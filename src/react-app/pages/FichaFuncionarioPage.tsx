@@ -15,6 +15,7 @@ import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 import AppLayout from '@/react-app/components/AppLayout';
 import PastaVirtualCompleta from '@/react-app/components/funcionarios/PastaVirtualCompleta';
 import Ficha360TreinamentoVooSection from '@/react-app/components/funcionarios/Ficha360TreinamentoVooSection';
+import Ficha360OperationalContext from '@/react-app/components/funcionarios/Ficha360OperationalContext';
 import CadernetaHorasVoo from '@/react-app/pages/funcionarios/CadernetaHorasVoo';
 import { buildPasta360Url } from '@/react-app/utils/pasta360';
 import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperationalSnapshot';
@@ -655,9 +656,6 @@ export default function FichaFuncionarioPage() {
               <p className="text-sm text-gray-600">
                 Matrícula: {f.matricula} · {f.funcao} · Base {f.base ?? '-'}
               </p>
-              <p className="mt-1 text-xs text-gray-500">
-                Email: {f.email} · Telefone: {f.telefone ?? '-'}
-              </p>
             </div>
           </div>
           <div>{badgeCompliance(complianceStatus)}</div>
@@ -821,58 +819,15 @@ export default function FichaFuncionarioPage() {
                 )}
               </div>
 
-              {/* Card 2: Dados do funcionário */}
-              <div className="min-h-[420px] rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="mb-4 text-base font-semibold text-gray-800">Dados do Funcionário</h3>
-                <dl className="space-y-2 text-sm text-gray-700">
-                  <div className="flex justify-between border-b pb-2">
-                    <dt className="font-medium text-gray-500">CPF:</dt>
-                    <dd>{f.cpf}</dd>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <dt className="font-medium text-gray-500">Data de Nascimento:</dt>
-                    <dd>{formatarData(f.nascimento)}</dd>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <dt className="font-medium text-gray-500">Data de Admissão:</dt>
-                    <dd>{formatarData(f.admissao)}</dd>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <dt className="font-medium text-gray-500">Status:</dt>
-                    <dd>
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          (f.status || '').toUpperCase() === 'ATIVO'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-gray-100 text-gray-700'
-                        }`}
-                      >
-                        {f.status}
-                      </span>
-                    </dd>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <dt className="font-medium text-gray-500">Função:</dt>
-                    <dd>{f.funcao}</dd>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <dt className="font-medium text-gray-500">Base:</dt>
-                    <dd>{f.base ?? '-'}</dd>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <dt className="font-medium text-gray-500">Aeronave:</dt>
-                    <dd>{f.aeronave ?? '-'}</dd>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <dt className="font-medium text-gray-500">Licença principal:</dt>
-                    <dd>{f.licenca ?? '-'}</dd>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <dt className="font-medium text-gray-500">Atualizado em:</dt>
-                    <dd>{formatarDataHora(f.updated_at)}</dd>
-                  </div>
-                </dl>
-              </div>
+              <Ficha360OperationalContext
+                status={f.status}
+                funcao={f.funcao}
+                base={f.base}
+                aeronave={f.aeronave}
+                licenca={f.licenca}
+                updatedAtLabel={formatarDataHora(f.updated_at)}
+                onOpenPersonalProfile={() => navigate(`/funcionarios/${id}/perfil?tab=dados`)}
+              />
 
               <div className="min-h-[420px] rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h3 className="mb-4 text-base font-semibold text-gray-800">Panorama Integrado</h3>
