@@ -28,6 +28,9 @@ describe('safeVisibleToastText', () => {
       'Participante sem e-mail válido.',
     );
     expect(safeVisibleToastText('Treinamento já concluído.')).toBe('Treinamento já concluído.');
+    expect(safeVisibleToastText('A consulta de dados será repetida.')).toBe(
+      'A consulta de dados será repetida.',
+    );
   });
 
   it('replaces unmistakably technical details', () => {
@@ -39,6 +42,10 @@ describe('safeVisibleToastText', () => {
       'Internal Server Error',
       'TypeError: Cannot read properties of undefined',
       'at Worker.fetch (/srv/src/worker.ts:418:11)',
+      'upstream database unavailable',
+      'query failed: unique constraint violation',
+      'Cloudflare Workers runtime exception 1101',
+      'SELECT token FROM sigvoos_credentials WHERE empresa_id = 6',
     ];
 
     for (const message of technicalMessages) {

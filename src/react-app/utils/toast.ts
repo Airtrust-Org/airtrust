@@ -19,6 +19,10 @@ const TECHNICAL_ERROR_PATTERNS = [
   /\bHTTP\s+[45]\d{2}\b/i,
   /\bat\s+(?:async\s+)?[\w.$<>]+\s*\([^)]*\.(?:ts|tsx|js|mjs|cjs):\d+:\d+\)/i,
   /\b(?:worker|node_modules|dist|src)[\\/][^\s)]+\.(?:ts|tsx|js|mjs|cjs):\d+/i,
+  /\b(?:database|query|constraint|foreign key)\b[^\n]{0,160}\b(?:error|failed|failure|unavailable|timeout|violation|locked)\b/i,
+  /\b(?:error|failed|failure|unavailable|timeout|violation|locked)\b[^\n]{0,160}\b(?:database|query|constraint|foreign key)\b/i,
+  /\b(?:Cloudflare|Wrangler|D1Database|Workers? runtime)\b/i,
+  /\b(?:SELECT\s+.+\s+FROM|INSERT\s+INTO|UPDATE\s+.+\s+SET|DELETE\s+FROM|ALTER\s+TABLE|CREATE\s+(?:TABLE|INDEX)|DROP\s+(?:TABLE|INDEX))\b/i,
 ];
 
 export function safeVisibleToastText(
