@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '../config/api';
+import { API_BASE_URL, ensureValidAccessToken } from '../config/api';
 import { controlledFetch } from '../utils/request-control';
 
 export type UsoSimulador = {
@@ -24,28 +24,12 @@ export type RelatorioUsoResponse = {
 };
 
 /**
- * HTTP helper que usa API_BASE_URL e desembrulha { success, data }
+ * HTTP helper que usa API_BASE_URL e desembrulha { success, data }.
+ * Auth comes from the canonical in-memory/session-aware token accessor instead
+ * of probing localStorage aliases, because session-only logins are the default.
  */
 async function http<T>(url: string, init?: RequestInit): Promise<T> {
-  // Buscar token de autenticação
-  const tokenKeys = [
-    'airtrust_token',
-    'token',
-    'auth_token',
-    'accessToken',
-    'access_token',
-    'airtrust_access_token',
-  ];
-  let token: string | null = null;
-  if (typeof window !== 'undefined') {
-    for (const k of tokenKeys) {
-      const v = localStorage.getItem(k);
-      if (v) {
-        token = v;
-        break;
-      }
-    }
-  }
+  const token = await ensureValidAccessToken();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -53,7 +37,6 @@ async function http<T>(url: string, init?: RequestInit): Promise<T> {
     ...((init?.headers as Record<string, string>) || {}),
   };
 
-  // Usar controlledFetch ao invés de fetch direto para evitar rate limiting
   const res = await controlledFetch(url, {
     credentials: 'include',
     ...init,
@@ -84,7 +67,6 @@ async function http<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error('Resposta inválida do servidor (não é JSON)');
   }
 
-  // Desembrulhar { success, data } do padrão AirTrust API
   if (parsed && typeof parsed === 'object' && 'success' in (parsed as Record<string, unknown>)) {
     const wrapper = parsed as { success: boolean; data?: T; error?: string };
     if (!wrapper.success) {
