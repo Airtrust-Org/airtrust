@@ -3,6 +3,12 @@ import { extractAndValidateLmsPackage, extractScormStaticGateMetadata } from './
 import { validateScormPackageQuality, type ScormQualityGateResult } from './lms-scorm-quality-gate';
 import { applyRuntimeConformance } from './lms-scorm-quality-gate';
 import { runScormBrowserConformance } from './lms-scorm-browser-run';
+import {
+  normalizeScormUploadFilename,
+  parseStoredScormValidation,
+  readScormUploadFilename,
+  withScormUploadMetadata,
+} from './lms-scorm-package-filename';
 
 type PackageRow = {
   id: string; empresa_id: number; curso_id: number; package_sha256: string; r2_prefix: string;
@@ -45,11 +51,51 @@ export async function createScormPackageCandidate(params: {
   const staticRejected = staticQuality.structural.status === 'FAIL' || staticQuality.completionManifest.status === 'FAIL' || staticQuality.diagnostics.status === 'FAIL';
 
   const packageSha256 = await sha256(params.bytes);
+  const originalFilename = normalizeScormUploadFilename(params.arquivoNome);
   const existing = await params.db.prepare(
     `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, status, validation_result_json
        FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND package_sha256 = ?`,
   ).bind(params.empresaId, params.cursoId, packageSha256).first<PackageRow>();
-  if (existing) return packageReadModel(existing);
+  if (existing) {
+    const storedValidation = parseStoredScormValidation<ScormQualityGateResult>(
+      existing.validation_result_json,
+    );
+    if (storedValidation && originalFilename) {
+      const nextValidationJson = JSON.stringify(
+        withScormUploadMetadata(storedValidation, originalFilename),
+      );
+      if (nextValidationJson !== existing.validation_result_json) {
+        await params.db
+          .prepare(
+            `UPDATE lms_scorm_package_versions
+                SET validation_result_json = ?
+              WHERE id = ? AND empresa_id = ? AND curso_id = ? AND package_sha256 = ?`,
+          )
+          .bind(
+            nextValidationJson,
+            existing.id,
+            params.empresaId,
+            params.cursoId,
+            packageSha256,
+          )
+          .run();
+        existing.validation_result_json = nextValidationJson;
+      }
+    }
+    // A re-upload of the exact ACTIVE SHA is a no-op for content, but the
+    // operator-visible file label must still reflect the file just selected.
+    if (existing.status === 'ACTIVE' && originalFilename) {
+      await params.db
+        .prepare(
+          `UPDATE lms_cursos
+              SET conteudo_arquivo_nome = ?, updated_at = datetime('now')
+            WHERE id = ? AND empresa_id = ?`,
+        )
+        .bind(originalFilename, params.cursoId, params.empresaId)
+        .run();
+    }
+    return packageReadModel(existing);
+  }
 
   const course = await params.db.prepare(
     'SELECT id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
@@ -63,6 +109,7 @@ export async function createScormPackageCandidate(params: {
   const quality = staticRejected ? staticQuality : validateScormPackageQuality(pkg);
   const rejected = quality.structural.status === 'FAIL' || quality.completionManifest.status === 'FAIL' || quality.diagnostics.status === 'FAIL';
   const status = rejected ? 'REJECTED' : 'VALIDATED';
+  const storedQuality = withScormUploadMetadata(quality, originalFilename);
 
   const id = crypto.randomUUID();
   const prefix = `lms/scorm/${params.empresaId}/${params.cursoId}/_candidates/${id}/`;
@@ -81,7 +128,7 @@ export async function createScormPackageCandidate(params: {
         (SELECT id FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND status = 'ACTIVE'))`,
     ).bind(id, params.empresaId, params.cursoId, `${new Date().toISOString()}-${packageSha256.slice(0, 12)}`, packageSha256,
       params.bytes.byteLength, prefix, pkg.launchFile, params.userId, status, quality.validatorVersion,
-      JSON.stringify(quality), JSON.stringify(errors(quality)), params.empresaId, params.cursoId).run();
+      JSON.stringify(storedQuality), JSON.stringify(errors(quality)), params.empresaId, params.cursoId).run();
     await params.db.prepare(
       `INSERT INTO lms_scorm_package_audit_log (id, empresa_id, curso_id, package_id, action, actor_id, reason, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
@@ -96,12 +143,21 @@ export async function createScormPackageCandidate(params: {
     if (listed.objects.length) await params.bucket.delete(listed.objects.map((item) => item.key));
     throw error;
   }
-  return { packageId: id, packageSha256, status, ...quality, arquivoNome: params.arquivoNome };
+  return { packageId: id, packageSha256, status, ...quality, arquivoNome: originalFilename };
 }
 
 export function packageReadModel(row: PackageRow) {
-  const validation = row.validation_result_json ? JSON.parse(row.validation_result_json) as ScormQualityGateResult : null;
-  return { packageId: row.id, packageSha256: row.package_sha256, status: row.status, validatorVersion: validation?.validatorVersion ?? null, ...validation, r2Prefix: row.r2_prefix, launchFile: row.launch_file };
+  const validation = parseStoredScormValidation<ScormQualityGateResult>(row.validation_result_json);
+  return {
+    packageId: row.id,
+    packageSha256: row.package_sha256,
+    status: row.status,
+    validatorVersion: validation?.validatorVersion ?? null,
+    ...validation,
+    r2Prefix: row.r2_prefix,
+    launchFile: row.launch_file,
+    arquivoNome: readScormUploadFilename(validation),
+  };
 }
 
 export async function listScormPackageVersions(db: D1Database, empresaId: number, cursoId: number) {
@@ -118,15 +174,16 @@ export async function activateScormPackageVersion(params: { db: D1Database; empr
        FROM lms_scorm_package_versions WHERE id = ? AND empresa_id = ? AND curso_id = ?`,
   ).bind(params.packageId, params.empresaId, params.cursoId).first<PackageRow>();
   if (!candidate) throw new ApiError('Versão candidata não encontrada', 404);
-  const quality = candidate.validation_result_json ? JSON.parse(candidate.validation_result_json) as ScormQualityGateResult : null;
+  const quality = parseStoredScormValidation<ScormQualityGateResult>(candidate.validation_result_json);
   if (candidate.status !== 'VALIDATED' || !quality?.publishable) {
     throw new ApiError('Pacote não pode ser ativado: todos os gates obrigatórios devem passar', 409);
   }
+  const originalFilename = readScormUploadFilename(quality);
   // Atomic D1 batch switches the course pointer only after the stored, exact SHA result is publishable.
   await params.db.batch([
     params.db.prepare(`UPDATE lms_scorm_package_versions SET status = 'SUPERSEDED' WHERE empresa_id = ? AND curso_id = ? AND status = 'ACTIVE'`).bind(params.empresaId, params.cursoId),
     params.db.prepare(`UPDATE lms_scorm_package_versions SET status = 'ACTIVE', activated_at = datetime('now'), activated_by = ? WHERE id = ? AND empresa_id = ? AND curso_id = ? AND package_sha256 = ? AND status = 'VALIDATED'`).bind(params.userId, candidate.id, params.empresaId, params.cursoId, candidate.package_sha256),
-    params.db.prepare(`UPDATE lms_cursos SET tipo_conteudo = 'scorm', scorm_package_r2_prefix = ?, scorm_launch_file = ?, scorm_versao = '1.2', updated_at = datetime('now') WHERE id = ? AND empresa_id = ?`).bind(candidate.r2_prefix, candidate.launch_file, params.cursoId, params.empresaId),
+    params.db.prepare(`UPDATE lms_cursos SET tipo_conteudo = 'scorm', scorm_package_r2_prefix = ?, scorm_launch_file = ?, scorm_versao = '1.2', conteudo_arquivo_nome = COALESCE(?, conteudo_arquivo_nome), updated_at = datetime('now') WHERE id = ? AND empresa_id = ?`).bind(candidate.r2_prefix, candidate.launch_file, originalFilename, params.cursoId, params.empresaId),
   ]);
   await params.db.prepare(
     `INSERT INTO lms_scorm_package_audit_log (id, empresa_id, curso_id, package_id, action, actor_id, created_at)
@@ -170,13 +227,17 @@ export async function runScormPackageConformance(params: {
   ).bind(params.packageId, params.empresaId, params.cursoId).first<PackageRow>();
   if (!candidate) throw new ApiError('Versão candidata não encontrada', 404);
   if (!['VALIDATED', 'REJECTED'].includes(candidate.status)) throw new ApiError('Estado do candidato não permite conformance', 409);
-  const staticResult = candidate.validation_result_json ? JSON.parse(candidate.validation_result_json) as ScormQualityGateResult : null;
+  const staticResult = parseStoredScormValidation<ScormQualityGateResult>(
+    candidate.validation_result_json,
+  );
   if (!staticResult) throw new ApiError('Validação estática ausente', 409);
+  const originalFilename = readScormUploadFilename(staticResult);
   const runtime = await runScormBrowserConformance({ browserBinding: params.browserBinding, candidateSha256: candidate.package_sha256, launchFile: candidate.launch_file, assets: await candidateAssets(params.bucket, candidate.r2_prefix) });
   const result = applyRuntimeConformance(staticResult, runtime, candidate.package_sha256);
   const status = result.publishable ? 'VALIDATED' : staticResult.structural.status === 'FAIL' || staticResult.completionManifest.status === 'FAIL' || staticResult.diagnostics.status === 'FAIL' ? 'REJECTED' : 'VALIDATED';
+  const storedResult = withScormUploadMetadata({ ...result, runtime }, originalFilename);
   await params.db.batch([
-    params.db.prepare(`UPDATE lms_scorm_package_versions SET status = ?, validation_finished_at = datetime('now'), validation_result_json = ?, rejection_reasons_json = ? WHERE id = ? AND empresa_id = ? AND curso_id = ? AND package_sha256 = ?`).bind(status, JSON.stringify({ ...result, runtime }), JSON.stringify(runtime.errors), candidate.id, params.empresaId, params.cursoId, candidate.package_sha256),
+    params.db.prepare(`UPDATE lms_scorm_package_versions SET status = ?, validation_finished_at = datetime('now'), validation_result_json = ?, rejection_reasons_json = ? WHERE id = ? AND empresa_id = ? AND curso_id = ? AND package_sha256 = ?`).bind(status, JSON.stringify(storedResult), JSON.stringify(runtime.errors), candidate.id, params.empresaId, params.cursoId, candidate.package_sha256),
     params.db.prepare(`INSERT INTO lms_scorm_package_audit_log (id, empresa_id, curso_id, package_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`).bind(crypto.randomUUID(), params.empresaId, params.cursoId, candidate.id, runtime.status === 'PASS' ? 'VALIDATION_PASSED' : 'VALIDATION_FAILED', params.userId, runtime.errors.join('; ')),
   ]);
   return { ...result, runtime };
