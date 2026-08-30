@@ -1,6 +1,7 @@
 import { strFromU8 } from 'fflate';
 import { fetchWithAuth } from '@/react-app/config/api';
 import type { ScormVersao } from '@/react-app/hooks/useLms';
+import { safeLmsResponseErrorText } from '@/react-app/lib/lms-safe-error-response';
 import { extractBrowserLmsPackage, normalizeBrowserArchivePath } from './lmsPackageValidator';
 
 type UploadTipoConteudo = 'scorm' | 'h5p';
@@ -124,19 +125,29 @@ function guessMime(filename: string): string {
   return map[ext ?? ''] ?? 'application/octet-stream';
 }
 
-async function parseApiResponse<T>(response: Response): Promise<T> {
+export async function parseApiResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
+  let json: { success?: boolean; data?: T; error?: string } | null = null;
+
   try {
-    const json = JSON.parse(text) as { success?: boolean; data?: T; error?: string };
-    if (!response.ok || !json.success) throw new Error(json.error ?? `HTTP ${response.status}`);
-    return json.data as T;
-  } catch (error) {
-    if (error instanceof Error && error.message !== `HTTP ${response.status}`) throw error;
-    if (/413|payload too large/i.test(text)) {
-      throw new Error('O pacote excede um dos limites seguros de upload.');
-    }
-    throw new Error(text || `HTTP ${response.status}`);
+    json = JSON.parse(text) as { success?: boolean; data?: T; error?: string };
+  } catch {
+    json = null;
   }
+
+  if (response.ok && json?.success) {
+    return json.data as T;
+  }
+
+  if (response.status === 413 || /413|payload too large/i.test(text)) {
+    throw new Error('O pacote excede um dos limites seguros de upload.');
+  }
+
+  if (response.ok && !json) {
+    throw new Error('Resposta inválida do servidor.');
+  }
+
+  throw new Error(safeLmsResponseErrorText(json?.error ?? text, response.status));
 }
 
 function isRetryableUploadResponse(response: Response) {
