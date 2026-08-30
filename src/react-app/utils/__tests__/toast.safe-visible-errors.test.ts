@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const toastErrorMock = vi.fn();
+const { toastErrorMock } = vi.hoisted(() => ({
+  toastErrorMock: vi.fn(),
+}));
 
 vi.mock('sonner', () => ({
   toast: {
@@ -71,6 +73,15 @@ describe('showToast.error', () => {
 
     expect(toastErrorMock).toHaveBeenCalledWith('Falha ao enviar convocação.', {
       description: 'Revise os destinatários e tente novamente.',
+      duration: 5000,
+    });
+  });
+
+  it('uses the generic fallback with default options when the error is empty', () => {
+    showToast.error('');
+
+    expect(toastErrorMock).toHaveBeenCalledWith('Não foi possível concluir a operação.', {
+      description: undefined,
       duration: 5000,
     });
   });
