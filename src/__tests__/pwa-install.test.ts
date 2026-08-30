@@ -19,6 +19,7 @@ const installPageSource = readFileSync(
   resolve(process.cwd(), 'src/react-app/pages/InstallAppPage.tsx'),
   'utf8',
 );
+const headersSource = readFileSync(resolve(process.cwd(), 'public/_headers'), 'utf8');
 
 describe('AirTrust PWA installation', () => {
   it('detecta iPhone aberto pelo WhatsApp', () => {
@@ -67,9 +68,10 @@ describe('AirTrust PWA installation', () => {
     expect(manifest.icons.some((icon) => icon.purpose?.includes('maskable'))).toBe(true);
   });
 
-  it('mantém /instalar público e oferece fluxos iOS e Android', () => {
+  it('mantém /instalar público, sem cache e com fluxos iOS e Android', () => {
     expect(mainSource).toContain("window.location.pathname === '/instalar'");
     expect(mainSource).toContain('<InstallAppPage />');
+    expect(headersSource).toContain('\n/instalar\n  Cache-Control: no-cache, no-store, must-revalidate');
     expect(installPageSource).toContain("window.addEventListener('beforeinstallprompt'");
     expect(installPageSource).toContain('Adicionar à Tela de Início');
     expect(installPageSource).toContain('Abrir no Chrome');
