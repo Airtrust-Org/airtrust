@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'rea
 import { toast } from 'sonner';
 
 import { API_BASE_URL } from '@/react-app/config/api';
+import { safeFrontendApiResponseErrorMessage } from '@/react-app/lib/api-contract';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import {
   ArrowUpDown,
@@ -492,13 +493,17 @@ export function ListaFuncionarios({
           return;
         }
 
-        let errorMessage = 'Não foi possível excluir o funcionário.';
         const errorData = await response.json().catch(() => null);
-        if (response.status === 403) {
-          errorMessage = 'Você não tem permissão para excluir funcionários.';
-        } else if (typeof errorData?.error === 'string') {
-          errorMessage = errorData.error;
-        }
+        const backendMessage =
+          typeof errorData?.error === 'string'
+            ? errorData.error
+            : typeof errorData?.message === 'string'
+              ? errorData.message
+              : undefined;
+        const errorMessage =
+          response.status === 403
+            ? 'Você não tem permissão para excluir funcionários.'
+            : safeFrontendApiResponseErrorMessage(backendMessage, response.status);
         toast.warning(errorMessage);
         setExcluindo(null);
       } catch (error) {
@@ -536,7 +541,13 @@ export function ListaFuncionarios({
           setTimeout(() => recarregar(), 200);
         } else {
           const errorData = await response.json().catch(() => ({}));
-          const msg = errorData?.error || errorData?.message || `Erro ${response.status}`;
+          const backendMessage =
+            typeof errorData?.error === 'string'
+              ? errorData.error
+              : typeof errorData?.message === 'string'
+                ? errorData.message
+                : undefined;
+          const msg = safeFrontendApiResponseErrorMessage(backendMessage, response.status);
           console.error('[SAVE ERROR]', errorData);
           toast.error(`Erro ao salvar funcionário: ${msg}`);
         }
