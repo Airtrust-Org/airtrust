@@ -1,0 +1,73 @@
+name: eDB Isolated Persisted Lifecycle
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/edb-isolated-persisted-lifecycle.yml'
+      - 'worker-airtrust/src/__tests__/edb/full-persisted-lifecycle-integration.test.ts'
+      - 'worker-airtrust/migrations/0477_edb_operational_core.sql'
+      - 'worker-airtrust/migrations/0478_edb_anac_receipt_integrity.sql'
+      - 'worker-airtrust/migrations/0479_edb_relational_integrity.sql'
+      - 'worker-airtrust/migrations/0480_edb_diary_lifecycle_integrity.sql'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edb-isolated-persisted-lifecycle-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  persisted-lifecycle:
+    name: eDB persisted lifecycle (isolated SQLite)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+
+      - name: Assert isolation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_file='worker-airtrust/src/__tests__/edb/full-persisted-lifecycle-integration.test.ts'
+          [[ -f "$test_file" ]] || { echo 'EDB_PERSISTED_TEST_MISSING' >&2; exit 1; }
+          grep -q "new NodeDatabaseSync(':memory:')" "$test_file" || { echo 'EDB_PERSISTED_TEST_NOT_IN_MEMORY' >&2; exit 1; }
+          grep -q "0477_edb_operational_core.sql" "$test_file" || { echo 'EDB_0477_NOT_COVERED' >&2; exit 1; }
+          grep -q "0480_edb_diary_lifecycle_integrity.sql" "$test_file" || { echo 'EDB_0480_NOT_COVERED' >&2; exit 1; }
+          if grep -Eq 'https?://|wrangler[[:space:]]+d1|CLOUDFLARE_|ANAC.*(POST|PUT|PATCH|DELETE)' "$test_file"; then
+            echo 'EDB_PERSISTED_TEST_REMOTE_SIDE_EFFECT_RISK' >&2
+            exit 1
+          fi
+          echo 'EDB_PERSISTED_ISOLATION_GUARD_PASS'
+
+      - name: Install Worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Run exact persisted lifecycle integration
+        working-directory: worker-airtrust
+        run: npx vitest run src/__tests__/edb/full-persisted-lifecycle-integration.test.ts
+
+      - name: Record safety scope
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## eDB isolated persisted lifecycle'
+            echo ''
+            echo '- persistence: Node SQLite `:memory:` only'
+            echo '- Cloudflare D1 remote writes: none'
+            echo '- staging operational records: none'
+            echo '- production action: none'
+            echo '- ANAC transmission: none'
+          } >> "$GITHUB_STEP_SUMMARY"
