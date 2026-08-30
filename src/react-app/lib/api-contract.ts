@@ -66,8 +66,15 @@ function fallbackForStatus(status?: number): string {
   return 'Não foi possível concluir a operação.';
 }
 
-function safeApiBoundaryMessage(message: string | undefined, status?: number): string {
-  return safeFrontendApiErrorMessage(message, fallbackForStatus(status));
+export function safeFrontendApiResponseErrorMessage(
+  message: string | undefined,
+  status?: number,
+): string {
+  const fallback = fallbackForStatus(status);
+  if (status === 401 || status === 403 || (status != null && status >= 500)) {
+    return fallback;
+  }
+  return safeFrontendApiErrorMessage(message, fallback);
 }
 
 function isNetworkTypeError(error: unknown): boolean {
@@ -133,7 +140,7 @@ function unwrapEnvelope<T>(payload: unknown): T {
     const envelope = payload as ApiEnvelope<T>;
     if (envelope.success === false) {
       throw new FrontendApiError(
-        safeApiBoundaryMessage(envelope.error || envelope.message),
+        safeFrontendApiResponseErrorMessage(envelope.error || envelope.message),
         'client',
         undefined,
         envelope.code,
@@ -168,7 +175,7 @@ export async function apiEnvelope<T>(
 
   if (!response.ok || envelope.success === false) {
     throw new FrontendApiError(
-      safeApiBoundaryMessage(
+      safeFrontendApiResponseErrorMessage(
         envelope.error || envelope.message || `Erro HTTP ${response.status}`,
         response.status,
       ),
@@ -198,7 +205,7 @@ export async function apiJson<T>(input: RequestInfo | URL, init?: RequestInit): 
     const envelope =
       payload && typeof payload === 'object' ? (payload as ApiEnvelope<unknown>) : undefined;
     throw new FrontendApiError(
-      safeApiBoundaryMessage(
+      safeFrontendApiResponseErrorMessage(
         envelope?.error || envelope?.message || `Erro HTTP ${response.status}`,
         response.status,
       ),
@@ -226,7 +233,7 @@ export async function apiBlob(input: RequestInfo | URL, init?: RequestInit): Pro
     const envelope =
       payload && typeof payload === 'object' ? (payload as ApiEnvelope<unknown>) : undefined;
     throw new FrontendApiError(
-      safeApiBoundaryMessage(
+      safeFrontendApiResponseErrorMessage(
         envelope?.error || envelope?.message || `Erro HTTP ${response.status}`,
         response.status,
       ),
