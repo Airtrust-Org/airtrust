@@ -3,6 +3,7 @@ import {
   FrontendApiError,
   frontendErrorMessage,
   safeFrontendApiErrorMessage,
+  safeFrontendApiResponseErrorMessage,
 } from '../api-contract';
 
 describe('api-contract visible error safety', () => {
@@ -10,6 +11,9 @@ describe('api-contract visible error safety', () => {
     expect(
       safeFrontendApiErrorMessage('Qualificação já cadastrada para este período.'),
     ).toBe('Qualificação já cadastrada para este período.');
+    expect(
+      safeFrontendApiResponseErrorMessage('Funcionário possui vínculos ativos.', 409),
+    ).toBe('Funcionário possui vínculos ativos.');
   });
 
   it('replaces technical backend detail with a safe fallback', () => {
@@ -26,6 +30,18 @@ describe('api-contract visible error safety', () => {
         'Não foi possível concluir a operação.',
       );
     }
+  });
+
+  it('never exposes arbitrary backend text for privileged or server response failures', () => {
+    expect(
+      safeFrontendApiResponseErrorMessage('opaque upstream detail for tenant 7', 500),
+    ).toBe('O servidor não conseguiu concluir a operação.');
+    expect(
+      safeFrontendApiResponseErrorMessage('token parser rejected key id abc', 401),
+    ).toBe('Sua sessão expirou. Entre novamente.');
+    expect(
+      safeFrontendApiResponseErrorMessage('internal authorization policy branch 12', 403),
+    ).toBe('Você não tem permissão para executar esta ação.');
   });
 
   it('does not expose a technical client FrontendApiError through frontendErrorMessage', () => {
