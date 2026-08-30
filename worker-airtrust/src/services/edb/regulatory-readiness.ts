@@ -40,6 +40,13 @@ export interface EdbRegulatoryReadiness {
   logicalRecordId: string | null;
   revisionId: string | null;
   lifecycleStatus: EdbFlightRecord['status'];
+  /**
+   * True when the immutable record has completed the AirTrust-side regulatory
+   * evidence flow through the operator/designated-person signature. External
+   * ANAC sharing is a distinct, acceptance-dependent integration concern.
+   */
+  internalRecordComplete: boolean;
+  /** Eligibility only. This does not mean ANAC transmission is required or enabled. */
   readyForAnacQueue: boolean;
   steps: EdbReadinessStep[];
   nextAction: EdbReadinessStepId | null;
@@ -59,8 +66,8 @@ function codes(issues: EdbValidationIssue[], severity: EdbValidationIssue['sever
   return issues.filter((issue) => issue.severity === severity).map((issue) => issue.code);
 }
 
-function firstIncomplete(steps: EdbReadinessStep[]): EdbReadinessStepId | null {
-  return steps.find((step) => step.status !== 'COMPLETE')?.id ?? null;
+function firstRequiredAction(steps: EdbReadinessStep[]): EdbReadinessStepId | null {
+  return steps.find((step) => step.status === 'ACTION_REQUIRED' || step.status === 'BLOCKED')?.id ?? null;
 }
 
 /**
@@ -142,6 +149,14 @@ export async function assessEdbRegulatoryReadiness(
     Boolean(record.signatures.operatorRecord) &&
     operatorBinding?.matchesPayload === true &&
     operatorBlocking.length === 0;
+
+  const internalRecordComplete =
+    technicalAckComplete &&
+    operatorSignatureComplete &&
+    (record.status === 'OPERATOR_SIGNED' ||
+      record.status === 'ANAC_PENDING' ||
+      record.status === 'ANAC_SYNCED' ||
+      record.status === 'SUPERSEDED');
 
   const technicalSnapshotCodes = technicalSnapshotComplete
     ? []
@@ -252,11 +267,10 @@ export async function assessEdbRegulatoryReadiness(
       status:
         record.status === 'ANAC_SYNCED'
           ? 'COMPLETE'
-          : record.status === 'ANAC_PENDING'
+          : record.status === 'ANAC_PENDING' ||
+              (record.status === 'OPERATOR_SIGNED' && operatorSignatureComplete && technicalAckComplete)
             ? 'PENDING_EXTERNAL'
-            : record.status === 'OPERATOR_SIGNED' && operatorSignatureComplete && technicalAckComplete
-              ? 'ACTION_REQUIRED'
-              : 'BLOCKED',
+            : 'BLOCKED',
       blockingCodes: [],
       warningCodes: [],
       deadlineAt: null,
@@ -267,9 +281,10 @@ export async function assessEdbRegulatoryReadiness(
     logicalRecordId: record.logicalRecordId,
     revisionId: record.revisionId,
     lifecycleStatus: record.status,
+    internalRecordComplete,
     readyForAnacQueue:
       record.status === 'OPERATOR_SIGNED' && operatorSignatureComplete && technicalAckComplete,
     steps,
-    nextAction: firstIncomplete(steps),
+    nextAction: firstRequiredAction(steps),
   };
 }
