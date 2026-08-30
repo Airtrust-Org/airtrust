@@ -9,6 +9,7 @@ import AppLayout from '../components/AppLayout';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../hooks/useAuth';
 import { API_BASE_URL, getAccessToken } from '../config/api';
+import { apiFetch } from '../lib/apiFetch';
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -320,13 +321,13 @@ export default function Sgso() {
       };
       if (t) headers['Authorization'] = `Bearer ${t}`;
 
-      let res = await fetch(`${base}${path}`, { ...options, headers });
+      let res = await apiFetch(`${base}${path}`, { ...options, headers });
       if (res.status === 401) {
         try {
           await refreshToken();
           t = getAccessToken() || token;
           if (t) headers['Authorization'] = `Bearer ${t}`;
-          res = await fetch(`${base}${path}`, { ...options, headers });
+          res = await apiFetch(`${base}${path}`, { ...options, headers });
         } catch {
           logout();
           throw new Error('Sessão expirada');
