@@ -37,8 +37,8 @@ type RevisionReadiness = {
   revision: number;
   stateVersion: number;
   readiness: {
-    nextAction: string;
-    complete: boolean;
+    nextAction: string | null;
+    internalRecordComplete: boolean;
     steps: Array<{ id: string; status: string; issues: string[] }>;
   };
 };
@@ -81,7 +81,7 @@ const ACTION_LABELS: Record<string, string> = {
   FLIGHT_RECORD: 'Gerar revisão do Diário de Bordo',
   PIC_FLIGHT_SIGNATURE: 'Coletar assinatura final do PIC',
   OPERATOR_SIGNATURE: 'Coletar assinatura do operador',
-  ANAC_SYNC: 'Aguardar futura integração oficial ANAC',
+  ANAC_SYNC: 'Integração ANAC externa, quando aplicável e autorizada',
   COMPLETE: 'Fluxo interno completo',
 };
 
@@ -175,7 +175,7 @@ export default function EdbShadowReadinessCard({ flightId }: { flightId: number 
   }
 
   if (!data) return null;
-  const complete = blockers.length === 0 && data.revisions.some((revision) => revision.readiness.complete);
+  const complete = blockers.length === 0 && data.revisions.some((revision) => revision.readiness.internalRecordComplete);
 
   return (
     <div className="rounded-xl border border-blue-200 bg-white p-5 dark:border-blue-900 dark:bg-slate-900">
@@ -231,7 +231,7 @@ export default function EdbShadowReadinessCard({ flightId }: { flightId: number 
       {data.revisions.length > 0 && (
         <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {data.revisions.length} revisão(ões) persistida(s) no shadow. Última: {data.revisions.at(-1)?.readiness.nextAction ?? '—'}.
+            {data.revisions.length} revisão(ões) persistida(s) no shadow. Última: {data.revisions.at(-1)?.readiness.nextAction ?? 'fluxo interno completo'}.
           </p>
         </div>
       )}
