@@ -1,6 +1,6 @@
 # eDB Regulatory Foundation V1
 
-Status: **design + code + unapplied Schema V2 foundation; no production activation**.
+Status: **design + code implemented; schema 0477–0480 applied to staging only; guarded shadow deployed; no production activation**.
 
 This document defines the regulatory architecture for a future AirTrust Electronic Journey Log / Diário de Bordo Digital (eDB/DBE). It does not claim that the implementation is authorized, accepted or homologated by ANAC.
 
@@ -8,10 +8,15 @@ This document defines the regulatory architecture for a future AirTrust Electron
 
 Primary references used by this foundation:
 
-- ANAC Resolução nº 773, de 25/06/2025, effective 01/01/2026 — Diário de Bordo;
-- ANAC Resolução nº 458, de 20/12/2017, compiled text — computerized systems for mandatory records.
+- ANAC Resolução nº 773, de 25/06/2025, effective 01/01/2026 — current Diário de Bordo regulation; it revoked Resolução nº 457/2017;
+- ANAC Resolução nº 458, de 20/12/2017, compiled text — computerized systems for mandatory records;
+- ANAC Portaria nº 3.220/SPO/SAR, de 15/10/2019, as currently published/compiled — reference model for electronic journey log/eDB.
 
-The software contract and audit controls are implementation foundations only. Regulatory use remains subject to the applicable ANAC acceptance/authorization/homologation process and current external-interface requirements.
+Resolução nº 773 requires, among other things, integrity and visible corrections, the prescribed per-flight information, PIC signature at the end of the flight/journey, preflight PIC acknowledgement of the aircraft technical situation, operator/designated-person signature within the applicable deadline, retention, and loss/corruption handling.
+
+The software contract and audit controls are implementation foundations only. Regulatory use remains subject to the applicable ANAC acceptance/authorization process and current external-interface requirements.
+
+During the 2026-08-30 review, an ANAC Diário de Bordo homologation API documentation host was identified. The referenced public Swagger definition was not available from the reviewed endpoint. That discovery is not treated as an accepted API contract: no endpoint behavior, payload schema, credential model, receipt meaning or acceptance semantics is inferred from it.
 
 ## 2. Master-data decision
 
@@ -108,6 +113,8 @@ Signature proof carries exact target identity and payload hash. Cryptographic pr
 
 Final signature insertion and its lifecycle transition are atomic in D1. Operator-signature deadline evaluation is separate and can warn on overdue remediation without making late correction impossible.
 
+The accepted production cryptographic/signature architecture remains an ANAC acceptance gate; implementation controls do not by themselves constitute regulatory acceptance.
+
 ## 8. Final-record lifecycle
 
 The final revision lifecycle is:
@@ -146,6 +153,8 @@ Volume opening/closing acts preserve actor evidence and the aircraft registratio
 
 Availability logic identifies volumes needed to cover the required recent operating period on board without implying every historical volume must always be carried.
 
+Retention follows the current Diário de Bordo rule: records are designed to remain available for the life of the aircraft and for the minimum post-cancellation period required by the applicable regulation.
+
 ## 11. Loss, corruption and reconstitution
 
 Loss, misplacement or corruption incidents retain diary scope and optional volume scope.
@@ -179,11 +188,13 @@ These controls support integrity/non-repudiation objectives but do not by themse
 
 No endpoint, payload, credential model, receipt meaning or acceptance rule is guessed.
 
-`edb_anac_outbox` and `edb_anac_recibos` provide inert internal persistence so an official adapter can later be implemented idempotently after current ANAC interface/homologation material is available.
+`edb_anac_outbox` and `edb_anac_recibos` provide inert internal persistence so an official adapter can later be implemented idempotently after the current official ANAC interface/onboarding material and accepted response semantics are obtained.
 
-## 14. Schema governance and isolation
+The existence of an ANAC homologation documentation host does not relax this boundary while its usable authoritative contract is unavailable to this implementation work.
 
-The governed, unapplied sequence is:
+## 14. Schema governance and validation isolation
+
+The governed sequence is:
 
 `0477_edb_operational_core.sql`
 
@@ -195,8 +206,32 @@ The governed, unapplied sequence is:
 
 Each change has a Schema V2 manifest with pinned SQL/plan hashes and isolated SQLite governance tests.
 
-The branch has no public eDB Worker route, no eDB frontend/menu, no enabled production feature flag and no real eDB operational write path. None of 0477–0480 is applied to staging or production.
+The sequence was applied to the pinned **staging D1 only** through `Deploy Staging (Official)` run #39 / `33269772056` from exact schema release SHA `5e6df4e1fc3b633a260c705c53fe1deca63ad382`. No production schema apply has occurred.
 
-FRMS/LMS runtime behavior is outside this branch's scope.
+The guarded staging-shadow `/api/edb` route and minimal Controle de Voos eDB card are deployed in staging with explicit Costa do Sol tenant allowlisting. Production remains fail-closed and has no enabled eDB menu/feature flag.
 
-Activation must remain staged and explicit: CI → current-main integration → governed staging schema apply → authenticated APIs → shadow UI → staging exercises → regulatory/security acceptance → production approval.
+Persisted lifecycle validation is deliberately split from shared staging data:
+
+- a full lifecycle integration test runs on isolated Node SQLite `:memory:`;
+- a second gate applies 0477–0480 through Cloudflare Wrangler **local D1** using the tracked dummy database ID and a temporary persistence directory, verifies tables/columns/triggers and proves technical-snapshot immutability;
+- Cloudflare credentials are sanitized for the local-D1 gate and no remote D1, production or ANAC write is performed;
+- shared staging remains limited to governed authenticated smoke and is not used as a disposable regulatory-evidence database.
+
+## 15. Current activation posture
+
+Staging schema and guarded shadow code exist, but regulatory/production activation remains blocked.
+
+Current safe posture:
+
+- staging 0477–0480 present;
+- staging shadow allowlisted only for Costa do Sol (`empresa_id=6`);
+- no production schema/application activation;
+- no ANAC external transmission;
+- `ANAC_SYNCED` fail-closed;
+- no private signing keys stored;
+- no claim of ANAC authorization/homologation;
+- operator's existing official logbook process remains authoritative.
+
+The exact-current-release tenant-6 positive re-smoke gap is preserved as historical evidence rather than bypassed. The PR adds post-deploy automation so future successful official staging releases can trigger the governed eDB positive smoke once that workflow reaches the default branch.
+
+Remaining gates are: frozen green PR evidence, current official ANAC API/onboarding and acceptance material, accepted signature/security architecture, applicable computerized-system authorization/acceptance, and explicit production approval.
