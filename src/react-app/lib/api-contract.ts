@@ -31,11 +31,43 @@ export interface ApiEnvelope<T> {
   [key: string]: unknown;
 }
 
+const TECHNICAL_API_ERROR_PATTERNS = [
+  /\b(?:SQLITE(?:_ERROR)?|D1_ERROR|SQLSTATE|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND)\b/i,
+  /\bno such (?:table|column)\b/i,
+  /\b(?:stack trace|traceback|internal server error)\b/i,
+  /\b(?:SyntaxError|TypeError|ReferenceError|RangeError):/i,
+  /\bHTTP\s+[45]\d{2}\b/i,
+  /\bat\s+(?:async\s+)?[\w.$<>]+\s*\([^)]*\.(?:ts|tsx|js|mjs|cjs):\d+:\d+\)/i,
+  /\b(?:worker|node_modules|dist|src)[\\/][^\s)]+\.(?:ts|tsx|js|mjs|cjs):\d+/i,
+];
+
+export function safeFrontendApiErrorMessage(
+  message: string | undefined,
+  fallback = 'Não foi possível concluir a operação.',
+): string {
+  const normalized = String(message || '').trim();
+  if (!normalized) return fallback;
+  return TECHNICAL_API_ERROR_PATTERNS.some((pattern) => pattern.test(normalized))
+    ? fallback
+    : normalized;
+}
+
 function classifyStatus(status: number): ApiFailureKind {
   if (status === 401) return 'session-expired';
   if (status === 403) return 'permission';
   if (status >= 500) return 'server';
   return 'client';
+}
+
+function fallbackForStatus(status?: number): string {
+  if (status === 401) return 'Sua sessão expirou. Entre novamente.';
+  if (status === 403) return 'Você não tem permissão para executar esta ação.';
+  if (status != null && status >= 500) return 'O servidor não conseguiu concluir a operação.';
+  return 'Não foi possível concluir a operação.';
+}
+
+function safeApiBoundaryMessage(message: string | undefined, status?: number): string {
+  return safeFrontendApiErrorMessage(message, fallbackForStatus(status));
 }
 
 function isNetworkTypeError(error: unknown): boolean {
@@ -62,7 +94,9 @@ export function classifyFrontendError(error: unknown): FrontendApiError {
     return new FrontendApiError('Não foi possível conectar ao servidor.', 'network');
   }
   return new FrontendApiError(
-    error instanceof Error ? error.message : 'Erro inesperado na requisição.',
+    safeFrontendApiErrorMessage(
+      error instanceof Error ? error.message : 'Erro inesperado na requisição.',
+    ),
     'client',
   );
 }
@@ -81,7 +115,7 @@ export function frontendErrorMessage(error: unknown): string {
     case 'stale-tenant':
       return 'A empresa ativa mudou. Os dados anteriores foram descartados.';
     default:
-      return classified.message || 'Não foi possível concluir a operação.';
+      return safeFrontendApiErrorMessage(classified.message);
   }
 }
 
@@ -99,7 +133,7 @@ function unwrapEnvelope<T>(payload: unknown): T {
     const envelope = payload as ApiEnvelope<T>;
     if (envelope.success === false) {
       throw new FrontendApiError(
-        envelope.error || envelope.message || 'A API recusou a operação.',
+        safeApiBoundaryMessage(envelope.error || envelope.message),
         'client',
         undefined,
         envelope.code,
@@ -134,7 +168,10 @@ export async function apiEnvelope<T>(
 
   if (!response.ok || envelope.success === false) {
     throw new FrontendApiError(
-      envelope.error || envelope.message || `Erro HTTP ${response.status}`,
+      safeApiBoundaryMessage(
+        envelope.error || envelope.message || `Erro HTTP ${response.status}`,
+        response.status,
+      ),
       classifyStatus(response.status),
       response.status,
       envelope.code,
@@ -161,7 +198,10 @@ export async function apiJson<T>(input: RequestInfo | URL, init?: RequestInit): 
     const envelope =
       payload && typeof payload === 'object' ? (payload as ApiEnvelope<unknown>) : undefined;
     throw new FrontendApiError(
-      envelope?.error || envelope?.message || `Erro HTTP ${response.status}`,
+      safeApiBoundaryMessage(
+        envelope?.error || envelope?.message || `Erro HTTP ${response.status}`,
+        response.status,
+      ),
       classifyStatus(response.status),
       response.status,
       envelope?.code,
@@ -186,7 +226,10 @@ export async function apiBlob(input: RequestInfo | URL, init?: RequestInit): Pro
     const envelope =
       payload && typeof payload === 'object' ? (payload as ApiEnvelope<unknown>) : undefined;
     throw new FrontendApiError(
-      envelope?.error || envelope?.message || `Erro HTTP ${response.status}`,
+      safeApiBoundaryMessage(
+        envelope?.error || envelope?.message || `Erro HTTP ${response.status}`,
+        response.status,
+      ),
       classifyStatus(response.status),
       response.status,
       envelope?.code,
