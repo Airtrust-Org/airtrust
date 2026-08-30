@@ -48,7 +48,7 @@ describe('service worker cache guard', () => {
     expect(indexHtmlSource).not.toContain("navigator.serviceWorker.register('/sw.js', {");
     expect(indexHtmlSource).toContain('registration.unregister?.()');
     expect(indexHtmlSource).toContain("currentUrl.searchParams.set(RECOVERY_PARAM, '1');");
-    expect(indexHtmlSource).toContain('window.location.replace(currentUrl.toString());
+    expect(indexHtmlSource).toContain('window.location.replace(currentUrl.toString());');
   });
 
   it('desregistra service workers existentes e limpa caches no sw-manager sem registrar outro', () => {
