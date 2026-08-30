@@ -47,8 +47,8 @@ jobs:
           [[ "$QA_EDB_FULL_FIXTURE_ID" =~ ^QA-EDB-FULL-[0-9]+-[0-9]+$ ]] || { echo 'FIXTURE_ID_REJECTED' >&2; exit 1; }
           echo 'EDB_STAGING_FULL_LIFECYCLE_GUARD_PASS'
 
-  full-lifecycle:
-    name: eDB tenant-6 synthetic full lifecycle
+  d1-full-lifecycle:
+    name: Staging D1 + eDB tenant-6 synthetic full lifecycle
     needs: guard
     runs-on: ubuntu-latest
     environment: staging
