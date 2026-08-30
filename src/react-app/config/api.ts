@@ -11,6 +11,7 @@
  */
 
 import { apiFetch } from '@/react-app/lib/apiFetch';
+import { sanitizeLmsAuthenticatedErrorResponse } from '@/react-app/lib/lms-safe-error-response';
 import { resolveApiBase } from './api-environment';
 
 export {
@@ -365,7 +366,7 @@ export async function fetchWithAuth(
     }
   }
 
-  return response;
+  return sanitizeLmsAuthenticatedErrorResponse(response, url);
 }
 
 /**
