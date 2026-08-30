@@ -163,6 +163,86 @@ describe('password recovery public UI', () => {
     expect(screen.queryByText(/SQLSTATE/i)).not.toBeInTheDocument();
   });
 
+  it('treats HTTP 400 as an invalid recovery link', async () => {
+    window.history.replaceState({}, '', '/reset-password?token=invalid');
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: false }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ) as typeof fetch;
+
+    render(<ResetPasswordPage />);
+    const fields = screen.getAllByLabelText(/senha/i);
+    fireEvent.change(fields[0], { target: { value: 'senha1234' } });
+    fireEvent.change(fields[1], { target: { value: 'senha1234' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('link expirou'));
+  });
+
+  it('treats HTTP 404 as an invalid recovery link', async () => {
+    window.history.replaceState({}, '', '/reset-password?token=missing');
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: false }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ) as typeof fetch;
+
+    render(<ResetPasswordPage />);
+    const fields = screen.getAllByLabelText(/senha/i);
+    fireEvent.change(fields[0], { target: { value: 'senha1234' } });
+    fireEvent.change(fields[1], { target: { value: 'senha1234' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('link expirou'));
+  });
+
+  it('treats a successful HTTP response with success false as a reset failure', async () => {
+    window.history.replaceState({}, '', '/reset-password?token=abc123');
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: false }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ) as typeof fetch;
+
+    render(<ResetPasswordPage />);
+    const fields = screen.getAllByLabelText(/senha/i);
+    fireEvent.change(fields[0], { target: { value: 'senha1234' } });
+    fireEvent.change(fields[1], { target: { value: 'senha1234' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Não foi possível redefinir a senha agora',
+      ),
+    );
+  });
+
+  it('fails safely when a reset error response has malformed JSON', async () => {
+    window.history.replaceState({}, '', '/reset-password?token=abc123');
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response('not-json', {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ) as typeof fetch;
+
+    render(<ResetPasswordPage />);
+    const fields = screen.getAllByLabelText(/senha/i);
+    fireEvent.change(fields[0], { target: { value: 'senha1234' } });
+    fireEvent.change(fields[1], { target: { value: 'senha1234' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Não foi possível redefinir a senha agora',
+      ),
+    );
+  });
+
   it('uses a generic retry message for reset server failures', async () => {
     window.history.replaceState({}, '', '/reset-password?token=abc123');
     globalThis.fetch = vi.fn().mockResolvedValue(
