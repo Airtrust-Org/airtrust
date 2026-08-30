@@ -11,7 +11,7 @@ const manifest = JSON.parse(
   start_url: string;
   display: string;
   orientation: string;
-  icons: Array<{ sizes: string; purpose?: string }>;
+  icons: Array<{ src: string; sizes: string; purpose?: string }>;
 };
 
 const mainSource = readFileSync(resolve(process.cwd(), 'src/react-app/main.tsx'), 'utf8');
@@ -58,14 +58,33 @@ describe('AirTrust PWA installation', () => {
     expect(env.isStandalone).toBe(true);
   });
 
-  it('abre o app instalado na home correta para qualquer perfil', () => {
+  it('abre o app instalado na home correta para qualquer perfil com os ícones oficiais', () => {
     expect(manifest.id).toBe('/');
     expect(manifest.start_url).toBe('/');
     expect(manifest.display).toBe('standalone');
     expect(manifest.orientation).toBe('any');
-    expect(manifest.icons.some((icon) => icon.sizes === '192x192')).toBe(true);
-    expect(manifest.icons.some((icon) => icon.sizes === '512x512')).toBe(true);
-    expect(manifest.icons.some((icon) => icon.purpose?.includes('maskable'))).toBe(true);
+    expect(manifest.icons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          src: '/android-chrome-192x192.png',
+          sizes: '192x192',
+          purpose: 'any',
+        }),
+        expect.objectContaining({
+          src: '/android-chrome-512x512.png',
+          sizes: '512x512',
+          purpose: 'any',
+        }),
+        expect.objectContaining({
+          src: '/apple-touch-icon.png',
+          sizes: '180x180',
+          purpose: 'any',
+        }),
+      ]),
+    );
+    expect(manifest.icons.some((icon) => icon.purpose?.includes('maskable'))).toBe(false);
+    expect(installPageSource).toContain('src="/android-chrome-192x192.png"');
+    expect(installPageSource).not.toContain('src="/airtrust-icon.svg"');
   });
 
   it('mantém /instalar público, sem cache e com fluxos iOS e Android', () => {
