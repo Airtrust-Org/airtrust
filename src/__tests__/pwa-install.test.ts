@@ -20,6 +20,7 @@ const installPageSource = readFileSync(
   'utf8',
 );
 const headersSource = readFileSync(resolve(process.cwd(), 'public/_headers'), 'utf8');
+const indexHtmlSource = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
 
 describe('AirTrust PWA installation', () => {
   it('detecta iPhone aberto pelo WhatsApp', () => {
@@ -58,7 +59,7 @@ describe('AirTrust PWA installation', () => {
     expect(env.isStandalone).toBe(true);
   });
 
-  it('abre o app instalado na home correta para qualquer perfil com os ícones oficiais', () => {
+  it('abre o app instalado na home correta para qualquer perfil com os ícones oficiais versionados', () => {
     expect(manifest.id).toBe('/');
     expect(manifest.start_url).toBe('/');
     expect(manifest.display).toBe('standalone');
@@ -66,25 +67,28 @@ describe('AirTrust PWA installation', () => {
     expect(manifest.icons).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          src: '/android-chrome-192x192.png',
+          src: '/airtrust-pwa-icon-20260830-192.png',
           sizes: '192x192',
           purpose: 'any',
         }),
         expect.objectContaining({
-          src: '/android-chrome-512x512.png',
+          src: '/airtrust-pwa-icon-20260830-512.png',
           sizes: '512x512',
           purpose: 'any',
         }),
         expect.objectContaining({
-          src: '/apple-touch-icon.png',
+          src: '/airtrust-apple-touch-icon-20260830.png',
           sizes: '180x180',
           purpose: 'any',
         }),
       ]),
     );
     expect(manifest.icons.some((icon) => icon.purpose?.includes('maskable'))).toBe(false);
-    expect(installPageSource).toContain('src="/android-chrome-192x192.png"');
+    expect(installPageSource).toContain('src="/airtrust-pwa-icon-20260830-192.png"');
     expect(installPageSource).not.toContain('src="/airtrust-icon.svg"');
+    expect(indexHtmlSource).toContain(
+      'rel="apple-touch-icon" sizes="180x180" href="/airtrust-apple-touch-icon-20260830.png"',
+    );
   });
 
   it('mantém /instalar público, sem cache e com fluxos iOS e Android', () => {
