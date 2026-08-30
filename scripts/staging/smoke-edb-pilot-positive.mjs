@@ -14,6 +14,7 @@ const DEFAULT_BASE_URL = 'https://airtrust-api-staging.airtrust.workers.dev';
 const QA_EMAIL = 'qa-edb-pilot@staging.airtrust.invalid';
 const PILOT_TENANT_ID = 6;
 const IMPOSSIBLE_AIRCRAFT_ID = 2147483647;
+const IMPOSSIBLE_FLIGHT_ID = 2147483647;
 
 async function main() {
   const baseUrl = assertAllowedStagingBaseUrl(process.env.STAGING_API_BASE_URL || DEFAULT_BASE_URL);
@@ -69,8 +70,39 @@ async function main() {
     'header de modo eDB shadow ausente ou divergente',
   );
 
+  // Regression evidence for the local eDB error adapter. The source repository
+  // throws ApiError(404, CONTROLE_VOOS_NOT_FOUND) for this impossible flight.
+  // The shadow route must preserve that safe status/code instead of collapsing
+  // it into EDB_SHADOW_INTERNAL_ERROR/500, while still hiding the raw message.
+  const missingFlightReadiness = await fetchJson(
+    `${baseUrl}/api/edb/voos/${IMPOSSIBLE_FLIGHT_ID}/readiness`,
+    { headers },
+  );
+  assert(
+    missingFlightReadiness.status === 404,
+    `readiness de voo inexistente deveria retornar 404; recebeu ${missingFlightReadiness.status}`,
+  );
+  assert(missingFlightReadiness.json?.success === false, 'readiness inexistente deveria retornar success=false');
+  assert(
+    missingFlightReadiness.json?.code === 'CONTROLE_VOOS_NOT_FOUND',
+    `readiness inexistente deveria preservar CONTROLE_VOOS_NOT_FOUND; recebeu ${String(missingFlightReadiness.json?.code || '')}`,
+  );
+  assert(
+    missingFlightReadiness.json?.error === 'Operação eDB shadow rejeitada',
+    'readiness inexistente deveria manter mensagem pública genérica',
+  );
+  assert(
+    !JSON.stringify(missingFlightReadiness.json || {}).includes('Voo nao encontrado'),
+    'readiness inexistente não pode vazar mensagem interna do repositório',
+  );
+  assert(
+    String(missingFlightReadiness.headers?.['x-airtrust-edb-mode'] || '').toLowerCase() === 'staging-shadow-not-regulatory',
+    'header de modo eDB shadow ausente no erro 404 governado',
+  );
+
   console.log(`EDB_STAGING_PILOT_POSITIVE_PASS release=${expectedSha} tenant=${PILOT_TENANT_ID}`);
   console.log('EDB_STAGING_PILOT_READONLY_PASS capability=true activeDiarySynthetic=null');
+  console.log('EDB_STAGING_PILOT_APIERROR_404_PASS code=CONTROLE_VOOS_NOT_FOUND rawMessageLeak=false');
   console.log('EDB_STAGING_PILOT_OPERATIONAL_MUTATIONS=none');
   console.log('EDB_STAGING_PILOT_PRODUCTION_ACTION=none ANAC_TRANSMISSION=none');
 }
