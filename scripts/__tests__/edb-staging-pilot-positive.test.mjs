@@ -57,6 +57,18 @@ test('eDB positive smoke is read-only after authentication', () => {
   assert.doesNotMatch(smoke, /\/api\/controle-voos\//);
 });
 
+test('eDB positive smoke proves upstream ApiError 404 is preserved safely', () => {
+  const smoke = read(SMOKE);
+  assert.match(smoke, /IMPOSSIBLE_FLIGHT_ID = 2147483647/);
+  assert.match(smoke, /\/api\/edb\/voos\/\$\{IMPOSSIBLE_FLIGHT_ID\}\/readiness/);
+  assert.match(smoke, /missingFlightReadiness\.status === 404/);
+  assert.match(smoke, /CONTROLE_VOOS_NOT_FOUND/);
+  assert.match(smoke, /Operação eDB shadow rejeitada/);
+  assert.match(smoke, /!JSON\.stringify\(missingFlightReadiness\.json \|\| \{\}\)\.includes\('Voo nao encontrado'\)/);
+  assert.match(smoke, /EDB_STAGING_PILOT_APIERROR_404_PASS/);
+  assert.doesNotMatch(smoke, /EDB_SHADOW_INTERNAL_ERROR.*===/);
+});
+
 test('workflow is governed staging-only and cannot deploy infrastructure', () => {
   const workflow = read(WORKFLOW);
   assert.match(workflow, /AIRTRUST_EDB_STAGING_PILOT_POSITIVE/);

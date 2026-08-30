@@ -75,6 +75,14 @@ type ReadinessEnvelope<T> = {
   message?: string;
 };
 
+type OperationalReadinessRequestKind = 'load' | 'submit';
+
+export function safeOperationalReadinessError(kind: OperationalReadinessRequestKind): string {
+  return kind === 'submit'
+    ? 'Não foi possível registrar o teste de prontidão. Tente novamente.'
+    : 'Não foi possível carregar a prontidão operacional. Tente novamente.';
+}
+
 function unwrapReadinessResponse<T>(response: ApiResponse<ReadinessEnvelope<T>>): T {
   if (!response.success) {
     throw new Error(response.error || 'Falha ao comunicar com o serviço de prontidão operacional.');
@@ -87,11 +95,21 @@ function unwrapReadinessResponse<T>(response: ApiResponse<ReadinessEnvelope<T>>)
 }
 
 async function getReadiness<T>(path: string): Promise<T> {
-  return unwrapReadinessResponse<T>(await httpClient.get<ReadinessEnvelope<T>>(path));
+  try {
+    return unwrapReadinessResponse<T>(await httpClient.get<ReadinessEnvelope<T>>(path));
+  } catch (error) {
+    console.error('[FRMS readiness] GET failed', { path, error });
+    throw new Error(safeOperationalReadinessError('load'));
+  }
 }
 
 async function postReadiness<T>(path: string, input: unknown): Promise<T> {
-  return unwrapReadinessResponse<T>(await httpClient.post<ReadinessEnvelope<T>>(path, input));
+  try {
+    return unwrapReadinessResponse<T>(await httpClient.post<ReadinessEnvelope<T>>(path, input));
+  } catch (error) {
+    console.error('[FRMS readiness] POST failed', { path, error });
+    throw new Error(safeOperationalReadinessError('submit'));
+  }
 }
 
 export function useReadinessBaseline(referenceDate?: string) {
