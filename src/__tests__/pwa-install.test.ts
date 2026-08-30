@@ -11,7 +11,7 @@ const manifest = JSON.parse(
   start_url: string;
   display: string;
   orientation: string;
-  icons: Array<{ sizes: string; purpose?: string }>;
+  icons: Array<{ src: string; sizes: string; purpose?: string }>;
 };
 
 const mainSource = readFileSync(resolve(process.cwd(), 'src/react-app/main.tsx'), 'utf8');
@@ -20,6 +20,7 @@ const installPageSource = readFileSync(
   'utf8',
 );
 const headersSource = readFileSync(resolve(process.cwd(), 'public/_headers'), 'utf8');
+const indexHtmlSource = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
 
 describe('AirTrust PWA installation', () => {
   it('detecta iPhone aberto pelo WhatsApp', () => {
@@ -58,14 +59,36 @@ describe('AirTrust PWA installation', () => {
     expect(env.isStandalone).toBe(true);
   });
 
-  it('abre o app instalado na home correta para qualquer perfil', () => {
+  it('abre o app instalado na home correta para qualquer perfil com o logo online em assets novos', () => {
     expect(manifest.id).toBe('/');
     expect(manifest.start_url).toBe('/');
     expect(manifest.display).toBe('standalone');
     expect(manifest.orientation).toBe('any');
-    expect(manifest.icons.some((icon) => icon.sizes === '192x192')).toBe(true);
-    expect(manifest.icons.some((icon) => icon.sizes === '512x512')).toBe(true);
-    expect(manifest.icons.some((icon) => icon.purpose?.includes('maskable'))).toBe(true);
+    expect(manifest.icons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          src: '/airtrust-site-logo-20260830-192.png',
+          sizes: '192x192',
+          purpose: 'any',
+        }),
+        expect.objectContaining({
+          src: '/airtrust-site-logo-20260830-512.png',
+          sizes: '512x512',
+          purpose: 'any',
+        }),
+        expect.objectContaining({
+          src: '/airtrust-site-logo-apple-20260830.png',
+          sizes: '180x180',
+          purpose: 'any',
+        }),
+      ]),
+    );
+    expect(manifest.icons.some((icon) => icon.purpose?.includes('maskable'))).toBe(false);
+    expect(installPageSource).toContain('src="/airtrust-logo.svg?v=site-logo-20260830"');
+    expect(installPageSource).not.toContain('src="/airtrust-icon.svg"');
+    expect(indexHtmlSource).toContain(
+      'rel="apple-touch-icon" sizes="180x180" href="/airtrust-site-logo-apple-20260830.png"',
+    );
   });
 
   it('mantém /instalar público, sem cache e com fluxos iOS e Android', () => {

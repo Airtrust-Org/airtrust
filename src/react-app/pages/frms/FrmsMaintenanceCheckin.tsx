@@ -17,7 +17,14 @@ function localTodayIso(): string {
   return local.toISOString().slice(0, 10);
 }
 
-const SLEEP_OPTIONS = [3.5, 4, 5, 6, 7, 8, 9, 9.5] as const;
+const SLEEP_OPTIONS = [
+  { hours: 3.5, label: 'Menos de 4 h' },
+  { hours: 4, label: '4 a menos de 5 h' },
+  { hours: 5, label: '5 a menos de 6 h' },
+  { hours: 6, label: '6 a menos de 7 h' },
+  { hours: 7, label: '7 a menos de 8 h' },
+  { hours: 8, label: '8 h ou mais' },
+] as const;
 const QUALITY_OPTIONS = [
   { value: 5, label: 'Excelente' },
   { value: 4, label: 'Boa' },
@@ -156,10 +163,10 @@ export default function FrmsMaintenanceCheckin() {
         <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
           <h2 className="font-bold text-slate-950 dark:text-white">1. Sono e recuperação</h2>
           <p className="mt-1 text-xs text-slate-500">Informe o sono total nas últimas 24 horas, incluindo cochilos.</p>
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {SLEEP_OPTIONS.map((hours) => (
-              <button key={hours} type="button" onClick={() => setSleepHours(hours)} className={`min-h-11 rounded-lg border px-3 py-2 text-sm font-semibold ${optionClass(sleepHours === hours, hours < 6)}`}>
-                {hours === 9.5 ? 'Mais de 9 h' : hours === 3.5 ? 'Menos de 4 h' : `${hours} h`}
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            {SLEEP_OPTIONS.map((option) => (
+              <button key={option.hours} type="button" onClick={() => setSleepHours(option.hours)} className={`min-h-11 rounded-lg border px-3 py-2 text-sm font-semibold ${optionClass(sleepHours === option.hours, option.hours < 6)}`}>
+                {option.label}
               </button>
             ))}
           </div>
