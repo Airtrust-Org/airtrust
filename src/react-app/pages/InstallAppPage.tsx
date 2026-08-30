@@ -148,7 +148,7 @@ export default function InstallAppPage() {
       <div className="mx-auto w-full max-w-xl">
         <header className="text-center">
           <img
-            src="/android-chrome-192x192.png"
+            src="/airtrust-pwa-icon-20260830-192.png"
             alt="AirTrust"
             className="mx-auto h-24 w-24 object-contain drop-shadow-lg"
           />
@@ -202,7 +202,8 @@ export default function InstallAppPage() {
 
               <ol className="mt-6 space-y-4">
                 <Step number={1}>
-                  No Safari, toque no botão <strong>Compartilhar</strong> <Share2 className="inline h-4 w-4 align-[-2px]" aria-hidden="true" />.
+                  No Safari, toque no botão <strong>Compartilhar</strong>{' '}
+                  <Share2 className="inline h-4 w-4 align-[-2px]" aria-hidden="true" />.
                 </Step>
                 <Step number={2}>
                   Role as opções e toque em <strong>Adicionar à Tela de Início</strong>.
@@ -239,7 +240,9 @@ export default function InstallAppPage() {
                 <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
                   <p className="font-semibold text-amber-950">Abra no Chrome para instalar.</p>
                   <p className="mt-1 text-sm leading-6 text-amber-900">
-                    No menu <MoreVertical className="inline h-4 w-4 align-[-2px]" aria-hidden="true" />, escolha <strong>Abrir no Chrome</strong> e volte a tocar em Instalar AirTrust.
+                    No menu{' '}
+                    <MoreVertical className="inline h-4 w-4 align-[-2px]" aria-hidden="true" />, escolha{' '}
+                    <strong>Abrir no Chrome</strong> e volte a tocar em Instalar AirTrust.
                   </p>
                 </div>
               )}
@@ -261,7 +264,8 @@ export default function InstallAppPage() {
                   </p>
                   <ol className="mt-3 space-y-3">
                     <Step number={1}>
-                      Toque no menu <MoreVertical className="inline h-4 w-4 align-[-2px]" aria-hidden="true" /> do navegador.
+                      Toque no menu{' '}
+                      <MoreVertical className="inline h-4 w-4 align-[-2px]" aria-hidden="true" /> do navegador.
                     </Step>
                     <Step number={2}>
                       Escolha <strong>Instalar app</strong> ou <strong>Adicionar à tela inicial</strong>.
@@ -307,7 +311,11 @@ export default function InstallAppPage() {
                   onClick={copyInstallLink}
                   className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg bg-white px-3 text-sm font-semibold text-slate-800 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
                 >
-                  {copied ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                  {copied ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
                   {copied ? 'Copiado' : 'Copiar'}
                 </button>
               </div>
