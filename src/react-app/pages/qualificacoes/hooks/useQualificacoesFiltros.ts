@@ -189,12 +189,13 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
     }
   }, [highlightedHistoricoId, searchParams]);
 
-  const isDefaultStatusFilter = useMemo(
-    () =>
-      statusFiltro.size === ALL_STATUS_VALUES.length &&
-      ALL_STATUS_VALUES.every((status) => statusFiltro.has(status)),
-    [statusFiltro],
-  );
+  const isDefaultStatusFilter = useMemo(() => {
+    const defaultStatusFiltro = getDefaultHistoricoStatusSet();
+    return (
+      statusFiltro.size === defaultStatusFiltro.size &&
+      [...defaultStatusFiltro].every((status) => statusFiltro.has(status))
+    );
+  }, [getDefaultHistoricoStatusSet, statusFiltro]);
 
   return {
     activeTab,
