@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   appendPersistedEdbAuditEvent,
@@ -51,6 +52,23 @@ import {
   isTechnicalDiscrepancyClosedForReturnToService,
 } from '../../services/edb/technical-discrepancy-workflow';
 
+type SqliteBindValue = string | number | bigint | null | Uint8Array;
+
+function toSqliteBindValue(value: unknown): SqliteBindValue {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'bigint' ||
+    value instanceof Uint8Array
+  ) {
+    return value;
+  }
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  throw new TypeError(`Unsupported SQLite bind value in D1 test adapter: ${typeof value}`);
+}
+
 class SqliteD1PreparedStatement {
   constructor(
     private readonly sqlite: DatabaseSync,
@@ -63,17 +81,17 @@ class SqliteD1PreparedStatement {
   }
 
   async first<T = unknown>(): Promise<T | null> {
-    const row = this.sqlite.prepare(this.sql).get(...this.values);
+    const row = this.sqlite.prepare(this.sql).get(...this.values.map(toSqliteBindValue));
     return (row ?? null) as T | null;
   }
 
   async all<T = unknown>(): Promise<D1Result<T>> {
-    const rows = this.sqlite.prepare(this.sql).all(...this.values) as T[];
+    const rows = this.sqlite.prepare(this.sql).all(...this.values.map(toSqliteBindValue)) as T[];
     return {
       success: true,
       results: rows,
       meta: { changes: 0 },
-    } as D1Result<T>;
+    } as unknown as D1Result<T>;
   }
 
   async run(): Promise<D1Result<unknown>> {
@@ -81,7 +99,7 @@ class SqliteD1PreparedStatement {
   }
 
   runSync(): D1Result<unknown> {
-    const result = this.sqlite.prepare(this.sql).run(...this.values);
+    const result = this.sqlite.prepare(this.sql).run(...this.values.map(toSqliteBindValue));
     return {
       success: true,
       results: [],
@@ -89,7 +107,7 @@ class SqliteD1PreparedStatement {
         changes: Number(result.changes),
         last_row_id: Number(result.lastInsertRowid),
       },
-    } as D1Result<unknown>;
+    } as unknown as D1Result<unknown>;
   }
 }
 
@@ -151,7 +169,7 @@ function applyEdbSchema(sqlite: DatabaseSync): void {
     '0480_edb_diary_lifecycle_integrity.sql',
   ]) {
     const url = new URL(`../../../migrations/${migration}`, import.meta.url);
-    sqlite.exec(readFileSync(url, 'utf8'));
+    sqlite.exec(readFileSync(fileURLToPath(url), 'utf8'));
   }
 }
 
