@@ -1078,7 +1078,7 @@ router.post('/incidents/:id/police', async (c) => {
       reportedAt: timestampOrNow(body.reportedAt, 'EDB_POLICE_OCCURRENCE_TIMESTAMP_INVALID'),
       updatedBy: actorUserId(c),
     });
-    return c.json({ success: true, data }, 201);
+    return c.json({ success: true, data });
   } catch (error) {
     return failure(c, error);
   }
@@ -1095,7 +1095,7 @@ router.post('/incidents/:id/regulator-notification-evidence', async (c) => {
       notifiedAt: timestampOrNow(body.notifiedAt, 'EDB_ANAC_NOTIFICATION_TIMESTAMP_INVALID'),
       updatedBy: actorUserId(c),
     });
-    return c.json({ success: true, data }, 201);
+    return c.json({ success: true, data });
   } catch (error) {
     return failure(c, error);
   }
@@ -1111,7 +1111,7 @@ router.post('/incidents/:id/reconstituted', async (c) => {
       completedAt: timestampOrNow(body.completedAt, 'EDB_RECONSTITUTION_TIMESTAMP_INVALID'),
       updatedBy: actorUserId(c),
     });
-    return c.json({ success: true, data }, 201);
+    return c.json({ success: true, data });
   } catch (error) {
     return failure(c, error);
   }
@@ -1131,7 +1131,7 @@ router.post('/incidents/:id/impossible', async (c) => {
       ),
       updatedBy: actorUserId(c),
     });
-    return c.json({ success: true, data }, 201);
+    return c.json({ success: true, data });
   } catch (error) {
     return failure(c, error);
   }
