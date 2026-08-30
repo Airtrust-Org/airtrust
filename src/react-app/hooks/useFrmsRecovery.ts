@@ -64,6 +64,14 @@ type RecoveryEnvelope<T> = {
   message?: string;
 };
 
+type FrmsRecoveryRequestKind = 'load' | 'submit';
+
+export function safeFrmsRecoveryError(kind: FrmsRecoveryRequestKind): string {
+  return kind === 'submit'
+    ? 'Não foi possível registrar a atividade de recuperação. Tente novamente.'
+    : 'Não foi possível carregar o contexto de recuperação do FRMS. Tente novamente.';
+}
+
 function unwrapRecoveryResponse<T>(response: ApiResponse<RecoveryEnvelope<T>>): T {
   if (!response.success) {
     throw new Error(response.error || 'Falha ao comunicar com o serviço de recuperação FRMS.');
@@ -78,11 +86,21 @@ function unwrapRecoveryResponse<T>(response: ApiResponse<RecoveryEnvelope<T>>): 
 }
 
 async function getRecovery<T>(path: string): Promise<T> {
-  return unwrapRecoveryResponse<T>(await httpClient.get<RecoveryEnvelope<T>>(path));
+  try {
+    return unwrapRecoveryResponse<T>(await httpClient.get<RecoveryEnvelope<T>>(path));
+  } catch (error) {
+    console.error('[FRMS recovery] GET failed', { path, error });
+    throw new Error(safeFrmsRecoveryError('load'));
+  }
 }
 
 async function postRecovery<T>(path: string, input: unknown): Promise<T> {
-  return unwrapRecoveryResponse<T>(await httpClient.post<RecoveryEnvelope<T>>(path, input));
+  try {
+    return unwrapRecoveryResponse<T>(await httpClient.post<RecoveryEnvelope<T>>(path, input));
+  } catch (error) {
+    console.error('[FRMS recovery] POST failed', { path, error });
+    throw new Error(safeFrmsRecoveryError('submit'));
+  }
 }
 
 export function previousOperationalDate(dateYmd?: string): string {
