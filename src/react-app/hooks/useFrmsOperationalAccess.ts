@@ -98,6 +98,19 @@ type EndpointEnvelope<T> = {
   code?: string;
 };
 
+type FrmsOperationalRequestKind = 'access' | 'maintenance-team' | 'maintenance-checkin';
+
+export function safeFrmsOperationalRequestError(kind: FrmsOperationalRequestKind): string {
+  switch (kind) {
+    case 'access':
+      return 'Não foi possível validar o acesso operacional ao FRMS. Tente novamente.';
+    case 'maintenance-team':
+      return 'Não foi possível carregar a equipe de manutenção. Tente novamente.';
+    case 'maintenance-checkin':
+      return 'Não foi possível registrar o check-in de manutenção. Tente novamente.';
+  }
+}
+
 function unwrap<T>(response: ApiResponse<EndpointEnvelope<T>>): T {
   if (!response.success) {
     throw new Error(response.error || 'Falha ao consultar o escopo operacional do FRMS.');
@@ -109,18 +122,32 @@ function unwrap<T>(response: ApiResponse<EndpointEnvelope<T>>): T {
   return payload.data;
 }
 
-async function getEndpoint<T>(path: string): Promise<T> {
-  return unwrap<T>(await httpClient.get<EndpointEnvelope<T>>(path));
+async function getEndpoint<T>(path: string, kind: FrmsOperationalRequestKind): Promise<T> {
+  try {
+    return unwrap<T>(await httpClient.get<EndpointEnvelope<T>>(path));
+  } catch (error) {
+    console.error('[FRMS operational access] GET failed', { path, error });
+    throw new Error(safeFrmsOperationalRequestError(kind));
+  }
 }
 
-async function postEndpoint<T>(path: string, input: unknown): Promise<T> {
-  return unwrap<T>(await httpClient.post<EndpointEnvelope<T>>(path, input));
+async function postEndpoint<T>(
+  path: string,
+  input: unknown,
+  kind: FrmsOperationalRequestKind,
+): Promise<T> {
+  try {
+    return unwrap<T>(await httpClient.post<EndpointEnvelope<T>>(path, input));
+  } catch (error) {
+    console.error('[FRMS operational access] POST failed', { path, error });
+    throw new Error(safeFrmsOperationalRequestError(kind));
+  }
 }
 
 export function useFrmsOperationalAccess() {
   return useQuery({
     queryKey: ['frms-operational-access'],
-    queryFn: () => getEndpoint<FrmsOperationalAccess>('/me/operational-access'),
+    queryFn: () => getEndpoint<FrmsOperationalAccess>('/me/operational-access', 'access'),
     staleTime: 2 * 60 * 1000,
   });
 }
@@ -131,6 +158,7 @@ export function useFrmsMaintenanceTeam(referenceDate: string, enabled = true) {
     queryFn: () =>
       getEndpoint<FrmsMaintenanceTeam>(
         `/me/operational-access/frms-maintenance-team?date=${encodeURIComponent(referenceDate)}`,
+        'maintenance-team',
       ),
     enabled: enabled && /^\d{4}-\d{2}-\d{2}$/.test(referenceDate),
     staleTime: 60 * 1000,
@@ -144,6 +172,7 @@ export function useSubmitFrmsMaintenanceCheckin() {
       postEndpoint<FrmsMaintenanceCheckinResult>(
         '/me/operational-access/frms-maintenance-checkin',
         input,
+        'maintenance-checkin',
       ),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['frms-maintenance-team', variables.reference_date] });
