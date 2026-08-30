@@ -35,7 +35,7 @@ function applyEdbSchema(sqlite: DatabaseSync): void {
     '0480_edb_diary_lifecycle_integrity.sql',
   ]) {
     const url = new URL(`../../../migrations/${migration}`, import.meta.url);
-    sqlite.exec(readFileSync(fileURLToPath(url), 'utf8'));
+    sqlite.exec(readFileSync(fileURLToPath(url.href), 'utf8'));
   }
 }
 
