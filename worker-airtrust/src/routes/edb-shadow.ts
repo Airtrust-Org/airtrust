@@ -4,6 +4,7 @@ import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import type { AppEnv } from '../types';
 import { isEdbShadowEnabledForTenant } from '../lib/edb/edb-shadow-flag';
+import { mapEdbShadowError } from '../lib/edb/edb-shadow-errors';
 import {
   createControleVoosRegulatoryStage,
   replaceControleVoosRegulatoryStage,
@@ -155,26 +156,8 @@ async function bodyObject(c: EdbContext): Promise<JsonObject> {
   return objectValue(body, 'EDB_INVALID_JSON_BODY');
 }
 
-function safeCode(error: unknown): { code: string; status: 400 | 404 | 409 | 500 } {
-  const message = error instanceof Error ? error.message : '';
-  const match = /EDB_[A-Z0-9_]+/.exec(message);
-  if (!match) return { code: 'EDB_SHADOW_INTERNAL_ERROR', status: 500 };
-  const code = match[0];
-  if (code.includes('NOT_FOUND') || code.includes('DISAPPEARED')) return { code, status: 404 };
-  if (
-    code.includes('CONFLICT') ||
-    code.includes('ALREADY') ||
-    code.includes('STATE_') ||
-    code.includes('_REQUIRES_') ||
-    code.includes('_REQUIRED_FOR_STATE')
-  ) {
-    return { code, status: 409 };
-  }
-  return { code, status: 400 };
-}
-
 function failure(c: EdbContext, error: unknown) {
-  const { code, status } = safeCode(error);
+  const { code, status } = mapEdbShadowError(error);
   return c.json({ success: false, error: 'Operação eDB shadow rejeitada', code }, status);
 }
 
@@ -1095,7 +1078,7 @@ router.post('/incidents/:id/police', async (c) => {
       reportedAt: timestampOrNow(body.reportedAt, 'EDB_POLICE_OCCURRENCE_TIMESTAMP_INVALID'),
       updatedBy: actorUserId(c),
     });
-    return c.json({ success: true, data });
+    return c.json({ success: true, data }, 201);
   } catch (error) {
     return failure(c, error);
   }
@@ -1112,7 +1095,7 @@ router.post('/incidents/:id/regulator-notification-evidence', async (c) => {
       notifiedAt: timestampOrNow(body.notifiedAt, 'EDB_ANAC_NOTIFICATION_TIMESTAMP_INVALID'),
       updatedBy: actorUserId(c),
     });
-    return c.json({ success: true, data });
+    return c.json({ success: true, data }, 201);
   } catch (error) {
     return failure(c, error);
   }
@@ -1128,7 +1111,7 @@ router.post('/incidents/:id/reconstituted', async (c) => {
       completedAt: timestampOrNow(body.completedAt, 'EDB_RECONSTITUTION_TIMESTAMP_INVALID'),
       updatedBy: actorUserId(c),
     });
-    return c.json({ success: true, data });
+    return c.json({ success: true, data }, 201);
   } catch (error) {
     return failure(c, error);
   }
@@ -1148,7 +1131,7 @@ router.post('/incidents/:id/impossible', async (c) => {
       ),
       updatedBy: actorUserId(c),
     });
-    return c.json({ success: true, data });
+    return c.json({ success: true, data }, 201);
   } catch (error) {
     return failure(c, error);
   }
