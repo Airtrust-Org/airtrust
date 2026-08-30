@@ -202,6 +202,32 @@ function statusBadge(status: SigvoosStatus): string {
   return 'bg-amber-100 text-amber-800 border-amber-200';
 }
 
+export function SigvoosEventDetail({
+  error,
+  status,
+}: {
+  error?: string | null;
+  status: SigvoosStatus;
+}) {
+  if (error) {
+    return (
+      <span className="inline-flex items-start gap-1 text-xs text-rose-700">
+        <AlertTriangle className="mt-0.5 h-3.5 w-3.5" /> Falha na sincronização
+      </span>
+    );
+  }
+
+  if (status === 'SUCESSO') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
+        <CheckCircle2 className="h-3.5 w-3.5" /> Sem erro
+      </span>
+    );
+  }
+
+  return <span className="text-xs text-amber-700">Execucao em andamento</span>;
+}
+
 export default function IntegracoesEdApp() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1064,17 +1090,7 @@ export default function IntegracoesEdApp() {
                     <td className="px-3 py-2">{evento.summary.totalErros || 0}</td>
                     <td className="px-3 py-2">{formatDateTime(evento.created_at)}</td>
                     <td className="px-3 py-2">
-                      {evento.erro_ultima ? (
-                        <span className="inline-flex items-start gap-1 text-xs text-rose-700">
-                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5" /> {evento.erro_ultima}
-                        </span>
-                      ) : evento.status === 'SUCESSO' ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Sem erro
-                        </span>
-                      ) : (
-                        <span className="text-xs text-amber-700">Execucao em andamento</span>
-                      )}
+                      <SigvoosEventDetail error={evento.erro_ultima} status={evento.status} />
                     </td>
                   </tr>
                 ))}
