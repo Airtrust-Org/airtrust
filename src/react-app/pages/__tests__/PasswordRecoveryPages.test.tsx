@@ -51,6 +51,33 @@ describe('password recovery public UI', () => {
     );
   });
 
+  it('shows the same safe retry message when the forgot-password request rejects', async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('network down')) as typeof fetch;
+
+    render(<ForgotPasswordPage />);
+    fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'usuario@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar instruções' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Não foi possível solicitar a recuperação agora',
+      ),
+    );
+    expect(screen.queryByText(/network down/i)).not.toBeInTheDocument();
+  });
+
+  it('does not call recovery when a programmatic submit has no email', () => {
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const { container } = render(<ForgotPasswordPage />);
+    const form = container.querySelector('form');
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('fails closed when reset-password has no token', () => {
     window.history.replaceState({}, '', '/reset-password');
     render(<ResetPasswordPage />);
@@ -60,6 +87,21 @@ describe('password recovery public UI', () => {
       'href',
       '/forgot-password',
     );
+  });
+
+  it('rejects a password shorter than eight characters before calling the API', () => {
+    window.history.replaceState({}, '', '/reset-password?token=abc123');
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const { container } = render(<ResetPasswordPage />);
+    const fields = screen.getAllByLabelText(/senha/i);
+    fireEvent.change(fields[0], { target: { value: 'curta12' } });
+    fireEvent.change(fields[1], { target: { value: 'curta12' } });
+    fireEvent.submit(container.querySelector('form')!);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('no mínimo 8 caracteres');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('validates matching password locally before calling reset-password', () => {
@@ -119,5 +161,46 @@ describe('password recovery public UI', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('link expirou'));
     expect(screen.queryByText(/SQLSTATE/i)).not.toBeInTheDocument();
+  });
+
+  it('uses a generic retry message for reset server failures', async () => {
+    window.history.replaceState({}, '', '/reset-password?token=abc123');
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: false, error: 'internal stack detail' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ) as typeof fetch;
+
+    render(<ResetPasswordPage />);
+    const fields = screen.getAllByLabelText(/senha/i);
+    fireEvent.change(fields[0], { target: { value: 'senha1234' } });
+    fireEvent.change(fields[1], { target: { value: 'senha1234' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Não foi possível redefinir a senha agora',
+      ),
+    );
+    expect(screen.queryByText(/internal stack detail/i)).not.toBeInTheDocument();
+  });
+
+  it('uses the same generic retry message when the reset request rejects', async () => {
+    window.history.replaceState({}, '', '/reset-password?token=abc123');
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('network down')) as typeof fetch;
+
+    render(<ResetPasswordPage />);
+    const fields = screen.getAllByLabelText(/senha/i);
+    fireEvent.change(fields[0], { target: { value: 'senha1234' } });
+    fireEvent.change(fields[1], { target: { value: 'senha1234' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Não foi possível redefinir a senha agora',
+      ),
+    );
+    expect(screen.queryByText(/network down/i)).not.toBeInTheDocument();
   });
 });
