@@ -70,6 +70,9 @@ export interface Env {
   // Migração arquitetural SIGVOOS→Controle de Voos→FRMS (shadow-mode, ver docs/frms-controle-voos-migracao.md)
   // Default seguro (ausente/vazio) = desativado. 'all' = todas as empresas. Ou lista de ids separada por vírgula.
   CONTROLE_VOOS_FRMS_SHADOW_MODE_TENANTS?: string;
+  // eDB shadow runtime. Staging-only in code, explicit tenant allowlist,
+  // `all` is invalid and production always fails closed.
+  EDB_SHADOW_PILOT_TENANTS?: string;
 
   // CORS Origins (pode ser string separada por vírgula)
   CORS_ORIGINS?: string;
@@ -258,8 +261,8 @@ export interface QualificacaoCategoria {
   codigo: string;
   nome: string;
   slug: string;
-  cor: string;
   descricao?: string;
+  cor?: string;
   ordem: number;
   ativo: boolean;
   created_at: string;
@@ -267,33 +270,59 @@ export interface QualificacaoCategoria {
   deleted_at?: string | null;
 }
 
-// Simulador
-export interface Simulador {
+// Habilitacao
+export interface Habilitacao {
   id: number;
-  modelo: string;
-  fabricante?: string;
-  tipo?: string;
-  codigo?: string;
+  funcionario_id: number;
+  tipo: string;
+  numero?: string;
+  data_emissao?: string;
+  data_validade?: string;
   ativo: boolean;
   created_at: string;
   updated_at: string;
-  deleted_at?: string | null;
+}
+
+// Licenca
+export interface Licenca {
+  id: number;
+  funcionario_id: number;
+  tipo: string;
+  numero: string;
+  data_emissao: string;
+  data_validade?: string;
+  ativo: boolean;
+  arquivo_url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Simulador
+export interface Simulador {
+  id: number;
+  nome: string;
+  modelo: string;
+  fabricante?: string;
+  localizacao?: string;
+  ativo: boolean;
+  observacoes?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // Sessao Simulador
 export interface SessaoSimulador {
   id: number;
   simulador_id: number;
-  instrutor_id: number;
-  checador_id?: number;
-  data_sessao: string;
-  duracao_minutos: number;
-  tipo_sessao: 'TREINAMENTO' | 'AVALIACAO' | 'RECORRENTE';
+  instrutor_id?: number;
+  data_inicio: string;
+  data_fim?: string;
+  duracao_minutos?: number;
+  tipo: 'TREINAMENTO' | 'AVALIACAO' | 'CHECK';
   status: 'AGENDADA' | 'EM_ANDAMENTO' | 'CONCLUIDA' | 'CANCELADA';
   observacoes?: string;
   created_at: string;
   updated_at: string;
-  deleted_at?: string | null;
 }
 
 // Participante Sessao
@@ -388,21 +417,15 @@ export interface UsuarioEmpresa {
   id: number;
   usuario_id: number;
   empresa_id: number;
-  role: 'admin' | 'manager' | 'editor' | 'viewer';
-  is_primary: boolean;
-  created_at: string;
-}
-
-export interface EmpresaConfig {
-  id: number;
-  empresa_id: number;
-  dias_alerta_vencimento: number;
-  email_notificacoes?: string;
-  webhook_url?: string;
-  timezone: string;
-  logo_relatorio?: string;
-  cores_tema?: string; // JSON
-  modulos_ativos: string; // JSON array
+  role: string;
+  ativo: boolean;
+  data_convite?: string;
+  data_aceite?: string;
   created_at: string;
   updated_at: string;
 }
+
+// ===== UTILITY TYPES =====
+
+export type Timestamp = string;
+export type ID = number;

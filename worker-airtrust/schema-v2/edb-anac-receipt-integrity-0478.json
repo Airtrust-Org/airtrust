@@ -1,0 +1,8 @@
+{
+  "changeId": "edb-anac-receipt-integrity-0478",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0478_edb_anac_receipt_integrity.sql",
+  "fileHash": "164e9d50a1c27fc5fd44b6177635ff8859e3e1c0164616eca248ca2f780b4b3e",
+  "planPath": "worker-airtrust/schema-v2/plans/edb-anac-receipt-integrity-0478.md",
+  "planHash": "6f29bf1b26a13a9b0bd87fadf1a56fbf202065c183f547cdaa083e31a2ac19e0"
+}

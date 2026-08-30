@@ -1,0 +1,8 @@
+{
+  "changeId": "edb-relational-integrity-0479",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0479_edb_relational_integrity.sql",
+  "fileHash": "98bc086e709fb4a1caa5782a57a6a40171231f3de05b3fc2e8723d4977d8401f",
+  "planPath": "worker-airtrust/schema-v2/plans/edb-relational-integrity-0479.md",
+  "planHash": "891289f150fdcbc2d3f30d247b62362bddcda248fc09a0cf34d4ea0c3772191a"
+}
