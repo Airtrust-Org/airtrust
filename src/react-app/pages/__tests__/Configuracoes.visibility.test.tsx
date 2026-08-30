@@ -66,18 +66,16 @@ describe('Configuracoes visibility', () => {
 
     renderPage();
 
-    expect(screen.queryByRole('button', { name: 'Empresas' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Usuários' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Backup' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Empresas' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Usuários' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Backup' })).toBeNull();
 
-    expect(screen.getByRole('button', { name: 'Cadastros' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Gestores por Setor' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Matriz de Treinamentos' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Importações e Exportações' }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Integrações' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sistema' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Cadastros' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Gestores por Setor' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Matriz de Treinamentos' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Importações e Exportações' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Integrações' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Sistema' })).toBeInTheDocument();
   });
 
   it('mantem abas administrativas para admin geral', () => {
@@ -93,8 +91,8 @@ describe('Configuracoes visibility', () => {
 
     renderPage();
 
-    expect(screen.getByRole('button', { name: 'Empresas' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Usuários' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Backup' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Empresas' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Usuários' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Backup' })).toBeInTheDocument();
   });
 });

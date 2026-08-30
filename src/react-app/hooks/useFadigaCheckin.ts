@@ -117,6 +117,20 @@ type DailyFatigueTeamPayload = {
   items?: Array<Record<string, unknown>>;
 };
 
+export type FadigaVisibleRequest = 'team-checkins-load' | 'daily-checkin-submit';
+
+export function safeFadigaVisibleErrorMessage(
+  request: FadigaVisibleRequest,
+  _technicalDetail?: unknown,
+): string {
+  switch (request) {
+    case 'team-checkins-load':
+      return 'Não foi possível carregar os check-ins da equipe.';
+    case 'daily-checkin-submit':
+      return 'Não foi possível registrar o check-in de fadiga. Tente novamente.';
+  }
+}
+
 export function normalizeFadigaPainelDate(value?: string): string {
   const raw = String(value || 'hoje').trim();
   const brMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -219,11 +233,17 @@ export function useCheckinHoje() {
 export function useSubmitCheckin() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: CheckinFormData) =>
-      fetchJson('/frms/fadiga-checkin', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
+    mutationFn: async (data: CheckinFormData) => {
+      try {
+        return await fetchJson('/frms/fadiga-checkin', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        });
+      } catch (error) {
+        console.error('[FRMS fadiga] Falha ao registrar check-in diário', error);
+        throw new Error(safeFadigaVisibleErrorMessage('daily-checkin-submit', error));
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fadiga-checkin-hoje'] });
       queryClient.invalidateQueries({ queryKey: ['fadiga-historico'] });
@@ -239,8 +259,16 @@ export function useFadigaPainel(data?: string) {
   return useQuery({
     queryKey: ['fadiga-painel', 'team', normalizedDate],
     queryFn: async () => {
-      const payload = await fetchJson<DailyFatigueTeamPayload>(buildFadigaPainelRequestPath(normalizedDate));
-      const normalized = normalizeFadigaPainelPayload(payload, normalizedDate);
+      let normalized: FadigaPainelEquipeItem[];
+      try {
+        const payload = await fetchJson<DailyFatigueTeamPayload>(
+          buildFadigaPainelRequestPath(normalizedDate),
+        );
+        normalized = normalizeFadigaPainelPayload(payload, normalizedDate);
+      } catch (error) {
+        console.error('[FRMS fadiga] Falha ao carregar check-ins da equipe', error);
+        throw new Error(safeFadigaVisibleErrorMessage('team-checkins-load', error));
+      }
 
       // O endpoint daily-fatigue historicamente omitiu KSS no SELECT da visão de equipe.
       // Enquanto clientes antigos ainda coexistem, reconciliamos o mesmo check-in pela fonte

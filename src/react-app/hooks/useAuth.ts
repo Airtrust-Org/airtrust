@@ -43,7 +43,12 @@ export function useAuth() {
       },
       selectEmpresa: async (empresaId: number) => {
         clearActiveSessionRole();
-        await context.selectEmpresa(empresaId);
+        try {
+          await context.selectEmpresa(empresaId);
+        } catch (error) {
+          console.error('[Auth] Falha ao trocar empresa', error);
+          throw new Error('Não foi possível trocar de empresa. Tente novamente.');
+        }
       },
     };
   }, [activeSessionRole, context]);

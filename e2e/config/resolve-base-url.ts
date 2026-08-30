@@ -7,6 +7,7 @@ const PRODUCTION_WORKER_HOSTS = new Set([
 
 const STAGING_HOSTS = new Set([
   'main.airtrust.pages.dev',
+  'staging.airtrust.pages.dev',
   'airtrust-api-staging.airtrust.workers.dev',
 ]);
 

@@ -4,6 +4,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL, fetchWithAuth, getAccessToken } from '@/react-app/config/api';
+import { safeLmsResponseErrorText } from '@/react-app/lib/lms-safe-error-response';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -323,20 +324,20 @@ function resolveUploadError<T>(xhr: XMLHttpRequest): LmsUploadResponse<T> {
       const result = JSON.parse(rawText) as LmsUploadResponse<T>;
       return {
         success: false,
-        error: result.error ?? `HTTP ${xhr.status}`,
+        error: safeLmsResponseErrorText(result.error, xhr.status),
         data: result.data,
       };
     } catch {
       return {
         success: false,
-        error: rawText.length > 220 ? `${rawText.slice(0, 220)}...` : rawText,
+        error: safeLmsResponseErrorText(rawText, xhr.status),
       };
     }
   }
 
   return {
     success: false,
-    error: `HTTP ${xhr.status}`,
+    error: safeLmsResponseErrorText(undefined, xhr.status),
   };
 }
 
