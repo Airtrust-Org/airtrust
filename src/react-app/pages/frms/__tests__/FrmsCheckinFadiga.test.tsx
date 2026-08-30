@@ -74,8 +74,6 @@ vi.mock('@/react-app/hooks/useFrmsRecovery', async () => {
   );
   return {
     ...actual,
-    // Default: previous day had a detected flight, so the recovery card stays
-    // collapsed and does not ask for an activity classification.
     useFrmsRecoveryContext: () => ({
       data: {
         reference_date: '2026-06-04',
@@ -245,11 +243,11 @@ describe('FrmsCheckinFadiga helpers', () => {
 
 describe('FrmsCheckinFadiga team panel adapter', () => {
   const canonicalItems = [
-    ['bb2a03a5', 3, 'Antonio Luiz Simões Ramos', 3, 13],
-    ['7b2bf012', 41, 'Filipe Passaroni Daumas', 3, 13],
-    ['49d52917', 38, 'Gabriel Ferreira Barreto', 3, 9],
-    ['243a1652', 15, 'José Alfredo Gomes Marinho', 1, 0],
-    ['5fa8ffaa', 33, 'Wilson Maciel Martins Nery', 1, 4],
+    ['fixture-a', 101, 'Tripulante Alfa', 3, 13],
+    ['fixture-b', 102, 'Tripulante Bravo', 3, 13],
+    ['fixture-c', 103, 'Tripulante Charlie', 3, 9],
+    ['fixture-d', 104, 'Tripulante Delta', 1, 0],
+    ['fixture-e', 105, 'Tripulante Eco', 1, 4],
   ].map(([checkin_id, funcionario_id, funcionario_nome, kss_score, score_fadiga]) => ({
     checkin_id,
     funcionario_id,
@@ -271,16 +269,16 @@ describe('FrmsCheckinFadiga team panel adapter', () => {
     );
   });
 
-  it('normaliza o shape canônico real com 5 check-ins de 2026-06-05', () => {
+  it('normaliza o shape canônico com 5 check-ins sintéticos', () => {
     const rows = normalizeFadigaPainelPayload({ date: '2026-06-05', items: canonicalItems }, '2026-06-05');
 
     expect(rows).toHaveLength(5);
     expect(rows.map((row) => row.funcionario_nome)).toEqual([
-      'Antonio Luiz Simões Ramos',
-      'Filipe Passaroni Daumas',
-      'Gabriel Ferreira Barreto',
-      'José Alfredo Gomes Marinho',
-      'Wilson Maciel Martins Nery',
+      'Tripulante Alfa',
+      'Tripulante Bravo',
+      'Tripulante Charlie',
+      'Tripulante Delta',
+      'Tripulante Eco',
     ]);
     expect(rows.every((row) => row.status === 'normal')).toBe(true);
   });
@@ -288,7 +286,7 @@ describe('FrmsCheckinFadiga team panel adapter', () => {
   it('não converte resposta individual ou shape inesperado em lista vazia', () => {
     const individualPayload = {
       date: '2026-06-05',
-      funcionario_id: 41,
+      funcionario_id: 102,
     } as unknown as Parameters<typeof normalizeFadigaPainelPayload>[0];
 
     expect(() =>
@@ -334,7 +332,7 @@ describe('FrmsCheckinFadiga UI', () => {
   });
 
   function preencherFormularioValido() {
-    fireEvent.click(screen.getByRole('radio', { name: '8 horas' }));
+    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
     fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
     fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
@@ -367,30 +365,26 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.getByText('Dormi muito bem; acordei descansado e recuperado.')).toBeInTheDocument();
   });
 
-  it('renderiza as escalas graduais da melhor condição para a pior', () => {
+  it('renderiza as seis faixas de sono alinhadas aos degraus do cálculo', () => {
     render(<FrmsCheckinFadiga />);
 
     const sonoFieldset = screen.getAllByText('Horas de sono nas últimas 24h')[1]?.closest('fieldset');
     expect(sonoFieldset).toBeTruthy();
     expect(within(sonoFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).value)).toEqual([
-      'mais9',
-      'h9',
-      'h8',
-      'h7',
-      'h6',
-      'h5',
-      'h4',
       'menos4',
+      'h4',
+      'h5',
+      'h6',
+      'h7',
+      'h8',
     ]);
     expect(within(sonoFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual([
-      'Mais de 9 horas',
-      '9 horas',
-      '8 horas',
-      '7 horas',
-      '6 horas',
-      '5 horas',
-      '4 horas',
       'Menos de 4 horas',
+      '4 a menos de 5 horas',
+      '5 a menos de 6 horas',
+      '6 a menos de 7 horas',
+      '7 a menos de 8 horas',
+      '8 horas ou mais',
     ]);
 
     const qualidadeFieldset = screen.getAllByText('Qualidade do sono')[1]?.closest('fieldset');
@@ -421,7 +415,7 @@ describe('FrmsCheckinFadiga UI', () => {
       screen.getByLabelText('KSS 9: Extremamente sonolento, com grande esforço para permanecer acordado'),
     ).toBeInTheDocument();
 
-    expect(within(sonoFieldset as HTMLElement).getAllByRole('radio')).toHaveLength(8);
+    expect(within(sonoFieldset as HTMLElement).getAllByRole('radio')).toHaveLength(6);
   });
 
   it('mantem a ordem semântica original da pergunta de aptidão, sem tratar coordenação como escala ordinal', () => {
@@ -447,8 +441,8 @@ describe('FrmsCheckinFadiga UI', () => {
 
     render(<FrmsCheckinFadiga />);
 
-    expect(screen.getByRole('radio', { name: 'Mais de 9 horas' })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: '8 horas' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Menos de 4 horas' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '8 horas ou mais' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmar Check-in Diário' })).toHaveClass('w-full');
   });
 
@@ -464,7 +458,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('envia payload minimo valido e compativel com null em meds/alcool', async () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: '8 horas' }));
+    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
     fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
     fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
@@ -503,7 +497,7 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(payload.motivo_inaptidao).toBeUndefined();
   });
 
-  it('envia o valor canônico correto para cada alternativa visual de sono', async () => {
+  it('envia o valor canônico correto para cada faixa visual de sono', async () => {
     render(<FrmsCheckinFadiga />);
 
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
@@ -515,14 +509,12 @@ describe('FrmsCheckinFadiga UI', () => {
     const submitButton = screen.getByRole('button', { name: 'Confirmar Check-in Diário' });
 
     const casos = [
-      ['Mais de 9 horas', 9.5],
-      ['9 horas', 9],
-      ['8 horas', 8],
-      ['7 horas', 7],
-      ['6 horas', 6],
-      ['5 horas', 5],
-      ['4 horas', 4],
       ['Menos de 4 horas', 3.5],
+      ['4 a menos de 5 horas', 4],
+      ['5 a menos de 6 horas', 5],
+      ['6 a menos de 7 horas', 6],
+      ['7 a menos de 8 horas', 7],
+      ['8 horas ou mais', 8],
     ] as const;
 
     for (const [label, horas] of casos) {
@@ -539,7 +531,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('preserva os valores internos de qualidade do sono e KSS no payload', async () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Mais de 9 horas' }));
+    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
     fireEvent.click(document.getElementById('fit-choice-sim') as HTMLElement);
     fireEvent.click(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i }));
@@ -614,7 +606,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('mantem observacao obrigatoria para resposta nao apto', () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: '5 horas' }));
+    fireEvent.click(screen.getByRole('radio', { name: '5 a menos de 6 horas' }));
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
     fireEvent.click(screen.getByLabelText('Qualidade 3 - Regular'));
     fireEvent.click(screen.getByLabelText('KSS 6: Alguns sinais de sonolência'));
@@ -672,7 +664,7 @@ describe('FrmsCheckinFadiga UI', () => {
 
     expect(screen.getByRole('status')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('radio', { name: '8 horas' }));
+    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
     fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
     fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
@@ -686,8 +678,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('usa fieldset e legend para agrupamento semantico com radios nativos', () => {
     render(<FrmsCheckinFadiga />);
 
-    // fieldset provides group semantics; native radio names create the radio group
-    expect(screen.getByRole('radio', { name: '8 horas' })).toHaveAttribute('name', 'sono-24h');
+    expect(screen.getByRole('radio', { name: '8 horas ou mais' })).toHaveAttribute('name', 'sono-24h');
     expect(screen.getByLabelText('Qualidade 3 - Regular')).toHaveAttribute('name', 'qualidade-sono');
     expect(screen.getByLabelText('KSS 5: Nem alerta nem sonolento')).toHaveAttribute('name', 'kss');
   });
@@ -736,7 +727,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('bloqueia envio quando horario e invalido e mostra mensagem clara', () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: '8 horas' }));
+    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     const wakeInput = screen.getByLabelText('Hora em que acordou');
     fireEvent.change(wakeInput, { target: { value: '2400' } });
     fireEvent.blur(wakeInput);
@@ -756,7 +747,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('submete 0630 como 06:30', async () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: '8 horas' }));
+    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0630' } });
     fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
     fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
@@ -803,12 +794,12 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.getByText(/não determina automaticamente aptidão ou restrição operacional/i)).toBeInTheDocument();
   });
 
-  it('na aba Equipe renderiza os 5 check-ins reais de 05/06/2026 quando a query retorna dados', async () => {
+  it('na aba Equipe renderiza 5 check-ins sintéticos quando a query retorna dados', async () => {
     const equipeRows: FadigaPainelEquipeItem[] = [
       {
-        id: 'daily-fatigue-3',
-        funcionario_id: 3,
-        funcionario_nome: 'Antonio Luiz Simões Ramos',
+        id: 'daily-fatigue-101',
+        funcionario_id: 101,
+        funcionario_nome: 'Tripulante Alfa',
         cargo: 'Comandante',
         data: '2026-06-05',
         status: 'normal',
@@ -819,9 +810,9 @@ describe('FrmsCheckinFadiga UI', () => {
         status_operacional: 'APTO',
       },
       {
-        id: 'daily-fatigue-41',
-        funcionario_id: 41,
-        funcionario_nome: 'Filipe Passaroni Daumas',
+        id: 'daily-fatigue-102',
+        funcionario_id: 102,
+        funcionario_nome: 'Tripulante Bravo',
         cargo: 'Comandante',
         data: '2026-06-05',
         status: 'normal',
@@ -832,9 +823,9 @@ describe('FrmsCheckinFadiga UI', () => {
         status_operacional: 'APTO',
       },
       {
-        id: 'daily-fatigue-38',
-        funcionario_id: 38,
-        funcionario_nome: 'Gabriel Ferreira Barreto',
+        id: 'daily-fatigue-103',
+        funcionario_id: 103,
+        funcionario_nome: 'Tripulante Charlie',
         cargo: 'Copiloto',
         data: '2026-06-05',
         status: 'normal',
@@ -845,9 +836,9 @@ describe('FrmsCheckinFadiga UI', () => {
         status_operacional: 'APTO',
       },
       {
-        id: 'daily-fatigue-15',
-        funcionario_id: 15,
-        funcionario_nome: 'José Alfredo Gomes Marinho',
+        id: 'daily-fatigue-104',
+        funcionario_id: 104,
+        funcionario_nome: 'Tripulante Delta',
         cargo: 'Comandante',
         data: '2026-06-05',
         status: 'normal',
@@ -858,9 +849,9 @@ describe('FrmsCheckinFadiga UI', () => {
         status_operacional: 'APTO',
       },
       {
-        id: 'daily-fatigue-33',
-        funcionario_id: 33,
-        funcionario_nome: 'Wilson Maciel Martins Nery',
+        id: 'daily-fatigue-105',
+        funcionario_id: 105,
+        funcionario_nome: 'Tripulante Eco',
         cargo: 'Comandante',
         data: '2026-06-05',
         status: 'normal',
@@ -885,11 +876,11 @@ describe('FrmsCheckinFadiga UI', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Equipe' }));
 
-    expect(await screen.findByText('Antonio Luiz Simões Ramos')).toBeInTheDocument();
-    expect(await screen.findByText('Filipe Passaroni Daumas')).toBeInTheDocument();
-    expect(screen.getByText('Gabriel Ferreira Barreto')).toBeInTheDocument();
-    expect(screen.getByText('José Alfredo Gomes Marinho')).toBeInTheDocument();
-    expect(screen.getByText('Wilson Maciel Martins Nery')).toBeInTheDocument();
+    expect(await screen.findByText('Tripulante Alfa')).toBeInTheDocument();
+    expect(await screen.findByText('Tripulante Bravo')).toBeInTheDocument();
+    expect(screen.getByText('Tripulante Charlie')).toBeInTheDocument();
+    expect(screen.getByText('Tripulante Delta')).toBeInTheDocument();
+    expect(screen.getByText('Tripulante Eco')).toBeInTheDocument();
     expect(screen.queryByText('Nenhum check-in registrado para esta data.')).not.toBeInTheDocument();
   });
 
