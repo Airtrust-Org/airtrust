@@ -39,14 +39,16 @@ describe('service worker cache guard', () => {
   });
 
   it('executa bootstrap de recuperacao nas rotas de entrada sem registrar novo service worker', () => {
-    expect(indexHtmlSource).toContain('const ENTRY_ROUTE_PATTERNS = [/^\\/$/, /^\\/login$/, /^\\/frms(?:\\/|$)/];');
+    expect(indexHtmlSource).toContain(
+      'const ENTRY_ROUTE_PATTERNS = [/^\\/$/, /^\\/login$/, /^\\/instalar$/, /^\\/frms(?:\\/|$)/];',
+    );
     expect(indexHtmlSource).toContain("const RECOVERY_KEY = 'airtrust-login-cache-recovery-v4';");
     expect(indexHtmlSource).toContain("const SW_RESET_PARAM = 'airtrust_sw_reset';");
     expect(indexHtmlSource).toContain('navigator.serviceWorker.getRegistrations()');
     expect(indexHtmlSource).not.toContain("navigator.serviceWorker.register('/sw.js', {");
     expect(indexHtmlSource).toContain('registration.unregister?.()');
     expect(indexHtmlSource).toContain("currentUrl.searchParams.set(RECOVERY_PARAM, '1');");
-    expect(indexHtmlSource).toContain('window.location.replace(currentUrl.toString());');
+    expect(indexHtmlSource).toContain('window.location.replace(currentUrl.toString());
   });
 
   it('desregistra service workers existentes e limpa caches no sw-manager sem registrar outro', () => {
