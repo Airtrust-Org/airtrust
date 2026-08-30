@@ -1,8 +1,9 @@
 /**
  * ERROR HANDLER MIDDLEWARE - Global Error Handling
  *
- * Captura erros não tratados e retorna resposta JSON padronizada
- * Previne vazamento de informações sensíveis em produção
+ * Captura erros não tratados e retorna resposta JSON padronizada.
+ * Detalhes técnicos permanecem nos logs e nunca atravessam a fronteira HTTP
+ * em staging/produção para respostas 5xx.
  */
 
 import type { ErrorHandler } from 'hono';
@@ -48,6 +49,15 @@ function resolveContextId(
   return undefined;
 }
 
+function safeServerMessage(status: number): string {
+  if (status === 503) return 'Serviço temporariamente indisponível.';
+  return 'Erro interno do servidor';
+}
+
+function shouldExposeServerDetail(environment: string, status: number): boolean {
+  return environment === 'development' || status < 500;
+}
+
 /**
  * Classe de erro customizada para API
  * Permite definir status code e mensagem específica
@@ -85,12 +95,14 @@ export const errorHandler: ErrorHandler = (err, c) => {
     method: c.req.method,
   });
 
-  // Se for ApiError, usar statusCode definido
+  // ApiError preserva feedback 4xx de negócio. Em staging/produção, 5xx
+  // mantém apenas code/requestId e uma mensagem operacional genérica.
   if (err instanceof ApiError) {
+    const exposeDetail = shouldExposeServerDetail(environment, err.statusCode);
     return c.json(
       {
         success: false,
-        error: err.message,
+        error: exposeDetail ? err.message : safeServerMessage(err.statusCode),
         code: err.code,
         requestId,
       },
@@ -98,14 +110,17 @@ export const errorHandler: ErrorHandler = (err, c) => {
     );
   }
 
-  // Se for AppError (de utils/errors), usar status definido
-  // Verificar por propriedades (o nome pode variar após transpile/minify)
+  // AppError (utils/errors): mesma política, verificado por propriedades
+  // porque o nome da classe pode variar após transpile/minify.
   const appErrorCandidate = err as Error & { status?: unknown; code?: string };
   if (typeof appErrorCandidate.status === 'number') {
+    const exposeDetail = shouldExposeServerDetail(environment, appErrorCandidate.status);
     return c.json(
       {
         success: false,
-        error: appErrorCandidate.message,
+        error: exposeDetail
+          ? appErrorCandidate.message
+          : safeServerMessage(appErrorCandidate.status),
         code: appErrorCandidate.code,
         requestId,
       },
@@ -113,11 +128,10 @@ export const errorHandler: ErrorHandler = (err, c) => {
     );
   }
 
-  // Detectar ambiente via binding (NUNCA via header — isso exporia stack traces a qualquer request)
-  const isDevelopment = environment === 'development' || environment === 'staging';
-
-  // Em produção: nunca expor stack traces
-  if (isDevelopment) {
+  // Somente desenvolvimento local pode receber detalhes técnicos pela resposta.
+  // Staging segue a mesma fronteira de confidencialidade de produção; o stack
+  // completo continua disponível no log estruturado acima.
+  if (environment === 'development') {
     return c.json(
       {
         success: false,
@@ -132,7 +146,6 @@ export const errorHandler: ErrorHandler = (err, c) => {
     );
   }
 
-  // Produção: resposta segura sem detalhes internos
   return c.json(
     {
       success: false,
