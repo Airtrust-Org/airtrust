@@ -17,6 +17,7 @@ import { installChunkErrorListeners } from '@/react-app/utils/lazyWithRetry';
 import GlobalConfirmDialogHost from '@/react-app/components/modals/GlobalConfirmDialogHost';
 import GlobalAlertDialogHost from '@/react-app/components/modals/GlobalAlertDialogHost';
 import { initializeThemePreference } from '@/react-app/theme/theme';
+import InstallAppPage from '@/react-app/pages/InstallAppPage';
 
 initializeThemePreference();
 
@@ -124,13 +125,19 @@ if (typeof window !== 'undefined' && import.meta.env.MODE === 'development') {
   console.log('🔒 [DEV] DevTools hotkey blocker activated');
 }
 
+const isInstallRoute = window.location.pathname === '/instalar';
+
 // StrictMode removido — causa double-invoke de effects que quebra dedup guards em dev
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>
-    <>
-      <App />
-      <GlobalConfirmDialogHost />
-      <GlobalAlertDialogHost />
-    </>
+    {isInstallRoute ? (
+      <InstallAppPage />
+    ) : (
+      <>
+        <App />
+        <GlobalConfirmDialogHost />
+        <GlobalAlertDialogHost />
+      </>
+    )}
   </ErrorBoundary>,
 );
