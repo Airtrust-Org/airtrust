@@ -85,6 +85,28 @@ jobs:
           node --check scripts/staging/seed-qa-edb-full-lifecycle.mjs
           node --check scripts/staging/smoke-edb-full-lifecycle.mjs
 
+      - name: Verify exact deployed eDB release before D1 access
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const baseUrl = String(process.env.STAGING_API_BASE_URL || '').trim();
+          const expectedSha = String(process.env.EXPECTED_EDB_RELEASE_SHA || '').trim().toLowerCase();
+          if (baseUrl !== 'https://airtrust-api-staging.airtrust.workers.dev') throw new Error('STAGING_API_REJECTED');
+          if (!/^[0-9a-f]{40}$/.test(expectedSha)) throw new Error('EXPECTED_RELEASE_SHA_INVALID');
+          const response = await fetch(`${baseUrl}/api/version`, { headers: { Accept: 'application/json' } });
+          if (!response.ok) throw new Error(`EDB_STAGING_VERSION_HTTP_${response.status}`);
+          const payload = await response.json();
+          if (payload?.success !== true || payload?.data?.environment !== 'staging') {
+            throw new Error('EDB_STAGING_VERSION_PAYLOAD_INVALID');
+          }
+          const actualSha = String(payload?.data?.sourceSha || '').trim().toLowerCase();
+          if (actualSha !== expectedSha) {
+            throw new Error(`EDB_STAGING_RELEASE_SHA_MISMATCH expected=${expectedSha} actual=${actualSha || 'missing'}`);
+          }
+          console.log(`EDB_STAGING_RELEASE_PROVENANCE_PASS sourceSha=${actualSha}`);
+          NODE
+
       - name: Fail closed unless tenant 6 is absent or exactly reserved synthetic tenant
         run: node scripts/staging/seed-qa-edb-full-lifecycle.mjs --preflight
 
@@ -118,6 +140,7 @@ jobs:
             echo '- synthetic login: `qa-edb-pilot@staging.airtrust.invalid`'
             echo "- fixture: \`$QA_EDB_FULL_FIXTURE_ID\`"
             echo "- expected deployed eDB release: \`$EXPECTED_EDB_RELEASE_SHA\`"
+            echo '- release provenance: verified against `/api/version` before any D1 read/write lifecycle step'
             echo '- canonical fixture: synthetic flight, stage, crew and active RDV only'
             echo '- eDB path: diary + volume + regulatory semantics + P1 + preflight snapshot/ack + revision/signatures + correction/signatures + discrepancy/deferred/corrective/RTS + audit + integrity incident/reconstitution + close volume/diary'
             echo '- final signed state: `OPERATOR_SIGNED`; no ANAC queue/transmission is invoked'
