@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { AppEnv } from '../types';
 import { getEmpresaId } from '../middleware/tenant';
+import { mapEdbShadowError } from '../lib/edb/edb-shadow-errors';
 import {
   createEmptyEdbFlightRecord,
   type EdbPersonIdentity,
@@ -103,10 +104,8 @@ async function parseDiscrepancies(
 }
 
 function mapError(c: EdbContext, error: unknown) {
-  const message = error instanceof Error ? error.message : '';
-  const code = /EDB_[A-Z0-9_]+/.exec(message)?.[0] ?? 'EDB_SHADOW_REVISION_FAILED';
-  const status = code.includes('NOT_FOUND') ? 404 : code.includes('CONFLICT') ? 409 : 400;
-  return c.json({ success: false, error: 'Operação de revisão eDB rejeitada', code }, status as 400 | 404 | 409);
+  const { code, status } = mapEdbShadowError(error);
+  return c.json({ success: false, error: 'Operação de revisão eDB rejeitada', code }, status);
 }
 
 router.post('/voos/:vooId/etapas/:etapaId/revisions', async (c) => {
