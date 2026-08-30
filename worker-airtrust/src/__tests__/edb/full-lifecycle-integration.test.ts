@@ -265,8 +265,9 @@ describe('eDB full lifecycle integration in isolated memory', () => {
       new Date('2026-08-30T12:21:00.000Z'),
       { technicalSituation, technicalAcknowledgement },
     );
+    expect(readiness1.internalRecordComplete).toBe(true);
     expect(readiness1.readyForAnacQueue).toBe(true);
-    expect(readiness1.nextAction).toBe('ANAC_SYNC');
+    expect(readiness1.nextAction).toBeNull();
     expect(evaluateEdbLifecycleAction(revision1, 'QUEUE_ANAC_SYNC')).toMatchObject({
       allowed: true,
       to: 'ANAC_PENDING',
