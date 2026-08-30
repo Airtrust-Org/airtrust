@@ -148,9 +148,9 @@ export default function InstallAppPage() {
       <div className="mx-auto w-full max-w-xl">
         <header className="text-center">
           <img
-            src="/airtrust-icon.svg"
+            src="/android-chrome-192x192.png"
             alt="AirTrust"
-            className="mx-auto h-24 w-24 rounded-[22px] shadow-lg shadow-slate-300/60"
+            className="mx-auto h-24 w-24 object-contain drop-shadow-lg"
           />
           <p className="mt-5 text-xs font-bold uppercase tracking-[0.22em] text-[#12356A]">
             AirTrust
