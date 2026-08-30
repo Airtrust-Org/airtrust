@@ -161,12 +161,13 @@ describe('eDB regulatory readiness', () => {
       capturedAt: '2026-08-28T10:00:00.000Z',
     });
     const readiness = await assessEdbRegulatoryReadiness(record, new Date('2026-08-28T12:00:00.000Z'));
+    expect(readiness.internalRecordComplete).toBe(false);
     expect(readiness.readyForAnacQueue).toBe(false);
     expect(readiness.nextAction).toBe('TECHNICAL_SNAPSHOT');
     expect(readiness.steps.find((step) => step.id === 'PIC_TECHNICAL_ACK')?.status).toBe('BLOCKED');
   });
 
-  it('becomes ready for the future ANAC queue only after valid independent preflight evidence and final signatures', async () => {
+  it('is internally complete after valid final signatures while ANAC sharing remains an external optional track', async () => {
     const { record, evidence } = await operatorSignedRecord();
     const readiness = await assessEdbRegulatoryReadiness(
       record,
@@ -178,9 +179,24 @@ describe('eDB regulatory readiness', () => {
     expect(readiness.steps.find((step) => step.id === 'TECHNICAL_SNAPSHOT')?.status).toBe('COMPLETE');
     expect(readiness.steps.find((step) => step.id === 'PIC_TECHNICAL_ACK')?.status).toBe('COMPLETE');
     expect(readiness.steps.find((step) => step.id === 'OPERATOR_SIGNATURE')?.status).toBe('COMPLETE');
-    expect(readiness.steps.find((step) => step.id === 'ANAC_SYNC')?.status).toBe('ACTION_REQUIRED');
+    expect(readiness.steps.find((step) => step.id === 'ANAC_SYNC')?.status).toBe('PENDING_EXTERNAL');
+    expect(readiness.internalRecordComplete).toBe(true);
     expect(readiness.readyForAnacQueue).toBe(true);
-    expect(readiness.nextAction).toBe('ANAC_SYNC');
+    expect(readiness.nextAction).toBeNull();
+  });
+
+  it('keeps an already queued ANAC integration external to internal record completion', async () => {
+    const { record, evidence } = await operatorSignedRecord();
+    record.status = 'ANAC_PENDING';
+    const readiness = await assessEdbRegulatoryReadiness(
+      record,
+      new Date('2026-08-28T12:01:00.000Z'),
+      evidence,
+    );
+    expect(readiness.internalRecordComplete).toBe(true);
+    expect(readiness.readyForAnacQueue).toBe(false);
+    expect(readiness.steps.find((step) => step.id === 'ANAC_SYNC')?.status).toBe('PENDING_EXTERNAL');
+    expect(readiness.nextAction).toBeNull();
   });
 
   it('fails closed when immutable revision identity is missing', async () => {
@@ -192,6 +208,7 @@ describe('eDB regulatory readiness', () => {
       evidence,
     );
     const flightStep = readiness.steps.find((step) => step.id === 'FLIGHT_RECORD');
+    expect(readiness.internalRecordComplete).toBe(false);
     expect(readiness.readyForAnacQueue).toBe(false);
     expect(flightStep?.blockingCodes).toContain('EDB_REVISION_ID_REQUIRED');
   });
@@ -200,13 +217,13 @@ describe('eDB regulatory readiness', () => {
     const { record, evidence } = await operatorSignedRecord();
     if (!record.signatures.picFlightRecord) throw new Error('fixture missing PIC signature');
     record.signatures.picFlightRecord.targetId = 'edbrev-1-r2';
-
     const readiness = await assessEdbRegulatoryReadiness(
       record,
       new Date('2026-08-28T12:01:00.000Z'),
       evidence,
     );
     const picStep = readiness.steps.find((step) => step.id === 'PIC_FLIGHT_SIGNATURE');
+    expect(readiness.internalRecordComplete).toBe(false);
     expect(readiness.readyForAnacQueue).toBe(false);
     expect(picStep?.status).toBe('ACTION_REQUIRED');
     expect(picStep?.blockingCodes).toContain('EDB_PIC_FLIGHT_SIGNATURE_TARGET_MISMATCH');
@@ -220,6 +237,7 @@ describe('eDB regulatory readiness', () => {
       new Date('2026-08-28T12:01:00.000Z'),
       evidence,
     );
+    expect(readiness.internalRecordComplete).toBe(false);
     expect(readiness.readyForAnacQueue).toBe(false);
     expect(readiness.steps.find((step) => step.id === 'PIC_FLIGHT_SIGNATURE')?.status).toBe('ACTION_REQUIRED');
     expect(readiness.steps.find((step) => step.id === 'OPERATOR_SIGNATURE')?.status).toBe('ACTION_REQUIRED');
@@ -228,6 +246,7 @@ describe('eDB regulatory readiness', () => {
   it('fails closed when preflight evidence is missing even if final signatures exist', async () => {
     const { record } = await operatorSignedRecord();
     const readiness = await assessEdbRegulatoryReadiness(record, new Date('2026-08-28T12:01:00.000Z'));
+    expect(readiness.internalRecordComplete).toBe(false);
     expect(readiness.readyForAnacQueue).toBe(false);
     expect(readiness.nextAction).toBe('TECHNICAL_SNAPSHOT');
   });
