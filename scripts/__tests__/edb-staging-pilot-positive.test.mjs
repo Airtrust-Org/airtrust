@@ -32,9 +32,15 @@ test('eDB pilot QA employee is bound to an exact synthetic sector', () => {
   const seed = read(SEED);
   assert.match(seed, /PILOT_SECTOR_CODE = 'QA-EDB-PILOT'/);
   assert.match(seed, /PILOT_SECTOR_DOMAIN = 'OPERACOES'/);
-  assert.match(seed, /INSERT INTO setores/);
+  assert.match(seed, /function ensurePilotSector\(dbName\)/);
+  assert.match(seed, /EDB_PILOT_SECTOR_CODE_COLLISION/);
+  assert.match(seed, /exact_synthetic_count/);
+  assert.match(seed, /SELECT 1 FROM setores s\s+WHERE s\.codigo = \$\{e\(PILOT_SECTOR_CODE\)\} AND s\.empresa_id = emp\.id\s+\);/s);
+  assert.match(seed, /ensurePilotSector\(dbName\);/);
   assert.match(seed, /setor_id = \(\s*SELECT s\.id FROM setores s/s);
   assert.match(seed, /UPDATE setores\s+SET ativo = 0/s);
+  assert.match(seed, /descricao = \$\{e\(PILOT_SECTOR_DESCRIPTION\)\}/);
+  assert.match(seed, /responsavel = \$\{e\(PILOT_SECTOR_RESPONSIBLE\)\}/);
   assert.doesNotMatch(seed, /setor\s*=\s*'QA eDB',\s*setor_id\s*=\s*NULL/);
 });
 
@@ -55,7 +61,7 @@ test('workflow is governed staging-only and cannot deploy infrastructure', () =>
   const workflow = read(WORKFLOW);
   assert.match(workflow, /AIRTRUST_EDB_STAGING_PILOT_POSITIVE/);
   assert.match(workflow, /refs\/heads\/main/);
-  assert.match(workflow, /environment:\s*staging/);
+  assert.match(workflow, /environment:\s*\n\s*staging/);
   assert.match(workflow, /permissions:\s*\n\s*contents:\s*read/);
   assert.match(workflow, /QA_EDB_PILOT_PASSWORD:\s*\$\{\{ secrets\.STAGING_SMOKE_PASSWORD \}\}/);
   assert.match(workflow, /CLOUDFLARE_D1_MIGRATION_API_TOKEN/);

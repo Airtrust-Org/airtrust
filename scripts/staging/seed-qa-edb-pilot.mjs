@@ -23,6 +23,8 @@ const PILOT_TENANT_CODE = 'edb_pilot_smoke';
 const PILOT_TENANT_NAME = 'eDB Pilot Smoke Tenant';
 const PILOT_SECTOR_CODE = 'QA-EDB-PILOT';
 const PILOT_SECTOR_NAME = 'QA eDB Pilot';
+const PILOT_SECTOR_DESCRIPTION = 'Fixture sintética de operações para QA eDB.';
+const PILOT_SECTOR_RESPONSIBLE = 'QA AirTrust';
 const PILOT_SECTOR_DOMAIN = 'OPERACOES';
 const CONFIRMATION = 'AIRTRUST_STAGING_EDB_PILOT_IDENTITY';
 const EMAIL = 'qa-edb-pilot@staging.airtrust.invalid';
@@ -140,36 +142,95 @@ function ensurePilotTenant(dbName) {
   console.log('EDB_PILOT_SYNTHETIC_TENANT_READY id=6 mode=created');
 }
 
+function verifyPilotSector(dbName) {
+  const e = sqlString;
+  const row = queryOne(
+    dbName,
+    `SELECT COUNT(*) AS count
+     FROM setores
+     WHERE empresa_id = ${PILOT_TENANT_ID}
+       AND codigo = ${e(PILOT_SECTOR_CODE)}
+       AND nome = ${e(PILOT_SECTOR_NAME)}
+       AND descricao = ${e(PILOT_SECTOR_DESCRIPTION)}
+       AND responsavel = ${e(PILOT_SECTOR_RESPONSIBLE)}
+       AND dominio_codigo = ${e(PILOT_SECTOR_DOMAIN)}
+       AND ativo = 1
+       AND deleted_at IS NULL;`,
+  );
+  if (Number(row?.count) !== 1) throw new Error('EDB_PILOT_SECTOR_NOT_READY');
+}
+
+function ensurePilotSector(dbName) {
+  const e = sqlString;
+  const state = queryOne(
+    dbName,
+    `SELECT
+      (SELECT COUNT(*) FROM setores
+       WHERE empresa_id = ${PILOT_TENANT_ID}
+         AND codigo = ${e(PILOT_SECTOR_CODE)}) AS code_count,
+      (SELECT COUNT(*) FROM setores
+       WHERE empresa_id = ${PILOT_TENANT_ID}
+         AND codigo = ${e(PILOT_SECTOR_CODE)}
+         AND nome = ${e(PILOT_SECTOR_NAME)}
+         AND descricao = ${e(PILOT_SECTOR_DESCRIPTION)}
+         AND responsavel = ${e(PILOT_SECTOR_RESPONSIBLE)}
+         AND dominio_codigo = ${e(PILOT_SECTOR_DOMAIN)}) AS exact_synthetic_count;`,
+  );
+  if (!state) throw new Error('EDB_PILOT_SECTOR_STATE_MISSING');
+
+  const codeCount = Number(state.code_count || 0);
+  const exactSyntheticCount = Number(state.exact_synthetic_count || 0);
+  if (codeCount > 1 || exactSyntheticCount > 1) {
+    throw new Error('EDB_PILOT_SECTOR_STATE_AMBIGUOUS');
+  }
+  if (codeCount === 1 && exactSyntheticCount === 0) {
+    throw new Error('EDB_PILOT_SECTOR_CODE_COLLISION');
+  }
+
+  if (exactSyntheticCount === 1) {
+    executeSqlFile(
+      dbName,
+      `UPDATE setores
+       SET ativo = 1, deleted_at = NULL, updated_at = datetime('now')
+       WHERE empresa_id = ${PILOT_TENANT_ID}
+         AND codigo = ${e(PILOT_SECTOR_CODE)}
+         AND nome = ${e(PILOT_SECTOR_NAME)}
+         AND descricao = ${e(PILOT_SECTOR_DESCRIPTION)}
+         AND responsavel = ${e(PILOT_SECTOR_RESPONSIBLE)}
+         AND dominio_codigo = ${e(PILOT_SECTOR_DOMAIN)};`,
+    );
+    verifyPilotSector(dbName);
+    console.log('EDB_PILOT_SYNTHETIC_SECTOR_READY code=QA-EDB-PILOT mode=reactivated');
+    return;
+  }
+
+  if (codeCount !== 0) throw new Error('EDB_PILOT_SECTOR_STATE_UNEXPECTED');
+
+  executeSqlFile(
+    dbName,
+    `INSERT INTO setores (
+       codigo, nome, descricao, responsavel, ativo, created_at, updated_at, deleted_at, empresa_id, dominio_codigo
+     )
+     SELECT
+       ${e(PILOT_SECTOR_CODE)}, ${e(PILOT_SECTOR_NAME)}, ${e(PILOT_SECTOR_DESCRIPTION)},
+       ${e(PILOT_SECTOR_RESPONSIBLE)}, 1, datetime('now'), datetime('now'), NULL,
+       emp.id, ${e(PILOT_SECTOR_DOMAIN)}
+     FROM empresas emp
+     WHERE emp.id = ${PILOT_TENANT_ID}
+       AND emp.ativo = 1
+       AND emp.deleted_at IS NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM setores s
+         WHERE s.codigo = ${e(PILOT_SECTOR_CODE)} AND s.empresa_id = emp.id
+       );`,
+  );
+  verifyPilotSector(dbName);
+  console.log('EDB_PILOT_SYNTHETIC_SECTOR_READY code=QA-EDB-PILOT mode=created');
+}
+
 function seedSql(passwordHash) {
   const e = sqlString;
   return `
-INSERT INTO setores (
-  codigo, nome, descricao, responsavel, ativo, created_at, updated_at, deleted_at, empresa_id, dominio_codigo
-)
-SELECT
-  ${e(PILOT_SECTOR_CODE)}, ${e(PILOT_SECTOR_NAME)},
-  'Fixture sintética de operações para QA eDB.', 'QA AirTrust', 1,
-  datetime('now'), datetime('now'), NULL, emp.id, ${e(PILOT_SECTOR_DOMAIN)}
-FROM empresas emp
-WHERE emp.id = ${PILOT_TENANT_ID}
-  AND emp.ativo = 1
-  AND emp.deleted_at IS NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM setores s
-    WHERE s.codigo = ${e(PILOT_SECTOR_CODE)} AND s.empresa_id = emp.id AND s.deleted_at IS NULL
-  );
-
-UPDATE setores
-SET nome = ${e(PILOT_SECTOR_NAME)},
-    descricao = 'Fixture sintética de operações para QA eDB.',
-    responsavel = 'QA AirTrust',
-    ativo = 1,
-    dominio_codigo = ${e(PILOT_SECTOR_DOMAIN)},
-    deleted_at = NULL,
-    updated_at = datetime('now')
-WHERE codigo = ${e(PILOT_SECTOR_CODE)}
-  AND empresa_id = ${PILOT_TENANT_ID};
-
 INSERT INTO funcionarios (
   nome, matricula, cargo, funcao, setor, setor_id, status,
   is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at, deleted_at
@@ -254,7 +315,12 @@ WHERE matricula = ${e(EMPLOYEE_REGISTRATION)} AND empresa_id = ${PILOT_TENANT_ID
 
 UPDATE setores
 SET ativo = 0, deleted_at = COALESCE(deleted_at, datetime('now')), updated_at = datetime('now')
-WHERE codigo = ${e(PILOT_SECTOR_CODE)} AND empresa_id = ${PILOT_TENANT_ID};
+WHERE codigo = ${e(PILOT_SECTOR_CODE)}
+  AND empresa_id = ${PILOT_TENANT_ID}
+  AND nome = ${e(PILOT_SECTOR_NAME)}
+  AND descricao = ${e(PILOT_SECTOR_DESCRIPTION)}
+  AND responsavel = ${e(PILOT_SECTOR_RESPONSIBLE)}
+  AND dominio_codigo = ${e(PILOT_SECTOR_DOMAIN)};
 
 UPDATE empresas
 SET ativo = 0, deleted_at = COALESCE(deleted_at, datetime('now')), updated_at = datetime('now')
@@ -306,6 +372,7 @@ async function main() {
   }
 
   ensurePilotTenant(dbName);
+  ensurePilotSector(dbName);
   if (!password) throw new Error('QA_EDB_PILOT_PASSWORD_MISSING');
 
   const passwordHash = bcrypt.hashSync(password, bcrypt.genSaltSync(10));
