@@ -1,6 +1,6 @@
 # eDB / Flight Operations — Operational Core 0477
 
-Status: **implemented on integration branch; staging-shadow gated; not deployed**.
+Status: **implemented; schema 0477–0480 applied to staging only; guarded staging shadow deployed; production inactive**.
 
 Branch: `feat/edb-operational-core-0477`
 
@@ -10,7 +10,7 @@ Branch: `feat/edb-operational-core-0477`
 
 The design has one operational source of truth and separate immutable regulatory evidence.
 
-Later additive changes 0478–0480 harden ANAC evidence, relational/audit bindings and diary/volume/incident lifecycle. None is applied to staging or production in PR #110.
+Later additive changes 0478–0480 harden ANAC evidence, relational/audit bindings and diary/volume/incident lifecycle. The complete 0477–0480 sequence has been applied to the pinned staging D1 through the governed staging release path. None has been applied to production.
 
 ## 1. One operational source
 
@@ -180,14 +180,52 @@ Materializes audit `voo_id`, `situacao_tecnica_id` and `actor_json`; enforces vo
 
 Makes diary/volume/incident lifecycle monotonic and historical evidence non-deletable: no diary/volume reopen, no closing-act rewrite, write-once incident references and no reverse reconstitution transition.
 
-## 10. Activation posture
+## 10. Current staging evidence
 
-The code surface now exists, but activation remains fail-closed:
+The 0477–0480 sequence was applied to the pinned staging D1 through `Deploy Staging (Official)` run #39 / `33269772056`, from exact schema release SHA `5e6df4e1fc3b633a260c705c53fe1deca63ad382`.
+
+The latest staging application release reviewed in this front is run #53 / `33319537112`, source SHA `0745da8fe06ed6e35a8840942098a81f52b73446`.
+
+Staging shadow activation remains restricted to Costa do Sol (`empresa_id=6`) through `EDB_SHADOW_PILOT_TENANTS="6"`.
+
+Prior governed staging evidence includes:
+
+- read-only/fail-closed smoke without eDB operational mutation;
+- tenant-6 synthetic positive smoke without flight/aircraft/eDB operational writes;
+- synthetic fixture cleanup;
+- current-release provenance checks.
+
+The latest tenant-6 positive smoke predates the currently reviewed staging application release. That exact-current-release re-smoke gap is preserved as a historical evidence limitation rather than bypassed.
+
+The PR adds post-deploy wiring so successful future official staging deployments can automatically trigger the tenant-6 positive eDB smoke once that workflow version reaches the default branch.
+
+## 11. Isolated persistence and D1-runtime validation
+
+The full mutating lifecycle is not exercised against the shared staging regulatory D1 because it intentionally creates immutable evidence.
+
+Instead, CI contains two complementary isolated gates:
+
+1. **Node SQLite `:memory:` persisted lifecycle** — exercises the complete synthetic persistence/evidence lifecycle without remote side effects.
+2. **Cloudflare Wrangler local D1 parity** — applies 0477–0480 to the tracked local-only D1 configuration, validates the eDB tables/columns/triggers and deliberately attempts a forbidden technical-snapshot update, which must fail with `EDB_TECHNICAL_SITUATION_IMMUTABLE`.
+
+The local D1 gate uses:
+
+- database name `airtrust-db-local`;
+- dummy database ID `00000000-0000-0000-0000-000000000001`;
+- `--local` + temporary `--persist-to` directory;
+- sanitized/blank Cloudflare credentials;
+- cleanup of the local persistence directory after execution.
+
+It has no staging/production D1 write path and no ANAC transmission path.
+
+## 12. Activation posture
+
+The code and staging shadow exist, but activation remains fail-closed:
 
 - `/api/edb` operational shadow requires `ENVIRONMENT=staging` and an explicit positive tenant ID in `EDB_SHADOW_PILOT_TENANTS`;
 - `all` is rejected and production cannot enable the gate;
 - no production eDB menu/feature flag is enabled;
-- 0477–0480 have not been applied to staging or production;
+- 0477–0480 are present in staging only and have not been applied to production;
 - no real production eDB data is written;
 - no private signing key is stored;
 - no ANAC external endpoint/payload/acceptance contract is guessed;
@@ -197,4 +235,4 @@ The governed staging runner for 0477–0480 verifies the Schema V2 manifest, pro
 
 The remaining safe sequence is:
 
-final CI → confirm current `main` → merge reviewed governance/code → official staging apply `0477 → 0478 → 0479 → 0480` → staging Worker/frontend shadow deploy → full staging exercises → official ANAC/security acceptance work → explicit production approval.
+frozen green PR evidence → keep full mutating validation isolated → future official staging deploy + automatic eDB positive smoke once workflow is on default branch → obtain current official ANAC DBE API/onboarding/acceptance material → accepted signature/security architecture and applicable system authorization → explicit production approval.
