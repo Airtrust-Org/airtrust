@@ -7,6 +7,7 @@ import { PageLayout } from '../../components/layout/PageLayout';
 import { Button } from '../../components/UI/Button';
 import { SkeletonCard } from '../../components/UI/Skeleton';
 import QualificationHistoryReportPanel from './QualificationHistoryReportPanel';
+import { downloadRelatoriosDashboardCsv } from './relatoriosDashboardCsv';
 
 interface CertificacaoMesMetric {
   mes?: string;
@@ -95,7 +96,7 @@ export default function RelatoriosDashboard() {
   };
 
   const exportarCSV = () => {
-    window.open(`${API_BASE_URL}/relatorios/exportar-csv?tipo=qualificacoes`, '_blank');
+    downloadRelatoriosDashboardCsv({ certMes, complianceSetor, simUso, treinCat });
   };
 
   const semDados =
@@ -155,6 +156,7 @@ export default function RelatoriosDashboard() {
             size="sm"
             leftIcon={<Download className="w-4 h-4" />}
             onClick={exportarCSV}
+            disabled={loading || semDados}
           >
             Exportar CSV
           </Button>
