@@ -8,8 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import AppLayout from '../components/AppLayout';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../hooks/useAuth';
-import { API_BASE_URL, getAccessToken } from '../config/api';
-import { apiFetch } from '../lib/apiFetch';
+import { API_BASE_URL, getAccessToken, fetchWithAuth } from '../config/api';
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -321,13 +320,13 @@ export default function Sgso() {
       };
       if (t) headers['Authorization'] = `Bearer ${t}`;
 
-      let res = await apiFetch(`${base}${path}`, { ...options, headers });
+      let res = await fetchWithAuth(`${base}${path}`, { ...options, headers });
       if (res.status === 401) {
         try {
           await refreshToken();
           t = getAccessToken() || token;
           if (t) headers['Authorization'] = `Bearer ${t}`;
-          res = await apiFetch(`${base}${path}`, { ...options, headers });
+          res = await fetchWithAuth(`${base}${path}`, { ...options, headers });
         } catch {
           logout();
           throw new Error('Sessão expirada');
@@ -812,7 +811,6 @@ export default function Sgso() {
                     </button>
                   </div>
 
-                  {/* Lista de relatos */}
                   {loadingRelatos ? (
                     <div className="space-y-2">
                       {Array.from({ length: 5 }).map((_, idx) => (
@@ -940,7 +938,6 @@ export default function Sgso() {
             </div>
           )}
 
-          {/* ── ABA: DASHBOARD KPIs ──────────────────────────── */}
           {activeTab === 'dashboard' && (
             <div>
               {loadingKpi ? (
@@ -951,230 +948,88 @@ export default function Sgso() {
                 <p className="text-slate-500 text-center py-12">Carregando indicadores...</p>
               ) : (
                 <>
-                  {/* Cards de resumo */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     <div className="bg-white border border-slate-200 rounded-xl p-4">
                       <p className="text-xs text-slate-500">Relatos (90 dias)</p>
-                      <p className="text-2xl font-bold text-slate-900 mt-1">
-                        {kpiSpi.resumo.total_relatos_90d}
-                      </p>
+                      <p className="text-2xl font-bold text-slate-900 mt-1">{kpiSpi.resumo.total_relatos_90d}</p>
                     </div>
                     <div className="bg-white border border-slate-200 rounded-xl p-4">
                       <p className="text-xs text-slate-500">Horas de Voo (90d)</p>
-                      <p className="text-2xl font-bold text-slate-900 mt-1">
-                        {kpiSpi.resumo.horas_voo_90d.toFixed(0)}h
-                      </p>
+                      <p className="text-2xl font-bold text-slate-900 mt-1">{kpiSpi.resumo.horas_voo_90d.toFixed(0)}h</p>
                     </div>
-                    <div
-                      className={`border rounded-xl p-4 ${kpiSpi.resumo.ncs_abertas > 5 ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}
-                    >
+                    <div className={`border rounded-xl p-4 ${kpiSpi.resumo.ncs_abertas > 5 ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
                       <p className="text-xs text-slate-500">NCs Abertas &gt;30d</p>
-                      <p
-                        className={`text-2xl font-bold mt-1 ${kpiSpi.resumo.ncs_abertas > 5 ? 'text-red-700' : 'text-slate-900'}`}
-                      >
-                        {kpiSpi.resumo.ncs_abertas}
-                      </p>
+                      <p className={`text-2xl font-bold mt-1 ${kpiSpi.resumo.ncs_abertas > 5 ? 'text-red-700' : 'text-slate-900'}`}>{kpiSpi.resumo.ncs_abertas}</p>
                     </div>
-                    <div
-                      className={`border rounded-xl p-4 ${(kpiSpi.resumo.efetividade_media ?? 100) < 65 ? 'bg-red-50 border-red-200' : (kpiSpi.resumo.efetividade_media ?? 100) < 75 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}
-                    >
+                    <div className={`border rounded-xl p-4 ${(kpiSpi.resumo.efetividade_media ?? 100) < 65 ? 'bg-red-50 border-red-200' : (kpiSpi.resumo.efetividade_media ?? 100) < 75 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
                       <p className="text-xs text-slate-500">Índice FRMS estimado</p>
-                      <p
-                        className={`text-2xl font-bold mt-1 ${(kpiSpi.resumo.efetividade_media ?? 100) < 65 ? 'text-red-700' : 'text-slate-900'}`}
-                      >
-                        {kpiSpi.resumo.efetividade_media !== null
-                          ? `${kpiSpi.resumo.efetividade_media.toFixed(1)}%`
-                          : '—'}
+                      <p className={`text-2xl font-bold mt-1 ${(kpiSpi.resumo.efetividade_media ?? 100) < 65 ? 'text-red-700' : 'text-slate-900'}`}>
+                        {kpiSpi.resumo.efetividade_media !== null ? `${kpiSpi.resumo.efetividade_media.toFixed(1)}%` : '—'}
                       </p>
                     </div>
                   </div>
 
-                  {/* SPIs */}
-                  <h3 className="text-sm font-semibold text-slate-700 mb-3">
-                    Safety Performance Indicators (SPI)
-                  </h3>
+                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Safety Performance Indicators (SPI)</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {kpiSpi.spis.map((spi) => (
-                      <div
-                        key={spi.codigo}
-                        className={`border rounded-xl p-4 ${SPI_STATUS_COLOR[spi.status]}`}
-                      >
+                      <div key={spi.codigo} className={`border rounded-xl p-4 ${SPI_STATUS_COLOR[spi.status]}`}>
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <p className="text-xs font-medium text-slate-600">{spi.nome}</p>
                             <p className="text-xs text-slate-400 mt-0.5">{spi.descricao}</p>
                           </div>
                           <span className={`text-lg font-bold ml-2 ${SPI_VALUE_COLOR[spi.status]}`}>
-                            {spi.status === 'ok'
-                              ? '✓'
-                              : spi.status === 'critico'
-                                ? '✗'
-                                : spi.status === 'atencao'
-                                  ? '⚠'
-                                  : '—'}
+                            {spi.status === 'ok' ? '✓' : spi.status === 'critico' ? '✗' : spi.status === 'atencao' ? '⚠' : '—'}
                           </span>
                         </div>
                         <div className="mt-3 flex items-end justify-between">
                           <div>
-                            <span className={`text-xl font-bold ${SPI_VALUE_COLOR[spi.status]}`}>
-                              {spi.valor_atual !== null ? spi.valor_atual.toFixed(1) : '—'}
-                            </span>
+                            <span className={`text-xl font-bold ${SPI_VALUE_COLOR[spi.status]}`}>{spi.valor_atual !== null ? spi.valor_atual.toFixed(1) : '—'}</span>
                             <span className="text-xs text-slate-500 ml-1">{spi.unidade}</span>
                           </div>
-                          <span className="text-xs text-slate-400">
-                            Meta: {spi.meta_operador}
-                            {spi.meta_valor}
-                          </span>
+                          <span className="text-xs text-slate-400">Meta: {spi.meta_operador}{spi.meta_valor}</span>
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  {/* Alertas operacionais (backlog, FRAT, barreiras) */}
-                  {(kpiSpi.resumo.backlog_triagem_24h ?? 0) > 0 ||
-                  (kpiSpi.resumo.frat_alto_sem_aprovacao ?? 0) > 0 ||
-                  (kpiSpi.resumo.barreiras_degradadas ?? 0) > 0 ? (
+                  {(kpiSpi.resumo.backlog_triagem_24h ?? 0) > 0 || (kpiSpi.resumo.frat_alto_sem_aprovacao ?? 0) > 0 || (kpiSpi.resumo.barreiras_degradadas ?? 0) > 0 ? (
                     <>
-                      <h3 className="text-sm font-semibold text-red-700 mb-3 mt-6 flex items-center gap-2">
-                        <span>⚠️</span> Alertas Operacionais
-                      </h3>
+                      <h3 className="text-sm font-semibold text-red-700 mb-3 mt-6 flex items-center gap-2"><span>⚠️</span> Alertas Operacionais</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-                        {(kpiSpi.resumo.backlog_triagem_24h ?? 0) > 0 && (
-                          <div className="border border-red-200 bg-red-50 rounded-xl p-4">
-                            <p className="text-xs text-slate-500">Backlog Triagem +24h</p>
-                            <p className="text-2xl font-bold text-red-700 mt-1">
-                              {kpiSpi.resumo.backlog_triagem_24h}
-                            </p>
-                            <p className="text-xs text-red-500 mt-1">
-                              Relatos sem triagem iniciada
-                            </p>
-                          </div>
-                        )}
-                        {(kpiSpi.resumo.frat_alto_sem_aprovacao ?? 0) > 0 && (
-                          <div className="border border-amber-200 bg-amber-50 rounded-xl p-4">
-                            <p className="text-xs text-slate-500">FRAT Alto sem Aprovação</p>
-                            <p className="text-2xl font-bold text-amber-700 mt-1">
-                              {kpiSpi.resumo.frat_alto_sem_aprovacao}
-                            </p>
-                            <p className="text-xs text-amber-500 mt-1">Despachos bloqueados</p>
-                          </div>
-                        )}
-                        {(kpiSpi.resumo.barreiras_degradadas ?? 0) > 0 && (
-                          <div className="border border-orange-200 bg-orange-50 rounded-xl p-4">
-                            <p className="text-xs text-slate-500">Barreiras Degradadas</p>
-                            <p className="text-2xl font-bold text-orange-700 mt-1">
-                              {kpiSpi.resumo.barreiras_degradadas}
-                            </p>
-                            <p className="text-xs text-orange-500 mt-1">DEGRADADA ou INOPERANTE</p>
-                          </div>
-                        )}
+                        {(kpiSpi.resumo.backlog_triagem_24h ?? 0) > 0 && <div className="border border-red-200 bg-red-50 rounded-xl p-4"><p className="text-xs text-slate-500">Backlog Triagem +24h</p><p className="text-2xl font-bold text-red-700 mt-1">{kpiSpi.resumo.backlog_triagem_24h}</p><p className="text-xs text-red-500 mt-1">Relatos sem triagem iniciada</p></div>}
+                        {(kpiSpi.resumo.frat_alto_sem_aprovacao ?? 0) > 0 && <div className="border border-amber-200 bg-amber-50 rounded-xl p-4"><p className="text-xs text-slate-500">FRAT Alto sem Aprovação</p><p className="text-2xl font-bold text-amber-700 mt-1">{kpiSpi.resumo.frat_alto_sem_aprovacao}</p><p className="text-xs text-amber-500 mt-1">Despachos bloqueados</p></div>}
+                        {(kpiSpi.resumo.barreiras_degradadas ?? 0) > 0 && <div className="border border-orange-200 bg-orange-50 rounded-xl p-4"><p className="text-xs text-slate-500">Barreiras Degradadas</p><p className="text-2xl font-bold text-orange-700 mt-1">{kpiSpi.resumo.barreiras_degradadas}</p><p className="text-xs text-orange-500 mt-1">DEGRADADA ou INOPERANTE</p></div>}
                       </div>
                     </>
                   ) : null}
 
-                  {/* Indicadores Antecipados (Leading) */}
                   {(kpiSpi.leading_indicators ?? []).length > 0 && (
                     <>
-                      <h3 className="text-sm font-semibold text-slate-700 mb-3 mt-6">
-                        Indicadores Antecipados
-                      </h3>
+                      <h3 className="text-sm font-semibold text-slate-700 mb-3 mt-6">Indicadores Antecipados</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
                         {(kpiSpi.leading_indicators ?? []).map((li) => (
-                          <div
-                            key={li.codigo}
-                            className={`border rounded-xl p-4 ${
-                              li.status === 'critico'
-                                ? 'bg-red-50 border-red-200'
-                                : li.status === 'atencao'
-                                  ? 'bg-amber-50 border-amber-200'
-                                  : 'bg-green-50 border-green-200'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <p className="text-xs font-medium text-slate-600">{li.nome}</p>
-                              <span
-                                className={`text-base font-bold ${
-                                  li.status === 'critico'
-                                    ? 'text-red-600'
-                                    : li.status === 'atencao'
-                                      ? 'text-amber-600'
-                                      : 'text-green-600'
-                                }`}
-                              >
-                                {li.status === 'ok' ? '✓' : li.status === 'critico' ? '⛔' : '⚠️'}
-                              </span>
-                            </div>
-                            <div className="mt-2">
-                              <span
-                                className={`text-xl font-bold ${
-                                  li.status === 'critico'
-                                    ? 'text-red-700'
-                                    : li.status === 'atencao'
-                                      ? 'text-amber-700'
-                                      : 'text-green-700'
-                                }`}
-                              >
-                                {li.valor_atual}
-                              </span>
-                              <span className="text-xs text-slate-500 ml-1">{li.unidade}</span>
-                            </div>
+                          <div key={li.codigo} className={`border rounded-xl p-4 ${li.status === 'critico' ? 'bg-red-50 border-red-200' : li.status === 'atencao' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+                            <div className="flex items-center justify-between"><p className="text-xs font-medium text-slate-600">{li.nome}</p><span className={`text-base font-bold ${li.status === 'critico' ? 'text-red-600' : li.status === 'atencao' ? 'text-amber-600' : 'text-green-600'}`}>{li.status === 'ok' ? '✓' : li.status === 'critico' ? '⛔' : '⚠️'}</span></div>
+                            <div className="mt-2"><span className={`text-xl font-bold ${li.status === 'critico' ? 'text-red-700' : li.status === 'atencao' ? 'text-amber-700' : 'text-green-700'}`}>{li.valor_atual}</span><span className="text-xs text-slate-500 ml-1">{li.unidade}</span></div>
                           </div>
                         ))}
                       </div>
                     </>
                   )}
 
-                  {/* Tendências 28 dias */}
                   {(kpiSpi.tendencia_curta ?? []).length > 0 && (
                     <>
-                      <h3 className="text-sm font-semibold text-slate-700 mb-3 mt-2">
-                        Tendências 28 dias
-                      </h3>
+                      <h3 className="text-sm font-semibold text-slate-700 mb-3 mt-2">Tendências 28 dias</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {(kpiSpi.tendencia_curta ?? []).map((tc) => (
-                          <div
-                            key={tc.codigo}
-                            className={`border rounded-xl p-4 ${
-                              tc.favoravel
-                                ? 'bg-white border-slate-200'
-                                : tc.direcao !== 'ESTAVEL'
-                                  ? 'bg-red-50 border-red-200'
-                                  : 'bg-amber-50 border-amber-200'
-                            }`}
-                          >
+                          <div key={tc.codigo} className={`border rounded-xl p-4 ${tc.favoravel ? 'bg-white border-slate-200' : tc.direcao !== 'ESTAVEL' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
                             <p className="text-xs font-medium text-slate-600">{tc.nome}</p>
                             <div className="flex items-end justify-between mt-2">
-                              <span
-                                className={`text-xl font-bold ${
-                                  tc.favoravel ? 'text-green-700' : 'text-red-700'
-                                }`}
-                              >
-                                {tc.valor_atual.toFixed(1)}
-                              </span>
-                              <div className="flex items-center gap-1">
-                                <span
-                                  className={`text-sm font-semibold ${
-                                    tc.direcao === 'SUBIU'
-                                      ? tc.favoravel
-                                        ? 'text-green-600'
-                                        : 'text-red-600'
-                                      : tc.direcao === 'CAIU'
-                                        ? tc.favoravel
-                                          ? 'text-green-600'
-                                          : 'text-red-600'
-                                        : 'text-slate-500'
-                                  }`}
-                                >
-                                  {tc.direcao === 'SUBIU' ? '↑' : tc.direcao === 'CAIU' ? '↓' : '→'}
-                                  {tc.delta_percentual !== null
-                                    ? ` ${Math.abs(tc.delta_percentual).toFixed(1)}%`
-                                    : ''}
-                                </span>
-                              </div>
+                              <span className={`text-xl font-bold ${tc.favoravel ? 'text-green-700' : 'text-red-700'}`}>{tc.valor_atual.toFixed(1)}</span>
+                              <div className="flex items-center gap-1"><span className={`text-sm font-semibold ${tc.direcao === 'SUBIU' ? tc.favoravel ? 'text-green-600' : 'text-red-600' : tc.direcao === 'CAIU' ? tc.favoravel ? 'text-green-600' : 'text-red-600' : 'text-slate-500'}`}>{tc.direcao === 'SUBIU' ? '↑' : tc.direcao === 'CAIU' ? '↓' : '→'}{tc.delta_percentual !== null ? ` ${Math.abs(tc.delta_percentual).toFixed(1)}%` : ''}</span></div>
                             </div>
-                            <p className="text-xs text-slate-400 mt-1">
-                              período anterior: {tc.valor_periodo_anterior.toFixed(1)}
-                            </p>
+                            <p className="text-xs text-slate-400 mt-1">período anterior: {tc.valor_periodo_anterior.toFixed(1)}</p>
                           </div>
                         ))}
                       </div>
@@ -1185,463 +1040,54 @@ export default function Sgso() {
             </div>
           )}
 
-          {/* ── ABA: AUDITORIAS ──────────────────────────────── */}
           {activeTab === 'auditorias' && (
             <div>
-              <div className="flex justify-end mb-4">
-                <button
-                  onClick={() => {
-                    setShowModalAuditoria(true);
-                    setErro(null);
-                  }}
-                  className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
-                >
-                  + Nova Auditoria
-                </button>
-              </div>
-
-              {loadingAuditorias ? (
-                <div className="flex justify-center py-12">
-                  <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : auditorias.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
-                  <p className="text-lg font-medium">Nenhuma auditoria</p>
-                  <p className="text-sm mt-1">Crie a primeira auditoria de segurança</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {auditorias.map((a) => (
-                    <div key={a.id} className="bg-white border border-slate-200 rounded-xl p-4">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-slate-900">{a.titulo}</span>
-                            <span
-                              className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_AUDITORIA_COLOR[a.status]}`}
-                            >
-                              {a.status.replace('_', ' ')}
-                            </span>
-                            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                              {a.tipo.replace('_', ' ')}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3 mt-1 text-sm text-slate-500 flex-wrap">
-                            {a.data_programada && <span>📅 {formatDate(a.data_programada)}</span>}
-                            {a.auditor_nome && <span>👤 {a.auditor_nome}</span>}
-                            {a.total_itens > 0 && (
-                              <span>
-                                {a.itens_nc_major > 0 && (
-                                  <span className="text-red-600 font-medium">
-                                    {a.itens_nc_major} MAJOR{' '}
-                                  </span>
-                                )}
-                                {a.itens_nc_minor > 0 && (
-                                  <span className="text-amber-600 font-medium">
-                                    {a.itens_nc_minor} MINOR{' '}
-                                  </span>
-                                )}
-                              </span>
-                            )}
-                            {a.percentual_conformidade !== null && (
-                              <span
-                                className={
-                                  a.percentual_conformidade >= 80
-                                    ? 'text-green-600 font-medium'
-                                    : 'text-amber-600 font-medium'
-                                }
-                              >
-                                {a.percentual_conformidade.toFixed(1)}% conformidade
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <div className="flex justify-end mb-4"><button onClick={() => { setShowModalAuditoria(true); setErro(null); }} className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors">+ Nova Auditoria</button></div>
+              {loadingAuditorias ? <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div> : auditorias.length === 0 ? <div className="text-center py-12 text-slate-500"><p className="text-lg font-medium">Nenhuma auditoria</p><p className="text-sm mt-1">Crie a primeira auditoria de segurança</p></div> : (
+                <div className="space-y-2">{auditorias.map((a) => <div key={a.id} className="bg-white border border-slate-200 rounded-xl p-4"><div className="flex items-center justify-between flex-wrap gap-2"><div className="flex-1 min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="font-medium text-slate-900">{a.titulo}</span><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_AUDITORIA_COLOR[a.status]}`}>{a.status.replace('_', ' ')}</span><span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{a.tipo.replace('_', ' ')}</span></div><div className="flex items-center gap-3 mt-1 text-sm text-slate-500 flex-wrap">{a.data_programada && <span>📅 {formatDate(a.data_programada)}</span>}{a.auditor_nome && <span>👤 {a.auditor_nome}</span>}{a.total_itens > 0 && <span>{a.itens_nc_major > 0 && <span className="text-red-600 font-medium">{a.itens_nc_major} MAJOR </span>}{a.itens_nc_minor > 0 && <span className="text-amber-600 font-medium">{a.itens_nc_minor} MINOR </span>}</span>}{a.percentual_conformidade !== null && <span className={a.percentual_conformidade >= 80 ? 'text-green-600 font-medium' : 'text-amber-600 font-medium'}>{a.percentual_conformidade.toFixed(1)}% conformidade</span>}</div></div></div></div>)}</div>
               )}
             </div>
           )}
 
-          {/* ── ABA: NÃO CONFORMIDADES ───────────────────────── */}
           {activeTab === 'ncs' && (
             <div>
-              {loadingNcs ? (
-                <div className="flex justify-center py-12">
-                  <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : ncs.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
-                  <p className="text-lg font-medium">Nenhuma não conformidade</p>
-                  <p className="text-sm mt-1">
-                    NCs são geradas automaticamente ao responder auditorias
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {ncs.map((nc) => (
-                    <div key={nc.id} className="bg-white border border-slate-200 rounded-xl p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span
-                              className={`text-xs font-medium px-2 py-0.5 rounded-full ${NC_TIPO_COLOR[nc.tipo]}`}
-                            >
-                              {nc.tipo}
-                            </span>
-                            <span
-                              className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                                nc.status === 'FECHADA'
-                                  ? 'bg-green-100 text-green-700'
-                                  : nc.status === 'ABERTA'
-                                    ? 'bg-red-100 text-red-700'
-                                    : 'bg-amber-100 text-amber-700'
-                              }`}
-                            >
-                              {nc.status.replace('_', ' ')}
-                            </span>
-                            {nc.rbac_referencia && (
-                              <span className="text-xs text-slate-500 font-mono">
-                                {nc.rbac_referencia}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-sm text-slate-800 mt-1">{nc.descricao}</p>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-slate-400 flex-wrap">
-                            {nc.auditoria_titulo && <span>Auditoria: {nc.auditoria_titulo}</span>}
-                            {nc.responsavel_nome && <span>Resp: {nc.responsavel_nome}</span>}
-                            {nc.prazo_resolucao && (
-                              <span
-                                className={
-                                  new Date(nc.prazo_resolucao) < new Date() &&
-                                  nc.status !== 'FECHADA'
-                                    ? 'text-red-500 font-medium'
-                                    : ''
-                                }
-                              >
-                                Prazo: {formatDate(nc.prazo_resolucao)}
-                              </span>
-                            )}
-                            <span>{formatDate(nc.created_at)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              {loadingNcs ? <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div> : ncs.length === 0 ? <div className="text-center py-12 text-slate-500"><p className="text-lg font-medium">Nenhuma não conformidade</p><p className="text-sm mt-1">NCs são geradas automaticamente ao responder auditorias</p></div> : (
+                <div className="space-y-2">{ncs.map((nc) => <div key={nc.id} className="bg-white border border-slate-200 rounded-xl p-4"><div className="flex items-start gap-3"><div className="flex-1"><div className="flex items-center gap-2 flex-wrap"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${NC_TIPO_COLOR[nc.tipo]}`}>{nc.tipo}</span><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${nc.status === 'FECHADA' ? 'bg-green-100 text-green-700' : nc.status === 'ABERTA' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{nc.status.replace('_', ' ')}</span>{nc.rbac_referencia && <span className="text-xs text-slate-500 font-mono">{nc.rbac_referencia}</span>}</div><p className="text-sm text-slate-800 mt-1">{nc.descricao}</p><div className="flex items-center gap-3 mt-1 text-xs text-slate-400 flex-wrap">{nc.auditoria_titulo && <span>Auditoria: {nc.auditoria_titulo}</span>}{nc.responsavel_nome && <span>Resp: {nc.responsavel_nome}</span>}{nc.prazo_resolucao && <span className={new Date(nc.prazo_resolucao) < new Date() && nc.status !== 'FECHADA' ? 'text-red-500 font-medium' : ''}>Prazo: {formatDate(nc.prazo_resolucao)}</span>}<span>{formatDate(nc.created_at)}</span></div></div></div></div>)}</div>
               )}
             </div>
           )}
         </div>
       </div>
 
-      {/* ─────────────────────────────────────────────────── */}
-      {/* Modal: Novo Relato */}
-      {/* ─────────────────────────────────────────────────── */}
       {showModalRelato && (
         <div className="fixed inset-0 z-modal flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40">
           <div className="bg-white w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[95vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-              <h2 className="text-base font-semibold text-slate-900">Novo Relato de Segurança</h2>
-              <button
-                onClick={() => setShowModalRelato(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200"><h2 className="text-base font-semibold text-slate-900">Novo Relato de Segurança</h2><button onClick={() => setShowModalRelato(false)} className="text-slate-400 hover:text-slate-600"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button></div>
             <div className="overflow-y-auto p-5 space-y-4 flex-1">
-              {erro && (
-                <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-                  {erro}
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Tipo *</label>
-                  <select
-                    value={formRelato.tipo}
-                    onChange={(e) => setFormRelato({ ...formRelato, tipo: e.target.value })}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                  >
-                    <option value="OCORRENCIA">Ocorrência</option>
-                    <option value="PERIGO">Perigo</option>
-                    <option value="INCIDENTE">Incidente</option>
-                    <option value="ACIDENTE">Acidente</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    Data e Hora *
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={formRelato.data_ocorrencia}
-                    onChange={(e) =>
-                      setFormRelato({ ...formRelato, data_ocorrencia: e.target.value })
-                    }
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    Fase do Voo
-                  </label>
-                  <select
-                    value={formRelato.fase_voo}
-                    onChange={(e) => setFormRelato({ ...formRelato, fase_voo: e.target.value })}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                  >
-                    <option value="">Selecionar...</option>
-                    <option value="PREFLIGHT">Pré-voo</option>
-                    <option value="TAXI">Táxi</option>
-                    <option value="DECOLAGEM">Decolagem</option>
-                    <option value="SUBIDA">Subida</option>
-                    <option value="CRUZEIRO">Cruzeiro</option>
-                    <option value="DESCIDA">Descida</option>
-                    <option value="APROXIMACAO">Aproximação</option>
-                    <option value="POUSO">Pouso</option>
-                    <option value="POS_VOO">Pós-voo</option>
-                    <option value="SOLO">Solo</option>
-                    <option value="MANUTENCAO">Manutenção</option>
-                    <option value="NAO_APLICAVEL">Não Aplicável</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    Condição MET
-                  </label>
-                  <select
-                    value={formRelato.condicao_meteorologica}
-                    onChange={(e) =>
-                      setFormRelato({ ...formRelato, condicao_meteorologica: e.target.value })
-                    }
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                  >
-                    <option value="">Selecionar...</option>
-                    <option value="VMC">VMC</option>
-                    <option value="IMC">IMC</option>
-                    <option value="NOITE_VMC">Noite VMC</option>
-                    <option value="NOITE_IMC">Noite IMC</option>
-                    <option value="DEGRADADA">Degradada</option>
-                    <option value="NAO_APLICAVEL">N/A</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    Local (ICAO)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ex: SBRJ, PLAT01"
-                    value={formRelato.local_icao}
-                    onChange={(e) => setFormRelato({ ...formRelato, local_icao: e.target.value })}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm uppercase"
-                    maxLength={10}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    Categoria ADREP
-                  </label>
-                  <select
-                    value={formRelato.categoria_adrep}
-                    onChange={(e) =>
-                      setFormRelato({ ...formRelato, categoria_adrep: e.target.value })
-                    }
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                  >
-                    <option value="">Selecionar...</option>
-                    {categorias.map((cat) => (
-                      <option key={cat.codigo} value={cat.codigo}>
-                        {cat.nome_pt}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Descrição Narrativa *
-                </label>
-                <textarea
-                  rows={4}
-                  placeholder="Descreva detalhadamente o que ocorreu, incluindo contexto, ações tomadas e consequências observadas..."
-                  value={formRelato.descricao}
-                  onChange={(e) => setFormRelato({ ...formRelato, descricao: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none"
-                />
-                <p className="text-xs text-slate-400 mt-1">
-                  {formRelato.descricao.length} caracteres (mínimo 10)
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formRelato.anonimo}
-                    onChange={(e) => setFormRelato({ ...formRelato, anonimo: e.target.checked })}
-                    className="sr-only peer"
-                  />
-                  <div className="w-10 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                </label>
-                <span className="text-sm text-slate-700">Relato Anônimo</span>
-                {formRelato.anonimo && (
-                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
-                    Sua identidade não será registrada
-                  </span>
-                )}
-              </div>
+              {erro && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{erro}</div>}
+              <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-slate-700 mb-1">Tipo *</label><select value={formRelato.tipo} onChange={(e) => setFormRelato({ ...formRelato, tipo: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"><option value="OCORRENCIA">Ocorrência</option><option value="PERIGO">Perigo</option><option value="INCIDENTE">Incidente</option><option value="ACIDENTE">Acidente</option></select></div><div><label className="block text-xs font-medium text-slate-700 mb-1">Data e Hora *</label><input type="datetime-local" value={formRelato.data_ocorrencia} onChange={(e) => setFormRelato({ ...formRelato, data_ocorrencia: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" /></div></div>
+              <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-slate-700 mb-1">Fase do Voo</label><select value={formRelato.fase_voo} onChange={(e) => setFormRelato({ ...formRelato, fase_voo: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"><option value="">Selecionar...</option><option value="PREFLIGHT">Pré-voo</option><option value="TAXI">Táxi</option><option value="DECOLAGEM">Decolagem</option><option value="SUBIDA">Subida</option><option value="CRUZEIRO">Cruzeiro</option><option value="DESCIDA">Descida</option><option value="APROXIMACAO">Aproximação</option><option value="POUSO">Pouso</option><option value="POS_VOO">Pós-voo</option><option value="SOLO">Solo</option><option value="MANUTENCAO">Manutenção</option><option value="NAO_APLICAVEL">Não Aplicável</option></select></div><div><label className="block text-xs font-medium text-slate-700 mb-1">Condição MET</label><select value={formRelato.condicao_meteorologica} onChange={(e) => setFormRelato({ ...formRelato, condicao_meteorologica: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"><option value="">Selecionar...</option><option value="VMC">VMC</option><option value="IMC">IMC</option><option value="NOITE_VMC">Noite VMC</option><option value="NOITE_IMC">Noite IMC</option><option value="DEGRADADA">Degradada</option><option value="NAO_APLICAVEL">N/A</option></select></div></div>
+              <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-slate-700 mb-1">Local (ICAO)</label><input type="text" placeholder="Ex: SBRJ, PLAT01" value={formRelato.local_icao} onChange={(e) => setFormRelato({ ...formRelato, local_icao: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm uppercase" maxLength={10} /></div><div><label className="block text-xs font-medium text-slate-700 mb-1">Categoria ADREP</label><select value={formRelato.categoria_adrep} onChange={(e) => setFormRelato({ ...formRelato, categoria_adrep: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"><option value="">Selecionar...</option>{categorias.map((cat) => <option key={cat.codigo} value={cat.codigo}>{cat.nome_pt}</option>)}</select></div></div>
+              <div><label className="block text-xs font-medium text-slate-700 mb-1">Descrição Narrativa *</label><textarea rows={4} placeholder="Descreva detalhadamente o que ocorreu, incluindo contexto, ações tomadas e consequências observadas..." value={formRelato.descricao} onChange={(e) => setFormRelato({ ...formRelato, descricao: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none" /><p className="text-xs text-slate-400 mt-1">{formRelato.descricao.length} caracteres (mínimo 10)</p></div>
+              <div className="flex items-center gap-3"><label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked={formRelato.anonimo} onChange={(e) => setFormRelato({ ...formRelato, anonimo: e.target.checked })} className="sr-only peer" /><div className="w-10 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div></label><span className="text-sm text-slate-700">Relato Anônimo</span>{formRelato.anonimo && <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Sua identidade não será registrada</span>}</div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-200">
-              <button
-                onClick={() => setShowModalRelato(false)}
-                className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={submitRelato}
-                disabled={submitting}
-                className="px-5 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
-              >
-                {submitting ? 'Enviando...' : 'Enviar Relato'}
-              </button>
-            </div>
+            <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-200"><button onClick={() => setShowModalRelato(false)} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancelar</button><button onClick={submitRelato} disabled={submitting} className="px-5 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors">{submitting ? 'Enviando...' : 'Enviar Relato'}</button></div>
           </div>
         </div>
       )}
 
-      {/* ─────────────────────────────────────────────────── */}
-      {/* Modal: Nova Auditoria */}
-      {/* ─────────────────────────────────────────────────── */}
       {showModalAuditoria && (
         <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-              <h2 className="text-base font-semibold text-slate-900">Nova Auditoria</h2>
-              <button
-                onClick={() => setShowModalAuditoria(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200"><h2 className="text-base font-semibold text-slate-900">Nova Auditoria</h2><button onClick={() => setShowModalAuditoria(false)} className="text-slate-400 hover:text-slate-600"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button></div>
             <div className="p-5 space-y-4">
-              {erro && (
-                <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-                  {erro}
-                </div>
-              )}
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Tipo *</label>
-                <select
-                  value={formAuditoria.tipo}
-                  onChange={(e) => setFormAuditoria({ ...formAuditoria, tipo: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                >
-                  <option value="INTERNA">Auditoria Interna</option>
-                  <option value="EXTERNA">Auditoria Externa</option>
-                  <option value="RAMP_CHECK">Ramp Check</option>
-                  <option value="OPERACIONAL">Auditoria Operacional</option>
-                  <option value="MANUTENCAO">Auditoria de Manutenção</option>
-                  <option value="REVISAO_SGO">Revisão de Desempenho SGO</option>
-                  <option value="FORNECEDORES">Auditoria de Fornecedores</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Título *</label>
-                <input
-                  type="text"
-                  placeholder="Ex: Auditoria Interna SGSO Q1 2026"
-                  value={formAuditoria.titulo}
-                  onChange={(e) => setFormAuditoria({ ...formAuditoria, titulo: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    Data Programada
-                  </label>
-                  <input
-                    type="date"
-                    value={formAuditoria.data_programada}
-                    onChange={(e) =>
-                      setFormAuditoria({ ...formAuditoria, data_programada: e.target.value })
-                    }
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Auditor</label>
-                  <select
-                    value={formAuditoria.auditor_id}
-                    onChange={(e) =>
-                      setFormAuditoria({ ...formAuditoria, auditor_id: e.target.value })
-                    }
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                  >
-                    <option value="">Selecionar...</option>
-                    {funcionarios.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.nome}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Descrição</label>
-                <textarea
-                  rows={2}
-                  value={formAuditoria.descricao}
-                  onChange={(e) =>
-                    setFormAuditoria({ ...formAuditoria, descricao: e.target.value })
-                  }
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none"
-                />
-              </div>
+              {erro && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{erro}</div>}
+              <div><label className="block text-xs font-medium text-slate-700 mb-1">Tipo *</label><select value={formAuditoria.tipo} onChange={(e) => setFormAuditoria({ ...formAuditoria, tipo: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"><option value="INTERNA">Auditoria Interna</option><option value="EXTERNA">Auditoria Externa</option><option value="RAMP_CHECK">Ramp Check</option><option value="OPERACIONAL">Auditoria Operacional</option><option value="MANUTENCAO">Auditoria de Manutenção</option><option value="REVISAO_SGO">Revisão de Desempenho SGO</option><option value="FORNECEDORES">Auditoria de Fornecedores</option></select></div>
+              <div><label className="block text-xs font-medium text-slate-700 mb-1">Título *</label><input type="text" placeholder="Ex: Auditoria Interna SGSO Q1 2026" value={formAuditoria.titulo} onChange={(e) => setFormAuditoria({ ...formAuditoria, titulo: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" /></div>
+              <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-slate-700 mb-1">Data Programada</label><input type="date" value={formAuditoria.data_programada} onChange={(e) => setFormAuditoria({ ...formAuditoria, data_programada: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" /></div><div><label className="block text-xs font-medium text-slate-700 mb-1">Auditor</label><select value={formAuditoria.auditor_id} onChange={(e) => setFormAuditoria({ ...formAuditoria, auditor_id: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"><option value="">Selecionar...</option>{funcionarios.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}</select></div></div>
+              <div><label className="block text-xs font-medium text-slate-700 mb-1">Descrição</label><textarea rows={2} value={formAuditoria.descricao} onChange={(e) => setFormAuditoria({ ...formAuditoria, descricao: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none" /></div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-200">
-              <button
-                onClick={() => setShowModalAuditoria(false)}
-                className="px-4 py-2 text-sm text-slate-600"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={submitAuditoria}
-                disabled={submitting}
-                className="px-5 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
-              >
-                {submitting ? 'Salvando...' : 'Criar Auditoria'}
-              </button>
-            </div>
+            <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-200"><button onClick={() => setShowModalAuditoria(false)} className="px-4 py-2 text-sm text-slate-600">Cancelar</button><button onClick={submitAuditoria} disabled={submitting} className="px-5 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors">{submitting ? 'Salvando...' : 'Criar Auditoria'}</button></div>
           </div>
         </div>
       )}
