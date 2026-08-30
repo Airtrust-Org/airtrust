@@ -1,6 +1,6 @@
 # eDB / Flight Operations — Operational Core 0477
 
-Status: **implemented; schema 0477–0480 applied to staging only; guarded staging shadow deployed; production inactive**.
+Status: **implemented; schema 0477–0480 applied to staging only; branch runtime non-production and not ANAC-authorized**.
 
 Branch: `feat/edb-operational-core-0477`
 
@@ -14,7 +14,7 @@ Later additive changes 0478–0480 harden ANAC evidence, relational/audit bindin
 
 ## 1. One operational source
 
-Canonical flight semantics are added directly to the existing `cv_voo_etapas` rows. The ANAC crew-function code is added directly to `cv_voo_tripulantes`.
+Canonical flight semantics are added directly to the existing `cv_voo_etapas` rows. The regulatory crew-function code is added directly to `cv_voo_tripulantes`.
 
 No parallel stage/crew registry is created.
 
@@ -91,11 +91,17 @@ The finalizer:
 7. blocks unresolved/unclassified IFR and other missing regulatory semantics;
 8. freezes a final immutable revision referencing `ciencia_tecnica_pic_id`.
 
-The final-record lifecycle is:
+The **internal final-record lifecycle** is:
 
-`DRAFT → READY_FOR_PIC_SIGNATURE → PIC_SIGNED → OPERATOR_SIGNED → ANAC_PENDING → ANAC_SYNCED`
+`DRAFT → READY_FOR_PIC_SIGNATURE → PIC_SIGNED → OPERATOR_SIGNED`
 
-`ANAC_SYNCED` remains unavailable until a future official ANAC acceptance adapter defines and validates accepted response semantics.
+`OPERATOR_SIGNED` is the internal completion point for the immutable AirTrust record/evidence flow. This does not itself authorize official regulatory use of the system.
+
+The schema reserves a separate external integration track:
+
+`OPERATOR_SIGNED → ANAC_PENDING → ANAC_SYNCED`
+
+That track is not required for internal record completion. It can only become operational if the accepted ANAC scope requires or permits such sharing and an authoritative adapter contract is available. `ANAC_SYNCED` remains unavailable until accepted response semantics are implemented.
 
 ## 5. Signatures
 
@@ -157,7 +163,7 @@ Immutable evidence receives no-update/no-delete protection where applicable. Mut
 5. `technical-awareness.ts` creates/verifies the preflight snapshot and acknowledgement binding.
 6. `edb-technical-awareness-repository.ts` persists and revalidates preflight evidence.
 7. `postflight-finalization.ts` enforces the preflight/postflight boundary.
-8. `edb-persistence-repository.ts` persists revisions, signatures, lifecycle transitions and ANAC queue evidence.
+8. `edb-persistence-repository.ts` persists revisions, signatures, lifecycle transitions and optional ANAC queue evidence.
 9. `edb-revision-view-repository.ts` rehydrates immutable revision + current lifecycle/signatures and revalidates hashes.
 10. `edb-audit-repository.ts` persists/reconstructs and verifies the diary hash chain.
 11. `edb-technical-discrepancy-repository.ts` persists/replays discrepancy → maintenance action → RTS history.
@@ -180,30 +186,19 @@ Materializes audit `voo_id`, `situacao_tecnica_id` and `actor_json`; enforces vo
 
 Makes diary/volume/incident lifecycle monotonic and historical evidence non-deletable: no diary/volume reopen, no closing-act rewrite, write-once incident references and no reverse reconstitution transition.
 
-## 10. Current staging evidence
+## 10. Staging evidence and QA consolidation
 
 The 0477–0480 sequence was applied to the pinned staging D1 through `Deploy Staging (Official)` run #39 / `33269772056`, from exact schema release SHA `5e6df4e1fc3b633a260c705c53fe1deca63ad382`.
 
-The latest staging application release reviewed in this front is run #53 / `33319537112`, source SHA `0745da8fe06ed6e35a8840942098a81f52b73446`.
+Prior governed staging evidence proved authentication, tenant gating and safe error behavior against exact reviewed eDB branch releases.
 
-Staging shadow activation remains restricted to Costa do Sol (`empresa_id=6`) through `EDB_SHADOW_PILOT_TENANTS="6"`.
+The full synthetic lifecycle QA work that began as Draft PR #184 was superseded without source change by PR #186 and merged to canonical `main` as `0a5e25a3e7126c97046f5bfd8a848cebd40483a3`. That workflow intentionally stops both signed revisions at `OPERATOR_SIGNED` and performs no ANAC queue/sync/transmission.
 
-Prior governed staging evidence includes:
-
-- read-only/fail-closed smoke without eDB operational mutation;
-- tenant-6 synthetic positive smoke without flight/aircraft/eDB operational writes;
-- synthetic fixture cleanup;
-- current-release provenance checks.
-
-The latest tenant-6 positive smoke predates the currently reviewed staging application release. That exact-current-release re-smoke gap is preserved as a historical evidence limitation rather than bypassed.
-
-The PR adds post-deploy wiring so successful future official staging deployments can automatically trigger the tenant-6 positive eDB smoke once that workflow version reaches the default branch.
+Because PR #110 remains unmerged, canonical `main` does not contain the branch-only `worker-airtrust/src/routes/edb-shadow.ts`. A later staging Worker deploy from `main` can therefore replace a prior eDB branch release. The full synthetic lifecycle must run only after exact staging `/api/version` provenance proves the Worker contains the reviewed #110 runtime.
 
 ## 11. Isolated persistence and D1-runtime validation
 
-The full mutating lifecycle is not exercised against the shared staging regulatory D1 because it intentionally creates immutable evidence.
-
-Instead, CI contains two complementary isolated gates:
+CI contains two complementary isolated gates:
 
 1. **Node SQLite `:memory:` persisted lifecycle** — exercises the complete synthetic persistence/evidence lifecycle without remote side effects.
 2. **Cloudflare Wrangler local D1 parity** — applies 0477–0480 to the tracked local-only D1 configuration, validates the eDB tables/columns/triggers and deliberately attempts a forbidden technical-snapshot update, which must fail with `EDB_TECHNICAL_SITUATION_IMMUTABLE`.
@@ -220,7 +215,7 @@ It has no staging/production D1 write path and no ANAC transmission path.
 
 ## 12. Activation posture
 
-The code and staging shadow exist, but activation remains fail-closed:
+The code exists, but official activation remains fail-closed:
 
 - `/api/edb` operational shadow requires `ENVIRONMENT=staging` and an explicit positive tenant ID in `EDB_SHADOW_PILOT_TENANTS`;
 - `all` is rejected and production cannot enable the gate;
@@ -231,8 +226,8 @@ The code and staging shadow exist, but activation remains fail-closed:
 - no ANAC external endpoint/payload/acceptance contract is guessed;
 - no claim of ANAC authorization/homologation is made.
 
-The governed staging runner for 0477–0480 verifies the Schema V2 manifest, proves migration/Schema V2 SQL copies are identical, captures a D1 Time Travel recovery point, writes both `airtrust_schema_changes_v2` and `d1_migrations` in the reviewed apply bundle, and fails closed on ledger divergence before migration-specific postconditions.
+The current regulatory reading also preserves a key separation: ANAC authorization/acceptance of the system is mandatory before official digital use, but external record transmission is not modeled as a universal mandatory terminal state. The applicable acceptance path and any sharing obligations must be established with ANAC for the intended operating scope.
 
 The remaining safe sequence is:
 
-frozen green PR evidence → keep full mutating validation isolated → future official staging deploy + automatic eDB positive smoke once workflow is on default branch → obtain current official ANAC DBE API/onboarding/acceptance material → accepted signature/security architecture and applicable system authorization → explicit production approval.
+frozen green PR evidence → exact reviewed #110 staging Worker release → governed full synthetic staging lifecycle → determine applicable Resolução 458 acceptance path and current ANAC onboarding/interface obligations → freeze accepted signature/security architecture → explicit production approval.
