@@ -1,4 +1,12 @@
-import { safeFrontendApiErrorMessage } from '@/react-app/lib/api-contract';
+const TECHNICAL_LMS_ERROR_PATTERNS = [
+  /\b(?:SQLITE(?:_ERROR)?|D1_ERROR|SQLSTATE|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND)\b/i,
+  /\bno such (?:table|column)\b/i,
+  /\b(?:stack trace|traceback|internal server error)\b/i,
+  /\b(?:SyntaxError|TypeError|ReferenceError|RangeError):/i,
+  /\bHTTP\s+[45]\d{2}\b/i,
+  /\bat\s+(?:async\s+)?[\w.$<>]+\s*\([^)]*\.(?:ts|tsx|js|mjs|cjs):\d+:\d+\)/i,
+  /\b(?:worker|node_modules|dist|src)[\\/][^\s)]+\.(?:ts|tsx|js|mjs|cjs):\d+/i,
+];
 
 function isLmsRequestUrl(rawUrl: string): boolean {
   try {
@@ -23,7 +31,12 @@ export function safeLmsResponseErrorText(
   if (status === 401 || status === 403 || status >= 500) {
     return fallbackForStatus(status);
   }
-  return safeFrontendApiErrorMessage(text, fallbackForStatus(status));
+
+  const normalized = String(text || '').trim();
+  if (!normalized) return fallbackForStatus(status);
+  return TECHNICAL_LMS_ERROR_PATTERNS.some((pattern) => pattern.test(normalized))
+    ? fallbackForStatus(status)
+    : normalized;
 }
 
 function rebuiltResponse(response: Response, body: BodyInit, contentType?: string): Response {
