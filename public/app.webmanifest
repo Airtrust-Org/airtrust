@@ -1,42 +1,49 @@
 {
+  "id": "/",
   "name": "AirTrust",
   "short_name": "AirTrust",
-  "description": "Plataforma de gestão aeronáutica — escalas, qualificações e FRMS",
-  "start_url": "/escalas/minha-escala",
+  "description": "Plataforma AirTrust de gestão aeronáutica",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#10b77f",
-  "orientation": "portrait-primary",
+  "theme_color": "#12356A",
+  "orientation": "any",
   "lang": "pt-BR",
-  "scope": "/",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/android-chrome-192x192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/android-chrome-512x512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/apple-touch-icon.png",
       "sizes": "180x180",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/favicon.ico",
       "sizes": "48x48 32x32 16x16",
-      "type": "image/x-icon"
+      "type": "image/x-icon",
+      "purpose": "any"
     }
   ],
-  "categories": ["productivity", "business"],
+  "categories": ["business", "productivity"],
   "shortcuts": [
     {
-      "name": "Minha Escala",
-      "url": "/escalas/minha-escala",
-      "description": "Ver escala do mês atual"
+      "name": "Início",
+      "short_name": "Início",
+      "url": "/",
+      "description": "Abrir o AirTrust"
     }
   ]
 }
