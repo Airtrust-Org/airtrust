@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { ArrowLeft, CheckCircle2, Mail } from 'lucide-react';
 import { API_BASE_URL } from '@/react-app/config/api';
+import { controlledFetch } from '@/react-app/utils/request-control';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -15,7 +16,7 @@ export default function ForgotPasswordPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+      const response = await controlledFetch(`${API_BASE_URL}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
