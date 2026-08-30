@@ -49,7 +49,7 @@ function resolveContextId(
   return undefined;
 }
 
-function safeServerMessage(status: number): string {
+export function safeServerMessage(status: number): string {
   if (status === 503) return 'Serviço temporariamente indisponível.';
   return 'Erro interno do servidor';
 }
