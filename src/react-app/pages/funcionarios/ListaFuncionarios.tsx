@@ -272,7 +272,14 @@ export function ListaFuncionarios({
       setPagination((prev) => (prev.page === 1 ? prev : { ...prev, page: 1 }));
     }
     prevFiltersKeyRef.current = key;
-  }, [debouncedTermoBusca, statusFilter, funcaoFilter, aeronaveFilter, quinzenaFilter, setorFilter]);
+  }, [
+    debouncedTermoBusca,
+    statusFilter,
+    funcaoFilter,
+    aeronaveFilter,
+    quinzenaFilter,
+    setorFilter,
+  ]);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -573,7 +580,10 @@ export function ListaFuncionarios({
     const byModelo: Record<string, { cmd: number; cop: number }> = {};
     for (const f of funcionarios) {
       if ((f.status || '').toUpperCase() !== 'ATIVO') continue;
-      const modelo = (f.aeronave || '').trim().toUpperCase().replace(/[\s-]+/g, '');
+      const modelo = (f.aeronave || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[\s-]+/g, '');
       const modeloKey = modelo.includes('AW139')
         ? 'AW139'
         : modelo.includes('SK76') || modelo.includes('S76')
@@ -631,16 +641,22 @@ export function ListaFuncionarios({
                         key={col.id}
                         onClick={() => isSortable && handleSort(col.id as SortableColumn)}
                         className={`whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 ${
-                          isSortable ? 'cursor-pointer select-none hover:bg-slate-100 dark:hover:bg-slate-800' : ''
+                          isSortable
+                            ? 'cursor-pointer select-none hover:bg-slate-100 dark:hover:bg-slate-800'
+                            : ''
                         }`}
                       >
                         <div className="flex items-center gap-2">
                           <span>{col.label}</span>
                           {isSortable && (
                             <div className="flex flex-col">
-                              {direction === null && <ArrowUpDown className="h-4 w-4 text-slate-400" />}
+                              {direction === null && (
+                                <ArrowUpDown className="h-4 w-4 text-slate-400" />
+                              )}
                               {direction === 'asc' && <ArrowUp className="h-4 w-4 text-blue-600" />}
-                              {direction === 'desc' && <ArrowDown className="h-4 w-4 text-blue-600" />}
+                              {direction === 'desc' && (
+                                <ArrowDown className="h-4 w-4 text-blue-600" />
+                              )}
                             </div>
                           )}
                         </div>
@@ -675,7 +691,10 @@ export function ListaFuncionarios({
                   </tr>
                 ) : (
                   funcionariosFiltradosEOrdenados.map((func) => (
-                    <tr key={func.id} className="transition hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                    <tr
+                      key={func.id}
+                      className="transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                    >
                       {colunasVisiveis.map((col) => {
                         const rawVal = func[col.id] as unknown;
                         let valor = rawVal == null || rawVal === '' ? '-' : String(rawVal);
@@ -715,7 +734,8 @@ export function ListaFuncionarios({
                         }
 
                         if (col.id === 'cpf' && func.cpf) valor = formatarCPF(func.cpf);
-                        if (col.id === 'matricula' && func.matricula) valor = formatarMatricula(func.matricula);
+                        if (col.id === 'matricula' && func.matricula)
+                          valor = formatarMatricula(func.matricula);
                         if (col.id === 'nascimento' && func.nascimento) {
                           valor = formatarDataExibicao(func.nascimento) || '-';
                         }
@@ -730,13 +750,19 @@ export function ListaFuncionarios({
                           )
                             .toString()
                             .toUpperCase();
-                          const normalizedStatus = rawStatus === 'DESLIGADO' ? 'INATIVO' : rawStatus;
+                          const normalizedStatus =
+                            rawStatus === 'DESLIGADO' ? 'INATIVO' : rawStatus;
                           const statusColors: Record<string, string> = {
-                            ATIVO: 'bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300',
-                            INATIVO: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300',
-                            FERIAS: 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300',
-                            LICENCA: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/50 dark:text-yellow-300',
-                            AFASTADO: 'bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-300',
+                            ATIVO:
+                              'bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300',
+                            INATIVO:
+                              'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300',
+                            FERIAS:
+                              'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300',
+                            LICENCA:
+                              'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/50 dark:text-yellow-300',
+                            AFASTADO:
+                              'bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-300',
                           };
                           const statusLabel: Record<string, string> = {
                             ATIVO: 'Ativo',
@@ -750,7 +776,9 @@ export function ListaFuncionarios({
 
                           return (
                             <td key={col.id} className="whitespace-nowrap px-4 py-3 text-sm">
-                              <span className={`rounded-full px-2 py-1 text-xs font-medium ${colorClass}`}>
+                              <span
+                                className={`rounded-full px-2 py-1 text-xs font-medium ${colorClass}`}
+                              >
                                 {label}
                               </span>
                             </td>
@@ -778,6 +806,16 @@ export function ListaFuncionarios({
                             title="Abrir perfil"
                           >
                             <FolderOpen className="h-4 w-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setFuncionarioSelecionado(func)}
+                            className={tableActionButtonClass}
+                            aria-label={`Editar ${func.nome || 'funcionário'}`}
+                            title="Editar"
+                          >
+                            <Edit2 className="h-4 w-4" />
                           </button>
 
                           <details className="relative">
