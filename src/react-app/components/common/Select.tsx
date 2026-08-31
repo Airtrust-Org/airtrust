@@ -13,6 +13,7 @@ interface SelectProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  ariaLabel?: string;
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -21,7 +22,8 @@ export const Select: React.FC<SelectProps> = ({
   options,
   placeholder = 'Selecione...',
   className = '',
-  disabled = false
+  disabled = false,
+  ariaLabel,
 }) => {
   return (
     <div className={`relative ${className}`}>
@@ -29,11 +31,10 @@ export const Select: React.FC<SelectProps> = ({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="w-full appearance-none px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+        aria-label={ariaLabel}
+        className="at-field at-focus min-h-11 w-full appearance-none rounded-lg border px-4 py-2 pr-10 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {placeholder && (
-          <option value="">{placeholder}</option>
-        )}
+        {placeholder && <option value="">{placeholder}</option>}
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
@@ -41,8 +42,9 @@ export const Select: React.FC<SelectProps> = ({
         ))}
       </select>
       <ChevronDown
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none transition-transform duration-200 ease-out"
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-transform duration-200 ease-out"
         size={20}
+        aria-hidden="true"
       />
     </div>
   );
