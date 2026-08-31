@@ -194,38 +194,6 @@ export function getLmsProgressLabel(status: string | null | undefined, progresso
   return `${progressoPct}%`;
 }
 
-export function LmsSectionNav({ canManage }: { canManage: boolean }) {
-  const location = useLocation();
-  const items = [
-    { label: 'Visão Geral', to: '/lms/dashboard', visible: true },
-    { label: 'Catálogo', to: '/lms/cursos', visible: true },
-    { label: 'Legado EdApp', to: '/lms/legado-edapp', visible: canManage },
-    { label: 'Configurações', to: '/lms/admin/cursos', visible: canManage },
-    { label: 'Relatórios', to: '/lms/relatorios', visible: canManage },
-  ].filter((item) => item.visible);
-
-  return (
-    <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      {items.map((item) => {
-        const active = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
-        return (
-          <Link
-            key={item.to}
-            to={item.to}
-            className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-              active
-                ? 'bg-primary/10 text-primary dark:bg-blue-500/15 dark:text-blue-200'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100'
-            }`}
-          >
-            {item.label}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
-
 export function LmsPageShell({ children }: { children: ReactNode }) {
   return <div className="w-full space-y-5 lg:space-y-6">{children}</div>;
 }
