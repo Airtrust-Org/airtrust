@@ -103,6 +103,16 @@ function normalizeAssetRef(value: string): string | null {
   return withoutQuery.replace(/^\.\//, '').replace(/^\//, '');
 }
 
+function localAssetExists(existingPaths: Set<string>, normalized: string): boolean {
+  const key = normalized.toLocaleLowerCase('en-US');
+  if (existingPaths.has(key)) return true;
+  // Some imported AW139 source metadata preserves the historical path
+  // "capXX/file.webp" while the packaged asset is intentionally rooted at
+  // "media/capXX/file.webp". Resolve that single canonical relocation; do not
+  // use arbitrary suffix matching, which could hide genuinely missing files.
+  return !key.startsWith('media/') && existingPaths.has(`media/${key}`);
+}
+
 function collectAssetRefs(value: unknown, refs: string[]): void {
   if (typeof value === 'string') {
     if (LOCAL_ASSET_RE.test(value.trim())) refs.push(value.trim());
@@ -182,7 +192,7 @@ export function validateModernM8AuditContract(pkg: ValidatedLmsPackage): GateSec
       if (!normalized) continue;
       if (/^(?:https?:)?\/\//i.test(normalized)) {
         externalAssets.add(ref);
-      } else if (!existingPaths.has(normalized.toLocaleLowerCase('en-US'))) {
+      } else if (!localAssetExists(existingPaths, normalized)) {
         missingAssets.add(normalized);
       }
     }
@@ -202,7 +212,9 @@ export function validateModernM8AuditContract(pkg: ValidatedLmsPackage): GateSec
   for (const api of ['LMSGetLastError', 'LMSGetErrorString', 'LMSGetDiagnostic']) {
     if (!js.includes(api)) errors.push(`M8: wrapper SCORM sem ${api}`);
   }
-  if (!/\.postMessage\s*\(/.test(js)) errors.push('M8: diagnostics runtime sem postMessage para o player');
+  if (!/\.postMessage\s*\(/.test(js) || !js.includes(DIAGNOSTICS_VERSION)) {
+    errors.push(`M8: diagnostics runtime deve emitir ${DIAGNOSTICS_VERSION} via postMessage para o player`);
+  }
   if (/window\s*\.\s*close\s*\(/i.test(js)) errors.push('M8: window.close() é proibido no fluxo SCORM');
 
   const tooSmallFonts = new Set<string>();
@@ -230,6 +242,9 @@ export function validateModernM8AuditContract(pkg: ValidatedLmsPackage): GateSec
     }
     if (!closure.semanticVisualCoverage) {
       errors.push('M8: auditClosure.semanticVisualCoverage ausente');
+    }
+    if (closure.storageScope !== 'course+enrollment+active-cycle') {
+      errors.push('M8: auditClosure.storageScope deve ser course+enrollment+active-cycle');
     }
   }
 
