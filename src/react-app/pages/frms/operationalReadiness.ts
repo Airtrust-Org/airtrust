@@ -42,10 +42,10 @@ export const PVTB_V1_PROTOCOL = {
 
 /**
  * Active protocol: `airtrust-pvtb-v2`. AirTrust implementation of the published
- * PVT-B paradigm (Basner, Mollicone & Dinges, 2011, Acta Astronautica 69:949–959;
- * PsyToolkit PVT-B, https://www.psytoolkit.org/experiment-library/pvtb.html):
+ * PVT-B stimulus/response paradigm (Basner, Mollicone & Dinges, 2011,
+ * Acta Astronautica 69:949–959; PsyToolkit PVT-B):
  *
- * - ~3 min session;
+ * - 1 min operational sampling window;
  * - a red box that stays visible the whole time;
  * - while waiting: the red box is empty;
  * - stimulus: a yellow millisecond counter appears inside the box and ticks up
@@ -54,16 +54,16 @@ export const PVTB_V1_PROTOCOL = {
  * - lapse   = RT ≥ 500 ms;
  * - false start / anticipation = RT < 100 ms (also any tap with no counter shown);
  * - inter-stimulus interval (response → next stimulus): ~1 s of feedback hold
- *   plus a random 0–3 s delay = 1–4 s total, matching the PsyToolkit PVT-B design;
+ *   plus a random 0–3 s delay = 1–4 s total;
  * - an unanswered presented stimulus remains active for up to 30 s and is then
  *   recorded as a 30,000 ms lapse rather than as a separate "missed" outcome.
  *
- * This is not the NASA PVT+ application; it is an independent implementation of
- * the same published paradigm.
+ * This is not the NASA PVT+ application; it is an independent implementation
+ * adapted to the AirTrust operational check-in duration.
  */
 export const PVTB_V2_PROTOCOL = {
   version: 'airtrust-pvtb-v2' as const,
-  defaultDurationMs: 3 * 60 * 1000,
+  defaultDurationMs: 1 * 60 * 1000,
   /** Feedback hold after a response before the box goes empty again. */
   feedbackHoldMs: 1_000,
   /** Random extra wait added after the feedback hold (PsyToolkit: 0–3 s). */
@@ -82,7 +82,7 @@ export const PVTB_V2_PROTOCOL = {
 
 /**
  * Backwards-compatible alias. Existing imports of `VIGILANCE_PROTOCOL` keep
- * working, but they now resolve to the active PVT-B V2 protocol.
+ * working and resolve to the active PVT-B V2 protocol.
  */
 export const VIGILANCE_PROTOCOL = PVTB_V2_PROTOCOL;
 
