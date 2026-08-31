@@ -97,6 +97,7 @@ describe('eDB shadow pilot route gate', () => {
       env('staging'),
     );
     expect(enabled.status).toBe(200);
+    expect(enabled.headers.get('x-airtrust-edb-mode')).toBe('staging-shadow-not-regulatory');
     expect(await enabled.json()).toMatchObject({ success: true, data: { enabled: true } });
 
     const wrongTenant = await createApp().request(

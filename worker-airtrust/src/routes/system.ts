@@ -25,6 +25,14 @@ function getFrontVersion(env: Env): string | null {
 }
 
 export function registerSystemRoutes(app: SystemApp) {
+  // Every eDB endpoint is a staging-only shadow surface.  Keep that explicit
+  // on the capability response as well as the operational endpoints so that
+  // callers cannot mistake a successful response for an official logbook.
+  app.use('/api/edb/*', async (c, next) => {
+    c.header('x-airtrust-edb-mode', 'staging-shadow-not-regulatory');
+    await next();
+  });
+
   app.get('/api/edb/capability', (c) => {
     const tenantId = getEmpresaId(c);
     const enabled =
