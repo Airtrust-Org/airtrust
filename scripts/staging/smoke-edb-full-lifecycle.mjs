@@ -47,7 +47,10 @@ async function api(baseUrl, path, headers, method = 'GET', payload) {
 }
 
 function expectSuccess(result, expectedStatus, label) {
-  assert(result.status === expectedStatus, `${label}: esperado HTTP ${expectedStatus}; recebeu ${result.status}`);
+  assert(
+    result.status === expectedStatus,
+    `${label}: esperado HTTP ${expectedStatus}; recebeu ${result.status}; response=${JSON.stringify(result.json || result.text || '')}`,
+  );
   assert(result.json?.success === true, `${label}: success=true ausente; payload=${JSON.stringify(result.json)}`);
   return result.json?.data;
 }
