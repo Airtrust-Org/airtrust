@@ -92,7 +92,7 @@ describe('AirTrust PWA installation', () => {
   });
 
   it('mantém /instalar público, sem cache e com fluxos iOS e Android', () => {
-    expect(mainSource).toContain("window.location.pathname === '/instalar'");
+    expect(mainSource).toContain("const isInstallRoute = pathname === '/instalar'");
     expect(mainSource).toContain('<InstallAppPage />');
     expect(headersSource).toContain('\n/instalar\n  Cache-Control: no-cache, no-store, must-revalidate');
     expect(installPageSource).toContain("window.addEventListener('beforeinstallprompt'");
