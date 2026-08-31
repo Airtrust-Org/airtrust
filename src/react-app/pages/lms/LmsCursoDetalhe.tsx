@@ -27,7 +27,6 @@ import {
   LmsEmptyState,
   LmsInfoChip,
   LmsPageShell,
-  LmsSectionNav,
   LmsStatPill,
   LmsSurface,
 } from './lmsUi';
@@ -191,7 +190,6 @@ export default function LmsCursoDetalhe() {
                 <ArrowLeft className="h-4 w-4" />
                 Voltar ao catálogo
               </Button>
-              {canManage ? <LmsSectionNav canManage={canManage} /> : null}
             </div>
           }
         />

@@ -104,7 +104,35 @@ describe('AppLayout module gating', () => {
     fireEvent.mouseEnter(screen.getByRole('button', { name: 'Treinamentos' }));
 
     expect(screen.getByRole('link', { name: 'LMS / Cursos EAD' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Painel' })).toBeNull();
     expect(screen.getByRole('link', { name: 'SGSO PRÉVIA' })).toBeInTheDocument();
+  });
+
+  it('mantém a entrada LMS para aluno quando o módulo está ativo', () => {
+    authMock.mockReturnValue({
+      user: { nome: 'Aluno Teste', role: 'ALUNO' },
+      logout: vi.fn(),
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['lms'] }],
+      empresaAtualId: 1,
+      selectEmpresa: vi.fn(async () => undefined),
+    });
+    permissionsMock.mockReturnValue({
+      can: () => false,
+      isAdmin: false,
+      isGestor: false,
+      isInstrutor: false,
+      isAluno: true,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppLayout>
+          <div>conteudo</div>
+        </AppLayout>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: 'LMS' })).toHaveAttribute('href', '/lms/cursos');
   });
 
   it('oculta Manutencao e Controle de Voos para admin comum', () => {
