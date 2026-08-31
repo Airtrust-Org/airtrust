@@ -1,5 +1,6 @@
-import { X } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useEffect, useId, useState } from 'react';
+import { frontendErrorMessage } from '@/react-app/lib/api-contract';
+import { BaseModal } from '../modals/BaseModal';
 import ModernCheckbox from './ModernCheckbox';
 
 interface FieldConfig {
@@ -31,6 +32,7 @@ export function ModalCadastro({
   const [formData, setFormData] = useState<any>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const formId = useId();
 
   useEffect(() => {
     if (initialData) {
@@ -57,8 +59,8 @@ export function ModalCadastro({
     try {
       await onSave(formData);
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Erro ao salvar');
+    } catch (err: unknown) {
+      setError(frontendErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -68,42 +70,67 @@ export function ModalCadastro({
     setFormData({ ...formData, [name]: value });
   }
 
-  if (!isOpen) return null;
+  const footer = (
+    <>
+      <button
+        type="button"
+        onClick={onClose}
+        disabled={loading}
+        className="at-surface at-focus at-interactive min-h-11 rounded-lg border px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Cancelar
+      </button>
+      <button
+        type="submit"
+        form={formId}
+        disabled={loading}
+        className="at-focus min-h-11 rounded-lg bg-primary px-4 py-2 font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-gray-300"
+      >
+        {loading ? 'Salvando...' : 'Salvar'}
+      </button>
+    </>
+  );
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center p-6 border-b sticky top-0 bg-white">
-          <h3 className="text-lg font-bold text-gray-900">{title}</h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition"
-            type="button"
+    <BaseModal isOpen={isOpen} onClose={onClose} title={title} size="sm" footer={footer}>
+      <form id={formId} onSubmit={handleSubmit} className="space-y-4" aria-busy={loading}>
+        {error && (
+          <div
+            role="alert"
+            className="at-status-critical rounded-lg border p-3 text-sm"
+            style={{ borderColor: 'var(--at-critical)' }}
           >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+            {error}
+          </div>
+        )}
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm">
-              {error}
-            </div>
-          )}
+        {fields.map((field) => {
+          const fieldId = `${formId}-${field.name}`;
 
-          {fields.map((field) => (
+          return (
             <div key={field.name}>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {field.label}
-                {field.required && <span className="text-red-500 ml-1">*</span>}
-              </label>
+              {field.type !== 'checkbox' && (
+                <label htmlFor={fieldId} className="mb-1 block text-sm font-medium text-gray-700">
+                  {field.label}
+                  {field.required && (
+                    <span
+                      className="ml-1"
+                      style={{ color: 'var(--at-critical)' }}
+                      aria-hidden="true"
+                    >
+                      *
+                    </span>
+                  )}
+                </label>
+              )}
 
               {field.type === 'select' ? (
                 <select
+                  id={fieldId}
                   value={formData[field.name] || ''}
                   onChange={(e) => handleChange(field.name, e.target.value)}
                   required={field.required}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  className="at-field at-focus min-h-11 w-full rounded-lg border px-3 py-2"
                 >
                   <option value="">Selecione...</option>
                   {field.options?.map((opt) => (
@@ -116,49 +143,33 @@ export function ModalCadastro({
                 <ModernCheckbox
                   checked={formData[field.name] || false}
                   onChange={(checked) => handleChange(field.name, checked)}
-                  label={field.placeholder || 'Ativo'}
+                  label={field.placeholder || field.label}
                 />
               ) : field.type === 'textarea' ? (
                 <textarea
+                  id={fieldId}
                   value={formData[field.name] || ''}
                   onChange={(e) => handleChange(field.name, e.target.value)}
                   required={field.required}
                   placeholder={field.placeholder}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  className="at-field at-focus w-full rounded-lg border px-3 py-2"
                 />
               ) : (
                 <input
+                  id={fieldId}
                   type={field.type}
                   value={formData[field.name] || ''}
                   onChange={(e) => handleChange(field.name, e.target.value)}
                   required={field.required}
                   placeholder={field.placeholder}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  className="at-field at-focus min-h-11 w-full rounded-lg border px-3 py-2"
                 />
               )}
             </div>
-          ))}
-
-          <div className="flex gap-3 pt-4 border-t">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 font-medium transition disabled:bg-gray-300 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Salvando...' : 'Salvar'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          );
+        })}
+      </form>
+    </BaseModal>
   );
 }

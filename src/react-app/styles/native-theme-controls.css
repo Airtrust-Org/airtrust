@@ -41,3 +41,33 @@
   cursor: not-allowed;
   opacity: 0.6;
 }
+
+/*
+ * Global keyboard baseline while legacy screens migrate to `.at-focus`.
+ * Component-specific focus treatments remain free to add rings/shadows, but
+ * keyboard users must never lose a visible focus indicator.
+ */
+.airtrust-global-standard :where(button, [role='button'], a[href], input, select, textarea):focus-visible {
+  outline: 2px solid var(--at-focus);
+  outline-offset: 2px;
+}
+
+/*
+ * Mobile touch baseline.
+ * 44px is enforced only on narrow viewports so dense desktop tables can keep
+ * their compact layout while phone users get reliable touch targets. Checkbox
+ * and radio controls are intentionally excluded from forced input height.
+ */
+@media (max-width: 640px) {
+  .airtrust-global-standard button,
+  .airtrust-global-standard [role='button'],
+  .airtrust-global-standard select,
+  .airtrust-global-standard input:not([type='checkbox']):not([type='radio']):not([type='hidden']) {
+    min-height: 44px;
+  }
+
+  .airtrust-global-standard button,
+  .airtrust-global-standard [role='button'] {
+    min-width: 44px;
+  }
+}
