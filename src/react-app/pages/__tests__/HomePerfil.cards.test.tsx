@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../components/AppLayout', () => ({
@@ -7,12 +9,12 @@ vi.mock('../../components/AppLayout', () => ({
 
 vi.mock('../../services/api', () => ({
   default: {
-    get: vi.fn(),
+    get: vi.fn().mockResolvedValue({ success: true, data: { success: true, data: [] } }),
   },
 }));
 
 vi.mock('../../components/dashboard/CardMeusEAD', () => ({
-  CardMeusEAD: () => null,
+  CardMeusEAD: () => <div data-testid="card-meus-ead">Meus cursos EAD</div>,
 }));
 
 vi.mock('../../hooks/useAuth', () => ({
@@ -28,7 +30,7 @@ vi.mock('../../hooks/usePermissions', () => ({
   }),
 }));
 
-import { buildHomeAccessCards } from '../HomePerfil';
+import HomePerfil, { buildHomeAccessCards } from '../HomePerfil';
 
 describe('HomePerfil quick access cards', () => {
   const canAll = () => true;
@@ -136,5 +138,27 @@ describe('HomePerfil quick access cards', () => {
 
     expect(paraAluno.map((card) => card.title)).not.toContain('Guias do Instrutor');
     expect(paraUsuario.map((card) => card.title)).not.toContain('Guias do Instrutor');
+  });
+});
+
+describe('HomePerfil EAD visibility', () => {
+  it('mantem os cursos EAD visiveis para funcionario da manutenção', () => {
+    render(
+      <MemoryRouter>
+        <HomePerfil homeProfile="STUDENT_MANUTENCAO" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('card-meus-ead')).toBeInTheDocument();
+  });
+
+  it('mantem os cursos EAD visiveis para tripulação/pilotos', () => {
+    render(
+      <MemoryRouter>
+        <HomePerfil homeProfile="STUDENT_TRIPULACAO" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('card-meus-ead')).toBeInTheDocument();
   });
 });
