@@ -11,36 +11,32 @@ export type ResolvedParticipantModel = {
   source: 'no_history' | 'normal_history' | 'shared_history' | 'sequence_complete';
 };
 
-/**
- * Cadeia canônica de progressão individual, confirmada no schema:
- *
- * NORMAL: fichas_sessao.agendamento_slot_id -> simulador_agendamentos.id
- *         -> simulador_agendamentos.template_id (= modelos_sessao.id)
- * SHARED: fichas_sessao.atribuicao_curricular_id -> simulador_atribuicoes_curriculares.id
- *         -> simulador_atribuicoes_curriculares.modelo_sessao_id
- *
- * fs.aprovado = 1 é o único sinal de "conta como concluída" (mesma convenção
- * já usada em simuladores-fichas.ts). Reprovada ou PENDENTE não avança.
- *
- * O histórico é escopado ao ciclo atual (cycleStartDate = data_conclusao da
- * qualificacoes_historico corrente) para que sessões de um ciclo anterior
- * não sejam contadas como progresso do ciclo vigente.
- */
-export async function resolveIndividualNextModel(params: {
+export type ResolvedParticipantRemainingModels = {
+  models: SequenceModel[];
+  completedModelIds: number[];
+  source: ResolvedParticipantModel['source'];
+};
+
+type CompletedModelRow = {
+  modelo_id: number | null;
+  origin: 'shared' | 'normal';
+};
+
+function orderedSequence(models: SequenceModel[]): SequenceModel[] {
+  return [...models].sort(
+    (a, b) =>
+      (a.ordem_no_treinamento ?? 999999) - (b.ordem_no_treinamento ?? 999999) ||
+      a.id - b.id,
+  );
+}
+
+async function loadCompletedModels(params: {
   db: D1Database;
   empresaId: number;
   employeeId: number;
   cycleStartDate: string | null;
-  models: SequenceModel[];
-}): Promise<ResolvedParticipantModel | null> {
-  const { db, empresaId, employeeId, cycleStartDate, models } = params;
-  if (models.length === 0) return null;
-
-  const sequence = [...models].sort(
-    (a, b) => (a.ordem_no_treinamento ?? 999999) - (b.ordem_no_treinamento ?? 999999),
-  );
-
-  const completed = await db
+}): Promise<CompletedModelRow[]> {
+  const completed = await params.db
     .prepare(
       `SELECT
          COALESCE(sac.modelo_sessao_id, sa.template_id) AS modelo_id,
@@ -60,17 +56,51 @@ export async function resolveIndividualNextModel(params: {
          AND (fs.colaborador_id_aluno = ? OR sac.participante_id = ?)
          AND (? IS NULL OR fs.data_sessao IS NULL OR date(fs.data_sessao) >= date(?))`,
     )
-    .bind(empresaId, empresaId, empresaId, employeeId, employeeId, cycleStartDate, cycleStartDate)
-    .all<{ modelo_id: number | null; origin: 'shared' | 'normal' }>();
+    .bind(
+      params.empresaId,
+      params.empresaId,
+      params.empresaId,
+      params.employeeId,
+      params.employeeId,
+      params.cycleStartDate,
+      params.cycleStartDate,
+    )
+    .all<CompletedModelRow>();
+  return completed.results || [];
+}
 
+/**
+ * Resolve todas as sessões ainda necessárias no ciclo atual.
+ *
+ * O planejamento precisa representar o treinamento inteiro restante, não
+ * somente a próxima sessão. A progressão continua usando a mesma cadeia
+ * canônica de evidência do resolver legado: somente fichas aprovadas e
+ * escopadas ao tenant/ciclo avançam o currículo.
+ */
+export async function resolveIndividualRemainingModels(params: {
+  db: D1Database;
+  empresaId: number;
+  employeeId: number;
+  cycleStartDate: string | null;
+  models: SequenceModel[];
+}): Promise<ResolvedParticipantRemainingModels> {
+  const sequence = orderedSequence(params.models);
+  if (sequence.length === 0) {
+    return { models: [], completedModelIds: [], source: 'sequence_complete' };
+  }
+
+  const completedRows = await loadCompletedModels(params);
   const sequenceIndexById = new Map(sequence.map((model, index) => [model.id, index]));
+  const completedIds = new Set<number>();
   let bestIndex = -1;
   let bestOrigin: 'shared' | 'normal' | null = null;
-  for (const row of completed.results || []) {
+
+  for (const row of completedRows) {
     const modelId = Number(row.modelo_id);
     if (!Number.isInteger(modelId)) continue;
     const index = sequenceIndexById.get(modelId);
     if (index === undefined) continue;
+    completedIds.add(modelId);
     if (index > bestIndex) {
       bestIndex = index;
       bestOrigin = row.origin;
@@ -78,18 +108,56 @@ export async function resolveIndividualNextModel(params: {
   }
 
   if (bestIndex === -1) {
-    return { modelId: sequence[0].id, ordem: sequence[0].ordem_no_treinamento, source: 'no_history' };
+    return {
+      models: sequence,
+      completedModelIds: [],
+      source: 'no_history',
+    };
   }
 
   if (bestIndex >= sequence.length - 1) {
-    const last = sequence[sequence.length - 1];
-    return { modelId: last.id, ordem: last.ordem_no_treinamento, source: 'sequence_complete' };
+    return {
+      models: [],
+      completedModelIds: sequence.filter((model) => completedIds.has(model.id)).map((model) => model.id),
+      source: 'sequence_complete',
+    };
   }
 
-  const next = sequence[bestIndex + 1];
   return {
-    modelId: next.id,
-    ordem: next.ordem_no_treinamento,
+    models: sequence.slice(bestIndex + 1),
+    completedModelIds: sequence.filter((model) => completedIds.has(model.id)).map((model) => model.id),
     source: bestOrigin === 'shared' ? 'shared_history' : 'normal_history',
+  };
+}
+
+/**
+ * Compatibilidade para os consumidores que ainda precisam apenas da próxima
+ * sessão. Não reinicia silenciosamente um currículo já concluído.
+ */
+export async function resolveIndividualNextModel(params: {
+  db: D1Database;
+  empresaId: number;
+  employeeId: number;
+  cycleStartDate: string | null;
+  models: SequenceModel[];
+}): Promise<ResolvedParticipantModel | null> {
+  if (params.models.length === 0) return null;
+
+  const sequence = orderedSequence(params.models);
+  const remaining = await resolveIndividualRemainingModels(params);
+  if (remaining.models.length > 0) {
+    const next = remaining.models[0];
+    return {
+      modelId: next.id,
+      ordem: next.ordem_no_treinamento,
+      source: remaining.source,
+    };
+  }
+
+  const last = sequence[sequence.length - 1];
+  return {
+    modelId: last.id,
+    ordem: last.ordem_no_treinamento,
+    source: 'sequence_complete',
   };
 }
