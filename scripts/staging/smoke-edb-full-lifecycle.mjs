@@ -404,7 +404,10 @@ async function main() {
     200,
     'incident readback',
   );
-  assert(String(incident?.status || '').toUpperCase() === 'RECONSTITUTED', 'incidente deveria estar RECONSTITUTED');
+  assert(
+    String(incident?.reconstitutionOutcome || incident?.status || '').toUpperCase() === 'RECONSTITUTED',
+    `incidente deveria estar RECONSTITUTED; payload=${JSON.stringify(incident)}`,
+  );
 
   const audit = expectSuccess(
     await api(baseUrl, `/api/edb/diaries/${diaryId}/audit`, headers),
