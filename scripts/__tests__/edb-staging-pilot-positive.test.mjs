@@ -24,6 +24,9 @@ test('eDB positive seed is synthetic, tenant-6 and staging-D1 only', () => {
   assert.match(seed, /airtrust-db-staging-baseline-20260701/);
   assert.match(seed, /AIRTRUST_STAGING_EDB_PILOT_IDENTITY/);
   assert.match(seed, /--rollback/);
+  assert.match(seed, /EDB_PILOT_TENANT_6_OCCUPIED_NON_SYNTHETIC_ACTIVE/);
+  assert.match(seed, /EDB_PILOT_TENANT_6_OCCUPIED_NON_SYNTHETIC_INACTIVE/);
+  assert.doesNotMatch(seed, /EDB_PILOT_TENANT_EXISTING_ACTIVE/);
   assert.doesNotMatch(seed, /airtrust-db-production/);
   assert.doesNotMatch(seed, /airtrust-db-prod/);
 });
