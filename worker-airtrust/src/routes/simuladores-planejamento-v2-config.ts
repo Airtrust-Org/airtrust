@@ -14,14 +14,19 @@ app.use('*', auth());
 
 const ALLOWED_POLICIES = new Set<SimulatorRosterPolicy>(['FOLGA', 'TRABALHO', 'AMBAS']);
 
-app.put('/config', requireRole('admin'), async (c) => {
-  const empresaId = getTenantContext(c).empresaId;
-  const body = (await c.req.json().catch(() => null)) as { roster_policy?: unknown } | null;
-  const rosterPolicy = String(body?.roster_policy || '')
+export function normalizeSimulatorRosterPolicy(value: unknown): SimulatorRosterPolicy | null {
+  const normalized = String(value || '')
     .trim()
     .toUpperCase() as SimulatorRosterPolicy;
+  return ALLOWED_POLICIES.has(normalized) ? normalized : null;
+}
 
-  if (!ALLOWED_POLICIES.has(rosterPolicy)) {
+app.put('/config', requireRole('admin', 'manager'), async (c) => {
+  const empresaId = getTenantContext(c).empresaId;
+  const body = (await c.req.json().catch(() => null)) as { roster_policy?: unknown } | null;
+  const rosterPolicy = normalizeSimulatorRosterPolicy(body?.roster_policy);
+
+  if (!rosterPolicy) {
     return c.json(
       {
         success: false,
