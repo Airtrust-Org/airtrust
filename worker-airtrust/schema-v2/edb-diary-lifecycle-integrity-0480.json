@@ -1,0 +1,8 @@
+{
+  "changeId": "edb-diary-lifecycle-integrity-0480",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0480_edb_diary_lifecycle_integrity.sql",
+  "fileHash": "cd4f471342b5c9005ebd140681a8b06a69dd66fab7ccdd9419649bf93ca759fa",
+  "planPath": "worker-airtrust/schema-v2/plans/edb-diary-lifecycle-integrity-0480.md",
+  "planHash": "b05cb0980974655b706ad858c10a1a4c251f813ad9ebf8ef02d81beea7781c42"
+}

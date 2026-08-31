@@ -1,0 +1,131 @@
+name: eDB Isolated Persisted Lifecycle
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/edb-isolated-persisted-lifecycle.yml'
+      - 'scripts/ci/validate-edb-local-d1.mjs'
+      - 'worker-airtrust/wrangler.dev.toml'
+      - 'worker-airtrust/src/__tests__/edb/full-persisted-lifecycle-integration.test.ts'
+      - 'worker-airtrust/migrations/0477_edb_operational_core.sql'
+      - 'worker-airtrust/migrations/0478_edb_anac_receipt_integrity.sql'
+      - 'worker-airtrust/migrations/0479_edb_relational_integrity.sql'
+      - 'worker-airtrust/migrations/0480_edb_diary_lifecycle_integrity.sql'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edb-isolated-persisted-lifecycle-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  persisted-lifecycle:
+    name: eDB persisted lifecycle (isolated SQLite)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+
+      - name: Assert isolation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_file='worker-airtrust/src/__tests__/edb/full-persisted-lifecycle-integration.test.ts'
+          [[ -f "$test_file" ]] || { echo 'EDB_PERSISTED_TEST_MISSING' >&2; exit 1; }
+          grep -q "new NodeDatabaseSync(':memory:')" "$test_file" || { echo 'EDB_PERSISTED_TEST_NOT_IN_MEMORY' >&2; exit 1; }
+          grep -q "0477_edb_operational_core.sql" "$test_file" || { echo 'EDB_0477_NOT_COVERED' >&2; exit 1; }
+          grep -q "0480_edb_diary_lifecycle_integrity.sql" "$test_file" || { echo 'EDB_0480_NOT_COVERED' >&2; exit 1; }
+          if grep -Eq 'https?://|wrangler[[:space:]]+d1|CLOUDFLARE_|ANAC.*(POST|PUT|PATCH|DELETE)' "$test_file"; then
+            echo 'EDB_PERSISTED_TEST_REMOTE_SIDE_EFFECT_RISK' >&2
+            exit 1
+          fi
+          echo 'EDB_PERSISTED_ISOLATION_GUARD_PASS'
+
+      - name: Install canonical dependencies
+        run: npm ci && npm --prefix worker-airtrust ci
+
+      - name: Run exact persisted lifecycle integration
+        working-directory: worker-airtrust
+        run: npx vitest run src/__tests__/edb/full-persisted-lifecycle-integration.test.ts
+
+      - name: Record safety scope
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## eDB isolated persisted lifecycle'
+            echo ''
+            echo '- persistence: Node SQLite `:memory:` only'
+            echo '- Cloudflare D1 remote writes: none'
+            echo '- staging operational records: none'
+            echo '- production action: none'
+            echo '- ANAC transmission: none'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  local-d1-parity:
+    name: eDB schema + immutability (Cloudflare local D1)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+
+      - name: Guard local-only D1 target
+        shell: bash
+        run: |
+          set -euo pipefail
+          config='worker-airtrust/wrangler.dev.toml'
+          script='scripts/ci/validate-edb-local-d1.mjs'
+          [[ -f "$config" && -f "$script" ]] || { echo 'EDB_LOCAL_D1_HARNESS_MISSING' >&2; exit 1; }
+          grep -q 'database_name = "airtrust-db-local"' "$config" || { echo 'EDB_LOCAL_D1_NAME_REJECTED' >&2; exit 1; }
+          grep -q 'database_id = "00000000-0000-0000-0000-000000000001"' "$config" || { echo 'EDB_LOCAL_D1_ID_REJECTED' >&2; exit 1; }
+          grep -q "'--local'" "$script" || { echo 'EDB_LOCAL_FLAG_MISSING' >&2; exit 1; }
+          if grep -Eq "'--remote'|\"--remote\"|CLOUDFLARE_API_TOKEN[[:space:]]*=" "$script"; then
+            echo 'EDB_LOCAL_D1_REMOTE_PATH_REJECTED' >&2
+            exit 1
+          fi
+          echo 'EDB_LOCAL_D1_GUARD_PASS'
+
+      - name: Install Worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Apply 0477-0480 and validate on local D1 runtime
+        env:
+          CLOUDFLARE_API_TOKEN: ''
+          CLOUDFLARE_ACCOUNT_ID: ''
+          CLOUDFLARE_D1_MIGRATION_API_TOKEN: ''
+        run: node scripts/ci/validate-edb-local-d1.mjs
+
+      - name: Record local D1 safety scope
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## eDB Cloudflare local D1 parity'
+            echo ''
+            echo '- runtime: Wrangler local D1 only (`--local`)'
+            echo '- persistence: temporary runner directory removed after execution'
+            echo '- Cloudflare credentials: explicitly blanked/sanitized'
+            echo '- remote D1 writes: none'
+            echo '- staging operational records: none'
+            echo '- production action: none'
+            echo '- ANAC transmission: none'
+          } >> "$GITHUB_STEP_SUMMARY"

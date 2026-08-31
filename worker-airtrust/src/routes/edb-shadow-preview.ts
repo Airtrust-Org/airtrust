@@ -14,6 +14,7 @@ import {
   edbShadowReviewInputSchema,
   EdbShadowReviewEvidenceError,
 } from '../services/edb/shadow-review-evidence';
+import edbShadowOperationalRoutes from './edb-shadow-operational';
 
 const edbShadowPreview = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -132,5 +133,7 @@ edbShadowPreview.post(
     }
   },
 );
+
+edbShadowPreview.route('/', edbShadowOperationalRoutes);
 
 export default edbShadowPreview;
