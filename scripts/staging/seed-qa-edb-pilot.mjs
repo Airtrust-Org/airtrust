@@ -43,13 +43,27 @@ function targetDb() {
   return value;
 }
 
+function syncSleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 function wrangler(dbName, args) {
-  const result = spawnSync('npx', ['wrangler', 'd1', 'execute', dbName, '--remote', ...args, '--json'], {
-    cwd: join(process.cwd(), 'worker-airtrust'),
-    encoding: 'utf8',
-  });
-  if (result.status !== 0) throw new Error(result.stderr || result.stdout || 'WRANGLER_D1_FAILED');
-  return result.stdout || '[]';
+  let lastResult = null;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const result = spawnSync('npx', ['wrangler', 'd1', 'execute', dbName, '--remote', ...args, '--json'], {
+      cwd: join(process.cwd(), 'worker-airtrust'),
+      encoding: 'utf8',
+    });
+    if (result.status === 0) return result.stdout || '[]';
+    lastResult = result;
+    const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+    const isTransient = /code:\s*7500|internal error|rate limit|fetch failed|econnreset|timeout/i.test(output);
+    if (!isTransient || attempt === 4) break;
+    const backoffMs = attempt * 1500;
+    console.log(`[seed-qa-edb-pilot] wrangler transient error (attempt ${attempt}/4), retrying in ${backoffMs}ms...`);
+    syncSleep(backoffMs);
+  }
+  throw new Error(lastResult?.stderr || lastResult?.stdout || 'WRANGLER_D1_FAILED');
 }
 
 function queryOne(dbName, sql) {

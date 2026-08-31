@@ -87,7 +87,7 @@ const validTrial = {
 
 const validTrials = Array.from({ length: 10 }, (_, index) => {
   const sequence = index + 1;
-  const scheduledAtMs = sequence * 10_000;
+  const scheduledAtMs = sequence * 5_000;
   const stimulusAtMs = scheduledAtMs + 100;
   return {
     ...validTrial,
@@ -136,7 +136,7 @@ describe('FRMS readiness route', () => {
       new Request('http://localhost/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reference_date: '2026-08-27', duration_ms: 180000, trials: validTrials }),
+        body: JSON.stringify({ reference_date: '2026-08-27', duration_ms: 60000, trials: validTrials }),
       }),
       { DB: db } as Env,
       {} as ExecutionContext,
@@ -157,7 +157,7 @@ describe('FRMS readiness route', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           reference_date: '2026-08-27',
-          duration_ms: 180000,
+          duration_ms: 60000,
           trials: validTrials,
           kss_score: 1,
           sleep_hours: 12,
@@ -189,7 +189,7 @@ describe('FRMS readiness route', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           reference_date: '2026-08-27',
-          duration_ms: 180000,
+          duration_ms: 60000,
           trials: [{ ...validTrial, sequence: 0 }],
         }),
       }),
