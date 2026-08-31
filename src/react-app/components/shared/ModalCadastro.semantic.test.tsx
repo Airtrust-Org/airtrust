@@ -27,6 +27,12 @@ const extendedFields = [
   { name: 'ativo', label: 'Ativo', type: 'checkbox' as const },
 ];
 
+function getCadastroForm() {
+  const form = screen.getByLabelText('Nome').closest('form');
+  expect(form).not.toBeNull();
+  return form as HTMLFormElement;
+}
+
 describe('ModalCadastro semantic accessibility', () => {
   it('uses the shared accessible modal and associates labels with semantic fields', () => {
     render(
@@ -39,10 +45,12 @@ describe('ModalCadastro semantic accessibility', () => {
       />,
     );
 
+    const form = getCadastroForm();
     expect(screen.getByRole('dialog', { name: 'Novo cadastro' })).toBeInTheDocument();
     expect(screen.getByLabelText('Nome')).toHaveClass('at-field', 'at-focus', 'min-h-11');
     expect(screen.getByLabelText('Tipo')).toHaveClass('at-field', 'at-focus', 'min-h-11');
     expect(screen.getByRole('button', { name: 'Salvar' })).toHaveClass('min-h-11', 'at-focus');
+    expect(screen.getByRole('button', { name: 'Salvar' })).toHaveAttribute('form', form.id);
   });
 
   it('sanitizes technical save errors before rendering them to the user', async () => {
@@ -57,7 +65,7 @@ describe('ModalCadastro semantic accessibility', () => {
     );
 
     fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Cadastro válido' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    fireEvent.submit(getCadastroForm());
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível concluir a operação.');
@@ -102,7 +110,7 @@ describe('ModalCadastro semantic accessibility', () => {
       target: { value: 'Observação atualizada' },
     });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Ativo' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    fireEvent.submit(getCadastroForm());
 
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledWith({
