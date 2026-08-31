@@ -5,7 +5,7 @@ const { controlledFetchMock } = vi.hoisted(() => ({
   controlledFetchMock: vi.fn(),
 }));
 
-vi.mock('../../utils/request-control', () => ({
+vi.mock('@/react-app/utils/request-control', () => ({
   controlledFetch: (...args: unknown[]) => controlledFetchMock(...args),
 }));
 
