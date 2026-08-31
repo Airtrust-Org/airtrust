@@ -70,8 +70,9 @@ function isRecurrentFlightTraining(session: SimulatorTrainingSessionNeed): boole
 
 /**
  * Compartilhamento cruzado é deliberadamente conservador nesta camada:
- * mesmo equipamento + mesma duração e ambos pertencentes ao ciclo recorrente
- * de voo. A reserva compartilhada continua mantendo currículo/ficha individual.
+ * mesmo equipamento, mesma duração e mesma posição curricular. O conteúdo
+ * continua individual por tripulante, inclusive quando um cumpre Periódico
+ * e o outro Semestral.
  */
 export function canShareSimulatorTrainingSessions(
   left: SimulatorTrainingSessionNeed,
@@ -80,6 +81,7 @@ export function canShareSimulatorTrainingSessions(
   if (left.employee_id === right.employee_id) return false;
   if (left.equipment !== right.equipment) return false;
   if (left.duration_minutes !== right.duration_minutes) return false;
+  if (left.session_order !== right.session_order) return false;
   if (left.qualification_type_id === right.qualification_type_id) return true;
   return isRecurrentFlightTraining(left) && isRecurrentFlightTraining(right);
 }
@@ -87,7 +89,7 @@ export function canShareSimulatorTrainingSessions(
 function partnerScore(
   primary: SimulatorTrainingSessionNeed,
   partner: SimulatorTrainingSessionNeed,
-): [number, number, number, number, number, number] {
+): [number, number, number, number, number] {
   const sameTraining = primary.qualification_type_id === partner.qualification_type_id;
   const sameModel = primary.session_model_id === partner.session_model_id;
   const complementaryRole =
@@ -97,7 +99,6 @@ function partnerScore(
     sameTraining ? 0 : 1,
     sameModel ? 0 : 1,
     complementaryRole ? 0 : 1,
-    Math.abs(primary.session_order - partner.session_order),
     daysDistance(primary.expiry_date, partner.expiry_date),
     partner.employee_id,
   ];
