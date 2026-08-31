@@ -56,6 +56,7 @@ describe('ModalCadastro semantic accessibility', () => {
       />,
     );
 
+    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Cadastro válido' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
 
     await waitFor(() => {
