@@ -18,12 +18,12 @@ function localTodayIso(): string {
 }
 
 const SLEEP_OPTIONS = [
-  { hours: 3.5, label: 'Menos de 4 h' },
-  { hours: 4, label: '4 a menos de 5 h' },
-  { hours: 5, label: '5 a menos de 6 h' },
-  { hours: 6, label: '6 a menos de 7 h' },
-  { hours: 7, label: '7 a menos de 8 h' },
-  { hours: 8, label: '8 h ou mais' },
+  { hours: 3.5, label: 'Menos de 4 horas' },
+  { hours: 4, label: 'Entre 4 e 5 horas' },
+  { hours: 5, label: 'Entre 5 e 6 horas' },
+  { hours: 6, label: 'Entre 6 e 7 horas' },
+  { hours: 7, label: 'Entre 7 e 8 horas' },
+  { hours: 8, label: '8 horas ou mais' },
 ] as const;
 const QUALITY_OPTIONS = [
   { value: 5, label: 'Excelente' },
