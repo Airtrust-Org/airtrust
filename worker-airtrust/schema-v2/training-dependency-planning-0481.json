@@ -1,0 +1,8 @@
+{
+  "changeId": "training-dependency-planning-0481",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0481_training_dependency_planning.sql",
+  "fileHash": "88f3d8208998446e2066ef63eff1ad9f58aa2cd7d16538edca1520fdc98dc5c6",
+  "planPath": "worker-airtrust/schema-v2/plans/training-dependency-planning-0481.md",
+  "planHash": "80f5b5ccefbb033d970a6a5632dcb9204b26f322a8df0ceae076963cb0cd151e"
+}
