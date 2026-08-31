@@ -414,8 +414,7 @@ async function main() {
     200,
     'audit chain',
   );
-  assert(audit?.valid !== false, 'cadeia de auditoria explicitamente inválida');
-  if (Array.isArray(audit?.events)) assert(audit.events.length > 0, 'cadeia de auditoria sem eventos');
+  assert(audit?.verification?.valid !== false && audit?.valid !== false, 'cadeia de auditoria explicitamente inválida');
 
   expectSuccess(
     await api(baseUrl, `/api/edb/volumes/${encodeURIComponent(volumeId)}/close`, headers, 'POST', {

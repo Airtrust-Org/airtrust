@@ -1,6 +1,7 @@
 /**
  * Active protocol: `airtrust-pvtb-v2` — AirTrust implementation of the published
- * PVT-B paradigm (Basner, Mollicone & Dinges 2011; PsyToolkit PVT-B). The
+ * PVT-B stimulus/response paradigm (Basner, Mollicone & Dinges 2011; PsyToolkit
+ * PVT-B), adapted to a one-minute AirTrust operational sampling window. The
  * historical `airtrust-vigilance-v1` (blue-dot stimulus, 2–10 s ISI) is only kept
  * for interpreting already-stored sessions. Individual baseline is computed per
  * protocol version, so v1 sessions never contribute to a v2 baseline.
@@ -9,7 +10,7 @@ export const READINESS_PROTOCOL = {
   version: 'airtrust-pvtb-v2',
   scoringVersion: 'readiness-score-v1',
   legacyVersions: ['airtrust-vigilance-v1'] as const,
-  defaultDurationMs: 180_000,
+  defaultDurationMs: 60_000,
   allowedDurationDriftMs: 15_000,
   minimumTrials: 10,
   lapseThresholdMs: 500,
@@ -89,7 +90,7 @@ function quantile(sorted: number[], p: number): number | null {
  * remains unanswered for the 30 s response ceiling is a lapse with RT=30,000 ms.
  * The historical v1 protocol keeps its original `missed` interpretation.
  *
- * V2 also enforces the three-minute sampling boundary server-side: scheduled and
+ * V2 also enforces the submitted sampling boundary server-side: scheduled and
  * stimulus timestamps must be inside the submitted sampling duration. Only the
  * response to an already-presented stimulus may extend beyond that boundary, up
  * to the 30-second response ceiling.
