@@ -120,6 +120,7 @@ function compareTuple(left: number[], right: number[]): number {
 export function pairSimulatorTrainingSessions(
   needs: SimulatorTrainingSessionNeed[],
   maxAnticipationDays: number,
+  allowCrossTraining = true,
 ): SimulatorTrainingSessionBlock[] {
   const remaining = [...needs].sort(
     (a, b) =>
@@ -134,10 +135,14 @@ export function pairSimulatorTrainingSessions(
     const primary = remaining.shift() as SimulatorTrainingSessionNeed;
     const candidates = remaining
       .map((partner, index) => ({ partner, index }))
-      .filter(({ partner }) =>
-        canShareSimulatorTrainingSessions(primary, partner) &&
-        daysDistance(primary.expiry_date, partner.expiry_date) <= Math.max(0, maxAnticipationDays),
-      )
+      .filter(({ partner }) => {
+        const crossTraining = primary.qualification_type_id !== partner.qualification_type_id;
+        return (
+          (!crossTraining || allowCrossTraining) &&
+          canShareSimulatorTrainingSessions(primary, partner) &&
+          daysDistance(primary.expiry_date, partner.expiry_date) <= Math.max(0, maxAnticipationDays)
+        );
+      })
       .sort((a, b) => compareTuple(partnerScore(primary, a.partner), partnerScore(primary, b.partner)));
 
     const selected = candidates[0];
