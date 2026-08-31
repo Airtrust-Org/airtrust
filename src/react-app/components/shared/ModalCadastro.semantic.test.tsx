@@ -16,8 +16,12 @@ const fields = [
   },
 ];
 
+function getRequiredNomeField() {
+  return screen.getByRole('textbox', { name: 'Nome' });
+}
+
 function getCadastroForm() {
-  const form = screen.getByLabelText('Nome').closest('form');
+  const form = getRequiredNomeField().closest('form');
   expect(form).not.toBeNull();
   return form as HTMLFormElement;
 }
@@ -36,8 +40,12 @@ describe('ModalCadastro semantic accessibility', () => {
 
     const form = getCadastroForm();
     expect(screen.getByRole('dialog', { name: 'Novo cadastro' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Nome')).toHaveClass('at-field', 'at-focus', 'min-h-11');
-    expect(screen.getByLabelText('Tipo')).toHaveClass('at-field', 'at-focus', 'min-h-11');
+    expect(getRequiredNomeField()).toHaveClass('at-field', 'at-focus', 'min-h-11');
+    expect(screen.getByRole('combobox', { name: 'Tipo' })).toHaveClass(
+      'at-field',
+      'at-focus',
+      'min-h-11',
+    );
     expect(screen.getByRole('button', { name: 'Salvar' })).toHaveClass('min-h-11', 'at-focus');
     expect(screen.getByRole('button', { name: 'Salvar' })).toHaveAttribute('form', form.id);
   });
@@ -53,7 +61,7 @@ describe('ModalCadastro semantic accessibility', () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Cadastro válido' } });
+    fireEvent.change(getRequiredNomeField(), { target: { value: 'Cadastro válido' } });
     fireEvent.submit(getCadastroForm());
 
     await waitFor(() => {
@@ -125,11 +133,13 @@ describe('ModalCadastro semantic accessibility', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Nome')).toHaveValue('Cadastro anterior');
-    expect(screen.getByLabelText('Tipo')).toHaveValue('asa-fixa');
+    expect(getRequiredNomeField()).toHaveValue('Cadastro anterior');
+    expect(screen.getByRole('combobox', { name: 'Tipo' })).toHaveValue('asa-fixa');
 
-    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Cadastro atualizado' } });
-    fireEvent.change(screen.getByLabelText('Tipo'), { target: { value: 'helicoptero' } });
+    fireEvent.change(getRequiredNomeField(), { target: { value: 'Cadastro atualizado' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Tipo' }), {
+      target: { value: 'helicoptero' },
+    });
     fireEvent.submit(getCadastroForm());
 
     await waitFor(() => {
