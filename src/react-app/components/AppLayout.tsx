@@ -22,7 +22,6 @@ import {
   Plane,
   ChevronDown,
   GraduationCap,
-  LayoutGrid,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
@@ -158,7 +157,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     canAccessModule('qualificacoes', modulosAtivos) && can('qualificacoes.view');
   const showSimuladores =
     canAccessModule('simuladores', modulosAtivos) && can('simuladores.view');
-  const showLms = canAccessModule('lms', modulosAtivos) && !isAluno && !isInstrutor;
+  const showLms = canAccessModule('lms', modulosAtivos);
   const showEscalas =
     canAccessModule('escalas', modulosAtivos) && (can('escalas.view') || can('self.escala'));
   const showFrms = canAccessModule('frms', modulosAtivos) && can('frms.view');
@@ -363,15 +362,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       onMouseEnter={handleTreinamentosMouseEnter}
                       onMouseLeave={handleTreinamentosMouseLeave}
                     >
-                      <Link
-                        to="/treinamentos"
-                        onClick={() => setTreinamentosOpen(false)}
-                        className={`flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/treinamentos', true) ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'}`}
-                      >
-                        <LayoutGrid className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
-                        Painel
-                      </Link>
-                      <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
                       {showQualificacoes && (
                         <Link
                           to="/qualificacoes"
@@ -662,13 +652,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   </button>
                   {(treinamentosMobileOpen || isInTreinamentosPath) && (
                     <div className="ml-7 flex flex-col gap-0.5">
-                      <Link
-                        to="/treinamentos"
-                        onClick={() => setMobileMenuOpen(false)}
-                        className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/treinamentos', true) ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}
-                      >
-                        <LayoutGrid className="h-3.5 w-3.5 shrink-0" /> Painel
-                      </Link>
                       {showQualificacoes && (
                         <Link
                           to="/qualificacoes"
