@@ -18,6 +18,8 @@ test('full lifecycle workflow is main-dispatched, staging-only and explicitly co
   assert.match(workflow, /STAGING_API_BASE_URL: https:\/\/airtrust-api-staging\.airtrust\.workers\.dev/);
   assert.match(workflow, /STAGING_D1_NAME: airtrust-db-staging-baseline-20260701/);
   assert.match(workflow, /environment: staging/);
+  assert.match(workflow, /concurrency:[\s\S]*?group: deploy-airtrust-staging/);
+  assert.doesNotMatch(workflow, /group: airtrust-edb-staging-full-lifecycle/);
   assert.doesNotMatch(workflow, /--env\s+production|airtrust-db-production|api\.airtrust\.online|wrangler\s+deploy/i);
 });
 
