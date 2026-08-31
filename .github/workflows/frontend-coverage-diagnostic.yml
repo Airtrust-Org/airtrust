@@ -27,24 +27,32 @@ jobs:
       - name: Verify exact source SHA
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git fetch origin main --quiet
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.node-version'
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3
       - id: coverage
-        name: Run frontend coverage without masking its result
+        name: Run exact frontend coverage and capture output
         continue-on-error: true
-        run: npm run test:coverage
-      - name: Upload raw V8 coverage JSON
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:coverage 2>&1 | tee frontend-coverage-output.log
+      - name: Upload frontend coverage output
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-coverage-json-${{ github.event.pull_request.head.sha || github.sha }}
-          path: coverage/coverage-final.json
+          name: frontend-coverage-output-${{ github.event.pull_request.head.sha || github.sha }}
+          path: frontend-coverage-output.log
           if-no-files-found: error
           retention-days: 1
       - name: Preserve coverage gate result
