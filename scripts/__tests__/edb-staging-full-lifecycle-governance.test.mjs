@@ -25,14 +25,17 @@ test('full lifecycle workflow is main-dispatched, staging-only and explicitly co
 
 test('release provenance and strict synthetic tenant preflight happen before any identity or lifecycle write', () => {
   const workflow = read(WORKFLOW);
+  const sourceBinding = workflow.indexOf('SOURCE_RELEASE_SHA_MISMATCH');
   const releaseCheck = workflow.indexOf('EDB_STAGING_RELEASE_PROVENANCE_PASS');
   const preflight = workflow.indexOf('seed-qa-edb-full-lifecycle.mjs --preflight');
   const identityApply = workflow.indexOf('seed-qa-edb-pilot.mjs --apply');
   const fixtureApply = workflow.indexOf('seed-qa-edb-full-lifecycle.mjs --apply');
-  assert.ok(releaseCheck >= 0, 'pre-write exact release provenance check missing');
+  assert.ok(sourceBinding >= 0, 'workflow source must be bound to the exact deployed release SHA');
+  assert.ok(releaseCheck > sourceBinding, 'remote release provenance must be checked after local source binding');
   assert.ok(preflight > releaseCheck, 'tenant preflight must happen after exact release provenance is verified');
   assert.ok(identityApply > preflight, 'identity write must happen after release and strict tenant preflights');
   assert.ok(fixtureApply > identityApply, 'canonical fixture write must happen after identity provisioning');
+  assert.match(workflow, /\$\{GITHUB_SHA,,\}.*\$\{EXPECTED_EDB_RELEASE_SHA,,\}/);
   assert.match(workflow, /\/api\/version/);
   assert.match(workflow, /EDB_STAGING_RELEASE_SHA_MISMATCH/);
 });
