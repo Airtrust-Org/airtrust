@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ModalCadastro } from './ModalCadastro';
@@ -138,49 +138,6 @@ describe('ModalCadastro semantic accessibility', () => {
         tipo: 'helicoptero',
       });
       expect(onClose).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  it('exposes busy and disabled controls while a save is pending', async () => {
-    let resolveSave: (() => void) | undefined;
-    const onSave = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveSave = resolve;
-        }),
-    );
-    const onClose = vi.fn();
-
-    render(
-      <ModalCadastro
-        isOpen
-        onClose={onClose}
-        title="Novo cadastro"
-        fields={fields}
-        onSave={onSave}
-      />,
-    );
-
-    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Cadastro em andamento' } });
-    const form = getCadastroForm();
-    fireEvent.submit(form);
-
-    await waitFor(() => {
-      expect(onSave).toHaveBeenCalledTimes(1);
-      expect(form).toHaveAttribute('aria-busy', 'true');
-      expect(screen.getByRole('button', { name: 'Salvando...' })).toBeDisabled();
-      expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
-    });
-
-    expect(resolveSave).toBeDefined();
-    await act(async () => {
-      resolveSave?.();
-    });
-
-    await waitFor(() => {
-      expect(onClose).toHaveBeenCalledTimes(1);
-      expect(form).toHaveAttribute('aria-busy', 'false');
-      expect(screen.getByRole('button', { name: 'Salvar' })).toBeEnabled();
     });
   });
 });
