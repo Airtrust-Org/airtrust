@@ -3,7 +3,7 @@
  * Componente de input de data com validação
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useId, useState } from 'react';
 import { AlertCircle, Calendar } from 'lucide-react';
 
 interface FormDateInputProps {
@@ -34,6 +34,9 @@ export function FormDateInput({
   className = '',
 }: FormDateInputProps) {
   const [validationError, setValidationError] = useState<string>('');
+  const inputId = useId();
+  const errorId = `${inputId}-error`;
+  const helperId = `${inputId}-helper`;
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,22 +74,28 @@ export function FormDateInput({
 
       onChange(newValue);
     },
-    [minDate, maxDate, onChange, onValidationError]
+    [minDate, maxDate, onChange, onValidationError],
   );
 
   const displayError = error || validationError;
+  const describedBy = displayError ? errorId : helperText ? helperId : undefined;
 
   return (
     <div className={`mb-4 ${className}`}>
-      <label className="block text-sm font-medium text-gray-700 mb-2">
+      <label htmlFor={inputId} className="mb-2 block text-sm font-medium text-gray-700">
         <span className="flex items-center gap-1">
-          <Calendar className="w-4 h-4" />
+          <Calendar className="h-4 w-4" aria-hidden="true" />
           {label}
-          {required && <span className="text-red-500 ml-1">*</span>}
+          {required && (
+            <span className="ml-1" style={{ color: 'var(--at-critical)' }} aria-hidden="true">
+              *
+            </span>
+          )}
         </span>
       </label>
 
       <input
+        id={inputId}
         type="date"
         value={value}
         onChange={handleChange}
@@ -94,31 +103,27 @@ export function FormDateInput({
         max={maxDate}
         disabled={disabled}
         required={required}
-        className={`w-full px-3 py-2 border rounded-lg transition-colors
-          ${disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}
-          ${
-            displayError
-              ? 'border-red-500 focus:ring-red-500'
-              : 'border-gray-300 focus:ring-primary/30'
-          }
-          focus-visible:outline-none focus:ring-2
-        `}
+        className="at-field at-focus min-h-11 w-full rounded-lg border px-3 py-2 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+        style={displayError ? { borderColor: 'var(--at-critical)' } : undefined}
         aria-invalid={!!displayError}
-        aria-describedby={displayError ? `${label}-error` : undefined}
+        aria-describedby={describedBy}
       />
 
       {displayError && (
         <div
-          id={`${label}-error`}
-          className="flex items-center gap-1 text-red-500 text-sm mt-2"
+          id={errorId}
+          className="mt-2 flex items-center gap-1 text-sm"
+          style={{ color: 'var(--at-critical)' }}
         >
-          <AlertCircle className="w-4 h-4" />
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
           {displayError}
         </div>
       )}
 
       {helperText && !displayError && (
-        <p className="text-gray-500 text-sm mt-1">{helperText}</p>
+        <p id={helperId} className="at-muted mt-1 text-sm">
+          {helperText}
+        </p>
       )}
     </div>
   );
