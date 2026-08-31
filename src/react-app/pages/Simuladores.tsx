@@ -33,8 +33,12 @@ const TabAgenda = lazyWithRetry(
   'SimuladoresTabAgenda',
 );
 const TabPlanejamento = lazyWithRetry(
-  () => import('./simuladores/planejamento/PlanejamentoSimuladores'),
+  () => import('./simuladores/planejamento/PlanejamentoSimuladoresV2'),
   'SimuladoresTabPlanejamento',
+);
+const PlanejamentoPolicyConfig = lazyWithRetry(
+  () => import('./simuladores/planejamento/PlanejamentoPolicyConfig'),
+  'SimuladoresPlanejamentoPolicyConfig',
 );
 const TabFichas = lazyWithRetry(
   () => import('./simuladores/fichas/index').then((m) => ({ default: m.FichasAvaliacaoContent })),
@@ -61,8 +65,16 @@ const preloadTab = (tab: 'agenda' | 'planejamento' | 'fichas' | 'gestao' | 'guia
     );
   } else if (tab === 'planejamento') {
     void importWithRetry(
-      () => import('./simuladores/planejamento/PlanejamentoSimuladores'),
+      () => import('./simuladores/planejamento/PlanejamentoSimuladoresV2'),
       'PreloadTabPlanejamento',
+      {
+        reloadOnChunkError: false,
+        maxAttempts: 2,
+      },
+    );
+    void importWithRetry(
+      () => import('./simuladores/planejamento/PlanejamentoPolicyConfig'),
+      'PreloadPlanejamentoPolicyConfig',
       {
         reloadOnChunkError: false,
         maxAttempts: 2,
@@ -177,7 +189,12 @@ export default function Simuladores() {
             }
           >
             {activeTab === 'agenda' && <TabAgenda />}
-            {activeTab === 'planejamento' && <TabPlanejamento />}
+            {activeTab === 'planejamento' && (
+              <>
+                <PlanejamentoPolicyConfig />
+                <TabPlanejamento />
+              </>
+            )}
             {activeTab === 'fichas' && <TabFichas />}
             {activeTab === 'gestao' && <TabGestaoWrapper />}
             {activeTab === 'guias' && <TabGuiasInstrutor />}
