@@ -1,6 +1,7 @@
 import { Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
+import { usePermissions } from './hooks/usePermissions';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/query-client';
 import { Toaster } from 'sonner';
@@ -18,6 +19,7 @@ import { useLanguage } from './i18n/useLanguage';
 import { syncRuntimeTranslation } from './i18n/runtimeTranslator';
 import { ThemeProvider } from './theme/ThemeProvider';
 import HomeRouter from './components/HomeRouter';
+import { resolveTrainingEntryPath } from './lib/training-entry';
 
 // 🚀 LAZY LOADING: Páginas principais (code splitting)
 const TrocarSenhaPage = lazyWithRetry(() => import('./pages/TrocarSenhaPage'), 'TrocarSenhaPage');
@@ -228,11 +230,6 @@ const TreinamentosPlanejadosPage = lazyWithRetry(
   () => import('./pages/TreinamentosPlanejadosPage'),
   'TreinamentosPlanejadosPage',
 );
-const TreinamentosPainel = lazyWithRetry(
-  () => import('./pages/TreinamentosPainel'),
-  'TreinamentosPainel',
-);
-
 // LMS — Learning Management System
 const LmsCatalogo = lazyWithRetry(() => import('./pages/lms/LmsCatalogo'), 'LmsCatalogo');
 const LmsCursoDetalhe = lazyWithRetry(
@@ -328,6 +325,22 @@ function LmsEntryRouter() {
   const role = user?.role?.toUpperCase() ?? '';
   if (role === 'ALUNO' || role === 'STUDENT' || role === 'INSTRUTOR' || role === 'INSTRUCTOR') return <Navigate to="/lms/cursos" replace />;
   return <LmsDashboard />;
+}
+
+function TreinamentosEntryRouter() {
+  const { user, isLoading, empresas, empresaAtualId } = useAuth();
+  const { can, isAluno, isInstrutor } = usePermissions();
+  if (isLoading) return null;
+
+  const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
+  const destination = resolveTrainingEntryPath({
+    modulosAtivos: empresaAtual?.modulos_ativos,
+    can,
+    isAluno,
+    isInstrutor,
+  });
+
+  return <Navigate to={destination} replace />;
 }
 
 export default function App() {
@@ -1046,7 +1059,7 @@ export default function App() {
                       path="/treinamentos"
                       element={
                         <ProtectedRoute>
-                          <TreinamentosPainel />
+                          <TreinamentosEntryRouter />
                         </ProtectedRoute>
                       }
                     />
