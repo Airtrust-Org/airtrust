@@ -112,6 +112,29 @@ function compareTuple(left: number[], right: number[]): number {
   return 0;
 }
 
+function normalizeTrainingSessionCounts(
+  needs: SimulatorTrainingSessionNeed[],
+): SimulatorTrainingSessionNeed[] {
+  const totalByTraining = new Map<string, number>();
+  for (const need of needs) {
+    const key = `${need.employee_id}:${need.qualification_type_id}`;
+    totalByTraining.set(
+      key,
+      Math.max(
+        totalByTraining.get(key) || 0,
+        Number(need.training_session_count || 0),
+        Number(need.session_order || 0),
+      ),
+    );
+  }
+  return needs.map((need) => ({
+    ...need,
+    training_session_count:
+      totalByTraining.get(`${need.employee_id}:${need.qualification_type_id}`) ||
+      need.training_session_count,
+  }));
+}
+
 /**
  * Forma blocos de sessão, não duplas fixas de treinamento. Assim um piloto
  * pode cumprir S1 com uma pessoa e S2 com outra; Periódico e Semestral podem
@@ -122,7 +145,7 @@ export function pairSimulatorTrainingSessions(
   maxAnticipationDays: number,
   allowCrossTraining = true,
 ): SimulatorTrainingSessionBlock[] {
-  const remaining = [...needs].sort(
+  const remaining = normalizeTrainingSessionCounts(needs).sort(
     (a, b) =>
       a.expiry_date.localeCompare(b.expiry_date) ||
       a.session_order - b.session_order ||
