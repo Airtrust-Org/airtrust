@@ -98,11 +98,11 @@ function ensurePilotTenant(dbName) {
   }
 
   if (idCount === 1 && exactSyntheticCount === 0) {
-    if (activeIdCount === 1) {
-      console.log('EDB_PILOT_TENANT_EXISTING_ACTIVE id=6 synthetic=false');
-      return;
-    }
-    throw new Error('EDB_PILOT_TENANT_6_OCCUPIED_NON_SYNTHETIC_INACTIVE');
+    throw new Error(
+      activeIdCount === 1
+        ? 'EDB_PILOT_TENANT_6_OCCUPIED_NON_SYNTHETIC_ACTIVE'
+        : 'EDB_PILOT_TENANT_6_OCCUPIED_NON_SYNTHETIC_INACTIVE',
+    );
   }
 
   if (codeCount === 1 && exactSyntheticCount === 0) {
