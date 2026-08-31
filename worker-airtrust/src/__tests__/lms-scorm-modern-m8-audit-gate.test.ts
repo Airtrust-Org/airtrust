@@ -11,6 +11,7 @@ function packageWith(params: {
   js?: string;
   css?: string;
   includeSecondAsset?: boolean;
+  extraEntries?: Array<{ path: string; data: Uint8Array }>;
 } = {}): ValidatedLmsPackage {
   const model = params.model ?? {
     schema: 'AIRTRUST_TRAINING_MODEL_M8',
@@ -18,11 +19,12 @@ function packageWith(params: {
     title: 'Teste M8',
     navigationGate: 'module-assessment',
     auditClosure: {
-      version: 'M8-R4-FULL-AUDIT',
+      version: 'M8-FINAL-100-AUDIT',
       typographyMinPx: 14,
       semanticVisualCoverage: 'all-originally-unvisualized-slides',
       moduleGate: true,
       certifyingScoreChanged: false,
+      storageScope: 'course+enrollment+active-cycle',
     },
     slides: [
       {
@@ -43,7 +45,7 @@ function packageWith(params: {
   const completionSlides = params.completionSlides ?? ['s001', 's002'];
   const js = params.js ?? `
     function check(){ LMSGetLastError(); LMSGetErrorString('0'); LMSGetDiagnostic('0'); }
-    window.parent.postMessage({ type: 'AIRTRUST_SCORM_DIAGNOSTICS' }, '*');
+    window.parent.postMessage({ type: 'AIRTRUST_COMPLETION_DIAGNOSTICS_V1', payload: {} }, '*');
   `;
   const css = params.css ?? '.body{font-size:14px}.legend{font-size:14px}';
 
@@ -56,6 +58,7 @@ function packageWith(params: {
     { path: 'app.js', data: encode(js) },
     { path: 'styles.css', data: encode(css) },
     { path: 'assets/s001.svg', data: encode('<svg xmlns="http://www.w3.org/2000/svg"/>') },
+    ...(params.extraEntries ?? []),
   ];
   if (params.includeSecondAsset !== false) {
     entries.push({ path: 'assets/s002.svg', data: encode('<svg xmlns="http://www.w3.org/2000/svg"/>') });
@@ -81,6 +84,22 @@ describe('modern M8 audit contract', () => {
     expect(validateModernM8AuditContract(packageWith())).toEqual({ status: 'PASS', errors: [], warnings: [] });
   });
 
+  it('accepts an AW139 historical source ref when the packaged asset is canonically rooted under media/', () => {
+    const pkg = packageWith({
+      extraEntries: [
+        { path: 'media/cap01/p010_img02.webp', data: encode('image-bytes') },
+      ],
+    });
+    const model = modelFrom(pkg);
+    (model.slides as Array<Record<string, unknown>>)[0]!.source = {
+      image: 'cap01/p010_img02.webp',
+    };
+    pkg.entries.find((item) => item.path === 'course-model.js')!.data = encode(
+      `window.AIRTRUST_COURSE_MODEL = ${JSON.stringify(model)};`,
+    );
+    expect(validateModernM8AuditContract(pkg)).toEqual({ status: 'PASS', errors: [], warnings: [] });
+  });
+
   it('fails completion-manifest/deck drift', () => {
     const result = validateModernM8AuditContract(packageWith({ completionSlides: ['s001'] }));
     expect(result.status).toBe('FAIL');
@@ -104,7 +123,7 @@ describe('modern M8 audit contract', () => {
   it('fails generic question prefix, tiny text and unsafe close', () => {
     const pkg = packageWith({
       css: '.legend{font-size:12px}',
-      js: `LMSGetLastError();LMSGetErrorString('0');LMSGetDiagnostic('0');window.parent.postMessage({}, '*');window.close();`,
+      js: `LMSGetLastError();LMSGetErrorString('0');LMSGetDiagnostic('0');window.parent.postMessage({type:'AIRTRUST_COMPLETION_DIAGNOSTICS_V1'}, '*');window.close();`,
     });
     const model = modelFrom(pkg);
     (model.slides as Array<Record<string, unknown>>)[0]!.question =
@@ -128,6 +147,26 @@ describe('modern M8 audit contract', () => {
     expect(errors).toMatch(/LMSGetErrorString/);
     expect(errors).toMatch(/LMSGetDiagnostic/);
     expect(errors).toMatch(/postMessage/);
+  });
+
+  it('fails a postMessage with the wrong diagnostics contract identifier', () => {
+    const result = validateModernM8AuditContract(packageWith({
+      js: `LMSGetLastError();LMSGetErrorString('0');LMSGetDiagnostic('0');window.parent.postMessage({type:'AIRTRUST_SCORM_DIAGNOSTICS'}, '*');`,
+    }));
+    expect(result.status).toBe('FAIL');
+    expect(result.errors.join('\n')).toMatch(/AIRTRUST_COMPLETION_DIAGNOSTICS_V1/);
+  });
+
+  it('fails a modern M8 package without enrollment+active-cycle storage scope', () => {
+    const pkg = packageWith();
+    const model = modelFrom(pkg);
+    (model.auditClosure as Record<string, unknown>).storageScope = 'course-only';
+    pkg.entries.find((item) => item.path === 'course-model.js')!.data = encode(
+      `window.AIRTRUST_COURSE_MODEL = ${JSON.stringify(model)};`,
+    );
+    const result = validateModernM8AuditContract(pkg);
+    expect(result.status).toBe('FAIL');
+    expect(result.errors.join('\n')).toMatch(/course\+enrollment\+active-cycle/);
   });
 
   it('does not impose the M8 audit contract on legacy packages', () => {
