@@ -45,6 +45,14 @@ describe('session-level simulator proposal', () => {
     expect(blocks.map((block) => block.sessions[0].session_order).sort()).toEqual([1, 2, 3, 4]);
   });
 
+  it('keeps the full curriculum denominator when only later sessions remain', () => {
+    const late = need('late', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 4, '2027-03-15', 'Comandante');
+    late.training_session_count = 2;
+    const [block] = pairSimulatorTrainingSessions([late], 60);
+    expect(block.sessions[0].session_order).toBe(4);
+    expect(block.sessions[0].training_session_count).toBe(4);
+  });
+
   it('allows an annual session to share with a semestral session when duration/equipment match', () => {
     const blocks = pairSimulatorTrainingSessions(
       [
@@ -56,6 +64,19 @@ describe('session-level simulator proposal', () => {
     expect(blocks).toHaveLength(1);
     expect(blocks[0].pairing).toBe('TREINAMENTOS_COMPATIVEIS');
     expect(blocks[0].sessions.map((session) => session.qualification_type_id).sort()).toEqual([1, 2]);
+  });
+
+  it('does not cross-pair annual and semestral when shared sessions are disabled by company policy', () => {
+    const blocks = pairSimulatorTrainingSessions(
+      [
+        need('per-1', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-03-15', 'Comandante'),
+        need('sem-1', 20, 2, 'AW139 — Currículo de Voo - Semestral (FFS)', 1, '2027-03-30', 'Copiloto'),
+      ],
+      60,
+      false,
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks.every((block) => block.pairing === 'SEM_DUPLA')).toBe(true);
   });
 
   it('does not anticipate a partner beyond the configured horizon', () => {
