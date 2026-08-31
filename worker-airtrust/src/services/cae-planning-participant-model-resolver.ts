@@ -11,35 +11,33 @@ export type ResolvedParticipantModel = {
   source: 'no_history' | 'normal_history' | 'shared_history' | 'sequence_complete';
 };
 
-/**
- * Cadeia canônica de progressão individual, confirmada no schema:
- *
- * NORMAL: fichas_sessao.agendamento_slot_id -> simulador_agendamentos.id
- *         -> simulador_agendamentos.template_id (= modelos_sessao.id)
- * SHARED: fichas_sessao.atribuicao_curricular_id -> simulador_atribuicoes_curriculares.id
- *         -> simulador_atribuicoes_curriculares.modelo_sessao_id
- *
- * fs.aprovado = 1 é o único sinal de "conta como concluída" (mesma convenção
- * já usada em simuladores-fichas.ts). Reprovada ou PENDENTE não avança.
- *
- * O histórico é escopado ao ciclo atual (cycleStartDate = data_conclusao da
- * qualificacoes_historico corrente) para que sessões de um ciclo anterior
- * não sejam contadas como progresso do ciclo vigente.
- */
-export async function resolveIndividualNextModel(params: {
+export type ResolvedParticipantRemainingModels = {
+  remaining: SequenceModel[];
+  completed_model_ids: number[];
+  last_completed_index: number;
+  source: 'no_history' | 'normal_history' | 'shared_history' | 'sequence_complete';
+};
+
+type CompletedModelRow = {
+  modelo_id: number | null;
+  origin: 'shared' | 'normal';
+};
+
+function orderedSequence(models: SequenceModel[]): SequenceModel[] {
+  return [...models].sort(
+    (a, b) =>
+      (a.ordem_no_treinamento ?? 999999) - (b.ordem_no_treinamento ?? 999999) ||
+      a.id - b.id,
+  );
+}
+
+async function loadCompletedModels(params: {
   db: D1Database;
   empresaId: number;
   employeeId: number;
   cycleStartDate: string | null;
-  models: SequenceModel[];
-}): Promise<ResolvedParticipantModel | null> {
-  const { db, empresaId, employeeId, cycleStartDate, models } = params;
-  if (models.length === 0) return null;
-
-  const sequence = [...models].sort(
-    (a, b) => (a.ordem_no_treinamento ?? 999999) - (b.ordem_no_treinamento ?? 999999),
-  );
-
+}): Promise<CompletedModelRow[]> {
+  const { db, empresaId, employeeId, cycleStartDate } = params;
   const completed = await db
     .prepare(
       `SELECT
@@ -61,16 +59,45 @@ export async function resolveIndividualNextModel(params: {
          AND (? IS NULL OR fs.data_sessao IS NULL OR date(fs.data_sessao) >= date(?))`,
     )
     .bind(empresaId, empresaId, empresaId, employeeId, employeeId, cycleStartDate, cycleStartDate)
-    .all<{ modelo_id: number | null; origin: 'shared' | 'normal' }>();
+    .all<CompletedModelRow>();
+  return completed.results || [];
+}
 
+/**
+ * Retorna TODAS as sessões ainda necessárias no ciclo atual. Esta é a fonte
+ * para o planejamento V2: o sistema planeja o treinamento completo restante,
+ * não apenas a próxima sessão isolada.
+ */
+export async function resolveIndividualRemainingModels(params: {
+  db: D1Database;
+  empresaId: number;
+  employeeId: number;
+  cycleStartDate: string | null;
+  models: SequenceModel[];
+}): Promise<ResolvedParticipantRemainingModels> {
+  const { db, empresaId, employeeId, cycleStartDate, models } = params;
+  const sequence = orderedSequence(models);
+  if (sequence.length === 0) {
+    return {
+      remaining: [],
+      completed_model_ids: [],
+      last_completed_index: -1,
+      source: 'sequence_complete',
+    };
+  }
+
+  const completed = await loadCompletedModels({ db, empresaId, employeeId, cycleStartDate });
   const sequenceIndexById = new Map(sequence.map((model, index) => [model.id, index]));
+  const completedIds = new Set<number>();
   let bestIndex = -1;
   let bestOrigin: 'shared' | 'normal' | null = null;
-  for (const row of completed.results || []) {
+
+  for (const row of completed) {
     const modelId = Number(row.modelo_id);
     if (!Number.isInteger(modelId)) continue;
     const index = sequenceIndexById.get(modelId);
     if (index === undefined) continue;
+    completedIds.add(modelId);
     if (index > bestIndex) {
       bestIndex = index;
       bestOrigin = row.origin;
@@ -78,18 +105,69 @@ export async function resolveIndividualNextModel(params: {
   }
 
   if (bestIndex === -1) {
-    return { modelId: sequence[0].id, ordem: sequence[0].ordem_no_treinamento, source: 'no_history' };
+    return {
+      remaining: sequence,
+      completed_model_ids: [],
+      last_completed_index: -1,
+      source: 'no_history',
+    };
   }
 
   if (bestIndex >= sequence.length - 1) {
-    const last = sequence[sequence.length - 1];
-    return { modelId: last.id, ordem: last.ordem_no_treinamento, source: 'sequence_complete' };
+    return {
+      remaining: [],
+      completed_model_ids: [...completedIds].sort((a, b) => a - b),
+      last_completed_index: bestIndex,
+      source: 'sequence_complete',
+    };
   }
 
-  const next = sequence[bestIndex + 1];
+  return {
+    remaining: sequence.slice(bestIndex + 1),
+    completed_model_ids: [...completedIds].sort((a, b) => a - b),
+    last_completed_index: bestIndex,
+    source: bestOrigin === 'shared' ? 'shared_history' : 'normal_history',
+  };
+}
+
+/**
+ * Cadeia canônica de progressão individual, confirmada no schema:
+ *
+ * NORMAL: fichas_sessao.agendamento_slot_id -> simulador_agendamentos.id
+ *         -> simulador_agendamentos.template_id (= modelos_sessao.id)
+ * SHARED: fichas_sessao.atribuicao_curricular_id -> simulador_atribuicoes_curriculares.id
+ *         -> simulador_atribuicoes_curriculares.modelo_sessao_id
+ *
+ * fs.aprovado = 1 é o único sinal de "conta como concluída". Reprovada ou
+ * PENDENTE não avança. O histórico é escopado ao ciclo atual.
+ *
+ * Compatibilidade: esta função continua retornando somente a próxima sessão
+ * para os fluxos V1 existentes. O V2 usa resolveIndividualRemainingModels.
+ */
+export async function resolveIndividualNextModel(params: {
+  db: D1Database;
+  empresaId: number;
+  employeeId: number;
+  cycleStartDate: string | null;
+  models: SequenceModel[];
+}): Promise<ResolvedParticipantModel | null> {
+  const sequence = orderedSequence(params.models);
+  if (sequence.length === 0) return null;
+
+  const progress = await resolveIndividualRemainingModels(params);
+  if (progress.source === 'sequence_complete' || progress.remaining.length === 0) {
+    const last = sequence[sequence.length - 1];
+    return {
+      modelId: last.id,
+      ordem: last.ordem_no_treinamento,
+      source: 'sequence_complete',
+    };
+  }
+
+  const next = progress.remaining[0];
   return {
     modelId: next.id,
     ordem: next.ordem_no_treinamento,
-    source: bestOrigin === 'shared' ? 'shared_history' : 'normal_history',
+    source: progress.source,
   };
 }
