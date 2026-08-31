@@ -12,8 +12,10 @@ on:
         required: true
         type: string
 
+# Share the official staging release lock so a deployment or positive eDB pilot
+# run cannot race release provenance or mutate the shared tenant-6 fixture.
 concurrency:
-  group: airtrust-edb-staging-full-lifecycle
+  group: deploy-airtrust-staging
   cancel-in-progress: false
 
 permissions:
@@ -141,6 +143,7 @@ jobs:
             echo "- fixture: \`$QA_EDB_FULL_FIXTURE_ID\`"
             echo "- expected deployed eDB release: \`$EXPECTED_EDB_RELEASE_SHA\`"
             echo '- release provenance: verified against `/api/version` before any D1 read/write lifecycle step'
+            echo '- concurrency: serialized with official staging deploy and positive eDB pilot via `deploy-airtrust-staging`'
             echo '- canonical fixture: synthetic flight, stage, crew and active RDV only'
             echo '- eDB path: diary + volume + regulatory semantics + P1 + preflight snapshot/ack + revision/signatures + correction/signatures + discrepancy/deferred/corrective/RTS + audit + integrity incident/reconstitution + close volume/diary'
             echo '- final signed state: `OPERATOR_SIGNED`; no ANAC queue/transmission is invoked'
