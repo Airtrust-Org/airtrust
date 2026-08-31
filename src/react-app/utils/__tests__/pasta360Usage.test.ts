@@ -19,6 +19,12 @@ describe('pasta360 usage guards', () => {
       const source = readFileSync(`${process.cwd()}/${file}`, 'utf8');
       if (file.endsWith('App.tsx')) {
         expect(source).toContain('LegacyPastaVirtualRedirect');
+      } else if (file.endsWith('PerfilFuncionario.tsx')) {
+        // O perfil legado agora e apenas um roteador de compatibilidade para a Ficha 360 canonica.
+        // Ele nao deve reconstruir uma segunda superficie nem navegar diretamente para /pasta-virtual.
+        expect(source).toContain('LEGACY_TAB_TO_CANONICAL');
+        expect(source).toContain('to={`/funcionarios/${id}?tab=${canonicalTab}`}');
+        expect(source).not.toContain('buildPasta360Url');
       } else {
         expect(source).toContain('buildPasta360Url');
       }
