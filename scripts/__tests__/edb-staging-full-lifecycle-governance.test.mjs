@@ -11,33 +11,45 @@ const SEED = 'scripts/staging/seed-qa-edb-full-lifecycle.mjs';
 const SMOKE = 'scripts/staging/smoke-edb-full-lifecycle.mjs';
 const read = (p) => readFileSync(path.join(ROOT, p), 'utf8');
 
-test('full lifecycle workflow is main-dispatched, staging-only and explicitly confirmed', () => {
+test('full lifecycle uses trusted main orchestration, shared staging lock and an exact reviewed candidate', () => {
   const workflow = read(WORKFLOW);
   assert.match(workflow, /AIRTRUST_EDB_STAGING_FULL_LIFECYCLE/);
+  assert.match(workflow, /pr_number:/);
   assert.match(workflow, /\[\[ "\$GITHUB_REF" == "refs\/heads\/main" \]\]/);
   assert.match(workflow, /STAGING_API_BASE_URL: https:\/\/airtrust-api-staging\.airtrust\.workers\.dev/);
   assert.match(workflow, /STAGING_D1_NAME: airtrust-db-staging-baseline-20260701/);
   assert.match(workflow, /environment: staging/);
   assert.match(workflow, /concurrency:[\s\S]*?group: deploy-airtrust-staging/);
   assert.doesNotMatch(workflow, /group: airtrust-edb-staging-full-lifecycle/);
+  assert.match(workflow, /PR_FROM_FORK_REJECTED/);
+  assert.match(workflow, /OPEN_PR_HEAD_MISMATCH/);
+  assert.match(workflow, /MERGED_PR_SHA_MISMATCH/);
+  assert.match(workflow, /EDB_STAGING_CANDIDATE_RELEASE_PASS/);
+  assert.match(workflow, /node scripts\/ci\/verify-release-gates\.mjs/);
+  assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/);
+  assert.doesNotMatch(workflow, /SOURCE_RELEASE_SHA_MISMATCH/);
+  assert.doesNotMatch(workflow, /ref:\s*\$\{\{\s*inputs\.expected_release_sha\s*\}\}/);
   assert.doesNotMatch(workflow, /--env\s+production|airtrust-db-production|api\.airtrust\.online|wrangler\s+deploy/i);
 });
 
-test('release provenance and strict synthetic tenant preflight happen before any identity or lifecycle write', () => {
+test('candidate and remote provenance are verified before any D1 lifecycle access or write', () => {
   const workflow = read(WORKFLOW);
-  const sourceBinding = workflow.indexOf('SOURCE_RELEASE_SHA_MISMATCH');
+  const candidateGuard = workflow.indexOf('EDB_STAGING_CANDIDATE_RELEASE_PASS');
+  const officialGates = workflow.indexOf('verify-release-gates.mjs');
   const releaseCheck = workflow.indexOf('EDB_STAGING_RELEASE_PROVENANCE_PASS');
   const preflight = workflow.indexOf('seed-qa-edb-full-lifecycle.mjs --preflight');
   const identityApply = workflow.indexOf('seed-qa-edb-pilot.mjs --apply');
   const fixtureApply = workflow.indexOf('seed-qa-edb-full-lifecycle.mjs --apply');
-  assert.ok(sourceBinding >= 0, 'workflow source must be bound to the exact deployed release SHA');
-  assert.ok(releaseCheck > sourceBinding, 'remote release provenance must be checked after local source binding');
-  assert.ok(preflight > releaseCheck, 'tenant preflight must happen after exact release provenance is verified');
+  assert.ok(candidateGuard >= 0, 'candidate PR/head binding is required');
+  assert.ok(officialGates > candidateGuard, 'official release gates must follow candidate binding');
+  assert.ok(releaseCheck > officialGates, 'remote release provenance must be checked after candidate release gates');
+  assert.ok(preflight > releaseCheck, 'tenant preflight must happen after exact deployed release provenance');
   assert.ok(identityApply > preflight, 'identity write must happen after release and strict tenant preflights');
   assert.ok(fixtureApply > identityApply, 'canonical fixture write must happen after identity provisioning');
-  assert.match(workflow, /\$\{GITHUB_SHA,,\}.*\$\{EXPECTED_EDB_RELEASE_SHA,,\}/);
   assert.match(workflow, /\/api\/version/);
   assert.match(workflow, /EDB_STAGING_RELEASE_SHA_MISMATCH/);
+  assert.match(workflow, /candidate code is not checked out into the secret-bearing lifecycle job/);
+  assert.match(workflow, /QA scripts execute from the trusted workflow SHA on `main`/);
 });
 
 test('cleanup is mandatory, exact-order and covers partial identity-apply failures without bypassing immutable eDB evidence', () => {

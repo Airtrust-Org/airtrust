@@ -26,15 +26,17 @@ The automatic mode is effective once this workflow version is present on the def
 
 The governed complete shared-staging lifecycle entrypoint is `.github/workflows/edb-staging-full-lifecycle.yml`. It is manual-only and requires all of the following before any D1 lifecycle access or write:
 
-- dispatch from `main` only;
+- dispatch from trusted `main` orchestration only;
 - explicit confirmation phrase `AIRTRUST_EDB_STAGING_FULL_LIFECYCLE`;
-- `expected_release_sha` must be a full 40-character SHA;
-- the workflow source `GITHUB_SHA` must equal `expected_release_sha` exactly;
-- staging `/api/version` must report `environment=staging` and the same exact `sourceSha`;
+- `pr_number` must identify a same-repository, non-fork PR based on `main`;
+- `expected_release_sha` must be a full 40-character SHA and must equal the exact current HEAD of that PR while it is open, or the merge SHA/current `main` when validating an already merged release;
+- the canonical release-gate verifier must accept that exact candidate SHA;
+- the secret-bearing lifecycle job checks out QA scripts only from the trusted workflow SHA on `main`; candidate code is never checked out into that job;
+- staging `/api/version` must report `environment=staging` and the same exact candidate `sourceSha` before any D1 lifecycle access;
 - tenant `6` must be absent or exactly the reserved synthetic tenant `codigo=edb_pilot_smoke` before identity provisioning;
 - the workflow shares the `deploy-airtrust-staging` concurrency group with the official staging deploy and positive eDB pilot so neither a release change nor shared tenant-6 cleanup can race the lifecycle.
 
-The full lifecycle workflow intentionally fails closed when local QA source and deployed staging release differ. It must never use newer local fixture/smoke scripts to exercise an older Worker release.
+The full lifecycle workflow deliberately separates the trusted orchestration SHA from the reviewed candidate release SHA. It fails closed if the PR/head binding, release gates or live staging provenance do not match, while preventing unmerged candidate code from executing inside a job that receives staging secrets.
 
 ## Target and fixture isolation
 
