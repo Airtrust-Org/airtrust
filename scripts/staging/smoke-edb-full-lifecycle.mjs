@@ -47,7 +47,10 @@ async function api(baseUrl, path, headers, method = 'GET', payload) {
 }
 
 function expectSuccess(result, expectedStatus, label) {
-  assert(result.status === expectedStatus, `${label}: esperado HTTP ${expectedStatus}; recebeu ${result.status}`);
+  assert(
+    result.status === expectedStatus,
+    `${label}: esperado HTTP ${expectedStatus}; recebeu ${result.status}; response=${JSON.stringify(result.json || result.text || '')}`,
+  );
   assert(result.json?.success === true, `${label}: success=true ausente; payload=${JSON.stringify(result.json)}`);
   return result.json?.data;
 }
@@ -269,8 +272,14 @@ async function main() {
     200,
     'post-regulatory readiness',
   );
-  const readinessText = JSON.stringify(readiness || {});
-  assert(!readinessText.includes('tempo_ifr_nao_classificado_minutos'), 'IFR não classificado permaneceu bloqueante');
+  assert(
+    !readiness?.stages?.some((s) => s.missingFields?.includes('tempo_ifr_nao_classificado_minutos')),
+    'IFR não classificado permaneceu bloqueante',
+  );
+  assert(
+    readiness?.stages?.every((s) => (s.regulatory?.tempo_ifr_nao_classificado_minutos ?? 0) === 0),
+    'IFR não classificado permaneceu positivo',
+  );
 
   const revisionId = `edbrev_${m.fixtureId}_r1`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120);
   expectSuccess(
