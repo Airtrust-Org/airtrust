@@ -27,6 +27,7 @@ import catalogo from './simuladores-catalogo-secured';
 import relatorios from './simuladores-relatorios';
 import planejamento from './simuladores-planejamento';
 import planejamentoV2 from './simuladores-planejamento-v2';
+import planejamentoV2Config from './simuladores-planejamento-v2-config';
 import guiasInstrutor from './simuladores-guias-instrutor';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -34,6 +35,7 @@ const app = new Hono<{ Bindings: Env }>();
 app.route('/relatorios', relatorios);
 app.route('/planejamento', planejamento);
 app.route('/planejamento-v2', planejamentoV2);
+app.route('/planejamento-v2', planejamentoV2Config);
 app.route('/', sharedSessions);
 app.route('/', sessoes);
 app.route('/', fichas);
