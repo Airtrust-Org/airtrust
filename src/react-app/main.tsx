@@ -18,6 +18,8 @@ import GlobalConfirmDialogHost from '@/react-app/components/modals/GlobalConfirm
 import GlobalAlertDialogHost from '@/react-app/components/modals/GlobalAlertDialogHost';
 import { initializeThemePreference } from '@/react-app/theme/theme';
 import InstallAppPage from '@/react-app/pages/InstallAppPage';
+import ForgotPasswordPage from '@/react-app/pages/ForgotPasswordPage';
+import ResetPasswordPage from '@/react-app/pages/ResetPasswordPage';
 
 initializeThemePreference();
 
@@ -125,13 +127,20 @@ if (typeof window !== 'undefined' && import.meta.env.MODE === 'development') {
   console.log('🔒 [DEV] DevTools hotkey blocker activated');
 }
 
-const isInstallRoute = window.location.pathname === '/instalar';
+const pathname = window.location.pathname;
+const isInstallRoute = pathname === '/instalar';
+const isForgotPasswordRoute = pathname === '/forgot-password';
+const isResetPasswordRoute = pathname === '/reset-password';
 
 // StrictMode removido — causa double-invoke de effects que quebra dedup guards em dev
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>
     {isInstallRoute ? (
       <InstallAppPage />
+    ) : isForgotPasswordRoute ? (
+      <ForgotPasswordPage />
+    ) : isResetPasswordRoute ? (
+      <ResetPasswordPage />
     ) : (
       <>
         <App />
