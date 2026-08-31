@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 
 import { API_BASE_URL } from '@/react-app/config/api';
@@ -190,6 +191,11 @@ export function ListaFuncionarios({
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<FuncionarioRow | null>(null);
   const [filtrosAtivos, setFiltrosAtivos] = useState<string[]>([]);
   const [excluindo, setExcluindo] = useState<number | null>(null);
+  const [menuAcoes, setMenuAcoes] = useState<{
+    funcionario: FuncionarioRow;
+    top: number;
+    right: number;
+  } | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     column: null,
     direction: null,
@@ -647,7 +653,7 @@ export function ListaFuncionarios({
                       </th>
                     );
                   })}
-                  <th className="w-24 whitespace-nowrap px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  <th className="w-32 whitespace-nowrap px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                     Ações
                   </th>
                 </tr>
@@ -772,6 +778,7 @@ export function ListaFuncionarios({
                       <td className="px-2 py-3 text-sm">
                         <div className="flex items-center justify-end gap-1">
                           <button
+                            type="button"
                             onClick={() => openPasta360(func.id)}
                             className={tableActionButtonClass}
                             aria-label={`Abrir perfil de ${func.nome || 'funcionário'}`}
@@ -780,40 +787,42 @@ export function ListaFuncionarios({
                             <FolderOpen className="h-4 w-4" />
                           </button>
 
-                          <details className="relative">
-                            <summary
-                              className={`${tableActionButtonClass} list-none cursor-pointer [&::-webkit-details-marker]:hidden`}
-                              aria-label={`Mais ações para ${func.nome || 'funcionário'}`}
-                              title="Mais ações"
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </summary>
-                            <div className="absolute right-0 z-30 mt-1 w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.currentTarget.closest('details')?.removeAttribute('open');
-                                  setFuncionarioSelecionado(func);
-                                }}
-                                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                              >
-                                <Edit2 className="h-4 w-4" />
-                                Editar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.currentTarget.closest('details')?.removeAttribute('open');
-                                  void handleExcluir(func.id, func.nome);
-                                }}
-                                disabled={excluindo === func.id}
-                                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                {excluindo === func.id ? 'Excluindo...' : 'Excluir'}
-                              </button>
-                            </div>
-                          </details>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuAcoes(null);
+                              setFuncionarioSelecionado(func);
+                            }}
+                            className={tableActionButtonClass}
+                            aria-label={`Editar ${func.nome || 'funcionário'}`}
+                            title="Editar funcionário"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              const sameFuncionario = menuAcoes?.funcionario.id === func.id;
+                              if (sameFuncionario) {
+                                setMenuAcoes(null);
+                                return;
+                              }
+                              setMenuAcoes({
+                                funcionario: func,
+                                top: Math.min(rect.bottom + 4, window.innerHeight - 108),
+                                right: Math.max(8, window.innerWidth - rect.right),
+                              });
+                            }}
+                            className={tableActionButtonClass}
+                            aria-label={`Mais ações para ${func.nome || 'funcionário'}`}
+                            aria-expanded={menuAcoes?.funcionario.id === func.id}
+                            aria-haspopup="menu"
+                            title="Mais ações"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -856,6 +865,53 @@ export function ListaFuncionarios({
           />
         </Suspense>
       )}
+
+      {menuAcoes &&
+        createPortal(
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-[90] cursor-default bg-transparent"
+              aria-label="Fechar menu de ações"
+              onClick={() => setMenuAcoes(null)}
+            />
+            <div
+              role="menu"
+              aria-label={`Ações para ${menuAcoes.funcionario.nome || 'funcionário'}`}
+              className="fixed z-[100] w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+              style={{ top: menuAcoes.top, right: menuAcoes.right }}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  const funcionario = menuAcoes.funcionario;
+                  setMenuAcoes(null);
+                  setFuncionarioSelecionado(funcionario);
+                }}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Edit2 className="h-4 w-4" />
+                Editar
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  const funcionario = menuAcoes.funcionario;
+                  setMenuAcoes(null);
+                  void handleExcluir(funcionario.id, funcionario.nome);
+                }}
+                disabled={excluindo === menuAcoes.funcionario.id}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30"
+              >
+                <Trash2 className="h-4 w-4" />
+                {excluindo === menuAcoes.funcionario.id ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </>,
+          document.body,
+        )}
 
       {configColunasAberto && (
         <ConfigurarColunas
