@@ -295,9 +295,9 @@ export default function OperationalVigilanceTest({
       const nextElapsed = performance.now() - startedAtRef.current;
       setElapsedMs(Math.min(nextElapsed, durationMs));
       if (nextElapsed >= durationMs) {
-        // Do not cut off a stimulus that was already presented inside the
-        // 3-minute sampling window. It may resolve by response or by the 30 s
-        // PVT-B lapse ceiling; no new stimulus is scheduled after the boundary.
+        // Do not cut off a stimulus that was already presented inside the sampling
+        // window. It may resolve by response or by the 30 s PVT-B lapse ceiling;
+        // no new stimulus is scheduled after the boundary.
         if (phase === 'stimulus' && stimulusAtRef.current != null) return;
         finish();
         return;
@@ -338,8 +338,7 @@ export default function OperationalVigilanceTest({
           </p>
         </div>
         <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-          Duração prevista: cerca de {Math.round(durationMs / 60_000)} minutos. Mantenha a tela ativa
-          e evite conversar ou alternar de aplicativo durante o teste.
+          Mantenha a tela ativa e evite conversar ou alternar de aplicativo durante o teste.
         </div>
         <p className="text-xs leading-5 text-slate-500">
           Referência científica: Psychomotor Vigilance Task (PVT) —{' '}
