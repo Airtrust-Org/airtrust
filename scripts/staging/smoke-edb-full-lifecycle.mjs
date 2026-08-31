@@ -269,8 +269,14 @@ async function main() {
     200,
     'post-regulatory readiness',
   );
-  const readinessText = JSON.stringify(readiness || {});
-  assert(!readinessText.includes('tempo_ifr_nao_classificado_minutos'), 'IFR não classificado permaneceu bloqueante');
+  assert(
+    !readiness?.stages?.some((s) => s.missingFields?.includes('tempo_ifr_nao_classificado_minutos')),
+    'IFR não classificado permaneceu bloqueante',
+  );
+  assert(
+    readiness?.stages?.every((s) => (s.regulatory?.tempo_ifr_nao_classificado_minutos ?? 0) === 0),
+    'IFR não classificado permaneceu positivo',
+  );
 
   const revisionId = `edbrev_${m.fixtureId}_r1`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120);
   expectSuccess(
