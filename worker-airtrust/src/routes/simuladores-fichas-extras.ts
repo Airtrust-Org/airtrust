@@ -5,6 +5,7 @@
  *   GET  /historico-notas/ultima/:funcionarioId/:codigoManobra
  *   GET  /historico-notas/:funcionarioId
  *   GET  /dashboard/:funcionarioId
+ *   PUT  /alertas/:alertaId/resolver
  *   POST /sessoes/:id/checks/resultados
  */
 
@@ -14,13 +15,11 @@ import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { audit } from './simuladores-shared';
 import { createLogger, toError } from '../utils/logger';
-import {
-  requireOperationalAccess,
-  } from '../services/operational-domain-access';
+import { requireOperationalAccess } from '../services/operational-domain-access';
 
 // Fichas de sessão de simulador são fixed-domain OPERACOES — see
 // docs/rbac/gestor-operational-autonomy.md.
-const requireOperacoesFicha = (action: 'create') =>
+const requireOperacoesFicha = (action: 'create' | 'update') =>
   requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' });
 
 const app = new Hono<{ Bindings: Env }>();
@@ -170,15 +169,19 @@ app.post('/historico-notas', requireOperacoesFicha('create'), async (c) => {
         (ultimaNotaAnterior.nota as number) < 7.0
       ) {
         const alertaExistente = await c.env.DB.prepare(
-          `SELECT id FROM alertas_reforco
-           WHERE funcionario_id = ?
-             AND codigo_manobra = ?
-             AND status = 'ATIVO'
-             AND empresa_id = ?
-             AND deleted_at IS NULL
-           LIMIT 1`,
+          `SELECT ar.id
+             FROM alertas_reforco ar
+             INNER JOIN funcionarios f
+               ON f.id = ar.funcionario_id
+              AND f.empresa_id = ?
+              AND f.deleted_at IS NULL
+            WHERE ar.funcionario_id = ?
+              AND ar.codigo_manobra = ?
+              AND ar.status = 'ATIVO'
+              AND ar.deleted_at IS NULL
+            LIMIT 1`,
         )
-          .bind(funcionario_id, codigo_manobra, empresaId)
+          .bind(empresaId, funcionario_id, codigo_manobra)
           .first();
 
         if (!alertaExistente) {
@@ -187,8 +190,8 @@ app.post('/historico-notas', requireOperacoesFicha('create'), async (c) => {
               funcionario_id, codigo_manobra, descricao_manobra,
               nota_sessao1, data_sessao1, ficha_id_sessao1,
               nota_sessao2, data_sessao2, ficha_id_sessao2,
-              instrutor_id_notificado, status, empresa_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ATIVO', ?)`,
+              instrutor_id_notificado, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ATIVO')`,
           )
             .bind(
               funcionario_id,
@@ -201,7 +204,6 @@ app.post('/historico-notas', requireOperacoesFicha('create'), async (c) => {
               data_sessao || new Date().toISOString().split('T')[0],
               ficha_id,
               instrutor_id || null,
-              empresaId,
             )
             .run();
 
@@ -343,9 +345,10 @@ app.get('/dashboard/:funcionarioId', async (c) => {
         fsm.codigo as codigo_manobra,
         fsm.descricao as descricao_manobra,
         AVG(CAST(fsm.resultado AS REAL)) as media_nota,
-        COUNT(*) as total_avaliacoes,
+        COUNT(*) as total_tentativas,
         MIN(CAST(fsm.resultado AS REAL)) as pior_nota,
-        MAX(CAST(fsm.resultado AS REAL)) as melhor_nota
+        MAX(CAST(fsm.resultado AS REAL)) as melhor_nota,
+        MAX(fs.data_sessao) as ultima_sessao
        FROM fichas_sessao_manobras fsm
        INNER JOIN fichas_sessao fs ON fsm.ficha_id = fs.id
        WHERE fs.colaborador_id_aluno = ?
@@ -369,21 +372,27 @@ app.get('/dashboard/:funcionarioId', async (c) => {
         i.email as instrutor_email,
         f.nome as funcionario_nome
        FROM alertas_reforco ar
-       LEFT JOIN funcionarios i ON ar.instrutor_id_notificado = i.id
-       LEFT JOIN funcionarios f ON ar.funcionario_id = f.id
+       INNER JOIN funcionarios f
+         ON ar.funcionario_id = f.id
+        AND f.empresa_id = ?
+        AND f.deleted_at IS NULL
+       LEFT JOIN funcionarios i
+         ON ar.instrutor_id_notificado = i.id
+        AND i.empresa_id = ?
+        AND i.deleted_at IS NULL
        WHERE ar.funcionario_id = ?
-         AND ar.empresa_id = ?
          AND ar.status = 'ATIVO'
          AND ar.deleted_at IS NULL
        ORDER BY ar.created_at DESC`,
     )
-      .bind(parseInt(funcionarioId), empresaId)
+      .bind(empresaId, empresaId, parseInt(funcionarioId))
       .all();
 
     const estatisticas = await c.env.DB.prepare(
       `SELECT
         COUNT(DISTINCT fs.id) as total_fichas,
         COUNT(fsm.id) as total_manobras_avaliadas,
+        COUNT(DISTINCT fsm.codigo) as total_manobras_unicas,
         ROUND(AVG(CAST(fsm.resultado AS REAL)), 1) as media_geral,
         MIN(CAST(fsm.resultado AS REAL)) as pior_nota_geral,
         MAX(CAST(fsm.resultado AS REAL)) as melhor_nota_geral
@@ -401,6 +410,8 @@ app.get('/dashboard/:funcionarioId', async (c) => {
     const evolucao = await c.env.DB.prepare(
       `SELECT
         fs.data_sessao,
+        MAX(fs.tipo_sessao) as tipo_sessao,
+        MAX(fs.tipo_aeronave) as tipo_aeronave,
         ROUND(AVG(CAST(fsm.resultado AS REAL)), 1) as media_sessao,
         COUNT(fsm.id) as manobras_avaliadas
        FROM fichas_sessao fs
@@ -436,6 +447,78 @@ app.get('/dashboard/:funcionarioId', async (c) => {
     });
   } catch (e: any) {
     createLogger(c, 'SimuladoresFichas').error('Erro ao buscar dashboard de manobras', toError(e));
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
+  }
+});
+
+// PUT /alertas/:alertaId/resolver - Resolve an active reinforcement alert in the current tenant.
+app.put('/alertas/:alertaId/resolver', requireOperacoesFicha('update'), async (c) => {
+  try {
+    const role = String((c as unknown as { get: (k: string) => unknown }).get('userRole') || '').toUpperCase();
+    const allowedRoles = ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'INSTRUTOR', 'COMPLIANCE'];
+    if (!allowedRoles.includes(role)) {
+      return c.json({ success: false, error: 'Acesso negado' }, 403);
+    }
+
+    const { empresaId } = getTenantContext(c);
+    const alertaId = Number.parseInt(c.req.param('alertaId'), 10);
+    if (!Number.isInteger(alertaId) || alertaId <= 0) {
+      return c.json({ success: false, error: 'Alerta inválido' }, 400);
+    }
+
+    const body = (await c.req.json().catch(() => ({}))) as {
+      observacoes_resolucao?: unknown;
+    };
+    const observacoesResolucao =
+      typeof body.observacoes_resolucao === 'string'
+        ? body.observacoes_resolucao.trim().slice(0, 2000)
+        : '';
+
+    const alerta = await c.env.DB.prepare(
+      `SELECT ar.id
+         FROM alertas_reforco ar
+         INNER JOIN funcionarios f
+           ON f.id = ar.funcionario_id
+          AND f.empresa_id = ?
+          AND f.deleted_at IS NULL
+        WHERE ar.id = ?
+          AND ar.status = 'ATIVO'
+          AND ar.deleted_at IS NULL
+        LIMIT 1`,
+    )
+      .bind(empresaId, alertaId)
+      .first();
+
+    if (!alerta) {
+      return c.json({ success: false, error: 'Alerta não encontrado' }, 404);
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE alertas_reforco
+          SET status = 'RESOLVIDO',
+              data_resolucao = datetime('now'),
+              observacoes_resolucao = ?,
+              updated_at = datetime('now')
+        WHERE id = ?
+          AND status = 'ATIVO'
+          AND deleted_at IS NULL`,
+    )
+      .bind(observacoesResolucao || null, alertaId)
+      .run();
+
+    await audit(c.env.DB, {
+      tabela: 'alertas_reforco',
+      acao: 'UPDATE',
+      registro_id: alertaId,
+      dados_novos: {
+        status: 'RESOLVIDO',
+        observacoes_resolucao: observacoesResolucao || null,
+      },
+    });
+
+    return c.json({ success: true, data: { id: alertaId, status: 'RESOLVIDO' } });
+  } catch (e: any) {
+    createLogger(c, 'SimuladoresFichas').error('Erro ao resolver alerta de reforço', toError(e));
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
