@@ -1,5 +1,12 @@
 -- Migration 0481: configurable training dependencies -> simulator planning.
 -- Additive, tenant-scoped and non-retroactive. No historical backfill.
+--
+-- OPERATIONAL MARKERS (guard:operational-sql-sources):
+--   source_reference: PR #225 (feat/training-dependency-planning) - Schema V2 0481
+--   operational_decision: Tenant-scoped training dependency automation between recurrent qualifications.
+--   dry_run_required: Validate preflight, triggers and plan generation in staging before production execution.
+--   rollback_plan_required: scripts/rollback/0481_training_dependency_planning.sql
+--
 
 CREATE TABLE IF NOT EXISTS treinamento_dependencias (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

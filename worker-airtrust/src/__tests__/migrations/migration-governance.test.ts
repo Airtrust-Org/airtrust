@@ -103,7 +103,7 @@ describe('migration governance', () => {
     // the regular chain after 0475 — additive PVT-B V2 baseline index plus the
     // Operational Load V1 columns on frms_fatorizacao_jornada. 9999 stays
     // reserved as the only high sentinel.
-    const expectedLatest = 476;
+    const expectedLatest = 481;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

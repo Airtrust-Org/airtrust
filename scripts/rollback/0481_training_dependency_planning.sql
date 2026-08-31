@@ -1,5 +1,12 @@
 -- Compensation for 0481_training_dependency_planning.sql.
 -- Disable automation without deleting historical qualification data or already-created plans.
+--
+-- OPERATIONAL MARKERS (guard:operational-sql-sources):
+--   source_reference: PR #225 (feat/training-dependency-planning) - Schema V2 0481 rollback
+--   operational_decision: Compensatory rollback disabling active rule and dropping triggers without deleting audit history.
+--   dry_run_required: Confirm rule and trigger status in target environment.
+--   rollback_plan_required: scripts/rollback/0481_training_dependency_planning.sql
+--
 
 UPDATE treinamento_dependencias
    SET ativo = 0,
