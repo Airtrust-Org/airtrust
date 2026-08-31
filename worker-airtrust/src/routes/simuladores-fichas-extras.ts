@@ -10,7 +10,7 @@
  */
 
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { audit } from './simuladores-shared';
@@ -22,7 +22,7 @@ import { requireOperationalAccess } from '../services/operational-domain-access'
 const requireOperacoesFicha = (action: 'create' | 'update') =>
   requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_ficha' });
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 app.use('*', auth());
 
 function parseHistoricoLimit(raw: string | undefined): number {
@@ -41,7 +41,7 @@ function parseHistoricoLimit(raw: string | undefined): number {
 // POST /historico-notas - Registrar nota no histórico
 app.post('/historico-notas', requireOperacoesFicha('create'), async (c) => {
   try {
-    const role = String((c as unknown as { get: (k: string) => unknown }).get('userRole') || '').toUpperCase();
+    const role = String(c.get('userRole') || '').toUpperCase();
     const allowedRoles = ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'INSTRUTOR', 'COMPLIANCE'];
     if (!allowedRoles.includes(role)) {
       return c.json({ success: false, error: 'Acesso negado' }, 403);
@@ -166,7 +166,7 @@ app.post('/historico-notas', requireOperacoesFicha('create'), async (c) => {
       if (
         ultimaNotaAnterior &&
         typeof ultimaNotaAnterior.nota === 'number' &&
-        (ultimaNotaAnterior.nota as number) < 7.0
+        ultimaNotaAnterior.nota < 7.0
       ) {
         const alertaExistente = await c.env.DB.prepare(
           `SELECT ar.id
@@ -229,7 +229,7 @@ app.post('/historico-notas', requireOperacoesFicha('create'), async (c) => {
       },
       201,
     );
-  } catch (e: any) {
+  } catch (e: unknown) {
     createLogger(c, 'SimuladoresFichas').error('Erro ao registrar histórico de notas', toError(e));
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
@@ -275,7 +275,7 @@ app.get('/historico-notas/ultima/:funcionarioId/:codigoManobra', async (c) => {
     }
 
     return c.json({ success: true, data: ultimaNota });
-  } catch (e: any) {
+  } catch (e: unknown) {
     createLogger(c, 'SimuladoresFichas').error('Erro ao buscar última nota', toError(e));
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
@@ -315,7 +315,7 @@ app.get('/historico-notas/:funcionarioId', async (c) => {
       .all();
 
     return c.json({ success: true, data: historico.results });
-  } catch (e: any) {
+  } catch (e: unknown) {
     createLogger(c, 'SimuladoresFichas').error('Erro ao listar histórico de notas', toError(e));
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
@@ -445,7 +445,7 @@ app.get('/dashboard/:funcionarioId', async (c) => {
         evolucao_temporal: evolucao.results.reverse(),
       },
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     createLogger(c, 'SimuladoresFichas').error('Erro ao buscar dashboard de manobras', toError(e));
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
@@ -454,7 +454,7 @@ app.get('/dashboard/:funcionarioId', async (c) => {
 // PUT /alertas/:alertaId/resolver - Resolve an active reinforcement alert in the current tenant.
 app.put('/alertas/:alertaId/resolver', requireOperacoesFicha('update'), async (c) => {
   try {
-    const role = String((c as unknown as { get: (k: string) => unknown }).get('userRole') || '').toUpperCase();
+    const role = String(c.get('userRole') || '').toUpperCase();
     const allowedRoles = ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'INSTRUTOR', 'COMPLIANCE'];
     if (!allowedRoles.includes(role)) {
       return c.json({ success: false, error: 'Acesso negado' }, 403);
@@ -517,7 +517,7 @@ app.put('/alertas/:alertaId/resolver', requireOperacoesFicha('update'), async (c
     });
 
     return c.json({ success: true, data: { id: alertaId, status: 'RESOLVIDO' } });
-  } catch (e: any) {
+  } catch (e: unknown) {
     createLogger(c, 'SimuladoresFichas').error('Erro ao resolver alerta de reforço', toError(e));
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
@@ -530,7 +530,7 @@ app.put('/alertas/:alertaId/resolver', requireOperacoesFicha('update'), async (c
 // POST /sessoes/:id/checks/resultados - Save only explicit check results
 app.post('/sessoes/:id/checks/resultados', requireOperacoesFicha('create'), async (c) => {
   try {
-    const role = String((c as unknown as { get: (k: string) => unknown }).get('userRole') || '').toUpperCase();
+    const role = String(c.get('userRole') || '').toUpperCase();
     const allowedRoles = ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'INSTRUTOR', 'COMPLIANCE'];
     if (!allowedRoles.includes(role)) {
       return c.json({ success: false, error: 'Acesso negado' }, 403);
@@ -551,13 +551,13 @@ app.post('/sessoes/:id/checks/resultados', requireOperacoesFicha('create'), asyn
        WHERE sa.id = ? AND sa.empresa_id = ? AND sa.deleted_at IS NULL`,
     )
       .bind(sessao_id, empresaId)
-      .first();
+      .first<{ is_check: number | null }>();
 
     if (!sessao) {
       return c.json({ success: false, error: 'Sessão não encontrada' }, 404);
     }
 
-    if ((sessao as any).is_check !== 1) {
+    if (sessao.is_check !== 1) {
       return c.json({ success: false, error: 'Sessão não é do tipo check' }, 400);
     }
 
@@ -601,7 +601,7 @@ app.post('/sessoes/:id/checks/resultados', requireOperacoesFicha('create'), asyn
       message: 'Resultados salvos',
       resultados_salvos: resultadosSalvos,
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     createLogger(c, 'SimuladoresFichas').error('Erro ao salvar resultados de checks', toError(e));
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
