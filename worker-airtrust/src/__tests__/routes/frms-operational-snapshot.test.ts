@@ -41,7 +41,11 @@ function createDb(resolveFuncionarioId: number | null) {
         };
       }
 
-      if (query.includes('FROM funcionarios') && query.includes('WHERE id = ?') && query.includes('empresa_id = ?')) {
+      if (
+        query.includes('FROM funcionarios') &&
+        query.includes('WHERE id = ?') &&
+        query.includes('empresa_id = ?')
+      ) {
         return {
           bind: () => ({
             first: async () => null,
@@ -201,5 +205,38 @@ describe('GET /frms/operational-snapshot', () => {
       success: true,
       meta: { scope: 'self', forced_funcionario_id: 11 },
     });
+  });
+
+  it('9) retorna 200 com snapshot vazio e aviso quando o perfil regulatório não está configurado', async () => {
+    const { FrmsParameterResolutionError } = await import('../../lib/frms/parameter-governance');
+    listSnapshotMock.mockRejectedValueOnce(
+      new FrmsParameterResolutionError(
+        'FRMS_CONTEXT_UNAVAILABLE',
+        'No effective FRMS profile assignment for empresa=6',
+      ),
+    );
+
+    const app = createApp();
+    const response = await app.fetch(
+      new Request(
+        'http://localhost/frms/operational-snapshot?data_inicio=2026-09-01&data_fim=2026-09-01',
+        {
+          method: 'GET',
+          headers: {
+            'x-role': 'manager',
+            'x-empresa-id': '6',
+            'x-user-id': '1',
+          },
+        },
+      ),
+      { DB: createDb(null) } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.success).toBe(true);
+    expect(body.data).toEqual([]);
+    expect(body.meta.notice).toBe('FRMS_CONTEXT_UNAVAILABLE');
   });
 });
