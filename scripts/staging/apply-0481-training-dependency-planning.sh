@@ -15,6 +15,7 @@ ALLOWED_DB_ID="bf9963f4-eb12-439b-a830-20bbf577ac22"
 BLOCKED_PRODUCTION_DB_ID="7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae"
 CONFIRMATION_PHRASE="AIRTRUST_STAGING_SCHEMA_CHANGE"
 MIGRATION_BASENAME="0481_training_dependency_planning.sql"
+SCHEMA_CHANGE_ID="training-dependency-planning-0481"
 
 apply=false
 migration_arg=""
@@ -61,6 +62,30 @@ else
 fi
 printf 'MIGRATION=%s\nRELEASE_SHA=%s\nSQL_SHA256=%s\nTARGET_DB=%s\n' \
   "$MIGRATION_BASENAME" "$release_sha" "$sql_sha256" "$db_name"
+
+# Staging must execute the exact SQL pinned by the reviewed Schema V2 manifest
+# used for production. This check is read-only and fails closed on any drift.
+manifest_path="release/worker-airtrust/schema-v2/$SCHEMA_CHANGE_ID.json"
+schema_sql_path="release/worker-airtrust/schema-v2/changes/$MIGRATION_BASENAME"
+if [[ -L "$manifest_path" || ! -f "$manifest_path" || -L "$schema_sql_path" || ! -f "$schema_sql_path" ]]; then
+  echo "ERROR: artefatos Schema V2 revisados da 0481 estão ausentes ou inválidos." >&2
+  exit 1
+fi
+if ! cmp -s "$migration_arg" "$schema_sql_path"; then
+  echo "ERROR: SQL canônico da 0481 diverge do SQL Schema V2 revisado." >&2
+  exit 1
+fi
+node - "$manifest_path" "$sql_sha256" "$SCHEMA_CHANGE_ID" <<'NODE'
+const fs = require('node:fs');
+const [,, manifestPath, sqlHash, expectedChangeId] = process.argv;
+const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+if (manifest.changeId !== expectedChangeId) throw new Error('SCHEMA_V2_CHANGE_ID_MISMATCH');
+if (manifest.filePath !== 'worker-airtrust/schema-v2/changes/0481_training_dependency_planning.sql') {
+  throw new Error('SCHEMA_V2_FILE_PATH_MISMATCH');
+}
+if (manifest.fileHash !== sqlHash) throw new Error('SCHEMA_V2_FILE_HASH_MISMATCH');
+NODE
+echo "SCHEMA_V2_REVIEWED_SQL_CONFIRMED=$SCHEMA_CHANGE_ID"
 
 preflight_output="$(mktemp -t airtrust-staging-0481-preflight.XXXXXXXX)"
 recovery_output="$(mktemp -t airtrust-staging-0481-recovery.XXXXXXXX)"
@@ -149,6 +174,15 @@ echo "Capturando ponto de recuperação D1 Time Travel..."
     --json > "$recovery_output"
 )
 test -s "$recovery_output"
+node - "$recovery_output" <<'NODE'
+const fs = require('node:fs');
+const file = process.argv[2];
+const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+const serialized = JSON.stringify(parsed);
+if (!/bookmark/i.test(serialized)) throw new Error('TIME_TRAVEL_BOOKMARK_NOT_CONFIRMED');
+NODE
+# The bookmark itself is deliberately never printed. The UTC timestamp is the
+# operator-facing rollback reference and can deterministically retrieve it.
 echo "RECOVERY_TIMESTAMP_UTC=$recovery_timestamp"
 echo "RECOVERY_POINT_CAPTURED=true"
 
@@ -161,6 +195,13 @@ if [[ $apply_status -ne 0 ]]; then
   echo "MIGRATION_FAILED=$MIGRATION_BASENAME" >&2
   exit "$apply_status"
 fi
+
+ledger_count="$(query_count "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '$MIGRATION_BASENAME';")"
+if [[ "$ledger_count" != "1" ]]; then
+  echo "ERROR: migration executada sem entrada única no ledger ($ledger_count)." >&2
+  exit 1
+fi
+echo "LEDGER_ENTRY_CONFIRMED=$MIGRATION_BASENAME"
 
 bash scripts/staging/validate-0481-postconditions.sh --target="$db_name"
 echo "MIGRATION_APPLIED_AND_VALIDATED=$MIGRATION_BASENAME"
