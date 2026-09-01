@@ -192,12 +192,14 @@ echo "RECOVERY_POINT_CAPTURED=true"
   npx wrangler d1 execute "$db_name" --remote --command "
     INSERT OR IGNORE INTO empresas (id, nome, razao_social, ativo, codigo) VALUES (6, 'Costa do Sol Táxi Aéreo', 'Costa do Sol Táxi Aéreo Ltda.', 1, 'costa_do_sol');
     INSERT OR IGNORE INTO empresas_config (empresa_id) VALUES (6);
-    INSERT OR IGNORE INTO qualificacoes_tipos (id, empresa_id, codigo, nome, carga_horaria_recorrente, carga_horaria) VALUES (33, 6, 'G1', 'AW139 FFS', 6, 6);
-    UPDATE qualificacoes_tipos SET deleted_at = NULL, ativo = 1, codigo = 'G1' WHERE id = 33 AND empresa_id = 6;
-    INSERT OR IGNORE INTO qualificacoes_tipos (id, empresa_id, codigo, nome, carga_horaria_recorrente, carga_horaria) VALUES (106, 6, 'G1-SEM', 'AW139 Semestral', 6, 6);
-    UPDATE qualificacoes_tipos SET deleted_at = NULL, ativo = 1, codigo = 'G1-SEM' WHERE id = 106 AND empresa_id = 6;
-    INSERT OR IGNORE INTO modelos_sessao (id, empresa_id, qualificacao_tipo_id, modelo_aeronave, ordem_no_treinamento) VALUES (111, 6, 106, 'AW139', 1);
-    UPDATE modelos_sessao SET deleted_at = NULL, ativo = 1 WHERE id = 111 AND empresa_id = 6;
+    INSERT OR IGNORE INTO qualificacoes_categorias (id, empresa_id, nome, ativo) VALUES (601, 6, 'Treinamentos Operacionais', 1);
+    UPDATE qualificacoes_categorias SET deleted_at = NULL, ativo = 1 WHERE id = 601 AND empresa_id = 6;
+    INSERT OR IGNORE INTO qualificacoes_tipos (id, empresa_id, codigo, nome, categoria_id, carga_horaria_recorrente, carga_horaria, ativo) VALUES (33, 6, 'G1', 'AW139 FFS', 601, 6, 6, 1);
+    UPDATE qualificacoes_tipos SET deleted_at = NULL, ativo = 1, codigo = 'G1', categoria_id = 601 WHERE id = 33 AND empresa_id = 6;
+    INSERT OR IGNORE INTO qualificacoes_tipos (id, empresa_id, codigo, nome, categoria_id, carga_horaria_recorrente, carga_horaria, ativo) VALUES (106, 6, 'G1-SEM', 'AW139 Semestral', 601, 6, 6, 1);
+    UPDATE qualificacoes_tipos SET deleted_at = NULL, ativo = 1, codigo = 'G1-SEM', categoria_id = 601 WHERE id = 106 AND empresa_id = 6;
+    INSERT OR IGNORE INTO modelos_sessao (id, empresa_id, qualificacao_tipo_id, modelo_aeronave, ordem_no_treinamento, codigo, nome, ativo) VALUES (111, 6, 106, 'AW139', 1, 'A139-S-02', 'AW139 Semestral Sessao 1', 1);
+    UPDATE modelos_sessao SET deleted_at = NULL, ativo = 1, qualificacao_tipo_id = 106 WHERE id = 111 AND empresa_id = 6;
   "
 )
 
