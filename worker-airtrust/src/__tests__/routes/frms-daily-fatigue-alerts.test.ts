@@ -61,7 +61,7 @@ function createLegacyRouter() {
 function createApp() {
   const app = new Hono<{ Bindings: Env }>();
   const routes = createFrmsFadigaCheckinRouter({
-    legacyRouter: createLegacyRouter() as any,
+    legacyRouter: createLegacyRouter(),
     authMiddleware: async (c, next) => {
       c.set('userRole', c.req.header('x-role') || 'ADMINISTRADOR');
       await next();
