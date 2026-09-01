@@ -6,6 +6,7 @@ import legacyRouter from './frms-fadiga-checkin-legacy';
 
 const router = new Hono<AppEnv>();
 
+// Audit 201 regression guard: team alerts follow the canonical daily-fatigue status surface.
 function dailyFatigueAlertMessage(status: string): string {
   if (status === 'not_submitted') {
     return 'Fadiga diária não preenchida pelo tripulante — usando estimativa padrão. Revisão operacional necessária.';
