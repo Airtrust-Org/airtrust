@@ -1,5 +1,11 @@
 import type { CaeAvailabilitySlotV1 } from './cae-availability';
 import type { SimulatorTrainingSessionBlock } from './cae-planning-session-proposal';
+import {
+  classifySimulatorTrainingTimeWindow,
+  simulatorTrainingTimeQualityRank,
+  simulatorTrainingTimeQualityReason,
+  type SimulatorTrainingTimeQuality,
+} from './cae-planning-time-policy';
 
 export type SessionRosterCheck = {
   eligible: boolean;
@@ -14,6 +20,7 @@ export type ScheduledSessionBlock = SimulatorTrainingSessionBlock & {
     date: string;
     start_time: string;
     end_time: string;
+    time_quality: SimulatorTrainingTimeQuality;
     source_ref?: CaeAvailabilitySlotV1['source_ref'];
   } | null;
   roster: Array<{
@@ -73,6 +80,9 @@ function overlaps(
  * Agenda somente blocos com dupla. A escolha é determinística e respeita:
  * equipamento, validade, ordem curricular aproximada por deadline, política
  * de escala resolvida pelo chamador e ausência de sobreposição do tripulante.
+ * Entre slots igualmente válidos, a qualidade do treinamento prevalece:
+ * horário comercial primeiro, diurno fora do comercial depois e noturno
+ * somente quando nenhuma opção diurna compatível resta para aquele bloco.
  */
 export async function scheduleSimulatorTrainingBlocks(params: {
   blocks: SimulatorTrainingSessionBlock[];
@@ -122,6 +132,7 @@ export async function scheduleSimulatorTrainingBlocks(params: {
       slotIndex: number;
       startMs: number;
       endMs: number;
+      timeQuality: SimulatorTrainingTimeQuality;
       roster: ScheduledSessionBlock['roster'];
     }> = [];
 
@@ -132,6 +143,13 @@ export async function scheduleSimulatorTrainingBlocks(params: {
       if (start.date < params.referenceDate || start.date > deadline) continue;
       const endMs = candidate.startMs + durationMs;
       if (endMs > candidate.endMs) continue;
+      const end = isoDateTime(endMs);
+      const timeQuality = classifySimulatorTrainingTimeWindow({
+        date: start.date,
+        start_time: start.time,
+        end_date: end.date,
+        end_time: end.time,
+      });
 
       let rosterAllowed = true;
       const rosterRows: ScheduledSessionBlock['roster'] = [];
@@ -160,13 +178,21 @@ export async function scheduleSimulatorTrainingBlocks(params: {
         }
       }
       if (!rosterAllowed) continue;
-      eligible.push({ slotIndex: index, startMs: candidate.startMs, endMs, roster: rosterRows });
+      eligible.push({
+        slotIndex: index,
+        startMs: candidate.startMs,
+        endMs,
+        timeQuality,
+        roster: rosterRows,
+      });
     }
 
     eligible.sort((a, b) => {
       const leftDate = isoDateTime(a.startMs).date;
       const rightDate = isoDateTime(b.startMs).date;
       return (
+        simulatorTrainingTimeQualityRank(a.timeQuality) -
+          simulatorTrainingTimeQualityRank(b.timeQuality) ||
         rightDate.localeCompare(leftDate) ||
         a.startMs - b.startMs ||
         (working[a.slotIndex].endMs - a.endMs) - (working[b.slotIndex].endMs - b.endMs) ||
@@ -191,6 +217,7 @@ export async function scheduleSimulatorTrainingBlocks(params: {
     const workingSlot = working[chosen.slotIndex];
     const start = isoDateTime(chosen.startMs);
     const end = isoDateTime(chosen.endMs);
+    const sourceRef = workingSlot.slot.source_ref;
     for (const session of block.sessions) {
       const ranges = assignmentsByEmployee.get(session.employee_id) || [];
       ranges.push({ startMs: chosen.startMs, endMs: chosen.endMs });
@@ -215,10 +242,13 @@ export async function scheduleSimulatorTrainingBlocks(params: {
         date: start.date,
         start_time: start.time,
         end_time: end.time,
-        source_ref: workingSlot.slot.source_ref,
+        time_quality: chosen.timeQuality,
+        source_ref: sourceRef,
       },
       roster: chosen.roster,
-      reasons: [`Sessão alocada ${start.date} ${start.time}–${end.time}, antes do vencimento.`],
+      reasons: [
+        `Sessão alocada ${start.date} ${start.time}–${end.time}, antes do vencimento, em ${simulatorTrainingTimeQualityReason(chosen.timeQuality)}.`,
+      ],
     });
   }
 
