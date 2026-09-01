@@ -21,11 +21,15 @@ describe('staging release GitHub token permissions', () => {
     expect(permissions).toContain('checks: read');
   });
 
-  it('limits the release ledger preflight to the explicitly approved migrations', () => {
+  it('limits the release ledger preflight to the exact approved release migrations', () => {
     const workflow = readFileSync(join(ROOT, '.github/workflows/deploy-staging.yml'), 'utf8');
 
-    expect(workflow).toContain(
-      'node scripts/staging/migration-ledger-preflight.mjs --scope=0467,0468,0469',
+    expect(workflow).toContain('APPROVED_MIGRATIONS: ${{ inputs.approved_migrations }}');
+    expect(workflow).toContain('--migrations-dir=release/worker-airtrust/migrations');
+    expect(workflow).toContain('--scope="$scope_csv"');
+    expect(workflow).toContain('release/worker-airtrust/migrations/$migration');
+    expect(workflow).not.toContain(
+      'migration-ledger-preflight.mjs --scope=0467,0468,0469,0470,0472,0475,0476,0477,0478,0479,0480',
     );
   });
 
