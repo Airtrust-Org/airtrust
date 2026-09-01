@@ -12,6 +12,18 @@ function createLegacyRouter() {
       return c.json({ success: false, error: 'upstream failure' }, 503);
     }
 
+    if ((c.req.header('x-role') || '').toUpperCase() === 'PILOTO') {
+      return c.json({
+        success: true,
+        data: {
+          date,
+          funcionario_id: 201,
+          status: 'attention',
+          data_source: 'crew_reported',
+        },
+      });
+    }
+
     return c.json({
       success: true,
       data: {
@@ -52,7 +64,7 @@ function createLegacyRouter() {
   });
 
   legacy.get('/daily-fatigue/alerts', (c) =>
-    c.json({ success: true, data: { delegated: true } }),
+    c.json({ success: false, error: 'legacy alerts route should not be called' }, 500),
   );
 
   return legacy;
@@ -62,11 +74,6 @@ function createApp() {
   const app = new Hono<AppEnv>();
   const routes = createFrmsFadigaCheckinRouter({
     legacyRouter: createLegacyRouter(),
-    authMiddleware: async (c, next) => {
-      c.set('userRole', c.req.header('x-role') || 'ADMINISTRADOR');
-      await next();
-    },
-    canSeeTeamScope: (role) => String(role || '').toUpperCase() === 'ADMINISTRADOR',
   });
   app.route('/api/frms', routes);
   return app;
@@ -116,7 +123,7 @@ describe('GET /api/frms/daily-fatigue/alerts', () => {
     );
   });
 
-  it('preserva o contrato legado para perfis sem escopo de equipe', async () => {
+  it('preserva o comportamento self quando o endpoint canônico restringe o escopo de equipe', async () => {
     const response = await createApp().fetch(
       new Request('http://localhost/api/frms/daily-fatigue/alerts?date=2026-09-01', {
         headers: { 'x-role': 'PILOTO' },
@@ -126,10 +133,16 @@ describe('GET /api/frms/daily-fatigue/alerts', () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      success: true,
-      data: { delegated: true },
-    });
+    const body = (await response.json()) as any;
+    expect(body.success).toBe(true);
+    expect(body.data.count).toBe(1);
+    expect(body.data.items).toEqual([
+      expect.objectContaining({
+        tripulante_id: 201,
+        nivel: 'ATENCAO',
+        alert_type: 'daily_fatigue_attention',
+      }),
+    ]);
   });
 
   it('não mascara falha do snapshot diário canônico', async () => {
