@@ -39,7 +39,8 @@ export function createFrmsFadigaCheckinRouter(
   options: FrmsFatigueRouterOptions = {},
 ): FrmsFatigueRouter {
   const delegatedRouter = options.legacyRouter ?? legacyRouter;
-  const authMiddleware = options.authMiddleware ?? (auth() as MiddlewareHandler<AppEnv>);
+  const authMiddleware =
+    options.authMiddleware ?? (auth() as unknown as MiddlewareHandler<AppEnv>);
   const canSeeTeamScope = options.canSeeTeamScope ?? canSeeFrmsTeamScope;
   const router = new Hono<AppEnv>();
 
