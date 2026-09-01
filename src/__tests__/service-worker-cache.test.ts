@@ -47,7 +47,7 @@ describe('service worker cache guard', () => {
     expect(indexHtmlSource).not.toContain("navigator.serviceWorker.register('/sw.js', {");
     expect(indexHtmlSource).toContain('registration.unregister?.()');
     expect(indexHtmlSource).toContain("currentUrl.searchParams.set(RECOVERY_PARAM, '1');");
-    expect(indexHtmlSource).toContain('window.location.replace(currentUrl.toString());
+    expect(indexHtmlSource).toContain('window.location.replace(currentUrl.toString());');
   });
 
   it('desregistra service workers existentes e limpa caches no sw-manager sem registrar outro', () => {
@@ -68,7 +68,7 @@ describe('service worker cache guard', () => {
     expect(serviceWorkerManagerSource).toContain('async function recoverLoginPageFromLegacyCaches()');
     expect(bypassFunctionMatch?.[1] || '').toContain("return /^\\/lms\\/player\\//.test(pathname);");
     expect(bypassFunctionMatch?.[1] || '').not.toContain("pathname === '/login'");
-    expect(serviceWorkerManagerSource).toContain('window.location.replace(nextUrl.toString());
+    expect(serviceWorkerManagerSource).toContain('window.location.replace(nextUrl.toString());');
   });
 
   it('nao mistura no-store global com cache longo dos assets hashados', () => {
