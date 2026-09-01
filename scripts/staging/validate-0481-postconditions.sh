@@ -49,9 +49,24 @@ assert_json \
   'if (JSON.parse(process.env.RESULT)[0]?.n !== 2) process.exit(1)' || fail=1
 
 assert_json \
+  "0481 temporary guard objects were removed" \
+  "SELECT COUNT(*) AS n FROM sqlite_master WHERE name IN ('_0481_preflight_guard','_0481_postseed_guard','_0481_preflight_validate','_0481_postseed_validate')" \
+  'if (JSON.parse(process.env.RESULT)[0]?.n !== 0) process.exit(1)' || fail=1
+
+assert_json \
   "0481 tenant and runtime triggers exist" \
   "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='trigger' AND name IN ('trg_treinamento_dependencias_tenant_insert','trg_treinamento_dependencias_tenant_update','trg_qualificacao_dependencia_after_insert','trg_qualificacao_dependencia_after_update','trg_treinamento_dependencia_evento_dispatch','trg_treinamento_dependencia_evento_recalculate')" \
   'if (JSON.parse(process.env.RESULT)[0]?.n !== 6) process.exit(1)' || fail=1
+
+assert_json \
+  "AW139 source and destination qualifications still match reviewed IDs" \
+  "SELECT COUNT(*) AS n FROM qualificacoes_tipos WHERE empresa_id=6 AND deleted_at IS NULL AND ((id=33 AND codigo='G1') OR (id=106 AND codigo='G1-SEM'))" \
+  'if (JSON.parse(process.env.RESULT)[0]?.n !== 2) process.exit(1)' || fail=1
+
+assert_json \
+  "AW139 semestral destination still has a current session model" \
+  "SELECT COUNT(*) AS n FROM modelos_sessao WHERE empresa_id=6 AND qualificacao_tipo_id=106 AND deleted_at IS NULL" \
+  'if ((JSON.parse(process.env.RESULT)[0]?.n ?? 0) < 1) process.exit(1)' || fail=1
 
 assert_json \
   "approved AW139 33 -> 106 dependency is unique and active" \
