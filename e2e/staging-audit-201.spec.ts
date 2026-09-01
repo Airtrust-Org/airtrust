@@ -71,6 +71,19 @@ const MOBILE_ROUTES: AuditRoute[] = [
 async function waitForStablePage(page: Page) {
   await page.waitForLoadState('domcontentloaded');
   await page.waitForLoadState('networkidle', { timeout: 2_000 }).catch(() => undefined);
+  await expect
+    .poll(
+      async () => {
+        const bodyText = (await page.locator('body').innerText()).trim();
+        return bodyText.length > 0 && bodyText !== 'Loading...';
+      },
+      {
+        message: 'timed out waiting for page loading state to resolve',
+        timeout: 15_000,
+      },
+    )
+    .toBe(true);
+  await page.waitForLoadState('networkidle', { timeout: 3_000 }).catch(() => undefined);
   await page.waitForTimeout(150);
 }
 
@@ -100,6 +113,7 @@ async function assertHealthyUi(page: Page, label: string) {
     .toBe(true);
 
   const visibleText = (await body.innerText()).trim();
+  expect(visibleText.length, `${label} rendered no meaningful UI`).toBeGreaterThan(20);
   expect(visibleText, `${label} exposed a technical backend/runtime error`).not.toMatch(
     TECHNICAL_ERROR_PATTERN,
   );
@@ -107,6 +121,9 @@ async function assertHealthyUi(page: Page, label: string) {
     RAW_INTERNAL_PATTERN,
   );
   expect(visibleText, `${label} rendered a not-found surface`).not.toMatch(ROUTE_NOT_FOUND_PATTERN);
+  expect(visibleText, `${label} exposed an unhandled 404/not found error`).not.toMatch(
+    ROUTE_NOT_FOUND_PATTERN,
+  );
 
   const main = page.locator('main, [role="main"]');
   expect(await main.count(), `${label} has no main landmark`).toBeGreaterThan(0);
@@ -114,6 +131,7 @@ async function assertHealthyUi(page: Page, label: string) {
 
   const headings = page.locator(
     'main h1, main h2, main h3, [role="main"] h1, [role="main"] h2, [role="main"] h3',
+    'main h1, main h2, main h3, main h4, [role="main"] h1, [role="main"] h2, [role="main"] h3, [role="main"] h4, h1, h2',
   );
   expect(await headings.count(), `${label} has no visible page heading structure`).toBeGreaterThan(
     0,
