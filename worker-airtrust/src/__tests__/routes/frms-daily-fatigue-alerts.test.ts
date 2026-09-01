@@ -59,7 +59,7 @@ function createLegacyRouter() {
 }
 
 function createApp() {
-  const app = new Hono<{ Bindings: Env }>();
+  const app = new Hono<AppEnv>();
   const routes = createFrmsFadigaCheckinRouter({
     legacyRouter: createLegacyRouter(),
     authMiddleware: async (c, next) => {
