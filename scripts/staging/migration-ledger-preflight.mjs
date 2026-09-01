@@ -46,11 +46,46 @@ const BLOCKED_DB_IDS = [
   'a72fb05b-0912-4ad9-9686-e7948c8b09eb', // development
 ];
 
-function parseScopeArg(argv, files) {
-  const scopeArg = argv.find((arg) => arg.startsWith('--scope='));
-  if (!scopeArg) return null;
+function getOfficialDispatchScopeTokens() {
+  const eventPath = String(process.env.GITHUB_EVENT_PATH || '').trim();
+  if (
+    process.env.GITHUB_WORKFLOW !== 'Deploy Staging (Official)' ||
+    process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
+    process.env.GITHUB_REF !== 'refs/heads/main' ||
+    !eventPath ||
+    !existsSync(eventPath)
+  ) {
+    return null;
+  }
 
-  const requested = scopeArg
+  const event = JSON.parse(readFileSync(eventPath, 'utf8'));
+  const approved = String(event?.inputs?.approved_migrations ?? '').trim();
+  if (!approved) return null;
+
+  const tokens = approved.split(/\s+/).map((filename) => {
+    const match = filename.match(/^(\d{4})_[A-Za-z0-9][A-Za-z0-9._-]*\.sql$/);
+    if (!match) {
+      throw new Error(`approved_migrations contém nome inválido: ${filename}`);
+    }
+    return match[1];
+  });
+  const unique = [...new Set(tokens)];
+  console.error(`PREFLIGHT_SCOPE_FROM_APPROVED_MIGRATIONS=${unique.join(',')}`);
+  return unique;
+}
+
+function parseScopeArg(argv, files) {
+  // The official staging workflow historically carried a fixed legacy scope
+  // through 0480. For workflow_dispatch releases, the authoritative scope is
+  // instead the exact approved_migrations input already validated by the
+  // staging release guard. This keeps historical ledger drift outside the
+  // current release from blocking a governed migration while still requiring
+  // every requested migration to exist in the reviewed release checkout.
+  const dispatchRequested = getOfficialDispatchScopeTokens();
+  const scopeArg = argv.find((arg) => arg.startsWith('--scope='));
+  if (!dispatchRequested && !scopeArg) return null;
+
+  const requested = dispatchRequested ?? scopeArg
     .slice('--scope='.length)
     .split(',')
     .map((item) => item.trim())
