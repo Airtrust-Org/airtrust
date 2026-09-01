@@ -25,7 +25,7 @@ test("0477-0480 are in the staging apply allowlist (apply-approved-migrations.sh
 
 test("RELEASE_PREFLIGHT_SCOPE includes 0477, 0478, 0479, 0480", () => {
   const script = read("scripts/staging/apply-approved-migrations.sh");
-  assert.match(script, /RELEASE_PREFLIGHT_SCOPE="[^"]*,0476,0477,0478,0479,0480"/);
+  assert.match(script, /RELEASE_PREFLIGHT_SCOPE="[^"]*,0476,0477,0478,0479,0480/);
 });
 
 test("0477-0480 route through the recovery-point runner (D1 Time Travel point captured)", () => {
@@ -47,9 +47,16 @@ test("0477-0480 are in the recovery-point allowlist and postcondition dispatch",
   );
 });
 
-test('deploy-staging.yml ledger preflight scope includes 0477-0480', () => {
+test('deploy-staging.yml ledger preflight derives the exact approved migration scope from the release checkout', () => {
   const workflow = read('.github/workflows/deploy-staging.yml');
-  assert.match(workflow, /--scope=0467,0468,0469,0470,0472,0475,0476,0477,0478,0479,0480/);
+  assert.match(workflow, /APPROVED_MIGRATIONS: \$\{\{ inputs\.approved_migrations \}\}/);
+  assert.match(workflow, /--migrations-dir=release\/worker-airtrust\/migrations/);
+  assert.match(workflow, /--scope="\$scope_csv"/);
+  assert.match(workflow, /release\/worker-airtrust\/migrations\/\$migration/);
+  assert.doesNotMatch(
+    workflow,
+    /migration-ledger-preflight\.mjs --scope=0467,0468,0469,0470,0472,0475,0476,0477,0478,0479,0480/,
+  );
 });
 
 test("validate-edb-0477-0480-postconditions.sh targets only staging and performs zero writes", () => {
