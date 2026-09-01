@@ -83,7 +83,7 @@ jobs:
     needs: guard
     runs-on: ubuntu-latest
     environment: staging
-    timeout-minutes: 45
+    timeout-minutes: 75
     env:
       BASE_URL: https://staging.airtrust.pages.dev
       E2E_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
@@ -109,7 +109,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Traverse audit surface exhaustively read-only
-        run: npx playwright test e2e/staging-audit-201.spec.ts --project=chromium
+        run: npx playwright test e2e/staging-audit-201.spec.ts e2e/staging-audit-201-tab-links.spec.ts --project=chromium
 
       - name: Publish sanitized audit summary
         if: success()
@@ -121,6 +121,7 @@ jobs:
             echo '- exact staging provenance guard: PASS'
             echo '- authenticated canonical-route traversal in light/dark: PASS'
             echo '- recursive accessible link/subroute discovery with no silent truncation: PASS'
+            echo '- recursive tab-aware link/subroute discovery across every accessible tab: PASS'
             echo '- tabs, search/empty-state, filters, pagination and date navigation: PASS'
             echo '- read-only details/modal inspection and disabled-state inspection: PASS'
             echo '- representative 375px horizontal-overflow checks: PASS'
