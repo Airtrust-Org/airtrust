@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import type { AppEnv } from '../types';
 import { auth } from '../middleware/auth';
 import { canSeeFrmsTeamScope } from '../lib/frms/access';
@@ -10,7 +11,7 @@ type FrmsFatigueRouter = typeof legacyRouter;
 
 type FrmsFatigueRouterOptions = {
   legacyRouter?: FrmsFatigueRouter;
-  authMiddleware?: ReturnType<typeof auth>;
+  authMiddleware?: MiddlewareHandler<AppEnv>;
   canSeeTeamScope?: typeof canSeeFrmsTeamScope;
 };
 
@@ -28,7 +29,7 @@ function dailyFatigueAlertMessage(status: string): string {
   return 'Fadiga diária em nível de atenção. Revisão operacional necessária.';
 }
 
-function legacyRequest(c: Parameters<ReturnType<typeof auth>>[0], pathname: string): Request {
+function legacyRequest(c: Context<AppEnv>, pathname: string): Request {
   const url = new URL(c.req.url);
   url.pathname = pathname;
   return new Request(url.toString(), c.req.raw);
@@ -38,7 +39,7 @@ export function createFrmsFadigaCheckinRouter(
   options: FrmsFatigueRouterOptions = {},
 ): FrmsFatigueRouter {
   const delegatedRouter = options.legacyRouter ?? legacyRouter;
-  const authMiddleware = options.authMiddleware ?? auth();
+  const authMiddleware = options.authMiddleware ?? (auth() as MiddlewareHandler<AppEnv>);
   const canSeeTeamScope = options.canSeeTeamScope ?? canSeeFrmsTeamScope;
   const router = new Hono<AppEnv>();
 
