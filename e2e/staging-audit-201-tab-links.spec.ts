@@ -18,12 +18,20 @@ const SEEDS: RouteCandidate[] = [
   { label: 'Dashboard', path: '/', shape: '/' },
   { label: 'Funcionários', path: '/funcionarios', shape: '/funcionarios' },
   { label: 'Qualificações', path: '/qualificacoes', shape: '/qualificacoes' },
-  { label: 'Treinamentos Planejados', path: '/treinamentos/planejados', shape: '/treinamentos/planejados' },
+  {
+    label: 'Treinamentos Planejados',
+    path: '/treinamentos/planejados',
+    shape: '/treinamentos/planejados',
+  },
   { label: 'LMS', path: '/lms/dashboard', shape: '/lms/dashboard' },
   { label: 'Escalas', path: '/escalas', shape: '/escalas' },
   { label: 'FRMS', path: '/frms', shape: '/frms' },
   { label: 'Simuladores', path: '/simuladores', shape: '/simuladores' },
-  { label: 'Planejamento de Simuladores', path: '/simuladores?tab=planejamento', shape: '/simuladores?tab=planejamento' },
+  {
+    label: 'Planejamento de Simuladores',
+    path: '/simuladores?tab=planejamento',
+    shape: '/simuladores?tab=planejamento',
+  },
   { label: 'SGSO', path: '/sgso', shape: '/sgso' },
   { label: 'MRO', path: '/mro', shape: '/mro' },
   { label: 'Controle de Voos', path: '/controle-voos', shape: '/controle-voos' },
@@ -56,7 +64,10 @@ function normalizeLink(href: string, text: string, currentUrl: string): RouteCan
   const frontendOrigin = new URL(FRONTEND_BASE_URL).origin;
   if (url.origin !== frontendOrigin) return null;
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/assets/')) return null;
-  if (/^\/(?:login|logout|recuperar-senha|reset-password|acesso-negado)(?:\/|$)/i.test(url.pathname)) return null;
+  if (
+    /^\/(?:login|logout|recuperar-senha|reset-password|acesso-negado)(?:\/|$)/i.test(url.pathname)
+  )
+    return null;
   if (/\.(?:pdf|csv|xlsx?|zip|png|jpe?g|webp|svg)$/i.test(url.pathname)) return null;
 
   const kept = new URLSearchParams();
@@ -81,7 +92,9 @@ async function waitForStablePage(page: Page) {
 
 async function assertHealthy(page: Page, label: string) {
   const finalUrl = new URL(page.url());
-  expect(finalUrl.origin, `${label} escaped staging origin`).toBe(new URL(FRONTEND_BASE_URL).origin);
+  expect(finalUrl.origin, `${label} escaped staging origin`).toBe(
+    new URL(FRONTEND_BASE_URL).origin,
+  );
   expect(finalUrl.pathname, `${label} redirected to login`).not.toMatch(/^\/login(?:\/|$)/);
   const body = page.locator('body');
   await expect(body).toBeVisible({ timeout: 20_000 });
@@ -126,7 +139,6 @@ async function collectLinksAcrossTabs(page: Page, routeLabel: string): Promise<R
       try {
         const url = new URL(response.url());
         if (url.hostname === STAGING_API_HOST && response.status() >= 500) {
-          if (response.status() === 503 && url.pathname.startsWith('/api/backup')) return;
           api5xx.push(`${response.status()} ${url.pathname}${url.search}`);
         }
       } catch {
@@ -153,11 +165,15 @@ async function collectLinksAcrossTabs(page: Page, routeLabel: string): Promise<R
     exercised += 1;
   }
 
-  console.log(`AUDIT_201_TAB_LINKS label=${JSON.stringify(routeLabel)} tabs=${exercised} links=${collected.size}`);
+  console.log(
+    `AUDIT_201_TAB_LINKS label=${JSON.stringify(routeLabel)} tabs=${exercised} links=${collected.size}`,
+  );
   return [...collected.values()];
 }
 
-test('audit #201 recursively discovers routes exposed by every accessible tab', async ({ page }) => {
+test('audit #201 recursively discovers routes exposed by every accessible tab', async ({
+  page,
+}) => {
   test.setTimeout(22 * 60 * 1_000);
 
   const queue = [...SEEDS];
@@ -181,7 +197,6 @@ test('audit #201 recursively discovers routes exposed by every accessible tab', 
       try {
         const url = new URL(response.url());
         if (url.hostname === STAGING_API_HOST && response.status() >= 500) {
-          if (response.status() === 503 && url.pathname.startsWith('/api/backup')) return;
           api5xx.push(`${response.status()} ${url.pathname}${url.search}`);
         }
       } catch {
