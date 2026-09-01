@@ -85,9 +85,21 @@ async function setTheme(page: Page, theme: ThemeMode) {
 async function assertHealthyUi(page: Page, label: string) {
   const body = page.locator('body');
   await expect(body).toBeVisible({ timeout: 20_000 });
-  const visibleText = (await body.innerText()).trim();
 
-  expect(visibleText.length, `${label} rendered no meaningful UI`).toBeGreaterThan(20);
+  await expect
+    .poll(
+      async () => {
+        const text = (await body.innerText()).trim();
+        return text.length > 20 && text !== 'Loading...';
+      },
+      {
+        message: `${label} rendered no meaningful UI (timed out waiting for loader)`,
+        timeout: 15_000,
+      },
+    )
+    .toBe(true);
+
+  const visibleText = (await body.innerText()).trim();
   expect(visibleText, `${label} exposed a technical backend/runtime error`).not.toMatch(
     TECHNICAL_ERROR_PATTERN,
   );

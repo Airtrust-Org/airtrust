@@ -98,8 +98,19 @@ async function assertHealthy(page: Page, label: string) {
   expect(finalUrl.pathname, `${label} redirected to login`).not.toMatch(/^\/login(?:\/|$)/);
   const body = page.locator('body');
   await expect(body).toBeVisible({ timeout: 20_000 });
+  await expect
+    .poll(
+      async () => {
+        const text = (await body.innerText()).trim();
+        return text.length > 20 && text !== 'Loading...';
+      },
+      {
+        message: `${label} rendered no meaningful UI (timed out waiting for loader)`,
+        timeout: 15_000,
+      },
+    )
+    .toBe(true);
   const text = (await body.innerText()).trim();
-  expect(text.length, `${label} rendered no meaningful UI`).toBeGreaterThan(20);
   expect(text, `${label} exposed a technical error`).not.toMatch(TECHNICAL_ERROR_PATTERN);
 }
 
