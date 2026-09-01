@@ -94,7 +94,10 @@ function RouteStatusScreen({
   const iconClass = tone === 'attention' ? 'text-[var(--at-attention)]' : 'text-[var(--at-critical)]';
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--at-bg-app)] p-4 text-[var(--at-text-primary)]">
+    <main
+      className="flex min-h-screen items-center justify-center bg-[var(--at-bg-app)] p-4 text-[var(--at-text-primary)]"
+      role="main"
+    >
       <div className="w-full max-w-md rounded-xl border border-[var(--at-border)] bg-[var(--at-bg-surface)] p-5 text-center shadow-sm">
         <Ban className={`mx-auto mb-4 h-14 w-14 ${iconClass}`} />
         <h2 className="mb-2 text-xl font-semibold text-[var(--at-text-primary)]">{title}</h2>
@@ -106,7 +109,7 @@ function RouteStatusScreen({
           {backLabel}
         </a>
       </div>
-    </div>
+    </main>
   );
 }
 

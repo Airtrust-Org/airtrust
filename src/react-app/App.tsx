@@ -37,6 +37,7 @@ const QualificacoesAlertas = lazyWithRetry(
   () => import('./pages/qualificacoes/Alertas'),
   'QualificacoesAlertas',
 );
+const Certificacoes = lazyWithRetry(() => import('./pages/Certificacoes'), 'CertificacoesPage');
 const LicencasPage = lazyWithRetry(() => import('./pages/LicencasPage'), 'LicencasPage');
 const HospedagemPage = lazyWithRetry(() => import('./pages/HospedagemPage'), 'HospedagemPage');
 const FichaFuncionarioPage = lazyWithRetry(
@@ -475,6 +476,14 @@ export default function App() {
                         element={
                           <ProtectedRoute>
                             <QualificacoesAlertas />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/certificacoes"
+                        element={
+                          <ProtectedRoute>
+                            <Certificacoes />
                           </ProtectedRoute>
                         }
                       />

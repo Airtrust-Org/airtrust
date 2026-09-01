@@ -33,7 +33,11 @@ const DESKTOP_ROUTES: AuditRoute[] = [
   { label: 'Funcionários', path: '/funcionarios' },
   { label: 'Qualificações', path: '/qualificacoes' },
   { label: 'Treinamentos Planejados', path: '/treinamentos/planejados' },
-  { label: 'LMS', path: '/lms/dashboard', allowedCanonicalPaths: ['/lms/dashboard', '/lms/cursos'] },
+  {
+    label: 'LMS',
+    path: '/lms/dashboard',
+    allowedCanonicalPaths: ['/lms/dashboard', '/lms/cursos'],
+  },
   { label: 'Escalas', path: '/escalas' },
   { label: 'FRMS', path: '/frms' },
   { label: 'Simuladores', path: '/simuladores' },
@@ -112,7 +116,6 @@ async function withRuntimeGuards(page: Page, label: string, action: () => Promis
     try {
       const url = new URL(response.url());
       if (url.hostname === STAGING_API_HOST && response.status() >= 500) {
-        if (response.status() === 503 && url.pathname.startsWith('/api/backup')) return;
         api5xx.push(`${response.status()} ${url.pathname}${url.search}`);
       }
     } catch {
