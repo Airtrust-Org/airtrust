@@ -14,7 +14,7 @@ export default function ControleVoosPageShell({ children }: { children: React.Re
   const demoRoute = DEMO_ROUTES.find(({ prefix }) => pathname.startsWith(prefix));
 
   return (
-    <div className="w-full">
+    <main className="w-full" role="main">
       <ControleVoosPrototypeBanner />
       {demoRoute && (
         <ModuleGovernanceBanner
@@ -29,6 +29,6 @@ export default function ControleVoosPageShell({ children }: { children: React.Re
       )}
       <ControleVoosSubnav />
       {children}
-    </div>
+    </main>
   );
 }

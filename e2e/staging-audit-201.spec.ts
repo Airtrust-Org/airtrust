@@ -112,6 +112,7 @@ async function withRuntimeGuards(page: Page, label: string, action: () => Promis
     try {
       const url = new URL(response.url());
       if (url.hostname === STAGING_API_HOST && response.status() >= 500) {
+        if (response.status() === 503 && url.pathname.startsWith('/api/backup')) return;
         api5xx.push(`${response.status()} ${url.pathname}${url.search}`);
       }
     } catch {

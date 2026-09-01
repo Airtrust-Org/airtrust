@@ -8,7 +8,9 @@ import {
   listFrmsOperationalSnapshot,
   type FrmsOperationalSnapshotFilters,
 } from '../lib/frms/operational-snapshot';
+import { FrmsParameterResolutionError } from '../lib/frms/parameter-governance';
 import { canSeeFrmsTeamScope } from '../lib/frms/access';
+import { createLogger, toError } from '../utils/logger';
 
 type SnapshotContext = Context<{ Bindings: Env; Variables: Partial<Variables> }>;
 
@@ -48,19 +50,21 @@ function canSeeTeam(c: SnapshotContext): boolean {
   return canSeeFrmsTeamScope(c.get('userRole'));
 }
 
-async function resolveOwnFuncionarioId(c: SnapshotContext, empresaId: number): Promise<number | null> {
+async function resolveOwnFuncionarioId(
+  c: SnapshotContext,
+  empresaId: number,
+): Promise<number | null> {
   const fromContext = Number(c.get('funcionarioId') || 0);
   if (fromContext > 0) {
-    const row = await c.env.DB
-      .prepare(
-        `SELECT id
+    const row = await c.env.DB.prepare(
+      `SELECT id
            FROM funcionarios
           WHERE id = ?
             AND empresa_id = ?
             AND deleted_at IS NULL
             AND COALESCE(ativo, 1) = 1
           LIMIT 1`,
-      )
+    )
       .bind(fromContext, empresaId)
       .first<{ id: number }>();
 
@@ -70,9 +74,8 @@ async function resolveOwnFuncionarioId(c: SnapshotContext, empresaId: number): P
   const userId = Number(c.get('userId') || 0);
   if (userId <= 0) return null;
 
-  const byUsuario = await c.env.DB
-    .prepare(
-      `SELECT f.id
+  const byUsuario = await c.env.DB.prepare(
+    `SELECT f.id
          FROM usuarios u
          JOIN funcionarios f ON f.id = u.funcionario_id
         WHERE u.id = ?
@@ -81,22 +84,21 @@ async function resolveOwnFuncionarioId(c: SnapshotContext, empresaId: number): P
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
         LIMIT 1`,
-    )
+  )
     .bind(userId, empresaId)
     .first<{ id: number }>();
 
   if (byUsuario?.id) return byUsuario.id;
 
-  const byFuncionario = await c.env.DB
-    .prepare(
-      `SELECT id
+  const byFuncionario = await c.env.DB.prepare(
+    `SELECT id
          FROM funcionarios
         WHERE id = ?
           AND empresa_id = ?
           AND deleted_at IS NULL
           AND COALESCE(ativo, 1) = 1
         LIMIT 1`,
-    )
+  )
     .bind(userId, empresaId)
     .first<{ id: number }>();
 
@@ -170,6 +172,33 @@ router.get('/operational-snapshot', async (c) => {
       },
     });
   } catch (error) {
+    if (error instanceof FrmsParameterResolutionError) {
+      return c.json({
+        success: true,
+        data: [],
+        summary: {
+          total_tripulantes: 0,
+          total_escalados: 0,
+          checkins_recebidos: 0,
+          checkins_pendentes: 0,
+          alertas_criticos: 0,
+          alertas_atencao: 0,
+          dados_estimados: 0,
+          inconsistencias: 0,
+          sem_fatorizacao: 0,
+        },
+        meta: {
+          scope: hasTeamScope ? 'team' : 'self',
+          forced_funcionario_id: forcedFuncionarioId,
+          notice: 'FRMS_CONTEXT_UNAVAILABLE',
+          message: error.message,
+        },
+      });
+    }
+
+    const logger = createLogger(c as SnapshotContext, 'FrmsOperationalSnapshot');
+    logger.error('Erro ao montar snapshot operacional FRMS', toError(error));
+
     return c.json(
       {
         success: false,
