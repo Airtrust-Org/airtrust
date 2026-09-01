@@ -1,8 +1,6 @@
 import { Hono } from 'hono';
-import type { Context, MiddlewareHandler } from 'hono';
+import type { Context } from 'hono';
 import type { AppEnv } from '../types';
-import { auth } from '../middleware/auth';
-import { canSeeFrmsTeamScope } from '../lib/frms/access';
 import legacyRouter from './frms-fadiga-checkin-legacy';
 
 export { resolveContextoPilotoLimites } from './frms-fadiga-checkin-legacy';
@@ -11,11 +9,18 @@ type FrmsFatigueRouter = typeof legacyRouter;
 
 type FrmsFatigueRouterOptions = {
   legacyRouter?: FrmsFatigueRouter;
-  authMiddleware?: MiddlewareHandler<AppEnv>;
-  canSeeTeamScope?: typeof canSeeFrmsTeamScope;
 };
 
-// Audit 201 regression guard: team alerts follow the canonical daily-fatigue status surface.
+type DailyFatigueStatusItem = Record<string, unknown> & {
+  funcionario_id?: unknown;
+  funcionario_nome?: unknown;
+  status?: unknown;
+  data_source?: unknown;
+};
+
+// Audit 201 regression guard: alerts follow the canonical daily-fatigue status surface.
+// The delegated endpoint owns auth + RBAC and automatically degrades scope=team to self
+// for profiles without team visibility, so this wrapper does not duplicate auth logic.
 function dailyFatigueAlertMessage(status: string): string {
   if (status === 'not_submitted') {
     return 'Fadiga diária não preenchida pelo tripulante — usando estimativa padrão. Revisão operacional necessária.';
@@ -35,24 +40,20 @@ function legacyRequest(c: Context<AppEnv>, pathname: string): Request {
   return new Request(url.toString(), c.req.raw);
 }
 
+function normalizeDailyFatigueItems(data: Record<string, unknown> | undefined): DailyFatigueStatusItem[] {
+  if (!data) return [];
+  if (Array.isArray(data.items)) return data.items as DailyFatigueStatusItem[];
+  if (data.funcionario_id != null) return [data as DailyFatigueStatusItem];
+  return [];
+}
+
 export function createFrmsFadigaCheckinRouter(
   options: FrmsFatigueRouterOptions = {},
 ): FrmsFatigueRouter {
   const delegatedRouter = options.legacyRouter ?? legacyRouter;
-  const authMiddleware =
-    options.authMiddleware ?? (auth() as unknown as MiddlewareHandler<AppEnv>);
-  const canSeeTeamScope = options.canSeeTeamScope ?? canSeeFrmsTeamScope;
   const router = new Hono<AppEnv>();
 
-  router.get('/daily-fatigue/alerts', authMiddleware, async (c) => {
-    if (!canSeeTeamScope(c.get('userRole'))) {
-      return delegatedRouter.fetch(
-        legacyRequest(c, '/daily-fatigue/alerts'),
-        c.env,
-        c.executionCtx,
-      );
-    }
-
+  router.get('/daily-fatigue/alerts', async (c) => {
     const date = c.req.query('date') || new Date().toISOString().slice(0, 10);
     const teamRequest = legacyRequest(c, '/daily-fatigue');
     const teamUrl = new URL(teamRequest.url);
@@ -60,20 +61,20 @@ export function createFrmsFadigaCheckinRouter(
     teamUrl.searchParams.set('date', date);
     teamUrl.searchParams.set('scope', 'team');
 
-    const teamResponse = await delegatedRouter.fetch(
+    const statusResponse = await delegatedRouter.fetch(
       new Request(teamUrl.toString(), teamRequest),
       c.env,
       c.executionCtx,
     );
 
-    if (!teamResponse.ok) return teamResponse;
+    if (!statusResponse.ok) return statusResponse;
 
-    const teamPayload = (await teamResponse.json()) as {
+    const statusPayload = (await statusResponse.json()) as {
       success?: boolean;
-      data?: { items?: Array<Record<string, unknown>> };
+      data?: Record<string, unknown>;
     };
 
-    if (teamPayload.success === false) {
+    if (statusPayload.success === false) {
       return c.json({ success: false, error: 'Erro ao carregar status de fadiga diária' }, 500);
     }
 
@@ -84,7 +85,7 @@ export function createFrmsFadigaCheckinRouter(
       'unfit_for_duty',
     ]);
 
-    const items = (teamPayload.data?.items || [])
+    const items = normalizeDailyFatigueItems(statusPayload.data)
       .filter((item) => alertableStatuses.has(String(item.status || '')))
       .map((item) => {
         const status = String(item.status || '');
@@ -121,7 +122,7 @@ export function createFrmsFadigaCheckinRouter(
   // override; every other endpoint continues through the legacy router.
   router.route('/', delegatedRouter);
 
-  return router as FrmsFatigueRouter;
+  return router;
 }
 
 const router = createFrmsFadigaCheckinRouter();
