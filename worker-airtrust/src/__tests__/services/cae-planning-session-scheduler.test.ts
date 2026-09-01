@@ -46,6 +46,8 @@ const slots: any[] = [
   },
 ];
 
+const rosterAllowed = async () => ({ eligible: true, state: 'FOLGA', reason: 'ok' });
+
 describe('session scheduler', () => {
   it('uses one 4h CAE slot as two chronological 2h session blocks', async () => {
     const result = await scheduleSimulatorTrainingBlocks({
@@ -53,13 +55,111 @@ describe('session scheduler', () => {
       slots,
       referenceDate: '2027-06-01',
       preferredSessionsPerDay: 2,
-      checkRoster: async () => ({ eligible: true, state: 'FOLGA', reason: 'ok' }),
+      checkRoster: rosterAllowed,
     });
     expect(result.scheduled.map((item) => item.schedule_status)).toEqual(['SCHEDULED', 'SCHEDULED']);
     expect(result.scheduled[0].scheduled_slot?.start_time).toBe('08:00');
     expect(result.scheduled[0].scheduled_slot?.end_time).toBe('10:00');
+    expect(result.scheduled[0].scheduled_slot?.time_quality).toBe('BUSINESS');
     expect(result.scheduled[1].scheduled_slot?.start_time).toBe('10:00');
     expect(result.scheduled[1].scheduled_slot?.end_time).toBe('12:00');
+    expect(result.scheduled[1].scheduled_slot?.time_quality).toBe('BUSINESS');
+  });
+
+  it('prefers a business-hour slot over a later night slot', async () => {
+    const result = await scheduleSimulatorTrainingBlocks({
+      blocks: [block(1)],
+      slots: [
+        {
+          equipment: 'AW139',
+          date: '2027-06-29',
+          start_time: '22:00',
+          end_date: '2027-06-30',
+          end_time: '00:00',
+          duration_minutes: 120,
+          state: 'OFFERED',
+          confidence: 1,
+        },
+        {
+          equipment: 'AW139',
+          date: '2027-06-28',
+          start_time: '09:00',
+          end_date: '2027-06-28',
+          end_time: '11:00',
+          duration_minutes: 120,
+          state: 'OFFERED',
+          confidence: 1,
+        },
+      ],
+      referenceDate: '2027-06-01',
+      preferredSessionsPerDay: 2,
+      checkRoster: rosterAllowed,
+    });
+
+    expect(result.scheduled[0].scheduled_slot).toMatchObject({
+      date: '2027-06-28',
+      start_time: '09:00',
+      end_time: '11:00',
+      time_quality: 'BUSINESS',
+    });
+  });
+
+  it('prefers daytime outside business hours over night', async () => {
+    const result = await scheduleSimulatorTrainingBlocks({
+      blocks: [block(1)],
+      slots: [
+        {
+          equipment: 'AW139',
+          date: '2027-06-29',
+          start_time: '23:00',
+          end_date: '2027-06-30',
+          end_time: '01:00',
+          duration_minutes: 120,
+          state: 'OFFERED',
+          confidence: 1,
+        },
+        {
+          equipment: 'AW139',
+          date: '2027-06-28',
+          start_time: '19:00',
+          end_date: '2027-06-28',
+          end_time: '21:00',
+          duration_minutes: 120,
+          state: 'OFFERED',
+          confidence: 1,
+        },
+      ],
+      referenceDate: '2027-06-01',
+      preferredSessionsPerDay: 2,
+      checkRoster: rosterAllowed,
+    });
+
+    expect(result.scheduled[0].scheduled_slot?.time_quality).toBe('DAYTIME');
+    expect(result.scheduled[0].scheduled_slot?.start_time).toBe('19:00');
+  });
+
+  it('uses a night slot only when no compatible daytime option exists', async () => {
+    const result = await scheduleSimulatorTrainingBlocks({
+      blocks: [block(1)],
+      slots: [
+        {
+          equipment: 'AW139',
+          date: '2027-06-29',
+          start_time: '22:00',
+          end_date: '2027-06-30',
+          end_time: '00:00',
+          duration_minutes: 120,
+          state: 'OFFERED',
+          confidence: 1,
+        },
+      ],
+      referenceDate: '2027-06-01',
+      preferredSessionsPerDay: 2,
+      checkRoster: rosterAllowed,
+    });
+
+    expect(result.scheduled[0].scheduled_slot?.time_quality).toBe('NIGHT');
+    expect(result.scheduled[0].reasons.join(' ')).toContain('somente como fallback');
   });
 
   it('does not consume CAE capacity for a session without a compatible partner', async () => {
@@ -69,7 +169,7 @@ describe('session scheduler', () => {
       slots,
       referenceDate: '2027-06-01',
       preferredSessionsPerDay: 2,
-      checkRoster: async () => ({ eligible: true, state: 'FOLGA', reason: 'ok' }),
+      checkRoster: rosterAllowed,
     });
     expect(result.scheduled[0].schedule_status).toBe('UNMATCHED_CREW');
     expect(result.remaining_slots[0].duration_minutes).toBe(240);

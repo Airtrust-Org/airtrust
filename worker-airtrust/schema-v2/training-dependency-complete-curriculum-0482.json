@@ -1,0 +1,8 @@
+{
+  "changeId": "training-dependency-complete-curriculum-0482",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0482_training_dependency_complete_curriculum.sql",
+  "fileHash": "6d2902d8e6a41ee501ae564d8740e2f3a6c3d2ff605d11668949cdf30d9a2437",
+  "planPath": "worker-airtrust/schema-v2/plans/training-dependency-complete-curriculum-0482.md",
+  "planHash": "52a58fb45d1df293e9f24da05f93035ffd638a6e8e1f03e9fad54d03fd3c2a88"
+}

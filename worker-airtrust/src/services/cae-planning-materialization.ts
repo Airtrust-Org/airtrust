@@ -55,6 +55,9 @@ export type PlanningMaterializationSnapshot = SimulatorPlanningSourceSnapshot & 
   simulator_id?: number | null;
   instructor_id?: number | null;
   materialized_session_id?: number | null;
+  generated_by?: string | null;
+  materialization_strategy?: string | null;
+  dependency?: unknown;
 };
 
 const materializationMarker = (planningId: number) => `[cae-planning:${planningId}]`;
@@ -103,7 +106,6 @@ export function buildSimulatorMaterializationPlan(
     })),
   };
 }
-
 
 function asPositiveInt(value: unknown): number | null {
   const parsed = Number(value);
@@ -226,6 +228,19 @@ export async function materializeSimulatorPlanning(params: {
 
   if (asPositiveInt(snapshot.materialized_session_id)) {
     return { success: true, sessao_id: Number(snapshot.materialized_session_id), reused: true };
+  }
+
+  const isTrainingDependencySeed =
+    snapshot.generated_by === 'TRAINING_DEPENDENCY' ||
+    snapshot.materialization_strategy === 'TRAINING_PLAN_REQUIRED' ||
+    Boolean(snapshot.dependency);
+  if (isTrainingDependencySeed) {
+    return {
+      success: false,
+      error:
+        'Obrigação de treinamento dependente deve ser expandida no Planejamento V2 e agendada por todas as sessões curriculares antes da materialização.',
+      code: 'TRAINING_PLAN_REQUIRED',
+    };
   }
 
   const snapshotParticipants = (snapshot.participants || []) as Array<{
