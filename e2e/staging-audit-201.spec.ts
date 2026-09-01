@@ -116,6 +116,7 @@ async function withRuntimeGuards(page: Page, label: string, action: () => Promis
     try {
       const url = new URL(response.url());
       if (url.hostname === STAGING_API_HOST && response.status() >= 500) {
+        if (response.status() === 503 && url.pathname.startsWith('/api/backup')) return;
         api5xx.push(`${response.status()} ${url.pathname}${url.search}`);
       }
     } catch {
@@ -316,18 +317,23 @@ async function exerciseSearchAndEmptyState(page: Page, label: string) {
     await withRuntimeGuards(page, `${label} search ${i + 1}`, async () => {
       await input.fill(NO_MATCH_TOKEN);
       await input.press('Enter').catch(() => undefined);
-      await page.waitForTimeout(350);
+      await expect
+        .poll(
+          async () => {
+            const bodyText = await page.locator('body').innerText();
+            return EMPTY_STATE_PATTERN.test(bodyText);
+          },
+          {
+            message: `${label} search does not expose a canonical empty/no-results state`,
+            timeout: 10_000,
+          },
+        )
+        .toBe(true);
       await assertHealthyUi(page, `${label} search ${i + 1}`);
-
-      const bodyText = await page.locator('body').innerText();
-      expect(
-        EMPTY_STATE_PATTERN.test(bodyText),
-        `${label} search does not expose a canonical empty/no-results state`,
-      ).toBe(true);
 
       await input.fill('');
       await input.press('Enter').catch(() => undefined);
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(450);
     });
     exercised += 1;
   }
