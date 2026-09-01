@@ -33,7 +33,7 @@ const DESKTOP_ROUTES: AuditRoute[] = [
   { label: 'Funcionários', path: '/funcionarios' },
   { label: 'Qualificações', path: '/qualificacoes' },
   { label: 'Treinamentos Planejados', path: '/treinamentos/planejados' },
-  { label: 'LMS', path: '/lms/dashboard' },
+  { label: 'LMS', path: '/lms/dashboard', allowedCanonicalPaths: ['/lms/dashboard', '/lms/cursos'] },
   { label: 'Escalas', path: '/escalas' },
   { label: 'FRMS', path: '/frms' },
   { label: 'Simuladores', path: '/simuladores' },
@@ -41,7 +41,11 @@ const DESKTOP_ROUTES: AuditRoute[] = [
   { label: 'SGSO', path: '/sgso' },
   { label: 'MRO', path: '/mro' },
   { label: 'Controle de Voos', path: '/controle-voos' },
-  { label: 'Administração', path: '/configuracoes/usuarios' },
+  {
+    label: 'Administração',
+    path: '/configuracoes/usuarios',
+    allowedCanonicalPaths: ['/configuracoes/usuarios', '/configuracoes'],
+  },
 ];
 
 const MOBILE_ROUTES: AuditRoute[] = [
@@ -53,7 +57,11 @@ const MOBILE_ROUTES: AuditRoute[] = [
   { label: 'SGSO', path: '/sgso' },
   { label: 'MRO', path: '/mro' },
   { label: 'Controle de Voos', path: '/controle-voos' },
-  { label: 'Administração', path: '/configuracoes/usuarios' },
+  {
+    label: 'Administração',
+    path: '/configuracoes/usuarios',
+    allowedCanonicalPaths: ['/configuracoes/usuarios', '/configuracoes'],
+  },
 ];
 
 async function waitForStablePage(page: Page) {
