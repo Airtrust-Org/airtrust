@@ -83,7 +83,7 @@ jobs:
     needs: guard
     runs-on: ubuntu-latest
     environment: staging
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       BASE_URL: https://staging.airtrust.pages.dev
       E2E_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
@@ -108,7 +108,7 @@ jobs:
       - name: Install Chromium for sanctioned staging browser QA
         run: npx playwright install --with-deps chromium
 
-      - name: Traverse canonical audit routes read-only
+      - name: Traverse audit surface exhaustively read-only
         run: npx playwright test e2e/staging-audit-201.spec.ts --project=chromium
 
       - name: Publish sanitized audit summary
@@ -119,11 +119,13 @@ jobs:
             echo '## Audit #201 staging browser regression'
             echo ''
             echo '- exact staging provenance guard: PASS'
-            echo '- authenticated desktop cross-module traversal: PASS'
-            echo '- light/dark semantic rendering contract: PASS'
+            echo '- authenticated canonical-route traversal in light/dark: PASS'
+            echo '- recursive accessible link/subroute discovery with no silent truncation: PASS'
+            echo '- tabs, search/empty-state, filters, pagination and date navigation: PASS'
+            echo '- read-only details/modal inspection and disabled-state inspection: PASS'
             echo '- representative 375px horizontal-overflow checks: PASS'
-            echo '- visible SQL/D1/stack/runtime leakage guard: PASS'
-            echo '- staging API 5xx guard during audited routes: PASS'
+            echo '- visible raw internal enum/ID and SQL/D1/stack/runtime leakage guard: PASS'
+            echo '- staging API 5xx guard during audited routes/interactions: PASS'
             echo '- product mutation actions executed by browser audit: none'
             echo '- credentials emitted: no'
           } >> "$GITHUB_STEP_SUMMARY"
