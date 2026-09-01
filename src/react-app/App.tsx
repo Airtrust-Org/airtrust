@@ -699,6 +699,14 @@ export default function App() {
                       }
                     />
                     <Route
+                      path="/configuracoes/usuarios"
+                      element={
+                        <ProtectedRoute>
+                          <Navigate to="/configuracoes?tab=usuarios" replace />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
                       path="/sistema"
                       element={
                         <ProtectedRoute>
