@@ -22,6 +22,8 @@ import {
 import { scheduleSimulatorTrainingBlocks } from '../services/cae-planning-session-scheduler';
 import { resolvePublishedRosterDayFromD1 } from '../services/cae-planning-roster-d1';
 import { validateAndNormalizeCaeAvailability } from '../services/cae-availability';
+import { loadPendingTrainingDependencyQualifications } from '../services/cae-planning-dependency-source';
+import { SIMULATOR_TRAINING_TIME_POLICY } from '../services/cae-planning-time-policy';
 import {
   buildRenewalSqlPredicates,
   hasHistoricoRenovacaoDeColumn,
@@ -49,6 +51,8 @@ type QualificationRow = {
   qualificacao_nome: string;
   data_vencimento: string;
   cycle_start_date: string | null;
+  planning_source?: 'QUALIFICATION_HISTORY' | 'TRAINING_DEPENDENCY';
+  source_planning_id?: number | null;
 };
 
 function isIsoDate(value: unknown): value is string {
@@ -186,7 +190,11 @@ async function loadQualifications(params: {
       ...params.scopeBindings,
     )
     .all<QualificationRow>();
-  return rows.results || [];
+  return (rows.results || []).map((row) => ({
+    ...row,
+    planning_source: 'QUALIFICATION_HISTORY',
+    source_planning_id: null,
+  }));
 }
 
 function chooseModelsForQualification(
@@ -234,6 +242,13 @@ app.get('/config', requireRole('admin', 'manager'), async (c) => {
       allow_shared_session: config.allow_shared_session,
       prefer_same_training: config.prefer_same_training,
       prefer_same_session: config.prefer_same_session,
+      time_preference: {
+        business_start: SIMULATOR_TRAINING_TIME_POLICY.business_start,
+        business_end: SIMULATOR_TRAINING_TIME_POLICY.business_end,
+        daytime_start: SIMULATOR_TRAINING_TIME_POLICY.daytime_start,
+        daytime_end: SIMULATOR_TRAINING_TIME_POLICY.daytime_end,
+        night_fallback_only: true,
+      },
       source: config.source,
       warnings: config.warnings,
     },
@@ -261,7 +276,7 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
   const scope = buildFuncionarioScopeWhere(access, 'f');
   const models = await loadModels(db, empresaId);
   const qualificationTypeIds = [...new Set(models.map((model) => Number(model.qualificacao_tipo_id)))];
-  const qualifications = await loadQualifications({
+  const qualificationHistory = await loadQualifications({
     db,
     empresaId,
     inicio,
@@ -270,6 +285,35 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
     scopeBindings: scope.bindings,
     qualificationTypeIds,
   });
+  const dependencyQualifications = await loadPendingTrainingDependencyQualifications({
+    db,
+    empresaId,
+    inicio,
+    fim,
+    scopeClause: scope.clause,
+    scopeBindings: scope.bindings,
+    qualificationTypeIds,
+  });
+  const historicalKeys = new Set(
+    qualificationHistory.map(
+      (qualification) => `${Number(qualification.funcionario_id)}:${Number(qualification.qualificacao_tipo_id)}`,
+    ),
+  );
+  const qualifications: QualificationRow[] = [
+    ...qualificationHistory,
+    ...dependencyQualifications.filter(
+      (qualification) =>
+        !historicalKeys.has(
+          `${Number(qualification.funcionario_id)}:${Number(qualification.qualificacao_tipo_id)}`,
+        ),
+    ),
+  ].sort(
+    (left, right) =>
+      String(left.data_vencimento).localeCompare(String(right.data_vencimento)) ||
+      left.funcionario_nome.localeCompare(right.funcionario_nome) ||
+      left.qualificacao_nome.localeCompare(right.qualificacao_nome),
+  );
+
   const modelsByQualification = new Map<number, ModelRow[]>();
   for (const model of models) {
     const id = Number(model.qualificacao_tipo_id);
@@ -296,6 +340,7 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
         employee_name: qualification.funcionario_nome,
         qualification_name: qualification.qualificacao_nome,
         expiry_date: expiry,
+        planning_source: qualification.planning_source || 'QUALIFICATION_HISTORY',
       });
       continue;
     }
@@ -329,6 +374,7 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
         employee_name: qualification.funcionario_nome,
         qualification_name: qualification.qualificacao_nome,
         expiry_date: expiry,
+        planning_source: qualification.planning_source || 'QUALIFICATION_HISTORY',
       });
       continue;
     }
@@ -344,6 +390,8 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
       equipment: selected.equipment,
       total_sessions: ordered.length,
       remaining_source: remaining.source,
+      planning_source: qualification.planning_source || 'QUALIFICATION_HISTORY',
+      source_planning_id: qualification.source_planning_id ?? null,
       sessions: ordered.map((model, index) => ({
         model_id: Number(model.id),
         code: model.codigo,
@@ -426,11 +474,21 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
       ...trainingClass,
       blocks: trainingClass.blocks.map((block) => scheduledById.get(block.block_id) || block),
     }));
-    const scheduledCount = schedule.scheduled.filter((block) => block.schedule_status === 'SCHEDULED').length;
+    const scheduledBlocks = schedule.scheduled.filter((block) => block.schedule_status === 'SCHEDULED');
+    const scheduledCount = scheduledBlocks.length;
     const noSlotCount = schedule.scheduled.filter((block) => block.schedule_status === 'NO_CAE_SLOT').length;
     caeComparison = {
       source_slots: validation.data.slots.length,
       scheduled_blocks: scheduledCount,
+      business_hour_blocks: scheduledBlocks.filter(
+        (block) => block.scheduled_slot?.time_quality === 'BUSINESS',
+      ).length,
+      daytime_blocks: scheduledBlocks.filter(
+        (block) => block.scheduled_slot?.time_quality === 'DAYTIME',
+      ).length,
+      night_fallback_blocks: scheduledBlocks.filter(
+        (block) => block.scheduled_slot?.time_quality === 'NIGHT',
+      ).length,
       unmatched_crew_blocks: schedule.scheduled.filter((block) => block.schedule_status === 'UNMATCHED_CREW').length,
       no_slot_blocks: noSlotCount,
       remaining_slots: schedule.remaining_slots,
@@ -450,6 +508,13 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
         preferred_sessions_per_day: config.preferred_sessions_per_day,
         preferred_minutes_per_day: config.preferred_minutes_per_day,
         allow_shared_session: config.allow_shared_session,
+        time_preference: {
+          business_start: SIMULATOR_TRAINING_TIME_POLICY.business_start,
+          business_end: SIMULATOR_TRAINING_TIME_POLICY.business_end,
+          daytime_start: SIMULATOR_TRAINING_TIME_POLICY.daytime_start,
+          daytime_end: SIMULATOR_TRAINING_TIME_POLICY.daytime_end,
+          night_fallback_only: true,
+        },
         source: config.source,
         warnings: config.warnings,
       },
