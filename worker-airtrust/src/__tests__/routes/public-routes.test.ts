@@ -67,7 +67,7 @@ describe('public routes extraction', () => {
     });
   });
 
-  it('mantém erro 502 quando provider responde não-ok', async () => {
+  it('faz fallback com status 200 quando provider responde não-ok', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -83,10 +83,40 @@ describe('public routes extraction', () => {
       body: JSON.stringify({ text: 'Olá', from: 'pt', to: 'en' }),
     });
 
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      success: false,
-      error: 'translation provider error (429)',
+      success: true,
+      data: {
+        translatedText: 'Olá',
+        source: 'pt',
+        target: 'en',
+        fallback: true,
+      },
+    });
+  });
+
+  it('faz fallback com status 200 quando fetch dispara erro', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValue(new Error('Network connection timeout')),
+    );
+
+    const app = createPublicApp();
+    const response = await app.request('/api/public/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'Funcionários', from: 'pt', to: 'en' }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      data: {
+        translatedText: 'Funcionários',
+        source: 'pt',
+        target: 'en',
+        fallback: true,
+      },
     });
   });
 

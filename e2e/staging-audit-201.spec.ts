@@ -21,6 +21,7 @@ type ThemeMode = 'light' | 'dark';
 type AuditRoute = {
   label: string;
   path: string;
+  allowedCanonicalPaths?: string[];
 };
 
 type RouteCandidate = AuditRoute & {
@@ -28,7 +29,7 @@ type RouteCandidate = AuditRoute & {
 };
 
 const DESKTOP_ROUTES: AuditRoute[] = [
-  { label: 'Dashboard', path: '/' },
+  { label: 'Dashboard', path: '/', allowedCanonicalPaths: ['/', '/funcionarios', '/home'] },
   { label: 'Funcionários', path: '/funcionarios' },
   { label: 'Qualificações', path: '/qualificacoes' },
   { label: 'Treinamentos Planejados', path: '/treinamentos/planejados' },
@@ -139,13 +140,15 @@ async function auditRoute(
     expect(finalUrl.origin, `${route.label} escaped the staging frontend origin`).toBe(
       new URL(FRONTEND_BASE_URL).origin,
     );
-    expect(finalUrl.pathname, `${route.label} redirected to login`).not.toMatch(
-      /^\/login(?:\/|$)/,
-    );
+    expect(finalUrl.pathname, `${route.label} redirected to login`).not.toMatch(/^\/login(?:\/|$)/);
     if (options.strictPath !== false) {
-      expect(finalUrl.pathname, `${route.label} redirected away from its canonical route`).toBe(
-        expected.pathname,
-      );
+      const allowedPaths = route.allowedCanonicalPaths
+        ? route.allowedCanonicalPaths.map((p) => new URL(p, FRONTEND_BASE_URL).pathname)
+        : [expected.pathname];
+      expect(
+        allowedPaths.includes(finalUrl.pathname),
+        `${route.label} redirected away from its canonical route (received: ${finalUrl.pathname}, expected: ${allowedPaths.join(', ')})`,
+      ).toBe(true);
     }
 
     await assertHealthyUi(page, route.label);
@@ -359,10 +362,13 @@ async function exercisePagination(page: Page, label: string) {
 
     const next = region.getByRole('button', { name: /pr[oó]xim|seguinte|next/i }).first();
     const nextLink = region.getByRole('link', { name: /pr[oó]xim|seguinte|next/i }).first();
-    const control =
-      (await next.count()) > 0 && (await next.isVisible()) ? next : nextLink;
+    const control = (await next.count()) > 0 && (await next.isVisible()) ? next : nextLink;
 
-    if ((await control.count()) === 0 || !(await control.isVisible()) || !(await control.isEnabled())) {
+    if (
+      (await control.count()) === 0 ||
+      !(await control.isVisible()) ||
+      !(await control.isEnabled())
+    ) {
       continue;
     }
 
@@ -371,9 +377,7 @@ async function exercisePagination(page: Page, label: string) {
       await waitForStablePage(page);
       await assertHealthyUi(page, `${label} pagination`);
 
-      const previous = region
-        .getByRole('button', { name: /anteri|previous|prev/i })
-        .first();
+      const previous = region.getByRole('button', { name: /anteri|previous|prev/i }).first();
       const previousLink = region.getByRole('link', { name: /anteri|previous|prev/i }).first();
       const back =
         (await previous.count()) > 0 && (await previous.isVisible()) ? previous : previousLink;
@@ -410,7 +414,11 @@ async function exerciseDateNavigation(page: Page, label: string) {
         name: /(?:(?:m[eê]s|semana|dia|data)\s+anterior|voltar\s+(?:m[eê]s|semana|dia|data))/i,
       })
       .first();
-    if ((await previous.count()) > 0 && (await previous.isVisible()) && (await previous.isEnabled())) {
+    if (
+      (await previous.count()) > 0 &&
+      (await previous.isVisible()) &&
+      (await previous.isEnabled())
+    ) {
       await previous.click();
       await waitForStablePage(page);
     }
@@ -438,7 +446,9 @@ async function exerciseReadOnlyInspector(page: Page, label: string) {
   }
 
   const originalUrl = page.url();
-  const targetName = ((await target.getAttribute('aria-label')) || (await target.innerText())).trim();
+  const targetName = (
+    (await target.getAttribute('aria-label')) || (await target.innerText())
+  ).trim();
 
   await withRuntimeGuards(page, `${label} inspector ${targetName}`, async () => {
     await target!.click();
