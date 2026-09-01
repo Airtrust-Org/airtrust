@@ -15,7 +15,7 @@ describe('staging governance for training dependency migration 0481', () => {
     expect(runner).toContain('"0481_training_dependency_planning.sql"');
     expect(runner).toContain('apply-0481-training-dependency-planning.sh');
     expect(runner).toContain('RELEASE_PREFLIGHT_SCOPE=');
-    expect(runner).toContain(',0481"');
+    expect(runner).toContain(',0481,0482"');
   });
 
   it('keeps the 0481 staging apply pinned to staging and to the reviewed Schema V2 SQL', () => {
