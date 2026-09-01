@@ -1,17 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
-import type { Env } from '../../types';
+import type { AppEnv, Env } from '../../types';
+import { createFrmsFadigaCheckinRouter } from '../../routes/frms-fadiga-checkin';
 
-vi.mock('../../middleware/auth', () => ({
-  auth: () => async (c: any, next: () => Promise<void>) => {
-    c.set('userRole', c.req.header('x-role') || 'ADMINISTRADOR');
-    await next();
-  },
-}));
-
-vi.mock('../../routes/frms-fadiga-checkin-legacy', async () => {
-  const { Hono } = await import('hono');
-  const legacy = new Hono();
+function createLegacyRouter() {
+  const legacy = new Hono<AppEnv>();
 
   legacy.get('/daily-fatigue', (c) => {
     const date = c.req.query('date');
@@ -62,14 +55,20 @@ vi.mock('../../routes/frms-fadiga-checkin-legacy', async () => {
     c.json({ success: true, data: { delegated: true } }),
   );
 
-  return { default: legacy };
-});
-
-import fatigueRoutes from '../../routes/frms-fadiga-checkin';
+  return legacy;
+}
 
 function createApp() {
   const app = new Hono<{ Bindings: Env }>();
-  app.route('/api/frms', fatigueRoutes);
+  const routes = createFrmsFadigaCheckinRouter({
+    legacyRouter: createLegacyRouter() as any,
+    authMiddleware: async (c, next) => {
+      c.set('userRole', c.req.header('x-role') || 'ADMINISTRADOR');
+      await next();
+    },
+    canSeeTeamScope: (role) => String(role || '').toUpperCase() === 'ADMINISTRADOR',
+  });
+  app.route('/api/frms', routes);
   return app;
 }
 
