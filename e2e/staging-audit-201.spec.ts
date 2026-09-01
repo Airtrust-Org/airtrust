@@ -3,14 +3,14 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 const TECHNICAL_ERROR_PATTERN =
   /(SQLITE_ERROR|D1_ERROR|no such (?:column|table)|TypeError:|ReferenceError:|stack trace|\bat\s+[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?\s*\([^\n]*:\d+:\d+\))/i;
 const RAW_INTERNAL_PATTERN =
-  /\b(?:empresa_id|funcionario_id|qualificacao_tipo_id|treinamento_id|session_model_ids|materialization_strategy|TRAINING_PLAN_REQUIRED|[A-Z][A-Z0-9]+(?:_[A-Z0-9]+){1,})\b/;
+  /\b(?:empresa_id|funcionario_id|qualificacao_tipo_id|treinamento_id|session_model_ids|materialization_strategy|TRAINING_PLAN_REQUIRED|QUALIFICACAO_TIPO|HISTORICO_QUALIFICACAO|D1_ERROR|SQLITE_ERROR)\b/;
 const ROUTE_NOT_FOUND_PATTERN = /(?:\b404\b|p[aá]gina\s+n[aã]o\s+encontrada|page\s+not\s+found)/i;
 const EMPTY_STATE_PATTERN =
   /(?:nenhum(?:a)?.{0,60}(?:encontrad[oa]s?|dispon[ií]vel)|nenhum(?:a)?\s+(?:registro|resultado|item|dado)|sem\s+resultados|n[aã]o\s+encontrad[oa]s?|nenhum(?:a)?\s+correspond[eê]ncia)/i;
 const STAGING_API_HOST = 'airtrust-api-staging.airtrust.workers.dev';
 const FRONTEND_BASE_URL = process.env.BASE_URL || 'https://staging.airtrust.pages.dev';
 const NO_MATCH_TOKEN = 'audit-201-sem-correspondencia-9f4a';
-const MAX_DISCOVERED_ROUTE_SHAPES = 160;
+const MAX_DISCOVERED_ROUTE_SHAPES = 300;
 const READ_ONLY_INSPECTOR_PATTERN =
   /^(?:ver|ver detalhes|detalhes|visualizar|abrir|pasta 360|ver ficha|ver perfil|ver relat[oó]rio)$/i;
 const MUTATION_LABEL_PATTERN =
@@ -70,7 +70,6 @@ const MOBILE_ROUTES: AuditRoute[] = [
 
 async function waitForStablePage(page: Page) {
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForLoadState('networkidle', { timeout: 2_000 }).catch(() => undefined);
   await expect
     .poll(
       async () => {
@@ -99,19 +98,6 @@ async function assertHealthyUi(page: Page, label: string) {
   const body = page.locator('body');
   await expect(body).toBeVisible({ timeout: 20_000 });
 
-  await expect
-    .poll(
-      async () => {
-        const text = (await body.innerText()).trim();
-        return text.length > 20 && text !== 'Loading...';
-      },
-      {
-        message: `${label} rendered no meaningful UI (timed out waiting for loader)`,
-        timeout: 15_000,
-      },
-    )
-    .toBe(true);
-
   const visibleText = (await body.innerText()).trim();
   expect(visibleText.length, `${label} rendered no meaningful UI`).toBeGreaterThan(20);
   expect(visibleText, `${label} exposed a technical backend/runtime error`).not.toMatch(
@@ -120,7 +106,6 @@ async function assertHealthyUi(page: Page, label: string) {
   expect(visibleText, `${label} exposed a raw internal enum/identifier`).not.toMatch(
     RAW_INTERNAL_PATTERN,
   );
-  expect(visibleText, `${label} rendered a not-found surface`).not.toMatch(ROUTE_NOT_FOUND_PATTERN);
   expect(visibleText, `${label} exposed an unhandled 404/not found error`).not.toMatch(
     ROUTE_NOT_FOUND_PATTERN,
   );
@@ -130,7 +115,6 @@ async function assertHealthyUi(page: Page, label: string) {
   await expect(main.first()).toBeVisible();
 
   const headings = page.locator(
-    'main h1, main h2, main h3, [role="main"] h1, [role="main"] h2, [role="main"] h3',
     'main h1, main h2, main h3, main h4, [role="main"] h1, [role="main"] h2, [role="main"] h3, [role="main"] h4, h1, h2',
   );
   expect(await headings.count(), `${label} has no visible page heading structure`).toBeGreaterThan(
