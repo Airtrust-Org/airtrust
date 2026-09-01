@@ -33,7 +33,7 @@ const TabAgenda = lazyWithRetry(
   'SimuladoresTabAgenda',
 );
 const TabPlanejamento = lazyWithRetry(
-  () => import('./simuladores/planejamento/PlanejamentoSimuladoresV2'),
+  () => import('./simuladores/planejamento/PlanejamentoSimuladoresV3'),
   'SimuladoresTabPlanejamento',
 );
 const PlanejamentoPolicyConfig = lazyWithRetry(
@@ -65,7 +65,7 @@ const preloadTab = (tab: 'agenda' | 'planejamento' | 'fichas' | 'gestao' | 'guia
     );
   } else if (tab === 'planejamento') {
     void importWithRetry(
-      () => import('./simuladores/planejamento/PlanejamentoSimuladoresV2'),
+      () => import('./simuladores/planejamento/PlanejamentoSimuladoresV3'),
       'PreloadTabPlanejamento',
       {
         reloadOnChunkError: false,

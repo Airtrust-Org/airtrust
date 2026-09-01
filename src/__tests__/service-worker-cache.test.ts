@@ -23,26 +23,25 @@ describe('service worker cache guard', () => {
     const versionMatch = serviceWorkerSource.match(/const CACHE_VERSION = 'airtrust-v(\d+)'/);
 
     expect(versionMatch).not.toBeNull();
-    expect(Number(versionMatch?.[1] || 0)).toBeGreaterThanOrEqual(14);
+    expect(Number(versionMatch?.[1] || 0)).toBeGreaterThanOrEqual(15);
     expect(serviceWorkerSource).toContain('await self.registration.unregister();');
     expect(serviceWorkerSource).toContain('Promise.resolve(self.skipWaiting())');
   });
 
-  it('limpa caches legados e recarrega clientes criticos, incluindo FRMS, sem cachear runtime novo', () => {
+  it('limpa caches legados e recarrega clientes criticos, incluindo FRMS e Simuladores, sem cachear runtime novo', () => {
     expect(serviceWorkerSource).toContain('async function purgeLegacyAirTrustCaches()');
     expect(serviceWorkerSource).toContain('cacheName.startsWith(CACHE_PREFIX)');
     expect(serviceWorkerSource).toContain('async function forceRefreshCriticalClients()');
     expect(serviceWorkerSource).toContain('/^\\/frms(?:\\/|$)/');
+    expect(serviceWorkerSource).toContain('/^\\/simuladores(?:\\/|$)/');
     expect(serviceWorkerSource).toContain("clientUrl.searchParams.set(LOGIN_SW_RESET_PARAM, CACHE_VERSION);");
     expect(serviceWorkerSource).toContain('await client.navigate(clientUrl.toString());');
     expect(serviceWorkerSource).not.toContain('caches.open(');
   });
 
   it('executa bootstrap de recuperacao nas rotas de entrada sem registrar novo service worker', () => {
-    expect(indexHtmlSource).toContain(
-      'const ENTRY_ROUTE_PATTERNS = [/^\\/$/, /^\\/login$/, /^\\/instalar$/, /^\\/frms(?:\\/|$)/];',
-    );
-    expect(indexHtmlSource).toContain("const RECOVERY_KEY = 'airtrust-login-cache-recovery-v4';");
+    expect(indexHtmlSource).toContain('/^\\/simuladores(?:\\/|$)/');
+    expect(indexHtmlSource).toContain("const RECOVERY_KEY = 'airtrust-login-cache-recovery-v5';");
     expect(indexHtmlSource).toContain("const SW_RESET_PARAM = 'airtrust_sw_reset';");
     expect(indexHtmlSource).toContain('navigator.serviceWorker.getRegistrations()');
     expect(indexHtmlSource).not.toContain("navigator.serviceWorker.register('/sw.js', {");
@@ -83,6 +82,8 @@ describe('service worker cache guard', () => {
     expect(headersSource).toContain('\n/mro/*\n');
     expect(headersSource).toContain('\n/frms\n');
     expect(headersSource).toContain('\n/frms/*\n');
+    expect(headersSource).toContain('\n/simuladores\n');
+    expect(headersSource).toContain('\n/simuladores/*\n');
     expect(headersSource).toContain('\n/sw.js\n');
     expect(headersSource).toContain('\n/assets/*.js\n');
     expect(headersSource).toContain('\n/assets/*.css\n');
