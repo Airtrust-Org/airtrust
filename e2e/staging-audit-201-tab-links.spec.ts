@@ -88,6 +88,20 @@ async function waitForStablePage(page: Page) {
   await page.waitForLoadState('domcontentloaded');
   await page.waitForLoadState('networkidle', { timeout: 2_000 }).catch(() => undefined);
   await page.waitForTimeout(120);
+  await expect
+    .poll(
+      async () => {
+        const bodyText = (await page.locator('body').innerText()).trim();
+        return bodyText.length > 0 && bodyText !== 'Loading...';
+      },
+      {
+        message: 'timed out waiting for page loading state to resolve',
+        timeout: 15_000,
+      },
+    )
+    .toBe(true);
+  await page.waitForLoadState('networkidle', { timeout: 3_000 }).catch(() => undefined);
+  await page.waitForTimeout(150);
 }
 
 async function assertHealthy(page: Page, label: string) {
@@ -98,6 +112,18 @@ async function assertHealthy(page: Page, label: string) {
   expect(finalUrl.pathname, `${label} redirected to login`).not.toMatch(/^\/login(?:\/|$)/);
   const body = page.locator('body');
   await expect(body).toBeVisible({ timeout: 20_000 });
+  await expect
+    .poll(
+      async () => {
+        const text = (await body.innerText()).trim();
+        return text.length > 20 && text !== 'Loading...';
+      },
+      {
+        message: `${label} rendered no meaningful UI (timed out waiting for loader)`,
+        timeout: 15_000,
+      },
+    )
+    .toBe(true);
   const text = (await body.innerText()).trim();
   expect(text.length, `${label} rendered no meaningful UI`).toBeGreaterThan(20);
   expect(text, `${label} exposed a technical error`).not.toMatch(TECHNICAL_ERROR_PATTERN);
