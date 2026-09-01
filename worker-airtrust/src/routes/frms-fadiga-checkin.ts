@@ -4,6 +4,8 @@ import { auth } from '../middleware/auth';
 import { canSeeFrmsTeamScope } from '../lib/frms/access';
 import legacyRouter from './frms-fadiga-checkin-legacy';
 
+export { resolveContextoPilotoLimites } from './frms-fadiga-checkin-legacy';
+
 const router = new Hono<AppEnv>();
 
 // Audit 201 regression guard: team alerts follow the canonical daily-fatigue status surface.
