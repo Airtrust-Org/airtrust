@@ -294,16 +294,21 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
     scopeBindings: scope.bindings,
     qualificationTypeIds,
   });
-  const historicalKeys = new Set(
-    qualificationHistory.map(
+
+  // An explicit dependency obligation is the authoritative future due-date for
+  // that employee + destination qualification. It wins over an older historical
+  // row for the same qualification. The dependency source itself suppresses the
+  // obligation when a destination completion already occurred after its source.
+  const dependencyKeys = new Set(
+    dependencyQualifications.map(
       (qualification) => `${Number(qualification.funcionario_id)}:${Number(qualification.qualificacao_tipo_id)}`,
     ),
   );
   const qualifications: QualificationRow[] = [
-    ...qualificationHistory,
-    ...dependencyQualifications.filter(
+    ...dependencyQualifications,
+    ...qualificationHistory.filter(
       (qualification) =>
-        !historicalKeys.has(
+        !dependencyKeys.has(
           `${Number(qualification.funcionario_id)}:${Number(qualification.qualificacao_tipo_id)}`,
         ),
     ),
