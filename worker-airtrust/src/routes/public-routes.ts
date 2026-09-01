@@ -98,13 +98,15 @@ export function registerPublicRoutes(app: PublicApp) {
       });
 
       if (!response.ok) {
-        return c.json(
-          {
-            success: false,
-            error: `translation provider error (${response.status})`,
+        return c.json({
+          success: true,
+          data: {
+            translatedText: rawText,
+            source: from,
+            target: to,
+            fallback: true,
           },
-          502,
-        );
+        });
       }
 
       const payload = (await response.json()) as unknown;
@@ -131,13 +133,15 @@ export function registerPublicRoutes(app: PublicApp) {
         },
       });
     } catch {
-      return c.json(
-        {
-          success: false,
-          error: 'Erro interno do servidor',
+      return c.json({
+        success: true,
+        data: {
+          translatedText: rawText,
+          source: from,
+          target: to,
+          fallback: true,
         },
-        500,
-      );
+      });
     }
   });
 }
