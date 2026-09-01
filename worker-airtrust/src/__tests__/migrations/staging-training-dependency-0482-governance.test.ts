@@ -37,6 +37,24 @@ describe('staging governance for training dependency migration 0482', () => {
     expect(runner).not.toContain('--env production');
   });
 
+  it('derives the official staging ledger preflight scope from approved_migrations', () => {
+    const preflight = readRepo('scripts/staging/migration-ledger-preflight.mjs');
+
+    expect(preflight).toContain('function getOfficialDispatchScopeTokens()');
+    expect(preflight).toContain("process.env.GITHUB_WORKFLOW !== 'Deploy Staging (Official)'");
+    expect(preflight).toContain("process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch'");
+    expect(preflight).toContain("process.env.GITHUB_REF !== 'refs/heads/main'");
+    expect(preflight).toContain('event?.inputs?.approved_migrations');
+    expect(preflight).toContain('PREFLIGHT_SCOPE_FROM_APPROVED_MIGRATIONS=');
+    expect(preflight).toContain('const dispatchRequested = getOfficialDispatchScopeTokens()');
+    expect(preflight).toContain('const requested = dispatchRequested ?? scopeArg');
+    expect(preflight).toContain('approved_migrations contém nome inválido');
+    expect(preflight).toContain('Migration fora da scope local/versionada');
+    expect(preflight).toContain("ALLOWED_STAGING_DB_NAME = 'airtrust-db-staging-baseline-20260701'");
+    expect(preflight).toContain('BLOCKED_DB_NAMES');
+    expect(preflight).toContain('BLOCKED_DB_IDS');
+  });
+
   it('keeps 0482 postconditions read-only, staging-only and curriculum-complete', () => {
     const validator = readRepo('scripts/staging/validate-0482-postconditions.sh');
 
