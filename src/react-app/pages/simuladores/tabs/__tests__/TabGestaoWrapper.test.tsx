@@ -17,6 +17,7 @@ vi.mock('../../cadastros/manobras/index', () => ({ default: () => <div>ManobrasP
 vi.mock('../../cadastros/categorias/index', () => ({ default: () => <div>CategoriasPage</div> }));
 vi.mock('../../cadastros/tipos-sessao/index', () => ({ default: () => <div>TiposSessaoPage</div> }));
 vi.mock('../../cadastros/modelos-sessao/index', () => ({ default: () => <div>ModelosSessaoPage</div> }));
+vi.mock('../../cadastros/curriculos-voo/index', () => ({ default: () => <div>CurriculosVooPage</div> }));
 
 describe('TabGestaoWrapper', () => {
   beforeEach(() => {
@@ -37,6 +38,7 @@ describe('TabGestaoWrapper', () => {
       new Response(JSON.stringify({ success: false, error: 'boom' }), { status: 500 }),
       new Response(JSON.stringify({ success: true, data: [{ id: 1 }] }), { status: 200 }),
       new Response(JSON.stringify({ success: true, data: [{ id: 1 }, { id: 2 }] }), { status: 200 }),
+      new Response(JSON.stringify({ success: true, data: [{ id: 1 }] }), { status: 200 }),
       new Response(JSON.stringify({ success: true, data: [{ id: 1 }] }), { status: 200 }),
       new Response(JSON.stringify({ success: true, data: [{ id: 1 }] }), { status: 200 }),
     ];
@@ -61,6 +63,7 @@ describe('TabGestaoWrapper', () => {
       if (url.includes('/manobras?')) return Promise.resolve(payload(3));
       if (url.includes('/categorias?')) return Promise.resolve(payload(4));
       if (url.includes('/tipos-sessao?')) return Promise.resolve(payload(5));
+      if (url.includes('/curriculos-voo?')) return Promise.resolve(payload(7));
       return Promise.resolve(payload(6));
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -71,7 +74,7 @@ describe('TabGestaoWrapper', () => {
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
     await waitFor(() => {
-      expect(screen.getByText('6')).toBeInTheDocument();
+      expect(screen.getByText('7')).toBeInTheDocument();
     });
   });
 });
