@@ -55,6 +55,8 @@ describe('admin usuarios P0 security boundaries', () => {
     );
     expect(reset).toContain('const target = await findTargetInTenant(db, targetUserId, empresaId)');
     expect(reset).toContain('INSERT OR IGNORE INTO token_blocklist');
+    expect(reset).toContain('INSERT OR IGNORE INTO token_blocklist (jti, expires_at)');
+    expect(reset).not.toContain('INSERT OR IGNORE INTO token_blocklist (jti, revoked_at, expires_at)');
     expect(reset).toContain('UPDATE refresh_tokens');
     expect(reset).toContain("'ADMIN_RESET_SENHA'");
     expect(reset).toContain('await db.batch([');

@@ -318,8 +318,8 @@ protectedAdminUsuariosRoutes.delete('/:id', async (c) => {
       .bind(targetUserId, targetEmpresaId),
     db
       .prepare(
-        `INSERT OR IGNORE INTO token_blocklist (jti, revoked_at, expires_at)
-         SELECT access_token_jti, datetime('now'), expires_at
+        `INSERT OR IGNORE INTO token_blocklist (jti, expires_at)
+         SELECT access_token_jti, expires_at
          FROM refresh_tokens
          WHERE user_id = ?
            AND revoked_at IS NULL
@@ -509,8 +509,8 @@ protectedAdminUsuariosRoutes.patch('/:id/reset-senha', async (c) => {
   await db.batch([
     db
       .prepare(
-        `INSERT OR IGNORE INTO token_blocklist (jti, revoked_at, expires_at)
-         SELECT access_token_jti, datetime('now'), expires_at
+        `INSERT OR IGNORE INTO token_blocklist (jti, expires_at)
+         SELECT access_token_jti, expires_at
          FROM refresh_tokens
          WHERE user_id = ? AND revoked_at IS NULL AND access_token_jti IS NOT NULL`,
       )
