@@ -19,6 +19,10 @@ import {
   pairSimulatorTrainingSessions,
   type SimulatorTrainingSessionNeed,
 } from '../services/cae-planning-session-proposal';
+import {
+  createRosterAwarePairEligibility,
+  loadPublishedRosterAllocations,
+} from '../services/cae-planning-roster-pairing';
 import { scheduleSimulatorTrainingBlocks } from '../services/cae-planning-session-scheduler';
 import { resolvePublishedRosterDayFromD1 } from '../services/cae-planning-roster-d1';
 import { validateAndNormalizeCaeAvailability } from '../services/cae-availability';
@@ -428,10 +432,28 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
     });
   }
 
+  const employeeIds = [...new Set(sessionNeeds.map((need) => need.employee_id))];
+  const latestExpiry = sessionNeeds.map((need) => need.expiry_date).sort().at(-1) || referencia;
+  const rosterAllocations = await loadPublishedRosterAllocations({
+    db,
+    empresaId,
+    employeeIds,
+    startDate: referencia,
+    endDate: latestExpiry,
+  });
+  const rosterPairing = createRosterAwarePairEligibility({
+    needs: sessionNeeds,
+    referenceDate: referencia,
+    horizonDays: config.planning_horizon_days,
+    rosterPolicy: config.roster_policy,
+    allocations: rosterAllocations,
+  });
+
   const blocks = pairSimulatorTrainingSessions(
     sessionNeeds,
     config.planning_horizon_days,
     config.allow_shared_session,
+    rosterPairing.pairEligibility,
   );
   const baseClasses = buildSimulatorTrainingClasses(blocks);
   const unmatched = blocks.filter((block) => block.pairing === 'SEM_DUPLA').length;
@@ -529,6 +551,11 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
         paired_blocks: blocks.length - unmatched,
         unmatched_blocks: unmatched,
         classes: baseClasses.length,
+        roster_pairing: {
+          allocation_rows: rosterAllocations.length,
+          employees_with_eligible_dates: rosterPairing.employeesWithEligibleDates,
+          eligible_date_count: rosterPairing.eligibleDateCount,
+        },
       },
       trainings,
       classes,
