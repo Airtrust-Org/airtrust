@@ -76,6 +76,33 @@ const baseProps = {
   onCloseModalNovoFuncionario: vi.fn(),
 };
 
+function mockFuncionarioFetch() {
+  mockFetch.mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      success: true,
+      data: [
+        {
+          id: 29,
+          nome: "Silvio Cesar de Sant Anna",
+          guerra: "Santanna",
+          funcao: "Comandante",
+          setor: "Tripulação",
+          aeronave: "SK76",
+          status: "ATIVO",
+          ativo: 1,
+        },
+      ],
+      meta: {
+        total: 1,
+        page: 1,
+        limit: 50,
+        totalPages: 1,
+      },
+    }),
+  });
+}
+
 describe("ListaFuncionarios action buttons", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -85,30 +112,7 @@ describe("ListaFuncionarios action buttons", () => {
   });
 
   it("renders direct Editar button alongside Pasta 360 and More Actions", async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        data: [
-          {
-            id: 29,
-            nome: "Silvio Cesar de Sant Anna",
-            guerra: "Santanna",
-            funcao: "Comandante",
-            setor: "Tripulação",
-            aeronave: "SK76",
-            status: "ATIVO",
-            ativo: 1,
-          },
-        ],
-        meta: {
-          total: 1,
-          page: 1,
-          limit: 50,
-          totalPages: 1,
-        },
-      }),
-    });
+    mockFuncionarioFetch();
 
     render(<ListaFuncionarios {...baseProps} termoBusca="" />);
 
@@ -116,14 +120,12 @@ describe("ListaFuncionarios action buttons", () => {
       expect(screen.getByText("Silvio Cesar de Sant Anna")).toBeInTheDocument();
     });
 
-    const pasta360Button = screen.getByTitle("Abrir perfil");
-    expect(pasta360Button).toBeInTheDocument();
+    expect(screen.getByTitle("Abrir perfil")).toBeInTheDocument();
 
     const directEditButtons = screen.getAllByTitle("Editar");
     expect(directEditButtons.length).toBeGreaterThanOrEqual(1);
 
-    const moreActionsButton = screen.getByTitle("Mais ações");
-    expect(moreActionsButton).toBeInTheDocument();
+    expect(screen.getByTitle("Mais ações")).toBeInTheDocument();
 
     fireEvent.click(directEditButtons[0]);
 
@@ -131,5 +133,26 @@ describe("ListaFuncionarios action buttons", () => {
       expect(screen.getByTestId("modal-funcionario")).toBeInTheDocument();
       expect(screen.getByText(/Modal Aberto para Silvio Cesar de Sant Anna/)).toBeInTheDocument();
     });
+  });
+
+  it("renders the overflow menu in a document-body portal so table scrolling cannot clip it", async () => {
+    mockFuncionarioFetch();
+
+    render(<ListaFuncionarios {...baseProps} termoBusca="" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Silvio Cesar de Sant Anna")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTitle("Mais ações"));
+
+    const menu = await screen.findByRole("menu", {
+      name: "Ações para Silvio Cesar de Sant Anna",
+    });
+
+    expect(menu.parentElement).toBe(document.body);
+    expect(screen.getByRole("menuitem", { name: "Editar" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Excluir" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Fechar menu de ações")).toBeInTheDocument();
   });
 });
