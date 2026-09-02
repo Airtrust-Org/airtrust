@@ -287,6 +287,7 @@ function adminItem(label: string): LmsPendingItem {
 
 function moduleAssessmentFailed(result: LmsDiagnosticModuleResult): boolean {
   if (!result.assessment.required) return false;
+  if (!result.assessment.completed) return false; // incomplete is not a failure of score
   if (result.assessment.passed === false) return true;
   const { scoreRaw, masteryScore } = result.assessment;
   return scoreRaw !== null && masteryScore !== null && scoreRaw < masteryScore;
@@ -295,7 +296,7 @@ function moduleAssessmentFailed(result: LmsDiagnosticModuleResult): boolean {
 function formatModuleFailure(result: LmsDiagnosticModuleResult): string {
   const moduleLabel = formatPendingModuleDisplay(result.module);
   const { scoreRaw, masteryScore } = result.assessment;
-  if (scoreRaw !== null && masteryScore !== null) {
+  if (scoreRaw != null && masteryScore != null) {
     return `${moduleLabel} — Nota obtida ${formatScore(scoreRaw)} — mínimo exigido ${formatScore(masteryScore)}.`;
   }
   return `${moduleLabel} — avaliação abaixo da nota mínima.`;
@@ -313,8 +314,8 @@ export function resolveCompletionExplanation(params: {
   canonical?: CanonicalCompletionDiagnosticLike | null;
   granular?: LmsGranularDiagnostic | null;
 }): LmsCompletionExplanation {
-  const canonical = params.canonical ?? null;
-  const granular = params.granular ?? null;
+  const canonical = params?.canonical ?? null;
+  const granular = params?.granular ?? null;
   const diagnosticsAvailable = granular !== null;
 
   const canComplete = canonical?.can_finalize === true;
@@ -366,40 +367,58 @@ export function resolveCompletionExplanation(params: {
   // "decisão canônica atual que não indique reprovação"
   const canonicalNonFailure = canonical?.explicit_failure === false || canonicalIndicatesPass;
 
-  // --- Prioridade 2A: avaliações reprovadas com módulo identificado ---------
+  // --- Prioridade 2A: módulos identificados (reprovados ou incompletos) -----
   // moduleResults stale não pode contradizer uma decisão canônica atual de não-reprovação.
   const failedModules = canonicalNonFailure
     ? []
     : (granular?.moduleResults ?? []).filter(moduleAssessmentFailed);
-  if (failedModules.length > 0) {
+    
+  const incompleteModules = canonicalNonFailure
+    ? []
+    : (granular?.moduleResults ?? []).filter((r) => r.assessment.required && !r.assessment.completed);
+
+  const pendingModules = [...failedModules, ...incompleteModules];
+
+  if (pendingModules.length > 0) {
     return {
       canComplete: false,
-      category: 'SCORE',
+      category: failedModules.length > 0 ? 'SCORE' : 'CONTENT',
       summary:
-        failedModules.length === 1
+        pendingModules.length === 1 && failedModules.length === 1
           ? 'Há 1 módulo com avaliação abaixo do mínimo exigido.'
-          : `Há ${failedModules.length} módulos com avaliação abaixo do mínimo exigido.`,
-      items: failedModules.map((result) => ({
-        category: 'SCORE' as const,
-        label: formatModuleFailure(result),
-        ref: result.module,
-        adminActionable: false,
-      })),
+          : pendingModules.length === failedModules.length
+          ? `Há ${failedModules.length} módulos com avaliação abaixo do mínimo exigido.`
+          : pendingModules.length === 1
+          ? 'Há 1 módulo com pendência na avaliação.'
+          : `Há ${pendingModules.length} módulos com pendências nas avaliações.`,
+      items: pendingModules.map((result) => {
+        const isFailed = moduleAssessmentFailed(result);
+        const moduleLabel = formatPendingModuleDisplay(result.module);
+        const label = isFailed
+          ? formatModuleFailure(result)
+          : `${moduleLabel} — avaliação não concluída.`;
+        return {
+          category: isFailed ? 'SCORE' : ('CONTENT' as const),
+          label,
+          ref: result.module,
+          adminActionable: false,
+        };
+      }),
       adminItems,
       diagnosticsAvailable,
     };
   }
 
   // --- Prioridade 2B: reprovação / nota global abaixo da mínima -------------
-  const granularScore = granular?.assessment.scoreRaw ?? null;
-  const granularMastery = granular?.assessment.masteryScore ?? null;
+  const granularScore = granular?.assessment?.scoreRaw ?? null;
+  const granularMastery = granular?.assessment?.masteryScore ?? null;
   // Canônico ganha sempre que presente; granular é só fallback quando ausente.
   const obtained = scorePct ?? granularScore;
   const minimum = masteryCanonical ?? granularMastery;
 
   // O flag de reprovação granular (passed === false) só é considerado quando o
   // canônico não apresenta evidência atual de aprovação/não-reprovação.
-  const trustGranularFailFlag = !canonicalNonFailure && granular?.assessment.passed === false;
+  const trustGranularFailFlag = !canonicalNonFailure && granular?.assessment?.passed === false;
   const failedByFlag = canonical?.explicit_failure === true || trustGranularFailFlag;
   const failedByScore =
     !canonicalIndicatesPass && obtained !== null && minimum !== null && obtained < minimum;
@@ -420,8 +439,8 @@ export function resolveCompletionExplanation(params: {
   }
 
   // --- Prioridade 3: questões pendentes ------------------------------------
-  const unanswered = granular?.assessment.unanswered ?? [];
-  const incompleteQuestions = granular?.assessment.incomplete ?? [];
+  const unanswered = granular?.assessment?.unanswered ?? [];
+  const incompleteQuestions = granular?.assessment?.incomplete ?? [];
   const questionRefs = [...unanswered, ...incompleteQuestions];
   if (questionRefs.length > 0) {
     return {
@@ -443,7 +462,7 @@ export function resolveCompletionExplanation(params: {
   }
 
   // --- Prioridade 4: slides pendentes --------------------------------------
-  const missingSlides = granular?.slides.missing ?? [];
+  const missingSlides = granular?.slides?.missing ?? [];
   if (missingSlides.length > 0) {
     return {
       canComplete: false,
