@@ -35,6 +35,11 @@ export type SimulatorTrainingClass = {
   blocks: SimulatorTrainingSessionBlock[];
 };
 
+export type SimulatorTrainingPairEligibility = (
+  primary: SimulatorTrainingSessionNeed,
+  partner: SimulatorTrainingSessionNeed,
+) => boolean;
+
 function normalizeText(value: unknown): string {
   return String(value || '')
     .normalize('NFD')
@@ -140,11 +145,16 @@ function normalizeTrainingSessionCounts(
  * Forma blocos de sessão, não duplas fixas de treinamento. Assim um piloto
  * pode cumprir S1 com uma pessoa e S2 com outra; Periódico e Semestral podem
  * compartilhar quando as sessões forem compatíveis.
+ *
+ * pairEligibility é uma restrição operacional adicional (por exemplo, escala
+ * publicada/quinzena). Ela nunca amplia compatibilidade curricular: somente
+ * pode eliminar uma dupla que já seria estruturalmente válida.
  */
 export function pairSimulatorTrainingSessions(
   needs: SimulatorTrainingSessionNeed[],
   maxAnticipationDays: number,
   allowCrossTraining = true,
+  pairEligibility?: SimulatorTrainingPairEligibility,
 ): SimulatorTrainingSessionBlock[] {
   const remaining = normalizeTrainingSessionCounts(needs).sort(
     (a, b) =>
@@ -164,7 +174,8 @@ export function pairSimulatorTrainingSessions(
         return (
           (!crossTraining || allowCrossTraining) &&
           canShareSimulatorTrainingSessions(primary, partner) &&
-          daysDistance(primary.expiry_date, partner.expiry_date) <= Math.max(0, maxAnticipationDays)
+          daysDistance(primary.expiry_date, partner.expiry_date) <= Math.max(0, maxAnticipationDays) &&
+          (!pairEligibility || pairEligibility(primary, partner))
         );
       })
       .sort((a, b) => compareTuple(partnerScore(primary, a.partner), partnerScore(primary, b.partner)));
@@ -195,33 +206,102 @@ export function pairSimulatorTrainingSessions(
   return blocks;
 }
 
+function blocksShareCrew(
+  left: SimulatorTrainingSessionBlock,
+  right: SimulatorTrainingSessionBlock,
+): boolean {
+  const leftEmployees = new Set(left.sessions.map((session) => session.employee_id));
+  return right.sessions.some((session) => leftEmployees.has(session.employee_id));
+}
+
+/**
+ * Uma turma operacional é um componente conexo por tripulante. Isso mantém
+ * juntas as S1..SN de uma mesma cadeia de pessoas mesmo quando a dupla muda
+ * entre sessões, mas separa grupos independentes no mesmo equipamento/mês.
+ */
+function splitOperationalCohorts(
+  blocks: SimulatorTrainingSessionBlock[],
+): SimulatorTrainingSessionBlock[][] {
+  const ordered = [...blocks].sort(
+    (a, b) =>
+      a.target_date.localeCompare(b.target_date) ||
+      a.block_id.localeCompare(b.block_id),
+  );
+  const visited = new Set<number>();
+  const cohorts: SimulatorTrainingSessionBlock[][] = [];
+
+  for (let start = 0; start < ordered.length; start += 1) {
+    if (visited.has(start)) continue;
+    const queue = [start];
+    const cohort: SimulatorTrainingSessionBlock[] = [];
+    visited.add(start);
+
+    while (queue.length > 0) {
+      const index = queue.shift() as number;
+      const current = ordered[index];
+      cohort.push(current);
+      for (let candidate = 0; candidate < ordered.length; candidate += 1) {
+        if (visited.has(candidate)) continue;
+        if (blocksShareCrew(current, ordered[candidate])) {
+          visited.add(candidate);
+          queue.push(candidate);
+        }
+      }
+    }
+
+    cohorts.push(
+      cohort.sort(
+        (a, b) =>
+          a.target_date.localeCompare(b.target_date) ||
+          a.block_id.localeCompare(b.block_id),
+      ),
+    );
+  }
+
+  return cohorts.sort(
+    (a, b) =>
+      a[0].target_date.localeCompare(b[0].target_date) ||
+      a[0].block_id.localeCompare(b[0].block_id),
+  );
+}
+
 export function buildSimulatorTrainingClasses(
   blocks: SimulatorTrainingSessionBlock[],
 ): SimulatorTrainingClass[] {
-  const grouped = new Map<string, SimulatorTrainingSessionBlock[]>();
+  const monthly = new Map<string, SimulatorTrainingSessionBlock[]>();
   for (const block of blocks) {
     const month = block.target_date.slice(0, 7);
     const key = `${block.equipment}|${month}`;
-    const bucket = grouped.get(key) || [];
+    const bucket = monthly.get(key) || [];
     bucket.push(block);
-    grouped.set(key, bucket);
+    monthly.set(key, bucket);
   }
 
-  const seeds = [...grouped.entries()].map(([key, groupedBlocks]) => ({
-    id: key,
-    equipment: groupedBlocks[0].equipment,
-    reference_date: groupedBlocks.map((block) => block.target_date).sort()[0],
-  }));
-  const named = nameSimulatorPlanningClasses(seeds);
+  const cohorts = [...monthly.entries()].flatMap(([monthlyKey, monthlyBlocks]) =>
+    splitOperationalCohorts(monthlyBlocks).map((cohortBlocks, index) => ({
+      id: `${monthlyKey}|${String(index + 1).padStart(2, '0')}`,
+      equipment: cohortBlocks[0].equipment,
+      reference_date: cohortBlocks.map((block) => block.target_date).sort()[0],
+      blocks: cohortBlocks,
+    })),
+  );
+
+  const named = nameSimulatorPlanningClasses(
+    cohorts.map((cohort) => ({
+      id: cohort.id,
+      equipment: cohort.equipment,
+      reference_date: cohort.reference_date,
+    })),
+  );
   const nameById = new Map(named.map((item) => [String(item.id), item.class_name]));
 
-  return [...grouped.entries()]
-    .map(([key, groupedBlocks]) => ({
-      class_id: key,
-      class_name: nameById.get(key) || key,
-      equipment: groupedBlocks[0].equipment,
-      reference_date: groupedBlocks.map((block) => block.target_date).sort()[0],
-      blocks: [...groupedBlocks].sort(
+  return cohorts
+    .map((cohort) => ({
+      class_id: cohort.id,
+      class_name: nameById.get(cohort.id) || cohort.id,
+      equipment: cohort.equipment,
+      reference_date: cohort.reference_date,
+      blocks: [...cohort.blocks].sort(
         (a, b) =>
           a.target_date.localeCompare(b.target_date) ||
           Math.min(...a.sessions.map((session) => session.session_order)) -

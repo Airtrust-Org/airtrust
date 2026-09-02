@@ -19,6 +19,7 @@ import {
   type SimulatorTrainingSessionBlock,
   type SimulatorTrainingSessionNeed,
 } from '../services/cae-planning-session-proposal';
+import { createRosterAwarePairEligibility } from '../services/cae-planning-roster-pairing';
 import { scheduleSimulatorTrainingBlocks } from '../services/cae-planning-session-scheduler';
 import { resolvePublishedRosterDayFromD1 } from '../services/cae-planning-roster-d1';
 import {
@@ -468,10 +469,27 @@ app.post('/reparear', requireRole('admin', 'manager'), async (c) => {
   }
 
   const remaining = needs.filter((need) => !used.has(need.need_id));
+  const remainingEmployeeIds = [...new Set(remaining.map((need) => need.employee_id))];
+  const remainingLatestTarget = remaining.map((need) => need.expiry_date).sort().at(-1) || referenceDate;
+  const remainingAllocations = await loadPublishedAllocations({
+    db: c.env.DB,
+    empresaId,
+    employeeIds: remainingEmployeeIds,
+    startDate: referenceDate,
+    endDate: remainingLatestTarget,
+  });
+  const automaticRoster = createRosterAwarePairEligibility({
+    needs: remaining,
+    referenceDate,
+    horizonDays: config.planning_horizon_days,
+    rosterPolicy: config.roster_policy,
+    allocations: remainingAllocations,
+  });
   const automaticBlocks = pairSimulatorTrainingSessions(
     remaining,
     config.planning_horizon_days,
     config.allow_shared_session,
+    automaticRoster.pairEligibility,
   );
   const blocks = [...lockedBlocks, ...automaticBlocks];
   const baseClasses = buildSimulatorTrainingClasses(blocks);

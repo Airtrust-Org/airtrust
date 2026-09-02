@@ -91,6 +91,23 @@ describe('session-level simulator proposal', () => {
     expect(blocks.every((block) => block.pairing === 'SEM_DUPLA')).toBe(true);
   });
 
+  it('applies an operational predicate without weakening curricular compatibility', () => {
+    const primary = need('a', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-06-17', 'Comandante');
+    const unavailable = need('b', 20, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-06-17', 'Copiloto');
+    const available = need('c', 30, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-06-17', 'Copiloto');
+
+    const blocks = pairSimulatorTrainingSessions(
+      [primary, unavailable, available],
+      60,
+      true,
+      (_left, right) => right.employee_id !== 20,
+    );
+
+    const paired = blocks.find((block) => block.sessions.some((session) => session.employee_id === 10));
+    expect(paired?.sessions.map((session) => session.employee_id).sort()).toEqual([10, 30]);
+    expect(blocks.some((block) => block.pairing === 'SEM_DUPLA' && block.sessions[0].employee_id === 20)).toBe(true);
+  });
+
   it('creates a stable class name by equipment and target month', () => {
     const blocks = pairSimulatorTrainingSessions(
       [
@@ -101,5 +118,43 @@ describe('session-level simulator proposal', () => {
     );
     const classes = buildSimulatorTrainingClasses(blocks);
     expect(classes[0].class_name).toBe('AW139-2027.06');
+  });
+
+  it('emits A/B suffixes for independent operational cohorts in the same equipment/month', () => {
+    const blocks = pairSimulatorTrainingSessions(
+      [
+        need('a1', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-06-17', 'Comandante'),
+        need('a2', 20, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-06-17', 'Copiloto'),
+        need('b1', 30, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-06-24', 'Comandante'),
+        need('b2', 40, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-06-24', 'Copiloto'),
+      ],
+      10,
+    );
+
+    const classes = buildSimulatorTrainingClasses(blocks);
+    expect(classes.map((item) => item.class_name)).toEqual(['AW139-2027.06A', 'AW139-2027.06B']);
+    expect(classes.map((item) => item.blocks.length)).toEqual([1, 1]);
+  });
+
+  it('keeps a cohort connected when the partner changes between sessions', () => {
+    const s1 = pairSimulatorTrainingSessions(
+      [
+        need('a1', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-06-17', 'Comandante'),
+        need('b1', 20, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-06-17', 'Copiloto'),
+      ],
+      60,
+    );
+    const s2 = pairSimulatorTrainingSessions(
+      [
+        need('a2', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 2, '2027-06-17', 'Comandante'),
+        need('c2', 30, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 2, '2027-06-17', 'Copiloto'),
+      ],
+      60,
+    );
+
+    const classes = buildSimulatorTrainingClasses([...s1, ...s2]);
+    expect(classes).toHaveLength(1);
+    expect(classes[0].class_name).toBe('AW139-2027.06');
+    expect(classes[0].blocks).toHaveLength(2);
   });
 });
