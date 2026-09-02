@@ -80,10 +80,10 @@ const SONO_OPCOES: {
   severidade: EscalaSeveridade;
 }[] = [
   { key: 'menos4', label: 'Menos de 4 horas', horas: 3.5, severidade: 'critica' },
-  { key: 'h4', label: '4 a menos de 5 horas', horas: 4, severidade: 'critica' },
-  { key: 'h5', label: '5 a menos de 6 horas', horas: 5, severidade: 'critica' },
-  { key: 'h6', label: '6 a menos de 7 horas', horas: 6, severidade: 'atencao' },
-  { key: 'h7', label: '7 a menos de 8 horas', horas: 7, severidade: 'intermediaria' },
+  { key: 'h4', label: 'Entre 4 e 5 horas', horas: 4, severidade: 'critica' },
+  { key: 'h5', label: 'Entre 5 e 6 horas', horas: 5, severidade: 'critica' },
+  { key: 'h6', label: 'Entre 6 e 7 horas', horas: 6, severidade: 'atencao' },
+  { key: 'h7', label: 'Entre 7 e 8 horas', horas: 7, severidade: 'intermediaria' },
   { key: 'h8', label: '8 horas ou mais', horas: 8, severidade: 'melhor' },
 ];
 
