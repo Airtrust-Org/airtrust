@@ -93,12 +93,7 @@ class ConcurrentRemovalDatabase {
         }
         throw new Error(`Unexpected first() query: ${sql}`);
       },
-      all: async <T>() => {
-        if (sql.includes("PRAGMA table_info('refresh_tokens')")) {
-          return { results: [{ name: 'access_token_jti' }] as T[] };
-        }
-        return { results: [] as T[] };
-      },
+      all: async <T>() => ({ results: [{ name: 'access_token_jti' }] as T[] }),
       run: async () => ({ success: true }),
     };
   }

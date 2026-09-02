@@ -137,6 +137,7 @@ vi.mock('../../lib/rbac/platform-access', () => ({
 vi.mock('../../utils/db-schema', () => ({
   hasUsuariosEmpresasTable: async () => true,
   getUsuariosSchema: async () => ({ activeWhere: '' }),
+  hasRefreshTokensAccessTokenJtiColumn: async () => false,
 }));
 
 // ===== HELPERS =====
