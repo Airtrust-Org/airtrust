@@ -189,7 +189,7 @@ export default function LmsAdminCursos() {
   }
 
   async function handleDelete(curso: LmsCurso) {
-    if (!confirm(`Excluir o curso "${curso.titulo}"?`)) return;
+    if (!confirm(`Excluir o curso \"${curso.titulo}\"?`)) return;
 
     try {
       await deleteCurso.mutateAsync(curso.id);
@@ -428,8 +428,8 @@ export default function LmsAdminCursos() {
                   ) : visibleCourses.length === 0 ? (
                     <LmsEmptyState
                       icon={<BookOpen className="h-8 w-8" />}
-                      title="Nenhum curso nesta visão"
-                      description="Ajuste os filtros para localizar cursos publicados, rascunhos ou itens que impactam compliance."
+                      title="Nenhum curso encontrado"
+                      description="Ajuste a busca ou os filtros para localizar cursos publicados, rascunhos ou itens que impactam compliance."
                     />
                   ) : (
                     <div className="overflow-x-auto">
