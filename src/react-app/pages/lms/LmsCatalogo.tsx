@@ -33,6 +33,12 @@ import { fetchWithAuth } from '@/react-app/config/api';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { useApi } from '@/react-app/hooks/useApi';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
+import {
+  OPERATIONAL_DOMAINS,
+  useOperationalAccess,
+  type OperationalAction,
+  type OperationalDomain,
+} from '@/react-app/hooks/useOperationalAccess';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   type CreateCursoDTO,
@@ -108,6 +114,45 @@ export function resolveLmsCatalogRoleView(params: {
         ? 'Meus treinamentos'
         : 'Catálogo de treinamentos',
   };
+}
+
+type LmsCourseMutationAction = Extract<OperationalAction, 'update' | 'delete'>;
+
+type LmsCourseMutationAccess = {
+  canManage: boolean;
+  operationalAccessReady: boolean;
+  operationalRbacEnabled: boolean;
+  setorIds: number[];
+  actions: Partial<Record<OperationalDomain, OperationalAction[]>>;
+  cursoDomain: string | null | undefined;
+  action: LmsCourseMutationAction;
+};
+
+/**
+ * Mirrors the server-side course mutation guard for UX only. The API remains
+ * authoritative; this prevents the catalog from offering an action that will
+ * be rejected after a destructive confirmation.
+ */
+export function canMutateLmsCourse({
+  canManage,
+  operationalAccessReady,
+  operationalRbacEnabled,
+  setorIds,
+  actions,
+  cursoDomain,
+  action,
+}: LmsCourseMutationAccess): boolean {
+  if (!canManage || !operationalAccessReady) return false;
+  if (!operationalRbacEnabled) return true;
+
+  if (cursoDomain == null) {
+    // Domain-agnostic courses remain writable only for an active operational
+    // manager assignment, matching isDomainAgnosticLmsCurso on the Worker.
+    return setorIds.length > 0;
+  }
+
+  if (!OPERATIONAL_DOMAINS.includes(cursoDomain as OperationalDomain)) return false;
+  return actions[cursoDomain as OperationalDomain]?.includes(action) ?? false;
 }
 
 function normCat(v?: string | null) {
@@ -1312,6 +1357,9 @@ function CourseCard({
   curso,
   matricula,
   canManage,
+  canUpdateCourse,
+  canDeleteCourse,
+  managementRestricted,
   pendingDeleteId,
   deleteLoading,
   onAction,
@@ -1324,6 +1372,9 @@ function CourseCard({
   curso: LmsCurso;
   matricula?: LmsMatricula;
   canManage: boolean;
+  canUpdateCourse: boolean;
+  canDeleteCourse: boolean;
+  managementRestricted: boolean;
   pendingDeleteId: number | null;
   deleteLoading: boolean;
   onAction: (c: LmsCurso) => void;
@@ -1511,31 +1562,35 @@ function CourseCard({
             </div>
             {canManage ? (
               <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => onEdit(curso)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  <PencilLine className="h-3.5 w-3.5" />
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onTogglePublication(curso)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  {curso.publicado ? (
-                    <>
-                      <EyeOff className="h-3.5 w-3.5" />
-                      Rascunho
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="h-3.5 w-3.5" />
-                      Publicar
-                    </>
-                  )}
-                </button>
+                {canUpdateCourse ? (
+                  <button
+                    type="button"
+                    onClick={() => onEdit(curso)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    <PencilLine className="h-3.5 w-3.5" />
+                    Editar
+                  </button>
+                ) : null}
+                {canUpdateCourse ? (
+                  <button
+                    type="button"
+                    onClick={() => onTogglePublication(curso)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    {curso.publicado ? (
+                      <>
+                        <EyeOff className="h-3.5 w-3.5" />
+                        Rascunho
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="h-3.5 w-3.5" />
+                        Publicar
+                      </>
+                    )}
+                  </button>
+                ) : null}
                 <Link
                   to={`/lms/matriculas/${curso.id}`}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -1543,14 +1598,21 @@ function CourseCard({
                   <Users className="h-3.5 w-3.5" />
                   Matrículas
                 </Link>
-                <button
-                  type="button"
-                  onClick={() => onStartDelete(curso.id)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                {canDeleteCourse ? (
+                  <button
+                    type="button"
+                    onClick={() => onStartDelete(curso.id)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
               </div>
+            ) : null}
+            {managementRestricted ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Somente leitura: curso fora do seu escopo operacional.
+              </p>
             ) : null}
           </div>
         )}
@@ -1567,6 +1629,7 @@ export default function LmsCatalogo() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const { isAdmin, isGestor, isAluno, isInstrutor } = usePermissions();
+  const operationalAccess = useOperationalAccess();
   const funcionarioId = user?.funcionario_id ? Number(user.funcionario_id) : null;
   const canManage = isAdmin || isGestor;
   const restrictToEnrolledCourses = isAluno || isInstrutor;
@@ -2132,25 +2195,55 @@ export default function LmsCatalogo() {
                   {visibleCourses.length} curso{visibleCourses.length === 1 ? '' : 's'} nesta visão
                 </p>
                 <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                  {visibleCourses.map((curso) => (
-                    <CourseCard
-                      key={curso.id}
-                      curso={curso}
-                      matricula={matriculasByCurso.get(curso.id)}
-                      canManage={canManage && !studentMode}
-                      pendingDeleteId={pendingDeleteId}
-                      deleteLoading={deleteCurso.isPending}
-                      onAction={handleCardAction}
-                      onEdit={(c) => {
-                        setEditingCourse(c);
-                        setDrawerOpen(true);
-                      }}
-                      onTogglePublication={handleTogglePub}
-                      onStartDelete={setPendingDeleteId}
-                      onCancelDelete={() => setPendingDeleteId(null)}
-                      onDelete={handleDelete}
-                    />
-                  ))}
+                  {visibleCourses.map((curso) => {
+                    const courseManagementEnabled = canManage && !studentMode;
+                    const canUpdateCourse = canMutateLmsCourse({
+                      canManage: courseManagementEnabled,
+                      operationalAccessReady: operationalAccess.isReady,
+                      operationalRbacEnabled: operationalAccess.enabled,
+                      setorIds: operationalAccess.setor_ids,
+                      actions: operationalAccess.actions,
+                      cursoDomain: curso.dominio_codigo,
+                      action: 'update',
+                    });
+                    const canDeleteCourse = canMutateLmsCourse({
+                      canManage: courseManagementEnabled,
+                      operationalAccessReady: operationalAccess.isReady,
+                      operationalRbacEnabled: operationalAccess.enabled,
+                      setorIds: operationalAccess.setor_ids,
+                      actions: operationalAccess.actions,
+                      cursoDomain: curso.dominio_codigo,
+                      action: 'delete',
+                    });
+
+                    return (
+                      <CourseCard
+                        key={curso.id}
+                        curso={curso}
+                        matricula={matriculasByCurso.get(curso.id)}
+                        canManage={courseManagementEnabled}
+                        canUpdateCourse={canUpdateCourse}
+                        canDeleteCourse={canDeleteCourse}
+                        managementRestricted={
+                          courseManagementEnabled &&
+                          operationalAccess.isReady &&
+                          operationalAccess.enabled &&
+                          !canUpdateCourse
+                        }
+                        pendingDeleteId={pendingDeleteId}
+                        deleteLoading={deleteCurso.isPending}
+                        onAction={handleCardAction}
+                        onEdit={(c) => {
+                          setEditingCourse(c);
+                          setDrawerOpen(true);
+                        }}
+                        onTogglePublication={handleTogglePub}
+                        onStartDelete={setPendingDeleteId}
+                        onCancelDelete={() => setPendingDeleteId(null)}
+                        onDelete={handleDelete}
+                      />
+                    );
+                  })}
                 </div>
               </>
             )}

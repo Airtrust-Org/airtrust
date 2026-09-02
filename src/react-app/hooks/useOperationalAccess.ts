@@ -107,6 +107,7 @@ export function useOperationalAccess() {
     canOperate,
     hasDomain,
     isLoading: query.isLoading,
+    isReady: !query.isLoading && !query.isError,
     isAuthenticated: !!isAuthenticated,
   };
 }
