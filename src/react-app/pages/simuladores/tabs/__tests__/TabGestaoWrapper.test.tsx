@@ -6,6 +6,7 @@ import TabGestaoWrapper from '../TabGestaoWrapper';
 vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: 'https://api.airtrust.online/api',
   getAccessToken: () => 'token',
+  fetchWithAuth: (url: string, options?: RequestInit) => fetch(url, options),
 }));
 
 vi.mock('@/react-app/hooks/guias-instrutor/useGuiasInstrutorPermissions', () => ({
