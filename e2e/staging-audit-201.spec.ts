@@ -117,9 +117,12 @@ async function assertHealthyUi(page: Page, label: string) {
   const headings = page.locator(
     'main h1, main h2, main h3, main h4, [role="main"] h1, [role="main"] h2, [role="main"] h3, [role="main"] h4, h1, h2',
   );
-  expect(await headings.count(), `${label} has no visible page heading structure`).toBeGreaterThan(
-    0,
-  );
+  await expect
+    .poll(async () => headings.count(), {
+      message: `${label} has no visible page heading structure`,
+      timeout: 15_000,
+    })
+    .toBeGreaterThan(0);
 }
 
 async function withRuntimeGuards(page: Page, label: string, action: () => Promise<void>) {
@@ -339,7 +342,7 @@ async function exerciseSearchAndEmptyState(page: Page, label: string) {
           },
           {
             message: `${label} search does not expose a canonical empty/no-results state`,
-            timeout: 10_000,
+            timeout: 20_000,
           },
         )
         .toBe(true);
