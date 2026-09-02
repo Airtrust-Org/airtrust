@@ -5,6 +5,7 @@ import { getTenantContext } from '../middleware/tenant';
 import { badRequest, forbidden } from '../middleware/error-handler';
 import { createLogger } from '../utils/logger';
 import { hashPassword } from '../utils/security';
+import { hasRefreshTokensAccessTokenJtiColumn } from '../utils/db-schema';
 import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 import { adminUsuariosRoutes as legacyAdminUsuariosRoutes } from './admin-usuarios-legacy';
 
@@ -298,6 +299,7 @@ protectedAdminUsuariosRoutes.delete('/:id', async (c) => {
   const targetEmpresaId = target.empresa_id;
   assertManagerMayManageTarget(callerRole, target.perfil);
 
+  const hasJti = await hasRefreshTokensAccessTokenJtiColumn(db);
   const statements: D1PreparedStatement[] = [
     db
       .prepare(
@@ -316,19 +318,27 @@ protectedAdminUsuariosRoutes.delete('/:id', async (c) => {
     db
       .prepare(`DELETE FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?`)
       .bind(targetUserId, targetEmpresaId),
-    db
-      .prepare(
-        `INSERT OR IGNORE INTO token_blocklist (jti, revoked_at, expires_at)
-         SELECT access_token_jti, datetime('now'), expires_at
-         FROM refresh_tokens
-         WHERE user_id = ?
-           AND revoked_at IS NULL
-           AND access_token_jti IS NOT NULL
-           AND NOT EXISTS (
-             SELECT 1 FROM usuarios_empresas WHERE usuario_id = ?
-           )`,
-      )
-      .bind(targetUserId, targetUserId),
+  ];
+
+  if (hasJti) {
+    statements.push(
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO token_blocklist (jti, expires_at)
+           SELECT access_token_jti, expires_at
+           FROM refresh_tokens
+           WHERE user_id = ?
+             AND revoked_at IS NULL
+             AND access_token_jti IS NOT NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM usuarios_empresas WHERE usuario_id = ?
+             )`,
+        )
+        .bind(targetUserId, targetUserId),
+    );
+  }
+
+  statements.push(
     db
       .prepare(
         `UPDATE refresh_tokens
@@ -374,7 +384,7 @@ protectedAdminUsuariosRoutes.delete('/:id', async (c) => {
          ) THEN 1 ELSE 0 END AS identity_deactivated`,
       )
       .bind(targetUserId),
-  ];
+  );
 
   // D1 executes batch statements sequentially in one transaction. The final
   // membership decision therefore observes the DELETE above, not a stale count
@@ -506,15 +516,23 @@ protectedAdminUsuariosRoutes.patch('/:id/reset-senha', async (c) => {
   }
 
   const novoHash = await hashPassword(novaSenha);
-  await db.batch([
-    db
-      .prepare(
-        `INSERT OR IGNORE INTO token_blocklist (jti, revoked_at, expires_at)
-         SELECT access_token_jti, datetime('now'), expires_at
-         FROM refresh_tokens
-         WHERE user_id = ? AND revoked_at IS NULL AND access_token_jti IS NOT NULL`,
-      )
-      .bind(targetUserId),
+  const hasJti = await hasRefreshTokensAccessTokenJtiColumn(db);
+  const statements: D1PreparedStatement[] = [];
+
+  if (hasJti) {
+    statements.push(
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO token_blocklist (jti, expires_at)
+           SELECT access_token_jti, expires_at
+           FROM refresh_tokens
+           WHERE user_id = ? AND revoked_at IS NULL AND access_token_jti IS NOT NULL`,
+        )
+        .bind(targetUserId),
+    );
+  }
+
+  statements.push(
     db
       .prepare(
         `UPDATE refresh_tokens
@@ -544,7 +562,9 @@ protectedAdminUsuariosRoutes.patch('/:id/reset-senha', async (c) => {
         targetUserId,
         JSON.stringify({ target_user_id: targetUserId, sessions_revoked: true }),
       ),
-  ]);
+  );
+
+  await db.batch(statements);
 
   logger.info(`Admin id=${callerId} redefiniu senha do usuário id=${targetUserId}`);
   return c.json({ success: true, message: 'Senha redefinida com sucesso' });

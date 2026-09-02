@@ -57,7 +57,7 @@ describe('admin usuarios P0 security boundaries', () => {
     expect(reset).toContain('INSERT OR IGNORE INTO token_blocklist');
     expect(reset).toContain('UPDATE refresh_tokens');
     expect(reset).toContain("'ADMIN_RESET_SENHA'");
-    expect(reset).toContain('await db.batch([');
+    expect(reset).toContain('await db.batch(statements)');
     expect(reset).not.toContain('best-effort');
   });
 
