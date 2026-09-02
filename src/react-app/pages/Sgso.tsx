@@ -146,7 +146,7 @@ function SgsoOperationalEntry() {
 
   return (
     <AppLayout>
-      <div className="mx-auto w-full max-w-6xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full space-y-8 px-4 py-6 sm:px-6 lg:px-8">
         <header className="space-y-2">
           <p className="text-sm font-medium text-primary">Segurança operacional</p>
           <h1 className="text-2xl font-semibold text-foreground sm:text-3xl">SGSO</h1>
