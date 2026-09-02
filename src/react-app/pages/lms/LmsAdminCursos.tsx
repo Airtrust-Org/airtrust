@@ -189,7 +189,7 @@ export default function LmsAdminCursos() {
   }
 
   async function handleDelete(curso: LmsCurso) {
-    if (!confirm(`Excluir o curso \"${curso.titulo}\"?`)) return;
+    if (!confirm(`Excluir o curso "${curso.titulo}"?`)) return;
 
     try {
       await deleteCurso.mutateAsync(curso.id);
