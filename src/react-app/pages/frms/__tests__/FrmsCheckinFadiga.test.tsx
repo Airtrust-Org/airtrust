@@ -380,10 +380,10 @@ describe('FrmsCheckinFadiga UI', () => {
     ]);
     expect(within(sonoFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual([
       'Menos de 4 horas',
-      '4 a menos de 5 horas',
-      '5 a menos de 6 horas',
-      '6 a menos de 7 horas',
-      '7 a menos de 8 horas',
+      'Entre 4 e 5 horas',
+      'Entre 5 e 6 horas',
+      'Entre 6 e 7 horas',
+      'Entre 7 e 8 horas',
       '8 horas ou mais',
     ]);
 
@@ -510,10 +510,10 @@ describe('FrmsCheckinFadiga UI', () => {
 
     const casos = [
       ['Menos de 4 horas', 3.5],
-      ['4 a menos de 5 horas', 4],
-      ['5 a menos de 6 horas', 5],
-      ['6 a menos de 7 horas', 6],
-      ['7 a menos de 8 horas', 7],
+      ['Entre 4 e 5 horas', 4],
+      ['Entre 5 e 6 horas', 5],
+      ['Entre 6 e 7 horas', 6],
+      ['Entre 7 e 8 horas', 7],
       ['8 horas ou mais', 8],
     ] as const;
 
@@ -606,7 +606,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('mantem observacao obrigatoria para resposta nao apto', () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: '5 a menos de 6 horas' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Entre 5 e 6 horas' }));
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
     fireEvent.click(screen.getByLabelText('Qualidade 3 - Regular'));
     fireEvent.click(screen.getByLabelText('KSS 6: Alguns sinais de sonolência'));
