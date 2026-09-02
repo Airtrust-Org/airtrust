@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { appFetch } from '@/react-app/lib/app-fetch';
 import {
   Plane,
   Settings,
@@ -139,7 +140,7 @@ export default function TabGestaoWrapper() {
         fetch(`${API_BASE_URL}/simuladores/categorias?_=${Date.now()}`, noStore),
         fetch(`${API_BASE_URL}/simuladores/tipos-sessao?_=${Date.now()}`, noStore),
         fetch(`${API_BASE_URL}/simuladores/modelos-sessao?_=${Date.now()}`, noStore),
-        fetch(`${API_BASE_URL}/simuladores/curriculos-voo?_=${Date.now()}`, noStore),
+        appFetch(`/api/simuladores/curriculos-voo?_=${Date.now()}`, { cache: 'no-store' }),
       ]);
 
       const [simData, manobrasData, categoriasData, tiposData, modelosData, curriculosData] = await Promise.all([
