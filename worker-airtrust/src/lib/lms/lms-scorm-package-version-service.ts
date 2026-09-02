@@ -15,6 +15,13 @@ type PackageRow = {
   launch_file: string; status: string; validation_result_json: string | null;
 };
 
+// Large SCORM packages can contain hundreds of small visual assets. Serial R2
+// put/get calls keep the browser at the 25%/65% milestone for minutes and can
+// outlive the request even when the ZIP itself is well below the 128 MB limit.
+// The legacy uploader already uses a batch of 10 as the safe R2 concurrency
+// boundary, so keep the versioned Quality Gate path on the same limit.
+const SCORM_PACKAGE_R2_BATCH_SIZE = 10;
+
 function hex(bytes: ArrayBuffer) {
   return [...new Uint8Array(bytes)].map((item) => item.toString(16).padStart(2, '0')).join('');
 }
@@ -115,8 +122,18 @@ export async function createScormPackageCandidate(params: {
   const prefix = `lms/scorm/${params.empresaId}/${params.cursoId}/_candidates/${id}/`;
   try {
     if (!rejected) {
-      for (const item of pkg.entries) {
-        await params.bucket.put(`${prefix}${item.path}`, item.data, { httpMetadata: { contentType: mimeType(item.path), cacheControl: 'public, max-age=86400' } });
+      for (let index = 0; index < pkg.entries.length; index += SCORM_PACKAGE_R2_BATCH_SIZE) {
+        const batch = pkg.entries.slice(index, index + SCORM_PACKAGE_R2_BATCH_SIZE);
+        await Promise.all(
+          batch.map((item) =>
+            params.bucket.put(`${prefix}${item.path}`, item.data, {
+              httpMetadata: {
+                contentType: mimeType(item.path),
+                cacheControl: 'public, max-age=86400',
+              },
+            }),
+          ),
+        );
       }
     }
     await params.db.prepare(
@@ -209,9 +226,22 @@ async function candidateAssets(bucket: R2Bucket, prefix: string) {
   let cursor: string | undefined;
   do {
     const page = await bucket.list({ prefix, cursor, limit: 1000 });
-    for (const item of page.objects) {
-      const object = await bucket.get(item.key);
-      if (object) assets.push({ path: item.key.slice(prefix.length), data: new Uint8Array(await object.arrayBuffer()) });
+    for (let index = 0; index < page.objects.length; index += SCORM_PACKAGE_R2_BATCH_SIZE) {
+      const batch = await Promise.all(
+        page.objects
+          .slice(index, index + SCORM_PACKAGE_R2_BATCH_SIZE)
+          .map(async (item) => {
+            const object = await bucket.get(item.key);
+            if (!object) return null;
+            return {
+              path: item.key.slice(prefix.length),
+              data: new Uint8Array(await object.arrayBuffer()),
+            };
+          }),
+      );
+      for (const asset of batch) {
+        if (asset) assets.push(asset);
+      }
     }
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
