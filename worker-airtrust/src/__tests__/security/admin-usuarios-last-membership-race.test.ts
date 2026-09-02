@@ -93,7 +93,7 @@ class ConcurrentRemovalDatabase {
         }
         throw new Error(`Unexpected first() query: ${sql}`);
       },
-      all: async <T>() => ({ results: [] as T[] }),
+      all: async <T>() => ({ results: [{ name: 'access_token_jti' }] as T[] }),
       run: async () => ({ success: true }),
     };
   }
