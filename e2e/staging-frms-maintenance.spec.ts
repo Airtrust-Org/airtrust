@@ -12,17 +12,17 @@ async function loginThroughUi(page: import('@playwright/test').Page, email: stri
 }
 
 test.describe('staging FRMS maintenance release QA', () => {
-  test('mechanic home is reduced to fatigue, Pasta 360 and password', async ({ page }) => {
+  test('mechanic home keeps fatigue, Pasta 360, EAD and password while hiding flight-only shortcuts', async ({ page }) => {
     await page.goto('/');
 
     await expect(page.getByRole('button', { name: /Fadiga Diária/i })).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole('button', { name: /Minha Pasta 360/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /Trocar Senha/i })).toBeVisible();
+    await expect(page.getByText(/Meus Treinamentos EAD/i)).toBeVisible();
 
     await expect(page.getByText(/Contexto derivado do funcion[aá]rio/i)).toHaveCount(0);
     await expect(page.getByText(/Minhas Sessões de Simulador/i)).toHaveCount(0);
     await expect(page.getByText(/Minhas Fichas de Treinamento de Voo/i)).toHaveCount(0);
-    await expect(page.getByText(/Meus Treinamentos EAD/i)).toHaveCount(0);
     await expect(page.getByText(/Minha Escala/i)).toHaveCount(0);
 
     await page.getByRole('button', { name: /Fadiga Diária/i }).click();
