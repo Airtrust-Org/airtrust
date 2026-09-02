@@ -67,6 +67,21 @@ export async function hasRefreshTokensEmpresaIdColumn(db: D1Database): Promise<b
   return _hasRefreshTokensEmpresaId;
 }
 
+let _hasRefreshTokensAccessTokenJti: boolean | null = null;
+
+/**
+ * Retorna se refresh_tokens já possui a coluna access_token_jti (migration 0289).
+ * Resultado cacheado após primeira chamada.
+ */
+export async function hasRefreshTokensAccessTokenJtiColumn(db: D1Database): Promise<boolean> {
+  if (_hasRefreshTokensAccessTokenJti !== null) return _hasRefreshTokensAccessTokenJti;
+  const columns =
+    (await db.prepare("PRAGMA table_info('refresh_tokens')").all<{ name: string }>()).results ||
+    [];
+  _hasRefreshTokensAccessTokenJti = columns.some((col) => col.name === 'access_token_jti');
+  return _hasRefreshTokensAccessTokenJti;
+}
+
 /**
  * Reseta o cache (útil em testes).
  */
@@ -74,4 +89,6 @@ export function resetSchemaCache(): void {
   _hasUsuariosEmpresas = null;
   _usuariosSchema = null;
   _hasRefreshTokensEmpresaId = null;
+  _hasRefreshTokensAccessTokenJti = null;
 }
+
