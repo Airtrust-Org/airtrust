@@ -9,9 +9,10 @@
  *   2. sessoes           — registers /sessoes, /agendamentos, /instrutores, /participantes
  *   3. fichas            — registers /fichas, /fichas-simulador
  *   3b. fichasExtras     — registers /historico-notas, /dashboard, /sessoes/:id/checks/resultados
- *   4. modelos           — registers /tipos-sessao, /modelos-sessao, /fix
- *   5. catalogo          — registers /categorias, /manobras
- *   6. equipamentos      — LAST (registers /, /:id wildcards for simuladores CRUD)
+ *   4. curriculosVoo     — explicit training ↔ ordered session-model configuration
+ *   5. modelos           — registers /tipos-sessao, /modelos-sessao, /fix
+ *   6. catalogo          — registers /categorias, /manobras
+ *   7. equipamentos      — LAST (registers /, /:id wildcards for simuladores CRUD)
  */
 
 import { Hono } from 'hono';
@@ -23,6 +24,7 @@ import fichas from './simuladores-fichas';
 import fichasEdicoes from './simuladores-fichas-edicoes';
 import fichasExtras from './simuladores-fichas-extras';
 import modelos from './simuladores-modelos';
+import curriculosVoo from './simuladores-curriculos-voo';
 import catalogo from './simuladores-catalogo-secured';
 import relatorios from './simuladores-relatorios';
 import planejamento from './simuladores-planejamento';
@@ -43,6 +45,7 @@ app.route('/', sessoes);
 app.route('/', fichas);
 app.route('/', fichasEdicoes);
 app.route('/', fichasExtras);
+app.route('/', curriculosVoo);
 app.route('/', modelos);
 app.route('/', catalogo);
 app.route('/', guiasInstrutor);
