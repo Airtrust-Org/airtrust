@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
   FileText,
   BookOpen,
+  BookOpenCheck,
   Library,
   ArrowUpRight,
   ArrowLeft,
@@ -66,8 +67,9 @@ import ManobrasPage from '../cadastros/manobras/index';
 import CategoriasPage from '../cadastros/categorias/index';
 import TiposSessaoPage from '../cadastros/tipos-sessao/index';
 import ModelosSessaoPage from '../cadastros/modelos-sessao/index';
+import CurriculosVooPage from '../cadastros/curriculos-voo/index';
 
-type SubView = 'menu' | 'simuladores' | 'manobras' | 'categorias' | 'tipos' | 'modelos';
+type SubView = 'menu' | 'simuladores' | 'manobras' | 'categorias' | 'tipos' | 'modelos' | 'curriculos';
 
 interface GestaoStats {
   simuladores: number;
@@ -75,14 +77,16 @@ interface GestaoStats {
   categorias: number;
   tiposSessao: number;
   modelosSessao: number;
+  curriculosVoo: number;
 }
 
 const colorClasses: Record<string, { icon: string; badge: string }> = {
-  blue:   { icon: 'bg-blue-100 text-blue-700',       badge: 'bg-blue-50 text-blue-700' },
+  blue:   { icon: 'bg-blue-100 text-blue-700',        badge: 'bg-blue-50 text-blue-700' },
   green:  { icon: 'bg-emerald-100 text-emerald-700',  badge: 'bg-emerald-50 text-emerald-700' },
   purple: { icon: 'bg-violet-100 text-violet-700',    badge: 'bg-violet-50 text-violet-700' },
-  orange: { icon: 'bg-amber-100 text-amber-700',      badge: 'bg-amber-50 text-amber-700' },
-  indigo: { icon: 'bg-indigo-100 text-indigo-700',    badge: 'bg-indigo-50 text-indigo-700' },
+  orange: { icon: 'bg-amber-100 text-amber-700',       badge: 'bg-amber-50 text-amber-700' },
+  indigo: { icon: 'bg-indigo-100 text-indigo-700',     badge: 'bg-indigo-50 text-indigo-700' },
+  teal:   { icon: 'bg-teal-100 text-teal-700',         badge: 'bg-teal-50 text-teal-700' },
 };
 
 export default function TabGestaoWrapper() {
@@ -98,6 +102,7 @@ export default function TabGestaoWrapper() {
     categorias: 0,
     tiposSessao: 0,
     modelosSessao: 0,
+    curriculosVoo: 0,
   });
   // Sentinel: null = carregando, false = OK, true = erro naquela entidade
   const [entityErrors, setEntityErrors] = useState<Record<string, boolean>>({});
@@ -107,6 +112,7 @@ export default function TabGestaoWrapper() {
   const countCat = useCountUp(stats.categorias, 500, dataReady);
   const countTip = useCountUp(stats.tiposSessao, 500, dataReady);
   const countMod = useCountUp(stats.modelosSessao, 500, dataReady);
+  const countCur = useCountUp(stats.curriculosVoo, 500, dataReady);
 
   // countMap usa os IDs dos cards como chave
   const countMap: Record<string, number> = {
@@ -115,6 +121,7 @@ export default function TabGestaoWrapper() {
     categorias: countCat,
     tipos: countTip,
     modelos: countMod,
+    curriculos: countCur,
   };
 
   const fetchData = async () => {
@@ -126,20 +133,22 @@ export default function TabGestaoWrapper() {
       const _gt = getAccessToken();
       const _gh = _gt ? { Authorization: `Bearer ${_gt}` } : {};
       const noStore = { headers: _gh, cache: 'no-store' as RequestCache };
-      const [simRes, manobrasRes, categoriasRes, tiposRes, modelosRes] = await Promise.all([
+      const [simRes, manobrasRes, categoriasRes, tiposRes, modelosRes, curriculosRes] = await Promise.all([
         fetch(`${API_BASE_URL}/simuladores?_=${Date.now()}`, noStore),
         fetch(`${API_BASE_URL}/simuladores/manobras?_=${Date.now()}`, noStore),
         fetch(`${API_BASE_URL}/simuladores/categorias?_=${Date.now()}`, noStore),
         fetch(`${API_BASE_URL}/simuladores/tipos-sessao?_=${Date.now()}`, noStore),
         fetch(`${API_BASE_URL}/simuladores/modelos-sessao?_=${Date.now()}`, noStore),
+        fetch(`${API_BASE_URL}/simuladores/curriculos-voo?_=${Date.now()}`, noStore),
       ]);
 
-      const [simData, manobrasData, categoriasData, tiposData, modelosData] = await Promise.all([
+      const [simData, manobrasData, categoriasData, tiposData, modelosData, curriculosData] = await Promise.all([
         simRes.ok ? simRes.json() : Promise.resolve(null),
         manobrasRes.ok ? manobrasRes.json() : Promise.resolve(null),
         categoriasRes.ok ? categoriasRes.json() : Promise.resolve(null),
         tiposRes.ok ? tiposRes.json() : Promise.resolve(null),
         modelosRes.ok ? modelosRes.json() : Promise.resolve(null),
+        curriculosRes.ok ? curriculosRes.json() : Promise.resolve(null),
       ]);
 
       // Track which entities failed
@@ -158,6 +167,7 @@ export default function TabGestaoWrapper() {
         categorias: calc(categoriasData, 'categorias'),
         tiposSessao: calc(tiposData, 'tipos'),
         modelosSessao: calc(modelosData, 'modelos'),
+        curriculosVoo: calc(curriculosData, 'curriculos'),
       });
       setEntityErrors(failures);
       if (anyFailure) {
@@ -217,9 +227,17 @@ export default function TabGestaoWrapper() {
       color: 'indigo',
       valor: stats.modelosSessao,
     },
+    {
+      id: 'curriculos' as SubView,
+      titulo: 'Currículos de Voo',
+      descricao: 'Sessões e ordem que compõem cada treinamento',
+      icon: BookOpenCheck,
+      color: 'teal',
+      valor: stats.curriculosVoo,
+    },
   ];
 
-  const estruturaCards = gestaoCards.filter((c) => ['simuladores', 'tipos', 'modelos'].includes(c.id));
+  const estruturaCards = gestaoCards.filter((c) => ['simuladores', 'tipos', 'modelos', 'curriculos'].includes(c.id));
   const bibliotecaCards = gestaoCards.filter((c) => ['manobras', 'categorias'].includes(c.id));
 
   const renderCard = (card: typeof gestaoCards[number]) => {
@@ -271,6 +289,7 @@ export default function TabGestaoWrapper() {
         {subView === 'categorias' && <CategoriasPage embedded onBack={handleBack} />}
         {subView === 'tipos' && <TiposSessaoPage embedded onBack={handleBack} />}
         {subView === 'modelos' && <ModelosSessaoPage embedded onBack={handleBack} />}
+        {subView === 'curriculos' && <CurriculosVooPage embedded onBack={handleBack} />}
       </div>
     );
   }
@@ -316,6 +335,7 @@ export default function TabGestaoWrapper() {
           <div className="space-y-3">
             <div className="h-4 w-32 rounded bg-slate-200 animate-pulse" />
             <div className="grid gap-2.5">
+              <SkeletonCard />
               <SkeletonCard />
               <SkeletonCard />
               <SkeletonCard />
