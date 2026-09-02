@@ -58,7 +58,7 @@ const LARGE_FILE_LINE_CAPS = {
   // Cap raised 2026-08-22: counted 2048 (fix/frms-parameter-governance-recalc
   // — governed operational context wired into the check-in contexto-piloto
   // block, replacing the legacy carregarLimites fallback).
-  'routes/frms-fadiga-checkin.ts': 2048,
+  'routes/frms-fadiga-checkin-legacy.ts': 2048,
   // Cap raised 2026-07-31: counted 2548 after scoped short-lived asset sessions,
   // request-aware cookie policy and CSP hardening in PR #565. Extraction remains
   // a follow-up and is not mixed into this security hotfix.
@@ -138,7 +138,7 @@ const CRITICAL_SELECT_STAR_CAPS = {
   'routes/escalas-padroes.ts': 1,
   'routes/escalas-shared.ts': 2,
   'routes/escalas-tripulacoes.ts': 4,
-  'routes/frms-fadiga-checkin.ts': 3,
+  'routes/frms-fadiga-checkin-legacy.ts': 3,
   // Two schema-compatible reads support import and mutation reliability guards.
   'routes/funcionarios-mutations.ts': 6,
   'routes/lms-matriculas.ts': 5,
