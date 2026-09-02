@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowUp, BookOpenCheck, Plus, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { appFetch } from '@/react-app/lib/app-fetch';
 import { Button } from '@/react-app/components/UI/Button';
 
 interface CurriculoResumo {
@@ -58,16 +58,10 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const authHeaders = () => {
-    const token = getAccessToken();
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   const carregarCurriculos = async (preservarSelecao = true) => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/simuladores/curriculos-voo?_=${Date.now()}`, {
-        headers: authHeaders(),
+      const response = await appFetch(`/api/simuladores/curriculos-voo?_=${Date.now()}`, {
         cache: 'no-store',
       });
       const payload = await response.json();
@@ -86,9 +80,9 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
   const carregarDetalhe = async (qualificacaoId: number) => {
     setLoadingDetail(true);
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/simuladores/curriculos-voo/${qualificacaoId}?_=${Date.now()}`,
-        { headers: authHeaders(), cache: 'no-store' },
+      const response = await appFetch(
+        `/api/simuladores/curriculos-voo/${qualificacaoId}?_=${Date.now()}`,
+        { cache: 'no-store' },
       );
       const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.error || 'Falha ao carregar currículo');
@@ -168,11 +162,11 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
     if (!detalhe) return;
     setSaving(true);
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/simuladores/curriculos-voo/${detalhe.qualification.id}`,
+      const response = await appFetch(
+        `/api/simuladores/curriculos-voo/${detalhe.qualification.id}`,
         {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ modelo_ids: draftIds }),
         },
       );
