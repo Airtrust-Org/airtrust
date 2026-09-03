@@ -52,7 +52,7 @@ export default function EscalasListagemView() {
   for (const escala of listaEscalas) {
     escalasPorMes.set(escala.mes, escala);
   }
-  const mesesOrdenados = [...listaEscalas].sort((a, b) => b.mes - a.mes);
+  const mesesOrdenados = [...listaEscalas].sort((a, b) => a.mes - b.mes);
   const mesesSemEscala = Array.from({ length: 12 }, (_, i) => i + 1)
     .filter((mesNumero) => !escalasPorMes.has(mesNumero))
     .slice(0, 3);
@@ -237,198 +237,216 @@ export default function EscalasListagemView() {
           </div>
         </div>
       ) : (
-        <div
-          data-testid="lista-escalas"
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4"
-        >
-          {mesesOrdenados.map((escala) => {
-            const conf = STATUS_CONFIG[escala.status];
-            const mesNome = MESES[(escala.mes - 1) % 12];
+        <>
+          <div
+            data-testid="lista-escalas"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4"
+          >
+            {mesesOrdenados.map((escala) => {
+              const conf = STATUS_CONFIG[escala.status];
+              const mesNome = MESES[(escala.mes - 1) % 12];
 
-            return (
-              <div
-                key={escala.id}
-                data-testid={`card-escala-${escala.id}`}
-                className={[
-                  'group cursor-pointer overflow-hidden rounded-2xl border bg-gradient-to-b from-white to-slate-50/70 transition-all hover:-translate-y-0.5 hover:shadow-md dark:from-slate-900 dark:to-slate-800/70 dark:hover:shadow-none',
-                  escala.status === 'publicada'
-                    ? 'border-emerald-200 dark:border-emerald-500/30'
-                    : 'border-gray-100 hover:border-gray-200 dark:border-slate-800 dark:hover:border-slate-700',
-                ].join(' ')}
-                onClick={() => abrirEscala(escala.id, escala.status)}
-              >
-                {/* Barra de status */}
-                <div className={`h-1.5 w-full ${conf.barColor}`} />
+              return (
+                <div
+                  key={escala.id}
+                  data-testid={`card-escala-${escala.id}`}
+                  className={[
+                    'group cursor-pointer overflow-hidden rounded-2xl border bg-gradient-to-b from-white to-slate-50/70 transition-all hover:-translate-y-0.5 hover:shadow-md dark:from-slate-900 dark:to-slate-800/70 dark:hover:shadow-none',
+                    escala.status === 'publicada'
+                      ? 'border-emerald-200 dark:border-emerald-500/30'
+                      : 'border-gray-100 hover:border-gray-200 dark:border-slate-800 dark:hover:border-slate-700',
+                  ].join(' ')}
+                  onClick={() => abrirEscala(escala.id, escala.status)}
+                >
+                  <div className={`h-1.5 w-full ${conf.barColor}`} />
 
-                <div className="p-5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <h3 className="text-lg font-bold leading-tight text-gray-900 dark:text-slate-100">{mesNome}</h3>
-                      <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-400">
-                        Escala {escala.mes}/{escala.ano}
-                      </p>
+                  <div className="p-5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h3 className="text-lg font-bold leading-tight text-gray-900 dark:text-slate-100">{mesNome}</h3>
+                        <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-400">
+                          Escala {escala.mes}/{escala.ano}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
+                          escala.status === 'rascunho'
+                            ? 'bg-gray-100 text-gray-600 border-gray-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                            : escala.status === 'em_revisao'
+                              ? 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-200'
+                              : escala.status === 'aprovada'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200'
+                                : escala.status === 'publicada'
+                                  ? 'bg-green-50 text-green-700 border-green-200 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-200'
+                                  : 'bg-gray-50 text-gray-400 border-gray-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500'
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${conf.dotColor}`} />
+                        {conf.label}
+                      </span>
                     </div>
-                    <span
-                      className={`shrink-0 flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
-                        escala.status === 'rascunho'
-                          ? 'bg-gray-100 text-gray-600 border-gray-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                          : escala.status === 'em_revisao'
-                            ? 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-200'
-                            : escala.status === 'aprovada'
-                              ? 'bg-blue-50 text-blue-700 border-blue-200 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200'
-                              : escala.status === 'publicada'
-                                ? 'bg-green-50 text-green-700 border-green-200 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-200'
-                                : 'bg-gray-50 text-gray-400 border-gray-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500'
-                      }`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${conf.dotColor}`} />
-                      {conf.label}
-                    </span>
-                  </div>
 
-                  {/* Métricas */}
-                  <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
-                    {((escala.conflitos_count || 0) > 0 ||
-                      (escala.tripulantes_sem_aeronave_count || 0) > 0 ||
-                      (escala.afastamentos_medicos_count || 0) > 0 ||
-                      (escala.afastamentos_count || 0) > 0) && (
-                      <>
-                        {(escala.conflitos_count || 0) > 0 && (
-                          <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 font-medium text-red-700">
-                            {formatarContagem(escala.conflitos_count || 0, 'conflito', 'conflitos')}
+                    <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
+                      {((escala.conflitos_count || 0) > 0 ||
+                        (escala.tripulantes_sem_aeronave_count || 0) > 0 ||
+                        (escala.afastamentos_medicos_count || 0) > 0 ||
+                        (escala.afastamentos_count || 0) > 0) && (
+                        <>
+                          {(escala.conflitos_count || 0) > 0 && (
+                            <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 font-medium text-red-700">
+                              {formatarContagem(escala.conflitos_count || 0, 'conflito', 'conflitos')}
+                            </span>
+                          )}
+                          {(escala.tripulantes_sem_aeronave_count || 0) > 0 && (
+                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-medium text-amber-700">
+                              {formatarContagem(
+                                escala.tripulantes_sem_aeronave_count || 0,
+                                'tripulante sem aeronave',
+                                'tripulantes sem aeronave',
+                              )}
+                            </span>
+                          )}
+                          {(escala.afastamentos_medicos_count || 0) > 0 && (
+                            <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 font-medium text-rose-700">
+                              {formatarContagem(
+                                escala.afastamentos_medicos_count || 0,
+                                'afastamento médico',
+                                'afastamentos médicos',
+                              )}
+                            </span>
+                          )}
+                          {(escala.afastamentos_count || 0) > 0 && (
+                            <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 font-medium text-orange-700">
+                              {formatarContagem(
+                                escala.afastamentos_count || 0,
+                                'afastamento',
+                                'afastamentos',
+                              )}
+                            </span>
+                          )}
+                        </>
+                      )}
+                      {(escala.conflitos_count || 0) === 0 &&
+                        (escala.tripulantes_sem_aeronave_count || 0) === 0 &&
+                        (escala.afastamentos_medicos_count || 0) === 0 &&
+                        (escala.afastamentos_count || 0) === 0 && (
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">
+                            Sem alertas operacionais
                           </span>
                         )}
-                        {(escala.tripulantes_sem_aeronave_count || 0) > 0 && (
-                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-medium text-amber-700">
-                            {formatarContagem(
-                              escala.tripulantes_sem_aeronave_count || 0,
-                              'tripulante sem aeronave',
-                              'tripulantes sem aeronave',
-                            )}
-                          </span>
-                        )}
-                        {(escala.afastamentos_medicos_count || 0) > 0 && (
-                          <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 font-medium text-rose-700">
-                            {formatarContagem(
-                              escala.afastamentos_medicos_count || 0,
-                              'afastamento médico',
-                              'afastamentos médicos',
-                            )}
-                          </span>
-                        )}
-                        {(escala.afastamentos_count || 0) > 0 && (
-                          <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 font-medium text-orange-700">
-                            {formatarContagem(
-                              escala.afastamentos_count || 0,
-                              'afastamento',
-                              'afastamentos',
-                            )}
-                          </span>
-                        )}
-                      </>
-                    )}
-                    {(escala.conflitos_count || 0) === 0 &&
-                      (escala.tripulantes_sem_aeronave_count || 0) === 0 &&
-                      (escala.afastamentos_medicos_count || 0) === 0 &&
-                      (escala.afastamentos_count || 0) === 0 && (
-                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">
-                          Sem alertas operacionais
+                      {escala.status === 'publicada' && (escala.numero_revisao ?? 0) > 0 && (
+                        <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 font-medium text-indigo-700">
+                          Rev. {escala.numero_revisao}
                         </span>
                       )}
-                    {escala.status === 'publicada' && (escala.numero_revisao ?? 0) > 0 && (
-                      <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 font-medium text-indigo-700">
-                        Rev. {escala.numero_revisao}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-slate-800">
-                    <div className="text-[11px] text-slate-400 dark:text-slate-500">
-                      {escala.status === 'publicada'
-                        ? 'Pronta para consulta da tripulação'
-                        : 'Escala em construção operacional'}
                     </div>
-                    <div className="flex items-center gap-2">
-                      {podeGerenciarOperacoes && confirmarExcluirId === escala.id ? (
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-red-600 font-medium">Confirmar?</span>
-                          <button
-                            className="text-[10px] px-2 py-0.5 rounded bg-red-500 text-white font-semibold hover:bg-red-600 disabled:opacity-50"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              const btn = e.currentTarget;
-                              btn.disabled = true;
-                              try {
-                                await deletarEscala(escala.id);
-                                toast.success('Escala excluída');
-                                refetchLista();
-                              } catch (err) {
-                                toast.error(
-                                  err instanceof Error ? err.message : 'Erro ao excluir escala',
-                                );
-                              } finally {
-                                btn.disabled = false;
+
+                    <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-slate-800">
+                      <div className="text-[11px] text-slate-400 dark:text-slate-500">
+                        {escala.status === 'publicada'
+                          ? 'Pronta para consulta da tripulação'
+                          : 'Escala em construção operacional'}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {podeGerenciarOperacoes && confirmarExcluirId === escala.id ? (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-red-600 font-medium">Confirmar?</span>
+                            <button
+                              className="text-[10px] px-2 py-0.5 rounded bg-red-500 text-white font-semibold hover:bg-red-600 disabled:opacity-50"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const btn = e.currentTarget;
+                                btn.disabled = true;
+                                try {
+                                  await deletarEscala(escala.id);
+                                  toast.success('Escala excluída');
+                                  refetchLista();
+                                } catch (err) {
+                                  toast.error(
+                                    err instanceof Error ? err.message : 'Erro ao excluir escala',
+                                  );
+                                } finally {
+                                  btn.disabled = false;
+                                  setConfirmarExcluirId(null);
+                                }
+                              }}
+                            >
+                              Sim
+                            </button>
+                            <button
+                              className="rounded border border-slate-200 px-2 py-0.5 text-[10px] text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setConfirmarExcluirId(null);
-                              }
-                            }}
-                          >
-                            Sim
-                          </button>
+                              }}
+                            >
+                              Não
+                            </button>
+                          </div>
+                        ) : podeGerenciarOperacoes ? (
                           <button
-                            className="rounded border border-slate-200 px-2 py-0.5 text-[10px] text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                            className="rounded p-1 text-slate-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100 dark:text-slate-500 dark:hover:bg-red-500/10 dark:hover:text-red-300"
+                            title="Excluir escala"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setConfirmarExcluirId(null);
+                              setConfirmarExcluirId(escala.id);
                             }}
                           >
-                            Não
+                            <Trash2 className="w-4 h-4" />
                           </button>
-                        </div>
-                      ) : podeGerenciarOperacoes ? (
+                        ) : null}
                         <button
-                          className="rounded p-1 text-slate-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100 dark:text-slate-500 dark:hover:bg-red-500/10 dark:hover:text-red-300"
-                          title="Excluir escala"
+                          className="text-xs text-primary font-medium group-hover:underline flex items-center gap-0.5"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setConfirmarExcluirId(escala.id);
+                            abrirEscala(escala.id, escala.status);
                           }}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          {escala.status === 'publicada' ? 'Visualizar' : 'Abrir'}
+                          <ArrowRight className="w-4 h-4" />
                         </button>
-                      ) : null}
-                      <button
-                        className="text-xs text-primary font-medium group-hover:underline flex items-center gap-0.5"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          abrirEscala(escala.id, escala.status);
-                        }}
-                      >
-                        {escala.status === 'publicada' ? 'Visualizar' : 'Abrir'}
-                        <ArrowRight className="w-4 h-4" />
-                      </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
 
-          {mesesSemEscala.map((mesNumero) => (
-            <button
-              key={`ghost-${mesNumero}`}
-              onClick={() => abrirModal({ tipo: 'criar-escala' })}
-              className="group rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50/50 p-5 text-left transition-all hover:border-gray-300 hover:bg-gray-100 dark:border-slate-700 dark:bg-slate-900/30 dark:hover:border-slate-600 dark:hover:bg-slate-900/70"
-            >
-              <p className="text-sm font-semibold text-gray-500 group-hover:text-gray-700 dark:text-slate-400 dark:group-hover:text-slate-200">
-                + Criar {MESES[mesNumero - 1]}
-              </p>
-              <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">Sem escala para este mês</p>
-            </button>
-          ))}
-        </div>
+          {podeGerenciarOperacoes && mesesSemEscala.length > 0 && (
+            <section className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-900/40">
+              <div className="mb-3">
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  Próximas competências
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Ações de criação ficam separadas das escalas já existentes.
+                </p>
+              </div>
+              <div
+                data-testid="criar-proximas-competencias"
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+              >
+                {mesesSemEscala.map((mesNumero) => (
+                  <button
+                    key={`ghost-${mesNumero}`}
+                    onClick={() => abrirModal({ tipo: 'criar-escala' })}
+                    className="group rounded-xl border border-dashed border-slate-300 bg-white p-4 text-left transition-all hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-600 dark:hover:bg-slate-800/80"
+                  >
+                    <p className="text-sm font-semibold text-slate-600 group-hover:text-slate-800 dark:text-slate-300 dark:group-hover:text-slate-100">
+                      + Criar {MESES[mesNumero - 1]}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                      Sem escala para este mês
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
-      {/* Modal criar escala */}
       {modalAberto?.tipo === 'criar-escala' && (
         <ModalCriarEscala onClose={fecharModal} onSuccess={() => refetchLista()} />
       )}
