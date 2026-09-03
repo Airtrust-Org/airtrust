@@ -22,6 +22,10 @@ import EscalasTabBar from '../components/EscalasTabBar';
 import { STATUS_CONFIG } from '../utils/statusConfig';
 import { MESES, MESES_CURTOS } from '../EscalaPageContext';
 import { useEscalaPageCtx } from '../EscalaPageContext';
+import {
+  ordenarEscalasCronologicamente,
+  proximasCompetenciasSemEscala,
+} from '../utils/ordenarEscalas';
 
 function formatarContagem(valor: number, singular: string, plural: string) {
   return `${valor} ${valor === 1 ? singular : plural}`;
@@ -48,14 +52,20 @@ export default function EscalasListagemView() {
   } = useEscalaPageCtx();
 
   const listaEscalas = escalas || [];
+  // "Linha do ano operacional" e a seção de criação são sempre relativas ao ano
+  // filtrado; escopar por filtroAno mantém o comportamento previsível mesmo se a
+  // lista trouxer competências de mais de um ano.
+  const escalasDoAno = listaEscalas.filter((escala) => escala.ano === filtroAno);
   const escalasPorMes = new Map<number, (typeof listaEscalas)[number]>();
-  for (const escala of listaEscalas) {
+  for (const escala of escalasDoAno) {
     escalasPorMes.set(escala.mes, escala);
   }
-  const mesesOrdenados = [...listaEscalas].sort((a, b) => a.mes - b.mes);
-  const mesesSemEscala = Array.from({ length: 12 }, (_, i) => i + 1)
-    .filter((mesNumero) => !escalasPorMes.has(mesNumero))
-    .slice(0, 3);
+  // Cards de competências existentes: ordem cronológica estável (ano, depois
+  // mês) — nunca lexicográfica, previsível com múltiplos anos.
+  const mesesOrdenados = ordenarEscalasCronologicamente(listaEscalas);
+  // Ação `Criar mês` fica sempre em seção própria, derivada dos meses do ano
+  // filtrado que ainda não têm escala.
+  const mesesSemEscala = proximasCompetenciasSemEscala(listaEscalas, filtroAno);
 
   return (
     <AppLayout>
