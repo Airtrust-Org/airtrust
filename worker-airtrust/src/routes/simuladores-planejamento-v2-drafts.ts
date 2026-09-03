@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
@@ -18,6 +18,7 @@ const ORIGIN = 'SIMULADOR_V3_PERSISTED';
 const SNAPSHOT_SCHEMA = 'airtrust.simulator.planning.v3.draft.v1';
 const MAX_SNAPSHOT_BYTES = 900_000;
 
+type AppContext = Context<{ Bindings: Env }>;
 type WorkflowStatus = 'AGUARDANDO_CAE' | 'CAE_RECEBIDA' | 'PLANEJADO' | 'REPLANEJAR';
 
 type SessionNeed = {
@@ -203,7 +204,7 @@ async function schemaReady(db: D1Database): Promise<boolean> {
   );
 }
 
-async function normalizePayload(c: any, raw: DraftPayload): Promise<{ snapshot: DraftSnapshot; participantIds: number[]; qualificationTypeId: number; equipment: string; referenceExpiry: string; plannedStatus: SimulatorPlanningStatus; legacyStatus: string; totalHours: number | null; dataInicio: string | null; dataFim: string | null; dataPrevista: string } | { error: string }> {
+async function normalizePayload(c: AppContext, raw: DraftPayload): Promise<{ snapshot: DraftSnapshot; participantIds: number[]; qualificationTypeId: number; equipment: string; referenceExpiry: string; plannedStatus: SimulatorPlanningStatus; legacyStatus: string; totalHours: number | null; dataInicio: string | null; dataFim: string | null; dataPrevista: string } | { error: string }> {
   const inicio = String(raw.vencimento_inicio || '');
   const fim = String(raw.vencimento_fim || '');
   const status = workflowStatus(raw.workflow_status);
@@ -325,7 +326,7 @@ function responseFromRow(row: DraftRow, snapshot: DraftSnapshot) {
   };
 }
 
-async function findDraftRow(c: any, draftId: string): Promise<DraftRow | null> {
+async function findDraftRow(c: AppContext, draftId: string): Promise<DraftRow | null> {
   const empresaId = getTenantContext(c).empresaId;
   const access = await getEmployeeSectorAccess(c, empresaId);
   const scope = buildFuncionarioScopeWhere(access, 'f');
