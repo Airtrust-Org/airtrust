@@ -67,4 +67,57 @@ describe('RowActionsMenu', () => {
 
     expect(screen.getByRole('button', { name: 'Mais ações' })).toHaveClass('min-h-11', 'min-w-11');
   });
+
+  it('renders nothing when there are no available actions', () => {
+    const { container } = render(<RowActionsMenu actions={[]} />);
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('supports a custom label, left alignment and a non-destructive action without an icon', async () => {
+    const user = userEvent.setup();
+    const onOpen = vi.fn();
+
+    render(
+      <RowActionsMenu
+        label="Ações do registro"
+        align="left"
+        actions={[{ label: 'Abrir', onSelect: onOpen }]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Ações do registro' }));
+
+    const action = screen.getByRole('button', { name: 'Abrir' });
+    expect(action).toHaveClass('text-slate-700');
+    expect(action.querySelector('svg')).toBeNull();
+
+    await user.click(action);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps disabled actions inert', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+
+    render(
+      <RowActionsMenu
+        actions={[
+          {
+            label: 'Excluir bloqueado',
+            destructive: true,
+            disabled: true,
+            onSelect,
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Mais ações' }));
+
+    const action = screen.getByRole('button', { name: 'Excluir bloqueado' });
+    expect(action).toBeDisabled();
+    await user.click(action);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
 });
