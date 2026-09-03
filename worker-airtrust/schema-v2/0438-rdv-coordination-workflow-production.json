@@ -1,0 +1,8 @@
+{
+  "changeId": "0438-rdv-coordination-workflow-production",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0438_controle_voos_rdv_coordenacao_workflow.sql",
+  "fileHash": "08279326595fbc9e04388d26c885a44ee66ca1cbd0a8489f08b9de707684c2b8",
+  "planPath": "worker-airtrust/schema-v2/plans/0438-rdv-coordination-workflow-production.md",
+  "planHash": "d79b22140346ec869a6f96a14e195aad6bd0bb9bf99f40f35390b0f278f5387f"
+}
