@@ -25,11 +25,24 @@ function log(msg) {
 function execD1(dbName, sql, label) {
   const result = spawnSync(
     'npx',
-    ['wrangler', 'd1', 'execute', dbName, '--env', 'staging', '--remote', '--command', sql, '--json'],
+    [
+      'wrangler',
+      'd1',
+      'execute',
+      dbName,
+      '--env',
+      'staging',
+      '--remote',
+      '--command',
+      sql,
+      '--json',
+    ],
     { cwd: WORKER_DIR, encoding: 'utf8' },
   );
   if (result.status !== 0) {
-    throw new Error(`D1 execute falhou [${label}]: ${result.stderr || result.stdout || `exit=${result.status}`}`);
+    throw new Error(
+      `D1 execute falhou [${label}]: ${result.stderr || result.stdout || `exit=${result.status}`}`,
+    );
   }
   try {
     return JSON.parse(result.stdout);
@@ -46,7 +59,8 @@ function queryD1(dbName, sql, label) {
 function assertNumericIds(values, label) {
   if (!Array.isArray(values) || values.length === 0) throw new Error(`${label}: empty id list`);
   for (const value of values) {
-    if (!Number.isInteger(Number(value)) || Number(value) <= 0) throw new Error(`${label}: invalid id ${value}`);
+    if (!Number.isInteger(Number(value)) || Number(value) <= 0)
+      throw new Error(`${label}: invalid id ${value}`);
   }
   return values.map(Number);
 }
@@ -65,8 +79,13 @@ async function main() {
   }
 
   const empresaIds = assertNumericIds([manifest.empresaA?.id, manifest.empresaB?.id], 'empresaIds');
-  const userIds = assertNumericIds(Object.values(manifest.users || {}).map((u) => u?.id), 'userIds');
-  log(`Limpando runId=${manifest.runId} empresas=${empresaIds.join(',')} users=${userIds.length} apply=${apply}`);
+  const userIds = assertNumericIds(
+    Object.values(manifest.users || {}).map((u) => u?.id),
+    'userIds',
+  );
+  log(
+    `Limpando runId=${manifest.runId} empresas=${empresaIds.join(',')} users=${userIds.length} apply=${apply}`,
+  );
 
   const empresaIdList = empresaIds.join(', ');
   const userIdList = userIds.join(', ');
@@ -87,15 +106,27 @@ async function main() {
     ['cv_rdv_aprovacoes', `DELETE FROM cv_rdv_aprovacoes WHERE empresa_id IN (${empresaIdList});`],
     ['cv_rdv_revisoes', `DELETE FROM cv_rdv_revisoes WHERE empresa_id IN (${empresaIdList});`],
     ['cv_rdv_alertas', `DELETE FROM cv_rdv_alertas WHERE empresa_id IN (${empresaIdList});`],
-    ['cv_voo_abastecimentos', `DELETE FROM cv_voo_abastecimentos WHERE empresa_id IN (${empresaIdList});`],
-    ['cv_voo_tripulantes', `DELETE FROM cv_voo_tripulantes WHERE empresa_id IN (${empresaIdList});`],
+    [
+      'cv_voo_abastecimentos',
+      `DELETE FROM cv_voo_abastecimentos WHERE empresa_id IN (${empresaIdList});`,
+    ],
+    [
+      'cv_voo_tripulantes',
+      `DELETE FROM cv_voo_tripulantes WHERE empresa_id IN (${empresaIdList});`,
+    ],
     ['cv_voo_etapas', `DELETE FROM cv_voo_etapas WHERE empresa_id IN (${empresaIdList});`],
-    ['cv_rdv_operacional', `DELETE FROM cv_rdv_operacional WHERE empresa_id IN (${empresaIdList});`],
+    [
+      'cv_rdv_operacional',
+      `DELETE FROM cv_rdv_operacional WHERE empresa_id IN (${empresaIdList});`,
+    ],
     ['cv_voos', `DELETE FROM cv_voos WHERE empresa_id IN (${empresaIdList});`],
     ['cv_aeroportos', `DELETE FROM cv_aeroportos WHERE empresa_id IN (${empresaIdList});`],
     ['cv_tipos_voo', `DELETE FROM cv_tipos_voo WHERE empresa_id IN (${empresaIdList});`],
     ['cv_naturezas_voo', `DELETE FROM cv_naturezas_voo WHERE empresa_id IN (${empresaIdList});`],
-    ['cv_motivos_operacionais', `DELETE FROM cv_motivos_operacionais WHERE empresa_id IN (${empresaIdList});`],
+    [
+      'cv_motivos_operacionais',
+      `DELETE FROM cv_motivos_operacionais WHERE empresa_id IN (${empresaIdList});`,
+    ],
     ['aeronaves', `DELETE FROM aeronaves WHERE empresa_id IN (${empresaIdList});`],
     ['modelos_aeronave', `DELETE FROM modelos_aeronave WHERE empresa_id IN (${empresaIdList});`],
     [
@@ -106,11 +137,20 @@ async function main() {
                 SELECT id FROM domain_events WHERE empresa_id IN (${empresaIdList})
              ));`,
     ],
-    ['auditoria', `DELETE FROM auditoria WHERE usuario_id IN (${userIdList}) OR empresa_id IN (${empresaIdList});`],
+    [
+      'auditoria',
+      `DELETE FROM auditoria WHERE usuario_id IN (${userIdList}) OR empresa_id IN (${empresaIdList});`,
+    ],
     ['domain_events', `DELETE FROM domain_events WHERE empresa_id IN (${empresaIdList});`],
     ['refresh_tokens', `DELETE FROM refresh_tokens WHERE user_id IN (${userIdList});`],
-    ['convites_usuarios', `DELETE FROM convites_usuarios WHERE empresa_id IN (${empresaIdList}) OR usuario_id IN (${userIdList});`],
-    ['usuarios_empresas', `DELETE FROM usuarios_empresas WHERE empresa_id IN (${empresaIdList}) OR usuario_id IN (${userIdList});`],
+    [
+      'convites_usuarios',
+      `DELETE FROM convites_usuarios WHERE empresa_id IN (${empresaIdList}) OR usuario_id IN (${userIdList});`,
+    ],
+    [
+      'usuarios_empresas',
+      `DELETE FROM usuarios_empresas WHERE empresa_id IN (${empresaIdList}) OR usuario_id IN (${userIdList});`,
+    ],
     ['usuarios', `DELETE FROM usuarios WHERE id IN (${userIdList});`],
     ['funcionarios', `DELETE FROM funcionarios WHERE empresa_id IN (${empresaIdList});`],
     ['setores', `DELETE FROM setores WHERE empresa_id IN (${empresaIdList});`],
@@ -144,7 +184,9 @@ async function main() {
     usuarios: Number(verification?.usuarios_restantes ?? -1),
     domainEvents: Number(verification?.domain_events_restantes ?? -1),
   };
-  log(`verify empresas=${remaining.empresas} usuarios=${remaining.usuarios} domain_events=${remaining.domainEvents}`);
+  log(
+    `verify empresas=${remaining.empresas} usuarios=${remaining.usuarios} domain_events=${remaining.domainEvents}`,
+  );
   if (remaining.empresas !== 0 || remaining.usuarios !== 0 || remaining.domainEvents !== 0) {
     throw new Error(`CLEANUP_POSTCONDITION_FAILED:${JSON.stringify(remaining)}`);
   }

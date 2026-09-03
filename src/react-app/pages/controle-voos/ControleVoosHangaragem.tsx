@@ -11,7 +11,10 @@ export default function ControleVoosHangaragem() {
     <AppLayout>
       <div className="w-full">
         <ControleVoosPageShell>
-          <ControleVoosPageHeader title="Hangaragem — Em desenvolvimento" description="Tela em preview. Ainda não existe tabela operacional real para hangaragem nem integração confiável com MRO nesta macroetapa.">
+          <ControleVoosPageHeader 
+            title="Hangaragem" 
+            description="Tela em preview. Ainda não existe tabela operacional real para hangaragem nem integração confiável com MRO nesta macroetapa."
+          >
             <button
               disabled
               className="inline-flex items-center gap-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-500 cursor-not-allowed dark:bg-slate-700 dark:text-slate-400"

@@ -17,7 +17,8 @@ import { readFileSync, writeFileSync, mkdtempSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const BASE_URL = process.env.STAGING_API_BASE_URL || 'https://airtrust-api-staging.airtrust.workers.dev';
+const BASE_URL =
+  process.env.STAGING_API_BASE_URL || 'https://airtrust-api-staging.airtrust.workers.dev';
 
 function log(msg) {
   process.stderr.write(`[e2e-cv] ${msg}\n`);
@@ -25,7 +26,17 @@ function log(msg) {
 
 const report = [];
 
-async function call({ operation, method, path, actor, tenant, body, expectedStatus, isMultipart, expectJson = true }) {
+async function call({
+  operation,
+  method,
+  path,
+  actor,
+  tenant,
+  body,
+  expectedStatus,
+  isMultipart,
+  expectJson = true,
+}) {
   const url = `${BASE_URL}${path}`;
   const headers = {};
   if (actor?.token) headers.Authorization = `Bearer ${actor.token}`;
@@ -76,7 +87,9 @@ async function call({ operation, method, path, actor, tenant, body, expectedStat
   if (error) record.error = error;
   report.push(record);
 
-  log(`${passed ? 'OK  ' : 'FAIL'} ${operation} (${method} ${path}) -> ${status} in ${durationMs}ms`);
+  log(
+    `${passed ? 'OK  ' : 'FAIL'} ${operation} (${method} ${path}) -> ${status} in ${durationMs}ms`,
+  );
 
   return { status, json, passed };
 }
@@ -330,7 +343,10 @@ async function main() {
     actor: adminA,
     tenant: 'A',
     expectedStatus: 201,
-    body: { codigo: `E2E${manifest.runId}`.slice(0, 20), nome: `E2E Synthetic Setor ${manifest.runId}` },
+    body: {
+      codigo: `E2E${manifest.runId}`.slice(0, 20),
+      nome: `E2E Synthetic Setor ${manifest.runId}`,
+    },
   });
 
   const { json: funcJson, passed: funcPassed } = await call({
@@ -499,7 +515,6 @@ async function main() {
       ocorrencias: 'Corrigido apos devolucao (E2E)',
     },
   });
-  rdvVersao += 1;
 
   await call({
     operation: 'refinalizar_preenchimento_rdv',

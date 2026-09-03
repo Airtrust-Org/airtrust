@@ -720,14 +720,22 @@ export default function FichaFuncionarioPage() {
               <FolderOpen className="h-4 w-4" />
               Pasta 360
             </button>
-            <button
-              type="button"
-              onClick={() => navigate(`/frms/tripulante/${id}`)}
-              className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap text-amber-700 hover:bg-amber-50 border border-amber-200"
-            >
-              <ShieldAlert className="h-4 w-4" />
-              FRMS / Fadiga
-            </button>
+            <div className="ml-2 flex items-center gap-2 border-l border-slate-200 pl-3">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                Subpágina
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate(`/frms/tripulante/${id}?origem=ficha`)}
+                aria-label="Abrir página FRMS / Fadiga deste funcionário"
+                title="Abrir página FRMS / Fadiga"
+                className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2 text-sm font-semibold text-amber-800 transition-colors whitespace-nowrap hover:bg-amber-100"
+              >
+                <ShieldAlert className="h-4 w-4" />
+                Abrir FRMS / Fadiga
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </div>
           </div>
         </div>
 

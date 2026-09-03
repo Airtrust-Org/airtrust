@@ -11,7 +11,10 @@ export default function ControleVoosIndisponibilidades() {
     <AppLayout>
       <div className="w-full">
         <ControleVoosPageShell>
-          <ControleVoosPageHeader title="Indisponibilidades de Aeronave — Preview" description="Tela em preview. Ainda não existe schema operacional consolidado para indisponibilidades por causa, grupo e período nesta macroetapa.">
+          <ControleVoosPageHeader 
+            title="Indisponibilidades de Aeronave" 
+            description="Tela em preview. Ainda não existe schema operacional consolidado para indisponibilidades por causa, grupo e período nesta macroetapa."
+          >
             <button
               disabled
               className="inline-flex items-center gap-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-500 cursor-not-allowed dark:bg-slate-700 dark:text-slate-400"
