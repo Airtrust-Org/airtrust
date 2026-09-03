@@ -19,7 +19,24 @@ const sourcePath = join(here, 'run-controle-voos-e2e.mjs');
 const startMarker = "  // ── 17. Corrigir (piloto reedita apos devolucao, status volta a rascunho) ──";
 const endMarker = "  await call({\n    operation: 'refinalizar_preenchimento_rdv'";
 
-const replacement = `  // ── 17. Corrigir (piloto reedita apos devolucao, status volta a rascunho) ──\n  // Contrato atual: PUT de RDV existente exige CAS numerico via \\`versao\\` e\n  // incrementa cv_rdv_operacional.versao quando a escrita e aplicada.\n  const correction = await call({\n    operation: 'corrigir_apos_devolucao',\n    method: 'PUT',\n    path: \\`/api/controle-voos/voos/\\${vooId}/rdv\\`,\n    actor: adminA,\n    tenant: 'A',\n    expectedStatus: 200,\n    body: { versao: rdvVersao, ocorrencias: 'Corrigido apos devolucao (E2E)' },\n  });\n  if (!correction.passed) return finish(manifest, false);\n  rdvVersao = correction.json?.data?.versao ?? rdvVersao + 1;\n\n`;
+const replacement = [
+  '  // ── 17. Corrigir (piloto reedita apos devolucao, status volta a rascunho) ──',
+  '  // Contrato atual: PUT de RDV existente exige CAS numerico via `versao` e',
+  '  // incrementa cv_rdv_operacional.versao quando a escrita e aplicada.',
+  '  const correction = await call({',
+  "    operation: 'corrigir_apos_devolucao',",
+  "    method: 'PUT',",
+  '    path: `/api/controle-voos/voos/${vooId}/rdv`,',
+  '    actor: adminA,',
+  "    tenant: 'A',",
+  '    expectedStatus: 200,',
+  "    body: { versao: rdvVersao, ocorrencias: 'Corrigido apos devolucao (E2E)' },",
+  '  });',
+  '  if (!correction.passed) return finish(manifest, false);',
+  '  rdvVersao = correction.json?.data?.versao ?? rdvVersao + 1;',
+  '',
+  '',
+].join('\n');
 
 function fail(message) {
   process.stderr.write(`[e2e-cv-cas-v2] ${message}\n`);
