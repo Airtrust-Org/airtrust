@@ -12,6 +12,9 @@ type StatusType =
 
 interface MroStatusBadgeProps { status: StatusType; className?: string }
 
+const NEUTRAL_CLASSIFICATION_STYLE =
+  'border border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-300';
+
 const STATUS_STYLES: Record<string, string> = {
   'operando': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
   'em-manutencao': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
@@ -36,14 +39,14 @@ const STATUS_STYLES: Record<string, string> = {
   'pendente': 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
   'aprovado': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
   'rejeitado': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-  'preventiva': 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
-  'corretiva': 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
-  'modificacao': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
-  'inspecao': 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300',
-  'componente': 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300',
-  'manutencao': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-  'reparo': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-  'alteracao': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
+  'preventiva': NEUTRAL_CLASSIFICATION_STYLE,
+  'corretiva': NEUTRAL_CLASSIFICATION_STYLE,
+  'modificacao': NEUTRAL_CLASSIFICATION_STYLE,
+  'inspecao': NEUTRAL_CLASSIFICATION_STYLE,
+  'componente': NEUTRAL_CLASSIFICATION_STYLE,
+  'manutencao': NEUTRAL_CLASSIFICATION_STYLE,
+  'reparo': NEUTRAL_CLASSIFICATION_STYLE,
+  'alteracao': NEUTRAL_CLASSIFICATION_STYLE,
 };
 
 const STATUS_LABELS: Record<string, string> = {

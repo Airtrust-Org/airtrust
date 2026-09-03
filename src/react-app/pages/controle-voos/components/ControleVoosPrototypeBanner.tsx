@@ -6,12 +6,12 @@ export default function ControleVoosPrototypeBanner() {
 
   return (
     <ModuleGovernanceBanner
-      title="Módulo Controle de Voos"
+      title="Controle de Voos"
       maturityLevel={module.maturityLevel}
       evidenceLevel={module.evidenceLevel}
       isPrototype={module.isPrototype}
       isRegulated={module.isRegulated}
-      description="Uso operacional interno com dados reais N1. Não regulado. Não substitui registros oficiais da operação."
+      description="Dados reais para uso operacional interno; não substitui registros oficiais da operação."
     />
   );
 }
