@@ -18,7 +18,9 @@ export interface DocumentoPV {
   data_upload: string;
   data_vencimento?: string;
   tamanho: number;
-  status: 'ATIVO' | 'VENCIDO' | 'VENCENDO';
+  status: string;
+  versaoAtual?: boolean;
+  substituidoPorId?: number | null;
 }
 
 export interface CategoriaPV {
@@ -45,6 +47,10 @@ const CATEGORIA_BASE: Omit<CategoriaPV, 'documentos'>[] = PASTA_VIRTUAL_CATEGORI
   expandido: c.expandidoInicial ?? false,
 }));
 
+export function isPastaVirtualDocumentAvailable(doc: Pick<DocumentoPV, 'tamanho' | 'arquivo_url'>) {
+  return Number(doc.tamanho) > 0 && Boolean(String(doc.arquivo_url || '').trim());
+}
+
 export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirtualResult {
   const [categorias, setCategorias] = useState<CategoriaPV[]>(
     CATEGORIA_BASE.map((c) => ({ ...c, documentos: [] })),
@@ -62,21 +68,15 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         Pragma: 'no-cache',
       };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
+      if (token) headers.Authorization = `Bearer ${token}`;
 
-      // Carregar documentos agrupados por categoria do novo endpoint
-      // Adicionar timestamp para forçar bypass de cache
       const timestamp = Date.now();
       const categoryRes = await fetch(
         `${API_BASE_URL}/pasta-virtual/by-category/${funcionarioId}?_t=${timestamp}`,
         { headers },
       );
 
-      if (!categoryRes.ok) {
-        throw new Error(`API retornou ${categoryRes.status}`);
-      }
+      if (!categoryRes.ok) throw new Error(`API retornou ${categoryRes.status}`);
 
       const categoryData = await categoryRes.json();
 
@@ -88,43 +88,40 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
         dataUpload: string;
         status: string;
         tamanho: number;
+        versaoAtual?: boolean;
+        substituidoPorId?: number | null;
       }
 
-      // Mapear categorias da API para categorias do frontend
-      const mapToDocumentoPV = (docs: DocumentoApi[]): DocumentoPV[] =>
+      const mapToDocumentoPV = (docs: DocumentoApi[], tipo: TipoDocumento): DocumentoPV[] =>
         docs.map((d) => ({
           id: d.id,
           nome: d.nome,
-          tipo: 'CERTIFICADO_QUALIFICACAO', // Será mapeado por categoria
+          tipo,
           arquivo_url: d.url,
           data_upload: d.dataUpload,
           data_vencimento: undefined,
-          tamanho: d.tamanho,
-          status: (d.status as DocumentoPV['status']) || 'ATIVO',
+          tamanho: Number(d.tamanho) || 0,
+          status: d.status || 'Válido',
+          versaoAtual: d.versaoAtual,
+          substituidoPorId: d.substituidoPorId ?? null,
         }));
 
-      // Mapear categorias da API para tipos do frontend
       const categorizedDocs = categoryData.data || {};
-
       const agrupado: Record<TipoDocumento, DocumentoPV[]> = {
         CERTIFICADO_QUALIFICACAO: mapToDocumentoPV(
           categorizedDocs['Certificados de Qualificação'] || [],
+          'CERTIFICADO_QUALIFICACAO',
         ),
-        DOCUMENTO_PESSOAL: mapToDocumentoPV(categorizedDocs['Documentos Pessoais'] || []),
-        EXAME_MEDICO: (categorizedDocs['Exames Médicos (ASO, CMA)'] || []).map(
-          (d: DocumentoApi) => ({
-            id: d.id,
-            nome: d.nome,
-            tipo: 'EXAME_MEDICO',
-            arquivo_url: d.url,
-            data_upload: d.dataUpload,
-            data_vencimento: undefined,
-            tamanho: d.tamanho,
-            status: (d.status as DocumentoPV['status']) || 'ATIVO',
-          }),
+        DOCUMENTO_PESSOAL: mapToDocumentoPV(
+          categorizedDocs['Documentos Pessoais'] || [],
+          'DOCUMENTO_PESSOAL',
         ),
-        SIMULADOR: mapToDocumentoPV(categorizedDocs['Simuladores'] || []),
-        OUTROS: mapToDocumentoPV(categorizedDocs['Outros'] || []),
+        EXAME_MEDICO: mapToDocumentoPV(
+          categorizedDocs['Exames Médicos (ASO, CMA)'] || [],
+          'EXAME_MEDICO',
+        ),
+        SIMULADOR: mapToDocumentoPV(categorizedDocs['Simuladores'] || [], 'SIMULADOR'),
+        OUTROS: mapToDocumentoPV(categorizedDocs['Outros'] || [], 'OUTROS'),
       };
 
       setCategorias((prev) =>
@@ -142,31 +139,19 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
     refetch();
   }, [refetch]);
 
-  // uploadDocumento removido - agora usa UploadDocumentoModal com nomenclatura padronizada
-
   const deleteDocumento = useCallback(
     async (id: number) => {
       const token = getAccessToken();
       const fetchConfig: RequestInit = { method: 'DELETE' };
-      if (token) {
-        fetchConfig.headers = { Authorization: `Bearer ${token}` };
-      }
-
-      console.log(`[usePastaVirtual] Deletando documento ${id}`);
+      if (token) fetchConfig.headers = { Authorization: `Bearer ${token}` };
 
       const res = await fetch(`${API_BASE_URL}/pasta-virtual/delete/${id}`, fetchConfig);
-
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        const errorMsg = errorData.error || `Falha ao excluir (${res.status})`;
-        console.error('[usePastaVirtual] Delete falhou:', errorMsg);
-        throw new Error(errorMsg);
+        throw new Error(errorData.error || `Falha ao excluir (${res.status})`);
       }
 
-      const data = await res.json().catch(() => ({}));
-      console.log('[usePastaVirtual] Delete sucesso, iniciando refetch...');
-
-      // Aguardar refetch com timeout para evitar travamento
+      await res.json().catch(() => ({}));
       try {
         await Promise.race([
           refetch(),
@@ -174,47 +159,37 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
             setTimeout(() => reject(new Error('Timeout no refetch')), 10000),
           ),
         ]);
-        console.log('[usePastaVirtual] Refetch completo');
       } catch (refetchError) {
-        console.warn('[usePastaVirtual] Refetch falhou, mas delete foi sucesso:', refetchError);
-        // Mesmo que refetch falhe, o delete foi bem-sucedido
+        console.warn('[usePastaVirtual] Refetch falhou após delete concluído:', refetchError);
       }
     },
     [refetch],
   );
 
   const downloadDocumento = useCallback(async (doc: DocumentoPV) => {
-    try {
-      const token = getAccessToken();
-      const fetchConfig: RequestInit = {};
-      if (token) {
-        fetchConfig.headers = { Authorization: `Bearer ${token}` };
-      }
-      // Todos os downloads agora vêm do mesmo endpoint
-      const endpoint = `${API_BASE_URL}/pasta-virtual/download/${doc.id}`;
-      const res = await fetch(endpoint, fetchConfig);
-      if (!res.ok) throw new Error('Erro ao baixar');
-      const data = await res.json();
-
-      if (!data.success || !data.data?.url) {
-        throw new Error('URL de download não fornecida');
-      }
-
-      // Agora fazer streaming do arquivo
-      // data.data.url pode vir como URL relativa, precisamos absolutizar
-      // Remove barra inicial se existir para evitar URL como /api//pasta-virtual
-      const urlPath = data.data.url.startsWith('/') ? data.data.url.slice(1) : data.data.url;
-      const streamUrl = data.data.url.startsWith('http')
-        ? data.data.url
-        : `${API_BASE_URL}/${urlPath}`;
-      await previewPdfBeforeDownload({
-        fileName: doc.nome,
-        title: doc.nome,
-        fetcher: () => fetch(streamUrl, fetchConfig),
-      });
-    } catch {
-      // silencioso
+    if (!isPastaVirtualDocumentAvailable(doc)) {
+      throw new Error('Arquivo indisponível para visualização');
     }
+
+    const token = getAccessToken();
+    const fetchConfig: RequestInit = {};
+    if (token) fetchConfig.headers = { Authorization: `Bearer ${token}` };
+
+    const endpoint = `${API_BASE_URL}/pasta-virtual/download/${doc.id}`;
+    const res = await fetch(endpoint, fetchConfig);
+    if (!res.ok) throw new Error('Erro ao baixar');
+    const data = await res.json();
+    if (!data.success || !data.data?.url) throw new Error('URL de download não fornecida');
+
+    const urlPath = data.data.url.startsWith('/') ? data.data.url.slice(1) : data.data.url;
+    const streamUrl = data.data.url.startsWith('http')
+      ? data.data.url
+      : `${API_BASE_URL}/${urlPath}`;
+    await previewPdfBeforeDownload({
+      fileName: doc.nome,
+      title: doc.nome,
+      fetcher: () => fetch(streamUrl, fetchConfig),
+    });
   }, []);
 
   return {
