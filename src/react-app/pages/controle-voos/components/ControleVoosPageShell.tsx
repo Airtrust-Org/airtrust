@@ -15,17 +15,18 @@ export default function ControleVoosPageShell({ children }: { children: React.Re
 
   return (
     <main className="w-full" role="main">
-      <ControleVoosPrototypeBanner />
-      {demoRoute && (
+      {demoRoute ? (
         <ModuleGovernanceBanner
-          title={`${demoRoute.label} — preview controlado`}
+          title={demoRoute.label}
           maturityLevel="N0"
           evidenceLevel="A0"
           isPrototype
           isRegulated={false}
-          description="Tela em preview, fora do fluxo operacional conectado. Nao usar como registro operacional nem como dado oficial."
+          description="Preview controlado com dados demonstrativos; não usar como registro operacional nem dado oficial."
           className="mb-3"
         />
+      ) : (
+        <ControleVoosPrototypeBanner />
       )}
       <ControleVoosSubnav />
       {children}

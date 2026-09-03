@@ -6,12 +6,12 @@ export default function MroPrototypeBanner() {
 
   return (
     <ModuleGovernanceBanner
-      title="Módulo MRO em prévia"
+      title="MRO"
       maturityLevel={module.maturityLevel}
       evidenceLevel={module.evidenceLevel}
       isPrototype={module.isPrototype}
       isRegulated={module.isRegulated}
-      description="Dados demonstrativos. Não utilizar como registro oficial de manutenção, OS, RAS ou aeronavegabilidade."
+      description="Dados demonstrativos; não usar como registro oficial de manutenção ou aeronavegabilidade."
     />
   );
 }
