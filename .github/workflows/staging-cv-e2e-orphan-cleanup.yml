@@ -1,0 +1,101 @@
+name: Staging CV E2E Orphan Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_STAGING_CV_E2E_ORPHAN_CLEANUP'
+        required: true
+        type: string
+      run_id:
+        description: 'Exact 8-hex synthetic E2E run id'
+        required: true
+        type: string
+      reason:
+        description: 'Why this synthetic staging cleanup is required'
+        required: true
+        type: string
+
+concurrency:
+  group: staging-cv-e2e-orphan-cleanup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  EXPECTED_CONFIRMATION: AIRTRUST_STAGING_CV_E2E_ORPHAN_CLEANUP
+  ALLOWED_STAGING_DB_NAME: airtrust-db-staging-baseline-20260701
+
+jobs:
+  d1-orphan-cleanup:
+    name: Guarded Staging D1 Synthetic Orphan Cleanup
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Validate staging-only dispatch
+        shell: bash
+        env:
+          GIT_REF: ${{ github.ref }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          RUN_ID: ${{ inputs.run_id }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          [[ "$GIT_REF" == "refs/heads/main" ]] || { echo "main only" >&2; exit 1; }
+          [[ "$CONFIRMATION" == "$EXPECTED_CONFIRMATION" ]] || { echo "invalid confirmation" >&2; exit 1; }
+          [[ "$RUN_ID" =~ ^[0-9a-fA-F]{8}$ ]] || { echo "run_id must be exactly 8 hex chars" >&2; exit 1; }
+          [[ -n "$REASON" ]] || { echo "reason is required" >&2; exit 1; }
+          echo "Synthetic staging D1 cleanup requested for run ${RUN_ID,,}."
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Require staging D1 credential
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$TOKEN" && -n "$ACCOUNT_ID" ]]
+
+      - name: Install Worker tooling
+        run: npm --prefix worker-airtrust ci
+
+      - name: Validate cleanup script syntax
+        run: node --check scripts/staging/cleanup-controle-voos-e2e-orphan-run-v2.mjs
+
+      - name: Discover exact synthetic D1 targets without writes
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: node scripts/staging/cleanup-controle-voos-e2e-orphan-run-v2.mjs "${RUN_ID,,}"
+
+      - name: Remove exact synthetic D1 orphan fail closed
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: node scripts/staging/cleanup-controle-voos-e2e-orphan-run-v2.mjs "${RUN_ID,,}" --apply
+
+      - name: Record outcome
+        if: ${{ success() }}
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          {
+            echo "## Staging synthetic E2E D1 orphan cleanup"
+            echo "- run_id: \`${RUN_ID,,}\`"
+            echo "- target: \`$ALLOWED_STAGING_DB_NAME\`"
+            echo "- production touched: no"
+            echo "- cleanup: PASS"
+            echo "- reason: $REASON"
+          } >> "$GITHUB_STEP_SUMMARY"
