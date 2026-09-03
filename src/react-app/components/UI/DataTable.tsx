@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { ChevronUp, ChevronDown, Edit2, Trash2, Eye } from 'lucide-react';
 import { classHelpers, iconWrappers } from '@/react-app/styles/design-tokens';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { RowActionsMenu } from './RowActionsMenu';
 
 type SortDirection = 'asc' | 'desc' | null;
 type RowStatus = 'valid' | 'expiring' | 'expired' | 'revoked' | 'total' | undefined;
@@ -33,7 +34,7 @@ interface DataTableProps {
  * Features:
  * - Sortable columns with visual indicators
  * - Status-based row coloring
- * - Inline actions (edit, delete, view)
+ * - Non-destructive quick actions with destructive actions kept secondary
  * - Responsive design
  */
 export function DataTable({
@@ -236,11 +237,11 @@ export function DataTable({
                 ))}
                 {showActions && (
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       {onView && (
                         <button
                           onClick={() => onView(item[idKey])}
-                          className="text-primary hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 rounded p-1"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
                           title="Visualizar"
                           aria-label="Visualizar"
                         >
@@ -250,7 +251,7 @@ export function DataTable({
                       {onEdit && (
                         <button
                           onClick={() => onEdit(item[idKey])}
-                          className="text-primary-600 hover:text-primary-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 rounded p-1"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-primary-600 transition-colors hover:bg-primary/10 hover:text-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
                           title="Editar"
                           aria-label="Editar"
                         >
@@ -258,18 +259,20 @@ export function DataTable({
                         </button>
                       )}
                       {onDelete && (
-                        <button
-                          onClick={async () => {
-                            if (await confirmDialog('Tem certeza que deseja deletar?')) {
-                              onDelete(item[idKey]);
-                            }
-                          }}
-                          className="text-red-600 hover:text-red-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 rounded p-1"
-                          title="Deletar"
-                          aria-label="Deletar"
-                        >
-                          <Trash2 className={iconWrappers.sm} aria-hidden="true" />
-                        </button>
+                        <RowActionsMenu
+                          actions={[
+                            {
+                              label: 'Excluir',
+                              destructive: true,
+                              icon: Trash2,
+                              onSelect: async () => {
+                                if (await confirmDialog('Tem certeza que deseja deletar?')) {
+                                  onDelete(item[idKey]);
+                                }
+                              },
+                            },
+                          ]}
+                        />
                       )}
                     </div>
                   </td>
