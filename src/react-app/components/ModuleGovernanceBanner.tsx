@@ -78,38 +78,31 @@ export default function ModuleGovernanceBanner({
   title,
   moduleName,
   description,
-  isPrototype = false,
-  isRegulated = false,
   className,
 }: ModuleGovernanceBannerProps) {
   const resolvedTitle = title ?? moduleName ?? 'Módulo';
   const config = BANNER_CONFIG[maturityLevel];
   const Icon = config.icon;
-  const chips = [
-    maturityLevel,
-    evidenceLevel,
-    isPrototype ? 'Protótipo' : null,
-    isRegulated ? 'Regulado' : 'Não regulado',
-  ].filter(Boolean) as string[];
+  const chips = [maturityLevel, evidenceLevel];
 
   return (
     <div
       className={cn(
-        'mb-4 flex min-w-0 flex-col gap-3 rounded-lg border px-4 py-3 text-sm sm:flex-row sm:items-start sm:gap-4',
+        'mb-4 flex min-w-0 flex-col gap-2 rounded-lg border px-3 py-2.5 text-sm sm:flex-row sm:items-center sm:gap-3',
         config.tone,
         className,
       )}
     >
-      <div className="flex min-w-0 flex-1 items-start gap-3">
-        <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', config.iconTone)} />
+      <div className="flex min-w-0 flex-1 items-start gap-2.5">
+        <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', config.iconTone)} />
         <div className="min-w-0 flex-1">
           <p className="font-medium leading-5">
             {resolvedTitle}: {config.label}.
           </p>
-          <p className="mt-1 leading-5 text-current/90">{description ?? config.description}</p>
+          <p className="leading-5 text-current/90">{description ?? config.description}</p>
         </div>
       </div>
-      <div className="flex min-w-0 flex-wrap gap-2 pl-8 sm:w-auto sm:shrink-0 sm:justify-end sm:pl-0">
+      <div className="flex min-w-0 shrink-0 flex-wrap gap-1.5 pl-7 sm:justify-end sm:pl-0">
         {chips.map((chip) => (
           <span
             key={chip}
