@@ -238,7 +238,7 @@ sgso.post('/relatos', async (c) => {
     if (d.aeronave_id && !aeronaveMatricula) {
       const aerRow = await db
         .prepare(
-          'SELECT matricula, modelo FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
+          'SELECT prefixo AS matricula, modelo FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
         )
         .bind(d.aeronave_id, empresaId)
         .first<{ matricula: string; modelo: string }>();
@@ -414,7 +414,7 @@ sgso.get('/relatos/:id', async (c) => {
         `SELECT r.*,
                 f.nome AS relator_nome, f.cargo AS relator_cargo,
                 ${hasGsoResponsavel ? 'g.nome AS gso_nome' : 'NULL AS gso_nome'},
-                ${hasAeronaveId ? 'a.matricula AS aeronave_matricula_atual' : 'NULL AS aeronave_matricula_atual'}
+                ${hasAeronaveId ? 'a.prefixo AS aeronave_matricula_atual' : 'NULL AS aeronave_matricula_atual'}
          FROM sgso_relatos r
          LEFT JOIN funcionarios f ON f.id = r.relator_id AND f.deleted_at IS NULL
          ${hasGsoResponsavel ? 'LEFT JOIN funcionarios g ON g.id = r.gso_responsavel_id AND g.deleted_at IS NULL' : ''}
