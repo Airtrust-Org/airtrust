@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Trash2 } from 'lucide-react';
 import { describe, expect, it, vi } from 'vitest';
@@ -23,13 +23,14 @@ describe('RowActionsMenu', () => {
       />,
     );
 
-    expect(screen.queryByRole('button', { name: 'Excluir' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Excluir' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Mais ações' }));
-    await user.click(screen.getByRole('button', { name: 'Excluir' }));
+    const trigger = screen.getByRole('button', { name: 'Mais ações' });
+    await user.click(trigger);
+    await user.click(screen.getByRole('menuitem', { name: 'Excluir' }));
 
     expect(onDelete).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('button', { name: 'Excluir' })).not.toBeInTheDocument();
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'));
   });
 
   it('closes on Escape and returns focus to the menu trigger', async () => {
@@ -50,11 +51,11 @@ describe('RowActionsMenu', () => {
 
     const trigger = screen.getByRole('button', { name: 'Mais ações' });
     await user.click(trigger);
-    expect(screen.getByRole('button', { name: 'Excluir' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Excluir' })).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
 
-    expect(screen.queryByRole('button', { name: 'Excluir' })).not.toBeInTheDocument();
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'));
     expect(trigger).toHaveFocus();
   });
 
@@ -88,7 +89,7 @@ describe('RowActionsMenu', () => {
 
     await user.click(screen.getByRole('button', { name: 'Ações do registro' }));
 
-    const action = screen.getByRole('button', { name: 'Abrir' });
+    const action = screen.getByRole('menuitem', { name: 'Abrir' });
     expect(action).toHaveClass('text-slate-700');
     expect(action.querySelector('svg')).toBeNull();
 
@@ -115,7 +116,7 @@ describe('RowActionsMenu', () => {
 
     await user.click(screen.getByRole('button', { name: 'Mais ações' }));
 
-    const action = screen.getByRole('button', { name: 'Excluir bloqueado' });
+    const action = screen.getByRole('menuitem', { name: 'Excluir bloqueado' });
     expect(action).toBeDisabled();
     await user.click(action);
     expect(onSelect).not.toHaveBeenCalled();

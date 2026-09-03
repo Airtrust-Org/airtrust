@@ -23,9 +23,10 @@ describe('DataTable destructive row actions', () => {
     );
 
     expect(screen.queryByRole('button', { name: /deletar|excluir/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /deletar|excluir/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Mais ações' }));
-    await user.click(screen.getByRole('button', { name: 'Excluir' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Excluir' }));
 
     expect(window.confirm).toHaveBeenCalledWith('Tem certeza que deseja deletar?');
     expect(onDelete).toHaveBeenCalledWith(42);

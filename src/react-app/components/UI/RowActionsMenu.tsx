@@ -57,7 +57,7 @@ export function RowActionsMenu({
                       : `${focus ? 'bg-slate-100 dark:bg-slate-800' : ''} text-slate-700 dark:text-slate-200`
                   }`}
                 >
-                  {Icon ? <Icon className="h-4 w-4 shrink-0" aria-hidden="true" /> : null}
+                  {Icon ? <Icon className="h-4 w-4 shrink-0" aria-hidden /> : null}
                   <span>{action.label}</span>
                 </button>
               )}
