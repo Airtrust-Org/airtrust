@@ -1,0 +1,24 @@
+<svg width="1024" height="320" viewBox="0 0 1024 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="320" fill="#F5F6F8"/>
+  <g transform="translate(40,24)">
+    <path d="M124 8L8 48V136C8 223 65 281 124 304C183 281 240 223 240 136V48L124 8Z" fill="#102B5B" stroke="#0A1D40" stroke-width="4"/>
+    <g opacity="0.5" stroke="#38BDF8" stroke-width="2">
+      <path d="M24 66L58 48L90 68L124 46L158 68L192 50L224 68"/>
+      <path d="M18 102L52 82L86 102L122 80L156 102L190 84L228 102"/>
+      <path d="M18 142L52 122L86 144L122 122L156 144L190 124L228 142"/>
+      <path d="M26 182L58 164L92 184L124 164L156 184L188 166L218 182"/>
+      <path d="M44 220L74 204L106 222L138 204L170 224L198 206"/>
+      <path d="M72 256L98 242L124 258L150 244L176 258"/>
+      <circle cx="24" cy="66" r="3"/><circle cx="58" cy="48" r="3"/><circle cx="90" cy="68" r="3"/><circle cx="124" cy="46" r="3"/><circle cx="158" cy="68" r="3"/><circle cx="192" cy="50" r="3"/><circle cx="224" cy="68" r="3"/>
+      <circle cx="18" cy="102" r="3"/><circle cx="52" cy="82" r="3"/><circle cx="86" cy="102" r="3"/><circle cx="122" cy="80" r="3"/><circle cx="156" cy="102" r="3"/><circle cx="190" cy="84" r="3"/><circle cx="228" cy="102" r="3"/>
+    </g>
+    <path d="M44 152L212 84L118 236L106 182L44 152Z" fill="#EEF2F7"/>
+    <path d="M106 182L140 150L118 236L106 182Z" fill="#32C3E6"/>
+  </g>
+
+  <g transform="translate(320,54)">
+    <text x="0" y="120" font-family="Inter, Arial, sans-serif" font-size="112" font-weight="800" fill="#12356A">AirTrust</text>
+    <line x1="0" y1="150" x2="620" y2="150" stroke="#5C6B73" stroke-width="6"/>
+    <text x="0" y="200" font-family="Inter, Arial, sans-serif" font-size="44" letter-spacing="4" fill="#66737B">AERONAUTICAL MANAGEMENT SYSTEM</text>
+  </g>
+</svg>
