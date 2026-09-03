@@ -24,9 +24,12 @@ test('0438 validation v2 stays staging-only and has no schema apply path', () =>
 });
 
 test('V2 overlay is fail closed, revision-only and exercises coordination etapa revisions', () => {
-  assert.match(runner, /ETAPA_CAPTURE_START_MARKER_NOT_FOUND/);
-  assert.match(runner, /ETAPA_REVISION_END_MARKER_NOT_FOUND/);
+  assert.match(runner, /START_MARKER_NOT_FOUND/);
+  assert.match(runner, /END_MARKER_NOT_FOUND/);
+  assert.match(runner, /START_MARKER_NOT_UNIQUE/);
   assert.match(runner, /SHAPE_CHANGED/);
+  assert.match(runner, /'ETAPA_CAPTURE'/);
+  assert.match(runner, /'ETAPA_REVISION'/);
   assert.match(runner, /editar_etapa_coordenacao_revisao/);
   assert.match(runner, /mode: 'coordenacao'/);
   assert.match(runner, /justificativa: 'Ajuste de combustivel durante revisao/);
