@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 
-// source_reference: compatibility runner for the governed staging 0438 validation.
-// It executes the canonical run-controle-voos-e2e.mjs after applying one exact,
-// fail-closed in-memory patch to the stale post-devolution RDV correction step.
-// Product code is never modified. The patch is necessary because the current
-// PUT /voos/:id/rdv contract requires `versao` for an existing RDV and bumps
-// cv_rdv_operacional.versao through CAS.
+// source_reference: revision-evidence overlay for the governed staging 0438 validation.
+// The historical filename is retained for workflow compatibility. The canonical
+// run-controle-voos-e2e.mjs now owns the current CAS correction contract; this
+// overlay only captures the created etapa id and exercises a coordination-time
+// etapa edit so cv_rdv_revisoes receives real evidence. Product code is not modified.
 
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,56 +15,113 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const sourcePath = join(here, 'run-controle-voos-e2e.mjs');
 
-const startMarker = "  // ── 17. Corrigir (piloto reedita apos devolucao, status volta a rascunho) ──";
-const endMarker = "  await call({\n    operation: 'refinalizar_preenchimento_rdv'";
+const etapaStartMarker = "  // ── 7. Criar etapa ───────────────────────────────────────────────────";
+const etapaEndMarker = "  // ── 7.5 Criar setor + funcionario via cadastro CANONICO (Funcionarios) ──";
+const reviewStartMarker = "  // ── 15. Iniciar revisao (coordenacao) ────────────────────────────────";
+const reviewEndMarker = "  // ── 16. Devolver ──────────────────────────────────────────────────────";
 
-const replacement = [
-  '  // ── 17. Corrigir (piloto reedita apos devolucao, status volta a rascunho) ──',
-  '  // Contrato atual: PUT de RDV existente exige CAS numerico via `versao` e',
-  '  // incrementa cv_rdv_operacional.versao quando a escrita e aplicada.',
-  '  const correction = await call({',
-  "    operation: 'corrigir_apos_devolucao',",
-  "    method: 'PUT',",
-  '    path: `/api/controle-voos/voos/${vooId}/rdv`,',
+const etapaReplacement = [
+  '  // ── 7. Criar etapa ───────────────────────────────────────────────────',
+  '  const { json: etapaJson, passed: etapaPassed } = await call({',
+  "    operation: 'criar_etapa',",
+  "    method: 'POST',",
+  '    path: `/api/controle-voos/voos/${vooId}/etapas`,',
   '    actor: adminA,',
   "    tenant: 'A',",
-  '    expectedStatus: 200,',
-  "    body: { versao: rdvVersao, ocorrencias: 'Corrigido apos devolucao (E2E)' },",
+  '    expectedStatus: 201,',
+  '    body: {',
+  '      versao: rdvVersao,',
+  '      numero_etapa: 1,',
+  "      origem_icao: 'OR' + 'A' + manifest.runId,",
+  "      destino_icao: 'DE' + 'A' + manifest.runId,",
+  '      horario_decolagem: `${dataProg}T10:05:00Z`,',
+  '      horario_pouso: `${dataProg}T10:55:00Z`,',
+  '      combustivel_inicio: 500,',
+  '      combustivel_fim: 400,',
+  '    },',
   '  });',
-  '  if (!correction.passed) return finish(manifest, false);',
-  '  rdvVersao = correction.json?.data?.versao ?? rdvVersao + 1;',
+  '  if (!etapaPassed || !etapaJson?.data?.id) return finish(manifest, false);',
+  '  const etapaId = etapaJson.data.id;',
+  '  rdvVersao += 1;',
+  '',
+  '',
+].join('\n');
+
+const reviewReplacement = [
+  '  // ── 15. Iniciar revisao (coordenacao) ────────────────────────────────',
+  '  const iniciarRevisao = await call({',
+  "    operation: 'iniciar_revisao',",
+  "    method: 'POST',",
+  '    path: `/api/controle-voos/voos/${vooId}/rdv/iniciar-revisao`,',
+  '    actor: coordA,',
+  "    tenant: 'A',",
+  '    expectedStatus: 200,',
+  '    body: { versao: rdvVersao },',
+  '  });',
+  '  if (!iniciarRevisao.passed) return finish(manifest, false);',
+  '  rdvVersao += 1;',
+  '',
+  '  // Exercita explicitamente cv_rdv_revisoes: a tabela registra diffs de',
+  '  // etapa quando a coordenacao altera dados durante revisao com justificativa.',
+  '  const etapaRevision = await call({',
+  "    operation: 'editar_etapa_coordenacao_revisao',",
+  "    method: 'PATCH',",
+  '    path: `/api/controle-voos/voos/${vooId}/etapas/${etapaId}`,',
+  '    actor: coordA,',
+  "    tenant: 'A',",
+  '    expectedStatus: 200,',
+  '    body: {',
+  '      versao: rdvVersao,',
+  "      mode: 'coordenacao',",
+  "      justificativa: 'Ajuste de combustivel durante revisao (E2E sintetico)',",
+  '      combustivel_fim: 395,',
+  '    },',
+  '  });',
+  '  if (!etapaRevision.passed) return finish(manifest, false);',
+  '  rdvVersao += 1;',
   '',
   '',
 ].join('\n');
 
 function fail(message) {
-  process.stderr.write(`[e2e-cv-cas-v2] ${message}\n`);
+  process.stderr.write(`[e2e-cv-revision-v2] ${message}\n`);
   process.exit(1);
+}
+
+function replaceSlice(source, startMarker, endMarker, replacement, label, expectedFragment) {
+  const start = source.indexOf(startMarker);
+  if (start < 0) fail(`${label}_START_MARKER_NOT_FOUND`);
+  const end = source.indexOf(endMarker, start);
+  if (end < 0) fail(`${label}_END_MARKER_NOT_FOUND`);
+  if (source.indexOf(startMarker, start + startMarker.length) >= 0) fail(`${label}_START_MARKER_NOT_UNIQUE`);
+  const sourceSlice = source.slice(start, end);
+  if (!sourceSlice.includes(expectedFragment)) fail(`${label}_SHAPE_CHANGED`);
+  return `${source.slice(0, start)}${replacement}${source.slice(end)}`;
 }
 
 const manifestPath = process.argv[2];
 if (!manifestPath) fail('Uso: run-controle-voos-e2e-cas-v2.mjs <manifest.json>');
 
-const source = readFileSync(sourcePath, 'utf8');
-const start = source.indexOf(startMarker);
-if (start < 0) fail('START_MARKER_NOT_FOUND: canonical E2E changed; review compatibility patch.');
-const end = source.indexOf(endMarker, start);
-if (end < 0) fail('END_MARKER_NOT_FOUND: canonical E2E changed; review compatibility patch.');
-if (source.indexOf(startMarker, start + startMarker.length) >= 0) {
-  fail('START_MARKER_NOT_UNIQUE');
-}
+let patched = readFileSync(sourcePath, 'utf8');
+patched = replaceSlice(
+  patched,
+  etapaStartMarker,
+  etapaEndMarker,
+  etapaReplacement,
+  'ETAPA_CAPTURE',
+  "operation: 'criar_etapa'",
+);
+patched = replaceSlice(
+  patched,
+  reviewStartMarker,
+  reviewEndMarker,
+  reviewReplacement,
+  'ETAPA_REVISION',
+  "operation: 'iniciar_revisao'",
+);
 
-const staleSlice = source.slice(start, end);
-if (!staleSlice.includes("body: { ocorrencias: 'Corrigido apos devolucao (E2E)' }")) {
-  fail('STALE_CORRECTION_SHAPE_CHANGED: refuse to patch unknown source.');
-}
-if (staleSlice.includes('body: { versao: rdvVersao')) {
-  fail('CANONICAL_SOURCE_ALREADY_CAS_AWARE: remove compatibility runner and call canonical E2E directly.');
-}
-
-const patched = `${source.slice(0, start)}${replacement}${source.slice(end)}`;
-const tempDir = mkdtempSync(join(tmpdir(), 'cv-e2e-cas-v2-'));
-const tempPath = join(tempDir, 'run-controle-voos-e2e-cas-v2.generated.mjs');
+const tempDir = mkdtempSync(join(tmpdir(), 'cv-e2e-revision-v2-'));
+const tempPath = join(tempDir, 'run-controle-voos-e2e-revision-v2.generated.mjs');
 writeFileSync(tempPath, patched, { mode: 0o700 });
 chmodSync(tempPath, 0o700);
 

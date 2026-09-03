@@ -1,5 +1,5 @@
 // source_reference: static contract test for the staging-only 0438 legacy validation v2 workflow and synthetic cleanup scripts.
-// operational_decision: assertions inspect DML text only to prove the cleanup remains synthetic, fail-closed and outside production/schema apply paths.
+// operational_decision: assertions inspect DML/text only to prove the revision-evidence overlay remains narrow and cleanup remains synthetic, dependency-aware, fail-closed and outside production/schema apply paths.
 // dry_run_required: not applicable; this test performs no remote execution and writes no database state.
 // rollback_plan_required: not applicable; this test is read-only and has no external side effects.
 
@@ -23,29 +23,45 @@ test('0438 validation v2 stays staging-only and has no schema apply path', () =>
   assert.match(workflow, /cleanup-controle-voos-e2e-orphan-run-v2\.mjs/);
 });
 
-test('CAS compatibility runner is fail closed and sends current RDV version', () => {
+test('V2 overlay is fail closed, revision-only and exercises coordination etapa revisions', () => {
   assert.match(runner, /START_MARKER_NOT_FOUND/);
   assert.match(runner, /END_MARKER_NOT_FOUND/);
-  assert.match(runner, /STALE_CORRECTION_SHAPE_CHANGED/);
-  assert.match(runner, /CANONICAL_SOURCE_ALREADY_CAS_AWARE/);
-  assert.match(runner, /body: \{ versao: rdvVersao, ocorrencias:/);
-  assert.match(runner, /rdvVersao = correction\.json\?\.data\?\.versao \?\? rdvVersao \+ 1/);
+  assert.match(runner, /START_MARKER_NOT_UNIQUE/);
+  assert.match(runner, /SHAPE_CHANGED/);
+  assert.match(runner, /'ETAPA_CAPTURE'/);
+  assert.match(runner, /'ETAPA_REVISION'/);
+  assert.match(runner, /editar_etapa_coordenacao_revisao/);
+  assert.match(runner, /mode: 'coordenacao'/);
+  assert.match(runner, /justificativa: 'Ajuste de combustivel durante revisao/);
+  assert.match(runner, /const etapaId = etapaJson\.data\.id/);
+  assert.doesNotMatch(runner, /CANONICAL_SOURCE_ALREADY_CAS_AWARE/);
+  assert.doesNotMatch(runner, /operation: 'corrigir_apos_devolucao'/);
 });
 
-test('fixture cleanup is fail closed and removes domain event dependencies', () => {
+test('fixture cleanup is fail closed and deletes auth/employee dependencies before users', () => {
   assert.match(cleanup, /airtrust-db-staging-baseline-20260701/);
   assert.match(cleanup, /prod\|production/);
   assert.match(cleanup, /DELETE FROM domain_events WHERE empresa_id IN/);
   assert.match(cleanup, /DELETE FROM auditoria_avancada_v2/);
+  assert.match(cleanup, /DELETE FROM refresh_tokens WHERE user_id IN/);
   assert.match(cleanup, /CLEANUP_POSTCONDITION_FAILED/);
   assert.doesNotMatch(cleanup, /AVISO: comando falhou \(continuando cleanup\)/);
+  assert.ok(cleanup.indexOf("['refresh_tokens'") < cleanup.indexOf("['usuarios'"));
+  assert.ok(cleanup.indexOf("['funcionarios'") < cleanup.indexOf("['usuarios'"));
+  assert.ok(cleanup.indexOf("['setores'") < cleanup.indexOf("['usuarios'"));
 });
 
-test('orphan cleanup only derives synthetic companies from an 8-hex run id', () => {
+test('orphan cleanup derives only exact synthetic companies/users from an 8-hex run id', () => {
   assert.match(orphan, /\^\[0-9a-f\]\{8\}\$/);
   assert.match(orphan, /cv_e2e_synth_a_/);
   assert.match(orphan, /cv_e2e_synth_b_/);
   assert.match(orphan, /CV E2E Synthetic Tenant/);
+  assert.match(orphan, /cv\.e2e\.admin\.a\.\$\{runId\}@synthetic\.invalid/);
+  assert.match(orphan, /cv\.e2e\.admin\.b\.\$\{runId\}@synthetic\.invalid/);
   assert.match(orphan, /NON_SYNTHETIC_CODE_REJECTED/);
   assert.match(orphan, /NON_SYNTHETIC_NAME_REJECTED/);
+  assert.match(orphan, /NON_SYNTHETIC_USER_REJECTED/);
+  assert.match(orphan, /DELETE FROM refresh_tokens WHERE user_id IN/);
+  assert.ok(orphan.indexOf("['refresh_tokens'") < orphan.indexOf("['usuarios'"));
+  assert.ok(orphan.indexOf("['funcionarios'") < orphan.indexOf("['usuarios'"));
 });
