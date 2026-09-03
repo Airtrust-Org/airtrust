@@ -56,7 +56,7 @@ describe('RowActionsMenu', () => {
     await user.keyboard('{Escape}');
 
     await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'));
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it('uses the 44px minimum touch-target contract on the trigger', () => {
