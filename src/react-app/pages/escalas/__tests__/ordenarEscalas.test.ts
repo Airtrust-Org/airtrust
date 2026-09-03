@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  classificarCompetencia,
+  competenciaAtualDoSistema,
   ordenarEscalasCronologicamente,
   proximasCompetenciasSemEscala,
 } from '../utils/ordenarEscalas';
@@ -74,5 +76,58 @@ describe('proximasCompetenciasSemEscala', () => {
 
   it('respeita o limite informado', () => {
     expect(proximasCompetenciasSemEscala([], 2026, 1)).toEqual([1]);
+  });
+});
+
+describe('classificarCompetencia (ano + mês)', () => {
+  const ref = c(2026, 9); // setembro/2026
+
+  it('janeiro/2027 visto em setembro/2026 → futura', () => {
+    expect(classificarCompetencia(c(2027, 1), ref)).toBe('futura');
+  });
+
+  it('janeiro/2025 visto em setembro/2026 → passada', () => {
+    expect(classificarCompetencia(c(2025, 1), ref)).toBe('passada');
+  });
+
+  it('setembro/2026 visto em setembro/2026 → atual', () => {
+    expect(classificarCompetencia(c(2026, 9), ref)).toBe('atual');
+  });
+
+  it('outubro/2026 visto em setembro/2026 → futura', () => {
+    expect(classificarCompetencia(c(2026, 10), ref)).toBe('futura');
+  });
+
+  it('agosto/2026 visto em setembro/2026 → passada', () => {
+    expect(classificarCompetencia(c(2026, 8), ref)).toBe('passada');
+  });
+
+  it('setembro/2025 não pode ser atual (é passada)', () => {
+    expect(classificarCompetencia(c(2025, 9), ref)).toBe('passada');
+  });
+
+  it('setembro/2027 não pode ser atual (é futura)', () => {
+    expect(classificarCompetencia(c(2027, 9), ref)).toBe('futura');
+  });
+
+  it('ano filtrado anterior ao atual: todos os meses são passados', () => {
+    for (let mes = 1; mes <= 12; mes++) {
+      expect(classificarCompetencia(c(2025, mes), ref)).toBe('passada');
+    }
+  });
+
+  it('ano filtrado posterior ao atual: nenhum mês é passado ou atual', () => {
+    for (let mes = 1; mes <= 12; mes++) {
+      expect(classificarCompetencia(c(2027, mes), ref)).toBe('futura');
+    }
+  });
+});
+
+describe('competenciaAtualDoSistema', () => {
+  it('extrai ano e mês (1-based) da data informada', () => {
+    expect(competenciaAtualDoSistema(new Date(2026, 8, 15))).toEqual({
+      ano: 2026,
+      mes: 9,
+    });
   });
 });

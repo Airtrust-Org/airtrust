@@ -44,3 +44,37 @@ export function proximasCompetenciasSemEscala(
     .filter((mes) => !mesesComEscala.has(mes))
     .slice(0, Math.max(0, limite));
 }
+
+export type ClassificacaoTemporal = 'passada' | 'atual' | 'futura';
+
+/**
+ * Competência (ano+mês) correspondente à data informada. Isola o único ponto
+ * que depende do relógio, para que a classificação abaixo seja determinística
+ * e testável sem stub de `Date` na renderização.
+ */
+export function competenciaAtualDoSistema(
+  agora: Date = new Date(),
+): CompetenciaTemporal {
+  return { ano: agora.getFullYear(), mes: agora.getMonth() + 1 };
+}
+
+/**
+ * Classifica uma competência como passada/atual/futura comparando ANO e MÊS
+ * (nunca só o número do mês):
+ *  - ano diferente → decide pelo ano;
+ *  - mesmo ano e mesmo mês → atual;
+ *  - mesmo ano, mês diferente → decide pelo mês.
+ *
+ * Assim, jan/2027 visto em set/2026 é futuro, e set/2025 ou set/2027 nunca
+ * são "atual".
+ */
+export function classificarCompetencia(
+  competencia: CompetenciaTemporal,
+  referencia: CompetenciaTemporal,
+): ClassificacaoTemporal {
+  if (competencia.ano !== referencia.ano) {
+    return competencia.ano < referencia.ano ? 'passada' : 'futura';
+  }
+  if (competencia.mes === referencia.mes) return 'atual';
+  return competencia.mes < referencia.mes ? 'passada' : 'futura';
+}
