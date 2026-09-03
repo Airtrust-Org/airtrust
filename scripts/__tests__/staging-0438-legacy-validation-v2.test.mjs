@@ -1,3 +1,8 @@
+// source_reference: static contract test for the staging-only 0438 legacy validation v2 workflow and synthetic cleanup scripts.
+// operational_decision: assertions inspect DML text only to prove the cleanup remains synthetic, fail-closed and outside production/schema apply paths.
+// dry_run_required: not applicable; this test performs no remote execution and writes no database state.
+// rollback_plan_required: not applicable; this test is read-only and has no external side effects.
+
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
