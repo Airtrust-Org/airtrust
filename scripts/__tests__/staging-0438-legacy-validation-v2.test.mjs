@@ -14,6 +14,8 @@ test('0438 validation v2 stays staging-only and has no schema apply path', () =>
   assert.doesNotMatch(workflow, /apply_change/);
   assert.match(workflow, /validate-0438-legacy-physical-state\.sh/);
   assert.match(workflow, /schema-v2-0438-rdv-coordination-workflow\.test\.mjs/);
+  assert.match(workflow, /cleanup-controle-voos-e2e-fixtures-v2\.mjs/);
+  assert.match(workflow, /cleanup-controle-voos-e2e-orphan-run-v2\.mjs/);
 });
 
 test('CAS compatibility runner is fail closed and sends current RDV version', () => {
