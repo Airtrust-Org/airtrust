@@ -29,8 +29,8 @@ env:
   ALLOWED_STAGING_DB_NAME: airtrust-db-staging-baseline-20260701
 
 jobs:
-  cleanup:
-    name: Guarded Synthetic Orphan Cleanup
+  d1-orphan-cleanup:
+    name: Guarded Staging D1 Synthetic Orphan Cleanup
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -47,7 +47,7 @@ jobs:
           [[ "$CONFIRMATION" == "$EXPECTED_CONFIRMATION" ]] || { echo "invalid confirmation" >&2; exit 1; }
           [[ "$RUN_ID" =~ ^[0-9a-fA-F]{8}$ ]] || { echo "run_id must be exactly 8 hex chars" >&2; exit 1; }
           [[ -n "$REASON" ]] || { echo "reason is required" >&2; exit 1; }
-          echo "Synthetic staging cleanup requested for run ${RUN_ID,,}."
+          echo "Synthetic staging D1 cleanup requested for run ${RUN_ID,,}."
 
       - uses: actions/checkout@v4
 
@@ -69,7 +69,7 @@ jobs:
       - name: Validate cleanup script syntax
         run: node --check scripts/staging/cleanup-controle-voos-e2e-orphan-run-v2.mjs
 
-      - name: Discover exact synthetic targets without writes
+      - name: Discover exact synthetic D1 targets without writes
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -77,7 +77,7 @@ jobs:
           RUN_ID: ${{ inputs.run_id }}
         run: node scripts/staging/cleanup-controle-voos-e2e-orphan-run-v2.mjs "${RUN_ID,,}"
 
-      - name: Remove exact synthetic orphan fail closed
+      - name: Remove exact synthetic D1 orphan fail closed
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -92,7 +92,7 @@ jobs:
           REASON: ${{ inputs.reason }}
         run: |
           {
-            echo "## Staging synthetic E2E orphan cleanup"
+            echo "## Staging synthetic E2E D1 orphan cleanup"
             echo "- run_id: \`${RUN_ID,,}\`"
             echo "- target: \`$ALLOWED_STAGING_DB_NAME\`"
             echo "- production touched: no"
