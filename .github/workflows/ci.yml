@@ -55,6 +55,8 @@ jobs:
         run: node --test scripts/__tests__/schema-v2-0438-rdv-coordination-workflow.test.mjs
       - name: validate 0438 legacy staging workflow guards
         run: node --test scripts/__tests__/staging-0438-legacy-validation.test.mjs
+      - name: validate 0438 legacy staging workflow v2 guards
+        run: node --test scripts/__tests__/staging-0438-legacy-validation-v2.test.mjs
       - name: internal docs check (self-test)
         run: chmod +x ./scripts/ci-demo-data-check.sh ./scripts/ci-internal-docs-check.sh ./scripts/production-audit-check.sh && ./scripts/ci-internal-docs-check.sh --test
       - name: internal docs check
