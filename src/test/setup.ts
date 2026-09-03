@@ -96,6 +96,21 @@ beforeEach(() => {
   resetLocalStorageMock();
 });
 
+// Polyfill de ResizeObserver: @headlessui/react v2 consulta o observer ao abrir
+// menus/popovers em jsdom, onde a API não existe.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  class ResizeObserverStub {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    writable: true,
+    value: ResizeObserverStub,
+  });
+}
+
 // Mock de window.matchMedia
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
