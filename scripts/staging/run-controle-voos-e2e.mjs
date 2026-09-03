@@ -494,15 +494,12 @@ async function main() {
     actor: adminA,
     tenant: 'A',
     expectedStatus: 200,
-    // PUT /voos/:id/rdv nao aceita `versao` (400 CONTROLE_VOOS_FORBIDDEN_FIELD
-    // — nao esta em allowedRdvFields) e NAO incrementa cv_rdv_operacional.versao
-    // (achado real via E2E: essa rota predata o CAS fino dos endpoints de
-    // workflow e usa apenas o lock grosso de `status` — devolver ja resetou
-    // status para 'rascunho', entao o PUT aqui e permitido sem CAS numerico).
-    // `observacoes` tambem nao existe em allowedRdvFields; `ocorrencias` sim.
-    body: { ocorrencias: 'Corrigido apos devolucao (E2E)' },
+    body: {
+      versao: rdvVersao,
+      ocorrencias: 'Corrigido apos devolucao (E2E)',
+    },
   });
-  // rdvVersao NAO muda aqui — PUT rdv nao bumpa versao (ver comentario acima).
+  rdvVersao += 1;
 
   await call({
     operation: 'refinalizar_preenchimento_rdv',
