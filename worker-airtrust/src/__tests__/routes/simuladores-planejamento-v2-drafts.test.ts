@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 
-const assertFuncionarioInScope = vi.fn().mockResolvedValue(undefined);
+const { assertFuncionarioInScope } = vi.hoisted(() => ({
+  assertFuncionarioInScope: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: any, next: () => Promise<void>) => {
