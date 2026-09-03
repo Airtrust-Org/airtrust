@@ -10,11 +10,15 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { buildReviewedSchemaApply } from '../schema-v2/build-reviewed-schema-apply.mjs';
+import { build0438DualLedgerApply } from '../staging/build-0438-dual-ledger-apply.mjs';
 
 const MANIFEST = 'worker-airtrust/schema-v2/0438-rdv-coordination-workflow-production.json';
 const MIGRATION = 'worker-airtrust/migrations/0438_controle_voos_rdv_coordenacao_workflow.sql';
 const BASE_0410 = 'worker-airtrust/migrations/0410_controle_voos_n1_schema.sql';
 const BASE_0411 = 'worker-airtrust/migrations/0411_controle_voos_sigvoos_integration_schema.sql';
+const STAGING_RUNNER = 'scripts/staging/apply-0438-rdv-coordination-workflow.sh';
+const STAGING_VALIDATOR = 'scripts/staging/validate-0438-postconditions.sh';
+const STAGING_WORKFLOW = '.github/workflows/staging-0438-schema-v2.yml';
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -105,7 +109,6 @@ test('0438 touches no existing table destructively — only additive DDL plus sc
   for (const sql of [change, migration]) {
     const body = executable(sql);
 
-    // The RDV coordination markers the mounted Worker routes depend on.
     assert.match(body, /ALTER TABLE cv_rdv_operacional ADD COLUMN workflow_status TEXT NOT NULL DEFAULT 'rascunho'/);
     assert.match(body, /ALTER TABLE cv_rdv_operacional ADD COLUMN versao INTEGER NOT NULL DEFAULT 1/);
     assert.match(body, /CREATE TABLE IF NOT EXISTS cv_rdv_aprovacoes/);
@@ -117,12 +120,10 @@ test('0438 touches no existing table destructively — only additive DDL plus sc
       /CREATE UNIQUE INDEX IF NOT EXISTS idx_cv_voo_etapas_empresa_voo_numero_unique/,
     );
 
-    // No ALTER against any existing table other than the additive cv_rdv_operacional columns.
     for (const m of body.matchAll(/ALTER TABLE\s+(\w+)/gi)) {
       assert.equal(m[1], 'cv_rdv_operacional');
     }
 
-    // Every DROP targets only the transient preflight/rollback guard tables.
     for (const m of body.matchAll(/DROP TABLE IF EXISTS\s+(\w+)/gi)) {
       assert.match(m[1], /^_(?:preflight|rollback)_0438_/);
     }
@@ -130,7 +131,6 @@ test('0438 touches no existing table destructively — only additive DDL plus sc
     assert.doesNotMatch(body, /\bDELETE\s+FROM\b/i);
     assert.doesNotMatch(body, /\bREPLACE\s+INTO\b/i);
 
-    // The only INSERTs are the fail-closed guard probes into the scratch tables.
     for (const m of body.matchAll(/INSERT INTO\s+(\w+)/gi)) {
       assert.match(m[1], /^_(?:preflight|rollback)_0438_/);
     }
@@ -224,7 +224,6 @@ test('0438 applies on a disposable database built from the real 0410/0411 base a
       /UNIQUE constraint failed|constraint/i,
     );
 
-    // Raw reapplication is deliberately fail-closed before duplicate ALTER TABLE operations.
     assert.throws(() => db.exec(change), /constraint/i);
     assert.equal(columnExists(db, 'cv_rdv_operacional', 'workflow_status'), true);
   } finally {
@@ -247,7 +246,6 @@ test('0438 preflight rejects duplicate active etapa numbers before any schema ma
 
     assert.throws(() => db.exec(schemaV2Sql()), /constraint/i);
 
-    // The fail-closed probe runs before ALTER/CREATE statements that carry 0438 markers.
     assert.equal(columnExists(db, 'cv_rdv_operacional', 'workflow_status'), false);
     assert.equal(columnExists(db, 'cv_rdv_operacional', 'versao'), false);
     assert.equal(tableExists(db, 'cv_rdv_aprovacoes'), false);
@@ -255,4 +253,62 @@ test('0438 preflight rejects duplicate active etapa numbers before any schema ma
   } finally {
     db.close();
   }
+});
+
+test('staging builder submits reviewed 0438 plus both ledgers in one generated file', () => {
+  const outputPath = path.join(
+    mkdtempSync(path.join(tmpdir(), 'airtrust-0438-staging-')),
+    '0438-dual-ledger.sql',
+  );
+  const releaseSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  const result = build0438DualLedgerApply({ releaseRoot: '.', releaseSha, outputPath });
+  assert.equal(result.changeId, '0438-rdv-coordination-workflow-production');
+  assert.equal(result.releaseSha, releaseSha);
+
+  const bundle = readFileSync(outputPath, 'utf8');
+  assert.equal((bundle.match(/INSERT INTO airtrust_schema_changes_v2/g) ?? []).length, 1);
+  assert.equal((bundle.match(/INSERT INTO d1_migrations/g) ?? []).length, 1);
+  assert.match(bundle, /0438_controle_voos_rdv_coordenacao_workflow\.sql/);
+  assert.match(bundle, /0438-rdv-coordination-workflow-production/);
+  assert.match(bundle, /idx_cv_voo_etapas_empresa_voo_numero_unique/);
+});
+
+test('staging 0438 runner is fail-closed and never routes 0438 through the raw migration executor', () => {
+  const runner = readFileSync(STAGING_RUNNER, 'utf8');
+  const validator = readFileSync(STAGING_VALIDATOR, 'utf8');
+
+  assert.match(runner, /AIRTRUST_STAGING_SCHEMA_V2_0438/);
+  assert.match(runner, /MARKERS_PRESENT=%s\/7/);
+  assert.match(runner, /PARTIAL_SCHEMA_STATE/);
+  assert.match(runner, /COMPLETE_SCHEMA_LEDGER_DIVERGENCE/);
+  assert.match(runner, /LEDGER_WITHOUT_SCHEMA/);
+  assert.match(runner, /ALREADY_APPLIED: segunda aplicação recusada/);
+  assert.match(runner, /ACTIVE_STAGE_DUPLICATE_GROUPS/);
+  assert.match(runner, /build-0438-dual-ledger-apply\.mjs/);
+  assert.match(runner, /d1 time-travel info/);
+  assert.match(runner, /d1 execute "\$db_name" --remote --file="\$combined_sql"/);
+  assert.doesNotMatch(runner, /d1 execute[^\n]+--file="?\$migration_arg/);
+  assert.match(runner, /bf9963f4-eb12-439b-a830-20bbf577ac22/);
+  assert.match(runner, /7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae/);
+
+  assert.match(validator, /workflow_status\.default/);
+  assert.match(validator, /versao\.default/);
+  assert.match(validator, /trg_cv_rdv_aprovacoes_no_update/);
+  assert.match(validator, /trg_cv_rdv_revisoes_no_update/);
+  assert.match(validator, /idx_cv_voo_etapas_empresa_voo_numero_unique/);
+});
+
+test('dedicated workflow keeps 0438 staging-only and does not overclaim transition-smoke coverage', () => {
+  const workflow = readFileSync(STAGING_WORKFLOW, 'utf8');
+  assert.match(workflow, /name: Staging 0438 RDV Schema V2/);
+  assert.match(workflow, /default: false/);
+  assert.match(workflow, /AIRTRUST_STAGING_SCHEMA_V2_0438/);
+  assert.match(workflow, /Require staging Worker provenance to match release SHA/);
+  assert.match(workflow, /apply-0438-rdv-coordination-workflow\.sh/);
+  assert.match(workflow, /validate-0438-postconditions\.sh/);
+  assert.match(workflow, /smoke-rdv-cas\.mjs/);
+  assert.match(workflow, /full workflow-transition smoke: not claimed by this workflow/);
+  assert.match(workflow, /production touched: no/);
+  assert.doesNotMatch(workflow, /apply-schema-change-v2\.yml/);
+  assert.doesNotMatch(workflow, /confirm_production|AIRTRUST_PRODUCTION/);
 });
