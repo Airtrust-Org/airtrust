@@ -3,16 +3,19 @@ import {
   AlertTriangle,
   CalendarRange,
   CheckCircle2,
+  Clock3,
   FileText,
+  FolderOpen,
   Loader2,
   RefreshCw,
   Repeat2,
+  Save,
   Upload,
   UserRoundCog,
   Users,
   X,
 } from 'lucide-react';
-import { apiJson, frontendErrorMessage } from '@/react-app/lib/api-contract';
+import { apiEnvelope, apiJson, frontendErrorMessage } from '@/react-app/lib/api-contract';
 import { showToast } from '@/react-app/utils/toast';
 
 type PlanningConfig = {
@@ -147,6 +150,29 @@ type RepairResponse = {
   summary: Pick<Proposal['summary'], 'session_requirements' | 'paired_blocks' | 'unmatched_blocks' | 'classes'>;
 };
 
+type DraftWorkflowStatus = 'AGUARDANDO_CAE' | 'CAE_RECEBIDA' | 'PLANEJADO' | 'REPLANEJAR';
+
+type DraftSummary = {
+  id: number;
+  draft_id: string;
+  workflow_status: DraftWorkflowStatus;
+  vencimento_inicio: string;
+  vencimento_fim: string;
+  cae_file_name: string | null;
+  classes: number;
+  class_names: string[];
+  session_requirements: number;
+  updated_at: string | null;
+};
+
+type SavedDraft = DraftSummary & {
+  proposal: Proposal;
+  base_needs: SessionNeed[];
+  locks: PairLock[];
+  cae_file_key: string | null;
+  cae_document: CaeAvailabilityDocument | null;
+};
+
 const inputClass =
   'min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
 
@@ -163,6 +189,13 @@ function formatDate(value?: string | null) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return '—';
   const [year, month, day] = raw.split('-');
   return `${day}/${month}/${year}`;
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return '—';
+  const parsed = new Date(value.endsWith('Z') || value.includes('+') ? value : `${value.replace(' ', 'T')}Z`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
 function rosterPolicyLabel(value?: PlanningConfig['roster_policy']) {
@@ -183,6 +216,14 @@ function blockStatus(block: PlanningBlock) {
   if (block.schedule_status === 'NO_CAE_SLOT') return 'Sem slot CAE compatível';
   if (block.pairing === 'SEM_DUPLA' || block.schedule_status === 'UNMATCHED_CREW') return 'Aguardando dupla';
   return 'Dupla proposta — data a confirmar';
+}
+
+function draftStatusLabel(value?: DraftWorkflowStatus | null) {
+  if (value === 'AGUARDANDO_CAE') return 'Aguardando resposta da CAE';
+  if (value === 'CAE_RECEBIDA') return 'CAE recebida — falta comparar';
+  if (value === 'PLANEJADO') return 'Planejamento definido com CAE';
+  if (value === 'REPLANEJAR') return 'Requer ajuste após CAE';
+  return 'Não salvo';
 }
 
 function uniqueNeeds(classes: PlanningClass[]): SessionNeed[] {
@@ -206,8 +247,14 @@ export default function PlanejamentoSimuladoresV3() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [caeFileName, setCaeFileName] = useState<string | null>(null);
+  const [caeFileKey, setCaeFileKey] = useState<string | null>(null);
   const [caeDocument, setCaeDocument] = useState<CaeAvailabilityDocument | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [drafts, setDrafts] = useState<DraftSummary[]>([]);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [draftStatus, setDraftStatus] = useState<DraftWorkflowStatus | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [loadingDraft, setLoadingDraft] = useState<string | null>(null);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -218,14 +265,27 @@ export default function PlanejamentoSimuladoresV3() {
     }
   }, []);
 
+  const loadDrafts = useCallback(async () => {
+    try {
+      const data = await apiJson<DraftSummary[]>('/api/simuladores/planejamento-v2/rascunhos');
+      setDrafts(data);
+    } catch (error) {
+      showToast.error(frontendErrorMessage(error));
+    }
+  }, []);
+
   useEffect(() => {
     void loadConfig();
-  }, [loadConfig]);
+    void loadDrafts();
+  }, [loadConfig, loadDrafts]);
 
-  const generateProposal = async (availability?: CaeAvailabilityDocument | null) => {
+  const generateProposal = async (
+    availability?: CaeAvailabilityDocument | null,
+    preserveDraft = false,
+  ): Promise<Proposal | null> => {
     if (!inicio || !fim || inicio > fim) {
       showToast.error('Informe um período de vencimentos válido.');
-      return;
+      return null;
     }
     try {
       setLoading(true);
@@ -243,20 +303,116 @@ export default function PlanejamentoSimuladoresV3() {
       setBaseNeeds(uniqueNeeds(data.classes));
       setLocks([]);
       setSwap(null);
+      if (!preserveDraft && !availability) {
+        setDraftId(null);
+        setDraftStatus(null);
+        setCaeFileName(null);
+        setCaeFileKey(null);
+        setCaeDocument(null);
+      }
       if (availability && data.cae_comparison) {
         showToast.success(`${data.cae_comparison.scheduled_blocks} sessão(ões) alocada(s) nos slots CAE.`);
       } else {
         showToast.success(`Proposta criada com ${data.summary.session_requirements} sessão(ões).`);
       }
+      return data;
     } catch (error) {
       showToast.error(frontendErrorMessage(error));
+      return null;
     } finally {
       setLoading(false);
     }
   };
 
-  const rePair = async (nextLocks: PairLock[], availability?: CaeAvailabilityDocument | null) => {
-    if (baseNeeds.length === 0) return;
+  const persistDraft = async (
+    workflowStatus: DraftWorkflowStatus,
+    overrides?: {
+      proposal?: Proposal | null;
+      baseNeeds?: SessionNeed[];
+      locks?: PairLock[];
+      caeFileName?: string | null;
+      caeFileKey?: string | null;
+      caeDocument?: CaeAvailabilityDocument | null;
+    },
+    silent = false,
+  ): Promise<SavedDraft | null> => {
+    const nextProposal = overrides?.proposal ?? proposal;
+    const nextBaseNeeds = overrides?.baseNeeds ?? baseNeeds;
+    const nextLocks = overrides?.locks ?? locks;
+    const nextCaeFileName = overrides?.caeFileName !== undefined ? overrides.caeFileName : caeFileName;
+    const nextCaeFileKey = overrides?.caeFileKey !== undefined ? overrides.caeFileKey : caeFileKey;
+    const nextCaeDocument = overrides?.caeDocument !== undefined ? overrides.caeDocument : caeDocument;
+    if (!nextProposal || nextBaseNeeds.length === 0) return null;
+
+    try {
+      setSavingDraft(true);
+      const payload = {
+        vencimento_inicio: inicio,
+        vencimento_fim: fim,
+        workflow_status: workflowStatus,
+        proposal: nextProposal,
+        base_needs: nextBaseNeeds,
+        locks: nextLocks,
+        cae_file_name: nextCaeFileName,
+        cae_file_key: nextCaeFileKey,
+        cae_document: nextCaeDocument,
+      };
+      const data = await apiJson<SavedDraft>(
+        draftId
+          ? `/api/simuladores/planejamento-v2/rascunhos/${encodeURIComponent(draftId)}`
+          : '/api/simuladores/planejamento-v2/rascunhos',
+        {
+          method: draftId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      );
+      setDraftId(data.draft_id);
+      setDraftStatus(data.workflow_status);
+      setCaeFileName(data.cae_file_name);
+      setCaeFileKey(data.cae_file_key);
+      setCaeDocument(data.cae_document);
+      await loadDrafts();
+      if (!silent) showToast.success(draftId ? 'Planejamento atualizado.' : 'Proposta salva para retomar depois.');
+      return data;
+    } catch (error) {
+      if (!silent) showToast.error(frontendErrorMessage(error));
+      return null;
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  const resumeDraft = async (id: string) => {
+    try {
+      setLoadingDraft(id);
+      const data = await apiJson<SavedDraft>(
+        `/api/simuladores/planejamento-v2/rascunhos/${encodeURIComponent(id)}`,
+      );
+      setInicio(data.vencimento_inicio);
+      setFim(data.vencimento_fim);
+      setProposal(data.proposal);
+      setBaseNeeds(data.base_needs);
+      setLocks(data.locks);
+      setCaeFileName(data.cae_file_name);
+      setCaeFileKey(data.cae_file_key);
+      setCaeDocument(data.cae_document);
+      setDraftId(data.draft_id);
+      setDraftStatus(data.workflow_status);
+      setSwap(null);
+      showToast.success(`Planejamento retomado: ${draftStatusLabel(data.workflow_status)}.`);
+    } catch (error) {
+      showToast.error(frontendErrorMessage(error));
+    } finally {
+      setLoadingDraft(null);
+    }
+  };
+
+  const rePair = async (
+    nextLocks: PairLock[],
+    availability?: CaeAvailabilityDocument | null,
+  ): Promise<Proposal | null> => {
+    if (baseNeeds.length === 0 || !proposal) return null;
     try {
       setLoading(true);
       const data = await apiJson<RepairResponse>('/api/simuladores/planejamento-v2/reparear', {
@@ -269,21 +425,20 @@ export default function PlanejamentoSimuladoresV3() {
           ...(availability ? { cae_availability: availability } : {}),
         }),
       });
+      const nextProposal: Proposal = {
+        ...proposal,
+        classes: data.classes,
+        cae_comparison: data.cae_comparison,
+        summary: { ...proposal.summary, ...data.summary },
+      };
       setLocks(nextLocks);
-      setProposal((current) =>
-        current
-          ? {
-              ...current,
-              classes: data.classes,
-              cae_comparison: data.cae_comparison,
-              summary: { ...current.summary, ...data.summary },
-            }
-          : current,
-      );
+      setProposal(nextProposal);
       setSwap(null);
       showToast.success('Dupla atualizada e restante do planejamento recalculado.');
+      return nextProposal;
     } catch (error) {
       showToast.error(frontendErrorMessage(error));
+      return null;
     } finally {
       setLoading(false);
     }
@@ -321,12 +476,18 @@ export default function PlanejamentoSimuladoresV3() {
       ...retained,
       { anchor_need_id: swap.anchor.need_id, partner_need_id: candidate.need_id },
     ];
-    await rePair(nextLocks, caeDocument);
+    const nextProposal = await rePair(nextLocks, caeDocument);
+    if (draftId && nextProposal) {
+      await persistDraft(draftStatus || 'AGUARDANDO_CAE', { proposal: nextProposal, locks: nextLocks }, true);
+    }
   };
 
   const resetPairings = async () => {
     if (locks.length === 0) return;
-    await rePair([], caeDocument);
+    const nextProposal = await rePair([], caeDocument);
+    if (draftId && nextProposal) {
+      await persistDraft(draftStatus || 'AGUARDANDO_CAE', { proposal: nextProposal, locks: [] }, true);
+    }
   };
 
   const uploadCae = async (file: File | null) => {
@@ -340,17 +501,31 @@ export default function PlanejamentoSimuladoresV3() {
     try {
       setUploading(true);
       setCaeFileName(file.name);
-      const imported = await apiJson<CaeImport>(
+      const envelope = await apiEnvelope<CaeImport>(
         '/api/simuladores/planejamento/cae-disponibilidade/importar',
         { method: 'POST', body: form },
       );
-      if (!imported.document) {
+      const imported = envelope.data;
+      const fileKey = typeof envelope.file_key === 'string' ? envelope.file_key : null;
+      setCaeFileKey(fileKey);
+      if (!imported?.document) {
         setCaeDocument(null);
         showToast.warning('PDF recebido, mas a disponibilidade não pôde ser validada automaticamente.');
         return;
       }
       setCaeDocument(imported.document);
       showToast.success(`${imported.document.slots.length} slot(s) CAE lido(s).`);
+      if (draftId) {
+        await persistDraft(
+          'CAE_RECEBIDA',
+          {
+            caeFileName: file.name,
+            caeFileKey: fileKey,
+            caeDocument: imported.document,
+          },
+          true,
+        );
+      }
     } catch (error) {
       setCaeDocument(null);
       showToast.error(frontendErrorMessage(error));
@@ -361,8 +536,35 @@ export default function PlanejamentoSimuladoresV3() {
 
   const compareCae = async () => {
     if (!caeDocument) return;
-    if (locks.length > 0) await rePair(locks, caeDocument);
-    else await generateProposal(caeDocument);
+    let nextProposal: Proposal | null = null;
+    let nextBaseNeeds = baseNeeds;
+    if (locks.length > 0) {
+      nextProposal = await rePair(locks, caeDocument);
+    } else {
+      nextProposal = await generateProposal(caeDocument, true);
+      if (nextProposal) nextBaseNeeds = uniqueNeeds(nextProposal.classes);
+    }
+    if (!nextProposal) return;
+    const comparison = nextProposal.cae_comparison;
+    const status: DraftWorkflowStatus =
+      comparison && comparison.no_slot_blocks === 0 && comparison.unmatched_crew_blocks === 0
+        ? 'PLANEJADO'
+        : 'REPLANEJAR';
+    if (draftId) {
+      await persistDraft(status, { proposal: nextProposal, baseNeeds: nextBaseNeeds }, true);
+    }
+  };
+
+  const saveCurrent = async () => {
+    if (!proposal) return;
+    const status: DraftWorkflowStatus = proposal.cae_comparison
+      ? proposal.cae_comparison.no_slot_blocks === 0 && proposal.cae_comparison.unmatched_crew_blocks === 0
+        ? 'PLANEJADO'
+        : 'REPLANEJAR'
+      : caeDocument
+        ? 'CAE_RECEBIDA'
+        : 'AGUARDANDO_CAE';
+    await persistDraft(status);
   };
 
   const scheduledBlocks = useMemo(
@@ -398,6 +600,7 @@ export default function PlanejamentoSimuladoresV3() {
       text('AirTrust — Planejamento de Treinamento em Simulador', 15, true);
       text(`Vencimentos: ${formatDate(inicio)} a ${formatDate(fim)}`);
       text(`Regra de escala: ${rosterPolicyLabel(proposal.config.roster_policy)}`);
+      if (draftId) text(`Proposta persistida: ${draftStatusLabel(draftStatus)}`, 8, true);
       if (locks.length > 0) text(`${locks.length} ajuste(s) manual(is) de dupla aplicado(s)`, 8, true);
       y += 2;
 
@@ -440,6 +643,40 @@ export default function PlanejamentoSimuladoresV3() {
 
   return (
     <div className="space-y-5">
+      {drafts.length > 0 && (
+        <section className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
+          <div className="flex items-center gap-2">
+            <FolderOpen className="h-4 w-4 text-blue-700" />
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Planejamentos em andamento</h3>
+          </div>
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+            Retome a proposta exatamente de onde parou, inclusive depois de enviar o pedido à CAE.
+          </p>
+          <div className="mt-3 grid gap-2 lg:grid-cols-2">
+            {drafts.slice(0, 6).map((draft) => (
+              <button
+                key={draft.draft_id}
+                type="button"
+                onClick={() => void resumeDraft(draft.draft_id)}
+                disabled={loadingDraft === draft.draft_id}
+                className="flex min-h-20 items-center justify-between gap-3 rounded-lg border border-blue-200 bg-white px-3 py-3 text-left hover:border-blue-400 disabled:opacity-50 dark:border-blue-900 dark:bg-slate-950"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">
+                    {draft.class_names.slice(0, 2).join(' · ') || `${draft.classes} turma(s)`}
+                  </div>
+                  <div className="mt-1 text-xs font-medium text-blue-700">{draftStatusLabel(draft.workflow_status)}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {formatDate(draft.vencimento_inicio)}–{formatDate(draft.vencimento_fim)} · {draft.session_requirements} sessão(ões) · atualizado {formatDateTime(draft.updated_at)}
+                  </div>
+                </div>
+                {loadingDraft === draft.draft_id ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <FolderOpen className="h-4 w-4 shrink-0 text-blue-600" />}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -448,8 +685,13 @@ export default function PlanejamentoSimuladoresV3() {
               Planejamento de simulador
             </div>
             <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">
-              Proposta por sessão, dupla editável e validação de disponibilidade antes de enviar à CAE.
+              Proposta por sessão, dupla editável, salvamento persistente e definição de datas somente após a resposta da CAE.
             </p>
+            {draftId && (
+              <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                <Clock3 className="h-3.5 w-3.5" /> {draftStatusLabel(draftStatus)}
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             {locks.length > 0 && (
@@ -462,6 +704,15 @@ export default function PlanejamentoSimuladoresV3() {
                 <Repeat2 className="h-4 w-4" /> Recalcular automático
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => void saveCurrent()}
+              disabled={!proposal || savingDraft}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800 disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200"
+            >
+              {savingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {draftId ? 'Salvar alterações' : caeDocument ? 'Salvar planejamento' : 'Salvar e aguardar CAE'}
+            </button>
             <button
               type="button"
               onClick={() => void exportPdf()}
@@ -498,7 +749,9 @@ export default function PlanejamentoSimuladoresV3() {
             Gerar proposta
           </button>
         </div>
-        <p className="mt-3 text-xs text-slate-500">Prévia somente leitura: trocar a dupla aqui não grava planejamento nem altera qualificação.</p>
+        <p className="mt-3 text-xs text-slate-500">
+          Salvar preserva a proposta, as turmas e as trocas para retomar depois. Isso não agenda sessão nem altera qualificação.
+        </p>
       </section>
 
       {proposal && (
@@ -646,7 +899,9 @@ export default function PlanejamentoSimuladoresV3() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h3 className="text-base font-semibold text-slate-900 dark:text-white">2. Disponibilidade da CAE</h3>
-            <p className="mt-1 text-sm text-slate-500">Envie o PDF da CAE depois de ajustar as duplas. O AirTrust revalida a escala na data exata de cada slot.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Salve a proposta e aguarde a CAE. Quando a resposta chegar, retome este planejamento, envie o PDF e o AirTrust revalidará a escala na data exata de cada slot.
+            </p>
           </div>
           <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200">
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -655,7 +910,7 @@ export default function PlanejamentoSimuladoresV3() {
           </label>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <div className="text-sm text-slate-600 dark:text-slate-300">{caeFileName ? `Arquivo: ${caeFileName}` : 'Nenhum PDF enviado nesta análise.'}</div>
+          <div className="text-sm text-slate-600 dark:text-slate-300">{caeFileName ? `Arquivo: ${caeFileName}` : 'Nenhum PDF CAE associado a esta proposta.'}</div>
           {caeDocument && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">{caeDocument.slots.length} slot(s) lido(s)</span>}
           <button
             type="button"
