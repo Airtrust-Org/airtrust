@@ -38,6 +38,8 @@ export interface LmsCurso {
   qualificacao_tipo_nome?: string | null;
   qualificacao_tipo_codigo?: string | null;
   qualificacao_codigo?: string | null;
+  /** Domínio operacional do curso, quando o tenant usa o RBAC por domínio. */
+  dominio_codigo?: string | null;
   tipo_conteudo: TipoConteudo;
   gerar_qualificacao_ao_concluir: 0 | 1;
   publicado: 0 | 1;

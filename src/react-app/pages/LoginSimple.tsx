@@ -187,7 +187,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-white p-4">
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="mb-8 text-center">
           <img
             src={logoSrc}
@@ -196,7 +195,6 @@ export default function LoginPage() {
           />
         </div>
 
-        {/* Staging badge — visível apenas em main.airtrust.pages.dev */}
         {IS_STAGING && (
           <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-center">
             <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
@@ -209,7 +207,6 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Card de login */}
         <div className="rounded-2xl border border-slate-200 bg-slate-100 p-5 shadow-sm shadow-slate-200/70">
           <div className="mb-7">
             <h1 className="text-xl font-bold text-slate-900">
@@ -302,14 +299,13 @@ export default function LoginPage() {
 
               <div className="mt-5 text-center">
                 <a
-                  href="#"
+                  href="/forgot-password"
                   className="text-sm text-primary hover:text-primary-dark transition-colors"
                 >
                   {t('auth.login.forgotPassword')}
                 </a>
               </div>
 
-              {/* Acesso rápido — perfis de demonstração (apenas em dev) */}
               {IS_DEV && (
                 <div className="mt-5 pt-5 border-t border-slate-100">
                   <p className="text-xs text-slate-400 text-center mb-2.5">
@@ -336,7 +332,6 @@ export default function LoginPage() {
           )}
         </div>
 
-        {/* Footer */}
         <p className="text-center text-xs text-slate-400 mt-6">
           © 2026 AirTrust. Todos os direitos reservados.
         </p>

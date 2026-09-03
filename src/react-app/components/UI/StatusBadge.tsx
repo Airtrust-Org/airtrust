@@ -56,47 +56,49 @@ interface StatusConfig {
   className: string;
 }
 
+const SUCCESS = 'at-status-success ring-current/20';
+const ATTENTION = 'at-status-attention ring-current/20';
+const RISK = 'at-status-risk ring-current/20';
+const CRITICAL = 'at-status-critical ring-current/20';
+const INFO = 'at-status-info ring-current/20';
+const NEUTRAL = 'bg-slate-50 text-slate-600 ring-slate-500/20';
+const NEUTRAL_SUBTLE = 'bg-slate-50 text-slate-500 ring-slate-400/20';
+
 const STATUS_MAP: Record<string, StatusConfig> = {
   // Qualificações
-  VALIDA: { label: 'Válida', className: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' },
-  VENCIDA: { label: 'Vencida', className: 'bg-red-50 text-red-700 ring-red-600/20' },
-  A_VENCER: { label: 'A vencer', className: 'bg-amber-50 text-amber-700 ring-amber-600/20' },
-  PENDENTE: { label: 'Pendente', className: 'bg-slate-50 text-slate-600 ring-slate-500/20' },
-  NAO_POSSUI: { label: 'Não possui', className: 'bg-slate-50 text-slate-500 ring-slate-400/20' },
-  RENOVADA: { label: 'Renovada', className: 'bg-blue-50 text-blue-700 ring-blue-600/20' },
+  VALIDA: { label: 'Válida', className: SUCCESS },
+  VENCIDA: { label: 'Vencida', className: CRITICAL },
+  A_VENCER: { label: 'A vencer', className: ATTENTION },
+  PENDENTE: { label: 'Pendente', className: NEUTRAL },
+  NAO_POSSUI: { label: 'Não possui', className: NEUTRAL_SUBTLE },
+  RENOVADA: { label: 'Renovada', className: INFO },
 
   // FRMS
-  APTO: { label: 'Apto', className: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' },
-  ATENCAO: { label: 'Atenção', className: 'bg-amber-50 text-amber-700 ring-amber-600/20' },
-  ALERTA: { label: 'Alerta', className: 'bg-orange-50 text-orange-700 ring-orange-600/20' },
-  CRITICO: { label: 'Crítico', className: 'bg-red-50 text-red-700 ring-red-600/20' },
-  INDISPONIVEL: {
-    label: 'Indisponível',
-    className: 'bg-slate-50 text-slate-600 ring-slate-500/20',
-  },
+  APTO: { label: 'Apto', className: SUCCESS },
+  ATENCAO: { label: 'Atenção', className: ATTENTION },
+  ALERTA: { label: 'Alerta', className: RISK },
+  CRITICO: { label: 'Crítico', className: CRITICAL },
+  INDISPONIVEL: { label: 'Indisponível', className: NEUTRAL },
 
   // SGSO
-  ABERTO: { label: 'Aberto', className: 'bg-sky-50 text-sky-700 ring-sky-600/20' },
-  EM_ANALISE: { label: 'Em análise', className: 'bg-violet-50 text-violet-700 ring-violet-600/20' },
-  FECHADO: { label: 'Fechado', className: 'bg-slate-50 text-slate-600 ring-slate-500/20' },
-  CANCELADO: { label: 'Cancelado', className: 'bg-red-50 text-red-600 ring-red-500/20' },
-  IMPLEMENTADO: {
-    label: 'Implementado',
-    className: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
-  },
+  ABERTO: { label: 'Aberto', className: INFO },
+  EM_ANALISE: { label: 'Em análise', className: INFO },
+  FECHADO: { label: 'Fechado', className: NEUTRAL },
+  CANCELADO: { label: 'Cancelado', className: CRITICAL },
+  IMPLEMENTADO: { label: 'Implementado', className: SUCCESS },
 
   // Escalas
-  ATIVO: { label: 'Ativo', className: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' },
-  FOLGA: { label: 'Folga', className: 'bg-slate-50 text-slate-600 ring-slate-500/20' },
-  FERIAS: { label: 'Férias', className: 'bg-blue-50 text-blue-600 ring-blue-500/20' },
-  AFASTADO: { label: 'Afastado', className: 'bg-amber-50 text-amber-700 ring-amber-600/20' },
-  LICENCA: { label: 'Licença', className: 'bg-violet-50 text-violet-600 ring-violet-500/20' },
+  ATIVO: { label: 'Ativo', className: SUCCESS },
+  FOLGA: { label: 'Folga', className: NEUTRAL },
+  FERIAS: { label: 'Férias', className: INFO },
+  AFASTADO: { label: 'Afastado', className: ATTENTION },
+  LICENCA: { label: 'Licença', className: INFO },
 
   // Genérico
-  INATIVO: { label: 'Inativo', className: 'bg-slate-50 text-slate-500 ring-slate-400/20' },
-  SUSPENSO: { label: 'Suspenso', className: 'bg-orange-50 text-orange-700 ring-orange-600/20' },
-  APROVADO: { label: 'Aprovado', className: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' },
-  REPROVADO: { label: 'Reprovado', className: 'bg-red-50 text-red-700 ring-red-600/20' },
+  INATIVO: { label: 'Inativo', className: NEUTRAL_SUBTLE },
+  SUSPENSO: { label: 'Suspenso', className: RISK },
+  APROVADO: { label: 'Aprovado', className: SUCCESS },
+  REPROVADO: { label: 'Reprovado', className: CRITICAL },
 };
 
 // ===== COMPONENTE =====
@@ -120,7 +122,7 @@ export function StatusBadge({
 }: StatusBadgeProps) {
   const config = STATUS_MAP[status] ?? {
     label: status,
-    className: 'bg-slate-50 text-slate-600 ring-slate-500/20',
+    className: NEUTRAL,
   };
 
   const displayLabel = label ?? config.label;

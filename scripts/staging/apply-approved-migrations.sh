@@ -25,10 +25,10 @@ trap 'rm -f "$PREFLIGHT_OUTPUT"' EXIT
 ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"
 ALLOWED_DB_ID="bf9963f4-eb12-439b-a830-20bbf577ac22"
 CONFIRMATION_PHRASE="AIRTRUST_STAGING_MIGRATION_APPLY"
-APPROVED_MIGRATIONS=("0424_examiner_universal_training_fichas.sql" "0425_examiner_event_models_and_assignment_owned_fichas.sql" "0452_operational_domain_rbac.sql" "0453_ead_category_reconciliation_executor.sql" "0454_qualificacoes_tipos_dominio_override.sql" "0457_qualification_category_lms_contract.sql" "0459_sk76_periodic_code_denominator.sql" "0467_sigvoos_shadow_parallel_v1.sql" "0468_sigvoos_shadow_leg_crew_v1.sql" "0469_lms_completion_pendencias_snapshots.sql" "0470_certificado_validacao_hash_index.sql" "0472_frms_operational_readiness.sql" "0475_usuarios_empresas_perfis_reconciliation.sql" "0476_frms_pvtb_v2_operational_load.sql" "0477_edb_operational_core.sql" "0478_edb_anac_receipt_integrity.sql" "0479_edb_relational_integrity.sql" "0480_edb_diary_lifecycle_integrity.sql")
+APPROVED_MIGRATIONS=("0424_examiner_universal_training_fichas.sql" "0425_examiner_event_models_and_assignment_owned_fichas.sql" "0452_operational_domain_rbac.sql" "0453_ead_category_reconciliation_executor.sql" "0454_qualificacoes_tipos_dominio_override.sql" "0457_qualification_category_lms_contract.sql" "0459_sk76_periodic_code_denominator.sql" "0467_sigvoos_shadow_parallel_v1.sql" "0468_sigvoos_shadow_leg_crew_v1.sql" "0469_lms_completion_pendencias_snapshots.sql" "0470_certificado_validacao_hash_index.sql" "0472_frms_operational_readiness.sql" "0475_usuarios_empresas_perfis_reconciliation.sql" "0476_frms_pvtb_v2_operational_load.sql" "0477_edb_operational_core.sql" "0478_edb_anac_receipt_integrity.sql" "0479_edb_relational_integrity.sql" "0480_edb_diary_lifecycle_integrity.sql" "0481_training_dependency_planning.sql" "0482_training_dependency_complete_curriculum.sql")
 # Compatibility marker for the previously validated release scope:
 # RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454"
-RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0457,0459,0467,0468,0469,0470,0472,0475,0476,0477,0478,0479,0480"
+RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0457,0459,0467,0468,0469,0470,0472,0475,0476,0477,0478,0479,0480,0481,0482"
 
 apply=false
 backup_file=""
@@ -99,7 +99,21 @@ if [[ -z "$backup_file" || ! -s "$backup_file" ]]; then
 fi
 echo "BACKUP_VERIFIED=$backup_file"
 
-# Pending schema migrations 0467-0469 use the newer schema-change runner so
+# 0481-0482 have dedicated staging runners because the reviewed changes are
+# Schema V2 bundles. Staging must execute the exact SQL pinned by the same
+# manifest used in production and keep its own D1 ledger/recovery point.
+if [[ "$migration_basename" == "0481_training_dependency_planning.sql" ]]; then
+  args=(--migration="$migration_path")
+  $apply && args+=(--apply)
+  exec bash "$ROOT/scripts/staging/apply-0481-training-dependency-planning.sh" "${args[@]}"
+fi
+if [[ "$migration_basename" == "0482_training_dependency_complete_curriculum.sql" ]]; then
+  args=(--migration="$migration_path")
+  $apply && args+=(--apply)
+  exec bash "$ROOT/scripts/staging/apply-0482-training-dependency-complete-curriculum.sh" "${args[@]}"
+fi
+
+# Pending schema migrations 0467-0480 use the newer schema-change runner so
 # DDL and d1_migrations ledger entry are applied atomically and a D1 Time
 # Travel recovery point is captured. The official workflow still creates and
 # verifies a full staging backup before invoking this script.

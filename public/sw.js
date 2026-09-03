@@ -6,7 +6,7 @@
  * que ainda consigam atualizar para uma versao mais nova do /sw.js.
  */
 
-const CACHE_VERSION = 'airtrust-v14';
+const CACHE_VERSION = 'airtrust-v15';
 const CACHE_PREFIX = 'airtrust-';
 const LOGIN_SW_RESET_PARAM = 'airtrust_sw_reset';
 const CRITICAL_PATH_PATTERNS = [
@@ -15,6 +15,7 @@ const CRITICAL_PATH_PATTERNS = [
   /^\/dashboard(?:\/|$)/,
   /^\/mro(?:\/|$)/,
   /^\/frms(?:\/|$)/,
+  /^\/simuladores(?:\/|$)/,
 ];
 
 function matchesAnyPath(pathname, patterns) {

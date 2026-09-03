@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 
 import { API_BASE_URL } from '@/react-app/config/api';
@@ -190,6 +191,11 @@ export function ListaFuncionarios({
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<FuncionarioRow | null>(null);
   const [filtrosAtivos, setFiltrosAtivos] = useState<string[]>([]);
   const [excluindo, setExcluindo] = useState<number | null>(null);
+  const [menuAcoes, setMenuAcoes] = useState<{
+    funcionario: FuncionarioRow;
+    top: number;
+    right: number;
+  } | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     column: null,
     direction: null,
@@ -272,7 +278,14 @@ export function ListaFuncionarios({
       setPagination((prev) => (prev.page === 1 ? prev : { ...prev, page: 1 }));
     }
     prevFiltersKeyRef.current = key;
-  }, [debouncedTermoBusca, statusFilter, funcaoFilter, aeronaveFilter, quinzenaFilter, setorFilter]);
+  }, [
+    debouncedTermoBusca,
+    statusFilter,
+    funcaoFilter,
+    aeronaveFilter,
+    quinzenaFilter,
+    setorFilter,
+  ]);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -573,7 +586,10 @@ export function ListaFuncionarios({
     const byModelo: Record<string, { cmd: number; cop: number }> = {};
     for (const f of funcionarios) {
       if ((f.status || '').toUpperCase() !== 'ATIVO') continue;
-      const modelo = (f.aeronave || '').trim().toUpperCase().replace(/[\s-]+/g, '');
+      const modelo = (f.aeronave || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[\s-]+/g, '');
       const modeloKey = modelo.includes('AW139')
         ? 'AW139'
         : modelo.includes('SK76') || modelo.includes('S76')
@@ -631,23 +647,29 @@ export function ListaFuncionarios({
                         key={col.id}
                         onClick={() => isSortable && handleSort(col.id as SortableColumn)}
                         className={`whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 ${
-                          isSortable ? 'cursor-pointer select-none hover:bg-slate-100 dark:hover:bg-slate-800' : ''
+                          isSortable
+                            ? 'cursor-pointer select-none hover:bg-slate-100 dark:hover:bg-slate-800'
+                            : ''
                         }`}
                       >
                         <div className="flex items-center gap-2">
                           <span>{col.label}</span>
                           {isSortable && (
                             <div className="flex flex-col">
-                              {direction === null && <ArrowUpDown className="h-4 w-4 text-slate-400" />}
+                              {direction === null && (
+                                <ArrowUpDown className="h-4 w-4 text-slate-400" />
+                              )}
                               {direction === 'asc' && <ArrowUp className="h-4 w-4 text-blue-600" />}
-                              {direction === 'desc' && <ArrowDown className="h-4 w-4 text-blue-600" />}
+                              {direction === 'desc' && (
+                                <ArrowDown className="h-4 w-4 text-blue-600" />
+                              )}
                             </div>
                           )}
                         </div>
                       </th>
                     );
                   })}
-                  <th className="w-24 whitespace-nowrap px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  <th className="w-32 whitespace-nowrap px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                     Ações
                   </th>
                 </tr>
@@ -675,7 +697,10 @@ export function ListaFuncionarios({
                   </tr>
                 ) : (
                   funcionariosFiltradosEOrdenados.map((func) => (
-                    <tr key={func.id} className="transition hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                    <tr
+                      key={func.id}
+                      className="transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                    >
                       {colunasVisiveis.map((col) => {
                         const rawVal = func[col.id] as unknown;
                         let valor = rawVal == null || rawVal === '' ? '-' : String(rawVal);
@@ -715,7 +740,8 @@ export function ListaFuncionarios({
                         }
 
                         if (col.id === 'cpf' && func.cpf) valor = formatarCPF(func.cpf);
-                        if (col.id === 'matricula' && func.matricula) valor = formatarMatricula(func.matricula);
+                        if (col.id === 'matricula' && func.matricula)
+                          valor = formatarMatricula(func.matricula);
                         if (col.id === 'nascimento' && func.nascimento) {
                           valor = formatarDataExibicao(func.nascimento) || '-';
                         }
@@ -730,13 +756,19 @@ export function ListaFuncionarios({
                           )
                             .toString()
                             .toUpperCase();
-                          const normalizedStatus = rawStatus === 'DESLIGADO' ? 'INATIVO' : rawStatus;
+                          const normalizedStatus =
+                            rawStatus === 'DESLIGADO' ? 'INATIVO' : rawStatus;
                           const statusColors: Record<string, string> = {
-                            ATIVO: 'bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300',
-                            INATIVO: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300',
-                            FERIAS: 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300',
-                            LICENCA: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/50 dark:text-yellow-300',
-                            AFASTADO: 'bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-300',
+                            ATIVO:
+                              'bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300',
+                            INATIVO:
+                              'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300',
+                            FERIAS:
+                              'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300',
+                            LICENCA:
+                              'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/50 dark:text-yellow-300',
+                            AFASTADO:
+                              'bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-300',
                           };
                           const statusLabel: Record<string, string> = {
                             ATIVO: 'Ativo',
@@ -750,7 +782,9 @@ export function ListaFuncionarios({
 
                           return (
                             <td key={col.id} className="whitespace-nowrap px-4 py-3 text-sm">
-                              <span className={`rounded-full px-2 py-1 text-xs font-medium ${colorClass}`}>
+                              <span
+                                className={`rounded-full px-2 py-1 text-xs font-medium ${colorClass}`}
+                              >
                                 {label}
                               </span>
                             </td>
@@ -772,6 +806,7 @@ export function ListaFuncionarios({
                       <td className="px-2 py-3 text-sm">
                         <div className="flex items-center justify-end gap-1">
                           <button
+                            type="button"
                             onClick={() => openPasta360(func.id)}
                             className={tableActionButtonClass}
                             aria-label={`Abrir perfil de ${func.nome || 'funcionário'}`}
@@ -780,40 +815,42 @@ export function ListaFuncionarios({
                             <FolderOpen className="h-4 w-4" />
                           </button>
 
-                          <details className="relative">
-                            <summary
-                              className={`${tableActionButtonClass} list-none cursor-pointer [&::-webkit-details-marker]:hidden`}
-                              aria-label={`Mais ações para ${func.nome || 'funcionário'}`}
-                              title="Mais ações"
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </summary>
-                            <div className="absolute right-0 z-30 mt-1 w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.currentTarget.closest('details')?.removeAttribute('open');
-                                  setFuncionarioSelecionado(func);
-                                }}
-                                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                              >
-                                <Edit2 className="h-4 w-4" />
-                                Editar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.currentTarget.closest('details')?.removeAttribute('open');
-                                  void handleExcluir(func.id, func.nome);
-                                }}
-                                disabled={excluindo === func.id}
-                                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                {excluindo === func.id ? 'Excluindo...' : 'Excluir'}
-                              </button>
-                            </div>
-                          </details>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuAcoes(null);
+                              setFuncionarioSelecionado(func);
+                            }}
+                            className={tableActionButtonClass}
+                            aria-label={`Editar ${func.nome || 'funcionário'}`}
+                            title="Editar"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              const sameFuncionario = menuAcoes?.funcionario.id === func.id;
+                              if (sameFuncionario) {
+                                setMenuAcoes(null);
+                                return;
+                              }
+                              setMenuAcoes({
+                                funcionario: func,
+                                top: Math.min(rect.bottom + 4, window.innerHeight - 108),
+                                right: Math.max(8, window.innerWidth - rect.right),
+                              });
+                            }}
+                            className={tableActionButtonClass}
+                            aria-label={`Mais ações para ${func.nome || 'funcionário'}`}
+                            aria-expanded={menuAcoes?.funcionario.id === func.id}
+                            aria-haspopup="menu"
+                            title="Mais ações"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -856,6 +893,53 @@ export function ListaFuncionarios({
           />
         </Suspense>
       )}
+
+      {menuAcoes &&
+        createPortal(
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-[90] cursor-default bg-transparent"
+              aria-label="Fechar menu de ações"
+              onClick={() => setMenuAcoes(null)}
+            />
+            <div
+              role="menu"
+              aria-label={`Ações para ${menuAcoes.funcionario.nome || 'funcionário'}`}
+              className="fixed z-[100] w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+              style={{ top: menuAcoes.top, right: menuAcoes.right }}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  const funcionario = menuAcoes.funcionario;
+                  setMenuAcoes(null);
+                  setFuncionarioSelecionado(funcionario);
+                }}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Edit2 className="h-4 w-4" />
+                Editar
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  const funcionario = menuAcoes.funcionario;
+                  setMenuAcoes(null);
+                  void handleExcluir(funcionario.id, funcionario.nome);
+                }}
+                disabled={excluindo === menuAcoes.funcionario.id}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30"
+              >
+                <Trash2 className="h-4 w-4" />
+                {excluindo === menuAcoes.funcionario.id ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </>,
+          document.body,
+        )}
 
       {configColunasAberto && (
         <ConfigurarColunas

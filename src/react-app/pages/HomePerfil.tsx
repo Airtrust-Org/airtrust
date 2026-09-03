@@ -388,10 +388,10 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
             </div>
           )}
 
+          <CardMeusEAD />
+
           {!isMaintenanceHome && (
             <div className="space-y-4 sm:space-y-6">
-              <CardMeusEAD />
-
               <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                 <div className="px-4 py-4 sm:px-5 sm:py-5 border-b border-slate-100">
                   <div className="flex items-start justify-between gap-3">

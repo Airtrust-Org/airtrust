@@ -111,8 +111,7 @@ export function BaseModal({
         aria-describedby={subtitle ? subtitleId : undefined}
         aria-label={!title ? ariaLabel : undefined}
         className={cn(
-          'relative my-auto w-full animate-scale-in rounded-2xl bg-white shadow-2xl',
-          'flex flex-col',
+          'at-surface relative my-auto flex w-full animate-scale-in flex-col rounded-2xl shadow-2xl',
           placement === 'top'
             ? 'max-h-[calc(100dvh-2.5rem)] sm:max-h-[calc(100dvh-3.5rem)]'
             : 'max-h-[calc(100dvh-2rem)]',
@@ -124,21 +123,22 @@ export function BaseModal({
         {/* Header */}
         {(title || subtitle) && (
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               {title && (
-                <h2 id={titleId} className="text-base font-semibold text-slate-900 leading-tight">
+                <h2 id={titleId} className="text-base font-semibold leading-tight text-slate-900">
                   {title}
                 </h2>
               )}
               {subtitle && (
-                <p id={subtitleId} className="mt-0.5 text-sm text-slate-500 leading-snug">
+                <p id={subtitleId} className="mt-0.5 text-sm leading-snug text-slate-500">
                   {subtitle}
                 </p>
               )}
             </div>
             <button
+              type="button"
               onClick={onClose}
-              className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
+              className="at-focus at-interactive inline-flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors duration-150 hover:text-slate-600"
               aria-label="Fechar"
             >
               <X className="h-4 w-4" aria-hidden="true" />
@@ -149,8 +149,9 @@ export function BaseModal({
         {/* Botão fechar flutuante quando não há header */}
         {!title && !subtitle && (
           <button
+            type="button"
             onClick={onClose}
-            className="absolute right-4 top-4 z-10 rounded-lg p-1.5 text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="at-focus at-interactive absolute right-4 top-4 z-10 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-400 transition-colors duration-150 hover:text-slate-600"
             aria-label="Fechar"
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -162,7 +163,7 @@ export function BaseModal({
 
         {/* Footer */}
         {footer && (
-          <div className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-100 px-6 py-4">
+          <div className="flex shrink-0 flex-col-reverse items-stretch justify-end gap-3 border-t border-slate-100 px-6 py-4 sm:flex-row sm:items-center">
             {footer}
           </div>
         )}
