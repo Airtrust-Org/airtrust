@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+// source_reference: the failed staging 0438 validation run 33705562073 left synthetic runId 1c2174cc without a reusable manifest after the legacy cleanup continued past an FK failure.
+// operational_decision: derive cleanup targets only from the exact synthetic company-code convention and verify synthetic names before any deletion; arbitrary empresa ids are never accepted.
+// dry_run_required: default execution is read-only discovery/dry-run; remote DELETE statements execute only with explicit --apply.
+// rollback_plan_required: staging-only synthetic fixture cleanup; target is locked to the canonical staging D1 and every target is reproducible from the run id. No production target is accepted.
+//
 // Guarded, idempotent cleanup for a specific failed synthetic Controle de Voos
 // staging E2E run whose manifest is no longer available. This script never
 // accepts arbitrary empresa ids: it derives them from the exact synthetic
