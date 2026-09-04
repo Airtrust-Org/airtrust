@@ -194,7 +194,7 @@ WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
 
 -- PLANEJAMENTO DE SIMULADOR QA — tipo/modelo/histórico estritamente sintéticos.
 -- Necessários para gerar uma proposta V3 real no tenant QA e validar a
--- persistência #275 sem tocar dados Costa do Sol.
+-- persistência #275 sem tocar nenhum tenant real.
 INSERT INTO qualificacoes_tipos (
   tipo, codigo, nome, descricao, categoria, carga_horaria, validade,
   vencimento_fim_mes, observacoes, ativo, empresa_id, created_at, updated_at, deleted_at
