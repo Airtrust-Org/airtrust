@@ -231,6 +231,28 @@ SELECT
 FROM empresas emp
 WHERE emp.codigo = ${e(EMPRESA_CODIGO)};
 
+-- Reative a escala QA após rollback apenas se isso não colidir com outra
+-- escala ativa do mesmo mês/ano no tenant sintético.
+UPDATE escalas_mensais
+SET mes = CAST(strftime('%m', date('now', '+90 days')) AS INTEGER),
+    ano = CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER),
+    titulo = 'QA Simulator Planning Roster',
+    status = 'publicada',
+    observacoes = 'QA_ONLY_SIMULATOR_PLANNING',
+    deleted_at = NULL,
+    updated_at = datetime('now')
+WHERE id = 'QA-SIM-PLN-ROSTER'
+  AND empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND NOT EXISTS (
+    SELECT 1
+    FROM escalas_mensais other
+    WHERE other.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+      AND other.id <> 'QA-SIM-PLN-ROSTER'
+      AND other.mes = CAST(strftime('%m', date('now', '+90 days')) AS INTEGER)
+      AND other.ano = CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER)
+      AND other.deleted_at IS NULL
+  );
+
 -- Se o tenant sintético já tiver uma escala para o mesmo mês, reutilize-a
 -- (a unicidade canônica é mês+ano+tenant) e marque-a publicada.
 UPDATE escalas_mensais
@@ -241,16 +263,7 @@ WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND ano = CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER)
   AND deleted_at IS NULL;
 
-UPDATE escala_alocacoes
-SET deleted_at = datetime('now'), updated_at = datetime('now')
-WHERE id IN ('QA-SIM-PLN-ALFA-FOLGA', 'QA-SIM-PLN-BRAVO-FOLGA')
-  AND escala_id IN (
-    SELECT id FROM escalas_mensais
-    WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-  )
-  AND deleted_at IS NULL;
-
-INSERT INTO escala_alocacoes (
+INSERT OR IGNORE INTO escala_alocacoes (
   id, escala_id, funcionario_id, aeronave_id, funcao,
   situacao_tipo, situacao_cor, quinzena_id,
   data_inicio, data_fim, status, observacoes,
@@ -288,6 +301,52 @@ JOIN escalas_mensais em
  AND em.status = 'publicada'
  AND em.deleted_at IS NULL
 WHERE emp.codigo = ${e(EMPRESA_CODIGO)};
+
+-- Reative/atualize as mesmas PKs em reruns; nunca cria terceira alocação.
+UPDATE escala_alocacoes
+SET escala_id = (
+      SELECT em.id
+      FROM escalas_mensais em
+      WHERE em.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+        AND em.mes = CAST(strftime('%m', date('now', '+90 days')) AS INTEGER)
+        AND em.ano = CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER)
+        AND em.status = 'publicada'
+        AND em.deleted_at IS NULL
+      LIMIT 1
+    ),
+    funcionario_id = CASE id
+      WHEN 'QA-SIM-PLN-ALFA-FOLGA' THEN CAST((
+        SELECT f.id FROM funcionarios f
+        WHERE f.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+          AND f.matricula = ${e(PARTICIPANTE1_CODIGO)}
+          AND f.deleted_at IS NULL
+        LIMIT 1
+      ) AS TEXT)
+      ELSE CAST((
+        SELECT f.id FROM funcionarios f
+        WHERE f.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+          AND f.matricula = ${e(PARTICIPANTE2_CODIGO)}
+          AND f.deleted_at IS NULL
+        LIMIT 1
+      ) AS TEXT)
+    END,
+    aeronave_id = NULL,
+    funcao = NULL,
+    situacao_tipo = 'FOLGA',
+    situacao_cor = '#64748b',
+    quinzena_id = NULL,
+    data_inicio = date('now'),
+    data_fim = date('now', '+120 days'),
+    status = 'confirmado',
+    observacoes = 'QA_ONLY_SIMULATOR_PLANNING',
+    created_by = 'qa-simulator-planning',
+    deleted_at = NULL,
+    updated_at = datetime('now')
+WHERE id IN ('QA-SIM-PLN-ALFA-FOLGA', 'QA-SIM-PLN-BRAVO-FOLGA')
+  AND escala_id IN (
+    SELECT id FROM escalas_mensais
+    WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  );
 
 -- Remove da listagem somente drafts de smoke anteriores do próprio tenant QA.
 -- É soft-delete, escopado por empresa + origem + marcador do snapshot.
