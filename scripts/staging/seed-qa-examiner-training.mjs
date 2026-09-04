@@ -183,6 +183,15 @@ FROM empresas emp WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
   AND NOT EXISTS (SELECT 1 FROM modelos_sessao ms JOIN empresas e2 ON e2.id = ms.empresa_id WHERE ms.codigo = ${e(CRED_EXA_CODIGO)} AND e2.codigo = ${e(EMPRESA_CODIGO)} AND ms.deleted_at IS NULL);
 
 
+-- Remove da listagem somente drafts de smoke anteriores do próprio tenant QA.
+-- É soft-delete, escopado por empresa + origem + marcador do snapshot.
+UPDATE treinamentos_planejados
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND planejamento_origem = 'SIMULADOR_V3_PERSISTED'
+  AND planejamento_snapshot_json LIKE '%QA_SIMULATOR_PLANNING_SMOKE%'
+  AND deleted_at IS NULL;
+
 -- PLANEJAMENTO DE SIMULADOR QA — tipo/modelo/histórico estritamente sintéticos.
 -- Necessários para gerar uma proposta V3 real no tenant QA e validar a
 -- persistência #275 sem tocar dados Costa do Sol.
