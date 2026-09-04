@@ -25,7 +25,7 @@ import { matchesStagingBuildVersion } from '../../e2e/lib/live-sha-guard.mjs';
 export const REQUIRED_CONFIRMATION = 'AIRTRUST_STAGING_FRONTEND_PR_QA';
 export const TRUSTED_REPOSITORY = 'Airtrust-Org/airtrust';
 export const TRUSTED_REF = 'refs/heads/main';
-export const SUPPORTED_AUDIT_PROFILES = Object.freeze(['destructive-actions']);
+export const SUPPORTED_AUDIT_PROFILES = Object.freeze(['destructive-actions', 'audit-closure']);
 export const ALLOWED_ACTOR_PERMISSIONS = Object.freeze(['write', 'push', 'maintain', 'admin']);
 
 export const STAGING_FRONTEND_ORIGIN = 'https://staging.airtrust.pages.dev';

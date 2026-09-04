@@ -16,6 +16,14 @@ const spec = readFileSync(
   resolve(root, 'e2e/frontend-pr-ui-qa/destructive-actions.spec.ts'),
   'utf8',
 );
+const closureSpec = readFileSync(
+  resolve(root, 'e2e/frontend-pr-ui-qa/audit-closure.spec.ts'),
+  'utf8',
+);
+const playwrightConfig = readFileSync(
+  resolve(root, 'e2e/frontend-pr-ui-qa.config.ts'),
+  'utf8',
+);
 const matcher = readFileSync(
   resolve(root, 'e2e/lib/synthetic-fixture-matcher.mjs'),
   'utf8',
@@ -76,6 +84,17 @@ test('BLOCKER D — the workflow re-assertion uses the exact staging build-versi
 test('the guard job runs the workflow-contract test alongside the unit tests', () => {
   assert.match(workflow, /scripts\/__tests__\/staging-frontend-pr-ui-qa-workflow\.test\.mjs/);
 });
+
+test('audit-closure is an explicit governed profile with a dedicated trusted-main spec', () => {
+  assert.match(workflow, /- audit-closure/);
+  assert.match(playwrightConfig, /AUDIT_PROFILE === 'audit-closure'/);
+  assert.match(playwrightConfig, /audit-closure\\.spec\\.ts/);
+  assert.match(closureSpec, /audit_profile: 'audit-closure'/);
+  assert.match(closureSpec, /closure_surfaces/);
+  assert.match(closureSpec, /installReadOnlyGuard/);
+  assert.doesNotMatch(closureSpec, /localStorage\.setItem\(['"]token/);
+});
+
 
 test('no production identifier is ever a live target in the pipeline', () => {
   assert.doesNotMatch(workflow, /https:\/\/api\.airtrust\.online/);
