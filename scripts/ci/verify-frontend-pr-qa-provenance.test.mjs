@@ -185,6 +185,27 @@ test('verifyFrontendBuildVersion enforces the short SHA in the build-version met
   );
 });
 
+test('verifyFrontendBuildVersion requires the EXACT staging-<iso>-<shortsha> shape (BLOCKER D)', () => {
+  const meta = (v) => `<meta name="build-version" content="${v}">`;
+  // short SHA only in the suffix position of a staging- value.
+  assert.equal(
+    verifyFrontendBuildVersion({ html: meta(`staging-2026-09-03T23:32:38Z-${SHORT}`), expectedShortSha: SHORT }),
+    `staging-2026-09-03T23:32:38Z-${SHORT}`,
+  );
+  for (const bad of [
+    `staging-${SHORT}-2026-09-03T23:32:38Z`, // SHA in the middle
+    `foo-${SHORT}`, // not staging- prefixed
+    `staging-2026-09-03T23:32:38Z-${SHORT}-extra`, // trailing segment
+    'staging-2026-09-03T23:32:38Z-0000000', // different SHA
+  ]) {
+    assert.throws(
+      () => verifyFrontendBuildVersion({ html: meta(bad), expectedShortSha: SHORT }),
+      /STAGING_FRONTEND_SHA_MISMATCH/,
+      bad,
+    );
+  }
+});
+
 test('assertStagingWorkerUsable accepts a different Worker SHA (frontend-only contract)', () => {
   const state = assertStagingWorkerUsable({
     versionJson: { environment: 'staging', sourceSha: 'f'.repeat(40) },

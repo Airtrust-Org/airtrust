@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 import { verifyReleaseGatePayloads } from './verify-release-gates.mjs';
+import { matchesStagingBuildVersion } from '../../e2e/lib/live-sha-guard.mjs';
 
 export const REQUIRED_CONFIRMATION = 'AIRTRUST_STAGING_FRONTEND_PR_QA';
 export const TRUSTED_REPOSITORY = 'Airtrust-Org/airtrust';
@@ -165,8 +166,10 @@ export function assertActorPermission(permission) {
 
 /**
  * Confirm the published staging frontend HTML was built from `release_sha`.
- * Mirrors scripts/stamp-build-version.sh output:
+ * Mirrors scripts/stamp-build-version.sh output EXACTLY:
  *   <meta name="build-version" content="staging-<iso>-<shortsha>">
+ * The short SHA is only accepted as the literal `-<shortsha>` suffix of a
+ * `staging-` prefixed value — not as a substring in any position.
  */
 export function verifyFrontendBuildVersion({ html, expectedShortSha }) {
   const shortSha = String(expectedShortSha ?? '')
@@ -181,7 +184,7 @@ export function verifyFrontendBuildVersion({ html, expectedShortSha }) {
     throw new Error('STAGING_FRONTEND_BUILD_VERSION_META_MISSING');
   }
   const buildVersion = match[1].trim();
-  if (!buildVersion.toLowerCase().includes(shortSha.slice(0, 7))) {
+  if (!matchesStagingBuildVersion(buildVersion, shortSha.slice(0, 7))) {
     throw new Error(`STAGING_FRONTEND_SHA_MISMATCH:${buildVersion}`);
   }
   return buildVersion;

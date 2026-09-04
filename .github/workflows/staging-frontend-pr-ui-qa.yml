@@ -124,7 +124,8 @@ jobs:
             scripts/ci/frontend-pr-qa-summarize.test.mjs \
             e2e/lib/read-only-network-guard.test.mjs \
             e2e/lib/live-sha-guard.test.mjs \
-            e2e/lib/credential-pair.test.mjs
+            e2e/lib/credential-pair.test.mjs \
+            scripts/__tests__/staging-frontend-pr-ui-qa-workflow.test.mjs
 
       - name: Run provenance guard against release_sha (data only, no checkout of it)
         id: provenance
@@ -179,16 +180,30 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Require canonical staging browser credentials
+      - name: Require exactly one complete staging credential pair
         shell: bash
         run: |
           set -euo pipefail
-          [[ -n "$E2E_EMAIL" ]] || { echo 'STAGING_SMOKE_EMAIL_MISSING' >&2; exit 1; }
-          [[ -n "$E2E_PASSWORD" ]] || { echo 'STAGING_SMOKE_PASSWORD_MISSING' >&2; exit 1; }
-          echo "::add-mask::$E2E_EMAIL"
-          echo "::add-mask::$E2E_PASSWORD"
-          if [[ -n "$QA_ADMIN_EMAIL" ]]; then echo "::add-mask::$QA_ADMIN_EMAIL"; fi
-          if [[ -n "$QA_ADMIN_PASSWORD" ]]; then echo "::add-mask::$QA_ADMIN_PASSWORD"; fi
+          # Mask every credential value that is present BEFORE any validation
+          # can echo. Never print an email or a password.
+          for v in "$E2E_EMAIL" "$E2E_PASSWORD" "$QA_ADMIN_EMAIL" "$QA_ADMIN_PASSWORD"; do
+            if [[ -n "$v" ]]; then echo "::add-mask::$v"; fi
+          done
+          # Single source of truth: the same resolver the Playwright login uses.
+          # Complete admin pair -> admin; no admin values -> smoke pair; a partial
+          # admin pair (exactly one of email/password) -> fail closed. A complete
+          # admin pair does NOT require STAGING_SMOKE_* to also be set.
+          node -e '
+            import("./e2e/lib/credential-pair.mjs")
+              .then((m) => {
+                const { profile } = m.resolveCredentialPair(process.env);
+                console.log("credential profile validated (" + profile + ")");
+              })
+              .catch((error) => {
+                console.error(error.message);
+                process.exit(1);
+              });
+          '
 
       - name: Download provenance evidence
         uses: actions/download-artifact@v4
@@ -202,12 +217,14 @@ jobs:
           RELEASE_SHA: ${{ inputs.release_sha }}
         run: |
           set -euo pipefail
-          node -e "
-            const p = require('./provenance-in/provenance.json');
+          node --input-type=module -e "
+            import { matchesStagingBuildVersion } from './e2e/lib/live-sha-guard.mjs';
+            import { readFileSync } from 'node:fs';
+            const p = JSON.parse(readFileSync('./provenance-in/provenance.json', 'utf8'));
             if (p.status !== 'PROVENANCE_OK') { console.error('PROVENANCE_NOT_OK'); process.exit(1); }
             const short = String(process.env.RELEASE_SHA).toLowerCase().slice(0,7);
-            if (!String(p.frontendBuildVersion || '').toLowerCase().includes(short)) {
-              console.error('STAGING_FRONTEND_SHA_MISMATCH'); process.exit(1);
+            if (!matchesStagingBuildVersion(p.frontendBuildVersion, short)) {
+              console.error('STAGING_FRONTEND_SHA_MISMATCH:' + (p.frontendBuildVersion || 'missing')); process.exit(1);
             }
             if (p.worker && p.worker.workerShaMatchRequired) {
               console.error('UNEXPECTED_WORKER_SHA_REQUIREMENT'); process.exit(1);
@@ -277,6 +294,47 @@ jobs:
             frontend-pr-ui-qa-final-summary.json
           if-no-files-found: ignore
           retention-days: 14
+
+      # BLOCKER A — a BLOCKED / FAIL / unknown final QA status must turn this job
+      # (and therefore qa-result) RED. Runs AFTER the artifact upload so evidence
+      # is always preserved even when this step fails.
+      - name: Require final QA status PASS
+        if: always()
+        shell: bash
+        env:
+          FINAL_SUMMARY_FILE: frontend-pr-ui-qa-final-summary.json
+        run: |
+          set -euo pipefail
+          if [[ ! -f "$FINAL_SUMMARY_FILE" ]]; then
+            echo 'STAGING_FRONTEND_PR_UI_QA_NO_FINAL_SUMMARY' >&2
+            exit 1
+          fi
+          status="$(node -e "
+            try {
+              const s = JSON.parse(require('fs').readFileSync(process.env.FINAL_SUMMARY_FILE, 'utf8'));
+              process.stdout.write(typeof s.status === 'string' ? s.status : 'MISSING');
+            } catch (e) {
+              process.stdout.write('UNPARSEABLE');
+            }
+          ")"
+          echo "final QA status = ${status}"
+          case "$status" in
+            PASS)
+              echo 'STAGING_FRONTEND_PR_UI_QA_PASS'
+              ;;
+            BLOCKED)
+              echo 'STAGING_FRONTEND_PR_UI_QA_BLOCKED' >&2
+              exit 1
+              ;;
+            FAIL)
+              echo 'STAGING_FRONTEND_PR_UI_QA_FAILED' >&2
+              exit 1
+              ;;
+            *)
+              echo "STAGING_FRONTEND_PR_UI_QA_STATUS_UNEXPECTED:${status}" >&2
+              exit 1
+              ;;
+          esac
 
   qa-result:
     name: Staging Frontend PR UI QA Passed

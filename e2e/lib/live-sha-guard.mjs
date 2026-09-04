@@ -26,6 +26,26 @@ export function normalizeShortSha(value) {
 }
 
 /**
+ * The published staging frontend stamps EXACTLY:
+ *   <meta name="build-version" content="staging-<iso8601>-<shortsha>">
+ * (see scripts/stamp-build-version.sh). Accept the short SHA only as the exact
+ * `-<shortsha>` suffix of a `staging-` prefixed string — never merely "appears
+ * somewhere in the value".
+ *
+ * @param {string | null | undefined} buildVersion
+ * @param {string} shortSha 7-hex short SHA (already normalized)
+ * @returns {boolean}
+ */
+export function matchesStagingBuildVersion(buildVersion, shortSha) {
+  const value = String(buildVersion ?? '').trim();
+  const short = String(shortSha ?? '')
+    .trim()
+    .toLowerCase();
+  if (!/^[0-9a-f]{7}$/.test(short)) return false;
+  return value.startsWith('staging-') && value.toLowerCase().endsWith(`-${short}`);
+}
+
+/**
  * @param {{ buildVersion: string | null, expectedShortSha: string, where?: string }} args
  * @returns {string} the confirmed build-version
  */
@@ -38,7 +58,7 @@ export function assertLiveShaMatches({
   if (!buildVersion) {
     throw new Error(`STAGING_FRONTEND_BUILD_VERSION_META_MISSING:${where}`);
   }
-  if (!buildVersion.toLowerCase().includes(short)) {
+  if (!matchesStagingBuildVersion(buildVersion, short)) {
     throw new Error(`STAGING_FRONTEND_SHA_MISMATCH:${where}:${buildVersion}`);
   }
   return buildVersion;

@@ -58,8 +58,13 @@ export default defineConfig({
   ],
   use: {
     baseURL: resolveFrontendBaseUrl(),
-    trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
+    // PRIVACY (BLOCKER C): this QA runs against REAL staging with a real session.
+    // Playwright's automatic failure trace/screenshot would capture whatever page
+    // is on screen — including the /funcionarios listing of real people before a
+    // synthetic fixture is confirmed. Disable both automatic captures; the spec
+    // takes explicit screenshots ONLY once it is inside a synthetic fixture.
+    trace: 'off',
+    screenshot: 'off',
     video: 'off',
     actionTimeout: 15_000,
     navigationTimeout: 45_000,

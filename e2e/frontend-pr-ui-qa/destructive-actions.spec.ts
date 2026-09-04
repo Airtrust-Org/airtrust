@@ -22,6 +22,13 @@
  *   - zero mutations, AND every viewport/theme cell PASS.
  *   Otherwise BLOCKED (no active surface / no fixture) or FAIL (mutation / layout).
  *
+ * PRIVACY (BLOCKER C): we NEVER open "the first funcionário". A funcionário
+ * ficha is opened only when the listing row itself is an unambiguous synthetic
+ * QA fixture (name matches SYNTHETIC_FIXTURE_PATTERN). If no synthetic funcionário
+ * exists, we record SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE, take NO
+ * screenshot of the listing (it contains real people), and the run is BLOCKED.
+ * We never create a fixture, never touch the database, never upload.
+ *
  * Strictly read-only. The destructive confirm button is NEVER clicked; every
  * confirmation is dismissed with "Cancelar". Live staging SHA is re-checked
  * after every navigation.
@@ -51,8 +58,16 @@ const RELEASE_SHORT_SHA = String(process.env.RELEASE_SHA || '')
   .toLowerCase()
   .slice(0, 7);
 
-// A row is only safe to exercise if it is an obvious synthetic QA fixture.
-const SYNTHETIC_DOC_PATTERN = /qa[_\s-]?sint|qa[_\s-]?synthetic|synthetic|fixture|sint[eé]tic/i;
+// A row (funcionário OR document) is only safe to exercise if it is an obvious
+// synthetic QA fixture. Same unambiguous markers for both.
+const SYNTHETIC_FIXTURE_PATTERN =
+  /qa[_\s-]?sint|qa[_\s-]?synthetic|synthetic|fixture|sint[eé]tic|\[qa\]|\bqa[_\s-]?fixture\b/i;
+const SYNTHETIC_DOC_PATTERN = SYNTHETIC_FIXTURE_PATTERN;
+
+type ReachResult =
+  | { status: 'OK'; trigger: Locator; download: Locator; fixtureName: string }
+  | { status: 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE' }
+  | { status: 'SYNTHETIC_DOCUMENT_NOT_AVAILABLE' };
 
 const results: Record<string, unknown> = {
   audit_profile: 'destructive-actions',
@@ -64,6 +79,7 @@ const results: Record<string, unknown> = {
   datatable_runtime: 'DATATABLE_RUNTIME_NOT_APPLICABLE_NO_ACTIVE_CONSUMER',
   real_surfaces_exercised: 0,
   mutations_detected: 0,
+  funcionario_fixture: 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE',
   documents: 'FIXTURE_NOT_AVAILABLE',
   desktop: 'PASS',
   mobile_390: 'PASS',
@@ -121,21 +137,33 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-async function reachDocumentsRowActionsMenu(
-  page: Page,
-  where: string,
-): Promise<{ trigger: Locator; download: Locator; fixtureName: string } | null> {
+async function reachDocumentsRowActionsMenu(page: Page, where: string): Promise<ReachResult> {
   await page.goto('/funcionarios', { waitUntil: 'domcontentloaded' });
   if (RELEASE_SHORT_SHA)
     await assertLiveFrontendShaFromPage(page, RELEASE_SHORT_SHA, `${where}:funcionarios`);
   await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
 
-  const firstRowLink = page
-    .locator('main a[href*="/funcionarios/"], [role="main"] a[href*="/funcionarios/"]')
-    .first();
-  if ((await firstRowLink.count()) === 0) return null;
+  // BLOCKER C: never click "the first funcionário". Only follow a listing row
+  // whose own accessible text unambiguously marks it as a synthetic QA fixture.
+  const rowLinks = page.locator(
+    'main a[href*="/funcionarios/"], [role="main"] a[href*="/funcionarios/"]',
+  );
+  const linkCount = await rowLinks.count();
+  let syntheticRow: Locator | null = null;
+  for (let i = 0; i < linkCount; i += 1) {
+    const link = rowLinks.nth(i);
+    const label = ((await link.innerText().catch(() => '')) || '').trim();
+    const aria = (await link.getAttribute('aria-label').catch(() => null)) || '';
+    if (SYNTHETIC_FIXTURE_PATTERN.test(label) || SYNTHETIC_FIXTURE_PATTERN.test(aria)) {
+      syntheticRow = link;
+      break;
+    }
+  }
+  if (!syntheticRow) {
+    return { status: 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE' };
+  }
 
-  await firstRowLink.click();
+  await syntheticRow.click();
   await page.waitForURL(/\/funcionarios\/[^/]+/, { timeout: 20_000 }).catch(() => undefined);
   if (RELEASE_SHORT_SHA)
     await assertLiveFrontendShaFromPage(page, RELEASE_SHORT_SHA, `${where}:ficha`);
@@ -170,11 +198,11 @@ async function reachDocumentsRowActionsMenu(
       name: new RegExp(`^baixar ${escapedName}$`, 'i'),
     });
     if ((await trigger.count()) === 1 && (await download.count()) === 1) {
-      return { trigger, download, fixtureName };
+      return { status: 'OK', trigger, download, fixtureName };
     }
   }
 
-  return null;
+  return { status: 'SYNTHETIC_DOCUMENT_NOT_AVAILABLE' };
 }
 
 test.describe('destructive-actions profile (PR #282 real delta)', () => {
@@ -211,7 +239,24 @@ test.describe('destructive-actions profile (PR #282 real delta)', () => {
         await setTheme(page, theme);
         await assertNoHorizontalOverflow(page, `Documentos @ ${viewport.key}/${theme}`);
 
-        if (reached) {
+        if (reached.status === 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE') {
+          results.funcionario_fixture = 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE';
+          results.documents = 'FIXTURE_NOT_AVAILABLE';
+          test.info().annotations.push({
+            type: 'note',
+            description:
+              'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE (no synthetic funcionário in the listing; no real ficha opened, no screenshot taken, nothing created)',
+          });
+        } else if (reached.status === 'SYNTHETIC_DOCUMENT_NOT_AVAILABLE') {
+          results.funcionario_fixture = 'SYNTHETIC_FIXTURE_CONFIRMED';
+          results.documents = 'FIXTURE_NOT_AVAILABLE';
+          test.info().annotations.push({
+            type: 'note',
+            description:
+              'DOCUMENT_DELETE_FIXTURE_NOT_AVAILABLE (synthetic funcionário opened, but no unambiguously synthetic document row; nothing created)',
+          });
+        } else {
+          results.funcionario_fixture = 'SYNTHETIC_FIXTURE_CONFIRMED';
           await reached.trigger.scrollIntoViewIfNeeded();
 
           // Download is a direct, named UI control on the same synthetic row.
@@ -259,26 +304,25 @@ test.describe('destructive-actions profile (PR #282 real delta)', () => {
           await dialog.getByRole('button', { name: /cancelar/i }).click();
           await expect(dialog).toBeHidden();
 
-          (results.real_surfaces_exercised as number) === 0 &&
-            (results.real_surfaces_exercised = 1);
+          if ((results.real_surfaces_exercised as number) === 0) {
+            results.real_surfaces_exercised = 1;
+          }
           results.documents = 'PASS';
-        } else {
-          results.documents = 'FIXTURE_NOT_AVAILABLE';
-          test.info().annotations.push({
-            type: 'note',
-            description:
-              'DOCUMENT_DELETE_FIXTURE_NOT_AVAILABLE (no safe synthetic document row; nothing created)',
-          });
         }
 
-        if (viewport.key !== 'desktop' && theme === 'light') {
-          await page.screenshot({ path: path.join(EVIDENCE_DIR, `${viewport.key}.png`) });
-        }
-        if (viewport.key === 'desktop' && theme === 'dark') {
-          await page.screenshot({ path: path.join(EVIDENCE_DIR, 'dark-mode.png') });
-        }
-        if (viewport.key === 'desktop' && theme === 'light') {
-          await page.screenshot({ path: path.join(EVIDENCE_DIR, 'desktop-menu-closed.png') });
+        // Screenshots are taken ONLY when we are inside a confirmed synthetic
+        // fixture. Before that the page still shows the real /funcionarios
+        // listing — capturing it would leak PII into the artifact/report.
+        if (reached.status === 'OK') {
+          if (viewport.key !== 'desktop' && theme === 'light') {
+            await page.screenshot({ path: path.join(EVIDENCE_DIR, `${viewport.key}.png`) });
+          }
+          if (viewport.key === 'desktop' && theme === 'dark') {
+            await page.screenshot({ path: path.join(EVIDENCE_DIR, 'dark-mode.png') });
+          }
+          if (viewport.key === 'desktop' && theme === 'light') {
+            await page.screenshot({ path: path.join(EVIDENCE_DIR, 'desktop-menu-closed.png') });
+          }
         }
 
         results.mutations_detected = Math.max(
@@ -303,11 +347,10 @@ test.describe('destructive-actions profile (PR #282 real delta)', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
     const reached = await reachDocumentsRowActionsMenu(page, 'a11y');
-    if (!reached) {
+    if (reached.status !== 'OK') {
       test.info().annotations.push({
         type: 'note',
-        description:
-          'A11Y_CONTRACT_SKIPPED: DOCUMENT_DELETE_FIXTURE_NOT_AVAILABLE',
+        description: `A11Y_CONTRACT_SKIPPED: ${reached.status}`,
       });
       guard.assertClean();
       return;
@@ -362,7 +405,9 @@ test.describe('destructive-actions profile (PR #282 real delta)', () => {
       'focus did not return to the trigger after closing the confirmation',
     ).toBeTruthy();
 
-    (results.real_surfaces_exercised as number) === 0 && (results.real_surfaces_exercised = 1);
+    if ((results.real_surfaces_exercised as number) === 0) {
+      results.real_surfaces_exercised = 1;
+    }
     results.documents = 'PASS';
     results.mutations_detected = Math.max(
       results.mutations_detected as number,

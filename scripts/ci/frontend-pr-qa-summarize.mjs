@@ -8,6 +8,7 @@
  *
  * Status decision (BLOCKER 9) for audit_profile = "destructive-actions":
  *   provenance not OK ............................ BLOCKED
+ *   no synthetic funcionário fixture confirmed ... BLOCKED
  *   no real #282 surface exercised in runtime .... BLOCKED
  *   documents === FIXTURE_NOT_AVAILABLE .......... BLOCKED
  *   any mutation detected ........................ FAIL
@@ -31,6 +32,9 @@ export function buildFinalSummary({ provenance, qa, prNumber, releaseSha, auditP
 
   const mutations = Number.isFinite(q.mutations_detected) ? q.mutations_detected : 0;
   const realSurfaces = Number.isFinite(q.real_surfaces_exercised) ? q.real_surfaces_exercised : 0;
+  const funcionarioFixture = String(
+    q.funcionario_fixture ?? 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE',
+  );
 
   const desktop = coercePassFail(q.desktop);
   const mobile390 = coercePassFail(q.mobile_390);
@@ -55,6 +59,12 @@ export function buildFinalSummary({ provenance, qa, prNumber, releaseSha, auditP
     status = 'BLOCKED';
   } else if (!everyMatrixGreen) {
     status = 'FAIL';
+  } else if (
+    profile === 'destructive-actions' &&
+    funcionarioFixture !== 'SYNTHETIC_FIXTURE_CONFIRMED'
+  ) {
+    // BLOCKER C — no unambiguously synthetic funcionário was opened.
+    status = 'BLOCKED';
   } else if (profile === 'destructive-actions' && realSurfaces < 1) {
     status = 'BLOCKED';
   } else if (profile === 'destructive-actions' && documents === 'FIXTURE_NOT_AVAILABLE') {
@@ -79,6 +89,7 @@ export function buildFinalSummary({ provenance, qa, prNumber, releaseSha, auditP
     ),
     real_surfaces_exercised: realSurfaces,
     mutations_detected: mutations,
+    funcionario_fixture: funcionarioFixture,
     desktop,
     mobile_390: mobile390,
     mobile_375: mobile375,

@@ -2,6 +2,10 @@ import type { Page } from '@playwright/test';
 
 export function extractBuildVersion(html: string | null | undefined): string | null;
 export function normalizeShortSha(value: string): string;
+export function matchesStagingBuildVersion(
+  buildVersion: string | null | undefined,
+  shortSha: string,
+): boolean;
 export function assertLiveShaMatches(args: {
   buildVersion: string | null;
   expectedShortSha: string;

@@ -47,7 +47,8 @@ jobs:
             scripts/ci/frontend-pr-qa-summarize.test.mjs \
             e2e/lib/read-only-network-guard.test.mjs \
             e2e/lib/live-sha-guard.test.mjs \
-            e2e/lib/credential-pair.test.mjs
+            e2e/lib/credential-pair.test.mjs \
+            scripts/__tests__/staging-frontend-pr-ui-qa-workflow.test.mjs
 
       - name: ✅ PR checks are structurally valid
         run: |

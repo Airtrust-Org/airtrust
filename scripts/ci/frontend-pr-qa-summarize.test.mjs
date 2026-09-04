@@ -16,6 +16,7 @@ const qaGreen = {
   audit_profile: 'destructive-actions',
   mutations_detected: 0,
   real_surfaces_exercised: 1,
+  funcionario_fixture: 'SYNTHETIC_FIXTURE_CONFIRMED',
   documents: 'PASS',
   desktop: 'PASS',
   mobile_390: 'PASS',
@@ -29,6 +30,27 @@ test('a real surface + green matrix + PASS documents yields PASS', () => {
   assert.equal(s.status, 'PASS');
   assert.equal(s.worker_sha_match_required, false);
   assert.equal(s.real_surfaces_exercised, 1);
+});
+
+test('no synthetic funcionário fixture confirmed => BLOCKED (BLOCKER C)', () => {
+  const s = buildFinalSummary({
+    provenance: provOk,
+    qa: {
+      ...qaGreen,
+      funcionario_fixture: 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE',
+      real_surfaces_exercised: 0,
+      documents: 'FIXTURE_NOT_AVAILABLE',
+    },
+  });
+  assert.equal(s.status, 'BLOCKED');
+  assert.equal(s.funcionario_fixture, 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE');
+});
+
+test('funcionario_fixture defaults to NOT_AVAILABLE when the spec did not report it', () => {
+  const { funcionario_fixture: _drop, ...qaNoField } = qaGreen;
+  const s = buildFinalSummary({ provenance: provOk, qa: qaNoField });
+  assert.equal(s.funcionario_fixture, 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE');
+  assert.equal(s.status, 'BLOCKED');
 });
 
 test('zero real #282 surfaces exercised => BLOCKED even with a green matrix', () => {
@@ -90,6 +112,7 @@ test('only allowlisted primitive fields are emitted (no secret passthrough)', ()
     'desktop',
     'documents',
     'frontend_build_version',
+    'funcionario_fixture',
     'light',
     'mobile_375',
     'mobile_390',
