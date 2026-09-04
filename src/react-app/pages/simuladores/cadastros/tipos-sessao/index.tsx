@@ -10,6 +10,7 @@ import { Input } from '@/react-app/components/UI/Input';
 import { ArrowLeft, Plus, Trash2, Inbox } from 'lucide-react';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { getColorByIndex, getAllColors } from '@/react-app/utils/colorPalette';
+import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 
 interface TipoSessao {
   id: number;
@@ -154,9 +155,16 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
             ))}
           </div>
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="px-4 py-3.5 grid grid-cols-4 gap-4 border-b border-gray-100 dark:border-slate-800">
+            <div
+              key={i}
+              className="px-4 py-3.5 grid grid-cols-4 gap-4 border-b border-gray-100 dark:border-slate-800"
+            >
               {[...Array(4)].map((_, j) => (
-                <div key={j} className="h-4 rounded bg-slate-100 dark:bg-slate-800" style={{ width: `${55 + Math.sin(i + j) * 20}%` }} />
+                <div
+                  key={j}
+                  className="h-4 rounded bg-slate-100 dark:bg-slate-800"
+                  style={{ width: `${55 + Math.sin(i + j) * 20}%` }}
+                />
               ))}
             </div>
           ))}
@@ -171,13 +179,20 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
       <div className="flex items-center justify-between">
         <div>
           {embedded && onBack && (
-            <button onClick={onBack} className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-1">
+            <button
+              onClick={onBack}
+              className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-1"
+            >
               <ArrowLeft className="w-3 h-3" />
               Gestão
             </button>
           )}
-          <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">Tipos de Sessão</h2>
-          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Classificação de sessões de treinamento</p>
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">
+            Tipos de Sessão
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+            Classificação de sessões de treinamento
+          </p>
         </div>
         <Button onClick={() => abrirModal()}>
           <Plus className="w-4 h-4 mr-2" />
@@ -208,42 +223,53 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
             {tipos.map((tipo) => {
               const corTipo = tipo.cor || getColorByIndex(tipo.id);
               return (
-              <tr key={tipo.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
-                <td className="px-4 py-3.5">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full border border-gray-300 dark:border-slate-600"
-                      style={{ backgroundColor: corTipo }}
-                    />
-                    <span
-                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white"
-                      style={{ backgroundColor: corTipo }}
-                    >
-                      {tipo.codigo}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-4 py-3.5 font-medium text-sm text-gray-900 dark:text-slate-100">{tipo.nome}</td>
-                <td className="px-4 py-3.5 text-sm text-gray-600 dark:text-slate-400">{tipo.descricao || '-'}</td>
-                <td className="px-4 py-3.5">
-                  <div className="flex items-center justify-center gap-2">
-                    <Button
-                      variant="secondary"
-                      onClick={() => abrirModal(tipo)}
-                      className="text-xs px-3 py-1.5 rounded-lg border transition-colors"
-                    >
-                      Editar
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => excluir(tipo.id)}
-                      className="text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 px-2 py-1.5 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </td>
-              </tr>
+                <tr
+                  key={tipo.id}
+                  className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors"
+                >
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full border border-gray-300 dark:border-slate-600"
+                        style={{ backgroundColor: corTipo }}
+                      />
+                      <span
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white"
+                        style={{ backgroundColor: corTipo }}
+                      >
+                        {tipo.codigo}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3.5 font-medium text-sm text-gray-900 dark:text-slate-100">
+                    {tipo.nome}
+                  </td>
+                  <td className="px-4 py-3.5 text-sm text-gray-600 dark:text-slate-400">
+                    {tipo.descricao || '-'}
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center justify-center gap-2">
+                      <Button
+                        variant="secondary"
+                        onClick={() => abrirModal(tipo)}
+                        className="text-xs px-3 py-1.5 rounded-lg border transition-colors"
+                      >
+                        Editar
+                      </Button>
+                      <RowActionsMenu
+                        label={`Mais ações para ${tipo.codigo}`}
+                        actions={[
+                          {
+                            label: 'Excluir tipo de sessão',
+                            destructive: true,
+                            icon: Trash2,
+                            onSelect: () => excluir(tipo.id),
+                          },
+                        ]}
+                      />
+                    </div>
+                  </td>
+                </tr>
               );
             })}
           </tbody>
@@ -255,15 +281,25 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
           <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-slate-800 mb-4">
             <Inbox className="w-8 h-8 text-gray-400 dark:text-slate-500" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-1">Nenhum tipo de sessão cadastrado</h3>
-          <p className="text-sm text-gray-500 dark:text-slate-400 max-w-md">Cadastre tipos de sessão para classificar os modelos de treinamento.</p>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-1">
+            Nenhum tipo de sessão cadastrado
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-slate-400 max-w-md">
+            Cadastre tipos de sessão para classificar os modelos de treinamento.
+          </p>
         </div>
       )}
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={fecharModal}>
-          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full animate-scale-in" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in"
+          onClick={fecharModal}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-6 border-b border-gray-200 dark:border-slate-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
                 {editando ? 'Editar' : 'Novo'} Tipo de Sessão
@@ -271,7 +307,9 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  Código <span className="text-red-500">*</span>
+                </label>
                 <Input
                   value={formData.codigo}
                   onChange={(e) =>
@@ -281,7 +319,9 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  Nome <span className="text-red-500">*</span>
+                </label>
                 <Input
                   value={formData.nome}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
@@ -289,7 +329,9 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  Descrição
+                </label>
                 <textarea
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.descricao}
@@ -299,7 +341,9 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Cor da Tag</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    Cor da Tag
+                  </label>
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
@@ -307,7 +351,9 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
                       onChange={(e) => setFormData({ ...formData, cor: e.target.value })}
                       className="w-12 h-10 border border-gray-300 dark:border-slate-600 rounded cursor-pointer"
                     />
-                    <span className="text-xs text-gray-500 dark:text-slate-400">{formData.cor}</span>
+                    <span className="text-xs text-gray-500 dark:text-slate-400">
+                      {formData.cor}
+                    </span>
                   </div>
                 </div>
                 <div

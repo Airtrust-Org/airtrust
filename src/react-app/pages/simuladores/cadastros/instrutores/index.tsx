@@ -8,8 +8,9 @@ import { toast } from 'sonner';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import { SimuladoresCard, EmptyState } from '../../components/SimuladoresLayout';
-import { Plus, Users } from 'lucide-react';
+import { Plus, Users, Trash2 } from 'lucide-react';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 
 interface Instrutor {
   id: number;
@@ -200,19 +201,27 @@ export default function CrudInstrutores() {
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600">{inst.habilitacoes || '-'}</td>
                   <td className="px-6 py-4 text-sm text-slate-600">{inst.observacoes || '-'}</td>
-                  <td className="px-6 py-4 text-right space-x-2">
-                    <button
-                      onClick={() => abrirModal(inst)}
-                      className="text-sm text-primary hover:text-primary/80"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => excluir(inst.id)}
-                      className="text-sm text-red-600 hover:text-red-800"
-                    >
-                      Remover
-                    </button>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => abrirModal(inst)}
+                        className="inline-flex min-h-11 items-center justify-center rounded-lg px-3 py-1.5 text-sm font-medium text-primary hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+                      >
+                        Editar
+                      </button>
+                      <RowActionsMenu
+                        label={`Mais ações para instrutor ${inst.funcionario_nome}`}
+                        actions={[
+                          {
+                            label: 'Remover instrutor',
+                            destructive: true,
+                            icon: Trash2,
+                            onSelect: () => excluir(inst.id),
+                          },
+                        ]}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}
