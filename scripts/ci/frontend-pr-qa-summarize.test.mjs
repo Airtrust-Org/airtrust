@@ -4,8 +4,10 @@ import test from 'node:test';
 import {
   buildFinalSummary,
   MATRIX_CELL_KEYS,
+  CLOSURE_SURFACE_KEYS,
   normalizeMatrixCells,
   normalizeA11yStatus,
+  normalizeClosureSurfaces,
 } from './frontend-pr-qa-summarize.mjs';
 
 const provOk = {
@@ -21,6 +23,11 @@ function cells(overrides = {}) {
   return { ...base, ...overrides };
 }
 
+function closureSurfaces(overrides = {}) {
+  const base = Object.fromEntries(CLOSURE_SURFACE_KEYS.map((k) => [k, 'PASS']));
+  return { ...base, ...overrides };
+}
+
 // A run that genuinely exercised every matrix cell + the a11y contract.
 function qaGreen(overrides = {}) {
   return {
@@ -31,6 +38,16 @@ function qaGreen(overrides = {}) {
     funcionario_fixture: 'SYNTHETIC_FIXTURE_CONFIRMED',
     matrix_cells: cells(),
     a11y_status: 'PASS',
+    ...overrides,
+  };
+}
+
+function qaClosureGreen(overrides = {}) {
+  return {
+    ...qaGreen(),
+    audit_profile: 'audit-closure',
+    real_surfaces_exercised: CLOSURE_SURFACE_KEYS.length,
+    closure_surfaces: closureSurfaces(),
     ...overrides,
   };
 }
@@ -158,6 +175,52 @@ test('15. one cell cannot overwrite another — only its own key is read', () =>
   assert.equal(s.status, 'FAIL');
 });
 
+
+test('audit-closure: all matrix cells, a11y and required surfaces PASS => global PASS', () => {
+  const s = buildFinalSummary({
+    provenance: provOk,
+    qa: qaClosureGreen(),
+    auditProfile: 'audit-closure',
+  });
+  assert.equal(s.status, 'PASS');
+  assert.deepEqual(Object.keys(s.closure_surfaces).sort(), [...CLOSURE_SURFACE_KEYS].sort());
+});
+
+test('audit-closure: one BLOCKED required surface => global BLOCKED', () => {
+  const s = buildFinalSummary({
+    provenance: provOk,
+    qa: qaClosureGreen({
+      closure_surfaces: closureSurfaces({ hospedagem_p0: 'BLOCKED' }),
+    }),
+    auditProfile: 'audit-closure',
+  });
+  assert.equal(s.status, 'BLOCKED');
+});
+
+test('audit-closure: one FAIL required surface => global FAIL', () => {
+  const s = buildFinalSummary({
+    provenance: provOk,
+    qa: qaClosureGreen({
+      closure_surfaces: closureSurfaces({ controle_voos_n03: 'FAIL' }),
+    }),
+    auditProfile: 'audit-closure',
+  });
+  assert.equal(s.status, 'FAIL');
+});
+
+test('audit-closure: missing closure_surfaces fails closed to BLOCKED', () => {
+  const { closure_surfaces: _drop, ...qa } = qaClosureGreen();
+  const s = buildFinalSummary({
+    provenance: provOk,
+    qa,
+    auditProfile: 'audit-closure',
+  });
+  assert.equal(s.status, 'BLOCKED');
+  for (const key of CLOSURE_SURFACE_KEYS) {
+    assert.equal(s.closure_surfaces[key], 'BLOCKED');
+  }
+});
+
 test('failed provenance forces BLOCKED regardless of a green matrix', () => {
   const s = buildFinalSummary({ provenance: { status: 'FAIL' }, qa: qaGreen() });
   assert.equal(s.status, 'BLOCKED');
@@ -229,7 +292,7 @@ test('real_surfaces_exercised is informational only, not a sufficient gate', () 
   assert.equal(s.status, 'BLOCKED');
 });
 
-test('normalizeMatrixCells / normalizeA11yStatus fail closed', () => {
+test('normalizeMatrixCells / normalizeA11yStatus / normalizeClosureSurfaces fail closed', () => {
   assert.deepEqual(normalizeMatrixCells(null).matrixObjectPresent, false);
   assert.equal(normalizeMatrixCells({}).cells.desktop_light, 'BLOCKED');
   assert.equal(normalizeMatrixCells([]).matrixObjectPresent, false);
@@ -237,6 +300,12 @@ test('normalizeMatrixCells / normalizeA11yStatus fail closed', () => {
   assert.equal(normalizeA11yStatus(undefined), 'NOT_RUN');
   assert.equal(normalizeA11yStatus('weird'), 'BLOCKED');
   assert.equal(normalizeA11yStatus('PASS'), 'PASS');
+  assert.equal(normalizeClosureSurfaces(null).closureObjectPresent, false);
+  assert.equal(normalizeClosureSurfaces({}).surfaces.controle_voos_n03, 'BLOCKED');
+  assert.equal(
+    normalizeClosureSurfaces({ controle_voos_n03: 'PASS' }).surfaces.controle_voos_n03,
+    'PASS',
+  );
 });
 
 test('only allowlisted primitive fields are emitted (no secret passthrough)', () => {
