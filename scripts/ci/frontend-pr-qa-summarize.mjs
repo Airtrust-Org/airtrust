@@ -52,6 +52,21 @@ export const MATRIX_CELL_KEYS = Object.freeze([
   'mobile_375_dark',
 ]);
 
+export const CLOSURE_SURFACE_KEYS = Object.freeze([
+  'controle_voos_n03',
+  'controle_voos_n06',
+  'funcionarios_frms_n10',
+  'escalas_n08',
+  'qualificacoes_manobras_p0',
+  'simuladores_p0',
+  'configuracoes_p0',
+  'lms_admin_p0',
+  'evd_p0',
+  'licencas_p0',
+  'certificacoes_p0',
+  'hospedagem_p0',
+]);
+
 /**
  * Normalize the raw per-cell matrix. Missing keys and unknown values fail
  * closed to BLOCKED. Returns { cells, matrixObjectPresent }.
@@ -69,6 +84,16 @@ export function normalizeMatrixCells(raw) {
 export function normalizeA11yStatus(value) {
   if (value === undefined || value === null || value === '') return 'NOT_RUN';
   return CELL_STATES.has(value) ? value : 'BLOCKED';
+}
+
+export function normalizeClosureSurfaces(raw) {
+  const closureObjectPresent = Boolean(raw) && typeof raw === 'object' && !Array.isArray(raw);
+  const surfaces = {};
+  for (const key of CLOSURE_SURFACE_KEYS) {
+    const value = closureObjectPresent ? raw[key] : undefined;
+    surfaces[key] = CELL_STATES.has(value) ? value : 'BLOCKED';
+  }
+  return { surfaces, closureObjectPresent };
 }
 
 function deriveDocumentsAggregate(cells) {
@@ -91,9 +116,17 @@ export function buildFinalSummary({ provenance, qa, prNumber, releaseSha, auditP
 
   const { cells, matrixObjectPresent } = normalizeMatrixCells(q.matrix_cells);
   const a11yStatus = normalizeA11yStatus(q.a11y_status);
+  const closureRequired = profile === 'audit-closure';
+  const { surfaces: closureSurfaces, closureObjectPresent } = normalizeClosureSurfaces(
+    q.closure_surfaces,
+  );
 
   const anyCellFail = MATRIX_CELL_KEYS.some((k) => cells[k] === 'FAIL');
   const everyCellPass = MATRIX_CELL_KEYS.every((k) => cells[k] === 'PASS');
+  const anyClosureFail =
+    closureRequired && CLOSURE_SURFACE_KEYS.some((k) => closureSurfaces[k] === 'FAIL');
+  const everyClosurePass =
+    !closureRequired || CLOSURE_SURFACE_KEYS.every((k) => closureSurfaces[k] === 'PASS');
   const workerEnvironment = String(p.worker?.environment ?? '');
   // BLOCKER J — absence of evidence must stay absence of evidence. Never
   // default a missing/non-string authentication field to REAL_STAGING.
@@ -108,12 +141,18 @@ export function buildFinalSummary({ provenance, qa, prNumber, releaseSha, auditP
     status = 'FAIL';
   } else if (a11yStatus === 'FAIL') {
     status = 'FAIL';
+  } else if (anyClosureFail) {
+    status = 'FAIL';
   } else if (!matrixObjectPresent) {
     status = 'BLOCKED';
   } else if (!everyCellPass) {
     // At least one cell is BLOCKED / NOT_RUN — never mask it behind a PASS cell.
     status = 'BLOCKED';
   } else if (a11yStatus !== 'PASS') {
+    status = 'BLOCKED';
+  } else if (closureRequired && !closureObjectPresent) {
+    status = 'BLOCKED';
+  } else if (!everyClosurePass) {
     status = 'BLOCKED';
   } else if (workerEnvironment !== 'staging') {
     status = 'BLOCKED';
@@ -141,6 +180,7 @@ export function buildFinalSummary({ provenance, qa, prNumber, releaseSha, auditP
     funcionario_fixture: funcionarioFixture,
     matrix_cells: cells,
     a11y_status: a11yStatus,
+    ...(closureRequired ? { closure_surfaces: closureSurfaces } : {}),
     // Derived aggregate — humans only, never a gate. every PASS => PASS,
     // any FAIL => FAIL, otherwise FIXTURE_NOT_AVAILABLE.
     documents: deriveDocumentsAggregate(cells),
