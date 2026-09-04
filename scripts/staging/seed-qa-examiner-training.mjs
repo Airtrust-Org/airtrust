@@ -48,6 +48,8 @@ const SIMULADOR_CODIGO = 'QA-SIM-01';
 const CRED_EXA_CODIGO = 'CRED-EXA';
 const SETOR_CODIGO = 'QA-SETOR-EXA';
 const SETOR_NOME = 'Setor QA Examinador';
+const PLANNING_QUAL_CODE = 'QA-SIM-PLN-AW139';
+const PLANNING_MODEL_CODE = 'QA-SIM-PLN-S01';
 
 function sqlString(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
@@ -179,6 +181,127 @@ INSERT INTO modelos_sessao (codigo, nome, tipo, descricao, ativo, empresa_id, ti
 SELECT ${e(CRED_EXA_CODIGO)}, 'CREDENCIAMENTO DE EXAMINADOR (QA SINTÉTICO)', 'RECORRENTE', 'Âncora de tenant sintética para QA de staging — nunca dado real.', 1, emp.id, NULL, datetime('now'), datetime('now')
 FROM empresas emp WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
   AND NOT EXISTS (SELECT 1 FROM modelos_sessao ms JOIN empresas e2 ON e2.id = ms.empresa_id WHERE ms.codigo = ${e(CRED_EXA_CODIGO)} AND e2.codigo = ${e(EMPRESA_CODIGO)} AND ms.deleted_at IS NULL);
+
+
+-- PLANEJAMENTO DE SIMULADOR QA — tipo/modelo/histórico estritamente sintéticos.
+-- Necessários para gerar uma proposta V3 real no tenant QA e validar a
+-- persistência #275 sem tocar dados Costa do Sol.
+INSERT INTO qualificacoes_tipos (
+  tipo, codigo, nome, descricao, categoria, carga_horaria, validade,
+  vencimento_fim_mes, observacoes, ativo, empresa_id, created_at, updated_at, deleted_at
+)
+SELECT
+  'TREINAMENTO', ${e(PLANNING_QUAL_CODE)}, 'QA Simulador AW139 — Planejamento Persistente',
+  'Fixture sintética de staging para QA do Planejamento de Simulador V3.',
+  'TREINAMENTO', 2, 12, 0, 'QA_ONLY_SIMULATOR_PLANNING', 1, emp.id,
+  datetime('now'), datetime('now'), NULL
+FROM empresas emp
+WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+  AND NOT EXISTS (
+    SELECT 1 FROM qualificacoes_tipos qt
+    WHERE qt.empresa_id = emp.id
+      AND UPPER(qt.codigo) = UPPER(${e(PLANNING_QUAL_CODE)})
+      AND qt.deleted_at IS NULL
+  );
+
+UPDATE qualificacoes_tipos
+SET nome = 'QA Simulador AW139 — Planejamento Persistente',
+    tipo = 'TREINAMENTO',
+    descricao = 'Fixture sintética de staging para QA do Planejamento de Simulador V3.',
+    categoria = 'TREINAMENTO',
+    carga_horaria = 2,
+    validade = 12,
+    ativo = 1,
+    deleted_at = NULL,
+    updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND UPPER(codigo) = UPPER(${e(PLANNING_QUAL_CODE)});
+
+INSERT INTO modelos_sessao (
+  codigo, nome, tipo, descricao, duracao_estimada, ordem_no_treinamento,
+  ativo, empresa_id, modelo_aeronave, qualificacao_tipo_id, created_at, updated_at, deleted_at
+)
+SELECT
+  ${e(PLANNING_MODEL_CODE)}, 'QA Planejamento Persistente — Sessão 1',
+  'RECORRENTE', 'Fixture sintética de staging para proposta V3.', 120, 1,
+  1, emp.id, 'AW139', qt.id, datetime('now'), datetime('now'), NULL
+FROM empresas emp
+JOIN qualificacoes_tipos qt
+  ON qt.empresa_id = emp.id
+ AND UPPER(qt.codigo) = UPPER(${e(PLANNING_QUAL_CODE)})
+ AND qt.deleted_at IS NULL
+WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+  AND NOT EXISTS (
+    SELECT 1 FROM modelos_sessao ms
+    WHERE ms.empresa_id = emp.id
+      AND ms.codigo = ${e(PLANNING_MODEL_CODE)}
+      AND ms.deleted_at IS NULL
+  );
+
+UPDATE modelos_sessao
+SET nome = 'QA Planejamento Persistente — Sessão 1',
+    tipo = 'RECORRENTE',
+    descricao = 'Fixture sintética de staging para proposta V3.',
+    duracao_estimada = 120,
+    ordem_no_treinamento = 1,
+    ativo = 1,
+    modelo_aeronave = 'AW139',
+    qualificacao_tipo_id = (
+      SELECT qt.id FROM qualificacoes_tipos qt
+      WHERE qt.empresa_id = modelos_sessao.empresa_id
+        AND UPPER(qt.codigo) = UPPER(${e(PLANNING_QUAL_CODE)})
+        AND qt.deleted_at IS NULL
+      LIMIT 1
+    ),
+    deleted_at = NULL,
+    updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND codigo = ${e(PLANNING_MODEL_CODE)};
+
+INSERT INTO qualificacoes_historico (
+  funcionario_id, qualificacao_id, qualificacao_codigo,
+  data_conclusao, data_vencimento, validade_meses,
+  codigo, categoria, observacoes, carga_horaria, status,
+  empresa_id, created_at, updated_at, deleted_at
+)
+SELECT
+  f.id, qt.id, qt.codigo,
+  date('now', '-275 days'), date('now', '+90 days'), 12,
+  'QA-SIM-PLN-' || f.matricula, 'TREINAMENTO',
+  'QA_ONLY_SIMULATOR_PLANNING', 2, 'VALIDA',
+  emp.id, datetime('now'), datetime('now'), NULL
+FROM empresas emp
+JOIN funcionarios f
+  ON f.empresa_id = emp.id
+ AND f.matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)})
+ AND f.deleted_at IS NULL
+JOIN qualificacoes_tipos qt
+  ON qt.empresa_id = emp.id
+ AND UPPER(qt.codigo) = UPPER(${e(PLANNING_QUAL_CODE)})
+ AND qt.deleted_at IS NULL
+WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+  AND NOT EXISTS (
+    SELECT 1 FROM qualificacoes_historico qh
+    WHERE qh.empresa_id = emp.id
+      AND qh.funcionario_id = f.id
+      AND qh.qualificacao_id = qt.id
+      AND qh.observacoes = 'QA_ONLY_SIMULATOR_PLANNING'
+      AND qh.deleted_at IS NULL
+  );
+
+UPDATE qualificacoes_historico
+SET data_conclusao = date('now', '-275 days'),
+    data_vencimento = date('now', '+90 days'),
+    validade_meses = 12,
+    qualificacao_codigo = ${e(PLANNING_QUAL_CODE)},
+    categoria = 'TREINAMENTO',
+    observacoes = 'QA_ONLY_SIMULATOR_PLANNING',
+    carga_horaria = 2,
+    status = 'VALIDA',
+    deleted_at = NULL,
+    updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND observacoes = 'QA_ONLY_SIMULATOR_PLANNING';
 `;
 }
 
@@ -191,6 +314,24 @@ WHERE matricula IN (${e(INSTRUTOR_CODIGO)}, ${e(PARTICIPANTE1_CODIGO)}, ${e(PART
 UPDATE aeronaves SET deleted_at = datetime('now') WHERE codigo = ${e(AERONAVE_CODIGO)} AND deleted_at IS NULL;
 
 UPDATE simuladores SET deleted_at = datetime('now') WHERE nome = ${e(SIMULADOR_CODIGO)} AND deleted_at IS NULL;
+
+UPDATE qualificacoes_historico
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND observacoes = 'QA_ONLY_SIMULATOR_PLANNING'
+  AND deleted_at IS NULL;
+
+UPDATE modelos_sessao
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND codigo = ${e(PLANNING_MODEL_CODE)}
+  AND deleted_at IS NULL;
+
+UPDATE qualificacoes_tipos
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND UPPER(codigo) = UPPER(${e(PLANNING_QUAL_CODE)})
+  AND deleted_at IS NULL;
 
 -- CRED-EXA e a empresa QA NÃO são removidos automaticamente: 0424 pode já ter
 -- criado EXA-V01..V04 apontando para essa empresa. Remover manualmente apenas
