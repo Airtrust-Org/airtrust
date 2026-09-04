@@ -175,7 +175,7 @@ jobs:
           ref: ${{ needs.guard.outputs.release_sha }}
           fetch-depth: 0
           path: release
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install Worker dependencies
@@ -200,7 +200,7 @@ jobs:
     environment: staging
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Capture verified staging backup
@@ -229,7 +229,7 @@ jobs:
           ref: ${{ needs.guard.outputs.release_sha }}
           fetch-depth: 0
           path: release
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install Worker dependencies
@@ -256,7 +256,7 @@ jobs:
     environment: staging
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install Worker dependencies
@@ -275,7 +275,7 @@ jobs:
     environment: staging
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install root dependencies
