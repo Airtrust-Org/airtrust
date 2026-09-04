@@ -405,17 +405,24 @@ async function exerciseDestructiveMenu(
   return 'PASS';
 }
 
-async function findSyntheticFuncionarioLink(page: Page): Promise<Locator | null> {
-  const links = page.locator(
-    'main a[href*="/funcionarios/"], [role="main"] a[href*="/funcionarios/"]',
-  );
-  const count = await links.count();
-  for (let i = 0; i < count; i += 1) {
-    const link = links.nth(i);
-    const text = ((await link.innerText().catch(() => '')) || '').trim();
-    const aria = (await link.getAttribute('aria-label').catch(() => null)) || '';
-    if (isSyntheticQaFixtureLabel(text) || isSyntheticQaFixtureLabel(aria)) return link;
-  }
+async function findSyntheticFuncionarioLink(
+  page: Page,
+  timeoutMs = 10_000,
+): Promise<Locator | null> {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const links = page.locator(
+      'main a[href*="/funcionarios/"], [role="main"] a[href*="/funcionarios/"]',
+    );
+    const count = await links.count();
+    for (let i = 0; i < count; i += 1) {
+      const link = links.nth(i);
+      const text = ((await link.innerText().catch(() => '')) || '').trim();
+      const aria = (await link.getAttribute('aria-label').catch(() => null)) || '';
+      if (isSyntheticQaFixtureLabel(text) || isSyntheticQaFixtureLabel(aria)) return link;
+    }
+    if (Date.now() < deadline) await page.waitForTimeout(250);
+  } while (Date.now() < deadline);
   return null;
 }
 
