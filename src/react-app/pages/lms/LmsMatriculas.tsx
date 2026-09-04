@@ -24,6 +24,7 @@ import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import Button from '@/react-app/components/Button';
 import { BaseModal } from '@/react-app/components/modals/BaseModal';
+import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 import {
   useLmsCurso,
   useLmsCursos,
@@ -885,15 +886,18 @@ export default function LmsMatriculas() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           {m.status !== 'CANCELADO' && (
-                            <button
-                              onClick={() => setCancelTarget(m)}
-                              disabled={cancelar.isPending}
-                              aria-label={`Remover matrícula de ${m.funcionario_nome ?? 'funcionário'}`}
-                              className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:hover:bg-red-500/10 dark:text-slate-500"
-                              title="Remover matrícula"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                            <RowActionsMenu
+                              label={`Mais ações para a matrícula de ${m.funcionario_nome ?? 'funcionário'}`}
+                              actions={[
+                                {
+                                  label: 'Cancelar matrícula',
+                                  destructive: true,
+                                  icon: Trash2,
+                                  disabled: cancelar.isPending,
+                                  onSelect: () => setCancelTarget(m),
+                                },
+                              ]}
+                            />
                           )}
                         </td>
                       </tr>

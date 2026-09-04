@@ -19,6 +19,7 @@ import {
 import AppLayout from '@/react-app/components/AppLayout';
 import Button from '@/react-app/components/Button';
 import PageHeader from '@/react-app/components/PageHeader';
+import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 import {
   type LmsCurso,
   type TipoConteudo,
@@ -71,10 +72,7 @@ function completionRate(curso: Pick<LmsCurso, 'total_matriculas' | 'total_conclu
 }
 
 const adminActionButtonClass =
-  'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900';
-
-const adminDangerActionButtonClass =
-  'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white p-2 text-rose-600 shadow-sm transition hover:bg-rose-50';
+  'inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900';
 
 export default function LmsAdminCursos() {
   const navigate = useNavigate();
@@ -575,6 +573,7 @@ export default function LmsAdminCursos() {
                                     <button
                                       type="button"
                                       title="Abrir detalhes"
+                                      aria-label={`Abrir detalhes de ${curso.titulo}`}
                                       onClick={() => handleOpen(curso)}
                                       className={adminActionButtonClass}
                                     >
@@ -584,6 +583,7 @@ export default function LmsAdminCursos() {
                                       <button
                                         type="button"
                                         title="Abrir preview"
+                                        aria-label={`Abrir preview de ${curso.titulo}`}
                                         onClick={() => navigate(getAdminCoursePreviewPath(curso)!)}
                                         className={adminActionButtonClass}
                                       >
@@ -593,6 +593,7 @@ export default function LmsAdminCursos() {
                                     <button
                                       type="button"
                                       title="Editar no catálogo"
+                                      aria-label={`Editar ${curso.titulo} no catálogo`}
                                       onClick={() => navigate(`/lms/cursos?edit=${curso.id}`)}
                                       className={adminActionButtonClass}
                                     >
@@ -602,6 +603,11 @@ export default function LmsAdminCursos() {
                                       type="button"
                                       title={
                                         curso.publicado ? 'Mover para rascunho' : 'Publicar curso'
+                                      }
+                                      aria-label={
+                                        curso.publicado
+                                          ? `Mover ${curso.titulo} para rascunho`
+                                          : `Publicar ${curso.titulo}`
                                       }
                                       onClick={() => void handleTogglePublication(curso)}
                                       className={adminActionButtonClass}
@@ -615,19 +621,23 @@ export default function LmsAdminCursos() {
                                     <button
                                       type="button"
                                       title="Abrir matrículas"
+                                      aria-label={`Abrir matrículas de ${curso.titulo}`}
                                       onClick={() => navigate(`/lms/matriculas/${curso.id}`)}
                                       className={adminActionButtonClass}
                                     >
                                       <Users className="h-4 w-4" />
                                     </button>
-                                    <button
-                                      type="button"
-                                      title="Excluir curso"
-                                      onClick={() => void handleDelete(curso)}
-                                      className={adminDangerActionButtonClass}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
+                                    <RowActionsMenu
+                                      label={`Mais ações para o curso ${curso.titulo}`}
+                                      actions={[
+                                        {
+                                          label: 'Excluir curso',
+                                          destructive: true,
+                                          icon: Trash2,
+                                          onSelect: () => handleDelete(curso),
+                                        },
+                                      ]}
+                                    />
                                   </div>
                                 </td>
                               </tr>
