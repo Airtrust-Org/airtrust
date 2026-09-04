@@ -102,9 +102,45 @@ jobs:
           console.log(`STAGING_SIMULATOR_PROVENANCE_SHA=${expected}`);
           NODE
 
+  d1-provision-simulator-planning-fixture:
+    name: Staging D1 Provision Synthetic Simulator Planning Fixture
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+      QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
+      QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD || secrets.STAGING_SMOKE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Require governed staging D1 credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$QA_EXAMINER_ADMIN_PASSWORD" ]] || { echo 'QA_EXAMINER_ADMIN_PASSWORD_MISSING' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo 'STAGING_D1_TOKEN_MISSING' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
+
+      - name: Install fixture dependencies
+        run: |
+          npm ci
+          npm --prefix worker-airtrust ci
+
+      - name: Validate synthetic simulator planning fixture in dry-run mode
+        run: node scripts/staging/seed-qa-examiner-training.mjs
+
+      - name: Provision only synthetic simulator/examiner QA tenant
+        run: node scripts/staging/seed-qa-examiner-training.mjs --apply
+
   qa:
     name: Persistent CAE Planning Runtime QA
-    needs: guard
+    needs: [guard, d1-provision-simulator-planning-fixture]
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 30
@@ -131,22 +167,15 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Require staging-only secrets
+      - name: Require staging-only QA credentials
         shell: bash
         run: |
           set -euo pipefail
           [[ -n "$QA_EXAMINER_ADMIN_PASSWORD" ]] || { echo 'QA_EXAMINER_ADMIN_PASSWORD_MISSING' >&2; exit 1; }
           [[ -n "$STAGING_SMOKE_PASSWORD" ]] || { echo 'STAGING_SMOKE_PASSWORD_MISSING' >&2; exit 1; }
-          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo 'STAGING_D1_TOKEN_MISSING' >&2; exit 1; }
-          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
 
       - name: Install QA dependencies
-        run: |
-          npm ci
-          npm --prefix worker-airtrust ci
-
-      - name: Reseed only synthetic simulator/examiner QA tenant
-        run: node scripts/staging/seed-qa-examiner-training.mjs --apply
+        run: npm ci
 
       - name: Generate, persist, resume and reconcile CAE planning
         run: node scripts/staging/smoke-simulator-planning-persistence.mjs
@@ -192,7 +221,7 @@ jobs:
 
   result:
     name: Staging Simulator Planning Persistence QA Passed
-    needs: [guard, qa]
+    needs: [guard, d1-provision-simulator-planning-fixture, qa]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -200,10 +229,12 @@ jobs:
         shell: bash
         env:
           GUARD: ${{ needs.guard.result }}
+          FIXTURE: ${{ needs.d1-provision-simulator-planning-fixture.result }}
           QA: ${{ needs.qa.result }}
         run: |
           set -euo pipefail
-          echo "guard=$GUARD qa=$QA"
+          echo "guard=$GUARD fixture=$FIXTURE qa=$QA"
           [[ "$GUARD" == 'success' ]]
+          [[ "$FIXTURE" == 'success' ]]
           [[ "$QA" == 'success' ]]
           echo 'STAGING_SIMULATOR_PLANNING_PERSISTENCE_QA_PASS'
