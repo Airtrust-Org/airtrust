@@ -59,6 +59,53 @@ setup('real staging login', async ({ page }) => {
 
   guard.assertClean();
 
+  // The canonical QA examiner credential can have more than one company
+  // association in staging. A fresh login follows the user's default company,
+  // which is not a reliable selector for governed QA. Pin the session through
+  // the real AppLayout company selector so AuthContext.selectEmpresa() performs
+  // the canonical /api/auth/select-empresa exchange and token rotation.
+  //
+  // Never manipulate local/session storage directly here.
+  if (profile === 'admin') {
+    const qaCompanyName = 'AirTrust Staging Examiner QA';
+    const qaCompanyOption = page.locator('select option', { hasText: qaCompanyName }).first();
+    if ((await qaCompanyOption.count()) === 0) {
+      throw new Error('QA_EXAMINER_TENANT_NOT_AVAILABLE');
+    }
+
+    const qaCompanyValue = await qaCompanyOption.getAttribute('value');
+    if (!qaCompanyValue) {
+      throw new Error('QA_EXAMINER_TENANT_VALUE_MISSING');
+    }
+
+    const companySelect = page.locator('select').filter({
+      has: page.locator(`option[value="${qaCompanyValue}"]`),
+    }).first();
+    await expect(companySelect, 'canonical QA company selector not reachable').toBeVisible();
+
+    const currentValue = await companySelect.inputValue();
+    if (currentValue !== qaCompanyValue) {
+      await companySelect.selectOption(qaCompanyValue);
+      await page.waitForLoadState('domcontentloaded');
+      await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
+      await expect
+        .poll(async () => {
+          const option = page.locator(`select option[value="${qaCompanyValue}"]:checked`).first();
+          return (await option.count()) > 0;
+        }, { timeout: 20_000 })
+        .toBe(true);
+    }
+
+    // Re-check the candidate SHA after tenant switch/reload.
+    if (releaseShortSha) {
+      await assertLiveFrontendShaFromPage(page, releaseShortSha, 'qa-tenant-selected');
+    }
+
+    guard.assertClean();
+    // eslint-disable-next-line no-console
+    console.log('[frontend-pr-ui-qa] canonical QA tenant selected through the real UI');
+  }
+
   // eslint-disable-next-line no-console
   console.log(`[frontend-pr-ui-qa] authenticated with the ${profile} credential pair`);
 
