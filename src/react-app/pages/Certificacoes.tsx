@@ -10,12 +10,14 @@ import {
   ChevronsRight,
 } from 'lucide-react';
 import Button from '@/react-app/components/Button';
+import RowActionsMenu from '@/react-app/components/UI/RowActionsMenu';
 import { PageLayout, PageGrid, PageSection } from '@/react-app/components/layout/PageLayout';
 import StatCard from '@/react-app/components/StatCard';
 import { statusBadges } from '@/react-app/styles/design-tokens';
-import { API_BASE_URL } from '@/react-app/config/api';
-import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
+import { apiFetch } from '@/react-app/lib/apiFetch';
+import { httpClient } from '@/react-app/services/http-client';
 
 interface Certificacao {
   id: number;
@@ -90,19 +92,55 @@ export default function Certificacoes() {
   const carregarPagina = async (page: number) => {
     try {
       setLoading(true);
-      const API = API_BASE_URL.replace('/api', '');
-      const resp = await fetch(`${API}/api/qualificacoes?page=${page}&limit=${limit}`);
-      const result = await resp.json();
-      if (result.success) {
-        setCertificacoes(result.data || []);
-        setTotal(result.stats?.total ?? 0);
-        setTotalPages(result.totalPages || 1);
-        setCurrentPage(result.page || page);
+      // A tela representa registros de qualificacoes_historico. Ler do endpoint
+      // canônico de histórico garante que o id exibido seja o mesmo recurso
+      // aceito pelo DELETE /api/qualificacoes/historico/:id.
+      const response = await httpClient.get<{
+        success?: boolean;
+        data?: Record<string, unknown>[];
+        stats?: Record<string, unknown>;
+        meta?: Record<string, unknown>;
+        pagination?: Record<string, unknown>;
+      }>(`/qualificacoes/historico?page=${page}&limit=${limit}&stats=true`);
+      const result = response.data;
+      if (response.success && result?.success) {
+        const historico = Array.isArray(result.data) ? result.data : [];
+        const normalized: Certificacao[] = historico.map(
+          (row: Record<string, unknown>) => ({
+            id: Number(row.id),
+            funcionario_id:
+              row.funcionario_id != null ? Number(row.funcionario_id) : undefined,
+            funcionario_nome: String(row.funcionario_nome || ''),
+            funcionario_matricula: String(row.funcionario_matricula || ''),
+            treinamento_nome: String(row.tipo_nome || row.tipo || ''),
+            treinamento_codigo: String(row.tipo_codigo || ''),
+            data_conclusao: String(row.data_realizacao || ''),
+            data_vencimento:
+              row.data_vencimento != null ? String(row.data_vencimento) : undefined,
+            status: String(row.status || row.qualificacao_status || ''),
+            instrutor: row.instrutor != null ? String(row.instrutor) : undefined,
+            nome: String(row.tipo_nome || row.tipo || ''),
+            codigo: String(row.tipo_codigo || ''),
+            data_realizado: String(row.data_realizacao || ''),
+            status_calculado: String(row.status || row.qualificacao_status || ''),
+          }),
+        );
+
+        const pagination = result.pagination || {};
+        const responseStats = result.stats || {};
+        const totalRegistros = Number(
+          pagination.total ?? result.meta?.total ?? responseStats.total ?? normalized.length,
+        );
+
+        setCertificacoes(normalized);
+        setTotal(totalRegistros);
+        setTotalPages(Math.max(1, Number(pagination.pages ?? 1)));
+        setCurrentPage(Number(pagination.page ?? page));
         setStats({
-          total: result.stats?.total ?? (result.data?.length || 0),
-          ativas: result.stats?.validas ?? 0,
-          vencidas: result.stats?.vencidas ?? 0,
-          vencendo: result.stats?.vencendo ?? 0,
+          total: Number(responseStats.total ?? totalRegistros),
+          ativas: Number(responseStats.validas ?? 0),
+          vencidas: Number(responseStats.vencidas ?? 0),
+          vencendo: Number(responseStats.vencendo ?? 0),
         });
       } else {
         setCertificacoes([]);
@@ -136,7 +174,7 @@ export default function Certificacoes() {
     if (!confirmacao) return;
 
     try {
-      const response = await apiFetch(`/api/qualificacoes/${certificacaoId}`, {
+      const response = await apiFetch(`/api/qualificacoes/historico/${certificacaoId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -321,14 +359,17 @@ export default function Certificacoes() {
                       />
                     </td>
                     <td className=" py-4 whitespace-nowrap text-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteCertificacao(cert.id)}
-                        title="Excluir certificação"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </Button>
+                      <RowActionsMenu
+                        label={`Ações da certificação ${cert.treinamento_nome || cert.nome || cert.id}`}
+                        actions={[
+                          {
+                            label: 'Excluir certificação',
+                            destructive: true,
+                            icon: Trash2,
+                            onSelect: () => handleDeleteCertificacao(cert.id),
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))}

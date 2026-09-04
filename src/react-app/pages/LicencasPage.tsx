@@ -20,6 +20,7 @@ import { apiClient } from '@/react-app/services/apiClient';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import AppLayout from '@/react-app/components/AppLayout';
+import RowActionsMenu from '@/react-app/components/UI/RowActionsMenu';
 
 type Licenca = {
   id: number;
@@ -314,14 +315,17 @@ export default function LicencasPage() {
                               >
                                 <Edit2 className="h-4 w-4" />
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => excluir(lic.id)}
-                                className="rounded-lg p-1.5 text-red-600 hover:bg-red-50"
-                                title="Excluir licença"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              <RowActionsMenu
+                                label={`Ações da licença ${lic.numero}`}
+                                actions={[
+                                  {
+                                    label: 'Excluir licença',
+                                    destructive: true,
+                                    icon: Trash2,
+                                    onSelect: () => excluir(lic.id),
+                                  },
+                                ]}
+                              />
                             </div>
                           </td>
                         </tr>

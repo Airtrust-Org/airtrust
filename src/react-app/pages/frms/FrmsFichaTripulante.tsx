@@ -241,6 +241,26 @@ function getCurrentMonthKeyLocal(): string {
   return `${year}-${month}`;
 }
 
+/**
+ * N-10: destino do botão "Voltar" da ficha individual FRMS.
+ *
+ * `/frms/tripulante/:id` é uma página independente (header e rota próprios).
+ * Quando é aberta a partir da Ficha do Funcionário (`?origem=ficha`), o retorno
+ * é para a ficha de origem — mantendo a navegação coerente com o módulo
+ * Funcionários. Para qualquer outra origem (operacao, casos, acesso direto por
+ * URL) o comportamento canônico do FRMS é preservado: volta para `/frms`.
+ */
+export function resolveFrmsFichaBack(
+  origem: string | null,
+  id: string | undefined,
+): { target: string; label: string } {
+  const funcionarioId = Number(id);
+  if (origem === 'ficha' && Number.isFinite(funcionarioId) && funcionarioId > 0) {
+    return { target: `/funcionarios/${id}`, label: 'Voltar à ficha' };
+  }
+  return { target: '/frms', label: 'Voltar' };
+}
+
 export default function FrmsFichaTripulante() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -258,6 +278,12 @@ export default function FrmsFichaTripulante() {
   const hojeIso = new Date().toISOString().slice(0, 10);
 
   const requestedFuncionarioId = Number(id);
+
+  // N-10: "Voltar" sensível à origem (ver resolveFrmsFichaBack).
+  const { target: backTarget, label: backLabel } = resolveFrmsFichaBack(
+    searchParams.get('origem'),
+    id,
+  );
   const {
     data: frmsSnapshotItems,
     loading: loadingFrmsSnapshotToday,
@@ -488,10 +514,10 @@ export default function FrmsFichaTripulante() {
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-4 min-w-0">
               <button
-                onClick={() => navigate('/frms')}
+                onClick={() => navigate(backTarget)}
                 className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all shrink-0"
               >
-                <ArrowLeft className="h-4 w-4" /> Voltar
+                <ArrowLeft className="h-4 w-4" /> {backLabel}
               </button>
               <div className="min-w-0">
                 <h1 className="text-2xl font-black bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent truncate">
