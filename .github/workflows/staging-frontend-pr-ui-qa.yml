@@ -153,7 +153,7 @@ jobs:
           cp "$PROVENANCE_OUT" provenance.json
 
       - name: Upload provenance evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: staging-frontend-pr-ui-qa-provenance-${{ github.run_id }}
           path: provenance.json
@@ -293,7 +293,7 @@ jobs:
 
       - name: Upload sanitized QA evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: staging-frontend-pr-ui-qa-${{ github.run_id }}
           path: |

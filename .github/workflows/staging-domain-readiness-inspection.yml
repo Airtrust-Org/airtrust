@@ -59,7 +59,7 @@ jobs:
           npx --prefix worker-airtrust wrangler d1 execute "$ALLOWED_STAGING_DB_NAME" --remote --command "SELECT empresa_id, id, codigo, nome FROM setores WHERE ativo = 1 AND deleted_at IS NULL AND dominio_codigo IS NULL ORDER BY empresa_id, nome" --json > "${RESULT_PATH%.json}-setores.json"
 
       - name: Upload sanitized inspection
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: staging-domain-readiness-${{ github.run_id }}
           path: |

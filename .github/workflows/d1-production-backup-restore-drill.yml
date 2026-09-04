@@ -96,7 +96,7 @@ jobs:
           rm -f "$raw_report"
 
       - name: Upload sanitized drill report only
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: d1-production-backup-restore-report-${{ github.sha }}
           path: ${{ runner.temp }}/d1-production-backup-restore-report.json

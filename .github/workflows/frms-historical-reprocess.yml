@@ -420,7 +420,7 @@ jobs:
 
       - name: Publish sanitized operation report
         if: ${{ always() && env.PRODUCTION_REPORT != '' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frms-historical-reprocess-${{ github.sha }}
           path: |
