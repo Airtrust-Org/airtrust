@@ -49,6 +49,7 @@ import { useAeronavesConfig } from '@/react-app/hooks/useAeronavesConfig';
 import { API_BASE_URL, getAccessToken, fetchWithAuth } from '@/react-app/config/api';
 import { clearApiCacheByPattern, useApi } from '@/react-app/hooks/useApi';
 import { DataTable, Column, SortConfig } from '@/components/ui/DataTable';
+import { RowActionsMenu, type RowAction } from '@/react-app/components/UI/RowActionsMenu';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import { Modal } from '@/components/ui/Modal';
 import { ModalAlertaEAD } from '@/react-app/components/modals/ModalAlertaEAD';
@@ -107,7 +108,6 @@ import { readUserPreference, writeUserPreference } from '@/react-app/utils/userP
 import {
   ALL_STATUS_VALUES,
   historicoActionButtonClass,
-  historicoActionDangerButtonClass,
   QUALIFICACOES_PREFS_KEY,
 } from './qualificacoes/qualificacoes.constants';
 import { useQualificacoesFiltros } from './qualificacoes/hooks/useQualificacoesFiltros';
@@ -1769,30 +1769,26 @@ export default function Qualificacoes() {
           const mostrarAlertaEAD =
             isEADouCMA && (isVencida || isVencendo) && !isPlanejada && !isCancelada;
 
+          const destructiveRowActions: RowAction[] = isPlanejada
+            ? [
+                {
+                  label: 'Excluir qualificação planejada',
+                  icon: Trash2,
+                  destructive: true,
+                  onSelect: () => handleCancelar(item),
+                },
+              ]
+            : [
+                {
+                  label: 'Deletar qualificação',
+                  icon: Trash2,
+                  destructive: true,
+                  onSelect: () => handleDeletear(item),
+                },
+              ];
+
           return (
             <div className="flex items-center gap-1">
-              {isPlanejada && (
-                <button
-                  type="button"
-                  onClick={() => handleCancelar(item)}
-                  title="Excluir qualificação planejada"
-                  className={historicoActionDangerButtonClass}
-                >
-                  <Trash2 className="w-4 h-4 text-red-600" />
-                </button>
-              )}
-
-              {!isPlanejada && (
-                <button
-                  type="button"
-                  onClick={() => handleDeletear(item)}
-                  title="Deletar qualificação"
-                  className={historicoActionDangerButtonClass}
-                >
-                  <Trash2 className="w-4 h-4 text-red-600" />
-                </button>
-              )}
-
               {!isCancelada && (
                 <button
                   type="button"
@@ -1883,6 +1879,8 @@ export default function Qualificacoes() {
                   <BellRing className="w-4 h-4 text-amber-500" />
                 </button>
               )}
+
+              <RowActionsMenu actions={destructiveRowActions} label="Mais ações" />
             </div>
           );
         },
@@ -2838,26 +2836,6 @@ export default function Qualificacoes() {
                             <>
                               <button
                                 onClick={async () => {
-                                  await safeDelete({
-                                    url: `${API_BASE_URL}/qualificacoes/tipos`,
-                                    id: row.id,
-                                    itemName: row.nome || 'modelo',
-                                    onSuccess: () => {
-                                      showToast.success('Modelo deletado com sucesso!');
-                                      refetchTipos();
-                                    },
-                                    onError: () => {
-                                      showToast.error('Erro ao deletar modelo');
-                                    },
-                                  });
-                                }}
-                                className={historicoActionDangerButtonClass}
-                                title="Excluir modelo"
-                              >
-                                <Trash2 className="w-4 h-4 text-red-600" />
-                              </button>
-                              <button
-                                onClick={async () => {
                                   setEditingTipo({
                                     id: row.id ?? String(row.nome || 'tipo'),
                                     nome: row.nome || '',
@@ -2905,6 +2883,30 @@ export default function Qualificacoes() {
                               >
                                 <Pencil className="w-4 h-4 text-indigo-600" />
                               </button>
+                              <RowActionsMenu
+                                label="Mais ações"
+                                actions={[
+                                  {
+                                    label: 'Excluir modelo',
+                                    icon: Trash2,
+                                    destructive: true,
+                                    onSelect: async () => {
+                                      await safeDelete({
+                                        url: `${API_BASE_URL}/qualificacoes/tipos`,
+                                        id: row.id,
+                                        itemName: row.nome || 'modelo',
+                                        onSuccess: () => {
+                                          showToast.success('Modelo deletado com sucesso!');
+                                          refetchTipos();
+                                        },
+                                        onError: () => {
+                                          showToast.error('Erro ao deletar modelo');
+                                        },
+                                      });
+                                    },
+                                  },
+                                ]}
+                              />
                             </>
                           )}
                         </div>
@@ -3160,47 +3162,6 @@ export default function Qualificacoes() {
                           <div className="flex items-center gap-2">
                             <button
                               onClick={async () => {
-                                if (
-                                  !(await confirmDialog(
-                                    'Tem certeza que deseja deletar esta categoria?',
-                                  ))
-                                )
-                                  return;
-                                try {
-                                  const apiUrl = API_BASE_URL;
-                                  const response = await fetchWithAuth(
-                                    `${apiUrl}/categorias/${cat.id}`,
-                                    {
-                                      method: 'DELETE',
-                                    },
-                                  );
-                                  if (response.ok) {
-                                    showToast.success('Categoria deletada com sucesso!');
-                                    setCategorias(categorias.filter((c) => c.id !== cat.id));
-                                  } else {
-                                    const errorData = await response.json().catch(() => ({}));
-                                    if (response.status === 403) {
-                                      showToast.error(
-                                        'Permissão negada. Apenas administradores podem deletar categorias.',
-                                      );
-                                    } else {
-                                      showToast.error(
-                                        errorData.error || 'Erro ao deletar categoria',
-                                      );
-                                    }
-                                  }
-                                } catch (error) {
-                                  console.error('Erro ao deletar categoria:', error);
-                                  showToast.error('Erro ao deletar categoria');
-                                }
-                              }}
-                              className={historicoActionDangerButtonClass}
-                              title="Deletar"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-600" />
-                            </button>
-                            <button
-                              onClick={async () => {
                                 setEditingCategoria(cat);
                                 setNovaCategoriaNome(cat.nome);
                                 setNovaCategoriaDesc(cat.descricao || '');
@@ -3211,6 +3172,53 @@ export default function Qualificacoes() {
                             >
                               <Pencil className="w-4 h-4 text-indigo-600" />
                             </button>
+                            <RowActionsMenu
+                              label="Mais ações"
+                              actions={[
+                                {
+                                  label: 'Deletar categoria',
+                                  icon: Trash2,
+                                  destructive: true,
+                                  onSelect: async () => {
+                                    if (
+                                      !(await confirmDialog(
+                                        'Tem certeza que deseja deletar esta categoria?',
+                                      ))
+                                    )
+                                      return;
+                                    try {
+                                      const apiUrl = API_BASE_URL;
+                                      const response = await fetchWithAuth(
+                                        `${apiUrl}/categorias/${cat.id}`,
+                                        {
+                                          method: 'DELETE',
+                                        },
+                                      );
+                                      if (response.ok) {
+                                        showToast.success('Categoria deletada com sucesso!');
+                                        setCategorias(categorias.filter((c) => c.id !== cat.id));
+                                      } else {
+                                        const errorData = await response
+                                          .json()
+                                          .catch(() => ({}));
+                                        if (response.status === 403) {
+                                          showToast.error(
+                                            'Permissão negada. Apenas administradores podem deletar categorias.',
+                                          );
+                                        } else {
+                                          showToast.error(
+                                            errorData.error || 'Erro ao deletar categoria',
+                                          );
+                                        }
+                                      }
+                                    } catch (error) {
+                                      console.error('Erro ao deletar categoria:', error);
+                                      showToast.error('Erro ao deletar categoria');
+                                    }
+                                  },
+                                },
+                              ]}
+                            />
                           </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">

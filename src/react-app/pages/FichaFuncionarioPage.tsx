@@ -658,7 +658,25 @@ export default function FichaFuncionarioPage() {
               </p>
             </div>
           </div>
-          <div>{badgeCompliance(complianceStatus)}</div>
+          <div className="flex items-center gap-3">
+            {badgeCompliance(complianceStatus)}
+            {/*
+              N-10: FRMS / Fadiga é uma PÁGINA independente (rota /frms/tripulante/:id,
+              header e RBAC próprios), não uma aba da ficha. Fica fora da barra de abas,
+              como ação de navegação explícita para outro módulo.
+            */}
+            <button
+              type="button"
+              onClick={() => navigate(`/frms/tripulante/${id}?origem=ficha`)}
+              aria-label="Abrir a página FRMS / Fadiga deste funcionário"
+              title="Abrir FRMS / Fadiga (página do módulo FRMS)"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100 whitespace-nowrap"
+            >
+              <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+              FRMS / Fadiga
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
         </div>
 
         {/* Abas */}
@@ -719,14 +737,6 @@ export default function FichaFuncionarioPage() {
             >
               <FolderOpen className="h-4 w-4" />
               Pasta 360
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate(`/frms/tripulante/${id}`)}
-              className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap text-amber-700 hover:bg-amber-50 border border-amber-200"
-            >
-              <ShieldAlert className="h-4 w-4" />
-              FRMS / Fadiga
             </button>
           </div>
         </div>

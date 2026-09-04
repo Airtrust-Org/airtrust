@@ -9,6 +9,7 @@ import { Button } from '@/react-app/components/UI/Button';
 import { Input } from '@/react-app/components/UI/Input';
 import { ArrowLeft, Plus, Trash2, Upload, Inbox } from 'lucide-react';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 
 interface Manobra {
   id: number;
@@ -403,13 +404,17 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
                     >
                       Editar
                     </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => excluir(m.id)}
-                      className="text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 px-2 py-1.5 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <RowActionsMenu
+                      label="Mais ações"
+                      actions={[
+                        {
+                          label: 'Excluir manobra',
+                          icon: Trash2,
+                          destructive: true,
+                          onSelect: () => excluir(m.id),
+                        },
+                      ]}
+                    />
                   </div>
                 </td>
               </tr>

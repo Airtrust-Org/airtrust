@@ -8,6 +8,7 @@ import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { Button } from '@/react-app/components/UI/Button';
 import { Input } from '@/react-app/components/UI/Input';
 import { Plus, Trash2, Inbox, ArrowLeft } from 'lucide-react';
+import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 interface Simulador {
@@ -290,13 +291,17 @@ export default function CrudSimuladores({ embedded = false, onBack }: Props = {}
                     >
                       Editar
                     </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => excluir(sim.id)}
-                      className="text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 px-2 py-1.5 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <RowActionsMenu
+                      label={`Mais ações para ${sim.nome}`}
+                      actions={[
+                        {
+                          label: 'Excluir simulador',
+                          destructive: true,
+                          icon: Trash2,
+                          onSelect: () => excluir(sim.id),
+                        },
+                      ]}
+                    />
                   </div>
                 </td>
               </tr>

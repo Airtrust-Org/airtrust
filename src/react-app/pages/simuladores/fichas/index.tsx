@@ -45,6 +45,7 @@ import {
   type ModeloSessaoResumo,
 } from './fichaModeloPdf';
 import { isFichaFutureEvaluation } from './fichaAvailability';
+import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 
 interface Instrutor {
   id: number;
@@ -1034,18 +1035,18 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
         )}
 
         {canDeleteFicha && (
-          <button
-            onClick={() => handleDeletar(ficha)}
-            disabled={deletandoId === ficha.id}
-            className={`${compact ? 'h-10 w-10 rounded-lg' : 'rounded-md p-1.5'} text-red-600 transition-all hover:bg-red-600 hover:text-white disabled:opacity-50 press-scale`}
-            title="Excluir"
-          >
-            {deletandoId === ficha.id ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <Trash2 size={16} />
-            )}
-          </button>
+          <RowActionsMenu
+            label={`Mais ações para ficha de ${ficha.participante_nome}`}
+            actions={[
+              {
+                label: 'Excluir ficha',
+                destructive: true,
+                icon: Trash2,
+                disabled: deletandoId === ficha.id,
+                onSelect: () => handleDeletar(ficha),
+              },
+            ]}
+          />
         )}
       </>
     );

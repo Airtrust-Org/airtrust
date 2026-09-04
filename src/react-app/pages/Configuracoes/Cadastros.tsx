@@ -4,6 +4,7 @@ import { lazyWithRetry } from '@/react-app/utils/lazyWithRetry';
 import { Plus, Briefcase, Building2, Plane, Edit2, Trash2, Layers } from 'lucide-react';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 import { SettingsSectionIntro } from './components/SettingsSectionIntro';
 
 const ModalCadastro = lazyWithRetry(
@@ -382,21 +383,26 @@ export function Cadastros() {
                       key={func.id}
                       className="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                     >
-                      <td className="px-6 py-3 flex gap-2">
+                      <td className="flex gap-2 px-6 py-3">
                         <button
                           onClick={() => setModalFuncao({ isOpen: true, data: func })}
-                          className="rounded-lg p-1.5 text-blue-600 transition-colors hover:bg-blue-50"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-blue-600 transition-colors hover:bg-blue-50"
                           title="Editar"
+                          aria-label={`Editar função ${func.nome}`}
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => excluirFuncao(func.id)}
-                          className="rounded-lg p-1.5 text-red-600 transition-colors hover:bg-red-50"
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <RowActionsMenu
+                          label={`Mais ações para a função ${func.nome}`}
+                          actions={[
+                            {
+                              label: 'Excluir função',
+                              destructive: true,
+                              icon: Trash2,
+                              onSelect: () => excluirFuncao(func.id),
+                            },
+                          ]}
+                        />
                       </td>
                       <td className="px-6 py-3 font-mono text-sm text-slate-900 dark:text-slate-100">
                         {func.codigo}
@@ -481,21 +487,26 @@ export function Cadastros() {
                       key={setor.id}
                       className="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                     >
-                      <td className="px-6 py-3 flex gap-2">
+                      <td className="flex gap-2 px-6 py-3">
                         <button
                           onClick={() => setModalSetor({ isOpen: true, data: setor })}
-                          className="rounded-lg p-1.5 text-blue-600 transition-colors hover:bg-blue-50"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-blue-600 transition-colors hover:bg-blue-50"
                           title="Editar"
+                          aria-label={`Editar setor ${setor.nome}`}
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => excluirSetor(setor.id)}
-                          className="rounded-lg p-1.5 text-red-600 transition-colors hover:bg-red-50"
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <RowActionsMenu
+                          label={`Mais ações para o setor ${setor.nome}`}
+                          actions={[
+                            {
+                              label: 'Excluir setor',
+                              destructive: true,
+                              icon: Trash2,
+                              onSelect: () => excluirSetor(setor.id),
+                            },
+                          ]}
+                        />
                       </td>
                       <td className="px-6 py-3 font-mono text-sm text-slate-900 dark:text-slate-100">
                         {setor.codigo}
@@ -580,21 +591,26 @@ export function Cadastros() {
                       key={modelo.id}
                       className="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                     >
-                      <td className="px-6 py-3 flex gap-2">
+                      <td className="flex gap-2 px-6 py-3">
                         <button
                           onClick={() => setModalModelo({ isOpen: true, data: modelo })}
-                          className="rounded-lg p-1.5 text-blue-600 transition-colors hover:bg-blue-50"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-blue-600 transition-colors hover:bg-blue-50"
                           title="Editar"
+                          aria-label={`Editar equipamento ${modelo.modelo}`}
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => excluirModelo(modelo.id)}
-                          className="rounded-lg p-1.5 text-red-600 transition-colors hover:bg-red-50"
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <RowActionsMenu
+                          label={`Mais ações para o equipamento ${modelo.modelo}`}
+                          actions={[
+                            {
+                              label: 'Excluir equipamento',
+                              destructive: true,
+                              icon: Trash2,
+                              onSelect: () => excluirModelo(modelo.id),
+                            },
+                          ]}
+                        />
                       </td>
                       <td className="px-6 py-3 font-medium text-slate-900 dark:text-slate-100">
                         {modelo.modelo}
@@ -673,21 +689,26 @@ export function Cadastros() {
                       key={aeronave.id}
                       className="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                     >
-                      <td className="px-6 py-3 flex gap-2">
+                      <td className="flex gap-2 px-6 py-3">
                         <button
                           onClick={() => setModalAeronave({ isOpen: true, data: aeronave })}
-                          className="rounded-lg p-1.5 text-blue-600 transition-colors hover:bg-blue-50"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-blue-600 transition-colors hover:bg-blue-50"
                           title="Editar"
+                          aria-label={`Editar aeronave ${aeronave.prefixo ?? aeronave.modelo}`}
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => excluirAeronave(aeronave.id)}
-                          className="rounded-lg p-1.5 text-red-600 transition-colors hover:bg-red-50"
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <RowActionsMenu
+                          label={`Mais ações para a aeronave ${aeronave.prefixo ?? aeronave.modelo}`}
+                          actions={[
+                            {
+                              label: 'Excluir aeronave',
+                              destructive: true,
+                              icon: Trash2,
+                              onSelect: () => excluirAeronave(aeronave.id),
+                            },
+                          ]}
+                        />
                       </td>
                       <td className="px-6 py-3 font-medium text-slate-900 dark:text-slate-100">
                         {aeronave.modelo}

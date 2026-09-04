@@ -4,6 +4,7 @@ import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { Button } from '@/react-app/components/UI/Button';
 import { Input } from '@/react-app/components/UI/Input';
 import { ArrowLeft, Plus, Trash2, X, ChevronUp, ChevronDown, Inbox } from 'lucide-react';
+import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { getColorByIndex } from '@/react-app/utils/colorPalette';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
@@ -860,13 +861,17 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                       >
                         Editar
                       </Button>
-                      <Button
-                        variant="ghost"
-                        onClick={() => excluir(modelo.id)}
-                        className="text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 px-2 py-1.5 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <RowActionsMenu
+                        label={`Mais ações para ${codigoExibicao(modelo)}`}
+                        actions={[
+                          {
+                            label: 'Excluir modelo',
+                            destructive: true,
+                            icon: Trash2,
+                            onSelect: () => excluir(modelo.id),
+                          },
+                        ]}
+                      />
                     </div>
                   </td>
                 </tr>
