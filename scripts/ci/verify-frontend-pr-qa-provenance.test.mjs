@@ -72,8 +72,9 @@ test('normalizeReleaseSha requires a full 40-char hex sha', () => {
   assert.throws(() => normalizeReleaseSha(`${SHA}z`), /RELEASE_SHA_INVALID/);
 });
 
-test('assertAuditProfile only accepts destructive-actions initially', () => {
+test('assertAuditProfile accepts only governed frontend QA profiles', () => {
   assert.equal(assertAuditProfile('destructive-actions'), 'destructive-actions');
+  assert.equal(assertAuditProfile('audit-closure'), 'audit-closure');
   assert.throws(() => assertAuditProfile('documents'), /AUDIT_PROFILE_UNSUPPORTED/);
   assert.throws(() => assertAuditProfile(''), /AUDIT_PROFILE_UNSUPPORTED/);
 });
