@@ -131,7 +131,10 @@ async function main() {
   const bravo = funcionarios.find((item) => item?.matricula === 'QA-PARTICIPANTE-BRAVO');
   const qualification = rows(tiposRes.json).find((item) => String(item?.codigo || '').toUpperCase() === QUAL_CODE);
   const model = rows(modelosRes.json).find((item) => item?.codigo === MODEL_CODE);
-  assert(alfa?.id && bravo?.id && qualification?.id && model?.id, 'fixture QA de planejamento incompleta');
+  assert(
+    alfa?.id && bravo?.id && qualification?.id && model?.id,
+    `fixture QA de planejamento incompleta: alfa=${Boolean(alfa?.id)} bravo=${Boolean(bravo?.id)} tipo=${Boolean(qualification?.id)} modelo=${Boolean(model?.id)}`,
+  );
 
   const inicio = isoDay(60);
   const fim = isoDay(120);
