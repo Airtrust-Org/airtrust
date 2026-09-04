@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
+import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 
 interface Documento {
   id: number;
@@ -112,20 +113,20 @@ export default function ListaDocumentos({ funcionarioId }: ListaDocumentosProps)
 
   if (loading) {
     return (
-      <div className="text-center py-8">
-        <Loader className="w-8 h-8 animate-spin text-orange-600 mx-auto mb-2" />
-        <p className="text-gray-600">Carregando documentos...</p>
+      <div className="py-8 text-center">
+        <Loader className="mx-auto mb-2 h-8 w-8 animate-spin text-orange-600" />
+        <p className="text-gray-600 dark:text-slate-300">Carregando documentos...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex gap-3">
-        <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+      <div className="flex gap-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30">
+        <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-300" />
         <div>
-          <p className="font-semibold text-red-900">Erro ao carregar</p>
-          <p className="text-sm text-red-800">{error}</p>
+          <p className="font-semibold text-red-900 dark:text-red-100">Erro ao carregar</p>
+          <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
         </div>
       </div>
     );
@@ -133,38 +134,42 @@ export default function ListaDocumentos({ funcionarioId }: ListaDocumentosProps)
 
   if (documentos.length === 0) {
     return (
-      <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-        <FileText className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-        <p className="text-gray-600 font-semibold">Nenhum documento anexado</p>
-        <p className="text-sm text-gray-500 mt-1">Use a aba "Enviar Documento" para adicionar</p>
+      <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 py-8 text-center dark:border-slate-700 dark:bg-slate-900">
+        <FileText className="mx-auto mb-2 h-12 w-12 text-gray-400 dark:text-slate-500" />
+        <p className="font-semibold text-gray-600 dark:text-slate-200">Nenhum documento anexado</p>
+        <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+          Use a aba &quot;Enviar Documento&quot; para adicionar
+        </p>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <h3 className="text-lg font-semibold">📁 Documentos Anexados ({documentos.length})</h3>
+      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+        Documentos anexados ({documentos.length})
+      </h3>
 
       <div className="space-y-2">
         {documentos.map((doc) => (
           <div
             key={doc.id}
-            className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition"
+            className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-4 transition hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
           >
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="p-2 bg-orange-50 rounded-lg flex-shrink-0">
-                <FileText className="w-6 h-6 text-orange-600" />
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="flex-shrink-0 rounded-lg bg-orange-50 p-2 dark:bg-orange-950/30">
+                <FileText className="h-6 w-6 text-orange-600 dark:text-orange-300" />
               </div>
               <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-semibold text-gray-900">{doc.tipo_documento}</p>
-                  <span className="text-xs text-gray-500 whitespace-nowrap">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-gray-900 dark:text-slate-100">{doc.tipo_documento}</p>
+                  <span className="whitespace-nowrap text-xs text-gray-500 dark:text-slate-400">
                     {(doc.tamanho_bytes / 1024).toFixed(2)} KB
                   </span>
                 </div>
-                <p className="text-sm text-gray-600 truncate">{doc.nome_arquivo}</p>
-                <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                  <Calendar className="w-3 h-3" />
+                <p className="truncate text-sm text-gray-600 dark:text-slate-300">{doc.nome_arquivo}</p>
+                <div className="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+                  <Calendar className="h-3 w-3" />
                   {new Date(doc.data_upload).toLocaleDateString('pt-BR')}
                   {doc.descricao && (
                     <>
@@ -176,21 +181,27 @@ export default function ListaDocumentos({ funcionarioId }: ListaDocumentosProps)
               </div>
             </div>
 
-            <div className="flex gap-2 flex-shrink-0 ml-2">
+            <div className="ml-2 flex flex-shrink-0 items-center gap-1">
               <button
+                type="button"
                 onClick={() => handleDownload(doc.id, doc.nome_arquivo)}
-                className="p-2 text-primary hover:bg-primary/10 rounded-lg transition"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
                 title="Baixar"
+                aria-label={`Baixar ${doc.nome_arquivo}`}
               >
-                <Download className="w-5 h-5" />
+                <Download className="h-5 w-5" aria-hidden="true" />
               </button>
-              <button
-                onClick={() => handleExcluir(doc.id)}
-                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                title="Excluir"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
+              <RowActionsMenu
+                label={`Mais ações para ${doc.nome_arquivo}`}
+                actions={[
+                  {
+                    label: 'Excluir documento',
+                    destructive: true,
+                    icon: Trash2,
+                    onSelect: () => handleExcluir(doc.id),
+                  },
+                ]}
+              />
             </div>
           </div>
         ))}
