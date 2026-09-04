@@ -47,6 +47,18 @@ setup('real staging login', async ({ page }) => {
     await rememberMe.check();
   }
 
+  const empresasResponsePromise = page.waitForResponse(
+    (response) => {
+      if (response.request().method() !== 'GET') return false;
+      try {
+        return new URL(response.url()).pathname === '/api/auth/empresas';
+      } catch {
+        return false;
+      }
+    },
+    { timeout: 45_000 },
+  );
+
   await page.getByRole('button', { name: /entrar|sign in/i }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 45_000 });
   await expect(page).not.toHaveURL(/\/login/);
@@ -59,51 +71,95 @@ setup('real staging login', async ({ page }) => {
 
   guard.assertClean();
 
-  // The canonical QA examiner credential can have more than one company
-  // association in staging. A fresh login follows the user's default company,
-  // which is not a reliable selector for governed QA. Pin the session through
-  // the real AppLayout company selector so AuthContext.selectEmpresa() performs
-  // the canonical /api/auth/select-empresa exchange and token rotation.
+  // The canonical QA examiner credential can have one OR multiple active
+  // company associations. AppLayout deliberately renders the company <select>
+  // only when isAdmin && empresas.length > 1, so absence of the selector is NOT
+  // evidence that the canonical QA tenant is unavailable.
   //
-  // Never manipulate local/session storage directly here.
+  // Resolve the authoritative tenant list/current tenant from the real
+  // GET /api/auth/empresas response issued by AuthContext during login. Only
+  // drive the real UI selector when an actual tenant switch is required.
+  //
+  // Never mock auth/API and never manipulate local/session storage directly.
   if (profile === 'admin') {
-    const qaCompanyName = 'AirTrust Staging Examiner QA';
-    const qaCompanyOption = page.locator('select option', { hasText: qaCompanyName }).first();
-    if ((await qaCompanyOption.count()) === 0) {
+    const empresasResponse = await empresasResponsePromise;
+    if (!empresasResponse.ok()) {
+      throw new Error(`QA_EMPRESAS_RESPONSE_FAILED:${empresasResponse.status()}`);
+    }
+
+    const empresasPayload = await empresasResponse.json().catch(() => null) as
+      | {
+          success?: boolean;
+          data?: {
+            empresaAtualId?: number;
+            empresas?: Array<{ id?: number; nome?: string; codigo?: string }>;
+          };
+        }
+      | null;
+
+    const empresas = Array.isArray(empresasPayload?.data?.empresas)
+      ? empresasPayload.data.empresas
+      : [];
+    const qaCompany = empresas.find((empresa) => empresa?.codigo === 'qa_examiner_training');
+    if (!qaCompany?.id) {
       throw new Error('QA_EXAMINER_TENANT_NOT_AVAILABLE');
     }
 
-    const qaCompanyValue = await qaCompanyOption.getAttribute('value');
-    if (!qaCompanyValue) {
-      throw new Error('QA_EXAMINER_TENANT_VALUE_MISSING');
-    }
+    const qaCompanyId = Number(qaCompany.id);
+    const currentCompanyId = Number(empresasPayload?.data?.empresaAtualId || 0);
 
-    const companySelect = page.locator('select').filter({
-      has: page.locator(`option[value="${qaCompanyValue}"]`),
-    }).first();
-    await expect(companySelect, 'canonical QA company selector not reachable').toBeVisible();
+    if (currentCompanyId !== qaCompanyId) {
+      const qaCompanyValue = String(qaCompanyId);
+      const companySelect = page.locator('select').filter({
+        has: page.locator(`option[value="${qaCompanyValue}"]`),
+      }).first();
 
-    const currentValue = await companySelect.inputValue();
-    if (currentValue !== qaCompanyValue) {
+      await expect(
+        companySelect,
+        'canonical QA company selector required for tenant switch but not reachable',
+      ).toBeVisible();
+
+      const switchedEmpresasResponsePromise = page.waitForResponse(
+        (response) => {
+          if (response.request().method() !== 'GET') return false;
+          try {
+            return new URL(response.url()).pathname === '/api/auth/empresas';
+          } catch {
+            return false;
+          }
+        },
+        { timeout: 20_000 },
+      );
+
       await companySelect.selectOption(qaCompanyValue);
-      await page.waitForLoadState('domcontentloaded');
-      await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
-      await expect
-        .poll(async () => {
-          const option = page.locator(`select option[value="${qaCompanyValue}"]:checked`).first();
-          return (await option.count()) > 0;
-        }, { timeout: 20_000 })
-        .toBe(true);
-    }
 
-    // Re-check the candidate SHA after tenant switch/reload.
-    if (releaseShortSha) {
-      await assertLiveFrontendShaFromPage(page, releaseShortSha, 'qa-tenant-selected');
+      const switchedEmpresasResponse = await switchedEmpresasResponsePromise;
+      if (!switchedEmpresasResponse.ok()) {
+        throw new Error(`QA_EXAMINER_TENANT_SWITCH_RESPONSE_FAILED:${switchedEmpresasResponse.status()}`);
+      }
+
+      const switchedPayload = await switchedEmpresasResponse.json().catch(() => null) as
+        | { data?: { empresaAtualId?: number } }
+        | null;
+      if (Number(switchedPayload?.data?.empresaAtualId || 0) !== qaCompanyId) {
+        throw new Error('QA_EXAMINER_TENANT_SWITCH_NOT_CONFIRMED');
+      }
+
+      // Re-check the candidate SHA after tenant switch/reload.
+      if (releaseShortSha) {
+        await assertLiveFrontendShaFromPage(page, releaseShortSha, 'qa-tenant-selected');
+      }
+
+      // eslint-disable-next-line no-console
+      console.log('[frontend-pr-ui-qa] canonical QA tenant selected through the real UI');
+    } else {
+      // Single-company sessions legitimately have no selector. The real auth
+      // response is sufficient proof that the session is already tenant-pinned.
+      // eslint-disable-next-line no-console
+      console.log('[frontend-pr-ui-qa] canonical QA tenant already current');
     }
 
     guard.assertClean();
-    // eslint-disable-next-line no-console
-    console.log('[frontend-pr-ui-qa] canonical QA tenant selected through the real UI');
   }
 
   // eslint-disable-next-line no-console
