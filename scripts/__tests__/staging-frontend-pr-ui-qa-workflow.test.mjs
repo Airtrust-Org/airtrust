@@ -20,6 +20,10 @@ const matcher = readFileSync(
   resolve(root, 'e2e/lib/synthetic-fixture-matcher.mjs'),
   'utf8',
 );
+const authSetup = readFileSync(
+  resolve(root, 'e2e/frontend-pr-ui-qa/auth.setup.ts'),
+  'utf8',
+);
 
 test('BLOCKER A — an explicit final-status enforcement step exists', () => {
   assert.match(workflow, /name: Require final QA status PASS/);
