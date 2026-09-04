@@ -99,3 +99,14 @@ test('BLOCKER K — no generic fixture/synthetic word is matched without an expl
   assert.doesNotMatch(spec, /\/qa\[_\\s-\]\?sint\|qa\[_\\s-\]\?synthetic\|synthetic\|fixture/);
   assert.doesNotMatch(spec, /SYNTHETIC_FIXTURE_PATTERN\s*=\s*\/[^/]*\bfixture\b[^/]*\/[a-z]*;?\s*$/m);
 });
+
+
+test('runtime regression — early Playwright failure still creates a sanitized summary path', () => {
+  const buildSummary = workflow.slice(
+    workflow.indexOf('name: Build sanitized final summary'),
+    workflow.indexOf('name: Publish sanitized summary'),
+  );
+  assert.match(buildSummary, /mkdir -p "\$\(dirname "\$QA_SUMMARY_PATH"\)"/);
+  assert.match(buildSummary, /if \[\[ ! -f "\$QA_SUMMARY_PATH" \]\]; then/);
+  assert.match(buildSummary, /"status":"NO_SUMMARY"/);
+});

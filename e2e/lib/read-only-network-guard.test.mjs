@@ -31,6 +31,40 @@ test('GET / HEAD / OPTIONS to staging are allowed', () => {
   }
 });
 
+test('Google Fonts GET/HEAD requests are suppressed locally, never allowed outbound', () => {
+  for (const [method, url] of [
+    ['GET', 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap'],
+    ['GET', 'https://fonts.gstatic.com/s/inter/v1/example.woff2'],
+    ['HEAD', 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap'],
+  ]) {
+    const r = classifyRequest({ method, url });
+    assert.equal(r.decision, 'suppress');
+    assert.match(r.reason, /optional-external-resource/);
+  }
+});
+
+test('POST to Google Fonts remains blocked, not suppressed', () => {
+  const r = classifyRequest({ method: 'POST', url: 'https://fonts.googleapis.com/api/auth/login' });
+  assert.equal(r.decision, 'block');
+  assert.match(r.reason, /NETWORK_HOST_NOT_ALLOWLISTED/);
+});
+
+test('public translate POST on staging is suppressed locally, never sent to the Worker', () => {
+  const r = classifyRequest({ method: 'POST', url: `${STG}/api/public/translate` });
+  assert.equal(r.decision, 'suppress');
+  assert.match(r.reason, /optional-read-only-post/);
+});
+
+test('public translate POST cannot be widened to an attacker or production host', () => {
+  const attacker = classifyRequest({ method: 'POST', url: `${EVIL}/api/public/translate` });
+  assert.equal(attacker.decision, 'block');
+  assert.match(attacker.reason, /NETWORK_HOST_NOT_ALLOWLISTED/);
+
+  const prod = classifyRequest({ method: 'POST', url: `${PROD_API}/api/public/translate` });
+  assert.equal(prod.decision, 'block');
+  assert.match(prod.reason, /^PRODUCTION_HOST_BLOCKED/);
+});
+
 test('GET attacker.example is blocked (non-allowlisted host)', () => {
   const r = classifyRequest({ method: 'GET', url: `${EVIL}/collect?token=abc` });
   assert.equal(r.decision, 'block');

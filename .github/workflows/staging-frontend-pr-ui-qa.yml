@@ -269,7 +269,10 @@ jobs:
           FINAL_SUMMARY_PATH: ${{ runner.temp }}/frontend-pr-ui-qa-final-summary.json
         run: |
           set -euo pipefail
-          test -f "$QA_SUMMARY_PATH" || printf '{"status":"NO_SUMMARY"}\n' > "$QA_SUMMARY_PATH"
+          mkdir -p "$(dirname "$QA_SUMMARY_PATH")"
+          if [[ ! -f "$QA_SUMMARY_PATH" ]]; then
+            printf '{"status":"NO_SUMMARY"}\n' > "$QA_SUMMARY_PATH"
+          fi
           node scripts/ci/frontend-pr-qa-summarize.mjs
           cp "$FINAL_SUMMARY_PATH" frontend-pr-ui-qa-final-summary.json
 
