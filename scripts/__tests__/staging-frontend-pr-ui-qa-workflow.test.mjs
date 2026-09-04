@@ -121,3 +121,13 @@ test('canonical staging QA-space fixture names are accepted without widening mid
   assert.equal(isSyntheticQaFixtureLabel('Maria QA Silva'), false);
   assert.equal(isSyntheticQaFixtureLabel('QATar funcionário'), false);
 });
+
+
+test('auth setup pins the admin session through the real canonical QA company selector', () => {
+  assert.match(authSetup, /AirTrust Staging Examiner QA/);
+  assert.match(authSetup, /QA_EXAMINER_TENANT_NOT_AVAILABLE/);
+  assert.match(authSetup, /companySelect\.selectOption/);
+  assert.match(authSetup, /qa-tenant-selected/);
+  assert.doesNotMatch(authSetup, /localStorage\.setItem\(/);
+  assert.doesNotMatch(authSetup, /sessionStorage\.setItem\(/);
+});
