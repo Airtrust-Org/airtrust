@@ -6,23 +6,69 @@
  * Sanitization contract: only an allowlist of primitive fields is ever emitted.
  * No secrets, tokens, headers, cookies, emails or free-form strings pass through.
  *
- * Status decision (BLOCKER 9) for audit_profile = "destructive-actions":
+ * PER-CELL MATRIX (BLOCKER G/I): the QA matrix is 6 explicit cells
+ *   desktop_light desktop_dark
+ *   mobile_390_light mobile_390_dark
+ *   mobile_375_light mobile_375_dark
+ * Each cell carries its OWN status (PASS | FAIL | BLOCKED | NOT_RUN). A single
+ * PASS cell can no longer mask a cell that never exercised the surface, and one
+ * cell can never overwrite another. Legacy aggregate fields (documents, …) are
+ * DERIVED from matrix_cells here — never mutated cell-by-cell.
+ *
+ * MANDATORY A11Y GATE (BLOCKER H): `a11y_status` (PASS | FAIL | BLOCKED |
+ * NOT_RUN) must be PASS for a global PASS. BLOCKED / NOT_RUN => global BLOCKED,
+ * FAIL => global FAIL.
+ *
+ * Status decision (audit_profile = "destructive-actions"):
  *   provenance not OK ............................ BLOCKED
- *   no synthetic funcionário fixture confirmed ... BLOCKED
- *   no real #282 surface exercised in runtime .... BLOCKED
- *   documents === FIXTURE_NOT_AVAILABLE .......... BLOCKED
- *   any mutation detected ........................ FAIL
- *   any viewport/theme cell FAIL ................. FAIL
- *   otherwise ................................... PASS
+ *   mutations_detected > 0 ...................... FAIL
+ *   any matrix cell === FAIL .................... FAIL
+ *   a11y_status === FAIL ....................... FAIL
+ *   matrix_cells missing / not an object ....... BLOCKED
+ *   any matrix cell !== PASS (BLOCKED/NOT_RUN) . BLOCKED
+ *   a11y_status !== PASS ...................... BLOCKED
+ *   worker env !== staging / auth !== real .... BLOCKED
+ *   otherwise ................................. PASS
  */
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 
-const PASS_FAIL = new Set(['PASS', 'FAIL', 'BLOCKED', 'FIXTURE_NOT_AVAILABLE']);
+const CELL_STATES = new Set(['PASS', 'FAIL', 'BLOCKED', 'NOT_RUN']);
 
-function coercePassFail(value, fallback = 'FAIL') {
-  return PASS_FAIL.has(value) ? value : fallback;
+export const MATRIX_CELL_KEYS = Object.freeze([
+  'desktop_light',
+  'desktop_dark',
+  'mobile_390_light',
+  'mobile_390_dark',
+  'mobile_375_light',
+  'mobile_375_dark',
+]);
+
+/**
+ * Normalize the raw per-cell matrix. Missing keys and unknown values fail
+ * closed to BLOCKED. Returns { cells, matrixObjectPresent }.
+ */
+export function normalizeMatrixCells(raw) {
+  const matrixObjectPresent = Boolean(raw) && typeof raw === 'object' && !Array.isArray(raw);
+  const cells = {};
+  for (const key of MATRIX_CELL_KEYS) {
+    const value = matrixObjectPresent ? raw[key] : undefined;
+    cells[key] = CELL_STATES.has(value) ? value : 'BLOCKED';
+  }
+  return { cells, matrixObjectPresent };
+}
+
+export function normalizeA11yStatus(value) {
+  if (value === undefined || value === null || value === '') return 'NOT_RUN';
+  return CELL_STATES.has(value) ? value : 'BLOCKED';
+}
+
+function deriveDocumentsAggregate(cells) {
+  const values = MATRIX_CELL_KEYS.map((k) => cells[k]);
+  if (values.every((v) => v === 'PASS')) return 'PASS';
+  if (values.some((v) => v === 'FAIL')) return 'FAIL';
+  return 'FIXTURE_NOT_AVAILABLE';
 }
 
 export function buildFinalSummary({ provenance, qa, prNumber, releaseSha, auditProfile }) {
@@ -36,41 +82,34 @@ export function buildFinalSummary({ provenance, qa, prNumber, releaseSha, auditP
     q.funcionario_fixture ?? 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE',
   );
 
-  const desktop = coercePassFail(q.desktop);
-  const mobile390 = coercePassFail(q.mobile_390);
-  const mobile375 = coercePassFail(q.mobile_375);
-  const light = coercePassFail(q.light);
-  const dark = coercePassFail(q.dark);
-  const documents = coercePassFail(q.documents, 'FIXTURE_NOT_AVAILABLE');
+  const { cells, matrixObjectPresent } = normalizeMatrixCells(q.matrix_cells);
+  const a11yStatus = normalizeA11yStatus(q.a11y_status);
 
-  const everyMatrixGreen = [desktop, mobile390, mobile375, light, dark].every((v) => v === 'PASS');
-  // The matrix "ran" only if the spec wrote at least one recognizable cell result.
-  const matrixRan = [q.desktop, q.mobile_390, q.mobile_375, q.light, q.dark].some((v) =>
-    PASS_FAIL.has(v),
-  );
+  const anyCellFail = MATRIX_CELL_KEYS.some((k) => cells[k] === 'FAIL');
+  const everyCellPass = MATRIX_CELL_KEYS.every((k) => cells[k] === 'PASS');
+  const workerEnvironment = String(p.worker?.environment ?? '');
+  const authentication = String(q.authentication ?? 'REAL_STAGING');
 
   let status;
   if (p.status !== 'PROVENANCE_OK') {
     status = 'BLOCKED';
   } else if (mutations > 0) {
     status = 'FAIL';
-  } else if (!matrixRan) {
-    // No QA summary / no cell executed — never silently PASS or FAIL-as-bug.
-    status = 'BLOCKED';
-  } else if (!everyMatrixGreen) {
+  } else if (anyCellFail) {
     status = 'FAIL';
-  } else if (
-    profile === 'destructive-actions' &&
-    funcionarioFixture !== 'SYNTHETIC_FIXTURE_CONFIRMED'
-  ) {
-    // BLOCKER C — no unambiguously synthetic funcionário was opened.
-    status = 'BLOCKED';
-  } else if (profile === 'destructive-actions' && realSurfaces < 1) {
-    status = 'BLOCKED';
-  } else if (profile === 'destructive-actions' && documents === 'FIXTURE_NOT_AVAILABLE') {
-    status = 'BLOCKED';
-  } else if (documents === 'FAIL') {
+  } else if (a11yStatus === 'FAIL') {
     status = 'FAIL';
+  } else if (!matrixObjectPresent) {
+    status = 'BLOCKED';
+  } else if (!everyCellPass) {
+    // At least one cell is BLOCKED / NOT_RUN — never mask it behind a PASS cell.
+    status = 'BLOCKED';
+  } else if (a11yStatus !== 'PASS') {
+    status = 'BLOCKED';
+  } else if (workerEnvironment !== 'staging') {
+    status = 'BLOCKED';
+  } else if (authentication !== 'REAL_STAGING') {
+    status = 'BLOCKED';
   } else {
     status = 'PASS';
   }
@@ -81,7 +120,7 @@ export function buildFinalSummary({ provenance, qa, prNumber, releaseSha, auditP
     pr_number: Number(prNumber ?? p.prNumber ?? q.pr_number ?? 0),
     release_sha: String(releaseSha ?? p.releaseSha ?? q.release_sha ?? ''),
     frontend_build_version: String(p.frontendBuildVersion ?? q.frontend_build_version ?? ''),
-    worker_environment: String(p.worker?.environment ?? ''),
+    worker_environment: workerEnvironment,
     worker_sha_match_required: false,
     authentication: 'REAL_STAGING',
     datatable_runtime: String(
@@ -90,12 +129,11 @@ export function buildFinalSummary({ provenance, qa, prNumber, releaseSha, auditP
     real_surfaces_exercised: realSurfaces,
     mutations_detected: mutations,
     funcionario_fixture: funcionarioFixture,
-    desktop,
-    mobile_390: mobile390,
-    mobile_375: mobile375,
-    light,
-    dark,
-    documents,
+    matrix_cells: cells,
+    a11y_status: a11yStatus,
+    // Derived aggregate — humans only, never a gate. every PASS => PASS,
+    // any FAIL => FAIL, otherwise FIXTURE_NOT_AVAILABLE.
+    documents: deriveDocumentsAggregate(cells),
   };
 }
 

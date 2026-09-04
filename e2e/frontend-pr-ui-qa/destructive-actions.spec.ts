@@ -16,11 +16,19 @@
  *   - RowActionsMenu's only importer is ListaDocumentos, reached from the
  *     funcionário ficha documents area. That is the one real surface to exercise.
  *
- * PASS rule (enforced by scripts/ci/frontend-pr-qa-summarize.mjs):
- *   - at least ONE real #282 surface exercised in runtime with RowActionsMenu, AND
- *   - documents !== FIXTURE_NOT_AVAILABLE, AND
- *   - zero mutations, AND every viewport/theme cell PASS.
- *   Otherwise BLOCKED (no active surface / no fixture) or FAIL (mutation / layout).
+ * PER-CELL MATRIX (BLOCKER G/I): the 6 viewport/theme cells each carry their
+ * OWN status in results.matrix_cells (PASS | FAIL | BLOCKED | NOT_RUN, all
+ * initialized NOT_RUN). A cell writes ONLY its own key — it can never change
+ * another cell's result, and one PASS cell can never mask a cell that did not
+ * reach the surface. The a11y contract has its own results.a11y_status.
+ * scripts/ci/frontend-pr-qa-summarize.mjs derives the global status from those.
+ *
+ * A cell is PASS only if, in that SAME cell: frontend SHA correct, synthetic
+ * funcionário confirmed, synthetic document confirmed, RowActionsMenu exercised,
+ * menu within the viewport, confirmation opened, "Cancelar" used, zero mutation,
+ * zero horizontal overflow, theme applied. It is BLOCKED if the synthetic
+ * funcionário / document / RowActionsMenu surface is not reachable, and FAIL on
+ * a mutation, overflow, clipped menu, SHA mismatch or any layout assertion.
  *
  * PRIVACY (BLOCKER C): we NEVER open "the first funcionário". A funcionário
  * ficha is opened only when the listing row itself is an unambiguous synthetic
@@ -51,6 +59,21 @@ const VIEWPORTS = [
 
 const THEMES: ThemeMode[] = ['light', 'dark'];
 
+type CellStatus = 'PASS' | 'FAIL' | 'BLOCKED' | 'NOT_RUN';
+
+const MATRIX_CELL_KEYS = [
+  'desktop_light',
+  'desktop_dark',
+  'mobile_390_light',
+  'mobile_390_dark',
+  'mobile_375_light',
+  'mobile_375_dark',
+] as const;
+
+const matrixCells: Record<string, CellStatus> = Object.fromEntries(
+  MATRIX_CELL_KEYS.map((k) => [k, 'NOT_RUN' as CellStatus]),
+);
+
 const EVIDENCE_DIR = path.join('test-results', 'frontend-pr-ui-qa', 'screenshots');
 const SUMMARY_PATH = path.join('test-results', 'frontend-pr-ui-qa', 'summary.json');
 
@@ -80,21 +103,23 @@ const results: Record<string, unknown> = {
   real_surfaces_exercised: 0,
   mutations_detected: 0,
   funcionario_fixture: 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE',
-  documents: 'FIXTURE_NOT_AVAILABLE',
-  desktop: 'PASS',
-  mobile_390: 'PASS',
-  mobile_375: 'PASS',
-  light: 'PASS',
-  dark: 'PASS',
+  matrix_cells: matrixCells,
+  a11y_status: 'NOT_RUN' as CellStatus,
 };
+
+/** Record ONLY this cell's status. Never touches another cell. */
+function setCell(cellKey: string, status: CellStatus) {
+  matrixCells[cellKey] = status;
+}
+
+function noteFuncionarioFixture(status: 'SYNTHETIC_FIXTURE_CONFIRMED' | 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE') {
+  // Only ever upgrade to CONFIRMED; a single confirmed cell is enough to record
+  // that a synthetic funcionário exists. It is informational, not a gate.
+  if (status === 'SYNTHETIC_FIXTURE_CONFIRMED') results.funcionario_fixture = status;
+}
 
 function ensureDir(dir: string) {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-}
-
-function fail(cellKeys: string[], reason: string): never {
-  for (const k of cellKeys) results[k] = 'FAIL';
-  throw new Error(reason);
 }
 
 async function setTheme(page: Page, theme: ThemeMode) {
@@ -129,9 +154,10 @@ async function withinViewport(locator: Locator): Promise<boolean> {
 }
 
 /**
- * Navigate Funcionários -> first funcionário -> ficha -> documents area, and
- * return the ListaDocumentos RowActionsMenu trigger locator if it is really
- * reachable at runtime on this #282-only staging frontend.
+ * Navigate Funcionários -> a SYNTHETIC funcionário fixture -> ficha -> documents
+ * area, and return the ListaDocumentos RowActionsMenu trigger locator only when
+ * a synthetic document row is really reachable at runtime on this #282-only
+ * staging frontend. Never opens a non-synthetic (real) funcionário.
  */
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -217,147 +243,146 @@ test.describe('destructive-actions profile (PR #282 real delta)', () => {
 
   for (const viewport of VIEWPORTS) {
     for (const theme of THEMES) {
-      test(`${viewport.key} / ${theme}: layout + documents reachability`, async ({ page }) => {
+      const cellKey = `${viewport.key}_${theme}`;
+      test(`${cellKey}: layout + documents reachability`, async ({ page }) => {
         const guard = installReadOnlyGuard(page);
-        const cellKeys = [viewport.key, theme];
 
-        await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        await page.goto('/funcionarios', { waitUntil: 'domcontentloaded' });
-        await captureBuildVersion(page);
-        if (RELEASE_SHORT_SHA) {
-          await assertLiveFrontendShaFromPage(
-            page,
-            RELEASE_SHORT_SHA,
-            `${viewport.key}/${theme}:entry`,
-          );
-        }
-        await setTheme(page, theme);
-
-        await assertNoHorizontalOverflow(page, `Funcionários @ ${viewport.key}/${theme}`);
-
-        const reached = await reachDocumentsRowActionsMenu(page, `${viewport.key}/${theme}`);
-        await setTheme(page, theme);
-        await assertNoHorizontalOverflow(page, `Documentos @ ${viewport.key}/${theme}`);
-
-        if (reached.status === 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE') {
-          results.funcionario_fixture = 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE';
-          results.documents = 'FIXTURE_NOT_AVAILABLE';
-          test.info().annotations.push({
-            type: 'note',
-            description:
-              'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE (no synthetic funcionário in the listing; no real ficha opened, no screenshot taken, nothing created)',
-          });
-        } else if (reached.status === 'SYNTHETIC_DOCUMENT_NOT_AVAILABLE') {
-          results.funcionario_fixture = 'SYNTHETIC_FIXTURE_CONFIRMED';
-          results.documents = 'FIXTURE_NOT_AVAILABLE';
-          test.info().annotations.push({
-            type: 'note',
-            description:
-              'DOCUMENT_DELETE_FIXTURE_NOT_AVAILABLE (synthetic funcionário opened, but no unambiguously synthetic document row; nothing created)',
-          });
-        } else {
-          results.funcionario_fixture = 'SYNTHETIC_FIXTURE_CONFIRMED';
-          await reached.trigger.scrollIntoViewIfNeeded();
-
-          // Download is a direct, named UI control on the same synthetic row.
-          // It is read-only; the guard still records and blocks any mutation.
-          if (viewport.key === 'desktop' && theme === 'light') {
-            const downloadResponse = page.waitForResponse(
-              (response) =>
-                response.request().method() === 'GET' &&
-                /\/api\/documentos\/[^/]+\/download(?:\?|$)/.test(response.url()),
-              { timeout: 20_000 },
-            );
-            await reached.download.click();
-            expect((await downloadResponse).ok(), `download failed for ${reached.fixtureName}`).toBe(
-              true,
-            );
-          }
-
-          // Destructive control must NOT be a permanently visible button.
-          const bareDestructive = page.getByRole('button', {
-            name: /^(excluir|remover|apagar)\b/i,
-          });
-          expect(await bareDestructive.count(), 'destructive action visible outside the menu').toBe(
-            0,
-          );
-
-          await reached.trigger.click();
-          const menu = page.getByRole('menu');
-          await expect(menu).toBeVisible();
-          expect(await withinViewport(menu), 'menu escapes the viewport').toBeTruthy();
-
-          const item = menu.getByRole('menuitem', { name: /excluir|remover|apagar/i }).first();
-          await expect(item).toBeVisible();
-          expect(await withinViewport(item), 'destructive item cut off').toBeTruthy();
-
-          if (viewport.key === 'desktop' && theme === 'light') {
-            await page.screenshot({ path: path.join(EVIDENCE_DIR, 'desktop-menu-open.png') });
-          }
-
-          await item.click();
-          const dialog = page.getByRole('alertdialog');
-          await expect(dialog).toBeVisible();
-          if (viewport.key === 'desktop') {
-            await page.screenshot({ path: path.join(EVIDENCE_DIR, `confirmation-${theme}.png`) });
-          }
-          await dialog.getByRole('button', { name: /cancelar/i }).click();
-          await expect(dialog).toBeHidden();
-
-          if ((results.real_surfaces_exercised as number) === 0) {
-            results.real_surfaces_exercised = 1;
-          }
-          results.documents = 'PASS';
-        }
-
-        // Screenshots are taken ONLY when we are inside a confirmed synthetic
-        // fixture. Before that the page still shows the real /funcionarios
-        // listing — capturing it would leak PII into the artifact/report.
-        if (reached.status === 'OK') {
-          if (viewport.key !== 'desktop' && theme === 'light') {
-            await page.screenshot({ path: path.join(EVIDENCE_DIR, `${viewport.key}.png`) });
-          }
-          if (viewport.key === 'desktop' && theme === 'dark') {
-            await page.screenshot({ path: path.join(EVIDENCE_DIR, 'dark-mode.png') });
-          }
-          if (viewport.key === 'desktop' && theme === 'light') {
-            await page.screenshot({ path: path.join(EVIDENCE_DIR, 'desktop-menu-closed.png') });
-          }
-        }
-
-        results.mutations_detected = Math.max(
-          results.mutations_detected as number,
-          guard.mutationCount,
-        );
-        if (guard.mutationCount > 0)
-          fail(cellKeys, `mutation attempted: ${guard.violations[0]?.reason}`);
         try {
+          await page.setViewportSize({ width: viewport.width, height: viewport.height });
+          await page.goto('/funcionarios', { waitUntil: 'domcontentloaded' });
+          await captureBuildVersion(page);
+          if (RELEASE_SHORT_SHA) {
+            await assertLiveFrontendShaFromPage(page, RELEASE_SHORT_SHA, `${cellKey}:entry`);
+          }
+          await setTheme(page, theme);
+          await assertNoHorizontalOverflow(page, `Funcionários @ ${cellKey}`);
+
+          const reached = await reachDocumentsRowActionsMenu(page, cellKey);
+          await setTheme(page, theme);
+          await assertNoHorizontalOverflow(page, `Documentos @ ${cellKey}`);
+
+          if (reached.status === 'SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE') {
+            noteFuncionarioFixture('SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE');
+            setCell(cellKey, 'BLOCKED');
+            test.info().annotations.push({
+              type: 'note',
+              description: `${cellKey}: SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE (no synthetic funcionário in the listing; no real ficha opened, no screenshot taken, nothing created)`,
+            });
+          } else if (reached.status === 'SYNTHETIC_DOCUMENT_NOT_AVAILABLE') {
+            noteFuncionarioFixture('SYNTHETIC_FIXTURE_CONFIRMED');
+            setCell(cellKey, 'BLOCKED');
+            test.info().annotations.push({
+              type: 'note',
+              description: `${cellKey}: DOCUMENT_DELETE_FIXTURE_NOT_AVAILABLE (synthetic funcionário opened, but no unambiguously synthetic document row; nothing created)`,
+            });
+          } else {
+            noteFuncionarioFixture('SYNTHETIC_FIXTURE_CONFIRMED');
+            await reached.trigger.scrollIntoViewIfNeeded();
+
+            // Download is a direct, named UI control on the same synthetic row.
+            // It is read-only; the guard still records and blocks any mutation.
+            if (viewport.key === 'desktop' && theme === 'light') {
+              const downloadResponse = page.waitForResponse(
+                (response) =>
+                  response.request().method() === 'GET' &&
+                  /\/api\/documentos\/[^/]+\/download(?:\?|$)/.test(response.url()),
+                { timeout: 20_000 },
+              );
+              await reached.download.click();
+              expect(
+                (await downloadResponse).ok(),
+                `download failed for ${reached.fixtureName}`,
+              ).toBe(true);
+            }
+
+            // Destructive control must NOT be a permanently visible button.
+            const bareDestructive = page.getByRole('button', {
+              name: /^(excluir|remover|apagar)\b/i,
+            });
+            expect(
+              await bareDestructive.count(),
+              'destructive action visible outside the menu',
+            ).toBe(0);
+
+            await reached.trigger.click();
+            const menu = page.getByRole('menu');
+            await expect(menu).toBeVisible();
+            expect(await withinViewport(menu), 'menu escapes the viewport').toBeTruthy();
+
+            const item = menu.getByRole('menuitem', { name: /excluir|remover|apagar/i }).first();
+            await expect(item).toBeVisible();
+            expect(await withinViewport(item), 'destructive item cut off').toBeTruthy();
+
+            if (viewport.key === 'desktop' && theme === 'light') {
+              await page.screenshot({ path: path.join(EVIDENCE_DIR, 'desktop-menu-open.png') });
+            }
+
+            await item.click();
+            const dialog = page.getByRole('alertdialog');
+            await expect(dialog).toBeVisible();
+            if (viewport.key === 'desktop') {
+              await page.screenshot({ path: path.join(EVIDENCE_DIR, `confirmation-${theme}.png`) });
+            }
+            await dialog.getByRole('button', { name: /cancelar/i }).click();
+            await expect(dialog).toBeHidden();
+
+            // Screenshots ONLY once inside a confirmed synthetic fixture.
+            if (viewport.key !== 'desktop' && theme === 'light') {
+              await page.screenshot({ path: path.join(EVIDENCE_DIR, `${viewport.key}.png`) });
+            }
+            if (viewport.key === 'desktop' && theme === 'dark') {
+              await page.screenshot({ path: path.join(EVIDENCE_DIR, 'dark-mode.png') });
+            }
+            if (viewport.key === 'desktop' && theme === 'light') {
+              await page.screenshot({ path: path.join(EVIDENCE_DIR, 'desktop-menu-closed.png') });
+            }
+
+            results.real_surfaces_exercised = (results.real_surfaces_exercised as number) + 1;
+            setCell(cellKey, 'PASS');
+          }
+
+          results.mutations_detected = Math.max(
+            results.mutations_detected as number,
+            guard.mutationCount,
+          );
+          if (guard.mutationCount > 0) {
+            setCell(cellKey, 'FAIL');
+            throw new Error(`mutation attempted: ${guard.violations[0]?.reason}`);
+          }
           guard.assertClean();
         } catch (error) {
-          fail(cellKeys, (error as Error).message);
+          // Any thrown assertion / SHA mismatch / mutation in THIS cell => FAIL
+          // for THIS cell only.
+          if (matrixCells[cellKey] !== 'FAIL') setCell(cellKey, 'FAIL');
+          results.mutations_detected = Math.max(
+            results.mutations_detected as number,
+            guard.mutationCount,
+          );
+          throw error;
         }
       });
     }
   }
 
-  test('RowActionsMenu keyboard + a11y contract (only if the #282 surface is reachable)', async ({
-    page,
-  }) => {
+  test('a11y_status: RowActionsMenu keyboard + a11y contract (mandatory gate)', async ({ page }) => {
     const guard = installReadOnlyGuard(page);
     await page.setViewportSize({ width: 1440, height: 900 });
 
     const reached = await reachDocumentsRowActionsMenu(page, 'a11y');
     if (reached.status !== 'OK') {
+      // BLOCKER H: a skipped a11y contract is BLOCKED, never a silent pass.
+      results.a11y_status = 'BLOCKED';
       test.info().annotations.push({
         type: 'note',
-        description: `A11Y_CONTRACT_SKIPPED: ${reached.status}`,
+        description: `A11Y_CONTRACT_BLOCKED: ${reached.status}`,
       });
       guard.assertClean();
       return;
     }
 
-    const { trigger } = reached;
-    await trigger.scrollIntoViewIfNeeded();
+    try {
+      const { trigger } = reached;
+      await trigger.scrollIntoViewIfNeeded();
 
     // Touch target — computed runtime size, not CSS class inspection.
     const box = await trigger.boundingBox();
@@ -405,14 +430,23 @@ test.describe('destructive-actions profile (PR #282 real delta)', () => {
       'focus did not return to the trigger after closing the confirmation',
     ).toBeTruthy();
 
-    if ((results.real_surfaces_exercised as number) === 0) {
-      results.real_surfaces_exercised = 1;
+      results.mutations_detected = Math.max(
+        results.mutations_detected as number,
+        guard.mutationCount,
+      );
+      if (guard.mutationCount > 0) {
+        results.a11y_status = 'FAIL';
+        throw new Error(`a11y mutation attempted: ${guard.violations[0]?.reason}`);
+      }
+      guard.assertClean();
+      results.a11y_status = 'PASS';
+    } catch (error) {
+      if (results.a11y_status !== 'FAIL') results.a11y_status = 'FAIL';
+      results.mutations_detected = Math.max(
+        results.mutations_detected as number,
+        guard.mutationCount,
+      );
+      throw error;
     }
-    results.documents = 'PASS';
-    results.mutations_detected = Math.max(
-      results.mutations_detected as number,
-      guard.mutationCount,
-    );
-    guard.assertClean();
   });
 });
