@@ -193,7 +193,7 @@ jobs:
           NODE
 
       - name: Checkout trusted pipeline
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Verify official release gates
         env:
@@ -259,9 +259,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout trusted pipeline (main)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Checkout release code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.release_sha }}
           fetch-depth: 0
@@ -415,9 +415,9 @@ jobs:
       backup_ok: ${{ steps.backup.outputs.backup_ok }}
     steps:
       - name: Checkout trusted pipeline (main)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Checkout release code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.release_sha }}
           fetch-depth: 0
@@ -456,9 +456,9 @@ jobs:
       preflight_ok: ${{ steps.preflight.outputs.preflight_ok }}
     steps:
       - name: Checkout trusted pipeline (main)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Checkout release code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.release_sha }}
           fetch-depth: 0
@@ -521,9 +521,9 @@ jobs:
     environment: staging
     steps:
       - name: Checkout trusted pipeline (main)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Checkout release code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.release_sha }}
           fetch-depth: 0
@@ -572,9 +572,9 @@ jobs:
     environment: staging
     steps:
       - name: Checkout trusted pipeline (main)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Checkout release code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.release_sha }}
           fetch-depth: 0
@@ -645,9 +645,9 @@ jobs:
       release_manifest_sha256: ${{ steps.provenance.outputs.release_manifest_sha256 }}
     steps:
       - name: Checkout trusted pipeline (main)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Checkout release code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.release_sha }}
           fetch-depth: 0
@@ -850,9 +850,9 @@ jobs:
     environment: staging
     steps:
       - name: Checkout trusted pipeline (main)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Checkout release code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.release_sha }}
           fetch-depth: 0
@@ -911,7 +911,7 @@ jobs:
     environment: staging
     steps:
       - name: Checkout trusted pipeline (main)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -952,9 +952,9 @@ jobs:
       QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD || secrets.STAGING_SMOKE_PASSWORD }}
     steps:
       - name: Checkout trusted pipeline (main)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Checkout release code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.release_sha }}
           fetch-depth: 0

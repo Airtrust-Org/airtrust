@@ -146,10 +146,10 @@ jobs:
       recovery_timestamp: ${{ steps.apply.outputs.recovery_timestamp }}
     steps:
       - name: Checkout trusted workflow source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Checkout reviewed release
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.release_sha }}
           fetch-depth: 0

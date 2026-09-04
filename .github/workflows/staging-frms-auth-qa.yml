@@ -48,7 +48,7 @@ jobs:
           [[ "$STAGING_FRONTEND_BASE_URL" == 'https://staging.airtrust.pages.dev' ]] || exit 1
           [[ "$STAGING_D1_NAME" == 'airtrust-db-staging-baseline-20260701' ]] || exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Require staging provenance to match expected SHA
         shell: bash
@@ -88,7 +88,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CONFIRM_STAGING_FRMS_QA: AIRTRUST_STAGING_FRMS_QA
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -121,7 +121,7 @@ jobs:
       STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
       LOGIN_ATTEMPTS: '10'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -151,7 +151,7 @@ jobs:
       STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
       STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}

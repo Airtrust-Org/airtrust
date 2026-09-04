@@ -89,7 +89,7 @@ jobs:
             if (!['write', 'push', 'maintain', 'admin'].includes(permission.permission)) throw new Error('ACTOR_PERMISSION_INSUFFICIENT');
           })().catch((error) => { console.error(error.message); process.exit(1); });
           NODE
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify official release gates for frozen SHA
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -135,7 +135,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -152,7 +152,7 @@ jobs:
     needs: guard
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -165,7 +165,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}

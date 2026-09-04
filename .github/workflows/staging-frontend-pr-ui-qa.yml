@@ -64,7 +64,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout trusted pipeline (main)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Assert dispatch ref is main
         shell: bash
@@ -178,7 +178,7 @@ jobs:
       QA_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
     steps:
       - name: Checkout trusted pipeline (main) — never the PR head SHA
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:

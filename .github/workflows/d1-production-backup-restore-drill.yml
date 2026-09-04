@@ -31,7 +31,7 @@ jobs:
           echo "MAINTENANCE_WINDOW_CONFIRMED=true"
 
       - name: Checkout canonical source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
