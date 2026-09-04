@@ -196,21 +196,84 @@ async function isRestrictedDevelopmentAccessDenied(page: Page) {
   return (await denied.count()) > 0 && (await denied.first().isVisible().catch(() => false));
 }
 
-function acceptRestrictedRuntimeSurface(key: SurfaceKey) {
-  // The workflow provenance guard has already proved the candidate's canonical
-  // release checks before this trusted-main browser job is allowed to start.
-  // Controle de Voos is intentionally restricted to the primary admin in
-  // ProtectedRoute, while the governed QA examiner credential is a synthetic
-  // admin. Seeing the deny screen is therefore the correct runtime security
-  // behavior; source/unit contracts for the candidate remain covered by its
-  // proven release gates.
-  // eslint-disable-next-line no-console
-  console.log(`[audit-closure][restricted-runtime][${key}] PRIMARY_ADMIN_POLICY_EXPECTED`);
-  test.info().annotations.push({
-    type: 'note',
-    description: `${key}: RUNTIME_RESTRICTED_BY_PRIMARY_ADMIN_POLICY; candidate release gates provide source/unit contract evidence`,
+function blockRestrictedRuntimeSurface(key: SurfaceKey) {
+  blockSurface(
+    key,
+    'RUNTIME_RESTRICTED_BY_PRIMARY_ADMIN_POLICY; browser acceptance not exercised by governed QA credential',
+  );
+}
+
+function safeRequestTarget(rawUrl: string) {
+  try {
+    const url = new URL(rawUrl);
+    return `${url.hostname}${url.pathname}`.slice(0, 300);
+  } catch {
+    return 'UNPARSEABLE_URL';
+  }
+}
+
+function installRouteDiagnostics(page: Page, label: string) {
+  const failedRequests: string[] = [];
+  const errorResponses: string[] = [];
+
+  page.on('requestfailed', (request) => {
+    const failure = request.failure()?.errorText || 'UNKNOWN';
+    failedRequests.push(
+      `${request.method()} ${safeRequestTarget(request.url())} ${failure}`.slice(0, 500),
+    );
   });
-  setSurface(key, 'PASS', { countRealSurface: false });
+
+  page.on('response', (response) => {
+    if (response.status() < 400) return;
+    errorResponses.push(
+      `${response.status()} ${safeRequestTarget(response.url())}`.slice(0, 500),
+    );
+  });
+
+  return async () => {
+    const state = await page.evaluate(() => {
+      const root = document.querySelector('#root');
+      return {
+        pathname: window.location.pathname,
+        readyState: document.readyState,
+        bodyTextLength: (document.body?.innerText || '').trim().length,
+        bodyChildCount: document.body?.children.length || 0,
+        rootExists: Boolean(root),
+        rootChildCount: root?.children.length || 0,
+        rootTextLength: (root?.textContent || '').trim().length,
+        rootHtmlLength: root?.innerHTML.length || 0,
+        headingCount: document.querySelectorAll('h1,h2,h3,[role="heading"]').length,
+        mainCount: document.querySelectorAll('main,[role="main"]').length,
+        scriptCount: document.scripts.length,
+        hasServiceWorkerController: Boolean(navigator.serviceWorker?.controller),
+      };
+    });
+
+    // Structural diagnostics only: no body text, cookies, headers, query strings
+    // or credential-bearing URLs are emitted.
+    // eslint-disable-next-line no-console
+    console.error(
+      `[audit-closure][route-diagnostic][${label}] ${JSON.stringify({
+        ...state,
+        failedRequests: failedRequests.slice(-20),
+        errorResponses: errorResponses.slice(-20),
+      })}`,
+    );
+  };
+}
+
+async function assertMeaningfulRender(page: Page, label: string) {
+  const render = await page.evaluate(() => {
+    const root = document.querySelector('#root');
+    return {
+      rootExists: Boolean(root),
+      rootChildCount: root?.children.length || 0,
+      bodyTextLength: (document.body?.innerText || '').trim().length,
+    };
+  });
+  expect(render.rootExists, `${label}: #root missing`).toBeTruthy();
+  expect(render.rootChildCount, `${label}: #root has no rendered children`).toBeGreaterThan(0);
+  expect(render.bodyTextLength, `${label}: rendered body has no visible text`).toBeGreaterThan(0);
 }
 
 async function setTheme(page: Page, theme: ThemeMode) {
@@ -227,7 +290,10 @@ async function captureBuildVersion(page: Page) {
     .locator('meta[name="build-version"]')
     .getAttribute('content')
     .catch(() => null);
-  if (content) results.frontend_build_version = content;
+  if (content) {
+    results.frontend_build_version = content;
+    persistSummary();
+  }
 }
 
 async function assertNoHorizontalOverflow(page: Page, label: string) {
@@ -245,6 +311,7 @@ async function gotoChecked(page: Page, route: string, where: string) {
   }
   await captureBuildVersion(page);
   await expect(page.locator('body')).toBeVisible();
+  await assertMeaningfulRender(page, where);
 }
 
 async function elementInsideViewport(locator: Locator) {
@@ -355,6 +422,8 @@ async function findSyntheticFuncionarioLink(page: Page): Promise<Locator | null>
 test.describe('audit-closure governed staging profile', () => {
   test.beforeAll(() => {
     ensureDir(path.dirname(SUMMARY_PATH));
+    hydrateSummaryFromDisk();
+    persistSummary();
   });
 
   test.beforeEach(async ({ page }, testInfo) => {
@@ -385,7 +454,7 @@ test.describe('audit-closure governed staging profile', () => {
   });
 
   test.afterAll(() => {
-    writeFileSync(SUMMARY_PATH, `${JSON.stringify(results, null, 2)}\n`);
+    persistSummary();
   });
 
   for (const viewport of VIEWPORTS) {
@@ -421,12 +490,13 @@ test.describe('audit-closure governed staging profile', () => {
   test('controle_voos_n03: mobile select + desktop active navigation contract', async ({ page }) => {
     const key: SurfaceKey = 'controle_voos_n03';
     const guard = installReadOnlyGuard(page);
+    const dumpDiagnostics = installRouteDiagnostics(page, 'controle_voos_n03');
     try {
       await page.setViewportSize({ width: 390, height: 844 });
       await gotoChecked(page, '/controle-voos/relatorios?qa_closure=1', 'n03:mobile');
       if (await isRestrictedDevelopmentAccessDenied(page)) {
         guard.assertClean();
-        acceptRestrictedRuntimeSurface(key);
+        blockRestrictedRuntimeSurface(key);
         return;
       }
       const select = page.getByRole('combobox', { name: /navegação do controle de voos/i });
@@ -448,6 +518,7 @@ test.describe('audit-closure governed staging profile', () => {
       guard.assertClean();
       setSurface(key, 'PASS');
     } catch (error) {
+      await dumpDiagnostics();
       setSurface(key, 'FAIL');
       throw error;
     }
@@ -456,11 +527,12 @@ test.describe('audit-closure governed staging profile', () => {
   test('controle_voos_n06: preview headers are specific and non-redundant', async ({ page }) => {
     const key: SurfaceKey = 'controle_voos_n06';
     const guard = installReadOnlyGuard(page);
+    const dumpDiagnostics = installRouteDiagnostics(page, 'controle_voos_n06');
     try {
       await gotoChecked(page, '/controle-voos/hangaragem', 'n06:hangaragem');
       if (await isRestrictedDevelopmentAccessDenied(page)) {
         guard.assertClean();
-        acceptRestrictedRuntimeSurface(key);
+        blockRestrictedRuntimeSurface(key);
         return;
       }
       await expect(page.getByRole('heading', { name: 'Hangaragem' })).toBeVisible();
@@ -478,6 +550,7 @@ test.describe('audit-closure governed staging profile', () => {
       guard.assertClean();
       setSurface(key, 'PASS');
     } catch (error) {
+      await dumpDiagnostics();
       setSurface(key, 'FAIL');
       throw error;
     }
