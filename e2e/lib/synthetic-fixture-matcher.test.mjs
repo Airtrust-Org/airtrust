@@ -5,6 +5,9 @@ import { isSyntheticQaFixtureLabel } from './synthetic-fixture-matcher.mjs';
 
 const PASS_CASES = [
   '[QA] Funcionário Teste',
+  'QA Participante Alfa',
+  'QA Instrutor Examinador',
+  'QA Participante Bravo',
   'QA_FIXTURE_FUNCIONARIO',
   'QA-FIXTURE Documento.pdf',
   'QA_SYNTHETIC Employee',
@@ -28,6 +31,7 @@ const FAIL_CASES = [
   'synthetic',
   'sintético',
   'QAX_FIXTURE', // QA not immediately followed by the required separator
+  'QATar funcionário', // starts with QA letters but not the explicit QA token + separator
   'Nome contém QA_FIXTURE no meio', // prefix not at the START of the label
 ];
 
