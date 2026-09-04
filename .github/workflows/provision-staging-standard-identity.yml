@@ -81,6 +81,63 @@ jobs:
           set -euo pipefail
           node scripts/staging/seed-qa-examiner-training.mjs --apply
 
+      - name: Verify synthetic examiner tenant fixture postconditions
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/staging-examiner-fixture-postconditions.json"
+          npx wrangler d1 execute "$STAGING_D1_NAME" --remote --json --command "
+            SELECT
+              (SELECT COUNT(*)
+               FROM empresas e
+               WHERE e.codigo = 'qa_examiner_training'
+                 AND e.ativo = 1
+                 AND e.deleted_at IS NULL) AS tenant_count,
+              (SELECT COUNT(*)
+               FROM usuarios u
+               JOIN usuarios_empresas ue ON ue.usuario_id = u.id
+               JOIN empresas e ON e.id = ue.empresa_id
+               WHERE u.nome = 'QA Administrador Examinador'
+                 AND u.deleted_at IS NULL
+                 AND u.active = 1
+                 AND e.codigo = 'qa_examiner_training'
+                 AND e.ativo = 1
+                 AND e.deleted_at IS NULL) AS admin_link_count,
+              (SELECT COUNT(DISTINCT f.matricula)
+               FROM funcionarios f
+               JOIN empresas e ON e.id = f.empresa_id
+               WHERE e.codigo = 'qa_examiner_training'
+                 AND e.ativo = 1
+                 AND e.deleted_at IS NULL
+                 AND f.deleted_at IS NULL
+                 AND f.ativo = 1
+                 AND f.matricula IN (
+                   'QA-INSTRUTOR-EXAMINADOR',
+                   'QA-PARTICIPANTE-ALFA',
+                   'QA-PARTICIPANTE-BRAVO'
+                 )) AS funcionario_fixture_count;
+          " > "$OUT"
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const raw = JSON.parse(
+            fs.readFileSync(process.env.RUNNER_TEMP + '/staging-examiner-fixture-postconditions.json', 'utf8'),
+          );
+          const row = Array.isArray(raw) ? raw[0]?.results?.[0] : raw?.results?.[0];
+          if (!row) throw new Error('QA_EXAMINER_POSTCONDITION_ROW_MISSING');
+          if (Number(row.tenant_count) !== 1) {
+            throw new Error(`QA_EXAMINER_TENANT_COUNT_INVALID:${row.tenant_count}`);
+          }
+          if (Number(row.admin_link_count) !== 1) {
+            throw new Error(`QA_EXAMINER_ADMIN_LINK_INVALID:${row.admin_link_count}`);
+          }
+          if (Number(row.funcionario_fixture_count) !== 3) {
+            throw new Error(
+              `QA_EXAMINER_FUNCIONARIO_FIXTURE_COUNT_INVALID:${row.funcionario_fixture_count}`,
+            );
+          }
+          console.log('QA_EXAMINER_TENANT_FIXTURE_READY');
+          NODE
+
       - name: Validate real authenticated session
         shell: bash
         run: |
