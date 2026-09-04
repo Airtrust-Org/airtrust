@@ -123,6 +123,6 @@ describe('ControleVoosSubnav navigation contract (N-03)', () => {
     expect(activeLink).toBeDefined();
     expect(activeLink).toHaveTextContent('Voos');
     expect(activeLink).toHaveAttribute('href', '/controle-voos/voos');
-    expect(activeLink).toHaveClass('min-h-[40px]');
+    expect(activeLink).toHaveClass('min-h-[44px]');
   });
 });
