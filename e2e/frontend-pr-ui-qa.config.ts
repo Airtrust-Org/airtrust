@@ -18,7 +18,8 @@ const PRODUCTION_HOST_PATTERNS = [
   /^airtrust\.pages\.dev$/i,
 ];
 
-const STAGING_HOST_ALLOWLIST = new Set(['staging.airtrust.pages.dev', 'main.airtrust.pages.dev']);
+// BLOCKER 10 — for this workflow staging means exactly staging.
+const STAGING_HOST_ALLOWLIST = new Set(['staging.airtrust.pages.dev']);
 
 function resolveFrontendBaseUrl(): string {
   const raw = (

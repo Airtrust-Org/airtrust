@@ -77,22 +77,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # A live production host literal (dotted, real) must never appear as an
+          # actual target. The guard/config/spec files legitimately embed dotted
+          # regex patterns (with backslashes) to REJECT production, so match the
+          # bare dotted literal only.
           prod_host="api.""airtrust.online"
           prod_worker="airtrust-api.""airtrust.workers.dev"
+          # Files that are allowed to carry production host *patterns* for rejection.
+          allow_patterns="scripts/ci/verify-frontend-pr-qa-provenance.mjs e2e/lib/read-only-network-guard.mjs e2e/lib/live-sha-guard.mjs e2e/frontend-pr-ui-qa.config.ts"
           for f in \
             .github/workflows/staging-frontend-pr-ui-qa.yml \
             scripts/ci/verify-frontend-pr-qa-provenance.mjs \
             scripts/ci/frontend-pr-qa-summarize.mjs \
+            scripts/ci/assert-live-frontend-sha.mjs \
             e2e/frontend-pr-ui-qa.config.ts \
             e2e/frontend-pr-ui-qa/auth.setup.ts \
             e2e/frontend-pr-ui-qa/destructive-actions.spec.ts \
-            e2e/lib/read-only-network-guard.mjs; do
+            e2e/lib/read-only-network-guard.mjs \
+            e2e/lib/live-sha-guard.mjs \
+            e2e/lib/credential-pair.mjs; do
             if grep -Fq "$prod_host" "$f" || grep -Fq "$prod_worker" "$f"; then
-              # Allowed only inside the provenance guard's rejection allowlist.
-              if [[ "$f" != "scripts/ci/verify-frontend-pr-qa-provenance.mjs" ]]; then
-                echo "PRODUCTION_IDENTIFIER_IN_PIPELINE:$f" >&2
-                exit 1
-              fi
+              case " $allow_patterns " in
+                *" $f "*) : ;;
+                *) echo "PRODUCTION_IDENTIFIER_IN_PIPELINE:$f" >&2; exit 1 ;;
+              esac
             fi
           done
           echo "NO_STRAY_PRODUCTION_IDENTIFIERS"
@@ -103,13 +111,20 @@ jobs:
 
       - name: Validate guard, network-guard and summary unit tests
         run: |
-          node --check scripts/ci/verify-frontend-pr-qa-provenance.mjs
-          node --check scripts/ci/frontend-pr-qa-summarize.mjs
-          node --check e2e/lib/read-only-network-guard.mjs
+          for f in \
+            scripts/ci/verify-frontend-pr-qa-provenance.mjs \
+            scripts/ci/frontend-pr-qa-summarize.mjs \
+            e2e/lib/read-only-network-guard.mjs \
+            e2e/lib/live-sha-guard.mjs \
+            e2e/lib/credential-pair.mjs; do
+            node --check "$f"
+          done
           node --test \
             scripts/ci/verify-frontend-pr-qa-provenance.test.mjs \
             scripts/ci/frontend-pr-qa-summarize.test.mjs \
-            e2e/lib/read-only-network-guard.test.mjs
+            e2e/lib/read-only-network-guard.test.mjs \
+            e2e/lib/live-sha-guard.test.mjs \
+            e2e/lib/credential-pair.test.mjs
 
       - name: Run provenance guard against release_sha (data only, no checkout of it)
         id: provenance
@@ -205,8 +220,25 @@ jobs:
       - name: Install Chromium for sanctioned staging browser QA
         run: npx playwright install --with-deps chromium
 
+      - name: Live staging-frontend SHA re-check (TOCTOU guard, immediately pre-Playwright)
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          node scripts/ci/assert-live-frontend-sha.mjs pre-playwright
+
       - name: Run authenticated read-only frontend QA
         run: npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts
+
+      - name: Live staging-frontend SHA re-check (post-matrix)
+        if: always()
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          node scripts/ci/assert-live-frontend-sha.mjs post-matrix
 
       - name: Build sanitized final summary
         if: always()

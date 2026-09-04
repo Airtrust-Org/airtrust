@@ -33,13 +33,21 @@ jobs:
 
       - name: Validate frontend PR UI QA guard scripts and tests
         run: |
-          node --check scripts/ci/verify-frontend-pr-qa-provenance.mjs
-          node --check scripts/ci/frontend-pr-qa-summarize.mjs
-          node --check e2e/lib/read-only-network-guard.mjs
+          for f in \
+            scripts/ci/verify-frontend-pr-qa-provenance.mjs \
+            scripts/ci/frontend-pr-qa-summarize.mjs \
+            scripts/ci/assert-live-frontend-sha.mjs \
+            e2e/lib/read-only-network-guard.mjs \
+            e2e/lib/live-sha-guard.mjs \
+            e2e/lib/credential-pair.mjs; do
+            node --check "$f"
+          done
           node --test \
             scripts/ci/verify-frontend-pr-qa-provenance.test.mjs \
             scripts/ci/frontend-pr-qa-summarize.test.mjs \
-            e2e/lib/read-only-network-guard.test.mjs
+            e2e/lib/read-only-network-guard.test.mjs \
+            e2e/lib/live-sha-guard.test.mjs \
+            e2e/lib/credential-pair.test.mjs
 
       - name: ✅ PR checks are structurally valid
         run: |

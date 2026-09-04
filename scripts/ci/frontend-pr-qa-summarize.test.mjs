@@ -8,35 +8,51 @@ const provOk = {
   prNumber: 282,
   releaseSha: 'd8507b3229bb16a5ff8b74c1ff6664924b9f8831',
   frontendBuildVersion: 'staging-2026-09-03T23:32:38Z-d8507b3',
+  worker: { environment: 'staging' },
 };
 
+// A run that genuinely exercised the ListaDocumentos RowActionsMenu surface.
 const qaGreen = {
-  status: 'PASS',
+  audit_profile: 'destructive-actions',
   mutations_detected: 0,
+  real_surfaces_exercised: 1,
+  documents: 'PASS',
   desktop: 'PASS',
   mobile_390: 'PASS',
   mobile_375: 'PASS',
   light: 'PASS',
   dark: 'PASS',
-  documents: 'FIXTURE_NOT_AVAILABLE',
 };
 
-test('all-green provenance + QA yields PASS and never requires worker SHA match', () => {
+test('a real surface + green matrix + PASS documents yields PASS', () => {
   const s = buildFinalSummary({ provenance: provOk, qa: qaGreen, prNumber: 282 });
   assert.equal(s.status, 'PASS');
   assert.equal(s.worker_sha_match_required, false);
-  assert.equal(s.pr_number, 282);
-  assert.equal(s.authentication, 'REAL_STAGING');
-  assert.equal(s.frontend_build_version, 'staging-2026-09-03T23:32:38Z-d8507b3');
+  assert.equal(s.real_surfaces_exercised, 1);
 });
 
-test('any detected mutation forces FAIL', () => {
+test('zero real #282 surfaces exercised => BLOCKED even with a green matrix', () => {
   const s = buildFinalSummary({
     provenance: provOk,
-    qa: { ...qaGreen, mutations_detected: 1 },
+    qa: { ...qaGreen, real_surfaces_exercised: 0, documents: 'FIXTURE_NOT_AVAILABLE' },
+  });
+  assert.equal(s.status, 'BLOCKED');
+});
+
+test('documents fixture not available => BLOCKED (Documentos is a #282 surface)', () => {
+  const s = buildFinalSummary({
+    provenance: provOk,
+    qa: { ...qaGreen, real_surfaces_exercised: 1, documents: 'FIXTURE_NOT_AVAILABLE' },
+  });
+  assert.equal(s.status, 'BLOCKED');
+});
+
+test('any detected mutation forces FAIL (overrides BLOCKED)', () => {
+  const s = buildFinalSummary({
+    provenance: provOk,
+    qa: { ...qaGreen, mutations_detected: 1, real_surfaces_exercised: 0 },
   });
   assert.equal(s.status, 'FAIL');
-  assert.equal(s.mutations_detected, 1);
 });
 
 test('a failed viewport forces FAIL', () => {
@@ -44,15 +60,21 @@ test('a failed viewport forces FAIL', () => {
   assert.equal(s.status, 'FAIL');
 });
 
-test('a failed provenance forces BLOCKED regardless of QA', () => {
+test('a failed theme forces FAIL', () => {
+  const s = buildFinalSummary({ provenance: provOk, qa: { ...qaGreen, dark: 'FAIL' } });
+  assert.equal(s.status, 'FAIL');
+});
+
+test('failed provenance forces BLOCKED regardless of QA', () => {
   const s = buildFinalSummary({ provenance: { status: 'FAIL' }, qa: qaGreen });
   assert.equal(s.status, 'BLOCKED');
 });
 
-test('missing QA summary is treated as BLOCKED, not silently PASS', () => {
+test('missing QA summary is BLOCKED, never silently PASS', () => {
   const s = buildFinalSummary({ provenance: provOk, qa: null });
-  assert.equal(s.status, 'FAIL');
+  assert.equal(s.status, 'BLOCKED');
   assert.equal(s.desktop, 'FAIL');
+  assert.equal(s.real_surfaces_exercised, 0);
 });
 
 test('only allowlisted primitive fields are emitted (no secret passthrough)', () => {
@@ -61,8 +83,10 @@ test('only allowlisted primitive fields are emitted (no secret passthrough)', ()
     qa: { ...qaGreen, email: 'someone@example.com', headers: { authorization: 'Bearer x' } },
   });
   assert.deepEqual(Object.keys(s).sort(), [
+    'audit_profile',
     'authentication',
     'dark',
+    'datatable_runtime',
     'desktop',
     'documents',
     'frontend_build_version',
@@ -71,8 +95,10 @@ test('only allowlisted primitive fields are emitted (no secret passthrough)', ()
     'mobile_390',
     'mutations_detected',
     'pr_number',
+    'real_surfaces_exercised',
     'release_sha',
     'status',
+    'worker_environment',
     'worker_sha_match_required',
   ]);
 });

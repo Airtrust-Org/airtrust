@@ -38,9 +38,10 @@ const PRODUCTION_HOST_PATTERNS = Object.freeze([
   /^airtrust\.pages\.dev$/i,
 ]);
 
+// Canonical staging targets for THIS workflow. `main.airtrust.pages.dev` is
+// deliberately excluded — staging means staging here (BLOCKER 10).
 const STAGING_HOST_ALLOWLIST = Object.freeze([
   'staging.airtrust.pages.dev',
-  'main.airtrust.pages.dev',
   'airtrust-api-staging.airtrust.workers.dev',
 ]);
 
@@ -198,16 +199,20 @@ export function assertStagingWorkerUsable({ versionJson }) {
   const data =
     versionJson.data && typeof versionJson.data === 'object' ? versionJson.data : versionJson;
   const environment = String(data.environment ?? '').toLowerCase();
+
+  // BLOCKER 6 — strict: the Worker MUST self-report environment "staging".
+  // Missing / unknown / development / production all fail closed. A divergent
+  // Worker source SHA is still fine (frontend-only contract).
   if (environment === 'production') {
     throw new Error('STAGING_WORKER_IS_PRODUCTION');
   }
-  if (environment && environment !== 'staging') {
-    throw new Error(`STAGING_WORKER_ENVIRONMENT_UNEXPECTED:${environment}`);
+  if (environment !== 'staging') {
+    throw new Error(`STAGING_WORKER_ENVIRONMENT_NOT_STAGING:${environment || 'missing'}`);
   }
 
   const sourceSha = String(data.sourceSha ?? '').toLowerCase();
   return {
-    environment: environment || 'unknown',
+    environment,
     workerSha: sourceSha || null,
     workerShaMatchRequired: false,
   };

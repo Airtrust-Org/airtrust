@@ -5,21 +5,22 @@
  * /auth/me or /auth/empresas. The browser drives the real staging login form
  * and the real staging API issues the session.
  *
- * Credentials come from the `staging` GitHub Environment:
- *   E2E_EMAIL / E2E_PASSWORD           -> STAGING_SMOKE_EMAIL / STAGING_SMOKE_PASSWORD
- *   QA_ADMIN_EMAIL / QA_ADMIN_PASSWORD -> optional admin profile for #282 surfaces
+ * Credentials are chosen as an ATOMIC pair (BLOCKER 7):
+ *   - QA_ADMIN_EMAIL + QA_ADMIN_PASSWORD both set  -> admin pair
+ *   - neither set                                  -> E2E_EMAIL / E2E_PASSWORD
+ *   - exactly one admin value set                  -> fail closed
  */
 import { test as setup, expect } from '@playwright/test';
 
 import { AUTH_FILE } from '../frontend-pr-ui-qa.config';
+import { resolveCredentialPair } from '../lib/credential-pair.mjs';
+import { assertLiveFrontendShaFromPage } from '../lib/live-sha-guard.mjs';
 
 setup('real staging login', async ({ page }) => {
-  const email = process.env.QA_ADMIN_EMAIL || process.env.E2E_EMAIL;
-  const password = process.env.QA_ADMIN_PASSWORD || process.env.E2E_PASSWORD;
-
-  if (!email || !password) {
-    throw new Error('FRONTEND_PR_UI_QA_CREDENTIALS_MISSING: set E2E_EMAIL/E2E_PASSWORD');
-  }
+  const { email, password, profile } = resolveCredentialPair(process.env);
+  const releaseShortSha = String(process.env.RELEASE_SHA || '')
+    .toLowerCase()
+    .slice(0, 7);
 
   const loginRequests: string[] = [];
   page.on('request', (request) => {
@@ -29,6 +30,10 @@ setup('real staging login', async ({ page }) => {
   });
 
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
+  if (releaseShortSha) {
+    await assertLiveFrontendShaFromPage(page, releaseShortSha, 'login');
+  }
+
   await page.locator('input[type="email"]').waitFor({ state: 'visible' });
   await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
@@ -43,7 +48,13 @@ setup('real staging login', async ({ page }) => {
   await expect(page).not.toHaveURL(/\/login/);
 
   // The session must have come from a real POST to the staging auth API.
-  expect(loginRequests.some((p) => p.includes('/api/auth/'))).toBeTruthy();
+  expect(
+    loginRequests.some((p) => p.includes('/api/auth/')),
+    'no real POST /api/auth/* observed during login',
+  ).toBeTruthy();
+
+  // eslint-disable-next-line no-console
+  console.log(`[frontend-pr-ui-qa] authenticated with the ${profile} credential pair`);
 
   await page.context().storageState({ path: AUTH_FILE });
 });

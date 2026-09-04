@@ -97,6 +97,11 @@ test('production hosts are rejected, staging hosts pass', () => {
     'airtrust-api-staging.airtrust.workers.dev',
   );
   assert.throws(() => assertStagingTarget('https://example.com'), /NON_STAGING_TARGET_REJECTED/);
+  // BLOCKER 10 — main.airtrust.pages.dev is not a canonical target here.
+  assert.throws(
+    () => assertStagingTarget('https://main.airtrust.pages.dev/'),
+    /NON_STAGING_TARGET_REJECTED/,
+  );
 });
 
 test('evaluateOpenFrontendPr accepts a well-formed open same-repo PR', () => {
@@ -196,6 +201,21 @@ test('assertStagingWorkerUsable rejects a production Worker', () => {
   );
 });
 
+test('assertStagingWorkerUsable fails closed on missing / unknown / development environment', () => {
+  assert.throws(
+    () => assertStagingWorkerUsable({ versionJson: { sourceSha: 'a'.repeat(40) } }),
+    /STAGING_WORKER_ENVIRONMENT_NOT_STAGING:missing/,
+  );
+  assert.throws(
+    () => assertStagingWorkerUsable({ versionJson: { environment: 'unknown' } }),
+    /STAGING_WORKER_ENVIRONMENT_NOT_STAGING:unknown/,
+  );
+  assert.throws(
+    () => assertStagingWorkerUsable({ versionJson: { environment: 'development' } }),
+    /STAGING_WORKER_ENVIRONMENT_NOT_STAGING:development/,
+  );
+});
+
 // ---- Integration-style tests of runProvenanceGuard with injected deps --------
 
 function baseEnv(overrides = {}) {
@@ -266,6 +286,22 @@ test('runProvenanceGuard fails closed on a frontend SHA mismatch', async () => {
 test('runProvenanceGuard rejects a production Worker environment', async () => {
   const deps = makeDeps({ workerJson: { environment: 'production' } });
   await assert.rejects(runProvenanceGuard(baseEnv(), deps), /STAGING_WORKER_IS_PRODUCTION/);
+});
+
+test('runProvenanceGuard rejects a Worker with no environment field', async () => {
+  const deps = makeDeps({ workerJson: { sourceSha: 'a'.repeat(40) } });
+  await assert.rejects(
+    runProvenanceGuard(baseEnv(), deps),
+    /STAGING_WORKER_ENVIRONMENT_NOT_STAGING/,
+  );
+});
+
+test('runProvenanceGuard passes with a staging Worker on a different SHA', async () => {
+  const deps = makeDeps({ workerJson: { environment: 'staging', sourceSha: '9'.repeat(40) } });
+  const result = await runProvenanceGuard(baseEnv(), deps);
+  assert.equal(result.status, 'PROVENANCE_OK');
+  assert.equal(result.worker.workerSha, '9'.repeat(40));
+  assert.notEqual(result.worker.workerSha, SHA);
 });
 
 test('runProvenanceGuard rejects a fork PR', async () => {

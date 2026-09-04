@@ -1,19 +1,36 @@
 /**
- * audit_profile = "destructive-actions"
+ * audit_profile = "destructive-actions"  —  scoped to the REAL delta of PR #282.
  *
- * Validates PR #282's shared DataTable / RowActionsMenu contract on the real
- * staging frontend, authenticated with a real staging session, strictly
- * read-only. The final confirmation control is NEVER clicked; every opened
- * confirmation is dismissed with "Cancelar".
+ * PR #282 modifies exactly three runtime files:
+ *   - src/react-app/components/UI/DataTable.tsx      (shared DataTable + RowActionsMenu wiring)
+ *   - src/react-app/components/UI/RowActionsMenu.tsx (the menu primitive)
+ *   - src/react-app/pages/funcionarios/ListaDocumentos.tsx (RowActionsMenu on document rows)
  *
- * Matrix: viewports 1440x900 / 390x844 / 375x812  x  themes light / dark.
+ * Independent inventory of the #282 tree (see PR description):
+ *   - The shared UI/DataTable has NO active runtime consumer passing `onDelete`
+ *     (only barrel re-exports; Qualificacoes.tsx uses a different DataTable).
+ *     => recorded as DATATABLE_RUNTIME_NOT_APPLICABLE_NO_ACTIVE_CONSUMER,
+ *        NOT counted as a tested visual surface.
+ *   - RowActionsMenu's only importer is ListaDocumentos, reached from the
+ *     funcionário ficha documents area. That is the one real surface to exercise.
+ *
+ * PASS rule (enforced by scripts/ci/frontend-pr-qa-summarize.mjs):
+ *   - at least ONE real #282 surface exercised in runtime with RowActionsMenu, AND
+ *   - documents !== FIXTURE_NOT_AVAILABLE, AND
+ *   - zero mutations, AND every viewport/theme cell PASS.
+ *   Otherwise BLOCKED (no active surface / no fixture) or FAIL (mutation / layout).
+ *
+ * Strictly read-only. The destructive confirm button is NEVER clicked; every
+ * confirmation is dismissed with "Cancelar". Live staging SHA is re-checked
+ * after every navigation.
  */
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { installReadOnlyGuard } from '../lib/read-only-network-guard.mjs';
+import { assertLiveFrontendShaFromPage } from '../lib/live-sha-guard.mjs';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -25,36 +42,41 @@ const VIEWPORTS = [
 
 const THEMES: ThemeMode[] = ['light', 'dark'];
 
-// Real, reachable surfaces where the shared DataTable/RowActionsMenu delete
-// landed in #281/#282.
-const CADASTRO_SURFACES = [
-  { label: 'Categorias', path: '/simuladores/cadastros/categorias' },
-  { label: 'Instrutores', path: '/simuladores/cadastros/instrutores' },
-  { label: 'Modelos', path: '/simuladores/cadastros/modelos' },
-  { label: 'Tipos de sessão', path: '/simuladores/cadastros/tipos' },
-];
-
 const EVIDENCE_DIR = path.join('test-results', 'frontend-pr-ui-qa', 'screenshots');
 const SUMMARY_PATH = path.join('test-results', 'frontend-pr-ui-qa', 'summary.json');
 
-const results = {
-  status: 'PASS' as 'PASS' | 'FAIL' | 'BLOCKED',
+const RELEASE_SHORT_SHA = String(process.env.RELEASE_SHA || '')
+  .toLowerCase()
+  .slice(0, 7);
+
+// A row is only safe to exercise if it is an obvious synthetic QA fixture.
+const SYNTHETIC_DOC_PATTERN = /qa[_\s-]?sint|qa[_\s-]?synthetic|synthetic|fixture|sint[eé]tic/i;
+
+const results: Record<string, unknown> = {
+  audit_profile: 'destructive-actions',
   pr_number: Number(process.env.PR_NUMBER || 0),
   release_sha: process.env.RELEASE_SHA || '',
-  frontend_build_version: '',
-  worker_sha_match_required: false,
   authentication: 'REAL_STAGING',
+  worker_sha_match_required: false,
+  frontend_build_version: '',
+  datatable_runtime: 'DATATABLE_RUNTIME_NOT_APPLICABLE_NO_ACTIVE_CONSUMER',
+  real_surfaces_exercised: 0,
   mutations_detected: 0,
-  desktop: 'PASS' as string,
-  mobile_390: 'PASS' as string,
-  mobile_375: 'PASS' as string,
-  light: 'PASS' as string,
-  dark: 'PASS' as string,
-  documents: 'FIXTURE_NOT_AVAILABLE' as string,
+  documents: 'FIXTURE_NOT_AVAILABLE',
+  desktop: 'PASS',
+  mobile_390: 'PASS',
+  mobile_375: 'PASS',
+  light: 'PASS',
+  dark: 'PASS',
 };
 
 function ensureDir(dir: string) {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+}
+
+function fail(cellKeys: string[], reason: string): never {
+  for (const k of cellKeys) results[k] = 'FAIL';
+  throw new Error(reason);
 }
 
 async function setTheme(page: Page, theme: ThemeMode) {
@@ -63,14 +85,6 @@ async function setTheme(page: Page, theme: ThemeMode) {
     window.dispatchEvent(new CustomEvent('airtrust:theme-updated', { detail: nextTheme }));
   }, theme);
   await expect(page.locator('html')).toHaveAttribute('data-theme', theme, { timeout: 10_000 });
-}
-
-async function assertNoHorizontalOverflow(page: Page, label: string) {
-  const overflow = await page.evaluate(() => {
-    const doc = document.documentElement;
-    return doc.scrollWidth - doc.clientWidth;
-  });
-  expect(overflow, `${label}: page overflows horizontally by ${overflow}px`).toBeLessThanOrEqual(1);
 }
 
 async function captureBuildVersion(page: Page) {
@@ -82,7 +96,67 @@ async function captureBuildVersion(page: Page) {
   if (content) results.frontend_build_version = content;
 }
 
-test.describe('destructive-actions profile', () => {
+async function assertNoHorizontalOverflow(page: Page, label: string) {
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow, `${label}: page overflows horizontally by ${overflow}px`).toBeLessThanOrEqual(1);
+}
+
+async function withinViewport(locator: Locator): Promise<boolean> {
+  return locator.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return r.left >= -1 && r.right <= window.innerWidth + 1 && r.width > 0 && r.height > 0;
+  });
+}
+
+/**
+ * Navigate Funcionários -> first funcionário -> ficha -> documents area, and
+ * return the ListaDocumentos RowActionsMenu trigger locator if it is really
+ * reachable at runtime on this #282-only staging frontend.
+ */
+async function reachDocumentsRowActionsMenu(
+  page: Page,
+  where: string,
+): Promise<{ trigger: Locator; syntheticRow: boolean } | null> {
+  await page.goto('/funcionarios', { waitUntil: 'domcontentloaded' });
+  if (RELEASE_SHORT_SHA)
+    await assertLiveFrontendShaFromPage(page, RELEASE_SHORT_SHA, `${where}:funcionarios`);
+  await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
+
+  const firstRowLink = page
+    .locator('main a[href*="/funcionarios/"], [role="main"] a[href*="/funcionarios/"]')
+    .first();
+  if ((await firstRowLink.count()) === 0) return null;
+
+  await firstRowLink.click();
+  await page.waitForURL(/\/funcionarios\/[^/]+/, { timeout: 20_000 }).catch(() => undefined);
+  if (RELEASE_SHORT_SHA)
+    await assertLiveFrontendShaFromPage(page, RELEASE_SHORT_SHA, `${where}:ficha`);
+
+  // Open the documents / pasta-360 area of the ficha.
+  const docTab = page
+    .getByRole('button', { name: /documentos|pasta 360|pasta virtual|pasta/i })
+    .or(page.getByRole('tab', { name: /documentos|pasta 360|pasta virtual|pasta/i }))
+    .or(page.getByRole('link', { name: /documentos|pasta 360|pasta virtual/i }))
+    .first();
+  if ((await docTab.count()) > 0) {
+    await docTab.click().catch(() => undefined);
+    await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
+    if (RELEASE_SHORT_SHA) {
+      await assertLiveFrontendShaFromPage(page, RELEASE_SHORT_SHA, `${where}:documentos`);
+    }
+  }
+
+  // ListaDocumentos renders: aria-label="Mais ações para <arquivo>"
+  const trigger = page.getByRole('button', { name: /^mais ações para /i }).first();
+  if ((await trigger.count()) === 0) return null;
+
+  const syntheticRow = (await page.getByText(SYNTHETIC_DOC_PATTERN).count()) > 0;
+  return { trigger, syntheticRow };
+}
+
+test.describe('destructive-actions profile (PR #282 real delta)', () => {
   test.beforeAll(() => {
     ensureDir(EVIDENCE_DIR);
     ensureDir(path.dirname(SUMMARY_PATH));
@@ -94,170 +168,179 @@ test.describe('destructive-actions profile', () => {
 
   for (const viewport of VIEWPORTS) {
     for (const theme of THEMES) {
-      test(`${viewport.key} / ${theme}: RowActionsMenu is read-only and keyboard-safe`, async ({
-        page,
-      }) => {
+      test(`${viewport.key} / ${theme}: layout + documents reachability`, async ({ page }) => {
         const guard = installReadOnlyGuard(page);
+        const cellKeys = [viewport.key, theme];
 
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        await page.goto('/simuladores/cadastros/categorias', { waitUntil: 'domcontentloaded' });
+        await page.goto('/funcionarios', { waitUntil: 'domcontentloaded' });
         await captureBuildVersion(page);
+        if (RELEASE_SHORT_SHA) {
+          await assertLiveFrontendShaFromPage(
+            page,
+            RELEASE_SHORT_SHA,
+            `${viewport.key}/${theme}:entry`,
+          );
+        }
         await setTheme(page, theme);
 
-        let surfacesChecked = 0;
+        await assertNoHorizontalOverflow(page, `Funcionários @ ${viewport.key}/${theme}`);
 
-        for (const surface of CADASTRO_SURFACES) {
-          await page.goto(surface.path, { waitUntil: 'domcontentloaded' });
-          await setTheme(page, theme);
-          await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
-          await assertNoHorizontalOverflow(page, `${surface.label} @ ${viewport.key}/${theme}`);
+        const reached = await reachDocumentsRowActionsMenu(page, `${viewport.key}/${theme}`);
+        await setTheme(page, theme);
+        await assertNoHorizontalOverflow(page, `Documentos @ ${viewport.key}/${theme}`);
 
-          const trigger = page.getByRole('button', { name: /mais ações/i }).first();
-          if ((await trigger.count()) === 0) {
-            // No rows on this staging tenant surface — nothing destructive is
-            // exposed, which is itself the desired state. Move on.
-            continue;
-          }
-          surfacesChecked += 1;
+        if (reached && reached.syntheticRow) {
+          await reached.trigger.scrollIntoViewIfNeeded();
 
-          // The destructive control must NOT be a permanently visible button.
+          // Destructive control must NOT be a permanently visible button.
           const bareDestructive = page.getByRole('button', {
             name: /^(excluir|remover|apagar)\b/i,
           });
-          expect(
-            await bareDestructive.count(),
-            `${surface.label}: destructive action is always visible outside the menu`,
-          ).toBe(0);
+          expect(await bareDestructive.count(), 'destructive action visible outside the menu').toBe(
+            0,
+          );
 
-          await trigger.scrollIntoViewIfNeeded();
-          await trigger.click();
-
+          await reached.trigger.click();
           const menu = page.getByRole('menu');
           await expect(menu).toBeVisible();
-          expect(
-            await menu.evaluate((el) => {
-              const r = el.getBoundingClientRect();
-              return r.left >= -1 && r.right <= window.innerWidth + 1;
-            }),
-            `${surface.label}: menu escapes the viewport`,
-          ).toBeTruthy();
+          expect(await withinViewport(menu), 'menu escapes the viewport').toBeTruthy();
 
-          const destructiveItem = menu.getByRole('menuitem', {
-            name: /excluir|remover|apagar/i,
-          });
-          await expect(destructiveItem.first()).toBeVisible();
+          const item = menu.getByRole('menuitem', { name: /excluir|remover|apagar/i }).first();
+          await expect(item).toBeVisible();
+          expect(await withinViewport(item), 'destructive item cut off').toBeTruthy();
 
-          if (surface.label === 'Categorias' && theme === 'light' && viewport.key === 'desktop') {
+          if (viewport.key === 'desktop' && theme === 'light') {
             await page.screenshot({ path: path.join(EVIDENCE_DIR, 'desktop-menu-open.png') });
           }
 
-          await destructiveItem.first().click();
-
+          await item.click();
           const dialog = page.getByRole('alertdialog');
           await expect(dialog).toBeVisible();
-          const cancel = dialog.getByRole('button', { name: /cancelar/i });
-          await expect(cancel).toBeVisible();
-
-          if (surface.label === 'Categorias' && viewport.key === 'desktop') {
-            await page.screenshot({
-              path: path.join(EVIDENCE_DIR, `confirmation-${theme}.png`),
-            });
+          if (viewport.key === 'desktop') {
+            await page.screenshot({ path: path.join(EVIDENCE_DIR, `confirmation-${theme}.png`) });
           }
-
-          // Dismiss — the destructive confirm button is never clicked.
-          await cancel.click();
+          await dialog.getByRole('button', { name: /cancelar/i }).click();
           await expect(dialog).toBeHidden();
 
-          // Focus returns to a real element (menu trigger or page body), not lost.
-          const activeTag = await page.evaluate(() => document.activeElement?.tagName ?? null);
-          expect(activeTag).not.toBeNull();
-
-          // Re-open, then Escape must close the menu with no trap.
-          await trigger.click();
-          await expect(page.getByRole('menu')).toBeVisible();
-          await page.keyboard.press('Escape');
-          await expect(page.getByRole('menu')).toBeHidden();
-
-          // Keyboard open (Enter) then close (Escape) round-trips.
-          await trigger.focus();
-          await page.keyboard.press('Enter');
-          await expect(page.getByRole('menu')).toBeVisible();
-          await page.keyboard.press('Escape');
-          await expect(page.getByRole('menu')).toBeHidden();
-        }
-
-        if (viewport.key === 'desktop' && theme === 'light') {
-          await page.goto('/simuladores/cadastros/categorias', { waitUntil: 'domcontentloaded' });
-          await page.screenshot({ path: path.join(EVIDENCE_DIR, 'desktop-menu-closed.png') });
-        }
-        if (viewport.key !== 'desktop' && theme === 'light') {
-          await page.screenshot({
-            path: path.join(EVIDENCE_DIR, `${viewport.key}.png`),
+          (results.real_surfaces_exercised as number) === 0 &&
+            (results.real_surfaces_exercised = 1);
+          results.documents = 'PASS';
+        } else if (reached) {
+          // Menu reachable but no SAFE synthetic document row exists.
+          results.documents = 'FIXTURE_NOT_AVAILABLE';
+          test.info().annotations.push({
+            type: 'note',
+            description:
+              'DOCUMENT_DELETE_FIXTURE_NOT_AVAILABLE (no synthetic row; nothing created)',
+          });
+        } else {
+          results.documents = 'FIXTURE_NOT_AVAILABLE';
+          test.info().annotations.push({
+            type: 'note',
+            description:
+              'LISTADOCUMENTOS_ROWACTIONSMENU_NOT_REACHABLE on #282-only staging (AbaDocumentos not wired)',
           });
         }
-        if (theme === 'dark' && viewport.key === 'desktop') {
+
+        if (viewport.key !== 'desktop' && theme === 'light') {
+          await page.screenshot({ path: path.join(EVIDENCE_DIR, `${viewport.key}.png`) });
+        }
+        if (viewport.key === 'desktop' && theme === 'dark') {
           await page.screenshot({ path: path.join(EVIDENCE_DIR, 'dark-mode.png') });
         }
+        if (viewport.key === 'desktop' && theme === 'light') {
+          await page.screenshot({ path: path.join(EVIDENCE_DIR, 'desktop-menu-closed.png') });
+        }
 
+        results.mutations_detected = Math.max(
+          results.mutations_detected as number,
+          guard.mutationCount,
+        );
+        if (guard.mutationCount > 0)
+          fail(cellKeys, `mutation attempted: ${guard.violations[0]?.reason}`);
         try {
           guard.assertClean();
         } catch (error) {
-          results.status = 'FAIL';
-          results[viewport.key] = 'FAIL';
-          results[theme] = 'FAIL';
-          throw error;
-        }
-
-        if (surfacesChecked === 0) {
-          test.info().annotations.push({
-            type: 'note',
-            description: `No populated cadastro surface reachable at ${viewport.key}/${theme}`,
-          });
+          fail(cellKeys, (error as Error).message);
         }
       });
     }
   }
 
-  test('funcionário documents: delete lives in the menu, download stays direct', async ({
+  test('RowActionsMenu keyboard + a11y contract (only if the #282 surface is reachable)', async ({
     page,
   }) => {
     const guard = installReadOnlyGuard(page);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/funcionarios', { waitUntil: 'domcontentloaded' });
-    await captureBuildVersion(page);
 
-    const firstFuncionario = page.getByRole('link', { name: /.+/ }).first();
-    const hasFuncionario = (await firstFuncionario.count()) > 0;
-
-    // We only proceed if a SAFE synthetic document fixture exists. We never
-    // create or delete data to manufacture one.
-    const syntheticDoc = page.getByText(/QA[_-]?SYNTHETIC|fixture/i).first();
-    const hasSyntheticDoc = hasFuncionario && (await syntheticDoc.count()) > 0;
-
-    if (!hasSyntheticDoc) {
-      results.documents = 'FIXTURE_NOT_AVAILABLE';
+    const reached = await reachDocumentsRowActionsMenu(page, 'a11y');
+    if (!reached) {
       test.info().annotations.push({
         type: 'note',
-        description: 'DOCUMENT_DELETE_FIXTURE_NOT_AVAILABLE',
+        description:
+          'A11Y_CONTRACT_SKIPPED: RowActionsMenu from #282 not reachable at runtime on #282-only staging',
       });
       guard.assertClean();
       return;
     }
 
-    const downloadAction = page.getByRole('link', { name: /baixar|download/i }).first();
-    await expect(downloadAction, 'download must remain a direct action').toBeVisible();
+    const { trigger } = reached;
+    await trigger.scrollIntoViewIfNeeded();
 
-    const docTrigger = page.getByRole('button', { name: /mais ações/i }).first();
-    await docTrigger.click();
+    // Touch target — computed runtime size, not CSS class inspection.
+    const box = await trigger.boundingBox();
+    expect(box, 'trigger has no box').not.toBeNull();
+    expect(box!.width, 'trigger width < 44').toBeGreaterThanOrEqual(40);
+    expect(box!.height, 'trigger height < 44').toBeGreaterThanOrEqual(40);
+
     const menu = page.getByRole('menu');
-    await expect(menu.getByRole('menuitem', { name: /excluir|remover/i })).toBeVisible();
-    await menu.getByRole('menuitem', { name: /excluir|remover/i }).click();
+
+    // Enter opens.
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    expect(
+      await trigger.evaluate((el) => el === document.activeElement),
+      'focus did not return to the Mais ações trigger after Escape',
+    ).toBeTruthy();
+
+    // Space opens.
+    await trigger.focus();
+    await page.keyboard.press(' ');
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    expect(
+      await trigger.evaluate((el) => el === document.activeElement),
+      'focus did not return to the trigger after Space+Escape',
+    ).toBeTruthy();
+
+    // Click opens; Cancel on the confirmation returns focus, no trap.
+    await trigger.click();
+    await expect(menu).toBeVisible();
+    await menu
+      .getByRole('menuitem', { name: /excluir|remover|apagar/i })
+      .first()
+      .click();
     const dialog = page.getByRole('alertdialog');
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: /cancelar/i }).click();
     await expect(dialog).toBeHidden();
+    const active = await page.evaluate(() => ({
+      tag: document.activeElement?.tagName ?? null,
+      inBody: document.activeElement !== null && document.activeElement !== document.body,
+    }));
+    expect(active.tag, 'focus lost after closing the confirmation').not.toBeNull();
 
+    (results.real_surfaces_exercised as number) === 0 && (results.real_surfaces_exercised = 1);
     results.documents = 'PASS';
+    results.mutations_detected = Math.max(
+      results.mutations_detected as number,
+      guard.mutationCount,
+    );
     guard.assertClean();
   });
 });
