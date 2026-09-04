@@ -93,7 +93,7 @@ test('the guard job type-checks and runs the synthetic-fixture matcher tests', (
 
 test('BLOCKER K — no generic fixture/synthetic word is matched without an explicit QA prefix anchor', () => {
   // the matcher module itself must anchor on an explicit QA prefix
-  assert.match(matcher, /\^\\s\*\(\?:\\\[QA\\\]\|QA\[_-\]/);
+  assert.match(matcher, /\^\\s\*\(\?:\\\[QA\\\]\|QA\(\?:\\s\+\|\[_-\]/);
   // the spec must consume the shared matcher, not its own ad-hoc broad regex
   assert.match(spec, /isSyntheticQaFixtureLabel/);
   assert.doesNotMatch(spec, /\/qa\[_\\s-\]\?sint\|qa\[_\\s-\]\?synthetic\|synthetic\|fixture/);
@@ -109,4 +109,15 @@ test('runtime regression — early Playwright failure still creates a sanitized 
   assert.match(buildSummary, /mkdir -p "\$\(dirname "\$QA_SUMMARY_PATH"\)"/);
   assert.match(buildSummary, /if \[\[ ! -f "\$QA_SUMMARY_PATH" \]\]; then/);
   assert.match(buildSummary, /"status":"NO_SUMMARY"/);
+});
+
+
+test('canonical staging QA-space fixture names are accepted without widening mid-string matching', async () => {
+  const { isSyntheticQaFixtureLabel } = await import(
+    resolve(root, 'e2e/lib/synthetic-fixture-matcher.mjs')
+  );
+  assert.equal(isSyntheticQaFixtureLabel('QA Participante Alfa'), true);
+  assert.equal(isSyntheticQaFixtureLabel('QA Instrutor Examinador'), true);
+  assert.equal(isSyntheticQaFixtureLabel('Maria QA Silva'), false);
+  assert.equal(isSyntheticQaFixtureLabel('QATar funcionário'), false);
 });

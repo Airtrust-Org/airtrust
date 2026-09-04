@@ -9,7 +9,9 @@
  *
  * BLOCKER K: no canonical "this is a synthetic staging funcionário" marker was
  * found anywhere in the repository. Absent that guarantee, the ONLY safe
- * contract is an explicit QA prefix at the START of the label. Anything else —
+ * contract is an explicit QA prefix at the START of the label. The canonical
+ * staging seed already uses names such as "QA Participante Alfa", so a literal
+ * "QA " prefix is accepted alongside [QA]/QA_FIXTURE/QA_SYNTHETIC forms. Anything else —
  * including the generic words "fixture" / "synthetic" / "sintético" used alone,
  * in the middle of a name, or only in a secondary description — is REJECTED.
  * If staging carries no such prefixed fixture, the correct outcome is BLOCKED,
@@ -18,11 +20,12 @@
 
 // Required prefix at the very start of the label:
 //   [QA]                             e.g. "[QA] Funcionário Teste"
+//   QA <label>                        e.g. "QA Participante Alfa" — canonical staging seed
 //   QA_FIXTURE / QA-FIXTURE          e.g. "QA_FIXTURE_FUNCIONARIO"
 //   QA_SYNTHETIC / QA-SYNTHETIC      e.g. "QA_SYNTHETIC Employee"
 //   QA_SINTETICO / QA-SINTETICO      e.g. "QA_SINTETICO Documento" (accent optional)
 const SYNTHETIC_QA_PREFIX_PATTERN =
-  /^\s*(?:\[QA\]|QA[_-](?:FIXTURE|SYNTHETIC|SINT[EÉ]TIC[OA]?))/i;
+  /^\s*(?:\[QA\]|QA(?:\s+|[_-](?:FIXTURE|SYNTHETIC|SINT[EÉ]TIC[OA]?)))/i;
 
 /**
  * @param {string | null | undefined} label the funcionário or document label
