@@ -31,6 +31,30 @@ jobs:
       - name: Validate staging QA script syntax
         run: node --check scripts/qa/staging-runtime-fichas-lms-qa.mjs
 
+      - name: Validate staging identity provisioning contract
+        run: node --test scripts/__tests__/provision-staging-standard-identity.test.mjs
+
+      - name: Validate frontend PR UI QA guard scripts and tests
+        run: |
+          for f in \
+            scripts/ci/verify-frontend-pr-qa-provenance.mjs \
+            scripts/ci/frontend-pr-qa-summarize.mjs \
+            scripts/ci/assert-live-frontend-sha.mjs \
+            e2e/lib/read-only-network-guard.mjs \
+            e2e/lib/live-sha-guard.mjs \
+            e2e/lib/credential-pair.mjs \
+            e2e/lib/synthetic-fixture-matcher.mjs; do
+            node --check "$f"
+          done
+          node --test \
+            scripts/ci/verify-frontend-pr-qa-provenance.test.mjs \
+            scripts/ci/frontend-pr-qa-summarize.test.mjs \
+            e2e/lib/read-only-network-guard.test.mjs \
+            e2e/lib/live-sha-guard.test.mjs \
+            e2e/lib/credential-pair.test.mjs \
+            e2e/lib/synthetic-fixture-matcher.test.mjs \
+            scripts/__tests__/staging-frontend-pr-ui-qa-workflow.test.mjs
+
       - name: ✅ PR checks are structurally valid
         run: |
           echo "PR: ${{ github.event.pull_request.title }}"
