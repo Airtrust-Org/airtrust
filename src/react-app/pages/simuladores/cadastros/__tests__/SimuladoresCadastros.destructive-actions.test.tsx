@@ -23,14 +23,6 @@ import CrudSimuladores from '../simuladores/crud-completo';
 import CrudInstrutores from '../instrutores';
 import CrudModelos from '../modelos';
 
-if (typeof globalThis.ResizeObserver === 'undefined') {
-  globalThis.ResizeObserver = class ResizeObserver {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof globalThis.ResizeObserver;
-}
-
 vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: 'http://localhost/api',
   getAccessToken: () => 'fake-test-token',

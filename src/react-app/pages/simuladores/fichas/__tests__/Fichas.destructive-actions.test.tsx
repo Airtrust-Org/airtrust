@@ -19,14 +19,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FichasAvaliacaoContent } from '../index';
 
-if (typeof globalThis.ResizeObserver === 'undefined') {
-  globalThis.ResizeObserver = class ResizeObserver {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof globalThis.ResizeObserver;
-}
-
 const permissionsRef = {
   isAdmin: true,
   isGestor: false,

@@ -8,8 +8,8 @@ import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { Button } from '@/react-app/components/UI/Button';
 import { Input } from '@/react-app/components/UI/Input';
 import { ArrowLeft, Plus, Trash2, Inbox } from 'lucide-react';
-import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 interface Categoria {
   id: number;
@@ -146,16 +146,9 @@ export default function CrudCategorias({ embedded = false, onBack }: Props = {})
             ))}
           </div>
           {[...Array(5)].map((_, i) => (
-            <div
-              key={i}
-              className="px-4 py-3.5 grid grid-cols-4 gap-4 border-b border-gray-100 dark:border-slate-800"
-            >
+            <div key={i} className="px-4 py-3.5 grid grid-cols-4 gap-4 border-b border-gray-100 dark:border-slate-800">
               {[...Array(4)].map((_, j) => (
-                <div
-                  key={j}
-                  className="h-4 rounded bg-slate-100 dark:bg-slate-800"
-                  style={{ width: `${55 + Math.sin(i + j) * 20}%` }}
-                />
+                <div key={j} className="h-4 rounded bg-slate-100 dark:bg-slate-800" style={{ width: `${55 + Math.sin(i + j) * 20}%` }} />
               ))}
             </div>
           ))}
@@ -170,20 +163,13 @@ export default function CrudCategorias({ embedded = false, onBack }: Props = {})
       <div className="flex items-center justify-between">
         <div>
           {embedded && onBack && (
-            <button
-              onClick={onBack}
-              className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-1"
-            >
+            <button onClick={onBack} className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-1">
               <ArrowLeft className="w-3 h-3" />
               Gestão
             </button>
           )}
-          <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">
-            Categorias de Manobras
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-            Classificação de manobras e exercícios
-          </p>
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">Categorias de Manobras</h2>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Classificação de manobras e exercícios</p>
         </div>
         <Button onClick={() => abrirModal()}>
           <Plus className="w-4 h-4 mr-2" />
@@ -212,22 +198,15 @@ export default function CrudCategorias({ embedded = false, onBack }: Props = {})
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
             {categorias.map((cat) => (
-              <tr
-                key={cat.id}
-                className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors"
-              >
+              <tr key={cat.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
                 <td className="px-4 py-3.5">
                   <div
                     className="w-6 h-6 rounded-full border border-gray-300 dark:border-slate-600"
                     style={{ backgroundColor: cat.cor || '#3b82f6' }}
                   />
                 </td>
-                <td className="px-4 py-3.5 font-medium text-sm text-gray-900 dark:text-slate-100">
-                  {cat.nome}
-                </td>
-                <td className="px-4 py-3.5 text-sm text-gray-600 dark:text-slate-400">
-                  {cat.descricao || '-'}
-                </td>
+                <td className="px-4 py-3.5 font-medium text-sm text-gray-900 dark:text-slate-100">{cat.nome}</td>
+                <td className="px-4 py-3.5 text-sm text-gray-600 dark:text-slate-400">{cat.descricao || '-'}</td>
                 <td className="px-4 py-3.5">
                   <div className="flex items-center justify-center gap-2">
                     <Button
@@ -261,44 +240,28 @@ export default function CrudCategorias({ embedded = false, onBack }: Props = {})
           <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-slate-800 mb-4">
             <Inbox className="w-8 h-8 text-gray-400 dark:text-slate-500" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-1">
-            Nenhuma categoria cadastrada
-          </h3>
-          <p className="text-sm text-gray-500 dark:text-slate-400 max-w-md">
-            Crie categorias para organizar as manobras por tipo ou finalidade.
-          </p>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-1">Nenhuma categoria cadastrada</h3>
+          <p className="text-sm text-gray-500 dark:text-slate-400 max-w-md">Crie categorias para organizar as manobras por tipo ou finalidade.</p>
         </div>
       )}
 
       {/* Modal */}
       {showModal && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in"
-          onClick={fecharModal}
-        >
-          <div
-            className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full animate-scale-in"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={fecharModal}>
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                {editando ? 'Editar' : 'Nova'} Categoria
-              </h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{editando ? 'Editar' : 'Nova'} Categoria</h3>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                  Nome <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
                 <Input
                   value={formData.nome}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                  Descrição
-                </label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
                 <textarea
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={formData.descricao}
@@ -307,9 +270,7 @@ export default function CrudCategorias({ embedded = false, onBack }: Props = {})
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                  Cor
-                </label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Cor</label>
                 <div className="flex items-center gap-3">
                   <input
                     type="color"

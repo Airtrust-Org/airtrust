@@ -4,12 +4,14 @@ import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { Button } from '@/react-app/components/UI/Button';
 import { Input } from '@/react-app/components/UI/Input';
 import { ArrowLeft, Plus, Trash2, X, ChevronUp, ChevronDown, Inbox } from 'lucide-react';
+import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { getColorByIndex } from '@/react-app/utils/colorPalette';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
-import { filterCompatibleChecks } from '@/react-app/utils/checkCompatibility';
+import {
+  filterCompatibleChecks,
+} from '@/react-app/utils/checkCompatibility';
 import { isQualificationCheck } from '@/react-app/utils/isQualificationCheck';
-import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 
 interface TipoSessao {
   id: number;
@@ -113,7 +115,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
   // silently overwritten by a form save.
   const codigoSomenteLeitura = Boolean(
     modeloSelecionado?.codigo_canonico &&
-    modeloSelecionado.codigo_canonico !== modeloSelecionado.codigo,
+      modeloSelecionado.codigo_canonico !== modeloSelecionado.codigo,
   );
   const [nome, setNome] = useState('');
   const [tipoSessaoId, setTipoSessaoId] = useState<number | null>(null);
@@ -150,31 +152,23 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
   }, [SORT_STORAGE_KEY]);
 
   const [sortField, setSortFieldState] = useState<SortField>(() => getStoredSort().field);
-  const [sortDirection, setSortDirectionState] = useState<SortDirection>(
-    () => getStoredSort().direction,
-  );
+  const [sortDirection, setSortDirectionState] = useState<SortDirection>(() => getStoredSort().direction);
 
   const setSortField = (field: SortField) => {
     setSortFieldState(field);
     const dir = getStoredSort().direction;
-    try {
-      localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field, direction: dir }));
-    } catch {}
+    try { localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field, direction: dir })); } catch {}
   };
 
   const setSortDirection = (direction: SortDirection) => {
     setSortDirectionState(direction);
-    try {
-      localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field: sortField, direction }));
-    } catch {}
+    try { localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field: sortField, direction })); } catch {}
   };
 
   const setSort = (field: SortField, direction: SortDirection) => {
     setSortFieldState(field);
     setSortDirectionState(direction);
-    try {
-      localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field, direction }));
-    } catch {}
+    try { localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field, direction })); } catch {}
   };
 
   const handleSortClick = (field: SortField) => {
@@ -212,12 +206,10 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
   const carregarQualificacoesTipos = async () => {
     try {
-      const resCats = await fetch(`${API_BASE_URL}/categorias?ativo=1`, {
-        headers: _authH() as Record<string, string>,
-      });
+      const resCats = await fetch(`${API_BASE_URL}/categorias?ativo=1`, { headers: _authH() as Record<string, string> });
       const dataCats = await resCats.json();
       const categorias = Array.isArray(dataCats.data) ? dataCats.data : [];
-
+      
       const catVoo = categorias.find((c: QualificacaoTipo) => c.codigo === 'VOO');
       const catCheck = categorias.find((c: QualificacaoTipo) => c.codigo === 'CHECK');
 
@@ -233,7 +225,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
         });
       };
 
-      const vooUrl = catVoo?.id
+      const vooUrl = catVoo?.id 
         ? `${API_BASE_URL}/qualificacoes/tipos?ativo=1&categoria_id=${catVoo.id}`
         : `${API_BASE_URL}/qualificacoes/tipos?ativo=1&categoria=VOO`;
       const resVoo = await fetch(vooUrl, { headers: _authH() as Record<string, string> });
@@ -249,8 +241,8 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
       const dataCheck = await resCheck.json();
       if (dataCheck.success) {
         const todos: QualificacaoTipo[] = [...(dataVoo.data || []), ...(dataCheck.data || [])];
-        const uniqueTodos = Array.from(new Map(todos.map((item) => [item.id, item])).values());
-
+        const uniqueTodos = Array.from(new Map(todos.map(item => [item.id, item])).values());
+        
         // Usar helper normalizado: aceita is_check=1, is_check=true, categoria='CHECK' (case-insensitive)
         setTiposCheckFAP(sortData(uniqueTodos.filter(isQualificationCheck)));
         // Qualificação principal: tudo que NÃO é check
@@ -403,7 +395,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
       toast.warning('Preencha código e nome do modelo');
       return;
     }
-
+    
     if (geraQualificacao && checksIncompativeis.length > 0) {
       toast.warning('Remova os checks incompatíveis antes de salvar.');
       return;
@@ -482,6 +474,8 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
       toast.error('Erro ao salvar');
     }
   };
+
+
 
   const salvarManobras = async (modeloId: number) => {
     try {
@@ -594,10 +588,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
   const checksIncompativeis = useMemo(() => {
     return checksIdsModelo
       .filter((id) => !checksCompativeis.some((c) => c.id === id))
-      .map(
-        (id) =>
-          tiposCheckFAP.find((c) => c.id === id) || qualificacoesTipos.find((q) => q.id === id),
-      )
+      .map((id) => tiposCheckFAP.find((c) => c.id === id) || qualificacoesTipos.find((q) => q.id === id))
       .filter(Boolean) as QualificacaoTipo[];
   }, [checksIdsModelo, checksCompativeis, tiposCheckFAP, qualificacoesTipos]);
 
@@ -621,13 +612,22 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
           cmp = sortCollator.compare(a.nome, b.nome);
           break;
         case 'dispositivo':
-          cmp = sortCollator.compare(a.tipo || 'SIMULADOR', b.tipo || 'SIMULADOR');
+          cmp = sortCollator.compare(
+            a.tipo || 'SIMULADOR',
+            b.tipo || 'SIMULADOR',
+          );
           break;
         case 'tipo':
-          cmp = sortCollator.compare(a.tipo_sessao_nome || '', b.tipo_sessao_nome || '');
+          cmp = sortCollator.compare(
+            a.tipo_sessao_nome || '',
+            b.tipo_sessao_nome || '',
+          );
           break;
         case 'modelo':
-          cmp = sortCollator.compare(a.modelo_aeronave || '', b.modelo_aeronave || '');
+          cmp = sortCollator.compare(
+            a.modelo_aeronave || '',
+            b.modelo_aeronave || '',
+          );
           break;
         case 'duracao':
           cmp = (a.duracao_estimada || 120) - (b.duracao_estimada || 120);
@@ -639,17 +639,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
       return cmp * dir;
     });
-  }, [
-    modelos,
-    filtroTipoSessao,
-    filtroTipoDispositivo,
-    filtroModeloAeronave,
-    sortField,
-    sortDirection,
-    sortCollator,
-    codeCollator,
-    codigoExibicao,
-  ]);
+  }, [modelos, filtroTipoSessao, filtroTipoDispositivo, filtroModeloAeronave, sortField, sortDirection, sortCollator, codeCollator, codigoExibicao]);
 
   if (loading) {
     return (
@@ -665,16 +655,9 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
             ))}
           </div>
           {[...Array(5)].map((_, i) => (
-            <div
-              key={i}
-              className="px-4 py-3.5 grid grid-cols-8 gap-4 border-b border-gray-100 dark:border-slate-800"
-            >
+            <div key={i} className="px-4 py-3.5 grid grid-cols-8 gap-4 border-b border-gray-100 dark:border-slate-800">
               {[...Array(8)].map((_, j) => (
-                <div
-                  key={j}
-                  className="h-4 rounded bg-slate-100 dark:bg-slate-800"
-                  style={{ width: `${55 + Math.sin(i + j) * 20}%` }}
-                />
+                <div key={j} className="h-4 rounded bg-slate-100 dark:bg-slate-800" style={{ width: `${55 + Math.sin(i + j) * 20}%` }} />
               ))}
             </div>
           ))}
@@ -688,20 +671,13 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
       <div className="flex items-center justify-between">
         <div>
           {embedded && onBack && (
-            <button
-              onClick={onBack}
-              className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-1"
-            >
+            <button onClick={onBack} className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-1">
               <ArrowLeft className="w-3 h-3" />
               Gestão
             </button>
           )}
-          <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">
-            Modelos de Sessão
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-            Configure modelos com suas manobras e ordem
-          </p>
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">Modelos de Sessão</h2>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Configure modelos com suas manobras e ordem</p>
         </div>
         <Button onClick={() => abrirModal()}>
           <Plus className="w-4 h-4 mr-2" />
@@ -713,14 +689,10 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
       <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 p-4 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              Dispositivo
-            </label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Dispositivo</label>
             <select
               value={filtroTipoDispositivo || ''}
-              onChange={(e) =>
-                setFiltroTipoDispositivo((e.target.value as TipoDispositivo) || null)
-              }
+              onChange={(e) => setFiltroTipoDispositivo((e.target.value as TipoDispositivo) || null)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
             >
               <option value="">Todos</option>
@@ -730,9 +702,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              Filtrar por Tipo
-            </label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Filtrar por Tipo</label>
             <select
               value={filtroTipoSessao || ''}
               onChange={(e) => setFiltroTipoSessao(e.target.value ? Number(e.target.value) : null)}
@@ -794,9 +764,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
               {SORTABLE_COLUMNS.map(({ field, label }) => {
                 const isActive = sortField === field;
                 const ariaSort: 'ascending' | 'descending' | 'none' = isActive
-                  ? sortDirection === 'asc'
-                    ? 'ascending'
-                    : 'descending'
+                  ? (sortDirection === 'asc' ? 'ascending' : 'descending')
                   : 'none';
                 return (
                   <th
@@ -834,10 +802,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
             {modelosFiltrados.map((modelo) => {
               const tipoInfo = tiposSessao.find((t) => t.id === modelo.tipo_sessao_id);
               return (
-                <tr
-                  key={modelo.id}
-                  className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors"
-                >
+                <tr key={modelo.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
                   <td className="px-4 py-3.5">
                     <span className="inline-flex items-center whitespace-nowrap px-2 py-1 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-mono rounded">
                       {codigoExibicao(modelo)}
@@ -845,9 +810,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                   </td>
                   <td className="px-4 py-3.5">
                     <div>
-                      <p className="font-medium text-sm text-gray-900 dark:text-slate-100">
-                        {modelo.nome}
-                      </p>
+                      <p className="font-medium text-sm text-gray-900 dark:text-slate-100">{modelo.nome}</p>
                       {modelo.descricao && (
                         <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5 truncate max-w-md">
                           {modelo.descricao}
@@ -879,14 +842,10 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                     )}
                   </td>
                   <td className="px-4 py-3.5">
-                    <span className="text-xs text-gray-600 dark:text-slate-400">
-                      {modelo.modelo_aeronave || '-'}
-                    </span>
+                    <span className="text-xs text-gray-600 dark:text-slate-400">{modelo.modelo_aeronave || '-'}</span>
                   </td>
                   <td className="px-4 py-3.5 text-center">
-                    <span className="text-sm text-gray-900 dark:text-slate-100">
-                      {modelo.duracao_estimada || 120} min
-                    </span>
+                    <span className="text-sm text-gray-900 dark:text-slate-100">{modelo.duracao_estimada || 120} min</span>
                   </td>
                   <td className="px-4 py-3.5 text-center">
                     <span className="inline-flex items-center whitespace-nowrap px-2.5 py-1 bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 text-xs font-semibold rounded">
@@ -942,18 +901,10 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
       {/* Modal Principal */}
       {modalAberto && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in"
-          onClick={() => setModalAberto(false)}
-        >
-          <div
-            className="bg-white dark:bg-slate-900 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto animate-scale-in"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setModalAberto(false)}>
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-900">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                {modoEdicao ? 'Editar' : 'Novo'} Modelo
-              </h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{modoEdicao ? 'Editar' : 'Novo'} Modelo</h3>
             </div>
 
             <div className="p-6 space-y-4">
@@ -964,9 +915,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                    Código <span className="text-red-500">*</span>
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Código <span className="text-red-500">*</span></label>
                   <Input
                     value={codigo}
                     onChange={(e) => setCodigo(e.target.value.toUpperCase())}
@@ -992,9 +941,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                  Nome <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nome <span className="text-red-500">*</span></label>
                 <Input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={200} />
               </div>
 
@@ -1062,9 +1009,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                  Descrição
-                </label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Descrição</label>
                 <textarea
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
                   value={descricao}
@@ -1084,9 +1029,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                   className="w-5 h-5 text-blue-600 bg-white border-gray-300 rounded focus:ring-primary/30"
                 />
                 <label htmlFor="geraQualificacao" className="flex-1 cursor-pointer">
-                  <span className="font-medium text-gray-900 dark:text-slate-100">
-                    Gera Qualificação
-                  </span>
+                  <span className="font-medium text-gray-900 dark:text-slate-100">Gera Qualificação</span>
                   <p className="text-xs text-gray-600 dark:text-slate-400 mt-0.5">
                     Ao finalizar esta sessão, o botão "Gerar Qualificação" será exibido na ficha de
                     avaliação
@@ -1160,9 +1103,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                               <span className="text-xs font-mono bg-green-200 dark:bg-green-500/30 text-green-800 dark:text-green-300 px-1.5 py-0.5 rounded">
                                 {check.codigo}
                               </span>
-                              <span className="text-sm text-green-900 dark:text-green-300 ml-1.5">
-                                {check.nome}
-                              </span>
+                              <span className="text-sm text-green-900 dark:text-green-300 ml-1.5">{check.nome}</span>
                             </div>
                           </label>
                         ))}
@@ -1178,15 +1119,11 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                             Atenção: Checks Incompatíveis Detectados
                           </label>
                           <p className="text-xs text-red-700 dark:text-red-400 mb-2">
-                            O modelo de aeronave selecionado ({tipoAeronave}) não é compatível com
-                            os seguintes checks já vinculados:
+                            O modelo de aeronave selecionado ({tipoAeronave}) não é compatível com os seguintes checks já vinculados:
                           </p>
                           <div className="flex flex-wrap gap-2 mb-3">
                             {checksIncompativeis.map((check) => (
-                              <span
-                                key={check.id}
-                                className="text-xs font-mono bg-red-200 dark:bg-red-500/30 text-red-800 dark:text-red-300 px-1.5 py-0.5 rounded"
-                              >
+                              <span key={check.id} className="text-xs font-mono bg-red-200 dark:bg-red-500/30 text-red-800 dark:text-red-300 px-1.5 py-0.5 rounded">
                                 {check.codigo}
                               </span>
                             ))}
@@ -1227,9 +1164,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                         key={m.manobra_id}
                         className="flex items-center gap-2 bg-gray-50 dark:bg-slate-800 p-2 rounded border border-gray-200 dark:border-slate-700"
                       >
-                        <span className="text-xs font-mono text-gray-500 dark:text-slate-400 w-6">
-                          {m.ordem}
-                        </span>
+                        <span className="text-xs font-mono text-gray-500 dark:text-slate-400 w-6">{m.ordem}</span>
                         <span className="text-xs font-mono bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 px-1.5 py-0.5 rounded shrink-0">
                           {m.manobra_codigo}
                         </span>
@@ -1305,18 +1240,10 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
 
       {/* Modal Manobras */}
       {modalManobras && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 animate-fade-in"
-          onClick={() => setModalManobras(false)}
-        >
-          <div
-            className="bg-white dark:bg-slate-900 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col animate-scale-in"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 animate-fade-in" onClick={() => setModalManobras(false)}>
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 dark:border-slate-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                Adicionar Manobras
-              </h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Adicionar Manobras</h3>
             </div>
 
             <div className="p-6 space-y-4 flex-1 overflow-y-auto">
@@ -1343,9 +1270,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                       <span className="font-mono text-xs bg-gray-200 dark:bg-slate-700 px-2 py-0.5 rounded text-gray-800 dark:text-slate-300">
                         {m.codigo}
                       </span>
-                      <p className="text-sm mt-1 text-gray-900 dark:text-slate-100">
-                        {m.nome || m.descricao}
-                      </p>
+                      <p className="text-sm mt-1 text-gray-900 dark:text-slate-100">{m.nome || m.descricao}</p>
                     </button>
                   );
                 })}

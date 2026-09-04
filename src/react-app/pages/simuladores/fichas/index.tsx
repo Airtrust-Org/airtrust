@@ -175,10 +175,7 @@ interface FichasAvaliacaoContentProps {
   mode?: FichasViewMode;
 }
 
-const FICHAS_VIEW_COPY: Record<
-  Exclude<FichasViewMode, 'all'>,
-  { title: string; subtitle: string }
-> = {
+const FICHAS_VIEW_COPY: Record<Exclude<FichasViewMode, 'all'>, { title: string; subtitle: string }> = {
   minhas: {
     title: 'Minhas Fichas de Treinamento de Voo',
     subtitle: 'Consulte e assine suas próprias fichas como participante.',
@@ -343,8 +340,9 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
           ...modelo,
           total_manobras: Number(modelo.total_manobras || 0),
         }))
-        .sort((a: ModeloSessaoResumo, b: ModeloSessaoResumo) =>
-          `${a.codigo} ${a.nome}`.localeCompare(`${b.codigo} ${b.nome}`, 'pt-BR'),
+        .sort(
+          (a: ModeloSessaoResumo, b: ModeloSessaoResumo) =>
+            `${a.codigo} ${a.nome}`.localeCompare(`${b.codigo} ${b.nome}`, 'pt-BR'),
         );
       setModelosSessao(modelosOrdenados);
     } catch (error) {
@@ -458,9 +456,7 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
 
       if (gerados > 0) {
         mensagens.push(
-          gerados === 1
-            ? '1 ficha modelo gerada com sucesso.'
-            : `${gerados} fichas modelo geradas com sucesso.`,
+          gerados === 1 ? '1 ficha modelo gerada com sucesso.' : `${gerados} fichas modelo geradas com sucesso.`,
         );
         mensagens.push(previewPolicyMessage);
       }
@@ -928,17 +924,13 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
           <ChevronUp
             size={12}
             className={`-mb-1 transition-colors duration-200 ${
-              isActive && sortDirection === 'asc'
-                ? 'text-blue-600 scale-110'
-                : 'text-gray-300 group-hover:text-gray-400'
+              isActive && sortDirection === 'asc' ? 'text-blue-600 scale-110' : 'text-gray-300 group-hover:text-gray-400'
             }`}
           />
           <ChevronDown
             size={12}
             className={`transition-colors duration-200 ${
-              isActive && sortDirection === 'desc'
-                ? 'text-blue-600 scale-110'
-                : 'text-gray-300 group-hover:text-gray-400'
+              isActive && sortDirection === 'desc' ? 'text-blue-600 scale-110' : 'text-gray-300 group-hover:text-gray-400'
             }`}
           />
         </span>
@@ -990,26 +982,24 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
           currentUser?.funcionario_id != null &&
           ficha.colaborador_id_aluno != null &&
           Number(currentUser.funcionario_id) === Number(ficha.colaborador_id_aluno) && (
-            <button
-              onClick={() => handleAssinar(ficha.id, 'TRIPULANTE')}
-              className={`${baseActionClass} bg-primary text-white hover:bg-primary/90 ${compact ? 'flex-1' : ''}`}
-            >
-              <PenTool size={14} />
-              Assinar (Aluno)
-            </button>
-          )}
+          <button
+            onClick={() => handleAssinar(ficha.id, 'TRIPULANTE')}
+            className={`${baseActionClass} bg-primary text-white hover:bg-primary/90 ${compact ? 'flex-1' : ''}`}
+          >
+            <PenTool size={14} />
+            Assinar (Aluno)
+          </button>
+        )}
 
         {ficha.status === 'AGUARDANDO_ASSINATURA_ALUNO' &&
           (isParaAvaliarMode ||
             currentUser?.funcionario_id == null ||
             ficha.colaborador_id_aluno == null ||
             Number(currentUser.funcionario_id) !== Number(ficha.colaborador_id_aluno)) && (
-            <span
-              className={`${baseActionClass} text-blue-700 bg-blue-50 border border-blue-200 ${compact ? 'flex-1' : ''}`}
-            >
-              Aguardando assinatura do aluno
-            </span>
-          )}
+          <span className={`${baseActionClass} text-blue-700 bg-blue-50 border border-blue-200 ${compact ? 'flex-1' : ''}`}>
+            Aguardando assinatura do aluno
+          </span>
+        )}
 
         {ficha.status === 'AGUARDANDO_ASSINATURA_INSTRUTOR' && showInstrutorActions && (
           <button
@@ -1067,7 +1057,9 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
       <div className="space-y-4 animate-fade-in-up">
         {mode !== 'all' && (
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">{FICHAS_VIEW_COPY[mode].title}</h1>
+            <h1 className="text-xl font-semibold text-gray-900">
+              {FICHAS_VIEW_COPY[mode].title}
+            </h1>
             <p className="mt-1 text-sm text-gray-500">{FICHAS_VIEW_COPY[mode].subtitle}</p>
           </div>
         )}
@@ -1232,11 +1224,7 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
             <div className="hidden lg:block">
               <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 grid grid-cols-6 gap-4">
                 {[...Array(6)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="skeleton h-4 rounded"
-                    style={{ width: `${60 + Math.random() * 40}%` }}
-                  />
+                  <div key={i} className="skeleton h-4 rounded" style={{ width: `${60 + Math.random() * 40}%` }} />
                 ))}
               </div>
               {/* Skeleton Rows */}
@@ -1424,8 +1412,7 @@ export function FichasAvaliacaoContent({ mode = 'all' }: FichasAvaliacaoContentP
                     const isFichaEspecial =
                       ficha.tipo_sessao === 'TRE-INST' || ficha.tipo_sessao === 'CRED-EXA';
                     const rowClassName = 'hover:bg-gray-50/80 transition-colors duration-150';
-                    const stickyCellClassName =
-                      'sticky left-0 z-10 bg-white group-hover:bg-gray-50/80 transition-colors duration-150';
+                    const stickyCellClassName = 'sticky left-0 z-10 bg-white group-hover:bg-gray-50/80 transition-colors duration-150';
 
                     return (
                       <tr key={ficha.id} className={`${rowClassName} group`}>

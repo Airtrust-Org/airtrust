@@ -9,8 +9,8 @@ import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import { SimuladoresCard, EmptyState } from '../../components/SimuladoresLayout';
 import { Plus, Users, Trash2 } from 'lucide-react';
-import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 
 interface Instrutor {
   id: number;

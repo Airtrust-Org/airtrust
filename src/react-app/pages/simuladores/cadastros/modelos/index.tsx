@@ -7,11 +7,11 @@
 
 import { useEffect, useState } from 'react';
 import { ArrowLeft, FileText, Link, List, Plus, Trash2 } from 'lucide-react';
+import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 import { toast } from 'sonner';
 
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog';
-import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 
 import ImportarRelacoesInteligente from '../../components/ImportarRelacoes';
 import { Badge, EmptyState, SimuladoresCard } from '../../components/SimuladoresLayout';
@@ -746,17 +746,12 @@ export default function CrudModelos({ onBack }: Props = {}) {
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
-                      <RowActionsMenu
-                        label={`Mais ações para manobra ${manobra.codigo}`}
-                        actions={[
-                          {
-                            label: 'Remover manobra',
-                            destructive: true,
-                            icon: Trash2,
-                            onSelect: () => removerManobra(manobra.id),
-                          },
-                        ]}
-                      />
+                      <button
+                        onClick={() => removerManobra(manobra.id)}
+                        className="font-medium text-red-600 hover:text-red-800"
+                      >
+                        Remover
+                      </button>
                     </td>
                   </tr>
                 ))}
