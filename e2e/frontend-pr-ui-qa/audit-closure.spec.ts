@@ -272,10 +272,10 @@ test.describe('audit-closure governed staging profile', () => {
   test.beforeEach(async ({ page }, testInfo) => {
     const sanitizeDiagnostic = (value: string) =>
       value
-        .replace(/Bearer\\s+\\S+/gi, 'Bearer [REDACTED]')
-        .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi, '[EMAIL]')
+        .replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
+        .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[EMAIL]')
         .replace(/eyJ[A-Za-z0-9._-]+/g, '[TOKEN]')
-        .replace(/https?:\\/\\/[^\\s)]+/g, '[URL]')
+        .replace(/https?:\/\/[^\s)]+/g, '[URL]')
         .slice(0, 800);
 
     page.on('pageerror', (error) => {
