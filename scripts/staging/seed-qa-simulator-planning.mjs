@@ -239,6 +239,35 @@ SET nome = 'QA Planejamento Persistente — Sessão 1',
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND codigo = ${e(PLANNING_MODEL_CODE)};
 
+-- Contrato 0440: quando o versionamento existe, as APIs de modelos e o
+-- planejador só enxergam versões correntes. O modelo físico isolado não basta.
+INSERT OR IGNORE INTO modelos_sessao_versionamento (
+  modelo_id, empresa_id, codigo_canonico, versao_numero,
+  versao_matriz, is_current, modelo_anterior_id, efetivo_em, efetivo_ate,
+  created_at, updated_at
+)
+SELECT
+  ms.id,
+  ms.empresa_id,
+  ${e(PLANNING_MODEL_CODE)},
+  1,
+  'QA_SIMULATOR_PLANNING',
+  1,
+  NULL,
+  datetime('now'),
+  NULL,
+  datetime('now'),
+  datetime('now')
+FROM modelos_sessao ms
+WHERE ms.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND ms.codigo = ${e(PLANNING_MODEL_CODE)}
+  AND ms.deleted_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1
+    FROM modelos_sessao_versionamento msv
+    WHERE msv.modelo_id = ms.id
+  );
+
 -- Dois históricos QA com o mesmo vencimento para formar uma dupla real.
 INSERT INTO qualificacoes_historico (
   funcionario_id, qualificacao_id, qualificacao_codigo,
@@ -407,6 +436,7 @@ CREATE TABLE IF NOT EXISTS _qa_sim_planning_post_guard (
   category_count INTEGER NOT NULL CHECK (category_count = 1),
   qualification_count INTEGER NOT NULL CHECK (qualification_count = 1),
   model_count INTEGER NOT NULL CHECK (model_count = 1),
+  model_version_count INTEGER NOT NULL CHECK (model_version_count = 1),
   history_count INTEGER NOT NULL CHECK (history_count = 2),
   allocation_count INTEGER NOT NULL CHECK (allocation_count = 2),
   config_count INTEGER NOT NULL CHECK (config_count = 1)
@@ -414,7 +444,7 @@ CREATE TABLE IF NOT EXISTS _qa_sim_planning_post_guard (
 DELETE FROM _qa_sim_planning_post_guard;
 INSERT INTO _qa_sim_planning_post_guard (
   tenant_count, category_count, qualification_count, model_count,
-  history_count, allocation_count, config_count
+  model_version_count, history_count, allocation_count, config_count
 )
 SELECT
   (SELECT COUNT(*) FROM empresas
@@ -439,6 +469,18 @@ SELECT
         LIMIT 1
       )
       AND deleted_at IS NULL),
+  (SELECT COUNT(*)
+   FROM modelos_sessao_versionamento msv
+   JOIN modelos_sessao ms
+     ON ms.id = msv.modelo_id
+    AND ms.empresa_id = msv.empresa_id
+   WHERE ms.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+     AND ms.codigo = ${e(PLANNING_MODEL_CODE)}
+     AND ms.deleted_at IS NULL
+     AND msv.codigo_canonico = ${e(PLANNING_MODEL_CODE)}
+     AND msv.versao_matriz = 'QA_SIMULATOR_PLANNING'
+     AND msv.is_current = 1
+     AND msv.efetivo_ate IS NULL),
   (SELECT COUNT(*) FROM qualificacoes_historico
     WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
       AND observacoes = ${e(PLANNING_MARKER)}
@@ -489,6 +531,17 @@ SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND observacoes = ${e(PLANNING_MARKER)}
   AND deleted_at IS NULL;
+
+DELETE FROM modelos_sessao_versionamento
+WHERE modelo_id IN (
+  SELECT id
+  FROM modelos_sessao
+  WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+    AND codigo = ${e(PLANNING_MODEL_CODE)}
+)
+  AND empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND codigo_canonico = ${e(PLANNING_MODEL_CODE)}
+  AND versao_matriz = 'QA_SIMULATOR_PLANNING';
 
 UPDATE modelos_sessao
 SET deleted_at = datetime('now'), updated_at = datetime('now')
