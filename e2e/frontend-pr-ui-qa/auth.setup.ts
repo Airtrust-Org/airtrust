@@ -15,8 +15,12 @@ import { test as setup, expect } from '@playwright/test';
 import { AUTH_FILE } from '../frontend-pr-ui-qa.config';
 import { resolveCredentialPair } from '../lib/credential-pair.mjs';
 import { assertLiveFrontendShaFromPage } from '../lib/live-sha-guard.mjs';
+import { installReadOnlyGuard } from '../lib/read-only-network-guard.mjs';
 
 setup('real staging login', async ({ page }) => {
+  // Guard the authentication phase too: otherwise an initial navigation could
+  // reach a production host before the post-auth specs install their guards.
+  const guard = installReadOnlyGuard(page);
   const { email, password, profile } = resolveCredentialPair(process.env);
   const releaseShortSha = String(process.env.RELEASE_SHA || '')
     .toLowerCase()
@@ -52,6 +56,8 @@ setup('real staging login', async ({ page }) => {
     loginRequests.some((p) => p.includes('/api/auth/')),
     'no real POST /api/auth/* observed during login',
   ).toBeTruthy();
+
+  guard.assertClean();
 
   // eslint-disable-next-line no-console
   console.log(`[frontend-pr-ui-qa] authenticated with the ${profile} credential pair`);

@@ -1,14 +1,16 @@
 /**
  * audit_profile = "destructive-actions"  —  scoped to the REAL delta of PR #282.
  *
- * PR #282 modifies exactly three runtime files:
+ * PR #282 changes these runtime files:
  *   - src/react-app/components/UI/DataTable.tsx      (shared DataTable + RowActionsMenu wiring)
  *   - src/react-app/components/UI/RowActionsMenu.tsx (the menu primitive)
  *   - src/react-app/pages/funcionarios/ListaDocumentos.tsx (RowActionsMenu on document rows)
+ * Its remaining changed files are component/unit-test support, not further
+ * browser runtime surfaces.
  *
  * Independent inventory of the #282 tree (see PR description):
  *   - The shared UI/DataTable has NO active runtime consumer passing `onDelete`
- *     (only barrel re-exports; Qualificacoes.tsx uses a different DataTable).
+ *     (Qualificacoes.tsx imports a different DataTable).
  *     => recorded as DATATABLE_RUNTIME_NOT_APPLICABLE_NO_ACTIVE_CONSUMER,
  *        NOT counted as a tested visual surface.
  *   - RowActionsMenu's only importer is ListaDocumentos, reached from the
@@ -115,10 +117,14 @@ async function withinViewport(locator: Locator): Promise<boolean> {
  * return the ListaDocumentos RowActionsMenu trigger locator if it is really
  * reachable at runtime on this #282-only staging frontend.
  */
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 async function reachDocumentsRowActionsMenu(
   page: Page,
   where: string,
-): Promise<{ trigger: Locator; syntheticRow: boolean } | null> {
+): Promise<{ trigger: Locator; download: Locator; fixtureName: string } | null> {
   await page.goto('/funcionarios', { waitUntil: 'domcontentloaded' });
   if (RELEASE_SHORT_SHA)
     await assertLiveFrontendShaFromPage(page, RELEASE_SHORT_SHA, `${where}:funcionarios`);
@@ -148,12 +154,27 @@ async function reachDocumentsRowActionsMenu(
     }
   }
 
-  // ListaDocumentos renders: aria-label="Mais ações para <arquivo>"
-  const trigger = page.getByRole('button', { name: /^mais ações para /i }).first();
-  if ((await trigger.count()) === 0) return null;
+  // ListaDocumentos renders one named trigger and one named direct-download
+  // control per file. Select a fixture only when both controls name the SAME
+  // synthetic filename; page-wide synthetic text is not sufficient.
+  const textCandidates = await page.locator('p').allTextContents();
+  for (const rawName of textCandidates) {
+    const fixtureName = rawName.trim();
+    if (!fixtureName || !SYNTHETIC_DOC_PATTERN.test(fixtureName)) continue;
 
-  const syntheticRow = (await page.getByText(SYNTHETIC_DOC_PATTERN).count()) > 0;
-  return { trigger, syntheticRow };
+    const escapedName = escapeRegExp(fixtureName);
+    const trigger = page.getByRole('button', {
+      name: new RegExp(`^mais ações para ${escapedName}$`, 'i'),
+    });
+    const download = page.getByRole('button', {
+      name: new RegExp(`^baixar ${escapedName}$`, 'i'),
+    });
+    if ((await trigger.count()) === 1 && (await download.count()) === 1) {
+      return { trigger, download, fixtureName };
+    }
+  }
+
+  return null;
 }
 
 test.describe('destructive-actions profile (PR #282 real delta)', () => {
@@ -190,8 +211,23 @@ test.describe('destructive-actions profile (PR #282 real delta)', () => {
         await setTheme(page, theme);
         await assertNoHorizontalOverflow(page, `Documentos @ ${viewport.key}/${theme}`);
 
-        if (reached && reached.syntheticRow) {
+        if (reached) {
           await reached.trigger.scrollIntoViewIfNeeded();
+
+          // Download is a direct, named UI control on the same synthetic row.
+          // It is read-only; the guard still records and blocks any mutation.
+          if (viewport.key === 'desktop' && theme === 'light') {
+            const downloadResponse = page.waitForResponse(
+              (response) =>
+                response.request().method() === 'GET' &&
+                /\/api\/documentos\/[^/]+\/download(?:\?|$)/.test(response.url()),
+              { timeout: 20_000 },
+            );
+            await reached.download.click();
+            expect((await downloadResponse).ok(), `download failed for ${reached.fixtureName}`).toBe(
+              true,
+            );
+          }
 
           // Destructive control must NOT be a permanently visible button.
           const bareDestructive = page.getByRole('button', {
@@ -226,20 +262,12 @@ test.describe('destructive-actions profile (PR #282 real delta)', () => {
           (results.real_surfaces_exercised as number) === 0 &&
             (results.real_surfaces_exercised = 1);
           results.documents = 'PASS';
-        } else if (reached) {
-          // Menu reachable but no SAFE synthetic document row exists.
-          results.documents = 'FIXTURE_NOT_AVAILABLE';
-          test.info().annotations.push({
-            type: 'note',
-            description:
-              'DOCUMENT_DELETE_FIXTURE_NOT_AVAILABLE (no synthetic row; nothing created)',
-          });
         } else {
           results.documents = 'FIXTURE_NOT_AVAILABLE';
           test.info().annotations.push({
             type: 'note',
             description:
-              'LISTADOCUMENTOS_ROWACTIONSMENU_NOT_REACHABLE on #282-only staging (AbaDocumentos not wired)',
+              'DOCUMENT_DELETE_FIXTURE_NOT_AVAILABLE (no safe synthetic document row; nothing created)',
           });
         }
 
@@ -279,7 +307,7 @@ test.describe('destructive-actions profile (PR #282 real delta)', () => {
       test.info().annotations.push({
         type: 'note',
         description:
-          'A11Y_CONTRACT_SKIPPED: RowActionsMenu from #282 not reachable at runtime on #282-only staging',
+          'A11Y_CONTRACT_SKIPPED: DOCUMENT_DELETE_FIXTURE_NOT_AVAILABLE',
       });
       guard.assertClean();
       return;
@@ -291,8 +319,8 @@ test.describe('destructive-actions profile (PR #282 real delta)', () => {
     // Touch target — computed runtime size, not CSS class inspection.
     const box = await trigger.boundingBox();
     expect(box, 'trigger has no box').not.toBeNull();
-    expect(box!.width, 'trigger width < 44').toBeGreaterThanOrEqual(40);
-    expect(box!.height, 'trigger height < 44').toBeGreaterThanOrEqual(40);
+    expect(box!.width, 'trigger width < 44').toBeGreaterThanOrEqual(44);
+    expect(box!.height, 'trigger height < 44').toBeGreaterThanOrEqual(44);
 
     const menu = page.getByRole('menu');
 
@@ -329,11 +357,10 @@ test.describe('destructive-actions profile (PR #282 real delta)', () => {
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: /cancelar/i }).click();
     await expect(dialog).toBeHidden();
-    const active = await page.evaluate(() => ({
-      tag: document.activeElement?.tagName ?? null,
-      inBody: document.activeElement !== null && document.activeElement !== document.body,
-    }));
-    expect(active.tag, 'focus lost after closing the confirmation').not.toBeNull();
+    expect(
+      await trigger.evaluate((el) => el === document.activeElement),
+      'focus did not return to the trigger after closing the confirmation',
+    ).toBeTruthy();
 
     (results.real_surfaces_exercised as number) === 0 && (results.real_surfaces_exercised = 1);
     results.documents = 'PASS';

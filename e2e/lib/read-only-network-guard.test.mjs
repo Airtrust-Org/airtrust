@@ -25,6 +25,12 @@ test('GET to a production host is blocked (host checked before method)', () => {
   assert.match(r.reason, /production-host:GET/);
 });
 
+test('an unparseable request URL is blocked fail-closed', () => {
+  const r = classifyRequest({ method: 'GET', url: 'not a URL' });
+  assert.equal(r.decision, 'block');
+  assert.match(r.reason, /request-host-unparseable:GET/);
+});
+
 test('HEAD to a production host is blocked', () => {
   const r = classifyRequest({ method: 'HEAD', url: `${PROD_PAGES}/` });
   assert.equal(r.decision, 'block');

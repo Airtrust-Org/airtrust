@@ -70,6 +70,13 @@ export function classifyRequest({ method, url }) {
   const host = hostnameOf(url);
   const pathname = pathnameOf(url);
 
+  // A request URL without a resolvable host cannot be proved to target staging.
+  // Keep the guard fail-closed even though Playwright normally provides absolute
+  // URLs here.
+  if (!host) {
+    return { decision: 'block', reason: `request-host-unparseable:${upper}` };
+  }
+
   // 1. Production host — blocked for EVERY method, before anything else.
   if (isProductionHost(host)) {
     return { decision: 'block', reason: `production-host:${upper}:${host}` };
