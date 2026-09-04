@@ -127,10 +127,14 @@ test('canonical staging QA-space fixture names are accepted without widening mid
 });
 
 
-test('auth setup pins the admin session through the real canonical QA company selector', () => {
-  assert.match(authSetup, /AirTrust Staging Examiner QA/);
+test('auth setup resolves the canonical QA tenant from real /api/auth/empresas before requiring a selector', () => {
+  assert.match(authSetup, /GET \/api\/auth\/empresas/);
+  assert.match(authSetup, /codigo === 'qa_examiner_training'/);
   assert.match(authSetup, /QA_EXAMINER_TENANT_NOT_AVAILABLE/);
+  assert.match(authSetup, /currentCompanyId !== qaCompanyId/);
   assert.match(authSetup, /companySelect\.selectOption/);
+  assert.match(authSetup, /QA_EXAMINER_TENANT_SWITCH_NOT_CONFIRMED/);
+  assert.match(authSetup, /canonical QA tenant already current/);
   assert.match(authSetup, /qa-tenant-selected/);
   assert.doesNotMatch(authSetup, /localStorage\.setItem\(/);
   assert.doesNotMatch(authSetup, /sessionStorage\.setItem\(/);
