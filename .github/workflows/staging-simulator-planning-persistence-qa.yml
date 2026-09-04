@@ -111,6 +111,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CONFIRM_STAGING_QA_SEED: AIRTRUST_STAGING_QA_SEED
+      CONFIRM_STAGING_SIMULATOR_PLANNING_QA_SEED: AIRTRUST_STAGING_SIMULATOR_PLANNING_QA_SEED
     steps:
       - uses: actions/checkout@v4
 
@@ -132,11 +133,17 @@ jobs:
           npm ci
           npm --prefix worker-airtrust ci
 
-      - name: Validate synthetic simulator planning fixture in dry-run mode
+      - name: Validate canonical examiner fixture in dry-run mode
         run: node scripts/staging/seed-qa-examiner-training.mjs
 
-      - name: Provision only synthetic simulator/examiner QA tenant
+      - name: Provision canonical synthetic examiner tenant
         run: node scripts/staging/seed-qa-examiner-training.mjs --apply
+
+      - name: Validate isolated simulator-planning fixture in dry-run mode
+        run: node scripts/staging/seed-qa-simulator-planning.mjs
+
+      - name: Provision only synthetic simulator-planning data
+        run: node scripts/staging/seed-qa-simulator-planning.mjs --apply
 
   qa:
     name: Persistent CAE Planning Runtime QA
