@@ -40,6 +40,7 @@ on:
         type: choice
         options:
           - destructive-actions
+          - audit-closure
 
 concurrency:
   group: staging-frontend-pr-ui-qa
@@ -93,6 +94,7 @@ jobs:
             e2e/frontend-pr-ui-qa.config.ts \
             e2e/frontend-pr-ui-qa/auth.setup.ts \
             e2e/frontend-pr-ui-qa/destructive-actions.spec.ts \
+            e2e/frontend-pr-ui-qa/audit-closure.spec.ts \
             e2e/lib/read-only-network-guard.mjs \
             e2e/lib/live-sha-guard.mjs \
             e2e/lib/credential-pair.mjs \
