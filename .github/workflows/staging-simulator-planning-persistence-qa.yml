@@ -1,0 +1,244 @@
+name: Staging Simulator Planning Persistence QA
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_STAGING_SIMULATOR_PLANNING_QA to continue'
+        required: true
+        type: string
+      release_sha:
+        description: 'Exact already-deployed staging release SHA to validate'
+        required: true
+        type: string
+
+concurrency:
+  group: staging-simulator-planning-persistence-qa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+  statuses: read
+  checks: read
+  pull-requests: read
+
+env:
+  NODE_VERSION: '24'
+  STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+  STAGING_FRONTEND_BASE_URL: https://staging.airtrust.pages.dev
+  STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+  QA_SIMULATOR_STATE_PATH: test-results/staging-simulator-planning/state.json
+
+jobs:
+  guard:
+    name: Staging Simulator Planning QA Guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate trusted-main dispatch
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          EVENT_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$EVENT_REF" == 'refs/heads/main' ]] || { echo 'MAIN_ONLY' >&2; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_STAGING_SIMULATOR_PLANNING_QA' ]] || { echo 'CONFIRMATION_REJECTED' >&2; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo 'RELEASE_SHA_INVALID' >&2; exit 1; }
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require deployed release to be an ancestor of trusted main
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          git cat-file -e "$RELEASE_SHA^{commit}"
+          git merge-base --is-ancestor "$RELEASE_SHA" HEAD
+          echo "TRUSTED_RELEASE_ANCESTRY_OK=$RELEASE_SHA"
+
+      - name: Require canonical release gates for deployed SHA
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          node scripts/ci/verify-release-gates.mjs
+
+      - name: Require live Worker and frontend provenance
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const expected = String(process.env.RELEASE_SHA || '').toLowerCase();
+
+          const versionResponse = await fetch(`${process.env.STAGING_API_BASE_URL}/api/version`, {
+            headers: { Accept: 'application/json' },
+          });
+          if (!versionResponse.ok) throw new Error(`STAGING_VERSION_HTTP_${versionResponse.status}`);
+          const version = await versionResponse.json();
+          const sourceSha = String(version?.sourceSha ?? version?.data?.sourceSha ?? '').toLowerCase();
+          if (sourceSha !== expected) {
+            throw new Error(`STAGING_WORKER_SHA_MISMATCH:${sourceSha || 'missing'}`);
+          }
+
+          const { assertLiveFrontendShaFromOrigin } = await import('./e2e/lib/live-sha-guard.mjs');
+          await assertLiveFrontendShaFromOrigin(
+            process.env.STAGING_FRONTEND_BASE_URL,
+            expected.slice(0, 7),
+          );
+
+          console.log(`STAGING_SIMULATOR_PROVENANCE_SHA=${expected}`);
+          NODE
+
+  d1-provision-simulator-planning-fixture:
+    name: Staging D1 Provision Synthetic Simulator Planning Fixture
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+      QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
+      QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD || secrets.STAGING_SMOKE_PASSWORD }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CONFIRM_STAGING_QA_SEED: AIRTRUST_STAGING_QA_SEED
+      CONFIRM_STAGING_SIMULATOR_PLANNING_QA_SEED: AIRTRUST_STAGING_SIMULATOR_PLANNING_QA_SEED
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Require governed staging D1 credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$QA_EXAMINER_ADMIN_PASSWORD" ]] || { echo 'QA_EXAMINER_ADMIN_PASSWORD_MISSING' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo 'STAGING_D1_TOKEN_MISSING' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
+
+      - name: Install fixture dependencies
+        run: |
+          npm ci
+          npm --prefix worker-airtrust ci
+
+      - name: Validate canonical examiner fixture in dry-run mode
+        run: node scripts/staging/seed-qa-examiner-training.mjs
+
+      - name: Provision canonical synthetic examiner tenant
+        run: node scripts/staging/seed-qa-examiner-training.mjs --apply
+
+      - name: Validate isolated simulator-planning fixture in dry-run mode
+        run: node scripts/staging/seed-qa-simulator-planning.mjs
+
+      - name: Provision only synthetic simulator-planning data
+        run: node scripts/staging/seed-qa-simulator-planning.mjs --apply
+
+  qa:
+    name: Persistent CAE Planning Runtime QA
+    needs: [guard, d1-provision-simulator-planning-fixture]
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 30
+    env:
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      QA_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
+      QA_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD || secrets.STAGING_SMOKE_PASSWORD }}
+      QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
+      QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD || secrets.STAGING_SMOKE_PASSWORD }}
+      STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+      STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      E2E_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      AUDIT_PROFILE: simulator-planning
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Require staging-only QA credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$QA_EXAMINER_ADMIN_PASSWORD" ]] || { echo 'QA_EXAMINER_ADMIN_PASSWORD_MISSING' >&2; exit 1; }
+          [[ -n "$STAGING_SMOKE_PASSWORD" ]] || { echo 'STAGING_SMOKE_PASSWORD_MISSING' >&2; exit 1; }
+
+      - name: Install QA dependencies
+        run: npm ci
+
+      - name: Generate, persist, resume and reconcile CAE planning
+        run: node scripts/staging/smoke-simulator-planning-persistence.mjs
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Resume persisted planning in real UI and generate PDF
+        run: npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium
+
+      - name: Publish sanitized simulator QA summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '## Simulator planning persistence staging QA'
+            echo ''
+            echo '- exact Worker/frontend release provenance: PASS'
+            echo '- synthetic AW139 proposal generation: PASS'
+            echo '- manual crew lock + recalculation: PASS'
+            echo '- AGUARDANDO_CAE persistence and reopen: PASS'
+            echo '- CAE_RECEBIDA persistence: PASS'
+            echo '- CAE comparison and PLANEJADO/REPLANEJAR transition: PASS'
+            echo '- final persisted reopen/list: PASS'
+            echo '- cross-tenant draft lookup: 404'
+            echo '- real browser resume: PASS'
+            echo '- client PDF generation/download: PASS'
+            echo '- production target/data used: no'
+            echo '- credentials emitted: no'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-simulator-planning-qa-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results/staging-simulator-planning
+            test-results/frontend-pr-ui-qa/results.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  result:
+    name: Staging Simulator Planning Persistence QA Passed
+    needs: [guard, d1-provision-simulator-planning-fixture, qa]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require governed simulator QA
+        shell: bash
+        env:
+          GUARD: ${{ needs.guard.result }}
+          FIXTURE: ${{ needs.d1-provision-simulator-planning-fixture.result }}
+          QA: ${{ needs.qa.result }}
+        run: |
+          set -euo pipefail
+          echo "guard=$GUARD fixture=$FIXTURE qa=$QA"
+          [[ "$GUARD" == 'success' ]]
+          [[ "$FIXTURE" == 'success' ]]
+          [[ "$QA" == 'success' ]]
+          echo 'STAGING_SIMULATOR_PLANNING_PERSISTENCE_QA_PASS'

@@ -45,7 +45,11 @@ function resolveFrontendBaseUrl(): string {
 const AUTH_FILE = 'e2e/.auth/frontend-pr-ui-qa.json';
 const AUDIT_PROFILE = String(process.env.AUDIT_PROFILE || 'destructive-actions');
 const PROFILE_TEST_MATCH =
-  AUDIT_PROFILE === 'audit-closure' ? /audit-closure\.spec\.ts$/ : /destructive-actions\.spec\.ts$/;
+  AUDIT_PROFILE === 'audit-closure'
+    ? /audit-closure\.spec\.ts$/
+    : AUDIT_PROFILE === 'simulator-planning'
+      ? /simulator-planning-persistence\.spec\.ts$/
+      : /destructive-actions\.spec\.ts$/;
 
 export default defineConfig({
   testDir: './frontend-pr-ui-qa',

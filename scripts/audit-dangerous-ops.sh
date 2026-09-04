@@ -110,6 +110,7 @@ self_protected_files=(
   "scripts/staging/apply-approved-migrations.sh"
   "scripts/staging/validate-0424-postconditions.sh"
   "scripts/staging/seed-qa-examiner-training.mjs"
+  "scripts/staging/seed-qa-simulator-planning.mjs"
   # Reviewed 2026-07-18 (AIRTRUST_PRODUCTION_READINESS_20260718):
   # - .github/workflows/apply-schema-change-v2.yml: manual workflow_dispatch
   #   only, environment: production (GitHub environment protection), requires
@@ -302,6 +303,15 @@ AIRTRUST_STAGING_QA_SEED
 CONFIRM_STAGING_QA_SEED
 EOF
       ;;
+    "scripts/staging/seed-qa-simulator-planning.mjs")
+      cat <<'EOF'
+BLOCKED_D1_NAMES
+validateD1Target
+AIRTRUST_STAGING_SIMULATOR_PLANNING_QA_SEED
+CONFIRM_STAGING_SIMULATOR_PLANNING_QA_SEED
+airtrust-db-staging-baseline-20260701
+EOF
+      ;;
     ".github/workflows/apply-schema-change-v2.yml")
       cat <<'EOF'
 PRODUCTION_CONFIRMATION: AIRTRUST_PRODUCTION
@@ -469,6 +479,9 @@ self_protected_pin() {
       ;;
     "scripts/staging/seed-qa-examiner-training.mjs")
       echo "2ded4dd62b005f00d0ff9b69a4e2632ef3a9f250226e797535629e5a51bf54e6"
+      ;;
+    "scripts/staging/seed-qa-simulator-planning.mjs")
+      echo "202d8f5fa26fef461f695c45a43495c79b31c5ace2a9caa2af43c651a10b03ee"
       ;;
     ".github/workflows/apply-schema-change-v2.yml")
       echo "21c520eb487e6b9142b3c7508ab5aaaa529652ea01be62b10778bc73803e4b59"
