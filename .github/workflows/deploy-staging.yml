@@ -884,7 +884,7 @@ jobs:
             exit 1
           fi
       - name: Deploy Pages (staging preview branch)
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
         with:
