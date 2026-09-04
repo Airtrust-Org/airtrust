@@ -343,7 +343,7 @@ async function main() {
 
   const statePath =
     process.env.QA_SIMULATOR_STATE_PATH ||
-    'test-results/staging-simulator-planning/state.json';
+    'qa-state/staging-simulator-planning/state.json';
   mkdirSync(dirname(statePath), { recursive: true });
   writeFileSync(
     statePath,
