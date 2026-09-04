@@ -14,7 +14,6 @@ import RowActionsMenu from '@/react-app/components/UI/RowActionsMenu';
 import { PageLayout, PageGrid, PageSection } from '@/react-app/components/layout/PageLayout';
 import StatCard from '@/react-app/components/StatCard';
 import { statusBadges } from '@/react-app/styles/design-tokens';
-import { API_BASE_URL } from '@/react-app/config/api';
 import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import { apiFetch } from '@/react-app/lib/apiFetch';
@@ -92,19 +91,51 @@ export default function Certificacoes() {
   const carregarPagina = async (page: number) => {
     try {
       setLoading(true);
-      const API = API_BASE_URL.replace('/api', '');
-      const resp = await fetch(`${API}/api/qualificacoes?page=${page}&limit=${limit}`);
+      // A tela representa registros de qualificacoes_historico. Ler do endpoint
+      // canônico de histórico garante que o id exibido seja o mesmo recurso
+      // aceito pelo DELETE /api/qualificacoes/historico/:id.
+      const resp = await apiFetch(
+        `/api/qualificacoes/historico?page=${page}&limit=${limit}&stats=true`,
+      );
       const result = await resp.json();
-      if (result.success) {
-        setCertificacoes(result.data || []);
-        setTotal(result.stats?.total ?? 0);
-        setTotalPages(result.totalPages || 1);
-        setCurrentPage(result.page || page);
+      if (resp.ok && result.success) {
+        const historico = Array.isArray(result.data) ? result.data : [];
+        const normalized: Certificacao[] = historico.map(
+          (row: Record<string, unknown>) => ({
+            id: Number(row.id),
+            funcionario_id:
+              row.funcionario_id != null ? Number(row.funcionario_id) : undefined,
+            funcionario_nome: String(row.funcionario_nome || ''),
+            funcionario_matricula: String(row.funcionario_matricula || ''),
+            treinamento_nome: String(row.tipo_nome || row.tipo || ''),
+            treinamento_codigo: String(row.tipo_codigo || ''),
+            data_conclusao: String(row.data_realizacao || ''),
+            data_vencimento:
+              row.data_vencimento != null ? String(row.data_vencimento) : undefined,
+            status: String(row.status || row.qualificacao_status || ''),
+            instrutor: row.instrutor != null ? String(row.instrutor) : undefined,
+            nome: String(row.tipo_nome || row.tipo || ''),
+            codigo: String(row.tipo_codigo || ''),
+            data_realizado: String(row.data_realizacao || ''),
+            status_calculado: String(row.status || row.qualificacao_status || ''),
+          }),
+        );
+
+        const pagination = result.pagination || {};
+        const responseStats = result.stats || {};
+        const totalRegistros = Number(
+          pagination.total ?? result.meta?.total ?? responseStats.total ?? normalized.length,
+        );
+
+        setCertificacoes(normalized);
+        setTotal(totalRegistros);
+        setTotalPages(Math.max(1, Number(pagination.pages ?? 1)));
+        setCurrentPage(Number(pagination.page ?? page));
         setStats({
-          total: result.stats?.total ?? (result.data?.length || 0),
-          ativas: result.stats?.validas ?? 0,
-          vencidas: result.stats?.vencidas ?? 0,
-          vencendo: result.stats?.vencendo ?? 0,
+          total: Number(responseStats.total ?? totalRegistros),
+          ativas: Number(responseStats.validas ?? 0),
+          vencidas: Number(responseStats.vencidas ?? 0),
+          vencendo: Number(responseStats.vencendo ?? 0),
         });
       } else {
         setCertificacoes([]);
