@@ -269,6 +269,33 @@ test.describe('audit-closure governed staging profile', () => {
     ensureDir(path.dirname(SUMMARY_PATH));
   });
 
+  test.beforeEach(async ({ page }, testInfo) => {
+    const sanitizeDiagnostic = (value: string) =>
+      value
+        .replace(/Bearer\\s+\\S+/gi, 'Bearer [REDACTED]')
+        .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi, '[EMAIL]')
+        .replace(/eyJ[A-Za-z0-9._-]+/g, '[TOKEN]')
+        .replace(/https?:\\/\\/[^\\s)]+/g, '[URL]')
+        .slice(0, 800);
+
+    page.on('pageerror', (error) => {
+      console.error(
+        `[audit-closure][pageerror][${testInfo.title}] ${sanitizeDiagnostic(
+          `${error.name}: ${error.message}`,
+        )}`,
+      );
+    });
+
+    page.on('console', (message) => {
+      if (message.type() !== 'error') return;
+      console.error(
+        `[audit-closure][browser-console][${testInfo.title}] ${sanitizeDiagnostic(
+          message.text(),
+        )}`,
+      );
+    });
+  });
+
   test.afterAll(() => {
     writeFileSync(SUMMARY_PATH, `${JSON.stringify(results, null, 2)}\n`);
   });
