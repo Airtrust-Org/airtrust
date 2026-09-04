@@ -211,7 +211,7 @@ jobs:
           '
 
       - name: Download provenance evidence
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: staging-frontend-pr-ui-qa-provenance-${{ github.run_id }}
           path: provenance-in
