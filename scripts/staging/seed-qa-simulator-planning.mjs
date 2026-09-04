@@ -23,6 +23,7 @@ const CONFIRMATION_PHRASE = 'AIRTRUST_STAGING_SIMULATOR_PLANNING_QA_SEED';
 const EMPRESA_CODIGO = 'qa_examiner_training';
 const PARTICIPANTE1_CODIGO = 'QA-PARTICIPANTE-ALFA';
 const PARTICIPANTE2_CODIGO = 'QA-PARTICIPANTE-BRAVO';
+const PLANNING_CATEGORY_CODE = 'QA-SIM-PLN-CAT';
 const PLANNING_QUAL_CODE = 'QA-SIM-PLN-AW139';
 const PLANNING_MODEL_CODE = 'QA-SIM-PLN-S01';
 const PLANNING_MARKER = 'QA_ONLY_SIMULATOR_PLANNING';
@@ -98,18 +99,69 @@ WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND planejamento_snapshot_json LIKE '%${DRAFT_MARKER}%'
   AND deleted_at IS NULL;
 
+-- Categoria canônica QA exigida pelo contrato 0457.
+-- A identidade é tenant-scoped, ativa e separada de qualquer catálogo real.
+INSERT INTO qualificacoes_categorias (
+  nome, codigo, descricao, cor, ativo, empresa_id,
+  dominio_codigo, lms_integrada, created_at, updated_at, deleted_at
+)
+SELECT
+  'QA Simulador — Planejamento Persistente',
+  ${e(PLANNING_CATEGORY_CODE)},
+  'Categoria sintética de staging para o aceite do Planejamento de Simulador V3.',
+  '#64748b',
+  1,
+  emp.id,
+  'OPERACOES',
+  0,
+  datetime('now'),
+  datetime('now'),
+  NULL
+FROM empresas emp
+WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+  AND emp.deleted_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1
+    FROM qualificacoes_categorias qc
+    WHERE qc.empresa_id = emp.id
+      AND UPPER(qc.codigo) = UPPER(${e(PLANNING_CATEGORY_CODE)})
+  );
+
+UPDATE qualificacoes_categorias
+SET nome = 'QA Simulador — Planejamento Persistente',
+    descricao = 'Categoria sintética de staging para o aceite do Planejamento de Simulador V3.',
+    cor = '#64748b',
+    ativo = 1,
+    dominio_codigo = 'OPERACOES',
+    lms_integrada = 0,
+    deleted_at = NULL,
+    updated_at = datetime('now')
+WHERE id = (
+  SELECT qc.id
+  FROM qualificacoes_categorias qc
+  WHERE qc.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+    AND UPPER(qc.codigo) = UPPER(${e(PLANNING_CATEGORY_CODE)})
+  ORDER BY CASE WHEN qc.deleted_at IS NULL THEN 0 ELSE 1 END, qc.id DESC
+  LIMIT 1
+);
+
 -- Tipo de qualificação QA. Reusa/reactiva a mesma identidade natural.
 INSERT INTO qualificacoes_tipos (
-  tipo, codigo, nome, descricao, categoria, carga_horaria, validade,
+  tipo, codigo, nome, descricao, categoria_id, categoria, carga_horaria, validade,
   vencimento_fim_mes, observacoes, ativo, empresa_id, created_at, updated_at, deleted_at
 )
 SELECT
   'TREINAMENTO', ${e(PLANNING_QUAL_CODE)},
   'QA Simulador AW139 — Planejamento Persistente',
   'Fixture sintética de staging para QA do Planejamento de Simulador V3.',
-  'TREINAMENTO', 2, 12, 0, ${e(PLANNING_MARKER)}, 1, emp.id,
+  qc.id, qc.nome, 2, 12, 0, ${e(PLANNING_MARKER)}, 1, emp.id,
   datetime('now'), datetime('now'), NULL
 FROM empresas emp
+JOIN qualificacoes_categorias qc
+  ON qc.empresa_id = emp.id
+ AND UPPER(qc.codigo) = UPPER(${e(PLANNING_CATEGORY_CODE)})
+ AND qc.ativo = 1
+ AND qc.deleted_at IS NULL
 WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
   AND emp.deleted_at IS NULL
   AND NOT EXISTS (
@@ -122,7 +174,16 @@ UPDATE qualificacoes_tipos
 SET nome = 'QA Simulador AW139 — Planejamento Persistente',
     tipo = 'TREINAMENTO',
     descricao = 'Fixture sintética de staging para QA do Planejamento de Simulador V3.',
-    categoria = 'TREINAMENTO',
+    categoria_id = (
+      SELECT qc.id
+      FROM qualificacoes_categorias qc
+      WHERE qc.empresa_id = qualificacoes_tipos.empresa_id
+        AND UPPER(qc.codigo) = UPPER(${e(PLANNING_CATEGORY_CODE)})
+        AND qc.ativo = 1
+        AND qc.deleted_at IS NULL
+      LIMIT 1
+    ),
+    categoria = 'QA Simulador — Planejamento Persistente',
     carga_horaria = 2,
     validade = 12,
     observacoes = ${e(PLANNING_MARKER)},
@@ -343,6 +404,7 @@ WHERE id IN (${allocationIds})
 -- Pós-condições atômicas. Qualquer divergência aborta o batch inteiro.
 CREATE TABLE IF NOT EXISTS _qa_sim_planning_post_guard (
   tenant_count INTEGER NOT NULL CHECK (tenant_count = 1),
+  category_count INTEGER NOT NULL CHECK (category_count = 1),
   qualification_count INTEGER NOT NULL CHECK (qualification_count = 1),
   model_count INTEGER NOT NULL CHECK (model_count = 1),
   history_count INTEGER NOT NULL CHECK (history_count = 2),
@@ -351,12 +413,17 @@ CREATE TABLE IF NOT EXISTS _qa_sim_planning_post_guard (
 );
 DELETE FROM _qa_sim_planning_post_guard;
 INSERT INTO _qa_sim_planning_post_guard (
-  tenant_count, qualification_count, model_count,
+  tenant_count, category_count, qualification_count, model_count,
   history_count, allocation_count, config_count
 )
 SELECT
   (SELECT COUNT(*) FROM empresas
     WHERE codigo = ${e(EMPRESA_CODIGO)} AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM qualificacoes_categorias
+    WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+      AND UPPER(codigo) = UPPER(${e(PLANNING_CATEGORY_CODE)})
+      AND ativo = 1
+      AND deleted_at IS NULL),
   (SELECT COUNT(*) FROM qualificacoes_tipos
     WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
       AND UPPER(codigo) = UPPER(${e(PLANNING_QUAL_CODE)})
@@ -434,6 +501,12 @@ SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND UPPER(codigo) = UPPER(${e(PLANNING_QUAL_CODE)})
   AND observacoes = ${e(PLANNING_MARKER)}
+  AND deleted_at IS NULL;
+
+UPDATE qualificacoes_categorias
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND UPPER(codigo) = UPPER(${e(PLANNING_CATEGORY_CODE)})
   AND deleted_at IS NULL;
 `;
 }
