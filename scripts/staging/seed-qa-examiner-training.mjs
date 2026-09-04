@@ -183,6 +183,112 @@ FROM empresas emp WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
   AND NOT EXISTS (SELECT 1 FROM modelos_sessao ms JOIN empresas e2 ON e2.id = ms.empresa_id WHERE ms.codigo = ${e(CRED_EXA_CODIGO)} AND e2.codigo = ${e(EMPRESA_CODIGO)} AND ms.deleted_at IS NULL);
 
 
+-- CONFIGURAÇÃO QA DETERMINÍSTICA PARA O PLANEJADOR.
+-- O tenant é exclusivamente sintético; nenhuma configuração de tenant real é alterada.
+INSERT INTO empresas_config (
+  empresa_id,
+  planejamento_simulador_antecedencia_dias,
+  planejamento_simulador_regra_quinzena,
+  planejamento_simulador_permitir_sessao_compartilhada,
+  planejamento_simulador_preferir_mesmo_treinamento,
+  planejamento_simulador_preferir_mesma_sessao,
+  planejamento_simulador_aprovacao_obrigatoria,
+  updated_at
+)
+SELECT
+  emp.id, 120, 'AMBAS', 1, 1, 1, 1, datetime('now')
+FROM empresas emp
+WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+ON CONFLICT(empresa_id) DO UPDATE SET
+  planejamento_simulador_antecedencia_dias = excluded.planejamento_simulador_antecedencia_dias,
+  planejamento_simulador_regra_quinzena = excluded.planejamento_simulador_regra_quinzena,
+  planejamento_simulador_permitir_sessao_compartilhada = excluded.planejamento_simulador_permitir_sessao_compartilhada,
+  planejamento_simulador_preferir_mesmo_treinamento = excluded.planejamento_simulador_preferir_mesmo_treinamento,
+  planejamento_simulador_preferir_mesma_sessao = excluded.planejamento_simulador_preferir_mesma_sessao,
+  planejamento_simulador_aprovacao_obrigatoria = excluded.planejamento_simulador_aprovacao_obrigatoria,
+  updated_at = datetime('now');
+
+-- ESCALA QA PUBLICADA.
+-- O planner falha fechado em DESCONHECIDO quando não existe escala publicada.
+-- Estas linhas criam apenas FOLGA sintética para os dois participantes QA no
+-- intervalo de aceitação; a política AMBAS permanece obedecida pelo backend.
+INSERT OR IGNORE INTO escalas_mensais (
+  id, mes, ano, titulo, status, observacoes, empresa_id,
+  created_by, created_at, updated_at, deleted_at
+)
+SELECT
+  'QA-SIM-PLN-ROSTER',
+  CAST(strftime('%m', date('now', '+90 days')) AS INTEGER),
+  CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER),
+  'QA Simulator Planning Roster',
+  'publicada',
+  'QA_ONLY_SIMULATOR_PLANNING',
+  emp.id,
+  'qa-simulator-planning',
+  datetime('now'),
+  datetime('now'),
+  NULL
+FROM empresas emp
+WHERE emp.codigo = ${e(EMPRESA_CODIGO)};
+
+-- Se o tenant sintético já tiver uma escala para o mesmo mês, reutilize-a
+-- (a unicidade canônica é mês+ano+tenant) e marque-a publicada.
+UPDATE escalas_mensais
+SET status = 'publicada',
+    updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND mes = CAST(strftime('%m', date('now', '+90 days')) AS INTEGER)
+  AND ano = CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER)
+  AND deleted_at IS NULL;
+
+UPDATE escala_alocacoes
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE id IN ('QA-SIM-PLN-ALFA-FOLGA', 'QA-SIM-PLN-BRAVO-FOLGA')
+  AND escala_id IN (
+    SELECT id FROM escalas_mensais
+    WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  )
+  AND deleted_at IS NULL;
+
+INSERT INTO escala_alocacoes (
+  id, escala_id, funcionario_id, aeronave_id, funcao,
+  situacao_tipo, situacao_cor, quinzena_id,
+  data_inicio, data_fim, status, observacoes,
+  created_by, created_at, updated_at, deleted_at
+)
+SELECT
+  CASE f.matricula
+    WHEN ${e(PARTICIPANTE1_CODIGO)} THEN 'QA-SIM-PLN-ALFA-FOLGA'
+    ELSE 'QA-SIM-PLN-BRAVO-FOLGA'
+  END,
+  em.id,
+  CAST(f.id AS TEXT),
+  NULL,
+  NULL,
+  'FOLGA',
+  '#64748b',
+  NULL,
+  date('now'),
+  date('now', '+120 days'),
+  'confirmado',
+  'QA_ONLY_SIMULATOR_PLANNING',
+  'qa-simulator-planning',
+  datetime('now'),
+  datetime('now'),
+  NULL
+FROM empresas emp
+JOIN funcionarios f
+  ON f.empresa_id = emp.id
+ AND f.matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)})
+ AND f.deleted_at IS NULL
+JOIN escalas_mensais em
+  ON em.empresa_id = emp.id
+ AND em.mes = CAST(strftime('%m', date('now', '+90 days')) AS INTEGER)
+ AND em.ano = CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER)
+ AND em.status = 'publicada'
+ AND em.deleted_at IS NULL
+WHERE emp.codigo = ${e(EMPRESA_CODIGO)};
+
 -- Remove da listagem somente drafts de smoke anteriores do próprio tenant QA.
 -- É soft-delete, escopado por empresa + origem + marcador do snapshot.
 UPDATE treinamentos_planejados
@@ -323,6 +429,22 @@ WHERE matricula IN (${e(INSTRUTOR_CODIGO)}, ${e(PARTICIPANTE1_CODIGO)}, ${e(PART
 UPDATE aeronaves SET deleted_at = datetime('now') WHERE codigo = ${e(AERONAVE_CODIGO)} AND deleted_at IS NULL;
 
 UPDATE simuladores SET deleted_at = datetime('now') WHERE nome = ${e(SIMULADOR_CODIGO)} AND deleted_at IS NULL;
+
+UPDATE escala_alocacoes
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE id IN ('QA-SIM-PLN-ALFA-FOLGA', 'QA-SIM-PLN-BRAVO-FOLGA')
+  AND escala_id IN (
+    SELECT id FROM escalas_mensais
+    WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  )
+  AND deleted_at IS NULL;
+
+UPDATE escalas_mensais
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE id = 'QA-SIM-PLN-ROSTER'
+  AND empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND observacoes = 'QA_ONLY_SIMULATOR_PLANNING'
+  AND deleted_at IS NULL;
 
 UPDATE qualificacoes_historico
 SET deleted_at = datetime('now'), updated_at = datetime('now')
