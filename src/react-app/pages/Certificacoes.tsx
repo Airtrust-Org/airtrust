@@ -10,12 +10,14 @@ import {
   ChevronsRight,
 } from 'lucide-react';
 import Button from '@/react-app/components/Button';
+import RowActionsMenu from '@/react-app/components/UI/RowActionsMenu';
 import { PageLayout, PageGrid, PageSection } from '@/react-app/components/layout/PageLayout';
 import StatCard from '@/react-app/components/StatCard';
 import { statusBadges } from '@/react-app/styles/design-tokens';
 import { API_BASE_URL } from '@/react-app/config/api';
-import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
+import { apiFetch } from '@/react-app/lib/apiFetch';
 
 interface Certificacao {
   id: number;
@@ -136,7 +138,7 @@ export default function Certificacoes() {
     if (!confirmacao) return;
 
     try {
-      const response = await apiFetch(`/api/qualificacoes/${certificacaoId}`, {
+      const response = await apiFetch(`/api/qualificacoes/historico/${certificacaoId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -321,14 +323,17 @@ export default function Certificacoes() {
                       />
                     </td>
                     <td className=" py-4 whitespace-nowrap text-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteCertificacao(cert.id)}
-                        title="Excluir certificação"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </Button>
+                      <RowActionsMenu
+                        label={`Ações da certificação ${cert.treinamento_nome || cert.nome || cert.id}`}
+                        actions={[
+                          {
+                            label: 'Excluir certificação',
+                            destructive: true,
+                            icon: Trash2,
+                            onSelect: () => handleDeleteCertificacao(cert.id),
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))}
