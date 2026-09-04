@@ -39,7 +39,8 @@ jobs:
             scripts/ci/assert-live-frontend-sha.mjs \
             e2e/lib/read-only-network-guard.mjs \
             e2e/lib/live-sha-guard.mjs \
-            e2e/lib/credential-pair.mjs; do
+            e2e/lib/credential-pair.mjs \
+            e2e/lib/synthetic-fixture-matcher.mjs; do
             node --check "$f"
           done
           node --test \
@@ -48,6 +49,7 @@ jobs:
             e2e/lib/read-only-network-guard.test.mjs \
             e2e/lib/live-sha-guard.test.mjs \
             e2e/lib/credential-pair.test.mjs \
+            e2e/lib/synthetic-fixture-matcher.test.mjs \
             scripts/__tests__/staging-frontend-pr-ui-qa-workflow.test.mjs
 
       - name: ✅ PR checks are structurally valid

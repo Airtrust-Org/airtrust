@@ -95,7 +95,8 @@ jobs:
             e2e/frontend-pr-ui-qa/destructive-actions.spec.ts \
             e2e/lib/read-only-network-guard.mjs \
             e2e/lib/live-sha-guard.mjs \
-            e2e/lib/credential-pair.mjs; do
+            e2e/lib/credential-pair.mjs \
+            e2e/lib/synthetic-fixture-matcher.mjs; do
             if grep -Fq "$prod_host" "$f" || grep -Fq "$prod_worker" "$f"; then
               case " $allow_patterns " in
                 *" $f "*) : ;;
@@ -116,7 +117,8 @@ jobs:
             scripts/ci/frontend-pr-qa-summarize.mjs \
             e2e/lib/read-only-network-guard.mjs \
             e2e/lib/live-sha-guard.mjs \
-            e2e/lib/credential-pair.mjs; do
+            e2e/lib/credential-pair.mjs \
+            e2e/lib/synthetic-fixture-matcher.mjs; do
             node --check "$f"
           done
           node --test \
@@ -125,6 +127,7 @@ jobs:
             e2e/lib/read-only-network-guard.test.mjs \
             e2e/lib/live-sha-guard.test.mjs \
             e2e/lib/credential-pair.test.mjs \
+            e2e/lib/synthetic-fixture-matcher.test.mjs \
             scripts/__tests__/staging-frontend-pr-ui-qa-workflow.test.mjs
 
       - name: Run provenance guard against release_sha (data only, no checkout of it)

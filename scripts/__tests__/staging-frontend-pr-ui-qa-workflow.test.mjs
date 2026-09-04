@@ -8,6 +8,18 @@ const workflow = readFileSync(
   resolve(root, '.github/workflows/staging-frontend-pr-ui-qa.yml'),
   'utf8',
 );
+const summarizer = readFileSync(
+  resolve(root, 'scripts/ci/frontend-pr-qa-summarize.mjs'),
+  'utf8',
+);
+const spec = readFileSync(
+  resolve(root, 'e2e/frontend-pr-ui-qa/destructive-actions.spec.ts'),
+  'utf8',
+);
+const matcher = readFileSync(
+  resolve(root, 'e2e/lib/synthetic-fixture-matcher.mjs'),
+  'utf8',
+);
 
 test('BLOCKER A — an explicit final-status enforcement step exists', () => {
   assert.match(workflow, /name: Require final QA status PASS/);
@@ -64,4 +76,26 @@ test('the guard job runs the workflow-contract test alongside the unit tests', (
 test('no production identifier is ever a live target in the pipeline', () => {
   assert.doesNotMatch(workflow, /https:\/\/api\.airtrust\.online/);
   assert.doesNotMatch(workflow, /https:\/\/airtrust-api\.airtrust\.workers\.dev/);
+});
+
+test('BLOCKER J — the summarizer never hard-codes authentication: REAL_STAGING', () => {
+  assert.doesNotMatch(summarizer, /authentication:\s*'REAL_STAGING'/);
+  assert.doesNotMatch(summarizer, /authentication:\s*"REAL_STAGING"/);
+  // absence must stay absence — no `?? 'REAL_STAGING'` style default
+  assert.doesNotMatch(summarizer, /q\.authentication\s*\?\?\s*['"]REAL_STAGING['"]/);
+  assert.match(summarizer, /typeof q\.authentication === 'string'/);
+});
+
+test('the guard job type-checks and runs the synthetic-fixture matcher tests', () => {
+  assert.match(workflow, /e2e\/lib\/synthetic-fixture-matcher\.mjs/);
+  assert.match(workflow, /e2e\/lib\/synthetic-fixture-matcher\.test\.mjs/);
+});
+
+test('BLOCKER K — no generic fixture/synthetic word is matched without an explicit QA prefix anchor', () => {
+  // the matcher module itself must anchor on an explicit QA prefix
+  assert.match(matcher, /\^\\s\*\(\?:\\\[QA\\\]\|QA\[_-\]/);
+  // the spec must consume the shared matcher, not its own ad-hoc broad regex
+  assert.match(spec, /isSyntheticQaFixtureLabel/);
+  assert.doesNotMatch(spec, /\/qa\[_\\s-\]\?sint\|qa\[_\\s-\]\?synthetic\|synthetic\|fixture/);
+  assert.doesNotMatch(spec, /SYNTHETIC_FIXTURE_PATTERN\s*=\s*\/[^/]*\bfixture\b[^/]*\/[a-z]*;?\s*$/m);
 });

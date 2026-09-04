@@ -32,7 +32,8 @@
  *
  * PRIVACY (BLOCKER C): we NEVER open "the first funcionário". A funcionário
  * ficha is opened only when the listing row itself is an unambiguous synthetic
- * QA fixture (name matches SYNTHETIC_FIXTURE_PATTERN). If no synthetic funcionário
+ * QA fixture (name starts with an explicit QA prefix, see
+ * synthetic-fixture-matcher.mjs). If no synthetic funcionário
  * exists, we record SYNTHETIC_FUNCIONARIO_FIXTURE_NOT_AVAILABLE, take NO
  * screenshot of the listing (it contains real people), and the run is BLOCKED.
  * We never create a fixture, never touch the database, never upload.
@@ -48,6 +49,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { installReadOnlyGuard } from '../lib/read-only-network-guard.mjs';
 import { assertLiveFrontendShaFromPage } from '../lib/live-sha-guard.mjs';
+import { isSyntheticQaFixtureLabel } from '../lib/synthetic-fixture-matcher.mjs';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -81,11 +83,11 @@ const RELEASE_SHORT_SHA = String(process.env.RELEASE_SHA || '')
   .toLowerCase()
   .slice(0, 7);
 
-// A row (funcionário OR document) is only safe to exercise if it is an obvious
-// synthetic QA fixture. Same unambiguous markers for both.
-const SYNTHETIC_FIXTURE_PATTERN =
-  /qa[_\s-]?sint|qa[_\s-]?synthetic|synthetic|fixture|sint[eé]tic|\[qa\]|\bqa[_\s-]?fixture\b/i;
-const SYNTHETIC_DOC_PATTERN = SYNTHETIC_FIXTURE_PATTERN;
+// BLOCKER K: a row (funcionário OR document) is only safe to exercise when its
+// label starts with an explicit QA fixture prefix (see synthetic-fixture-matcher.mjs
+// for the exact contract and rationale). Generic words like "fixture" /
+// "synthetic" / "sintético" occurring anywhere else — including inside a real
+// person's name — are NEVER sufficient.
 
 type ReachResult =
   | { status: 'OK'; trigger: Locator; download: Locator; fixtureName: string }
@@ -180,7 +182,7 @@ async function reachDocumentsRowActionsMenu(page: Page, where: string): Promise<
     const link = rowLinks.nth(i);
     const label = ((await link.innerText().catch(() => '')) || '').trim();
     const aria = (await link.getAttribute('aria-label').catch(() => null)) || '';
-    if (SYNTHETIC_FIXTURE_PATTERN.test(label) || SYNTHETIC_FIXTURE_PATTERN.test(aria)) {
+    if (isSyntheticQaFixtureLabel(label) || isSyntheticQaFixtureLabel(aria)) {
       syntheticRow = link;
       break;
     }
@@ -214,7 +216,7 @@ async function reachDocumentsRowActionsMenu(page: Page, where: string): Promise<
   const textCandidates = await page.locator('p').allTextContents();
   for (const rawName of textCandidates) {
     const fixtureName = rawName.trim();
-    if (!fixtureName || !SYNTHETIC_DOC_PATTERN.test(fixtureName)) continue;
+    if (!isSyntheticQaFixtureLabel(fixtureName)) continue;
 
     const escapedName = escapeRegExp(fixtureName);
     const trigger = page.getByRole('button', {

@@ -184,6 +184,42 @@ test('authentication that is not REAL_STAGING blocks a global PASS', () => {
   assert.equal(s.status, 'BLOCKED');
 });
 
+test('BLOCKER J.1 — auth REAL_STAGING + everything else green => PASS', () => {
+  const s = buildFinalSummary({ provenance: provOk, qa: qaGreen() });
+  assert.equal(s.status, 'PASS');
+  assert.equal(s.authentication, 'REAL_STAGING');
+});
+
+test('BLOCKER J.2 — missing authentication field => BLOCKED, never defaulted', () => {
+  const { authentication: _drop, ...qaNoAuth } = qaGreen();
+  const s = buildFinalSummary({ provenance: provOk, qa: qaNoAuth });
+  assert.equal(s.status, 'BLOCKED');
+  assert.equal(s.authentication, '');
+  assert.notEqual(s.authentication, 'REAL_STAGING');
+});
+
+test('BLOCKER J.3 — empty-string authentication => BLOCKED', () => {
+  const s = buildFinalSummary({ provenance: provOk, qa: qaGreen({ authentication: '' }) });
+  assert.equal(s.status, 'BLOCKED');
+  assert.equal(s.authentication, '');
+});
+
+test('BLOCKER J.4 — authentication "MOCK" => BLOCKED', () => {
+  const s = buildFinalSummary({ provenance: provOk, qa: qaGreen({ authentication: 'MOCK' }) });
+  assert.equal(s.status, 'BLOCKED');
+  assert.equal(s.authentication, 'MOCK');
+});
+
+test('BLOCKER J.5 — the final summary never reports REAL_STAGING when the input carries no such evidence', () => {
+  for (const badAuth of [undefined, null, '', 'MOCK', 42, {}, ['REAL_STAGING']]) {
+    const { authentication: _drop, ...base } = qaGreen();
+    const qa = badAuth === undefined ? base : { ...base, authentication: badAuth };
+    const s = buildFinalSummary({ provenance: provOk, qa });
+    assert.notEqual(s.authentication, 'REAL_STAGING', `input=${JSON.stringify(badAuth)}`);
+    assert.equal(s.status, 'BLOCKED', `input=${JSON.stringify(badAuth)}`);
+  }
+});
+
 test('real_surfaces_exercised is informational only, not a sufficient gate', () => {
   // 6 surfaces exercised but a cell is BLOCKED -> still BLOCKED.
   const s = buildFinalSummary({

@@ -19,6 +19,13 @@
  * NOT_RUN) must be PASS for a global PASS. BLOCKED / NOT_RUN => global BLOCKED,
  * FAIL => global FAIL.
  *
+ * AUTHENTICATION EVIDENCE IS FAIL-CLOSED (BLOCKER J): `authentication` is read
+ * from the QA summary as-is — a missing/non-string/empty value is emitted as
+ * `''`, NEVER defaulted to "REAL_STAGING". Only the literal string
+ * "REAL_STAGING" passes the gate; everything else (missing, empty, "MOCK", any
+ * other value) is BLOCKED. The emitted field is the actually-validated value,
+ * never a hard-coded literal.
+ *
  * Status decision (audit_profile = "destructive-actions"):
  *   provenance not OK ............................ BLOCKED
  *   mutations_detected > 0 ...................... FAIL
@@ -88,7 +95,9 @@ export function buildFinalSummary({ provenance, qa, prNumber, releaseSha, auditP
   const anyCellFail = MATRIX_CELL_KEYS.some((k) => cells[k] === 'FAIL');
   const everyCellPass = MATRIX_CELL_KEYS.every((k) => cells[k] === 'PASS');
   const workerEnvironment = String(p.worker?.environment ?? '');
-  const authentication = String(q.authentication ?? 'REAL_STAGING');
+  // BLOCKER J — absence of evidence must stay absence of evidence. Never
+  // default a missing/non-string authentication field to REAL_STAGING.
+  const authentication = typeof q.authentication === 'string' ? q.authentication : '';
 
   let status;
   if (p.status !== 'PROVENANCE_OK') {
@@ -122,7 +131,8 @@ export function buildFinalSummary({ provenance, qa, prNumber, releaseSha, auditP
     frontend_build_version: String(p.frontendBuildVersion ?? q.frontend_build_version ?? ''),
     worker_environment: workerEnvironment,
     worker_sha_match_required: false,
-    authentication: 'REAL_STAGING',
+    // Emit the actually-validated value, never a hard-coded literal (BLOCKER J).
+    authentication,
     datatable_runtime: String(
       q.datatable_runtime ?? 'DATATABLE_RUNTIME_NOT_APPLICABLE_NO_ACTIVE_CONSUMER',
     ),
