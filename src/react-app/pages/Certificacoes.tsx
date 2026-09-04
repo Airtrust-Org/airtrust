@@ -17,6 +17,7 @@ import { statusBadges } from '@/react-app/styles/design-tokens';
 import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import { apiFetch } from '@/react-app/lib/apiFetch';
+import { httpClient } from '@/react-app/services/http-client';
 
 interface Certificacao {
   id: number;
@@ -94,11 +95,15 @@ export default function Certificacoes() {
       // A tela representa registros de qualificacoes_historico. Ler do endpoint
       // canônico de histórico garante que o id exibido seja o mesmo recurso
       // aceito pelo DELETE /api/qualificacoes/historico/:id.
-      const resp = await apiFetch(
-        `/api/qualificacoes/historico?page=${page}&limit=${limit}&stats=true`,
-      );
-      const result = await resp.json();
-      if (resp.ok && result.success) {
+      const response = await httpClient.get<{
+        success?: boolean;
+        data?: Record<string, unknown>[];
+        stats?: Record<string, unknown>;
+        meta?: Record<string, unknown>;
+        pagination?: Record<string, unknown>;
+      }>(`/qualificacoes/historico?page=${page}&limit=${limit}&stats=true`);
+      const result = response.data;
+      if (response.success && result?.success) {
         const historico = Array.isArray(result.data) ? result.data : [];
         const normalized: Certificacao[] = historico.map(
           (row: Record<string, unknown>) => ({
