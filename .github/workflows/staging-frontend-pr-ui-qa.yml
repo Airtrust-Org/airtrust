@@ -1,0 +1,266 @@
+name: Staging Frontend PR UI QA
+
+# Authenticated, strictly read-only browser QA against the PUBLISHED STAGING
+# FRONTEND of an open pull request head SHA.
+#
+# Why this workflow exists: staging-audit-201-ui-qa and
+# staging-runtime-fichas-lms-qa both require main + Worker + frontend on the
+# same SHA. There was no governed browser QA for a frontend-only PR whose
+# frontend is on staging while the Worker is intentionally on another SHA.
+#
+# SECURITY MODEL
+# - Every job checks out and runs code from TRUSTED `main` only. Nothing from
+#   the PR head SHA is ever checked out or executed. `release_sha` is used
+#   purely as data: to look the PR up, confirm the open head, verify the 8
+#   canonical release gates, and confirm the published frontend build-version.
+# - The guard job runs WITHOUT environment secrets.
+# - Only the ui-qa job has `environment: staging`, and it runs trusted-main
+#   Playwright specs that authenticate against the REAL staging API and never
+#   mutate operational data.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_STAGING_FRONTEND_PR_QA to continue'
+        required: true
+        type: string
+      pr_number:
+        description: 'Open, same-repository PR whose exact head SHA is on the staging frontend'
+        required: true
+        type: string
+      release_sha:
+        description: 'Exact 40-character head SHA of that PR (provenance only — never checked out)'
+        required: true
+        type: string
+      audit_profile:
+        description: 'QA profile to run'
+        required: true
+        default: destructive-actions
+        type: choice
+        options:
+          - destructive-actions
+
+concurrency:
+  group: staging-frontend-pr-ui-qa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+env:
+  NODE_VERSION: '24'
+  STAGING_FRONTEND_BASE_URL: https://staging.airtrust.pages.dev
+  STAGING_WORKER_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+
+jobs:
+  guard:
+    name: Frontend PR QA Provenance Guard (no secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout trusted pipeline (main)
+        uses: actions/checkout@v4
+
+      - name: Assert dispatch ref is main
+        shell: bash
+        env:
+          GIT_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$GIT_REF" == "refs/heads/main" ]] || { echo "WORKFLOW_REF_NOT_MAIN:$GIT_REF" >&2; exit 1; }
+
+      - name: Assert no production identifiers in the QA pipeline files
+        shell: bash
+        run: |
+          set -euo pipefail
+          prod_host="api.""airtrust.online"
+          prod_worker="airtrust-api.""airtrust.workers.dev"
+          for f in \
+            .github/workflows/staging-frontend-pr-ui-qa.yml \
+            scripts/ci/verify-frontend-pr-qa-provenance.mjs \
+            scripts/ci/frontend-pr-qa-summarize.mjs \
+            e2e/frontend-pr-ui-qa.config.ts \
+            e2e/frontend-pr-ui-qa/auth.setup.ts \
+            e2e/frontend-pr-ui-qa/destructive-actions.spec.ts \
+            e2e/lib/read-only-network-guard.mjs; do
+            if grep -Fq "$prod_host" "$f" || grep -Fq "$prod_worker" "$f"; then
+              # Allowed only inside the provenance guard's rejection allowlist.
+              if [[ "$f" != "scripts/ci/verify-frontend-pr-qa-provenance.mjs" ]]; then
+                echo "PRODUCTION_IDENTIFIER_IN_PIPELINE:$f" >&2
+                exit 1
+              fi
+            fi
+          done
+          echo "NO_STRAY_PRODUCTION_IDENTIFIERS"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Validate guard, network-guard and summary unit tests
+        run: |
+          node --check scripts/ci/verify-frontend-pr-qa-provenance.mjs
+          node --check scripts/ci/frontend-pr-qa-summarize.mjs
+          node --check e2e/lib/read-only-network-guard.mjs
+          node --test \
+            scripts/ci/verify-frontend-pr-qa-provenance.test.mjs \
+            scripts/ci/frontend-pr-qa-summarize.test.mjs \
+            e2e/lib/read-only-network-guard.test.mjs
+
+      - name: Run provenance guard against release_sha (data only, no checkout of it)
+        id: provenance
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_REF: ${{ github.ref }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          AUDIT_PROFILE: ${{ inputs.audit_profile }}
+          PROVENANCE_OUT: ${{ runner.temp }}/frontend-pr-qa-provenance.json
+        run: |
+          set -euo pipefail
+          node scripts/ci/verify-frontend-pr-qa-provenance.mjs | tee "$PROVENANCE_OUT"
+          # Keep only the trailing JSON object for downstream consumption.
+          node -e "const fs=require('fs');const t=fs.readFileSync(process.env.PROVENANCE_OUT,'utf8');const s=t.indexOf('{');const e=t.lastIndexOf('}');const j=JSON.parse(t.slice(s,e+1));fs.writeFileSync(process.env.PROVENANCE_OUT, JSON.stringify(j));"
+          cp "$PROVENANCE_OUT" provenance.json
+
+      - name: Upload provenance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-frontend-pr-ui-qa-provenance-${{ github.run_id }}
+          path: provenance.json
+          if-no-files-found: error
+          retention-days: 14
+
+  ui-qa:
+    name: Authenticated Read-Only Frontend QA (${{ inputs.audit_profile }})
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 45
+    env:
+      STAGING_FRONTEND_BASE_URL: https://staging.airtrust.pages.dev
+      BASE_URL: https://staging.airtrust.pages.dev
+      PR_NUMBER: ${{ inputs.pr_number }}
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      AUDIT_PROFILE: ${{ inputs.audit_profile }}
+      E2E_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      QA_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      QA_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+    steps:
+      - name: Checkout trusted pipeline (main) — never the PR head SHA
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Require canonical staging browser credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$E2E_EMAIL" ]] || { echo 'STAGING_SMOKE_EMAIL_MISSING' >&2; exit 1; }
+          [[ -n "$E2E_PASSWORD" ]] || { echo 'STAGING_SMOKE_PASSWORD_MISSING' >&2; exit 1; }
+          echo "::add-mask::$E2E_EMAIL"
+          echo "::add-mask::$E2E_PASSWORD"
+          if [[ -n "$QA_ADMIN_EMAIL" ]]; then echo "::add-mask::$QA_ADMIN_EMAIL"; fi
+          if [[ -n "$QA_ADMIN_PASSWORD" ]]; then echo "::add-mask::$QA_ADMIN_PASSWORD"; fi
+
+      - name: Download provenance evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: staging-frontend-pr-ui-qa-provenance-${{ github.run_id }}
+          path: provenance-in
+
+      - name: Re-assert provenance passed and frontend SHA matches
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          node -e "
+            const p = require('./provenance-in/provenance.json');
+            if (p.status !== 'PROVENANCE_OK') { console.error('PROVENANCE_NOT_OK'); process.exit(1); }
+            const short = String(process.env.RELEASE_SHA).toLowerCase().slice(0,7);
+            if (!String(p.frontendBuildVersion || '').toLowerCase().includes(short)) {
+              console.error('STAGING_FRONTEND_SHA_MISMATCH'); process.exit(1);
+            }
+            if (p.worker && p.worker.workerShaMatchRequired) {
+              console.error('UNEXPECTED_WORKER_SHA_REQUIREMENT'); process.exit(1);
+            }
+            console.log('PROVENANCE_REVALIDATED frontend=' + p.frontendBuildVersion + ' worker.env=' + (p.worker && p.worker.environment));
+          "
+
+      - run: npm ci
+
+      - name: Install Chromium for sanctioned staging browser QA
+        run: npx playwright install --with-deps chromium
+
+      - name: Run authenticated read-only frontend QA
+        run: npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts
+
+      - name: Build sanitized final summary
+        if: always()
+        shell: bash
+        env:
+          PROVENANCE_JSON_PATH: provenance-in/provenance.json
+          QA_SUMMARY_PATH: test-results/frontend-pr-ui-qa/summary.json
+          FINAL_SUMMARY_PATH: ${{ runner.temp }}/frontend-pr-ui-qa-final-summary.json
+        run: |
+          set -euo pipefail
+          test -f "$QA_SUMMARY_PATH" || printf '{"status":"NO_SUMMARY"}\n' > "$QA_SUMMARY_PATH"
+          node scripts/ci/frontend-pr-qa-summarize.mjs
+          cp "$FINAL_SUMMARY_PATH" frontend-pr-ui-qa-final-summary.json
+
+      - name: Publish sanitized summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '## Staging Frontend PR UI QA'
+            echo ''
+            echo '```json'
+            cat frontend-pr-ui-qa-final-summary.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-frontend-pr-ui-qa-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results/frontend-pr-ui-qa
+            frontend-pr-ui-qa-final-summary.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  qa-result:
+    name: Staging Frontend PR UI QA Passed
+    needs: [guard, ui-qa]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require sanctioned guard and QA jobs
+        shell: bash
+        env:
+          GUARD: ${{ needs.guard.result }}
+          UI_QA: ${{ needs.ui-qa.result }}
+        run: |
+          set -euo pipefail
+          echo "guard=$GUARD ui_qa=$UI_QA"
+          [[ "$GUARD" == 'success' ]]
+          [[ "$UI_QA" == 'success' ]]
+          echo 'STAGING_FRONTEND_PR_UI_QA_PASS'

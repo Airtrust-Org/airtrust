@@ -31,6 +31,16 @@ jobs:
       - name: Validate staging QA script syntax
         run: node --check scripts/qa/staging-runtime-fichas-lms-qa.mjs
 
+      - name: Validate frontend PR UI QA guard scripts and tests
+        run: |
+          node --check scripts/ci/verify-frontend-pr-qa-provenance.mjs
+          node --check scripts/ci/frontend-pr-qa-summarize.mjs
+          node --check e2e/lib/read-only-network-guard.mjs
+          node --test \
+            scripts/ci/verify-frontend-pr-qa-provenance.test.mjs \
+            scripts/ci/frontend-pr-qa-summarize.test.mjs \
+            e2e/lib/read-only-network-guard.test.mjs
+
       - name: ✅ PR checks are structurally valid
         run: |
           echo "PR: ${{ github.event.pull_request.title }}"
