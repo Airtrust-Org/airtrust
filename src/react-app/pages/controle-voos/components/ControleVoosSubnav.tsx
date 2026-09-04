@@ -81,7 +81,7 @@ export default function ControleVoosSubnav() {
                 to={`${link.to}${search}`}
                 title={link.preview ? PREVIEW_BADGE_TITLE : undefined}
                 aria-current={active ? 'page' : undefined}
-                className={`flex min-h-[40px] items-center whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                className={`flex min-h-[44px] items-center whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                   active
                     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
