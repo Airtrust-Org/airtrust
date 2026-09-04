@@ -90,14 +90,11 @@ jobs:
             throw new Error(`STAGING_WORKER_SHA_MISMATCH:${sourceSha || 'missing'}`);
           }
 
-          const frontendResponse = await fetch(`${process.env.STAGING_FRONTEND_BASE_URL}/`, {
-            headers: { Accept: 'text/html' },
-          });
-          if (!frontendResponse.ok) throw new Error(`STAGING_FRONTEND_HTTP_${frontendResponse.status}`);
-          const html = await frontendResponse.text();
-          if (!html.toLowerCase().includes(expected.slice(0, 7))) {
-            throw new Error('STAGING_FRONTEND_SHA_MISMATCH');
-          }
+          const { assertLiveFrontendShaFromOrigin } = await import('./e2e/lib/live-sha-guard.mjs');
+          await assertLiveFrontendShaFromOrigin(
+            process.env.STAGING_FRONTEND_BASE_URL,
+            expected.slice(0, 7),
+          );
 
           console.log(`STAGING_SIMULATOR_PROVENANCE_SHA=${expected}`);
           NODE
