@@ -9,7 +9,9 @@ const hospedagem = readFileSync('src/react-app/pages/HospedagemPage.tsx', 'utf8'
 function section(source: string, start: string, end: string) {
   const first = source.indexOf(start);
   const last = source.indexOf(end, first);
-  return first >= 0 && last >= 0 ? source.slice(first, last) : '';
+  expect(first, `start marker not found: ${start}`).toBeGreaterThanOrEqual(0);
+  expect(last, `end marker not found: ${end}`).toBeGreaterThan(first);
+  return source.slice(first, last);
 }
 
 describe('P0 destructive actions on operational runtime pages', () => {
@@ -34,13 +36,22 @@ describe('P0 destructive actions on operational runtime pages', () => {
 
   it.each([
     ['licenças', licencas, "await confirmDialog('Confirma exclusão desta licença?')", "apiClient.delete<{ success?: boolean; error?: string }>(`/licencas/${id}`)"],
-    ['certificações', certificacoes, 'await confirmDialog(', "apiFetch(`/api/qualificacoes/${certificacaoId}`, {"],
+    ['certificações', certificacoes, 'await confirmDialog(', "apiFetch(`/api/qualificacoes/historico/${certificacaoId}`, {"],
     ['hospedagem', hospedagem, 'await confirmDialog(', 'fetch(`${API_BASE_URL}/hospedagem/${h.id}`, {'],
   ])('%s keeps its existing confirmation before the mutation', (_, source, confirmation, mutation) => {
     const start = source.indexOf(confirmation);
     const end = source.indexOf(mutation, start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(source.slice(start, end)).toContain('return;');
+  });
+
+  it('loads certificações from the same canonical historico resource used by DELETE', () => {
+    expect(certificacoes).toContain(
+      '`/api/qualificacoes/historico?page=${page}&limit=${limit}&stats=true`',
+    );
+    expect(certificacoes).toContain('row.tipo_nome || row.tipo');
+    expect(certificacoes).toContain('pagination.pages');
+    expect(certificacoes).not.toContain('/api/qualificacoes?page=');
   });
 
   it('preserves the active DELETE endpoint and method for every surface', () => {
