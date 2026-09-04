@@ -47,7 +47,10 @@ describe('P0 destructive actions on operational runtime pages', () => {
 
   it('loads certificações from the same canonical historico resource used by DELETE', () => {
     expect(certificacoes).toContain(
-      '`/api/qualificacoes/historico?page=${page}&limit=${limit}&stats=true`',
+      'httpClient.get<{',
+    );
+    expect(certificacoes).toContain(
+      '`/qualificacoes/historico?page=${page}&limit=${limit}&stats=true`',
     );
     expect(certificacoes).toContain('row.tipo_nome || row.tipo');
     expect(certificacoes).toContain('pagination.pages');
