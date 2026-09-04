@@ -28,7 +28,8 @@ env:
   STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
   STAGING_FRONTEND_BASE_URL: https://staging.airtrust.pages.dev
   STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
-  QA_SIMULATOR_STATE_PATH: test-results/staging-simulator-planning/state.json
+  # Must live outside Playwright's default outputDir (`test-results`), which is cleaned at test startup.
+  QA_SIMULATOR_STATE_PATH: qa-state/staging-simulator-planning/state.json
 
 jobs:
   guard:
@@ -218,7 +219,7 @@ jobs:
           name: staging-simulator-planning-qa-${{ github.run_id }}
           path: |
             playwright-report
-            test-results/staging-simulator-planning
+            qa-state/staging-simulator-planning
             test-results/frontend-pr-ui-qa/results.json
           if-no-files-found: ignore
           retention-days: 14
