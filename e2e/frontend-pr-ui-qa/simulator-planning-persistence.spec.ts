@@ -20,7 +20,7 @@ function statusLabel(value: QaState['workflow_status']) {
 test('simulator planning: resume persisted CAE workflow and export PDF', async ({ page }) => {
   const statePath =
     process.env.QA_SIMULATOR_STATE_PATH ||
-    'test-results/staging-simulator-planning/state.json';
+    'qa-state/staging-simulator-planning/state.json';
   const state = JSON.parse(readFileSync(statePath, 'utf8')) as QaState;
 
   expect(state.draft_id.length).toBeGreaterThan(20);
