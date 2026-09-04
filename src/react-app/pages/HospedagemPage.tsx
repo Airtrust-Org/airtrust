@@ -21,6 +21,7 @@ import {
 import { format, parseISO } from 'date-fns';
 import { confirmDialog } from '../utils/confirmDialog';
 import FuncionarioLink from '../components/funcionarios/FuncionarioLink';
+import RowActionsMenu from '../components/UI/RowActionsMenu';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -598,13 +599,17 @@ export default function HospedagemPage() {
                             >
                               <Pencil className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => handleDelete(h)}
-                              title="Remover"
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <RowActionsMenu
+                              label={`Ações da hospedagem ${h.local}`}
+                              actions={[
+                                {
+                                  label: 'Remover hospedagem',
+                                  destructive: true,
+                                  icon: Trash2,
+                                  onSelect: () => handleDelete(h),
+                                },
+                              ]}
+                            />
                           </div>
                         </td>
                       </tr>

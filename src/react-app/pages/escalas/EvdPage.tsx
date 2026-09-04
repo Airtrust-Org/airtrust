@@ -27,6 +27,7 @@ import {
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import TimeInput from '@/react-app/components/TimeInput';
+import RowActionsMenu from '@/react-app/components/UI/RowActionsMenu';
 import EscalasTabBar from './components/EscalasTabBar';
 import Button from '@/react-app/components/Button';
 import { useAuth } from '@/react-app/hooks/useAuth';
@@ -35,6 +36,7 @@ import { apiFetch } from '@/react-app/lib/apiFetch';
 import { getAccessToken } from '@/react-app/config/api';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { canManageEscalaOperations } from './utils/operationalPermissions';
 import {
@@ -1080,6 +1082,14 @@ export default function EvdPage() {
     },
   });
 
+  async function handleDelete(voo: EvdVoo) {
+    const confirmed = await confirmDialog(
+      `Confirma exclusão do voo ${voo.origem || '—'} → ${voo.destino || '—'}?`,
+    );
+    if (!confirmed) return;
+    deleteMutation.mutate(voo.id);
+  }
+
   async function handlePublish(voo: EvdVoo) {
     const picSignal = toNumericId(voo.pic_id) ? frmsByTripulante.get(Number(voo.pic_id)) : null;
     const sicSignal = toNumericId(voo.sic_id) ? frmsByTripulante.get(Number(voo.sic_id)) : null;
@@ -1943,13 +1953,18 @@ export default function EvdPage() {
                                 >
                                   <Send className="h-3.5 w-3.5" /> Publicar
                                 </button>
-                                <button
-                                  onClick={() => deleteMutation.mutate(voo.id)}
-                                  disabled={deleteMutation.isPending}
-                                  className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" /> Excluir
-                                </button>
+                                <RowActionsMenu
+                                  label={`Ações do voo ${voo.origem || ''} ${voo.destino || ''}`.trim()}
+                                  actions={[
+                                    {
+                                      label: 'Excluir voo',
+                                      destructive: true,
+                                      disabled: deleteMutation.isPending,
+                                      icon: Trash2,
+                                      onSelect: () => handleDelete(voo),
+                                    },
+                                  ]}
+                                />
                               </>
                             )}
                             {voo.status === 'PUBLICADA' && (

@@ -25,6 +25,35 @@ describe('layout audit regressions', () => {
     expect((shell.match(/<ControleVoosPrototypeBanner/g) || []).length).toBe(1);
   });
 
+  it('keeps Controle de Voos preview PageHeaders free of redundant preview labels (N-06)', () => {
+    const indisponibilidades = source(
+      'src/react-app/pages/controle-voos/ControleVoosIndisponibilidades.tsx',
+    );
+    const hangaragem = source(
+      'src/react-app/pages/controle-voos/ControleVoosHangaragem.tsx',
+    );
+    const jornadas = source(
+      'src/react-app/pages/controle-voos/ControleVoosJornadas.tsx',
+    );
+
+    // Titles no longer carry a generic preview/dev suffix.
+    expect(indisponibilidades).toContain('title="Indisponibilidades de Aeronave"');
+    expect(indisponibilidades).not.toContain('— Preview"');
+    expect(hangaragem).toContain('title="Hangaragem"');
+    expect(hangaragem).not.toContain('— Em desenvolvimento"');
+
+    // Descriptions drop the generic "Tela em preview." phrase but keep the
+    // specific operational/schema limitation.
+    expect(indisponibilidades).not.toContain('Tela em preview.');
+    expect(indisponibilidades).toContain('schema operacional consolidado');
+    expect(hangaragem).not.toContain('Tela em preview.');
+    expect(hangaragem).toContain('integração confiável com MRO');
+
+    // Jornadas already had a clean header — guard it stays that way.
+    expect(jornadas).toContain('title="Jornadas"');
+    expect(jornadas).not.toContain('Tela em preview');
+  });
+
   it('uses neutral styling for MRO classification/type badges', () => {
     const badge = source('src/react-app/pages/mro/components/MroStatusBadge.tsx');
 

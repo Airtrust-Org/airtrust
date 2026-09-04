@@ -6,7 +6,8 @@
  */
 
 import { useEffect, useState } from 'react';
-import { ArrowLeft, FileText, Link, List, Plus } from 'lucide-react';
+import { ArrowLeft, FileText, Link, List, Plus, Trash2 } from 'lucide-react';
+import { RowActionsMenu } from '@/react-app/components/UI/RowActionsMenu';
 import { toast } from 'sonner';
 
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
@@ -515,31 +516,39 @@ export default function CrudModelos({ onBack }: Props = {}) {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex items-center justify-end gap-2">
                         <button
+                          type="button"
                           onClick={() => verManobras(modelo)}
-                          className="text-sm font-medium text-primary hover:text-primary/80"
+                          className="inline-flex min-h-11 items-center justify-center rounded-lg px-2.5 py-1 text-sm font-medium text-primary hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
                         >
                           Ver Manobras
                         </button>
                         <button
+                          type="button"
                           onClick={() => abrirFormulario(modelo)}
-                          className="text-sm font-medium text-slate-700 hover:text-slate-900"
+                          className="inline-flex min-h-11 items-center justify-center rounded-lg px-2.5 py-1 text-sm font-medium text-slate-700 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
                         >
                           Editar
                         </button>
                         <button
+                          type="button"
                           onClick={() => clonar(modelo.id)}
-                          className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                          className="inline-flex min-h-11 items-center justify-center rounded-lg px-2.5 py-1 text-sm font-medium text-blue-600 hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
                         >
                           Clonar
                         </button>
-                        <button
-                          onClick={() => excluir(modelo.id)}
-                          className="text-sm font-medium text-red-600 hover:text-red-800"
-                        >
-                          Excluir
-                        </button>
+                        <RowActionsMenu
+                          label={`Mais ações para ${modelo.codigo_canonico || modelo.codigo}`}
+                          actions={[
+                            {
+                              label: 'Excluir modelo',
+                              destructive: true,
+                              icon: Trash2,
+                              onSelect: () => excluir(modelo.id),
+                            },
+                          ]}
+                        />
                       </div>
                     </td>
                   </tr>
