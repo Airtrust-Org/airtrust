@@ -112,6 +112,10 @@ async function main() {
   });
   assert(configUpdate.status === 200, `config QA retornou ${configUpdate.status}`);
   assert(configUpdate.json?.data?.roster_policy === 'AMBAS', 'config QA não confirmou AMBAS');
+  assert(
+    Number(configUpdate.json?.data?.planning_horizon_days || 0) >= 90,
+    'config QA não confirmou horizonte >= 90 dias',
+  );
 
   const [funcionariosRes, tiposRes, modelosRes] = await Promise.all([
     authFetch(baseUrl, token, '/api/funcionarios'),
