@@ -2,7 +2,7 @@
   "changeId": "edb-audit-persistence-0484",
   "baselineId": "production-d1-baseline-v2-20260714",
   "filePath": "worker-airtrust/schema-v2/changes/0484_edb_audit_persistence.sql",
-  "fileHash": "20f2b28af7c57f55d9dfa295bf0768c1376a0da4752e447f34fc6dfbb8baaf3b",
+  "fileHash": "0adba524e052434c4b472ec0bd2798c2a5e6849992251b54289caeecc3750ef4",
   "planPath": "worker-airtrust/schema-v2/plans/edb-audit-persistence-0484.md",
   "planHash": "2c552fbf722267ddf91e5e598670a2943257bee96c95295f49a789cc8568e76d"
 }
