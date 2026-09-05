@@ -161,6 +161,12 @@ export async function loadAndVerifyPersistedEdbAuditChain(params: {
   ).bind(params.empresaId, params.diaryId).all<EdbStoredAuditEventRow>();
 
   const rows = result.results ?? [];
+  for (let index = 0; index < rows.length; index += 1) {
+    if (rows[index].sequence_no !== index + 1) {
+      throw new Error('EDB_AUDIT_PERSISTED_SEQUENCE_INVALID');
+    }
+  }
+
   const events = rows.map(hydrateEdbAuditEventRow);
   const verification = await verifyEdbAuditChain(events);
   if (!verification.valid) {
