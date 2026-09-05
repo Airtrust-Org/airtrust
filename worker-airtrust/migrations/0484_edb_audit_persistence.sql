@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS edb_audit_events (
   id TEXT PRIMARY KEY,
   empresa_id INTEGER NOT NULL,
   diario_id INTEGER NOT NULL,
-  sequence_no INTEGER NOT NULL CHECK (sequence_no >= 1),
-  source_flight_id INTEGER,
+  sequence_no INTEGER NOT NULL CHECK (typeof(sequence_no) = 'integer' AND sequence_no >= 1),
+  source_flight_id INTEGER CHECK (source_flight_id IS NULL OR (typeof(source_flight_id) = 'integer' AND source_flight_id >= 1)),
   technical_situation_id TEXT,
   revision_id TEXT,
   event_type TEXT NOT NULL CHECK (event_type IN (
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS edb_audit_events (
     'RECORD_CANCELLED'
   )),
   actor_json TEXT CHECK (actor_json IS NULL OR json_valid(actor_json)),
-  occurred_at TEXT NOT NULL,
+  occurred_at TEXT NOT NULL CHECK (datetime(occurred_at) IS NOT NULL),
   payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
   previous_event_hash_sha256 TEXT,
   event_hash_sha256 TEXT NOT NULL,

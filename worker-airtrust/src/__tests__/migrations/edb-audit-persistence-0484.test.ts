@@ -173,6 +173,43 @@ describe('0484 eDB audit persistence', () => {
     expect(linkedFirst.stderr).toContain('EDB_AUDIT_FIRST_PREVIOUS_HASH_MUST_BE_NULL');
   });
 
+  it('rejects fractional sequence/source-flight identities and invalid timestamps', () => {
+    const dbPath = createDatabase();
+
+    const fractionalSequence = insertEvent(dbPath, {
+      id: 'evt-frac-seq',
+      sequence: 1.5,
+      type: 'SOURCE_SNAPSHOT_CAPTURED',
+      sourceFlightId: 100,
+      technicalSituationId: 'tech-1',
+      occurredAt: '2026-09-05T10:00:00Z',
+      hash: 'a'.repeat(64),
+    });
+    expect(fractionalSequence.code).not.toBe(0);
+
+    const fractionalFlight = insertEvent(dbPath, {
+      id: 'evt-frac-flight',
+      sequence: 1,
+      type: 'SOURCE_SNAPSHOT_CAPTURED',
+      sourceFlightId: 100.5,
+      technicalSituationId: 'tech-1',
+      occurredAt: '2026-09-05T10:00:00Z',
+      hash: 'b'.repeat(64),
+    });
+    expect(fractionalFlight.code).not.toBe(0);
+
+    const invalidTimestamp = insertEvent(dbPath, {
+      id: 'evt-bad-time',
+      sequence: 1,
+      type: 'SOURCE_SNAPSHOT_CAPTURED',
+      sourceFlightId: 100,
+      technicalSituationId: 'tech-1',
+      occurredAt: 'not-a-timestamp',
+      hash: 'c'.repeat(64),
+    });
+    expect(invalidTimestamp.code).not.toBe(0);
+  });
+
   it('rejects wrong previous hash, skipped sequence and time regression', () => {
     const dbPath = createDatabase();
     const h1 = 'a'.repeat(64);
