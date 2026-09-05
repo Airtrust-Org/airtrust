@@ -1,0 +1,140 @@
+name: Staging LMS SCORM Runtime QA
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AIRTRUST_STAGING_LMS_SCORM_QA
+        required: true
+        type: string
+      release_sha:
+        description: Exact product SHA currently deployed to staging
+        required: true
+        type: string
+
+concurrency:
+  group: airtrust-staging-lms-scorm-runtime-qa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Staging LMS SCORM QA Guard
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      CONFIRMATION: ${{ inputs.confirmation }}
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      QA_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      QA_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail closed before staging mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo 'AIRTRUST_STAGING_LMS_SCORM_QA_NO_GO: main required' >&2
+            exit 1
+          }
+          [[ "$CONFIRMATION" == "AIRTRUST_STAGING_LMS_SCORM_QA" ]] || {
+            echo 'AIRTRUST_STAGING_LMS_SCORM_QA_NO_GO: confirmation rejected' >&2
+            exit 1
+          }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo 'AIRTRUST_STAGING_LMS_SCORM_QA_NO_GO: invalid release SHA' >&2
+            exit 1
+          }
+          [[ -n "$QA_ADMIN_EMAIL" && -n "$QA_ADMIN_PASSWORD" ]] || {
+            echo 'AIRTRUST_STAGING_LMS_SCORM_QA_NO_GO: QA examiner credentials absent' >&2
+            exit 1
+          }
+          blocked_api="api.""airtrust.online"
+          blocked_worker="airtrust-api.""airtrust.workers.dev"
+          ! grep -Fq "$blocked_api" scripts/staging/lms-scorm-staging-qa.mjs e2e/frontend-pr-ui-qa/lms-scorm-staging.spec.ts || {
+            echo 'AIRTRUST_STAGING_LMS_SCORM_QA_NO_GO: production API target found' >&2
+            exit 1
+          }
+          ! grep -Fq "$blocked_worker" scripts/staging/lms-scorm-staging-qa.mjs e2e/frontend-pr-ui-qa/lms-scorm-staging.spec.ts || {
+            echo 'AIRTRUST_STAGING_LMS_SCORM_QA_NO_GO: production Worker target found' >&2
+            exit 1
+          }
+          ! grep -Eqi 'wrangler .*deploy|migration|sincronizar-frms|frms_jornada' scripts/staging/lms-scorm-staging-qa.mjs || {
+            echo 'AIRTRUST_STAGING_LMS_SCORM_QA_NO_GO: forbidden operation found' >&2
+            exit 1
+          }
+          echo 'STAGING_LMS_SCORM_GUARD_PASS'
+
+  runtime:
+    name: Real SCORM Upload and Browser Rendering QA
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    env:
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      QA_LMS_SCORM_STATE_PATH: qa-state/staging-lms-scorm/state.json
+      QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+      QA_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      QA_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+      AUDIT_PROFILE: lms-scorm
+      STAGING_FRONTEND_BASE_URL: https://staging.airtrust.pages.dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate trusted harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/staging/lms-scorm-staging-qa.mjs
+          AUDIT_PROFILE=lms-scorm npx playwright test             -c e2e/frontend-pr-ui-qa.config.ts             --project=chromium             --list
+          npm run test:run -- src/react-app/pages/lms/__tests__/lmsContentUpload.serial.test.ts
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare synthetic SCORM fixtures on pinned staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-state/staging-lms-scorm
+          node scripts/staging/lms-scorm-staging-qa.mjs
+
+      - name: Exercise real SCORM upload UI and Browser Rendering
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx playwright test             -c e2e/frontend-pr-ui-qa.config.ts             --project=chromium
+
+      - name: Cleanup synthetic SCORM fixtures
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$QA_LMS_SCORM_STATE_PATH" ]]; then
+            node scripts/staging/lms-scorm-staging-qa.mjs --cleanup
+          else
+            echo '{"ok":true,"cleanup":"NOT_REQUIRED_NO_STATE"}'               > qa-state/staging-lms-scorm/cleanup-summary.json
+          fi
+
+      - name: Upload sanitized SCORM QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-lms-scorm-qa-${{ github.run_id }}
+          path: |
+            qa-state/staging-lms-scorm/browser-summary.json
+            qa-state/staging-lms-scorm/cleanup-summary.json
+          if-no-files-found: warn
+          retention-days: 30
