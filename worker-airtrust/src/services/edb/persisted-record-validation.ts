@@ -8,8 +8,6 @@ const LIFECYCLE_STATUSES: ReadonlySet<string> = new Set([
   'READY_FOR_PIC_SIGNATURE',
   'PIC_SIGNED',
   'OPERATOR_SIGNED',
-  'ANAC_PENDING',
-  'ANAC_SYNCED',
   'SUPERSEDED',
   'CANCELLED',
 ]);
