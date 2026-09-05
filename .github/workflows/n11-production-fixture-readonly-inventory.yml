@@ -1,0 +1,95 @@
+name: N-11 Production Fixture Readonly Inventory
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact main SHA reviewed for this read-only inventory
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_PRODUCTION_READONLY_N11 to continue
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: n11-production-readonly-inventory
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    name: Read-only N-11 production inventory
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_REF_REQUIRED" >&2; exit 1; }
+          [[ "$CONFIRMATION" == "AIRTRUST_PRODUCTION_READONLY_N11" ]] || { echo "READONLY_CONFIRMATION_REQUIRED" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "EXPECTED_SHA_INVALID" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo "EXPECTED_SHA_MISMATCH" >&2; exit 1; }
+
+      - name: Checkout exact reviewed main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+
+      - name: Install Worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Validate D1 read credential
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo "D1_READ_TOKEN_MISSING" >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo "CLOUDFLARE_ACCOUNT_ID_MISSING" >&2; exit 1; }
+
+      - name: Inventory exact N-11 candidates and relationship counts
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          N11_PRODUCTION_READONLY_CONFIRMATION: AIRTRUST_PRODUCTION_READONLY_N11
+          N11_PRODUCTION_DB_NAME: airtrust-db
+        run: |
+          set -euo pipefail
+          node scripts/validation/n11-production-fixture-inventory.mjs > "$RUNNER_TEMP/n11-inventory.json"
+          node - "$RUNNER_TEMP/n11-inventory.json" >> "$GITHUB_STEP_SUMMARY" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          console.log('## N-11 production inventory — read-only');
+          console.log('');
+          console.log(`- source SHA: \`${data.source_sha}\``);
+          console.log(`- tenant id: \`${data.empresa_id}\``);
+          console.log(`- candidate employee IDs: \`${data.candidates.map((x) => x.id).join(',') || 'none'}\``);
+          console.log(`- linked user IDs: \`${data.user_links.map((x) => x.id).join(',') || 'none'}\``);
+          console.log(`- tables with matching funcionario_id references: \`${data.references.length}\``);
+          console.log('- names/emails/document numbers: not emitted');
+          console.log('- writes: none');
+          NODE
+
+      - name: Upload sanitized inventory evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: n11-production-readonly-inventory-${{ github.sha }}
+          path: ${{ runner.temp }}/n11-inventory.json
+          if-no-files-found: error
+          retention-days: 7
