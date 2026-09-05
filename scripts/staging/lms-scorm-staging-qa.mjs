@@ -18,7 +18,9 @@ const STATE_PATH =
   process.env.QA_LMS_SCORM_STATE_PATH || 'qa-state/staging-lms-scorm/state.json';
 const ROOT = path.dirname(STATE_PATH);
 const MODE = process.argv.includes('--cleanup') ? 'cleanup' : 'prepare';
-const RUN_MARKER = String(process.env.GITHUB_RUN_ID || Date.now());
+const RUN_ID = String(process.env.GITHUB_RUN_ID || Date.now());
+const RUN_ATTEMPT = String(process.env.GITHUB_RUN_ATTEMPT || '1');
+const RUN_MARKER = `${RUN_ID}-${RUN_ATTEMPT}`;
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
