@@ -20,10 +20,15 @@ const VIEWPORTS = [
   { key: 'mobile_375', width: 375, height: 812 },
 ] as const;
 
+// Exact route set required by the 2026-09-02 MRO mobile audit closure plan.
 const ROUTES = [
   { key: 'dashboard', path: '/mro' },
   { key: 'ordens_servico', path: '/mro/os' },
   { key: 'aeronaves', path: '/mro/aeronaves' },
+  { key: 'vencimentos', path: '/mro/vencimentos' },
+  { key: 'componentes', path: '/mro/componentes' },
+  { key: 'estoque', path: '/mro/estoque' },
+  { key: 'registros_tecnicos', path: '/mro/registros-tecnicos' },
 ] as const;
 
 async function gotoChecked(page: Page, route: string, label: string) {
