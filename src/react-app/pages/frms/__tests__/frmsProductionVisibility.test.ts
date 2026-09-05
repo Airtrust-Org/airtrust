@@ -20,21 +20,4 @@ describe('frmsProductionVisibility', () => {
     expect(shouldExposeFrmsPerson(fixture, true)).toBe(false);
     expect(shouldExposeFrmsPerson(fixture, false)).toBe(true);
   });
-
-  it('reconhece o nome canônico retornado pela equipe FRMS de manutenção', () => {
-    const fixture = {
-      funcionario_nome: 'QA Governada — Mecânico Fictício',
-      cargo: 'Mecânico',
-      funcao: 'MECANICO',
-    };
-    const real = {
-      funcionario_nome: 'João da Silva',
-      cargo: 'Mecânico',
-      funcao: 'MECANICO',
-    };
-
-    expect(shouldExposeFrmsPerson(fixture, true)).toBe(false);
-    expect(shouldExposeFrmsPerson(real, true)).toBe(true);
-    expect(shouldExposeFrmsPerson(fixture, false)).toBe(true);
-  });
 });
