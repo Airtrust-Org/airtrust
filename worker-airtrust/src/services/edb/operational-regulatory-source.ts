@@ -3,8 +3,18 @@ import type { EdbTechnicalDiscrepancy } from './contracts';
 export type EdbRegulatoryDataOrigin = 'MANUAL' | 'SIGVOOS' | 'IMPORTACAO' | 'SISTEMA';
 
 /**
- * Canonical regulatory semantics now live on the source `cv_voo_etapas` row.
- * `etapa_id` is an alias of that row id when loaded by the repository.
+ * Explicit regulatory-stage source contract for a future repository boundary.
+ *
+ * This interface does not assert that these fields currently exist on the
+ * operational `cv_voo_etapas` schema. Values may only be populated by a
+ * source that has independently established the corresponding regulatory
+ * semantics; unresolved fields remain null. In particular, this contract must
+ * not be used to reinterpret legacy `starts`, unclassified `tempo_ifr`, or
+ * RDV free text as regulated cycles, actual/simulated IFR, or structured
+ * technical discrepancies.
+ *
+ * When a repository eventually binds an explicit source row, `etapa_id`
+ * identifies that stage.
  */
 export interface ControleVoosEtapaRegulatoriaRow {
   id: number;
