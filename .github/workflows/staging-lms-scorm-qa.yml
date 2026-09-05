@@ -1,0 +1,204 @@
+name: Staging LMS SCORM QA
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_STAGING_LMS_SCORM_QA to continue'
+        required: true
+        type: string
+      release_sha:
+        description: 'Exact already-deployed staging release SHA to validate'
+        required: true
+        type: string
+
+concurrency:
+  group: staging-lms-scorm-qa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+  statuses: read
+  checks: read
+  pull-requests: read
+
+env:
+  NODE_VERSION: '24'
+  STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+  STAGING_FRONTEND_BASE_URL: https://staging.airtrust.pages.dev
+  QA_LMS_SCORM_STATE_PATH: qa-state/staging-lms-scorm/state.json
+
+jobs:
+  guard:
+    name: Staging LMS SCORM QA Guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate trusted-main dispatch
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          EVENT_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$EVENT_REF" == 'refs/heads/main' ]] || { echo 'MAIN_ONLY' >&2; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_STAGING_LMS_SCORM_QA' ]] || { echo 'CONFIRMATION_REJECTED' >&2; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo 'RELEASE_SHA_INVALID' >&2; exit 1; }
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require deployed release to be an ancestor of trusted main
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          git cat-file -e "$RELEASE_SHA^{commit}"
+          git merge-base --is-ancestor "$RELEASE_SHA" HEAD
+          echo "TRUSTED_RELEASE_ANCESTRY_OK=$RELEASE_SHA"
+
+      - name: Require canonical release gates for deployed SHA
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          node scripts/ci/verify-release-gates.mjs
+
+      - name: Require live Worker and frontend provenance
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const expected = String(process.env.RELEASE_SHA || '').toLowerCase();
+          const versionResponse = await fetch(`${process.env.STAGING_API_BASE_URL}/api/version`, {
+            headers: { Accept: 'application/json' },
+          });
+          if (!versionResponse.ok) throw new Error(`STAGING_VERSION_HTTP_${versionResponse.status}`);
+          const version = await versionResponse.json();
+          const sourceSha = String(version?.sourceSha ?? version?.data?.sourceSha ?? '').toLowerCase();
+          if (sourceSha !== expected) {
+            throw new Error(`STAGING_WORKER_SHA_MISMATCH:${sourceSha || 'missing'}`);
+          }
+
+          const { assertLiveFrontendShaFromOrigin } = await import('./e2e/lib/live-sha-guard.mjs');
+          await assertLiveFrontendShaFromOrigin(
+            process.env.STAGING_FRONTEND_BASE_URL,
+            expected.slice(0, 7),
+          );
+          console.log(`STAGING_LMS_SCORM_PROVENANCE_SHA=${expected}`);
+          NODE
+
+  qa:
+    name: Real LMS SCORM Upload QA
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    env:
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      QA_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
+      QA_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD || secrets.STAGING_SMOKE_PASSWORD }}
+      QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
+      QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD || secrets.STAGING_SMOKE_PASSWORD }}
+      E2E_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      AUDIT_PROFILE: lms-scorm
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Require staging-only QA credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$QA_EXAMINER_ADMIN_PASSWORD" ]] || { echo 'QA_EXAMINER_ADMIN_PASSWORD_MISSING' >&2; exit 1; }
+
+      - name: Install QA dependencies
+        run: npm ci
+
+      - name: Check SCORM QA harness and upload contract
+        run: |
+          node --check scripts/staging/lms-scorm-staging-qa.mjs
+          npm run test:run -- src/react-app/pages/lms/__tests__/lmsContentUpload.serial.test.ts
+
+      - name: Prepare disposable SCORM courses and ZIP fixtures
+        run: node scripts/staging/lms-scorm-staging-qa.mjs
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Exercise real SCORM success, rejection, timeout and progress in staging UI
+        run: npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium
+
+      - name: Cleanup disposable LMS SCORM fixtures
+        if: always()
+        run: node scripts/staging/lms-scorm-staging-qa.mjs --cleanup
+
+      - name: Publish sanitized LMS SCORM QA summary
+        if: success()
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const browser = JSON.parse(fs.readFileSync('qa-state/staging-lms-scorm/browser-summary.json', 'utf8'));
+          const cleanup = JSON.parse(fs.readFileSync('qa-state/staging-lms-scorm/cleanup-summary.json', 'utf8'));
+          const lines = [
+            '## LMS SCORM staging acceptance',
+            '',
+            '- exact Worker/frontend release provenance: PASS',
+            `- real synthetic ZIP upload: ${browser.success?.real_zip_upload ? 'PASS' : 'FAIL'}`,
+            `- visible upload progress/status: ${Array.isArray(browser.success?.visible_progress) ? 'PASS' : 'FAIL'}`,
+            `- Browser Rendering conformance success: ${browser.success?.runtime_conformance || 'FAIL'}`,
+            `- static rejection path: ${browser.rejection?.static_gate || 'FAIL'}`,
+            `- runtime timeout path: ${browser.timeout?.runtime_conformance || 'FAIL'}`,
+            `- rejected/timeout package activation blocked: ${!browser.rejection?.activated && !browser.timeout?.activated ? 'PASS' : 'FAIL'}`,
+            `- cleanup through product API: ${cleanup.cleanup || 'FAIL'}`,
+            '- production target/data used: no',
+            '- credentials emitted: no',
+          ];
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+          NODE
+
+      - name: Upload sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-lms-scorm-qa-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results/frontend-pr-ui-qa/results.json
+            qa-state/staging-lms-scorm/browser-summary.json
+            qa-state/staging-lms-scorm/cleanup-summary.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  result:
+    name: Staging LMS SCORM QA Passed
+    needs: [guard, qa]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require governed LMS SCORM QA
+        shell: bash
+        env:
+          GUARD: ${{ needs.guard.result }}
+          QA: ${{ needs.qa.result }}
+        run: |
+          set -euo pipefail
+          echo "guard=$GUARD qa=$QA"
+          [[ "$GUARD" == 'success' ]]
+          [[ "$QA" == 'success' ]]
+          echo 'STAGING_LMS_SCORM_QA_PASS'
