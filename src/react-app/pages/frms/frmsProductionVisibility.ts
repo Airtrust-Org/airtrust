@@ -1,5 +1,6 @@
 export interface FrmsPersonLike {
   nome?: string | null;
+  funcionario_nome?: string | null;
   nome_guerra?: string | null;
   cargo?: string | null;
   funcao?: string | null;
@@ -14,7 +15,13 @@ function normalize(value: unknown): string {
 }
 
 export function isSyntheticFrmsFixture(person: FrmsPersonLike): boolean {
-  const haystack = [person.nome, person.nome_guerra, person.cargo, person.funcao]
+  const haystack = [
+    person.nome,
+    person.funcionario_nome,
+    person.nome_guerra,
+    person.cargo,
+    person.funcao,
+  ]
     .map(normalize)
     .filter(Boolean)
     .join(' | ');
