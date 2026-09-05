@@ -94,4 +94,55 @@ describe('eDB canonical final-record payload foundation', () => {
     const changed = await hashSignableEdbPayload(record, 'PIC_FLIGHT_RECORD');
     expect(changed).not.toBe(first);
   });
+
+  it('binds the PIC hash to tenant identity, source provenance, maintenance, flight data and technical acknowledgement', async () => {
+    const baselineRecord = makeRecord();
+    baselineRecord.signatures.picTechnicalAcknowledgement = proof('PIC_TECHNICAL_ACK');
+    const baseline = await hashSignableEdbPayload(baselineRecord, 'PIC_FLIGHT_RECORD');
+
+    const mutations = [
+      (record: ReturnType<typeof makeRecord>) => {
+        record.identity.operatorCompanyId = 8;
+      },
+      (record: ReturnType<typeof makeRecord>) => {
+        record.source.sourceStageId = 304;
+      },
+      (record: ReturnType<typeof makeRecord>) => {
+        record.maintenance.nextIntervention.dueAtAirframeHours = 1250;
+      },
+      (record: ReturnType<typeof makeRecord>) => {
+        record.flight.origin = 'SBSP';
+      },
+      (record: ReturnType<typeof makeRecord>) => {
+        record.correction.revision = 2;
+      },
+      (record: ReturnType<typeof makeRecord>) => {
+        const acknowledgement = proof('PIC_TECHNICAL_ACK');
+        acknowledgement.signer.employeeId = 10;
+        record.signatures.picTechnicalAcknowledgement = acknowledgement;
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const record = makeRecord();
+      record.signatures.picTechnicalAcknowledgement = proof('PIC_TECHNICAL_ACK');
+      mutate(record);
+      await expect(hashSignableEdbPayload(record, 'PIC_FLIGHT_RECORD')).resolves.not.toBe(baseline);
+    }
+  });
+
+  it('binds the operator hash to the exact PIC final-record proof', async () => {
+    const baselineRecord = makeRecord();
+    baselineRecord.signatures.picTechnicalAcknowledgement = proof('PIC_TECHNICAL_ACK');
+    baselineRecord.signatures.picFlightRecord = proof('PIC_FLIGHT_RECORD');
+    const baseline = await hashSignableEdbPayload(baselineRecord, 'OPERATOR_RECORD');
+
+    const changedRecord = makeRecord();
+    changedRecord.signatures.picTechnicalAcknowledgement = proof('PIC_TECHNICAL_ACK');
+    const changedPicProof = proof('PIC_FLIGHT_RECORD');
+    changedPicProof.canonicalPayloadHashSha256 = 'b'.repeat(64);
+    changedRecord.signatures.picFlightRecord = changedPicProof;
+
+    await expect(hashSignableEdbPayload(changedRecord, 'OPERATOR_RECORD')).resolves.not.toBe(baseline);
+  });
 });
