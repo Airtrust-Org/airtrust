@@ -504,7 +504,7 @@ export function recordPersistedEdbPoliceOccurrence(params: {
   });
 }
 
-export function recordPersistedEdbAnacNotification(params: {
+export function recordPersistedEdbAnacNotificationEvidence(params: {
   db: D1Database;
   empresaId: number;
   incidentId: string;
