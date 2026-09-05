@@ -122,7 +122,10 @@ export type ControlFlightProjectionFindingCode =
   | 'RDV_SUMMARY_WITHOUT_LEG'
   | 'RDV_TEXT_TOO_LONG'
   | 'SOURCE_CONFLICT_OPEN'
-  | 'TIMEZONE_REQUIRED';
+  | 'TIMEZONE_REQUIRED'
+  | 'CYCLES_SEMANTICS_UNCONFIRMED'
+  | 'IFR_CLASSIFICATION_REQUIRED'
+  | 'TECHNICAL_DISCREPANCY_SOURCE_REQUIRED';
 
 export interface ControlFlightProjectionFinding {
   code: ControlFlightProjectionFindingCode;
@@ -436,6 +439,22 @@ export function projectControlFlightToEdbDraft(
     findings,
   );
 
+  // These operational fields are intentionally not promoted into regulated eDB
+  // semantics without an explicit, approved source contract.
+  if (input.legs.some((leg) => leg.starts !== null)) {
+    addFinding(findings, 'CYCLES_SEMANTICS_UNCONFIRMED', 'legs.*.cycles');
+  }
+  if (input.legs.some((leg) => normalizeText(leg.tempo_ifr) !== null)) {
+    addFinding(findings, 'IFR_CLASSIFICATION_REQUIRED', 'legs.*.times.ifrActualMinutes');
+  }
+  if (rdvTechnicalDiscrepancySummary !== null) {
+    addFinding(
+      findings,
+      'TECHNICAL_DISCREPANCY_SOURCE_REQUIRED',
+      'legs.*.technicalDiscrepancySummary',
+    );
+  }
+
   const sortedLegs = [...input.legs].sort((left, right) => left.numero_etapa - right.numero_etapa);
   const operationalDates = deriveLegOperationalDates(sortedLegs, input.operationalDate);
   const finalLegIndex = sortedLegs.length - 1;
@@ -450,13 +469,13 @@ export function projectControlFlightToEdbDraft(
   const legs = sortedLegs.map((leg, legIndex) => {
     const blockMinutes = durationToMinutes(leg.tempo_total);
     const takeoffToLandingMinutes = durationToMinutes(leg.tempo_decolagem_pouso);
-    const ifrActualMinutes = durationToMinutes(leg.tempo_ifr);
+    const ifrSourceMinutes = durationToMinutes(leg.tempo_ifr);
     const nightMinutes = durationToMinutes(leg.tempo_noturno);
 
     const durationValues = [
       [leg.tempo_total, blockMinutes, 'times.blockMinutes'],
       [leg.tempo_decolagem_pouso, takeoffToLandingMinutes, 'times.takeoffToLandingMinutes'],
-      [leg.tempo_ifr, ifrActualMinutes, 'times.ifrActualMinutes'],
+      [leg.tempo_ifr, ifrSourceMinutes, 'times.ifrActualMinutes'],
       [leg.tempo_noturno, nightMinutes, 'times.nightMinutes'],
     ] as const;
 
@@ -519,12 +538,12 @@ export function projectControlFlightToEdbDraft(
         dayMinutes: null,
         nightMinutes,
         vfrMinutes: null,
-        ifrActualMinutes,
+        ifrActualMinutes: null,
         ifrSimulatedMinutes: null,
       },
       dayLandings: leg.pousos_diurnos,
       nightLandings: leg.pousos_noturnos,
-      cycles: leg.starts,
+      cycles: null,
       fuelAtEngineStart: fuelQuantity(leg.combustivel_inicio),
       fuelAtEngineShutdown: fuelQuantity(leg.combustivel_fim),
       fuelConsumed: fuelQuantity(fuelConsumed),
@@ -539,7 +558,7 @@ export function projectControlFlightToEdbDraft(
         legIndex,
       ),
       occurrenceSummary: isFinalLeg ? rdvOccurrenceSummary : null,
-      technicalDiscrepancySummary: isFinalLeg ? rdvTechnicalDiscrepancySummary : null,
+      technicalDiscrepancySummary: null,
       source,
     };
   });
@@ -560,12 +579,10 @@ export function projectControlFlightToEdbDraft(
       });
     }
 
-    if (rdvTechnicalDiscrepancySummary !== null) {
-      fieldSources.push({
-        path: `legs.${finalLegIndex}.technicalDiscrepancySummary`,
-        source: rdvSource,
-      });
-    }
+    // rdv.divergencias is retained as source evidence only. It is not promoted
+    // into the regulated technical discrepancy field because the free-text RDV
+    // value does not carry the structured detector/maintenance/RTS semantics
+    // required by the eDB contract.
   }
 
   const technicalSource = {

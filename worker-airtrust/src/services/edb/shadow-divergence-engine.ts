@@ -451,6 +451,9 @@ function addProjectionFindings(
         break;
       case 'DURATION_INVALID':
       case 'FUEL_CONSUMPTION_UNAVAILABLE':
+      case 'CYCLES_SEMANTICS_UNCONFIRMED':
+      case 'IFR_CLASSIFICATION_REQUIRED':
+      case 'TECHNICAL_DISCREPANCY_SOURCE_REQUIRED':
         addFinding(state, {
           category: 'FIELD_MISSING',
           severity: 'HIGH',
