@@ -14,6 +14,7 @@ import {
   readinessLabel,
   type MaintenanceDecisionBucket,
 } from './frmsMaintenanceDecision';
+import { shouldExposeFrmsPerson } from './frmsProductionVisibility';
 
 const BUCKET_STYLE: Record<MaintenanceDecisionBucket, { label: string; className: string; dot: string }> = {
   CRITICAL: {
@@ -92,7 +93,10 @@ export default function FrmsMaintenanceDashboard() {
   const canManage = access.data?.can_manage_maintenance === true;
   const canOpenOwnMaintenanceCheckin = access.data?.frms_profile === 'maintenance';
   const team = useFrmsMaintenanceTeam(date, canManage);
-  const items = team.data?.items || [];
+  const items = useMemo(
+    () => (team.data?.items || []).filter((item) => shouldExposeFrmsPerson(item)),
+    [team.data?.items],
+  );
 
   const counts = useMemo(
     () =>
