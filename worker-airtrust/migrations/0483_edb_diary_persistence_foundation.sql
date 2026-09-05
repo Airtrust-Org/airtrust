@@ -112,6 +112,9 @@ CREATE INDEX IF NOT EXISTS idx_edb_incidentes_tenant_diary
 CREATE TRIGGER IF NOT EXISTS trg_edb_diario_require_aircraft_scope
 BEFORE INSERT ON edb_diarios
 BEGIN
+  SELECT CASE WHEN NEW.status <> 'ACTIVE'
+    THEN RAISE(ABORT, 'EDB_DIARY_MUST_START_ACTIVE') END;
+
   SELECT CASE WHEN NOT EXISTS (
     SELECT 1
       FROM aeronaves a
@@ -154,6 +157,9 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_edb_volume_require_diary_scope
 BEFORE INSERT ON edb_volumes
 BEGIN
+  SELECT CASE WHEN NEW.status <> 'OPEN'
+    THEN RAISE(ABORT, 'EDB_VOLUME_MUST_START_OPEN') END;
+
   SELECT CASE WHEN NOT EXISTS (
     SELECT 1
       FROM edb_diarios d
@@ -218,6 +224,28 @@ BEGIN
        AND v.empresa_id = NEW.empresa_id
        AND v.diario_id = NEW.diario_id
   ) THEN RAISE(ABORT, 'EDB_INCIDENT_VOLUME_SCOPE_MISMATCH') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_edb_incident_initial_evidence_guard
+BEFORE INSERT ON edb_incidentes_integridade
+BEGIN
+  SELECT CASE WHEN NEW.police_reported_at IS NOT NULL
+    AND datetime(NEW.police_reported_at) < datetime(NEW.detected_at)
+    THEN RAISE(ABORT, 'EDB_INCIDENT_POLICE_BEFORE_DETECTION') END;
+
+  SELECT CASE WHEN NEW.anac_notification_reference IS NOT NULL
+    AND NEW.police_occurrence_reference IS NULL
+    THEN RAISE(ABORT, 'EDB_INCIDENT_ANAC_NOTIFICATION_REQUIRES_POLICE') END;
+
+  SELECT CASE WHEN NEW.anac_notified_at IS NOT NULL
+    AND (
+      NEW.police_reported_at IS NULL
+      OR datetime(NEW.anac_notified_at) < datetime(NEW.police_reported_at)
+    )
+    THEN RAISE(ABORT, 'EDB_INCIDENT_ANAC_NOTIFICATION_CHRONOLOGY_INVALID') END;
+
+  SELECT CASE WHEN NEW.reconstitution_outcome <> 'PENDING'
+    THEN RAISE(ABORT, 'EDB_INCIDENT_MUST_START_PENDING') END;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_edb_incident_identity_immutable
