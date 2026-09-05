@@ -87,6 +87,10 @@ describe('eDB minimum retention', () => {
     expect(minimumEdbRetentionUntil('2026-09-04')).toBe('2031-09-05');
   });
 
+  it('clamps a leap-day cancellation anniversary before adding the final day', () => {
+    expect(minimumEdbRetentionUntil('2024-02-29')).toBe('2029-03-01');
+  });
+
   it('rejects impossible calendar dates', () => {
     expect(() => minimumEdbRetentionUntil('2026-02-30')).toThrow('valid calendar date');
   });
