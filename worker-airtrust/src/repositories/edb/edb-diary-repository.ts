@@ -67,9 +67,21 @@ function text(value: string, code: string): string {
 function optionalDate(value: string | null | undefined): string | null {
   if (value === undefined || value === null) return null;
   const normalized = value.trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
+  if (!match) throw new Error('EDB_VOLUME_RETENTION_DATE_INVALID');
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
     throw new Error('EDB_VOLUME_RETENTION_DATE_INVALID');
   }
+
   return normalized;
 }
 
