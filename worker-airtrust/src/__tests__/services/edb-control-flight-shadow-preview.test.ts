@@ -205,7 +205,12 @@ describe('eDB shadow preview adapter', () => {
     });
     expect(result.draft.legs[0]).toMatchObject({
       occurrenceSummary: 'Ocorrencia operacional sintetica',
-      technicalDiscrepancySummary: 'Divergencia tecnica sintetica',
+      cycles: null,
+      technicalDiscrepancySummary: null,
+      times: {
+        ifrActualMinutes: null,
+        ifrSimulatedMinutes: null,
+      },
     });
     expect(result.draft.legs[0].crew[0]).toMatchObject({
       displayName: 'Tripulante Sintetico',
@@ -220,19 +225,20 @@ describe('eDB shadow preview adapter', () => {
           code: 'TECHNICAL_STATUS_SOURCE_UNAVAILABLE',
           path: 'technicalStatus.source',
         },
+        { code: 'CYCLES_SEMANTICS_UNCONFIRMED', path: 'legs.*.cycles' },
+        {
+          code: 'IFR_CLASSIFICATION_REQUIRED',
+          path: 'legs.*.times.ifrActualMinutes',
+        },
+        {
+          code: 'TECHNICAL_DISCREPANCY_SOURCE_REQUIRED',
+          path: 'legs.*.technicalDiscrepancySummary',
+        },
       ]),
     );
     expect(result.fieldSources).toEqual([
       {
         path: 'legs.0.occurrenceSummary',
-        source: {
-          kind: 'AIRTRUST_CONTROL_FLIGHTS',
-          reference: 'cv_rdv_operacional:401',
-          observedAt: '2026-08-02T13:00:00-03:00',
-        },
-      },
-      {
-        path: 'legs.0.technicalDiscrepancySummary',
         source: {
           kind: 'AIRTRUST_CONTROL_FLIGHTS',
           reference: 'cv_rdv_operacional:401',
