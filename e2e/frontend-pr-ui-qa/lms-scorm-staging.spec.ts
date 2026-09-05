@@ -44,7 +44,9 @@ async function delayedRealResponse(
   delayMs: number,
   capture: (json: ApiEnvelope | null) => void,
 ) {
-  const response = await route.fetch();
+  // The governed timeout fixture intentionally waits for the real Browser Rendering
+  // conformance limit (~30s). Keep the Playwright proxy timeout above that backend limit.
+  const response = await route.fetch({ timeout: 45_000 });
   const json = (await response.json().catch(() => null)) as ApiEnvelope | null;
   capture(json);
   await sleep(delayMs);
