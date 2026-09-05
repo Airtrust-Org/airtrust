@@ -61,6 +61,56 @@ afterEach(() => {
 });
 
 describe('0483 eDB diary persistence foundation', () => {
+  it('rejects pre-finalized diary, volume and incident inserts', () => {
+    const dbPath = createDatabase();
+
+    const closedDiary = execSql(
+      dbPath,
+      `INSERT INTO edb_diarios (empresa_id, aeronave_id, status) VALUES (1, 10, 'CLOSED');`,
+    );
+    expect(closedDiary.code).not.toBe(0);
+    expect(closedDiary.stderr).toContain('EDB_DIARY_MUST_START_ACTIVE');
+
+    const diary = execSql(
+      dbPath,
+      `INSERT INTO edb_diarios (empresa_id, aeronave_id) VALUES (1, 10);`,
+    );
+    expect(diary.code, diary.stderr).toBe(0);
+
+    const closedVolume = execSql(
+      dbPath,
+      `
+        INSERT INTO edb_volumes (
+          id, empresa_id, diario_id, numero_volume, status,
+          opened_at, opening_act_json, closed_at, closing_act_json
+        ) VALUES (
+          'vol-closed', 1, 1, 1, 'CLOSED',
+          '2026-09-04T10:00:00Z', json_object('type','OPENING'),
+          '2026-09-04T11:00:00Z', json_object('type','CLOSING')
+        );
+      `,
+    );
+    expect(closedVolume.code).not.toBe(0);
+    expect(closedVolume.stderr).toContain('EDB_VOLUME_MUST_START_OPEN');
+
+    const finalizedIncident = execSql(
+      dbPath,
+      `
+        INSERT INTO edb_incidentes_integridade (
+          id, empresa_id, diario_id, tipo, detected_at, descricao,
+          police_occurrence_reference, police_reported_at,
+          reconstitution_outcome, reconstitution_completed_at
+        ) VALUES (
+          'inc-final', 1, 1, 'LOSS', '2026-09-04T12:00:00Z', 'invalid initial final state',
+          'BO-X', '2026-09-04T12:10:00Z',
+          'RECONSTITUTED', '2026-09-04T13:00:00Z'
+        );
+      `,
+    );
+    expect(finalizedIncident.code).not.toBe(0);
+    expect(finalizedIncident.stderr).toContain('EDB_INCIDENT_MUST_START_PENDING');
+  });
+
   it('enforces tenant aircraft scope and a single active diary per aircraft', () => {
     const dbPath = createDatabase();
 
