@@ -279,4 +279,54 @@ describe('Controle de Voos -> eDB regulatory shadow adapter', () => {
       }),
     ).toThrow('EDB_SHADOW_RDV_SCOPE_MISMATCH');
   });
+
+  it('rejects duplicate stage identity before any projection', () => {
+    expect(() =>
+      adaptControleVoosToEdbShadowSource({
+        flight: flight(),
+        rdv: rdv(),
+        stages: [stage(30), { ...stage(31), id: 30 }],
+        crew: [crew()],
+        aircraft,
+        maintenance,
+        operatorRegulation: 'RBAC135',
+        natureLabel: 'TRANSPORTE',
+        capturedAt: '2026-09-05T12:00:00.000Z',
+      }),
+    ).toThrow('EDB_SHADOW_STAGE_DUPLICATED');
+  });
+
+  it('defensively copies mutable aircraft and maintenance evidence', () => {
+    const inputAircraft = {
+      ...aircraft,
+      owners: [...aircraft.owners],
+      operators: [...aircraft.operators],
+    };
+    const inputMaintenance = {
+      lastIntervention: { ...maintenance.lastIntervention },
+      nextIntervention: { ...maintenance.nextIntervention },
+    };
+
+    const source = adaptControleVoosToEdbShadowSource({
+      flight: flight(),
+      rdv: rdv(),
+      stages: [stage()],
+      crew: [crew()],
+      aircraft: inputAircraft,
+      maintenance: inputMaintenance,
+      operatorRegulation: 'RBAC135',
+      natureLabel: 'TRANSPORTE',
+      capturedAt: '2026-09-05T12:00:00.000Z',
+    });
+
+    inputAircraft.owners[0] = 'Mutated owner';
+    inputAircraft.operators[0] = 'Mutated operator';
+    inputMaintenance.lastIntervention.type = 'Mutated maintenance';
+    inputMaintenance.nextIntervention.type = 'Mutated next maintenance';
+
+    expect(source.aircraft.owners).toEqual(['Empresa Proprietaria']);
+    expect(source.aircraft.operators).toEqual(['Empresa Operadora']);
+    expect(source.maintenance?.lastIntervention.type).toBe('Inspecao programada');
+    expect(source.maintenance?.nextIntervention.type).toBe('Inspecao 50h');
+  });
 });
