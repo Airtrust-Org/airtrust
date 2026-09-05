@@ -19,6 +19,9 @@ const BASE_0411 = 'worker-airtrust/migrations/0411_controle_voos_sigvoos_integra
 const STAGING_RUNNER = 'scripts/staging/apply-0438-rdv-coordination-workflow.sh';
 const STAGING_VALIDATOR = 'scripts/staging/validate-0438-postconditions.sh';
 const STAGING_WORKFLOW = '.github/workflows/staging-0438-schema-v2.yml';
+const PRODUCTION_PREFLIGHT = 'scripts/schema-v2/validate-0438-production-preflight.sh';
+const PRODUCTION_POSTCONDITIONS = 'scripts/schema-v2/validate-0438-production-postconditions.sh';
+const PRODUCTION_SCHEMA_WORKFLOW = '.github/workflows/apply-schema-change-v2.yml';
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -311,4 +314,41 @@ test('dedicated workflow keeps 0438 staging-only and does not overclaim transiti
   assert.match(workflow, /production touched: no/);
   assert.doesNotMatch(workflow, /apply-schema-change-v2\.yml/);
   assert.doesNotMatch(workflow, /confirm_production|AIRTRUST_PRODUCTION/);
+});
+
+
+test('production Schema V2 workflow fail-closes 0438 with dedicated read-only guards', () => {
+  const preflight = readFileSync(PRODUCTION_PREFLIGHT, 'utf8');
+  const postconditions = readFileSync(PRODUCTION_POSTCONDITIONS, 'utf8');
+  const workflow = readFileSync(PRODUCTION_SCHEMA_WORKFLOW, 'utf8');
+
+  assert.match(preflight, /ALLOWED_DB_NAME="airtrust-db"/);
+  assert.match(preflight, /--env', 'production'/);
+  assert.match(preflight, /MARKERS_PRESENT=\$markers_present\/7/);
+  assert.match(preflight, /PARTIAL_SCHEMA_STATE/);
+  assert.match(preflight, /COMPLETE_SCHEMA_WITHOUT_LEDGER_OR_ALREADY_APPLIED/);
+  assert.match(preflight, /ACTIVE_STAGE_DUPLICATE_GROUPS/);
+  assert.match(preflight, /production-d1-baseline-v2-20260714/);
+  assert.match(preflight, /RDV_OPERACIONAL_COUNT/);
+  assert.doesNotMatch(preflight, /airtrust-db-staging/);
+
+  assert.match(postconditions, /ALLOWED_DB_NAME="airtrust-db"/);
+  assert.match(postconditions, /--env', 'production'/);
+  assert.match(postconditions, /workflow_status\.default/);
+  assert.match(postconditions, /versao\.default/);
+  assert.match(postconditions, /trg_cv_rdv_aprovacoes_no_update/);
+  assert.match(postconditions, /trg_cv_rdv_revisoes_no_update/);
+  assert.match(postconditions, /idx_cv_voo_etapas_empresa_voo_numero_unique/);
+  assert.match(postconditions, /RDV_0438_PRODUCTION_POSTCONDITIONS=PASS/);
+  assert.doesNotMatch(postconditions, /d1_migrations/);
+  assert.doesNotMatch(postconditions, /airtrust-db-staging/);
+
+  assert.match(workflow, /Preflight RDV 0438 production physical state/);
+  assert.match(workflow, /validate-0438-production-preflight\.sh --target=airtrust-db/);
+  assert.match(workflow, /Post-validate RDV 0438 production invariants/);
+  assert.match(workflow, /validate-0438-production-postconditions\.sh --target=airtrust-db/);
+  assert.match(
+    workflow,
+    /inputs\.change_id == '0438-rdv-coordination-workflow-production'/,
+  );
 });
