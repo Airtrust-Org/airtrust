@@ -78,10 +78,7 @@ async function qaToken() {
 
   const mine = await authJson(token, '/api/empresas/minha');
   assert(mine.status === 200, `empresa QA retornou ${mine.status}`);
-  assert(
-    String(mine.json?.data?.codigo || '') === 'qa_examiner_training',
-    'token não está no tenant QA',
-  );
+  assert(Number(mine.json?.data?.id || 0) === target, 'token não está no tenant QA');
   return token;
 }
 
@@ -226,8 +223,8 @@ async function createCourse(token, key, label) {
   );
   const id = Number(result.json?.data?.id);
   assert(Number.isInteger(id) && id > 0, `create ${label} sem id`);
-  const zipPath = path.join(ROOT, `${key}.zip`);
   const zipName = `qa-scorm-${key}-${RUN_MARKER}.zip`;
+  const zipPath = path.join(ROOT, zipName);
   fs.writeFileSync(zipPath, makeZip(key), { mode: 0o600 });
   return { id, title, kind: key, zip_path: zipPath, zip_name: zipName };
 }
