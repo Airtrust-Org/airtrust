@@ -7,6 +7,7 @@ import { isEdbShadowPilotEnabledForTenant } from '../lib/edb/edb-shadow-pilot-fl
 import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 import { getOperationalStatus } from '../observability/operational-status';
 import { getReleaseMetadata } from '../services/release-metadata';
+import { getActiveEdbDiaryForAircraft } from '../repositories/edb/edb-diary-repository';
 
 type SystemApp = Hono<{ Bindings: Env; Variables: Variables }>;
 
@@ -52,7 +53,28 @@ export function registerSystemRoutes(app: SystemApp) {
       throw new ApiError('Recurso indisponivel', 404, 'EDB_SHADOW_PILOT_NOT_ENABLED');
     }
 
+    c.header('X-AirTrust-eDB-Mode', 'staging-shadow-not-regulatory');
+    c.header('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     await next();
+  });
+
+  app.get('/api/edb/aircraft/:aircraftId/active-diary', async (c) => {
+    if (!checkPermission(c, 'manager')) {
+      throw new ApiError('Permissao insuficiente', 403, 'EDB_SHADOW_MANAGER_REQUIRED');
+    }
+
+    const aircraftId = Number(c.req.param('aircraftId'));
+    if (!Number.isInteger(aircraftId) || aircraftId <= 0) {
+      throw new ApiError('Aeronave invalida', 400, 'EDB_DIARY_AIRCRAFT_ID_INVALID');
+    }
+
+    const data = await getActiveEdbDiaryForAircraft({
+      db: c.env.DB,
+      empresaId: getEmpresaId(c),
+      aircraftId,
+    });
+
+    return c.json({ success: true, data });
   });
 
   app.route('/api/edb', edbShadowPreviewRoutes);
