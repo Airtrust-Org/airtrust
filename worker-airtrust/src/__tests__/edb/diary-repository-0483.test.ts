@@ -166,17 +166,6 @@ describe('eDB diary repository against migration 0483', () => {
     await expect(closeEdbDiary({ db, empresaId: 1, diaryId: diary.diaryId }))
       .rejects.toThrow('EDB_DIARY_OPEN_VOLUME_EXISTS');
 
-    const closed = await closePersistedEdbDiaryVolume({
-      db,
-      empresaId: 1,
-      volumeId: 'vol-1',
-      closedAt: '2026-09-30T20:00:00Z',
-      closedBy: actor,
-      observations: 'Encerramento',
-      retentionMinimumUntil: '2031-10-01',
-    });
-    expect(closed.status).toBe('CLOSED');
-
     await expect(
       closePersistedEdbDiaryVolume({
         db,
@@ -187,6 +176,17 @@ describe('eDB diary repository against migration 0483', () => {
         retentionMinimumUntil: '2031-02-30',
       }),
     ).rejects.toThrow('EDB_VOLUME_RETENTION_DATE_INVALID');
+
+    const closed = await closePersistedEdbDiaryVolume({
+      db,
+      empresaId: 1,
+      volumeId: 'vol-1',
+      closedAt: '2026-09-30T20:00:00Z',
+      closedBy: actor,
+      observations: 'Encerramento',
+      retentionMinimumUntil: '2031-10-01',
+    });
+    expect(closed.status).toBe('CLOSED');
 
     await closeEdbDiary({ db, empresaId: 1, diaryId: diary.diaryId });
     expect(await getActiveEdbDiaryForAircraft({ db, empresaId: 1, aircraftId: 10 }))
