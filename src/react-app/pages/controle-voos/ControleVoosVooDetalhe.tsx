@@ -5,6 +5,7 @@ import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosBreadcrumb from './components/ControleVoosBreadcrumb';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
+import EdbShadowReadinessCard from './components/EdbShadowReadinessCard';
 import {
   useControleVoosVoo,
   useControleVoosRdv,
@@ -131,9 +132,7 @@ export default function ControleVoosVooDetalhe() {
           </ControleVoosPageHeader>
 
           <div className="grid gap-6 lg:grid-cols-3">
-            {/* Coluna principal */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Dados gerais */}
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Dados gerais</h2>
                 <dl className="grid gap-3 sm:grid-cols-2 text-sm">
@@ -195,13 +194,11 @@ export default function ControleVoosVooDetalhe() {
                 )}
               </div>
 
-              {/* Timeline de status */}
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Status do voo</h2>
                 <StatusTimeline status={voo.status} />
               </div>
 
-              {/* Tripulação — sem endpoint N1 ainda */}
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Tripulação</h2>
                 <p className="text-sm text-slate-400 dark:text-slate-500">
@@ -210,9 +207,7 @@ export default function ControleVoosVooDetalhe() {
               </div>
             </div>
 
-            {/* Coluna lateral */}
             <div className="space-y-6">
-              {/* Verificações — demonstrativas no N1 */}
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                   <Shield className="h-4 w-4 text-blue-500" /> Verificações (demonstrativo)
@@ -236,7 +231,6 @@ export default function ControleVoosVooDetalhe() {
                 </div>
               </div>
 
-              {/* RDV */}
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                   <FileText className="h-4 w-4 text-purple-500" /> RDV
@@ -267,7 +261,8 @@ export default function ControleVoosVooDetalhe() {
                 )}
               </div>
 
-              {/* Ações desabilitadas */}
+              <EdbShadowReadinessCard flightId={voo.id} />
+
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Ações</h2>
                 <div className="space-y-2">
