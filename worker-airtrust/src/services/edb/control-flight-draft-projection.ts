@@ -115,13 +115,16 @@ export type ControlFlightProjectionFindingCode =
   | 'CREW_LEG_NOT_FOUND'
   | 'CREW_ROLE_UNMAPPED'
   | 'CREW_WITHOUT_LEG'
+  | 'CYCLES_SOURCE_SEMANTICS_UNCONFIRMED'
   | 'DURATION_INVALID'
+  | 'IFR_CLASSIFICATION_REQUIRED'
   | 'FUEL_CONSUMPTION_UNAVAILABLE'
   | 'FUEL_UNIT_UNKNOWN'
   | 'PAYLOAD_UNIT_UNKNOWN'
   | 'RDV_SUMMARY_WITHOUT_LEG'
   | 'RDV_TEXT_TOO_LONG'
   | 'SOURCE_CONFLICT_OPEN'
+  | 'TECHNICAL_DISCREPANCY_STRUCTURED_SOURCE_REQUIRED'
   | 'TIMEZONE_REQUIRED';
 
 export interface ControlFlightProjectionFinding {
@@ -436,13 +439,21 @@ export function projectControlFlightToEdbDraft(
     findings,
   );
 
+  if (rdvTechnicalDiscrepancySummary !== null) {
+    addFinding(
+      findings,
+      'TECHNICAL_DISCREPANCY_STRUCTURED_SOURCE_REQUIRED',
+      'rdv.divergencias',
+    );
+  }
+
   const sortedLegs = [...input.legs].sort((left, right) => left.numero_etapa - right.numero_etapa);
   const operationalDates = deriveLegOperationalDates(sortedLegs, input.operationalDate);
   const finalLegIndex = sortedLegs.length - 1;
 
   if (
     finalLegIndex < 0 &&
-    (rdvOccurrenceSummary !== null || rdvTechnicalDiscrepancySummary !== null)
+    rdvOccurrenceSummary !== null
   ) {
     addFinding(findings, 'RDV_SUMMARY_WITHOUT_LEG', 'rdv');
   }
@@ -450,13 +461,13 @@ export function projectControlFlightToEdbDraft(
   const legs = sortedLegs.map((leg, legIndex) => {
     const blockMinutes = durationToMinutes(leg.tempo_total);
     const takeoffToLandingMinutes = durationToMinutes(leg.tempo_decolagem_pouso);
-    const ifrActualMinutes = durationToMinutes(leg.tempo_ifr);
+    const unclassifiedIfrMinutes = durationToMinutes(leg.tempo_ifr);
     const nightMinutes = durationToMinutes(leg.tempo_noturno);
 
     const durationValues = [
       [leg.tempo_total, blockMinutes, 'times.blockMinutes'],
       [leg.tempo_decolagem_pouso, takeoffToLandingMinutes, 'times.takeoffToLandingMinutes'],
-      [leg.tempo_ifr, ifrActualMinutes, 'times.ifrActualMinutes'],
+      [leg.tempo_ifr, unclassifiedIfrMinutes, 'times.ifrActualMinutes'],
       [leg.tempo_noturno, nightMinutes, 'times.nightMinutes'],
     ] as const;
 
@@ -489,6 +500,13 @@ export function projectControlFlightToEdbDraft(
       addFinding(findings, 'PAYLOAD_UNIT_UNKNOWN', `legs.${legIndex}.payloadUnit`);
     }
 
+    if (normalizeText(leg.tempo_ifr) !== null) {
+      addFinding(findings, 'IFR_CLASSIFICATION_REQUIRED', `legs.${legIndex}.times.ifrActualMinutes`);
+    }
+    if (leg.starts !== null) {
+      addFinding(findings, 'CYCLES_SOURCE_SEMANTICS_UNCONFIRMED', `legs.${legIndex}.cycles`);
+    }
+
     const source = {
       kind: mapSourceKind(leg.origem_dados),
       reference: `cv_voo_etapas:${leg.id}`,
@@ -519,12 +537,12 @@ export function projectControlFlightToEdbDraft(
         dayMinutes: null,
         nightMinutes,
         vfrMinutes: null,
-        ifrActualMinutes,
+        ifrActualMinutes: null,
         ifrSimulatedMinutes: null,
       },
       dayLandings: leg.pousos_diurnos,
       nightLandings: leg.pousos_noturnos,
-      cycles: leg.starts,
+      cycles: null,
       fuelAtEngineStart: fuelQuantity(leg.combustivel_inicio),
       fuelAtEngineShutdown: fuelQuantity(leg.combustivel_fim),
       fuelConsumed: fuelQuantity(fuelConsumed),
@@ -539,7 +557,7 @@ export function projectControlFlightToEdbDraft(
         legIndex,
       ),
       occurrenceSummary: isFinalLeg ? rdvOccurrenceSummary : null,
-      technicalDiscrepancySummary: isFinalLeg ? rdvTechnicalDiscrepancySummary : null,
+      technicalDiscrepancySummary: null,
       source,
     };
   });
@@ -560,12 +578,6 @@ export function projectControlFlightToEdbDraft(
       });
     }
 
-    if (rdvTechnicalDiscrepancySummary !== null) {
-      fieldSources.push({
-        path: `legs.${finalLegIndex}.technicalDiscrepancySummary`,
-        source: rdvSource,
-      });
-    }
   }
 
   const technicalSource = {
