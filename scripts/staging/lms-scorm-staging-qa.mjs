@@ -43,6 +43,18 @@ async function authJson(token, route, options = {}) {
   });
 }
 
+async function assertPinnedStagingRelease() {
+  const expected = String(process.env.RELEASE_SHA || process.env.EXPECTED_SHA || '').trim();
+  assert(expected, 'RELEASE_SHA ausente');
+  const version = await fetchJson(`${API}/api/version`);
+  assert(version.status === 200, `staging /api/version retornou ${version.status}`);
+  const actual = String(version.json?.data?.sourceSha || version.json?.sourceSha || '').trim();
+  assert(
+    actual === expected,
+    `staging release SHA mismatch: expected ${expected}, got ${actual || 'missing'}`,
+  );
+}
+
 async function qaToken() {
   const email = String(
     process.env.QA_EXAMINER_ADMIN_EMAIL ||
@@ -231,6 +243,7 @@ async function createCourse(token, key, label) {
 
 async function prepare() {
   fs.mkdirSync(ROOT, { recursive: true });
+  await assertPinnedStagingRelease();
   const token = await qaToken();
   const created = [];
 
@@ -264,6 +277,7 @@ async function prepare() {
 
 async function cleanup() {
   assert(fs.existsSync(STATE_PATH), 'state QA SCORM ausente para cleanup');
+  await assertPinnedStagingRelease();
   const state = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
   const token = await qaToken();
   const results = [];
