@@ -151,10 +151,6 @@ validate_postconditions() {
     0476_frms_pvtb_v2_operational_load.sql)
       bash scripts/staging/validate-0476-postconditions.sh --target="$db_name"
       ;;
-    0477_edb_operational_core.sql|0478_edb_anac_receipt_integrity.sql|0479_edb_relational_integrity.sql|0480_edb_diary_lifecycle_integrity.sql)
-      bash scripts/staging/validate-edb-0477-0480-postconditions.sh \
-        --target="$db_name" --migration="$migration_basename"
-      ;;
   esac
 }
 

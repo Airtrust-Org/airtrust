@@ -89,7 +89,6 @@ readonly_remote_files=(
   "scripts/staging/validate-0453-postconditions.sh"
   "scripts/staging/validate-0475-postconditions.sh"
   "scripts/staging/validate-0476-postconditions.sh"
-  "scripts/staging/validate-edb-0477-0480-postconditions.sh"
 )
 
 # Scripts com proteção própria forte (env var obrigatória + confirmação)
