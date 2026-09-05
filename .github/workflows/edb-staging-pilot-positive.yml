@@ -64,7 +64,7 @@ jobs:
           [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
 
       - name: Checkout trusted main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -97,7 +97,7 @@ jobs:
           [[ -n "$QA_EDB_PILOT_PASSWORD" ]] || { echo 'STAGING_SMOKE_PASSWORD_MISSING' >&2; exit 1; }
 
       - name: Checkout trusted main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -151,7 +151,7 @@ jobs:
           [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
 
       - name: Checkout trusted main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node
         uses: actions/setup-node@v4

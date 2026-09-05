@@ -65,7 +65,7 @@ jobs:
       release_utc: ${{ steps.version.outputs.build_time }}
     steps:
       - name: Checkout trusted production pipeline
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate production dispatch inputs
         shell: bash
@@ -105,7 +105,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -150,7 +150,7 @@ jobs:
       worker_version_id: ${{ steps.deploy.outputs.worker_version_id }}
     steps:
       - name: Checkout main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -413,7 +413,7 @@ jobs:
       pages_url: ${{ steps.capture.outputs.pages_url }}
     steps:
       - name: Checkout main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

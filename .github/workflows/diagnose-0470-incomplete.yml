@@ -21,7 +21,7 @@ jobs:
     environment: staging
     steps:
       - name: Checkout trusted current main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 1
@@ -43,7 +43,7 @@ jobs:
           fi
 
       - name: Checkout exact release code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.release_sha }}
           fetch-depth: 1

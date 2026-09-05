@@ -37,7 +37,7 @@ jobs:
           [[ "$RELEASE_SHA" == "$EVENT_SHA" ]] || { echo "RELEASE_SHA_MISMATCH" >&2; exit 1; }
 
       - name: Checkout exact main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

@@ -109,7 +109,7 @@ jobs:
           NODE
 
       - name: Checkout trusted pipeline
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Verify official release gates
         env:
@@ -168,9 +168,9 @@ jobs:
     environment: staging
     steps:
       - name: Checkout trusted pipeline
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Checkout reviewed release
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.release_sha }}
           fetch-depth: 0
@@ -199,7 +199,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -222,9 +222,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Checkout reviewed release
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.release_sha }}
           fetch-depth: 0
@@ -255,7 +255,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -274,7 +274,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}

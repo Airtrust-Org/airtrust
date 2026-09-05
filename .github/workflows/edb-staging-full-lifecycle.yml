@@ -110,7 +110,7 @@ jobs:
           NODE
 
       - name: Checkout trusted orchestration source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
 
@@ -147,7 +147,7 @@ jobs:
           [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
 
       - name: Checkout trusted QA source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
 
