@@ -163,7 +163,7 @@ describe('eDB regulatory readiness', () => {
       new Date('2026-08-28T12:00:00.000Z'),
     );
     expect(readiness.internalRecordComplete).toBe(false);
-    expect(readiness.readyForAnacQueue).toBe(false);
+    expect(readiness.readyForExternalAnacIntegration).toBe(false);
     expect(readiness.nextAction).toBe('TECHNICAL_SNAPSHOT');
     expect(readiness.steps.find((step) => step.id === 'PIC_TECHNICAL_ACK')?.status).toBe(
       'BLOCKED',
@@ -178,7 +178,7 @@ describe('eDB regulatory readiness', () => {
       evidence,
     );
     expect(readiness.internalRecordComplete).toBe(true);
-    expect(readiness.readyForAnacQueue).toBe(true);
+    expect(readiness.readyForExternalAnacIntegration).toBe(true);
     expect(readiness.steps.find((step) => step.id === 'ANAC_SYNC')?.status).toBe(
       'PENDING_EXTERNAL',
     );
@@ -194,7 +194,7 @@ describe('eDB regulatory readiness', () => {
       evidence,
     );
     expect(readiness.internalRecordComplete).toBe(false);
-    expect(readiness.readyForAnacQueue).toBe(false);
+    expect(readiness.readyForExternalAnacIntegration).toBe(false);
     expect(
       readiness.steps.find((step) => step.id === 'FLIGHT_RECORD')?.blockingCodes,
     ).toContain('EDB_REVISION_ID_REQUIRED');
@@ -211,7 +211,7 @@ describe('eDB regulatory readiness', () => {
     );
     const picStep = readiness.steps.find((step) => step.id === 'PIC_FLIGHT_SIGNATURE');
     expect(readiness.internalRecordComplete).toBe(false);
-    expect(readiness.readyForAnacQueue).toBe(false);
+    expect(readiness.readyForExternalAnacIntegration).toBe(false);
     expect(picStep?.status).toBe('ACTION_REQUIRED');
     expect(picStep?.blockingCodes).toContain('EDB_PIC_FLIGHT_SIGNATURE_TARGET_MISMATCH');
   });
@@ -225,7 +225,7 @@ describe('eDB regulatory readiness', () => {
       evidence,
     );
     expect(readiness.internalRecordComplete).toBe(false);
-    expect(readiness.readyForAnacQueue).toBe(false);
+    expect(readiness.readyForExternalAnacIntegration).toBe(false);
     expect(readiness.steps.find((step) => step.id === 'PIC_FLIGHT_SIGNATURE')?.status).toBe(
       'ACTION_REQUIRED',
     );
@@ -241,7 +241,7 @@ describe('eDB regulatory readiness', () => {
       new Date('2026-08-28T12:01:00.000Z'),
     );
     expect(readiness.internalRecordComplete).toBe(false);
-    expect(readiness.readyForAnacQueue).toBe(false);
+    expect(readiness.readyForExternalAnacIntegration).toBe(false);
     expect(readiness.nextAction).toBe('TECHNICAL_SNAPSHOT');
   });
 });
