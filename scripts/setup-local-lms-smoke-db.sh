@@ -70,10 +70,29 @@ fi
 
 cd "$ROOT_DIR"
 
-find_local_sqlite() {
+list_local_sqlites() {
   local database_dir="$LOCAL_STATE_DIR/v3/d1/miniflare-D1DatabaseObject"
   [[ -d "$database_dir" ]] || return 0
-  find "$database_dir" -name "*.sqlite" ! -name "*-shm" ! -name "*-wal" 2>/dev/null | head -n 1
+  find "$database_dir" -type f -name "*.sqlite" ! -name "*-shm" ! -name "*-wal" -print 2>/dev/null | sort
+}
+
+find_local_sqlite() {
+  local candidate
+  while IFS= read -r candidate; do
+    [[ -n "$candidate" ]] || continue
+    if sqlite3 "$candidate"       "SELECT CASE WHEN EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='d1_migrations') THEN 1 ELSE 0 END;"       2>/dev/null | grep -qx '1'; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done < <(list_local_sqlites)
+}
+
+has_any_local_sqlite() {
+  local candidate
+  while IFS= read -r candidate; do
+    [[ -n "$candidate" ]] && return 0
+  done < <(list_local_sqlites)
+  return 1
 }
 
 apply_local_schema() {
@@ -89,6 +108,8 @@ apply_local_schema() {
 SQLITE_FILE="$(find_local_sqlite)"
 if [[ -n "$SQLITE_FILE" ]]; then
   printf 'setup:lms:local: existing local database found; base schema not reapplied\n'
+elif has_any_local_sqlite; then
+  error "ambiguous local D1 state: no persisted SQLite contains d1_migrations; rerun with --reset"
 else
   apply_local_schema
   SQLITE_FILE="$(find_local_sqlite)"
