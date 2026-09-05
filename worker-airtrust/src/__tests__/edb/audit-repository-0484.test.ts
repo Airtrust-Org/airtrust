@@ -255,6 +255,64 @@ describe('eDB audit repository against 0483 + 0484', () => {
     })).rejects.toThrow('EDB_AUDIT_EVENT_TIME_REGRESSION');
   });
 
+  it('detects persisted sequence tampering even when hash linkage remains intact', async () => {
+    const { db, databasePath } = createDatabase();
+
+    const first = await appendPersistedEdbAuditEvent({
+      db,
+      empresaId: 1,
+      draft: {
+        eventId: 'evt-1',
+        scope: {
+          diaryId: 1,
+          sourceFlightId: 100,
+          technicalSituationId: 'tech-1',
+          revisionId: null,
+        },
+        type: 'SOURCE_SNAPSHOT_CAPTURED',
+        actor,
+        occurredAt: '2026-09-05T10:00:00Z',
+        payload: {},
+      },
+    });
+
+    await appendPersistedEdbAuditEvent({
+      db,
+      empresaId: 1,
+      draft: {
+        eventId: 'evt-2',
+        scope: {
+          diaryId: 1,
+          sourceFlightId: 100,
+          technicalSituationId: 'tech-1',
+          revisionId: null,
+        },
+        type: 'PIC_TECHNICAL_ACK_SIGNED',
+        actor,
+        occurredAt: '2026-09-05T10:05:00Z',
+        payload: {},
+      },
+    });
+
+    expect(first.eventHashSha256).toHaveLength(64);
+
+    sqlite(
+      databasePath,
+      `
+        DROP TRIGGER trg_edb_audit_no_update;
+        UPDATE edb_audit_events
+           SET sequence_no=3
+         WHERE id='evt-2';
+      `,
+    );
+
+    await expect(loadAndVerifyPersistedEdbAuditChain({
+      db,
+      empresaId: 1,
+      diaryId: 1,
+    })).rejects.toThrow('EDB_AUDIT_PERSISTED_SEQUENCE_INVALID');
+  });
+
   it('detects payload tampering even if the database update guard is deliberately removed', async () => {
     const { db, databasePath } = createDatabase();
 
