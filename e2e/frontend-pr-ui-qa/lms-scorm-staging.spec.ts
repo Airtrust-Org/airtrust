@@ -19,6 +19,15 @@ type QaState = {
   };
 };
 
+type ApiEnvelope = {
+  success?: boolean;
+  data?: {
+    status?: string;
+    publishable?: boolean;
+    runtime?: { status?: string };
+  };
+};
+
 const STATE_PATH =
   process.env.QA_LMS_SCORM_STATE_PATH || 'qa-state/staging-lms-scorm/state.json';
 const SUMMARY_PATH = 'qa-state/staging-lms-scorm/browser-summary.json';
@@ -88,9 +97,9 @@ test('LMS SCORM staging: real success, rejection, timeout and visible progress',
     mutations.push({ method, url: request.url() });
   });
 
-  let successUpload: any = null;
-  let successConformance: any = null;
-  let successActivate: any = null;
+  let successUpload: ApiEnvelope | null = null;
+  let successConformance: ApiEnvelope | null = null;
+  let successActivate: ApiEnvelope | null = null;
 
   await page.route(
     `**/api/lms/cursos/${state.courses.success.id}/scorm-upload**`,
@@ -136,7 +145,7 @@ test('LMS SCORM staging: real success, rejection, timeout and visible progress',
     `**/api/lms/cursos/${state.courses.success.id}/scorm-package-versions/*/activate`,
   );
 
-  let rejectedUpload: any = null;
+  let rejectedUpload: ApiEnvelope | null = null;
   await page.route(
     `**/api/lms/cursos/${state.courses.reject.id}/scorm-upload**`,
     (route) => delayedRealResponse(route, 1_000, (json) => { rejectedUpload = json; }),
@@ -170,8 +179,8 @@ test('LMS SCORM staging: real success, rejection, timeout and visible progress',
 
   await page.unroute(`**/api/lms/cursos/${state.courses.reject.id}/scorm-upload**`);
 
-  let timeoutUpload: any = null;
-  let timeoutConformance: any = null;
+  let timeoutUpload: ApiEnvelope | null = null;
+  let timeoutConformance: ApiEnvelope | null = null;
   await page.route(
     `**/api/lms/cursos/${state.courses.timeout.id}/scorm-upload**`,
     (route) => delayedRealResponse(route, 700, (json) => { timeoutUpload = json; }),
