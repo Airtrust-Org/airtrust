@@ -29,7 +29,7 @@
     "hono": "^4.13.5",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
-    "lucide-react": "^0.510.0",
+    "lucide-react": "^1.39.0",
     "material-symbols": "^0.40.2",
     "papaparse": "^5.5.3",
     "pdf-lib": "^1.17.1",
