@@ -1,0 +1,198 @@
+name: Staging MRO Mobile QA
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_STAGING_MRO_MOBILE_QA to continue'
+        required: true
+        type: string
+      release_sha:
+        description: 'Exact already-deployed staging release SHA to validate'
+        required: true
+        type: string
+
+concurrency:
+  group: staging-mro-mobile-qa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+  statuses: read
+  checks: read
+
+env:
+  NODE_VERSION: '24'
+  STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+  STAGING_FRONTEND_BASE_URL: https://staging.airtrust.pages.dev
+
+jobs:
+  guard:
+    name: Staging MRO Mobile QA Guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Validate trusted-main dispatch
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          EVENT_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$EVENT_REF" == 'refs/heads/main' ]] || { echo 'MAIN_ONLY' >&2; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_STAGING_MRO_MOBILE_QA' ]] || { echo 'CONFIRMATION_REJECTED' >&2; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo 'RELEASE_SHA_INVALID' >&2; exit 1; }
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require deployed release to be an ancestor of trusted main
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          git cat-file -e "$RELEASE_SHA^{commit}"
+          git merge-base --is-ancestor "$RELEASE_SHA" HEAD
+          echo "TRUSTED_RELEASE_ANCESTRY_OK=$RELEASE_SHA"
+
+      - name: Require canonical release gates for deployed SHA
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          node scripts/ci/verify-release-gates.mjs
+
+      - name: Require live Worker and frontend provenance
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const expected = String(process.env.RELEASE_SHA || '').toLowerCase();
+          const versionResponse = await fetch(`${process.env.STAGING_API_BASE_URL}/api/version`, {
+            headers: { Accept: 'application/json' },
+          });
+          if (!versionResponse.ok) throw new Error(`STAGING_VERSION_HTTP_${versionResponse.status}`);
+          const version = await versionResponse.json();
+          const sourceSha = String(version?.sourceSha ?? version?.data?.sourceSha ?? '').toLowerCase();
+          if (sourceSha !== expected) {
+            throw new Error(`STAGING_WORKER_SHA_MISMATCH:${sourceSha || 'missing'}`);
+          }
+
+          const { assertLiveFrontendShaFromOrigin } = await import('./e2e/lib/live-sha-guard.mjs');
+          await assertLiveFrontendShaFromOrigin(
+            process.env.STAGING_FRONTEND_BASE_URL,
+            expected.slice(0, 7),
+          );
+          console.log(`STAGING_MRO_MOBILE_PROVENANCE_SHA=${expected}`);
+          NODE
+
+  qa:
+    name: Authenticated Read-Only MRO Mobile QA
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 25
+    env:
+      BASE_URL: https://staging.airtrust.pages.dev
+      STAGING_FRONTEND_BASE_URL: https://staging.airtrust.pages.dev
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      AUDIT_PROFILE: audit-closure
+      E2E_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      QA_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      QA_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Require exactly one complete staging credential pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          for v in "$E2E_EMAIL" "$E2E_PASSWORD" "$QA_ADMIN_EMAIL" "$QA_ADMIN_PASSWORD"; do
+            if [[ -n "$v" ]]; then echo "::add-mask::$v"; fi
+          done
+          node -e '
+            import("./e2e/lib/credential-pair.mjs")
+              .then((m) => {
+                const { profile } = m.resolveCredentialPair(process.env);
+                console.log("credential profile validated (" + profile + ")");
+              })
+              .catch((error) => {
+                console.error(error.message);
+                process.exit(1);
+              });
+          '
+
+      - run: npm ci
+
+      - name: List exact trusted-main MRO mobile test
+        run: npx playwright test mro-audit-closure.spec.ts --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium --list
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Exercise MRO at 390x844 and 375x812 read-only
+        run: npx playwright test mro-audit-closure.spec.ts --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium
+
+      - name: Publish sanitized MRO mobile QA summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '## MRO mobile staging acceptance'
+            echo ''
+            echo '- exact Worker/frontend release provenance: PASS'
+            echo '- /mro at 390x844 and 375x812: PASS'
+            echo '- /mro/os at 390x844 and 375x812: PASS'
+            echo '- /mro/aeronaves at 390x844 and 375x812: PASS'
+            echo '- horizontal document/body overflow: none'
+            echo '- visible interactive controls outside viewport: none'
+            echo '- product mutations executed: none'
+            echo '- production target/data used: no'
+            echo '- credentials emitted: no'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-mro-mobile-qa-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results/frontend-pr-ui-qa
+          if-no-files-found: ignore
+          retention-days: 14
+
+  result:
+    name: Staging MRO Mobile QA Passed
+    needs: [guard, qa]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require governed MRO mobile QA
+        shell: bash
+        env:
+          GUARD: ${{ needs.guard.result }}
+          QA: ${{ needs.qa.result }}
+        run: |
+          set -euo pipefail
+          echo "guard=$GUARD qa=$QA"
+          [[ "$GUARD" == 'success' ]]
+          [[ "$QA" == 'success' ]]
+          echo 'STAGING_MRO_MOBILE_QA_PASS'
