@@ -34,6 +34,17 @@ describe('local D1 setup scripts', () => {
     expect(source).not.toMatch(/schema (returned warnings|aplicado com avisos).*continu/i);
   });
 
+  it.each(setupScripts)('%s selects the D1 SQLite by migration-ledger identity', (scriptPath) => {
+    const source = readScript(scriptPath);
+    const finder = functionBody(source, 'find_local_sqlite');
+
+    expect(source).toContain('list_local_sqlites');
+    expect(finder).toContain('sqlite_master');
+    expect(finder).toContain("name='d1_migrations'");
+    expect(finder).not.toMatch(/head\s+(?:-n\s*)?1\b/);
+    expect(source).toContain('elif has_any_local_sqlite; then');
+  });
+
   it.each(setupScripts)('%s does not blindly reapply the base schema', (scriptPath) => {
     const source = readScript(scriptPath);
     expect(source).toContain('find_local_sqlite');
