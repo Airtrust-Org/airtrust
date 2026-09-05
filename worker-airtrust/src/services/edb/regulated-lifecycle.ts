@@ -196,7 +196,7 @@ export function evaluateEdbRegulatedLifecycleAction(
   }
 
   if (action === 'SUPERSEDE') {
-    if (!SIGNED_OR_LATER.has(revision.status) || revision.status === 'SUPERSEDED') {
+    if (!SIGNED_OR_LATER.has(revision.status)) {
       return decision(revision, false, null, ['EDB_ONLY_SIGNED_RECORD_CAN_BE_SUPERSEDED']);
     }
 
