@@ -132,6 +132,10 @@ jobs:
       - name: Check SCORM QA harness and upload contract
         run: |
           node --check scripts/staging/lms-scorm-staging-qa.mjs
+          AUDIT_PROFILE=lms-scorm npx playwright test \
+            --config=e2e/frontend-pr-ui-qa.config.ts \
+            --project=chromium \
+            --list
           npm run test:run -- src/react-app/pages/lms/__tests__/lmsContentUpload.serial.test.ts
 
       - name: Prepare disposable SCORM courses and ZIP fixtures
@@ -145,7 +149,16 @@ jobs:
 
       - name: Cleanup disposable LMS SCORM fixtures
         if: always()
-        run: node scripts/staging/lms-scorm-staging-qa.mjs --cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$QA_LMS_SCORM_STATE_PATH" ]]; then
+            node scripts/staging/lms-scorm-staging-qa.mjs --cleanup
+          else
+            mkdir -p qa-state/staging-lms-scorm
+            printf '%s\n' '{"ok":true,"cleanup":"NOT_REQUIRED_NO_STATE"}' \
+              > qa-state/staging-lms-scorm/cleanup-summary.json
+          fi
 
       - name: Publish sanitized LMS SCORM QA summary
         if: success()
