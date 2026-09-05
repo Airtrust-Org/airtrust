@@ -82,4 +82,85 @@ describe('eDB technical awareness boundary', () => {
       snapshot, signature: { ...acknowledgement.signature, canonicalPayloadHashSha256: 'f'.repeat(64) },
     })).toThrow('EDB_TECHNICAL_ACK_HASH_MISMATCH');
   });
+
+  it('fails closed when persisted acknowledgement tenant scope is substituted', async () => {
+    const { snapshot, acknowledgement } = await fixture();
+    const result = await verifyPicTechnicalAcknowledgementBinding({
+      snapshot,
+      acknowledgement: { ...acknowledgement, operatorCompanyId: 2 },
+    });
+    expect(result.snapshotIntegrity).toBe(true);
+    expect(result.matchesSnapshot).toBe(false);
+  });
+
+  it('fails closed when persisted acknowledgement flight scope is substituted', async () => {
+    const { snapshot, acknowledgement } = await fixture();
+    const result = await verifyPicTechnicalAcknowledgementBinding({
+      snapshot,
+      acknowledgement: { ...acknowledgement, sourceFlightId: 101 },
+    });
+    expect(result.snapshotIntegrity).toBe(true);
+    expect(result.matchesSnapshot).toBe(false);
+  });
+
+  it('fails closed when persisted signature time is invalid or predates the snapshot', async () => {
+    const { snapshot, acknowledgement } = await fixture();
+    for (const signedAt of ['not-a-timestamp', '2026-08-28T08:59:59.999Z']) {
+      const result = await verifyPicTechnicalAcknowledgementBinding({
+        snapshot,
+        acknowledgement: {
+          ...acknowledgement,
+          signature: { ...acknowledgement.signature, signedAt },
+        },
+      });
+      expect(result.snapshotIntegrity).toBe(true);
+      expect(result.matchesSnapshot).toBe(false);
+    }
+  });
+
+  it('rejects acknowledgement that predates the technical snapshot at bind time', async () => {
+    const { snapshot, acknowledgement } = await fixture();
+    expect(() => bindPicTechnicalAcknowledgement({
+      snapshot,
+      signature: { ...acknowledgement.signature, signedAt: '2026-08-28T08:59:59.999Z' },
+    })).toThrow('EDB_TECHNICAL_ACK_PREDATES_SNAPSHOT');
+  });
+
+  it('rejects non-technical signature types at bind time', async () => {
+    const { snapshot, acknowledgement } = await fixture();
+    expect(() => bindPicTechnicalAcknowledgement({
+      snapshot,
+      signature: { ...acknowledgement.signature, type: 'PIC_FLIGHT_RECORD' },
+    })).toThrow('EDB_TECHNICAL_ACK_SIGNATURE_TYPE_INVALID');
+  });
+
+  it('clones mutable aircraft and maintenance evidence into the snapshot', async () => {
+    const mutableAircraft: EdbAircraftIdentity = {
+      ...aircraft,
+      owners: ['Original Owner'],
+      operators: ['Original Operator'],
+    };
+    const mutableMaintenance: EdbMaintenanceSnapshot = {
+      lastIntervention: { ...maintenance.lastIntervention },
+      nextIntervention: { ...maintenance.nextIntervention },
+    };
+    const snapshot = await createTechnicalSituationSnapshot({
+      snapshotId: 'tech-clone',
+      operatorCompanyId: 1,
+      sourceFlightId: 100,
+      aircraft: mutableAircraft,
+      maintenance: mutableMaintenance,
+      capturedAt: '2026-08-28T09:00:00.000Z',
+    });
+
+    mutableAircraft.owners?.push('Injected Owner');
+    mutableAircraft.operators?.push('Injected Operator');
+    mutableMaintenance.lastIntervention.type = 'Mutated inspection';
+    mutableMaintenance.nextIntervention.dueAtAirframeHours = 1;
+
+    expect(snapshot.aircraft.owners).toEqual(['Original Owner']);
+    expect(snapshot.aircraft.operators).toEqual(['Original Operator']);
+    expect(snapshot.maintenance.lastIntervention.type).toBe('Scheduled inspection');
+    expect(snapshot.maintenance.nextIntervention.dueAtAirframeHours).toBe(1520);
+  });
 });
