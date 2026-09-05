@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   appendEdbAuditEvent,
+  hashEdbAuditEventDraft,
   verifyEdbAuditChain,
   type EdbAuditEvent,
 } from '../../services/edb/audit-chain';
@@ -54,6 +55,10 @@ async function expectHistoricalMutationRejected(
   expect(result.issues).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ index: 0, code: 'EVENT_HASH_MISMATCH' }),
+    ]),
+  );
+  expect(result.issues).not.toEqual(
+    expect.arrayContaining([
       expect.objectContaining({ index: 1, code: 'PREVIOUS_HASH_MISMATCH' }),
     ]),
   );
@@ -90,6 +95,33 @@ describe('eDB audit-chain evidence binding regression', () => {
       ...event,
       occurredAt: '2026-09-04T12:06:00.000Z',
     }));
+  });
+
+  it('detects a rewritten historical hash through the next event link', async () => {
+    const chain = await buildChain();
+    const mutated = {
+      ...chain[0],
+      actor: { actorRef: 'employee:999', displayName: 'Other PIC' },
+    };
+    const { eventHashSha256: _storedHash, ...draft } = mutated;
+    const rewritten = {
+      ...mutated,
+      eventHashSha256: await hashEdbAuditEventDraft(draft),
+    };
+
+    const result = await verifyEdbAuditChain([rewritten, chain[1]]);
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ index: 1, code: 'PREVIOUS_HASH_MISMATCH' }),
+      ]),
+    );
+    expect(result.issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ index: 0, code: 'EVENT_HASH_MISMATCH' }),
+      ]),
+    );
   });
 
   it('detects diary substitution independently of the cryptographic hash mismatch', async () => {
