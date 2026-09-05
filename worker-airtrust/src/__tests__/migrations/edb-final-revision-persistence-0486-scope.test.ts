@@ -109,7 +109,9 @@ describe('0486 eDB scope and immutability invariants', () => {
       // flight-scope lookup, so the earlier fail-closed invariant is expected.
       { overrides: { company: 2, diary: 2, volume: 'vol-2', flight: 100, stage: 2001, ack: 'ack-2', payload: payload({ company: 2, flight: 100, stage: 2001, ack: 'ack-2', target: 'snap-2', ackHash: 'd'.repeat(64) }) }, error: 'EDB_REVISION_PAYLOAD_TECHNICAL_ACK_MISMATCH' },
       { overrides: { company: 2, diary: 2, volume: 'vol-2', flight: 200, stage: 1001, ack: 'ack-2', payload: payload({ company: 2, flight: 200, stage: 1001, ack: 'ack-2', target: 'snap-2', ackHash: 'd'.repeat(64) }) }, error: 'EDB_REVISION_STAGE_SCOPE_MISMATCH' },
-      { overrides: { company: 2, diary: 2, volume: 'vol-2', flight: 200, stage: 2001, ack: 'ack-1', payload: payload({ company: 2, flight: 200, stage: 2001, ack: 'ack-1', target: 'snap-1', ackHash: 'b'.repeat(64) }) }, error: 'EDB_REVISION_TECHNICAL_ACK_SCOPE_MISMATCH' },
+      // Same ordering rule applies to a cross-tenant acknowledgement: the
+      // payload binding may fail before the lower-level scope trigger.
+      { overrides: { company: 2, diary: 2, volume: 'vol-2', flight: 200, stage: 2001, ack: 'ack-1', payload: payload({ company: 2, flight: 200, stage: 2001, ack: 'ack-1', target: 'snap-1', ackHash: 'b'.repeat(64) }) }, error: 'EDB_REVISION_PAYLOAD_TECHNICAL_ACK_MISMATCH' },
     ];
 
     for (const { overrides, error } of cases) {
