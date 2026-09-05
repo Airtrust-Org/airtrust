@@ -5,7 +5,11 @@ import type { Env, Variables } from '../../types';
 
 type TestContext = Context<{ Bindings: Env; Variables: Variables }>;
 
-const { loadPreviewMock, getActiveDiaryMock } = vi.hoisted(() => ({ loadPreviewMock: vi.fn(), getActiveDiaryMock: vi.fn() }));
+const { loadPreviewMock, loadAssessmentMock, getActiveDiaryMock } = vi.hoisted(() => ({
+  loadPreviewMock: vi.fn(),
+  loadAssessmentMock: vi.fn(),
+  getActiveDiaryMock: vi.fn(),
+}));
 
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: TestContext, next: () => Promise<void>) => {
@@ -46,6 +50,10 @@ vi.mock('../../repositories/edb/edb-diary-repository', () => ({
   getActiveEdbDiaryForAircraft: getActiveDiaryMock,
 }));
 
+vi.mock('../../services/edb/control-flight-shadow-assessment', () => ({
+  loadEdbShadowPreliminaryAssessment: loadAssessmentMock,
+}));
+
 vi.mock('../../services/edb/control-flight-shadow-preview', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../services/edb/control-flight-shadow-preview')>();
@@ -81,8 +89,13 @@ function env(environment: 'development' | 'staging' | 'production', tenants = '6
 
 beforeEach(() => {
   loadPreviewMock.mockReset();
+  loadAssessmentMock.mockReset();
   getActiveDiaryMock.mockReset();
   getActiveDiaryMock.mockResolvedValue(null);
+  loadAssessmentMock.mockResolvedValue({
+    classification: 'preliminarily_available',
+    findings: [],
+  });
   loadPreviewMock.mockResolvedValue({
     draft: { status: 'INCOMPLETE' },
     findings: [],
@@ -160,6 +173,48 @@ describe('eDB shadow pilot route gate', () => {
     );
     expect(wrongTenant.status).toBe(404);
     expect(getActiveDiaryMock).not.toHaveBeenCalled();
+  });
+
+  it('serves current shadow assessment through the readiness alias without ANAC lifecycle claims', async () => {
+    const response = await createApp().request(
+      '/api/edb/voos/42/readiness',
+      { headers: headers(6, 'manager') },
+      env('staging'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      success: true,
+      data: {
+        classification: 'NON_OFFICIAL_SHADOW_READINESS',
+        officialLogbook: false,
+        replacesPaper: false,
+      },
+    });
+    expect(loadAssessmentMock).toHaveBeenCalledWith(expect.anything(), 6, 42);
+  });
+
+  it('preserves safe ApiError status/code for missing readiness flight without leaking raw message', async () => {
+    const { ApiError } = await import('../../middleware/error-handler');
+    loadAssessmentMock.mockRejectedValueOnce(
+      new ApiError('Voo nao encontrado', 404, 'CONTROLE_VOOS_NOT_FOUND'),
+    );
+
+    const response = await createApp().request(
+      '/api/edb/voos/2147483647/readiness',
+      { headers: headers(6, 'manager') },
+      env('staging'),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body).toEqual({
+      success: false,
+      error: 'Operação eDB shadow rejeitada',
+      code: 'CONTROLE_VOOS_NOT_FOUND',
+    });
+    expect(JSON.stringify(body)).not.toContain('Voo nao encontrado');
+    expect(response.headers.get('X-AirTrust-eDB-Mode')).toBe('staging-shadow-not-regulatory');
   });
 
   it('returns not found before loading data outside the enabled scope', async () => {
