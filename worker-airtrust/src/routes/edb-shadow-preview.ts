@@ -9,6 +9,7 @@ import {
   loadEdbShadowPreview,
 } from '../services/edb/control-flight-shadow-preview';
 import { loadEdbShadowPreliminaryAssessment } from '../services/edb/control-flight-shadow-assessment';
+import { mapEdbShadowError } from '../lib/edb/edb-shadow-errors';
 import {
   createEdbShadowReviewEvidence,
   edbShadowReviewInputSchema,
@@ -47,6 +48,39 @@ function mapPreviewError(error: unknown, fallbackCode: string): never {
   }
   throw new ApiError('Preview eDB indisponivel', 500, fallbackCode);
 }
+
+edbShadowPreview.get(
+  '/voos/:flightId/readiness',
+  auth(),
+  requireEdbShadowPreviewAccess(),
+  async (c) => {
+    const tenantId = getEmpresaId(c);
+    const flightId = parseFlightId(c.req.param('flightId'));
+
+    try {
+      const assessment = await loadEdbShadowPreliminaryAssessment(c.env.DB, tenantId, flightId);
+      return c.json({
+        success: true,
+        data: {
+          classification: 'NON_OFFICIAL_SHADOW_READINESS',
+          officialLogbook: false,
+          replacesPaper: false,
+          assessment,
+        },
+      });
+    } catch (error) {
+      const mapped = mapEdbShadowError(error);
+      return c.json(
+        {
+          success: false,
+          error: 'Operação eDB shadow rejeitada',
+          code: mapped.code,
+        },
+        mapped.status,
+      );
+    }
+  },
+);
 
 edbShadowPreview.get(
   '/shadow-preview/:flightId',
