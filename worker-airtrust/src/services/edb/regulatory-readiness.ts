@@ -41,7 +41,7 @@ export interface EdbRegulatoryReadiness {
   revisionId: string | null;
   lifecycleStatus: EdbFlightRecord['status'];
   internalRecordComplete: boolean;
-  readyForAnacQueue: boolean;
+  readyForExternalAnacIntegration: boolean;
   steps: EdbReadinessStep[];
   nextAction: EdbReadinessStepId | null;
 }
@@ -148,10 +148,7 @@ export async function assessEdbRegulatoryReadiness(
   const internalRecordComplete =
     technicalAckComplete &&
     operatorSignatureComplete &&
-    (record.status === 'OPERATOR_SIGNED' ||
-      record.status === 'ANAC_PENDING' ||
-      record.status === 'ANAC_SYNCED' ||
-      record.status === 'SUPERSEDED');
+    (record.status === 'OPERATOR_SIGNED' || record.status === 'SUPERSEDED');
 
   const technicalSnapshotCodes = technicalSnapshotComplete
     ? []
@@ -258,14 +255,11 @@ export async function assessEdbRegulatoryReadiness(
     {
       id: 'ANAC_SYNC',
       status:
-        record.status === 'ANAC_SYNCED'
-          ? 'COMPLETE'
-          : record.status === 'ANAC_PENDING' ||
-              (record.status === 'OPERATOR_SIGNED' &&
-                operatorSignatureComplete &&
-                technicalAckComplete)
-            ? 'PENDING_EXTERNAL'
-            : 'BLOCKED',
+        record.status === 'OPERATOR_SIGNED' &&
+        operatorSignatureComplete &&
+        technicalAckComplete
+          ? 'PENDING_EXTERNAL'
+          : 'BLOCKED',
       blockingCodes: [],
       warningCodes: [],
       deadlineAt: null,
@@ -277,7 +271,7 @@ export async function assessEdbRegulatoryReadiness(
     revisionId: record.revisionId,
     lifecycleStatus: record.status,
     internalRecordComplete,
-    readyForAnacQueue:
+    readyForExternalAnacIntegration:
       record.status === 'OPERATOR_SIGNED' && operatorSignatureComplete && technicalAckComplete,
     steps,
     nextAction: firstRequiredAction(steps),
