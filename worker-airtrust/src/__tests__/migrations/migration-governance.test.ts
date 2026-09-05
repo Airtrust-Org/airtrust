@@ -99,10 +99,10 @@ describe('migration governance', () => {
     const regularPrefixes = files
       .map((file) => /^([0-9]{4})_/.exec(file)?.[1] ?? null)
       .filter((prefix): prefix is string => prefix !== null && prefix !== '9999');
-    // Ratchet raised 2026-08-31: 0482_training_dependency_complete_curriculum.sql
-    // follows the reviewed 0481 dependency foundation and keeps 9999 reserved
-    // as the only high sentinel.
-    const expectedLatest = 482;
+    // Ratchet raised 2026-09-04: 0483_edb_diary_persistence_foundation.sql
+    // is the first current-main eDB persistence migration after 0481/0482.
+    // Historical #110 numbers 0477-0480 are intentionally not backfilled.
+    const expectedLatest = 483;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

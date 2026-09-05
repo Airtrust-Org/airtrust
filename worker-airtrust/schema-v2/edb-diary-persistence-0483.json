@@ -1,0 +1,8 @@
+{
+  "changeId": "edb-diary-persistence-0483",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0483_edb_diary_persistence_foundation.sql",
+  "fileHash": "022e74407d25f6d72bc07408698f83e3c6df7f527a001dab2c9455f51c759428",
+  "planPath": "worker-airtrust/schema-v2/plans/edb-diary-persistence-0483.md",
+  "planHash": "ad4c7c973c236d431e3efed4108417b683af83a994549c71c0e0b47ab0c59a09"
+}
