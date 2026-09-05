@@ -1,0 +1,8 @@
+{
+  "changeId": "edb-technical-awareness-persistence-0485",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0485_edb_technical_awareness_persistence.sql",
+  "fileHash": "efd9d6d74f3d0eca5f751374cfd227e1b71107aaeaeb9056d6bbe7e8cbad4c54",
+  "planPath": "worker-airtrust/schema-v2/plans/edb-technical-awareness-persistence-0485.md",
+  "planHash": "12505d702aa1b0bcc5459e45328a3b7ce10ab341d731a8a461f150a004969cce"
+}
