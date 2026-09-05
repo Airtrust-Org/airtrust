@@ -99,4 +99,93 @@ describe('summarizeEdbShadowReadiness', () => {
     expect(result.findingCount).toBe(1);
     expect(result.readinessScore).toBe(35);
   });
+
+  it('requires review when readiness status alone is review', () => {
+    const base = assessment();
+    const result = summarizeEdbShadowReadiness(
+      assessment({
+        divergence: {
+          ...base.divergence,
+          readiness: {
+            ...base.divergence.readiness,
+            status: 'review',
+            score: 82,
+            completenessPercent: 91,
+          },
+        },
+      }),
+    );
+
+    expect(result.tone).toBe('warning');
+    expect(result.reviewRequired).toBe(true);
+    expect(result.title).toMatch(/requer revisão/i);
+    expect(result.readinessScore).toBe(82);
+    expect(result.completenessPercent).toBe(91);
+  });
+
+  it('requires review when recommendation alone is review', () => {
+    const base = assessment();
+    const result = summarizeEdbShadowReadiness(
+      assessment({
+        divergence: {
+          ...base.divergence,
+          recommendation: 'review',
+        },
+      }),
+    );
+
+    expect(result.tone).toBe('warning');
+    expect(result.reviewRequired).toBe(true);
+  });
+
+  it('requires review when technical status alone requires review', () => {
+    const base = assessment();
+    const result = summarizeEdbShadowReadiness(
+      assessment({
+        technicalStatus: {
+          ...base.technicalStatus,
+          status: 'requires_review',
+        },
+      }),
+    );
+
+    expect(result.tone).toBe('warning');
+    expect(result.reviewRequired).toBe(true);
+    expect(result.technicalMessage).toMatch(/revisão humana/i);
+  });
+
+  it('blocks when readiness is not ready even if recommendation still says continue', () => {
+    const base = assessment();
+    const result = summarizeEdbShadowReadiness(
+      assessment({
+        divergence: {
+          ...base.divergence,
+          readiness: {
+            ...base.divergence.readiness,
+            status: 'not_ready',
+            score: 49,
+          },
+        },
+      }),
+    );
+
+    expect(result.tone).toBe('blocked');
+    expect(result.reviewRequired).toBe(true);
+    expect(result.title).toMatch(/bloqueada/i);
+  });
+
+  it('blocks when recommendation is stop even if readiness still says ready', () => {
+    const base = assessment();
+    const result = summarizeEdbShadowReadiness(
+      assessment({
+        divergence: {
+          ...base.divergence,
+          recommendation: 'stop',
+        },
+      }),
+    );
+
+    expect(result.tone).toBe('blocked');
+    expect(result.reviewRequired).toBe(true);
+  });
 });
