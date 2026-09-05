@@ -109,6 +109,16 @@ function ensureAppendable(
   }
 }
 
+function cloneEvent(event: EdbTechnicalDiscrepancyEvent): EdbTechnicalDiscrepancyEvent {
+  if (event.type === 'DEFERRED_ACTION_AUTHORIZED') {
+    return { ...event, authorizedBy: { ...event.authorizedBy } };
+  }
+  if (event.type === 'CORRECTIVE_ACTION_RECORDED') {
+    return { ...event, performedBy: { ...event.performedBy } };
+  }
+  return { ...event, approvedBy: { ...event.approvedBy } };
+}
+
 function cloneLedger(
   ledger: EdbTechnicalDiscrepancyLedger,
   event: EdbTechnicalDiscrepancyEvent,
@@ -118,7 +128,7 @@ function cloneLedger(
       ...ledger.identity,
       detectedBy: { ...ledger.identity.detectedBy },
     },
-    events: [...ledger.events.map((item) => ({ ...item })), event],
+    events: [...ledger.events.map(cloneEvent), cloneEvent(event)],
   };
 }
 
