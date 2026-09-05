@@ -99,10 +99,10 @@ describe('migration governance', () => {
     const regularPrefixes = files
       .map((file) => /^([0-9]{4})_/.exec(file)?.[1] ?? null)
       .filter((prefix): prefix is string => prefix !== null && prefix !== '9999');
-    // Ratchet raised 2026-09-04: 0483_edb_diary_persistence_foundation.sql
-    // is the first current-main eDB persistence migration after 0481/0482.
+    // Ratchet raised 2026-09-05: 0484_edb_audit_persistence.sql
+    // follows the current-main local-only 0483 eDB diary foundation.
     // Historical #110 numbers 0477-0480 are intentionally not backfilled.
-    const expectedLatest = 483;
+    const expectedLatest = 484;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
