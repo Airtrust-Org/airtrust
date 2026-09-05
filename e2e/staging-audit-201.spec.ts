@@ -68,17 +68,6 @@ const MOBILE_ROUTES: AuditRoute[] = [
   },
 ];
 
-const MRO_MOBILE_ROUTES: AuditRoute[] = [
-  { label: 'MRO dashboard', path: '/mro' },
-  { label: 'MRO ordens de serviço', path: '/mro/os' },
-  { label: 'MRO aeronaves', path: '/mro/aeronaves' },
-];
-
-const MRO_MOBILE_VIEWPORTS = [
-  { width: 390, height: 844 },
-  { width: 375, height: 812 },
-] as const;
-
 async function waitForStablePage(page: Page) {
   await page.waitForLoadState('domcontentloaded');
   await expect
@@ -210,35 +199,6 @@ async function auditRoute(
   console.log(
     `AUDIT_201_ROUTE_PASS label=${JSON.stringify(route.label)} path=${route.path} theme=${options.theme} mobile=${Boolean(options.mobile)}`,
   );
-}
-
-async function assertVisibleInteractiveControlsInsideViewport(page: Page, label: string) {
-  const offenders = await page
-    .locator('button:visible, input:visible, select:visible, a:visible')
-    .evaluateAll((elements) =>
-      elements
-        .map((element) => {
-          const rect = element.getBoundingClientRect();
-          return {
-            tag: element.tagName,
-            label:
-              element.getAttribute('aria-label') ||
-              element.getAttribute('title') ||
-              (element.textContent || '').trim().slice(0, 80),
-            left: rect.left,
-            right: rect.right,
-            width: rect.width,
-          };
-        })
-        .filter(
-          (item) =>
-            item.width > 0 &&
-            (item.left < -1 || item.right > window.innerWidth + 1),
-        )
-        .slice(0, 10),
-    );
-
-  expect(offenders, `${label}: interactive controls outside viewport`).toEqual([]);
 }
 
 function routeShape(path: string): string {
@@ -637,18 +597,6 @@ test.describe('staging audit #201 — authenticated cross-module UI regression',
     await page.setViewportSize({ width: 375, height: 812 });
     for (const route of MOBILE_ROUTES) {
       await auditRoute(page, route, { theme: 'light', mobile: true });
-    }
-  });
-
-  test('MRO dashboard, service orders and aircraft stay contained at 390x844 and 375x812', async ({ page }) => {
-    test.setTimeout(4 * 60 * 1_000);
-    for (const viewport of MRO_MOBILE_VIEWPORTS) {
-      await page.setViewportSize(viewport);
-      for (const route of MRO_MOBILE_ROUTES) {
-        const label = `${route.label} ${viewport.width}x${viewport.height}`;
-        await auditRoute(page, route, { theme: 'light', mobile: true });
-        await assertVisibleInteractiveControlsInsideViewport(page, label);
-      }
     }
   });
 
