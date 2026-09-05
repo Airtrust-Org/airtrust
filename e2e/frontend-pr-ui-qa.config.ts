@@ -49,13 +49,18 @@ const PROFILE_TEST_MATCH =
     ? /audit-closure\.spec\.ts$/
     : AUDIT_PROFILE === 'simulator-planning'
       ? /simulator-planning-persistence\.spec\.ts$/
-      : /destructive-actions\.spec\.ts$/;
+      : AUDIT_PROFILE === 'lms-scorm'
+        ? /lms-scorm-staging\.spec\.ts$/
+        : /destructive-actions\.spec\.ts$/;
 
 export default defineConfig({
   testDir: './frontend-pr-ui-qa',
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 1 : 0,
+  // The staging LMS SCORM profile mutates only disposable synthetic fixtures.
+  // Do not retry it: a retry after a partial activation would test deduplication
+  // instead of the intended first-upload acceptance path.
+  retries: AUDIT_PROFILE === 'lms-scorm' ? 0 : process.env.CI ? 1 : 0,
   workers: 1,
   timeout: 90_000,
   reporter: [
