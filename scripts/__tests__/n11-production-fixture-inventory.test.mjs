@@ -17,8 +17,8 @@ test('N-11 production inventory is explicit, SHA-pinned and read-only', () => {
   assert.match(workflow, /n11-production-fixture-inventory\.mjs/);
   assert.doesNotMatch(workflow, /wrangler\s+(?:deploy|pages deploy)/);
   assert.doesNotMatch(workflow, /--file\b/);
-  assert.match(workflow, /secrets\.CLOUDFLARE_WORKER_API_TOKEN/);
-  assert.doesNotMatch(workflow, /CLOUDFLARE_D1_(?:BACKUP|MIGRATION)_API_TOKEN/);
+  assert.match(workflow, /secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
+  assert.doesNotMatch(workflow, /secrets\.CLOUDFLARE_WORKER_API_TOKEN/);
 
   assert.match(script, /const DB_NAME = 'airtrust-db'/);
   assert.match(script, /'--env', 'production', '--remote', '--json', '--command'/);
