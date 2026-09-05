@@ -46,6 +46,10 @@ describe('staging MRO mobile governed harness contract', () => {
     expect(spec).toContain("{ key: 'dashboard', path: '/mro' }");
     expect(spec).toContain("{ key: 'ordens_servico', path: '/mro/os' }");
     expect(spec).toContain("{ key: 'aeronaves', path: '/mro/aeronaves' }");
+    expect(spec).toContain("{ key: 'vencimentos', path: '/mro/vencimentos' }");
+    expect(spec).toContain("{ key: 'componentes', path: '/mro/componentes' }");
+    expect(spec).toContain("{ key: 'estoque', path: '/mro/estoque' }");
+    expect(spec).toContain("{ key: 'registros_tecnicos', path: '/mro/registros-tecnicos' }");
     expect(spec).toContain('installReadOnlyGuard(page)');
     expect(spec).toContain("expect(guard.mutationCount, 'MRO responsive QA must remain read-only').toBe(0)");
   });
