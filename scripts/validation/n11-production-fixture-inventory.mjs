@@ -20,7 +20,32 @@ if ((process.env.N11_PRODUCTION_DB_NAME || DB_NAME) !== DB_NAME) {
   fail('PRODUCTION_DB_TARGET_REJECTED');
 }
 
+function assertReadOnlySql(sql) {
+  const normalized = String(sql || '').trim();
+  const singleStatement = normalized.replace(/;+\s*$/, '').trim();
+
+  if (!singleStatement || singleStatement.includes(';')) {
+    fail('MULTI_STATEMENT_SQL_REJECTED');
+  }
+
+  if (/^PRAGMA\b/i.test(singleStatement)) {
+    if (!/^PRAGMA\s+table_info\s*\(/i.test(singleStatement)) {
+      fail('PRAGMA_NOT_ALLOWLISTED');
+    }
+    return;
+  }
+
+  if (!/^SELECT\b/i.test(singleStatement)) {
+    fail('NON_READONLY_SQL_REJECTED');
+  }
+
+  if (/\b(?:INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|REPLACE|VACUUM|ATTACH|DETACH|REINDEX|ANALYZE)\b/i.test(singleStatement)) {
+    fail('MUTATING_SQL_REJECTED');
+  }
+}
+
 function query(sql) {
+  assertReadOnlySql(sql);
   const result = spawnSync(
     'npx',
     ['wrangler', 'd1', 'execute', DB_NAME, '--env', 'production', '--remote', '--json', '--command', sql],
