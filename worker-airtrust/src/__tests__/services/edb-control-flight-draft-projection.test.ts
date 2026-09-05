@@ -166,9 +166,10 @@ describe('Control Flights to eDB shadow draft projection', () => {
         dayMinutes: null,
         nightMinutes: 0,
         vfrMinutes: null,
-        ifrActualMinutes: 30,
+        ifrActualMinutes: null,
         ifrSimulatedMinutes: null,
       },
+      cycles: null,
       fuelConsumed: {
         value: 240,
         unit: 'KG',
@@ -178,7 +179,14 @@ describe('Control Flights to eDB shadow draft projection', () => {
     expect(result.draft.legs[0].crew.map((member) => member.function)).toEqual(['P1', 'P2']);
     expect(result.draft.legs[1].crew.map((member) => member.function)).toEqual(['C', 'M']);
     expect(result.draft.legs[1].source.kind).toBe('SIGVOOS');
-    expect(result.findings).toEqual([]);
+    expect(result.findings).toEqual(
+      expect.arrayContaining([
+        { code: 'IFR_CLASSIFICATION_REQUIRED', path: 'legs.0.times.ifrActualMinutes' },
+        { code: 'CYCLES_SOURCE_SEMANTICS_UNCONFIRMED', path: 'legs.0.cycles' },
+        { code: 'IFR_CLASSIFICATION_REQUIRED', path: 'legs.1.times.ifrActualMinutes' },
+        { code: 'CYCLES_SOURCE_SEMANTICS_UNCONFIRMED', path: 'legs.1.cycles' },
+      ]),
+    );
   });
 
   it('keeps unscoped crew out of every leg and reports the missing association', () => {
