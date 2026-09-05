@@ -1,0 +1,8 @@
+{
+  "changeId": "edb-final-revision-persistence-0486",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0486_edb_final_revision_persistence.sql",
+  "fileHash": "ad4b3e9b367c3c0ea4a8dd8fc3b54a29183da51a8c06a80a61a58d4a28ab9502",
+  "planPath": "worker-airtrust/schema-v2/plans/edb-final-revision-persistence-0486.md",
+  "planHash": "58b0cf73dc1469e89d8c588bb97362d7777f57284332a5f65f9d3b8dd1ccce2b"
+}
