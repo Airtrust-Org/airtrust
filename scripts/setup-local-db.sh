@@ -106,13 +106,24 @@ list_local_sqlites() {
 
 find_local_sqlite() {
   local candidate
+  local selected=""
+  local matches=0
   while IFS= read -r candidate; do
     [[ -n "$candidate" ]] || continue
-    if sqlite3 "$candidate"       "SELECT CASE WHEN EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='d1_migrations') THEN 1 ELSE 0 END;"       2>/dev/null | grep -qx '1'; then
-      printf '%s\n' "$candidate"
-      return 0
+    if sqlite3 "$candidate" \
+      "SELECT CASE WHEN EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='d1_migrations') THEN 1 ELSE 0 END;" \
+      2>/dev/null | grep -qx '1'; then
+      selected="$candidate"
+      matches=$((matches + 1))
     fi
   done < <(list_local_sqlites)
+
+  if (( matches > 1 )); then
+    error "ambiguous local D1 state: multiple persisted SQLite files contain d1_migrations; rerun with --reset"
+  fi
+  if (( matches == 1 )); then
+    printf '%s\n' "$selected"
+  fi
 }
 
 has_any_local_sqlite() {
