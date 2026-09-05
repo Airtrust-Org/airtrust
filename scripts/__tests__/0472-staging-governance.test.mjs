@@ -20,7 +20,7 @@ test('0472 is present in the staging apply allowlist (apply-approved-migrations.
 
 test('RELEASE_PREFLIGHT_SCOPE includes 0472 in scope', () => {
   const script = read('scripts/staging/apply-approved-migrations.sh');
-  assert.match(script, /RELEASE_PREFLIGHT_SCOPE="[^"]*,0470,0472,0475,0476,0481,0482"/);
+  assert.match(script, /RELEASE_PREFLIGHT_SCOPE="[^"]*,0470,0472,0475,0476,0477,0478,0479,0480"/);
 });
 
 test('0472 routes through the recovery-point runner, same as 0467-0470', () => {
