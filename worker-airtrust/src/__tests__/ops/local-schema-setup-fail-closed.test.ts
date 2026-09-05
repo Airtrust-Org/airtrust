@@ -42,6 +42,9 @@ describe('local D1 setup scripts', () => {
     expect(finder).toContain('sqlite_master');
     expect(finder).toContain("name='d1_migrations'");
     expect(finder).not.toMatch(/head\s+(?:-n\s*)?1\b/);
+    expect(finder).toContain('matches=$((matches + 1))');
+    expect(finder).toContain('if (( matches > 1 )); then');
+    expect(finder).toContain('multiple persisted SQLite files contain d1_migrations');
     expect(source).toContain('elif has_any_local_sqlite; then');
   });
 
