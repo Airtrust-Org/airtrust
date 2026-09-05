@@ -56,4 +56,77 @@ describe('eDB persisted record runtime validation', () => {
     };
     expect(isPersistedEdbFlightRecord(value)).toBe(false);
   });
+
+  it.each([
+    ['operator company identity', (value: ReturnType<typeof record>) => { value.identity.operatorCompanyId = 10.5; }],
+    ['aircraft identity', (value: ReturnType<typeof record>) => { value.identity.aircraft.aircraftId = 1.5; }],
+    ['source RDV identity', (value: ReturnType<typeof record>) => { value.source.sourceRdvId = 30.5; }],
+    ['source RDV version', (value: ReturnType<typeof record>) => { value.source.sourceRdvVersion = 1.5; }],
+    ['source stage identity', (value: ReturnType<typeof record>) => { value.source.sourceStageId = 40.5; }],
+    ['landing count', (value: ReturnType<typeof record>) => { value.flight.landingsTotal = 1.5; }],
+    ['cycle count', (value: ReturnType<typeof record>) => { value.flight.cycles = 2.5; }],
+    ['persons on board', (value: ReturnType<typeof record>) => { value.flight.personsOnBoard = 3.5; }],
+  ])('fails closed for fractional persisted %s', (_label, mutate) => {
+    const value = record();
+    mutate(value);
+    expect(isPersistedEdbFlightRecord(value)).toBe(false);
+  });
+
+  it.each([
+    ['airframe due hours', (value: ReturnType<typeof record>) => { value.maintenance.nextIntervention.dueAtAirframeHours = Number.POSITIVE_INFINITY; }],
+    ['day duration', (value: ReturnType<typeof record>) => { value.flight.duration.dayMinutes = Number.NaN; }],
+    ['night duration', (value: ReturnType<typeof record>) => { value.flight.duration.nightMinutes = Number.POSITIVE_INFINITY; }],
+    ['total duration', (value: ReturnType<typeof record>) => { value.flight.duration.totalMinutes = Number.NEGATIVE_INFINITY; }],
+    ['actual IFR duration', (value: ReturnType<typeof record>) => { value.flight.duration.ifrActualMinutes = Number.NaN; }],
+    ['simulated IFR duration', (value: ReturnType<typeof record>) => { value.flight.duration.ifrSimulatedMinutes = Number.POSITIVE_INFINITY; }],
+    ['fuel', (value: ReturnType<typeof record>) => { value.flight.fuelBeforeEngineStart = Number.NaN; }],
+    ['cargo', (value: ReturnType<typeof record>) => { value.flight.cargoKg = Number.POSITIVE_INFINITY; }],
+  ])('fails closed for non-finite persisted %s', (_label, mutate) => {
+    const value = record();
+    mutate(value);
+    expect(isPersistedEdbFlightRecord(value)).toBe(false);
+  });
+
+  it('rejects mixed-type persisted string evidence arrays', () => {
+    const owners = record();
+    owners.identity.aircraft.owners = ['Owner A', 123 as unknown as string];
+    expect(isPersistedEdbFlightRecord(owners)).toBe(false);
+
+    const occurrences = record();
+    occurrences.flight.occurrences = ['none', { text: 'unexpected' } as unknown as string];
+    expect(isPersistedEdbFlightRecord(occurrences)).toBe(false);
+  });
+
+  it('rejects malformed nested crew and discrepancy identities', () => {
+    const crew = record();
+    crew.flight.crew = [{
+      employeeId: 1,
+      fullName: 'PIC Test',
+      anacCode: null,
+      operationalRole: 'INVALID' as 'PIC',
+      regulatoryFunctionCode: null,
+    }];
+    expect(isPersistedEdbFlightRecord(crew)).toBe(false);
+
+    const discrepancy = record();
+    discrepancy.flight.technicalDiscrepancies = [{
+      description: 'Hydraulic indication',
+      detectedBy: {
+        employeeId: 10.5,
+        fullName: 'Mechanic Test',
+        anacCode: null,
+      },
+    }];
+    expect(isPersistedEdbFlightRecord(discrepancy)).toBe(false);
+  });
+
+  it('rejects invalid correction revision evidence', () => {
+    const zero = record();
+    zero.correction.revision = 0;
+    expect(isPersistedEdbFlightRecord(zero)).toBe(false);
+
+    const fractional = record();
+    fractional.correction.revision = 1.5;
+    expect(isPersistedEdbFlightRecord(fractional)).toBe(false);
+  });
 });
