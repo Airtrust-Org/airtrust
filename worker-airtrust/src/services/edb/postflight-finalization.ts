@@ -68,7 +68,7 @@ function assertAcknowledgementBeforeFlight(record: EdbFlightRecord, acknowledgem
 
   const signedAt = Date.parse(acknowledgement.signature.signedAt);
   const engineStart = Date.parse(engineStartAt);
-  if (Number.isFinite(signedAt) && Number.isFinite(engineStart) && signedAt > engineStart) {
+  if (Number.isFinite(signedAt) && Number.isFinite(engineStart) && signedAt >= engineStart) {
     throw new Error('EDB_TECHNICAL_ACK_NOT_BEFORE_FLIGHT');
   }
 }
