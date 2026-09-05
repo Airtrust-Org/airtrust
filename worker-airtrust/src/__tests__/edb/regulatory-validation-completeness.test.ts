@@ -142,9 +142,7 @@ const blockingCases: MutationCase[] = [
     code: 'EDB_TECH_DISCREPANCY_DESCRIPTION_REQUIRED',
     mutate: (r) => {
       r.flight.technicalDiscrepancies = [{
-        discrepancyId: 'disc-1',
         description: '',
-        detectedAt: '2026-09-05T10:30:00.000Z',
         detectedBy: { employeeId: 10, fullName: 'Piloto em Comando', anacCode: '123456' },
       }];
     },
@@ -154,9 +152,7 @@ const blockingCases: MutationCase[] = [
     code: 'EDB_TECH_DISCREPANCY_DETECTOR_REQUIRED',
     mutate: (r) => {
       r.flight.technicalDiscrepancies = [{
-        discrepancyId: 'disc-1',
         description: 'Indicacao anormal',
-        detectedAt: '2026-09-05T10:30:00.000Z',
         detectedBy: { employeeId: 10, fullName: '', anacCode: '123456' },
       }];
     },
