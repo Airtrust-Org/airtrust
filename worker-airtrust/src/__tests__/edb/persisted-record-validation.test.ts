@@ -21,6 +21,14 @@ describe('eDB persisted record runtime validation', () => {
     expect(isPersistedEdbFlightRecord(record())).toBe(true);
   });
 
+  it('rejects unverified ANAC transport lifecycle states', () => {
+    for (const status of ['ANAC_PENDING', 'ANAC_SYNCED']) {
+      const value = record() as unknown as { status: string };
+      value.status = status;
+      expect(isPersistedEdbFlightRecord(value)).toBe(false);
+    }
+  });
+
   it('rejects non-integer persistent identities', () => {
     const value = record();
     value.source.sourceFlightId = 20.5;
