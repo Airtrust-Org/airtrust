@@ -5,7 +5,7 @@ import type { Env, Variables } from '../../types';
 
 type TestContext = Context<{ Bindings: Env; Variables: Variables }>;
 
-const { loadPreviewMock } = vi.hoisted(() => ({ loadPreviewMock: vi.fn() }));
+const { loadPreviewMock, getActiveDiaryMock } = vi.hoisted(() => ({ loadPreviewMock: vi.fn(), getActiveDiaryMock: vi.fn() }));
 
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: TestContext, next: () => Promise<void>) => {
@@ -42,6 +42,10 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
   };
 });
 
+vi.mock('../../repositories/edb/edb-diary-repository', () => ({
+  getActiveEdbDiaryForAircraft: getActiveDiaryMock,
+}));
+
 vi.mock('../../services/edb/control-flight-shadow-preview', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../services/edb/control-flight-shadow-preview')>();
@@ -77,6 +81,8 @@ function env(environment: 'development' | 'staging' | 'production', tenants = '6
 
 beforeEach(() => {
   loadPreviewMock.mockReset();
+  getActiveDiaryMock.mockReset();
+  getActiveDiaryMock.mockResolvedValue(null);
   loadPreviewMock.mockResolvedValue({
     draft: { status: 'INCOMPLETE' },
     findings: [],
@@ -119,6 +125,41 @@ describe('eDB shadow pilot route gate', () => {
       env('staging'),
     );
     expect(await viewer.json()).toMatchObject({ success: true, data: { enabled: false } });
+  });
+
+  it('serves active diary as manager-only tenant-scoped read-only shadow data', async () => {
+    const response = await createApp().request(
+      '/api/edb/aircraft/2147483647/active-diary',
+      { headers: headers(6, 'manager') },
+      env('staging'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true, data: null });
+    expect(response.headers.get('X-AirTrust-eDB-Mode')).toBe('staging-shadow-not-regulatory');
+    expect(getActiveDiaryMock).toHaveBeenCalledWith({
+      db: expect.anything(),
+      empresaId: 6,
+      aircraftId: 2147483647,
+    });
+  });
+
+  it('blocks active diary before repository access for viewer or disabled tenant', async () => {
+    const viewer = await createApp().request(
+      '/api/edb/aircraft/42/active-diary',
+      { headers: headers(6, 'viewer') },
+      env('staging'),
+    );
+    expect(viewer.status).toBe(403);
+    expect(getActiveDiaryMock).not.toHaveBeenCalled();
+
+    const wrongTenant = await createApp().request(
+      '/api/edb/aircraft/42/active-diary',
+      { headers: headers(7, 'manager') },
+      env('staging'),
+    );
+    expect(wrongTenant.status).toBe(404);
+    expect(getActiveDiaryMock).not.toHaveBeenCalled();
   });
 
   it('returns not found before loading data outside the enabled scope', async () => {
