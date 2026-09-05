@@ -169,6 +169,14 @@ jobs:
           [[ "$baseline_total" == '1' ]] || { echo 'baseline must exist and be active.' >&2; exit 1; }
           [[ "$change_total" == '0' ]] || { echo 'change is already applied.' >&2; exit 1; }
 
+      - name: Preflight RDV 0438 production physical state
+        if: ${{ inputs.change_id == '0438-rdv-coordination-workflow-production' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0438-production-preflight.sh --target=airtrust-db
+
       - name: Backup governance ledger
         shell: bash
         working-directory: worker-airtrust
@@ -249,6 +257,14 @@ jobs:
               process.exit(1);
             }
           '
+
+      - name: Post-validate RDV 0438 production invariants
+        if: ${{ inputs.change_id == '0438-rdv-coordination-workflow-production' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0438-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate EAD reconciliation ledger 0453
         if: ${{ inputs.change_id == 'ead-category-reconciliation-executor-0453' }}
