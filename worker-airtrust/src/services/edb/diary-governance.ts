@@ -186,9 +186,12 @@ export function minimumEdbRetentionUntil(
     'registrationCancellationDate',
   );
 
-  const fiveYearsLater = new Date(Date.UTC(year + 5, month - 1, day));
-  fiveYearsLater.setUTCDate(fiveYearsLater.getUTCDate() + 1);
-  return fiveYearsLater.toISOString().slice(0, 10);
+  const targetYear = year + 5;
+  const lastDayOfTargetMonth = new Date(Date.UTC(targetYear, month, 0)).getUTCDate();
+  const anniversaryDay = Math.min(day, lastDayOfTargetMonth);
+  const retention = new Date(Date.UTC(targetYear, month - 1, anniversaryDay));
+  retention.setUTCDate(retention.getUTCDate() + 1);
+  return retention.toISOString().slice(0, 10);
 }
 
 export function createEdbInformationLossIncident(params: {
