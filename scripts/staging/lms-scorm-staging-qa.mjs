@@ -78,7 +78,10 @@ async function qaToken() {
 
   const mine = await authJson(token, '/api/empresas/minha');
   assert(mine.status === 200, `empresa QA retornou ${mine.status}`);
-  assert(String(mine.json?.data?.codigo || '') === 'qa_examiner_training', 'token não está no tenant QA');
+  assert(
+    String(mine.json?.data?.codigo || '') === 'qa_examiner_training',
+    'token não está no tenant QA',
+  );
   return token;
 }
 
@@ -202,7 +205,7 @@ function makeZip(kind) {
   return zipSync(files, { level: 6 });
 }
 
-async function createCourse(token, label) {
+async function createCourse(token, key, label) {
   const title = `QA SCORM ${label} ${RUN_MARKER}`;
   const result = await authJson(token, '/api/lms/cursos', {
     method: 'POST',
@@ -217,59 +220,33 @@ async function createCourse(token, label) {
       scorm_versao: '1.2',
     },
   });
-  assert(result.status === 201, `create ${label} retornou ${result.status}: ${safeMessage(result.json?.error)}`);
+  assert(
+    result.status === 201,
+    `create ${label} retornou ${result.status}: ${safeMessage(result.json?.error)}`,
+  );
   const id = Number(result.json?.data?.id);
   assert(Number.isInteger(id) && id > 0, `create ${label} sem id`);
-  return { id, title };
+  const zipPath = path.join(ROOT, `${key}.zip`);
+  const zipName = `qa-scorm-${key}-${RUN_MARKER}.zip`;
+  fs.writeFileSync(zipPath, makeZip(key), { mode: 0o600 });
+  return { id, title, kind: key, zip_path: zipPath, zip_name: zipName };
 }
 
 async function prepare() {
   fs.mkdirSync(ROOT, { recursive: true });
   const token = await qaToken();
-
   const created = [];
+
   try {
-    for (const [key, label] of [
-      ['success', 'Success'],
-      ['reject', 'Reject'],
-      ['timeout', 'Timeout'],
-    ]) {
-      const course = await createCourse(token, label);
-      created.push(course.id);
-      const zipPath = path.join(ROOT, `${key}.zip`);
-      fs.writeFileSync(zipPath, makeZip(key), { mode: 0o600 });
-      course.zip_path = zipPath;
-      course.zip_name = `qa-scorm-${key}-${RUN_MARKER}.zip`;
-      course.kind = key;
-    }
+    created.push(await createCourse(token, 'success', 'Success'));
+    created.push(await createCourse(token, 'reject', 'Reject'));
+    created.push(await createCourse(token, 'timeout', 'Timeout'));
 
     const state = {
       schema_version: 1,
       run_marker: RUN_MARKER,
-      courses: {
-        success: created.length > 0 ? { ...arguments } : null,
-      },
+      courses: Object.fromEntries(created.map((item) => [item.kind, item])),
     };
-    state.courses = {};
-    for (const course of [
-      await Promise.resolve(null),
-    ]) void course;
-    // Recreate deterministic mapping without leaking auth material.
-    const keys = ['success', 'reject', 'timeout'];
-    state.courses = Object.fromEntries(
-      keys.map((key, index) => {
-        const label = key === 'success' ? 'Success' : key === 'reject' ? 'Reject' : 'Timeout';
-        return [
-          key,
-          {
-            id: created[index],
-            title: `QA SCORM ${label} ${RUN_MARKER}`,
-            zip_path: path.join(ROOT, `${key}.zip`),
-            zip_name: `qa-scorm-${key}-${RUN_MARKER}.zip`,
-          },
-        ];
-      }),
-    );
     fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
     console.log(
       JSON.stringify({
@@ -281,9 +258,8 @@ async function prepare() {
       }),
     );
   } catch (error) {
-    // Best-effort compensation for partially-created fixtures.
-    for (const id of created.reverse()) {
-      await authJson(token, `/api/lms/cursos/${id}`, { method: 'DELETE' }).catch(() => null);
+    for (const item of [...created].reverse()) {
+      await authJson(token, `/api/lms/cursos/${item.id}`, { method: 'DELETE' }).catch(() => null);
     }
     throw error;
   }
@@ -305,7 +281,7 @@ async function cleanup() {
     );
     const verify = await authJson(token, `/api/lms/cursos/${id}`);
     assert(verify.status === 404, `curso sintético ${id} ainda visível após cleanup`);
-    results.push({ kind: item.kind || null, removed: true });
+    results.push({ kind: item.kind, removed: true });
   }
 
   const summary = {
@@ -322,6 +298,8 @@ async function cleanup() {
 }
 
 (MODE === 'cleanup' ? cleanup() : prepare()).catch((error) => {
-  console.error(`STAGING_LMS_SCORM_QA_${MODE.toUpperCase()}_FAILED: ${safeMessage(error?.message || error)}`);
+  console.error(
+    `STAGING_LMS_SCORM_QA_${MODE.toUpperCase()}_FAILED: ${safeMessage(error?.message || error)}`,
+  );
   process.exit(1);
 });
