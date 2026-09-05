@@ -13,7 +13,7 @@ import {
   getActiveEdbDiaryForAircraft,
   loadEdbDiaryVolume,
   loadEdbIntegrityIncident,
-  recordPersistedEdbAnacNotification,
+  recordPersistedEdbAnacNotificationEvidence,
   recordPersistedEdbImpossibleReconstitution,
   recordPersistedEdbPoliceOccurrence,
 } from '../../repositories/edb/edb-diary-repository';
@@ -177,6 +177,17 @@ describe('eDB diary repository against migration 0483', () => {
     });
     expect(closed.status).toBe('CLOSED');
 
+    await expect(
+      closePersistedEdbDiaryVolume({
+        db,
+        empresaId: 1,
+        volumeId: 'vol-1',
+        closedAt: '2026-09-30T20:00:00Z',
+        closedBy: actor,
+        retentionMinimumUntil: '2031-02-30',
+      }),
+    ).rejects.toThrow('EDB_VOLUME_RETENTION_DATE_INVALID');
+
     await closeEdbDiary({ db, empresaId: 1, diaryId: diary.diaryId });
     expect(await getActiveEdbDiaryForAircraft({ db, empresaId: 1, aircraftId: 10 }))
       .toBeNull();
@@ -214,7 +225,7 @@ describe('eDB diary repository against migration 0483', () => {
       reference: 'BO-123',
       reportedAt: '2026-09-05T12:30:00Z',
     });
-    await recordPersistedEdbAnacNotification({
+    await recordPersistedEdbAnacNotificationEvidence({
       db,
       empresaId: 1,
       incidentId: 'incident-1',
