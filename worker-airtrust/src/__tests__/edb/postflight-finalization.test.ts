@@ -152,6 +152,19 @@ describe('eDB postflight finalization', () => {
     ).rejects.toThrow('EDB_TECHNICAL_SITUATION_CHANGED_AFTER_ACK');
   });
 
+  it('rejects an acknowledgement made exactly at engine start', async () => {
+    const record = completeRecord();
+    const { snapshot, acknowledgement } = await preflight(record, '2026-08-28T10:00:00.000Z');
+
+    await expect(
+      finalizePostflightEdbRecord({
+        draftRecord: record,
+        technicalSituation: snapshot,
+        technicalAcknowledgement: acknowledgement,
+      }),
+    ).rejects.toThrow('EDB_TECHNICAL_ACK_NOT_BEFORE_FLIGHT');
+  });
+
   it('rejects an acknowledgement made after engine start', async () => {
     const record = completeRecord();
     const { snapshot, acknowledgement } = await preflight(record, '2026-08-28T10:01:00.000Z');
