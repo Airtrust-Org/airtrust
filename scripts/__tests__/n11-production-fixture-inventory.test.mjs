@@ -26,6 +26,12 @@ test('N-11 production inventory is explicit, SHA-pinned and read-only', () => {
   assert.match(script, /audit_observed_fixture_label/);
   assert.match(script, /pragma_table_info/);
   assert.match(script, /total_rows/);
+  assert.match(script, /function assertReadOnlySql\(sql\)/);
+  assert.match(script, /assertReadOnlySql\(sql\)/);
+  assert.match(script, /NON_READONLY_SQL_REJECTED/);
+  assert.match(script, /MUTATING_SQL_REJECTED/);
+  assert.match(script, /PRAGMA_NOT_ALLOWLISTED/);
+  assert.match(script, /MULTI_STATEMENT_SQL_REJECTED/);
   assert.doesNotMatch(script, /\b(?:INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|REPLACE)\s+(?:INTO|TABLE|FROM|SET)?/i);
   assert.doesNotMatch(script, /--file\b/);
   assert.doesNotMatch(script, /SELECT\s+[^;]*(?:email|cpf)/i);
