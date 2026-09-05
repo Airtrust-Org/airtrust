@@ -127,7 +127,7 @@ describe('Control Flights projection rollover and RDV summaries', () => {
     });
     expect(result.draft.legs[1]).toMatchObject({
       occurrenceSummary: 'Synthetic operational occurrence',
-      technicalDiscrepancySummary: 'Synthetic technical discrepancy',
+      technicalDiscrepancySummary: null,
     });
     expect(result.fieldSources).toEqual([
       {
@@ -138,15 +138,11 @@ describe('Control Flights projection rollover and RDV summaries', () => {
           observedAt: '2026-08-03T02:00:00-03:00',
         },
       },
-      {
-        path: 'legs.1.technicalDiscrepancySummary',
-        source: {
-          kind: 'AIRTRUST_CONTROL_FLIGHTS',
-          reference: 'cv_rdv_operacional:990',
-          observedAt: '2026-08-03T02:00:00-03:00',
-        },
-      },
     ]);
+    expect(result.findings).toContainEqual({
+      code: 'TECHNICAL_DISCREPANCY_STRUCTURED_SOURCE_REQUIRED',
+      path: 'rdv.divergencias',
+    });
   });
 
   it('rejects an RDV row from another tenant or flight', () => {
