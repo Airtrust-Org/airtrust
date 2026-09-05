@@ -34,7 +34,8 @@ describe('staging MRO mobile governed harness contract', () => {
     expect(workflow).toContain('mro-audit-closure.spec.ts --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium');
     expect(workflow).toContain('credential-pair.mjs');
     expect(workflow).not.toContain('wrangler d1 execute');
-    expect(workflow).not.toContain('deploy');
+    expect(workflow).not.toContain('wrangler deploy');
+    expect(workflow).not.toContain('deploy-staging.yml');
   });
 
   it('locks all audited MRO routes, both mobile viewports and zero-mutation checks', () => {
