@@ -42,10 +42,10 @@ function sleep(ms: number) {
 async function delayedRealResponse(
   route: Route,
   delayMs: number,
-  capture: (json: unknown) => void,
+  capture: (json: ApiEnvelope | null) => void,
 ) {
   const response = await route.fetch();
-  const json = await response.json().catch(() => null);
+  const json = (await response.json().catch(() => null)) as ApiEnvelope | null;
   capture(json);
   await sleep(delayMs);
   await route.fulfill({ response });
