@@ -1,0 +1,133 @@
+name: N-11 Production Structural Remediation
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact main SHA reviewed for this structural remediation
+        required: true
+        type: string
+      mode:
+        description: Execution mode (dry-run or apply)
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - apply
+        default: dry-run
+      confirmation:
+        description: Type AIRTRUST_PRODUCTION_DRYRUN_N11_REMEDIATION (for dry-run) or AIRTRUST_PRODUCTION_APPLY_N11_REMEDIATION (for apply)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: n11-production-structural-remediation
+  cancel-in-progress: false
+
+jobs:
+  d1_remediation:
+    name: Governed D1 N-11 structural remediation
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_REF_REQUIRED" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "EXPECTED_SHA_INVALID" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo "EXPECTED_SHA_MISMATCH" >&2; exit 1; }
+
+          if [[ "$MODE" == "dry-run" ]]; then
+            [[ "$CONFIRMATION" == "AIRTRUST_PRODUCTION_DRYRUN_N11_REMEDIATION" ]] || { echo "DRYRUN_CONFIRMATION_REQUIRED" >&2; exit 1; }
+          elif [[ "$MODE" == "apply" ]]; then
+            [[ "$CONFIRMATION" == "AIRTRUST_PRODUCTION_APPLY_N11_REMEDIATION" ]] || { echo "APPLY_CONFIRMATION_REQUIRED" >&2; exit 1; }
+          else
+            echo "UNSUPPORTED_MODE" >&2
+            exit 1
+          fi
+
+      - name: Checkout exact reviewed main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+
+      - name: Install Worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Validate D1 credential
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo "D1_TOKEN_MISSING" >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo "CLOUDFLARE_ACCOUNT_ID_MISSING" >&2; exit 1; }
+
+      - name: Capture D1 Time Travel recovery point
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          recovery_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          recovery_output="$RUNNER_TEMP/d1-time-travel-info.txt"
+          npx wrangler d1 time-travel info airtrust-db --env production \
+            --timestamp="$recovery_timestamp" > "$recovery_output"
+          test -s "$recovery_output"
+          echo "N11_RECOVERY_TIMESTAMP_UTC=$recovery_timestamp" >> "$GITHUB_STEP_SUMMARY"
+          rm -f "$recovery_output"
+
+      - name: Execute governed structural remediation
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          N11_REMEDIATION_CONFIRMATION: ${{ inputs.confirmation }}
+          N11_REMEDIATION_MODE: ${{ inputs.mode }}
+          N11_PRODUCTION_DB_NAME: airtrust-db
+        run: |
+          set -euo pipefail
+          node scripts/validation/n11-structural-remediation.mjs "${{ inputs.mode }}" > "$RUNNER_TEMP/n11-remediation-result.json"
+          node - "$RUNNER_TEMP/n11-remediation-result.json" >> "$GITHUB_STEP_SUMMARY" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          console.log('## N-11 Governed Structural Remediation Summary');
+          console.log('');
+          console.log(`- mode: \`${data.mode}\``);
+          console.log(`- source SHA: \`${data.source_sha}\``);
+          console.log(`- tenant: \`${data.empresa_id}\``);
+          console.log(`- target employee IDs: \`${data.target_funcionario_ids.join(',')}\``);
+          console.log(`- target user ID: \`${data.target_user_id}\``);
+          console.log(`- mutation executed: \`${data.mutation_executed}\``);
+          if (data.postcondition_state) {
+            console.log(`- postconditions verified: \`${data.postcondition_state.postconditions_verified}\``);
+          }
+          console.log('- personal data emitted: none');
+          NODE
+
+      - name: Upload sanitized remediation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: n11-production-remediation-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/n11-remediation-result.json
+          if-no-files-found: error
+          retention-days: 7
