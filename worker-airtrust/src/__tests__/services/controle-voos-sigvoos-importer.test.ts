@@ -462,6 +462,85 @@ describe('controle-voos sigvoos importer', () => {
     expect(tripulantes.map((row) => row.sigvoos_staff_inscription)).toEqual(['252', '00252']);
   });
 
+  it('isolates an unknown ICAO as a staging conflict and continues the remaining payload', async () => {
+    const db = createSqliteD1();
+    const payload = {
+      variants: [
+        {
+          flight_report: {
+            id: 720101,
+            report_number: 'FR-720101',
+            flight_number: 'ATX7201',
+          },
+          flight_report_leg: {
+            number: 1,
+            departure_location: { icao_code: 'ZZZZ' },
+            arrival_location: { icao_code: 'SBSP' },
+            takeoff_time_str: '08:05',
+            landing_time_str: '09:00',
+          },
+          staff: {
+            id: 8802,
+            name: 'TRIPULANTE_SIG_02',
+            inscription: '04567',
+          },
+          date: '2026-06-15',
+        },
+        {
+          flight_report: {
+            id: 720102,
+            report_number: 'FR-720102',
+            flight_number: 'ATX7202',
+          },
+          flight_report_leg: {
+            number: 1,
+            departure_location: { icao_code: 'SBRJ' },
+            arrival_location: { icao_code: 'SBSP' },
+            takeoff_time_str: '10:05',
+            landing_time_str: '11:00',
+          },
+          staff: {
+            id: 8802,
+            name: 'TRIPULANTE_SIG_02',
+            inscription: '04567',
+          },
+          date: '2026-06-15',
+        },
+      ],
+    };
+
+    const summary = await importSigvoosPayloadToControleVoos(db, 6, payload, {
+      actorUserId: 10,
+    });
+
+    expect(summary.totalRecords).toBe(2);
+    expect(summary.conflictRecords).toBe(1);
+    expect(summary.processedRecords).toBe(1);
+    expect(summary.createdFlights).toBe(1);
+    expect(summary.results.map((result) => result.status)).toEqual(['CONFLICT', 'PROCESSED']);
+
+    const stages = db.queryJson<{ import_status: string; erro_msg: string | null }>(
+      `SELECT import_status, erro_msg
+         FROM cv_sigvoos_staging
+        WHERE empresa_id = 6
+        ORDER BY created_at ASC, id ASC`,
+    );
+    expect(stages).toHaveLength(2);
+    expect(stages.some((row) =>
+      row.import_status === 'CONFLICT' &&
+      row.erro_msg === 'SIGVOOS_IMPORT_MISSING_AIRPORT_MATCH'
+    )).toBe(true);
+    expect(stages.some((row) => row.import_status === 'PROCESSED')).toBe(true);
+
+    const flights = db.queryJson<{ sigvoos_flight_report_id: number | null }>(
+      `SELECT sigvoos_flight_report_id
+         FROM cv_voos
+        WHERE empresa_id = 6
+        ORDER BY id`,
+    );
+    expect(flights).toEqual([{ sigvoos_flight_report_id: 720102 }]);
+  });
+
   it('creates an explicit conflict when the employee cannot be resolved', async () => {
     const db = createSqliteD1();
     const fixture = readFixture<Record<string, unknown>>('sigvoos-sem-canac.json');
