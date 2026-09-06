@@ -704,13 +704,13 @@ export async function gerarPDFFichaCliente(
   }
 
   // Pré-calcular nomeLines/obsLines para TODAS as linhas (sem row scaling)
-  const precomputedRows = allRows.map(({ m, rowH, displayNum }) => {
+  const precomputedRows = allRows.map(({ m, rowH, displayNum, isNotechs }) => {
     const nomeTxt = (m.nome || '').trim();
     const nomeLines = limitTextLines(doc.splitTextToSize(nomeTxt, ITENS_WIDTH), MAX_ITEM_LINES);
     const obsTxt = (m.observacoes || '').trim();
     const obsLines =
       obsTxt.length > 0 ? limitTextLines(doc.splitTextToSize(obsTxt, OBS_WIDTH), MAX_OBS_LINES) : [];
-    return { m, nomeLines, obsLines, rowH, displayNum };
+    return { m, nomeLines, obsLines, rowH, displayNum, isNotechs };
   });
 
   // Desenha uma linha da tabela (já com nomeLines/obsLines/rowH resolvidos) —

@@ -19,6 +19,7 @@ type ApiClientCompat = {
   put<T>(endpoint: string, data?: unknown, options?: HttpClientOptions): Promise<ApiResponse<T>>;
   delete<T>(endpoint: string, options?: HttpClientOptions): Promise<ApiResponse<T>>;
   patch<T>(endpoint: string, data?: unknown, options?: HttpClientOptions): Promise<ApiResponse<T>>;
+  getBlob(endpoint: string): Promise<Blob>;
 };
 
 function resolveLegacyUrl(endpoint: string): string {
@@ -62,6 +63,14 @@ async function legacyRequest<T = unknown>(
   };
 }
 
+async function getBlob(endpoint: string): Promise<Blob> {
+  const response = await fetchWithAuth(resolveLegacyUrl(endpoint));
+  if (!response.ok) {
+    throw new Error(`Erro ${response.status} ao baixar arquivo`);
+  }
+  return response.blob();
+}
+
 // Mantém os consumidores modernos por método sem mudar a semântica do httpClient.
 export const apiClient = Object.assign(legacyRequest, {
   get: <T>(endpoint: string, options?: HttpClientOptions) => httpClient.get<T>(endpoint, options),
@@ -73,6 +82,7 @@ export const apiClient = Object.assign(legacyRequest, {
     httpClient.delete<T>(endpoint, options),
   patch: <T>(endpoint: string, data?: unknown, options?: HttpClientOptions) =>
     httpClient.patch<T>(endpoint, data, options),
+  getBlob,
 }) as ApiClientCompat;
 
 export default apiClient;
