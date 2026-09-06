@@ -1,0 +1,180 @@
+name: Production Simulator FOLGA Policy
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA containing the reviewed executor
+        required: true
+        type: string
+      mode:
+        description: verify performs no write; apply sets tenant 6 policy to FOLGA
+        required: true
+        type: choice
+        options:
+          - verify
+          - apply
+        default: verify
+      confirmation:
+        description: Type AIRTRUST_PRODUCTION_VERIFY_FOLGA or AIRTRUST_PRODUCTION_APPLY_FOLGA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-simulator-folga-policy
+  cancel-in-progress: false
+
+env:
+  PROD_API_BASE_URL: https://api.airtrust.online
+  EXPECTED_TENANT_ID: '6'
+
+jobs:
+  policy:
+    name: Governed production simulator FOLGA policy
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_REF_REQUIRED" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "EXPECTED_SHA_INVALID" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo "EXPECTED_SHA_MISMATCH" >&2; exit 1; }
+          if [[ "$MODE" == "verify" ]]; then
+            [[ "$CONFIRMATION" == "AIRTRUST_PRODUCTION_VERIFY_FOLGA" ]] || { echo "VERIFY_CONFIRMATION_REQUIRED" >&2; exit 1; }
+          elif [[ "$MODE" == "apply" ]]; then
+            [[ "$CONFIRMATION" == "AIRTRUST_PRODUCTION_APPLY_FOLGA" ]] || { echo "APPLY_CONFIRMATION_REQUIRED" >&2; exit 1; }
+          else
+            echo "UNSUPPORTED_MODE" >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Verify current-main release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Require production admin/manager credential
+        env:
+          QA_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          QA_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$QA_EMAIL" && -n "$QA_PASSWORD" ]] || { echo "PRODUCTION_QA_CREDENTIALS_MISSING" >&2; exit 1; }
+          [[ "$QA_EMAIL" != *"staging.airtrust.invalid"* ]] || { echo "STAGING_QA_IDENTITY_REJECTED" >&2; exit 1; }
+
+      - name: Verify identity and optionally apply FOLGA
+        env:
+          QA_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          QA_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          MODE: ${{ inputs.mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module > "$RUNNER_TEMP/simulator-folga-result.json" <<'NODE'
+          import {
+            assertAllowedProductionBaseUrl,
+            decodeJwtPayload,
+            extractAccessToken,
+            fetchJson,
+            login,
+          } from './scripts/smoke-auth-common.mjs';
+
+          const base = assertAllowedProductionBaseUrl(process.env.PROD_API_BASE_URL);
+          const loginPayload = await login(base, process.env.QA_EMAIL, process.env.QA_PASSWORD);
+          const token = extractAccessToken(loginPayload);
+          const claims = decodeJwtPayload(token);
+          const tenantId = Number(claims?.empresa_id || 0);
+          const role = String(claims?.role || '').toLowerCase();
+
+          if (tenantId !== Number(process.env.EXPECTED_TENANT_ID)) {
+            throw new Error(`PRODUCTION_TENANT_MISMATCH:${tenantId}`);
+          }
+          if (!['admin', 'manager'].includes(role)) {
+            throw new Error(`PRODUCTION_ROLE_NOT_AUTHORIZED:${role || 'missing'}`);
+          }
+
+          const versionResult = await fetchJson(`${base}/api/version`);
+          if (versionResult.status !== 200) throw new Error(`PRODUCTION_VERSION_HTTP_${versionResult.status}`);
+          const versionBody = versionResult.json?.data && typeof versionResult.json.data === 'object'
+            ? versionResult.json.data
+            : versionResult.json;
+          const liveSha = String(versionBody?.sourceSha ?? versionBody?.source_sha ?? '');
+
+          let response = null;
+          let mutationExecuted = false;
+          if (process.env.MODE === 'apply') {
+            response = await fetchJson(`${base}/api/simuladores/planejamento-v2/config`, {
+              method: 'PUT',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ roster_policy: 'FOLGA' }),
+            });
+            if (response.status !== 200 || response.json?.success !== true || response.json?.data?.roster_policy !== 'FOLGA') {
+              throw new Error(`SIMULATOR_FOLGA_APPLY_FAILED:${response.status}`);
+            }
+            mutationExecuted = true;
+          }
+
+          process.stdout.write(JSON.stringify({
+            ok: true,
+            mode: process.env.MODE,
+            tenant_id: tenantId,
+            authorized_role: role,
+            live_worker_sha: liveSha || null,
+            mutation_executed: mutationExecuted,
+            roster_policy_readback: response?.json?.data?.roster_policy ?? null,
+            pii_emitted: false,
+          }, null, 2));
+          NODE
+
+      - name: Publish sanitized summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - "$RUNNER_TEMP/simulator-folga-result.json" >> "$GITHUB_STEP_SUMMARY" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          console.log('## Production simulator FOLGA policy');
+          console.log('');
+          console.log(`- mode: \`${data.mode}\``);
+          console.log(`- workflow source SHA: \`${process.env.GITHUB_SHA}\``);
+          console.log(`- live Worker SHA: \`${data.live_worker_sha || 'unknown'}\``);
+          console.log(`- tenant: \`${data.tenant_id}\``);
+          console.log(`- authorized role: \`${data.authorized_role}\``);
+          console.log(`- mutation executed: \`${data.mutation_executed}\``);
+          if (data.mutation_executed) console.log(`- server-side readback roster_policy: \`${data.roster_policy_readback}\``);
+          console.log('- credentials/PII emitted: no');
+          NODE
+
+      - name: Upload sanitized evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-simulator-folga-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/simulator-folga-result.json
+          if-no-files-found: error
+          retention-days: 14

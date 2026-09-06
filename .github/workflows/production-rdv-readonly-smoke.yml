@@ -1,0 +1,150 @@
+name: Production RDV Readonly Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA containing the reviewed smoke
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_PRODUCTION_READONLY_RDV
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-rdv-readonly-smoke
+  cancel-in-progress: false
+
+env:
+  PROD_API_BASE_URL: https://api.airtrust.online
+  EXPECTED_TENANT_ID: '6'
+
+jobs:
+  smoke:
+    name: Authenticated production RDV queue read-only smoke
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_REF_REQUIRED" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "EXPECTED_SHA_INVALID" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo "EXPECTED_SHA_MISMATCH" >&2; exit 1; }
+          [[ "$CONFIRMATION" == "AIRTRUST_PRODUCTION_READONLY_RDV" ]] || { echo "READONLY_CONFIRMATION_REQUIRED" >&2; exit 1; }
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Verify current-main release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Require production QA credentials
+        env:
+          QA_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          QA_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$QA_EMAIL" && -n "$QA_PASSWORD" ]] || { echo "PRODUCTION_QA_CREDENTIALS_MISSING" >&2; exit 1; }
+          [[ "$QA_EMAIL" != *"staging.airtrust.invalid"* ]] || { echo "STAGING_QA_IDENTITY_REJECTED" >&2; exit 1; }
+
+      - name: Authenticate tenant 6 and read RDV queue
+        env:
+          QA_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          QA_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module > "$RUNNER_TEMP/rdv-production-smoke.json" <<'NODE'
+          import {
+            assertAllowedProductionBaseUrl,
+            decodeJwtPayload,
+            extractAccessToken,
+            fetchJson,
+            login,
+          } from './scripts/smoke-auth-common.mjs';
+
+          const base = assertAllowedProductionBaseUrl(process.env.PROD_API_BASE_URL);
+          const loginPayload = await login(base, process.env.QA_EMAIL, process.env.QA_PASSWORD);
+          const token = extractAccessToken(loginPayload);
+          const claims = decodeJwtPayload(token);
+          const tenantId = Number(claims?.empresa_id || 0);
+          if (tenantId !== Number(process.env.EXPECTED_TENANT_ID)) {
+            throw new Error(`PRODUCTION_TENANT_MISMATCH:${tenantId}`);
+          }
+
+          const versionResult = await fetchJson(`${base}/api/version`);
+          if (versionResult.status !== 200) {
+            throw new Error(`PRODUCTION_VERSION_HTTP_${versionResult.status}`);
+          }
+          const versionBody = versionResult.json?.data && typeof versionResult.json.data === 'object'
+            ? versionResult.json.data
+            : versionResult.json;
+          const liveSha = String(versionBody?.sourceSha ?? versionBody?.source_sha ?? '');
+
+          const queue = await fetchJson(`${base}/api/controle-voos/rdv/fila?limit=1`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (queue.status !== 200 || queue.json?.success !== true || !Array.isArray(queue.json?.data)) {
+            throw new Error(`RDV_QUEUE_SMOKE_FAILED:${queue.status}`);
+          }
+
+          process.stdout.write(JSON.stringify({
+            ok: true,
+            mode: 'production-authenticated-readonly',
+            tenant_id: tenantId,
+            live_worker_sha: liveSha || null,
+            queue_http_status: queue.status,
+            queue_success: true,
+            queue_array: true,
+            writes: 0,
+            pii_emitted: false,
+          }, null, 2));
+          NODE
+
+      - name: Publish sanitized summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - "$RUNNER_TEMP/rdv-production-smoke.json" >> "$GITHUB_STEP_SUMMARY" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          console.log('## Production RDV queue read-only smoke');
+          console.log('');
+          console.log(`- workflow source SHA: \`${process.env.GITHUB_SHA}\``);
+          console.log(`- live Worker SHA: \`${data.live_worker_sha || 'unknown'}\``);
+          console.log(`- tenant: \`${data.tenant_id}\``);
+          console.log(`- /rdv/fila HTTP: \`${data.queue_http_status}\``);
+          console.log('- success=true and data[]: PASS');
+          console.log('- writes: none');
+          console.log('- credentials/PII emitted: no');
+          NODE
+
+      - name: Upload sanitized evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-rdv-readonly-smoke-${{ github.sha }}
+          path: ${{ runner.temp }}/rdv-production-smoke.json
+          if-no-files-found: error
+          retention-days: 14
