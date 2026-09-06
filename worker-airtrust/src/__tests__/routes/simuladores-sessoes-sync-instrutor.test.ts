@@ -185,7 +185,7 @@ describe('PUT /sessoes/:id — guardrail is_instrutor bloqueia não-instrutor', 
     expect(r.status).toBe(400);
     const b = await r.json() as { success: boolean; error?: string };
     expect(b.success).toBe(false);
-    expect(b.error).toContain('is_instrutor');
+    expect(b.error).toContain('Instrutor inválido para esta empresa.');
   });
 });
 

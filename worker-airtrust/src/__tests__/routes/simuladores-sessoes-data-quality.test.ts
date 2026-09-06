@@ -154,6 +154,22 @@ function createSimuladoresDb() {
 
           if (
             normalized.includes(
+              'SELECT * FROM simulador_agendamentos WHERE id=? AND empresa_id = ? AND deleted_at IS NULL',
+            )
+          ) {
+            const [sessaoId, empresaId] = binds as [string, number];
+            return (
+              sessions.find(
+                (session) =>
+                  session.id === sessaoId &&
+                  session.empresa_id === empresaId &&
+                  session.deleted_at === null,
+              ) || null
+            ) as T | null;
+          }
+
+          if (
+            normalized.includes(
               'FROM simulador_agendamentos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
             )
           ) {
@@ -210,10 +226,39 @@ function createSimuladoresDb() {
             } as T;
           }
 
+          if (
+            normalized.includes('FROM funcionarios') &&
+            normalized.includes('WHERE id = ?') &&
+            normalized.includes('empresa_id = ?') &&
+            normalized.includes('deleted_at IS NULL') &&
+            normalized.includes('as is_instrutor')
+          ) {
+            const [funcionarioId, empresaId] = binds as [number, number];
+            const funcionario = funcionarios.find(
+              (item) =>
+                item.id === Number(funcionarioId) &&
+                item.empresa_id === Number(empresaId) &&
+                item.deleted_at === null,
+            );
+            return funcionario
+              ? ({ is_instrutor: funcionario.is_instrutor } as T)
+              : (null as T | null);
+          }
+
           return null as T | null;
         },
         all: async <T = unknown>() => {
           logs.push({ sql: normalized, binds, method: 'all' });
+
+          if (normalized.includes("PRAGMA table_info('funcionarios')")) {
+            return {
+              results: [
+                { name: 'id' },
+                { name: 'empresa_id' },
+                { name: 'is_instrutor' },
+              ] as T[],
+            };
+          }
 
           if (
             normalized.includes(
@@ -399,6 +444,62 @@ describe('simuladores sessoes data-quality guards', () => {
     );
 
     expect(forbiddenResponse.status).toBe(404);
+  });
+
+  it('rejects cross-tenant instructor reassignment before updating the session', async () => {
+    const { db, logs } = createSimuladoresDb();
+
+    const response = await simuladoresSessoesRoutes.fetch(
+      new Request('http://localhost/sessoes/sess-1', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', 'x-empresa-id': '1' },
+        body: JSON.stringify({ instrutor_id: 22 }),
+      }),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Instrutor inválido para esta empresa.',
+    });
+    expect(
+      logs.some(
+        (log) =>
+          log.method === 'first' &&
+          log.sql.includes('FROM funcionarios') &&
+          log.sql.includes('empresa_id = ?') &&
+          Number(log.binds[0]) === 22 &&
+          Number(log.binds[1]) === 1,
+      ),
+    ).toBe(true);
+    expect(
+      logs.some(
+        (log) =>
+          log.method === 'run' &&
+          log.sql.includes('UPDATE simulador_agendamentos SET'),
+      ),
+    ).toBe(false);
+  });
+
+  it('tenant-scopes employee joins in session list queries', async () => {
+    const { db, logs } = createSimuladoresDb();
+
+    const response = await simuladoresSessoesRoutes.fetch(
+      new Request('http://localhost/sessoes?limit=10', {
+        headers: { 'x-empresa-id': '1', 'x-role': 'manager' },
+      }),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    const listQuery = logs.find(
+      (log) => log.method === 'all' && log.sql.includes('FROM simulador_agendamentos sa'),
+    );
+    expect(listQuery?.sql).toContain('fi.empresa_id = sa.empresa_id');
+    expect(listQuery?.sql).toContain('fe.empresa_id = sa.empresa_id');
   });
 
   it('rejects participant creation when funcionario belongs to another tenant', async () => {

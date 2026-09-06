@@ -298,10 +298,10 @@ app.get('/agendamentos', async (c) => {
         ) as participantes
       FROM simulador_agendamentos sa
       LEFT JOIN simuladores s ON sa.simulador_id = s.id
-      LEFT JOIN funcionarios f ON sa.instrutor_id = f.id
-      LEFT JOIN funcionarios exam ON sa.examinador_id = exam.id
+      LEFT JOIN funcionarios f ON sa.instrutor_id = f.id AND f.empresa_id = sa.empresa_id AND f.deleted_at IS NULL
+      LEFT JOIN funcionarios exam ON sa.examinador_id = exam.id AND exam.empresa_id = sa.empresa_id AND exam.deleted_at IS NULL
       LEFT JOIN sessoes_participantes sp ON sa.id = sp.sessao_id AND sp.deleted_at IS NULL
-      LEFT JOIN funcionarios pf ON sp.funcionario_id = pf.id
+      LEFT JOIN funcionarios pf ON sp.funcionario_id = pf.id AND pf.empresa_id = sa.empresa_id AND pf.deleted_at IS NULL
       WHERE sa.deleted_at IS NULL
     `;
 
@@ -513,8 +513,8 @@ app.get('/sessoes', async (c) => {
         ON ms.tipo_sessao_id = ts_ref.id
        AND ts_ref.deleted_at IS NULL
        AND ts_ref.empresa_id = sa.empresa_id
-      INNER JOIN funcionarios fi ON sa.instrutor_id = fi.id AND fi.deleted_at IS NULL
-      LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.deleted_at IS NULL
+      INNER JOIN funcionarios fi ON sa.instrutor_id = fi.id AND fi.empresa_id = sa.empresa_id AND fi.deleted_at IS NULL
+      LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.empresa_id = sa.empresa_id AND fe.deleted_at IS NULL
       WHERE sa.deleted_at IS NULL
     `
       : `
@@ -582,14 +582,14 @@ app.get('/sessoes', async (c) => {
         ON ms.tipo_sessao_id = ts_ref.id
        AND ts_ref.deleted_at IS NULL
        AND ts_ref.empresa_id = sa.empresa_id
-      INNER JOIN funcionarios fi ON sa.instrutor_id = fi.id AND fi.deleted_at IS NULL
-      LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.deleted_at IS NULL
+      INNER JOIN funcionarios fi ON sa.instrutor_id = fi.id AND fi.empresa_id = sa.empresa_id AND fi.deleted_at IS NULL
+      LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.empresa_id = sa.empresa_id AND fe.deleted_at IS NULL
       -- LEFT JOIN participantes
       LEFT JOIN sessoes_participantes sp ON sa.id = sp.sessao_id AND sp.deleted_at IS NULL
-      LEFT JOIN funcionarios f_part ON sp.funcionario_id = f_part.id
+      LEFT JOIN funcionarios f_part ON sp.funcionario_id = f_part.id AND f_part.empresa_id = sa.empresa_id AND f_part.deleted_at IS NULL
       -- LEFT JOIN fichas
-      LEFT JOIN fichas_sessao fs ON sa.id = fs.agendamento_slot_id AND fs.deleted_at IS NULL
-      LEFT JOIN funcionarios f_ficha ON fs.colaborador_id_aluno = f_ficha.id
+      LEFT JOIN fichas_sessao fs ON sa.id = fs.agendamento_slot_id AND fs.empresa_id = sa.empresa_id AND fs.deleted_at IS NULL
+      LEFT JOIN funcionarios f_ficha ON fs.colaborador_id_aluno = f_ficha.id AND f_ficha.empresa_id = sa.empresa_id AND f_ficha.deleted_at IS NULL
       WHERE sa.deleted_at IS NULL
     `;
 
@@ -857,9 +857,9 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
       const instrutorRow = await c.env.DB.prepare(
         `SELECT COALESCE(is_instrutor, 0) as is_instrutor
          FROM funcionarios
-         WHERE id = ? AND deleted_at IS NULL`,
+         WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
-        .bind(instrutor_id)
+        .bind(instrutor_id, empresaId)
         .first<{ is_instrutor: number }>();
 
       if (!instrutorRow || Number(instrutorRow.is_instrutor) !== 1) {
@@ -1535,7 +1535,7 @@ app.get('/sessoes/:id', async (c) => {
         ON ms.tipo_sessao_id = ts_ref.id
        AND ts_ref.deleted_at IS NULL
        AND ts_ref.empresa_id = sa.empresa_id
-      LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.deleted_at IS NULL
+      LEFT JOIN funcionarios fe ON sa.examinador_id = fe.id AND fe.empresa_id = sa.empresa_id AND fe.deleted_at IS NULL
       WHERE sa.id = ?
         AND sa.deleted_at IS NULL
         ${empresaId ? 'AND sa.empresa_id = ?' : ''}`,
