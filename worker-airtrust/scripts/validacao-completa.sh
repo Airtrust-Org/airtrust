@@ -8,18 +8,29 @@ set -euo pipefail
 #   cd worker-airtrust
 #   chmod +x scripts/validacao-completa.sh
 #   ./scripts/validacao-completa.sh
-# Variáveis opcionais:
-#   API_BASE (default: https://airtrust-api.airtrust.workers.dev)
-#   DB_NAME  (default: airtrust-db)
-#   EMAIL    (default: admin@airtrust.com)
-#   SENHA    (default: admin123)
+# Variáveis obrigatórias:
+#   API_BASE, DB_NAME, EMAIL, SENHA
+# REMOTE_FLAG usa --local por padrão. Execução remota exige opt-in explícito
+# e continua proibida contra produção.
 # =============================================================
 
-API_BASE=${API_BASE:-"https://airtrust-api.airtrust.workers.dev"}
-DB_NAME=${DB_NAME:-"airtrust-db"}
-EMAIL=${EMAIL:-"admin@airtrust.com"}
-SENHA=${SENHA:-"admin123"}
-REMOTE_FLAG=${REMOTE_FLAG:-"--remote"}
+API_BASE="${API_BASE:?Defina API_BASE explicitamente}"
+DB_NAME="${DB_NAME:?Defina DB_NAME explicitamente}"
+EMAIL="${EMAIL:?Defina EMAIL por ambiente}"
+SENHA="${SENHA:?Defina SENHA por ambiente}"
+REMOTE_FLAG="${REMOTE_FLAG:---local}"
+
+case "$API_BASE" in
+  *://api.airtrust.online*|*://airtrust-api.airtrust.workers.dev*)
+    echo "ERRO: validacao-completa.sh legado nao pode executar contra producao." >&2
+    exit 2
+    ;;
+esac
+
+if [[ "$REMOTE_FLAG" == *"--remote"* ]] && [[ "${AIRTRUST_ALLOW_NONPROD_REMOTE_VALIDATION:-}" != "AIRTRUST_NONPROD_ONLY" ]]; then
+  echo "ERRO: validacao remota requer AIRTRUST_ALLOW_NONPROD_REMOTE_VALIDATION=AIRTRUST_NONPROD_ONLY." >&2
+  exit 2
+fi
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'

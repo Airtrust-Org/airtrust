@@ -10,6 +10,24 @@ DEV_ENV="development"
 SEED_FILE="./seeds/dev-seed.sql"
 BOOTSTRAP_SCHEMA_FILE="./scripts/schema-local.sql"
 WRANGLER=(npx -y node@20 node_modules/wrangler/bin/wrangler.js)
+REMOTE_WRITE_CONFIRMATION="${AIRTRUST_ALLOW_REMOTE_DEV_DB_WRITE:-}"
+RESET_CONFIRMATION="${AIRTRUST_DEV_DB_RESET_CONFIRMATION:-}"
+ALLOW_RESET=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --reset-incompatible) ALLOW_RESET=true ;;
+    *) echo "Argumento desconhecido: $arg" >&2; exit 2 ;;
+  esac
+done
+
+[[ "$DEV_ENV" == "development" ]] || { echo "Ambiente remoto recusado: $DEV_ENV" >&2; exit 2; }
+[[ "$DEV_DB_NAME" == "airtrust-db-dev" ]] || { echo "Banco remoto recusado: $DEV_DB_NAME" >&2; exit 2; }
+[[ "$REMOTE_WRITE_CONFIRMATION" == "AIRTRUST_DEVELOPMENT_ONLY" ]] || {
+  echo "Mutacao D1 development requer AIRTRUST_ALLOW_REMOTE_DEV_DB_WRITE=AIRTRUST_DEVELOPMENT_ONLY" >&2
+  exit 2
+}
+
 INCREMENTAL_MIGRATIONS=(
   "./migrations/0304_usuarios_perfis_e_permissoes.sql"
   "./migrations/0335_lms_cursos.sql"
@@ -53,6 +71,8 @@ column_exists() {
 
 reset_incompatible_schema() {
   local output
+  [[ "$ALLOW_RESET" == "true" ]] || fail "Schema incompatível: reset automático bloqueado. Revise e use --reset-incompatible somente se realmente necessário."
+  [[ "$RESET_CONFIRMATION" == "AIRTRUST_RESET_DEVELOPMENT_D1" ]] || fail "Reset destrutivo requer AIRTRUST_DEV_DB_RESET_CONFIRMATION=AIRTRUST_RESET_DEVELOPMENT_D1"
   local line
 
   info "Schema incompatível detectado; recriando estrutura do banco development..."
@@ -135,5 +155,5 @@ echo
 ok "Ambiente development pronto"
 echo "  Banco: $DEV_DB_NAME"
 echo "  Seed : $SEED_FILE"
-echo "  Login: admin.dev@airtrust.online / Admin@123"
+echo "  Login: use credenciais de development fornecidas fora do repositório"
 echo
