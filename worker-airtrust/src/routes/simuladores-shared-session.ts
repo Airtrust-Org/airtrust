@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
+import { requireOperacoesSessao } from './simuladores-sessoes-rbac';
 import { getTenantContext } from '../middleware/tenant';
 import {
   audit,
@@ -165,7 +166,7 @@ function scheduleSharedSessionNotification(
   );
 }
 
-app.post('/sessoes/compartilhada', async (c) => {
+app.post('/sessoes/compartilhada', requireOperacoesSessao('create'), async (c) => {
   const denied = await assertSharedFeature(c);
   if (denied) return denied;
 
@@ -221,7 +222,7 @@ app.get('/sessoes/compartilhada/:id', async (c) => {
   }
 });
 
-app.put('/sessoes/compartilhada/:id', async (c) => {
+app.put('/sessoes/compartilhada/:id', requireOperacoesSessao('update'), async (c) => {
   const denied = await assertSharedFeature(c);
   if (denied) return denied;
 
@@ -331,7 +332,7 @@ app.put('/sessoes/compartilhada/:id', async (c) => {
 // /sessoes/compartilhada/:id, which requires the session to already be
 // shared — a plain simulador_agendamentos row has no rows in the
 // segmento/atribuicao tables yet, so loadSharedDetail would 404 it.
-app.put('/sessoes/:id/converter-compartilhada', async (c) => {
+app.put('/sessoes/:id/converter-compartilhada', requireOperacoesSessao('update'), async (c) => {
   const denied = await assertSharedFeature(c);
   if (denied) return denied;
 
@@ -493,7 +494,7 @@ app.put('/sessoes/:id/converter-compartilhada', async (c) => {
   }
 });
 
-app.post('/sessoes/compartilhada/:id/atribuicoes/:atribuicaoId/cancelar', async (c) => {
+app.post('/sessoes/compartilhada/:id/atribuicoes/:atribuicaoId/cancelar', requireOperacoesSessao('update'), async (c) => {
   const denied = await assertSharedFeature(c);
   if (denied) return denied;
 
