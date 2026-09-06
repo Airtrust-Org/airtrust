@@ -53,6 +53,11 @@ jobs:
           node-version-file: '.node-version'
           cache: 'npm'
       - run: npm ci
+      - name: validate release-gate verifier and deploy wiring
+        run: |
+          node --test scripts/ci/verify-release-gates.test.mjs
+          node --test scripts/__tests__/deploy-release-gates-wiring.test.mjs
+          node --test scripts/ci/check-github-workflow-contexts.test.mjs
       - name: validate 0438 on disposable real-base SQLite
         run: node --test scripts/__tests__/schema-v2-0438-rdv-coordination-workflow.test.mjs
       - name: validate 0438 legacy staging workflow guards
