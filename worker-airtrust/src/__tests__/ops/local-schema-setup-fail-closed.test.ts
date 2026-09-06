@@ -92,9 +92,20 @@ describe('local D1 setup scripts', () => {
   it('creates LMS tables before validating their contract', () => {
     const source = readScript(lmsSetup);
     const applyIndex = source.indexOf('for migration_file in "${LMS_MIGRATIONS[@]}"; do\n  apply_local_migration');
-    const contractIndex = source.indexOf('for table_name in audit_logs lms_cursos');
+    const contractIndex = source.indexOf('audit_logs lms_cursos');
 
     expect(applyIndex).toBeGreaterThan(-1);
+    expect(contractIndex).toBeGreaterThan(applyIndex);
+  });
+
+  it('provisions token revocation state before LMS auth smoke', () => {
+    const source = readScript(lmsSetup);
+    const migrationIndex = source.indexOf('0289_security_rate_limit_and_token_blocklist.sql');
+    const applyIndex = source.indexOf('for migration_file in "${LMS_MIGRATIONS[@]}"; do\n  apply_local_migration');
+    const contractIndex = source.indexOf('token_blocklist audit_logs lms_cursos');
+
+    expect(migrationIndex).toBeGreaterThan(-1);
+    expect(applyIndex).toBeGreaterThan(migrationIndex);
     expect(contractIndex).toBeGreaterThan(applyIndex);
   });
 
