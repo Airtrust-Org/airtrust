@@ -21,6 +21,7 @@ test('accepts the eight official GitHub Actions gates and ignores optional noise
         { name: 'airtrust-gcb', status: 'completed', conclusion: 'failure' },
         { name: 'optional-experiment', status: 'completed', conclusion: 'failure' },
       ],
+      statuses: [],
     }),
     {
       githubActions: [
@@ -33,6 +34,7 @@ test('accepts the eight official GitHub Actions gates and ignores optional noise
         'lms-smoke',
         'public-e2e',
       ],
+      gcbStatus: 'airtrust-gcb',
     },
   );
 });
@@ -42,6 +44,7 @@ test('fails when any official gate is missing', () => {
     () =>
       verifyReleaseGatePayloads({
         checkRuns: greenChecks.filter((check) => check.name !== 'worker-tests-2'),
+        statuses: [],
       }),
     /worker-tests-2:missing/,
   );
@@ -54,6 +57,7 @@ test('fails when an official gate is not green', () => {
         checkRuns: greenChecks.map((check) =>
           check.name === 'public-e2e' ? { ...check, conclusion: 'failure' } : check,
         ),
+        statuses: [],
       }),
     /public-e2e:not-success/,
   );
@@ -67,7 +71,29 @@ test('legacy aggregate cannot substitute for a missing heavy gate', () => {
           ...greenChecks.filter((check) => check.name !== 'frontend-coverage'),
           { name: 'airtrust-gcb', status: 'completed', conclusion: 'success' },
         ],
+        statuses: [],
       }),
     /frontend-coverage:missing/,
+  );
+});
+
+
+test('fails closed when a classic airtrust-gcb status exists and is red', () => {
+  assert.throws(
+    () =>
+      verifyReleaseGatePayloads({
+        checkRuns: greenChecks,
+        statuses: [{ context: 'airtrust-gcb', state: 'failure' }],
+      }),
+    /airtrust-gcb:not-success/,
+  );
+});
+
+test('accepts a green classic airtrust-gcb status when present', () => {
+  assert.doesNotThrow(() =>
+    verifyReleaseGatePayloads({
+      checkRuns: greenChecks,
+      statuses: [{ context: 'airtrust-gcb', state: 'success' }],
+    }),
   );
 });
