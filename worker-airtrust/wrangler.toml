@@ -181,7 +181,10 @@ preview_bucket_name = "airtrust-storage"
 binding = "DB"
 database_name = "airtrust-db"
 database_id = "7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae"
-migrations_dir = "./migrations"
+# Production schema is governed exclusively through Schema V2 explicit-file
+# execution. Keep Wrangler's generic migrations command isolated from the
+# historical ./migrations chain, which is not replay-safe in production.
+migrations_dir = "./migrations_production_disabled"
 
 [env.production.ai]
 binding = "AI"
