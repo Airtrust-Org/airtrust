@@ -311,11 +311,11 @@ function buildDecision(
     hasIncomingRuntimeEvidence(incoming) ||
     Number(row.xapi_count ?? 0) > 0 ||
     progressPct > 0;
-  // Qualification issuance does not imply an assessment. Require a score only
-  // when the course explicitly configures a mastery threshold; otherwise H5P
-  // (and other runtimes with a valid completion event) may conclude without a
-  // fabricated score.
-  const requiresAssessment = row.scorm_mastery_score !== null;
+  // Preserve the existing qualification policy: interactive content that
+  // generates an operational qualification must still satisfy the assessment
+  // gate. The new non-SCORM evidence gate must not weaken SCORM/H5P rules.
+  const requiresAssessment =
+    interactive && (row.gerar_qualificacao_ao_concluir === 1 || row.scorm_mastery_score !== null);
 
   return evaluateLmsCompletionEvidence({
     source,
