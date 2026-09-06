@@ -10,6 +10,7 @@ export const SIGVOOS_PASSWORD_MARKER = '__WORKER_ENCRYPTED__';
 export const SIGVOOS_PASSWORD_ENCRYPTED_PREFIX = 'enc:v1';
 
 const SIGVOOS_MAX_CLIENT_BATCH = 1000;
+export const SIGVOOS_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 
 export class SigvoosClientError extends Error {
   constructor(
@@ -92,6 +93,55 @@ export async function decryptSigvoosPassword(
   const key = await importSigvoosAesKey(secret);
   const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, payload);
   return new TextDecoder().decode(decrypted);
+}
+
+export async function readSigvoosResponseTextBounded(
+  response: Response,
+  maxBytes = SIGVOOS_MAX_RESPONSE_BYTES,
+): Promise<string> {
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new SigvoosClientError(
+      'SIGVOOS_RESPONSE_TOO_LARGE',
+      `Resposta SIGVOOS excede o limite de ${maxBytes} bytes`,
+      response.status,
+    );
+  }
+
+  if (!response.body) return '';
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || value.byteLength === 0) continue;
+
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel('SIGVOOS_RESPONSE_TOO_LARGE').catch(() => undefined);
+        throw new SigvoosClientError(
+          'SIGVOOS_RESPONSE_TOO_LARGE',
+          `Resposta SIGVOOS excede o limite de ${maxBytes} bytes`,
+          response.status,
+        );
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(merged);
 }
 
 function resolveRequestedSearchLimit(payload: Record<string, unknown>): number | null {
@@ -184,10 +234,15 @@ export class SigvoosApiClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-      const response = await this.fetchImpl(url, { ...init, signal: controller.signal });
-      clearTimeout(timeoutId);
+      let response: Response;
+      let text: string;
+      try {
+        response = await this.fetchImpl(url, { ...init, signal: controller.signal });
+        text = await readSigvoosResponseTextBounded(response);
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
-      const text = await response.text();
       let parsed: Record<string, unknown> = {};
 
       if (text.trim().length > 0) {
