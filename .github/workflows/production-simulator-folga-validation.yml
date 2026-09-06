@@ -1,0 +1,40 @@
+name: Production Simulator FOLGA Validation
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - name: Validate FOLGA
+        env:
+          PROD_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          PROD_API_BASE_URL: https://api.airtrust.online
+        run: |
+          node --input-type=module <<'NODE'
+          import { login, extractAccessToken, fetchJson } from './scripts/smoke-auth-common.mjs';
+          const payload = await login(process.env.PROD_API_BASE_URL, process.env.PROD_EMAIL, process.env.PROD_PASSWORD);
+          const token = extractAccessToken(payload);
+          const propResp = await fetchJson(`${process.env.PROD_API_BASE_URL}/api/simuladores/planejamento-v2/proposta`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              modelo_id: 1, // replace with valid model
+              data_inicio: '2026-09-01',
+              data_fim: '2026-09-30',
+              preview_only: true
+            })
+          });
+          console.log(JSON.stringify(propResp, null, 2));
+          if(propResp.status !== 200) throw new Error("Proposta failed");
+          NODE
