@@ -119,8 +119,11 @@ export function resolveNextSigvoosDay(
   if (!lastTo) return operationalDate;
   const candidate = addIsoDay(lastTo, 1);
   if (candidate > operationalDate) return null;
-  const oldestAllowed = addIsoDay(operationalDate, -7);
-  return candidate < oldestAllowed ? oldestAllowed : candidate;
+  // The job already processes a single operational day per invocation. Never
+  // jump the watermark forward to enforce a catch-up horizon: doing so silently
+  // discards every missed day before that horizon. Resume from the exact next
+  // durable/legacy day and let subsequent scheduled invocations catch up.
+  return candidate;
 }
 
 export function shouldRunSigvoosAtCurrentHour(
