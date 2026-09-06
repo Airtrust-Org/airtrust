@@ -6,9 +6,16 @@
 # ============================================================
 set -euo pipefail
 
-API_BASE="${API:-https://airtrust-api.airtrust.workers.dev}"
-EMAIL="${ADMIN_EMAIL:-admin@airtrust.com}"
-SENHA="${ADMIN_SENHA:-admin123}"
+API_BASE="${API:?Defina API explicitamente para um ambiente NAO produtivo}"
+EMAIL="${ADMIN_EMAIL:?Defina ADMIN_EMAIL por ambiente}"
+SENHA="${ADMIN_PASSWORD:?Defina ADMIN_PASSWORD por ambiente}"
+
+case "$API_BASE" in
+  *://api.airtrust.online*|*://airtrust-api.airtrust.workers.dev*)
+    echo "ERRO: test-reatividade.sh faz PUT e e proibido contra producao." >&2
+    exit 2
+    ;;
+esac
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'

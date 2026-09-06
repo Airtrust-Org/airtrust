@@ -1,8 +1,5 @@
 import { API_BASE_URL } from '@/react-app/config/api';
 
-const LOCAL_DEV_ADMIN_EMAIL = 'admin@airtrust.com';
-const LOCAL_DEV_ADMIN_PASSWORD = 'Admin@123';
-
 export function getDevLoginCredentials() {
   const envEmail =
     import.meta.env.VITE_DEV_AUTH_EMAIL || import.meta.env.VITE_DEFAULT_LOGIN_EMAIL || '';
@@ -22,15 +19,12 @@ export function getDevLoginCredentials() {
   const shouldUseLocalCredentials =
     isLocalApi || isLocalProxyTarget || (isLocalFrontend && explicitApiUrl.length === 0);
 
-  if (shouldUseLocalCredentials) {
-    return {
-      email: envEmail || LOCAL_DEV_ADMIN_EMAIL,
-      password: envPassword || LOCAL_DEV_ADMIN_PASSWORD,
-    };
+  if (!shouldUseLocalCredentials) {
+    return { email: '', password: '' };
   }
 
   return {
-    email: envEmail || 'admin@airtrust.com',
-    password: envPassword || LOCAL_DEV_ADMIN_PASSWORD,
+    email: envEmail,
+    password: envPassword,
   };
 }
