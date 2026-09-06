@@ -144,8 +144,9 @@ describe('SIGVOOS resumability', () => {
     expect(resolveNextSigvoosDay('2026-08-02', null, '2026-08-02')).toBeNull();
   });
 
-  it('limita catch-up a sete dias e permite retomada em qualquer execução da hora', () => {
-    expect(resolveNextSigvoosDay('2026-06-01', null, '2026-08-02')).toBe('2026-07-26');
+  it('retoma sem pular dias mesmo quando o watermark está muito atrasado', () => {
+    expect(resolveNextSigvoosDay('2026-06-01', null, '2026-08-02')).toBe('2026-06-02');
+    expect(resolveNextSigvoosDay('2026-08-01', null, '2026-09-01')).toBe('2026-08-02');
     expect(shouldRunSigvoosAtCurrentHour('19', new Date('2026-08-02T19:50:00.000Z'))).toBe(true);
     expect(shouldRunSigvoosAtCurrentHour('19', new Date('2026-08-02T20:00:00.000Z'))).toBe(false);
   });
