@@ -1,0 +1,116 @@
+name: Production Simulator FOLGA Functional Readonly Proof
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/validation/production-simulator-folga-functional-readonly-20260906.marker
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-simulator-folga-functional-readonly
+  cancel-in-progress: false
+
+env:
+  PROD_API_BASE_URL: https://api.airtrust.online
+
+jobs:
+  proof:
+    name: Tenant 6 FOLGA functional read-only proof
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Wait for the eight release gates on this exact main SHA
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 24); do
+            if node scripts/ci/verify-release-gates.mjs; then
+              echo "RELEASE_GATES_GREEN"
+              exit 0
+            fi
+            if [[ "$attempt" -eq 24 ]]; then
+              echo "RELEASE_GATES_TIMEOUT_OR_FAILURE" >&2
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - name: Require production QA credentials
+        shell: bash
+        env:
+          AIRTRUST_LOGIN: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          AIRTRUST_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [[ -n "$AIRTRUST_LOGIN" && -n "$AIRTRUST_PASSWORD" ]] || { echo "PRODUCTION_SMOKE_CREDENTIALS_MISSING" >&2; exit 1; }
+          [[ "$AIRTRUST_LOGIN" != *"staging.airtrust.invalid"* ]] || { echo "STAGING_QA_IDENTITY_REJECTED" >&2; exit 1; }
+
+      - name: Run production functional proof without writes
+        shell: bash
+        env:
+          AIRTRUST_LOGIN: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          AIRTRUST_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          node scripts/validation/production-simulator-folga-readonly.mjs > "$RUNNER_TEMP/folga-functional-readonly.json"
+          node - "$RUNNER_TEMP/folga-functional-readonly.json" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const fail = (message) => { throw new Error(message); };
+          if (data.ok !== true) fail('FUNCTIONAL_PROOF_NOT_OK');
+          if (Number(data.tenant_id) !== 6) fail('TENANT_6_REQUIRED');
+          if (data.roster_policy !== 'FOLGA') fail('FOLGA_POLICY_NOT_READ_BACK');
+          if (data.proposal_mode !== 'PREVIEW_ONLY') fail('PROPOSAL_NOT_PREVIEW_ONLY');
+          if (data.folga_validation?.schedule_status !== 'SCHEDULED') fail('FOLGA_NOT_SCHEDULED');
+          if (!Array.isArray(data.folga_validation?.roster_states) || !data.folga_validation.roster_states.every((state) => state === 'FOLGA')) {
+            fail('FOLGA_ROSTER_EVIDENCE_INVALID');
+          }
+          if (data.trabalho_validation?.result !== 'REJECTED_UNDER_FOLGA') fail('WORK_DAY_NOT_REJECTED');
+          if (Number(data.writes) !== 0) fail('READONLY_CONTRACT_BROKEN');
+          if (data.pii_emitted !== false) fail('PII_EMISSION_CONTRACT_BROKEN');
+          NODE
+
+      - name: Publish sanitized evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - "$RUNNER_TEMP/folga-functional-readonly.json" >> "$GITHUB_STEP_SUMMARY" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          console.log('## Production simulator FOLGA functional proof');
+          console.log('');
+          console.log(`- workflow source SHA: \`${process.env.GITHUB_SHA}\``);
+          console.log(`- tenant: \`${data.tenant_id}\``);
+          console.log(`- roster policy: \`${data.roster_policy}\``);
+          console.log(`- proposal mode: \`${data.proposal_mode}\``);
+          console.log(`- FOLGA candidate: \`${data.folga_validation?.schedule_status}\``);
+          console.log(`- work-day candidate: \`${data.trabalho_validation?.result}\``);
+          console.log('- published roster evidence: yes');
+          console.log('- writes: 0');
+          console.log('- PII emitted: no');
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-simulator-folga-functional-readonly-${{ github.sha }}
+          path: ${{ runner.temp }}/folga-functional-readonly.json
+          if-no-files-found: error
+          retention-days: 14
