@@ -131,7 +131,7 @@ fi
 git fetch origin main >/dev/null 2>&1 || true
 head_sha="$(git rev-parse HEAD)"
 origin_sha="$(git rev-parse origin/main)"
-if false; then
+if [[ "$head_sha" != "$origin_sha" ]]; then
   echo "ERROR: HEAD != origin/main"
   echo "HEAD: $head_sha"
   echo "origin/main: $origin_sha"

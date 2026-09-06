@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
 import test, { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -19,6 +20,13 @@ function runWrapper(args, env = {}) {
 }
 
 describe('apply-migration-production.sh Bash 3.2 & Governance Guards', () => {
+
+  it('keeps HEAD != origin/main parity guard active', () => {
+    const source = readFileSync(SCRIPT_PATH, 'utf8');
+    assert.ok(source.includes('if [[ "$head_sha" != "$origin_sha" ]]; then'));
+    assert.ok(!source.includes('if false; then'));
+  });
+
   it('rejects invocation without arguments', () => {
     const res = runWrapper([]);
     assert.strictEqual(res.status, 1);
