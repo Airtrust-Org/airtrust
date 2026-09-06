@@ -77,18 +77,18 @@ jobs:
 
       - name: Require production admin/manager credential
         env:
-          QA_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
-          QA_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          PROD_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
-          [[ -n "$QA_EMAIL" && -n "$QA_PASSWORD" ]] || { echo "PRODUCTION_QA_CREDENTIALS_MISSING" >&2; exit 1; }
-          [[ "$QA_EMAIL" != *"staging.airtrust.invalid"* ]] || { echo "STAGING_QA_IDENTITY_REJECTED" >&2; exit 1; }
+          [[ -n "$PROD_EMAIL" && -n "$PROD_PASSWORD" ]] || { echo "PRODUCTION_SMOKE_CREDENTIALS_MISSING" >&2; exit 1; }
+          [[ "$PROD_EMAIL" != *"staging.airtrust.invalid"* ]] || { echo "STAGING_QA_IDENTITY_REJECTED" >&2; exit 1; }
 
       - name: Verify identity and optionally apply FOLGA
         env:
-          QA_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
-          QA_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          PROD_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
           MODE: ${{ inputs.mode }}
         shell: bash
         run: |
@@ -103,7 +103,7 @@ jobs:
           } from './scripts/smoke-auth-common.mjs';
 
           const base = assertAllowedProductionBaseUrl(process.env.PROD_API_BASE_URL);
-          const loginPayload = await login(base, process.env.QA_EMAIL, process.env.QA_PASSWORD);
+          const loginPayload = await login(base, process.env.PROD_EMAIL, process.env.PROD_PASSWORD);
           const token = extractAccessToken(loginPayload);
           const claims = decodeJwtPayload(token);
           const tenantId = Number(claims?.empresa_id || 0);
