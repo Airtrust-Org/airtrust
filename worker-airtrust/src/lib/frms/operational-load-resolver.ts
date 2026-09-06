@@ -8,9 +8,10 @@
  *   the REDEMET/IOGP evidence pipeline and persisted per journey in
  *   `frms_jornada_avaliacoes.environmental_json`.
  *
- * A valid SIGVOOS query returning zero rows is NOT the same thing as an
- * unavailable query/schema. The distinction is propagated into the model so
- * source failure can never masquerade as a confirmed no-flight day.
+ * A zero-row Controle de Voos result is not, by itself, positive evidence of
+ * a no-flight day: the tenant/day may simply not have been imported yet. Until
+ * coverage is explicitly proven, zero rows fail closed as SIGVOOS_UNAVAILABLE
+ * so missing source data can never masquerade as confirmed compliance.
  */
 
 import {
@@ -69,7 +70,7 @@ export async function resolveJornadaLandings(
 
     const legs = Number(row?.legs || 0);
     if (legs === 0) {
-      return { landingsCount: 0, source: 'SIGVOOS_CONFIRMED_ZERO' };
+      return { landingsCount: 0, source: 'SIGVOOS_UNAVAILABLE' };
     }
     const landings = Number(row?.landings || 0);
     return {
