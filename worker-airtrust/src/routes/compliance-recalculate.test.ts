@@ -7,6 +7,18 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 
+vi.mock('../middleware/auth', () => ({
+  auth: () => async (c: { set: (key: string, value: unknown) => void }, next: () => Promise<void>) => {
+    c.set('userId', 42);
+    c.set('empresaId', 1);
+    await next();
+  },
+}));
+
+vi.mock('../middleware/rbac', () => ({
+  requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
+}));
+
 // Mock do D1Database
 const mockDB = {
   prepare: vi.fn((query: string) => ({
@@ -188,13 +200,15 @@ describe('Compliance Stats API', () => {
   it('deve retornar estatísticas agregadas', async () => {
     const prepareMock = mockDB.prepare as ReturnType<typeof vi.fn>;
     prepareMock.mockReturnValue({
-      first: vi.fn(async () => ({
-        total: 100,
-        conformes: 75,
-        a_vencer: 15,
-        vencidos: 8,
-        pendentes: 2,
-        percentual_medio: 82.5,
+      bind: vi.fn(() => ({
+        first: vi.fn(async () => ({
+          total: 100,
+          conformes: 75,
+          a_vencer: 15,
+          vencidos: 8,
+          pendentes: 2,
+          percentual_medio: 82.5,
+        })),
       })),
     });
 
