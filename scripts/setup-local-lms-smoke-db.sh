@@ -19,6 +19,9 @@ SEED_FILE="$SCRIPT_DIR/seed-local-lms-smoke.sql"
 DB_NAME="airtrust-db-local"
 LOCAL_STATE_DIR="$WORKER_DIR/.wrangler/state"
 LMS_MIGRATIONS=(
+  # Authenticated LMS asset access revalidates JTI revocation. The local smoke
+  # DB must include the same blocklist contract as runtime.
+  "$WORKER_DIR/migrations/0289_security_rate_limit_and_token_blocklist.sql"
   "$WORKER_DIR/migrations/0320_treinamentos_convocacao_email.sql"
   # completeLmsMatricula grava audit_logs no mesmo db.batch() da conclusão.
   # O snapshot local não possui essa tabela; ela deve ser criada antes do smoke.
