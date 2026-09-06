@@ -456,6 +456,46 @@ beforeEach(() => {
 });
 
 describe('POST /voos/:id/status — guard do gate de despacho FRMS', () => {
+  it('PATCH nao aceita transicao para liberado_operacionalmente e preserva o voo com pendencia FRMS', async () => {
+    const db = createSqliteD1();
+    mockSnapshot([
+      baseSnapshotItem({ funcionario_id: 1001, checkin_status: 'AUSENTE' }),
+      baseSnapshotItem({ funcionario_id: 1002, nome: 'Copiloto Ficticio A', checkin_status: 'RECEBIDO' }),
+    ]);
+
+    const response = await request(db, '/api/controle-voos/voos/601', {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'liberado_operacionalmente', versao: 1 }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_FORBIDDEN_FIELD',
+    });
+    expect(queryJson<{ status: string; versao: number }>(
+      db.databasePath,
+      'SELECT status, versao FROM cv_voos WHERE id = 601',
+    )).toEqual([{ status: 'planejado', versao: 1 }]);
+    expect(listSnapshotMock).not.toHaveBeenCalled();
+  });
+
+  it('PATCH de outro tenant nao revela nem altera o voo alvo', async () => {
+    const db = createSqliteD1();
+    mockSnapshot([baseSnapshotItem({ funcionario_id: 1001, checkin_status: 'AUSENTE' })]);
+
+    const response = await request(db, '/api/controle-voos/voos/701', {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'liberado_operacionalmente', versao: 1 }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(queryJson<{ status: string; versao: number }>(
+      db.databasePath,
+      'SELECT status, versao FROM cv_voos WHERE id = 701 AND empresa_id = 2',
+    )).toEqual([{ status: 'planejado', versao: 1 }]);
+    expect(listSnapshotMock).not.toHaveBeenCalled();
+  });
+
   it('1/4) chamada direta de status com check-in ausente e bloqueada com 409 (nao contorna o gate)', async () => {
     const db = createSqliteD1();
     mockSnapshot([
