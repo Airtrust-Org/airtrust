@@ -206,7 +206,7 @@ describe('qualificacoes-expiration', () => {
     it('deve agrupar corretamente com dias customizados', () => {
       const resultado = agruparPorStatus(qualificacoes, 15, dataBase);
       expect(resultado.vigentes.length).toBe(1); // 2025 é vigente
-      expect(resultado.expirando.length).toBe(0); // 2024-01-25 está fora do range
+      expect(resultado.expirando.length).toBe(1); // 2024-01-25 está a 10 dias, dentro do range de 15
       expect(resultado.vencidas.length).toBeGreaterThan(0);
     });
   });
