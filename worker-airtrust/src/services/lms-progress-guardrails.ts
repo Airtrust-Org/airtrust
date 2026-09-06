@@ -616,6 +616,62 @@ export function buildScormCompletionDiagnostic(params: {
   };
 }
 
+
+export function buildMatriculaCompletionDiagnostic(params: {
+  matriculaStatus?: Nullable<string>;
+  progressoPct?: Nullable<number>;
+  masteryScore?: Nullable<number>;
+  scorm?: {
+    lesson_status?: Nullable<string>;
+    completion_status?: Nullable<string>;
+    success_status?: Nullable<string>;
+    score_raw?: Nullable<number>;
+    score_max?: Nullable<number>;
+    score_scaled?: Nullable<number>;
+    suspend_data?: Nullable<string>;
+    session_time?: Nullable<string>;
+    total_time?: Nullable<string>;
+    cmi_json?: Nullable<string>;
+  } | null;
+  commit?: {
+    commit_event?: Nullable<string>;
+    completion_candidate?: Nullable<boolean>;
+    completion_observed_at?: Nullable<string>;
+  };
+}) {
+  const base = buildScormCompletionDiagnostic({
+    lessonStatus: params.scorm?.lesson_status,
+    completionStatus: params.scorm?.completion_status,
+    successStatus: params.scorm?.success_status,
+    scoreRaw: params.scorm?.score_raw,
+    scoreMax: params.scorm?.score_max,
+    scoreScaled: params.scorm?.score_scaled,
+    masteryScore: params.masteryScore,
+    progressoPct: params.progressoPct,
+    cmiJson: params.scorm?.cmi_json,
+    suspendData: params.scorm?.suspend_data,
+    sessionTime: params.scorm?.session_time,
+    totalTime: params.scorm?.total_time,
+    commit: params.commit,
+  });
+
+  return {
+    ...base,
+    matricula_status: params.matriculaStatus ?? null,
+    pending_server_confirmation:
+      base.status === 'candidate' &&
+      normalizeMatriculaStatus(params.matriculaStatus) !== 'CONCLUIDO',
+  };
+}
+
+export function requiresExplicitScormCompletion(
+  tipoConteudo: Nullable<string>,
+  completionDiagnostic: { explicit_completion?: boolean },
+): boolean {
+  const isScorm = String(tipoConteudo ?? 'scorm').toLowerCase() === 'scorm';
+  return isScorm && completionDiagnostic.explicit_completion !== true;
+}
+
 // ── Progresso efetivo (99/100) ──────────────────────────────────────────────
 //
 // Regra: apenas matrícula canonicamente CONCLUIDA reporta 100%. Qualquer outro

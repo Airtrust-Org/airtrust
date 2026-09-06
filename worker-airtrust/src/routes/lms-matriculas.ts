@@ -21,6 +21,7 @@ import {
   syncMatriculaCycleFromMatricula,
 } from '../services/lms-matricula-cycle';
 import {
+  buildMatriculaCompletionDiagnostic,
   buildScormCompletionDiagnostic,
   extractScormLocationFromCmiJson,
   isTrustedScorm12Finish,
@@ -29,6 +30,7 @@ import {
   mergeMonotonicNumber,
   parseScormLocationPair,
   preferScormValue,
+  requiresExplicitScormCompletion,
   resolveLmsEffectiveProgress,
   shouldPreferIncomingScormState,
 } from '../services/lms-progress-guardrails';
@@ -45,7 +47,6 @@ import { ensureCertificateForQualification } from '../services/ensure-certificat
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 
 const app = new Hono<{ Bindings: Env }>();
-
 app.use('*', auth());
 
 function getCallerFuncionarioId(c: Context): number | null {
@@ -368,60 +369,13 @@ function summarizeScormTextPayload(value: string | null | undefined) {
   };
 }
 
-function buildMatriculaCompletionDiagnostic(params: {
-  matriculaStatus?: string | null;
-  progressoPct?: number | null;
-  masteryScore?: number | null;
-  scorm:
-    | {
-        lesson_status?: string | null;
-        completion_status?: string | null;
-        success_status?: string | null;
-        score_raw?: number | null;
-        score_max?: number | null;
-        score_scaled?: number | null;
-        suspend_data?: string | null;
-        session_time?: string | null;
-        total_time?: string | null;
-        cmi_json?: string | null;
-      }
-    | null
-    | undefined;
-  commit?: z.infer<typeof ScormCommitSchema>;
-}) {
-  const base = buildScormCompletionDiagnostic({
-    lessonStatus: params.scorm?.lesson_status ?? null,
-    completionStatus: params.scorm?.completion_status ?? null,
-    successStatus: params.scorm?.success_status ?? null,
-    scoreRaw: params.scorm?.score_raw ?? null,
-    scoreMax: params.scorm?.score_max ?? null,
-    scoreScaled: params.scorm?.score_scaled ?? null,
-    masteryScore: params.masteryScore ?? null,
-    progressoPct: params.progressoPct ?? null,
-    cmiJson: params.scorm?.cmi_json ?? null,
-    suspendData: params.scorm?.suspend_data ?? null,
-    sessionTime: params.scorm?.session_time ?? null,
-    totalTime: params.scorm?.total_time ?? null,
-    commit: params.commit,
-  });
-
-  return {
-    ...base,
-    matricula_status: params.matriculaStatus ?? null,
-    pending_server_confirmation:
-      base.status === 'candidate' &&
-      String(params.matriculaStatus ?? '').toUpperCase() !== 'CONCLUIDO',
-  };
-}
-
-function requiresExplicitScormCompletion(
+function requiresServerValidatedNonScormEvidence(
   tipoConteudo: string | null | undefined,
-  completionDiagnostic: {
-    explicit_completion?: boolean;
-  },
+  gerarQualificacaoAoConcluir: number | null | undefined,
 ): boolean {
-  const isScorm = String(tipoConteudo ?? 'scorm').toLowerCase() === 'scorm';
-  return isScorm && completionDiagnostic.explicit_completion !== true;
+  if (gerarQualificacaoAoConcluir !== 1) return false;
+  const type = String(tipoConteudo ?? 'scorm').trim().toLowerCase();
+  return !['scorm', 'h5p'].includes(type);
 }
 
 function emitScormCommitTelemetry(params: {
@@ -2099,6 +2053,29 @@ app.post('/:id/finalizar', async (c) => {
     );
   }
 
+  if (
+    requiresServerValidatedNonScormEvidence(
+      matricula.tipo_conteudo,
+      matricula.gerar_qualificacao_ao_concluir,
+    )
+  ) {
+    return c.json(
+      {
+        success: false,
+        code: 'CONTENT_EVIDENCE_REQUIRED',
+        error:
+          'Conteúdo não-SCORM qualificante exige evidência de conclusão validada pelo servidor.',
+        data: {
+          matricula_id: matriculaId,
+          novo_status: matricula.status,
+          progresso_pct: matricula.progresso_pct,
+          qualificacao_gerada: null,
+        },
+      },
+      409,
+    );
+  }
+
   const dataConclusao = new Date().toISOString().slice(0, 10);
 
   // Toda a persistência da conclusão é delegada ao serviço canônico —
@@ -2341,6 +2318,29 @@ app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
           409,
         );
       }
+    }
+
+    if (
+      requiresServerValidatedNonScormEvidence(
+        existing.tipo_conteudo,
+        existing.gerar_qualificacao_ao_concluir,
+      )
+    ) {
+      return c.json(
+        {
+          success: false,
+          code: 'CONTENT_EVIDENCE_REQUIRED',
+          error:
+            'Conteúdo não-SCORM qualificante exige evidência de conclusão validada pelo servidor.',
+          data: {
+            matricula_id: matriculaId,
+            novo_status: existing.status,
+            progresso_pct: existing.progresso_pct,
+            qualificacao_gerada: null,
+          },
+        },
+        409,
+      );
     }
   }
   // ────────────────────────────────────────────────────────────────────────────
