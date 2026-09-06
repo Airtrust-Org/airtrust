@@ -1,0 +1,115 @@
+name: F4-03 Production Qualification Expiry Readonly Inventory
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/validation/f4-03-production-readonly-20260906.marker
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA reviewed for the read-only inventory
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_PRODUCTION_READONLY_F4_03
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f4-03-production-readonly-inventory
+  cancel-in-progress: false
+
+jobs:
+  schema_d1_inventory:
+    name: Read-only F4-03 production D1 schema inventory
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha || github.sha }}
+          CONFIRMATION: ${{ inputs.confirmation || 'AIRTRUST_PRODUCTION_READONLY_F4_03' }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_REF_REQUIRED" >&2; exit 1; }
+          [[ "$CONFIRMATION" == "AIRTRUST_PRODUCTION_READONLY_F4_03" ]] || { echo "READONLY_CONFIRMATION_REQUIRED" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "EXPECTED_SHA_INVALID" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo "EXPECTED_SHA_MISMATCH" >&2; exit 1; }
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Wait for the eight release gates on this exact main SHA
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 24); do
+            if node scripts/ci/verify-release-gates.mjs; then
+              echo "RELEASE_GATES_GREEN"
+              exit 0
+            fi
+            if [[ "$attempt" -eq 24 ]]; then
+              echo "RELEASE_GATES_TIMEOUT_OR_FAILURE" >&2
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+
+      - run: npm --prefix worker-airtrust ci
+
+      - name: Require read-only D1 credential
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo "D1_READ_TOKEN_MISSING" >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo "CLOUDFLARE_ACCOUNT_ID_MISSING" >&2; exit 1; }
+
+      - name: Inventory F4-03 aggregate evidence
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          F4_03_PRODUCTION_READONLY_CONFIRMATION: AIRTRUST_PRODUCTION_READONLY_F4_03
+          F4_03_PRODUCTION_DB_NAME: airtrust-db
+        run: |
+          set -euo pipefail
+          node scripts/validation/f4-03-production-qualification-expiry-inventory.mjs > "$RUNNER_TEMP/f4-03-inventory.json"
+          node - "$RUNNER_TEMP/f4-03-inventory.json" >> "$GITHUB_STEP_SUMMARY" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          console.log('## F4-03 qualification expiry incident — production read-only');
+          console.log('');
+          console.log(`- source SHA: \`${data.source_sha}\``);
+          console.log(`- exact incident-window candidates: \`${data.exact_incident_window_count}\``);
+          console.log(`- broad MANUAL signature candidates: \`${data.broad_manual_signature_count}\``);
+          console.log(`- interpretation: \`${data.interpretation}\``);
+          console.log('- names/emails/documents/free-text: not emitted');
+          console.log('- writes: none');
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: f4-03-production-readonly-inventory-${{ github.sha }}
+          path: ${{ runner.temp }}/f4-03-inventory.json
+          if-no-files-found: error
+          retention-days: 7
