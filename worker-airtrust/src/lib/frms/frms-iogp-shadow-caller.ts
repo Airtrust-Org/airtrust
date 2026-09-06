@@ -81,9 +81,18 @@ function buildRedemetClientFromEnv(env: FrmsIogpShadowCallerEnv): RedemetClient 
   if (!env.REDEMET_API_KEY) return null;
   try {
     return new RedemetClient({ apiKey: env.REDEMET_API_KEY });
-  } catch {
-    return null;
+  } catch (error) {
+    // A missing/failed funcionarios lookup is not evidence that the tripulante
+    // has no tenant. Let the caller's existing shadow isolation log the failure.
+    throw error;
   }
+}
+
+function isMissingOptionalSchemaError(error: unknown, tableNames: string[]): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  const normalized = message.toLowerCase();
+  if (!normalized.includes('no such table:')) return false;
+  return tableNames.some((table) => normalized.includes(table.toLowerCase()));
 }
 
 /**
@@ -135,10 +144,21 @@ async function fetchSigvoosLegsForJornada(
       .bind(empresaId, tripulanteId, data)
       .all<CvLegRow>();
     return result.results ?? [];
-  } catch {
-    // cv_voo_* tables may not exist in older environments without the CV migration.
-    // Treat as empty: shadow returns disabled gracefully.
-    return [];
+  } catch (error) {
+    // Older environments may legitimately predate the Controle de Voos schema.
+    // Only that explicit compatibility case is treated as "no legs". Operational
+    // D1 failures (AUTH, IO, malformed schema, etc.) must remain observable.
+    if (
+      isMissingOptionalSchemaError(error, [
+        'cv_voo_tripulantes',
+        'cv_voos',
+        'cv_voo_etapas',
+        'cv_aeroportos',
+      ])
+    ) {
+      return [];
+    }
+    throw error;
   }
 }
 
@@ -182,9 +202,13 @@ async function fetchLocationCatalog(
       redemetStationIcao: row.redemetStationIcao,
       active: row.active === 1,
     }));
-  } catch {
-    // Table doesn't exist (migration not applied) — return empty.
-    return [];
+  } catch (error) {
+    // Compatibility only: an environment that predates migration 0463 has no
+    // catalog. Do not collapse unrelated D1 failures into an empty catalog.
+    if (isMissingOptionalSchemaError(error, ['frms_location_catalog'])) {
+      return [];
+    }
+    throw error;
   }
 }
 
