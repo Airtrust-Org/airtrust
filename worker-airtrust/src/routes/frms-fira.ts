@@ -54,6 +54,18 @@ function parseMesCompetencia(ano: unknown, mes: unknown): { ano: number; mes: nu
   return { ano: anoNum, mes: mesNum };
 }
 
+function getFiraEmpresaId(c: Parameters<typeof getEmpresaIdSafe>[0]): number | null {
+  const empresaId = getEmpresaIdSafe(c);
+  return Number.isInteger(empresaId) && Number(empresaId) > 0 ? Number(empresaId) : null;
+}
+
+function invalidFiraTenantResponse(c: Parameters<typeof getEmpresaIdSafe>[0]): Response {
+  return c.json(
+    { success: false, error: 'Contexto de empresa inválido', code: 'INVALID_TENANT_CONTEXT' },
+    403,
+  );
+}
+
 // ════════════════════════════════════════════════════════
 // IMPORTAÇÃO FIRA
 // ════════════════════════════════════════════════════════
@@ -402,7 +414,8 @@ firaRoutes.patch(
   '/importacao/fira/:importacaoId/vincular-tripulante',
   safe(async (c) => {
     const importacaoId = c.req.param('importacaoId') ?? '';
-    const empresaId = getEmpresaIdSafe(c);
+    const empresaId = getFiraEmpresaId(c);
+    if (!empresaId) return invalidFiraTenantResponse(c);
     const body = await c.req.json<{ tripulante_id: string }>();
     if (!body.tripulante_id) {
       return c.json({ success: false, error: 'tripulante_id obrigatório' }, 400);
@@ -446,7 +459,8 @@ firaRoutes.get(
   '/importacao/fira/:importacaoId',
   safe(async (c) => {
     const importacaoId = c.req.param('importacaoId') ?? '';
-    const empresaId = getEmpresaIdSafe(c);
+    const empresaId = getFiraEmpresaId(c);
+    if (!empresaId) return invalidFiraTenantResponse(c);
     const row = await buscarImportacaoFiraById(c.env.DB, importacaoId, empresaId);
     if (!row) return c.json({ success: false, error: 'Não encontrado', code: 'NOT_FOUND' }, 404);
     return c.json({ success: true, data: row });
@@ -461,7 +475,8 @@ firaRoutes.delete(
   '/importacao/fira/:importacaoId',
   safe(async (c) => {
     const importacaoId = c.req.param('importacaoId') ?? '';
-    const empresaId = getEmpresaIdSafe(c);
+    const empresaId = getFiraEmpresaId(c);
+    if (!empresaId) return invalidFiraTenantResponse(c);
     const operadorId = await resolveFuncionarioId(c);
     await deletarImportacaoFira(c.env.DB, importacaoId, operadorId, empresaId);
     return c.json({ success: true });
@@ -967,7 +982,11 @@ firaRoutes.get(
 firaRoutes.get(
   '/tripulante/:id/timeline',
   safe(async (c) => {
-    const tripulanteId = c.req.param('id');
+    const tripulanteId = c.req.param('id') ?? '';
+    const empresaId = getFiraEmpresaId(c);
+    if (!empresaId) return invalidFiraTenantResponse(c);
+    const denied = await assertTripulanteEmpresa(c, tripulanteId);
+    if (denied) return denied;
     const mes = c.req.query('mes') ?? undefined;
     const periodo = Math.min(Math.max(Number(c.req.query('periodo') ?? '30'), 7), 365);
     const [inicio, fim] =
