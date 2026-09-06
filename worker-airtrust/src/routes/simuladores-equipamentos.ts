@@ -16,6 +16,7 @@ type DbRow = Record<string, unknown>;
 type DbValue = string | number | null;
 type SimuladoresContext = Context<{ Bindings: Env }>;
 import { auth } from '../middleware/auth';
+import { requireRole } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
 import { requireAdminForDelete, audit } from './simuladores-shared';
 import { createLogger, toError } from '../utils/logger';
@@ -98,7 +99,7 @@ app.get('/alertas', async (c) => {
 });
 
 // PUT /api/simuladores/alertas/:id/resolver - Marcar alerta como resolvido
-app.put('/alertas/:id/resolver', async (c) => {
+app.put('/alertas/:id/resolver', requireRole('admin', 'manager', 'instructor'), async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
     const alertaId = c.req.param('id');
@@ -345,7 +346,7 @@ app.get('/', async (c) => {
   }
 });
 
-app.post('/', async (c) => {
+app.post('/', requireRole('admin', 'manager'), async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
     const b = await c.req.json();
@@ -440,7 +441,7 @@ app.get('/:id', async (c) => {
   }
 });
 
-app.put('/:id', async (c) => {
+app.put('/:id', requireRole('admin', 'manager'), async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
@@ -523,7 +524,7 @@ app.put('/:id', async (c) => {
   }
 });
 
-app.delete('/:id', async (c) => {
+app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
     const denied = requireAdminForDelete(c);
