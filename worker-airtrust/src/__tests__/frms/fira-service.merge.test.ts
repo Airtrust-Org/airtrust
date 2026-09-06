@@ -259,6 +259,101 @@ describe('confirmarImportacaoFira duplicate merge', () => {
     expect(result.erros).toBe(0);
   });
 
+  it('forced replacement of a populated MANUAL jornada updates in place without delete-before-insert', async () => {
+    const preview = {
+      importacao_id: 'imp-force-manual',
+      tripulante_encontrado: true,
+      tripulante_id: '24',
+      tripulante_nome_fira: 'Force',
+      tripulante_nome_sistema: 'Force',
+      canac: '242424',
+      ano: 2026,
+      mes: 5,
+      mes_nome: 'maio',
+      total_dias: 1,
+      totais_fira: { jornada: '06:00', voo: '02:00' },
+      totais_calculados: { jornada_min: 360, voo_min: 120 },
+      divergencia_totais: false,
+      avisos: [],
+      erros: [],
+      linhas: [
+        {
+          dia: 28,
+          data: '2026-05-28',
+          status_fira: 'VOO',
+          status_frms: 'TR',
+          hora_apresentacao: '07:00',
+          hora_termino: '13:00',
+          duracao_jornada_min: 360,
+          horas_voo_min: 120,
+          local_base: 'SBJR',
+          situacao: 'DUPLICATA',
+          jornada_existente_id: 'jornada-manual-populada',
+          marcado: true,
+        },
+      ],
+    };
+
+    const db = createDbStub({
+      importacao: {
+        id: 'imp-force-manual',
+        tripulante_id: '24',
+        canac: '242424',
+        ano: 2026,
+        mes: 5,
+        preview_json: JSON.stringify(preview),
+        status: 'REVISAO',
+        total_dias_importados: 0,
+      },
+      rowsById: [
+        {
+          id: 'jornada-manual-populada',
+          data: '2026-05-28',
+          origem: 'MANUAL',
+          empresa_id: 6,
+          hora_apresentacao: '08:00',
+          hora_termino: '12:00',
+          horas_voo_minutos: 60,
+          duracao_jornada_minutos: 240,
+        },
+      ],
+      rowsByDate: [
+        {
+          id: 'jornada-manual-populada',
+          data: '2026-05-28',
+          origem: 'MANUAL',
+          empresa_id: 6,
+          hora_apresentacao: '08:00',
+          hora_termino: '12:00',
+          horas_voo_minutos: 60,
+          duracao_jornada_minutos: 240,
+        },
+      ],
+    });
+    const batchSpy = vi.spyOn(db, 'batch');
+
+    const result = await confirmarImportacaoFira(
+      db,
+      'imp-force-manual',
+      { dias_selecionados: [{ dia: 28, forcar_substituicao: true }] },
+      'operador-humano',
+      {} as any,
+      6,
+    );
+
+    expect(atualizarJornada).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(atualizarJornada).mock.calls[0]?.[1]).toBe('jornada-manual-populada');
+    expect(vi.mocked(atualizarJornada).mock.calls[0]?.[2]).toMatchObject({
+      origem: 'FIRA',
+      hora_apresentacao: '07:00',
+      hora_termino: '13:00',
+    });
+    expect(salvarJornada).not.toHaveBeenCalled();
+    expect(batchSpy).not.toHaveBeenCalled();
+    expect(result.substituidos).toBe(1);
+    expect(result.erros).toBe(0);
+  });
+
   it('persists new SIGVOOS journeys with canonical operational origin', async () => {
     const preview = {
       importacao_id: 'imp-3',
