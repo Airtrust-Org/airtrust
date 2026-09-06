@@ -131,17 +131,17 @@ async function findUsuarioAcessosPermitido(
   db: Env['DB'],
   usuarioId: number,
   tenantCtx: ReturnType<typeof getTenantContext>,
-): Promise<{ id: number; nome: string; email: string } | null> {
+): Promise<{ id: number; nome: string; email: string; is_primary: number } | null> {
   if (tenantCtx.empresaCodigo === 'airtrust') {
     return db
       .prepare('SELECT id, nome, email FROM usuarios WHERE id = ? AND deleted_at IS NULL')
       .bind(usuarioId)
-      .first<{ id: number; nome: string; email: string }>();
+      .first<{ id: number; nome: string; email: string; is_primary: number }>();
   }
 
   return db
     .prepare(
-      `SELECT u.id, u.nome, u.email
+      `SELECT u.id, u.nome, u.email, ue.is_primary
          FROM usuarios u
          INNER JOIN usuarios_empresas ue
            ON ue.usuario_id = u.id AND ue.empresa_id = ?
@@ -732,8 +732,11 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
 
   let isPrimarySet = false;
   for (const acesso of acessos) {
-    const isPrimary = !isPrimarySet ? 1 : 0;
-    isPrimarySet = true;
+    const isPrimary =
+      tenantCtx.empresaCodigo === 'airtrust'
+        ? (!isPrimarySet ? 1 : 0)
+        : Number(usuario.is_primary ?? 0);
+    if (tenantCtx.empresaCodigo === 'airtrust') isPrimarySet = true;
 
     if (hasModulosAtivos) {
       await db
