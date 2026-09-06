@@ -1229,7 +1229,10 @@ export async function buscarImportacaoFiraById(
        LEFT JOIN funcionarios op ON op.id = CAST(f.importado_por AS INTEGER)
       WHERE f.id = ?
         AND f.deleted_at IS NULL
-        AND (p.empresa_id = ? OR op.empresa_id = ?)`,
+        AND (
+          (f.tripulante_id IS NOT NULL AND p.empresa_id = ?)
+          OR (f.tripulante_id IS NULL AND op.empresa_id = ?)
+        )`,
     )
     .bind(importacaoId, tenantEmpresaId, tenantEmpresaId)
     .first();
@@ -1255,14 +1258,14 @@ export async function deletarImportacaoFira(
         WHERE f.id = ?
           AND f.deleted_at IS NULL
           AND (
-            EXISTS (
+            (f.tripulante_id IS NOT NULL AND EXISTS (
               SELECT 1 FROM funcionarios p
                WHERE p.id = CAST(f.tripulante_id AS INTEGER) AND p.empresa_id = ?
-            )
-            OR EXISTS (
+            ))
+            OR (f.tripulante_id IS NULL AND EXISTS (
               SELECT 1 FROM funcionarios op
                WHERE op.id = CAST(f.importado_por AS INTEGER) AND op.empresa_id = ?
-            )
+            ))
           )`,
     )
     .bind(importacaoId, tenantEmpresaId, tenantEmpresaId)
@@ -1283,16 +1286,16 @@ export async function deletarImportacaoFira(
         WHERE id = ?
           AND deleted_at IS NULL
           AND (
-            EXISTS (
+            (frms_importacao_fira.tripulante_id IS NOT NULL AND EXISTS (
               SELECT 1 FROM funcionarios p
                WHERE p.id = CAST(frms_importacao_fira.tripulante_id AS INTEGER)
                  AND p.empresa_id = ?
-            )
-            OR EXISTS (
+            ))
+            OR (frms_importacao_fira.tripulante_id IS NULL AND EXISTS (
               SELECT 1 FROM funcionarios op
                WHERE op.id = CAST(frms_importacao_fira.importado_por AS INTEGER)
                  AND op.empresa_id = ?
-            )
+            ))
           )`,
     )
     .bind(timestamp, timestamp, importacaoId, tenantEmpresaId, tenantEmpresaId)
@@ -1371,12 +1374,9 @@ export async function vincularTripulanteFira(
          FROM frms_importacao_fira f
         WHERE f.id = ?
           AND f.deleted_at IS NULL
-          AND (f.tripulante_id = ? OR EXISTS (
-            SELECT 1 FROM funcionarios op
-             WHERE op.id = CAST(f.importado_por AS INTEGER) AND op.empresa_id = ?
-          ))`,
+          AND f.tripulante_id = ?`,
     )
-    .bind(importacaoId, tripulanteId, tenantEmpresaId)
+    .bind(importacaoId, tripulanteId)
     .first<{ preview_json: string }>();
 
   if (row?.preview_json) {
@@ -1397,13 +1397,9 @@ export async function vincularTripulanteFira(
             SET preview_json = ?, updated_at = ?
           WHERE id = ?
             AND deleted_at IS NULL
-            AND (tripulante_id = ? OR EXISTS (
-              SELECT 1 FROM funcionarios op
-               WHERE op.id = CAST(frms_importacao_fira.importado_por AS INTEGER)
-                 AND op.empresa_id = ?
-            ))`,
+            AND tripulante_id = ?`,
       )
-      .bind(JSON.stringify(preview), timestamp, importacaoId, tripulanteId, tenantEmpresaId)
+      .bind(JSON.stringify(preview), timestamp, importacaoId, tripulanteId)
       .run();
   }
 }
