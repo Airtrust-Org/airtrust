@@ -21,6 +21,7 @@ import {
   syncMatriculaCycleFromMatricula,
 } from '../services/lms-matricula-cycle';
 import {
+  buildMatriculaCompletionDiagnostic,
   buildScormCompletionDiagnostic,
   extractScormLocationFromCmiJson,
   isTrustedScorm12Finish,
@@ -29,6 +30,7 @@ import {
   mergeMonotonicNumber,
   parseScormLocationPair,
   preferScormValue,
+  requiresExplicitScormCompletion,
   resolveLmsEffectiveProgress,
   shouldPreferIncomingScormState,
 } from '../services/lms-progress-guardrails';
@@ -366,62 +368,6 @@ function summarizeScormTextPayload(value: string | null | undefined) {
     present: value.trim().length > 0,
     bytes: value.length,
   };
-}
-
-function buildMatriculaCompletionDiagnostic(params: {
-  matriculaStatus?: string | null;
-  progressoPct?: number | null;
-  masteryScore?: number | null;
-  scorm:
-    | {
-        lesson_status?: string | null;
-        completion_status?: string | null;
-        success_status?: string | null;
-        score_raw?: number | null;
-        score_max?: number | null;
-        score_scaled?: number | null;
-        suspend_data?: string | null;
-        session_time?: string | null;
-        total_time?: string | null;
-        cmi_json?: string | null;
-      }
-    | null
-    | undefined;
-  commit?: z.infer<typeof ScormCommitSchema>;
-}) {
-  const base = buildScormCompletionDiagnostic({
-    lessonStatus: params.scorm?.lesson_status ?? null,
-    completionStatus: params.scorm?.completion_status ?? null,
-    successStatus: params.scorm?.success_status ?? null,
-    scoreRaw: params.scorm?.score_raw ?? null,
-    scoreMax: params.scorm?.score_max ?? null,
-    scoreScaled: params.scorm?.score_scaled ?? null,
-    masteryScore: params.masteryScore ?? null,
-    progressoPct: params.progressoPct ?? null,
-    cmiJson: params.scorm?.cmi_json ?? null,
-    suspendData: params.scorm?.suspend_data ?? null,
-    sessionTime: params.scorm?.session_time ?? null,
-    totalTime: params.scorm?.total_time ?? null,
-    commit: params.commit,
-  });
-
-  return {
-    ...base,
-    matricula_status: params.matriculaStatus ?? null,
-    pending_server_confirmation:
-      base.status === 'candidate' &&
-      String(params.matriculaStatus ?? '').toUpperCase() !== 'CONCLUIDO',
-  };
-}
-
-function requiresExplicitScormCompletion(
-  tipoConteudo: string | null | undefined,
-  completionDiagnostic: {
-    explicit_completion?: boolean;
-  },
-): boolean {
-  const isScorm = String(tipoConteudo ?? 'scorm').toLowerCase() === 'scorm';
-  return isScorm && completionDiagnostic.explicit_completion !== true;
 }
 
 function requiresServerValidatedNonScormEvidence(
