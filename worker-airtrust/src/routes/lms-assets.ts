@@ -7,7 +7,7 @@
 import { Hono } from 'hono';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { ApiError } from '../middleware/error-handler';
-import { auth } from '../middleware/auth';
+import { auth, validateAccessTokenSecurityState } from '../middleware/auth';
 import { buildResumeStorageScript } from '../services/lms-scorm-local-resume';
 import {
   buildScormLocationHelpersScript,
@@ -397,11 +397,23 @@ async function authenticateLmsAssetRequest(
     throw new ApiError('Token inválido ou expirado', 401);
   }
 
-  if (resolved.source !== 'authorization' && payload.token_type !== 'lms_asset') {
-    throw new ApiError('Token de asset inválido', 401);
+  if (resolved.source !== 'authorization') {
+    if (payload.token_type !== 'lms_asset') {
+      throw new ApiError('Token de asset inválido', 401);
+    }
+    return payload;
   }
 
-  return payload;
+  // Bearer lms_asset continua escopado/curto e é validado pelos assert*Token
+  // específicos da rota. Bearer de sessão normal precisa obedecer ao mesmo
+  // estado mutável de segurança de auth(): logout/blocklist, conta ativa,
+  // membership atual e role atual do tenant.
+  if (payload.token_type === 'lms_asset') {
+    return payload;
+  }
+
+  const security = await validateAccessTokenSecurityState(env.DB, payload);
+  return { ...payload, role: security.role };
 }
 
 function assertCourseAssetToken(

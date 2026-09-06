@@ -11,8 +11,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 
-const { verifyJWTMock } = vi.hoisted(() => ({
+const { verifyJWTMock, validateAccessTokenSecurityStateMock } = vi.hoisted(() => ({
   verifyJWTMock: vi.fn(),
+  validateAccessTokenSecurityStateMock: vi.fn(),
 }));
 
 vi.mock('../../utils/security', () => ({
@@ -22,6 +23,7 @@ vi.mock('../../utils/security', () => ({
 
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  validateAccessTokenSecurityState: validateAccessTokenSecurityStateMock,
 }));
 
 vi.mock('../../config/allowed-origins', () => ({
@@ -29,7 +31,7 @@ vi.mock('../../config/allowed-origins', () => ({
 }));
 
 import lmsAssetsRoutes from '../../routes/lms-assets';
-import { errorHandler } from '../../middleware/error-handler';
+import { ApiError, errorHandler } from '../../middleware/error-handler';
 
 const VIDEO_SIZE = 8_828_890;
 
@@ -151,7 +153,9 @@ describe('SCORM assets — Range request support', () => {
       funcionario_id: 42,
       role: 'admin',
       sub: '42',
+      jti: 'access-jti-1',
     });
+    validateAccessTokenSecurityStateMock.mockResolvedValue({ role: 'ADMIN' });
   });
 
   describe('request sem Range — comportamento base preservado', () => {
@@ -225,6 +229,31 @@ describe('SCORM assets — Range request support', () => {
   });
 
   describe('autenticação preservada', () => {
+    it('revalida o estado mutável de um bearer access token antes de servir R2', async () => {
+      const env = makeEnv();
+      const res = await getAsset(VIDEO_PATH, env);
+
+      expect(res.status).toBe(200);
+      expect(validateAccessTokenSecurityStateMock).toHaveBeenCalledTimes(1);
+      expect(validateAccessTokenSecurityStateMock).toHaveBeenCalledWith(
+        env.DB,
+        expect.objectContaining({ sub: '42', empresa_id: 6, jti: 'access-jti-1' }),
+      );
+    });
+
+    it('bloqueia asset quando o bearer access token foi revogado', async () => {
+      validateAccessTokenSecurityStateMock.mockRejectedValueOnce(
+        new ApiError('Token revogado. Faça login novamente.', 401, 'TOKEN_REVOKED'),
+      );
+
+      const res = await getAsset(VIDEO_PATH, makeEnv());
+      expect(res.status).toBe(401);
+      await expect(res.json()).resolves.toMatchObject({
+        success: false,
+        code: 'TOKEN_REVOKED',
+      });
+    });
+
     it('retorna 401 sem token de autenticação', async () => {
       verifyJWTMock.mockResolvedValue(null);
       const app = createApp();

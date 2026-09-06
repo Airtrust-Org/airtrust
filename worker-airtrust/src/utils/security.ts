@@ -50,7 +50,7 @@ export async function verifyJWT(token: string, secret: string): Promise<JwtPaylo
     const encoder = new TextEncoder();
     const secretKey = encoder.encode(secret);
 
-    const { payload } = await jwtVerify(token, secretKey);
+    const { payload } = await jwtVerify(token, secretKey, { algorithms: ['HS256'] });
 
     return payload as unknown as JwtPayload;
   } catch (error) {

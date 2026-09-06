@@ -154,6 +154,73 @@ async function resolveUserSecurityState(
   };
 }
 
+export type AccessTokenSecurityState = {
+  role: string;
+};
+
+/**
+ * Revalida um access JWT já assinado contra o estado mutável de segurança.
+ * Usado tanto pelo middleware auth() quanto por superfícies públicas que
+ * precisam aceitar Authorization bearer sem pular logout, desativação de
+ * usuário ou remoção de vínculo empresarial.
+ */
+export async function validateAccessTokenSecurityState(
+  db: D1Database,
+  payload: JwtPayload,
+): Promise<AccessTokenSecurityState> {
+  if (payload.token_type && payload.token_type !== 'access') {
+    return unauthorized('Tipo de token inválido para esta rota', 'INVALID_TOKEN_TYPE');
+  }
+
+  if (payload.jti) {
+    let blocked: boolean;
+    try {
+      blocked = await isJtiBlocklisted(db, payload.jti);
+    } catch (e) {
+      console.error('[AUTH] Falha ao consultar token_blocklist:', (e as Error).message);
+      return serviceUnavailable(
+        'Não foi possível verificar a revogação do token. Tente novamente.',
+        'AUTH_REVOCATION_CHECK_UNAVAILABLE',
+      );
+    }
+    if (blocked) {
+      return unauthorized('Token revogado. Faça login novamente.', 'TOKEN_REVOKED');
+    }
+  }
+
+  let security: UserSecurityState;
+  try {
+    security = await resolveUserSecurityState(
+      db,
+      payload.sub,
+      payload.empresa_id,
+      payload.role ?? '',
+    );
+  } catch (e) {
+    console.error('[AUTH] Falha ao verificar estado do usuário:', (e as Error).message);
+    return serviceUnavailable(
+      'Não foi possível verificar o status da conta. Tente novamente.',
+      'AUTH_USER_STATE_CHECK_UNAVAILABLE',
+    );
+  }
+
+  if (!security.found || !security.active) {
+    return unauthorized(
+      'Usuário inativo ou não encontrado. Faça login novamente.',
+      'USER_INACTIVE',
+    );
+  }
+
+  if (!security.hasMembership) {
+    return unauthorized(
+      'Usuário sem vínculo válido com o tenant do token.',
+      'TENANT_MEMBERSHIP_INVALID',
+    );
+  }
+
+  return { role: security.role };
+}
+
 async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<number | null> {
   const usuariosEmpresasExists = await hasUsuariosEmpresasTable(db);
 
@@ -378,63 +445,7 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
       return unauthorized('Token inválido ou expirado', 'INVALID_TOKEN');
     }
 
-    if (payload.token_type && payload.token_type !== 'access') {
-      return unauthorized('Tipo de token inválido para esta rota', 'INVALID_TOKEN_TYPE');
-    }
-
-    // Verificar se o JTI está na blocklist (token invalidado via logout).
-    // Fail-closed: se a checagem em si falhar, a autenticação é recusada —
-    // nunca tratamos uma falha de leitura como "token não revogado".
-    if (payload.jti) {
-      let blocked: boolean;
-      try {
-        blocked = await isJtiBlocklisted(c.env.DB, payload.jti);
-      } catch (e) {
-        console.error('[AUTH] Falha ao consultar token_blocklist:', (e as Error).message);
-        return serviceUnavailable(
-          'Não foi possível verificar a revogação do token. Tente novamente.',
-          'AUTH_REVOCATION_CHECK_UNAVAILABLE',
-        );
-      }
-      if (blocked) {
-        return unauthorized('Token revogado. Faça login novamente.', 'TOKEN_REVOKED');
-      }
-    }
-
-    // Confirmar que o usuário ainda existe, está ativo, e possui vínculo
-    // válido com o tenant carregado no JWT. Um JWT assinado válido de um
-    // usuário desativado ou sem vínculo com a empresa do token não pode
-    // continuar autenticando — a role do JWT nunca é usada como fallback
-    // quando esse vínculo esperado não existe.
-    let security: UserSecurityState;
-    try {
-      security = await resolveUserSecurityState(
-        c.env.DB,
-        payload.sub,
-        payload.empresa_id,
-        payload.role ?? '',
-      );
-    } catch (e) {
-      console.error('[AUTH] Falha ao verificar estado do usuário:', (e as Error).message);
-      return serviceUnavailable(
-        'Não foi possível verificar o status da conta. Tente novamente.',
-        'AUTH_USER_STATE_CHECK_UNAVAILABLE',
-      );
-    }
-
-    if (!security.found || !security.active) {
-      return unauthorized(
-        'Usuário inativo ou não encontrado. Faça login novamente.',
-        'USER_INACTIVE',
-      );
-    }
-
-    if (!security.hasMembership) {
-      return unauthorized(
-        'Usuário sem vínculo válido com o tenant do token.',
-        'TENANT_MEMBERSHIP_INVALID',
-      );
-    }
+    const security = await validateAccessTokenSecurityState(c.env.DB, payload);
 
     c.set('userId', payload.sub);
     c.set('empresaId', payload.empresa_id ?? 0);
