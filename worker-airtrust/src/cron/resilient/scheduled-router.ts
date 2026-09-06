@@ -109,7 +109,7 @@ export async function runResilientScheduledJobs(
   }
 
   const failures: Array<{ job: string; error: string }> = [];
-  const runStep = async (job: string, enabled: boolean, task: () => Promise<void>) => {
+  const runStep = async (job: string, enabled: boolean, task: () => Promise<unknown>) => {
     if (!enabled) return;
     try {
       await task();
