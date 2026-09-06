@@ -114,21 +114,23 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
     if (b.instrutor_id !== undefined) {
       const fColsAll = await c.env.DB.prepare("PRAGMA table_info('funcionarios')").all();
       const fColSetAll = new Set((fColsAll.results || []).map((r: any) => r.name));
-      if (fColSetAll.has('is_instrutor')) {
-        const instrutorRow = await c.env.DB.prepare(
-          `SELECT COALESCE(is_instrutor, 0) as is_instrutor
-           FROM funcionarios
-           WHERE id = ? AND deleted_at IS NULL`,
-        )
-          .bind(b.instrutor_id)
-          .first<{ is_instrutor: number }>();
+      const hasIsInstrutor = fColSetAll.has('is_instrutor');
+      const instrutorFlagExpr = hasIsInstrutor ? 'COALESCE(is_instrutor, 0)' : '1';
+      const instrutorRow = await c.env.DB.prepare(
+        `SELECT ${instrutorFlagExpr} as is_instrutor
+         FROM funcionarios
+         WHERE id = ?
+           AND empresa_id = ?
+           AND deleted_at IS NULL`,
+      )
+        .bind(b.instrutor_id, empresaId)
+        .first<{ is_instrutor: number }>();
 
-        if (!instrutorRow || Number(instrutorRow.is_instrutor) !== 1) {
-          return c.json(
-            { success: false, error: 'O funcionário selecionado como instrutor não possui o flag is_instrutor. Selecione um instrutor válido.' },
-            400,
-          );
-        }
+      if (!instrutorRow || (hasIsInstrutor && Number(instrutorRow.is_instrutor) !== 1)) {
+        return c.json(
+          { success: false, error: 'Instrutor inválido para esta empresa.' },
+          400,
+        );
       }
 
       // ── Bloqueio de autoavaliação: novo instrutor não pode já ser
