@@ -103,12 +103,7 @@ const allowedFields = new Set([
   'alternado_destino_id',
 ]);
 
-// A criacao pode receber o estado inicial. Transicoes posteriores de status
-// sao governadas exclusivamente por POST /voos/:id/status, que aplica os
-// gates de dominio antes de persistir a mudanca.
-const allowedPatchFields = new Set([...allowedFields].filter((field) => field !== 'status'));
-
-const allowedFieldsWithVersion = new Set([...allowedPatchFields, 'versao']);
+const allowedFieldsWithVersion = new Set([...allowedFields, 'versao'].filter((field) => field !== 'status'));
 
 const blockedFields = new Set([
   'id',
@@ -1304,7 +1299,7 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
   const fields: string[] = [];
   const values: unknown[] = [];
 
-  for (const field of allowedPatchFields) {
+  for (const field of allowedFields) {
     if (Object.prototype.hasOwnProperty.call(input, field)) {
       fields.push(`${field} = ?`);
       values.push(input[field as keyof FlightInput] ?? null);
