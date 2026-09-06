@@ -6,7 +6,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient as api } from '@/react-app/services/apiClient';
-import { apiFetch } from '@/react-app/lib/apiFetch';
 
 // =====================
 // TYPES
@@ -306,11 +305,8 @@ export function useSimuladores() {
 
   const downloadFichaPDF = useCallback(async (fichaId: number) => {
     try {
-      const response = await apiFetch(`/api/simuladores/fichas-simulador/${fichaId}/pdf`);
-      if (!response.ok) {
-        throw new Error(`Erro ${response.status} ao baixar PDF`);
-      }
-      const blob = await response.blob();
+      // Fetch blob
+      const blob = await api.getBlob(`/api/simuladores/fichas-simulador/${fichaId}/pdf`);
 
       // Create download link
       const url = window.URL.createObjectURL(blob);
