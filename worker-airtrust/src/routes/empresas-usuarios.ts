@@ -134,7 +134,7 @@ async function findUsuarioAcessosPermitido(
 ): Promise<{ id: number; nome: string; email: string; is_primary: number } | null> {
   if (tenantCtx.empresaCodigo === 'airtrust') {
     return db
-      .prepare('SELECT id, nome, email FROM usuarios WHERE id = ? AND deleted_at IS NULL')
+      .prepare('SELECT id, nome, email, 0 AS is_primary FROM usuarios WHERE id = ? AND deleted_at IS NULL')
       .bind(usuarioId)
       .first<{ id: number; nome: string; email: string; is_primary: number }>();
   }
@@ -149,7 +149,7 @@ async function findUsuarioAcessosPermitido(
         LIMIT 1`,
     )
     .bind(tenantCtx.empresaId, usuarioId)
-    .first<{ id: number; nome: string; email: string }>();
+    .first<{ id: number; nome: string; email: string; is_primary: number }>();
 }
 
 function normalizeEmpresaUserRole(value: unknown): string {
