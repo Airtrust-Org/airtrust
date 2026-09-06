@@ -151,9 +151,20 @@ export function canonicalizeDiagnosticText(text, { cwd = process?.cwd?.() ?? '' 
   });
 }
 
-/** Builds the deterministic identity string used for baseline comparison. */
+/** Builds the exact identity used for deterministic de-duplication and display. */
 export function diagnosticIdentity(diagnostic) {
   return `${diagnostic.file}:${diagnostic.line}:${diagnostic.column}:${diagnostic.code}:${diagnostic.message}`;
+}
+
+/**
+ * Stable fingerprint used by the ratchet after exact matches are removed.
+ * Line/column are deliberately excluded: unrelated edits can move a known
+ * diagnostic without changing the underlying TypeScript debt. Multiplicity is
+ * still enforced, so adding another identical diagnostic in the same file
+ * increases the fingerprint count and fails the ratchet.
+ */
+export function diagnosticFingerprint(diagnostic) {
+  return `${diagnostic.file}:${diagnostic.code}:${diagnostic.message}`;
 }
 
 /** Deduplicates diagnostics by identity (tsc can double-emit in edge cases). */
@@ -250,30 +261,58 @@ export function checkBaselineGovernance(baseline, { expectedSha } = {}) {
 }
 
 /**
- * Compares a current diagnostic set against the baseline using normalized
- * identity (not count). Returns { pass, newDiagnostics, fixedDiagnostics }.
- * PASS iff current diagnostics are a subset of (or equal to) the baseline
- * set — any diagnostic present now but absent from baseline fails the run,
- * regardless of how many other diagnostics were simultaneously fixed.
+ * Compares current diagnostics against the baseline. Exact identities match
+ * first; remaining diagnostics may match a stable file/code/message fingerprint
+ * so harmless line shifts do not become false regressions. Fingerprint counts
+ * are enforced, so a newly duplicated diagnostic still fails.
  */
 export function compareDiagnostics(currentDiagnostics, baselineDiagnostics) {
   const currentDeduped = dedupeDiagnostics(currentDiagnostics);
   const baselineDeduped = dedupeDiagnostics(baselineDiagnostics);
 
-  const baselineKeys = new Set(baselineDeduped.map(diagnosticIdentity));
-  const currentKeys = new Set(currentDeduped.map(diagnosticIdentity));
+  // Match exact locations first. This preserves the strongest identity when
+  // source positions did not move.
+  const baselineExact = new Set(baselineDeduped.map(diagnosticIdentity));
+  const currentExact = new Set(currentDeduped.map(diagnosticIdentity));
+  const currentRemaining = currentDeduped.filter(
+    (d) => !baselineExact.has(diagnosticIdentity(d)),
+  );
+  const baselineRemaining = baselineDeduped.filter(
+    (d) => !currentExact.has(diagnosticIdentity(d)),
+  );
 
-  const newDiagnostics = sortDiagnostics(
-    currentDeduped.filter((d) => !baselineKeys.has(diagnosticIdentity(d))),
-  );
-  const fixedDiagnostics = sortDiagnostics(
-    baselineDeduped.filter((d) => !currentKeys.has(diagnosticIdentity(d))),
-  );
+  // Then match known diagnostics that merely moved because unrelated lines
+  // were inserted/removed. Match as a multiset, not a plain Set: one known
+  // diagnostic cannot grandfather two current diagnostics with the same
+  // fingerprint.
+  const baselineBuckets = new Map();
+  for (const diagnostic of baselineRemaining) {
+    const fingerprint = diagnosticFingerprint(diagnostic);
+    const bucket = baselineBuckets.get(fingerprint) ?? [];
+    bucket.push(diagnostic);
+    baselineBuckets.set(fingerprint, bucket);
+  }
+
+  const newDiagnostics = [];
+  for (const diagnostic of sortDiagnostics(currentRemaining)) {
+    const fingerprint = diagnosticFingerprint(diagnostic);
+    const bucket = baselineBuckets.get(fingerprint);
+    if (bucket?.length) {
+      bucket.shift();
+    } else {
+      newDiagnostics.push(diagnostic);
+    }
+  }
+
+  const fixedDiagnostics = [];
+  for (const bucket of baselineBuckets.values()) {
+    fixedDiagnostics.push(...bucket);
+  }
 
   return {
     pass: newDiagnostics.length === 0,
-    newDiagnostics,
-    fixedDiagnostics,
+    newDiagnostics: sortDiagnostics(newDiagnostics),
+    fixedDiagnostics: sortDiagnostics(fixedDiagnostics),
     currentCount: currentDeduped.length,
     baselineCount: baselineDeduped.length,
   };
