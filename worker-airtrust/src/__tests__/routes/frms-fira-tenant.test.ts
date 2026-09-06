@@ -72,6 +72,7 @@ vi.mock('../../utils/logger', () => ({
 
 // Mock frms-shared to track which empresaId is used
 let lastEmpresaIdUsed: string | null = null;
+let deniedTripulanteId: string | null = null;
 
 vi.mock('../../routes/frms-shared', () => ({
   safe: (fn: any) => fn,
@@ -79,7 +80,10 @@ vi.mock('../../routes/frms-shared', () => ({
     const empresaId = c.get('empresaId');
     return empresaId && empresaId > 0 ? empresaId : null;
   },
-  assertTripulanteEmpresa: async () => null,
+  assertTripulanteEmpresa: async (c: any, tripulanteId: string) =>
+    deniedTripulanteId === tripulanteId
+      ? c.json({ success: false, code: 'TENANT_ACCESS_DENIED' }, 403)
+      : null,
   assertJornadaEmpresa: async () => null,
   assertAlertaEmpresa: async () => null,
   resolveFuncionarioId: async (c: any) => Number(c.get('userId') || 0),
@@ -242,6 +246,22 @@ async function uploadFiraMultipaginaRequest(opts: {
   );
 }
 
+async function timelineRequest(opts: { empresaId: number; tripulanteId: string }) {
+  const app = createApp();
+  return app.fetch(
+    new Request(`http://localhost/api/frms/tripulante/${opts.tripulanteId}/timeline`, {
+      headers: {
+        Authorization: 'Bearer test-token',
+        'x-test-user-id': '10',
+        'x-test-user-role': 'admin',
+        'x-test-empresa-id': String(opts.empresaId),
+      },
+    }),
+    createEnv(createDb()),
+    {} as ExecutionContext,
+  );
+}
+
 // ===== TESTS =====
 
 describe('FIRA upload-multipagina tenant isolation (BUG-004)', () => {
@@ -329,5 +349,31 @@ describe('FIRA upload tenant isolation (BUG-004)', () => {
     // Sem tenant válido, não deve processar
     expect(response.status).not.toBe(200);
     expect(capturedEmpresaId).toBeNull(); // never called
+  });
+});
+
+describe('FIRA timeline tenant isolation', () => {
+  beforeEach(() => {
+    deniedTripulanteId = null;
+  });
+
+  it('permite timeline do tripulante no tenant atual', async () => {
+    const response = await timelineRequest({ empresaId: 7, tripulanteId: '70' });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('nega timeline de tripulante de outro tenant antes da consulta de rolling', async () => {
+    deniedTripulanteId = '71';
+    const response = await timelineRequest({ empresaId: 7, tripulanteId: '71' });
+
+    expect(response.status).toBe(403);
+    expect((await response.json() as { code: string }).code).toBe('TENANT_ACCESS_DENIED');
+  });
+
+  it('falha fechada para timeline sem contexto de tenant', async () => {
+    const response = await timelineRequest({ empresaId: 0, tripulanteId: '70' });
+
+    expect(response.status).toBe(403);
   });
 });

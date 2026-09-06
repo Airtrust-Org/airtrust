@@ -1208,43 +1208,33 @@ export async function buscarHistoricoFira(
 // Buscar importação FIRA por ID
 // ──────────────────────────────────────────────────────────────
 
+function requireFiraEmpresaId(empresaId: number | undefined): number {
+  if (!Number.isInteger(empresaId) || Number(empresaId) <= 0) {
+    throw new Error('Contexto de empresa inválido');
+  }
+  return Number(empresaId);
+}
+
 export async function buscarImportacaoFiraById(
   db: D1Database,
   importacaoId: string,
-  empresaId?: number,
+  empresaId: number,
 ): Promise<unknown | null> {
-  // Busca sem restrição de empresa para não bloquear importações com tripulante_id = null
-  // A segurança de multi-tenant é garantida pelo operador (importado_por) quando necessário
+  const tenantEmpresaId = requireFiraEmpresaId(empresaId);
   const row = await db
     .prepare(
       `SELECT f.*, p.nome as tripulante_nome, op.nome as operador_nome
        FROM frms_importacao_fira f
        LEFT JOIN funcionarios p ON p.id = CAST(f.tripulante_id AS INTEGER)
        LEFT JOIN funcionarios op ON op.id = CAST(f.importado_por AS INTEGER)
-      WHERE f.id = ? AND f.deleted_at IS NULL`,
+      WHERE f.id = ?
+        AND f.deleted_at IS NULL
+        AND (p.empresa_id = ? OR op.empresa_id = ?)`,
     )
-    .bind(importacaoId)
+    .bind(importacaoId, tenantEmpresaId, tenantEmpresaId)
     .first();
 
-  if (!row) return null;
-
-  // Verificar empresa se informada: via tripulante, operador ou sem tripulante (revisão manual)
-  if (empresaId != null) {
-    const r = row as Record<string, unknown>;
-    const tripEmpresa = (r['tripulante_empresa_id'] as number | null) ?? null;
-    const opEmpresa = (r['operador_empresa_id'] as number | null) ?? null;
-    const tripulanteIdVal = r['tripulante_id'];
-    // Se tem tripulante vinculado, filtrar por empresa do tripulante
-    if (tripulanteIdVal != null && tripEmpresa != null && Number(tripEmpresa) !== empresaId) {
-      return null;
-    }
-    // Se não tem tripulante (revisão manual), só filtrar por empresa do operador se disponível
-    if (tripulanteIdVal == null && opEmpresa != null && Number(opEmpresa) !== empresaId) {
-      return null;
-    }
-  }
-
-  return row;
+  return row ?? null;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -1255,15 +1245,27 @@ export async function deletarImportacaoFira(
   db: D1Database,
   importacaoId: string,
   operadorId: string,
-  empresaId?: number,
+  empresaId: number,
 ): Promise<void> {
+  const tenantEmpresaId = requireFiraEmpresaId(empresaId);
   const row = await db
     .prepare(
       `SELECT f.status, f.total_dias_importados
          FROM frms_importacao_fira f
-        WHERE f.id = ? AND f.deleted_at IS NULL`,
+        WHERE f.id = ?
+          AND f.deleted_at IS NULL
+          AND (
+            EXISTS (
+              SELECT 1 FROM funcionarios p
+               WHERE p.id = CAST(f.tripulante_id AS INTEGER) AND p.empresa_id = ?
+            )
+            OR EXISTS (
+              SELECT 1 FROM funcionarios op
+               WHERE op.id = CAST(f.importado_por AS INTEGER) AND op.empresa_id = ?
+            )
+          )`,
     )
-    .bind(importacaoId)
+    .bind(importacaoId, tenantEmpresaId, tenantEmpresaId)
     .first<{ status: string; total_dias_importados: number }>();
 
   if (!row) throw new Error('Importação não encontrada');
@@ -1274,10 +1276,31 @@ export async function deletarImportacaoFira(
   }
 
   const timestamp = now();
-  await db
-    .prepare(`UPDATE frms_importacao_fira SET deleted_at = ?, updated_at = ? WHERE id = ?`)
-    .bind(timestamp, timestamp, importacaoId)
+  const deleted = await db
+    .prepare(
+      `UPDATE frms_importacao_fira
+          SET deleted_at = ?, updated_at = ?
+        WHERE id = ?
+          AND deleted_at IS NULL
+          AND (
+            EXISTS (
+              SELECT 1 FROM funcionarios p
+               WHERE p.id = CAST(frms_importacao_fira.tripulante_id AS INTEGER)
+                 AND p.empresa_id = ?
+            )
+            OR EXISTS (
+              SELECT 1 FROM funcionarios op
+               WHERE op.id = CAST(frms_importacao_fira.importado_por AS INTEGER)
+                 AND op.empresa_id = ?
+            )
+          )`,
+    )
+    .bind(timestamp, timestamp, importacaoId, tenantEmpresaId, tenantEmpresaId)
     .run();
+
+  if (Number(deleted.meta?.changes ?? 0) !== 1) {
+    throw new Error('Importação não encontrada');
+  }
 
   await db
     .prepare(
@@ -1296,14 +1319,18 @@ export async function vincularTripulanteFira(
   db: D1Database,
   importacaoId: string,
   tripulanteId: string,
-  empresaId?: number,
+  empresaId: number,
 ): Promise<void> {
+  const tenantEmpresaId = requireFiraEmpresaId(empresaId);
+  const importacao = await buscarImportacaoFiraById(db, importacaoId, tenantEmpresaId);
+  if (!importacao) throw new Error('Importação não encontrada');
+
   // Validar existência do tripulante
   const tripRow = await db
     .prepare(
-      `SELECT id FROM funcionarios WHERE id = ? AND deleted_at IS NULL AND (? IS NULL OR empresa_id = ?) LIMIT 1`,
+      `SELECT id FROM funcionarios WHERE id = ? AND deleted_at IS NULL AND empresa_id = ? LIMIT 1`,
     )
-    .bind(tripulanteId, empresaId ?? null, empresaId ?? null)
+    .bind(tripulanteId, tenantEmpresaId)
     .first<{ id: number }>();
   if (!tripRow) {
     throw new Error(`Tripulante #${tripulanteId} não encontrado`);
@@ -1311,17 +1338,45 @@ export async function vincularTripulanteFira(
 
   const timestamp = now();
   // Atualizar importação com o tripulante vinculado
-  await db
+  const updated = await db
     .prepare(
-      `UPDATE frms_importacao_fira SET tripulante_id = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
+      `UPDATE frms_importacao_fira
+          SET tripulante_id = ?, updated_at = ?
+        WHERE id = ?
+          AND deleted_at IS NULL
+          AND (
+            EXISTS (
+              SELECT 1 FROM funcionarios p
+               WHERE p.id = CAST(frms_importacao_fira.tripulante_id AS INTEGER)
+                 AND p.empresa_id = ?
+            )
+            OR EXISTS (
+              SELECT 1 FROM funcionarios op
+               WHERE op.id = CAST(frms_importacao_fira.importado_por AS INTEGER)
+                 AND op.empresa_id = ?
+            )
+          )`,
     )
-    .bind(tripulanteId, timestamp, importacaoId)
+    .bind(tripulanteId, timestamp, importacaoId, tenantEmpresaId, tenantEmpresaId)
     .run();
+
+  if (Number(updated.meta?.changes ?? 0) !== 1) {
+    throw new Error('Importação não encontrada');
+  }
 
   // Atualizar preview_json com o novo tripulante_id
   const row = await db
-    .prepare(`SELECT preview_json FROM frms_importacao_fira WHERE id = ?`)
-    .bind(importacaoId)
+    .prepare(
+      `SELECT f.preview_json
+         FROM frms_importacao_fira f
+        WHERE f.id = ?
+          AND f.deleted_at IS NULL
+          AND (f.tripulante_id = ? OR EXISTS (
+            SELECT 1 FROM funcionarios op
+             WHERE op.id = CAST(f.importado_por AS INTEGER) AND op.empresa_id = ?
+          ))`,
+    )
+    .bind(importacaoId, tripulanteId, tenantEmpresaId)
     .first<{ preview_json: string }>();
 
   if (row?.preview_json) {
@@ -1337,8 +1392,18 @@ export async function vincularTripulanteFira(
     if (pessoa) preview.tripulante_nome_sistema = pessoa.nome;
 
     await db
-      .prepare(`UPDATE frms_importacao_fira SET preview_json = ?, updated_at = ? WHERE id = ?`)
-      .bind(JSON.stringify(preview), timestamp, importacaoId)
+      .prepare(
+        `UPDATE frms_importacao_fira
+            SET preview_json = ?, updated_at = ?
+          WHERE id = ?
+            AND deleted_at IS NULL
+            AND (tripulante_id = ? OR EXISTS (
+              SELECT 1 FROM funcionarios op
+               WHERE op.id = CAST(frms_importacao_fira.importado_por AS INTEGER)
+                 AND op.empresa_id = ?
+            ))`,
+      )
+      .bind(JSON.stringify(preview), timestamp, importacaoId, tripulanteId, tenantEmpresaId)
       .run();
   }
 }
