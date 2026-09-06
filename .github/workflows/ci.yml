@@ -36,6 +36,8 @@ jobs:
         run: git fetch origin main --quiet
       - name: canonical lint and safety guards
         run: npm run lint
+      - name: frontend TypeScript ratchet
+        run: npm run typecheck:ratchet
 
   build-content-gates:
     runs-on: ubuntu-latest
