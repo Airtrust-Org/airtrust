@@ -25,7 +25,7 @@ import empresasUsuariosRoutes from '../../routes/empresas-usuarios';
 
 type DbState = {
   memberships: number[];
-  writes: string[];
+  writes: Array<{ sql: string; params: unknown[] }>;
 };
 
 function createDb(memberships: number[]): D1Database {
@@ -44,11 +44,11 @@ function createDb(memberships: number[]): D1Database {
           if (lower.includes('from usuarios u') && lower.includes('inner join usuarios_empresas ue')) {
             const [empresaId] = stmt.params.map(Number);
             return state.memberships.includes(empresaId)
-              ? { id: 200, nome: 'Usuário alvo', email: 'alvo@empresa.test' }
+              ? { id: 200, nome: 'Usuário alvo', email: 'alvo@empresa.test', is_primary: 0 }
               : null;
           }
           if (lower.includes('from usuarios where')) {
-            return { id: 200, nome: 'Usuário alvo', email: 'alvo@empresa.test' };
+            return { id: 200, nome: 'Usuário alvo', email: 'alvo@empresa.test', is_primary: 0 };
           }
           return null;
         },
@@ -75,7 +75,7 @@ function createDb(memberships: number[]): D1Database {
           return { results: [] };
         },
         async run() {
-          state.writes.push(sql);
+          state.writes.push({ sql, params: [...stmt.params] });
           return { meta: { changes: 1 } };
         },
       };
@@ -158,6 +158,10 @@ describe('empresas usuários acessos tenant boundary', () => {
 
     expect(response.status).toBe(200);
     expect(writes.length).toBeGreaterThan(0);
+    const membershipInsert = writes.find((write) =>
+      write.sql.includes('INSERT INTO usuarios_empresas (usuario_id, empresa_id, role, is_primary'),
+    );
+    expect(membershipInsert?.params[3]).toBe(0);
   });
 
   it('preserva o acesso cross-tenant do platform admin conforme o contrato atual', async () => {
