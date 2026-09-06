@@ -269,7 +269,8 @@ app.use('/api/*', async (c, next) => {
     pathname.startsWith('/api/lms/scorm/preview/') ||
     pathname.startsWith('/api/lms/h5p/assets/') ||
     pathname.startsWith('/api/lms/pptx/asset/') ||
-    pathname.startsWith('/api/certificados/validar') ||
+    pathname === '/api/certificados/validar' ||
+    pathname.startsWith('/api/certificados/validar/') ||
     pathname.startsWith('/api/auth/') ||
     pathname === '/api/integracoes/edapp/webhook' ||
     pathname === '/api/alertas/whatsapp/status-callback';
