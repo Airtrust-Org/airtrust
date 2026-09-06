@@ -65,6 +65,14 @@ function createDbMock(options?: {
     prepare: vi.fn((query: string) => {
       const bind = (...args: unknown[]) => ({
         first: async () => {
+          if (
+            query.includes('SELECT id FROM fichas_sessao') &&
+            query.includes('empresa_id = ?') &&
+            query.includes('deleted_at IS NULL')
+          ) {
+            return { id: Number(args[0]) };
+          }
+
           // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
           if (query.includes('FROM empresas WHERE id')) {
             return { operational_domain_rbac_enabled: 0 };
