@@ -62,8 +62,8 @@ describe('frmsDailyCheck — governed alerts (fail-closed per tenant)', () => {
     expect(result.alertasGerados).toBe(0);
   });
 
-  it('sem assignment de perfil FRMS vigente para a empresa: falha fechado (não usa LIMITES_DEFAULT), erro coletado', async () => {
-    vi.spyOn(parameterGovernanceModule, 'resolveFrmsOperationalContext').mockRejectedValue(
+  it('sem assignment de perfil FRMS vigente para a empresa: falha fechado e usa o watermark SIGVOOS como data de referência', async () => {
+    const resolveSpy = vi.spyOn(parameterGovernanceModule, 'resolveFrmsOperationalContext').mockRejectedValue(
       Object.assign(new Error('Expected exactly one effective FRMS profile assignment for empresa=10.'), {
         code: 'FRMS_CONTEXT_UNAVAILABLE',
       }),
@@ -75,6 +75,11 @@ describe('frmsDailyCheck — governed alerts (fail-closed per tenant)', () => {
 
     const result = await frmsDailyCheck(env);
 
+    expect(resolveSpy).toHaveBeenCalledWith(db, {
+      empresaId: 10,
+      referenceAt: '2026-08-01',
+      funcionarioId: 1,
+    });
     expect(result.erros).toHaveLength(1);
     expect(result.erros[0]).toMatch(/FRMS profile assignment/);
     expect(result.alertasGerados).toBe(0);
