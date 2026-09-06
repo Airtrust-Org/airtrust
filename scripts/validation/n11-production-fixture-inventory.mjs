@@ -44,8 +44,9 @@ function assertReadOnlySql(sql) {
   }
 }
 
-function query(sql) {
+function query(sql, label = '') {
   assertReadOnlySql(sql);
+  console.error(`[D1_QUERY_START] ${label || 'query'}`);
   const result = spawnSync(
     'npx',
     ['wrangler', 'd1', 'execute', DB_NAME, '--env', 'production', '--remote', '--json', '--command', sql],
@@ -65,6 +66,8 @@ function query(sql) {
   if (result.status !== 0) {
     // Surface the failure cause (sanitized) so the read-only run is diagnosable.
     // wrangler --json routes API errors to stdout, not stderr.
+    console.error(`[D1_QUERY_FAILED] ${label || 'query'}`);
+    console.error(`D1_QUERY_SQL:${sql.slice(0, 160).replace(/\s+/g, ' ')}`);
     console.error(redactSecrets(result.stderr));
     console.error(`D1_READ_EXIT_STATUS:${result.status ?? 'null'}`);
     console.error(`D1_READ_STDOUT:${redactSecrets(result.stdout).slice(0, 4000)}`);
@@ -113,7 +116,7 @@ const candidates = query(`
       OR nome = 'Funcionário Teste Manutenção'
     )
   ORDER BY id;
-`);
+`, 'candidates');
 
 const candidateIds = [...new Set(candidates.map((row) => Number(row.id)).filter(Number.isInteger))];
 const knownUser = query(`
@@ -126,44 +129,58 @@ const knownUser = query(`
   WHERE id = 108
      OR funcionario_id IN (${candidateIds.length ? candidateIds.join(',') : '-1'})
   ORDER BY id;
-`);
+`, 'known_user');
 
-const referenceColumns = query(`
-  SELECT DISTINCT m.name AS table_name
-  FROM sqlite_master AS m
-  JOIN pragma_table_info(m.name) AS p
-    ON p.name = 'funcionario_id'
-  WHERE m.type = 'table'
-    AND m.name NOT LIKE 'sqlite_%'
-  ORDER BY m.name;
-`);
+// Discover tables referencing funcionario_id using sqlite_master schema DDL.
+// Note: Cloudflare D1 blocks correlated dynamic pragma_table_info in JOINs with SQLITE_AUTH (code 7500).
+const masterTables = query(`
+  SELECT name AS table_name, sql
+  FROM sqlite_master
+  WHERE type = 'table'
+    AND name NOT LIKE 'sqlite_%'
+    AND name NOT LIKE '_cf_%'
+  ORDER BY name;
+`, 'master_tables');
+
+const referenceTables = [];
+for (const row of masterTables) {
+  const tableName = String(row.table_name || '');
+  const sql = String(row.sql || '');
+  if (!/\bfuncionario_id\b/i.test(sql)) continue;
+
+  const hasDeletedAt = /\bdeleted_at\b/i.test(sql);
+  referenceTables.push({
+    tableName,
+    hasDeletedAt,
+  });
+}
 
 const references = [];
-for (const row of referenceColumns) {
-  const tableName = String(row.table_name || '');
-  const quotedTable = quoteIdentifier(tableName);
-  const columns = query(`PRAGMA table_info(${quotedTable});`);
-  const hasDeletedAt = columns.some((column) => column.name === 'deleted_at');
-  const idList = candidateIds.length ? candidateIds.join(',') : '-1';
-  const rows = query(`
-    SELECT
-      CAST(funcionario_id AS INTEGER) AS funcionario_id,
-      COUNT(*) AS total_rows
-      ${hasDeletedAt ? ", SUM(CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END) AS non_deleted_rows" : ''}
-    FROM ${quotedTable}
-    WHERE CAST(funcionario_id AS INTEGER) IN (${idList})
-    GROUP BY CAST(funcionario_id AS INTEGER)
-    ORDER BY CAST(funcionario_id AS INTEGER);
-  `);
-  if (rows.length > 0) {
-    references.push({
-      table_name: tableName,
-      rows: rows.map((entry) => ({
-        funcionario_id: Number(entry.funcionario_id),
-        total_rows: Number(entry.total_rows),
-        ...(hasDeletedAt ? { non_deleted_rows: Number(entry.non_deleted_rows) } : {}),
-      })),
-    });
+if (candidateIds.length > 0) {
+  const idList = candidateIds.join(',');
+  for (const tableInfo of referenceTables) {
+    const quotedTable = quoteIdentifier(tableInfo.tableName);
+    const hasDeletedAt = tableInfo.hasDeletedAt;
+    const rows = query(`
+      SELECT
+        CAST(funcionario_id AS INTEGER) AS funcionario_id,
+        COUNT(*) AS total_rows
+        ${hasDeletedAt ? ", SUM(CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END) AS non_deleted_rows" : ''}
+      FROM ${quotedTable}
+      WHERE CAST(funcionario_id AS INTEGER) IN (${idList})
+      GROUP BY CAST(funcionario_id AS INTEGER)
+      ORDER BY CAST(funcionario_id AS INTEGER);
+    `, `ref_counts_${tableInfo.tableName}`);
+    if (rows.length > 0) {
+      references.push({
+        table_name: tableInfo.tableName,
+        rows: rows.map((entry) => ({
+          funcionario_id: Number(entry.funcionario_id),
+          total_rows: Number(entry.total_rows),
+          ...(hasDeletedAt ? { non_deleted_rows: Number(entry.non_deleted_rows) } : {}),
+        })),
+      });
+    }
   }
 }
 
