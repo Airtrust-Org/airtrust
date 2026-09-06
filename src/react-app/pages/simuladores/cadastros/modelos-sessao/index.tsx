@@ -79,6 +79,7 @@ interface ModeloSessao {
 
 interface ModelosSessaoPageProps {
   embedded?: boolean;
+  onBack?: () => void;
 }
 
 type SortField = 'codigo' | 'nome' | 'dispositivo' | 'tipo' | 'modelo' | 'duracao' | 'manobras';
@@ -184,7 +185,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
     carregarDados();
   }, []);
 
-  const _authH = () => {
+  const _authH = (): Record<string, string> => {
     const t = getAccessToken();
     return t ? { Authorization: `Bearer ${t}` } : {};
   };
@@ -312,7 +313,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
           manobra_id: m.manobra_id,
           manobra_codigo: m.manobra_codigo,
           manobra_descricao: m.manobra_descricao,
-          manobra_nome: m.manobra_nome || null,
+          manobra_nome: m.manobra_nome || undefined,
           ordem: m.ordem,
           tripulante: (m.tripulante as Tripulante) || 'AB',
         }));
@@ -533,7 +534,7 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
         manobra_id: manobra.id,
         manobra_codigo: manobra.codigo,
         manobra_descricao: manobra.nome || manobra.descricao || manobra.codigo,
-        manobra_nome: manobra.nome || null,
+        manobra_nome: manobra.nome || undefined,
         ordem: manobrasSelecionadas.length + 1,
         tripulante: 'AB' as Tripulante,
       },

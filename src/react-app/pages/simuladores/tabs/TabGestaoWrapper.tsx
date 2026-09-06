@@ -132,8 +132,8 @@ export default function TabGestaoWrapper() {
       setErro(null);
       setEntityErrors({});
       const _gt = getAccessToken();
-      const _gh = _gt ? { Authorization: `Bearer ${_gt}` } : {};
-      const noStore = { headers: _gh, cache: 'no-store' as RequestCache };
+      const _gh: Record<string, string> = _gt ? { Authorization: `Bearer ${_gt}` } : {};
+      const noStore: RequestInit = { headers: _gh, cache: 'no-store' };
       const [simRes, manobrasRes, categoriasRes, tiposRes, modelosRes, curriculosRes] = await Promise.all([
         fetch(`${API_BASE_URL}/simuladores?_=${Date.now()}`, noStore),
         fetch(`${API_BASE_URL}/simuladores/manobras?_=${Date.now()}`, noStore),

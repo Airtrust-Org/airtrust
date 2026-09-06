@@ -75,7 +75,7 @@ export default function CrudManobras({ embedded = false, onBack }: Props = {}) {
     };
   }, [showModal]);
 
-  const _authH = () => {
+  const _authH = (): Record<string, string> => {
     const t = getAccessToken();
     return t ? { Authorization: `Bearer ${t}` } : {};
   };
