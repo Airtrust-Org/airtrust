@@ -5,6 +5,7 @@ import {
   encryptSigvoosPassword,
   decryptSigvoosPassword,
   SigvoosClientError,
+  readSigvoosResponseTextBounded,
 } from '../../lib/sigvoos/client';
 
 describe('SigvoosApiClient', () => {
@@ -95,6 +96,36 @@ describe('SigvoosApiClient', () => {
       const res = await client.postSearch('/data', {});
       assert.equal(res.success, true);
       assert.equal(calls, 4); // 1: token, 2: search(401), 3: token(force), 4: search(200)
+    });
+
+    it('rejects a response whose declared body exceeds the configured byte limit', async () => {
+      const response = new Response('{}', {
+        status: 200,
+        headers: { 'content-length': '17' },
+      });
+      await assert.rejects(
+        readSigvoosResponseTextBounded(response, 16),
+        (error: unknown) =>
+          error instanceof SigvoosClientError && error.code === 'SIGVOOS_RESPONSE_TOO_LARGE',
+      );
+    });
+
+    it('rejects a streamed body that crosses the byte limit without content-length', async () => {
+      const response = new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('12345678'));
+            controller.enqueue(new TextEncoder().encode('901234567'));
+            controller.close();
+          },
+        }),
+        { status: 200 },
+      );
+      await assert.rejects(
+        readSigvoosResponseTextBounded(response, 16),
+        (error: unknown) =>
+          error instanceof SigvoosClientError && error.code === 'SIGVOOS_RESPONSE_TOO_LARGE',
+      );
     });
 
     it('handles timeouts properly', async () => {
