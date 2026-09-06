@@ -121,9 +121,10 @@ describe('local D1 setup scripts', () => {
     expect(source).not.toContain('qualificacoes_categorias audit_logs; do');
   });
 
-  it('keeps modern additive LMS schema in the local smoke contract', () => {
+  it('keeps auth revocation and modern additive LMS schema in the local smoke contract', () => {
     const source = readScript(lmsSetup);
     for (const migration of [
+      '0289_security_rate_limit_and_token_blocklist.sql',
       '0456_lms_h5p_course_binding.sql',
       '0465_lms_scorm_package_quality_gate_v1.sql',
       '0469_lms_completion_pendencias_snapshots.sql',
@@ -132,6 +133,7 @@ describe('local D1 setup scripts', () => {
       expect(source).toContain(migration);
     }
     for (const table of [
+      'token_blocklist',
       'lms_scorm_package_versions',
       'lms_scorm_package_audit_log',
       'lms_completion_diagnostics_snapshots',
