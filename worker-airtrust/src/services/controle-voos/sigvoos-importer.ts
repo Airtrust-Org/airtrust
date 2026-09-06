@@ -1494,6 +1494,31 @@ export async function importSigvoosPayloadToControleVoos(
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'SIGVOOS_IMPORT_UNKNOWN_ERROR';
+
+      // A previously unseen ICAO is a record-level catalog conflict, not a
+      // reason to abort every remaining record in the fetched SIGVOOS payload.
+      // Keep it isolated in staging so the catalog can be corrected/retried,
+      // while unrelated flights in the same batch continue processing.
+      if (message === 'SIGVOOS_IMPORT_MISSING_AIRPORT_MATCH') {
+        await updateStageStatus(db, {
+          stageId,
+          status: 'CONFLICT',
+          errorMessage: message,
+        });
+        summary.conflictRecords += 1;
+        summary.results.push({
+          stageId,
+          payloadHash: record.payloadHash,
+          status: 'CONFLICT',
+          reused: false,
+          flightId: null,
+          etapaId: null,
+          tripulanteId: null,
+          conflictId: null,
+        });
+        continue;
+      }
+
       await updateStageStatus(db, {
         stageId,
         status: 'ERROR',
