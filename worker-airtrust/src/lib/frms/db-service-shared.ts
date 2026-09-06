@@ -14,14 +14,14 @@ export function now(): string {
 }
 
 export function dateOffset(dateStr: string, days: number): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  d.setDate(d.getDate() + days);
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
 
 export function diffDays(d1: string, d2: string): number {
-  const a = new Date(d1 + 'T00:00:00');
-  const b = new Date(d2 + 'T00:00:00');
+  const a = new Date(`${d1}T00:00:00Z`);
+  const b = new Date(`${d2}T00:00:00Z`);
   return Math.round((b.getTime() - a.getTime()) / 86400000);
 }
 
