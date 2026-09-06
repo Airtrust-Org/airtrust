@@ -35,9 +35,19 @@ type ModeloState = {
   qual_validade: number | null;
 };
 
+type FichaRow = {
+  agendamento_slot_id: number;
+  colaborador_id_aluno: number;
+  empresa_id: number;
+  status: string;
+  aprovado: number | null;
+  deleted_at: string | null;
+};
+
 type MockState = {
   modelos: Record<number, ModeloState>;
   historico: HistoricoRow[];
+  fichas: FichaRow[];
 };
 
 function createMockDb(state: MockState): D1Database {
@@ -110,6 +120,16 @@ function createMockDb(state: MockState): D1Database {
                   if (row.sessao_id !== sessaoId) continue;
                   if (!['PLANEJADA', 'PLANEJADO'].includes(row.status)) continue;
                   if (empresaId !== null && row.empresa_id !== empresaId) continue;
+                  const fichaAprovada = state.fichas.some(
+                    (ficha) =>
+                      ficha.deleted_at === null &&
+                      ficha.agendamento_slot_id === row.sessao_id &&
+                      ficha.colaborador_id_aluno === row.funcionario_id &&
+                      ficha.empresa_id === row.empresa_id &&
+                      ficha.aprovado === 1 &&
+                      ['APROVADO', 'CONCLUIDA'].includes(ficha.status),
+                  );
+                  if (sql.includes('EXISTS (') && !fichaAprovada) continue;
                   row.status = 'CONCLUIDA';
                   row.data_confirmacao = 'now';
                   row.updated_at = 'now';
@@ -174,6 +194,7 @@ function buildState(): MockState {
       },
     },
     historico: [],
+    fichas: [],
   };
 }
 
@@ -218,6 +239,25 @@ describe('simuladores status compatibility', () => {
         deleted_at: null,
         created_at: 'now',
         updated_at: 'now',
+      },
+    );
+
+    state.fichas.push(
+      {
+        agendamento_slot_id: 400,
+        colaborador_id_aluno: 20,
+        empresa_id: 6,
+        status: 'APROVADO',
+        aprovado: 1,
+        deleted_at: null,
+      },
+      {
+        agendamento_slot_id: 400,
+        colaborador_id_aluno: 21,
+        empresa_id: 6,
+        status: 'CONCLUIDA',
+        aprovado: 1,
+        deleted_at: null,
       },
     );
 

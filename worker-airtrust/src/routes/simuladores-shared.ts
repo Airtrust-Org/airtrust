@@ -895,20 +895,35 @@ export async function sincronizarQualificacoesDaSessaoConcluida(
       ? Number(params.empresaId)
       : null;
 
-  const queryBase = `
-    UPDATE qualificacoes_historico
-       SET status = '${QUALIFICACAO_STATUS.CONCLUIDA}',
-           data_confirmacao = COALESCE(data_confirmacao, datetime('now')),
-           updated_at = datetime('now')
-     WHERE sessao_id = ?
-       AND ${sqlStatusEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.PLANEJADA)}
-       AND deleted_at IS NULL
-  `;
+  if (!empresaId || empresaId <= 0) {
+    return { atualizadas: 0 };
+  }
 
-  const result =
-    empresaId && empresaId > 0
-      ? await db.prepare(`${queryBase} AND empresa_id = ?`).bind(params.sessaoId, empresaId).run()
-      : await db.prepare(queryBase).bind(params.sessaoId).run();
+  const result = await db
+    .prepare(
+      `
+      UPDATE qualificacoes_historico
+         SET status = '${QUALIFICACAO_STATUS.CONCLUIDA}',
+             data_confirmacao = COALESCE(data_confirmacao, datetime('now')),
+             updated_at = datetime('now')
+       WHERE sessao_id = ?
+         AND empresa_id = ?
+         AND ${sqlStatusEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.PLANEJADA)}
+         AND deleted_at IS NULL
+         AND EXISTS (
+           SELECT 1
+             FROM fichas_sessao fs
+            WHERE fs.agendamento_slot_id = qualificacoes_historico.sessao_id
+              AND fs.colaborador_id_aluno = qualificacoes_historico.funcionario_id
+              AND fs.empresa_id = qualificacoes_historico.empresa_id
+              AND fs.deleted_at IS NULL
+              AND COALESCE(fs.aprovado, 0) = 1
+              AND UPPER(COALESCE(fs.status, '')) IN ('APROVADO', 'CONCLUIDA')
+         )
+    `,
+    )
+    .bind(params.sessaoId, empresaId)
+    .run();
 
   return { atualizadas: Number(result.meta?.changes || 0) };
 }

@@ -114,6 +114,58 @@ async function carregarJornadaSigvoosDoDia(db: D1Database, tripulanteId: number,
     }>();
 }
 
+async function carregarWatermarkSigvoosTenant(
+  db: D1Database,
+  empresaId: number,
+  hoje: string,
+): Promise<string | null> {
+  try {
+    const row = await db
+      .prepare(
+        `SELECT watermark_to
+           FROM cron_job_state
+          WHERE job_name = 'sigvoos-ingest'
+            AND scope_key = ?
+          LIMIT 1`,
+      )
+      .bind(`empresa:${empresaId}`)
+      .first<{ watermark_to: string | null }>();
+
+    const watermark = String(row?.watermark_to || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(watermark) || watermark > hoje) {
+      return null;
+    }
+    return watermark;
+  } catch (error) {
+    console.warn(
+      '[FRMS][CRON] Watermark SIGVOOS indisponível:',
+      error instanceof Error ? error.message : String(error),
+    );
+    return null;
+  }
+}
+
+async function existeJornadaSigvoosInvalidaDoDia(
+  db: D1Database,
+  tripulanteId: number,
+  data: string,
+): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `SELECT id
+         FROM frms_jornada
+        WHERE tripulante_id = ?
+          AND data = ?
+          AND deleted_at IS NULL
+          AND UPPER(COALESCE(origem, '')) = 'SIGVOOS'
+          AND COALESCE(horas_voo_minutos, 0) > COALESCE(duracao_jornada_minutos, 0)
+        LIMIT 1`,
+    )
+    .bind(tripulanteId, data)
+    .first<{ id: string }>();
+  return Boolean(row?.id);
+}
+
 export async function notificarCheckinFadigaPendente(
   db: D1Database,
   empresaId: number,
@@ -181,7 +233,11 @@ export async function notificarCheckinFadigaPendente(
 }
 
 export async function frmsDailyCheck(env: Env): Promise<{
+  tripulantesEncontrados: number;
   tripulantesProcessados: number;
+  semWatermarkSigvoos: number;
+  jornadasAusentes: number;
+  jornadasInvalidas: number;
   alertasGerados: number;
   erros: string[];
 }> {
@@ -190,8 +246,13 @@ export async function frmsDailyCheck(env: Env): Promise<{
   const horaSaoPaulo = getSaoPauloHour();
 
   const tripulantes = await listarTripulantesAtivos(db);
+  let tripulantesProcessados = 0;
+  let semWatermarkSigvoos = 0;
+  let jornadasAusentes = 0;
+  let jornadasInvalidas = 0;
   let alertasGerados = 0;
   const erros: string[] = [];
+  const watermarkPorEmpresa = new Map<number, string | null>();
 
   for (const trip of tripulantes) {
     try {
@@ -200,20 +261,37 @@ export async function frmsDailyCheck(env: Env): Promise<{
       if (!tripEmpresaId) {
         throw new Error('FRMS_CONTEXT_UNAVAILABLE: tripulante sem empresa_id.');
       }
+      let dataOperacional = watermarkPorEmpresa.get(tripEmpresaId);
+      if (dataOperacional === undefined) {
+        dataOperacional = await carregarWatermarkSigvoosTenant(db, tripEmpresaId, hoje);
+        watermarkPorEmpresa.set(tripEmpresaId, dataOperacional);
+      }
+      if (!dataOperacional) {
+        semWatermarkSigvoos++;
+        continue;
+      }
+
       const operationalContext = await resolveFrmsOperationalContext(db, {
         empresaId: tripEmpresaId,
-        referenceAt: hoje,
+        referenceAt: dataOperacional,
         funcionarioId: trip.id,
       });
       const limites = asOperationalLimitesMap(operationalContext.parameters);
 
-      // 1. Recalcular acúmulo rolling
-      const acumulo = await recalcularAcumuloRolling(db, trip.id, hoje, limites);
-      const jornadaSigvoosHoje = await carregarJornadaSigvoosDoDia(db, trip.id, hoje);
+      // 1. Recalcular acúmulo rolling no último dia operacional confirmado pela ingestão SIGVOOS.
+      const acumulo = await recalcularAcumuloRolling(db, trip.id, dataOperacional, limites);
+      const jornadaSigvoosHoje = await carregarJornadaSigvoosDoDia(db, trip.id, dataOperacional);
 
       if (!jornadaSigvoosHoje?.id) {
+        const invalida = await existeJornadaSigvoosInvalidaDoDia(db, trip.id, dataOperacional);
+        if (invalida) {
+          jornadasInvalidas++;
+        } else {
+          jornadasAusentes++;
+        }
         continue;
       }
+      tripulantesProcessados++;
       const status = FRMS_STATUS.includes(jornadaSigvoosHoje.status as FrmsStatus)
         ? (jornadaSigvoosHoje.status as FrmsStatus)
         : 'OT';
@@ -277,7 +355,7 @@ export async function frmsDailyCheck(env: Env): Promise<{
       }
 
       // 4. Fadiga Acumulada Legal (PRC-OPS-012) — % do limite mensal
-      const mesAtual = hoje.slice(0, 7);
+      const mesAtual = dataOperacional.slice(0, 7);
       const totaisMes = await db
         .prepare(
           `SELECT COALESCE(SUM(duracao_jornada_minutos), 0) AS total_jornada,
@@ -414,7 +492,11 @@ export async function frmsDailyCheck(env: Env): Promise<{
       .bind(
         hoje,
         JSON.stringify({
-          tripulantes_processados: tripulantes.length,
+          tripulantes_encontrados: tripulantes.length,
+          tripulantes_processados: tripulantesProcessados,
+          sem_watermark_sigvoos: semWatermarkSigvoos,
+          jornadas_ausentes: jornadasAusentes,
+          jornadas_invalidas: jornadasInvalidas,
           alertas_gerados: alertasGerados,
           erros: erros.length,
         }),
@@ -425,7 +507,7 @@ export async function frmsDailyCheck(env: Env): Promise<{
   }
 
   console.log(
-    `[FRMS][CRON] Concluído: ${tripulantes.length} tripulantes, ${alertasGerados} alertas, ${erros.length} erros`,
+    `[FRMS][CRON] Concluído: ${tripulantesProcessados}/${tripulantes.length} avaliados, ${semWatermarkSigvoos} sem watermark, ${jornadasAusentes} sem jornada, ${jornadasInvalidas} jornadas inválidas, ${alertasGerados} alertas, ${erros.length} erros`,
   );
 
   if (horaSaoPaulo >= 8) {
@@ -454,7 +536,11 @@ export async function frmsDailyCheck(env: Env): Promise<{
   }
 
   return {
-    tripulantesProcessados: tripulantes.length,
+    tripulantesEncontrados: tripulantes.length,
+    tripulantesProcessados,
+    semWatermarkSigvoos,
+    jornadasAusentes,
+    jornadasInvalidas,
     alertasGerados,
     erros,
   };
