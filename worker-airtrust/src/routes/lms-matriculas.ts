@@ -47,7 +47,6 @@ import { ensureCertificateForQualification } from '../services/ensure-certificat
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 
 const app = new Hono<{ Bindings: Env }>();
-
 app.use('*', auth());
 
 function getCallerFuncionarioId(c: Context): number | null {
