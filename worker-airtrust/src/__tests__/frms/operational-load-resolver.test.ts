@@ -37,11 +37,11 @@ describe('resolveJornadaLandings', () => {
     expect(result).toEqual({ landingsCount: 5, source: 'SIGVOOS_OBSERVED' });
   });
 
-  it('distinguishes a valid zero-leg result from source failure', async () => {
+  it('fails closed when the Controle de Voos query returns zero legs without positive coverage evidence', async () => {
     const db = makeDb(() => ({ landings: 0, legs: 0 }));
     expect(await resolveJornadaLandings(db, 6, 42, '2026-08-20')).toEqual({
       landingsCount: 0,
-      source: 'SIGVOOS_CONFIRMED_ZERO',
+      source: 'SIGVOOS_UNAVAILABLE',
     });
   });
 
@@ -182,16 +182,10 @@ describe('resolveOperationalLoadForJornada', () => {
     expect(result.data_quality).toBe('SIGVOOS_UNAVAILABLE');
   });
 
-  it('does not apply flight temperature exposure when SIGVOOS confirms no flight', async () => {
-    let weatherReads = 0;
+  it('keeps zero-leg days incomplete until positive source coverage is proven', async () => {
     const db = makeDb((sql) => {
       if (sql.includes('cv_voo_tripulantes')) return { landings: 0, legs: 0 };
-      if (sql.includes('frms_jornada_avaliacoes')) {
-        weatherReads += 1;
-        return {
-          environmental_json: JSON.stringify({ maxAmbientTempC: 40, weatherSource: 'DECEA_REDEMET' }),
-        };
-      }
+      if (sql.includes('frms_jornada_avaliacoes')) return null;
       return null;
     });
 
@@ -202,14 +196,10 @@ describe('resolveOperationalLoadForJornada', () => {
       jornadaId: 'jornada-1',
     });
 
-    expect(result.landings_source).toBe('SIGVOOS_CONFIRMED_ZERO');
-    expect(result.landings_evidence_quality).toBe('CONFIRMED_ZERO');
+    expect(result.landings_source).toBe('SIGVOOS_UNAVAILABLE');
+    expect(result.landings_evidence_quality).toBe('INCOMPLETE');
     expect(result.landings_count).toBe(0);
-    expect(result.temperature_max_c).toBeNull();
-    expect(result.operational_load_temperature_delta).toBe(0);
-    expect(result.weather_evidence_quality).toBe('NOT_APPLICABLE');
-    expect(result.operational_load_total_delta).toBe(0);
-    expect(result.data_quality).toBe('COMPLETE');
-    expect(weatherReads).toBe(0);
+    expect(result.operational_load_landings_delta).toBe(0);
+    expect(result.data_quality).toBe('SIGVOOS_UNAVAILABLE');
   });
 });
