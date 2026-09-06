@@ -322,6 +322,7 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
            AND f.deleted_at IS NULL
            AND qh.certificado_arquivo_id IS NOT NULL
            AND qh.numero_certificado IS NOT NULL
+           ${hasIndexedHash ? "AND (qh.validacao_hash IS NULL OR TRIM(qh.validacao_hash) = '')" : ''}
            ${cursorPredicate}
          ORDER BY d.created_at DESC, d.id DESC
          LIMIT ?`,

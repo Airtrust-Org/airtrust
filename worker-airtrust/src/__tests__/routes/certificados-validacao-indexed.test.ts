@@ -18,7 +18,10 @@ function makeEnv(rows: Array<Record<string, unknown>>, hasColumn = true) {
           return { results: rows.filter((row) => row.validacao_hash === hash) };
         }
         if (sql.includes('FROM qualificacoes_historico qh')) {
-          return { results: rows };
+          const fallbackRows = hasColumn && sql.includes('validacao_hash IS NULL')
+            ? rows.filter((row) => row.validacao_hash == null || String(row.validacao_hash).trim() === '')
+            : rows;
+          return { results: fallbackRows };
         }
         return { results: [] };
       };
@@ -118,6 +121,14 @@ describe('indexed public certificate validation', () => {
     const payload = (await response.json()) as { success: boolean; valido: boolean };
     expect(payload.success).toBe(true);
     expect(payload.valido).toBe(true);
+  });
+
+  it('does not re-scan already indexed certificates after an indexed miss', async () => {
+    const { row } = await makeCertificateRow();
+    const env = makeEnv([row], true);
+
+    const response = await validacaoCertificadosRoutes.request('/0123456789ABCDEF', {}, env);
+    expect(response.status).toBe(404);
   });
 
   it('returns 404 when neither indexed nor transitional lookup finds the hash', async () => {
