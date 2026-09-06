@@ -923,54 +923,9 @@ export async function confirmarImportacaoFira(
     };
   });
 
-  const substituicoes = linhasPreparadasComMerge.filter(
-    ({ forcarSubstituicao, jornadaExistenteId, shouldMerge, hasTenantConflict }) =>
-      forcarSubstituicao && Boolean(jornadaExistenteId) && !shouldMerge && !hasTenantConflict,
-  );
-
-  if (substituicoes.length > 0) {
-    const timestampSubstituicao = now();
-    const stmtDelete = db.prepare(
-      `UPDATE frms_jornada SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
-    );
-    const stmtDeleteAlertas = db.prepare(
-      `UPDATE frms_alerta SET deleted_at = ?, updated_at = ? WHERE jornada_id = ? AND deleted_at IS NULL`,
-    );
-    const stmtDeleteFat = db.prepare(
-      `UPDATE frms_fatorizacao_jornada SET deleted_at = ?, updated_at = ? WHERE jornada_id = ? AND deleted_at IS NULL`,
-    );
-
-    await db.batch([
-      ...substituicoes.map(({ jornadaExistenteId }) =>
-        stmtDelete.bind(timestampSubstituicao, timestampSubstituicao, jornadaExistenteId!),
-      ),
-      ...substituicoes.map(({ jornadaExistenteId }) =>
-        stmtDeleteAlertas.bind(timestampSubstituicao, timestampSubstituicao, jornadaExistenteId!),
-      ),
-      ...substituicoes.map(({ jornadaExistenteId }) =>
-        stmtDeleteFat.bind(timestampSubstituicao, timestampSubstituicao, jornadaExistenteId!),
-      ),
-    ]);
-
-    const stmtAuditoria = db.prepare(
-      `INSERT INTO auditoria_avancada_v2 (tabela, acao, registro_id, dados_anteriores, dados_novos)
-       VALUES ('frms_jornada', 'FRMS_JORNADA_SUBSTITUIDA_FIRA', ?, ?, ?)`,
-    );
-
-    await db.batch(
-      substituicoes.map(({ linha, jornadaExistenteId }) =>
-        stmtAuditoria.bind(
-          jornadaExistenteId!,
-          JSON.stringify({ id: jornadaExistenteId }),
-          JSON.stringify({
-            canac: importacao.canac,
-            data: linha.data,
-            motivo: 'Substituição forçada na importação FIRA',
-          }),
-        ),
-      ),
-    );
-  }
+  // Forced replacement is performed in place below. Do not soft-delete the
+  // existing jornada before the replacement has been successfully applied:
+  // a later failure would otherwise erase an operational day from FRMS.
 
   for (const {
     linha,
@@ -1000,7 +955,7 @@ export async function confirmarImportacaoFira(
         continue;
       }
 
-      if (jornadaExistenteId && shouldMerge) {
+      if (jornadaExistenteId && (shouldMerge || forcarSubstituicao)) {
         const result = await atualizarJornada(
           db,
           jornadaExistenteId,
@@ -1010,7 +965,10 @@ export async function confirmarImportacaoFira(
             hora_termino: linha.hora_termino,
             horas_voo_minutos: linha.horas_voo_min || null,
             observacao: null,
-            origem: 'SIGVOOS',
+            origem:
+              String(linha.status_fira || '').trim().toUpperCase() === 'SIGVOOS'
+                ? 'SIGVOOS'
+                : 'FIRA',
             local_base: linha.local_base ?? null,
             empresa_id: empresaId ?? null,
           },
