@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 const workerRoot = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const repoRoot = join(workerRoot, '..');
 const migrationsDir = join(workerRoot, 'migrations');
+const productionDisabledMigrationsDir = join(workerRoot, 'migrations_production_disabled');
 const migrationsDirPattern = /^\s*migrations_dir\s*=\s*"([^"]+)"/gm;
 const experimentalMigrationPath = join(
   workerRoot,
@@ -116,13 +117,20 @@ describe('migration governance', () => {
     expect(existsSync(experimentalMigrationPath)).toBe(true);
   });
 
-  it('keeps Wrangler configured to the canonical migrations folder', () => {
-    for (const configPath of wranglerConfigPaths) {
-      const configured = readConfiguredMigrationDirs(configPath);
-      expect(configured.length).toBeGreaterThan(0);
-      expect(configured.every((value) => value === './migrations')).toBe(true);
-      expect(configured).not.toContain('./migrations_experimental');
-    }
+  it('keeps dev/staging on the canonical chain and production isolated from historical migrations', () => {
+    const remoteConfigured = readConfiguredMigrationDirs(join(workerRoot, 'wrangler.toml'));
+    expect(remoteConfigured).toEqual([
+      './migrations',
+      './migrations',
+      './migrations_production_disabled',
+    ]);
+
+    const localConfigured = readConfiguredMigrationDirs(join(workerRoot, 'wrangler.dev.toml'));
+    expect(localConfigured.length).toBeGreaterThan(0);
+    expect(localConfigured.every((value) => value === './migrations')).toBe(true);
+
+    expect(readdirSync(productionDisabledMigrationsDir).filter((file) => file.endsWith('.sql'))).toEqual([]);
+    expect(remoteConfigured).not.toContain('./migrations_experimental');
   });
 
   it('keeps CREATE TEMP TABLE confined to its historical allowlist', () => {
