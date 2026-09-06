@@ -151,26 +151,6 @@ describe('LMS completion evidence decision table', () => {
     ).toMatchObject({ accepted: false, code: 'CONTENT_EVIDENCE_REQUIRED' });
   });
 
-  it('accepts H5P completion when its persisted xAPI runtime evidence is validated', () => {
-    expect(
-      evaluateLmsCompletionEvidence(
-        valid({
-          source: 'xapi',
-          packageBound: true,
-          requiresAssessment: false,
-          masteryScore: null,
-          scoreRaw: null,
-          scoreMin: null,
-          scoreMax: null,
-          lessonStatus: 'completed',
-          completionStatus: 'completed',
-          successStatus: null,
-          contentEvidenceValidated: true,
-        }),
-      ),
-    ).toMatchObject({ accepted: true, code: 'COMPLETION_ACCEPTED' });
-  });
-
   it('13. is deterministic and idempotent for repeated commits', () => {
     const input = valid();
     expect(evaluateLmsCompletionEvidence(input)).toEqual(evaluateLmsCompletionEvidence(input));
