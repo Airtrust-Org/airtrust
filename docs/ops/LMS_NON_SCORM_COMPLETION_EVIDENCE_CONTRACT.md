@@ -52,10 +52,10 @@ fonte de autorização da qualificação.
   vinculada quando configurada.
 - **Vídeo:** tempo assistido/cobertura de segmentos, calculado contra a duração
   canônica do asset, ou avaliação vinculada quando configurada.
-- **H5P:** statement xAPI terminal com resultado coerente; só exigir nota se o
-  curso realmente configurar mastery/avaliação.
-- **SCORM:** status terminal e estado CMI coerente; só exigir nota se o curso
-  realmente configurar mastery/avaliação.
+- **H5P:** statement xAPI terminal com resultado coerente; cursos que geram
+  qualificação preservam o gate de avaliação/mastery já existente no runtime.
+- **SCORM:** status terminal e estado CMI coerente; cursos que geram
+  qualificação preservam o gate de avaliação/mastery já existente no runtime.
 
 Uma política de atestação administrativa, se necessária, deve ser explícita,
 separada da finalização do aluno, exigir RBAC próprio e uma referência de
