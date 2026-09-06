@@ -127,6 +127,31 @@ async function getUsuariosEmpresasFeatures(db: Env['DB']): Promise<{ hasModulosA
   };
 }
 
+async function findUsuarioAcessosPermitido(
+  db: Env['DB'],
+  usuarioId: number,
+  tenantCtx: ReturnType<typeof getTenantContext>,
+): Promise<{ id: number; nome: string; email: string; is_primary: number } | null> {
+  if (tenantCtx.empresaCodigo === 'airtrust') {
+    return db
+      .prepare('SELECT id, nome, email, 0 AS is_primary FROM usuarios WHERE id = ? AND deleted_at IS NULL')
+      .bind(usuarioId)
+      .first<{ id: number; nome: string; email: string; is_primary: number }>();
+  }
+
+  return db
+    .prepare(
+      `SELECT u.id, u.nome, u.email, ue.is_primary
+         FROM usuarios u
+         INNER JOIN usuarios_empresas ue
+           ON ue.usuario_id = u.id AND ue.empresa_id = ?
+        WHERE u.id = ? AND u.deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(tenantCtx.empresaId, usuarioId)
+    .first<{ id: number; nome: string; email: string; is_primary: number }>();
+}
+
 function normalizeEmpresaUserRole(value: unknown): string {
   const role = String(value || 'viewer')
     .trim()
@@ -537,16 +562,16 @@ app.get('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
   const db = c.env.DB;
   const usuarioId = parseInt(c.req.param('usuarioId'), 10);
   const tenantCtx = getTenantContext(c);
-  const { hasModulosAtivos } = await getUsuariosEmpresasFeatures(db);
-
-  const usuario = await db
-    .prepare('SELECT id, nome, email FROM usuarios WHERE id = ? AND deleted_at IS NULL')
-    .bind(usuarioId)
-    .first<{ id: number; nome: string; email: string }>();
+  const usuario = await findUsuarioAcessosPermitido(db, usuarioId, tenantCtx);
 
   if (!usuario) {
+    if (tenantCtx.empresaCodigo !== 'airtrust') {
+      throw new AppError('Sem permissão para acessar usuário de outra empresa', 403);
+    }
     throw new AppError('Usuário não encontrado', 404);
   }
+
+  const { hasModulosAtivos } = await getUsuariosEmpresasFeatures(db);
 
   const acessos = await db
     .prepare(
@@ -560,10 +585,11 @@ app.get('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
       WHERE ue.usuario_id = ?
         AND e.deleted_at IS NULL
         AND e.ativo = 1
+        AND (? = 1 OR ue.empresa_id = ?)
       ORDER BY e.nome ASC
     `,
     )
-    .bind(usuarioId)
+    .bind(usuarioId, tenantCtx.empresaCodigo === 'airtrust' ? 1 : 0, tenantCtx.empresaId)
     .all<{
       empresa_id: number;
       role: string;
@@ -619,6 +645,14 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
   const db = c.env.DB;
   const usuarioId = parseInt(c.req.param('usuarioId'), 10);
   const tenantCtx = getTenantContext(c);
+  const usuario = await findUsuarioAcessosPermitido(db, usuarioId, tenantCtx);
+
+  if (!usuario) {
+    if (tenantCtx.empresaCodigo !== 'airtrust') {
+      throw new AppError('Sem permissão para editar acessos de usuário de outra empresa', 403);
+    }
+    throw new AppError('Usuário não encontrado', 404);
+  }
 
   const body = (await c.req.json()) as {
     acessos?: Array<{ empresaId: number; role?: string; perfis?: string[]; modulosAtivos?: string[] }>;
@@ -649,15 +683,6 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
     if (invalid) {
       throw new AppError('Sem permissão para editar acessos de outras empresas', 403);
     }
-  }
-
-  const usuario = await db
-    .prepare('SELECT id FROM usuarios WHERE id = ? AND deleted_at IS NULL')
-    .bind(usuarioId)
-    .first();
-
-  if (!usuario) {
-    throw new AppError('Usuário não encontrado', 404);
   }
 
   // Papel manager exige setor já vinculado na empresa alvo antes de gravar o
@@ -707,8 +732,11 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
 
   let isPrimarySet = false;
   for (const acesso of acessos) {
-    const isPrimary = !isPrimarySet ? 1 : 0;
-    isPrimarySet = true;
+    const isPrimary =
+      tenantCtx.empresaCodigo === 'airtrust'
+        ? (!isPrimarySet ? 1 : 0)
+        : Number(usuario.is_primary ?? 0);
+    if (tenantCtx.empresaCodigo === 'airtrust') isPrimarySet = true;
 
     if (hasModulosAtivos) {
       await db
