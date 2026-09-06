@@ -857,9 +857,9 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
       const instrutorRow = await c.env.DB.prepare(
         `SELECT COALESCE(is_instrutor, 0) as is_instrutor
          FROM funcionarios
-         WHERE id = ? AND deleted_at IS NULL`,
+         WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
-        .bind(instrutor_id)
+        .bind(instrutor_id, empresaId)
         .first<{ is_instrutor: number }>();
 
       if (!instrutorRow || Number(instrutorRow.is_instrutor) !== 1) {
