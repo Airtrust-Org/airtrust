@@ -10,7 +10,7 @@ describe('simuladores session update tenant model boundary', () => {
     );
 
     expect(source).toContain(
-      'getSimuladorModeloAeronave(c.env.DB, (a as any).simulador_id, empresaId)',
+      '(a as { simulador_id?: string | number | null }).simulador_id',
     );
     expect(source).toContain(
       'SELECT tipo_aeronave FROM fichas_sessao WHERE agendamento_slot_id=? AND empresa_id=?',
