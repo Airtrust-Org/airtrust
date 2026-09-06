@@ -41,10 +41,20 @@ type HistoricoRow = {
   updated_at: string;
 };
 
+type FichaRow = {
+  agendamento_slot_id: number;
+  colaborador_id_aluno: number;
+  empresa_id: number;
+  status: string;
+  aprovado: number | null;
+  deleted_at: string | null;
+};
+
 type MockState = {
   participantes: ParticipanteRow[];
   modelos: Record<number, ModeloState>;
   historico: HistoricoRow[];
+  fichas: FichaRow[];
 };
 
 function addDays(base: Date, days: number): string {
@@ -159,6 +169,16 @@ function createMockDb(state: MockState): D1Database {
                   if (empresaId !== null && Number.isFinite(empresaId) && row.empresa_id !== empresaId) {
                     continue;
                   }
+                  const fichaAprovada = state.fichas.some(
+                    (ficha) =>
+                      ficha.deleted_at === null &&
+                      ficha.agendamento_slot_id === row.sessao_id &&
+                      ficha.colaborador_id_aluno === row.funcionario_id &&
+                      ficha.empresa_id === row.empresa_id &&
+                      ficha.aprovado === 1 &&
+                      ['APROVADO', 'CONCLUIDA'].includes(ficha.status),
+                  );
+                  if (sql.includes('EXISTS (') && !fichaAprovada) continue;
                   row.status = 'CONCLUIDA';
                   row.data_confirmacao = nowIso();
                   row.updated_at = nowIso();
@@ -224,6 +244,7 @@ function baseState(): MockState {
       },
     },
     historico: [],
+    fichas: [],
   };
 }
 
@@ -245,6 +266,14 @@ describe('simuladores -> qualificacoes transition', () => {
     });
 
     expect(created.criadas).toBe(1);
+    state.fichas.push({
+      agendamento_slot_id: 120,
+      colaborador_id_aluno: 19,
+      empresa_id: 6,
+      status: 'APROVADO',
+      aprovado: 1,
+      deleted_at: null,
+    });
 
     const synced = await sincronizarQualificacoesDaSessaoConcluida(db, {
       sessaoId: 120,
@@ -428,6 +457,15 @@ describe('simuladores -> qualificacoes transition', () => {
       },
     );
 
+    state.fichas.push({
+      agendamento_slot_id: 200,
+      colaborador_id_aluno: 19,
+      empresa_id: 6,
+      status: 'APROVADO',
+      aprovado: 1,
+      deleted_at: null,
+    });
+
     const db = createMockDb(state);
     const synced = await sincronizarQualificacoesDaSessaoConcluida(db, {
       sessaoId: 200,
@@ -437,6 +475,58 @@ describe('simuladores -> qualificacoes transition', () => {
     expect(synced.atualizadas).toBe(1);
     expect(state.historico.find((h) => h.id === 31)?.status).toBe('CONCLUIDA');
     expect(state.historico.find((h) => h.id === 32)?.status).toBe('PLANEJADA');
+  });
+
+  it('conclui somente a qualificacao do participante com ficha aprovada', async () => {
+    const state = baseState();
+    for (const [id, funcionarioId] of [[41, 19], [42, 20]] as const) {
+      state.historico.push({
+        id,
+        funcionario_id: funcionarioId,
+        qualificacao_id: 91,
+        qualificacao_codigo: 'R',
+        categoria: 'TREINAMENTO DE VOO',
+        data_conclusao: addDays(new Date(), 2),
+        validade_meses: 12,
+        status: 'PLANEJADA',
+        renovada: 0,
+        carga_horaria: 120,
+        tipo_treinamento: 'RECORRENTE',
+        empresa_id: 6,
+        sessao_id: 201,
+        data_confirmacao: null,
+        deleted_at: null,
+        created_at: 'old',
+        updated_at: 'old',
+      });
+    }
+    state.fichas.push(
+      {
+        agendamento_slot_id: 201,
+        colaborador_id_aluno: 19,
+        empresa_id: 6,
+        status: 'APROVADO',
+        aprovado: 1,
+        deleted_at: null,
+      },
+      {
+        agendamento_slot_id: 201,
+        colaborador_id_aluno: 20,
+        empresa_id: 6,
+        status: 'NAO_APROVADO',
+        aprovado: 0,
+        deleted_at: null,
+      },
+    );
+
+    const synced = await sincronizarQualificacoesDaSessaoConcluida(createMockDb(state), {
+      sessaoId: 201,
+      empresaId: 6,
+    });
+
+    expect(synced.atualizadas).toBe(1);
+    expect(state.historico.find((h) => h.funcionario_id === 19)?.status).toBe('CONCLUIDA');
+    expect(state.historico.find((h) => h.funcionario_id === 20)?.status).toBe('PLANEJADA');
   });
 
   it('bloqueia planejada em data passada e permite em data futura', async () => {

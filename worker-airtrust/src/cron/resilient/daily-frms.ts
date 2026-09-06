@@ -112,7 +112,11 @@ export async function runDailyFrmsOperations(
   try {
     const result = await frmsDailyCheck(env);
     logger.log('[CRON] FRMS daily check concluído', {
+      tripulantes_encontrados: result.tripulantesEncontrados,
       tripulantes_processados: result.tripulantesProcessados,
+      sem_watermark_sigvoos: result.semWatermarkSigvoos,
+      jornadas_ausentes: result.jornadasAusentes,
+      jornadas_invalidas: result.jornadasInvalidas,
       alertas_gerados: result.alertasGerados,
     });
   } catch (error) {
