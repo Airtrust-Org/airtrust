@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 // N-11 governed structural remediation.
-// Saneamento estrutural governado por IDs exatos (128, 129) e usuário vinculado (108).
+// Saneamento estrutural governado pelo ID exato 129 e usuário vinculado 108.
 // NUNCA utiliza filtros por nome, heurísticas textuais ou wildcards.
 // source_reference: issue #380 and production inventory artifact n11-production-readonly-inventory-712cd93cf952ef4d5645a87f6d124370564c5024
-// operational_decision: soft-delete synthetic QA fixtures 128 and 129 in tenant 6 and linked user 108 without display-name heuristics
+// operational_decision: soft-delete documented synthetic QA fixture 129 in tenant 6 and linked user 108 without display-name heuristics; candidate 128 remains indeterminate and untouched
 // dry_run_required: dry-run mode required and verified before any apply
 // rollback_plan_required: rollback SQL documented and Time Travel recovery point captured
 import { spawnSync } from 'node:child_process';
 
 const DB_NAME = 'airtrust-db';
 const EMPRESA_ID = 6;
-const TARGET_FUNCIONARIO_IDS = [128, 129];
+const TARGET_FUNCIONARIO_IDS = [129];
 const TARGET_USER_ID = 108;
 
 const CONFIRMATION_DRY_RUN = 'AIRTRUST_PRODUCTION_DRYRUN_N11_REMEDIATION';
