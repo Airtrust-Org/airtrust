@@ -8,6 +8,7 @@ AIRTRUST_CONFIRM_PROD_SMOKE_WRITES="${AIRTRUST_CONFIRM_PROD_SMOKE_WRITES:-}"
 AIRTRUST_RUN_FRMS_FAIL_SAFE="${AIRTRUST_RUN_FRMS_FAIL_SAFE:-NO}"
 AIRTRUST_EXPECTED_EMPRESA_ID="${AIRTRUST_EXPECTED_EMPRESA_ID:-}"
 AIRTRUST_EXPECTED_EMPRESA_CODIGO="${AIRTRUST_EXPECTED_EMPRESA_CODIGO:-}"
+AIRTRUST_RUN_RDV_QUEUE_SMOKE="${AIRTRUST_RUN_RDV_QUEUE_SMOKE:-NO}"
 
 PROD_WRITE_CONFIRM_TEXT="I understand this will create test data in production"
 
@@ -263,8 +264,23 @@ smoke_authenticated_read_only() {
   run_request "Simuladores sessoes" "GET" "/api/simuladores/sessoes?limit=1" "200" "yes" "optional"
   run_request "Qualificacoes historico" "GET" "/api/qualificacoes/historico?limit=1" "200" "yes" "optional"
   run_request "Funcionarios" "GET" "/api/funcionarios?limit=1" "200" "yes" "optional"
+  smoke_rdv_queue_read_only
   smoke_assets_policy_read_only
   log "Read-only autenticado concluído"
+}
+
+smoke_rdv_queue_read_only() {
+  if ! is_yes "$AIRTRUST_RUN_RDV_QUEUE_SMOKE"; then
+    record_skip "RDV queue" "SKIPPED_ENDPOINT_NOT_AVAILABLE" "AIRTRUST_RUN_RDV_QUEUE_SMOKE != YES"
+    return 0
+  fi
+
+  if [[ "$AIRTRUST_EXPECTED_EMPRESA_ID" != "6" ]]; then
+    record_fail "RDV queue" "AIRTRUST_EXPECTED_EMPRESA_ID must be exactly 6 for the governed production closure smoke"
+    return 1
+  fi
+
+  run_request "RDV queue" "GET" "/api/controle-voos/rdv/fila?limit=1" "200" "yes"
 }
 
 smoke_frms_fail_safe() {

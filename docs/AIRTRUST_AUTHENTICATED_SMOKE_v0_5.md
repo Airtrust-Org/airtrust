@@ -68,6 +68,23 @@ AIRTRUST_EXPECTED_EMPRESA_CODIGO="empresa-codigo" AIRTRUST_AUTH_TOKEN="<redacted
 
 O script usa `GET /api/auth/empresas` e compara a empresa atual/primaria com o valor esperado. Se houver divergencia, o smoke falha.
 
+## Fechamento RDV Produção
+
+Para validar especificamente a fila de coordenação RDV da Costa do Sol sem persistir credenciais no GitHub:
+
+```bash
+AIRTRUST_EXPECTED_EMPRESA_ID=6 \
+AIRTRUST_RUN_RDV_QUEUE_SMOKE=YES \
+npm run smoke:auth:login
+```
+
+O login é interativo e efêmero. A senha não é exibida, e o material de autenticação é mantido apenas em memória/arquivos temporários removidos ao final. O probe adicional é somente leitura:
+
+- `GET /api/controle-voos/rdv/fila?limit=1`
+- exige HTTP 200;
+- exige empresa esperada 6;
+- não habilita nenhum write.
+
 ## Endpoints Validados
 
 Read-only publico:
