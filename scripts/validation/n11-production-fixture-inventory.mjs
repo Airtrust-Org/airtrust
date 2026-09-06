@@ -56,9 +56,18 @@ function query(sql) {
     },
   );
 
+  const redactSecrets = (value) =>
+    String(value || '')
+      .replace(/[A-Za-z0-9_+\/-]{24,}/g, '[REDACTED]')
+      .replace(/\/accounts\/[^/\s"]+/g, '/accounts/[REDACTED]')
+      .replace(/database\/[0-9a-f-]{16,}/gi, 'database/[REDACTED]');
+
   if (result.status !== 0) {
-    const safeStderr = String(result.stderr || '').replace(/[A-Za-z0-9_+\/-]{24,}/g, '[REDACTED]');
-    console.error(safeStderr);
+    // Surface the failure cause (sanitized) so the read-only run is diagnosable.
+    // wrangler --json routes API errors to stdout, not stderr.
+    console.error(redactSecrets(result.stderr));
+    console.error(`D1_READ_EXIT_STATUS:${result.status ?? 'null'}`);
+    console.error(`D1_READ_STDOUT:${redactSecrets(result.stdout).slice(0, 4000)}`);
     fail('D1_READ_FAILED');
   }
 
@@ -66,6 +75,7 @@ function query(sql) {
   try {
     parsed = JSON.parse(result.stdout || '[]');
   } catch {
+    console.error(`D1_JSON_INVALID_STDOUT:${redactSecrets(result.stdout).slice(0, 4000)}`);
     fail('D1_JSON_INVALID');
   }
   const envelope = Array.isArray(parsed) ? parsed[0] : parsed;
