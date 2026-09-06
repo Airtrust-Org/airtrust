@@ -26,7 +26,7 @@ test('N-11 structural remediation script targets strictly exact IDs and tenant 6
 
   assert.match(script, /const DB_NAME = 'airtrust-db'/);
   assert.match(script, /const EMPRESA_ID = 6/);
-  assert.match(script, /TARGET_FUNCIONARIO_IDS = \[128, 129\]/);
+  assert.match(script, /TARGET_FUNCIONARIO_IDS = \[129\]/);
   assert.match(script, /TARGET_USER_ID = 108/);
 
   // Must not use display-name filtering
