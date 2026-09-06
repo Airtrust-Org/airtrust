@@ -200,13 +200,15 @@ describe('Compliance Stats API', () => {
   it('deve retornar estatísticas agregadas', async () => {
     const prepareMock = mockDB.prepare as ReturnType<typeof vi.fn>;
     prepareMock.mockReturnValue({
-      first: vi.fn(async () => ({
-        total: 100,
-        conformes: 75,
-        a_vencer: 15,
-        vencidos: 8,
-        pendentes: 2,
-        percentual_medio: 82.5,
+      bind: vi.fn(() => ({
+        first: vi.fn(async () => ({
+          total: 100,
+          conformes: 75,
+          a_vencer: 15,
+          vencidos: 8,
+          pendentes: 2,
+          percentual_medio: 82.5,
+        })),
       })),
     });
 
