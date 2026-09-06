@@ -324,9 +324,9 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
         if (!tipoAeronaveEsp) {
           const fichaRef = await c.env.DB.prepare(
             `SELECT tipo_aeronave FROM fichas_sessao
-             WHERE agendamento_slot_id = ? AND deleted_at IS NULL LIMIT 1`,
+             WHERE agendamento_slot_id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
           )
-            .bind(id)
+            .bind(id, empresaId)
             .first();
           tipoAeronaveEsp = (fichaRef as any)?.tipo_aeronave || null;
         }
@@ -355,9 +355,9 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
                     data_conclusao
              FROM fichas_sessao
              WHERE agendamento_slot_id = ? AND colaborador_id_aluno = ?
-               AND tipo_sessao = ? AND deleted_at IS NULL`,
+               AND tipo_sessao = ? AND empresa_id = ? AND deleted_at IS NULL`,
           )
-            .bind(id, instrutorEspecial, esp.modelo)
+            .bind(id, instrutorEspecial, esp.modelo, empresaId)
             .first();
 
           if (!esp.ativo) {
@@ -376,9 +376,9 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
                 await c.env.DB.prepare(
                   `UPDATE fichas_sessao
                    SET deleted_at = datetime('now')
-                   WHERE id = ? AND deleted_at IS NULL`,
+                   WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
                 )
-                  .bind(fichaExistente.id)
+                  .bind(fichaExistente.id, empresaId)
                   .run();
 
                 await c.env.DB.prepare(
