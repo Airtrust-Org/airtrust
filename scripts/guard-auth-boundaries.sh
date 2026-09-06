@@ -51,4 +51,19 @@ for route_file in "${API_MOUNTED_ROUTES[@]}"; do
 
 done
 
+if grep -Fq "pathname.startsWith('/api/certificados/validar')" "$INDEX_FILE"; then
+  echo "❌ Guard falhou: validação pública de certificado usa prefixo sem boundary."
+  exit 1
+fi
+
+grep -Fq "pathname === '/api/certificados/validar'" "$INDEX_FILE" || {
+  echo "❌ Guard falhou: boundary exato de /api/certificados/validar ausente."
+  exit 1
+}
+
+grep -Fq "pathname.startsWith('/api/certificados/validar/')" "$INDEX_FILE" || {
+  echo "❌ Guard falhou: boundary com slash de /api/certificados/validar/* ausente."
+  exit 1
+}
+
 echo "✅ Auth boundary guard OK"

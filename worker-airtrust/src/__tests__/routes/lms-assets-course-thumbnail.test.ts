@@ -20,6 +20,9 @@ import type { Env } from '../../types';
 
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  validateAccessTokenSecurityState: vi.fn(async (_db: unknown, payload: { role?: string }) => ({
+    role: payload.role || 'USUARIO',
+  })),
 }));
 
 vi.mock('../../config/allowed-origins', () => ({
