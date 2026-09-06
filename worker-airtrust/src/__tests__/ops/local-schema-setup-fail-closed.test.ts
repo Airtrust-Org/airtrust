@@ -92,9 +92,20 @@ describe('local D1 setup scripts', () => {
   it('creates LMS tables before validating their contract', () => {
     const source = readScript(lmsSetup);
     const applyIndex = source.indexOf('for migration_file in "${LMS_MIGRATIONS[@]}"; do\n  apply_local_migration');
-    const contractIndex = source.indexOf('for table_name in audit_logs lms_cursos');
+    const contractIndex = source.indexOf('audit_logs lms_cursos');
 
     expect(applyIndex).toBeGreaterThan(-1);
+    expect(contractIndex).toBeGreaterThan(applyIndex);
+  });
+
+  it('provisions token revocation state before LMS auth smoke', () => {
+    const source = readScript(lmsSetup);
+    const migrationIndex = source.indexOf('0289_security_rate_limit_and_token_blocklist.sql');
+    const applyIndex = source.indexOf('for migration_file in "${LMS_MIGRATIONS[@]}"; do\n  apply_local_migration');
+    const contractIndex = source.indexOf('token_blocklist audit_logs lms_cursos');
+
+    expect(migrationIndex).toBeGreaterThan(-1);
+    expect(applyIndex).toBeGreaterThan(migrationIndex);
     expect(contractIndex).toBeGreaterThan(applyIndex);
   });
 
@@ -102,7 +113,7 @@ describe('local D1 setup scripts', () => {
     const source = readScript(lmsSetup);
     const migrationIndex = source.indexOf('0332_create_audit_logs_compatible.sql');
     const applyIndex = source.indexOf('for migration_file in "${LMS_MIGRATIONS[@]}"; do\n  apply_local_migration');
-    const contractIndex = source.indexOf('for table_name in audit_logs lms_cursos');
+    const contractIndex = source.indexOf('for table_name in token_blocklist audit_logs lms_cursos');
 
     expect(migrationIndex).toBeGreaterThan(-1);
     expect(applyIndex).toBeGreaterThan(migrationIndex);
@@ -110,9 +121,10 @@ describe('local D1 setup scripts', () => {
     expect(source).not.toContain('qualificacoes_categorias audit_logs; do');
   });
 
-  it('keeps modern additive LMS schema in the local smoke contract', () => {
+  it('keeps auth revocation and modern additive LMS schema in the local smoke contract', () => {
     const source = readScript(lmsSetup);
     for (const migration of [
+      '0289_security_rate_limit_and_token_blocklist.sql',
       '0456_lms_h5p_course_binding.sql',
       '0465_lms_scorm_package_quality_gate_v1.sql',
       '0469_lms_completion_pendencias_snapshots.sql',
@@ -121,6 +133,7 @@ describe('local D1 setup scripts', () => {
       expect(source).toContain(migration);
     }
     for (const table of [
+      'token_blocklist',
       'lms_scorm_package_versions',
       'lms_scorm_package_audit_log',
       'lms_completion_diagnostics_snapshots',
