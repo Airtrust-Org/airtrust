@@ -65,6 +65,8 @@ function query(sql) {
   if (result.status !== 0) {
     // Surface the failure cause (sanitized) so the read-only run is diagnosable.
     // wrangler --json routes API errors to stdout, not stderr.
+    // The SQL emitted here is schema/id-only (documented fixture labels); it carries no real PII.
+    console.error(`D1_READ_FAILED_SQL:${String(sql).replace(/\s+/g, ' ').trim().slice(0, 600)}`);
     console.error(redactSecrets(result.stderr));
     console.error(`D1_READ_EXIT_STATUS:${result.status ?? 'null'}`);
     console.error(`D1_READ_STDOUT:${redactSecrets(result.stdout).slice(0, 4000)}`);
