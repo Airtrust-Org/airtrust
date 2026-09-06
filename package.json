@@ -171,10 +171,11 @@
     "guard:worker-bundle-provenance": "node scripts/guard-worker-bundle-provenance.mjs",
     "guard:cloudflare-secret-contract": "node scripts/ci/guard-cloudflare-secret-contract.mjs",
     "guard:sanitization": "node scripts/guard-sanitization.mjs",
+    "guard:pii-delta": "node scripts/guard-pii-delta.mjs",
     "guard:package-references": "node scripts/guard-package-references.mjs",
     "guard:route-ownership": "node scripts/guard-route-ownership.mjs",
     "typecheck:ratchet": "node scripts/guard-typescript-baseline-ratchet.mjs",
-    "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries && npm run guard:empresa-default1 && npm run guard:duplicate-migrations && npm run guard:no-go-migrations && npm run guard:operational-sql-sources && npm run guard:typescript-delta && npm run guard:frms-no-direct-sigvoos && npm run guard:staging-version-stamp && npm run guard:local-maintenance-runtime && npm run guard:worker-bundle-provenance && npm run guard:cloudflare-secret-contract && npm run guard:sanitization && npm run guard:no-raw-fetch && npm run guard:package-references && npm run guard:route-ownership",
+    "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:auth-boundaries && npm run guard:empresa-default1 && npm run guard:duplicate-migrations && npm run guard:no-go-migrations && npm run guard:operational-sql-sources && npm run guard:typescript-delta && npm run guard:frms-no-direct-sigvoos && npm run guard:staging-version-stamp && npm run guard:local-maintenance-runtime && npm run guard:worker-bundle-provenance && npm run guard:cloudflare-secret-contract && npm run guard:sanitization && npm run guard:pii-delta && npm run guard:no-raw-fetch && npm run guard:package-references && npm run guard:route-ownership",
     "guard:no-raw-fetch": "node scripts/guard-no-raw-fetch.mjs"
   }
 }
