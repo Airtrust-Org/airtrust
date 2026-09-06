@@ -28,6 +28,13 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
+vi.mock('../../routes/simuladores-sessoes-rbac', () => ({
+  requireOperacoesSessao:
+    () =>
+    async (_c: unknown, next: () => Promise<void>) =>
+      next(),
+}));
+
 let mockConflict: any = null;
 
 vi.mock('../../routes/simuladores-shared', async () => {
