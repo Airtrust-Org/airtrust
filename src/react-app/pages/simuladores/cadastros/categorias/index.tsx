@@ -35,7 +35,7 @@ export default function CrudCategorias({ embedded = false, onBack }: Props = {})
     carregarCategorias();
   }, []);
 
-  const _authH = () => {
+  const _authH = (): Record<string, string> => {
     const t = getAccessToken();
     return t ? { Authorization: `Bearer ${t}` } : {};
   };

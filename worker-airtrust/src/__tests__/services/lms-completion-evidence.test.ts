@@ -25,6 +25,7 @@ function valid(overrides: Partial<LmsCompletionEvidenceInput> = {}): LmsCompleti
     requiresAssessment: true,
     generatesQualification: true,
     informativeCourse: false,
+    contentEvidenceValidated: true,
     ...overrides,
   };
 }
@@ -132,6 +133,22 @@ describe('LMS completion evidence decision table', () => {
       accepted: true,
       code: 'COMPLETION_ACCEPTED',
     });
+  });
+
+  it('rejects a qualifying PDF finalization backed only by client progress', () => {
+    expect(
+      evaluateLmsCompletionEvidence(
+        valid({
+          source: 'manual',
+          assetSessionValid: false,
+          lessonStatus: null,
+          completionStatus: null,
+          successStatus: null,
+          requiresAssessment: false,
+          contentEvidenceValidated: false,
+        }),
+      ),
+    ).toMatchObject({ accepted: false, code: 'CONTENT_EVIDENCE_REQUIRED' });
   });
 
   it('13. is deterministic and idempotent for repeated commits', () => {

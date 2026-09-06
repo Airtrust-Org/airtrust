@@ -38,7 +38,7 @@ export default function ListaDocumentos({ funcionarioId }: ListaDocumentosProps)
       setError(null);
 
       const token = getAccessToken();
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
       const response = await fetch(`${API_BASE_URL}/funcionarios/${funcionarioId}/documentos`, {
         headers,
@@ -63,7 +63,7 @@ export default function ListaDocumentos({ funcionarioId }: ListaDocumentosProps)
   const handleDownload = async (docId: number, nomeArquivo: string) => {
     try {
       const token = getAccessToken();
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
       const response = await apiFetch(`/api/documentos/${docId}/download`, {
         headers,
@@ -92,7 +92,7 @@ export default function ListaDocumentos({ funcionarioId }: ListaDocumentosProps)
 
     try {
       const token = getAccessToken();
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
       const response = await apiFetch(`/api/documentos/${docId}`, {
         method: 'DELETE',

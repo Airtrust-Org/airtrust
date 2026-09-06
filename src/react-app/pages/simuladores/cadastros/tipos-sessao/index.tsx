@@ -37,7 +37,7 @@ export default function CrudTiposSessao({ embedded = false, onBack }: Props = {}
     carregarTipos();
   }, []);
 
-  const _authH = () => {
+  const _authH = (): Record<string, string> => {
     const t = getAccessToken();
     return t ? { Authorization: `Bearer ${t}` } : {};
   };

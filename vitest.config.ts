@@ -36,13 +36,15 @@ export default defineConfig({
         'src/react-app/pages/escalas/**/*.tsx',
       ],
       exclude: ['node_modules/', 'src/**/*.d.ts', 'src/**/__tests__/**', 'dist/', 'cypress/'],
+      // Ratchet baseline from canonical main 52bd7abc CI:
+      // statements 22.12%, branches 20.84%, functions 19.42%, lines 22.26%.
+      // Keep thresholds at the Vitest-supported root level so the gate is
+      // actually enforced; increases should be monotonic as coverage improves.
       thresholds: {
-        global: {
-          branches: 75,
-          functions: 80,
-          lines: 80,
-          statements: 80,
-        },
+        branches: 20.8,
+        functions: 19.4,
+        lines: 22.2,
+        statements: 22.1,
       },
     },
   },

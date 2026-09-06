@@ -106,18 +106,42 @@ curl -fsS -X PATCH "$API_BASE/lms/matriculas/$PPTX_MATRICULA_ID/progresso" \
   -H 'Content-Type: application/json' \
   -d '{"progresso_pct":100}' >/dev/null
 
-echo "[smoke:lms] Finalizing enrollments through end-user flow"
-curl -fsS -X POST "$API_BASE/lms/matriculas/$PDF_MATRICULA_ID/finalizar" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{}' >/dev/null
+finalize_requires_server_evidence() {
+  local matricula_id="$1"
+  local label="$2"
+  local body_file
+  local http_code
+  local code
 
-curl -fsS -X POST "$API_BASE/lms/matriculas/$PPTX_MATRICULA_ID/finalizar" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{}' >/dev/null
+  body_file="$(mktemp)"
+  http_code="$(curl -sS -o "$body_file" -w '%{http_code}' -X POST "$API_BASE/lms/matriculas/$matricula_id/finalizar" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H 'Content-Type: application/json' \
+    -d '{}')"
 
-echo "[smoke:lms] Checking qualification linkage in local D1"
+  if [[ "$http_code" != "409" ]]; then
+    echo "$label finalization should fail closed with HTTP 409; got $http_code." >&2
+    cat "$body_file" >&2
+    rm -f "$body_file"
+    exit 1
+  fi
+
+  code="$(json_get code < "$body_file")"
+  if [[ "$code" != "CONTENT_EVIDENCE_REQUIRED" ]]; then
+    echo "$label finalization returned unexpected code: $code" >&2
+    cat "$body_file" >&2
+    rm -f "$body_file"
+    exit 1
+  fi
+
+  rm -f "$body_file"
+}
+
+echo "[smoke:lms] Confirming qualifying non-SCORM content fails closed without server evidence"
+finalize_requires_server_evidence "$PDF_MATRICULA_ID" "PDF"
+finalize_requires_server_evidence "$PPTX_MATRICULA_ID" "PPTX"
+
+echo "[smoke:lms] Checking that no qualification linkage was created in local D1"
 PDF_ROW="$(sql "SELECT status || '|' || COALESCE(CAST(qualificacao_historico_id AS TEXT), '') FROM lms_matriculas WHERE id = $PDF_MATRICULA_ID LIMIT 1;")"
 PPTX_ROW="$(sql "SELECT status || '|' || COALESCE(CAST(qualificacao_historico_id AS TEXT), '') FROM lms_matriculas WHERE id = $PPTX_MATRICULA_ID LIMIT 1;")"
 
@@ -126,22 +150,20 @@ PDF_HISTORICO_ID="${PDF_ROW#*|}"
 PPTX_STATUS="${PPTX_ROW%%|*}"
 PPTX_HISTORICO_ID="${PPTX_ROW#*|}"
 
-if [[ "$PDF_STATUS" != "CONCLUIDO" || -z "$PDF_HISTORICO_ID" ]]; then
-  echo "PDF flow did not generate qualification as expected." >&2
+if [[ "$PDF_STATUS" == "CONCLUIDO" || -n "$PDF_HISTORICO_ID" ]]; then
+  echo "PDF flow created qualification without server-validated evidence." >&2
   echo "$PDF_OUTPUT"
   exit 1
 fi
 
-if [[ "$PPTX_STATUS" != "CONCLUIDO" || -z "$PPTX_HISTORICO_ID" ]]; then
-  echo "PPTX flow did not generate qualification as expected." >&2
+if [[ "$PPTX_STATUS" == "CONCLUIDO" || -n "$PPTX_HISTORICO_ID" ]]; then
+  echo "PPTX flow created qualification without server-validated evidence." >&2
   echo "$PPTX_OUTPUT"
   exit 1
 fi
 
-echo "[smoke:lms] OK"
+echo "[smoke:lms] OK — qualifying PDF/PPTX remain unqualified without server evidence"
 echo "PDF_CURSO_ID=$PDF_CURSO_ID"
 echo "PDF_MATRICULA_ID=$PDF_MATRICULA_ID"
-echo "PDF_QUALIFICACAO_HISTORICO_ID=$PDF_HISTORICO_ID"
 echo "PPTX_CURSO_ID=$PPTX_CURSO_ID"
 echo "PPTX_MATRICULA_ID=$PPTX_MATRICULA_ID"
-echo "PPTX_QUALIFICACAO_HISTORICO_ID=$PPTX_HISTORICO_ID"

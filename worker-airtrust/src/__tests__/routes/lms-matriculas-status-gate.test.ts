@@ -140,6 +140,7 @@ const scormMatriculaWithQual = {
   qualificacao_tipo_id: 7,
   tipo_conteudo: 'scorm',
   scorm_mastery_score: 70,
+  gerar_qualificacao_ao_concluir: 1,
   qualificacao_nome: 'AW139',
   qualificacao_codigo: 'MNT_AW139',
   qualificacao_categoria: 'manutencao',
@@ -331,9 +332,9 @@ describe('PATCH /:id/status — qualification gate', () => {
     );
   });
 
-  // ── 5. Admin CONCLUIDO + conteúdo não-SCORM → sem gate SCORM, 200 ─────────
+  // ── 5. Admin CONCLUIDO + conteúdo não-SCORM qualificante → evidência exigida ─
 
-  it('aceita CONCLUIDO sem gate SCORM para curso nao-SCORM (PDF)', async () => {
+  it('rejeita CONCLUIDO para PDF qualificante sem evidência server-side', async () => {
     hasRoleMock.mockReturnValue(true);
 
     const pdfMatricula = {
@@ -341,19 +342,19 @@ describe('PATCH /:id/status — qualification gate', () => {
       tipo_conteudo: 'pdf',
       scorm_mastery_score: null,
     };
-    const updatedPdf = { ...pdfMatricula, status: 'CONCLUIDO' };
-
     const { db } = createMockDb([
       ['c.tipo_conteudo, c.scorm_mastery_score', { first: () => pdfMatricula }],
-      // sem mock de lms_progresso_scorm — gate SCORM não deve consultar
-      ['data_conclusao = COALESCE', {}],
-      ['SELECT * FROM lms_matriculas WHERE id = ? AND empresa_id = ?', { first: () => updatedPdf }],
     ]);
 
     const res = await patchStatus(makeApp(), db, 200, { status: 'CONCLUIDO' });
 
-    expect(res.status).toBe(200);
-    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      success: false,
+      code: 'CONTENT_EVIDENCE_REQUIRED',
+      data: { matricula_id: 200, qualificacao_gerada: null },
+    });
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 
   // ── 6. Manager pode alterar status não-CONCLUIDO sem gate ─────────────────
@@ -385,7 +386,11 @@ describe('PATCH /:id/status — qualification gate', () => {
       matriculaId: 200,
     });
 
-    const semQual = { ...scormMatriculaWithQual, qualificacao_tipo_id: null };
+    const semQual = {
+      ...scormMatriculaWithQual,
+      qualificacao_tipo_id: null,
+      gerar_qualificacao_ao_concluir: 0,
+    };
     const updatedSemQual = { ...semQual, status: 'CONCLUIDO' };
 
     const { db } = createMockDb([
