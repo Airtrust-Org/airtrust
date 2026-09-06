@@ -244,7 +244,7 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
     completeLmsMatriculaMock.mockRejectedValue(new LmsCompletionRejectedError('rejeitado'));
 
     const { app, db } = makeTestEnv([
-      ['FROM lms_matriculas m', { first: () => ({ ...MATRICULA_EM_ANDAMENTO_BASE, tipo_conteudo: 'pdf' }) }],
+      ['FROM lms_matriculas m', { first: () => ({ ...MATRICULA_EM_ANDAMENTO_BASE, tipo_conteudo: 'h5p' }) }],
       ['FROM lms_progresso_scorm', { first: () => null }],
     ]);
 
@@ -261,7 +261,7 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
     completeLmsMatriculaMock.mockRejectedValue(new LmsCompletionRejectedError('rejeitado'));
 
     const { app, db } = makeTestEnv([
-      ['FROM lms_matriculas m', { first: () => ({ ...MATRICULA_EM_ANDAMENTO_BASE, curso_id: 10, tipo_conteudo: 'pdf' }) }],
+      ['FROM lms_matriculas m', { first: () => ({ ...MATRICULA_EM_ANDAMENTO_BASE, curso_id: 10, tipo_conteudo: 'h5p' }) }],
     ]);
 
     const response = await app.fetch(

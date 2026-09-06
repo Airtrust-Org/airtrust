@@ -75,6 +75,7 @@ vi.mock('../../lib/email', () => ({
 }));
 
 import lmsMatriculasRoutes from '../../routes/lms-matriculas';
+import { enforceLmsCompletionIntegrity } from '../../middleware/lms-completion-integrity';
 
 type QueryHandler = {
   first?: (args: unknown[]) => Promise<unknown> | unknown;
@@ -1272,10 +1273,10 @@ describe('lms matriculas progress integrity', () => {
     ).toBe(false);
   });
 
-  it('preserva a finalizacao manual de conteudo nao-scorm usada pelos players PDF e PPTX', async () => {
+  it('preserva a finalizacao manual de conteúdo não qualificante', async () => {
     completeLmsMatriculaMock.mockResolvedValue({
-      outcome: 'qualification_created',
-      qualificacaoHistoricoId: 9100,
+      outcome: 'qualification_not_required',
+      qualificacaoHistoricoId: null,
       matriculaId: 402,
     });
 
@@ -1291,8 +1292,8 @@ describe('lms matriculas progress integrity', () => {
             progresso_pct: 100,
             qualificacao_historico_id: null,
             tipo_conteudo: 'pdf',
-            gerar_qualificacao_ao_concluir: 1,
-            qualificacao_tipo_id: 131,
+            gerar_qualificacao_ao_concluir: 0,
+            qualificacao_tipo_id: null,
             scorm_mastery_score: null,
             curso_titulo: 'Manual PDF',
             qualificacao_codigo: 'PDF_MANUAL',
@@ -1334,12 +1335,119 @@ describe('lms matriculas progress integrity', () => {
         matricula_id: 402,
         novo_status: 'CONCLUIDO',
         progresso_pct: 100,
-        qualificacao_gerada: {
-          qualificacao_historico_id: 9100,
-        },
+        qualificacao_gerada: null,
       },
     });
     expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('PATCH PDF 100 seguido de finalizar não emite qualificação nem certificado sem evidência server-side', async () => {
+    let progress = 0;
+    const db = {
+      prepare: vi.fn((query: string) => {
+        const result = {
+          __sql: query,
+          first: async () => {
+            if (query.includes('FROM lms_matriculas m')) {
+              return {
+                id: 402,
+                empresa_id: 1,
+                funcionario_id: 77,
+                status: 'EM_ANDAMENTO',
+                progresso_pct: progress,
+                qualificacao_historico_id: null,
+                curso_id: 131,
+                tipo_conteudo: 'pdf',
+                ativo: 1,
+                publicado: 1,
+                scorm_mastery_score: null,
+                scorm_package_r2_prefix: null,
+                scorm_launch_file: null,
+                gerar_qualificacao_ao_concluir: 1,
+                lesson_status: null,
+                completion_status: null,
+                success_status: null,
+                score_raw: null,
+                score_min: null,
+                score_max: null,
+                score_scaled: null,
+                session_time: null,
+                total_time: null,
+                suspend_data: null,
+                cmi_json: null,
+                xapi_count: 0,
+              };
+            }
+            if (query.includes('SELECT id, status, funcionario_id, progresso_pct')) {
+              return {
+                id: 402,
+                status: 'EM_ANDAMENTO',
+                funcionario_id: 77,
+                progresso_pct: progress,
+                ultimo_slide: 0,
+                ultima_pagina: 0,
+              };
+            }
+            if (query.includes('SELECT id, status, progresso_pct, ultimo_slide, ultima_pagina')) {
+              return {
+                id: 402,
+                status: 'EM_ANDAMENTO',
+                progresso_pct: progress,
+                ultimo_slide: 0,
+                ultima_pagina: 0,
+              };
+            }
+            return null;
+          },
+          run: async () => ({ meta: { changes: 1 } }),
+          all: async () => ({ results: [] }),
+        };
+        return {
+          ...result,
+          bind: () => result,
+        };
+      }),
+      batch: vi.fn(async () => {
+        progress = 100;
+        return [];
+      }),
+    } as unknown as D1Database;
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.use('*', async (c, next) => {
+      c.set('empresaId' as never, 1 as never);
+      c.set('userId' as never, 42 as never);
+      c.set('funcionarioId' as never, 77 as never);
+      const guarded = await enforceLmsCompletionIntegrity(c as never);
+      if (guarded) return guarded;
+      return next();
+    });
+    app.route('/api/lms/matriculas', lmsMatriculasRoutes);
+
+    const progressResponse = await app.fetch(
+      new Request('http://localhost/api/lms/matriculas/402/progresso', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ progresso_pct: 100 }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(progressResponse.status).toBe(200);
+    expect(progress).toBe(100);
+
+    const finalizeResponse = await app.fetch(
+      new Request('http://localhost/api/lms/matriculas/402/finalizar', { method: 'POST' }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(finalizeResponse.status).toBe(409);
+    await expect(finalizeResponse.json()).resolves.toMatchObject({
+      success: false,
+      code: 'CONTENT_EVIDENCE_REQUIRED',
+      data: { matricula_id: 402 },
+    });
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 
   it('nao usa a nota do quiz como progresso quando o pacote informa localizacao real', async () => {
