@@ -160,7 +160,11 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
     let participantesParaNotificacaoAlterados = false;
     const modeloAeronaveSessao =
       normalizeModeloAeronave(b.tipo_aeronave) ||
-      (await getSimuladorModeloAeronave(c.env.DB, (a as any).simulador_id, empresaId));
+      (await getSimuladorModeloAeronave(
+        c.env.DB,
+        (a as { simulador_id?: string | number | null }).simulador_id,
+        empresaId,
+      ));
     let checksNormalizados: number[] = [];
     try {
       checksNormalizados = await normalizeChecksSessao(c.env.DB, b.checks, modeloAeronaveSessao, empresaId);
@@ -844,7 +848,7 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
             tipoAeronave =
               (await getSimuladorModeloAeronave(
                 c.env.DB,
-                (sessaoAtual as any)?.simulador_id,
+                (sessaoAtual as { simulador_id?: string | number | null } | null)?.simulador_id,
                 empresaId,
               )) || null;
           }
