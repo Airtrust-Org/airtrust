@@ -54,6 +54,13 @@ function createDbMock(options?: {
         bind(...args: unknown[]) {
           return {
             async first<T>() {
+            if (
+              sql ===
+              'SELECT id FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL'
+            ) {
+              return { id: Number(args[0]) } as T;
+            }
+
             // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
             if (sql.includes('FROM empresas WHERE id')) {
               return { operational_domain_rbac_enabled: 0 } as T;
