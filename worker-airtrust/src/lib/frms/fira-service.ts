@@ -1348,16 +1348,16 @@ export async function vincularTripulanteFira(
         WHERE id = ?
           AND deleted_at IS NULL
           AND (
-            EXISTS (
+            (frms_importacao_fira.tripulante_id IS NOT NULL AND EXISTS (
               SELECT 1 FROM funcionarios p
                WHERE p.id = CAST(frms_importacao_fira.tripulante_id AS INTEGER)
                  AND p.empresa_id = ?
-            )
-            OR EXISTS (
+            ))
+            OR (frms_importacao_fira.tripulante_id IS NULL AND EXISTS (
               SELECT 1 FROM funcionarios op
                WHERE op.id = CAST(frms_importacao_fira.importado_por AS INTEGER)
                  AND op.empresa_id = ?
-            )
+            ))
           )`,
     )
     .bind(tripulanteId, timestamp, importacaoId, tenantEmpresaId, tenantEmpresaId)
