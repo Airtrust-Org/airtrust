@@ -264,3 +264,6 @@ guias-manifest/
 guias-assets/
 
 db/
+# ========== OPERATIONAL / AUDIT ARTIFACTS (NEVER COMMIT) ==========
+/artifacts/
+
