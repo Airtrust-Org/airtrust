@@ -71,7 +71,7 @@ describe('resilient scheduled router', () => {
       'utf8',
     );
     const schemaProbeIndex = router.indexOf('await assertCronStateSchemaAvailable(env.DB)');
-    const dailyAlertsIndex = router.indexOf('await alertasDiariosHandler(event, env)');
+    const dailyAlertsIndex = router.indexOf('alertasDiariosHandler(event, env)');
 
     expect(schemaProbeIndex).toBeGreaterThan(-1);
     expect(dailyAlertsIndex).toBeGreaterThan(-1);
@@ -102,6 +102,12 @@ describe('resilient scheduled router', () => {
     expect(router).toContain('Schema resiliente ausente; usando handler legado');
     expect(router).toContain('logCronHealthSnapshot(env.DB, logger, now)');
     expect(router).toContain('runDomainEventDispatchJob(env.DB, logger)');
+    expect(router).toContain("await runStep('lms-reminders'");
+    expect(router).toContain("await runStep('sigvoos-frms'");
+    expect(router).toContain("await runStep('domain-events'");
+    expect(router).toContain("await runStep('cron-health'");
+    expect(router).toContain('CRON_TICK_PARTIAL_FAILURE');
+    expect(router).not.toContain('await Promise.allSettled(');
   });
 });
 

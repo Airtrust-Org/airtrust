@@ -93,37 +93,9 @@ export async function runResilientScheduledJobs(
     return;
   }
 
+  // Decide fallback before alerts, e-mails or any other side effect.
   try {
-    // Decide fallback before alerts, e-mails or any other side effect.
     await assertCronStateSchemaAvailable(env.DB);
-
-    if (plan.runDailyAlerts) {
-      await alertasDiariosHandler(event, env);
-    }
-
-    if (plan.runLmsReminders) {
-      await runLmsReminderJob(env.DB, logger, now);
-    }
-
-    if (plan.runEadRenewal) {
-      await runEadRenewalJob(env.DB, env, logger);
-    }
-
-    if (plan.runSigvoosFrms) {
-      await runSigvoosFrmsJobs(env.DB, env, logger, now);
-    }
-
-    if (plan.runDomainEvents) {
-      await runDomainEventDispatchJob(env.DB, logger);
-    }
-
-    if (plan.runDailyFrms) {
-      await runDailyFrmsOperations(event, env, logger);
-    }
-
-    if (plan.runCronHealth) {
-      await logCronHealthSnapshot(env.DB, logger, now);
-    }
   } catch (error) {
     if (isMissingCronStateSchema(error)) {
       logger.warn('[CRON_ROUTER] Schema resiliente ausente; usando handler legado nesta execução', {
@@ -133,17 +105,49 @@ export async function runResilientScheduledJobs(
       await legacyHandler(event, env, ctx);
       return;
     }
-
-    logger.error('[CRON_ROUTER] Falha não recuperável antes da delegação legada', {
-      trigger: event.cron,
-      error_code: error instanceof Error ? error.message : String(error),
-    });
     throw error;
   }
+
+  const failures: Array<{ job: string; error: string }> = [];
+  const runStep = async (job: string, enabled: boolean, task: () => Promise<unknown>) => {
+    if (!enabled) return;
+    try {
+      await task();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push({ job, error: message });
+      logger.error('[CRON_ROUTER] Job falhou; demais jobs do tick continuarão em ordem', {
+        trigger: event.cron,
+        job,
+        error_code: message,
+      });
+    }
+  };
+
+  // Preserve the existing ordering. Isolation is sequential rather than
+  // Promise.allSettled because SIGVOOS/domain-event/FRMS jobs can have
+  // operational dependencies and must not be made concurrent by a reliability fix.
+  await runStep('daily-alerts', plan.runDailyAlerts, () => alertasDiariosHandler(event, env));
+  await runStep('lms-reminders', plan.runLmsReminders, () => runLmsReminderJob(env.DB, logger, now));
+  await runStep('ead-renewal', plan.runEadRenewal, () => runEadRenewalJob(env.DB, env, logger));
+  await runStep('sigvoos-frms', plan.runSigvoosFrms, () =>
+    runSigvoosFrmsJobs(env.DB, env, logger, now),
+  );
+  await runStep('domain-events', plan.runDomainEvents, () =>
+    runDomainEventDispatchJob(env.DB, logger),
+  );
+  await runStep('daily-frms', plan.runDailyFrms, () => runDailyFrmsOperations(event, env, logger));
+  await runStep('cron-health', plan.runCronHealth, () => logCronHealthSnapshot(env.DB, logger, now));
 
   if (plan.delegateLegacy) {
     // Keep daily generic maintenance, while neutralizing the functional blocks
     // already executed by the resilient router.
-    await legacyHandler(withDelegatedCron(event), env, ctx);
+    await runStep('legacy-delegated', true, () => legacyHandler(withDelegatedCron(event), env, ctx));
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `CRON_TICK_PARTIAL_FAILURE: ${failures.map((failure) => failure.job).join(', ')}`,
+    );
   }
 }
