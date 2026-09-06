@@ -25,7 +25,6 @@ LMS_MIGRATIONS=(
   "$WORKER_DIR/migrations/0320_treinamentos_convocacao_email.sql"
   # completeLmsMatricula grava audit_logs no mesmo db.batch() da conclusão.
   # O snapshot local não possui essa tabela; ela deve ser criada antes do smoke.
-  "$WORKER_DIR/migrations/0289_security_rate_limit_and_token_blocklist.sql"
   "$WORKER_DIR/migrations/0332_create_audit_logs_compatible.sql"
   "$WORKER_DIR/migrations/0335_lms_cursos.sql"
   "$WORKER_DIR/migrations/0336_lms_matriculas.sql"
