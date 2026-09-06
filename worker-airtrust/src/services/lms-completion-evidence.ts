@@ -8,6 +8,7 @@ export type LmsCompletionDecisionCode =
   | 'PACKAGE_BINDING_INVALID'
   | 'ASSET_SESSION_INVALID'
   | 'PROGRESS_EVIDENCE_MISSING'
+  | 'CONTENT_EVIDENCE_REQUIRED'
   | 'COMPLETION_EVIDENCE_INSUFFICIENT'
   | 'EXPLICIT_FAILURE'
   | 'STATE_INCONSISTENT'
@@ -40,6 +41,12 @@ export interface LmsCompletionEvidenceInput {
   requiresAssessment: boolean;
   generatesQualification: boolean;
   informativeCourse: boolean;
+  /**
+   * True only when the server has validated the completion signal using the
+   * runtime appropriate to the content (for example SCORM runtime or H5P
+   * xAPI). A browser-reported percentage is deliberately not this evidence.
+   */
+  contentEvidenceValidated?: boolean;
   minimumTimeSatisfied?: boolean;
   stateConsistent?: boolean;
   administrativeAuthorized?: boolean;
@@ -205,6 +212,14 @@ export function evaluateLmsCompletionEvidence(
   }
   if (input.minimumTimeSatisfied === false) {
     return reject('COMPLETION_EVIDENCE_INSUFFICIENT', scoreValue, masteryValue);
+  }
+
+  // A qualification is an operational record, not a UI progress badge. For
+  // non-interactive content the generic PATCH /progresso value is authored by
+  // the browser and cannot authorize issuance on its own. Such content needs a
+  // server-validated evidence mechanism before it may mint a qualification.
+  if (input.generatesQualification && input.contentEvidenceValidated !== true) {
+    return reject('CONTENT_EVIDENCE_REQUIRED', scoreValue, masteryValue);
   }
 
   if (input.source === 'administrative') {

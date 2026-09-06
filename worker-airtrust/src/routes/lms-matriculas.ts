@@ -424,6 +424,15 @@ function requiresExplicitScormCompletion(
   return isScorm && completionDiagnostic.explicit_completion !== true;
 }
 
+function requiresServerValidatedNonScormEvidence(
+  tipoConteudo: string | null | undefined,
+  gerarQualificacaoAoConcluir: number | null | undefined,
+): boolean {
+  if (gerarQualificacaoAoConcluir !== 1) return false;
+  const type = String(tipoConteudo ?? 'scorm').trim().toLowerCase();
+  return !['scorm', 'h5p'].includes(type);
+}
+
 function emitScormCommitTelemetry(params: {
   matriculaId: number;
   cursoTitulo: string;
@@ -2099,6 +2108,29 @@ app.post('/:id/finalizar', async (c) => {
     );
   }
 
+  if (
+    requiresServerValidatedNonScormEvidence(
+      matricula.tipo_conteudo,
+      matricula.gerar_qualificacao_ao_concluir,
+    )
+  ) {
+    return c.json(
+      {
+        success: false,
+        code: 'CONTENT_EVIDENCE_REQUIRED',
+        error:
+          'Conteúdo não-SCORM qualificante exige evidência de conclusão validada pelo servidor.',
+        data: {
+          matricula_id: matriculaId,
+          novo_status: matricula.status,
+          progresso_pct: matricula.progresso_pct,
+          qualificacao_gerada: null,
+        },
+      },
+      409,
+    );
+  }
+
   const dataConclusao = new Date().toISOString().slice(0, 10);
 
   // Toda a persistência da conclusão é delegada ao serviço canônico —
@@ -2341,6 +2373,29 @@ app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
           409,
         );
       }
+    }
+
+    if (
+      requiresServerValidatedNonScormEvidence(
+        existing.tipo_conteudo,
+        existing.gerar_qualificacao_ao_concluir,
+      )
+    ) {
+      return c.json(
+        {
+          success: false,
+          code: 'CONTENT_EVIDENCE_REQUIRED',
+          error:
+            'Conteúdo não-SCORM qualificante exige evidência de conclusão validada pelo servidor.',
+          data: {
+            matricula_id: matriculaId,
+            novo_status: existing.status,
+            progresso_pct: existing.progresso_pct,
+            qualificacao_gerada: null,
+          },
+        },
+        409,
+      );
     }
   }
   // ────────────────────────────────────────────────────────────────────────────

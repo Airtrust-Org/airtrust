@@ -256,6 +256,28 @@ function isInteractive(row: EnrollmentEvidenceRow): boolean {
   return type === 'scorm' || type === 'h5p';
 }
 
+function contentEvidenceValidated(row: EnrollmentEvidenceRow, source: LmsCompletionSource): boolean {
+  const type = String(row.tipo_conteudo ?? 'scorm')
+    .trim()
+    .toLowerCase();
+
+  // SCORM and H5P completion claims are checked by their respective runtime
+  // guards above. A manual/admin request may reuse only persisted SCORM final
+  // status; it must never turn a client-owned non-SCORM percentage into an
+  // issuance signal.
+  if (source === 'scorm') return type === 'scorm';
+  if (source === 'xapi') return type === 'h5p';
+  if (source === 'administrative') {
+    return (
+      type === 'scorm' &&
+      (['completed', 'complete'].includes(normalizeStatus(row.completion_status)) ||
+        ['passed', 'completed', 'complete'].includes(normalizeStatus(row.lesson_status)) ||
+        normalizeStatus(row.success_status) === 'passed')
+    );
+  }
+  return false;
+}
+
 function packageBound(row: EnrollmentEvidenceRow): boolean {
   const type = String(row.tipo_conteudo ?? 'scorm')
     .trim()
@@ -289,8 +311,11 @@ function buildDecision(
     hasIncomingRuntimeEvidence(incoming) ||
     Number(row.xapi_count ?? 0) > 0 ||
     progressPct > 0;
-  const requiresAssessment =
-    interactive && (row.gerar_qualificacao_ao_concluir === 1 || row.scorm_mastery_score !== null);
+  // Qualification issuance does not imply an assessment. Require a score only
+  // when the course explicitly configures a mastery threshold; otherwise H5P
+  // (and other runtimes with a valid completion event) may conclude without a
+  // fabricated score.
+  const requiresAssessment = row.scorm_mastery_score !== null;
 
   return evaluateLmsCompletionEvidence({
     source,
@@ -313,6 +338,7 @@ function buildDecision(
     requiresAssessment,
     generatesQualification: row.gerar_qualificacao_ao_concluir === 1,
     informativeCourse: !interactive && row.gerar_qualificacao_ao_concluir !== 1,
+    contentEvidenceValidated: contentEvidenceValidated(row, source),
     minimumTimeSatisfied: undefined,
     administrativeAuthorized: options.administrativeAuthorized,
     administrativeReason: options.administrativeReason,
