@@ -110,6 +110,27 @@ describe('local D1 setup scripts', () => {
     expect(source).not.toContain('qualificacoes_categorias audit_logs; do');
   });
 
+  it('keeps modern additive LMS schema in the local smoke contract', () => {
+    const source = readScript(lmsSetup);
+    for (const migration of [
+      '0456_lms_h5p_course_binding.sql',
+      '0465_lms_scorm_package_quality_gate_v1.sql',
+      '0469_lms_completion_pendencias_snapshots.sql',
+      '0470_certificado_validacao_hash_index.sql',
+    ]) {
+      expect(source).toContain(migration);
+    }
+    for (const table of [
+      'lms_scorm_package_versions',
+      'lms_scorm_package_audit_log',
+      'lms_completion_diagnostics_snapshots',
+    ]) {
+      expect(source).toContain(table);
+    }
+    expect(source).toContain('require_sqlite_column "lms_cursos" "h5p_conteudo_id"');
+    expect(source).toContain('require_sqlite_column "qualificacoes_historico" "validacao_hash"');
+  });
+
   it.each(setupScripts)('%s excludes the incompatible training-class migration', (scriptPath) => {
     const source = readScript(scriptPath);
     expect(source).not.toContain('$WORKER_DIR/migrations/0390_training_class_management.sql');
