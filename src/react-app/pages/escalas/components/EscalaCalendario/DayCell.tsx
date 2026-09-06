@@ -236,6 +236,7 @@ function buildDayEvents(
       extra: placeholderExtra || (isAvulsa ? 'Sem aeronave' : undefined),
       backgroundColor: placeholderColor,
       textColor: '#FFFFFF',
+      autoGerado: false,
     });
   }
 
@@ -247,6 +248,7 @@ function buildDayEvents(
       badgeLabel: configMap?.['FOL']?.sigla || 'FO',
       backgroundColor: folgaColor,
       textColor: '#FFFFFF',
+      autoGerado: false,
     });
   }
 
