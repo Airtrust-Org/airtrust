@@ -103,7 +103,7 @@ const allowedFields = new Set([
   'alternado_destino_id',
 ]);
 
-const allowedFieldsWithVersion = new Set([...allowedFields, 'versao']);
+const allowedFieldsWithVersion = new Set([...allowedFields, 'versao'].filter((field) => field !== 'status'));
 
 const blockedFields = new Set([
   'id',
