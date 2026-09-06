@@ -160,7 +160,7 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
     let participantesParaNotificacaoAlterados = false;
     const modeloAeronaveSessao =
       normalizeModeloAeronave(b.tipo_aeronave) ||
-      (await getSimuladorModeloAeronave(c.env.DB, (a as any).simulador_id));
+      (await getSimuladorModeloAeronave(c.env.DB, (a as any).simulador_id, empresaId));
     let checksNormalizados: number[] = [];
     try {
       checksNormalizados = await normalizeChecksSessao(c.env.DB, b.checks, modeloAeronaveSessao, empresaId);
@@ -834,19 +834,19 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
           let tipoAeronave: string | null = b.tipo_aeronave || null;
           if (!tipoAeronave) {
             const fichaRef = await c.env.DB.prepare(
-              'SELECT tipo_aeronave FROM fichas_sessao WHERE agendamento_slot_id=? AND deleted_at IS NULL LIMIT 1',
+              'SELECT tipo_aeronave FROM fichas_sessao WHERE agendamento_slot_id=? AND empresa_id=? AND deleted_at IS NULL LIMIT 1',
             )
-              .bind(id)
+              .bind(id, empresaId)
               .first();
             tipoAeronave = (fichaRef as any)?.tipo_aeronave || null;
           }
           if (!tipoAeronave) {
-            const simRef = await c.env.DB.prepare(
-              'SELECT tipo FROM simuladores WHERE id=? AND deleted_at IS NULL',
-            )
-              .bind((sessaoAtual as any)?.simulador_id)
-              .first();
-            tipoAeronave = (simRef as any)?.tipo || null;
+            tipoAeronave =
+              (await getSimuladorModeloAeronave(
+                c.env.DB,
+                (sessaoAtual as any)?.simulador_id,
+                empresaId,
+              )) || null;
           }
 
           const resultFicha = await c.env.DB.prepare(
@@ -868,20 +868,40 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
           const fichaId = resultFicha.meta.last_row_id;
 
           // Popular manobras automaticamente
-          const modeloId =
+          const modeloIdCandidate =
             b.modelo_sessao_id || b.template_id || (sessaoAtual as any)?.template_id || null;
-          let modeloIdFinal = modeloId;
+          let modeloIdFinal: number | null = null;
+
+          if (modeloIdCandidate) {
+            const modeloTenant = await c.env.DB.prepare(
+              `SELECT id
+                 FROM modelos_sessao
+                WHERE id = ?
+                  AND empresa_id = ?
+                  AND deleted_at IS NULL
+                LIMIT 1`,
+            )
+              .bind(modeloIdCandidate, empresaId)
+              .first<{ id: number }>();
+            if (modeloTenant) modeloIdFinal = Number(modeloTenant.id);
+          }
 
           if (!modeloIdFinal) {
             const modeloEncontrado = await c.env.DB.prepare(
               `SELECT ms.id FROM modelos_sessao ms
-                 INNER JOIN tipos_sessao ts ON ms.tipo_sessao_id = ts.id
-                 WHERE ts.codigo = ? AND ms.modelo_aeronave = ? AND ms.deleted_at IS NULL
+                 INNER JOIN tipos_sessao ts
+                   ON ms.tipo_sessao_id = ts.id
+                  AND ts.empresa_id = ?
+                  AND ts.deleted_at IS NULL
+                 WHERE ts.codigo = ?
+                   AND ms.modelo_aeronave = ?
+                   AND ms.empresa_id = ?
+                   AND ms.deleted_at IS NULL
                  LIMIT 1`,
             )
-              .bind(tipoSessao, tipoAeronave)
-              .first();
-            if (modeloEncontrado) modeloIdFinal = (modeloEncontrado as any).id;
+              .bind(empresaId, tipoSessao, tipoAeronave, empresaId)
+              .first<{ id: number }>();
+            if (modeloEncontrado) modeloIdFinal = Number(modeloEncontrado.id);
           }
 
           if (modeloIdFinal) {
@@ -889,11 +909,14 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
               `SELECT m.codigo, m.nome, COALESCE(m.nome, m.descricao) AS descricao, m.categoria,
                       msm.ordem, msm.observacoes, COALESCE(msm.tripulante, 'AB') as tripulante
                  FROM modelos_sessao_manobras msm
-                 INNER JOIN manobras m ON m.id = msm.manobra_id
-                 WHERE msm.modelo_id = ? AND msm.deleted_at IS NULL AND m.deleted_at IS NULL
+                 INNER JOIN manobras m
+                   ON m.id = msm.manobra_id
+                  AND m.empresa_id = ?
+                  AND m.deleted_at IS NULL
+                 WHERE msm.modelo_id = ? AND msm.deleted_at IS NULL
                  ORDER BY msm.ordem ASC`,
             )
-              .bind(modeloIdFinal)
+              .bind(empresaId, modeloIdFinal)
               .all();
 
             const manobras = buildOperationalFichaManobras(
