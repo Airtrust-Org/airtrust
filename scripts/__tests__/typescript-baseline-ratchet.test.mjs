@@ -9,6 +9,7 @@ import {
   checkBaselineGovernance,
   compareDiagnostics,
   dedupeDiagnostics,
+  diagnosticFingerprint,
   diagnosticIdentity,
   normalizeFilePath,
   parseTscOutput,
@@ -147,6 +148,29 @@ describe('typescript baseline ratchet — comparison logic', () => {
     const result = compareDiagnostics(currentWithDupes, baseline);
     expect(result.pass).toBe(true);
     expect(result.currentCount).toBe(1);
+  });
+
+  it('7b. treats a known diagnostic moved by unrelated source edits as the same debt', () => {
+    const baseline = [makeDiagnostic({ line: 10, column: 5 })];
+    const current = [makeDiagnostic({ line: 146, column: 7 })];
+
+    expect(diagnosticIdentity(current[0])).not.toBe(diagnosticIdentity(baseline[0]));
+    expect(diagnosticFingerprint(current[0])).toBe(diagnosticFingerprint(baseline[0]));
+    const result = compareDiagnostics(current, baseline);
+    expect(result.pass).toBe(true);
+    expect(result.newDiagnostics).toEqual([]);
+    expect(result.fixedDiagnostics).toEqual([]);
+  });
+
+  it('7c. fails when a stable known diagnostic is duplicated at a new location', () => {
+    const baseline = [makeDiagnostic({ line: 10 })];
+    const current = [makeDiagnostic({ line: 110 }), makeDiagnostic({ line: 210 })];
+
+    const result = compareDiagnostics(current, baseline);
+    expect(result.pass).toBe(false);
+    expect(result.newDiagnostics).toHaveLength(1);
+    expect(result.currentCount).toBe(2);
+    expect(result.baselineCount).toBe(1);
   });
 
   // 8. Invalid/malformed baseline file -> fail closed
