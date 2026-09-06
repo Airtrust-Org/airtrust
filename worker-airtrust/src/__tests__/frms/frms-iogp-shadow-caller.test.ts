@@ -46,3 +46,64 @@ describe('FRMS IOGP shadow caller feature gate', () => {
     });
   });
 });
+
+
+describe('FRMS IOGP shadow caller D1 failure semantics', () => {
+  const canonical = {
+    fatorizacao: { effectiveness_nivel: 'verde', effectiveness_pct: 100 },
+    acumulo: {
+      hv_dia_min: 120,
+      hv_7_dias_min: 600,
+      hv_28_dias_min: 1200,
+      hv_365_dias_min: 6000,
+    },
+  };
+
+  function dbThrowingOnAll(message: string) {
+    return {
+      prepare: vi.fn(() => ({
+        bind: vi.fn(() => ({
+          all: vi.fn(async () => {
+            throw new Error(message);
+          }),
+        })),
+      })),
+    } as never;
+  }
+
+  it('keeps explicit pre-CV missing-table compatibility fail-soft', async () => {
+    await expect(
+      runFrmsIogpShadowForJornada(
+        dbThrowingOnAll('D1_ERROR: no such table: cv_voo_tripulantes'),
+        {
+          id: 'j-missing-cv',
+          tripulante_id: 42,
+          data: '2026-08-20',
+          status: 'ES',
+          origem: 'SIGVOOS',
+        },
+        canonical,
+        { ENVIRONMENT: 'staging', FRMS_IOGP_SHADOW_MODE_TENANTS: '6' },
+        6,
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it('does not convert operational D1 errors into a false no-legs result', async () => {
+    await expect(
+      runFrmsIogpShadowForJornada(
+        dbThrowingOnAll('SQLITE_AUTH: authorization denied'),
+        {
+          id: 'j-d1-auth',
+          tripulante_id: 42,
+          data: '2026-08-20',
+          status: 'ES',
+          origem: 'SIGVOOS',
+        },
+        canonical,
+        { ENVIRONMENT: 'staging', FRMS_IOGP_SHADOW_MODE_TENANTS: '6' },
+        6,
+      ),
+    ).rejects.toThrow('SQLITE_AUTH');
+  });
+});
