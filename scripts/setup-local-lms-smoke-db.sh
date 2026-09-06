@@ -19,8 +19,6 @@ SEED_FILE="$SCRIPT_DIR/seed-local-lms-smoke.sql"
 DB_NAME="airtrust-db-local"
 LOCAL_STATE_DIR="$WORKER_DIR/.wrangler/state"
 LMS_MIGRATIONS=(
-  # Auth prerequisite for normal bearer access used by the LMS smoke.
-  "$WORKER_DIR/migrations/0289_security_rate_limit_and_token_blocklist.sql"
   "$WORKER_DIR/migrations/0320_treinamentos_convocacao_email.sql"
   # completeLmsMatricula grava audit_logs no mesmo db.batch() da conclusão.
   # O snapshot local não possui essa tabela; ela deve ser criada antes do smoke.
@@ -296,7 +294,7 @@ for migration_file in "${LMS_MIGRATIONS[@]}"; do
   require_migration_recorded "$(basename "$migration_file")"
 done
 
-for table_name in token_blocklist audit_logs lms_cursos lms_matriculas lms_progresso_scorm qualificacoes_tipos_setores lms_cursos_setores lms_scorm_package_versions lms_scorm_package_audit_log lms_completion_diagnostics_snapshots; do
+for table_name in audit_logs lms_cursos lms_matriculas lms_progresso_scorm qualificacoes_tipos_setores lms_cursos_setores lms_scorm_package_versions lms_scorm_package_audit_log lms_completion_diagnostics_snapshots; do
   require_sqlite_table "$table_name"
 done
 
