@@ -7,9 +7,11 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
+import { requireRole } from '../middleware/rbac';
 import { getEmpresaIdSafe } from './escalas-shared';
 
 const quinzenas = new Hono<{ Bindings: Env }>();
+const requireQuinzenaManager = requireRole('admin', 'manager');
 
 const OPERATIONAL_QUINZENA_PRESETS: Record<
   number,
@@ -95,7 +97,7 @@ quinzenas.get('/', auth(), async (c) => {
 
 // POST /api/escalas/quinzenas/gerar-ano — auto-generate standard quinzenas for a year
 // NOTE: must be registered BEFORE /:id to avoid route conflict
-quinzenas.post('/gerar-ano', auth(), async (c) => {
+quinzenas.post('/gerar-ano', auth(), requireQuinzenaManager, async (c) => {
   try {
     const empresaId = getEmpresaIdSafe(c);
     const body = await c.req.json();
@@ -135,7 +137,7 @@ quinzenas.post('/gerar-ano', auth(), async (c) => {
 });
 
 // POST /api/escalas/quinzenas — create or upsert one quinzena
-quinzenas.post('/', auth(), async (c) => {
+quinzenas.post('/', auth(), requireQuinzenaManager, async (c) => {
   try {
     const empresaId = getEmpresaIdSafe(c);
     const body = await c.req.json();
@@ -166,7 +168,7 @@ quinzenas.post('/', auth(), async (c) => {
 });
 
 // PUT /api/escalas/quinzenas/:id
-quinzenas.put('/:id', auth(), async (c) => {
+quinzenas.put('/:id', auth(), requireQuinzenaManager, async (c) => {
   try {
     const empresaId = getEmpresaIdSafe(c);
     const id = Number(c.req.param('id'));
@@ -195,7 +197,7 @@ quinzenas.put('/:id', auth(), async (c) => {
 });
 
 // DELETE /api/escalas/quinzenas/:id
-quinzenas.delete('/:id', auth(), async (c) => {
+quinzenas.delete('/:id', auth(), requireQuinzenaManager, async (c) => {
   try {
     const empresaId = getEmpresaIdSafe(c);
     const id = Number(c.req.param('id'));
