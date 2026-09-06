@@ -9,7 +9,7 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
-import securedCatalogRoutes from '../../routes/simuladores-catalogo-secured';
+import catalogoRoutes from '../../routes/simuladores-catalogo';
 
 function createEnv(): Env {
   const db = {
@@ -44,7 +44,7 @@ function createApp(role: string, empresaId = 7) {
     });
     await next();
   });
-  app.route('/api/simuladores', securedCatalogRoutes);
+  app.route('/api/simuladores', catalogoRoutes);
   return app;
 }
 

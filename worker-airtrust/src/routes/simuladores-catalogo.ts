@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
+import { requireRole } from '../middleware/rbac';
 import {
   CategoriaSimuladoresSchema,
   ManobraSchema,
@@ -47,7 +48,7 @@ app.get('/categorias', async (c) => {
 });
 
 // POST /api/simuladores/categorias - Criar categoria
-app.post('/categorias', async (c) => {
+app.post('/categorias', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c);
     const parsed = CategoriaSimuladoresSchema.safeParse(await c.req.json());
@@ -101,7 +102,7 @@ app.post('/categorias', async (c) => {
 });
 
 // PUT /api/simuladores/categorias/:id - Atualizar categoria
-app.put('/categorias/:id', async (c) => {
+app.put('/categorias/:id', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c);
     const id = c.req.param('id');
@@ -180,7 +181,7 @@ app.put('/categorias/:id', async (c) => {
 });
 
 // DELETE /api/simuladores/categorias/:id - Excluir categoria
-app.delete('/categorias/:id', async (c) => {
+app.delete('/categorias/:id', requireRole('admin', 'manager'), async (c) => {
   try {
     const denied = requireAdminForDelete(c);
     if (denied) return denied;
@@ -235,7 +236,7 @@ app.get('/manobras', async (c) => {
   }
 });
 
-app.post('/manobras', async (c) => {
+app.post('/manobras', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c);
     const parsed = ManobraSchema.safeParse(await c.req.json());
@@ -287,7 +288,7 @@ app.post('/manobras', async (c) => {
   }
 });
 
-app.put('/manobras/:id', async (c) => {
+app.put('/manobras/:id', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c);
     const id = c.req.param('id');
@@ -356,7 +357,7 @@ app.put('/manobras/:id', async (c) => {
   }
 });
 
-app.delete('/manobras/:id', async (c) => {
+app.delete('/manobras/:id', requireRole('admin', 'manager'), async (c) => {
   try {
     const denied = requireAdminForDelete(c);
     if (denied) return denied;
