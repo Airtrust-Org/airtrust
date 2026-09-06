@@ -59,6 +59,17 @@ app.put(
     const { fichaId, ordem } = c.req.param();
     const b = await c.req.json();
 
+    // Record-level tenant boundary must be proven before availability/model
+    // lookups or any read/write by ficha_id.
+    const fichaTenant = await c.env.DB.prepare(
+      'SELECT id FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+    )
+      .bind(fichaId, empresaId)
+      .first<{ id: number }>();
+    if (!fichaTenant) {
+      return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
+    }
+
     const availability = await getFichaAvailabilityFromDb(c.env.DB, fichaId);
     if (!availability.available) {
       return c.json(
@@ -94,9 +105,9 @@ app.put(
          LEFT JOIN simulador_agendamentos sa ON fs.agendamento_slot_id = sa.id
          LEFT JOIN simuladores s ON sa.simulador_id = s.id
          LEFT JOIN aeronaves aer ON fs.tipo_aeronave = aer.id
-         WHERE fs.id = ? AND fs.deleted_at IS NULL`,
+         WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL`,
       )
-        .bind(fichaId)
+        .bind(fichaId, empresaId)
         .first();
 
       if (!ficha) {
