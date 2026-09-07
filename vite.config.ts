@@ -11,7 +11,7 @@ type ManualChunkGroup = {
 };
 
 const MANUAL_CHUNK_GROUPS: readonly ManualChunkGroup[] = [
-  { name: 'vendor', packages: ['react', 'react-dom', 'scheduler'] },
+  { name: 'vendor', packages: ['react', 'react-dom', 'scheduler', 'clsx', 'tailwind-merge', 'lucide-react'] },
   { name: 'router', packages: ['react-router', 'react-router-dom'] },
   { name: 'query', packages: ['@tanstack/query-core', '@tanstack/react-query'] },
   { name: 'charts', packages: ['recharts'] },
@@ -31,6 +31,7 @@ function isPackageModule(id: string, packageName: string): boolean {
 }
 
 function manualChunkForModule(id: string): string | undefined {
+  if (id.includes('vite/preload-helper')) return 'vendor';
   if (!id.includes('node_modules')) return undefined;
 
   for (const group of MANUAL_CHUNK_GROUPS) {
