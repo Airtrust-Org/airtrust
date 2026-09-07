@@ -94,7 +94,16 @@ CREATE TABLE lms_progresso_scorm (
   completion_status TEXT,
   success_status TEXT,
   score_raw REAL,
+  score_max REAL,
+  score_min REAL,
   score_scaled REAL,
+  session_time TEXT,
+  total_time TEXT,
+  session_count INTEGER DEFAULT 1,
+  suspend_data TEXT,
+  launch_data TEXT,
+  cmi_json TEXT,
+  last_commit_at TEXT,
   updated_at TEXT
 );
 CREATE TABLE qualificacoes_historico (
