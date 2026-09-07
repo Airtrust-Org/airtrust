@@ -169,7 +169,7 @@ check(
   );
 
   if (raw) {
-    const allowed = /\$\{|YOUR_|PLACEHOLDER|EXAMPLE|CHANGEME|<[^>]+>|=[[:space:]]*$/i;
+    const allowed = /\$\{|YOUR[-_]|PLACEHOLDER|EXAMPLE|CHANGEME|<[^>]+>|=\s*$/i;
     raw = raw
       .split('\n')
       .filter((line) => line && !allowed.test(line))
