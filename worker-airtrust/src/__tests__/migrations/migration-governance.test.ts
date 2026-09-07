@@ -117,11 +117,11 @@ describe('migration governance', () => {
     expect(existsSync(experimentalMigrationPath)).toBe(true);
   });
 
-  it('keeps dev/staging on the canonical chain and production isolated from historical migrations', () => {
+  it('keeps dev canonical while staging/production are isolated from historical migrations', () => {
     const remoteConfigured = readConfiguredMigrationDirs(join(workerRoot, 'wrangler.toml'));
     expect(remoteConfigured).toEqual([
       './migrations',
-      './migrations',
+      './migrations_staging_disabled',
       './migrations_production_disabled',
     ]);
 
