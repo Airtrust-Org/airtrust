@@ -67,18 +67,57 @@ function resolveTenantScope(
 }
 
 app.get('/actions', auth(), adminOnly(), async (c) => {
+  const tenantScope = resolveTenantScope(c);
+  if (!tenantScope) {
+    return c.json(
+      {
+        success: false,
+        error: 'tenant_scope_required',
+        message: 'Contexto de tenant inválido. Consulta bloqueada.',
+      },
+      403,
+    );
+  }
+
   try {
     const limit = Math.min(200, Math.max(1, parseInt(c.req.query('limit') || '50', 10)));
     const offset = Math.max(0, parseInt(c.req.query('offset') || '0', 10));
 
+    // The legacy v_admin_actions_audit view has no empresa_id and is therefore
+    // structurally incapable of tenant isolation. Read the canonical audit
+    // trail instead and scope every row to the authenticated tenant.
     const actions = await c.env.DB.prepare(
       `
-      SELECT * FROM v_admin_actions_audit
+      SELECT
+        id,
+        event_action AS action,
+        entity_type AS module,
+        success,
+        failure_reason_code AS error_message,
+        created_at,
+        actor_user_id AS user_id,
+        actor_role,
+        risk_level,
+        metadata_sanitized_json,
+        'Ação Admin' AS action_type
+      FROM audit_events_v2
+      WHERE event_category = 'ADMIN_OPERATION'
+        AND (
+          empresa_id = ?
+          OR target_empresa_id = ?
+          OR actor_empresa_id = ?
+        )
       ORDER BY created_at DESC
       LIMIT ? OFFSET ?
     `,
     )
-      .bind(limit, offset)
+      .bind(
+        tenantScope.empresaId,
+        tenantScope.empresaId,
+        tenantScope.empresaId,
+        limit,
+        offset,
+      )
       .all();
 
     return c.json({
