@@ -207,7 +207,7 @@ describe('lms matriculas progress integrity', () => {
         },
       ],
       [
-        'SELECT id, nome\n         FROM funcionarios',
+        'SELECT id, nome, setor_id FROM funcionarios',
         {
           all: () => ({ results: [{ id: 77, nome: 'Aluno AW139' }] }),
         },
