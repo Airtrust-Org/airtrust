@@ -1,0 +1,151 @@
+name: FRMS Production Assignment Readonly Inventory
+
+# Read-only. Identifies which active production FRMS tenant lacks a governed
+# frms_profile_assignments row (the FRMS_GOVERNANCE_NOT_READY blocker from the
+# production release preflight) and enumerates that tenant's own applicable
+# regulatory profiles so a profile decision can be made without inference.
+# No write, no migration, no Schema V2 apply, no deploy. Production D1 is
+# hard-pinned; the staging D1 id is hard-blocked. Only empresa_id and technical
+# FRMS governance fields are returned — never names, emails, documents, tokens.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_FRMS_PRODUCTION_ASSIGNMENT_INVENTORY to continue'
+        required: true
+        type: string
+      expected_sha:
+        description: 'Exact current main SHA reviewed for this read-only inventory'
+        required: true
+        type: string
+
+concurrency:
+  group: frms-production-assignment-readonly-inventory
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  PRODUCTION_D1_NAME: airtrust-db
+  PRODUCTION_D1_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+  BLOCKED_STAGING_D1_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+
+jobs:
+  guard:
+    name: FRMS production inventory guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EVENT_REF" == 'refs/heads/main' ]] || { echo 'MAIN_REF_REQUIRED' >&2; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_FRMS_PRODUCTION_ASSIGNMENT_INVENTORY' ]] || { echo 'CONFIRMATION_REQUIRED' >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'EXPECTED_SHA_INVALID' >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$EVENT_SHA" ]] || { echo 'EXPECTED_SHA_MISMATCH' >&2; exit 1; }
+
+  d1-readonly-inventory:
+    name: FRMS production D1 read-only assignment inventory
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Require production D1 read credential
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] || { echo 'PRODUCTION_D1_READ_TOKEN_MISSING' >&2; exit 1; }
+          [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
+
+      - name: Run read-only FRMS assignment inventory against production D1
+        id: inventory
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PRODUCTION_D1_NAME: ${{ env.PRODUCTION_D1_NAME }}
+          PRODUCTION_D1_ID: ${{ env.PRODUCTION_D1_ID }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set +e
+          node scripts/production/frms-assignment-readonly-inventory.mjs > "$RUNNER_TEMP/frms-assignment-inventory.json"
+          status=$?
+          set -e
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          test -s "$RUNNER_TEMP/frms-assignment-inventory.json"
+
+      - name: Publish sanitized summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/frms-assignment-inventory.json"
+          [[ -s "$report" ]] || { echo 'No inventory report produced.' >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          node -e '
+            const fs = require("node:fs");
+            const r = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/frms-assignment-inventory.json", "utf8"));
+            const p = (k, v) => console.log(`- ${k}: \`${v}\``);
+            console.log("## FRMS production assignment read-only inventory");
+            console.log("");
+            p("active tenants", r.activeTenantCount);
+            p("missing-assignment tenant id", r.missingAssignmentTenantId ?? "none");
+            for (const t of r.tenants) {
+              p(`tenant ${t.empresaId}`, `regProfiles=${t.activeRegulatoryProfileCount} assignments=${t.activeAssignmentCount} state=${t.assignmentState} revision=${t.resolvedRevision ? t.resolvedRevision.id : "n/a"} params=${t.resolvedParameterCount ?? "n/a"}`);
+            }
+            p("profile decision proven", r.profileDecision.proven ? "YES" : "NO");
+            p("profile decision reason", r.profileDecision.reason);
+            if (r.profileDecision.proven) {
+              p("profile_code", r.profileDecision.profileCode);
+              p("regulatory_profile_id", r.profileDecision.regulatoryProfileId);
+              p("revision_id", r.profileDecision.revisionId);
+              p("parameter_count", r.profileDecision.parameterCount);
+            }
+            p("blocker", r.verdict.blocker ?? "none");
+            p("writes", r.writes);
+          ' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized inventory evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frms-production-assignment-inventory-${{ github.sha }}
+          path: ${{ runner.temp }}/frms-assignment-inventory.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Report inconclusive decision (does not fail the release preflight)
+        shell: bash
+        env:
+          INVENTORY_EXIT_CODE: ${{ steps.inventory.outputs.exit_code }}
+        run: |
+          set -euo pipefail
+          if [[ "$INVENTORY_EXIT_CODE" != '0' ]]; then
+            echo "FRMS_ASSIGNMENT_INVENTORY_INCONCLUSIVE exit=$INVENTORY_EXIT_CODE — no write performed; decision needs explicit authorization." >&2
+            exit 1
+          fi
+          echo 'FRMS_ASSIGNMENT_INVENTORY=PASS'

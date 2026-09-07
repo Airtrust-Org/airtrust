@@ -73,6 +73,8 @@ jobs:
         run: node --test scripts/__tests__/staging-frms-0464-bootstrap-repair.test.mjs
       - name: validate production release read-only preflight contract
         run: node --test scripts/__tests__/production-release-readonly-preflight.test.mjs
+      - name: validate FRMS production assignment read-only inventory contract
+        run: node --test scripts/__tests__/frms-production-assignment-readonly-inventory.test.mjs
       - name: validate 0438 legacy staging workflow guards
         run: node --test scripts/__tests__/staging-0438-legacy-validation.test.mjs
       - name: validate 0438 legacy staging workflow v2 guards
