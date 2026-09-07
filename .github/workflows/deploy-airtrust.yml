@@ -405,8 +405,8 @@ jobs:
 
   deploy-pages:
     name: Deploy Pages
-    needs: [guard, prepare]
-    if: ${{ inputs.deploy_pages }}
+    needs: [guard, prepare, deploy-worker]
+    if: ${{ always() && inputs.deploy_pages && needs.guard.result == 'success' && needs.prepare.result == 'success' && (inputs.deploy_worker == false || needs.deploy-worker.result == 'success') }}
     runs-on: ubuntu-latest
     environment: production
     outputs:
@@ -515,4 +515,64 @@ jobs:
             echo "- APP_VERSION: \`${{ needs.guard.outputs.app_version }}\`"
             echo "- Pages URL: \`${{ steps.capture.outputs.pages_url }}\`"
             echo "- UTC: \`${{ needs.guard.outputs.release_utc }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  verify-release-parity:
+    name: Verify Worker / Pages Parity
+    needs: [guard, deploy-worker, deploy-pages]
+    if: ${{ always() && inputs.deploy_worker && inputs.deploy_pages && needs.guard.result == 'success' && needs.deploy-worker.result == 'success' && needs.deploy-pages.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release verifier
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Verify exact production version parity
+        shell: bash
+        env:
+          EXPECTED_APP_VERSION: ${{ needs.guard.outputs.app_version }}
+        run: |
+          set -euo pipefail
+          worker_body="$(mktemp)"
+          pages_body="$(mktemp)"
+          trap 'rm -f "$worker_body" "$pages_body"' EXIT
+
+          worker_status="$(curl -sS -L -H 'Cache-Control: no-cache' -o "$worker_body" -w '%{http_code}' "$WORKER_VERSION_ENDPOINT")"
+          if [[ "$worker_status" != "200" ]]; then
+            echo "Worker version endpoint returned HTTP $worker_status" >&2
+            cat "$worker_body" >&2
+            exit 1
+          fi
+
+          node --input-type=module - "$worker_body" "$EXPECTED_APP_VERSION" <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const [, , file, expected] = process.argv;
+          const payload = JSON.parse(readFileSync(file, 'utf8'));
+          const actual = String(payload?.data?.version ?? '');
+          if (!actual || actual !== expected) {
+            console.error(`Worker version mismatch: expected ${expected}, got ${actual || '<missing>'}`);
+            process.exit(1);
+          }
+          NODE
+
+          pages_status="$(curl -sS -L -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o "$pages_body" -w '%{http_code}' "${PAGES_LOGIN_URL}?parity=${GITHUB_SHA}")"
+          if [[ "$pages_status" != "200" ]]; then
+            echo "Pages login returned HTTP $pages_status" >&2
+            cat "$pages_body" >&2
+            exit 1
+          fi
+
+          node scripts/ci/assert-pages-build-version.mjs --expected "$EXPECTED_APP_VERSION" --html-file "$pages_body"
+
+          {
+            echo "## Production release parity"
+            echo ""
+            echo "- Worker APP_VERSION: \`$EXPECTED_APP_VERSION\`"
+            echo "- Pages APP_VERSION: \`$EXPECTED_APP_VERSION\`"
+            echo "- Source SHA: \`$GITHUB_SHA\`"
+            echo "- parity: \`PASS\`"
           } >> "$GITHUB_STEP_SUMMARY"
