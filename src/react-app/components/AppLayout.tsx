@@ -26,6 +26,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
 import { VersionBadge } from './VersionBadge';
+import { NotificacoesSistema } from './NotificacoesSistema';
 import { useSystemSettings } from '../hooks/useSystemSettings';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../config/api';
@@ -504,6 +505,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               >
                 <RefreshCcw className={`h-3.5 w-3.5 ${hardRefreshLoading ? 'animate-spin' : ''}`} />
               </button>
+              {isAdmin && <NotificacoesSistema />}
               <button
                 type="button"
                 onClick={toggleTheme}

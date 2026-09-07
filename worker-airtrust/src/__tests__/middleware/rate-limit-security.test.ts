@@ -51,6 +51,35 @@ describe('rate limiter security degradation', () => {
     expect(response.status).toBe(503);
   });
 
+
+  it('allows an explicit non-production local identity override without trusting X-Forwarded-For', async () => {
+    const app = new Hono<{ Bindings: Env }>();
+    app.use(
+      '/test',
+      rateLimiter({
+        maxRequests: 5,
+        windowSeconds: 60,
+        keyPrefix: 'certificate-validation',
+        failureMode: 'closed',
+        allowLocalFallback: false,
+        allowLocalFallbackOutsideProduction: true,
+      }),
+    );
+    app.get('/test', (c) => c.json({ success: true }));
+    const env = {
+      DB: failingDb(),
+      ENVIRONMENT: 'test',
+    } as unknown as Env;
+
+    const response = await app.request(
+      'http://localhost/test',
+      { headers: { 'X-Forwarded-For': '198.51.100.77' } },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+  });
+
   it('never creates a shared global unknown bucket', () => {
     const first = resolveRateLimitIdentifier({ requestId: 'request-a' }, 'open');
     const second = resolveRateLimitIdentifier({ requestId: 'request-b' }, 'open');

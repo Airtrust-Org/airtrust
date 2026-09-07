@@ -504,34 +504,24 @@ app.get('/modelos-sessao', async (c) => {
       .join(', ');
     const modeloAeronaveExpr = filtroModeloExpr ? `COALESCE(${filtroModeloExpr}, '')` : "''";
 
-    // Also check qualificacoes_tipos for empresa_id column (may be missing in older schemas)
-    let hasQualificacoesEmpresaId = true;
-    try {
-      const qtCol = await c.env.DB.prepare('PRAGMA table_info(qualificacoes_tipos)').all();
-      hasQualificacoesEmpresaId = (qtCol.results || []).some(
-        (r: any) => String(r.name || '') === 'empresa_id',
-      );
-    } catch {
-      hasQualificacoesEmpresaId = false;
+    // Tenant columns are security invariants, not optional compatibility hints.
+    // If schema introspection fails or either column is absent, let the route fail
+    // closed instead of silently dropping tenant predicates from the JOINs.
+    const qtCol = await c.env.DB.prepare('PRAGMA table_info(qualificacoes_tipos)').all();
+    const hasQualificacoesEmpresaId = (qtCol.results || []).some(
+      (r: { name?: unknown }) => String(r.name || '') === 'empresa_id',
+    );
+    const tsCol = await c.env.DB.prepare('PRAGMA table_info(tipos_sessao)').all();
+    const hasTiposEmpresaId = (tsCol.results || []).some(
+      (r: { name?: unknown }) => String(r.name || '') === 'empresa_id',
+    );
+    if (!hasQualificacoesEmpresaId || !hasTiposEmpresaId) {
+      throw new Error('SIMULADORES_TENANT_SCHEMA_REQUIRED');
     }
 
-    // Check tipos_sessao for empresa_id column
-    let hasTiposEmpresaId = true;
-    try {
-      const tsCol = await c.env.DB.prepare('PRAGMA table_info(tipos_sessao)').all();
-      hasTiposEmpresaId = (tsCol.results || []).some(
-        (r: any) => String(r.name || '') === 'empresa_id',
-      );
-    } catch {
-      hasTiposEmpresaId = false;
-    }
-
-    // Build JOIN conditions based on column availability
-    const tiposJoinOn = hasTiposEmpresaId
-      ? 'ms.tipo_sessao_id = ts.id AND ts.empresa_id = ?'
-      : 'ms.tipo_sessao_id = ts.id';
+    const tiposJoinOn = 'ms.tipo_sessao_id = ts.id AND ts.empresa_id = ?';
     const qualificacaoJoin = hasQualificacaoTipoId
-      ? `LEFT JOIN qualificacoes_tipos qt ON ms.qualificacao_tipo_id = qt.id${hasQualificacoesEmpresaId ? ' AND qt.empresa_id = ?' : ''}`
+      ? 'LEFT JOIN qualificacoes_tipos qt ON ms.qualificacao_tipo_id = qt.id AND qt.empresa_id = ?'
       : '';
     const qualificacaoSelect = hasQualificacaoTipoId
       ? `,
@@ -581,10 +571,9 @@ app.get('/modelos-sessao', async (c) => {
         AND ms.empresa_id = ?
     `;
     const params: any[] = [];
-    // ts.empresa_id param (only if tipos_sessao has the column)
-    if (hasTiposEmpresaId) params.push(empresaId);
-    // qt.empresa_id param (only if qualificacoes_tipos has the column)
-    if (hasQualificacaoTipoId && hasQualificacoesEmpresaId) params.push(empresaId);
+    // Both tenant columns are mandatory above.
+    params.push(empresaId);
+    if (hasQualificacaoTipoId) params.push(empresaId);
     // ms.empresa_id (always present per query WHERE)
     params.push(empresaId);
 

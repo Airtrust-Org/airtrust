@@ -244,13 +244,11 @@ export async function collectCronHealthSnapshot(
   };
 }
 
-export async function logCronHealthSnapshot(
-  db: D1Database,
-  logger: CronJobLogger,
-  now = new Date(),
-): Promise<CronHealthSnapshot> {
-  const snapshot = await collectCronHealthSnapshot(db, now);
-  const degraded =
+const CRON_HEALTH_ALERT_TYPE = 'CRON_HEALTH_DEGRADED';
+const CRON_HEALTH_ALERT_DEDUP_MINUTES = 30;
+
+function isCronHealthDegraded(snapshot: CronHealthSnapshot): boolean {
+  return (
     snapshot.repeatedFailureScopes > 0 ||
     snapshot.expiredLeaseScopes > 0 ||
     snapshot.backlogScopes > 0 ||
@@ -258,7 +256,185 @@ export async function logCronHealthSnapshot(
     snapshot.delayedScopes > 0 ||
     snapshot.stalledCursorScopes > 0 ||
     snapshot.staleRunningScopes > 0 ||
-    snapshot.tenantErrorScopes > 0;
+    snapshot.tenantErrorScopes > 0
+  );
+}
+
+function cronHealthAlertMessage(snapshot: CronHealthSnapshot): string {
+  const signalCount = snapshot.affectedScopes.reduce(
+    (total, scope) => total + scope.signals.length,
+    0,
+  );
+  return [
+    `${snapshot.affectedScopes.length} escopo(s) de automação exigem atenção.`,
+    `${signalCount} sinal(is) operacional(is) detectado(s).`,
+    `Pendências: ${snapshot.pendingItems}; retries esgotados: ${snapshot.exhaustedItems}.`,
+  ].join(' ');
+}
+
+function cronHealthAlertData(snapshot: CronHealthSnapshot): string {
+  return JSON.stringify({
+    source: 'cron-health',
+    affected_scopes: snapshot.affectedScopes.map((scope) => ({
+      job: scope.job_name,
+      scope: scope.scope_key,
+      error_code: scope.error_code,
+      signals: scope.signals,
+    })),
+    counters: {
+      repeated_failure_scopes: snapshot.repeatedFailureScopes,
+      expired_lease_scopes: snapshot.expiredLeaseScopes,
+      backlog_scopes: snapshot.backlogScopes,
+      exhausted_item_scopes: snapshot.exhaustedItemScopes,
+      delayed_scopes: snapshot.delayedScopes,
+      stalled_cursor_scopes: snapshot.stalledCursorScopes,
+      stale_running_scopes: snapshot.staleRunningScopes,
+      tenant_error_scopes: snapshot.tenantErrorScopes,
+      pending_items: snapshot.pendingItems,
+      exhausted_items: snapshot.exhaustedItems,
+    },
+  });
+}
+
+function tenantIdsFromCronHealth(snapshot: CronHealthSnapshot): number[] {
+  const ids = new Set<number>();
+  for (const scope of snapshot.affectedScopes) {
+    const match = /^empresa:(\d+)$/.exec(scope.scope_key);
+    if (!match) continue;
+    const empresaId = Number(match[1]);
+    if (Number.isInteger(empresaId) && empresaId > 0) ids.add(empresaId);
+  }
+  return [...ids].sort((a, b) => a - b);
+}
+
+function hasGlobalCronHealthScope(snapshot: CronHealthSnapshot): boolean {
+  return snapshot.affectedScopes.some((scope) => !scope.scope_key.startsWith('empresa:'));
+}
+
+async function insertTenantCronHealthAlerts(
+  db: D1Database,
+  empresaId: number,
+  message: string,
+  dataJson: string,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO notificacoes_sistema (
+         tipo, prioridade, titulo, mensagem, dados, grupo,
+         user_id, empresa_id, lida, created_at, updated_at
+       )
+       SELECT
+         ?, 'ALTA', 'Automações AirTrust exigem atenção', ?, ?, 'operacoes',
+         CAST(admins.usuario_id AS TEXT), ?, 0, datetime('now'), datetime('now')
+       FROM (
+         SELECT DISTINCT ue.usuario_id
+           FROM usuarios_empresas ue
+           JOIN usuarios u
+             ON u.id = ue.usuario_id
+            AND u.deleted_at IS NULL
+            AND COALESCE(u.ativo, 1) = 1
+           LEFT JOIN usuarios_empresas_perfis uep
+             ON uep.usuario_id = ue.usuario_id
+            AND uep.empresa_id = ue.empresa_id
+            AND COALESCE(uep.ativo, 1) = 1
+          WHERE ue.empresa_id = ?
+            AND ue.deleted_at IS NULL
+            AND COALESCE(ue.ativo, 1) = 1
+            AND (
+              UPPER(COALESCE(ue.role, '')) IN ('ADMIN', 'ADMINISTRADOR', 'SUPER_ADMIN')
+              OR UPPER(COALESCE(uep.perfil, '')) IN ('ADMIN', 'ADMINISTRADOR', 'SUPER_ADMIN')
+            )
+       ) admins
+       WHERE NOT EXISTS (
+         SELECT 1
+           FROM notificacoes_sistema n
+          WHERE n.tipo = ?
+            AND n.empresa_id = ?
+            AND n.user_id = CAST(admins.usuario_id AS TEXT)
+            AND n.created_at >= datetime('now', ?)
+            AND n.deleted_at IS NULL
+       )`,
+    )
+    .bind(
+      CRON_HEALTH_ALERT_TYPE,
+      message,
+      dataJson,
+      empresaId,
+      empresaId,
+      CRON_HEALTH_ALERT_TYPE,
+      empresaId,
+      `-${CRON_HEALTH_ALERT_DEDUP_MINUTES} minutes`,
+    )
+    .run();
+}
+
+async function insertPlatformCronHealthAlerts(
+  db: D1Database,
+  message: string,
+  dataJson: string,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO notificacoes_sistema (
+         tipo, prioridade, titulo, mensagem, dados, grupo,
+         user_id, empresa_id, lida, created_at, updated_at
+       )
+       SELECT
+         ?, 'ALTA', 'Automações AirTrust exigem atenção', ?, ?, 'operacoes',
+         CAST(upr.user_id AS TEXT), NULL, 0, datetime('now'), datetime('now')
+       FROM user_platform_roles upr
+       JOIN usuarios u
+         ON u.id = upr.user_id
+        AND u.deleted_at IS NULL
+        AND COALESCE(u.ativo, 1) = 1
+       WHERE upr.role_code = 'platform_admin'
+         AND upr.revoked_at IS NULL
+         AND (upr.expires_at IS NULL OR datetime(upr.expires_at) > datetime('now'))
+         AND NOT EXISTS (
+           SELECT 1
+             FROM notificacoes_sistema n
+            WHERE n.tipo = ?
+              AND n.empresa_id IS NULL
+              AND n.user_id = CAST(upr.user_id AS TEXT)
+              AND n.created_at >= datetime('now', ?)
+              AND n.deleted_at IS NULL
+         )`,
+    )
+    .bind(
+      CRON_HEALTH_ALERT_TYPE,
+      message,
+      dataJson,
+      CRON_HEALTH_ALERT_TYPE,
+      `-${CRON_HEALTH_ALERT_DEDUP_MINUTES} minutes`,
+    )
+    .run();
+}
+
+export async function persistCronHealthAdminAlerts(
+  db: D1Database,
+  snapshot: CronHealthSnapshot,
+): Promise<void> {
+  if (!isCronHealthDegraded(snapshot)) return;
+
+  const message = cronHealthAlertMessage(snapshot);
+  const dataJson = cronHealthAlertData(snapshot);
+
+  for (const empresaId of tenantIdsFromCronHealth(snapshot)) {
+    await insertTenantCronHealthAlerts(db, empresaId, message, dataJson);
+  }
+
+  if (hasGlobalCronHealthScope(snapshot)) {
+    await insertPlatformCronHealthAlerts(db, message, dataJson);
+  }
+}
+
+export async function logCronHealthSnapshot(
+  db: D1Database,
+  logger: CronJobLogger,
+  now = new Date(),
+): Promise<CronHealthSnapshot> {
+  const snapshot = await collectCronHealthSnapshot(db, now);
+  const degraded = isCronHealthDegraded(snapshot);
 
   const metadata = {
     checked_scopes: snapshot.checkedScopes,
@@ -277,6 +453,13 @@ export async function logCronHealthSnapshot(
 
   if (degraded) {
     logger.warn('[CRON_HEALTH] Degradação operacional detectada', metadata);
+    try {
+      await persistCronHealthAdminAlerts(db, snapshot);
+    } catch (error) {
+      logger.error('[CRON_HEALTH] Falha ao persistir alerta administrativo', {
+        error_code: error instanceof Error ? error.message : String(error),
+      });
+    }
   } else {
     logger.log('[CRON_HEALTH] Snapshot saudável', metadata);
   }

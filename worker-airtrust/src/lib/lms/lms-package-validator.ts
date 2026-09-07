@@ -10,11 +10,16 @@ export type LmsStructuredContentType = 'scorm' | 'h5p';
  * The compressed body is bounded before extraction and central-directory
  * metadata is inspected before unzipSync allocates expanded entries.
  */
+// Cloudflare Workers have a 128 MiB per-isolate memory ceiling. unzipSync keeps
+// the submitted ZIP and expanded entries resident at the same time, so limits
+// must leave material headroom for the JS heap, validator metadata and
+// concurrent requests sharing the isolate. A larger package requires a future
+// streaming/external extraction architecture; it must not be admitted here.
 export const LMS_PACKAGE_LIMITS = Object.freeze({
-  maxCompressedBytes: 128 * 1024 * 1024,
+  maxCompressedBytes: 32 * 1024 * 1024,
   maxEntries: 2_000,
-  maxUncompressedBytes: 256 * 1024 * 1024,
-  maxFileBytes: 64 * 1024 * 1024,
+  maxUncompressedBytes: 64 * 1024 * 1024,
+  maxFileBytes: 32 * 1024 * 1024,
   maxMetadataBytes: 2 * 1024 * 1024,
   maxPathDepth: 20,
   maxPathBytes: 512,
@@ -168,7 +173,7 @@ function assertEntryLimits(entry: {
   uncompressedSize: number;
 }): void {
   if (entry.uncompressedSize > LMS_PACKAGE_LIMITS.maxFileBytes) {
-    invalidPackage(`O arquivo ${entry.path} excede o limite individual de 64 MB`);
+    invalidPackage(`O arquivo ${entry.path} excede o limite individual de 32 MB`);
   }
 
   const ratio = entry.uncompressedSize / Math.max(1, entry.compressedSize);
@@ -182,7 +187,7 @@ function assertEntryLimits(entry: {
 export function inspectZipCentralDirectory(bytes: Uint8Array): ZipEntryMetadata[] {
   if (bytes.byteLength === 0) invalidPackage('Arquivo vazio');
   if (bytes.byteLength > LMS_PACKAGE_LIMITS.maxCompressedBytes) {
-    invalidPackage('Pacote excede o limite comprimido de 128 MB', 413);
+    invalidPackage('Pacote excede o limite comprimido de 32 MB', 413);
   }
 
   const eocdOffset = findEocdOffset(bytes);
@@ -243,7 +248,7 @@ export function inspectZipCentralDirectory(bytes: Uint8Array): ZipEntryMetadata[
       assertEntryLimits({ path, compressedSize, uncompressedSize });
       totalUncompressed += uncompressedSize;
       if (totalUncompressed > LMS_PACKAGE_LIMITS.maxUncompressedBytes) {
-        invalidPackage('Pacote excede o limite descompactado total de 256 MB');
+        invalidPackage('Pacote excede o limite descompactado total de 64 MB');
       }
     }
 
@@ -449,11 +454,11 @@ export function extractAndValidateLmsPackage(
         const path = normalizeLmsArchivePath(file.name);
         if (!path) return false;
         if (file.originalSize > LMS_PACKAGE_LIMITS.maxFileBytes) {
-          invalidPackage(`O arquivo ${path} excede o limite individual de 64 MB`);
+          invalidPackage(`O arquivo ${path} excede o limite individual de 32 MB`);
         }
         filteredTotal += file.originalSize;
         if (filteredTotal > LMS_PACKAGE_LIMITS.maxUncompressedBytes) {
-          invalidPackage('Pacote excede o limite descompactado total de 256 MB');
+          invalidPackage('Pacote excede o limite descompactado total de 64 MB');
         }
         return true;
       },
@@ -488,12 +493,12 @@ export function extractAndValidateLmsPackage(
       invalidPackage(`A entrada ${path} possui tamanho descompactado inconsistente`);
     }
     if (data.byteLength > LMS_PACKAGE_LIMITS.maxFileBytes) {
-      invalidPackage(`O arquivo ${path} excede o limite individual de 64 MB`);
+      invalidPackage(`O arquivo ${path} excede o limite individual de 32 MB`);
     }
 
     totalUncompressedBytes += data.byteLength;
     if (totalUncompressedBytes > LMS_PACKAGE_LIMITS.maxUncompressedBytes) {
-      invalidPackage('Pacote excede o limite descompactado total de 256 MB');
+      invalidPackage('Pacote excede o limite descompactado total de 64 MB');
     }
     entries.push({ path, data });
   }
@@ -538,7 +543,7 @@ export function validateUploadedEntryDescriptors(entries: UploadedEntryDescripto
     }
     assertNoPathCollision(path, seen);
     if (entry.size > LMS_PACKAGE_LIMITS.maxFileBytes) {
-      invalidPackage(`O arquivo ${path} excede o limite individual de 64 MB`, 413);
+      invalidPackage(`O arquivo ${path} excede o limite individual de 32 MB`, 413);
     }
     totalBytes += entry.size;
     if (totalBytes > LMS_PACKAGE_LIMITS.maxUncompressedBytes) {
