@@ -1,5 +1,8 @@
 import path from 'node:path';
-import { runSchemaContractCheck } from '../../src/schema-contract/checkSchemaContract.ts';
+import {
+  runSchemaContractCheck,
+  runSchemaContractStalenessCheck,
+} from '../../src/schema-contract/checkSchemaContract.ts';
 
 function usage(): never {
   console.error(
@@ -7,6 +10,13 @@ function usage(): never {
       'Uso:',
       '  node --experimental-strip-types scripts/schema-contract/check-schema-contract.ts --contract <path> [--snapshot <path>]',
       '  node --experimental-strip-types scripts/schema-contract/check-schema-contract.ts --contract <path> --production [--db-name airtrust-db] [--env-name production]',
+      '  node --experimental-strip-types scripts/schema-contract/check-schema-contract.ts --contract <path> --staleness',
+      '',
+      'Modos:',
+      '  --snapshot / --production : compara o contrato contra a estrutura real das tabelas escopadas.',
+      '  --staleness              : verifica apenas proveniencia + obsolescencia contra a arvore do repo (sem DB).',
+      '  (sem --staleness)        : os modos de snapshot/producao tambem executam a verificacao de staleness.',
+      '',
       'Exit codes: 0=PASS, 10=WARNING, 20=FAIL',
     ].join('\n'),
   );
@@ -17,6 +27,7 @@ const args = process.argv.slice(2);
 let contractPath = '';
 let snapshotPath = '';
 let production = false;
+let stalenessOnly = false;
 let dbName = 'airtrust-db';
 let envName = 'production';
 
@@ -33,6 +44,9 @@ for (let index = 0; index < args.length; index += 1) {
       break;
     case '--production':
       production = true;
+      break;
+    case '--staleness':
+      stalenessOnly = true;
       break;
     case '--db-name':
       dbName = args[index + 1] ?? dbName;
@@ -56,15 +70,25 @@ if (production && snapshotPath) {
   process.exit(30);
 }
 
+if (stalenessOnly && (production || snapshotPath)) {
+  console.error('Nao combine --staleness com --production/--snapshot.');
+  process.exit(30);
+}
+
 const rootDir = process.cwd();
-const result = runSchemaContractCheck({
-  contractPath: path.resolve(rootDir, contractPath),
-  snapshotPath: snapshotPath ? path.resolve(rootDir, snapshotPath) : undefined,
-  production,
-  rootDir,
-  dbName,
-  envName,
-});
+const result = stalenessOnly
+  ? runSchemaContractStalenessCheck({
+      contractPath: path.resolve(rootDir, contractPath),
+      rootDir,
+    })
+  : runSchemaContractCheck({
+      contractPath: path.resolve(rootDir, contractPath),
+      snapshotPath: snapshotPath ? path.resolve(rootDir, snapshotPath) : undefined,
+      production,
+      rootDir,
+      dbName,
+      envName,
+    });
 
 process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 

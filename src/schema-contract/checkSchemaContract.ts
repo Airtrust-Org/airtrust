@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { evaluateStaleness } from './contractStaleness.mjs';
 
 export type ContractSeverity = 'PASS' | 'WARNING' | 'FAIL';
 
@@ -17,10 +18,13 @@ export interface ContractIssue {
     | 'EXTRA_COLUMN'
     | 'MISSING_RELEVANT_INDEX'
     | 'HASH_MISMATCH'
-    | 'PROHIBITED_ASSUMPTION';
+    | 'PROHIBITED_ASSUMPTION'
+    | 'STALENESS'
+    | (string & {});
   table?: string;
   column?: string;
   index?: string;
+  change_file?: string;
   message: string;
 }
 
@@ -35,6 +39,19 @@ export interface ContractTableRule {
   notes?: string[];
 }
 
+export interface SchemaV2LedgerEntry {
+  change_file: string;
+  change_id: string | null;
+  sha256: string;
+  targets: string[];
+  domain?: string;
+  coverage: string;
+  governance_state: string;
+  reviewed_manifest?: string | null;
+  evidence?: string;
+  note?: string;
+}
+
 export interface SchemaContract {
   baseline_id: string;
   baseline_date: string;
@@ -45,6 +62,30 @@ export interface SchemaContract {
   tables: Record<string, ContractTableRule>;
   prohibited_assumptions: string[];
   out_of_contract_tables: string[];
+  provenance?: {
+    baseline_state?: string;
+    confirmed_via?: string;
+    snapshot_generated_at?: string;
+    inspection_method?: string;
+    verified_scope_note?: string;
+    state_definitions?: Record<string, string>;
+  };
+  staleness_guard?: {
+    schema_v2_changes_dir?: string;
+    reviewed_manifests_dir?: string;
+    last_reconciled_at?: string;
+    last_reconciled_against?: string;
+    schema_v2_digest?: string;
+    policy?: string;
+  };
+  runtime_critical_uncovered?: Array<{
+    table: string;
+    introduced_by: string;
+    why_critical: string;
+    blocked_on: string;
+    tracking: string;
+  }>;
+  schema_v2_since_baseline?: SchemaV2LedgerEntry[];
 }
 
 export interface SnapshotTableInfoRow {
@@ -618,6 +659,37 @@ export function loadSnapshotFromFile(snapshotPath: string): StructuralSnapshot {
   return loadJson<StructuralSnapshot>(snapshotPath);
 }
 
+/**
+ * Repo-only staleness / provenance check. Never touches a database or a snapshot.
+ * Fails when a Schema V2 change landed in the repo without the contract being
+ * reconciled (unclassified change, content drift, digest mismatch, false
+ * coverage claim, or a scoped table changed silently).
+ */
+export function runSchemaContractStalenessCheck(input: {
+  contractPath: string;
+  rootDir?: string;
+}): CheckSchemaResult {
+  const rootDir = input.rootDir ?? process.cwd();
+  try {
+    const contract = loadContract(input.contractPath);
+    const staleness = evaluateStaleness({ contract, rootDir });
+    return {
+      status: staleness.status,
+      schemaHash: 'not-computed',
+      scopedTables: contract.scoped_tables,
+      issues: staleness.issues as ContractIssue[],
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      status: 'FAIL',
+      schemaHash: 'invalid',
+      scopedTables: [],
+      issues: [{ severity: 'FAIL', code: 'INVALID_CONTRACT', message }],
+    };
+  }
+}
+
 export function runSchemaContractCheck(input: {
   contractPath: string;
   snapshotPath?: string;
@@ -626,6 +698,7 @@ export function runSchemaContractCheck(input: {
   dbName?: string;
   envName?: string;
   options?: CheckSchemaOptions;
+  skipStaleness?: boolean;
 }): CheckSchemaResult {
   try {
     const contract = loadContract(input.contractPath);
@@ -643,7 +716,26 @@ export function runSchemaContractCheck(input: {
             ),
         );
 
-    return evaluateContract(contract, snapshot, input.options ?? { allowExtraColumns: true });
+    const result = evaluateContract(contract, snapshot, input.options ?? { allowExtraColumns: true });
+
+    if (input.skipStaleness) {
+      return result;
+    }
+
+    // The contract-vs-database check and the contract-vs-repo staleness check are
+    // complementary: a snapshot can match the scoped tables perfectly while the
+    // contract is still stale against newer Schema V2 changes.
+    const staleness = evaluateStaleness({
+      contract,
+      rootDir: input.rootDir ?? process.cwd(),
+    });
+    const issues = [...result.issues, ...(staleness.issues as ContractIssue[])];
+    const status: ContractSeverity = issues.some((issue) => issue.severity === 'FAIL')
+      ? 'FAIL'
+      : issues.some((issue) => issue.severity === 'WARNING')
+        ? 'WARNING'
+        : 'PASS';
+    return { ...result, status, issues };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {

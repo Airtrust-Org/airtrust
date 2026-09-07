@@ -190,5 +190,298 @@
   "out_of_contract_tables": [
     "airtrust_schema_baselines_v2",
     "airtrust_schema_changes_v2"
+  ],
+  "provenance": {
+    "baseline_state": "PRODUCTION_CONFIRMED",
+    "confirmed_via": "docs/database/production-schema-snapshot-20260714/structural-snapshot.json",
+    "snapshot_generated_at": "2026-07-29T00:22:49.078Z",
+    "inspection_method": "wrangler d1 execute airtrust-db --env production --remote --json with PRAGMA table_info / PRAGMA index_list / PRAGMA foreign_key_list / SELECT sql FROM sqlite_master only (no writes, no migrations apply)",
+    "verified_scope_note": "scoped_tables + tables{} + schema_hash below are PRODUCTION_CONFIRMED only for the 13 listed tables and only as of snapshot_generated_at. Any table NOT in scoped_tables is deliberately NOT asserted as production truth by this contract; see schema_v2_since_baseline and runtime_critical_uncovered.",
+    "state_definitions": {
+      "REPO_EXPECTED": "The DDL exists in the repository (worker-airtrust/migrations or worker-airtrust/schema-v2/changes). This contract makes NO claim that it reached any live database.",
+      "STAGING_APPLIED": "Applied to the staging D1 database and verified there. Not confirmed in production. Requires an in-repo evidence pointer.",
+      "PRODUCTION_CONFIRMED": "Structurally observed in production via read-only inspection, or recorded as an ACTIVE row in airtrust_schema_changes_v2. Requires an in-repo evidence pointer.",
+      "REMOTE_APPLY_PENDING": "A reviewed manifest under worker-airtrust/schema-v2/ wires the change for the governed Apply Schema Change V2 workflow, but the dispatch has not been executed / not been confirmed here. Preparation is not application."
+    }
+  },
+  "staleness_guard": {
+    "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
+    "reviewed_manifests_dir": "worker-airtrust/schema-v2",
+    "last_reconciled_at": "2026-09-07",
+    "last_reconciled_against": "origin/main c0b8cb5a fix(schema-v2): fail closed on non-atomic table rebuilds (#497)",
+    "schema_v2_digest": "4bf5f47e6595c67d451484fa67bd07dd296e862a052e23eae22c30b03b70c032",
+    "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
+  },
+  "runtime_critical_uncovered": [
+    {
+      "table": "usuarios_empresas_perfis",
+      "introduced_by": "0475_usuarios_empresas_perfis_reconciliation.sql",
+      "why_critical": "Server-side multi-profile authorization authority; the backend resolver is fail-closed on this table. Present in production (147 rows) per the 0475 reviewed plan, but its structure is not asserted by a verified production snapshot.",
+      "blocked_on": "OPS-PROOF-PENDING: an authorized read-only production structural snapshot covering the auth/RBAC tables (no such snapshot exists in-repo).",
+      "tracking": "https://github.com/Airtrust-Org/airtrust/issues/485"
+    },
+    {
+      "table": "qualificacoes_renovacoes",
+      "introduced_by": "0487_qualificacoes_renovacoes.sql",
+      "why_critical": "Canonical backing table for the active qualification-renewal request routes (HEALTH P1-26). Governed and dispatchable, but 0487 is REMOTE_APPLY_PENDING - not applied.",
+      "blocked_on": "0487 governed apply + an authorized read-only production snapshot covering the qualification tables.",
+      "tracking": "https://github.com/Airtrust-Org/airtrust/issues/485"
+    }
+  ],
+  "schema_v2_since_baseline": [
+    {
+      "change_file": "0438_controle_voos_rdv_coordenacao_workflow.sql",
+      "change_id": "0438-rdv-coordination-workflow-production",
+      "sha256": "08279326595fbc9e04388d26c885a44ee66ca1cbd0a8489f08b9de707684c2b8",
+      "targets": ["cv_rdv_alertas", "cv_rdv_aprovacoes", "cv_rdv_operacional", "cv_rdv_revisoes", "cv_voo_abastecimentos", "cv_voo_etapas"],
+      "domain": "controle-de-voos / RDV coordination workflow",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "0438-rdv-coordination-workflow-production.json"
+    },
+    {
+      "change_file": "0451_cron_job_resilience_state_v2.sql",
+      "change_id": "cron-resilience-state-0451",
+      "sha256": "3746540210b488cdc1f21ce9f85a17ac27da17c4f231147e0901e8ac57d7a3ca",
+      "targets": ["cron_job_items", "cron_job_runs", "cron_job_state"],
+      "domain": "cron job resilience / scheduler state",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "cron-resilience-state-0451.json"
+    },
+    {
+      "change_file": "0452_operational_domain_rbac.sql",
+      "change_id": null,
+      "sha256": "7bebba2a7565bd2a1c9e277ba2109a1da46f0641a60137b0e01a9f041fc20fda",
+      "targets": ["dominios_operacionais", "empresas", "lms_cursos", "qualificacoes_categorias", "setores"],
+      "domain": "operational-domain RBAC (dominios_operacionais + domain codes)",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
+    },
+    {
+      "change_file": "0454_qualificacoes_tipos_dominio_override.sql",
+      "change_id": null,
+      "sha256": "6aef100bbff18241eae3c067b5c9aadc647a17145fcd136f300cb57244b2b2f6",
+      "targets": ["qualificacoes_tipos"],
+      "domain": "qualificacoes_tipos operational-domain override (base statement)",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
+    },
+    {
+      "change_file": "0454_qualificacoes_tipos_dominio_override_reconcile_existing.sql",
+      "change_id": "qualificacoes-tipos-dominio-override-0454",
+      "sha256": "ca185d203fc0cc11b26be9fb829057c618c6d5f471adadfdba3c67f9526521a3",
+      "targets": ["qualificacoes_tipos"],
+      "domain": "qualificacoes_tipos operational-domain override (reconcile existing rows)",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "qualificacoes-tipos-dominio-override-0454.json"
+    },
+    {
+      "change_file": "0456_lms_h5p_course_binding.sql",
+      "change_id": null,
+      "sha256": "0236d14eb531eb590b5f7f09dd952c2c1f35f090543eaa580d75ce378f72e1ec",
+      "targets": ["lms_cursos"],
+      "domain": "LMS H5P course binding",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
+    },
+    {
+      "change_file": "0457_qualification_category_lms_contract.sql",
+      "change_id": null,
+      "sha256": "d2d55f1501df89201c11c88390b4aa17411760da22096a9279ff6bf2d95204f5",
+      "targets": ["lms_cursos", "qualificacoes_categorias", "qualificacoes_historico", "qualificacoes_tipos"],
+      "domain": "qualification-category <-> LMS course integrity triggers",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
+    },
+    {
+      "change_file": "0459_sk76_periodic_code_denominator.sql",
+      "change_id": null,
+      "sha256": "4417c6e8a0416711117056254e995b4ad8c86ccf69294f5ac377fe25fa13e21c",
+      "targets": ["modelos_sessao_versionamento"],
+      "domain": "SK76 periodic-code denominator reconciliation (modelos_sessao_versionamento trigger + DML)",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
+    },
+    {
+      "change_file": "0460_simulator_future_planning.sql",
+      "change_id": null,
+      "sha256": "d5214bd5bac6a0ea01df3778fb2d09d6b1899bbd52d4b278549910cb693512ab",
+      "targets": ["simulador_planejamento_auditoria", "treinamentos_planejados"],
+      "domain": "simulator future planning (treinamentos_planejados + audit) - adjacent to the simulator domain but does not touch scoped session/ficha tables",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
+    },
+    {
+      "change_file": "0467_sigvoos_shadow_parallel_v1.sql",
+      "change_id": "sigvoos-shadow-parallel-0467",
+      "sha256": "3fa117707d1d868df160682d07ab055af3906d84c6c85c9587639f688a640602",
+      "targets": ["sigvoos_shadow_comparisons", "sigvoos_shadow_leg_history", "sigvoos_shadow_legs", "sigvoos_shadow_runs"],
+      "domain": "SIGVOOS shadow parallel run",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "sigvoos-shadow-parallel-0467.json"
+    },
+    {
+      "change_file": "0468_sigvoos_shadow_leg_crew_v1.sql",
+      "change_id": "sigvoos-shadow-leg-crew-0468",
+      "sha256": "0dfa5264de1c155a1aa8bbc4217e145b16ba93ccd97bc249102314828ed264e2",
+      "targets": ["sigvoos_shadow_leg_crews"],
+      "domain": "SIGVOOS shadow leg crew",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "sigvoos-shadow-leg-crew-0468.json"
+    },
+    {
+      "change_file": "0469_lms_completion_pendencias_snapshots.sql",
+      "change_id": "lms-completion-diagnostics-0469",
+      "sha256": "37e9bdd45048ca5e84f3e955324996d8e49a81a7a0893d10e05f8be792a35ebf",
+      "targets": ["lms_completion_diagnostics_snapshots"],
+      "domain": "LMS completion pendencias diagnostics snapshots",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-completion-diagnostics-0469.json"
+    },
+    {
+      "change_file": "0470_certificado_validacao_hash_index.sql",
+      "change_id": "certificate-validation-hash-0470",
+      "sha256": "efc80eadb66bf30a241cf595529ccc9452f894d6f6d60cab25288cc514efbf02",
+      "targets": ["qualificacoes_historico"],
+      "domain": "certificate validation-hash index on qualificacoes_historico",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "certificate-validation-hash-0470.json"
+    },
+    {
+      "change_file": "0472_frms_operational_readiness.sql",
+      "change_id": "frms-operational-readiness-0472",
+      "sha256": "8db1a914f013ae48d3e860c8148a1dd9c0d6c9c2ab591a02870dde09fd05a738",
+      "targets": ["frms_readiness_assessment", "frms_readiness_vigilance_trial"],
+      "domain": "FRMS operational readiness persistence",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "PRODUCTION_CONFIRMED",
+      "reviewed_manifest": "frms-operational-readiness-0472.json",
+      "evidence": "worker-airtrust/schema-v2/plans/usuarios-empresas-perfis-reconciliation-0475.md"
+    },
+    {
+      "change_file": "0474_frms_recovery_activity_v1.sql",
+      "change_id": "frms-recovery-activity-0474",
+      "sha256": "3925bf0a81a3a6e20893d60cc5dc15139f0c925c79705020a5b74ca33ac5df04",
+      "targets": ["frms_recovery_activity_day", "frms_recovery_activity_segment", "frms_recovery_assessment"],
+      "domain": "FRMS recovery activity persistence",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "frms-recovery-activity-0474.json"
+    },
+    {
+      "change_file": "0475_usuarios_empresas_perfis_reconciliation.sql",
+      "change_id": "usuarios-empresas-perfis-reconciliation-0475",
+      "sha256": "a1b979f8e09e326effe62e4374572df5ea5f7154503d87bcc0b980525cfb9230",
+      "targets": ["usuarios_empresas_perfis"],
+      "domain": "multi-profile authorization authority (usuarios_empresas_perfis)",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "PRODUCTION_CONFIRMED",
+      "reviewed_manifest": "usuarios-empresas-perfis-reconciliation-0475.json",
+      "evidence": "worker-airtrust/schema-v2/plans/usuarios-empresas-perfis-reconciliation-0475.md",
+      "note": "The physical table exists in production (via ungoverned 0473); 0475 brings it under the Schema V2 ledger. Structure is production-confirmed; it is also listed in runtime_critical_uncovered because the contract does not yet carry a verified column-level rule for it."
+    },
+    {
+      "change_file": "0476_frms_pvtb_v2_operational_load.sql",
+      "change_id": "frms-pvtb-v2-operational-load-0476",
+      "sha256": "6c708bdf3309bbac9382ce549909e2d6488dcafb4067e33e67485f100c24fcd8",
+      "targets": ["frms_fatorizacao_jornada", "frms_readiness_assessment"],
+      "domain": "FRMS PVT-B V2 + operational load (frms_fatorizacao_jornada)",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "frms-pvtb-v2-operational-load-0476.json"
+    },
+    {
+      "change_file": "0481_training_dependency_planning.sql",
+      "change_id": "training-dependency-planning-0481",
+      "sha256": "88f3d8208998446e2066ef63eff1ad9f58aa2cd7d16538edca1520fdc98dc5c6",
+      "targets": ["qualificacoes_historico", "treinamento_dependencia_eventos", "treinamento_dependencias"],
+      "domain": "training dependency planning",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-dependency-planning-0481.json"
+    },
+    {
+      "change_file": "0482_training_dependency_complete_curriculum.sql",
+      "change_id": "training-dependency-complete-curriculum-0482",
+      "sha256": "6d2902d8e6a41ee501ae564d8740e2f3a6c3d2ff605d11668949cdf30d9a2437",
+      "targets": ["treinamentos_planejados"],
+      "domain": "training dependency complete-curriculum trigger",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-dependency-complete-curriculum-0482.json"
+    },
+    {
+      "change_file": "0483_edb_diary_persistence_foundation.sql",
+      "change_id": "edb-diary-persistence-0483",
+      "sha256": "e9dfb1409099be76d1da58c7f500d92182fe9182149f9dffd6163a8b1a3377b8",
+      "targets": ["edb_diarios", "edb_incidentes_integridade", "edb_volumes"],
+      "domain": "eDB diary persistence foundation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "edb-diary-persistence-0483.json"
+    },
+    {
+      "change_file": "0484_edb_audit_persistence.sql",
+      "change_id": "edb-audit-persistence-0484",
+      "sha256": "9eec92df3dc98642659de5483d35955cb2cd6ce7753cc13877f76de1cba4c6f6",
+      "targets": ["edb_audit_events"],
+      "domain": "eDB audit chain persistence",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "edb-audit-persistence-0484.json"
+    },
+    {
+      "change_file": "0485_edb_technical_awareness_persistence.sql",
+      "change_id": "edb-technical-awareness-persistence-0485",
+      "sha256": "efd9d6d74f3d0eca5f751374cfd227e1b71107aaeaeb9056d6bbe7e8cbad4c54",
+      "targets": ["edb_ciencias_tecnicas_pic", "edb_situacoes_tecnicas"],
+      "domain": "eDB technical awareness persistence",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "edb-technical-awareness-persistence-0485.json"
+    },
+    {
+      "change_file": "0486_edb_final_revision_persistence.sql",
+      "change_id": "edb-final-revision-persistence-0486",
+      "sha256": "ad4b3e9b367c3c0ea4a8dd8fc3b54a29183da51a8c06a80a61a58d4a28ab9502",
+      "targets": ["edb_assinaturas", "edb_registro_estado", "edb_registro_revisoes"],
+      "domain": "eDB final revision / signatures persistence",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "edb-final-revision-persistence-0486.json"
+    },
+    {
+      "change_file": "0487_qualificacoes_renovacoes.sql",
+      "change_id": "qualificacoes-renovacoes-0487",
+      "sha256": "2e76ab6e7a0ae9dc6e37b16d2856bb6369dbb13595c4305456648b6381b441f9",
+      "targets": ["qualificacoes_renovacoes"],
+      "domain": "qualification renewal requests backing table (HEALTH P1-26)",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "qualificacoes-renovacoes-0487.json",
+      "note": "0487 preparada NAO significa aplicada. Preflight/postcondition scripts are wired in apply-schema-change-v2.yml; the dispatch has not been executed."
+    },
+    {
+      "change_file": "ead-category-reconciliation-executor-0453.sql",
+      "change_id": null,
+      "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
+      "targets": ["ead_category_reconciliation_runs"],
+      "domain": "EAD category reconciliation executor ledger",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
+    }
   ]
 }
