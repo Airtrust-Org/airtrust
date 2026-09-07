@@ -58,6 +58,7 @@ jobs:
           node --test scripts/ci/verify-release-gates.test.mjs
           node --test scripts/__tests__/deploy-release-gates-wiring.test.mjs
           node --test scripts/ci/check-github-workflow-contexts.test.mjs
+          node --test scripts/ci/check-frontend-entry-chunks.test.mjs
       - name: validate 0438 on disposable real-base SQLite
         run: node --test scripts/__tests__/schema-v2-0438-rdv-coordination-workflow.test.mjs
       - name: validate governed qualification renewals 0487
@@ -72,6 +73,8 @@ jobs:
         run: ./scripts/ci-internal-docs-check.sh
       - name: build
         run: VITE_API_URL=http://127.0.0.1:8787 npm run build
+      - name: prove heavy frontend chunks stay out of initial entry closure
+        run: node scripts/ci/check-frontend-entry-chunks.mjs
       - name: check:demo-data
         run: npm run check:demo-data
 
