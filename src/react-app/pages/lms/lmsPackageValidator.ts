@@ -1,10 +1,11 @@
 import { unzipSync } from 'fflate';
 
+// Keep browser preflight aligned with the authoritative Worker budget.
 export const LMS_BROWSER_PACKAGE_LIMITS = Object.freeze({
-  maxCompressedBytes: 128 * 1024 * 1024,
+  maxCompressedBytes: 32 * 1024 * 1024,
   maxEntries: 2_000,
-  maxUncompressedBytes: 256 * 1024 * 1024,
-  maxFileBytes: 64 * 1024 * 1024,
+  maxUncompressedBytes: 64 * 1024 * 1024,
+  maxFileBytes: 32 * 1024 * 1024,
   maxPathDepth: 20,
   maxPathBytes: 512,
   maxCompressionRatio: 200,
@@ -78,7 +79,7 @@ export function normalizeBrowserArchivePath(rawPath: string): string | null {
 export function inspectBrowserZip(bytes: Uint8Array) {
   if (bytes.byteLength === 0) throw new Error('O pacote está vazio.');
   if (bytes.byteLength > LMS_BROWSER_PACKAGE_LIMITS.maxCompressedBytes) {
-    throw new Error('O pacote excede o limite comprimido de 128 MB.');
+    throw new Error('O pacote excede o limite comprimido de 32 MB.');
   }
   const eocd = findEocd(bytes);
   const entries = u16(bytes, eocd + 10);
@@ -117,7 +118,7 @@ export function inspectBrowserZip(bytes: Uint8Array) {
     const path = normalizeBrowserArchivePath(rawPath);
     if (path) {
       if (uncompressed > LMS_BROWSER_PACKAGE_LIMITS.maxFileBytes) {
-        throw new Error(`O arquivo ${path} excede o limite individual de 64 MB.`);
+        throw new Error(`O arquivo ${path} excede o limite individual de 32 MB.`);
       }
       const ratio = uncompressed / Math.max(1, compressed);
       if (uncompressed > 1024 && ratio > LMS_BROWSER_PACKAGE_LIMITS.maxCompressionRatio) {
@@ -128,7 +129,7 @@ export function inspectBrowserZip(bytes: Uint8Array) {
       expected.set(key, { path, size: uncompressed });
       total += uncompressed;
       if (total > LMS_BROWSER_PACKAGE_LIMITS.maxUncompressedBytes) {
-        throw new Error('O pacote excede o limite descompactado total de 256 MB.');
+        throw new Error('O pacote excede o limite descompactado total de 64 MB.');
       }
     }
     cursor = end;
@@ -147,11 +148,11 @@ export function extractBrowserLmsPackage(bytes: Uint8Array): BrowserPackageEntry
         const path = normalizeBrowserArchivePath(file.name);
         if (!path) return false;
         if (file.originalSize > LMS_BROWSER_PACKAGE_LIMITS.maxFileBytes) {
-          throw new Error(`O arquivo ${path} excede o limite individual de 64 MB.`);
+          throw new Error(`O arquivo ${path} excede o limite individual de 32 MB.`);
         }
         filteredTotal += file.originalSize;
         if (filteredTotal > LMS_BROWSER_PACKAGE_LIMITS.maxUncompressedBytes) {
-          throw new Error('O pacote excede o limite descompactado total de 256 MB.');
+          throw new Error('O pacote excede o limite descompactado total de 64 MB.');
         }
         return true;
       },

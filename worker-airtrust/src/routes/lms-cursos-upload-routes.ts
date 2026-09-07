@@ -141,7 +141,7 @@ async function readPackageRequest(
     if (!file) throw new ApiError('Campo de arquivo não encontrado', 400);
     validateExtension(file, tipoConteudo);
     if (file.size > LMS_PACKAGE_LIMITS.maxCompressedBytes) {
-      throw new ApiError('Pacote excede o limite comprimido de 128 MB', 413);
+      throw new ApiError('Pacote excede o limite comprimido de 32 MB', 413);
     }
     bytes = new Uint8Array(await file.arrayBuffer());
   } else {
@@ -323,7 +323,7 @@ app.post(
     }
     if (stored.size > LMS_PACKAGE_LIMITS.maxFileBytes) {
       await c.env.BUCKET.delete(storedKey);
-      throw new ApiError('Arquivo individual excede o limite de 64 MB', 413);
+      throw new ApiError('Arquivo individual excede o limite de 32 MB', 413);
     }
 
     return c.json({ success: true, data: { ...data, bytes: stored.size } });

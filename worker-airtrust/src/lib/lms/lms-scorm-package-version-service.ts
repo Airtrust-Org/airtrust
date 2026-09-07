@@ -17,7 +17,7 @@ type PackageRow = {
 
 // Large SCORM packages can contain hundreds of small visual assets. Serial R2
 // put/get calls keep the browser at the 25%/65% milestone for minutes and can
-// outlive the request even when the ZIP itself is well below the 128 MB limit.
+// outlive the request even when the ZIP itself is within the governed memory budget.
 // The legacy uploader already uses a batch of 10 as the safe R2 concurrency
 // boundary, so keep the versioned Quality Gate path on the same limit.
 const SCORM_PACKAGE_R2_BATCH_SIZE = 10;
