@@ -132,7 +132,10 @@ preview_bucket_name = "airtrust-storage-staging"
 binding = "DB"
 database_name = "airtrust-db-staging-baseline-20260701"
 database_id = "bf9963f4-eb12-439b-a830-20bbf577ac22"
-migrations_dir = "./migrations"
+# Staging schema changes are applied only by explicit governed runners that
+# resolve reviewed SQL paths themselves. Keep Wrangler's generic migration
+# enumerator isolated from the historical chain, matching production safety.
+migrations_dir = "./migrations_staging_disabled"
 
 [env.staging.ai]
 binding = "AI"
