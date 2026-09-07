@@ -45,6 +45,7 @@ import {
 import { buildAuditMetadata } from '../lib/audit/context';
 import { ensureCertificateForQualification } from '../services/ensure-certificate';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
+import { collectByBindChunks } from '../utils/d1-bind-chunks';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -1189,25 +1190,36 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
     if (!sectorOk) throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
   }
 
-  const funcionarioPlaceholders = funcionarioIdsUnicos.map(() => '?').join(', ');
-  let funcionarioQuery = `SELECT id, nome
-         FROM funcionarios
-        WHERE empresa_id = ?
-          AND deleted_at IS NULL
-          AND COALESCE(ativo, 1) = 1
-          AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
-          AND id IN (${funcionarioPlaceholders})`;
-  const funcionarioBinds: (number | string)[] = [empresaId, ...funcionarioIdsUnicos];
-  if (loteAccess.mode === 'restricted') {
-    funcionarioQuery += ` AND setor_id IN (${loteAccess.setorIds.map(() => '?').join(',')})`;
-    funcionarioBinds.push(...loteAccess.setorIds);
-  }
-  const funcionarios = await db
-    .prepare(funcionarioQuery)
-    .bind(...funcionarioBinds)
-    .all<{ id: number; nome: string }>();
+  const funcionarios = await collectByBindChunks(
+    funcionarioIdsUnicos,
+    1,
+    async (funcionarioIdChunk) => {
+      const funcionarioPlaceholders = funcionarioIdChunk.map(() => '?').join(', ');
+      const rows = await db
+        .prepare(
+          `SELECT id, nome, setor_id
+             FROM funcionarios
+            WHERE empresa_id = ?
+              AND deleted_at IS NULL
+              AND COALESCE(ativo, 1) = 1
+              AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
+              AND id IN (${funcionarioPlaceholders})`,
+        )
+        .bind(empresaId, ...funcionarioIdChunk)
+        .all<{ id: number; nome: string; setor_id: number | null }>();
+      return rows.results || [];
+    },
+  );
+  const allowedSetorIds =
+    loteAccess.mode === 'restricted' ? new Set(loteAccess.setorIds.map(Number)) : null;
   const funcionariosPorId = new Map(
-    (funcionarios.results ?? []).map((funcionario) => [Number(funcionario.id), funcionario]),
+    funcionarios
+      .filter(
+        (funcionario) =>
+          !allowedSetorIds ||
+          (funcionario.setor_id != null && allowedSetorIds.has(Number(funcionario.setor_id))),
+      )
+      .map((funcionario) => [Number(funcionario.id), funcionario]),
   );
   const funcionariosInvalidos = funcionarioIdsUnicos.filter(
     (funcionarioId) => !funcionariosPorId.has(funcionarioId),
