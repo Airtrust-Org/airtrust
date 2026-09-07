@@ -1,24 +1,23 @@
 #!/usr/bin/env node
 
-// source_reference: production-release-readonly-preflight (run 34169522648 / 34170340062)
-//   reported FRMS governance not ready — 1 of 2 active FRMS tenants has
-//   ASSIGNMENT_MISSING. That preflight's sanitized report intentionally omits
-//   empresa_id. This inventory identifies, READ-ONLY, exactly which active
-//   tenant lacks a governed frms_profile_assignments row, and enumerates the
-//   candidate frms_regulatory_profiles from that tenant's own data so a
-//   profile decision can be made without inference.
-// operational_decision: READ-ONLY production D1 inventory. Only SELECT / PRAGMA
-//   table_info. Every statement is validated against a mutating-SQL denylist
-//   before it reaches wrangler. Never --file, never a migration, never a
-//   Schema V2 apply, never a write. Production D1 name+id are hard-pinned; the
-//   staging D1 id is hard-blocked. No PII: only empresa_id and technical FRMS
-//   governance fields are returned (never names, emails, documents, tokens).
+// source_reference: production-release-readonly-preflight (runs 34169522648 /
+//   34170340062) reported FRMS_GOVERNANCE_NOT_READY — 1 of 2 active FRMS
+//   tenants has ASSIGNMENT_MISSING (no governed frms_profile_assignments row).
+//   That preflight's sanitized report omits empresa_id. This inventory
+//   identifies, READ-ONLY, exactly which active tenant lacks a governed
+//   assignment and enumerates that tenant's own applicable regulatory profiles
+//   so a profile decision can be made without inference.
+// operational_decision: READ-ONLY production D1 inventory via the Cloudflare
+//   D1 REST API (same transport as scripts/production/release-readonly-preflight.mjs
+//   — no CLI, no toml config parsing). Only SELECT / PRAGMA table_info,
+//   each validated against a mutating-SQL denylist before it is sent. Never a
+//   migration, Schema V2 apply, deploy or write. Production D1 id is
+//   hard-pinned; the staging and dev D1 ids are hard-blocked. No PII: only
+//   empresa_id and technical FRMS governance fields are returned (never names,
+//   emails, documents or tokens).
 // dry_run_required: not applicable — no side effects.
 // rollback_plan_required: not applicable — read-only.
 
-import { spawnSync } from 'node:child_process';
-
-const PRODUCTION_DB_NAME = 'airtrust-db';
 const PRODUCTION_DB_ID = '7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae';
 const BLOCKED_STAGING_DB_ID = 'bf9963f4-eb12-439b-a830-20bbf577ac22';
 const BLOCKED_DEV_DB_ID = 'a72fb05b-0912-4ad9-9686-e7948c8b09eb';
@@ -37,36 +36,38 @@ function assertReadOnlySql(sql) {
   if (!text) fail('EMPTY_SQL');
   if (!READ_ONLY_PREFIX.test(text)) fail(`NOT_READ_ONLY_SQL: ${text}`);
   if (MUTATING_SQL.test(text)) fail(`MUTATING_SQL_BLOCKED: ${text}`);
-  if (text.includes(';') && text.slice(text.indexOf(';') + 1).trim().length > 0) {
-    fail(`MULTI_STATEMENT_SQL_BLOCKED: ${text}`);
-  }
+  if (text.replace(/;\s*$/, '').includes(';')) fail(`MULTI_STATEMENT_SQL_BLOCKED: ${text}`);
 }
 
-function assertProductionTarget(name, id) {
-  const n = String(name || '').trim();
+function assertProductionTarget(id) {
   const i = String(id || '').trim();
   if (i === BLOCKED_STAGING_DB_ID || i === BLOCKED_DEV_DB_ID) fail(`TARGET_IS_NON_PRODUCTION_BLOCKED: ${i}`);
-  if (n !== PRODUCTION_DB_NAME || i !== PRODUCTION_DB_ID) {
-    fail(`TARGET_NOT_PRODUCTION: got ${n} / ${i}, expected ${PRODUCTION_DB_NAME} / ${PRODUCTION_DB_ID}`);
-  }
+  if (i !== PRODUCTION_DB_ID) fail(`TARGET_NOT_PRODUCTION: got ${i}, expected ${PRODUCTION_DB_ID}`);
 }
 
-function query(dbName, sql) {
+async function query(sql) {
   assertReadOnlySql(sql);
-  const run = spawnSync(
-    'npx',
-    ['wrangler', 'd1', 'execute', dbName, '--env', 'production', '--remote', '--json', '--command', sql],
-    { cwd: 'worker-airtrust', encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
-  );
-  if (run.status !== 0) fail(`WRANGLER_EXECUTE_FAILED: ${(run.stderr || run.stdout || '').slice(0, 4000)}`);
-  let parsed;
-  try {
-    parsed = JSON.parse(run.stdout);
-  } catch {
-    parsed = JSON.parse(run.stdout.slice(run.stdout.search(/[[{]/)));
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/d1/database/${PRODUCTION_DB_ID}/query`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ sql }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.success !== true) {
+    const codes = Array.isArray(payload?.errors)
+      ? payload.errors.map((x) => x?.code).filter(Boolean).join(',')
+      : '';
+    fail(`D1_READ_FAILED:http=${response.status}:codes=${codes || 'unknown'}`);
   }
-  const first = Array.isArray(parsed) ? parsed[0] : parsed;
-  return first?.results ?? [];
+  const first = Array.isArray(payload.result) ? payload.result[0] : payload.result;
+  if (first?.success === false) fail('D1_STATEMENT_FAILED');
+  return Array.isArray(first?.results) ? first.results : [];
 }
 
 function scalar(rows) {
@@ -74,37 +75,36 @@ function scalar(rows) {
   return Number(row[Object.keys(row)[0]] ?? 0);
 }
 
-function main() {
+async function main() {
   if (!process.env.CLOUDFLARE_API_TOKEN) fail('PRODUCTION_D1_READ_TOKEN_MISSING');
   if (!process.env.CLOUDFLARE_ACCOUNT_ID) fail('CLOUDFLARE_ACCOUNT_ID_MISSING');
 
-  const dbName = String(process.env.PRODUCTION_D1_NAME || PRODUCTION_DB_NAME);
   const dbId = String(process.env.PRODUCTION_D1_ID || PRODUCTION_DB_ID);
-  assertProductionTarget(dbName, dbId);
+  assertProductionTarget(dbId);
 
   const expectedSha = String(process.env.EXPECTED_SHA || '').toLowerCase();
   if (!/^[0-9a-f]{40}$/.test(expectedSha)) fail('EXPECTED_SHA_INVALID');
 
   const today = new Date().toISOString().slice(0, 10);
 
-  // Active FRMS tenants = same definition the release preflight uses.
-  const tenantIds = query(
-    dbName,
-    `SELECT DISTINCT f.empresa_id AS empresa_id FROM frms_jornada j ` +
-      `JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER) AND f.deleted_at IS NULL ` +
-      `WHERE j.deleted_at IS NULL AND f.empresa_id IS NOT NULL ORDER BY f.empresa_id`,
+  // Active FRMS tenants — same definition the release preflight uses.
+  const tenantIds = (
+    await query(
+      `SELECT DISTINCT f.empresa_id AS empresa_id FROM frms_jornada j ` +
+        `JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER) AND f.deleted_at IS NULL ` +
+        `WHERE j.deleted_at IS NULL AND f.empresa_id IS NOT NULL ORDER BY f.empresa_id`,
+    )
   ).map((r) => Number(r.empresa_id));
 
-  const tenants = tenantIds.map((empresaId) => {
-    const activeAssignments = query(
-      dbName,
+  const tenants = [];
+  for (const empresaId of tenantIds) {
+    const activeAssignments = await query(
       `SELECT regulatory_profile_id, profile_code FROM frms_profile_assignments ` +
         `WHERE empresa_id = ${empresaId} AND status = 'ACTIVE' ` +
         `AND effective_from <= '${today}' AND (effective_to IS NULL OR effective_to >= '${today}') ` +
         `ORDER BY profile_code`,
     );
-    const activeRegulatoryProfiles = query(
-      dbName,
+    const activeRegulatoryProfiles = await query(
       `SELECT id, profile_code, service_category FROM frms_regulatory_profiles ` +
         `WHERE empresa_id = ${empresaId} AND active = 1 AND deleted_at IS NULL ` +
         `AND effective_from <= '${today}' AND (effective_to IS NULL OR effective_to >= '${today}') ` +
@@ -115,39 +115,29 @@ function main() {
     let resolvedParameterCount = null;
     if (activeRegulatoryProfiles.length === 1) {
       const profileCode = activeRegulatoryProfiles[0].profile_code;
-      const revisions = query(
-        dbName,
-        `SELECT id, revision_number, model_version, policy_version, effective_from FROM frms_config_revisions ` +
+      const revisions = await query(
+        `SELECT id, revision_number, model_version, policy_version, effective_from, empresa_id FROM frms_config_revisions ` +
           `WHERE profile_code = '${profileCode}' AND status = 'ACTIVE' ` +
           `AND (empresa_id = ${empresaId} OR empresa_id IS NULL) ` +
           `AND effective_from <= '${today}' AND (effective_to IS NULL OR effective_to >= '${today}') ` +
           `ORDER BY CASE WHEN empresa_id = ${empresaId} THEN 0 ELSE 1 END, revision_number DESC, effective_from DESC`,
       );
       if (revisions.length >= 1) {
+        const rev = revisions[0];
         resolvedRevision = {
-          id: revisions[0].id,
-          revisionNumber: revisions[0].revision_number,
-          modelVersion: revisions[0].model_version,
-          tenantScoped: query(
-            dbName,
-            `SELECT COUNT(*) AS c FROM frms_config_revisions WHERE id = '${revisions[0].id}' AND empresa_id = ${empresaId}`,
-          )[0]
-            ? scalar(
-                query(
-                  dbName,
-                  `SELECT COUNT(*) AS c FROM frms_config_revisions WHERE id = '${revisions[0].id}' AND empresa_id = ${empresaId}`,
-                ),
-              ) === 1
-            : false,
+          id: rev.id,
+          revisionNumber: rev.revision_number,
+          modelVersion: rev.model_version,
+          tenantScoped: rev.empresa_id != null && Number(rev.empresa_id) === empresaId,
           ambiguous: revisions.length > 1,
         };
         resolvedParameterCount = scalar(
-          query(dbName, `SELECT COUNT(*) AS c FROM frms_config_parameters WHERE revision_id = '${revisions[0].id}'`),
+          await query(`SELECT COUNT(*) AS c FROM frms_config_parameters WHERE revision_id = '${rev.id}'`),
         );
       }
     }
 
-    return {
+    tenants.push({
       empresaId,
       activeRegulatoryProfileCount: activeRegulatoryProfiles.length,
       activeRegulatoryProfiles: activeRegulatoryProfiles.map((p) => ({
@@ -168,15 +158,25 @@ function main() {
           : activeAssignments.length === 1
             ? 'ASSIGNMENT_PRESENT'
             : 'ASSIGNMENT_AMBIGUOUS',
-    };
-  });
+    });
+  }
 
   const missing = tenants.filter((t) => t.assignmentState === 'ASSIGNMENT_MISSING');
 
-  // Profile decision — only proven from the tenant's OWN data, exactly one
-  // applicable active regulatory profile, and an unambiguous governed revision.
-  let profileDecision = { proven: false, reason: null };
-  if (missing.length === 1) {
+  // Profile decision — proven ONLY from the tenant's own data: exactly one
+  // applicable active regulatory profile and an unambiguous active governed
+  // revision. Never LEGACY_GENERAL / HELICOPTER_OFFSHORE / another tenant /
+  // heuristic as a default.
+  let profileDecision;
+  if (missing.length !== 1) {
+    profileDecision = {
+      proven: false,
+      reason:
+        missing.length === 0
+          ? 'NO_TENANT_WITH_MISSING_ASSIGNMENT'
+          : `MULTIPLE_TENANTS_WITH_MISSING_ASSIGNMENT:${missing.length}`,
+    };
+  } else {
     const t = missing[0];
     if (t.activeRegulatoryProfileCount === 0) {
       profileDecision = { proven: false, reason: 'NO_APPLICABLE_REGULATORY_PROFILE_FOR_TENANT' };
@@ -199,16 +199,12 @@ function main() {
         parameterCount: t.resolvedParameterCount,
       };
     }
-  } else if (missing.length === 0) {
-    profileDecision = { proven: false, reason: 'NO_TENANT_WITH_MISSING_ASSIGNMENT' };
-  } else {
-    profileDecision = { proven: false, reason: `MULTIPLE_TENANTS_WITH_MISSING_ASSIGNMENT:${missing.length}` };
   }
 
   const report = {
     generatedAtUtc: new Date().toISOString(),
     expectedSha,
-    target: { databaseName: dbName, databaseId: dbId, stagingDatabaseIdBlocked: BLOCKED_STAGING_DB_ID },
+    target: { databaseId: dbId, stagingDatabaseIdBlocked: BLOCKED_STAGING_DB_ID },
     readOnly: true,
     writes: 0,
     activeTenantCount: tenants.length,
@@ -232,4 +228,7 @@ function main() {
   }
 }
 
-main();
+main().catch((error) => {
+  console.error(`[frms-assignment-readonly-inventory][ERROR] ${String(error?.message || error)}`);
+  process.exitCode = 1;
+});

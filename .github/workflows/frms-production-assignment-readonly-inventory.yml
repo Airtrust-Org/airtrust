@@ -67,10 +67,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Install worker dependencies
-        run: npm --prefix worker-airtrust ci
 
       - name: Require production D1 read credential
         shell: bash
