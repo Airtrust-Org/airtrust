@@ -1,0 +1,183 @@
+name: Production Release Readonly Preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA reviewed for production preflight
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_PRODUCTION_READONLY_PREFLIGHT
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-release-readonly-preflight
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  PRODUCTION_D1_NAME: airtrust-db
+  PRODUCTION_D1_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+  BLOCKED_STAGING_D1_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+
+jobs:
+  guard:
+    name: Production readonly preflight guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EVENT_REF" == 'refs/heads/main' ]] || { echo 'MAIN_REF_REQUIRED' >&2; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_PRODUCTION_READONLY_PREFLIGHT' ]] || {
+            echo 'READONLY_CONFIRMATION_REQUIRED' >&2
+            exit 1
+          }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'EXPECTED_SHA_INVALID' >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$EVENT_SHA" ]] || { echo 'EXPECTED_SHA_MISMATCH' >&2; exit 1; }
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Verify official release gates on exact SHA
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+  d1-readonly-preflight:
+    name: Production D1 read-only release preflight
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Require production D1 read credential
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo 'PRODUCTION_D1_READ_TOKEN_MISSING' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
+
+      - name: Check governed production schema contract read-only
+        id: contract
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types scripts/schema-contract/check-schema-contract.ts             --contract docs/database/schema-contracts/production-d1-baseline-v2.json             --production > "$RUNNER_TEMP/production-schema-contract.json"
+          node - "$RUNNER_TEMP/production-schema-contract.json" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (data.status !== 'PASS') {
+            console.error(JSON.stringify({status:data.status,issues:data.issues ?? data.errors ?? data.failures ?? []}, null, 2));
+            process.exit(1);
+          }
+          console.log('PRODUCTION_SCHEMA_CONTRACT=PASS');
+          NODE
+
+      - name: Execute bounded read-only production release preflight
+        id: preflight
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PRODUCTION_D1_NAME: ${{ env.PRODUCTION_D1_NAME }}
+          PRODUCTION_D1_ID: ${{ env.PRODUCTION_D1_ID }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set +e
+          node scripts/production/release-readonly-preflight.mjs > "$RUNNER_TEMP/production-release-preflight.json"
+          status=$?
+          set -e
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          if [[ ! -s "$RUNNER_TEMP/production-release-preflight.json" ]]; then
+            echo 'PRODUCTION_PREFLIGHT_REPORT_MISSING' >&2
+            exit 1
+          fi
+
+      - name: Publish sanitized preflight summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/production-release-preflight.json"
+          [[ -s "$report" ]] || { echo 'No preflight report produced.' >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          node - "$report" <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('node:fs');
+          const r = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const line = (k, v) => console.log(`- ${k}: \`${v}\``);
+          console.log('## Production release read-only preflight');
+          console.log('');
+          line('release SHA', r.expectedSha);
+          line('production current source SHA', r.productionVersion.sourceSha || 'missing');
+          line('staging current source SHA', r.stagingVersion.sourceSha || 'missing');
+          line('staging matches release', r.stagingMatchesRelease ? 'YES' : 'NO');
+          line('schema structural readiness', r.schema.ready ? 'PASS' : 'FAIL');
+          line('auth authority readiness', r.authAuthority.ready ? 'PASS' : 'FAIL');
+          line('FRMS active tenants', r.frms.activeTenantCount);
+          line('FRMS ready tenants', r.frms.readyTenantCount);
+          line('FRMS governance readiness', r.frms.ready ? 'PASS' : 'FAIL');
+          line('0487 state', r.qualificationRenewals.state);
+          line('0487 apply ready', r.qualificationRenewals.applyReady ? 'YES' : 'NO');
+          line('production release ready', r.verdict.productionReleaseReady ? 'YES' : 'NO');
+          line('blockers', r.verdict.blockers.join(',') || 'none');
+          console.log('- writes: none');
+          NODE
+
+      - name: Upload sanitized read-only evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-release-readonly-preflight-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/production-release-preflight.json
+            ${{ runner.temp }}/production-schema-contract.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Fail closed on production blocker
+        shell: bash
+        env:
+          PREFLIGHT_EXIT_CODE: ${{ steps.preflight.outputs.exit_code }}
+        run: |
+          set -euo pipefail
+          [[ "$PREFLIGHT_EXIT_CODE" == '0' ]] || {
+            echo "PRODUCTION_RELEASE_PREFLIGHT_BLOCKED exit=$PREFLIGHT_EXIT_CODE" >&2
+            exit 1
+          }
+          echo 'PRODUCTION_RELEASE_PREFLIGHT=PASS'
