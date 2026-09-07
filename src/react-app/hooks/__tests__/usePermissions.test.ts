@@ -74,6 +74,27 @@ describe('usePermissions', () => {
     expect(resultB.current.can('relatorios.export')).toBe(false);
   });
 
+  it('localStorage adulterado nunca concede permissão efetiva', () => {
+    localStorage.setItem(
+      'airtrust:9:77:perfis_custom',
+      JSON.stringify([{ value: 'ALUNO', permissoes: null }]),
+    );
+    localStorage.setItem(
+      'airtrust_perfis_custom',
+      JSON.stringify([{ value: 'ALUNO', permissoes: null }]),
+    );
+
+    mockAuth({
+      user: { id: 77, role: 'ALUNO', permissions: [] },
+      empresaAtualId: 9,
+    });
+    const { result } = renderHook(() => usePermissions());
+
+    expect(result.current.can('admin.usuarios')).toBe(false);
+    expect(result.current.can('relatorios.export')).toBe(false);
+    expect(result.current.can('self.ficha')).toBe(true);
+  });
+
   it('usuário sem permissão: GESTOR não acessa admin.config nem admin.multiempresa mesmo com wildcard de role', () => {
     mockAuth({
       user: { id: 2, role: 'GESTOR', permissions: [] },
