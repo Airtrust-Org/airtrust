@@ -822,7 +822,6 @@ async function calcRepouso(
   horaApresentacao: string | undefined,
 ): Promise<{ minutos: number | null; ok: boolean | null }> {
   if (!horaApresentacao) return { minutos: null, ok: null };
-
   // Buscar último corte motor deste piloto (EVD ou FRMS jornada)
   const ultimoCorte = await db
     .prepare(
@@ -839,7 +838,6 @@ async function calcRepouso(
     .first<{ hora_corte_motor: string | null; data: string }>();
 
   if (!ultimoCorte?.hora_corte_motor) return { minutos: null, ok: null };
-
   const [ch, cm] = ultimoCorte.hora_corte_motor.split(':').map(Number);
   const [ah, am] = horaApresentacao.split(':').map(Number);
 
