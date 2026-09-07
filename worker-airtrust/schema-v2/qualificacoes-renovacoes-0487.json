@@ -1,0 +1,8 @@
+{
+  "changeId": "qualificacoes-renovacoes-0487",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0487_qualificacoes_renovacoes.sql",
+  "fileHash": "2e76ab6e7a0ae9dc6e37b16d2856bb6369dbb13595c4305456648b6381b441f9",
+  "planPath": "worker-airtrust/schema-v2/plans/qualificacoes-renovacoes-0487.md",
+  "planHash": "f960a97843ce7ff90d0fa87422e90d8436ffad7f4cd583cc156e8fe029a9f408"
+}
