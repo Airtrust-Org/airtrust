@@ -41,6 +41,7 @@ const MSG_PIC_SIC_SAME = 'PIC e SIC não podem ser o mesmo tripulante.';
 const MSG_DUPLICATE_CREW =
   'Tripulante já alocado em outra escala diária na mesma data/intervalo.';
 const MSG_REST_INVALID = 'Repouso mínimo não atendido.';
+const MSG_REST_UNKNOWN = 'Repouso mínimo não pôde ser comprovado.';
 const MSG_AIRCRAFT_UNAVAILABLE = 'Aeronave indisponível ou inativa no cadastro mestre.';
 const MSG_MODEL_QUALIFICATION = 'Tripulante sem habilitação cadastrada para o modelo da aeronave.';
 const MSG_MONTHLY_UNAVAILABLE = 'Tripulante indisponível na escala mensal para esta data/período.';
@@ -819,8 +820,8 @@ async function calcRepouso(
   pilotoId: number,
   dataVoo: string,
   horaApresentacao: string | undefined,
-): Promise<{ minutos: number | null; ok: boolean }> {
-  if (!horaApresentacao) return { minutos: null, ok: true };
+): Promise<{ minutos: number | null; ok: boolean | null }> {
+  if (!horaApresentacao) return { minutos: null, ok: null };
 
   // Buscar último corte motor deste piloto (EVD ou FRMS jornada)
   const ultimoCorte = await db
@@ -837,7 +838,7 @@ async function calcRepouso(
     .bind(pilotoId, pilotoId, empresaId, dataVoo, pilotoId, dataVoo)
     .first<{ hora_corte_motor: string | null; data: string }>();
 
-  if (!ultimoCorte?.hora_corte_motor) return { minutos: null, ok: true };
+  if (!ultimoCorte?.hora_corte_motor) return { minutos: null, ok: null };
 
   const [ch, cm] = ultimoCorte.hora_corte_motor.split(':').map(Number);
   const [ah, am] = horaApresentacao.split(':').map(Number);
@@ -1076,7 +1077,10 @@ async function validateEvdItemForDailyPublication(params: {
     return { ok: false, error: `${MSG_DUPLICATE_CREW} [voo:${params.voo.id}]`, code: 'DUPLICATE_CREW' };
   }
 
-  if (Number(params.voo.repouso_minimo_ok ?? 1) === 0) {
+  if (params.voo.repouso_minimo_ok == null) {
+    return { ok: false, error: `${MSG_REST_UNKNOWN} [voo:${params.voo.id}]`, code: 'REST_UNKNOWN' };
+  }
+  if (Number(params.voo.repouso_minimo_ok) !== 1) {
     return { ok: false, error: `${MSG_REST_INVALID} [voo:${params.voo.id}]`, code: 'REST_INVALID' };
   }
 
@@ -1182,7 +1186,8 @@ async function buildDailyPublicationSnapshot(params: {
       },
       observacoes_gerais: voo.observacoes,
       flags_operacionais: {
-        repouso_minimo_ok: Number(voo.repouso_minimo_ok ?? 1) === 1,
+        repouso_minimo_ok:
+          voo.repouso_minimo_ok == null ? null : Number(voo.repouso_minimo_ok) === 1,
       },
       justificativas: (justificativasPorVoo[voo.id] || []).map((just) => ({
         id: just.id,
@@ -1639,7 +1644,9 @@ evdRoutes.post('/', requireRole('admin', 'manager'), async (c) => {
   // Validação de repouso para PIC
   if (d.pic_id) {
     const repPic = await calcRepouso(db, empresaId, d.pic_id, d.data, d.hora_apresentacao);
-    if (repPic.minutos !== null && !repPic.ok) {
+    if (repPic.ok === null) {
+      warnings.push('PIC: repouso anterior não pôde ser comprovado');
+    } else if (repPic.minutos !== null && !repPic.ok) {
       warnings.push(
         `PIC: repouso insuficiente (${Math.floor(repPic.minutos / 60)}h${repPic.minutos % 60}m < 12h30 mínimo)`,
       );
@@ -1649,7 +1656,9 @@ evdRoutes.post('/', requireRole('admin', 'manager'), async (c) => {
   // Validação de repouso para SIC
   if (d.sic_id) {
     const repSic = await calcRepouso(db, empresaId, d.sic_id, d.data, d.hora_apresentacao);
-    if (repSic.minutos !== null && !repSic.ok) {
+    if (repSic.ok === null) {
+      warnings.push('SIC: repouso anterior não pôde ser comprovado');
+    } else if (repSic.minutos !== null && !repSic.ok) {
       warnings.push(
         `SIC: repouso insuficiente (${Math.floor(repSic.minutos / 60)}h${repSic.minutos % 60}m < 12h30 mínimo)`,
       );
@@ -1661,7 +1670,7 @@ evdRoutes.post('/', requireRole('admin', 'manager'), async (c) => {
 
   // Calc repouso for storage
   let repousoMinutos: number | null = null;
-  let repousoOk = 1;
+  let repousoOk: number | null = null;
   if (d.pic_id && d.hora_apresentacao) {
     const r = await calcRepouso(db, empresaId, d.pic_id, d.data, d.hora_apresentacao);
     repousoMinutos = r.minutos;
@@ -1887,7 +1896,7 @@ evdRoutes.put('/:id', requireRole('admin', 'manager'), async (c) => {
   }
 
   let repousoMinutos: number | null = null;
-  let repousoOk = 1;
+  let repousoOk: number | null = null;
   if (
     typeof candidate.pic_id === 'number' &&
     candidate.hora_apresentacao &&
@@ -2077,9 +2086,12 @@ evdRoutes.post('/:id/publicar', requireRole('admin', 'manager'), async (c) => {
     return c.json({ success: false, error: MSG_DUPLICATE_CREW }, 409);
   }
 
-  // Block publication if rest violation
-  if (voo.repouso_minimo_ok === 0) {
-    return c.json({ success: false, error: MSG_REST_INVALID }, 400);
+  // Fail closed: unknown rest evidence is not operational conformity.
+  if (voo.repouso_minimo_ok == null) {
+    return c.json({ success: false, error: MSG_REST_UNKNOWN, code: 'REST_UNKNOWN' }, 409);
+  }
+  if (Number(voo.repouso_minimo_ok) !== 1) {
+    return c.json({ success: false, error: MSG_REST_INVALID, code: 'REST_INVALID' }, 400);
   }
 
   const operationalChecks = await collectOperationalWarningsAndBlocks({
