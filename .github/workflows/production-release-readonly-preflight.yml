@@ -61,8 +61,8 @@ jobs:
           RELEASE_SHA: ${{ github.sha }}
         run: node scripts/ci/verify-release-gates.mjs
 
-  readonly:
-    name: Read-only production release checks
+  d1-readonly-preflight:
+    name: Production D1 read-only release preflight
     needs: guard
     runs-on: ubuntu-latest
     environment: production
