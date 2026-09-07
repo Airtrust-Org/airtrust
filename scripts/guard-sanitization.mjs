@@ -159,6 +159,30 @@ check(
   }
 );
 
+// ─── 4b. Credenciais R2 literais ───────────────────────────────────────────
+// Diferente do guard genérico, esta verificação varre também Markdown: fontes
+// documentais e arquivos .example não podem conter credenciais reais.
+{
+  let raw = gitGrep(
+    '(R2_ACCESS_KEY_ID|R2_SECRET_ACCESS_KEY|R2_ACCOUNT_ID)[[:space:]]*=[[:space:]]*[A-Za-z0-9_-]{24,}',
+    [],
+  );
+
+  if (raw) {
+    const allowed = /\$\{|YOUR_|PLACEHOLDER|EXAMPLE|CHANGEME|<[^>]+>|=[[:space:]]*$/i;
+    raw = raw
+      .split('\n')
+      .filter((line) => line && !allowed.test(line))
+      .join('\n');
+  }
+
+  if (raw?.trim()) {
+    console.error('\n[guard:sanitization] FAIL: Credencial R2 literal rastreada');
+    raw.split('\n').slice(0, 20).forEach((line) => console.error('  ' + line.replace(/=(.*)$/, '=[REDACTED]')));
+    violations++;
+  }
+}
+
 // ─── 5. Caminhos absolutos pessoais hardcoded ───────────────────────────────
 check(
   'Caminho absoluto pessoal hardcoded',
