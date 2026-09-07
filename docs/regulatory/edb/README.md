@@ -43,6 +43,9 @@ Esses arquivos foram produzidos antes da vigência da Resolução nº 773/2025 e
 - `ADR_EDB_REGULATED_RECORDS_BOUNDARY_20260802.md`: fronteira arquitetural entre `cv_*` e o domínio regulado.
 - `ANAC_EDB_RBAC135_SUBMISSION_PLAN_20260802.md`: estratégia de FOP 200, ateste do software e alteração de EO.
 - `ANAC_EDB_IMPLEMENTATION_PLAN_20260802.md`: divisão em PRs pequenas, testes e critérios de saída.
+- `EDB_SEMANTIC_DECISION_CYCLES_IFR_DISCREPANCIES_20260904.md`: decisão fail-closed para ciclos, IFR e discrepâncias até que a fonte estruturada aplicável exista.
+- `EDB_COSTA_DO_SOL_MGO_SOURCE_MAPPING_2026-09-07.md`: mapeamento de IFR-R/IFR-C do operador e registro da pesquisa de aplicabilidade para ciclos.
+- `ANAC_EDB_HOMOLOGATION_REQUEST_PACK_2026-09-07.md`: pedido pronto para protocolo pelo operador para obter o contrato técnico ANAC, sem inferir integração.
 
 ## Fontes oficiais consultadas
 
