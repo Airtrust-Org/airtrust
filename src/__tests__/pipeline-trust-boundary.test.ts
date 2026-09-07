@@ -5,6 +5,10 @@ import { describe, it, expect } from 'vitest';
 describe('Staging Pipeline Trust Boundary', () => {
   const workflowPath = path.resolve(__dirname, '../../.github/workflows/deploy-staging.yml');
   const applyMigrationPath = path.resolve(__dirname, '../../scripts/staging/apply-approved-migrations.sh');
+  const recoveryRunnerPath = path.resolve(
+    __dirname,
+    '../../scripts/staging/apply-approved-migration-with-recovery-point.sh',
+  );
 
   const releaseGateVerifierPath = path.resolve(
     __dirname,
@@ -13,6 +17,7 @@ describe('Staging Pipeline Trust Boundary', () => {
 
   const workflowContent = fs.readFileSync(workflowPath, 'utf8');
   const scriptContent = fs.readFileSync(applyMigrationPath, 'utf8');
+  const recoveryRunnerContent = fs.readFileSync(recoveryRunnerPath, 'utf8');
   const releaseGateVerifierContent = fs.readFileSync(releaseGateVerifierPath, 'utf8');
 
   it('1. workflow confiável vem de main (ou github.sha) na raiz', () => {
@@ -50,9 +55,18 @@ describe('Staging Pipeline Trust Boundary', () => {
   });
 
   it('7. allowlist e validator vêm de main', () => {
-    // Scripts are run via `bash scripts/staging/validate...` (root checkout)
-    expect(scriptContent).toMatch(/bash "\$ROOT\/scripts\/staging\/validate-0424-postconditions\.sh"/);
-    expect(scriptContent).toMatch(/bash "\$ROOT\/scripts\/staging\/validate-0452-postconditions\.sh"/);
+    // HEALTH P0-08/#477: 0424 and 0452 no longer fall through to a bare
+    // wrangler call inside apply-approved-migrations.sh — they route to the
+    // governed recovery-point runner, which is where their postcondition
+    // validators actually run now. The trust-boundary property this test
+    // guards (validators execute from the trusted root checkout, never from
+    // untrusted `release/`) is unchanged: both scripts `cd "$ROOT"` before
+    // resolving any relative script path, and neither ever prefixes a
+    // validator invocation with `release/`.
+    expect(scriptContent).not.toMatch(/bash release\/scripts\/staging\/validate/);
+    expect(recoveryRunnerContent).toMatch(/bash scripts\/staging\/validate-0424-postconditions\.sh/);
+    expect(recoveryRunnerContent).toMatch(/bash scripts\/staging\/validate-0452-postconditions\.sh/);
+    expect(recoveryRunnerContent).not.toMatch(/bash release\/scripts\/staging\/validate/);
   });
 
   it('8. path traversal é rejeitado em migrations', () => {

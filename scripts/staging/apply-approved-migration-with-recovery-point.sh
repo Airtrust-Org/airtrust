@@ -13,8 +13,13 @@ ALLOWED_DB_ID="bf9963f4-eb12-439b-a830-20bbf577ac22"
 BLOCKED_PRODUCTION_DB_ID="7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae"
 CONFIRMATION_PHRASE="AIRTRUST_STAGING_SCHEMA_CHANGE"
 APPROVED_MIGRATIONS=(
+  "0424_examiner_universal_training_fichas.sql"
+  "0425_examiner_event_models_and_assignment_owned_fichas.sql"
+  "0452_operational_domain_rbac.sql"
   "0453_ead_category_reconciliation_executor.sql"
   "0454_qualificacoes_tipos_dominio_override.sql"
+  "0457_qualification_category_lms_contract.sql"
+  "0459_sk76_periodic_code_denominator.sql"
   "0461_refresh_tokens_empresa_id.sql"
   "0462_qualificacoes_tipos_codigo_tenant_active_unique.sql"
   "0466_cae_planning_v3.sql"
@@ -115,12 +120,26 @@ trap 'rm -f "$preflight_output" "$recovery_output" "$ledger_output" "$combined_s
 
 validate_postconditions() {
   case "$migration_basename" in
+    0424_examiner_universal_training_fichas.sql)
+      bash scripts/staging/validate-0424-postconditions.sh --target="$db_name"
+      ;;
+    0452_operational_domain_rbac.sql)
+      bash scripts/staging/validate-0452-postconditions.sh --target="$db_name"
+      ;;
     0453_ead_category_reconciliation_executor.sql)
       bash scripts/staging/validate-0453-postconditions.sh --target="$db_name"
       ;;
     0454_qualificacoes_tipos_dominio_override.sql)
       bash scripts/staging/validate-0454-postconditions.sh --target="$db_name"
       ;;
+    0457_qualification_category_lms_contract.sql)
+      bash scripts/staging/validate-0457-postconditions.sh --target="$db_name"
+      ;;
+    0459_sk76_periodic_code_denominator.sql)
+      bash scripts/staging/validate-0459-postconditions.sh --target="$db_name"
+      ;;
+    # 0425 has no dedicated structural postcondition validator, matching its
+    # historical behavior in scripts/staging/apply-approved-migrations.sh.
     0461_refresh_tokens_empresa_id.sql)
       bash scripts/staging/validate-0461-postconditions.sh --target="$db_name"
       ;;
