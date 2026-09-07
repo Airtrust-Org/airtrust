@@ -39,18 +39,71 @@ function parseMode() {
   return mode;
 }
 
-function parseLimitesDefaultKeys() {
+function parseLimitesDefaultEntries() {
   const file = path.join(ROOT, 'worker-airtrust', 'src', 'lib', 'frms', 'types.ts');
   const source = readFileSync(file, 'utf8');
-  const block = source.match(/LIMITES_DEFAULT[^{]*\{([\s\S]*?)\n\};/);
+  const block = source.match(/LIMITES_DEFAULT[^=]*=\s*\{([\s\S]*?)\n\};/);
   if (!block) fail('LIMITES_DEFAULT_NOT_FOUND');
-  const keys = [...block[1].matchAll(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/gm)].map((match) => match[1]);
-  if (keys.length === 0) fail('LIMITES_DEFAULT_EMPTY');
-  if (new Set(keys).size !== keys.length) fail('LIMITES_DEFAULT_DUPLICATE_KEYS');
-  for (const key of keys) {
-    if (!SAFE_KEY.test(key)) fail(`LIMITES_DEFAULT_UNSAFE_KEY:${key}`);
+
+  const entries = [];
+  for (const rawLine of block[1].split('\n')) {
+    const line = rawLine.replace(/\/\/.*$/, '').trim();
+    if (!line) continue;
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([^,]+),?$/);
+    if (!match) continue;
+    const key = match[1];
+    const literal = match[2].trim();
+    if (!SAFE_KEY.test(key)) fail('LIMITES_DEFAULT_UNSAFE_KEY:' + key);
+    if (!/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(literal)) {
+      fail('LIMITES_DEFAULT_NON_LITERAL_VALUE:' + key);
+    }
+    const value = Number(literal);
+    if (!Number.isFinite(value)) fail('LIMITES_DEFAULT_NON_FINITE_VALUE:' + key);
+    entries.push({ key, value });
   }
-  return keys;
+
+  if (entries.length === 0) fail('LIMITES_DEFAULT_EMPTY');
+  if (new Set(entries.map((entry) => entry.key)).size !== entries.length) {
+    fail('LIMITES_DEFAULT_DUPLICATE_KEYS');
+  }
+  return entries;
+}
+
+function loadReviewedCanonicalBaseline(requiredEntries) {
+  const file = path.join(ROOT, 'scripts', 'frms-seeds', 'frms_helicopter_offshore_baseline_v1.sql');
+  const source = readFileSync(file, 'utf8');
+  const revisionId = 'frms-helicopter-offshore-baseline-v1';
+  const missingKeys = [];
+  const mismatches = [];
+
+  for (const entry of requiredEntries) {
+    const needle = "'" + revisionId + "-" + entry.key + "', '" + revisionId + "', '" + entry.key + "', ";
+    const start = source.indexOf(needle);
+    if (start < 0 || source.indexOf(needle, start + needle.length) >= 0) {
+      missingKeys.push(entry.key);
+      continue;
+    }
+    const valueStart = start + needle.length;
+    const valueEnd = source.indexOf(',', valueStart);
+    const baselineValue = Number(source.slice(valueStart, valueEnd).trim());
+    if (!Number.isFinite(baselineValue) || baselineValue !== entry.value) {
+      mismatches.push({
+        key: entry.key,
+        limitesDefault: entry.value,
+        reviewedBaseline: baselineValue,
+      });
+    }
+  }
+
+  return {
+    revisionId,
+    unit: 'unit',
+    requiredCount: requiredEntries.length,
+    matchedCount: requiredEntries.length - missingKeys.length,
+    missingKeys,
+    mismatches,
+    ready: missingKeys.length === 0 && mismatches.length === 0,
+  };
 }
 
 function quote(value) {
@@ -117,26 +170,38 @@ function assertReadOnlySql(sql) {
   if (body.includes(';')) fail('MULTI_STATEMENT_SQL_BLOCKED');
 }
 
-function assertApplySql(sql) {
+function assertApplySql(sql, sourceMode) {
   const normalized = String(sql).trim();
-  if (!/^INSERT\s+INTO\s+frms_config_parameters\b/i.test(normalized)) {
+  if (!/\bINSERT\s+INTO\s+frms_config_parameters\b/i.test(normalized)) {
     fail('APPLY_SQL_TARGET_REJECTED');
   }
   if (APPLY_FORBIDDEN_SQL.test(normalized)) fail('APPLY_SQL_FORBIDDEN_VERB');
   if ((normalized.match(/\bINSERT\s+INTO\b/gi) || []).length !== 1) {
     fail('APPLY_SQL_INSERT_COUNT_REJECTED');
   }
-  if (!/FROM\s+frms_configuracao_limites\s+s\b/i.test(normalized)) {
-    fail('APPLY_SQL_SOURCE_REJECTED');
-  }
   if (!normalized.includes(quote(TARGET_REVISION_ID))) fail('APPLY_SQL_REVISION_REJECTED');
   if (!/NOT\s+EXISTS\s*\(/i.test(normalized)) fail('APPLY_SQL_NOT_IDEMPOTENT');
+
+  if (sourceMode === 'legacy_table') {
+    if (!/FROM\s+frms_configuracao_limites\s+s\b/i.test(normalized)) {
+      fail('APPLY_SQL_LEGACY_SOURCE_REJECTED');
+    }
+  } else if (sourceMode === 'canonical_snapshot') {
+    if (!/^WITH\s+canonical\s*\(parameter_key,\s*numeric_value\)\s+AS\s*\(VALUES\s+/i.test(normalized)) {
+      fail('APPLY_SQL_CANONICAL_SOURCE_REJECTED');
+    }
+    if (!/FROM\s+canonical\s+c\b/i.test(normalized)) fail('APPLY_SQL_CANONICAL_SOURCE_REJECTED');
+    if (!normalized.includes("'unit'")) fail('APPLY_SQL_CANONICAL_UNIT_REJECTED');
+  } else {
+    fail('APPLY_SQL_SOURCE_MODE_REJECTED');
+  }
+
   const body = normalized.replace(/;\s*$/, '');
   if (body.includes(';')) fail('APPLY_SQL_MULTI_STATEMENT_BLOCKED');
 }
 
-async function cloudflareD1Query(sql, { write = false } = {}) {
-  if (write) assertApplySql(sql);
+async function cloudflareD1Query(sql, { write = false, sourceMode = null } = {}) {
+  if (write) assertApplySql(sql, sourceMode);
   else assertReadOnlySql(sql);
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -180,7 +245,7 @@ async function tableColumns(table) {
   return new Set(rows.map((row) => String(row.name)));
 }
 
-async function preflightSource(requiredKeys) {
+async function preflightLegacySource(requiredKeys) {
   const requiredColumns = ['nome', 'valor_numerico', 'unidade', 'ativo', 'deleted_at'];
   const columns = await tableColumns('frms_configuracao_limites');
   const missingColumns = requiredColumns.filter((column) => !columns.has(column));
@@ -282,23 +347,61 @@ async function preflightTarget(requiredKeys) {
   };
 }
 
-function buildApplySql(requiredKeys) {
-  const keyList = requiredKeys.map(quote).join(', ');
-  return (
-    `INSERT INTO frms_config_parameters ` +
-    `(id, revision_id, parameter_key, numeric_value, unit, metric, required, created_at) ` +
-    `SELECT 'frms-legacy-limit-' || s.nome, ${quote(TARGET_REVISION_ID)}, s.nome, ` +
-    `s.valor_numerico, s.unidade, 'LEGACY_LIMIT', 1, datetime('now') ` +
-    `FROM frms_configuracao_limites s ` +
-    `WHERE s.ativo = 1 AND s.deleted_at IS NULL AND s.nome IN (${keyList}) ` +
-    `AND NOT EXISTS (SELECT 1 FROM frms_config_parameters t ` +
-    `WHERE t.revision_id = ${quote(TARGET_REVISION_ID)} AND t.parameter_key = s.nome)`
-  );
+function chooseSourceMode(legacySource, canonicalSource) {
+  if (legacySource.ready) return 'legacy_table';
+
+  const legacyIsStructurallyValidButEmpty =
+    legacySource.tableExists &&
+    legacySource.missingColumns.length === 0 &&
+    legacySource.presentCount === 0 &&
+    legacySource.duplicateKeys.length === 0 &&
+    legacySource.invalidValueKeys.length === 0 &&
+    legacySource.invalidUnitKeys.length === 0;
+
+  if (legacyIsStructurallyValidButEmpty && canonicalSource.ready) return 'canonical_snapshot';
+  return null;
 }
 
-function assessApplyReady(source, target) {
+function buildApplySql(requiredEntries, sourceMode) {
+  const requiredKeys = requiredEntries.map((entry) => entry.key);
+  const keyList = requiredKeys.map(quote).join(', ');
+
+  if (sourceMode === 'legacy_table') {
+    return (
+      'INSERT INTO frms_config_parameters ' +
+      '(id, revision_id, parameter_key, numeric_value, unit, metric, required, created_at) ' +
+      "SELECT 'frms-legacy-limit-' || s.nome, " + quote(TARGET_REVISION_ID) + ', s.nome, ' +
+      "s.valor_numerico, s.unidade, 'LEGACY_LIMIT', 1, datetime('now') " +
+      'FROM frms_configuracao_limites s ' +
+      'WHERE s.ativo = 1 AND s.deleted_at IS NULL AND s.nome IN (' + keyList + ') ' +
+      'AND NOT EXISTS (SELECT 1 FROM frms_config_parameters t ' +
+      'WHERE t.revision_id = ' + quote(TARGET_REVISION_ID) + ' AND t.parameter_key = s.nome)'
+    );
+  }
+
+  if (sourceMode === 'canonical_snapshot') {
+    const values = requiredEntries
+      .map((entry) => '(' + quote(entry.key) + ', ' + String(entry.value) + ')')
+      .join(', ');
+    return (
+      'WITH canonical(parameter_key, numeric_value) AS (VALUES ' + values + ') ' +
+      'INSERT INTO frms_config_parameters ' +
+      '(id, revision_id, parameter_key, numeric_value, unit, metric, required, created_at) ' +
+      "SELECT 'frms-legacy-limit-' || c.parameter_key, " + quote(TARGET_REVISION_ID) + ', c.parameter_key, ' +
+      "c.numeric_value, 'unit', 'LEGACY_LIMIT', 1, datetime('now') " +
+      'FROM canonical c ' +
+      'WHERE NOT EXISTS (SELECT 1 FROM frms_config_parameters t ' +
+      'WHERE t.revision_id = ' + quote(TARGET_REVISION_ID) + ' AND t.parameter_key = c.parameter_key)'
+    );
+  }
+
+  fail('NO_SAFE_APPLY_SOURCE');
+}
+
+function assessApplyReady(sourceMode, canonicalSource, target) {
   return Boolean(
-    source.ready &&
+    sourceMode &&
+      canonicalSource.ready &&
       target.revisionCount === 1 &&
       target.fixedRevisionIsOnlyActive &&
       target.requiredDuplicateKeys.length === 0 &&
@@ -312,13 +415,15 @@ async function run() {
   assertCloudflareCredentialContext();
   assertConfirmation(mode);
   const expectedDeployedSha = assertExpectedDeployedSha();
-  const requiredKeys = parseLimitesDefaultKeys();
-
-  const source = await preflightSource(requiredKeys);
+  const requiredEntries = parseLimitesDefaultEntries();
+  const requiredKeys = requiredEntries.map((entry) => entry.key);
+  const canonicalSource = loadReviewedCanonicalBaseline(requiredEntries);
+  const legacySource = await preflightLegacySource(requiredKeys);
   const targetBefore = await preflightTarget(requiredKeys);
-  const applyReady = assessApplyReady(source, targetBefore);
-  const applySql = buildApplySql(requiredKeys);
-  assertApplySql(applySql);
+  const sourceMode = chooseSourceMode(legacySource, canonicalSource);
+  const applyReady = assessApplyReady(sourceMode, canonicalSource, targetBefore);
+  const applySql = sourceMode ? buildApplySql(requiredEntries, sourceMode) : null;
+  if (applySql) assertApplySql(applySql, sourceMode);
 
   const report = {
     generatedAtUtc: new Date().toISOString(),
@@ -330,14 +435,26 @@ async function run() {
       productionDatabaseIdBlocked: PRODUCTION_DB_ID,
     },
     governance: OPERATIONAL_SQL_GOVERNANCE,
-    source,
+    legacySource,
+    canonicalSource,
+    sourceDecision: {
+      mode: sourceMode,
+      reason:
+        sourceMode === 'legacy_table'
+          ? 'legacy source table has a complete validated 67-key set'
+          : sourceMode === 'canonical_snapshot'
+            ? 'legacy source table is structurally valid but empty; use reviewed self-contained LIMITES_DEFAULT snapshot cross-checked against FRMS_HELICOPTER_OFFSHORE_BASELINE_V1'
+            : 'no safe source is available',
+    },
     targetBefore,
     preparedApply: {
       scope: 'frms_config_parameters only',
       revisionId: TARGET_REVISION_ID,
+      sourceMode,
       idempotent: true,
       replays0464: false,
       touchesLedger: false,
+      touchesLegacySourceTable: false,
       applyReady,
     },
     applyExecuted: false,
@@ -351,8 +468,8 @@ async function run() {
   };
 
   if (mode === 'apply') {
-    if (!applyReady) fail('APPLY_NOT_READY_PREFLIGHT_FAILED');
-    const result = await cloudflareD1Query(applySql, { write: true });
+    if (!applyReady || !applySql || !sourceMode) fail('APPLY_NOT_READY_PREFLIGHT_FAILED');
+    const result = await cloudflareD1Query(applySql, { write: true, sourceMode });
     report.applyExecuted = true;
     report.insertedChanges = Number(result.meta?.changes ?? 0);
     report.targetAfter = await preflightTarget(requiredKeys);
@@ -370,7 +487,7 @@ async function run() {
 
   if (mode === 'preflight') {
     if (applyReady) {
-      console.log('FRMS_0464_BOOTSTRAP_PREFLIGHT_PASS: source and target are safe for the dedicated idempotent repair. No write executed.');
+      console.log('FRMS_0464_BOOTSTRAP_PREFLIGHT_PASS: sourceMode=' + sourceMode + '; target is safe for the dedicated idempotent repair. No write executed.');
       return;
     }
     console.error('FRMS_0464_BOOTSTRAP_PREFLIGHT_FAIL: repair is not safe to authorize yet. No write executed.');
@@ -378,7 +495,7 @@ async function run() {
     return;
   }
 
-  console.log('FRMS_0464_BOOTSTRAP_APPLY_PASS: dedicated bootstrap repair completed and postconditions passed.');
+  console.log('FRMS_0464_BOOTSTRAP_APPLY_PASS: sourceMode=' + sourceMode + '; dedicated bootstrap repair completed and postconditions passed.');
 }
 
 run().catch((error) => {
