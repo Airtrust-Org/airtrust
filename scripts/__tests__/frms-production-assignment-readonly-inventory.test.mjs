@@ -81,6 +81,10 @@ test('script enforces a read-only SQL contract, hard-pins production, blocks non
   assert.match(s, /NOT_READ_ONLY_SQL/);
   assert.match(s, /MUTATING_SQL_BLOCKED/);
   assert.match(s, /READ_ONLY_PREFIX\s*=\s*\/\^\\s\*\(SELECT\|PRAGMA\\s\+table_info\)/);
+  // Uses the Cloudflare D1 REST API directly (like release-readonly-preflight.mjs),
+  // never wrangler / wrangler.toml — so it cannot be diverted by config or --file.
+  assert.match(s, /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]*\/d1\/database\/\$\{PRODUCTION_DB_ID\}\/query/);
+  assert.doesNotMatch(s, /\bwrangler\b/);
   assert.doesNotMatch(s, /['"]--file['"]/);
   assert.doesNotMatch(s, /`\s*(INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|REPLACE\s+INTO|CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE)/i);
 });
