@@ -7,6 +7,7 @@ import { tableHasColumn } from '../qualificacoes-certificados-helpers';
 
 const validacao = new Hono<{ Bindings: Env }>();
 const CERTIFICATE_SCAN_BATCH_SIZE = 250;
+const CERTIFICATE_SCAN_MAX_ROWS = 1_000;
 
 interface CertificateValidationRow {
   id: number | string;
@@ -282,7 +283,9 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
     let cursorId: number | null = null;
     let scanned = 0;
 
-    while (true) {
+    while (scanned < CERTIFICATE_SCAN_MAX_ROWS) {
+      const remaining = CERTIFICATE_SCAN_MAX_ROWS - scanned;
+      const pageSize = Math.min(CERTIFICATE_SCAN_BATCH_SIZE, remaining);
       const cursorPredicate = cursorCreatedAt
         ? 'AND (d.created_at < ? OR (d.created_at = ? AND d.id < ?))'
         : '';
@@ -329,9 +332,9 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
       );
       const page: D1Result<CertificateValidationRow> = cursorCreatedAt
         ? await statement
-            .bind(cursorCreatedAt, cursorCreatedAt, cursorId, CERTIFICATE_SCAN_BATCH_SIZE)
+            .bind(cursorCreatedAt, cursorCreatedAt, cursorId, pageSize)
             .all<CertificateValidationRow>()
-        : await statement.bind(CERTIFICATE_SCAN_BATCH_SIZE).all<CertificateValidationRow>();
+        : await statement.bind(pageSize).all<CertificateValidationRow>();
       const results: CertificateValidationRow[] = page.results || [];
       scanned += results.length;
 
@@ -342,11 +345,26 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
         return c.json(payload);
       }
 
-      if (results.length < CERTIFICATE_SCAN_BATCH_SIZE) break;
+      if (results.length < pageSize) break;
       const last: CertificateValidationRow = results[results.length - 1];
       cursorCreatedAt = String(last.created_at || '');
       cursorId = Number(last.id);
       if (!cursorCreatedAt || !Number.isFinite(cursorId)) break;
+    }
+
+    if (scanned >= CERTIFICATE_SCAN_MAX_ROWS) {
+      console.warn(
+        `[VALIDAÇÃO] Fallback histórico atingiu o teto de ${CERTIFICATE_SCAN_MAX_ROWS} registros sem resolução.`,
+      );
+      return c.json(
+        {
+          success: false,
+          valido: false,
+          code: 'CERTIFICATE_VALIDATION_SCAN_LIMIT',
+          mensagem: 'Validação temporariamente indisponível para este certificado.',
+        },
+        503,
+      );
     }
 
     console.log(`[VALIDAÇÃO] Hash não encontrado após ${scanned} registros: ${hash}`);

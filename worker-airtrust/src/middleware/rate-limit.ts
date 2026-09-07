@@ -21,6 +21,7 @@ export interface RateLimitConfig {
   keyExtractor?: (c: Parameters<MiddlewareHandler<{ Bindings: Env }>>[0]) => string;
   failureMode?: RateLimitFailureMode;
   allowLocalFallback?: boolean;
+  allowLocalFallbackOutsideProduction?: boolean;
 }
 
 interface RateLimitEntry {
@@ -164,8 +165,11 @@ export function rateLimiter(config: RateLimitConfig): MiddlewareHandler<{ Bindin
 
     const key = `${keyPrefix}:${resolved.identifier}`;
     const environment = c.env?.ENVIRONMENT || 'development';
+    const nonProductionOverride =
+      environment !== 'production' && config.allowLocalFallbackOutsideProduction === true;
     const allowLocalFallback =
-      config.allowLocalFallback ?? (failureMode === 'open' || environment === 'development');
+      nonProductionOverride ||
+      (config.allowLocalFallback ?? (failureMode === 'open' || environment === 'development'));
 
     let count: number;
     try {
@@ -225,6 +229,7 @@ export const rateLimitPresets = {
     keyPrefix: 'login',
     failureMode: 'closed',
     allowLocalFallback: false,
+    allowLocalFallbackOutsideProduction: true,
   },
   api: { maxRequests: 100, windowSeconds: 60, keyPrefix: 'api', failureMode: 'open' },
   webhook: {
@@ -249,6 +254,7 @@ export const rateLimitPresets = {
     maxRequests: 20,
     windowSeconds: 60,
     keyPrefix: 'certificate-validation',
-    failureMode: 'open',
+    failureMode: 'closed',
+    allowLocalFallback: false,
   },
 } as const;

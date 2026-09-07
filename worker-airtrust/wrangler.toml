@@ -56,6 +56,12 @@ binding = "AI"
 [env.staging]
 name = "airtrust-api-staging"
 
+# Persist Worker invocation/custom/error logs. Staging captures every request so
+# governed QA can correlate a release SHA with runtime failures.
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 1
+
 # Workers Paid plan active on this account since 2026-08-23. The Free plan's
 # 10ms CPU-per-invocation hard limit repeatedly caused error 1102 on
 # CPU-heavy operations (bcrypt login, SCORM Quality Gate Browser Run). This
@@ -134,6 +140,13 @@ binding = "AI"
 # ===== PRODUÇÃO =====
 [env.production]
 name = "airtrust-api-production"
+
+# Production observability is explicitly enabled in source control so a release
+# cannot silently revert to an unobservable Worker. Sampling can be revisited
+# only through a reviewed config change with retained error visibility.
+[env.production.observability]
+enabled = true
+head_sampling_rate = 1
 routes = [
   { pattern = "api.airtrust.online/*", zone_name = "airtrust.online" }
 ]

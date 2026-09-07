@@ -1,19 +1,25 @@
 # Alerting Setup - AirTrust Production Monitoring
 
 **Data:** 10 de Novembro de 2025  
-**Status:** ✅ CONFIGURED
+**Status:** ⚠️ NÃO COMPROVADO / REQUER CONFIGURAÇÃO EXTERNA
+
+> Este arquivo é um **runbook de configuração desejada**, não evidência de que
+> UptimeRobot, Slack, e-mail, SMS, PagerDuty, Logpush ou outro consumidor externo
+> estejam ativos. Nenhum alerta deve ser declarado `CONFIGURED` sem prova
+> runtime do monitor e do canal de entrega. A observabilidade do Worker é
+> configurada separadamente em `worker-airtrust/wrangler.toml`.
 
 ---
 
-## 📊 Alertas Configurados
+## 📊 Alertas propostos (pendentes de prova externa)
 
 ### 1. 🔴 Uptime Alert (P1 - Critical)
 
-**Ferramenta:** Cloudflare Health Checks + UptimeRobot
+**Ferramenta proposta:** Cloudflare Health Checks e/ou UptimeRobot
 
 **Configuração:**
 
-- **Endpoint:** `https://airtrust.workers.dev/api/v2/system/health`
+- **Endpoint:** `https://api.airtrust.online/api/health`
 - **Método:** GET
 - **Intervalo:** 60 segundos
 - **Expected:** HTTP 200 com `"status":"healthy"`
@@ -45,7 +51,7 @@ Target: Restore within 30 minutes
 
 ### 2. 🟡 Error Rate Alert (P2 - High)
 
-**Ferramenta:** Cloudflare Logpush + Custom Worker
+**Ferramenta proposta:** Cloudflare Workers Logs/OpenTelemetry/Logpush + consumidor externo
 
 **Configuração:**
 
@@ -82,7 +88,7 @@ Target: Remediate within 1 hour
 
 ### 3. 🟠 Rate Limit Alert (P2 - High)
 
-**Ferramenta:** Wrangler Tail + Custom Monitoring
+**Ferramenta proposta:** Workers Logs/OpenTelemetry/Logpush + consumidor externo
 
 **Configuração:**
 
@@ -209,7 +215,7 @@ Target: Fix within 24 hours
 1. Go to Workers > airtrust-production
 2. Click "Health Checks"
 3. Create new check:
-   - URL: https://airtrust.workers.dev/api/v2/system/health
+   - URL: https://api.airtrust.online/api/health
    - Interval: 60 seconds
    - Expected: 200 OK, body contains "healthy"
 4. Add alert notification
@@ -222,7 +228,7 @@ Target: Fix within 24 hours
 1. Create account
 2. Add Monitor:
    - Type: HTTP(s) GET
-   - URL: https://airtrust.workers.dev/api/v2/system/health
+   - URL: https://api.airtrust.online/api/health
    - Interval: 5 minutes
    - Expected: Status 200, Keyword "healthy"
 3. Add alert contacts:
