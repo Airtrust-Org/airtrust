@@ -509,11 +509,11 @@ app.get('/modelos-sessao', async (c) => {
     // closed instead of silently dropping tenant predicates from the JOINs.
     const qtCol = await c.env.DB.prepare('PRAGMA table_info(qualificacoes_tipos)').all();
     const hasQualificacoesEmpresaId = (qtCol.results || []).some(
-      (r: any) => String(r.name || '') === 'empresa_id',
+      (r: { name?: unknown }) => String(r.name || '') === 'empresa_id',
     );
     const tsCol = await c.env.DB.prepare('PRAGMA table_info(tipos_sessao)').all();
     const hasTiposEmpresaId = (tsCol.results || []).some(
-      (r: any) => String(r.name || '') === 'empresa_id',
+      (r: { name?: unknown }) => String(r.name || '') === 'empresa_id',
     );
     if (!hasQualificacoesEmpresaId || !hasTiposEmpresaId) {
       throw new Error('SIMULADORES_TENANT_SCHEMA_REQUIRED');
