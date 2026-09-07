@@ -11,13 +11,17 @@ export {
   atualizarConfiguracao,
   restaurarConfiguracoesPadrao,
   createRevisionAndRecalcRun,
+  listFrmsConfigurationHistory,
+  loadEffectiveFrmsConfiguration,
   loadFrmsRecalcRun,
+  loadRestorableFrmsRevision,
   runGovernedRecalc,
 } from './db-service-config';
 export type {
   CreateFrmsRevisionInput,
   FrmsConfigParameter,
   FrmsConfigRevision,
+  EffectiveFrmsConfiguration,
   FrmsRecalcRun,
   ResolvedFrmsParameterSet,
 } from './db-service-config';
