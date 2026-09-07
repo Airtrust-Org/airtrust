@@ -34,20 +34,16 @@ export async function carregarLimites(db: D1Database): Promise<LimitesMap> {
     if (Number.isFinite(value)) map[row.nome] = value;
   }
 
-  const missing = (Object.keys(LIMITES_DEFAULT) as (keyof LimitesMap)[]).filter(
-    (key) => !Object.hasOwn(map, key),
-  );
+  const keys = Object.keys(LIMITES_DEFAULT) as (keyof LimitesMap)[];
+  const missing = keys.filter((key) => !Object.hasOwn(map, key));
   if (missing.length > 0) {
     throw new Error(`FRMS_OPERATIONAL_PARAMETER_MISSING:${missing.join(',')}`);
   }
 
   // LIMITES_DEFAULT supplies the required-key catalogue/type shape only. No
   // operational numeric value is copied from code into the returned set.
-  const result = {} as LimitesMap;
-  for (const key of Object.keys(LIMITES_DEFAULT) as (keyof LimitesMap)[]) {
-    (result as unknown as Record<string, number>)[key] = map[key];
-  }
-  return result;
+  const entries = keys.map((key) => [key, map[key]] as const);
+  return Object.fromEntries(entries) as LimitesMap;
 }
 
 export async function buscarConfiguracoes(db: D1Database): Promise<FrmsConfigLimite[]> {
