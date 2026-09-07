@@ -42,8 +42,11 @@ export async function carregarLimites(db: D1Database): Promise<LimitesMap> {
 
   // LIMITES_DEFAULT supplies the required-key catalogue/type shape only. No
   // operational numeric value is copied from code into the returned set.
-  const entries = keys.map((key) => [key, map[key]] as const);
-  return Object.fromEntries(entries) as LimitesMap;
+  const result: Partial<LimitesMap> = {};
+  for (const key of keys) {
+    result[key] = map[key];
+  }
+  return result as LimitesMap;
 }
 
 export async function buscarConfiguracoes(db: D1Database): Promise<FrmsConfigLimite[]> {
