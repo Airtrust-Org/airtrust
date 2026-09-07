@@ -15,5 +15,8 @@ describe('public certificate validation resource bounds', () => {
     const preset = source.slice(source.indexOf('certificateValidation:'), source.indexOf('} as const;'));
     expect(preset).toContain("failureMode: 'closed'");
     expect(preset).toContain('allowLocalFallback: false');
+    expect(preset).toContain('allowLocalFallbackOutsideProduction: true');
+    expect(source).toContain("environment !== 'production'");
+    expect(source).toContain('config.allowLocalFallbackOutsideProduction === true');
   });
 });
