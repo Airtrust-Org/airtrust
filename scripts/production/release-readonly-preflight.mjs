@@ -128,12 +128,19 @@ function parseGovernedParameterKeys() {
     'utf8',
   );
   const revision = 'frms-helicopter-offshore-baseline-v1';
-  const keys = [...sql.matchAll(new RegExp(
-    `\\('${revision}-([A-Z][A-Z0-9_]*)',\\s*'${revision}',\\s*'\\2',`,
+  const pattern = new RegExp(
+    "\\('" + revision + "-([A-Z][A-Z0-9_]*)',\\s*'" + revision + "',\\s*'([A-Z][A-Z0-9_]*)',",
     'g',
-  ))].map((match) => match[1]);
+  );
+  const keys = [];
+  for (const match of sql.matchAll(pattern)) {
+    if (match[1] !== match[2]) fail('GOVERNED_PARAMETER_SEED_KEY_MISMATCH');
+    keys.push(match[1]);
+  }
   const unique = [...new Set(keys)].sort();
-  if (unique.length !== 128) fail(`GOVERNED_PARAMETER_CATALOG_COUNT:${unique.length}`);
+  if (unique.length !== 128 || unique.length !== keys.length) {
+    fail(`GOVERNED_PARAMETER_CATALOG_COUNT:${unique.length}/${keys.length}`);
+  }
   return unique;
 }
 
@@ -400,7 +407,15 @@ async function run() {
     inspectQualificationRenewals(),
   ]);
 
+  const productionVersionReady =
+    productionVersion.ok && productionVersion.environment === 'production';
+  const stagingMatchesRelease =
+    stagingVersion.ok &&
+    stagingVersion.environment === 'staging' &&
+    stagingVersion.sourceSha === expectedSha;
   const releaseReady =
+    productionVersionReady &&
+    stagingMatchesRelease &&
     schema.ready &&
     authAuthority.ready &&
     frms.ready &&
@@ -416,8 +431,8 @@ async function run() {
     },
     productionVersion,
     stagingVersion,
-    stagingMatchesRelease:
-      stagingVersion.ok && stagingVersion.environment === 'staging' && stagingVersion.sourceSha === expectedSha,
+    productionVersionReady,
+    stagingMatchesRelease,
     schema,
     authAuthority,
     frms,
@@ -426,6 +441,7 @@ async function run() {
       readOnly: true,
       productionReleaseReady: releaseReady,
       blockers: [
+        ...(productionVersionReady ? [] : ['PRODUCTION_VERSION_UNREADABLE_OR_WRONG_ENV']),
         ...(schema.ready ? [] : ['PRODUCTION_SCHEMA_STRUCTURAL_GAP']),
         ...(authAuthority.ready ? [] : ['AUTH_MULTI_PROFILE_AUTHORITY_NOT_READY']),
         ...(frms.ready ? [] : ['FRMS_GOVERNANCE_NOT_READY']),
@@ -434,11 +450,7 @@ async function run() {
             ? 'QUALIFICACOES_RENOVACOES_0487_APPLY_REQUIRED'
             : 'QUALIFICACOES_RENOVACOES_0487_DRIFT',
         ]),
-        ...(
-          stagingVersion.ok && stagingVersion.environment === 'staging' && stagingVersion.sourceSha === expectedSha
-            ? []
-            : ['STAGING_RELEASE_SHA_MISMATCH']
-        ),
+        ...(stagingMatchesRelease ? [] : ['STAGING_RELEASE_SHA_MISMATCH']),
       ],
     },
   };
