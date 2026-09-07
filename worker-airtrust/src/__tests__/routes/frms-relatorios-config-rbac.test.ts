@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { ExecutionContext } from 'hono';
 import frmsRelatoriosConfig from '../../routes/frms-relatorios-config';
+import { LIMITES_DEFAULT } from '../../lib/frms/types';
 
 // Cria um mock de D1Database mínimo para o resolvePlatformAccessState
 function createMockDB(isPlatformAdmin: boolean) {
@@ -27,7 +28,11 @@ function createMockDB(isPlatformAdmin: boolean) {
             return { results: [] };
           }
           if (sql.includes('frms_configuracao_limites')) {
-            return { results: [] };
+            const results = Object.entries(LIMITES_DEFAULT).map(([nome, valor_numerico]) => ({
+              nome,
+              valor_numerico,
+            }));
+            return { results };
           }
           return { results: [] };
         },
