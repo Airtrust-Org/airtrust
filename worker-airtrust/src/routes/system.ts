@@ -120,6 +120,7 @@ export function registerSystemRoutes(app: SystemApp) {
         status: 'error',
         error: 'Erro interno do servidor',
       };
+      overallHealthy = false;
     }
 
     const metadata = getReleaseMetadata(c.env);

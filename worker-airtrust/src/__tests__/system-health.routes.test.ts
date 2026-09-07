@@ -88,7 +88,7 @@ describe('system health routes', () => {
     expect(JSON.stringify(body)).not.toContain('internal database connection details');
   });
 
-  it('keeps the endpoint healthy when only the non-critical R2 check fails', async () => {
+  it('returns 503 when R2 is unavailable instead of reporting a false healthy state', async () => {
     const app = createApp();
     const { env } = createEnv({
       storageError: new Error('private bucket details'),
@@ -97,10 +97,10 @@ describe('system health routes', () => {
     const response = await app.request('http://localhost/api/health', {}, env);
     const body = (await response.json()) as HealthBody;
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(503);
     expectNoStoreHeaders(response);
-    expect(body.success).toBe(true);
-    expect(body.status).toBe('healthy');
+    expect(body.success).toBe(false);
+    expect(body.status).toBe('unhealthy');
     expect(body.checks.storage).toEqual({
       status: 'error',
       error: 'Erro interno do servidor',
