@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  clearAllScopedAuthStorage,
   clearLegacyPerfisCache,
   hasLegacyPerfisCache,
   readScopedAuthStorage,
@@ -29,15 +28,16 @@ describe('auth-storage helpers', () => {
     expect(readScopedAuthStorage('preferencia_ui', a)).toBeNull();
   });
 
-  it('ignora escopo incompleto e limpa somente chaves AirTrust escopadas', () => {
+  it('ignora escopo incompleto e remove apenas a chave escopada solicitada', () => {
     writeScopedAuthStorage('x', { empresaId: 0, userId: 10 }, 'never');
     expect(readScopedAuthStorage('x', { empresaId: 0, userId: 10 })).toBeNull();
 
-    localStorage.setItem('airtrust:1:10:ui', '1');
+    const scope = { empresaId: 1, userId: 10 };
+    writeScopedAuthStorage('ui', scope, '1');
     localStorage.setItem('unrelated', 'keep');
-    clearAllScopedAuthStorage();
+    removeScopedAuthStorage('ui', scope);
 
-    expect(localStorage.getItem('airtrust:1:10:ui')).toBeNull();
+    expect(readScopedAuthStorage('ui', scope)).toBeNull();
     expect(localStorage.getItem('unrelated')).toBe('keep');
   });
 
