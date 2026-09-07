@@ -18,8 +18,8 @@ const TARGET_REVISION_ID = 'frms-legacy-global-v2';
 const TARGET_PROFILE_CODE = 'LEGACY_GENERAL';
 
 const OPERATIONAL_SQL_GOVERNANCE = Object.freeze({
-  source_reference: '0464_frms_parameter_governance_recalc.sql legacy bootstrap',
-  operational_decision: 'staging-only repair of missing LEGACY_GENERAL operational limit parameters',
+  source_reference: '0464 legacy bootstrap + reviewed LIMITES_DEFAULT / FRMS_HELICOPTER_OFFSHORE_BASELINE_V1 canonical snapshot',
+  operational_decision: 'staging-only repair of missing LEGACY_GENERAL parameters; canonical fallback is allowed only when the legacy source table is structurally valid but empty',
   dry_run_required: true,
   rollback_plan_required: true,
 });
