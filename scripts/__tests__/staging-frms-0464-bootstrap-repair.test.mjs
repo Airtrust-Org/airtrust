@@ -156,7 +156,8 @@ test('script contains no update/delete/ddl repair path or migration replay', () 
 
 test('apply cannot run unless the complete source and exact target revision pass preflight', () => {
   const source = read(SCRIPT);
-  assert.match(source, /source\.ready/);
+  assert.match(source, /canonicalSource\.ready/);
+  assert.match(source, /sourceMode/);
   assert.match(source, /target\.revisionCount === 1/);
   assert.match(source, /target\.fixedRevisionIsOnlyActive/);
   assert.match(source, /target\.requiredDuplicateKeys\.length === 0/);
