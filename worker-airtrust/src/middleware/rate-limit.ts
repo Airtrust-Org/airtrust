@@ -229,7 +229,6 @@ export const rateLimitPresets = {
     keyPrefix: 'login',
     failureMode: 'closed',
     allowLocalFallback: false,
-    allowLocalFallbackOutsideProduction: true,
   },
   api: { maxRequests: 100, windowSeconds: 60, keyPrefix: 'api', failureMode: 'open' },
   webhook: {
@@ -256,5 +255,6 @@ export const rateLimitPresets = {
     keyPrefix: 'certificate-validation',
     failureMode: 'closed',
     allowLocalFallback: false,
+    allowLocalFallbackOutsideProduction: true,
   },
 } as const;
