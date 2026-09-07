@@ -69,6 +69,8 @@ jobs:
           npm run guard:schema-contract-staleness
       - name: validate staging FRMS schema doctor (read-only contract)
         run: node --test scripts/__tests__/staging-frms-schema-doctor.test.mjs
+      - name: validate staging FRMS 0464 bootstrap repair governance
+        run: node --test scripts/__tests__/staging-frms-0464-bootstrap-repair.test.mjs
       - name: validate 0438 legacy staging workflow guards
         run: node --test scripts/__tests__/staging-0438-legacy-validation.test.mjs
       - name: validate 0438 legacy staging workflow v2 guards
