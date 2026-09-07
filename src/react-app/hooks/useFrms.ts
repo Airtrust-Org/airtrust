@@ -594,10 +594,55 @@ export interface FrmsConfigRow {
   ativo: number;
 }
 
+export interface FrmsGovernedConfigRevision {
+  id: string;
+  empresa_id: number | null;
+  profile_code: string;
+  revision_number: number;
+  status: 'DRAFT' | 'ACTIVE' | 'SUPERSEDED' | 'RETIRED';
+  source_type: string;
+  source_reference: string | null;
+  regulatory_profile_id: string | null;
+  policy_version: string;
+  effective_from: string;
+  effective_to: string | null;
+  actor_user_id: string | null;
+  reason: string;
+  supersedes_revision_id: string | null;
+  created_at: string;
+}
+
+export interface FrmsGovernedConfigParameter {
+  parameter_key: string;
+  numeric_value: number | null;
+  unit: string;
+  metric: string | null;
+  window_kind: string | null;
+  direction: string | null;
+}
+
+export interface FrmsGovernedConfiguracoes {
+  revision: FrmsGovernedConfigRevision;
+  profile_code: string;
+  regulatory_profile_id: string;
+  model_version: string;
+  effective_from: string;
+  effective_to: string | null;
+  limites: Record<string, number>;
+  parameters: FrmsGovernedConfigParameter[];
+}
+
 export function useFrmsConfiguracoes() {
-  return useApi<{ configs: FrmsConfigRow[]; limites: Record<string, number> }>(
-    '/api/frms/configuracoes',
-    { requireAuth: false, bypassGetCache: true, staleTime: 15 * 60 * 1000 },
+  return useApi<FrmsGovernedConfiguracoes>(
+    '/api/frms/configuracoes/governadas',
+    { bypassGetCache: true, staleTime: 15 * 60 * 1000 },
+  );
+}
+
+export function useFrmsConfiguracoesHistorico() {
+  return useApi<FrmsGovernedConfigRevision[]>(
+    '/api/frms/configuracoes/governadas/historico',
+    { bypassGetCache: true, staleTime: 15 * 60 * 1000 },
   );
 }
 
