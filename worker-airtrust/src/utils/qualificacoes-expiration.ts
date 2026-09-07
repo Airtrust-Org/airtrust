@@ -58,14 +58,23 @@ export function calcularDataVencimento(
   const data = new Date(dataConclusao + 'T00:00:00Z');
   const dataVencimento = new Date(data);
 
+  // Toda a aritmética de mês/dia usa os métodos UTC (setUTCMonth/getUTCMonth/
+  // setUTCDate), nunca os locais (setMonth/getMonth/setDate). O ancoramento
+  // acima já é em UTC meia-noite; misturar com métodos de hora local faz a
+  // data derivar um dia em qualquer fuso atrás de UTC (inclusive
+  // America/Sao_Paulo) sempre que a mudança de mês cai perto da virada —
+  // ex.: 2024-01-15 + 1 mês, fim do mês, virava 2024-03-01 em vez de
+  // 2024-02-29 quando calculado em UTC-3. Ver
+  // worker-airtrust/src/utils/__tests__/qualificacoes-expiration.test.ts.
+
   // Adiciona meses
-  dataVencimento.setMonth(dataVencimento.getMonth() + validadeMeses);
+  dataVencimento.setUTCMonth(dataVencimento.getUTCMonth() + validadeMeses);
 
   // Se modo é "fim do mês", ajusta para último dia do mês
   if (vencimentoFimMes === 1) {
     // Vai para primeiro dia do mês seguinte e volta 1 dia
-    dataVencimento.setMonth(dataVencimento.getMonth() + 1);
-    dataVencimento.setDate(0); // 0 = último dia do mês anterior
+    dataVencimento.setUTCMonth(dataVencimento.getUTCMonth() + 1);
+    dataVencimento.setUTCDate(0); // 0 = último dia do mês anterior
   }
 
   // Retorna em formato ISO (YYYY-MM-DD)
