@@ -1190,37 +1190,23 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
     if (!sectorOk) throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
   }
 
-  const funcionarios = await collectByBindChunks(
-    funcionarioIdsUnicos,
-    1,
-    async (funcionarioIdChunk) => {
-      const funcionarioPlaceholders = funcionarioIdChunk.map(() => '?').join(', ');
-      const rows = await db
-        .prepare(
-          `SELECT id, nome, setor_id
-             FROM funcionarios
-            WHERE empresa_id = ?
-              AND deleted_at IS NULL
-              AND COALESCE(ativo, 1) = 1
-              AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
-              AND id IN (${funcionarioPlaceholders})`,
-        )
-        .bind(empresaId, ...funcionarioIdChunk)
-        .all<{ id: number; nome: string; setor_id: number | null }>();
-      return rows.results || [];
-    },
-  );
-  const allowedSetorIds =
-    loteAccess.mode === 'restricted' ? new Set(loteAccess.setorIds.map(Number)) : null;
-  const funcionariosPorId = new Map(
-    funcionarios
-      .filter(
-        (funcionario) =>
-          !allowedSetorIds ||
-          (funcionario.setor_id != null && allowedSetorIds.has(Number(funcionario.setor_id))),
+  const funcionarios = await collectByBindChunks(funcionarioIdsUnicos, 1, async (ids) => {
+    const placeholders = ids.map(() => '?').join(', ');
+    const rows = await db
+      .prepare(
+        `SELECT id, nome, setor_id FROM funcionarios
+         WHERE empresa_id = ? AND deleted_at IS NULL AND COALESCE(ativo, 1) = 1
+           AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
+           AND id IN (${placeholders})`,
       )
-      .map((funcionario) => [Number(funcionario.id), funcionario]),
-  );
+      .bind(empresaId, ...ids)
+      .all<{ id: number; nome: string; setor_id: number | null }>();
+    return rows.results || [];
+  });
+  const allowedSetorIds = loteAccess.mode === 'restricted' ? new Set(loteAccess.setorIds.map(Number)) : null;
+  const funcionariosPorId = new Map(funcionarios
+    .filter((f) => !allowedSetorIds || (f.setor_id != null && allowedSetorIds.has(Number(f.setor_id))))
+    .map((f) => [Number(f.id), f]));
   const funcionariosInvalidos = funcionarioIdsUnicos.filter(
     (funcionarioId) => !funcionariosPorId.has(funcionarioId),
   );
