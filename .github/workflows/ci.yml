@@ -60,6 +60,8 @@ jobs:
           node --test scripts/ci/check-github-workflow-contexts.test.mjs
       - name: validate 0438 on disposable real-base SQLite
         run: node --test scripts/__tests__/schema-v2-0438-rdv-coordination-workflow.test.mjs
+      - name: validate governed qualification renewals 0487
+        run: node --test scripts/__tests__/schema-v2-0487-qualificacoes-renovacoes.test.mjs
       - name: validate 0438 legacy staging workflow guards
         run: node --test scripts/__tests__/staging-0438-legacy-validation.test.mjs
       - name: validate 0438 legacy staging workflow v2 guards
