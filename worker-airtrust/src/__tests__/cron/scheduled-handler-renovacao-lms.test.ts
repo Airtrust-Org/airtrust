@@ -21,17 +21,19 @@ describe('renovacao automatica LMS por qualificacao EAD', () => {
     expect(sql).toContain('LIMIT ?');
   });
 
-  it('repara ciclo e notificação após falha parcial sem reset destrutivo', () => {
+  it('reabre matrícula terminal em novo ciclo e nunca marca renovação inativa como sucesso', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/cron/resilient/ead-renewal.ts'),
       'utf8',
     );
 
-    expect(source).not.toContain('resetMatriculaForNewCycle(');
-    expect(source).toContain('ensureMatriculaCycle(db');
+    expect(source).toContain('canReuseMatriculaCycle(existing)');
+    expect(source).toContain('resetMatriculaForNewCycle(db');
+    expect(source).toContain("origin: 'AUTO_RENOVACAO'");
     expect(source).toContain('ensureRenewalNotification(db');
     expect(source).toContain('MATRICULA_CYCLE_NOTIFICATION_READY');
-    expect(source).toContain('EXISTING_INACTIVE_PRESERVED');
+    expect(source).not.toContain('EXISTING_INACTIVE_PRESERVED');
+    expect(source).toContain('EAD_RENEWAL_EXISTING_MATRICULA_NOT_REUSABLE');
   });
 
   it('envia email focado da renovação somente após matrícula e notificação, sem tornar o job bloqueante', () => {
