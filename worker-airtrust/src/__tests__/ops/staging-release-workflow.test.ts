@@ -136,6 +136,17 @@ describe('deploy-staging.yml — static guards', () => {
     expect(workflow).toContain('apply-approved-migrations.sh');
   });
 
+  it('keeps staging generic Wrangler migration enumeration isolated from the historical chain', () => {
+    const wrangler = readFileSync(join(ROOT, 'worker-airtrust/wrangler.toml'), 'utf8');
+    const stagingStart = wrangler.indexOf('[env.staging]');
+    const productionStart = wrangler.indexOf('[env.production]');
+    expect(stagingStart).toBeGreaterThan(-1);
+    expect(productionStart).toBeGreaterThan(stagingStart);
+    const staging = wrangler.slice(stagingStart, productionStart);
+    expect(staging).toContain('migrations_dir = "./migrations_staging_disabled"');
+    expect(staging).not.toContain('migrations_dir = "./migrations"');
+  });
+
   it('requires a verified backup and green preflight before any migration apply', () => {
     const applyJob = workflow.slice(
       workflow.indexOf('apply-migrations:'),
