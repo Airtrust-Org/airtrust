@@ -140,7 +140,11 @@ export function rateLimiter(config: RateLimitConfig): MiddlewareHandler<{ Bindin
   return async (c, next) => {
     if (c.req.method === 'OPTIONS') return next();
 
-    const resolved = keyExtractor
+    const environment = c.env?.ENVIRONMENT || 'development';
+    const nonProductionOverride =
+      environment !== 'production' && config.allowLocalFallbackOutsideProduction === true;
+
+    let resolved = keyExtractor
       ? { identifier: keyExtractor(c)?.trim() || null, source: 'request' as const }
       : resolveRateLimitIdentifier(
           {
@@ -149,6 +153,17 @@ export function rateLimiter(config: RateLimitConfig): MiddlewareHandler<{ Bindin
           },
           failureMode,
         );
+
+    // Critical public routes remain fail-closed in production when Cloudflare
+    // does not provide a trustworthy client IP. Unit/dev environments can opt
+    // into a per-request local identifier so route behavior can be exercised
+    // without pretending a forged X-Forwarded-For value is trustworthy.
+    if (!resolved.identifier && nonProductionOverride) {
+      resolved = resolveRateLimitIdentifier(
+        { requestId: c.req.header('X-Request-ID') || crypto.randomUUID() },
+        'open',
+      );
+    }
 
     if (!resolved.identifier) {
       console.warn(
@@ -164,9 +179,6 @@ export function rateLimiter(config: RateLimitConfig): MiddlewareHandler<{ Bindin
     }
 
     const key = `${keyPrefix}:${resolved.identifier}`;
-    const environment = c.env?.ENVIRONMENT || 'development';
-    const nonProductionOverride =
-      environment !== 'production' && config.allowLocalFallbackOutsideProduction === true;
     const allowLocalFallback =
       nonProductionOverride ||
       (config.allowLocalFallback ?? (failureMode === 'open' || environment === 'development'));
