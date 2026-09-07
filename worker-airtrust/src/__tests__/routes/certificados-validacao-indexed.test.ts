@@ -33,7 +33,7 @@ function makeEnv(rows: Array<Record<string, unknown>>, hasColumn = true) {
       };
     },
   };
-  return { DB: db, BUCKET: bucket } as unknown as Env;
+  return { DB: db, BUCKET: bucket, ENVIRONMENT: 'test' } as unknown as Env;
 }
 
 async function makeCertificateRow(validacaoHash?: string | null) {

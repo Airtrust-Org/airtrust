@@ -16,6 +16,7 @@ import { auth } from '../middleware/auth';
 import { getEmpresaIdSafe, getEscalaVerificada } from './escalas-shared';
 import { recalcularCoberturaAeronave } from './escalas-alocacoes';
 import { getHabilitacoesBatch } from '../shared/getTripulanteOperacional';
+import { collectByBindChunks } from '../utils/d1-bind-chunks';
 
 const cobertura = new Hono<{ Bindings: Env }>();
 
@@ -426,41 +427,48 @@ cobertura.get('/:id/cobertura/tripulantes', auth(), async (c) => {
   const alocacoesPorFuncionario = new Map<string, AlocacaoCoberturaTripulanteRow[]>();
 
   if (tripulanteIds.length > 0) {
-    const placeholders = tripulanteIds.map(() => '?').join(', ');
-    const alocacoes = await db
-      .prepare(
-        `SELECT
-           CAST(ea.id AS TEXT) AS id,
-           CAST(ea.funcionario_id AS TEXT) AS funcionario_id,
-           COALESCE(ea.situacao_tipo, ea.funcao) AS tipo,
-           ae.prefixo AS aeronave,
-           ea.aeronave_id,
-           ea.data_inicio,
-           ea.data_fim,
-           ea.situacao_tipo AS situacao,
-           est.nome AS situacao_nome,
-           est.cor AS situacao_cor,
-           est.icone AS situacao_icone,
-           ea.auto_gerado
-         FROM escala_alocacoes ea
-         LEFT JOIN aeronaves ae ON ae.id = ea.aeronave_id
-         LEFT JOIN escala_situacao_tipos est
-           ON UPPER(est.codigo) = UPPER(COALESCE(ea.situacao_tipo, ''))
-          AND est.deleted_at IS NULL
-         WHERE ea.escala_id = ?
-           AND ea.deleted_at IS NULL
-           AND ea.status != 'cancelado'
-           AND (
-             ea.aeronave_id IS NULL
-             OR (ae.deleted_at IS NULL AND UPPER(COALESCE(NULLIF(TRIM(ae.status), ''), 'ATIVO')) = 'ATIVO')
-           )
-           AND CAST(ea.funcionario_id AS TEXT) IN (${placeholders})
-         ORDER BY ea.data_inicio ASC, ea.created_at ASC`,
-      )
-      .bind(escalaId, ...tripulanteIds)
-      .all<AlocacaoCoberturaTripulanteRow>();
+    const alocacoes = await collectByBindChunks(
+      tripulanteIds,
+      1,
+      async (tripulanteIdChunk) => {
+        const placeholders = tripulanteIdChunk.map(() => '?').join(', ');
+        const rows = await db
+          .prepare(
+            `SELECT
+               CAST(ea.id AS TEXT) AS id,
+               CAST(ea.funcionario_id AS TEXT) AS funcionario_id,
+               COALESCE(ea.situacao_tipo, ea.funcao) AS tipo,
+               ae.prefixo AS aeronave,
+               ea.aeronave_id,
+               ea.data_inicio,
+               ea.data_fim,
+               ea.situacao_tipo AS situacao,
+               est.nome AS situacao_nome,
+               est.cor AS situacao_cor,
+               est.icone AS situacao_icone,
+               ea.auto_gerado
+             FROM escala_alocacoes ea
+             LEFT JOIN aeronaves ae ON ae.id = ea.aeronave_id
+             LEFT JOIN escala_situacao_tipos est
+               ON UPPER(est.codigo) = UPPER(COALESCE(ea.situacao_tipo, ''))
+              AND est.deleted_at IS NULL
+             WHERE ea.escala_id = ?
+               AND ea.deleted_at IS NULL
+               AND ea.status != 'cancelado'
+               AND (
+                 ea.aeronave_id IS NULL
+                 OR (ae.deleted_at IS NULL AND UPPER(COALESCE(NULLIF(TRIM(ae.status), ''), 'ATIVO')) = 'ATIVO')
+               )
+               AND CAST(ea.funcionario_id AS TEXT) IN (${placeholders})
+             ORDER BY ea.data_inicio ASC, ea.created_at ASC`,
+          )
+          .bind(escalaId, ...tripulanteIdChunk)
+          .all<AlocacaoCoberturaTripulanteRow>();
+        return rows.results || [];
+      },
+    );
 
-    for (const alocacao of alocacoes.results || []) {
+    for (const alocacao of alocacoes) {
       const lista = alocacoesPorFuncionario.get(alocacao.funcionario_id) || [];
       lista.push(alocacao);
       alocacoesPorFuncionario.set(alocacao.funcionario_id, lista);

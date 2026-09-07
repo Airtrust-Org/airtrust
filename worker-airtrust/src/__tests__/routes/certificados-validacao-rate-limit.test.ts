@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Env } from '../../types';
 import validacaoCertificadosRoutes from '../../routes/certificados/validacao';
 
-const testEnv = {} as Env;
+const testEnv = { ENVIRONMENT: 'test' } as unknown as Env;
 const invalidHash = 'INVALID-HASH';
 
 describe('public certificate validation rate limit', () => {
