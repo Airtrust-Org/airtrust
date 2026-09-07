@@ -11,11 +11,15 @@ import { LIMITES_DEFAULT } from './types';
 import { generateId, now, logAuditoria } from './db-service-shared';
 export {
   createRevisionAndRecalcRun,
+  listFrmsConfigurationHistory,
+  loadEffectiveFrmsConfiguration,
   loadFrmsRecalcRun,
+  loadRestorableFrmsRevision,
   loadResolvedFrmsParameters,
   type CreateFrmsRevisionInput,
   type FrmsConfigParameter,
   type FrmsConfigRevision,
+  type EffectiveFrmsConfiguration,
   type FrmsRecalcRun,
   type ResolvedFrmsParameterSet,
 } from './parameter-governance';

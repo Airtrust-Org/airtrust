@@ -23,6 +23,7 @@ import {
 import AppLayout from '@/react-app/components/AppLayout';
 import {
   useFrmsConfiguracoes,
+  useFrmsConfiguracoesHistorico,
   useFrmsMutation,
   useFrmsNotificacaoConfig,
   FrmsNotificacaoConfigRow,
@@ -288,10 +289,22 @@ export const PARAMETROS_DECORATIVOS = new Set([
 
 type Tab = 'regulatorios' | 'fatorizacao' | 'offshore' | 'notificacoes';
 
+const PROVENANCE_TYPES = [
+  { value: 'REGULATORY', label: 'Regulatório' },
+  { value: 'REGULATORY_CONTEXT_BASELINE', label: 'Baseline com contexto regulatório' },
+  { value: 'OPERATIONAL_POLICY_WITH_REGULATORY_CONTEXT', label: 'Política operacional com contexto regulatório' },
+  { value: 'UNVERIFIED_OPERATIONAL_POLICY', label: 'Política operacional ainda não verificada' },
+] as const;
+
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function FrmsConfiguracoes() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>('regulatorios');
   const { data, loading: isLoading, refetch } = useFrmsConfiguracoes();
+  const { data: history, loading: historyLoading, refetch: refetchHistory } = useFrmsConfiguracoesHistorico();
   const { mutate } = useFrmsMutation();
   const [values, setValues] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
@@ -304,9 +317,16 @@ export default function FrmsConfiguracoes() {
     name: string;
   } | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const [reason, setReason] = useState('');
+  const [sourceType, setSourceType] = useState('');
+  const [sourceReference, setSourceReference] = useState('');
+  const [policyVersion, setPolicyVersion] = useState('');
+  const [effectiveFrom, setEffectiveFrom] = useState(todayIsoDate);
+  const [restoreRevisionId, setRestoreRevisionId] = useState('');
 
   useEffect(() => {
     if (data?.limites) setValues({ ...data.limites });
+    if (data?.revision?.policy_version) setPolicyVersion(data.revision.policy_version);
   }, [data]);
 
   const handleChange = useCallback((key: string, val: string) => {
@@ -318,18 +338,27 @@ export default function FrmsConfiguracoes() {
   }, []);
 
   const handleSave = useCallback(async () => {
+    if (!reason.trim() || !sourceType || !sourceReference.trim() || !policyVersion.trim()) {
+      setSaveError('Motivo, classificação de proveniência, referência e versão da política são obrigatórios.');
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     try {
-      const configs = Object.entries(values).map(([nome, valor_numerico]) => ({ nome, valor_numerico }));
-      const savedLimites = (await mutate('/api/frms/configuracoes', {
+      await mutate('/api/frms/configuracoes/governadas', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ configs }),
-      })) as Record<string, number>;
-
-      if (savedLimites && typeof savedLimites === 'object') setValues({ ...savedLimites });
+        body: JSON.stringify({
+          source_type: sourceType,
+          source_reference: sourceReference.trim(),
+          policy_version: policyVersion.trim(),
+          effective_from: effectiveFrom,
+          reason: reason.trim(),
+          parameters: Object.entries(values).map(([key, value]) => ({ key, value })),
+        }),
+      });
       clearApiCacheByPattern('/frms');
+      await Promise.all([refetch(), refetchHistory()]);
       setSaved(true);
       setTimeout(() => setSaved(false), 4000);
     } catch (e) {
@@ -338,25 +367,38 @@ export default function FrmsConfiguracoes() {
     } finally {
       setSaving(false);
     }
-  }, [values, mutate]);
+  }, [values, mutate, reason, sourceType, sourceReference, policyVersion, effectiveFrom, refetch, refetchHistory]);
 
   const handleRestore = useCallback(async () => {
-    if (!(await confirmDialog('Restaurar TODOS os parâmetros para os valores padrão de referência?')))
+    if (!restoreRevisionId) {
+      setSaveError('Selecione uma revisão persistida do histórico para restaurar.');
+      return;
+    }
+    if (!reason.trim()) {
+      setSaveError('Informe o motivo da nova revisão de restauração.');
+      return;
+    }
+    if (!(await confirmDialog('Criar uma nova revisão a partir da revisão persistida selecionada?')))
       return;
     setRestoring(true);
     try {
-      await mutate('/api/frms/configuracoes/restaurar', {
+      await mutate('/api/frms/configuracoes/governadas/restaurar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          baseline_revision_id: restoreRevisionId,
+          effective_from: effectiveFrom,
+          reason: reason.trim(),
+        }),
       });
-      refetch();
+      clearApiCacheByPattern('/frms');
+      await Promise.all([refetch(), refetchHistory()]);
     } catch (e) {
       console.error('Erro ao restaurar:', e);
     } finally {
       setRestoring(false);
     }
-  }, [mutate, refetch]);
+  }, [mutate, refetch, refetchHistory, restoreRevisionId, effectiveFrom, reason]);
 
   const handleReprocessar = useCallback(async () => {
     setReprocessing(true);
@@ -465,6 +507,77 @@ export default function FrmsConfiguracoes() {
           </button>
         </div>
 
+        {data?.revision ? (
+          <section className="rounded-xl border border-slate-200 bg-slate-50 p-4" aria-label="Revisão FRMS efetiva">
+            <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-700">
+              <span><strong>Perfil:</strong> {data.profile_code}</span>
+              <span><strong>Revisão:</strong> {data.revision.revision_number} ({data.revision.id})</span>
+              <span><strong>Modelo/política:</strong> {data.model_version}</span>
+              <span><strong>Vigência:</strong> {data.effective_from}{data.effective_to ? ` a ${data.effective_to}` : ' em diante'}</span>
+              <span><strong>Proveniência:</strong> {data.revision.source_type}</span>
+            </div>
+            <p className="mt-2 text-xs text-slate-600">
+              Esta tela usa a revisão efetiva do tenant autenticado. Não há seleção de empresa pelo cliente nem fallback para valores globais.
+            </p>
+          </section>
+        ) : null}
+
+        <section className="rounded-xl border border-primary/20 bg-blue-50/40 p-4" aria-label="Metadados obrigatórios da revisão">
+          <h2 className="text-sm font-semibold text-slate-900">Nova revisão governada</h2>
+          <p className="mt-1 text-xs text-slate-600">
+            A mudança cria histórico imutável, com autor do tenant autenticado, motivo, proveniência e vigência. Valores sem fonte externa comprovada devem ser classificados como política não verificada.
+          </p>
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <label className="text-xs font-medium text-slate-700">
+              Classificação da proveniência
+              <select
+                value={sourceType}
+                onChange={(event) => setSourceType(event.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+              >
+                <option value="">Selecione</option>
+                {PROVENANCE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-medium text-slate-700">
+              Referência / fonte
+              <input
+                value={sourceReference}
+                onChange={(event) => setSourceReference(event.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+                placeholder="Documento, cláusula ou decisão"
+              />
+            </label>
+            <label className="text-xs font-medium text-slate-700">
+              Versão da política/modelo
+              <input
+                value={policyVersion}
+                onChange={(event) => setPolicyVersion(event.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="text-xs font-medium text-slate-700">
+              Vigência inicial
+              <input
+                type="date"
+                min={todayIsoDate()}
+                value={effectiveFrom}
+                onChange={(event) => setEffectiveFrom(event.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+              />
+            </label>
+          </div>
+          <label className="mt-3 block text-xs font-medium text-slate-700">
+            Motivo da alteração
+            <textarea
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              className="mt-1 min-h-16 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+              placeholder="Explique a necessidade, aprovação ou evidência que fundamenta esta revisão."
+            />
+          </label>
+        </section>
+
         <div className="py-2">
           <div className="mb-6 flex flex-wrap gap-2">
             {tabs.map((tab) => (
@@ -491,7 +604,7 @@ export default function FrmsConfiguracoes() {
             </summary>
             <div className="border-t border-amber-200 px-4 py-4">
               <p className="mb-3 text-xs text-amber-800">
-                Estas ações afetam dados derivados do FRMS e ficam separadas da edição normal de parâmetros.
+                Estas ações afetam dados derivados do FRMS. A restauração só pode clonar uma revisão persistida e auditável; constantes do código não são usadas como autoridade operacional.
               </p>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -509,13 +622,28 @@ export default function FrmsConfiguracoes() {
                 </button>
                 <button
                   onClick={handleRestore}
-                  disabled={restoring}
+                  disabled={restoring || historyLoading || !restoreRevisionId}
                   className="flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
                 >
                   <RotateCcw className={`h-4 w-4 ${restoring ? 'animate-spin' : ''}`} />
-                  Restaurar valores padrão
+                  Criar revisão a partir do histórico
                 </button>
               </div>
+              <label className="mt-3 block max-w-3xl text-xs font-medium text-amber-900">
+                Revisão persistida para restaurar
+                <select
+                  value={restoreRevisionId}
+                  onChange={(event) => setRestoreRevisionId(event.target.value)}
+                  className="mt-1 w-full rounded-md border border-amber-300 bg-white px-2 py-1.5 text-sm text-slate-800"
+                >
+                  <option value="">Selecione uma revisão histórica</option>
+                  {(history ?? []).map((revision) => (
+                    <option key={revision.id} value={revision.id}>
+                      #{revision.revision_number} · {revision.policy_version} · {revision.source_type} · {revision.effective_from}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           </details>
 

@@ -25,18 +25,20 @@ import {
   buscarAlertas,
   carregarLimites,
   buscarConfiguracoes,
-  atualizarConfiguracao,
-  restaurarConfiguracoesPadrao,
-  reprocessarTodosTripulantes,
   createRevisionAndRecalcRun,
+  listFrmsConfigurationHistory,
+  loadEffectiveFrmsConfiguration,
   loadFrmsRecalcRun,
+  loadRestorableFrmsRevision,
   runGovernedRecalc,
   buscarNotificacoes,
   marcarNotificacaoLida,
   marcarTodasNotificacoesLidas,
 } from '../lib/frms/db-service';
+import { FrmsParameterResolutionError } from '../lib/frms/parameter-governance';
 import {
   safe,
+  type FrmsAppContext,
   getEmpresaIdSafe,
   auditFrms,
   assertTripulanteEmpresa,
@@ -45,6 +47,41 @@ import {
 } from './frms-shared';
 
 const frmsRelatoriosConfig = new Hono<{ Bindings: Env; Variables: { userId?: string } }>();
+
+const GOVERNED_SOURCE_TYPES = [
+  'REGULATORY',
+  'REGULATORY_CONTEXT_BASELINE',
+  'OPERATIONAL_POLICY_WITH_REGULATORY_CONTEXT',
+  'UNVERIFIED_OPERATIONAL_POLICY',
+] as const;
+
+function isoDateToday(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function frmsConfigurationUnavailable(c: FrmsAppContext, error: unknown) {
+  const code = error instanceof FrmsParameterResolutionError ? error.code : 'FRMS_CONTEXT_UNAVAILABLE';
+  return c.json(
+    {
+      success: false,
+      error: 'Configuração FRMS efetiva indisponível para este tenant. Nenhum valor padrão foi aplicado.',
+      code,
+      state: 'UNKNOWN',
+    },
+    503,
+  );
+}
+
+function sameParameterKeys(
+  expected: readonly { parameter_key: string; numeric_value: number | null }[],
+  submitted: readonly { key: string; value: number }[],
+): boolean {
+  const expectedKeys = new Set(expected.filter((parameter) => parameter.numeric_value != null).map((parameter) => parameter.parameter_key));
+  const submittedKeys = new Set(submitted.map((parameter) => parameter.key));
+  return expectedKeys.size === submitted.length
+    && submittedKeys.size === submitted.length
+    && [...expectedKeys].every((key) => submittedKeys.has(key));
+}
 
 // ════════════════════════════════════════════════════════
 // RELATÓRIOS
@@ -142,99 +179,178 @@ frmsRelatoriosConfig.get(
 
 /**
  * GET /api/frms/configuracoes
- * Retorna todas as configurações (rows do banco) para UI admin
+ * Compatibilidade de leitura para consumidores legados. Não é uma fonte
+ * operacional tenant-aware e a UI FRMS não deve mais chamá-lo.
  */
 frmsRelatoriosConfig.get(
   '/configuracoes',
   safe(async (c) => {
     const configs = await buscarConfiguracoes(c.env.DB);
     const limites = await carregarLimites(c.env.DB);
-    return c.json({ success: true, data: { configs, limites } });
+    return c.json({
+      success: true,
+      data: { configs, limites },
+      deprecated: true,
+      operational: false,
+      replacement: '/api/frms/configuracoes/governadas',
+    });
   }),
 );
 
 /**
  * PUT /api/frms/configuracoes
- * Atualiza múltiplas configurações de uma vez
- * Body: { configs: [{ nome: string, valor_numerico: number }] }
+ * Legacy global writer retained only as an explicit fail-closed compatibility
+ * response. It must never mutate shared operational configuration.
  */
 frmsRelatoriosConfig.put(
   '/configuracoes',
   safe(async (c) => {
     const denied = await requirePlatformAdmin(c);
     if (denied) return denied;
-
-    const body = await c.req.json();
-    const schema = z.object({
-      configs: z.array(
-        z.object({
-          nome: z.string(),
-          valor_numerico: z.number(),
-        }),
-      ),
-    });
-    const parsed = schema.safeParse(body);
-    if (!parsed.success) {
-      return c.json({ success: false, error: parsed.error.flatten() }, 400);
-    }
-
-    await atualizarConfiguracao(c.env.DB, parsed.data.configs);
-    const limites = await carregarLimites(c.env.DB);
-
-    // Reprocessar todos os tripulantes em background com os novos limites
-    c.executionCtx.waitUntil(reprocessarTodosTripulantes(c.env.DB));
-
-    return c.json({ success: true, data: limites });
+    return c.json(
+      {
+        success: false,
+        error: 'A escrita global de parâmetros FRMS foi retirada do caminho operacional.',
+        code: 'FRMS_LEGACY_CONFIGURATION_WRITE_RETIRED',
+        replacement: '/api/frms/configuracoes/governadas',
+      },
+      410,
+    );
   }),
 );
 
 /**
- * Governed backend for the existing configuration UI. It does not create a
- * second panel: callers submit the same parameter values with mandatory scope,
- * provenance and effectivity; the revision and ledger are created before work.
+ * GET /api/frms/configuracoes/governadas
+ *
+ * Returns only the current tenant's effective immutable revision. Missing,
+ * invalid or ambiguous governance state is a 503/UNKNOWN; there is no global
+ * table or code-default fallback in this administrative path.
+ */
+frmsRelatoriosConfig.get(
+  '/configuracoes/governadas',
+  requireRole('admin'),
+  safe(async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return frmsConfigurationUnavailable(c, new Error('tenant context absent'));
+    try {
+      const effective = await loadEffectiveFrmsConfiguration(c.env.DB, empresaId, isoDateToday());
+      return c.json({
+        success: true,
+        data: {
+          revision: effective.revision,
+          profile_code: effective.profileCode,
+          regulatory_profile_id: effective.regulatoryProfileId,
+          model_version: effective.modelVersion,
+          effective_from: effective.revision.effective_from,
+          effective_to: effective.revision.effective_to,
+          limites: effective.values,
+          parameters: effective.parameters,
+        },
+      });
+    } catch (error) {
+      return frmsConfigurationUnavailable(c, error);
+    }
+  }),
+);
+
+/** Tenant/profile-scoped immutable history for audit and restore selection. */
+frmsRelatoriosConfig.get(
+  '/configuracoes/governadas/historico',
+  requireRole('admin'),
+  safe(async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return frmsConfigurationUnavailable(c, new Error('tenant context absent'));
+    try {
+      const effective = await loadEffectiveFrmsConfiguration(c.env.DB, empresaId, isoDateToday());
+      const history = await listFrmsConfigurationHistory(c.env.DB, empresaId, effective.profileCode);
+      return c.json({ success: true, data: history });
+    } catch (error) {
+      return frmsConfigurationUnavailable(c, error);
+    }
+  }),
+);
+
+/**
+ * Creates a tenant-scoped immutable revision. Scope and regulatory profile are
+ * resolved from the authenticated tenant; empresa_id/profile IDs in the body
+ * are rejected rather than trusted.
  */
 frmsRelatoriosConfig.put(
   '/configuracoes/governadas',
+  requireRole('admin'),
   safe(async (c) => {
-    const denied = await requirePlatformAdmin(c);
-    if (denied) return denied;
     const schema = z.object({
-      profile_code: z.string().min(1),
-      source_type: z.string().min(1),
-      source_reference: z.string().min(1).nullable().optional(),
-      regulatory_profile_id: z.string().min(1).nullable().optional(),
+      source_type: z.enum(GOVERNED_SOURCE_TYPES),
+      source_reference: z.string().trim().min(3),
       policy_version: z.string().min(1),
       effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-      reason: z.string().min(3),
-      parameters: z.array(z.object({
-        key: z.string().min(1), value: z.number().finite(), unit: z.string().min(1),
-        metric: z.string().nullable().optional(), window_kind: z.string().nullable().optional(),
-        direction: z.string().nullable().optional(),
-      })).min(1),
-    });
+      reason: z.string().trim().min(3),
+      parameters: z.array(z.object({ key: z.string().min(1), value: z.number().finite() })).min(1),
+    }).strict();
     const parsed = schema.safeParse(await c.req.json());
     if (!parsed.success) return c.json({ success: false, error: parsed.error.flatten() }, 400);
     const empresaId = getEmpresaIdSafe(c);
-    if (!empresaId) return c.json({ success: false, error: 'Empresa não identificada' }, 401);
-    const created = await createRevisionAndRecalcRun(c.env.DB, {
-      empresaId, profileCode: parsed.data.profile_code, sourceType: parsed.data.source_type,
-      sourceReference: parsed.data.source_reference ?? null,
-      regulatoryProfileId: parsed.data.regulatory_profile_id ?? null,
-      policyVersion: parsed.data.policy_version,
-      effectiveFrom: parsed.data.effective_from, effectiveTo: parsed.data.effective_to ?? null,
-      actorUserId: c.get('userId') == null ? null : String(c.get('userId')),
-      reason: parsed.data.reason, parameters: parsed.data.parameters,
-    });
-    const run = await loadFrmsRecalcRun(c.env.DB, created.runId);
-    c.executionCtx.waitUntil(runGovernedRecalc(c.env.DB, run));
-    return c.json({ success: true, data: { revision_id: created.revisionId, run_id: created.runId, status: 'PENDING' } });
+    if (!empresaId) return frmsConfigurationUnavailable(c, new Error('tenant context absent'));
+    if (parsed.data.effective_from < isoDateToday()) {
+      return c.json({ success: false, error: 'Revisões FRMS não podem alterar vigência histórica.', code: 'FRMS_HISTORICAL_WRITE_FORBIDDEN' }, 400);
+    }
+    try {
+      const effective = await loadEffectiveFrmsConfiguration(c.env.DB, empresaId, isoDateToday());
+      if (!sameParameterKeys(effective.parameters, parsed.data.parameters)) {
+        return c.json({
+          success: false,
+          error: 'A revisão deve conter exatamente todas as chaves numéricas da configuração efetiva.',
+          code: 'FRMS_PARAMETER_SET_MISMATCH',
+        }, 400);
+      }
+      const submitted = new Map(parsed.data.parameters.map((parameter) => [parameter.key, parameter.value]));
+      const created = await createRevisionAndRecalcRun(c.env.DB, {
+        empresaId,
+        profileCode: effective.profileCode,
+        sourceType: parsed.data.source_type,
+        sourceReference: parsed.data.source_reference,
+        regulatoryProfileId: effective.regulatoryProfileId,
+        policyVersion: parsed.data.policy_version,
+        effectiveFrom: parsed.data.effective_from,
+        effectiveTo: parsed.data.effective_to ?? null,
+        actorUserId: c.get('userId') == null ? null : String(c.get('userId')),
+        reason: parsed.data.reason,
+        parameters: effective.parameters.map((parameter) => ({
+          key: parameter.parameter_key,
+          value: submitted.get(parameter.parameter_key) as number,
+          unit: parameter.unit,
+          metric: parameter.metric,
+          windowKind: parameter.window_kind,
+          direction: parameter.direction,
+        })),
+      });
+      const run = await loadFrmsRecalcRun(c.env.DB, created.runId);
+      c.executionCtx.waitUntil(runGovernedRecalc(c.env.DB, run));
+      await auditFrms(c, 'frms_config_revisions', 'INSERT', created.revisionId, {
+        depois: {
+          empresa_id: empresaId,
+          profile_code: effective.profileCode,
+          source_type: parsed.data.source_type,
+          source_reference: parsed.data.source_reference,
+          policy_version: parsed.data.policy_version,
+          effective_from: parsed.data.effective_from,
+          effective_to: parsed.data.effective_to ?? null,
+          reason: parsed.data.reason,
+          supersedes_revision_id: created.previousRevisionId,
+        },
+      });
+      return c.json({ success: true, data: { revision_id: created.revisionId, run_id: created.runId, status: 'PENDING' } });
+    } catch (error) {
+      return frmsConfigurationUnavailable(c, error);
+    }
   }),
 );
 
 /**
  * POST /api/frms/configuracoes/restaurar
- * Restaura todos os limites para valores padrão científicos
+ * Legacy global restore is intentionally retired. See the governed endpoint
+ * below, which clones an explicit persisted revision instead of LIMITES_DEFAULT.
  */
 frmsRelatoriosConfig.post(
   '/configuracoes/restaurar',
@@ -242,13 +358,88 @@ frmsRelatoriosConfig.post(
     const denied = await requirePlatformAdmin(c);
     if (denied) return denied;
 
-    await restaurarConfiguracoesPadrao(c.env.DB);
-    const limites = await carregarLimites(c.env.DB);
+    return c.json(
+      {
+        success: false,
+        error: 'Restaurar padrões globais foi retirado. Selecione uma revisão persistida do histórico governado.',
+        code: 'FRMS_LEGACY_CONFIGURATION_RESTORE_RETIRED',
+        replacement: '/api/frms/configuracoes/governadas/restaurar',
+      },
+      410,
+    );
+  }),
+);
 
-    // Reprocessar todos os tripulantes em background com os limites restaurados
-    c.executionCtx.waitUntil(reprocessarTodosTripulantes(c.env.DB));
-
-    return c.json({ success: true, data: limites });
+/**
+ * Restores values only by creating a new tenant revision from an explicit,
+ * persisted history entry. Code constants are never consulted.
+ */
+frmsRelatoriosConfig.post(
+  '/configuracoes/governadas/restaurar',
+  requireRole('admin'),
+  safe(async (c) => {
+    const schema = z.object({
+      baseline_revision_id: z.string().min(1),
+      effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+      reason: z.string().trim().min(3),
+    }).strict();
+    const parsed = schema.safeParse(await c.req.json());
+    if (!parsed.success) return c.json({ success: false, error: parsed.error.flatten() }, 400);
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return frmsConfigurationUnavailable(c, new Error('tenant context absent'));
+    if (parsed.data.effective_from < isoDateToday()) {
+      return c.json({ success: false, error: 'Revisões FRMS não podem alterar vigência histórica.', code: 'FRMS_HISTORICAL_WRITE_FORBIDDEN' }, 400);
+    }
+    try {
+      const effective = await loadEffectiveFrmsConfiguration(c.env.DB, empresaId, isoDateToday());
+      const baseline = await loadRestorableFrmsRevision(
+        c.env.DB,
+        empresaId,
+        effective.profileCode,
+        parsed.data.baseline_revision_id,
+      );
+      if (!sameParameterKeys(effective.parameters, baseline.parameters.map((parameter) => ({
+        key: parameter.parameter_key,
+        value: Number(parameter.numeric_value),
+      })))) {
+        return c.json({ success: false, error: 'A revisão de restauração não possui o conjunto completo de parâmetros.', code: 'FRMS_RESTORE_BASELINE_INVALID' }, 400);
+      }
+      const created = await createRevisionAndRecalcRun(c.env.DB, {
+        empresaId,
+        profileCode: effective.profileCode,
+        sourceType: baseline.revision.source_type,
+        sourceReference: `${baseline.revision.source_reference ?? 'Revisão persistida'}; restaurada de ${baseline.revision.id}`,
+        regulatoryProfileId: effective.regulatoryProfileId,
+        policyVersion: baseline.revision.policy_version,
+        effectiveFrom: parsed.data.effective_from,
+        effectiveTo: parsed.data.effective_to ?? null,
+        actorUserId: c.get('userId') == null ? null : String(c.get('userId')),
+        reason: parsed.data.reason,
+        parameters: baseline.parameters.map((parameter) => ({
+          key: parameter.parameter_key,
+          value: Number(parameter.numeric_value),
+          unit: parameter.unit,
+          metric: parameter.metric,
+          windowKind: parameter.window_kind,
+          direction: parameter.direction,
+        })),
+      });
+      const run = await loadFrmsRecalcRun(c.env.DB, created.runId);
+      c.executionCtx.waitUntil(runGovernedRecalc(c.env.DB, run));
+      await auditFrms(c, 'frms_config_revisions', 'INSERT', created.revisionId, {
+        depois: {
+          empresa_id: empresaId,
+          restored_from_revision_id: baseline.revision.id,
+          policy_version: baseline.revision.policy_version,
+          effective_from: parsed.data.effective_from,
+          reason: parsed.data.reason,
+        },
+      });
+      return c.json({ success: true, data: { revision_id: created.revisionId, run_id: created.runId, status: 'PENDING' } });
+    } catch (error) {
+      return frmsConfigurationUnavailable(c, error);
+    }
   }),
 );
 

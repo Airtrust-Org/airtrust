@@ -53,6 +53,24 @@ export interface ResolvedFrmsParameterSet {
   modelVersion: string;
 }
 
+/**
+ * Complete, tenant-derived configuration for an administrative surface.
+ *
+ * This is deliberately resolved through the same assignment/profile/revision
+ * chain as the operational callers.  An admin panel must never reconstruct a
+ * parameter set from the legacy global limits table just because it is easier
+ * to render.
+ */
+export interface EffectiveFrmsConfiguration {
+  empresaId: number;
+  profileCode: string;
+  regulatoryProfileId: string;
+  revision: Readonly<FrmsConfigRevision>;
+  parameters: readonly Readonly<FrmsConfigParameter>[];
+  values: Readonly<Record<string, number>>;
+  modelVersion: string;
+}
+
 export class FrmsParameterResolutionError extends Error {
   constructor(public readonly code: string, message: string) {
     super(message);
@@ -315,6 +333,120 @@ export async function loadResolvedFrmsParameters(
     .bind(revision.id)
     .all<FrmsConfigParameter>();
   return buildResolvedParameterSet(revision, parameters.results ?? [], requiredKeys);
+}
+
+/**
+ * Reads the effective configuration for a tenant. Missing assignments,
+ * ambiguous revisions and incomplete values are intentionally surfaced as
+ * typed errors; callers must present UNKNOWN/503 instead of numeric defaults.
+ */
+export async function loadEffectiveFrmsConfiguration(
+  db: FrmsGovernanceDb,
+  empresaId: number,
+  operationalDate: string,
+): Promise<EffectiveFrmsConfiguration> {
+  const assignments = await db.prepare(
+    `SELECT a.regulatory_profile_id, a.profile_code
+       FROM frms_profile_assignments a
+       JOIN frms_regulatory_profiles p ON p.id = a.regulatory_profile_id
+      WHERE a.empresa_id = ? AND a.status = 'ACTIVE'
+        AND a.effective_from <= ? AND (a.effective_to IS NULL OR a.effective_to >= ?)
+        AND p.empresa_id = ? AND p.active = 1 AND p.deleted_at IS NULL
+        AND p.profile_code = a.profile_code
+        AND p.effective_from <= ? AND (p.effective_to IS NULL OR p.effective_to >= ?)`,
+  )
+    .bind(empresaId, operationalDate, operationalDate, empresaId, operationalDate, operationalDate)
+    .all<{ regulatory_profile_id: string; profile_code: string }>();
+  const matches = assignments.results ?? [];
+  if (matches.length !== 1) {
+    throw new FrmsParameterResolutionError(
+      matches.length === 0 ? 'FRMS_CONTEXT_UNAVAILABLE' : 'CONFIGURATION_ERROR',
+      `Expected exactly one effective FRMS profile assignment for empresa=${empresaId}, date=${operationalDate}.`,
+    );
+  }
+
+  const assignment = matches[0];
+  const requiredKeys = Object.keys(LIMITES_DEFAULT);
+  const parameterSet = await loadResolvedFrmsParameters(
+    db,
+    empresaId,
+    assignment.profile_code,
+    operationalDate,
+    requiredKeys,
+  );
+  const rows = await db
+    .prepare('SELECT * FROM frms_config_parameters WHERE revision_id = ? ORDER BY parameter_key ASC')
+    .bind(parameterSet.revision.id)
+    .all<FrmsConfigParameter>();
+  const parameters = rows.results ?? [];
+
+  // Retain the complete, immutable rows for a later governed revision. The
+  // values map is only a rendering convenience and is never a source of truth.
+  return Object.freeze({
+    empresaId,
+    profileCode: assignment.profile_code,
+    regulatoryProfileId: assignment.regulatory_profile_id,
+    revision: parameterSet.revision,
+    parameters: Object.freeze(parameters.map((parameter) => Object.freeze({ ...parameter }))),
+    values: parameterSet.values,
+    modelVersion: parameterSet.modelVersion,
+  });
+}
+
+/** Tenant history is scoped server-side; a client never supplies empresa_id. */
+export async function listFrmsConfigurationHistory(
+  db: FrmsGovernanceDb,
+  empresaId: number,
+  profileCode: string,
+): Promise<readonly FrmsConfigRevision[]> {
+  const rows = await db
+    .prepare(
+      `SELECT * FROM frms_config_revisions
+        WHERE profile_code = ? AND (empresa_id = ? OR empresa_id IS NULL)
+        ORDER BY CASE WHEN empresa_id = ? THEN 0 ELSE 1 END,
+                 revision_number DESC, effective_from DESC, created_at DESC`,
+    )
+    .bind(profileCode, empresaId, empresaId)
+    .all<FrmsConfigRevision>();
+  return Object.freeze((rows.results ?? []).map((revision) => Object.freeze({ ...revision })));
+}
+
+/**
+ * Loads an explicitly persisted revision for a governed restore. Code defaults
+ * are intentionally absent from this path.
+ */
+export async function loadRestorableFrmsRevision(
+  db: FrmsGovernanceDb,
+  empresaId: number,
+  profileCode: string,
+  revisionId: string,
+): Promise<{ revision: FrmsConfigRevision; parameters: readonly FrmsConfigParameter[] }> {
+  const revision = await db
+    .prepare(
+      `SELECT * FROM frms_config_revisions
+        WHERE id = ? AND profile_code = ? AND (empresa_id = ? OR empresa_id IS NULL)
+        LIMIT 1`,
+    )
+    .bind(revisionId, profileCode, empresaId)
+    .first<FrmsConfigRevision>();
+  if (!revision) {
+    throw new FrmsParameterResolutionError(
+      'FRMS_RESTORE_BASELINE_NOT_FOUND',
+      'The requested FRMS restore baseline is not available for this tenant/profile.',
+    );
+  }
+  const rows = await db
+    .prepare('SELECT * FROM frms_config_parameters WHERE revision_id = ? ORDER BY parameter_key ASC')
+    .bind(revision.id)
+    .all<FrmsConfigParameter>();
+  const parameters = rows.results ?? [];
+  if (parameters.length === 0 || parameters.some((parameter) => parameter.numeric_value == null)) {
+    throw new FrmsParameterResolutionError(
+      'FRMS_RESTORE_BASELINE_INVALID',
+      'The requested FRMS restore baseline is incomplete or cannot be represented as numeric parameters.',
+    );
+  }
+  return { revision, parameters };
 }
 
 export interface CreateFrmsRevisionInput {

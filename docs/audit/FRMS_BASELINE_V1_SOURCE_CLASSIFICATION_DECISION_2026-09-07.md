@@ -49,6 +49,18 @@ The signed Costa do Sol Táxi Aéreo ACT 2025/2027 is authoritative for the labo
 
 Those provisions do **not** prove the AirTrust 15-day fatigue-model constant and do **not** establish the 3 h/6 h platform-rest pair. They must be modeled as a separate tenant/applicability layer if the product later enforces them directly.
 
+## Official statutory cross-check: reserve is not platform rest
+
+The official text of Lei 13.475/2017 distinguishes **reserva** (a crewmember being available at the workplace) from **repouso** (the post-duty uninterrupted period free from service). It must not be used as a source for `REPOUSO_PLATAFORMA_*`.
+
+- Article 44, paragraph 2 sets reserve at 3–6 hours only for the Article 5(I) regular/non-regular public-air-transport category.
+- Article 44, paragraph 3 sets reserve at 3–10 hours for Article 5(II)–(V), which includes taxi-air services.
+- Article 41, paragraphs 2–4 separately establishes the 21-day mission / 17-day work-at-location outer framework and the corresponding post-mission leave calculation for Article 5(II)–(V); this is not a fixed 15-day fatigue cycle.
+
+Official source: [Lei 13.475/2017, arts. 41 and 44](https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2017/lei/l13475.htm).
+
+Therefore, the legacy 3 h/6 h pair numerically resembles the **reserve** range for a different service category. It is neither evidence of taxi-air reserve (3–10 h) nor evidence of offshore platform rest. This is a possible historical conflation, not a basis to relabel or change either number without a new approved governed revision.
+
 ## IOGP consequence
 
 The reviewed IOGP 690-2 fatigue-management material supports general offshore aviation fatigue controls, including FDP/rest concepts and the need for additional restrictions in demanding operations. The material reviewed does not establish the AirTrust-specific 15-day or 3 h/6 h values.

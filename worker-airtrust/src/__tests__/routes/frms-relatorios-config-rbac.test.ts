@@ -72,7 +72,7 @@ describe('FRMS Configurações Globais RBAC', () => {
     expect(body.code).toBe('PLATFORM_ADMIN_REQUIRED');
   });
 
-  it('deve permitir (200) para platform_admin ao tentar PUT /configuracoes', async () => {
+  it('retira o writer global mesmo para platform_admin', async () => {
     const app = setupApp(true);
     const req = new Request('http://localhost/configuracoes', {
       method: 'PUT',
@@ -82,6 +82,8 @@ describe('FRMS Configurações Globais RBAC', () => {
     const ctx = { waitUntil: vi.fn(), passThroughOnException: vi.fn(), props: {} } as ExecutionContext;
     const res = await app.fetch(req, {}, ctx);
     
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(410);
+    const body = await res.json() as { code: string };
+    expect(body.code).toBe('FRMS_LEGACY_CONFIGURATION_WRITE_RETIRED');
   });
 });
