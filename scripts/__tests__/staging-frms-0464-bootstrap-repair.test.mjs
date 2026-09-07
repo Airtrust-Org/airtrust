@@ -94,10 +94,23 @@ test('script hard-pins staging D1 and blocks production/development ids', () => 
 
 test('script derives required operational keys from canonical LIMITES_DEFAULT', () => {
   const source = read(SCRIPT);
-  assert.match(source, /parseLimitesDefaultKeys/);
+  assert.match(source, /parseLimitesDefaultEntries/);
   assert.match(source, /worker-airtrust.*src.*lib.*frms.*types\.ts/s);
   assert.match(source, /LIMITES_DEFAULT/);
   assert.doesNotMatch(source, /const\s+REQUIRED_KEYS\s*=\s*\[/);
+});
+
+test('canonical fallback is derived from LIMITES_DEFAULT and cross-checked against the reviewed self-contained baseline', () => {
+  const source = read(SCRIPT);
+  assert.match(source, /loadReviewedCanonicalBaseline/);
+  assert.match(source, /frms_helicopter_offshore_baseline_v1\.sql/);
+  assert.match(source, /canonicalSource\.ready/);
+  assert.match(source, /canonical_snapshot/);
+  assert.match(source, /legacyIsStructurallyValidButEmpty/);
+  assert.match(source, /legacySource\.presentCount === 0/);
+  assert.match(source, /WITH canonical\(parameter_key, numeric_value\) AS \(VALUES/);
+  assert.match(source, /FROM canonical c/);
+  assert.match(source, /touchesLegacySourceTable:\s*false/);
 });
 
 test('preflight is read-only and validates source completeness', () => {
@@ -117,6 +130,8 @@ test('prepared apply is one allowlisted idempotent insert into frms_config_param
   const source = read(SCRIPT);
   assert.match(source, /INSERT INTO frms_config_parameters/);
   assert.match(source, /FROM frms_configuracao_limites s/);
+  assert.match(source, /FROM canonical c/);
+  assert.match(source, /sourceMode/);
   assert.match(source, /NOT EXISTS \(SELECT 1 FROM frms_config_parameters t/);
   assert.match(source, /frms-legacy-global-v2/);
   assert.match(source, /'frms-legacy-limit-' \|\| s\.nome/);
