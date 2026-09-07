@@ -80,6 +80,52 @@ describe('buildReviewedSchemaApply', () => {
     ).toThrow(/change_id is invalid/);
   });
 
+  it('fails closed on DROP TABLE + ALTER TABLE RENAME rebuilds that require a dedicated transactional executor', () => {
+    const f = fixture();
+    const rebuildSql = `
+CREATE TABLE employees_new (id INTEGER PRIMARY KEY);
+INSERT INTO employees_new SELECT * FROM employees;
+DROP TABLE employees;
+ALTER TABLE employees_new RENAME TO employees;
+`;
+    writeFileSync(f.manifest.filePath, rebuildSql);
+    const manifest = JSON.parse(readFileSync(f.manifestPath, 'utf8'));
+    manifest.fileHash = hash(rebuildSql);
+    writeFileSync(f.manifestPath, JSON.stringify(manifest));
+
+    expect(() =>
+      buildReviewedSchemaApply({
+        manifestPath: f.manifestPath,
+        outputPath: f.outputPath,
+        expectedChangeId: 'safe-change',
+        githubSha: 'e'.repeat(40),
+      }),
+    ).toThrow(/NON_ATOMIC_TABLE_REBUILD_REQUIRES_DEDICATED_EXECUTOR/);
+  });
+
+  it('does not mistake comments, string literals, or scratch-table cleanup alone for a table rebuild', () => {
+    const f = fixture();
+    const safeSql = `
+-- DROP TABLE real_table; ALTER TABLE next RENAME TO real_table;
+CREATE TABLE audit_note (value TEXT);
+INSERT INTO audit_note(value) VALUES ('DROP TABLE x; ALTER TABLE y RENAME TO z;');
+DROP TABLE IF EXISTS _preflight_safe_change;
+`;
+    writeFileSync(f.manifest.filePath, safeSql);
+    const manifest = JSON.parse(readFileSync(f.manifestPath, 'utf8'));
+    manifest.fileHash = hash(safeSql);
+    writeFileSync(f.manifestPath, JSON.stringify(manifest));
+
+    expect(() =>
+      buildReviewedSchemaApply({
+        manifestPath: f.manifestPath,
+        outputPath: f.outputPath,
+        expectedChangeId: 'safe-change',
+        githubSha: 'f'.repeat(40),
+      }),
+    ).not.toThrow();
+  });
+
   it('fails closed when SQL or plan content no longer matches review hashes', () => {
     const f = fixture();
     writeFileSync(f.manifest.filePath, 'DROP TABLE usuarios;\n');
