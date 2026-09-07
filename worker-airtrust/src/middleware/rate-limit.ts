@@ -249,6 +249,7 @@ export const rateLimitPresets = {
     maxRequests: 20,
     windowSeconds: 60,
     keyPrefix: 'certificate-validation',
-    failureMode: 'open',
+    failureMode: 'closed',
+    allowLocalFallback: false,
   },
 } as const;
