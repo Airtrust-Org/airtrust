@@ -19,6 +19,25 @@ function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex');
 }
 
+function stripSqlCommentsAndStringLiterals(sqlText) {
+  return sqlText
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/--[^\n\r]*/g, ' ')
+    .replace(/'(?:''|[^'])*'/g, "''");
+}
+
+function assertNoNonAtomicTableRebuild(sqlText) {
+  const executable = stripSqlCommentsAndStringLiterals(sqlText);
+  const hasDropTable = /\bDROP\s+TABLE\b/i.test(executable);
+  const hasTableRename = /\bALTER\s+TABLE\b[\s\S]{0,240}?\bRENAME\s+TO\b/i.test(executable);
+
+  if (hasDropTable && hasTableRename) {
+    fail(
+      'NON_ATOMIC_TABLE_REBUILD_REQUIRES_DEDICATED_EXECUTOR: reviewed Schema V2 file transport cannot safely execute DROP TABLE + ALTER TABLE RENAME as a rebuild',
+    );
+  }
+}
+
 function assertSafeId(value, name) {
   if (!SAFE_ID.test(value)) fail(`${name} is invalid`);
 }
@@ -61,6 +80,7 @@ export function buildReviewedSchemaApply({
   if (sha256(plan) !== manifest.planHash) fail('reviewed plan hash mismatch');
 
   const sqlText = sql.toString('utf8').trimEnd();
+  assertNoNonAtomicTableRebuild(sqlText);
   const ledgerSql = `\n\nINSERT INTO airtrust_schema_changes_v2\n  (change_id, baseline_id, file_path, file_hash, plan_hash, github_sha)\nVALUES\n  ('${manifest.changeId}', '${manifest.baselineId}', '${manifest.filePath}', '${manifest.fileHash}', '${manifest.planHash}', '${githubSha}');\n`;
 
   writeFileSync(resolve(outputPath), `${sqlText}${ledgerSql}`, { encoding: 'utf8', flag: 'wx' });
