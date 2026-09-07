@@ -1,4 +1,9 @@
-import { ensureMatriculaCycle, hasActiveMatriculaCycle } from '../../services/lms-matricula-cycle';
+import {
+  canReuseMatriculaCycle,
+  ensureMatriculaCycle,
+  hasActiveMatriculaCycle,
+  resetMatriculaForNewCycle,
+} from '../../services/lms-matricula-cycle';
 import { getQualificacoesVencimentoExpr } from '../../utils/qualificacoes-alerta-config';
 import { sendEmail } from '../../lib/email';
 import type { Env } from '../../types';
@@ -159,15 +164,17 @@ function isMatriculaUniqueConstraintError(error: unknown): boolean {
   return message.includes('UNIQUE constraint failed') && message.includes('lms_matriculas');
 }
 
-async function ensureRenewalMatricula(
+function buildRenewalExpirationDate(): string {
+  const expiration = new Date();
+  expiration.setUTCDate(expiration.getUTCDate() + LMS_RENOVACAO_EAD_JANELA_DIAS);
+  return expiration.toISOString().slice(0, 10);
+}
+
+async function ensureExistingRenewalMatricula(
   db: D1Database,
-  payload: RenewalPayload,
-): Promise<{ matriculaId: number; created: boolean; active: boolean }> {
-  let existing = await findLatestMatricula(db, payload);
-  if (existing) {
-    if (!hasActiveMatriculaCycle(existing)) {
-      return { matriculaId: existing.id, created: false, active: false };
-    }
+  existing: ExistingMatricula,
+): Promise<{ matriculaId: number; created: false; active: true }> {
+  if (hasActiveMatriculaCycle(existing)) {
     const cycleId = await ensureMatriculaCycle(db, {
       matriculaId: existing.id,
       origin: 'AUTO_RENOVACAO',
@@ -176,9 +183,31 @@ async function ensureRenewalMatricula(
     return { matriculaId: existing.id, created: false, active: true };
   }
 
-  const expiration = new Date();
-  expiration.setUTCDate(expiration.getUTCDate() + LMS_RENOVACAO_EAD_JANELA_DIAS);
-  const expirationDate = expiration.toISOString().slice(0, 10);
+  if (!canReuseMatriculaCycle(existing)) {
+    throw new Error(`EAD_RENEWAL_EXISTING_MATRICULA_NOT_REUSABLE:${existing.status}`);
+  }
+
+  const cycleId = await resetMatriculaForNewCycle(db, {
+    matriculaId: existing.id,
+    dataExpiracao: buildRenewalExpirationDate(),
+    observacoes: 'Matrícula automática: renovação de qualificação EAD vencendo',
+    origin: 'AUTO_RENOVACAO',
+  });
+  if (!cycleId) throw new Error('EAD_RENEWAL_CYCLE_NOT_CREATED');
+
+  return { matriculaId: existing.id, created: false, active: true };
+}
+
+async function ensureRenewalMatricula(
+  db: D1Database,
+  payload: RenewalPayload,
+): Promise<{ matriculaId: number; created: boolean; active: boolean }> {
+  let existing = await findLatestMatricula(db, payload);
+  if (existing) {
+    return ensureExistingRenewalMatricula(db, existing);
+  }
+
+  const expirationDate = buildRenewalExpirationDate();
 
   try {
     const inserted = await db
@@ -201,15 +230,7 @@ async function ensureRenewalMatricula(
     if (!isMatriculaUniqueConstraintError(error)) throw error;
     existing = await findLatestMatricula(db, payload);
     if (!existing) throw error;
-    if (!hasActiveMatriculaCycle(existing)) {
-      return { matriculaId: existing.id, created: false, active: false };
-    }
-    const cycleId = await ensureMatriculaCycle(db, {
-      matriculaId: existing.id,
-      origin: 'AUTO_RENOVACAO',
-    });
-    if (!cycleId) throw new Error('EAD_RENEWAL_CYCLE_NOT_CREATED');
-    return { matriculaId: existing.id, created: false, active: true };
+    return ensureExistingRenewalMatricula(db, existing);
   }
 }
 
@@ -375,17 +396,6 @@ export async function runEadRenewalJob(db: D1Database, env: Env, logger: CronJob
 
         try {
           const result = await ensureRenewalMatricula(db, payload);
-          if (!result.active) {
-            await markCronJobItemSucceeded(db, {
-              jobName: JOB_NAME,
-              scopeKey: SCOPE_KEY,
-              itemKey: item.item_key,
-              stage: 'EXISTING_INACTIVE_PRESERVED',
-            });
-            processed++;
-            continue;
-          }
-
           await ensureRenewalNotification(db, payload, result.matriculaId);
           await ensureRenewalEmail(env, db, payload);
           await markCronJobItemSucceeded(db, {
