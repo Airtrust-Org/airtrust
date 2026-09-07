@@ -61,6 +61,53 @@ For a RBAC 135 operator, the official ANAC material points to the certification/
 
 This artifact does not submit the request. Formal filing must be performed by the authorized operator representative through the applicable ANAC/SEI/service channel with the operator's real certification identifiers.
 
+## Verified official route and dispatch-ready bundle
+
+The ANAC service page was rechecked on 2026-09-07.  For an RBAC 135 operator:
+
+1. a prior orientation meeting is optional, but when requested it uses the
+   current FOP 200 through ANAC Electronic Petitioning/SEI;
+2. the formal EO/records-digital process uses FOP 219 and FAI;
+3. when the software has not already been verified/attested by ANAC, the
+   official list also requires D-144-01, revised operator manuals in the
+   separate manual process, the Resolution 458 software-conformity checklist,
+   and an Art. 3 conformity report from a competent entity;
+4. the published service directs general service/process questions to Fale com
+   a ANAC or telephone 163.
+
+The send-ready bundle is therefore:
+
+- the current official FOP 200, completed and signed only by the authorized
+  Costa do Sol representative;
+- the formal request text above as a controlled annex, with no credentials,
+  tokens, endpoint guesses, or personal data;
+- the current operator-specific FOP 200 package in `fop200/`, including the
+  submission checklist, meeting script and decision register;
+- the current MGO/maintenance-source and field-gap evidence needed to frame
+  the questions; and
+- an explicit request that ANAC either supplies the versioned technical
+  integration contract or records that no public/partner contract is available
+  for the proposed route.
+
+The AirTrust team must not submit this bundle itself: operator authority,
+current COA/EO data, signatory powers, the chosen aircraft scope and the SEI
+process identity are outside this repository and must be supplied by the
+operator.  This is an authorization boundary, not a missing software secret.
+
+## Exact external dependency register
+
+| Dependency | Needed before implementation | Current evidence | Owner / resolution path |
+| --- | --- | --- | --- |
+| Versioned OpenAPI/Swagger or equivalent API contract | Base URL, operations, DTOs, enums, validation and error model | No usable contract was found in the official public material reviewed; the public Swagger shell is not a usable definition. | ANAC technical/regulatory response through the documented process. |
+| Homologation access procedure | Environment rules, credential issuance and support channel | The public procedure identifies the regulatory process, not reusable API credentials. | ANAC; credentials must remain outside Git. |
+| Transport semantics | Auth/scopes, idempotency, retries, rate limits, receipt, acceptance/rejection and status | Not specified by the published rules or service page. | Versioned ANAC contract and homologation guidance. |
+| Integrity/signature transport requirements | Certificate, hash, signature, correction and operator-signature representation | Published regulation states the regulated outcome, not an API payload or certificate protocol. | ANAC technical/regulatory confirmation. |
+| Homologation-to-production progression | Entry criteria, test cases, approval evidence and production access | Formal EO process and demonstrations are published; technical transition contract is not. | ANAC process owner and technical support channel. |
+
+The request is intentionally limited to obtaining those official materials. It
+does not request or authorize data transmission, production activation, or an
+implementation inference.
+
 ## AirTrust implementation gate
 
 Until ANAC supplies or confirms the current technical contract:
