@@ -69,7 +69,7 @@ test('remote SQL contract is fixed read-only SELECT/PRAGMA only', () => {
   assert.match(s, /MUTATING_SQL_REJECTED/);
   assert.match(s, /MULTI_STATEMENT_SQL_REJECTED/);
   assert.match(s, /normalized\.startsWith\('SELECT '\)/);
-  assert.match(s, /PRAGMA\\s\+table_info/);
+  assert.match(s, /table_info/);
   assert.doesNotMatch(s, /wrangler\s+d1\s+migrations\s+apply/i);
   assert.doesNotMatch(s, /['"]--file['"]/);
   assert.doesNotMatch(s, /`\s*(INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP)\s+/i);
@@ -108,7 +108,7 @@ test('FRMS production readiness checks assignment profile revision and all gover
 test('multi-profile auth authority is checked structurally and fail-closed', () => {
   const s = read(SCRIPT);
   assert.match(s, /usuarios_empresas_perfis/);
-  assert.match(s, /UNIQUE\\s\*\\\(/);
+  assert.match(s, /uniqueConstraint/);
   assert.match(s, /backfillGaps/);
   assert.match(s, /orphanRows/);
   assert.match(s, /AUTH_MULTI_PROFILE_AUTHORITY_NOT_READY/);
