@@ -99,6 +99,18 @@ if [[ -z "$backup_file" || ! -s "$backup_file" ]]; then
 fi
 echo "BACKUP_VERIFIED=$backup_file"
 
+# HEALTH P0-08 / #477: this dispatcher used to fall through, for every
+# migration below, to a bare `wrangler d1 execute --file=` call guarded only
+# by a preflight and an ad hoc per-migration postcondition check — with no
+# ledger/recovery-point atomicity and no idempotent already-applied check.
+# That hybrid/legacy path has been removed. Every allowlisted migration is
+# now routed to a dedicated or governed runner before this script can reach
+# a raw `wrangler d1 execute` call; see the "no unrouted allowlist entry"
+# test below for the guarantee. RELEASE_PREFLIGHT_SCOPE above documents the
+# full historical release scope for audit trail — each governed runner
+# performs its own narrower single-migration ledger preflight
+# (scripts/staging/migration-ledger-preflight.mjs --scope=<prefix>) instead.
+
 # 0481-0482 have dedicated staging runners because the reviewed changes are
 # Schema V2 bundles. Staging must execute the exact SQL pinned by the same
 # manifest used in production and keep its own D1 ledger/recovery point.
@@ -113,11 +125,29 @@ if [[ "$migration_basename" == "0482_training_dependency_complete_curriculum.sql
   exec bash "$ROOT/scripts/staging/apply-0482-training-dependency-complete-curriculum.sh" "${args[@]}"
 fi
 
-# Reviewed schema migrations 0467-0476 use the newer schema-change runner so
-# DDL and d1_migrations ledger entry are applied atomically and a D1 Time
-# Travel recovery point is captured. Historical eDB placeholders 0477-0480
-# were never landed on current main and are intentionally not allowlisted.
-if [[ "$migration_basename" == "0467_sigvoos_shadow_parallel_v1.sql" || \
+# Every remaining allowlisted migration — including the pre-Schema-V2
+# examiner/RBAC/qualification-category/SK-76 migrations that used to fall
+# through to the bare `wrangler d1 execute --file=` path — goes through the
+# same ledger-aware, idempotent, recovery-point runner as the reviewed
+# 0467-0476 schema migrations: it checks d1_migrations for this exact
+# migration name first (an already-applied rerun is a read-only no-op, never
+# a second write), and only captures a D1 Time Travel recovery point and
+# applies migration+ledger atomically when the ledger has zero entries for
+# it. Its own validate_postconditions() invokes
+# validate-0424-postconditions.sh, validate-0452-postconditions.sh,
+# validate-0453-postconditions.sh, validate-0454-postconditions.sh,
+# validate-0457-postconditions.sh and validate-0459-postconditions.sh for
+# these migrations (0425 has no dedicated structural postcondition
+# validator). Historical eDB placeholders 0477-0480 were never landed on
+# current main and are intentionally not allowlisted.
+if [[ "$migration_basename" == "0424_examiner_universal_training_fichas.sql" || \
+      "$migration_basename" == "0425_examiner_event_models_and_assignment_owned_fichas.sql" || \
+      "$migration_basename" == "0452_operational_domain_rbac.sql" || \
+      "$migration_basename" == "0453_ead_category_reconciliation_executor.sql" || \
+      "$migration_basename" == "0454_qualificacoes_tipos_dominio_override.sql" || \
+      "$migration_basename" == "0457_qualification_category_lms_contract.sql" || \
+      "$migration_basename" == "0459_sk76_periodic_code_denominator.sql" || \
+      "$migration_basename" == "0467_sigvoos_shadow_parallel_v1.sql" || \
       "$migration_basename" == "0468_sigvoos_shadow_leg_crew_v1.sql" || \
       "$migration_basename" == "0469_lms_completion_pendencias_snapshots.sql" || \
       "$migration_basename" == "0470_certificado_validacao_hash_index.sql" || \
@@ -129,59 +159,9 @@ if [[ "$migration_basename" == "0467_sigvoos_shadow_parallel_v1.sql" || \
   exec bash "$ROOT/scripts/staging/apply-approved-migration-with-recovery-point.sh" "${args[@]}"
 fi
 
-echo "Rodando preflight de ledger (read-only)..."
-if ! node scripts/staging/migration-ledger-preflight.mjs --scope="$RELEASE_PREFLIGHT_SCOPE" > "$PREFLIGHT_OUTPUT"; then
-  echo "ERROR: preflight retornou estado ambíguo/vermelho. Aplicação recusada — revisão humana necessária." >&2
-  cat "$PREFLIGHT_OUTPUT" >&2
-  exit 1
-fi
-echo "PREFLIGHT_OK"
-
-if ! $apply; then
-  echo "DRY_RUN: alvo, allowlist, backup e preflight validados. Nenhuma escrita realizada."
-  echo "DRY_RUN: para aplicar de fato, rode novamente com --apply e CONFIRM_STAGING_MIGRATION=$CONFIRMATION_PHRASE."
-  exit 0
-fi
-
-if [[ "${CONFIRM_STAGING_MIGRATION:-}" != "$CONFIRMATION_PHRASE" ]]; then
-  echo "ERROR: --apply requer CONFIRM_STAGING_MIGRATION=$CONFIRMATION_PHRASE explícito." >&2
-  exit 1
-fi
-
-db_name="${STAGING_D1_NAME:-$ALLOWED_DB_NAME}"
-db_id="${STAGING_D1_ID:-$ALLOWED_DB_ID}"
-if [[ "$db_name" != "$ALLOWED_DB_NAME" || "$db_id" != "$ALLOWED_DB_ID" ]]; then
-  echo "ERROR: alvo '$db_name' ($db_id) não é o D1 de staging esperado. Recusado." >&2
-  exit 1
-fi
-
-echo "Aplicando $migration_basename em $db_name (uma migration, uma única invocação --remote)..."
-apply_status=0
-( cd worker-airtrust && npx wrangler d1 execute "$db_name" --remote --file="../$migration_path" ) || apply_status=$?
-
-if [[ $apply_status -ne 0 ]]; then
-  echo "MIGRATION_FAILED (esperado se esta for uma tentativa deliberada sem CRED-EXA; ver runbook)." >&2
-  exit "$apply_status"
-fi
-
-echo "Validando pós-condições de $migration_arg..."
-if [[ "$migration_basename" == "0424_examiner_universal_training_fichas.sql" ]]; then
-  bash "$ROOT/scripts/staging/validate-0424-postconditions.sh" --target="$db_name"
-fi
-if [[ "$migration_basename" == "0452_operational_domain_rbac.sql" ]]; then
-  bash "$ROOT/scripts/staging/validate-0452-postconditions.sh" --target="$db_name"
-fi
-if [[ "$migration_basename" == "0453_ead_category_reconciliation_executor.sql" ]]; then
-  bash "$ROOT/scripts/staging/validate-0453-postconditions.sh" --target="$db_name"
-fi
-if [[ "$migration_basename" == "0454_qualificacoes_tipos_dominio_override.sql" ]]; then
-  bash "$ROOT/scripts/staging/validate-0454-postconditions.sh" --target="$db_name"
-fi
-if [[ "$migration_basename" == "0457_qualification_category_lms_contract.sql" ]]; then
-  bash "$ROOT/scripts/staging/validate-0457-postconditions.sh" --target="$db_name"
-fi
-if [[ "$migration_basename" == "0459_sk76_periodic_code_denominator.sql" ]]; then
-  bash "$ROOT/scripts/staging/validate-0459-postconditions.sh" --target="$db_name"
-fi
-
-echo "MIGRATION_APPLIED_AND_VALIDATED=$migration_basename"
+# Every name declared in APPROVED_MIGRATIONS above must be handled by one of
+# the branches above. Reaching this point means the allowlist and the
+# dispatch table have drifted apart — fail closed instead of ever falling
+# through to an unrouted, non-ledger-aware apply.
+echo "ERROR: '$migration_basename' está na allowlist mas não tem runner de destino roteado (drift allowlist/dispatch). Recusado." >&2
+exit 1

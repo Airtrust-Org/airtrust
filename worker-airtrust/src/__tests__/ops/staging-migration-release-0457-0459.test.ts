@@ -17,6 +17,7 @@ function stripComments(source: string): string {
 
 describe('staging migration release 0457/0459', () => {
   const runner = read('scripts/staging/apply-approved-migrations.sh');
+  const recoveryRunner = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
 
   it('keeps the canonical preflight scope aligned with the approved migration allowlist', () => {
     expect(runner).toContain('0457_qualification_category_lms_contract.sql');
@@ -27,9 +28,21 @@ describe('staging migration release 0457/0459', () => {
     expect(stripComments(runner)).not.toMatch(/wrangler\s+d1\s+migrations\s+apply/);
   });
 
+  // HEALTH P0-08/#477: 0457 and 0459 no longer fall through to a bare
+  // `wrangler d1 execute --file=` call inside apply-approved-migrations.sh.
+  // They are routed to the ledger-aware, idempotent recovery-point runner,
+  // which is where their postcondition validators are actually invoked now.
+  it('routes both migrations to the governed recovery-point runner, not a bare wrangler call', () => {
+    expect(runner).toContain('"0457_qualification_category_lms_contract.sql"');
+    expect(runner).toContain('"0459_sk76_periodic_code_denominator.sql"');
+    expect(runner).not.toContain('--file="../$migration_path"');
+    expect(recoveryRunner).toContain('"0457_qualification_category_lms_contract.sql"');
+    expect(recoveryRunner).toContain('"0459_sk76_periodic_code_denominator.sql"');
+  });
+
   it('requires dedicated postcondition validators after both migrations', () => {
-    expect(runner).toContain('validate-0457-postconditions.sh');
-    expect(runner).toContain('validate-0459-postconditions.sh');
+    expect(recoveryRunner).toContain('validate-0457-postconditions.sh');
+    expect(recoveryRunner).toContain('validate-0459-postconditions.sh');
   });
 
   it.each(['0457', '0459'])('keeps validate-%s staging-only and read-only', (prefix) => {
