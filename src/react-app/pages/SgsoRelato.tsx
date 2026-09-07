@@ -151,6 +151,22 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleDateString('pt-BR');
 }
 
+export function resolveSgsoRelatoLoadError(response: {
+  success?: boolean;
+  error?: string | null;
+  code?: string;
+  http_status?: number;
+}): string | null {
+  if (response.success) return null;
+  if (response.code === 'SGSO_RELATO_NOT_FOUND' || response.http_status === 404) {
+    return 'Relato não encontrado';
+  }
+  if (response.error) return response.error;
+  return response.http_status
+    ? `Erro ao carregar relato (HTTP ${response.http_status})`
+    : 'Erro ao carregar relato';
+}
+
 // ─────────────────────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────────────────────
@@ -231,15 +247,21 @@ export default function SgsoRelato() {
           success: res.ok,
           error: res.ok ? null : `Erro HTTP ${res.status}`,
           code: res.ok ? undefined : 'SGSO_API_EMPTY_RESPONSE',
+          http_status: res.status,
         };
       }
       try {
-        return JSON.parse(text);
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return { ...parsed, http_status: res.status };
+        }
+        return { success: res.ok, data: parsed, http_status: res.status };
       } catch {
         return {
           success: false,
           error: `Resposta inválida da API (HTTP ${res.status})`,
           code: 'SGSO_API_INVALID_JSON',
+          http_status: res.status,
         };
       }
     },
@@ -251,14 +273,19 @@ export default function SgsoRelato() {
   const carregar = useCallback(async () => {
     if (!id) return;
     setLoading(true);
+    setErro(null);
     try {
       const [relatoData, histData, funcsData] = await Promise.all([
         apiCall(`/sgso/relatos/${id}`),
         apiCall(`/sgso/relatos/${id}/historico`),
         apiCall('/funcionarios?limit=200'),
       ]);
-      if (relatoData.success) setRelato(relatoData.data);
-      else setErro('Relato não encontrado');
+      if (relatoData.success) {
+        setRelato(relatoData.data);
+      } else {
+        setRelato(null);
+        setErro(resolveSgsoRelatoLoadError(relatoData));
+      }
       if (histData.success) setHistorico(histData.data ?? []);
       if (funcsData.success) setFuncionarios(funcsData.data ?? []);
     } catch {
