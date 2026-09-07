@@ -2,7 +2,8 @@
 
 Date: 2026-09-07  
 Issue: #93  
-Purpose: prepare an exact external-information request without inventing API behavior.
+Purpose: prepare an exact external-information request without inventing API behavior.  
+Repository revalidation: reviewed for compatibility with current protected `main` after the F4-03 offline-recovery comparator merge; no runtime/API-contract assumption is introduced by that main advance.
 
 ## Confirmed regulatory/procedural basis
 
