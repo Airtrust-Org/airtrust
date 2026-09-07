@@ -215,7 +215,7 @@ Target: Fix within 24 hours
 1. Go to Workers > airtrust-production
 2. Click "Health Checks"
 3. Create new check:
-   - URL: https://airtrust.workers.dev/api/v2/system/health
+   - URL: https://api.airtrust.online/api/health
    - Interval: 60 seconds
    - Expected: 200 OK, body contains "healthy"
 4. Add alert notification
@@ -228,7 +228,7 @@ Target: Fix within 24 hours
 1. Create account
 2. Add Monitor:
    - Type: HTTP(s) GET
-   - URL: https://airtrust.workers.dev/api/v2/system/health
+   - URL: https://api.airtrust.online/api/health
    - Interval: 5 minutes
    - Expected: Status 200, Keyword "healthy"
 3. Add alert contacts:
