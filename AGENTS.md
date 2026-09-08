@@ -11,7 +11,7 @@ unrelated worktree changes intact; never reset, clean, stash or `git add .`.
 
 - GitHub `Airtrust-Org/airtrust` and its `main` branch are the canonical code,
   branch, PR and merge authority.
-- GitHub Actions is the canonical workflow/check surface when healthy.
+- GitHub Actions is the canonical workflow/check surface when healthy. GitHub Actions is the official CI. GitLab and CircleCI are deprecated and removed.
 - Google Cloud Build (GCB) is the official heavy-CI and governed backup
   execution path. When GitHub Actions has an operational incident, use the
   sanctioned GCB path without weakening required gates.
