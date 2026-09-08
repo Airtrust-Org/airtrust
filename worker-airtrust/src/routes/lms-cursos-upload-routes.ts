@@ -15,7 +15,7 @@ import {
 } from '../lib/lms/lms-package-validator';
 import { getLmsSchemaSnapshot } from '../lib/lms/lms-schema-state';
 import { ApiError } from '../middleware/error-handler';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import type { Env } from '../types';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { requireOperacoesCurso } from './lms-cursos-rbac';
@@ -204,7 +204,7 @@ app.post('/', async (c, next) => {
 
 app.post(
   '/:id/content-upload/init',
-  requireRole('admin', 'manager'),
+  requirePermission('lms', 'editar', 'admin', 'manager'),
   requireOperacoesCurso('update'),
   async (c) => {
     if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
@@ -250,13 +250,13 @@ app.post(
   },
 );
 
-app.get('/:id/scorm-package-versions', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+app.get('/:id/scorm-package-versions', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const cursoId = Number(c.req.param('id'));
   if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400);
   return c.json({ success: true, data: await listScormPackageVersions(c.env.DB, getEmpresaIdSafe(c), cursoId) });
 });
 
-app.post('/:id/scorm-package-versions/:packageId/activate', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+app.post('/:id/scorm-package-versions/:packageId/activate', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const cursoId = Number(c.req.param('id'));
   if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400);
   const data = await activateScormPackageVersion({
@@ -265,7 +265,7 @@ app.post('/:id/scorm-package-versions/:packageId/activate', requireRole('admin',
   return c.json({ success: true, data });
 });
 
-app.post('/:id/scorm-package-versions/:packageId/conformance', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+app.post('/:id/scorm-package-versions/:packageId/conformance', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const cursoId = Number(c.req.param('id'));
   if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400);
   const data = await runScormPackageConformance({
@@ -277,7 +277,7 @@ app.post('/:id/scorm-package-versions/:packageId/conformance', requireRole('admi
 
 app.post(
   '/:id/content-upload/file',
-  requireRole('admin', 'manager'),
+  requirePermission('lms', 'editar', 'admin', 'manager'),
   requireOperacoesCurso('update'),
   async (c) => {
     if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
@@ -332,7 +332,7 @@ app.post(
 
 app.post(
   '/:id/content-upload/complete',
-  requireRole('admin', 'manager'),
+  requirePermission('lms', 'editar', 'admin', 'manager'),
   requireOperacoesCurso('update'),
   async (c) => {
     if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
@@ -357,19 +357,19 @@ app.post(
 
 app.post(
   '/:id/scorm-upload',
-  requireRole('admin', 'manager'),
+  requirePermission('lms', 'editar', 'admin', 'manager'),
   requireOperacoesCurso('update'),
   (c) => handleDirectPackageUpload(c, 'scorm'),
 );
 
 app.post(
   '/:id/upload/scorm',
-  requireRole('admin', 'manager'),
+  requirePermission('lms', 'editar', 'admin', 'manager'),
   requireOperacoesCurso('update'),
   (c) => handleDirectPackageUpload(c, 'scorm'),
 );
 
-app.post('/:id/upload/h5p', requireRole('admin', 'manager'), requireOperacoesCurso('update'), (c) =>
+app.post('/:id/upload/h5p', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), (c) =>
   handleDirectPackageUpload(c, 'h5p'),
 );
 
