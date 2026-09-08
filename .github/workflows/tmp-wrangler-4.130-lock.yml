@@ -1,0 +1,62 @@
+name: Temporary Wrangler 4.130 lock refresh
+
+on:
+  push:
+    branches:
+      - deps/wrangler-4.130.0-20260908
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lock:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+
+      - name: Refresh Wrangler lock entry
+        working-directory: worker-airtrust
+        run: npm update wrangler --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Verify resolved graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const lock = JSON.parse(fs.readFileSync('worker-airtrust/package-lock.json', 'utf8'));
+          const wrangler = lock.packages?.['node_modules/wrangler']?.version;
+          const miniflare = lock.packages?.['node_modules/miniflare']?.version;
+          const sharp = lock.packages?.['node_modules/sharp']?.version;
+          if (wrangler !== '4.130.0') throw new Error('WRANGLER_NOT_4_130_0:' + String(wrangler));
+          console.log(JSON.stringify({ wrangler, miniflare, sharp }));
+          NODE
+
+      - name: Remove temporary generator workflow
+        run: rm .github/workflows/tmp-wrangler-4.130-lock.yml
+
+      - name: Commit generated lockfile only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add worker-airtrust/package-lock.json .github/workflows/tmp-wrangler-4.130-lock.yml
+          changed="$(git diff --cached --name-only)"
+          printf '%s\n' "$changed"
+          [[ "$changed" == $'.github/workflows/tmp-wrangler-4.130-lock.yml\nworker-airtrust/package-lock.json' ]] || {
+            echo "UNEXPECTED_GENERATED_FILES" >&2
+            exit 1
+          }
+          git commit -m "build(deps-dev): refresh wrangler lock to 4.130.0"
+          git push origin HEAD:deps/wrangler-4.130.0-20260908
