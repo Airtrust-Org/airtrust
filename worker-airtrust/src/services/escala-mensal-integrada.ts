@@ -360,6 +360,7 @@ function bindEmployeeFilters(base: unknown[], filters: IntegratedMonthlyFilters)
 
 function employeeFilterSql(alias = 'f', filters: IntegratedMonthlyFilters): string {
   const parts: string[] = [];
+  parts.push(`AND UPPER(COALESCE(${alias}.setor, '')) LIKE '%TRIPULA%'`);
   if (filters.employeeId) parts.push(`AND CAST(${alias}.id AS TEXT) = ?`);
   if (filters.baseId) parts.push(`AND COALESCE(${alias}.base, '') = ?`);
   // M1: a função é exposta no contrato e deve filtrar de fato (não pode ser no-op).
