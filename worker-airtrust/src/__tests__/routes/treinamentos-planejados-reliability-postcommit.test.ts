@@ -39,14 +39,15 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
-vi.mock('../../middleware/rbac', () => ({
-  requireRole: () => async (c: MockMiddlewareContext, next: () => Promise<void>) => {
+vi.mock('../../middleware/rbac', () => {
+  const guard = () => async (c: MockMiddlewareContext, next: () => Promise<void>) => {
     if (requireRoleMode.current === 'forbidden') {
       return c.json({ success: false, error: 'Acesso não autorizado' }, 403);
     }
     await next();
-  },
-}));
+  };
+  return { requireRole: guard, requirePermission: guard };
+});
 
 vi.mock('../../middleware/tenant', () => ({
   getEmpresaId: () => 1,
