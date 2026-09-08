@@ -7,11 +7,15 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import catalogo from './simuladores-catalogo';
 
 const app = new Hono<{ Bindings: Env }>();
-const requireCatalogManager = requireRole('admin', 'manager');
+const requireCatalogPermission = (method: string) => {
+  if (method === 'DELETE') return requirePermission('simuladores', 'deletar', 'admin', 'manager');
+  if (method === 'POST') return requirePermission('simuladores', 'criar', 'admin', 'manager');
+  return requirePermission('simuladores', 'editar', 'admin', 'manager');
+};
 
 app.use('*', async (c, next) => {
   const method = c.req.method.toUpperCase();
@@ -20,7 +24,7 @@ app.use('*', async (c, next) => {
     return;
   }
 
-  return requireCatalogManager(c, next);
+  return requireCatalogPermission(method)(c, next);
 });
 
 app.route('/', catalogo);

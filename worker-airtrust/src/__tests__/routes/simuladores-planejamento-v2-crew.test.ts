@@ -13,6 +13,7 @@ vi.mock('../../middleware/auth', () => ({
 
 vi.mock('../../middleware/rbac', () => ({
   requireRole: () => async (_c: any, next: () => Promise<void>) => next(),
+  requirePermission: () => async (_c: any, next: () => Promise<void>) => next(),
 }));
 
 vi.mock('../../middleware/tenant', () => ({

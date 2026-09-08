@@ -26,6 +26,11 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
+
+vi.mock('../../middleware/rbac', () => ({
+  requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
+}));
+
 vi.mock('../../routes/simuladores-shared', () => ({
   requireAdminForDelete: vi.fn(),
   audit: auditMock,

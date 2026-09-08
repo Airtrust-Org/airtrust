@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
 import {
   buildFuncionarioScopeWhere,
@@ -314,7 +314,7 @@ function pairKind(left: SimulatorTrainingSessionNeed, right: SimulatorTrainingSe
     : ('TREINAMENTOS_COMPATIVEIS' as const);
 }
 
-app.post('/candidatos', requireRole('admin', 'manager'), async (c) => {
+app.post('/candidatos', requirePermission('simuladores', 'visualizar', 'admin', 'manager'), async (c) => {
   const empresaId = getTenantContext(c).empresaId;
   const body = (await c.req.json().catch(() => null)) as {
     reference_date?: unknown;
@@ -378,7 +378,7 @@ app.post('/candidatos', requireRole('admin', 'manager'), async (c) => {
   return c.json({ success: true, data: { candidates: available } });
 });
 
-app.post('/reparear', requireRole('admin', 'manager'), async (c) => {
+app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manager'), async (c) => {
   const empresaId = getTenantContext(c).empresaId;
   const body = (await c.req.json().catch(() => null)) as {
     reference_date?: unknown;

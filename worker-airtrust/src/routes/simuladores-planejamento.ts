@@ -8,7 +8,7 @@ import { importCaeAvailabilityFromUpload } from '../services/cae-availability-im
 
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
 import {
   assertFuncionarioInScope,
@@ -808,7 +808,7 @@ function dateRangesOverlap(
 }
 
 
-app.post('/cae-disponibilidade/importar', requireRole('admin', 'manager'), async (c) => {
+app.post('/cae-disponibilidade/importar', requirePermission('simuladores', 'editar', 'admin', 'manager'), async (c) => {
   const formData = await c.req.formData().catch(() => null);
   if (!formData) {
     return c.json({ success: false, error: 'Upload inválido' }, 400);
@@ -885,7 +885,7 @@ app.get('/', async (c) => {
   });
 });
 
-app.post('/disponibilidade-cae/validar', requireRole('admin', 'manager'), async (c) => {
+app.post('/disponibilidade-cae/validar', requirePermission('simuladores', 'visualizar', 'admin', 'manager'), async (c) => {
   const body = await c.req.json().catch(() => null);
   const result = validateAndNormalizeCaeAvailability(body);
   if (!result.ok) {
@@ -911,7 +911,7 @@ app.post('/disponibilidade-cae/validar', requireRole('admin', 'manager'), async 
   });
 });
 
-app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
+app.post('/recalcular', requirePermission('simuladores', 'editar', 'admin', 'manager'), async (c) => {
   const empresaId = getEmpresaId(c);
   const db = c.env.DB;
   if (!(await planningSchemaReady(db))) {
@@ -1444,7 +1444,7 @@ app.post('/recalcular', requireRole('admin', 'manager'), async (c) => {
   }
 });
 
-app.patch('/:id', requireRole('admin', 'manager'), async (c) => {
+app.patch('/:id', requirePermission('simuladores', 'editar', 'admin', 'manager'), async (c) => {
   const empresaId = getEmpresaId(c);
   const db = c.env.DB;
   if (!(await planningSchemaReady(db))) {
@@ -1737,7 +1737,7 @@ app.patch('/:id', requireRole('admin', 'manager'), async (c) => {
 
 
 
-app.post('/:id/recursos', requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/recursos', requirePermission('simuladores', 'editar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const treinamentoId = Number(c.req.param('id'));
@@ -1835,7 +1835,7 @@ app.post('/:id/recursos', requireRole('admin', 'manager'), async (c) => {
   });
 });
 
-app.post('/:id/submeter', requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/submeter', requirePermission('simuladores', 'editar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const id = Number(c.req.param('id'));
@@ -1854,7 +1854,7 @@ app.post('/:id/submeter', requireRole('admin', 'manager'), async (c) => {
   return c.json(result, result.success ? 200 : 400);
 });
 
-app.post('/:id/aprovar', requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/aprovar', requirePermission('simuladores', 'editar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const id = Number(c.req.param('id'));
@@ -1873,7 +1873,7 @@ app.post('/:id/aprovar', requireRole('admin', 'manager'), async (c) => {
   return c.json(result, result.success ? 200 : 400);
 });
 
-app.post('/:id/devolver', requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/devolver', requirePermission('simuladores', 'editar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const id = Number(c.req.param('id'));
@@ -1898,7 +1898,7 @@ app.post('/:id/devolver', requireRole('admin', 'manager'), async (c) => {
   return c.json(result, result.success ? 200 : 400);
 });
 
-app.post('/:id/materializar', requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/materializar', requirePermission('simuladores', 'editar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const id = Number(c.req.param('id'));
@@ -1915,7 +1915,7 @@ app.post('/:id/materializar', requireRole('admin', 'manager'), async (c) => {
   return c.json(result, result.success ? 200 : 400);
 });
 
-app.get('/:id/recursos/candidatos', requireRole('admin', 'manager'), async (c) => {
+app.get('/:id/recursos/candidatos', requirePermission('simuladores', 'visualizar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const treinamentoId = Number(c.req.param('id'));
@@ -1970,7 +1970,7 @@ app.get('/:id/recursos/candidatos', requireRole('admin', 'manager'), async (c) =
   });
 });
 
-app.get('/:id/pdf', requireRole('admin', 'manager'), async (c) => {
+app.get('/:id/pdf', requirePermission('simuladores', 'visualizar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const treinamentoId = Number(c.req.param('id'));

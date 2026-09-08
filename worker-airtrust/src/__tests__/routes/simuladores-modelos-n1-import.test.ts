@@ -15,6 +15,9 @@ vi.mock('../../middleware/rbac', () => ({
   requireRole: () => async (_c: any, next: () => Promise<void>) => {
     await next();
   },
+  requirePermission: () => async (_c: any, next: () => Promise<void>) => {
+    await next();
+  },
 }));
 
 import modelosApp from '../../routes/simuladores-modelos';
