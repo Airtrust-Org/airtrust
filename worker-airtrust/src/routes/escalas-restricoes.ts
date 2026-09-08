@@ -6,13 +6,13 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaIdSafe, parseBody, RestricaoTripulacaoSchema } from './escalas-shared';
 
 const restricoes = new Hono<{ Bindings: Env }>();
 
 // GET /api/escalas/restricoes
-restricoes.get('/', auth(), async (c) => {
+restricoes.get('/', auth(), requirePermission('escalas', 'visualizar', 'admin', 'manager', 'instructor', 'student', 'viewer', 'editor'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   try {
@@ -35,7 +35,7 @@ restricoes.get('/', auth(), async (c) => {
 });
 
 // POST /api/escalas/restricoes
-restricoes.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+restricoes.post('/', auth(), requirePermission('escalas', 'criar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const userId = String(c.get('userId' as never) || '');
@@ -76,7 +76,7 @@ restricoes.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
 });
 
 // DELETE /api/escalas/restricoes/:id
-restricoes.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+restricoes.delete('/:id', auth(), requirePermission('escalas', 'deletar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const { id } = c.req.param();
   const empresaId = getEmpresaIdSafe(c);
