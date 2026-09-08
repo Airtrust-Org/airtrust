@@ -7,7 +7,7 @@
 import { Hono, type MiddlewareHandler } from 'hono';
 import type { Env, ApiResponse } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { ApiError } from '../middleware/error-handler';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
@@ -94,7 +94,7 @@ const app = new Hono<{ Bindings: Env }>();
 app.post(
   '/historico/:id/certificados/gerar',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('certificados', 'criar', 'admin', 'manager'),
   requireOperacoesCertificado('issue'),
   async (c) => {
     const id = parseInt(c.req.param('id'));
@@ -304,7 +304,7 @@ app.post(
 app.post(
   '/historico/:id/certificados/upload',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('certificados', 'criar', 'admin', 'manager'),
   requireOperacoesCertificado('create'),
   async (c) => {
     const db = c.env.DB;
