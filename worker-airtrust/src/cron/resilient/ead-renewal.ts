@@ -173,6 +173,7 @@ function buildRenewalExpirationDate(): string {
 async function ensureExistingRenewalMatricula(
   db: D1Database,
   existing: ExistingMatricula,
+  empresaId: number,
 ): Promise<{ matriculaId: number; created: false; active: true }> {
   if (hasActiveMatriculaCycle(existing)) {
     const cycleId = await ensureMatriculaCycle(db, {
@@ -192,6 +193,7 @@ async function ensureExistingRenewalMatricula(
     dataExpiracao: buildRenewalExpirationDate(),
     observacoes: 'Matrícula automática: renovação de qualificação EAD vencendo',
     origin: 'AUTO_RENOVACAO',
+    empresaId,
   });
   if (!cycleId) throw new Error('EAD_RENEWAL_CYCLE_NOT_CREATED');
 
@@ -204,7 +206,7 @@ async function ensureRenewalMatricula(
 ): Promise<{ matriculaId: number; created: boolean; active: boolean }> {
   let existing = await findLatestMatricula(db, payload);
   if (existing) {
-    return ensureExistingRenewalMatricula(db, existing);
+    return ensureExistingRenewalMatricula(db, existing, payload.empresa_id);
   }
 
   const expirationDate = buildRenewalExpirationDate();
@@ -230,7 +232,7 @@ async function ensureRenewalMatricula(
     if (!isMatriculaUniqueConstraintError(error)) throw error;
     existing = await findLatestMatricula(db, payload);
     if (!existing) throw error;
-    return ensureExistingRenewalMatricula(db, existing);
+    return ensureExistingRenewalMatricula(db, existing, payload.empresa_id);
   }
 }
 
