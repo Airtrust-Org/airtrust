@@ -210,6 +210,7 @@ async function inspectFrmsGovernance(requiredKeys) {
   );
   const reasons = {};
   const missingAssignmentTenantIds = [];
+  const missingAssignmentDetails = [];
   let readyTenants = 0;
 
   const bump = (reason) => {
@@ -226,7 +227,56 @@ async function inspectFrmsGovernance(requiredKeys) {
       `SELECT regulatory_profile_id, profile_code FROM frms_profile_assignments WHERE empresa_id = ${empresaId} AND status = 'ACTIVE' AND effective_from <= ${quote(today)} AND (effective_to IS NULL OR effective_to >= ${quote(today)})`,
     );
     if (assignments.length !== 1) {
-      if (assignments.length === 0) missingAssignmentTenantIds.push(empresaId);
+      if (assignments.length === 0) {
+        missingAssignmentTenantIds.push(empresaId);
+        const candidateProfiles = await query(
+          `SELECT id, profile_code, service_category FROM frms_regulatory_profiles WHERE empresa_id = ${empresaId} AND active = 1 AND deleted_at IS NULL AND effective_from <= ${quote(today)} AND (effective_to IS NULL OR effective_to >= ${quote(today)}) ORDER BY profile_code, id`,
+        );
+        const profileCandidates = [];
+        for (const candidate of candidateProfiles) {
+          const candidateCode = String(candidate.profile_code);
+          const revisions = await query(
+            `SELECT id, empresa_id, revision_number, policy_version, effective_from FROM frms_config_revisions WHERE profile_code = ${quote(candidateCode)} AND status = 'ACTIVE' AND (empresa_id = ${empresaId} OR empresa_id IS NULL) AND effective_from <= ${quote(today)} AND (effective_to IS NULL OR effective_to >= ${quote(today)}) ORDER BY CASE WHEN empresa_id = ${empresaId} THEN 0 ELSE 1 END, revision_number DESC, effective_from DESC`,
+          );
+          let resolvedRevisionId = null;
+          let governedParameterCount = null;
+          let revisionDecisionReady = false;
+          if (revisions.length > 0) {
+            const preferredScope = revisions[0].empresa_id == null ? null : Number(revisions[0].empresa_id);
+            const scoped = revisions.filter((rev) =>
+              (preferredScope == null ? rev.empresa_id == null : Number(rev.empresa_id) === empresaId),
+            );
+            const top = scoped[0];
+            const equallyPreferred = scoped.filter(
+              (rev) => Number(rev.revision_number) === Number(top.revision_number) && String(rev.effective_from) === String(top.effective_from),
+            );
+            if (equallyPreferred.length === 1 && String(top.policy_version || '')) {
+              resolvedRevisionId = String(top.id);
+              const keyList = requiredKeys.map(quote).join(', ');
+              const parameterRows = await query(
+                `SELECT COUNT(DISTINCT parameter_key) AS c FROM frms_config_parameters WHERE revision_id = ${quote(resolvedRevisionId)} AND parameter_key IN (${keyList}) AND numeric_value IS NOT NULL`,
+              );
+              governedParameterCount = Number(parameterRows[0]?.c || 0);
+              revisionDecisionReady = governedParameterCount === requiredKeys.length;
+            }
+          }
+          profileCandidates.push({
+            regulatoryProfileId: String(candidate.id),
+            profileCode: candidateCode,
+            serviceCategory: candidate.service_category == null ? null : String(candidate.service_category),
+            resolvedRevisionId,
+            governedParameterCount,
+            revisionDecisionReady,
+          });
+        }
+        missingAssignmentDetails.push({
+          empresaId,
+          activeRegulatoryProfileCount: profileCandidates.length,
+          profileCandidates,
+          profileDecisionProven:
+            profileCandidates.length === 1 && profileCandidates[0].revisionDecisionReady === true,
+        });
+      }
       bump(assignments.length === 0 ? 'ASSIGNMENT_MISSING' : 'ASSIGNMENT_AMBIGUOUS');
       continue;
     }
@@ -298,6 +348,7 @@ async function inspectFrmsGovernance(requiredKeys) {
     notReadyTenantCount: tenantRows.length - readyTenants,
     failureReasons: reasons,
     missingAssignmentTenantIds,
+    missingAssignmentDetails,
     legacyActiveRevisionCount: legacyRows.length,
     legacyParameterCount,
     legacyGovernedRequiredPresent: legacyRequiredCount,
