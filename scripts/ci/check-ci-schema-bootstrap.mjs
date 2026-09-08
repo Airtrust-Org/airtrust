@@ -7,7 +7,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const CONTRACT_PATH = join(ROOT, 'scripts/ci/ci-schema-bootstrap-contract.json');
 
 export function extractMigrationReferences(source) {
-  return [...source.matchAll(/\$WORKER_DIR\/migrations\/([0-9][^"'\\s]+\.sql)/g)].map((m) => m[1]);
+  return [...source.matchAll(/\$WORKER_DIR\/migrations\/([0-9][^"'\s]+\.sql)/g)].map((m) => m[1]);
 }
 
 export function extractDdlTargets(sql) {
