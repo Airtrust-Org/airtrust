@@ -41,7 +41,7 @@
     "react-pdf": "^9.2.1",
     "react-router-dom": "^7.18.3",
     "recharts": "^2.15.4",
-    "scorm-again": "^3.0.3",
+    "scorm-again": "^3.3.2",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "tesseract.js": "^6.0.1",
