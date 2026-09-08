@@ -66,6 +66,28 @@ vi.mock('../../middleware/rbac', () => ({
 
       await next();
     },
+  requirePermission:
+    (_module: string, _action: string, ...allowedRoles: string[]) =>
+    async (
+      c: {
+        get: (key: string) => unknown;
+        json: (body: unknown, status?: number) => Response;
+      },
+      next: () => Promise<void>,
+    ) => {
+      const role = String(c.get('userRole') ?? '')
+        .trim()
+        .toLowerCase();
+      const allowed = allowedRoles.some(
+        (allowedRole) => role === String(allowedRole).trim().toLowerCase(),
+      );
+
+      if (!allowed) {
+        return c.json({ success: false, error: 'Forbidden' }, 403);
+      }
+
+      await next();
+    },
 }));
 
 vi.mock('../../routes/escalas-shared', () => ({
