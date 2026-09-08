@@ -1,3 +1,5 @@
+import { hasSchemaTable } from '../../utils/db-schema';
+
 export type PlatformRoleCode = 'platform_admin' | 'support_read_only' | 'support_elevated';
 export type SupportAccessLevel = 'read_only' | 'elevated';
 
@@ -25,19 +27,9 @@ type SupportGrantRow = {
   access_level: SupportAccessLevel;
 };
 
-const USER_PLATFORM_ROLES_TABLE_SQL =
-  "SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = 'user_platform_roles' LIMIT 1";
-const SUPPORT_ACCESS_GRANTS_TABLE_SQL =
-  "SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = 'support_access_grants' LIMIT 1";
-
 function normalizeUserId(userId: number | string | null | undefined): number {
   const parsed = typeof userId === 'string' ? Number(userId) : Number(userId || 0);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-async function hasTable(db: D1Database, sql: string): Promise<boolean> {
-  const row = await db.prepare(sql).first<{ found: number }>();
-  return Boolean(row?.found);
 }
 
 export async function resolvePlatformAccessState(
@@ -59,8 +51,8 @@ export async function resolvePlatformAccessState(
   }
 
   const [hasPlatformRolesTable, hasSupportGrantsTable] = await Promise.all([
-    hasTable(db, USER_PLATFORM_ROLES_TABLE_SQL),
-    hasTable(db, SUPPORT_ACCESS_GRANTS_TABLE_SQL),
+    hasSchemaTable(db, 'user_platform_roles'),
+    hasSchemaTable(db, 'support_access_grants'),
   ]);
 
   const roleRows = hasPlatformRolesTable
