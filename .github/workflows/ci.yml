@@ -67,6 +67,10 @@ jobs:
         run: |
           node --test scripts/__tests__/schema-contract-staleness.test.mjs
           npm run guard:schema-contract-staleness
+      - name: validate CI schema bootstrap provenance / staleness
+        run: |
+          node --test scripts/ci/check-ci-schema-bootstrap.test.mjs
+          node scripts/ci/check-ci-schema-bootstrap.mjs
       - name: validate staging FRMS schema doctor (read-only contract)
         run: node --test scripts/__tests__/staging-frms-schema-doctor.test.mjs
       - name: validate staging FRMS 0464 bootstrap repair governance
