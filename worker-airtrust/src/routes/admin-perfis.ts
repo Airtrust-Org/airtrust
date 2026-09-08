@@ -65,9 +65,11 @@ type PermissaoRow = {
   permitido: number;
 };
 
+type PermBody = { perfil: string; modulo: string; acao: string; permitido: boolean };
+
 async function savePerfisPermissoes(c: Context) {
   const { empresaId, role } = getTenantContext(c as any);
-  const callerId = (c as any).get('userId');
+  const callerId = Number((c as any).get('userId'));
   requireAdmin(role, 'atualizar permissões de perfis');
 
   const logger = createLogger(c, 'AdminPerfis.salvar');
@@ -82,7 +84,6 @@ async function savePerfisPermissoes(c: Context) {
     throw badRequest('Máximo de 500 permissões por requisição', 'TOO_MANY_ITEMS');
   }
 
-  type PermBody = { perfil: string; modulo: string; acao: string; permitido: boolean };
   const items: PermBody[] = [];
 
   for (const item of body) {
@@ -108,22 +109,77 @@ async function savePerfisPermissoes(c: Context) {
   }
 
   const db = c.env.DB;
+  const previous = new Map<string, PermissaoRow>();
 
+  // Read only the authenticated tenant. These snapshots become the old_values
+  // in the persistent audit trail; they are never accepted from the browser.
   for (const item of items) {
-    await db
+    const row = await db
       .prepare(
-        `INSERT INTO perfis_permissoes (empresa_id, perfil, modulo, acao, permitido, updated_at)
-         VALUES (?, ?, ?, ?, ?, datetime('now'))
-         ON CONFLICT(empresa_id, perfil, modulo, acao) DO UPDATE SET
-           permitido = excluded.permitido,
-           updated_at = excluded.updated_at`,
+        `SELECT perfil, modulo, acao, permitido
+           FROM perfis_permissoes
+          WHERE empresa_id = ? AND perfil = ? AND modulo = ? AND acao = ?
+          LIMIT 1`,
       )
-      .bind(empresaId, item.perfil, item.modulo, item.acao, item.permitido ? 1 : 0)
-      .run();
+      .bind(empresaId, item.perfil, item.modulo, item.acao)
+      .first<PermissaoRow>();
+    if (row) previous.set(`${item.perfil}:${item.modulo}:${item.acao}`, row);
   }
 
+  const statements: D1PreparedStatement[] = [];
+  const ipAddress = c.req.header('CF-Connecting-IP') || null;
+  const userAgent = c.req.header('User-Agent') || null;
+  const safeCallerId = Number.isInteger(callerId) && callerId > 0 ? callerId : null;
+
+  for (const item of items) {
+    const oldRow = previous.get(`${item.perfil}:${item.modulo}:${item.acao}`);
+    const oldValues = oldRow
+      ? JSON.stringify({
+          perfil: oldRow.perfil,
+          modulo: oldRow.modulo,
+          acao: oldRow.acao,
+          permitido: Number(oldRow.permitido) === 1,
+        })
+      : null;
+    const newValues = JSON.stringify(item);
+
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO perfis_permissoes (empresa_id, perfil, modulo, acao, permitido, updated_at)
+           VALUES (?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(empresa_id, perfil, modulo, acao) DO UPDATE SET
+             permitido = excluded.permitido,
+             updated_at = excluded.updated_at`,
+        )
+        .bind(empresaId, item.perfil, item.modulo, item.acao, item.permitido ? 1 : 0),
+      db
+        .prepare(
+          `INSERT INTO audit_logs (
+             user_id, action, entity_type, old_values, new_values,
+             ip_address, user_agent, empresa_id,
+             usuario_id, acao, tabela, detalhes, created_at
+           ) VALUES (?, 'PROFILE_PERMISSION_UPDATED', 'perfis_permissoes', ?, ?, ?, ?, ?, ?,
+                     'PROFILE_PERMISSION_UPDATED', 'perfis_permissoes', ?, datetime('now'))`,
+        )
+        .bind(
+          safeCallerId,
+          oldValues,
+          newValues,
+          ipAddress,
+          userAgent,
+          empresaId,
+          safeCallerId,
+          JSON.stringify({ perfil: item.perfil, modulo: item.modulo, acao: item.acao }),
+        ),
+    );
+  }
+
+  // D1 batch preserves the permission write + its audit record as one governed unit.
+  if (statements.length > 0) await db.batch(statements);
+
   logger.info(
-    `Admin id=${callerId} atualizou ${items.length} permissões de perfis empresa_id=${empresaId}`,
+    `Admin id=${safeCallerId ?? 'unknown'} atualizou ${items.length} permissões de perfis empresa_id=${empresaId}`,
   );
 
   return c.json({ success: true, message: `${items.length} permissões atualizadas` });
