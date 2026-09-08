@@ -153,6 +153,13 @@ jobs:
           line('FRMS ready tenants', r.frms.readyTenantCount);
           line('FRMS governance readiness', r.frms.ready ? 'PASS' : 'FAIL');
           line('FRMS missing-assignment tenant ids', (r.frms.missingAssignmentTenantIds || []).join(',') || 'none');
+          for (const d of r.frms.missingAssignmentDetails || []) {
+            line(`FRMS tenant ${d.empresaId} active regulatory profiles`, d.activeRegulatoryProfileCount);
+            for (const p of d.profileCandidates || []) {
+              line(`FRMS tenant ${d.empresaId} profile ${p.profileCode}`, `profileId=${p.regulatoryProfileId} revision=${p.resolvedRevisionId || 'none'} params=${p.governedParameterCount ?? 'n/a'} decisionReady=${p.revisionDecisionReady ? 'YES' : 'NO'}`);
+            }
+            line(`FRMS tenant ${d.empresaId} profile decision proven`, d.profileDecisionProven ? 'YES' : 'NO');
+          }
           line('0487 state', r.qualificationRenewals.state);
           line('0487 apply ready', r.qualificationRenewals.applyReady ? 'YES' : 'NO');
           line('production release ready', r.verdict.productionReleaseReady ? 'YES' : 'NO');
