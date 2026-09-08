@@ -4,7 +4,7 @@ import { Hono } from 'hono';
 // Mock auth middleware BEFORE importing the route
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: any, next: () => Promise<void>) => {
-    c.set('userId', 'mock-user-id');
+    c.set('userId', 42);
     c.set('userRole', 'admin');
     c.set('empresaId', 1);
     await next();
@@ -22,11 +22,11 @@ import type { Env } from '../../types';
 
 describe('Escalas CRUD Observability', () => {
   let app: Hono<{ Bindings: Env }>;
-  const originalConsoleError = console.error;
-  const mockConsoleError = vi.fn();
+  const originalConsoleLog = console.log;
+  const mockConsoleLog = vi.fn();
 
   beforeEach(() => {
-    console.error = mockConsoleError;
+    console.log = mockConsoleLog;
     app = new Hono<{ Bindings: Env }>();
 
     app.use('*', async (c, next) => {
@@ -41,7 +41,7 @@ describe('Escalas CRUD Observability', () => {
         }),
       };
       
-      c.env = { DB: mockDB as any } as Env;
+      c.env = { DB: mockDB as any, ENVIRONMENT: 'test' } as unknown as Env;
       await next();
     });
 
@@ -49,7 +49,7 @@ describe('Escalas CRUD Observability', () => {
   });
 
   afterEach(() => {
-    console.error = originalConsoleError;
+    console.log = originalConsoleLog;
     vi.clearAllMocks();
   });
 
@@ -61,14 +61,16 @@ describe('Escalas CRUD Observability', () => {
     const body = await res.json();
     expect(body).toEqual({ success: false, error: 'Erro interno do servidor' });
     
-    expect(mockConsoleError).toHaveBeenCalledTimes(1);
-    const logCall = mockConsoleError.mock.calls[0][0];
-    
-    expect(logCall).toContain('[escalas-crud]');
-    expect(logCall).toContain('[GET /]');
-    expect(logCall).toContain('1'); // empresaId
-    expect(logCall).toContain('Simulated D1 Error');
-    expect(logCall).not.toContain('2026'); // the query param shouldn't be logged
+    expect(mockConsoleLog).toHaveBeenCalledTimes(1);
+    const entry = JSON.parse(String(mockConsoleLog.mock.calls[0][0]));
+    expect(entry).toMatchObject({
+      level: 'ERROR',
+      message: 'escalas_list_failed',
+      context: { empresaId: 1, userId: 42 },
+      error: { message: 'database_operation_failed' },
+    });
+    expect(JSON.stringify(entry)).not.toContain('Simulated D1 Error');
+    expect(entry.data).toBeUndefined();
   });
 
   it('should return 500 without leaking payload when POST / fails', async () => {
@@ -85,16 +87,16 @@ describe('Escalas CRUD Observability', () => {
     const body = await res.json();
     expect(body).toEqual({ success: false, error: 'Erro interno do servidor' });
     
-    expect(mockConsoleError).toHaveBeenCalledTimes(1);
-    const logCall = mockConsoleError.mock.calls[0][0];
-    
-    expect(logCall).toContain('[escalas-crud]');
-    expect(logCall).toContain('[POST /]');
-    expect(logCall).toContain('1'); // empresaId
-    expect(logCall).toContain('Simulated D1 Error');
-    
-    // Crucial validation: no payload leaks
-    expect(logCall).not.toContain('Escala Secreta');
-    expect(logCall).not.toContain('Dados sensiveis');
+    expect(mockConsoleLog).toHaveBeenCalledTimes(1);
+    const entry = JSON.parse(String(mockConsoleLog.mock.calls[0][0]));
+    expect(entry).toMatchObject({
+      level: 'ERROR',
+      message: 'escalas_create_failed',
+      context: { empresaId: 1, userId: 42 },
+      error: { message: 'database_operation_failed' },
+    });
+    expect(JSON.stringify(entry)).not.toContain('Simulated D1 Error');
+    expect(JSON.stringify(entry)).not.toContain('Escala Secreta');
+    expect(JSON.stringify(entry)).not.toContain('Dados sensiveis');
   });
 });
