@@ -38,6 +38,7 @@ vi.mock('../../middleware/tenant', () => ({
 
 vi.mock('../../middleware/rbac', () => ({
   requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
 vi.mock('../../services/employee-sector-access', () => ({
