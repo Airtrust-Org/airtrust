@@ -20,7 +20,7 @@ function routeBlock(): string {
 
 describe('GET /:id/pdf — contrato RBAC e isolamento de tenant', () => {
   it('exige role admin ou manager (RBAC)', () => {
-    expect(src).toMatch(/app\.get\('\/:id\/pdf',\s*requireRole\('admin',\s*'manager'\)/);
+    expect(src).toMatch(/app\.get\('\/:id\/pdf',\s*requirePermission\('simuladores',\s*'visualizar',\s*'admin',\s*'manager'\)/);
   });
 
   it('busca a proposta filtrando por t.empresa_id — nunca por id previsível sozinho', () => {
