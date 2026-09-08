@@ -1,4 +1,5 @@
 import { API_BASE_URL, getAccessToken } from './api';
+import { getCurrentTenantId } from '@/react-app/lib/tenant-data-layer';
 
 export interface SystemSettings {
   appName: string;
@@ -10,7 +11,12 @@ export interface SystemSettings {
   timezone: string;
 }
 
-export const SYSTEM_SETTINGS_STORAGE_KEY = 'airtrust_system_settings_v1';
+export const SYSTEM_SETTINGS_STORAGE_KEY = 'airtrust_system_settings_v2';
+const LEGACY_SYSTEM_SETTINGS_STORAGE_KEY = 'airtrust_system_settings_v1';
+
+export function systemSettingsStorageKey(tenantId: number): string {
+  return `${SYSTEM_SETTINGS_STORAGE_KEY}:${tenantId}`;
+}
 
 export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   appName: 'AirTrust',
@@ -86,12 +92,18 @@ export function mapServerToLocalSettings(server: ServerSystemSettings): SystemSe
   });
 }
 
-export function getSystemSettings(): SystemSettings {
-  if (typeof window === 'undefined') {
+export function getSystemSettings(
+  tenantId: number | null = getCurrentTenantId(),
+): SystemSettings {
+  if (typeof window === 'undefined' || !tenantId) {
     return DEFAULT_SYSTEM_SETTINGS;
   }
 
-  const raw = localStorage.getItem(SYSTEM_SETTINGS_STORAGE_KEY);
+  // The historical unscoped cache can contain another tenant's branding or
+  // preferences. Never read it as a fallback after tenant-aware storage exists.
+  localStorage.removeItem(LEGACY_SYSTEM_SETTINGS_STORAGE_KEY);
+
+  const raw = localStorage.getItem(systemSettingsStorageKey(tenantId));
   if (!raw) {
     return DEFAULT_SYSTEM_SETTINGS;
   }
@@ -104,12 +116,17 @@ export function getSystemSettings(): SystemSettings {
   }
 }
 
-export function saveSystemSettings(settings: SystemSettings): void {
-  if (typeof window === 'undefined') return;
+export function saveSystemSettings(
+  settings: SystemSettings,
+  tenantId: number | null = getCurrentTenantId(),
+): void {
+  if (typeof window === 'undefined' || !tenantId) return;
 
   const normalized = normalizeSystemSettings(settings);
-  localStorage.setItem(SYSTEM_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
-  window.dispatchEvent(new CustomEvent('airtrust:system-settings-updated'));
+  localStorage.setItem(systemSettingsStorageKey(tenantId), JSON.stringify(normalized));
+  window.dispatchEvent(
+    new CustomEvent('airtrust:system-settings-updated', { detail: { tenantId } }),
+  );
 }
 
 export async function fetchSystemSettingsFromServer(): Promise<ServerSystemSettings> {
