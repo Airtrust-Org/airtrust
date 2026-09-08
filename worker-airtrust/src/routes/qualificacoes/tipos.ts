@@ -1748,7 +1748,7 @@ router.put(
 router.put(
   '/:id/setores',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'editar', 'admin', 'manager'),
   requireOperacoesTipo('update'),
   safe(async (c) => {
     const db: D1Database = c.env.DB;
