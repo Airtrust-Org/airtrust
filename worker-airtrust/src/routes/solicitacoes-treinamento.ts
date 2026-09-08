@@ -19,7 +19,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import {
   createQualificationHistoryAtomic,
@@ -177,7 +177,7 @@ solicitacoesRoutes.post('/solicitacoes', async (c) => {
 // POST /api/treinamentos/solicitacoes/:id/aprovar-gestor
 solicitacoesRoutes.post(
   '/solicitacoes/:id/aprovar-gestor',
-  requireRole('admin', 'manager'),
+  requirePermission('agendamentos', 'editar', 'admin', 'manager'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
@@ -213,7 +213,7 @@ solicitacoesRoutes.post(
 // POST /api/treinamentos/solicitacoes/:id/aprovar-ops
 solicitacoesRoutes.post(
   '/solicitacoes/:id/aprovar-ops',
-  requireRole('admin', 'manager'),
+  requirePermission('agendamentos', 'editar', 'admin', 'manager'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
@@ -249,7 +249,7 @@ solicitacoesRoutes.post(
 // POST /api/treinamentos/solicitacoes/:id/rejeitar
 solicitacoesRoutes.post(
   '/solicitacoes/:id/rejeitar',
-  requireRole('admin', 'manager'),
+  requirePermission('agendamentos', 'editar', 'admin', 'manager'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
@@ -281,7 +281,7 @@ solicitacoesRoutes.post(
 );
 
 // POST /api/treinamentos/solicitacoes/:id/agendar
-solicitacoesRoutes.post('/solicitacoes/:id/agendar', requireRole('admin', 'manager'), async (c) => {
+solicitacoesRoutes.post('/solicitacoes/:id/agendar', requirePermission('agendamentos', 'editar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const id = c.req.param('id');
@@ -323,7 +323,7 @@ solicitacoesRoutes.post('/solicitacoes/:id/agendar', requireRole('admin', 'manag
 // POST /api/treinamentos/solicitacoes/:id/concluir
 solicitacoesRoutes.post(
   '/solicitacoes/:id/concluir',
-  requireRole('admin', 'manager'),
+  requirePermission('agendamentos', 'editar', 'admin', 'manager'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);

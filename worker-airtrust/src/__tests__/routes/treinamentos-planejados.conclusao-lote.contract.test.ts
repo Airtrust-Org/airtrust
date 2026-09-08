@@ -9,7 +9,7 @@ const source = readFileSync(
 describe('treinamentos-planejados conclusão em lote route contract', () => {
   it('expõe endpoint de conclusão em lote protegido por admin/manager', () => {
     expect(source).toContain("'/planejados/:id/conclusao-lote'");
-    expect(source).toContain("requireRole('admin', 'manager')");
+    expect(source).toContain("requirePermission('agendamentos', 'editar', 'admin', 'manager')");
   });
 
   it('rejeita turma futura, turma sem participantes e submissão vazia', () => {
