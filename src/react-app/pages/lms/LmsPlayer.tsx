@@ -517,42 +517,6 @@ export default function LmsPlayer() {
   ]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function syncFrameToken() {
-      const frameWindow = iframeRef.current?.contentWindow;
-      if (!frameWindow) return;
-
-      try {
-        const nextToken = await ensureValidAccessToken();
-        if (cancelled) return;
-
-        const resolvedToken = nextToken ?? getAccessToken() ?? null;
-        setPlayerToken(resolvedToken);
-        frameWindow.postMessage(
-          {
-            type: 'lms:auth-token',
-            matriculaId: id,
-            previewMode: false,
-            token: resolvedToken,
-          },
-          launchOrigin,
-        );
-      } catch {
-        if (!cancelled) {
-          frameWindow.postMessage(
-            {
-              type: 'lms:auth-token',
-              matriculaId: id,
-              previewMode: false,
-              token: null,
-            },
-            launchOrigin,
-          );
-        }
-      }
-    }
-
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== launchOrigin) return;
       // Só aceita mensagens do próprio iframe do curso. Sem esta checagem, qualquer
@@ -669,16 +633,6 @@ export default function LmsPlayer() {
       if (
         event.data &&
         typeof event.data === 'object' &&
-        event.data.type === 'lms:auth-token-request' &&
-        event.data.matriculaId === id
-      ) {
-        void syncFrameToken();
-        return;
-      }
-
-      if (
-        event.data &&
-        typeof event.data === 'object' &&
         event.data.type === 'lms:navigate:ack' &&
         event.data.matriculaId === id &&
         event.data.moved === false
@@ -688,20 +642,10 @@ export default function LmsPlayer() {
     };
 
     window.addEventListener('message', handleMessage);
-    const intervalId = window.setInterval(() => {
-      if (iframeLoaded) void syncFrameToken();
-    }, 45_000);
-
-    if (iframeLoaded) {
-      void syncFrameToken();
-    }
-
     return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
       window.removeEventListener('message', handleMessage);
     };
-  }, [effectiveReviewMode, id, iframeLoaded, launchOrigin, refetchMatricula, persistGranularDiagnostic]);
+  }, [effectiveReviewMode, id, launchOrigin, refetchMatricula, persistGranularDiagnostic]);
 
   async function handleFullscreen() {
     const el = iframeRef.current;

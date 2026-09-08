@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import { hasRole } from './rbac';
-import type { Env, JwtPayload, Variables } from '../types';
-import { verifyJWT } from '../utils/security';
+import type { Env, Variables } from '../types';
+import { assetSessionMatchesEnrollment, readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
 import {
   evaluateLmsCompletionEvidence,
   type LmsCompletionDecision,
@@ -41,7 +41,6 @@ type EnrollmentEvidenceRow = {
   xapi_count: number | null;
 };
 
-const ASSET_COOKIE = 'airtrust_lms_asset_token';
 
 function jsonResponse(c: Context<LmsIntegrityContext>, status: number, body: JsonRecord): Response {
   return c.json(body, status as never);
@@ -101,39 +100,18 @@ function normalizeStatus(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
-function parseAssetCookie(request: Request): string | null {
-  const cookieHeader = request.headers.get('cookie') ?? '';
-  for (const part of cookieHeader.split(';')) {
-    const [name, ...rest] = part.trim().split('=');
-    if (name !== ASSET_COOKIE) continue;
-    const encoded = rest.join('=').trim();
-    if (!encoded) return null;
-    try {
-      return decodeURIComponent(encoded);
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
 async function hasValidAssetSession(
   c: Context<LmsIntegrityContext>,
   row: EnrollmentEvidenceRow,
 ): Promise<boolean> {
-  if (!c.env.JWT_SECRET) return false;
-  const token = parseAssetCookie(c.req.raw);
-  if (!token) return false;
-  const payload = (await verifyJWT(token, c.env.JWT_SECRET)) as JwtPayload | null;
-  if (!payload || payload.token_type !== 'lms_asset' || payload.asset_scope !== 'course_assets') {
-    return false;
-  }
-  return (
-    Number(payload.empresa_id ?? 0) === row.empresa_id &&
-    Number(payload.asset_curso_id ?? 0) === row.curso_id &&
-    Number(payload.asset_matricula_id ?? 0) === row.id &&
-    payload.asset_preview !== true
-  );
+  const payload = await readCourseAssetSessionPayload(c.env, c.req.raw);
+  return payload
+    ? assetSessionMatchesEnrollment(payload, {
+        empresaId: row.empresa_id,
+        cursoId: row.curso_id,
+        matriculaId: row.id,
+      })
+    : false;
 }
 
 async function readEnrollmentEvidence(
