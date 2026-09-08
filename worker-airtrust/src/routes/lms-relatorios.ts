@@ -51,7 +51,7 @@ function resolveScormReportLimit(raw: string | undefined): number | undefined {
   return Math.min(parsed, 200);
 }
 
-const requireLmsReportVisibility = requirePermission('lms', 'visualizar', 'admin', 'manager');
+const requireLmsReportVisibility = requirePermission('relatorios', 'visualizar', 'admin', 'manager');
 
 app.get('/relatorios/conformidade', auth(), requireLmsReportVisibility, async (c) => {
   const db = c.env.DB;
