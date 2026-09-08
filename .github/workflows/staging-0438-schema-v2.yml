@@ -1,0 +1,346 @@
+name: Staging 0438 RDV Schema V2
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_STAGING_SCHEMA_V2_0438'
+        required: true
+        type: string
+      pr_number:
+        description: 'Reviewed same-repository PR anchoring release_sha'
+        required: true
+        type: string
+      release_sha:
+        description: 'Exact 40-character reviewed SHA already deployed to staging Worker'
+        required: true
+        type: string
+      apply_change:
+        description: 'Apply 0438 after the read-only preflight passes'
+        required: true
+        type: boolean
+        default: false
+      release_reason:
+        description: 'Why the 0438 staging validation is being run'
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-airtrust-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+env:
+  NODE_VERSION: '24'
+  EXPECTED_CONFIRMATION: AIRTRUST_STAGING_SCHEMA_V2_0438
+  ALLOWED_STAGING_DB_NAME: airtrust-db-staging-baseline-20260701
+  ALLOWED_STAGING_DB_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+  BLOCKED_PRODUCTION_DB_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+  STAGING_VERSION_URL: https://airtrust-api-staging.airtrust.workers.dev/api/version
+  MIGRATION_NAME: 0438_controle_voos_rdv_coordenacao_workflow.sql
+  CHANGE_ID: 0438-rdv-coordination-workflow-production
+
+jobs:
+  guard:
+    name: Reviewed 0438 Release Guard
+    runs-on: ubuntu-latest
+    outputs:
+      release_sha: ${{ steps.release.outputs.release_sha }}
+    steps:
+      - name: Validate dispatch, provenance and current main
+        shell: bash
+        env:
+          GIT_REF: ${{ github.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_REASON: ${{ inputs.release_reason }}
+        run: |
+          set -euo pipefail
+          [[ "$GIT_REF" == "refs/heads/main" ]] || { echo "Workflow must run from main." >&2; exit 1; }
+          [[ "$CONFIRMATION" == "$EXPECTED_CONFIRMATION" ]] || { echo "Invalid confirmation." >&2; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "release_sha must be a full SHA." >&2; exit 1; }
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "pr_number must be positive." >&2; exit 1; }
+          [[ -n "$RELEASE_REASON" ]] || { echo "release_reason is required." >&2; exit 1; }
+          export RELEASE_SHA="${RELEASE_SHA,,}" PR_NUMBER GITHUB_REPOSITORY GITHUB_ACTOR
+          node <<'NODE'
+          (async () => {
+            const repo = process.env.GITHUB_REPOSITORY;
+            const prNumber = process.env.PR_NUMBER;
+            const releaseSha = process.env.RELEASE_SHA;
+            const headers = {
+              authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+              accept: 'application/vnd.github+json',
+              'x-github-api-version': '2022-11-28',
+            };
+            async function get(path) {
+              const response = await fetch(`https://api.github.com${path}`, { headers });
+              if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`);
+              return response.json();
+            }
+            const pr = await get(`/repos/${repo}/pulls/${prNumber}`);
+            if (pr.base?.ref !== 'main') throw new Error('PR_BASE_NOT_MAIN');
+            if (pr.head?.repo?.full_name !== repo || pr.head?.repo?.fork) throw new Error('PR_FROM_FORK_REJECTED');
+            if (pr.state === 'open') {
+              if (pr.head?.sha?.toLowerCase() !== releaseSha) throw new Error('OPEN_PR_HEAD_MISMATCH');
+            } else if (pr.merged === true) {
+              if (pr.merge_commit_sha?.toLowerCase() !== releaseSha) throw new Error('MERGED_PR_SHA_MISMATCH');
+              const mainRef = await get(`/repos/${repo}/git/refs/heads/main`);
+              if (mainRef.object?.sha?.toLowerCase() !== releaseSha) throw new Error('RELEASE_SHA_NOT_CURRENT_MAIN');
+            } else {
+              throw new Error('PR_NOT_OPEN_OR_MERGED');
+            }
+            const permission = await get(`/repos/${repo}/collaborators/${process.env.GITHUB_ACTOR}/permission`);
+            if (!['write', 'push', 'maintain', 'admin'].includes(permission.permission)) {
+              throw new Error('ACTOR_PERMISSION_INSUFFICIENT');
+            }
+          })().catch((error) => {
+            console.error(`0438 release guard failed: ${error.message}`);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Checkout trusted pipeline
+        uses: actions/checkout@v4
+
+      - name: Verify official release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          export RELEASE_SHA="${RELEASE_SHA,,}"
+          node scripts/ci/verify-release-gates.mjs
+
+      - name: Require staging Worker provenance to match release SHA
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error --retry 3 --retry-all-errors "$STAGING_VERSION_URL")"
+          node - "$response" "${RELEASE_SHA,,}" <<'NODE'
+          const payload = JSON.parse(process.argv[2]);
+          const expected = process.argv[3];
+          const body = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
+          const environment = String(body?.environment ?? '').toLowerCase();
+          const sourceSha = String(body?.sourceSha ?? body?.source_sha ?? '').toLowerCase();
+          if (environment !== 'staging') throw new Error(`STAGING_ENVIRONMENT_MISMATCH:${environment}`);
+          if (sourceSha !== expected) throw new Error(`STAGING_SOURCE_SHA_MISMATCH:${sourceSha}:${expected}`);
+          NODE
+
+      - id: release
+        name: Publish reviewed SHA
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: echo "release_sha=${RELEASE_SHA,,}" >> "$GITHUB_OUTPUT"
+
+  token-readiness:
+    name: Check Staging D1 Credentials
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Require migration credential
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$TOKEN" ]] || { echo "Missing CLOUDFLARE_D1_MIGRATION_API_TOKEN" >&2; exit 1; }
+          [[ -n "$ACCOUNT_ID" ]] || { echo "Missing CLOUDFLARE_ACCOUNT_ID" >&2; exit 1; }
+          [[ "$ALLOWED_STAGING_DB_ID" != "$BLOCKED_PRODUCTION_DB_ID" ]] || exit 1
+
+  preflight:
+    name: Read-only 0438 Preflight
+    needs: [guard, token-readiness]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout trusted pipeline
+        uses: actions/checkout@v4
+      - name: Checkout reviewed release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.guard.outputs.release_sha }}
+          fetch-depth: 0
+          path: release
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install Worker dependencies
+        run: npm --prefix worker-airtrust ci
+      - name: Execute read-only preflight and build verification
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+          STAGING_D1_ID: ${{ env.ALLOWED_STAGING_DB_ID }}
+        run: |
+          set -euo pipefail
+          bash scripts/staging/apply-0438-rdv-coordination-workflow.sh \
+            --migration="release/worker-airtrust/migrations/$MIGRATION_NAME"
+
+  backup:
+    name: Backup Staging D1 Before 0438
+    needs: [guard, preflight]
+    if: ${{ inputs.apply_change }}
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Capture verified staging backup
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CONFIRM_STAGING_BACKUP: AIRTRUST_STAGING_BACKUP
+        run: |
+          set -euo pipefail
+          bash scripts/staging/backup-d1-staging.sh --apply --out-dir="$RUNNER_TEMP/staging-backups"
+          latest="$(ls -t "$RUNNER_TEMP"/staging-backups/*.sql | head -n1)"
+          test -s "$latest"
+          echo "BACKUP_VERIFIED=true"
+
+  apply:
+    name: Apply Reviewed 0438 Dual-ledger Bundle
+    needs: [guard, preflight, backup]
+    if: ${{ inputs.apply_change && needs.preflight.result == 'success' && needs.backup.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout reviewed release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.guard.outputs.release_sha }}
+          fetch-depth: 0
+          path: release
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install Worker dependencies
+        run: npm --prefix worker-airtrust ci
+      - name: Apply exact reviewed bundle once
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+          STAGING_D1_ID: ${{ env.ALLOWED_STAGING_DB_ID }}
+          CONFIRM_STAGING_SCHEMA_V2_0438: AIRTRUST_STAGING_SCHEMA_V2_0438
+        run: |
+          set -euo pipefail
+          bash scripts/staging/apply-0438-rdv-coordination-workflow.sh \
+            --migration="release/worker-airtrust/migrations/$MIGRATION_NAME" \
+            --apply
+
+  postconditions:
+    name: Validate 0438 Postconditions
+    needs: [guard, apply]
+    if: ${{ inputs.apply_change && needs.apply.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install Worker dependencies
+        run: npm --prefix worker-airtrust ci
+      - name: Validate schema and ledgers read-only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/staging/validate-0438-postconditions.sh --target="$ALLOWED_STAGING_DB_NAME"
+
+  smoke:
+    name: Authenticated RDV CAS and Queue Smoke
+    needs: [guard, postconditions]
+    if: ${{ inputs.apply_change && needs.postconditions.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install root dependencies
+        run: npm ci
+      - name: Require QA credentials
+        env:
+          QA_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          QA_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [[ -n "$QA_EMAIL" && -n "$QA_PASSWORD" ]] || { echo "Missing QA_EXAMINER_ADMIN credentials" >&2; exit 1; }
+      - name: Run authenticated RDV CAS smoke
+        env:
+          QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+        run: node scripts/staging/smoke-rdv-cas.mjs
+      - name: Verify coordination queue is reachable with authenticated admin
+        env:
+          QA_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          QA_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { extractAccessToken, fetchJson, login } from './scripts/smoke-auth-common.mjs';
+          const base = 'https://airtrust-api-staging.airtrust.workers.dev';
+          const loginResult = await login(base, process.env.QA_EMAIL, process.env.QA_PASSWORD);
+          const token = extractAccessToken(loginResult, process.env.QA_EMAIL);
+          const result = await fetchJson(`${base}/api/controle-voos/rdv/fila?limit=1`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (result.status !== 200 || result.json?.success !== true || !Array.isArray(result.json?.data)) {
+            throw new Error(`RDV_QUEUE_SMOKE_FAILED:${result.status}:${JSON.stringify(result.json)}`);
+          }
+          console.log('RDV_0438_AUTHENTICATED_QUEUE_SMOKE=PASS');
+          NODE
+
+  summary:
+    name: Record 0438 Staging Summary
+    needs: [guard, preflight, backup, apply, postconditions, smoke]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write outcome
+        env:
+          RELEASE_SHA: ${{ needs.guard.outputs.release_sha }}
+          APPLY_REQUESTED: ${{ inputs.apply_change }}
+          PREFLIGHT: ${{ needs.preflight.result }}
+          BACKUP: ${{ needs.backup.result }}
+          APPLY: ${{ needs.apply.result }}
+          POSTCONDITIONS: ${{ needs.postconditions.result }}
+          SMOKE: ${{ needs.smoke.result }}
+          REASON: ${{ inputs.release_reason }}
+        run: |
+          {
+            echo "## Staging 0438 RDV Schema V2"
+            echo "- release_sha: \`$RELEASE_SHA\`"
+            echo "- change_id: \`$CHANGE_ID\`"
+            echo "- apply_requested: $APPLY_REQUESTED"
+            echo "- preflight: $PREFLIGHT"
+            echo "- backup: $BACKUP"
+            echo "- apply: $APPLY"
+            echo "- postconditions: $POSTCONDITIONS"
+            echo "- authenticated CAS/queue smoke: $SMOKE"
+            echo "- full workflow-transition smoke: not claimed by this workflow"
+            echo "- production touched: no"
+            echo "- reason: $REASON"
+          } >> "$GITHUB_STEP_SUMMARY"
