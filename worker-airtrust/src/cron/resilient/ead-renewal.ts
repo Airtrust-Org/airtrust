@@ -179,6 +179,7 @@ async function ensureExistingRenewalMatricula(
     const cycleId = await ensureMatriculaCycle(db, {
       matriculaId: existing.id,
       origin: 'AUTO_RENOVACAO',
+      empresaId,
     });
     if (!cycleId) throw new Error('EAD_RENEWAL_CYCLE_NOT_CREATED');
     return { matriculaId: existing.id, created: false, active: true };
@@ -225,6 +226,7 @@ async function ensureRenewalMatricula(
     const cycleId = await ensureMatriculaCycle(db, {
       matriculaId,
       origin: 'AUTO_RENOVACAO',
+      empresaId: payload.empresa_id,
     });
     if (!cycleId) throw new Error('EAD_RENEWAL_CYCLE_NOT_CREATED');
     return { matriculaId, created: true, active: true };
