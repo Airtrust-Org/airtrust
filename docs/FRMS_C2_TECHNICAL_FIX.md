@@ -86,7 +86,7 @@ A cirurgia correta é: usar os fatores já persistidos + sono informado → `cal
 | `fadiga-score.ts` | Não alterado |
 | `db-service-jornadas.ts` | Não alterado |
 | Thresholds (`EFFECTIV_VERDE_MIN`, etc.) | Não alterados |
-| Fórmula científica (Borbély, ICAO Doc 9966) | Não alterada |
+| Fórmula empresarial de triagem (com referências FRMS; não é Borbély calibrado nem fórmula ICAO) | Não alterada |
 | C4 (controle operacional) | Não alterado |
 | AUTH | Não alterado |
 | EVD | Não alterado |
