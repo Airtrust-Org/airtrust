@@ -1217,8 +1217,8 @@ router.post('/fadiga-checkin', async (c) => {
         )
         .run();
     } else {
-      await c.env.DB.prepare(
-        `INSERT INTO frms_fadiga_checkin (
+      const insertResult = await c.env.DB.prepare(
+        `INSERT OR IGNORE INTO frms_fadiga_checkin (
              id, empresa_id, funcionario_id, data_checkin, hora_checkin,
              kss_score, horas_sono, qualidade_sono,
              sintomas_json, observacoes,
@@ -1276,6 +1276,20 @@ router.post('/fadiga-checkin', async (c) => {
           now,
         )
         .run();
+
+      // The daily partial UNIQUE index is the durable idempotency boundary.
+      // A simultaneous first submission must stop before FRMS synchronisation,
+      // notifications and audit side effects instead of falling through with a
+      // generated id that was never persisted.
+      if (insertResult.meta.changes !== 1) {
+        return c.json(
+          {
+            success: false,
+            error: 'Já existe um check-in para esta data. Atualize a página antes de enviar novamente.',
+          },
+          409,
+        );
+      }
     }
 
     const sync = await sincronizarCheckinComFrms(
