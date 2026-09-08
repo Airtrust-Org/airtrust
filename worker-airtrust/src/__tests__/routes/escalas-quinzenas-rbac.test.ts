@@ -9,6 +9,21 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
+vi.mock('../../middleware/rbac', () => ({
+  requirePermission:
+    (_module: string, _action: string, ...roles: string[]) =>
+    async (
+      c: { get: (key: string) => unknown; json: (body: unknown, status?: number) => Response },
+      next: () => Promise<void>,
+    ) => {
+      const role = String(c.get('userRole') ?? '').trim().toLowerCase();
+      if (!roles.includes(role)) {
+        return c.json({ success: false, error: 'Forbidden' }, 403);
+      }
+      await next();
+    },
+}));
+
 import quinzenasRoutes from '../../routes/escalas-quinzenas';
 
 function createEnv(): Env {
