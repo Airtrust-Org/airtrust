@@ -126,9 +126,12 @@ export function validarRepousoPlataforma(
 ): boolean {
   if (!inicio || !fim) return false;
   const duracao = calcDuracaoMinutos(inicio, fim);
+  // Lei 13.475/2017, art. 38(I): para a hipótese aplicável de interrupção
+  // de jornada fora da base, a duração deve ser superior a 3 h e inferior a 6 h.
+  // Os parâmetros permanecem configuráveis, mas seus limites são exclusivos.
   return (
-    duracao >= limites.REPOUSO_PLATAFORMA_MINIMO_HORAS * 60 &&
-    duracao <= limites.REPOUSO_PLATAFORMA_MAXIMO_HORAS * 60
+    duracao > limites.REPOUSO_PLATAFORMA_MINIMO_HORAS * 60 &&
+    duracao < limites.REPOUSO_PLATAFORMA_MAXIMO_HORAS * 60
   );
 }
 

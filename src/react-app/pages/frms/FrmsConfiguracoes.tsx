@@ -61,9 +61,9 @@ const GRUPOS_REGULATORIOS: ConfigGroup[] = [
     ],
   },
   {
-    label: 'Repouso',
+    label: 'Repouso e interrupção de jornada',
     icon: <Shield className="h-4 w-4" />,
-    description: 'Período mínimo de repouso entre jornadas',
+    description: 'Repouso inter-jornada e janela de interrupção fora da base (Lei 13.475/2017 art. 38)',
     keys: [
       'REPOUSO_MINIMO_HORAS',
       'REPOUSO_PLATAFORMA_MINIMO_HORAS',
@@ -195,8 +195,8 @@ const LABELS: Record<string, string> = {
   HV_MES_HORAS: 'HV mês calendário (90 h) — Lei 13.475 art. 30 IV',
   HV_365_DIAS_HORAS: 'HV 365 dias (930 h) — RBAC 117',
   REPOUSO_MINIMO_HORAS: 'Repouso baseline (12 h, profile-dependent)',
-  REPOUSO_PLATAFORMA_MINIMO_HORAS: 'Repouso Plataforma mín (horas)',
-  REPOUSO_PLATAFORMA_MAXIMO_HORAS: 'Repouso Plataforma máx (horas)',
+  REPOUSO_PLATAFORMA_MINIMO_HORAS: 'Interrupção fora da base — limite inferior exclusivo (3 h)',
+  REPOUSO_PLATAFORMA_MAXIMO_HORAS: 'Interrupção fora da base — limite superior exclusivo (6 h)',
   ALERTA_AVISO_PCT: 'Aviso (%)',
   ALERTA_ATENCAO_PCT: 'Atenção (%)',
   ALERTA_CRITICO_PCT: 'Crítico (%)',

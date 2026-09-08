@@ -1040,18 +1040,22 @@ describe('calcFatorizacao com limites customizados', () => {
 // ────────────────────────────────────────────────────────────────────
 
 describe('validarRepousoPlataforma', () => {
-  it('repouso dentro do intervalo válido (3h–6h) é aceito', () => {
-    expect(validarRepousoPlataforma('10:00', '13:00', limites)).toBe(true); // 3h exato
+  it('aceita apenas duração estritamente superior a 3h e inferior a 6h', () => {
+    expect(validarRepousoPlataforma('10:00', '13:00', limites)).toBe(false); // 3h: limite exclusivo
+    expect(validarRepousoPlataforma('10:00', '13:01', limites)).toBe(true); // > 3h
     expect(validarRepousoPlataforma('10:00', '14:00', limites)).toBe(true); // 4h
-    expect(validarRepousoPlataforma('10:00', '16:00', limites)).toBe(true); // 6h exato
+    expect(validarRepousoPlataforma('10:00', '15:59', limites)).toBe(true); // < 6h
+    expect(validarRepousoPlataforma('10:00', '16:00', limites)).toBe(false); // 6h: limite exclusivo
   });
 
-  it('repouso abaixo do mínimo (< 3h) é rejeitado', () => {
+  it('repouso igual ou abaixo do limite inferior é rejeitado', () => {
     expect(validarRepousoPlataforma('10:00', '11:30', limites)).toBe(false); // 1h30
+    expect(validarRepousoPlataforma('10:00', '13:00', limites)).toBe(false); // 3h
     expect(validarRepousoPlataforma('10:00', '10:00', limites)).toBe(false); // 0h
   });
 
-  it('repouso acima do máximo (> 6h) é rejeitado', () => {
+  it('repouso igual ou acima do limite superior é rejeitado', () => {
+    expect(validarRepousoPlataforma('10:00', '16:00', limites)).toBe(false); // 6h
     expect(validarRepousoPlataforma('10:00', '17:00', limites)).toBe(false); // 7h
   });
 
@@ -1061,8 +1065,9 @@ describe('validarRepousoPlataforma', () => {
     expect(validarRepousoPlataforma(null, null, limites)).toBe(false);
   });
 
-  it('repouso cruzando meia-noite dentro do intervalo é aceito', () => {
-    expect(validarRepousoPlataforma('23:00', '02:00', limites)).toBe(true); // 3h
+  it('interrupção cruzando meia-noite respeita os limites exclusivos', () => {
+    expect(validarRepousoPlataforma('23:00', '02:00', limites)).toBe(false); // 3h
+    expect(validarRepousoPlataforma('23:00', '02:01', limites)).toBe(true); // 3h01
     expect(validarRepousoPlataforma('22:00', '03:00', limites)).toBe(true); // 5h
   });
 
@@ -1072,8 +1077,10 @@ describe('validarRepousoPlataforma', () => {
       REPOUSO_PLATAFORMA_MINIMO_HORAS: 2,
       REPOUSO_PLATAFORMA_MAXIMO_HORAS: 4,
     };
-    expect(validarRepousoPlataforma('10:00', '12:00', customLimites)).toBe(true); // 2h = mínimo
-    expect(validarRepousoPlataforma('10:00', '14:00', customLimites)).toBe(true); // 4h = máximo
+    expect(validarRepousoPlataforma('10:00', '12:00', customLimites)).toBe(false); // 2h = limite exclusivo
+    expect(validarRepousoPlataforma('10:00', '12:01', customLimites)).toBe(true); // > 2h
+    expect(validarRepousoPlataforma('10:00', '13:59', customLimites)).toBe(true); // < 4h
+    expect(validarRepousoPlataforma('10:00', '14:00', customLimites)).toBe(false); // 4h = limite exclusivo
     expect(validarRepousoPlataforma('10:00', '11:00', customLimites)).toBe(false); // 1h < 2h
     expect(validarRepousoPlataforma('10:00', '15:00', customLimites)).toBe(false); // 5h > 4h
   });

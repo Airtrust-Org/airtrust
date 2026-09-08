@@ -213,6 +213,9 @@ export interface LimitesMap {
   ALERTA_VIOLACAO_PCT: number;
   FDP_ALERTA_RESTANTE_HORAS: number;
   HV_DIA_ALERTA_RESTANTE_HORAS: number;
+  // Limites exclusivos para a hipótese de interrupção de jornada fora da base
+  // (Lei 13.475/2017, art. 38(I)); o nome legado "repouso_plataforma" é mantido
+  // por compatibilidade de schema e não deve ser confundido com repouso pós-jornada.
   REPOUSO_PLATAFORMA_MINIMO_HORAS: number;
   REPOUSO_PLATAFORMA_MAXIMO_HORAS: number;
 
