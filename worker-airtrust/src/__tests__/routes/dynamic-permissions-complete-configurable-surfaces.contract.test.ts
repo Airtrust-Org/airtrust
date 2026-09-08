@@ -18,10 +18,17 @@ describe('dynamic configurable permission surfaces', () => {
     }
   });
 
-  it('routes employee vacation mutations through funcionarios permissions', () => {
-    const source = read('src/routes/funcionarios.ts');
-    expect(source).toContain("requirePermission('funcionarios', 'criar', 'admin', 'manager')");
-    expect(source).toContain("requirePermission('funcionarios', 'deletar', 'admin', 'manager')");
+  it('routes employee manager surfaces through funcionarios permissions', () => {
+    const root = read('src/routes/funcionarios.ts');
+    expect(root).toContain("requirePermission('funcionarios', 'editar', 'admin', 'manager')");
+    expect(root).toContain("requirePermission('funcionarios', 'deletar', 'admin', 'manager')");
+    expect(root).not.toContain("requireRole('admin', 'manager')");
+
+    const mutations = read('src/routes/funcionarios-mutations.ts');
+    expect(mutations).toContain("requirePermission('funcionarios', 'criar', 'admin', 'manager')");
+    expect(mutations).toContain("requirePermission('funcionarios', 'editar', 'admin', 'manager')");
+    expect(mutations).toContain("requirePermission('funcionarios', 'deletar', 'admin', 'manager')");
+    expect(mutations).not.toContain("requireRole('admin', 'manager')");
   });
 
   it('routes LMS manager surfaces dynamically while preserving admin-only recovery operations', () => {
