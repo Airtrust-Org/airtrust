@@ -9,7 +9,7 @@ const source = readFileSync(
 
 describe('LMS MEL Manutenção — contrato de matrícula automática', () => {
   it('mantém autorização, tenant e escopo setorial antes do processamento', () => {
-    expect(source).toContain("app.post('/processar', requireRole('admin', 'manager')");
+    expect(source).toContain("app.post('/processar', requirePermission('lms', 'editar', 'admin', 'manager')");
     expect(source).toContain('const empresaId = getEmpresaIdSafe(c);');
     expect(source).toContain('const access = await getEmployeeSectorAccess(c, empresaId);');
     expect(source).toContain("access.mode === 'restricted'");
