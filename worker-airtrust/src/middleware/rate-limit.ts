@@ -104,6 +104,13 @@ function normalizeCfConnectingIp(value: string | undefined): string | null {
   return trimmed;
 }
 
+
+export function tenantAwareKeyExtractor(c: Parameters<MiddlewareHandler<{ Bindings: Env }>>[0]): string {
+  const ip = normalizeCfConnectingIp(c.req.header('CF-Connecting-IP')) || 'unknown-ip';
+  const empresaId = ((c as any).get('user'))?.empresa_id || 'unknown-tenant';
+  return `tenant:${empresaId}:ip:${ip}`;
+}
+
 export function resolveRateLimitIdentifier(
   headers: { cfConnectingIp?: string; requestId?: string },
   failureMode: RateLimitFailureMode,
