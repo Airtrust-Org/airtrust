@@ -55,20 +55,13 @@ describe('service worker cache guard', () => {
       /function shouldBypassCleanupForPath\(pathname: string\): boolean \{([\s\S]*?)\n\}/,
     );
 
-    expect(serviceWorkerManagerSource).toContain(
-      "const LOGIN_CACHE_RECOVERY_SESSION_KEY = 'airtrust-login-cache-recovery-v4';",
-    );
-    expect(serviceWorkerManagerSource).toContain(
-      "const LOGIN_CACHE_RECOVERY_QUERY_PARAM = 'airtrust_login_recovered';",
-    );
     expect(serviceWorkerManagerSource).toContain('async function unregisterExistingServiceWorkers()');
     expect(serviceWorkerManagerSource).toContain('await cleanupLegacyServiceWorkers();');
     expect(serviceWorkerManagerSource).toContain('registration.unregister().catch(() => false)');
     expect(serviceWorkerManagerSource).not.toContain("navigator.serviceWorker.register('/sw.js', {");
-    expect(serviceWorkerManagerSource).toContain('async function recoverLoginPageFromLegacyCaches()');
+    expect(serviceWorkerManagerSource).not.toContain('useServiceWorkerUpdates');
+    expect(serviceWorkerManagerSource).not.toContain('setInterval(');
     expect(bypassFunctionMatch?.[1] || '').toContain("return /^\\/lms\\/player\\//.test(pathname);");
-    expect(bypassFunctionMatch?.[1] || '').not.toContain("pathname === '/login'");
-    expect(serviceWorkerManagerSource).toContain('window.location.replace(nextUrl.toString());');
   });
 
   it('nao mistura no-store global com cache longo dos assets hashados', () => {
