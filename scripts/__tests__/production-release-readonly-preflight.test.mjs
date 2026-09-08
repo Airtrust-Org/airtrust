@@ -148,3 +148,10 @@ test('workflow itself performs no production deploy, schema apply or migration',
   assert.doesNotMatch(wf, /d1\s+migrations\s+apply/);
   assert.doesNotMatch(wf, /--file/);
 });
+
+
+test('preflight stdout remains pure JSON for workflow summary parsing', () => {
+  const s = read(SCRIPT);
+  assert.doesNotMatch(s, /console\.log\('PRODUCTION_RELEASE_READONLY_PREFLIGHT=PASS'\)/);
+  assert.match(s, /console\.error\('PRODUCTION_RELEASE_READONLY_PREFLIGHT=PASS'\)/);
+});

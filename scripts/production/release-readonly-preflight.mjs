@@ -517,7 +517,7 @@ async function run() {
     console.error('PRODUCTION_RELEASE_READONLY_PREFLIGHT=BLOCKED');
     process.exitCode = 2;
   } else {
-    console.log('PRODUCTION_RELEASE_READONLY_PREFLIGHT=PASS');
+    console.error('PRODUCTION_RELEASE_READONLY_PREFLIGHT=PASS');
   }
 }
 
