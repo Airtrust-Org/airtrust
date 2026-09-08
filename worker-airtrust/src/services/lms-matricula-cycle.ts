@@ -52,7 +52,11 @@ export function canReuseMatriculaCycle(record: LmsMatriculaCycleRecord | null | 
   return REUSABLE_MATRICULA_STATUSES.has(normalizeStatus(record.status));
 }
 
-async function readMatriculaSnapshot(db: D1Database, matriculaId: number) {
+async function readMatriculaSnapshot(
+  db: D1Database,
+  matriculaId: number,
+  empresaId?: number,
+) {
   return db
     .prepare(
       `SELECT id,
@@ -72,9 +76,10 @@ async function readMatriculaSnapshot(db: D1Database, matriculaId: number) {
               qualificacao_historico_id
          FROM lms_matriculas
         WHERE id = ?
+          AND (? IS NULL OR empresa_id = ?)
         LIMIT 1`,
     )
-    .bind(matriculaId)
+    .bind(matriculaId, empresaId ?? null, empresaId ?? null)
     .first<MatriculaSnapshot>();
 }
 
@@ -207,9 +212,9 @@ async function upsertCurrentMatriculaCycle(
 
 export async function ensureMatriculaCycle(
   db: D1Database,
-  params: { matriculaId: number; origin?: string },
+  params: { matriculaId: number; origin?: string; empresaId?: number },
 ) {
-  const snapshot = await readMatriculaSnapshot(db, params.matriculaId);
+  const snapshot = await readMatriculaSnapshot(db, params.matriculaId, params.empresaId);
   if (!snapshot) return null;
 
   return upsertCurrentMatriculaCycle(db, snapshot, params.origin ?? DEFAULT_CYCLE_ORIGIN);
@@ -451,9 +456,10 @@ export async function resetMatriculaForNewCycle(
     observacoes?: string | null;
     matriculadoPor?: number | null;
     origin?: string;
+    empresaId: number;
   },
 ) {
-  const beforeReset = await readMatriculaSnapshot(db, params.matriculaId);
+  const beforeReset = await readMatriculaSnapshot(db, params.matriculaId, params.empresaId);
 
   if (beforeReset) {
     await upsertCurrentMatriculaCycle(db, beforeReset, params.origin ?? 'AUTO_RENOVACAO');
@@ -463,10 +469,11 @@ export async function resetMatriculaForNewCycle(
             SET ciclo_atual = 0,
                 updated_at = datetime('now')
           WHERE matricula_id = ?
+            AND empresa_id = ?
             AND ciclo_atual = 1
             AND deleted_at IS NULL`,
       )
-      .bind(params.matriculaId)
+      .bind(params.matriculaId, params.empresaId)
       .run();
   }
 
@@ -486,13 +493,15 @@ export async function resetMatriculaForNewCycle(
               matriculado_por = ?,
               observacoes = ?,
               updated_at = datetime('now')
-        WHERE id = ?`,
+        WHERE id = ?
+          AND empresa_id = ?`,
     )
     .bind(
       params.dataExpiracao ?? null,
       params.matriculadoPor ?? null,
       params.observacoes ?? null,
       params.matriculaId,
+      params.empresaId,
     )
     .run();
 
@@ -514,18 +523,34 @@ export async function resetMatriculaForNewCycle(
               cmi_json = NULL,
               last_commit_at = NULL,
               updated_at = datetime('now')
-        WHERE matricula_id = ?`,
+        WHERE matricula_id = ?
+          AND EXISTS (
+            SELECT 1
+              FROM lms_matriculas m
+             WHERE m.id = lms_progresso_scorm.matricula_id
+               AND m.empresa_id = ?
+          )`,
     )
-    .bind(params.matriculaId)
+    .bind(params.matriculaId, params.empresaId)
     .run();
 
   await db
-    .prepare('DELETE FROM lms_xapi_statements WHERE matricula_id = ?')
-    .bind(params.matriculaId)
+    .prepare(
+      `DELETE FROM lms_xapi_statements
+        WHERE matricula_id = ?
+          AND EXISTS (
+            SELECT 1
+              FROM lms_matriculas m
+             WHERE m.id = lms_xapi_statements.matricula_id
+               AND m.empresa_id = ?
+          )`,
+    )
+    .bind(params.matriculaId, params.empresaId)
     .run();
 
   return ensureMatriculaCycle(db, {
     matriculaId: params.matriculaId,
     origin: params.origin ?? 'AUTO_RENOVACAO',
+    empresaId: params.empresaId,
   });
 }
