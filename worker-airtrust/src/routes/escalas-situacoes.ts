@@ -9,7 +9,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaIdSafe, getEscalaVerificada } from './escalas-shared';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { createLogger, toError } from '../utils/logger';
@@ -56,7 +56,7 @@ situacoes.get('/situacao-tipos', auth(), async (c) => {
 // POST /:id/situacoes — criar situação sem aeronave
 // ─────────────────────────────────────────────────────────────────────────────
 
-situacoes.post('/:id/situacoes', auth(), requireRole('admin', 'manager'), async (c) => {
+situacoes.post('/:id/situacoes', auth(), requirePermission('escalas', 'criar', 'admin', 'manager'), async (c) => {
   const escalaId = c.req.param('id');
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
@@ -268,7 +268,7 @@ situacoes.post('/:id/situacoes', auth(), requireRole('admin', 'manager'), async 
 // PUT /:id/situacoes/:sid — editar situação sem aeronave
 // ─────────────────────────────────────────────────────────────────────────────
 
-situacoes.put('/:id/situacoes/:sid', auth(), requireRole('admin', 'manager'), async (c) => {
+situacoes.put('/:id/situacoes/:sid', auth(), requirePermission('escalas', 'editar', 'admin', 'manager'), async (c) => {
   const escalaId = c.req.param('id');
   const situacaoId = c.req.param('sid');
   const db = c.env.DB;
@@ -522,7 +522,7 @@ situacoes.put('/:id/situacoes/:sid', auth(), requireRole('admin', 'manager'), as
 // DELETE /:id/situacoes/:sid — remover situação sem aeronave
 // ─────────────────────────────────────────────────────────────────────────────
 
-situacoes.delete('/:id/situacoes/:sid', auth(), requireRole('admin', 'manager'), async (c) => {
+situacoes.delete('/:id/situacoes/:sid', auth(), requirePermission('escalas', 'deletar', 'admin', 'manager'), async (c) => {
   const escalaId = c.req.param('id');
   const situacaoId = c.req.param('sid');
   const db = c.env.DB;
