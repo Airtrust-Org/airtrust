@@ -14,7 +14,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import {
   getEmpresaIdSafe,
   getEscalaVerificada,
@@ -437,7 +437,7 @@ function formatarErroLote(params: {
 // POST /:id/alocacoes/lote — salvar lote atômico de alocações operacionais
 // ─────────────────────────────────────────────────────────────────────────────
 
-alocacoes.post('/:id/alocacoes/lote', auth(), requireRole('admin', 'manager'), async (c) => {
+alocacoes.post('/:id/alocacoes/lote', auth(), requirePermission('escalas', 'criar', 'admin', 'manager'), async (c) => {
   const escalaId = c.req.param('id');
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
@@ -1217,7 +1217,7 @@ alocacoes.post('/:id/alocacoes/lote', auth(), requireRole('admin', 'manager'), a
 // POST /:id/alocacoes — criar alocação individual
 // ─────────────────────────────────────────────────────────────────────────────
 
-alocacoes.post('/:id/alocacoes', auth(), requireRole('admin', 'manager'), async (c) => {
+alocacoes.post('/:id/alocacoes', auth(), requirePermission('escalas', 'criar', 'admin', 'manager'), async (c) => {
   const escalaId = c.req.param('id');
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
@@ -1726,7 +1726,7 @@ alocacoes.get('/:id/alocacoes', auth(), async (c) => {
 // PUT /:id/alocacoes/:aid — editar alocação
 // ─────────────────────────────────────────────────────────────────────────────
 
-alocacoes.put('/:id/alocacoes/:aid', auth(), requireRole('admin', 'manager'), async (c) => {
+alocacoes.put('/:id/alocacoes/:aid', auth(), requirePermission('escalas', 'editar', 'admin', 'manager'), async (c) => {
   const escalaId = c.req.param('id');
   const alocacaoId = c.req.param('aid');
   const db = c.env.DB;
@@ -2127,7 +2127,7 @@ alocacoes.put('/:id/alocacoes/:aid', auth(), requireRole('admin', 'manager'), as
 // DELETE /:id/alocacoes/:aid — soft-delete + remover eventos auto-gerados
 // ─────────────────────────────────────────────────────────────────────────────
 
-alocacoes.delete('/:id/alocacoes/:aid', auth(), requireRole('admin', 'manager'), async (c) => {
+alocacoes.delete('/:id/alocacoes/:aid', auth(), requirePermission('escalas', 'deletar', 'admin', 'manager'), async (c) => {
   const escalaId = c.req.param('id');
   const alocacaoId = c.req.param('aid');
   const db = c.env.DB;
