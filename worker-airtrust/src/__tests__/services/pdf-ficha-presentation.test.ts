@@ -23,7 +23,7 @@ function decodePdfText(bytes: Uint8Array): string {
     if (buffer[dataEnd - 1] === 0x0d) dataEnd -= 1;
     const stream = buffer.subarray(dataStart, dataEnd);
     try {
-      chunks.push(inflateSync(stream).toString('latin1'));
+      chunks.push(Buffer.from(inflateSync(stream)).toString('latin1'));
     } catch {
       chunks.push(stream.toString('latin1'));
     }

@@ -732,6 +732,10 @@ function parseNullableText(value: string | null | undefined): string | null | un
   return trimmed === '' ? null : trimmed;
 }
 
+function formText(value: string | File | null): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
 function parseOptionalInt(value: string | null | undefined): number | null | undefined {
   if (typeof value !== 'string') return undefined;
   if (value.trim() === '') return null;
@@ -911,18 +915,18 @@ async function parseCursoCreateRequest(c: Context) {
     }
     const payload = {
       titulo: String(formData.get('titulo') ?? '').trim(),
-      descricao: parseNullableText(formData.get('descricao')),
-      categoria: parseNullableText(formData.get('categoria')),
-      carga_horaria_minutos: parseOptionalInt(formData.get('carga_horaria_minutos')),
+      descricao: parseNullableText(formText(formData.get('descricao'))),
+      categoria: parseNullableText(formText(formData.get('categoria'))),
+      carga_horaria_minutos: parseOptionalInt(formText(formData.get('carga_horaria_minutos'))),
       idioma: String(formData.get('idioma') ?? 'pt-BR').trim() || 'pt-BR',
       tipo_conteudo: String(formData.get('tipo_conteudo') ?? 'scorm').trim() || 'scorm',
-      scorm_versao: parseOptionalScormVersion(formData.get('scorm_versao')),
-      scorm_mastery_score: parseOptionalInt(formData.get('scorm_mastery_score')),
-      qualificacao_tipo_id: parseOptionalInt(formData.get('qualificacao_tipo_id')),
+      scorm_versao: parseOptionalScormVersion(formText(formData.get('scorm_versao'))),
+      scorm_mastery_score: parseOptionalInt(formText(formData.get('scorm_mastery_score'))),
+      qualificacao_tipo_id: parseOptionalInt(formText(formData.get('qualificacao_tipo_id'))),
       gerar_qualificacao_ao_concluir: parseOptionalBinary(
-        formData.get('gerar_qualificacao_ao_concluir'),
+        formText(formData.get('gerar_qualificacao_ao_concluir')),
       ),
-      publicado: parseOptionalBinary(formData.get('publicado')),
+      publicado: parseOptionalBinary(formText(formData.get('publicado'))),
       setor_ids: parsedSetorIds.length > 0 ? parsedSetorIds : undefined,
     };
 

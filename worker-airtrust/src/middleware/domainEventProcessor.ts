@@ -114,7 +114,7 @@ export function domainEventProcessorMiddleware() {
     const logger = createLogger(c, 'DomainEventProcessor');
     const empresaId = getEmpresaIdSafe(c);
 
-    let executionCtx: ExecutionContext;
+    let executionCtx: { waitUntil(promise: Promise<unknown>): void };
     try {
       executionCtx = c.executionCtx;
     } catch (error) {

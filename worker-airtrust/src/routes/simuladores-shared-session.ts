@@ -138,7 +138,7 @@ function buildSharedNotificationSessionSnapshot(
 }
 
 function scheduleSharedSessionNotification(
-  c: { executionCtx?: ExecutionContext; env: Env },
+  c: { executionCtx?: { waitUntil(promise: Promise<unknown>): void }; env: Env },
   sessaoId: number,
   empresaId: number,
   reason: 'created' | 'updated',
