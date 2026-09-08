@@ -8,6 +8,7 @@ const migratedModules = [
   'worker-airtrust/src/routes/lms-progresso.ts',
   'worker-airtrust/src/routes/escalas-crud.ts',
   'worker-airtrust/src/lib/lms/lms-schema-state.ts',
+  'worker-airtrust/src/routes/lms-matriculas.ts',
 ];
 
 const rawConsole = /\bconsole\s*\.\s*(?:log|info|warn|error|debug)\s*\(/g;
