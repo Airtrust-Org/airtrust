@@ -2,6 +2,7 @@ import type { Context, Next } from 'hono';
 
 import { ApiError } from '../../middleware/error-handler';
 import type { Env } from '../../types';
+import { createLogger, type Logger } from '../../utils/logger';
 
 export type SchemaPresence = 'present' | 'absent' | 'unknown';
 
@@ -102,7 +103,11 @@ export async function detectLmsSchemaSnapshot(db: D1Database): Promise<LmsSchema
   };
 }
 
-export function assertLmsSchemaKnown(snapshot: LmsSchemaSnapshot, requestId?: string): void {
+export function assertLmsSchemaKnown(
+  snapshot: LmsSchemaSnapshot,
+  requestId?: string,
+  logger?: Logger,
+): void {
   const unknown = [
     ...Object.entries(snapshot.tables),
     ...Object.entries(snapshot.lmsCursosColumns),
@@ -110,7 +115,7 @@ export function assertLmsSchemaKnown(snapshot: LmsSchemaSnapshot, requestId?: st
 
   if (unknown.length === 0) return;
 
-  console.error('[LMS_SCHEMA_STATE_UNKNOWN]', {
+  logger?.error('lms_schema_state_unknown', undefined, {
     code: 'LMS_SCHEMA_STATE_UNKNOWN',
     requestId: requestId ?? null,
     probes: unknown.map(([name]) => name),
@@ -212,7 +217,7 @@ export async function installLmsSchemaSnapshot(c: Context<{ Bindings: Env }>, ne
   const originalDb = c.env.DB;
   const snapshot = await detectLmsSchemaSnapshot(originalDb);
   const requestId = String(c.get('requestId' as never) ?? c.req.header('x-request-id') ?? '');
-  assertLmsSchemaKnown(snapshot, requestId || undefined);
+  assertLmsSchemaKnown(snapshot, requestId || undefined, createLogger(c, 'LmsSchemaState'));
 
   c.set(SNAPSHOT_KEY as never, snapshot as never);
   c.env.DB = createSchemaSnapshotDb(originalDb, snapshot);
