@@ -9,8 +9,8 @@
  * - missing IP never shares a global "unknown" bucket.
  */
 
-import type { MiddlewareHandler } from 'hono';
-import type { Env } from '../types';
+import type { Context, MiddlewareHandler } from 'hono';
+import type { AppEnv, Env } from '../types';
 
 export type RateLimitFailureMode = 'closed' | 'open';
 
@@ -107,7 +107,8 @@ function normalizeCfConnectingIp(value: string | undefined): string | null {
 
 export function tenantAwareKeyExtractor(c: Parameters<MiddlewareHandler<{ Bindings: Env }>>[0]): string {
   const ip = normalizeCfConnectingIp(c.req.header('CF-Connecting-IP')) || 'unknown-ip';
-  const empresaId = ((c as any).get('user'))?.empresa_id || 'unknown-tenant';
+  const typedContext = c as unknown as Context<AppEnv>;
+  const empresaId = typedContext.get('empresaId') || 'unknown-tenant';
   return `tenant:${empresaId}:ip:${ip}`;
 }
 
