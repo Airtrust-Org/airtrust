@@ -15,6 +15,7 @@ import {
   isReadinessProtocolVersion,
 } from '../lib/frms/readiness';
 import recoveryRoutes, { refreshRecoveryAssessmentForActivityDate } from './frms-recovery';
+import { createLogger } from '../utils/logger';
 
 const router = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
 router.use('*', auth());
@@ -285,12 +286,10 @@ router.post('/', async (c) => {
     if (code === 'invalid_trial_sequence' || code === 'invalid_trial_timing') {
       return c.json({ success: false, error: code }, 400);
     }
-    console.error('[frms-readiness] persistence failed', {
-      empresaId,
-      funcionarioId,
-      referenceDate: parsed.data.reference_date,
-      error: code,
-    });
+    createLogger(c, 'FrmsReadiness').error(
+      'frms_readiness_persistence_failed',
+      new Error('readiness_persistence_failed'),
+    );
     return c.json({ success: false, error: 'readiness_persistence_failed' }, 500);
   }
 });

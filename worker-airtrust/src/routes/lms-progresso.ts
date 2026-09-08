@@ -20,6 +20,7 @@ import {
   resolveLmsEffectiveProgress,
 } from '../services/lms-progress-guardrails';
 import { logAudit } from '../utils/db';
+import { createLogger } from '../utils/logger';
 import type { Env } from '../types';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -73,8 +74,8 @@ async function logLmsProgressAudit(
       ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined,
       userAgent: c.req.header('user-agent') ?? undefined,
     });
-  } catch (error) {
-    console.warn('[LMS] Falha ao registrar audit log de progresso:', error);
+  } catch {
+    createLogger(c, 'LmsProgress').warn('lms_progress_audit_failed');
   }
 }
 
@@ -393,7 +394,10 @@ app.post('/xapi/statements', async (c) => {
       if (!(e instanceof LmsCompletionRejectedError)) throw e;
       qualificationFailed = true;
       statusFinal = statusSemConclusao;
-      console.error('[LMS xAPI] Conclusão rejeitada (batch revertido):', e);
+      createLogger(c, 'LmsProgress').error(
+        'lms_xapi_completion_rejected',
+        new Error('lms_completion_rejected'),
+      );
     }
   } else if (statusFinal !== matricula.status || progressoPct !== undefined) {
     // Sem transição para CONCLUIDO nesta chamada (progresso parcial,
