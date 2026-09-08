@@ -1,0 +1,280 @@
+name: Staging 0438 Legacy Functional Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_STAGING_0438_LEGACY_VALIDATION'
+        required: true
+        type: string
+      pr_number:
+        description: 'Open same-repository PR anchoring the exact staging Worker release SHA'
+        required: true
+        type: string
+      release_sha:
+        description: 'Exact 40-character reviewed SHA already deployed to staging Worker'
+        required: true
+        type: string
+      release_reason:
+        description: 'Why legacy 0438 staging validation is being executed'
+        required: true
+        type: string
+
+concurrency:
+  group: staging-0438-legacy-functional-validation
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+env:
+  NODE_VERSION: '24'
+  EXPECTED_CONFIRMATION: AIRTRUST_STAGING_0438_LEGACY_VALIDATION
+  ALLOWED_STAGING_DB_NAME: airtrust-db-staging-baseline-20260701
+  STAGING_VERSION_URL: https://airtrust-api-staging.airtrust.workers.dev/api/version
+  STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+
+jobs:
+  guard:
+    name: Frozen 0438 Legacy Validation Guard
+    runs-on: ubuntu-latest
+    outputs:
+      release_sha: ${{ steps.release.outputs.release_sha }}
+    steps:
+      - name: Validate dispatch and reviewed PR provenance
+        env:
+          GIT_REF: ${{ github.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_REASON: ${{ inputs.release_reason }}
+        run: |
+          set -euo pipefail
+          [[ "$GIT_REF" == "refs/heads/main" ]] || exit 1
+          [[ "$CONFIRMATION" == "$EXPECTED_CONFIRMATION" ]] || exit 1
+          [[ "$RELEASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || exit 1
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || exit 1
+          [[ -n "$RELEASE_REASON" ]] || exit 1
+          export RELEASE_SHA="${RELEASE_SHA,,}" PR_NUMBER GITHUB_REPOSITORY GITHUB_ACTOR
+          node <<'NODE'
+          (async () => {
+            const headers = {
+              authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+              accept: 'application/vnd.github+json',
+              'x-github-api-version': '2022-11-28',
+            };
+            const repo = process.env.GITHUB_REPOSITORY;
+            const get = async (path) => {
+              const res = await fetch(`https://api.github.com${path}`, { headers });
+              if (!res.ok) throw new Error(`${path}:${res.status}`);
+              return res.json();
+            };
+            const pr = await get(`/repos/${repo}/pulls/${process.env.PR_NUMBER}`);
+            if (pr.base?.ref !== 'main') throw new Error('PR_BASE_NOT_MAIN');
+            if (pr.head?.repo?.full_name !== repo || pr.head?.repo?.fork) throw new Error('PR_FROM_FORK_REJECTED');
+            if (pr.state === 'open') {
+              if (pr.head?.sha?.toLowerCase() !== process.env.RELEASE_SHA) throw new Error('OPEN_PR_HEAD_MISMATCH');
+            } else if (pr.merged === true) {
+              if (pr.merge_commit_sha?.toLowerCase() !== process.env.RELEASE_SHA) throw new Error('MERGED_PR_SHA_MISMATCH');
+            } else {
+              throw new Error('PR_NOT_OPEN_OR_MERGED');
+            }
+            const permission = await get(`/repos/${repo}/collaborators/${process.env.GITHUB_ACTOR}/permission`);
+            if (!['write', 'push', 'maintain', 'admin'].includes(permission.permission)) throw new Error('ACTOR_PERMISSION_INSUFFICIENT');
+          })().catch((error) => { console.error(error.message); process.exit(1); });
+          NODE
+      - uses: actions/checkout@v4
+      - name: Verify official release gates for frozen SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Require staging Worker provenance to match frozen SHA
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error --retry 3 --retry-all-errors "$STAGING_VERSION_URL")"
+          node - "$response" "${RELEASE_SHA,,}" <<'NODE'
+          const payload = JSON.parse(process.argv[2]);
+          const expected = process.argv[3];
+          const body = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
+          if (String(body?.environment ?? '').toLowerCase() !== 'staging') throw new Error('STAGING_ENVIRONMENT_MISMATCH');
+          if (String(body?.sourceSha ?? body?.source_sha ?? '').toLowerCase() !== expected) throw new Error('STAGING_SOURCE_SHA_MISMATCH');
+          NODE
+      - id: release
+        name: Publish frozen SHA
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: echo "release_sha=${RELEASE_SHA,,}" >> "$GITHUB_OUTPUT"
+
+  d1-credentials:
+    name: Check Staging D1 Validation Credentials
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Require staging-only D1 credential
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$TOKEN" && -n "$ACCOUNT_ID" ]]
+
+  d1-physical-state:
+    name: Read-only Legacy 0438 D1 Physical State
+    needs: [guard, d1-credentials]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm --prefix worker-airtrust ci
+      - name: Validate exact historical schema and ledger state
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+        run: bash scripts/staging/validate-0438-legacy-physical-state.sh
+
+  clean-apply-proof:
+    name: Clean Disposable 0438 Apply Proof
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+      - run: node --test scripts/__tests__/schema-v2-0438-rdv-coordination-workflow.test.mjs
+
+  d1-functional-e2e:
+    name: Authenticated 0438 Full Lifecycle and D1 Tenant Isolation
+    needs: [guard, d1-credentials, d1-physical-state, clean-apply-proof]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix worker-airtrust ci
+      - name: Provision disposable two-tenant fixtures
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+        run: |
+          set -euo pipefail
+          manifest="$(node scripts/staging/provision-controle-voos-e2e-fixtures.mjs --apply)"
+          [[ -n "$manifest" && -s "$manifest" ]]
+          echo "CV_E2E_MANIFEST=$manifest" >> "$GITHUB_ENV"
+      - id: e2e
+        name: Run full authenticated Controle de Voos lifecycle
+        env:
+          STAGING_API_BASE_URL: ${{ env.STAGING_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rdv-0438-evidence"
+          set +e
+          report="$(node scripts/staging/run-controle-voos-e2e.mjs "$CV_E2E_MANIFEST")"
+          status=$?
+          set -e
+          if [[ -n "$report" && -s "$report" ]]; then
+            cp "$report" "$RUNNER_TEMP/rdv-0438-evidence/e2e-report.json"
+            chmod 600 "$RUNNER_TEMP/rdv-0438-evidence/e2e-report.json"
+            echo "CV_E2E_REPORT=$RUNNER_TEMP/rdv-0438-evidence/e2e-report.json" >> "$GITHUB_ENV"
+          fi
+          exit "$status"
+      - name: Require lifecycle, review, approval and cross-tenant evidence
+        if: ${{ steps.e2e.outcome == 'success' }}
+        run: |
+          node - "$CV_E2E_REPORT" <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (report.ranFully !== true || Number(report.failed) !== 0) throw new Error('E2E_NOT_GREEN');
+          const required = [
+            'criar_voo','criar_rdv','criar_etapa','adicionar_abastecimento',
+            'finalizar_preenchimento_rdv','enviar_rdv','iniciar_revisao','devolver_rdv',
+            'corrigir_apos_devolucao','refinalizar_preenchimento_rdv','reenviar_rdv',
+            'iniciar_revisao_2','aprovar_rdv','finalizar_rdv','viewer_403_em_mutacao',
+            'tenant_b_nao_acessa_voo_tenant_a','tenant_b_nao_acessa_rdv_tenant_a',
+            'tenant_b_nao_acessa_tripulantes_tenant_a','tenant_b_nao_acessa_abastecimentos_tenant_a',
+            'tenant_b_nao_baixa_anexo_tenant_a','payload_empresa_id_rejeitado',
+            'impersonate_tentativa_cross_tenant',
+          ];
+          for (const operation of required) {
+            const record = report.operations?.find((entry) => entry.operation === operation);
+            if (!record || record.result !== 'PASS') throw new Error(`MISSING_GREEN_OPERATION:${operation}`);
+          }
+          console.log(`RDV_0438_FULL_LIFECYCLE_EVIDENCE=PASS:${required.length}`);
+          NODE
+      - name: Verify synthetic support records remain tenant-scoped
+        if: ${{ steps.e2e.outcome == 'success' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+        run: node scripts/staging/validate-0438-e2e-tenant-records.mjs "$CV_E2E_MANIFEST" "$CV_E2E_REPORT"
+      - name: Cleanup disposable fixtures
+        if: ${{ always() }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${CV_E2E_MANIFEST:-}" && -s "${CV_E2E_MANIFEST:-}" ]]; then
+            node scripts/staging/cleanup-controle-voos-e2e-fixtures.mjs "$CV_E2E_MANIFEST" --apply
+          else
+            echo "No fixture manifest exists; nothing to clean."
+          fi
+      - name: Upload sanitized E2E evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rdv-0438-legacy-functional-evidence
+          path: ${{ runner.temp }}/rdv-0438-evidence/e2e-report.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  summary:
+    name: 0438 Legacy Functional Validation Passed
+    needs: [guard, d1-physical-state, clean-apply-proof, d1-functional-e2e]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record and enforce outcome
+        env:
+          RELEASE_SHA: ${{ needs.guard.outputs.release_sha }}
+          PHYSICAL: ${{ needs.d1-physical-state.result }}
+          CLEAN_APPLY: ${{ needs.clean-apply-proof.result }}
+          FUNCTIONAL: ${{ needs.d1-functional-e2e.result }}
+          REASON: ${{ inputs.release_reason }}
+        run: |
+          {
+            echo "## Staging 0438 legacy functional validation"
+            echo "- release_sha: \`$RELEASE_SHA\`"
+            echo "- physical legacy state: $PHYSICAL"
+            echo "- clean disposable apply proof: $CLEAN_APPLY"
+            echo "- authenticated full lifecycle + tenant isolation: $FUNCTIONAL"
+            echo "- Schema V2 staging ledger reconciliation: intentionally NOT performed"
+            echo "- schema/ledger writes by this workflow: none"
+            echo "- production touched: no"
+            echo "- reason: $REASON"
+          } >> "$GITHUB_STEP_SUMMARY"
+          [[ "$PHYSICAL" == "success" && "$CLEAN_APPLY" == "success" && "$FUNCTIONAL" == "success" ]]
