@@ -129,10 +129,10 @@ describe('qualificacoes-certificados-helpers', () => {
                 results: [
                   {
                     id: 41,
-                    nome: 'Filipe Passaroni Daumas',
-                    cpf: '123.456.789-00',
-                    codigo_anac: '12694-7',
-                    matricula: '00353',
+                    nome: 'Instrutor Teste',
+                    cpf: '000.000.000-00',
+                    codigo_anac: 'ANAC-TEST',
+                    matricula: 'MAT-TEST',
                     funcao: 'Instrutor',
                   },
                 ],
@@ -147,13 +147,13 @@ describe('qualificacoes-certificados-helpers', () => {
     await expect(
       resolveInstrutorCertificadoData(db, {
         empresaId: 6,
-        nomeInstrutor: 'Filipe Passaroni Daumas',
+        nomeInstrutor: 'Instrutor Teste',
       }),
     ).resolves.toEqual({
-      nome: 'Filipe Passaroni Daumas',
-      cpf: '123.456.789-00',
-      codigoAnac: '12694-7',
-      matricula: '00353',
+      nome: 'Instrutor Teste',
+      cpf: '000.000.000-00',
+      codigoAnac: 'ANAC-TEST',
+      matricula: 'MAT-TEST',
       funcao: 'Instrutor',
     });
 
@@ -184,18 +184,18 @@ describe('qualificacoes-certificados-helpers', () => {
                 results: [
                   {
                     id: 25,
-                    nome: 'Ramon Godinho Bastos',
-                    cpf: '093.127.887-28',
+                    nome: 'Aluno Teste',
+                    cpf: '111.111.111-11',
                     codigo_anac: '',
-                    matricula: '00264',
+                    matricula: 'MAT-ALUNO',
                     funcao: 'Aluno',
                   },
                   {
                     id: 41,
-                    nome: 'Filipe Passaroni Daumas',
-                    cpf: '083.286.227-42',
-                    codigo_anac: '12694-7',
-                    matricula: '00353',
+                    nome: 'Instrutor Teste',
+                    cpf: '222.222.222-22',
+                    codigo_anac: 'ANAC-TEST',
+                    matricula: 'MAT-TEST',
                     funcao: 'Instrutor',
                   },
                 ],
@@ -210,21 +210,21 @@ describe('qualificacoes-certificados-helpers', () => {
     await expect(
       resolveFuncionarioInstrutorNaEmpresa(db, {
         empresaId: 6,
-        nomeInstrutor: 'Filipe Passaroni Daumas',
+        nomeInstrutor: 'Instrutor Teste',
       }),
     ).resolves.toMatchObject({
       id: 41,
-      nome: 'Filipe Passaroni Daumas',
+      nome: 'Instrutor Teste',
     });
 
     await expect(
       resolveFuncionarioInstrutorNaEmpresa(db, {
         empresaId: 6,
-        cpfInstrutor: '08328622742',
+        cpfInstrutor: '22222222222',
       }),
     ).resolves.toMatchObject({
       id: 41,
-      nome: 'Filipe Passaroni Daumas',
+      nome: 'Instrutor Teste',
     });
   });
 
