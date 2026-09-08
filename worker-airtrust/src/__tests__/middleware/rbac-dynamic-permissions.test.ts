@@ -1,16 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
-import type { Env } from '../../types';
-import type { TenantContext } from '../../middleware/tenant';
 import { requirePermission, type UserRole } from '../../middleware/rbac';
 import { errorHandler } from '../../middleware/error-handler';
 
 type OverrideRow = { permitido: number } | null;
-type TestVariables = {
-  userRole: string;
-  empresaId: number;
-  tenantContext: TenantContext;
-};
 
 function makeDb(resolve: (binds: unknown[]) => OverrideRow | Promise<OverrideRow>) {
   return {
@@ -23,8 +16,8 @@ function makeDb(resolve: (binds: unknown[]) => OverrideRow | Promise<OverrideRow
 }
 
 function createApp(options: { role: UserRole; empresaId: number; defaults?: UserRole[] }) {
-  const app = new Hono<{ Bindings: Env; Variables: TestVariables }>();
-  app.onError(errorHandler);
+  const app = new Hono<any>();
+  app.onError(errorHandler as any);
   app.use('*', async (c, next) => {
     c.set('userRole', options.role);
     c.set('empresaId', options.empresaId);
@@ -40,17 +33,18 @@ function createApp(options: { role: UserRole; empresaId: number; defaults?: User
   });
   app.get(
     '/protected',
-    requirePermission('lms', 'visualizar', ...(options.defaults ?? ['admin', 'manager'])),
+    requirePermission('lms', 'visualizar', ...(options.defaults ?? ['admin', 'manager'])) as any,
     (c) => c.json({ ok: true }),
   );
   return app;
 }
 
-function env(db: D1Database): Env {
+function env(db: D1Database) {
   return {
     DB: db,
     ENVIRONMENT: 'test',
-  } as unknown as Env;
+    ENABLE_DEV_AUTH_BYPASS: 'false',
+  } as any;
 }
 
 describe('requirePermission', () => {
