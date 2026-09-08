@@ -57,6 +57,7 @@ vi.mock('../../middleware/rate-limit', () => ({
       await next();
     },
   rateLimitPresets: {},
+  tenantAwareKeyExtractor: () => 'tenant:test:ip:test',
 }));
 
 vi.mock('../../middleware/rbac', () => ({
