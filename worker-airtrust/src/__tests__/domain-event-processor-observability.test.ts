@@ -84,7 +84,7 @@ describe('domain event processor observability', () => {
       },
       passThroughOnException() {},
       props: {},
-    } as ExecutionContext;
+    };
 
     const response = await app.request(
       '/api/frms/checkin',
@@ -123,7 +123,7 @@ describe('domain event processor observability', () => {
       },
       passThroughOnException() {},
       props: {},
-    } as ExecutionContext;
+    };
 
     const response = await app.request(
       '/api/frms/checkin',
@@ -153,7 +153,7 @@ describe('domain event processor observability', () => {
       },
       passThroughOnException() {},
       props: {},
-    } as ExecutionContext;
+    };
 
     const response = await app.request(
       '/api/admin-usuarios/77',

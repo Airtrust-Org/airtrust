@@ -101,7 +101,7 @@ function inflatePdfStreams(bytes: Uint8Array): string[] {
     if (buf[dataEnd - 1] === 0x0d) dataEnd -= 1;
     const data = buf.subarray(dataStart, dataEnd);
     try {
-      out.push(inflateSync(data).toString('latin1'));
+      out.push(Buffer.from(inflateSync(data)).toString('latin1'));
     } catch {
       // stream não comprimido / não-Flate
       out.push(data.toString('latin1'));

@@ -1434,8 +1434,9 @@ app.post('/fichas/:id/pdf', async (c) => {
             console.log('[FICHA PDF] Buscando logo do R2 com key:', key);
             const obj = await c.env.BUCKET.get(key);
             if (obj) {
-              logoBytes = Buffer.from(await obj.arrayBuffer());
-              console.log('[FICHA PDF] ✅ Logo carregado do R2:', logoBytes.length, 'bytes');
+              const loadedLogoBytes = Buffer.from(await obj.arrayBuffer());
+              logoBytes = loadedLogoBytes;
+              console.log('[FICHA PDF] ✅ Logo carregado do R2:', loadedLogoBytes.length, 'bytes');
             } else {
               console.warn('[FICHA PDF] ⚠️ Logo não encontrado no R2 com key:', key);
             }
@@ -1443,10 +1444,11 @@ app.post('/fichas/:id/pdf', async (c) => {
             console.log('[FICHA PDF] Buscando logo de URL externa:', logoUrl);
             const res = await fetch(logoUrl);
             if (res.ok) {
-              logoBytes = Buffer.from(await res.arrayBuffer());
+              const loadedLogoBytes = Buffer.from(await res.arrayBuffer());
+              logoBytes = loadedLogoBytes;
               console.log(
                 '[FICHA PDF] ✅ Logo carregado de URL externa:',
-                logoBytes.length,
+                loadedLogoBytes.length,
                 'bytes',
               );
             } else {
