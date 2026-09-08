@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaIdSafe } from './escalas-shared';
 import {
   buildIntegratedMonthlyView,
@@ -26,7 +26,7 @@ const querySchema = z.object({
 router.get(
   '/visao-mensal-integrada',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('escalas', 'visualizar', 'admin', 'manager'),
   async (c) => {
     const parsed = querySchema.safeParse(c.req.query());
     if (!parsed.success) {

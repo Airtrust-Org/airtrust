@@ -6,7 +6,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaIdSafe, parseBody, PadraoEscalaSchema } from './escalas-shared';
 
 const padroes = new Hono<{ Bindings: Env }>();
@@ -31,7 +31,7 @@ padroes.get('/', auth(), async (c) => {
 });
 
 // POST /api/escalas/padroes
-padroes.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+padroes.post('/', auth(), requirePermission('escalas', 'criar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const body = await c.req.json();
@@ -66,7 +66,7 @@ padroes.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
 });
 
 // DELETE /api/escalas/padroes/:id
-padroes.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+padroes.delete('/:id', auth(), requirePermission('escalas', 'deletar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const { id } = c.req.param();
   const empresaId = getEmpresaIdSafe(c);

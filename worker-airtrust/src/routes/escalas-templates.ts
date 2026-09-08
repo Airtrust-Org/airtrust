@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { createLogger, toError } from '../utils/logger';
 
@@ -77,7 +77,7 @@ templates.get('/', auth(), async (c) => {
 });
 
 // POST /api/escalas/templates
-templates.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+templates.post('/', auth(), requirePermission('escalas', 'criar', 'admin', 'manager'), async (c) => {
   const logger = createLogger(c, 'EscalasTemplates.create');
   try {
     const empresaId = getEmpresaIdSafe(c);
@@ -131,7 +131,7 @@ templates.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
 });
 
 // PUT /api/escalas/templates/:id
-templates.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+templates.put('/:id', auth(), requirePermission('escalas', 'editar', 'admin', 'manager'), async (c) => {
   const logger = createLogger(c, 'EscalasTemplates.update');
   try {
     const empresaId = getEmpresaIdSafe(c);
@@ -200,7 +200,7 @@ templates.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
 });
 
 // DELETE /api/escalas/templates/:id
-templates.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+templates.delete('/:id', auth(), requirePermission('escalas', 'deletar', 'admin', 'manager'), async (c) => {
   const logger = createLogger(c, 'EscalasTemplates.delete');
   try {
     const empresaId = getEmpresaIdSafe(c);

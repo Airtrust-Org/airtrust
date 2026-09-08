@@ -21,6 +21,15 @@ vi.mock('../../middleware/rbac', () => ({
       }
       await next();
     },
+  requirePermission:
+    (_module: string, _action: string, ...roles: string[]) =>
+    async (c: any, next: () => Promise<void>) => {
+      const role = String(c.get('userRole') || '').toLowerCase();
+      if (!roles.includes(role)) {
+        return c.json({ success: false, error: 'forbidden', code: 'RBAC_FORBIDDEN' }, 403);
+      }
+      await next();
+    },
 }));
 
 vi.mock('../../middleware/tenant', () => ({
