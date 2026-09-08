@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { AUTH_TOKEN_CHANGED_EVENT } from '@/react-app/config/api';
+import { getCurrentTenantId } from '@/react-app/lib/tenant-data-layer';
 import {
   applySystemSettingsToDocument,
   fetchSystemSettingsFromServer,
@@ -14,33 +16,73 @@ export function useSystemSettings() {
 
   useEffect(() => {
     let mounted = true;
+    let requestGeneration = 0;
 
-    const handleUpdate = () => {
-      const latest = getSystemSettings();
+    const applyCachedForTenant = (tenantId: number | null) => {
+      const latest = getSystemSettings(tenantId);
       if (mounted) {
         setSettings(latest);
       }
       applySystemSettingsToDocument(latest);
     };
 
-    handleUpdate();
+    const loadForCurrentTenant = () => {
+      const tenantId = getCurrentTenantId();
+      const generation = ++requestGeneration;
+      applyCachedForTenant(tenantId);
 
-    fetchSystemSettingsFromServer()
-      .then((server) => {
-        const mapped = mapServerToLocalSettings(server);
-        saveSystemSettings(mapped);
-      })
-      .catch(() => {
-        // fallback local-only
-      });
+      if (!tenantId) return;
 
-    window.addEventListener('airtrust:system-settings-updated', handleUpdate as EventListener);
-    window.addEventListener('storage', handleUpdate);
+      fetchSystemSettingsFromServer()
+        .then((server) => {
+          if (
+            !mounted ||
+            generation !== requestGeneration ||
+            server.empresaId !== tenantId ||
+            getCurrentTenantId() !== tenantId
+          ) {
+            return;
+          }
+
+          const mapped = mapServerToLocalSettings(server);
+          saveSystemSettings(mapped, tenantId);
+        })
+        .catch(() => {
+          // Tenant-scoped local cache remains the safe fallback.
+        });
+    };
+
+    const handleSettingsUpdate = (event?: Event) => {
+      const currentTenantId = getCurrentTenantId();
+      const eventTenantId = Number(
+        (event as CustomEvent<{ tenantId?: number }> | undefined)?.detail?.tenantId || 0,
+      );
+      if (eventTenantId > 0 && eventTenantId !== currentTenantId) return;
+      applyCachedForTenant(currentTenantId);
+    };
+
+    const handleTokenChange = () => {
+      loadForCurrentTenant();
+    };
+
+    loadForCurrentTenant();
+
+    window.addEventListener(
+      'airtrust:system-settings-updated',
+      handleSettingsUpdate as EventListener,
+    );
+    window.addEventListener('storage', handleSettingsUpdate);
+    window.addEventListener(AUTH_TOKEN_CHANGED_EVENT, handleTokenChange);
 
     return () => {
       mounted = false;
-      window.removeEventListener('airtrust:system-settings-updated', handleUpdate as EventListener);
-      window.removeEventListener('storage', handleUpdate);
+      requestGeneration += 1;
+      window.removeEventListener(
+        'airtrust:system-settings-updated',
+        handleSettingsUpdate as EventListener,
+      );
+      window.removeEventListener('storage', handleSettingsUpdate);
+      window.removeEventListener(AUTH_TOKEN_CHANGED_EVENT, handleTokenChange);
     };
   }, []);
 
