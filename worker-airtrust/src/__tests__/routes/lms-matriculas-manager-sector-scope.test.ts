@@ -51,6 +51,7 @@ vi.mock('../../middleware/auth', () => ({
 }));
 
 vi.mock('../../middleware/rbac', () => ({
+  requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
   hasRole: hasRoleMock,
   requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));

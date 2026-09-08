@@ -12,7 +12,7 @@
  */
 import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { logAudit } from '../utils/db';
@@ -135,7 +135,7 @@ async function sendMelMatriculaEmail(
 
 // ── POST /api/lms/matriculas/mel-manutencao/processar ─────────────────────────
 
-app.post('/processar', requireRole('admin', 'manager'), async (c) => {
+app.post('/processar', requirePermission('lms', 'editar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const userIdRaw = c.get('userId' as never) as unknown;
@@ -434,7 +434,7 @@ app.post('/processar', requireRole('admin', 'manager'), async (c) => {
 
 // ── GET /api/lms/matriculas/mel-manutencao/status ──────────────────────────────
 
-app.get('/status', requireRole('admin', 'manager'), async (c) => {
+app.get('/status', requirePermission('lms', 'visualizar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const vencExpr = getQualificacoesVencimentoExpr();

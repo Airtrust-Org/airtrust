@@ -10,7 +10,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { auth } from '../middleware/auth';
-import { hasRole, requireRole } from '../middleware/rbac';
+import { hasRole, requirePermission, requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
@@ -687,7 +687,7 @@ app.get('/minhas', async (c) => {
 
 // ── Listar matrículas por curso (gestão) ─────────────────────────────────────
 
-app.get('/curso/:curso_id', requireRole('admin', 'manager'), async (c) => {
+app.get('/curso/:curso_id', requirePermission('lms', 'visualizar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('curso_id'));
@@ -1143,7 +1143,7 @@ app.post('/', async (c) => {
 
 // ── Matricula em lote ─────────────────────────────────────────────────────────
 
-app.post('/lote', requireRole('admin', 'manager'), async (c) => {
+app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const userIdRaw = c.get('userId' as never) as unknown;
@@ -1319,7 +1319,7 @@ app.post('/lote', requireRole('admin', 'manager'), async (c) => {
 
 // ── Cancelar matrícula ────────────────────────────────────────────────────────
 
-app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
+app.delete('/:id', requirePermission('lms', 'deletar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const matriculaId = Number(c.req.param('id'));
@@ -2198,7 +2198,7 @@ const PatchStatusSchema = z.object({
   observacoes: z.string().optional().nullable(),
 });
 
-app.patch('/:id/status', requireRole('admin', 'manager'), async (c) => {
+app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const matriculaId = Number(c.req.param('id'));
