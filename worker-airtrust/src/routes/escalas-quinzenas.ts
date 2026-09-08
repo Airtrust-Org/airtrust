@@ -7,11 +7,11 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaIdSafe } from './escalas-shared';
 
 const quinzenas = new Hono<{ Bindings: Env }>();
-const requireQuinzenaManager = requireRole('admin', 'manager');
+const requireQuinzenaManager = requirePermission('escalas', 'editar', 'admin', 'manager');
 
 const OPERATIONAL_QUINZENA_PRESETS: Record<
   number,
