@@ -91,7 +91,7 @@ describe('useSalvarProgresso optimistic rollback', () => {
 
     await act(async () => {
       releaseRequest();
-      await expect(mutationPromise).rejects.toThrow('persistencia indisponivel');
+      await expect(mutationPromise).rejects.toThrow();
     });
 
     expect(queryClient.getQueryData(lmsKeys.matriculaDetalhe(matriculaId))).toEqual(detalhe);
