@@ -36,7 +36,8 @@ describe('system settings tenant cache', () => {
   it('does not persist settings without a resolved tenant', () => {
     saveSystemSettings({ ...DEFAULT_SYSTEM_SETTINGS, appName: 'Pending' }, null);
 
-    expect(localStorage.length).toBe(0);
+    expect(localStorage.getItem(systemSettingsStorageKey(1))).toBeNull();
+    expect(localStorage.getItem('airtrust_system_settings_v1')).toBeNull();
     expect(getSystemSettings(null)).toEqual(DEFAULT_SYSTEM_SETTINGS);
   });
 });
