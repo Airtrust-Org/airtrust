@@ -7,6 +7,10 @@ const lmsAssetsSource = readFileSync(
   join(process.cwd(), 'worker-airtrust/src/routes/lms-assets.ts'),
   'utf8',
 );
+const lmsAssetSessionSource = readFileSync(
+  join(process.cwd(), 'worker-airtrust/src/lib/lms/lms-asset-session.ts'),
+  'utf8',
+);
 
 describe('LMS cross-origin credential contract', () => {
   it('keeps authenticated frontend requests credentialed', () => {
@@ -15,7 +19,8 @@ describe('LMS cross-origin credential contract', () => {
   });
 
   it('preserves the scoped HttpOnly asset-session cookie for SCORM/H5P', () => {
-    expect(lmsAssetsSource).toContain("const LMS_ASSET_TOKEN_COOKIE = 'airtrust_lms_asset_token'");
+    expect(lmsAssetSessionSource).toContain("export const LMS_ASSET_TOKEN_COOKIE = 'airtrust_lms_asset_token'");
+    expect(lmsAssetsSource).toContain("import { LMS_ASSET_TOKEN_COOKIE } from '../lib/lms/lms-asset-session'");
     expect(lmsAssetsSource).toContain('HttpOnly');
     expect(lmsAssetsSource).toContain('SameSite=None; Secure');
     expect(lmsAssetsSource).toContain('Path=/api/lms/');

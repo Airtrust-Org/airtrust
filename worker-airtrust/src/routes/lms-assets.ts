@@ -18,10 +18,11 @@ import { generateJWT, verifyJWT } from '../utils/security';
 import { getEmpresaIdOptional } from './escalas-shared';
 import type { Env, JwtPayload } from '../types';
 import { buildLmsContentSecurityPolicy } from '../lib/lms/security-headers';
+import { LMS_ASSET_TOKEN_COOKIE } from '../lib/lms/lms-asset-session';
 
 const app = new Hono<{ Bindings: Env }>();
 
-const LMS_ASSET_TOKEN_COOKIE = 'airtrust_lms_asset_token';
+
 const LMS_ASSET_TOKEN_MAX_AGE_SECONDS = 15 * 60;
 const LMS_PPTX_VIEWER_TOKEN_MAX_AGE_SECONDS = 5 * 60;
 
@@ -1263,7 +1264,6 @@ export function buildLaunchPage(cfg: LaunchPageConfig): string {
     titulo,
     launchUrl,
     commitUrl,
-    token,
     isScorm2004,
     initialCmiJson = '{}',
     hasResumeState = false,
@@ -1366,7 +1366,6 @@ ${buildScormLocationHelpersScript()}
   })();
   var MATRICULA_ID = ${matriculaId === null ? 'null' : matriculaId};
   var COMMIT_URL = ${commitUrl ? `'${commitUrl}'` : 'null'};
-  var TOKEN = '${escapeHtml(token)}';
   var IS_2004 = ${isScorm2004 ? 'true' : 'false'};
   var PREVIEW_MODE = ${previewMode ? 'true' : 'false'};
   var REVIEW_MODE = ${reviewMode ? 'true' : 'false'};
@@ -1380,8 +1379,6 @@ ${buildScormLocationHelpersScript()}
   })();
   var completed = false;
   var maxVisitedSlide = 0;
-  var tokenResolvers = [];
-  var tokenRequestId = 0;
   var autosaveTimer = null;
   var interactionProbeTimer = null;
   var lastCommittedFingerprint = '';
@@ -1419,7 +1416,7 @@ ${buildScormLocationHelpersScript()}
 
   var SCORM_DIAG = (function(){ try { return /[?&]scorm_diag=1(&|$)/.test(window.location.search); } catch(e) { return false; } })();
   function diag(msg) { if (SCORM_DIAG) console.info('[SCORM_DIAG]' + msg); }
-  diag(' WRAPPER_START mid=' + MATRICULA_ID + ' preview=' + PREVIEW_MODE + ' token_present=' + (TOKEN && TOKEN.length > 10 ? '1' : '0') + ' url=' + (COMMIT_URL || 'null'));
+  diag(' WRAPPER_START mid=' + MATRICULA_ID + ' preview=' + PREVIEW_MODE + ' url=' + (COMMIT_URL || 'null'));
 
   if (${hasResumeState ? 'true' : 'false'}) {
     if (IS_2004) {
@@ -1432,51 +1429,6 @@ ${buildScormLocationHelpersScript()}
   function postToParent(message) {
     if (!window.parent || window.parent === window) return;
     window.parent.postMessage(message, PARENT_ORIGIN === 'null' ? '*' : PARENT_ORIGIN);
-  }
-
-  function resolvePendingToken(tokenValue) {
-    while (tokenResolvers.length > 0) {
-      var resolve = tokenResolvers.shift();
-      if (typeof resolve === 'function') resolve(tokenValue);
-    }
-  }
-
-  function updateToken(tokenValue) {
-    if (!tokenValue || typeof tokenValue !== 'string') return;
-    TOKEN = tokenValue;
-    resolvePendingToken(tokenValue);
-  }
-
-  function requestFreshToken(reason) {
-    if (PREVIEW_MODE) return;
-    tokenRequestId += 1;
-    postToParent({
-      type: 'lms:auth-token-request',
-      matriculaId: MATRICULA_ID,
-      previewMode: PREVIEW_MODE,
-      reason: reason || 'sync',
-      requestId: tokenRequestId,
-    });
-  }
-
-  function getFreshToken(reason) {
-    if (PREVIEW_MODE) return Promise.resolve(TOKEN || null);
-    if (TOKEN) {
-      requestFreshToken(reason || 'heartbeat');
-      return Promise.resolve(TOKEN);
-    }
-
-    requestFreshToken(reason || 'missing');
-    return new Promise(function(resolve) {
-      tokenResolvers.push(resolve);
-      window.setTimeout(function() {
-        resolve(TOKEN || null);
-      }, 1500);
-    });
-  }
-
-  if (!PREVIEW_MODE) {
-    requestFreshToken('launch');
   }
 
   var statusHideTimer = null;
@@ -2000,29 +1952,21 @@ ${buildScormProgressParsersScript()}
     });
     diag(' COMMIT_FETCH_START event=' + (eventType || '?') + ' attempt=' + currentAttempt + ' has_loc=' + (!!getScormLocation() ? '1' : '0'));
 
-    var requestPromise = getFreshToken('commit').then(function(freshToken) {
-      if (!freshToken) {
-        diag(' COMMIT_NO_TOKEN');
-        return null;
-      }
-      var requestBody = Object.assign({
-        matricula_id: MATRICULA_ID,
-        commit_event: eventType || 'SCORM_COMMIT',
-        completion_candidate: completionPending ? true : null,
-        completion_observed_at: completionObservedAt,
-      }, data);
-      // Browsers cap the TOTAL body size across in-flight keepalive fetches
-      // per page (~64KB). Reserve keepalive for teardown only.
-      var needsKeepalive = eventType === 'SCORM_BEFORE_UNLOAD_COMMIT' || eventType === 'SCORM_VISIBILITY_COMMIT';
-      return fetch(COMMIT_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + freshToken,
-        },
-        body: JSON.stringify(requestBody),
-        keepalive: needsKeepalive,
-      });
+    var requestBody = Object.assign({
+      matricula_id: MATRICULA_ID,
+      commit_event: eventType || 'SCORM_COMMIT',
+      completion_candidate: completionPending ? true : null,
+      completion_observed_at: completionObservedAt,
+    }, data);
+    // The wrapper never receives an access bearer. The browser sends only the
+    // short-lived, HttpOnly, enrollment-scoped LMS capability cookie.
+    var needsKeepalive = eventType === 'SCORM_BEFORE_UNLOAD_COMMIT' || eventType === 'SCORM_VISIBILITY_COMMIT';
+    var requestPromise = fetch(COMMIT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+      keepalive: needsKeepalive,
+      credentials: 'include',
     }).then(function(response) {
       if (response && response.ok) {
         diag(' COMMIT_FETCH_STATUS=' + String(response.status) + ' OK');
@@ -2388,10 +2332,6 @@ ${buildScormSessionCloseRuntimeScript()}
       performGovernedSessionClose(typeof event.data.reason === 'string' ? event.data.reason : null);
       return;
     }
-    if (event.data.type === 'lms:auth-token' && (event.data.previewMode === PREVIEW_MODE)) {
-      updateToken(event.data.token || '');
-      return;
-    }
     if (event.data.type === 'lms:navigate' && (event.data.direction === 'prev' || event.data.direction === 'next')) {
       userNavigatedManually = true;
       var moved = navigateSlide(event.data.direction);
@@ -2571,7 +2511,7 @@ ${buildScormSessionCloseRuntimeScript()}
     diag(' API_READY version=2004 mid=' + MATRICULA_ID);
   } else {
     Object.assign(window.API, SCORM12);
-    diag(' API_READY version=1.2 mid=' + MATRICULA_ID + ' has_token=' + (TOKEN ? '1' : '0'));
+    diag(' API_READY version=1.2 mid=' + MATRICULA_ID);
   }
 
   var appliedBackup = applyLocalResumeBackup();
@@ -2603,7 +2543,6 @@ ${buildScormSessionCloseRuntimeScript()}
 
   document.getElementById('scorm-frame').addEventListener('load', function() {
     setStatus('Conteúdo carregado', true);
-    requestFreshToken('frame-loaded');
     bindFrameProgressTracking();
     if (!resumeAppliedThisLoad && !userNavigatedManually) {
       resumeAppliedThisLoad = true;
@@ -2615,10 +2554,6 @@ ${buildScormSessionCloseRuntimeScript()}
   });
 
   setStatus('Iniciando...', false);
-  requestFreshToken('launch-init');
-  window.setInterval(function() {
-    requestFreshToken('heartbeat');
-  }, 45000);
   window.setInterval(function() {
     probeFrameProgress();
   }, 3000);

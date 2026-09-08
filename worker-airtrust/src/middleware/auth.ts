@@ -10,7 +10,7 @@
  * - Implementar endpoint de login que gera tokens
  */
 
-import type { MiddlewareHandler } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import type { Env, Variables, JwtPayload } from '../types';
 import { extractBearerToken, verifyJWT } from '../utils/security';
 import { getUsuariosSchema, hasUsuariosEmpresasTable } from '../utils/db-schema';
@@ -20,6 +20,7 @@ import {
   resolveRequestedSessionRole,
 } from '../services/auth-session-roles';
 import { unauthorized, serviceUnavailable } from './error-handler';
+import { readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
 
 const USUARIOS_TABLE_SQL =
   "SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = 'usuarios' LIMIT 1";
@@ -371,6 +372,49 @@ async function resolveDevBypassIdentity(db: D1Database): Promise<DevBypassIdenti
   };
 }
 
+async function authenticateScopedScormCommitAsset(
+  c: Context<{ Bindings: Env; Variables: Variables }>,
+): Promise<boolean> {
+  if (c.req.path !== '/api/lms/matriculas/scorm/commit') return false;
+
+  const payload = await readCourseAssetSessionPayload(c.env, c.req.raw);
+  const userId = Number(payload?.sub ?? 0);
+  const empresaId = Number(payload?.empresa_id ?? 0);
+  const cursoId = Number(payload?.asset_curso_id ?? 0);
+  const matriculaId = Number(payload?.asset_matricula_id ?? 0);
+  if (
+    !payload ||
+    !Number.isSafeInteger(userId) ||
+    userId <= 0 ||
+    !Number.isSafeInteger(empresaId) ||
+    empresaId <= 0 ||
+    !Number.isSafeInteger(cursoId) ||
+    cursoId <= 0 ||
+    !Number.isSafeInteger(matriculaId) ||
+    matriculaId <= 0
+  ) {
+    return false;
+  }
+
+  const security = await resolveUserSecurityState(c.env.DB, userId, empresaId, payload.role ?? '');
+  if (!security.found || !security.active) {
+    return unauthorized('Usuário inativo ou não encontrado. Faça login novamente.', 'USER_INACTIVE');
+  }
+  if (!security.hasMembership) {
+    return unauthorized(
+      'Usuário sem vínculo válido com o tenant do token.',
+      'TENANT_MEMBERSHIP_INVALID',
+    );
+  }
+
+  c.set('userId', userId);
+  c.set('empresaId', empresaId);
+  c.set('userEmail', payload.email);
+  c.set('userRole', security.role);
+  c.set('funcionarioId', payload.funcionario_id ?? null);
+  return true;
+}
+
 /**
  * Middleware de autenticação JWT
  * Verifica token no header Authorization
@@ -417,6 +461,10 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
     const authHeader = c.req.header('Authorization');
 
     if (!authHeader) {
+      if (await authenticateScopedScormCommitAsset(c)) {
+        await next();
+        return;
+      }
       return unauthorized('Token de autenticação não fornecido', 'MISSING_TOKEN');
     }
 
