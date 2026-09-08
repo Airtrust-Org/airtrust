@@ -34,6 +34,7 @@ vi.mock('../../middleware/auth', () => ({
 vi.mock('../../middleware/rbac', () => ({
   hasRole: hasRoleMock,
   requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
 vi.mock('../../routes/escalas-shared', () => ({
