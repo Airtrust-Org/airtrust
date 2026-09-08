@@ -16,6 +16,9 @@ vi.mock('../../middleware/rbac', () => ({
   requireRole: () => async (c: any, next: () => Promise<void>) => {
     await next();
   },
+  requirePermission: () => async (c: any, next: () => Promise<void>) => {
+    await next();
+  },
 }));
 
 describe('GET /qualificacoes/tipos com filtro ativo', () => {

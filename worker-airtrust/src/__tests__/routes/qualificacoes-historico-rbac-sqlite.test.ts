@@ -48,6 +48,9 @@ vi.mock('../../middleware/rbac', () => ({
   requireRole: () => async (c: any, next: () => Promise<void>) => {
     await next();
   },
+  requirePermission: () => async (c: any, next: () => Promise<void>) => {
+    await next();
+  },
 }));
 
 const { histCacheMock } = vi.hoisted(() => ({

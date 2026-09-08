@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import type { Env, Variables } from '../types';
 import {
   getConformidadeRows,
@@ -51,7 +51,9 @@ function resolveScormReportLimit(raw: string | undefined): number | undefined {
   return Math.min(parsed, 200);
 }
 
-app.get('/relatorios/conformidade', auth(), requireRole('admin', 'manager'), async (c) => {
+const requireLmsReportVisibility = requirePermission('lms', 'visualizar', 'admin', 'manager');
+
+app.get('/relatorios/conformidade', auth(), requireLmsReportVisibility, async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
@@ -63,7 +65,7 @@ app.get('/relatorios/conformidade', auth(), requireRole('admin', 'manager'), asy
 });
 
 // ── GET /relatorios/cursos-conformidade ──────────────────────────────────────
-app.get('/relatorios/cursos-conformidade', auth(), requireRole('admin', 'manager'), async (c) => {
+app.get('/relatorios/cursos-conformidade', auth(), requireLmsReportVisibility, async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
@@ -75,7 +77,7 @@ app.get('/relatorios/cursos-conformidade', auth(), requireRole('admin', 'manager
 });
 
 // ── GET /relatorios/expiracoes ───────────────────────────────────────────────
-app.get('/relatorios/expiracoes', auth(), requireRole('admin', 'manager'), async (c) => {
+app.get('/relatorios/expiracoes', auth(), requireLmsReportVisibility, async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
@@ -90,7 +92,7 @@ app.get('/relatorios/expiracoes', auth(), requireRole('admin', 'manager'), async
 app.get(
   '/relatorios/conclusoes-inconsistentes',
   auth(),
-  requireRole('admin', 'manager'),
+  requireLmsReportVisibility,
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaIdSafe(c);
