@@ -209,6 +209,7 @@ async function inspectFrmsGovernance(requiredKeys) {
     `SELECT DISTINCT f.empresa_id AS empresa_id FROM frms_jornada j JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER) AND f.deleted_at IS NULL WHERE j.deleted_at IS NULL AND f.empresa_id IS NOT NULL ORDER BY f.empresa_id`,
   );
   const reasons = {};
+  const missingAssignmentTenantIds = [];
   let readyTenants = 0;
 
   const bump = (reason) => {
@@ -225,6 +226,7 @@ async function inspectFrmsGovernance(requiredKeys) {
       `SELECT regulatory_profile_id, profile_code FROM frms_profile_assignments WHERE empresa_id = ${empresaId} AND status = 'ACTIVE' AND effective_from <= ${quote(today)} AND (effective_to IS NULL OR effective_to >= ${quote(today)})`,
     );
     if (assignments.length !== 1) {
+      if (assignments.length === 0) missingAssignmentTenantIds.push(empresaId);
       bump(assignments.length === 0 ? 'ASSIGNMENT_MISSING' : 'ASSIGNMENT_AMBIGUOUS');
       continue;
     }
@@ -295,6 +297,7 @@ async function inspectFrmsGovernance(requiredKeys) {
     readyTenantCount: readyTenants,
     notReadyTenantCount: tenantRows.length - readyTenants,
     failureReasons: reasons,
+    missingAssignmentTenantIds,
     legacyActiveRevisionCount: legacyRows.length,
     legacyParameterCount,
     legacyGovernedRequiredPresent: legacyRequiredCount,
