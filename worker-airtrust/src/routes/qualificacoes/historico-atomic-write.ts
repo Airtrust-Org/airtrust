@@ -11,7 +11,7 @@ import { z } from 'zod';
 import type { Env } from '../../types';
 import { auth } from '../../middleware/auth';
 import { getTenantContext } from '../../middleware/tenant';
-import { requireRole } from '../../middleware/rbac';
+import { requirePermission } from '../../middleware/rbac';
 import { ApiError } from '../../middleware/error-handler';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../../utils/auditoria';
 import {
@@ -418,7 +418,7 @@ async function processRenewComplementaryEffects(params: {
   return pending;
 }
 
-router.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+router.post('/', auth(), requirePermission('qualificacoes', 'criar', 'admin', 'manager'), async (c) => {
   try {
     const tenantCtx = getTenantContext(c);
     const parsed = createSchema.safeParse(await c.req.json());
@@ -589,7 +589,7 @@ router.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
   }
 });
 
-router.post('/:id/renovar', auth(), requireRole('admin', 'manager'), async (c) => {
+router.post('/:id/renovar', auth(), requirePermission('qualificacoes', 'editar', 'admin', 'manager'), async (c) => {
   try {
     const tenantCtx = getTenantContext(c);
     const sourceHistoryId = Number(c.req.param('id'));
