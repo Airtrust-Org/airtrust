@@ -889,7 +889,7 @@ describe('calcAcumuloRolling — virada de ano', () => {
 });
 
 // ────────────────────────────────────────────────────────────────────
-// calcFatorCicloEmbarcado (Process S — Borbély Two-Process Model)
+// calcFatorCicloEmbarcado (modelo empresarial de penalidade progressiva no período embarcado)
 // ────────────────────────────────────────────────────────────────────
 
 describe('calcFatorCicloEmbarcado', () => {

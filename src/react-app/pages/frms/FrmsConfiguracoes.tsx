@@ -80,9 +80,9 @@ const GRUPOS_REGULATORIOS: ConfigGroup[] = [
 
 const GRUPOS_FATORIZACAO: ConfigGroup[] = [
   {
-    label: 'Ciclo Embarcado (Process S — Borbély)',
+    label: 'Ciclo Embarcado — modelo interno de fadiga acumulada',
     icon: <Brain className="h-4 w-4" />,
-    description: 'Acúmulo homeostático de fadiga durante ciclo offshore',
+    description: 'Penalidade linear configurável ao longo do período embarcado; modelo empresarial de triagem, não Borbély calibrado',
     keys: [
       'CICLO_EMBARCADO_ATIVO',
       'CICLO_EMBARCADO_DIA_INICIO',
@@ -681,7 +681,7 @@ export default function FrmsConfiguracoes() {
                   <div className="mb-4 flex items-center gap-2 border-b border-gray-100 pb-4">
                     <Info className="h-4 w-4 text-primary" />
                     <span className="text-xs text-gray-500">
-                      Modelo Borbély Two-Process + ICAO Doc 9966. Apenas parâmetros com efeito no motor atual são editáveis aqui.
+                      Modelo empresarial de triagem inspirado em princípios de fadiga e referências FRMS. Não representa implementação calibrada do Two-Process de Borbély nem validação formal pela ICAO. Apenas parâmetros com efeito no motor atual são editáveis aqui.
                     </span>
                   </div>
                   {GRUPOS_FATORIZACAO.map(renderGroup)}
