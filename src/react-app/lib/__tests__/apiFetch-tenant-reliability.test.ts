@@ -44,6 +44,63 @@ describe('apiFetch tenant-safe bounded caches', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('applies Retry-After backoff to authenticated GETs without refetching', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'rate limited' }), {
+        status: 429,
+        headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(window, 'fetch', {
+      configurable: true,
+      writable: true,
+      value: fetchMock,
+    });
+    const { apiFetch } = await loadApiFetch();
+    const authenticated = { headers: { Authorization: 'Bearer test-token' } };
+
+    const first = await apiFetch('/api/dashboard/protected', authenticated);
+    const second = await apiFetch('/api/dashboard/protected', authenticated);
+
+    expect(first.status).toBe(429);
+    expect(second.status).toBe(429);
+    expect(second.headers.get('Retry-After')).toBe('60');
+    expect(second.headers.get('X-AirTrust-Local-Backoff')).toBe('1');
+    expect(await second.json()).toEqual({ error: 'rate limited' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('never replays or locally suppresses authenticated mutations', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'temporarily unavailable' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(window, 'fetch', {
+      configurable: true,
+      writable: true,
+      value: fetchMock,
+    });
+    const { apiFetch } = await loadApiFetch();
+    const mutation = {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: 1 }),
+    };
+
+    const first = await apiFetch('/api/qualificacoes', mutation);
+    const second = await apiFetch('/api/qualificacoes', mutation);
+
+    expect(first.status).toBe(503);
+    expect(second.status).toBe(503);
+    expect(first.headers.get('X-AirTrust-Local-Backoff')).toBeNull();
+    expect(second.headers.get('X-AirTrust-Local-Backoff')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('clears recentGetCache, endpointBackoff and inflight map on tenant reset', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ success: true, data: ['fresh'] }), {
