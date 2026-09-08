@@ -152,6 +152,7 @@ jobs:
           line('FRMS active tenants', r.frms.activeTenantCount);
           line('FRMS ready tenants', r.frms.readyTenantCount);
           line('FRMS governance readiness', r.frms.ready ? 'PASS' : 'FAIL');
+          line('FRMS missing-assignment tenant ids', (r.frms.missingAssignmentTenantIds || []).join(',') || 'none');
           line('0487 state', r.qualificationRenewals.state);
           line('0487 apply ready', r.qualificationRenewals.applyReady ? 'YES' : 'NO');
           line('production release ready', r.verdict.productionReleaseReady ? 'YES' : 'NO');
