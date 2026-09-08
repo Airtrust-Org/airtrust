@@ -12,6 +12,7 @@ export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'FATAL';
 export interface LogContext {
   requestId: string;
   userId?: number;
+  empresaId?: number;
   environment: string;
   timestamp: string;
   module: string;
@@ -41,10 +42,16 @@ export class Logger {
   private context: LogContext;
   private startTime: number;
 
-  constructor(requestId: string, module: string, environment: string, user?: { id: number }) {
+  constructor(
+    requestId: string,
+    module: string,
+    environment: string,
+    identity: { userId?: number; empresaId?: number } = {},
+  ) {
     this.context = {
       requestId,
-      userId: user?.id,
+      userId: identity.userId,
+      empresaId: identity.empresaId,
       environment,
       timestamp: new Date().toISOString(),
       module,
@@ -232,7 +239,7 @@ export function createLogger(context: unknown, module: string): Logger {
       : crypto.randomUUID();
 
   const rawUser = getValue('user');
-  const userId =
+  const userFromObject =
     rawUser &&
     typeof rawUser === 'object' &&
     'id' in rawUser &&
@@ -240,6 +247,7 @@ export function createLogger(context: unknown, module: string): Logger {
     Number.isFinite(rawUser.id)
       ? rawUser.id
       : undefined;
+  const userId = userFromObject ?? readPositiveInteger(getValue('userId'));
 
   const rawEnvironment = source.env?.ENVIRONMENT;
   const environment =
@@ -251,6 +259,16 @@ export function createLogger(context: unknown, module: string): Logger {
     requestId,
     module,
     environment,
-    userId === undefined ? undefined : { id: userId },
+    {
+      userId,
+      empresaId: readPositiveInteger(getValue('empresaId')),
+    },
   );
+}
+
+function readPositiveInteger(value: unknown): number | undefined {
+  const parsed = typeof value === 'string' ? Number(value) : value;
+  return typeof parsed === 'number' && Number.isSafeInteger(parsed) && parsed > 0
+    ? parsed
+    : undefined;
 }
