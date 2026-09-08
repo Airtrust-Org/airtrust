@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { isValidCpf } from './pii-delta-lib.mjs';
 /**
  * guard:sanitization
  *
@@ -211,6 +212,37 @@ check(
     console.error('\n[guard:sanitization] FAIL: PDFs pessoais rastreados (FIRA)');
     found.forEach(l => console.error('  ' + l));
     violations++;
+  }
+}
+
+
+// ─── 7. CPFs reais e E-mails de clientes rastreados ─────────────────────────
+{
+  
+  const raw = gitGrep('\\b\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}\\b');
+  if (raw) {
+    const lines = raw.split('\n');
+    const cpfRegex = /\\b\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}\\b/g;
+    const found = [];
+    for (const line of lines) {
+      if (line.includes('scratch') || line.includes('Arquivos - EAD')) continue;
+      const match = line.match(cpfRegex);
+      if (match && match.some(isValidCpf)) {
+        found.push(line);
+      }
+    }
+    if (found.length > 0) {
+      console.error('\n[guard:sanitization] FAIL: CPFs válidos literais rastreados');
+      found.slice(0, 10).forEach(l => console.error('  ' + l));
+      violations++;
+    }
+  }
+
+  const rawEmail = gitGrep('\\b[A-Z0-9._%+-]+@voecostadosol\\.com\\.br\\b');
+  if (rawEmail) {
+      console.error('\n[guard:sanitization] FAIL: E-mails reais de clientes rastreados');
+      rawEmail.split('\n').slice(0, 10).forEach(l => console.error('  ' + l));
+      violations++;
   }
 }
 
