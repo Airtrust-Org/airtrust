@@ -54,4 +54,31 @@ describe('scorm-manifest-parser', () => {
 </ns0:manifest>`;
     expect(resolveScormLaunchFileHref(xml)).toBe('launch.html');
   });
+  it('does not launch an asset resource listed before the SCO', () => {
+    const xml = `<manifest>
+  <resources>
+    <resource identifier="ASSET-1" type="webcontent" adlcp:scormtype="asset" href="support/help.html" />
+    <resource identifier="SCO-1" type="webcontent" adlcp:scormtype="sco" href="course/index.html" />
+  </resources>
+</manifest>`;
+
+    expect(resolveScormLaunchFileHref(xml)).toBe('course/index.html');
+  });
+
+  it('prioritizes the organization identifierref over resource order', () => {
+    const xml = `<manifest>
+  <organizations>
+    <organization>
+      <item identifier="ITEM-1" identifierref="SCO-2" />
+    </organization>
+  </organizations>
+  <resources>
+    <resource identifier="SCO-1" type="webcontent" adlcp:scormtype="sco" href="intro.html" />
+    <resource identifier="SCO-2" type="webcontent" adlcp:scormtype="sco" href="assigned.html" />
+  </resources>
+</manifest>`;
+
+    expect(resolveScormLaunchFileHref(xml)).toBe('assigned.html');
+  });
+
 });

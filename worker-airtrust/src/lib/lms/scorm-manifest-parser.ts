@@ -26,21 +26,38 @@ export function parseQuotedAttribute(tag: string, attribute: string): string | n
 
 export function resolveScormLaunchFileHref(manifestXml: string): string | null {
   const resourceTag = new RegExp(`<${TAG_PREFIX}resource\\b[^>]*>`, 'gi');
-  for (const resource of manifestXml.matchAll(resourceTag)) {
-    const href = parseQuotedAttribute(resource[0], 'href');
-    if (href) return href;
-  }
+  const resources = [...manifestXml.matchAll(resourceTag)].map((match) => match[0]);
 
+  // The organization item is the strongest launch signal: it names the
+  // resource the learner actually enters. Resolve it before any positional
+  // fallback so a preceding asset resource cannot become the launch file.
   const item = new RegExp(`<${TAG_PREFIX}item\\b[^>]*>`, 'i').exec(manifestXml)?.[0];
-  if (!item) return null;
-  const identifierRef = parseQuotedAttribute(item, 'identifierref');
-  if (!identifierRef) return null;
+  const identifierRef = item ? parseQuotedAttribute(item, 'identifierref') : null;
+  if (identifierRef) {
+    for (const resource of resources) {
+      if (parseQuotedAttribute(resource, 'identifier') !== identifierRef) continue;
+      const href = parseQuotedAttribute(resource, 'href');
+      if (href) return href;
+    }
+  }
 
-  for (const resource of manifestXml.matchAll(resourceTag)) {
-    if (parseQuotedAttribute(resource[0], 'identifier') !== identifierRef) continue;
-    const href = parseQuotedAttribute(resource[0], 'href');
+  // When the organization does not provide a usable identifierref, prefer a
+  // resource explicitly declared as a SCO. SCORM packages commonly list
+  // support assets before the SCO resource; selecting the first href blindly
+  // can launch CSS/media/auxiliary HTML instead of the course entry point.
+  for (const resource of resources) {
+    const scormType = parseQuotedAttribute(resource, 'scormtype')?.trim().toLowerCase();
+    const href = parseQuotedAttribute(resource, 'href');
+    if (scormType === 'sco' && href) return href;
+  }
+
+  // Compatibility fallback for older packages that omit adlcp:scormtype but
+  // still expose a single launchable resource.
+  for (const resource of resources) {
+    const href = parseQuotedAttribute(resource, 'href');
     if (href) return href;
   }
+
   return null;
 }
 
