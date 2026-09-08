@@ -35,6 +35,10 @@ vi.mock('../../middleware/rbac', () => ({
     () =>
     async (_c: any, next: () => Promise<void>) =>
       next(),
+  requirePermission:
+    () =>
+    async (_c: any, next: () => Promise<void>) =>
+      next(),
 }));
 
 vi.mock('../../routes/escalas-shared', () => ({
