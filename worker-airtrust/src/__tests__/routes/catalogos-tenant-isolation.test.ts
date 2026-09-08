@@ -49,6 +49,15 @@ vi.mock('../../middleware/rbac', () => ({
       }
       await next();
     },
+  requirePermission:
+    (_module: string, _action: string, ...requiredRoles: string[]) =>
+    async (c: MockContext, next: () => Promise<void>) => {
+      const role = String(c.get('userRole') || '').toLowerCase();
+      if (!requiredRoles.map((item) => item.toLowerCase()).includes(role)) {
+        return c.json({ success: false, error: 'Permissão negada' }, 403);
+      }
+      await next();
+    },
 }));
 
 vi.mock('../../utils/auditoria', () => ({
