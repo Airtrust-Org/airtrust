@@ -1,4 +1,4 @@
-import { MutationCache, QueryClient } from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { frontendErrorMessage } from '@/react-app/lib/api-contract';
 import {
@@ -10,6 +10,14 @@ import {
 export interface AirTrustMutationMeta extends Record<string, unknown> {
   suppressGlobalError?: boolean;
 }
+
+const queryCache = new QueryCache({
+  onError: (error, query) => {
+    const meta = query.meta as AirTrustMutationMeta | undefined;
+    if (meta?.suppressGlobalError) return;
+    toast.error(frontendErrorMessage(error));
+  },
+});
 
 const mutationCache = new MutationCache({
   onError: (error, _variables, _context, mutation) => {
@@ -24,6 +32,7 @@ const mutationCache = new MutationCache({
  * tenant-scoped refetch can begin.
  */
 export const queryClient = new QueryClient({
+  queryCache,
   mutationCache,
   defaultOptions: {
     queries: {

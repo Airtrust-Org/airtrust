@@ -50,4 +50,39 @@ describe('React Query tenant keys and mutation errors', () => {
     await expect(mutation.execute(undefined)).rejects.toThrow('handled locally');
     expect(toastError).not.toHaveBeenCalled();
   });
+  it('reports a terminal query error globally', async () => {
+    const { queryClient } = await import('../query-client');
+
+    await expect(
+      queryClient.fetchQuery({
+        queryKey: ['test', 'query-global-error'],
+        queryFn: async () => {
+          throw new TypeError('network down');
+        },
+        retry: false,
+      }),
+    ).rejects.toThrow('network down');
+
+    expect(toastError).toHaveBeenCalledWith(
+      'Falha de rede. Verifique sua conexão e tente novamente.',
+    );
+  });
+
+  it('allows a query to suppress the global notification', async () => {
+    const { queryClient } = await import('../query-client');
+
+    await expect(
+      queryClient.fetchQuery({
+        queryKey: ['test', 'query-local-error'],
+        queryFn: async () => {
+          throw new Error('handled locally');
+        },
+        retry: false,
+        meta: { suppressGlobalError: true },
+      }),
+    ).rejects.toThrow('handled locally');
+
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
 });

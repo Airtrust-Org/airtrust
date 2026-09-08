@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   AUTH_TOKEN_CHANGED_EVENT,
   AuthRefreshError,
@@ -602,19 +602,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [token, loadEmpresas],
   );
 
-  const value: AuthContextType = {
-    user,
-    token,
-    empresas,
-    empresaAtualId,
-    isAuthenticated: !!user && !!token,
-    isLoading,
-    login,
-    logout,
-    refreshToken,
-    selectEmpresa,
-    refreshEmpresas: () => (token ? loadEmpresas(token) : Promise.resolve()),
-  };
+  const refreshEmpresas = useCallback(
+    () => (token ? loadEmpresas(token) : Promise.resolve()),
+    [token, loadEmpresas],
+  );
+
+  const value = useMemo<AuthContextType>(
+    () => ({
+      user,
+      token,
+      empresas,
+      empresaAtualId,
+      isAuthenticated: !!user && !!token,
+      isLoading,
+      login,
+      logout,
+      refreshToken,
+      selectEmpresa,
+      refreshEmpresas,
+    }),
+    [
+      user,
+      token,
+      empresas,
+      empresaAtualId,
+      isLoading,
+      login,
+      logout,
+      refreshToken,
+      selectEmpresa,
+      refreshEmpresas,
+    ],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
