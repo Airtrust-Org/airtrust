@@ -29,6 +29,9 @@ vi.mock('../../middleware/tenant', () => ({
 }));
 
 vi.mock('../../middleware/rbac', () => ({
+  requirePermission: () => async (_c: any, next: () => Promise<void>) => {
+    await next();
+  },
   requireRole:
     (...requiredRoles: string[]) =>
     async (c: any, next: () => Promise<void>) => {
