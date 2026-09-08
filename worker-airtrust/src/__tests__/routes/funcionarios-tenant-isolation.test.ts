@@ -35,6 +35,15 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
 });
 
 vi.mock('../../middleware/rbac', () => ({
+  requirePermission:
+    (_module: string, _action: string, ...defaultRoles: string[]) =>
+    async (c: any, next: () => Promise<void>) => {
+      const role = String(c.get('userRole') || '').toLowerCase();
+      if (!defaultRoles.map((requiredRole) => requiredRole.toLowerCase()).includes(role)) {
+        return c.json({ success: false, error: 'Permissão negada' }, 403);
+      }
+      await next();
+    },
   requireRole:
     (...requiredRoles: string[]) =>
     async (c: any, next: () => Promise<void>) => {
