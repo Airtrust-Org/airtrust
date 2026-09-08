@@ -33,7 +33,7 @@ export function buildStagingReleaseAttestation(input) {
   const names = migrations?.map((migration) => migration.name) ?? [];
   if (names.join(',') !== '0461_refresh_tokens_empresa_id.sql,0462_qualificacoes_tipos_codigo_tenant_active_unique.sql') throw new Error('ATTESTATION_MIGRATION_ORDER');
   if (migrations.some((migration) => migration.ledger !== true || migration.postconditions !== true)) throw new Error('ATTESTATION_MIGRATION_EVIDENCE');
-  const required = ['gitlab_project', 'pipeline_id', 'actor', 'runner', 'backup', 'recovery_points', 'd1', 'r2', 'worker', 'pages', 'health', 'version', 'qa', 'rollback_target', 'timestamps'];
+  const required = ['github_repository', 'pipeline_id', 'actor', 'runner', 'backup', 'recovery_points', 'd1', 'r2', 'worker', 'pages', 'health', 'version', 'qa', 'rollback_target', 'timestamps'];
   for (const key of required) requiredString(input, key);
   for (const key of ['d1', 'r2', 'worker', 'pages']) if (input[key] !== ({ d1: STAGING_IDENTITY.d1Id, r2: STAGING_IDENTITY.r2, worker: STAGING_IDENTITY.worker, pages: STAGING_IDENTITY.pagesUrl })[key]) throw new Error(`ATTESTATION_IDENTITY:${key}`);
   const bundleHashes = input.bundle_hashes ?? {};
@@ -48,7 +48,7 @@ export function buildStagingReleaseAttestation(input) {
     environment: 'staging',
     release_sha: releaseSha.toLowerCase(),
     source_tree: sourceTree.toLowerCase(),
-    gitlab_project: requiredString(input, 'gitlab_project'),
+    github_repository: requiredString(input, 'github_repository'),
     pipeline_id: requiredString(input, 'pipeline_id'),
     actor: requiredString(input, 'actor'),
     runner: requiredString(input, 'runner'),
