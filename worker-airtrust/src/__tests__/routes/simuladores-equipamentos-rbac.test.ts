@@ -7,6 +7,19 @@ vi.mock('../../middleware/auth', () => ({
   auth: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
+
+vi.mock('../../middleware/rbac', () => ({
+  requirePermission:
+    (_module: string, _action: string, ...requiredRoles: string[]) =>
+    async (c: any, next: () => Promise<void>) => {
+      const role = String(c.get('userRole') || '').toLowerCase();
+      if (!requiredRoles.map((item) => item.toLowerCase()).includes(role)) {
+        return c.json({ success: false, error: 'Permissão negada' }, 403);
+      }
+      await next();
+    },
+}));
+
 import routes from '../../routes/simuladores-equipamentos';
 
 function createEnv(): Env {
