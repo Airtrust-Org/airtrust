@@ -39,7 +39,7 @@ import { noCacheMiddleware } from './middleware/no-cache';
 import { buildLmsContentSecurityPolicy } from './lib/lms/security-headers';
 import { provenanceHeadersMiddleware } from './middleware/provenance';
 import { requestIdMiddleware } from './middleware/requestId';
-import { rateLimiter, rateLimitPresets } from './middleware/rate-limit';
+import { rateLimiter, rateLimitPresets, tenantAwareKeyExtractor } from './middleware/rate-limit';
 import { requireRole } from './middleware/rbac';
 import { getTenantContext, tenantMiddleware } from './middleware/tenant';
 import { domainEventProcessorMiddleware } from './middleware/domainEventProcessor';
@@ -394,7 +394,7 @@ app.use('/api/pasta-virtual/upload', rateLimiter(rateLimitPresets.upload));
 // Importação: 5 por 300s (operação pesada)
 app.use(
   '/api/importacao/*',
-  rateLimiter({ maxRequests: 5, windowSeconds: 300, keyPrefix: 'importacao' }),
+  rateLimiter({ maxRequests: 5, windowSeconds: 300, keyPrefix: 'importacao', keyExtractor: tenantAwareKeyExtractor }),
 );
 
 // ===== MONTAR ROTAS =====
@@ -414,7 +414,7 @@ app.route('/api/admin/perfis', adminPerfisRoutes);
 // habilitar em produção sem autorização explícita para a execução.
 app.use(
   '/api/admin/simuladores-matriz-import/*',
-  rateLimiter({ maxRequests: 3, windowSeconds: 60, keyPrefix: 'simuladores-matriz-import' }),
+  rateLimiter({ maxRequests: 3, windowSeconds: 60, keyPrefix: 'simuladores-matriz-import', keyExtractor: tenantAwareKeyExtractor }),
 );
 app.route('/api/admin/simuladores-matriz-import', adminSimuladoresMatrizExecutorRoutes);
 // Executor separado e atômico apenas para os 51 vínculos de guias de
@@ -427,7 +427,7 @@ app.route('/api/admin/simuladores-matriz-import/guias', adminSimuladoresGuiasRel
 // nunca habilitar em produção sem autorização explícita para a execução.
 app.use(
   '/api/admin/simuladores-matriz-remediation/*',
-  rateLimiter({ maxRequests: 3, windowSeconds: 60, keyPrefix: 'simuladores-matriz-remediation' }),
+  rateLimiter({ maxRequests: 3, windowSeconds: 60, keyPrefix: 'simuladores-matriz-remediation', keyExtractor: tenantAwareKeyExtractor }),
 );
 app.route(
   '/api/admin/simuladores-matriz-remediation',
@@ -435,7 +435,7 @@ app.route(
 );
 app.use(
   '/api/admin/ead-category-reconciliation/*',
-  rateLimiter({ maxRequests: 3, windowSeconds: 60, keyPrefix: 'ead-category-reconciliation' }),
+  rateLimiter({ maxRequests: 3, windowSeconds: 60, keyPrefix: 'ead-category-reconciliation', keyExtractor: tenantAwareKeyExtractor }),
 );
 app.route('/api/admin/ead-category-reconciliation', adminEadCategoryReconciliationRoutes);
 app.route('/api/preferencias', preferenciasRoutes);
