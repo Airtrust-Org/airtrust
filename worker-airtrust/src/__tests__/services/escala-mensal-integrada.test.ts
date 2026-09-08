@@ -302,6 +302,11 @@ describe('escala-mensal-integrada — contrato de tenant/filtros/parcialidade', 
     expect(source).toContain('if (filters.funcaoId) bindings.push(filters.funcaoId);');
   });
 
+  it('restringe todas as fontes da visão mensal ao setor Tripulação', () => {
+    expect(source).toContain("UPPER(COALESCE(${alias}.setor, '')) LIKE '%TRIPULA%'");
+    expect(source.match(/employeeFilterSql\('f', filters\)/g)).toHaveLength(6);
+  });
+
   it('M10: alerta FRMS sinaliza confiabilidade da data operacional', () => {
     expect(source).toContain('dateReliable');
     expect(source).toContain("dateSource: dateReliable ? 'jornada' : 'created_at'");
