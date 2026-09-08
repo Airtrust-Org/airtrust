@@ -21,7 +21,7 @@ import {
 import { notFound, badRequest, forbidden } from '../middleware/error-handler';
 import { isValidEmail, isValidCPF, sanitizeString } from '../utils/security';
 import { auth } from '../middleware/auth';
-import { requireRole, requirePermission } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
