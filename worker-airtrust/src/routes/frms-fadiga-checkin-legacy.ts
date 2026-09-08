@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { AppEnv, Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { registrarAuditoria } from '../utils/auditoria';
 import {
@@ -1589,7 +1589,7 @@ router.get('/fadiga-checkin/historico', async (c) => {
   }
 });
 
-router.get('/fadiga-checkin/painel-gestor', requireRole('manager'), async (c) => {
+router.get('/fadiga-checkin/painel-gestor', requirePermission('frms', 'visualizar', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
     const data = c.req.query('data') || todayIso();
@@ -1659,7 +1659,7 @@ router.get('/fadiga-checkin/painel-gestor', requireRole('manager'), async (c) =>
   }
 });
 
-router.get('/fadiga-checkin/painel', requireRole('manager'), async (c) => {
+router.get('/fadiga-checkin/painel', requirePermission('frms', 'visualizar', 'manager'), async (c) => {
   try {
     const date = c.req.query('data') || todayIso();
     const response = await router.fetch(
@@ -1703,7 +1703,7 @@ router.get('/fadiga-checkin/painel', requireRole('manager'), async (c) => {
   }
 });
 
-router.get('/fadiga-checkin/analytics', requireRole('manager'), async (c) => {
+router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
     const dataInicio =
@@ -1823,7 +1823,7 @@ router.get('/fadiga-checkin/analytics', requireRole('manager'), async (c) => {
   }
 });
 
-router.patch('/fadiga-checkin/:id/resposta-gestor', requireRole('manager'), async (c) => {
+router.patch('/fadiga-checkin/:id/resposta-gestor', requirePermission('frms', 'editar', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
     const gestorId = Number(c.get('userId') || 0);
@@ -1886,7 +1886,7 @@ router.patch('/fadiga-checkin/:id/resposta-gestor', requireRole('manager'), asyn
   }
 });
 
-router.get('/fadiga-checkin/export', requireRole('manager'), async (c) => {
+router.get('/fadiga-checkin/export', requirePermission('frms', 'visualizar', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
     const dataInicio = c.req.query('data_inicio') || todayIso().slice(0, 8) + '01';
