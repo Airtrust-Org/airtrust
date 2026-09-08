@@ -46,6 +46,7 @@ import { buildAuditMetadata } from '../lib/audit/context';
 import { ensureCertificateForQualification } from '../services/ensure-certificate';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 import { collectByBindChunks } from '../utils/d1-bind-chunks';
+import { createLogger, toError } from '../utils/logger';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -105,7 +106,7 @@ async function logLmsMatriculaAudit(
       userAgent: c.req.header('user-agent') ?? undefined,
     });
   } catch (error) {
-    console.warn('[LMS] Falha ao registrar audit log de matrícula:', error);
+    createLogger(c, 'LmsMatriculas.audit').error('lms_matricula_audit_failed', toError(error), { matriculaId: params.matriculaId, action: params.action });
   }
 }
 
@@ -157,6 +158,7 @@ async function createLmsInAppNotification(
  * Fire-and-forget: nunca lança exceção, loga warnings em caso de falha.
  */
 async function sendMatriculaEmail(
+  c: Context,
   env: Env,
   db: D1Database,
   params: {
@@ -178,7 +180,7 @@ async function sendMatriculaEmail(
       .first<{ nome: string; email: string | null }>();
 
     if (!funcionario?.email) {
-      console.info('[lms-matricula] Email não encontrado para funcionario', params.funcionarioId);
+      createLogger(c, 'LmsMatriculas.email').info('lms_matricula_email_missing', { funcionarioId: params.funcionarioId, cursoId: params.cursoId, empresaId: params.empresaId });
       return;
     }
 
@@ -238,15 +240,12 @@ async function sendMatriculaEmail(
     });
 
     if (sent) {
-      console.log(
-        '[lms-matricula] Email enviado para o funcionario',
-        params.funcionarioId,
-        'curso',
-        params.cursoId,
-      );
+      createLogger(c, 'LmsMatriculas.email').info('lms_matricula_email_sent', { funcionarioId: params.funcionarioId, cursoId: params.cursoId, empresaId: params.empresaId });
     }
   } catch (err) {
-    console.warn('[lms-matricula] Falha ao enviar email de matrícula:', err);
+    createLogger(c, 'LmsMatriculas.email').error('lms_matricula_email_failed', toError(err), {
+      funcionarioId: params.funcionarioId, cursoId: params.cursoId, empresaId: params.empresaId,
+    });
   }
 }
 
@@ -379,7 +378,7 @@ function requiresServerValidatedNonScormEvidence(
   return !['scorm', 'h5p'].includes(type);
 }
 
-function emitScormCommitTelemetry(params: {
+function emitScormCommitTelemetry(c: Context, params: {
   matriculaId: number;
   cursoTitulo: string;
   preferIncomingState: boolean;
@@ -411,23 +410,17 @@ function emitScormCommitTelemetry(params: {
     .filter(Boolean)
     .join(',');
 
-  console.info(
-    '[LMS SCORM TELEMETRY]',
-    JSON.stringify({
-      matricula_id: params.matriculaId,
-      curso_titulo: params.cursoTitulo,
-      event,
-      decision: blocked ? 'blocked' : 'accepted',
-      reason: reason || 'normal-merge',
-      prefer_incoming_state: params.preferIncomingState,
-      previous_location: formatScormLocationTelemetry(params.previousLocation),
-      incoming_location: formatScormLocationTelemetry(params.incomingLocation),
-      final_location: formatScormLocationTelemetry(params.finalLocation),
-      previous_suspend_data: summarizeScormTextPayload(params.previousSuspendData),
-      incoming_suspend_data: summarizeScormTextPayload(params.incomingSuspendData),
-      final_suspend_data: summarizeScormTextPayload(params.finalSuspendData),
-    }),
-  );
+  createLogger(c, 'LmsMatriculas.scorm').info('lms_scorm_commit_telemetry', {
+    matriculaId: params.matriculaId, cursoTitulo: params.cursoTitulo, event,
+    decision: blocked ? 'blocked' : 'accepted', reason: reason || 'normal-merge',
+    preferIncomingState: params.preferIncomingState,
+    previousLocation: formatScormLocationTelemetry(params.previousLocation),
+    incomingLocation: formatScormLocationTelemetry(params.incomingLocation),
+    finalLocation: formatScormLocationTelemetry(params.finalLocation),
+    previousSuspendData: summarizeScormTextPayload(params.previousSuspendData),
+    incomingSuspendData: summarizeScormTextPayload(params.incomingSuspendData),
+    finalSuspendData: summarizeScormTextPayload(params.finalSuspendData),
+  });
 }
 
 function extractProgressPctFromCmiJson(cmiJson: string | null | undefined): number | null {
@@ -1083,7 +1076,7 @@ app.post('/', async (c) => {
         data_expiracao: data_expiracao ?? null,
       },
     });
-    await sendMatriculaEmail(c.env, db, {
+    await sendMatriculaEmail(c, c.env, db, {
       funcionarioId: funcionario_id,
       empresaId,
       cursoId: curso_id,
@@ -1277,7 +1270,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           observacoes: observacoes ?? null,
         },
       });
-      await sendMatriculaEmail(c.env, db, {
+      await sendMatriculaEmail(c, c.env, db, {
         funcionarioId,
         empresaId,
         cursoId: curso_id,
@@ -1665,7 +1658,7 @@ app.post('/scorm/commit', async (c) => {
     )
     .run();
 
-  emitScormCommitTelemetry({
+  emitScormCommitTelemetry(c, {
     matriculaId: d.matricula_id,
     cursoTitulo: matricula.curso_titulo,
     preferIncomingState: preferIncomingScormState,
@@ -1747,7 +1740,7 @@ app.post('/scorm/commit', async (c) => {
       qualificationFailed = true;
       statusFinal = statusSemConclusao;
       dataConclusaoFinal = null;
-      console.error('[LMS] Conclusão via SCORM rejeitada (batch revertido):', e);
+      createLogger(c, 'LmsMatriculas.scorm').error('lms_scorm_completion_rejected', toError(e), { matriculaId: d.matricula_id });
     }
 
     // tentativas/ultimo_slide/session-level fields não fazem parte do batch
@@ -1769,12 +1762,11 @@ app.post('/scorm/commit', async (c) => {
         const certResult = await ensureCertificateForQualification(c.env, historicoId, empresaId, {
           actorUserId: getCallerUserId(c),
         });
-        console.log(`[auto-cert/scorm] historicoId=${historicoId} state=${certResult.state}`);
+        createLogger(c, 'LmsMatriculas.certificate').info('lms_scorm_certificate_ensured', { historicoId, state: certResult.state });
       } catch (certErr) {
-        console.error(
-          `[auto-cert/scorm] ERROR historicoId=${qualificacaoGerada.qualificacao_historico_id}:`,
-          certErr,
-        );
+        createLogger(c, 'LmsMatriculas.certificate').error('lms_scorm_certificate_failed', toError(certErr), {
+          historicoId: qualificacaoGerada.qualificacao_historico_id,
+        });
       }
     }
   } else {
@@ -2111,7 +2103,7 @@ app.post('/:id/finalizar', async (c) => {
     }
   } catch (error) {
     if (!(error instanceof LmsCompletionRejectedError)) throw error;
-    console.error('[LMS] Conclusão manual rejeitada (batch revertido):', error);
+    createLogger(c, 'LmsMatriculas.completion').error('lms_manual_completion_rejected', toError(error), { matriculaId });
     await logLmsMatriculaAudit(db, c, {
       action: 'LMS_QUALIFICATION_COMPLETION_FAILED',
       matriculaId,
@@ -2376,7 +2368,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
         result.qualificacaoHistoricoId ?? existing.qualificacao_historico_id;
     } catch (error) {
       if (!(error instanceof LmsCompletionRejectedError)) throw error;
-      console.error('[LMS] Conclusão via PATCH status rejeitada (batch revertido):', error);
+      createLogger(c, 'LmsMatriculas.completion').error('lms_status_completion_rejected', toError(error), { matriculaId });
       await logLmsMatriculaAudit(db, c, {
         action: 'LMS_QUALIFICATION_COMPLETION_FAILED',
         matriculaId,
@@ -2418,11 +2410,13 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
             actorUserId: getCallerUserId(c) ?? undefined,
           },
         );
-        console.log(
-          `[auto-cert/status] historicoId=${qualificacaoHistoricoId} state=${certResult.state}`,
-        );
+        createLogger(c, 'LmsMatriculas.certificate').info('lms_status_certificate_ensured', {
+          historicoId: qualificacaoHistoricoId, state: certResult.state,
+        });
       } catch (certErr) {
-        console.error(`[auto-cert/status] ERROR historicoId=${qualificacaoHistoricoId}:`, certErr);
+        createLogger(c, 'LmsMatriculas.certificate').error('lms_status_certificate_failed', toError(certErr), {
+          historicoId: qualificacaoHistoricoId,
+        });
       }
     }
   } else {
