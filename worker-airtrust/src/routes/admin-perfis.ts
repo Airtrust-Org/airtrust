@@ -24,6 +24,8 @@ type PerfisVars = {
   empresaId?: number | string;
 };
 
+type PerfisContext = Context<{ Bindings: Env; Variables: PerfisVars }>;
+
 const adminPerfisRoutes = new Hono<{ Bindings: Env; Variables: PerfisVars }>();
 
 adminPerfisRoutes.use('/*', auth());
@@ -67,9 +69,9 @@ type PermissaoRow = {
 
 type PermBody = { perfil: string; modulo: string; acao: string; permitido: boolean };
 
-async function savePerfisPermissoes(c: Context) {
-  const { empresaId, role } = getTenantContext(c as any);
-  const callerId = Number((c as any).get('userId'));
+async function savePerfisPermissoes(c: PerfisContext) {
+  const { empresaId, role } = getTenantContext(c);
+  const callerId = Number(c.get('userId'));
   requireAdmin(role, 'atualizar permissões de perfis');
 
   const logger = createLogger(c, 'AdminPerfis.salvar');
