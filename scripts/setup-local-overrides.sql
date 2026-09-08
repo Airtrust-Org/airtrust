@@ -1,3 +1,9 @@
+-- OPERATIONAL MARKERS (guard:operational-sql-sources):
+-- source_reference: synthetic local-development fixtures only; no staging/production data source.
+-- operational_decision: keep deterministic local overrides for disposable developer D1 snapshots.
+-- dry_run_required: local disposable database only; never execute against remote D1.
+-- rollback_plan_required: reset/recreate the disposable local database snapshot.
+
 PRAGMA foreign_keys = ON;
 
 INSERT INTO usuarios (
