@@ -21,7 +21,7 @@ import {
 import { notFound, badRequest, forbidden } from '../middleware/error-handler';
 import { isValidEmail, isValidCPF, sanitizeString } from '../utils/security';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requireRole, requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
@@ -820,7 +820,7 @@ app.get('/:fid/ferias', auth(), async (c) => {
   return c.json({ success: true, data: rows.results || [] });
 });
 
-app.post('/:fid/ferias', auth(), requireRole('admin', 'manager'), async (c) => {
+app.post('/:fid/ferias', auth(), requirePermission('funcionarios', 'criar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const funcionarioId = c.req.param('fid');
   const empresaId = getEmpresaId(c);
@@ -933,7 +933,7 @@ app.post('/:fid/ferias', auth(), requireRole('admin', 'manager'), async (c) => {
   );
 });
 
-app.delete('/:fid/ferias/:feriasId', auth(), requireRole('admin', 'manager'), async (c) => {
+app.delete('/:fid/ferias/:feriasId', auth(), requirePermission('funcionarios', 'deletar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const funcionarioId = c.req.param('fid');
   const feriasId = c.req.param('feriasId');
