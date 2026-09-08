@@ -9,16 +9,18 @@
  * - missing IP never shares a global "unknown" bucket.
  */
 
-import type { MiddlewareHandler } from 'hono';
-import type { Env } from '../types';
+import type { Context, MiddlewareHandler } from 'hono';
+import type { Env, Variables } from '../types';
 
 export type RateLimitFailureMode = 'closed' | 'open';
+
+type RateLimitContext = Context<{ Bindings: Env; Variables: Partial<Variables> }>;
 
 export interface RateLimitConfig {
   maxRequests: number;
   windowSeconds: number;
   keyPrefix: string;
-  keyExtractor?: (c: Parameters<MiddlewareHandler<{ Bindings: Env }>>[0]) => string;
+  keyExtractor?: (c: RateLimitContext) => string;
   failureMode?: RateLimitFailureMode;
   allowLocalFallback?: boolean;
   allowLocalFallbackOutsideProduction?: boolean;
@@ -104,6 +106,13 @@ function normalizeCfConnectingIp(value: string | undefined): string | null {
   return trimmed;
 }
 
+
+export function tenantAwareKeyExtractor(c: RateLimitContext): string {
+  const ip = normalizeCfConnectingIp(c.req.header('CF-Connecting-IP')) || 'unknown-ip';
+  const empresaId = c.get('empresaId') || 'unknown-tenant';
+  return `tenant:${empresaId}:ip:${ip}`;
+}
+
 export function resolveRateLimitIdentifier(
   headers: { cfConnectingIp?: string; requestId?: string },
   failureMode: RateLimitFailureMode,
@@ -121,7 +130,7 @@ export function resolveRateLimitIdentifier(
   return { identifier: `missing:${requestId || crypto.randomUUID()}`, source: 'request' };
 }
 
-function unavailableResponse(c: Parameters<MiddlewareHandler<{ Bindings: Env }>>[0]) {
+function unavailableResponse(c: RateLimitContext) {
   c.header('Retry-After', '30');
   return c.json(
     {
@@ -133,7 +142,7 @@ function unavailableResponse(c: Parameters<MiddlewareHandler<{ Bindings: Env }>>
   );
 }
 
-export function rateLimiter(config: RateLimitConfig): MiddlewareHandler<{ Bindings: Env }> {
+export function rateLimiter(config: RateLimitConfig): MiddlewareHandler<{ Bindings: Env; Variables: Partial<Variables> }> {
   const { maxRequests, windowSeconds, keyPrefix, keyExtractor } = config;
   const failureMode = inferFailureMode(config);
 

@@ -4,7 +4,7 @@ import type { Context } from 'hono';
 import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
-import { rateLimiter } from '../middleware/rate-limit';
+import { rateLimiter, tenantAwareKeyExtractor } from '../middleware/rate-limit';
 import { tenantMiddleware } from '../middleware/tenant';
 import {
   assertNoImpersonation,
@@ -489,7 +489,7 @@ sigvoosRouter.post('/mapeamento-manual', async (c) => {
 
 sigvoosRouter.post(
   '/mapear',
-  rateLimiter({ maxRequests: 10, windowSeconds: 60, keyPrefix: 'sigvoos-mapear' }),
+  rateLimiter({ maxRequests: 10, windowSeconds: 60, keyPrefix: 'sigvoos-mapear', keyExtractor: tenantAwareKeyExtractor }),
   requireMaintenanceCapability(
     MAINTENANCE_CAPABILITIES.sigvoosExecutar,
     'Operação SIGVOOS restrita a administradores autorizados.',
@@ -553,7 +553,7 @@ sigvoosRouter.post(
 
 sigvoosRouter.post(
   '/sincronizar-frms',
-  rateLimiter({ maxRequests: 4, windowSeconds: 60, keyPrefix: 'sigvoos-sync' }),
+  rateLimiter({ maxRequests: 4, windowSeconds: 60, keyPrefix: 'sigvoos-sync', keyExtractor: tenantAwareKeyExtractor }),
   requireMaintenanceCapability(
     MAINTENANCE_CAPABILITIES.sigvoosExecutar,
     'Sincronização SIGVOOS restrita a administradores autorizados.',
@@ -680,7 +680,7 @@ const ShadowSyncSchema = z.object({
  */
 sigvoosRouter.post(
   '/shadow/sincronizar',
-  rateLimiter({ maxRequests: 4, windowSeconds: 60, keyPrefix: 'sigvoos-shadow-sync' }),
+  rateLimiter({ maxRequests: 4, windowSeconds: 60, keyPrefix: 'sigvoos-shadow-sync', keyExtractor: tenantAwareKeyExtractor }),
   requireMaintenanceCapability(
     MAINTENANCE_CAPABILITIES.sigvoosExecutar,
     'Sincronização shadow SIGVOOS restrita a administradores autorizados.',
@@ -755,7 +755,7 @@ sigvoosRouter.post(
 
 sigvoosRouter.post(
   '/maintenance/sincronizar-frms',
-  rateLimiter({ maxRequests: 4, windowSeconds: 60, keyPrefix: 'sigvoos-maintenance-dry-run' }),
+  rateLimiter({ maxRequests: 4, windowSeconds: 60, keyPrefix: 'sigvoos-maintenance-dry-run', keyExtractor: tenantAwareKeyExtractor }),
   requireMaintenanceCapability(
     MAINTENANCE_CAPABILITIES.sigvoosExecutar,
     'Sincronização SIGVOOS restrita a administradores autorizados.',
@@ -830,7 +830,7 @@ sigvoosRouter.post(
 
 sigvoosRouter.post(
   '/reprocessar-previews',
-  rateLimiter({ maxRequests: 6, windowSeconds: 60, keyPrefix: 'sigvoos-reprocessar-previews' }),
+  rateLimiter({ maxRequests: 6, windowSeconds: 60, keyPrefix: 'sigvoos-reprocessar-previews', keyExtractor: tenantAwareKeyExtractor }),
   requireMaintenanceCapability(
     MAINTENANCE_CAPABILITIES.sigvoosExecutar,
     'Operação SIGVOOS restrita a administradores autorizados.',
@@ -865,7 +865,7 @@ sigvoosRouter.post(
 
 sigvoosRouter.post(
   '/reconciliar-pendencias',
-  rateLimiter({ maxRequests: 4, windowSeconds: 60, keyPrefix: 'sigvoos-reconciliar' }),
+  rateLimiter({ maxRequests: 4, windowSeconds: 60, keyPrefix: 'sigvoos-reconciliar', keyExtractor: tenantAwareKeyExtractor }),
   requireMaintenanceCapability(
     MAINTENANCE_CAPABILITIES.sigvoosExecutar,
     'Operação SIGVOOS restrita a administradores autorizados.',

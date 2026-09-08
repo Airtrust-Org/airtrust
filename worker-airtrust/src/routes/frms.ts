@@ -16,7 +16,7 @@ import { z } from 'zod';
 import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
-import { rateLimiter } from '../middleware/rate-limit';
+import { rateLimiter, tenantAwareKeyExtractor } from '../middleware/rate-limit';
 import { tenantMiddleware } from '../middleware/tenant';
 import { localMaintenanceMutationNotFound } from '../middleware/local-maintenance';
 import {
@@ -1333,7 +1333,7 @@ function assertRequestedEmpresaMatchesTenant(
 
 frmsRoutes.get(
   '/maintenance/fortnight-coverage',
-  rateLimiter({ maxRequests: 20, windowSeconds: 60, keyPrefix: 'frms-maintenance-coverage' }),
+  rateLimiter({ maxRequests: 20, windowSeconds: 60, keyPrefix: 'frms-maintenance-coverage', keyExtractor: tenantAwareKeyExtractor }),
   requireMaintenanceCapability(
     MAINTENANCE_CAPABILITIES.frmsVisualizar,
     'Acesso restrito a operadores autorizados do FRMS.',
@@ -1408,7 +1408,7 @@ frmsRoutes.get(
 
 frmsRoutes.get(
   '/maintenance/fortnight-materialization-preview',
-  rateLimiter({ maxRequests: 20, windowSeconds: 60, keyPrefix: 'frms-maintenance-preview' }),
+  rateLimiter({ maxRequests: 20, windowSeconds: 60, keyPrefix: 'frms-maintenance-preview', keyExtractor: tenantAwareKeyExtractor }),
   requireMaintenanceCapability(
     MAINTENANCE_CAPABILITIES.frmsVisualizar,
     'Acesso restrito a operadores autorizados do FRMS.',
@@ -2194,7 +2194,7 @@ frmsRoutes.get(
  */
 frmsRoutes.post(
   '/reprocessar',
-  rateLimiter({ maxRequests: 10, windowSeconds: 60, keyPrefix: 'frms-reprocessar' }),
+  rateLimiter({ maxRequests: 10, windowSeconds: 60, keyPrefix: 'frms-reprocessar', keyExtractor: tenantAwareKeyExtractor }),
   requireRole('admin'),
   requireMaintenanceCapability(
     MAINTENANCE_CAPABILITIES.frmsExecutar,
@@ -2285,7 +2285,7 @@ frmsRoutes.get(
  */
 frmsRoutes.post(
   '/reprocessar/:tripulante_id',
-  rateLimiter({ maxRequests: 10, windowSeconds: 60, keyPrefix: 'frms-reprocessar-tripulante' }),
+  rateLimiter({ maxRequests: 10, windowSeconds: 60, keyPrefix: 'frms-reprocessar-tripulante', keyExtractor: tenantAwareKeyExtractor }),
   requireRole('admin'),
   requireMaintenanceCapability(
     MAINTENANCE_CAPABILITIES.frmsExecutar,
@@ -3808,7 +3808,7 @@ frmsRoutes.delete(
  */
 frmsRoutes.post(
   '/importacao/apus',
-  rateLimiter({ maxRequests: 5, windowSeconds: 60, keyPrefix: 'frms-import-apus' }),
+  rateLimiter({ maxRequests: 5, windowSeconds: 60, keyPrefix: 'frms-import-apus', keyExtractor: tenantAwareKeyExtractor }),
   safe(async (c) => {
     const body = await c.req.json();
     const arraySchema = z
@@ -3842,7 +3842,7 @@ frmsRoutes.post(
  */
 frmsRoutes.post(
   '/importacao/simulador',
-  rateLimiter({ maxRequests: 30, windowSeconds: 60, keyPrefix: 'frms-import-sim' }),
+  rateLimiter({ maxRequests: 30, windowSeconds: 60, keyPrefix: 'frms-import-sim', keyExtractor: tenantAwareKeyExtractor }),
   safe(async (c) => {
     const body = await c.req.json();
     const schema = z.object({

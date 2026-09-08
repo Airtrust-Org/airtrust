@@ -1,3 +1,9 @@
+-- OPERATIONAL MARKERS (guard:operational-sql-sources):
+-- source_reference: synthetic local-development fixtures only; no staging/production data source.
+-- operational_decision: keep deterministic local overrides for disposable developer D1 snapshots.
+-- dry_run_required: local disposable database only; never execute against remote D1.
+-- rollback_plan_required: reset/recreate the disposable local database snapshot.
+
 PRAGMA foreign_keys = ON;
 
 INSERT INTO usuarios (
@@ -11,17 +17,17 @@ INSERT INTO usuarios (
   updated_at
 )
 SELECT
-  'filipe.daumas@icloud.com',
+  'dev.login@airtrust.invalid',
   '$2b$10$g2ndd.4BDOPg4O0vb.7cGeX88MhzayrKRiwomRatJkuyfKkj9XWPG',
-  'Filipe Passaroni Daumas',
+  'Desenvolvedor Admin',
   'ADMIN',
   (
     SELECT f.id
     FROM funcionarios f
     WHERE f.deleted_at IS NULL
       AND (
-        lower(f.email) = lower('filipe.daumas@voecostadosol.com.br')
-        OR lower(f.nome) = lower('Filipe Passaroni Daumas')
+        lower(f.email) = lower('dev.admin@airtrust.invalid')
+        OR lower(f.nome) = lower('Desenvolvedor Admin')
       )
     ORDER BY CASE WHEN f.empresa_id = 6 THEN 0 ELSE 1 END, f.id
     LIMIT 1
@@ -32,13 +38,13 @@ SELECT
 WHERE NOT EXISTS (
   SELECT 1
   FROM usuarios
-  WHERE lower(email) = lower('filipe.daumas@icloud.com')
+  WHERE lower(email) = lower('dev.login@airtrust.invalid')
     AND deleted_at IS NULL
 );
 
 UPDATE usuarios
 SET password_hash = '$2b$10$g2ndd.4BDOPg4O0vb.7cGeX88MhzayrKRiwomRatJkuyfKkj9XWPG',
-    nome = 'Filipe Passaroni Daumas',
+    nome = 'Desenvolvedor Admin',
     perfil = 'ADMIN',
     funcionario_id = COALESCE(
       funcionario_id,
@@ -47,8 +53,8 @@ SET password_hash = '$2b$10$g2ndd.4BDOPg4O0vb.7cGeX88MhzayrKRiwomRatJkuyfKkj9XWP
         FROM funcionarios f
         WHERE f.deleted_at IS NULL
           AND (
-            lower(f.email) = lower('filipe.daumas@voecostadosol.com.br')
-            OR lower(f.nome) = lower('Filipe Passaroni Daumas')
+            lower(f.email) = lower('dev.admin@airtrust.invalid')
+            OR lower(f.nome) = lower('Desenvolvedor Admin')
           )
         ORDER BY CASE WHEN f.empresa_id = 6 THEN 0 ELSE 1 END, f.id
         LIMIT 1
@@ -57,13 +63,13 @@ SET password_hash = '$2b$10$g2ndd.4BDOPg4O0vb.7cGeX88MhzayrKRiwomRatJkuyfKkj9XWP
     active = 1,
     deleted_at = NULL,
     updated_at = datetime('now')
-WHERE lower(email) = lower('filipe.daumas@icloud.com');
+WHERE lower(email) = lower('dev.login@airtrust.invalid');
 
 INSERT INTO usuarios_empresas (usuario_id, empresa_id, role, is_primary, created_at)
 SELECT u.id, e.id, 'admin', 1, datetime('now')
 FROM usuarios u
 JOIN empresas e ON e.codigo = 'airtrust' AND e.deleted_at IS NULL
-WHERE lower(u.email) = lower('filipe.daumas@icloud.com')
+WHERE lower(u.email) = lower('dev.login@airtrust.invalid')
   AND NOT EXISTS (
     SELECT 1
     FROM usuarios_empresas ue
@@ -74,7 +80,7 @@ INSERT INTO usuarios_empresas (usuario_id, empresa_id, role, is_primary, created
 SELECT u.id, f.empresa_id, 'admin', 0, datetime('now')
 FROM usuarios u
 JOIN funcionarios f ON f.id = u.funcionario_id
-WHERE lower(u.email) = lower('filipe.daumas@icloud.com')
+WHERE lower(u.email) = lower('dev.login@airtrust.invalid')
   AND f.empresa_id IS NOT NULL
   AND NOT EXISTS (
     SELECT 1
@@ -86,14 +92,14 @@ UPDATE usuarios_empresas
 SET is_primary = 0,
     role = CASE WHEN role = 'viewer' THEN 'admin' ELSE role END
 WHERE usuario_id = (
-  SELECT id FROM usuarios WHERE lower(email) = lower('filipe.daumas@icloud.com') LIMIT 1
+  SELECT id FROM usuarios WHERE lower(email) = lower('dev.login@airtrust.invalid') LIMIT 1
 );
 
 UPDATE usuarios_empresas
 SET role = 'admin',
     is_primary = 1
 WHERE usuario_id = (
-  SELECT id FROM usuarios WHERE lower(email) = lower('filipe.daumas@icloud.com') LIMIT 1
+  SELECT id FROM usuarios WHERE lower(email) = lower('dev.login@airtrust.invalid') LIMIT 1
 )
   AND empresa_id = (
     SELECT id FROM empresas WHERE codigo = 'airtrust' AND deleted_at IS NULL LIMIT 1
