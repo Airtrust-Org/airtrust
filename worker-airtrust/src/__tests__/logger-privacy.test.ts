@@ -12,6 +12,7 @@ describe('structured logger privacy', () => {
       get(key: string) {
         if (key === 'requestId') return 'req-privacy-1';
         if (key === 'user') return { id: 42, email: 'operator@example.invalid' };
+        if (key === 'empresaId') return '7';
         return undefined;
       },
       env: { ENVIRONMENT: 'test' },
@@ -26,6 +27,7 @@ describe('structured logger privacy', () => {
     };
 
     expect(entry.context.userId).toBe(42);
+    expect(entry.context.empresaId).toBe(7);
     expect(entry.context).not.toHaveProperty('userEmail');
     expect(serialized).not.toContain('operator@example.invalid');
   });
