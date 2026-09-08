@@ -68,7 +68,7 @@ export function assembleGovernedReleaseAttestation({ root = process.cwd(), evide
   const built = buildStagingReleaseAttestation({
     environment: 'staging', release_sha: exactSha, source_tree: sourceTree,
     github_repository: environment.GITHUB_REPOSITORY ?? 'airtrust-group/airtrust', pipeline_id: environment.GITHUB_RUN_ID ?? 'local-test',
-    actor: environment.GITLAB_USER_LOGIN ?? 'protected-runner', runner: environment.CI_RUNNER_DESCRIPTION ?? 'airtrust-staging-release',
+    actor: environment.GITHUB_ACTOR ?? 'github-actions', runner: environment.RUNNER_NAME ?? 'airtrust-staging-release',
     runtime: { node: process.version, platform: process.platform }, gate_results: gateResults, migration_results: migrationResults,
     backup: `sha256:${backupHash}`, recovery_points: migrationResults.map((item) => item.recovery_point).join(','),
     d1: STAGING_IDENTITY.d1Id, r2: STAGING_IDENTITY.r2, worker: STAGING_IDENTITY.worker, pages: STAGING_IDENTITY.pagesUrl,
