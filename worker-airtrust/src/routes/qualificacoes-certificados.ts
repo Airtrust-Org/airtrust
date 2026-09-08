@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, ApiResponse } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import {
@@ -127,7 +127,7 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
 app.route('/', certificadosWriteRoutes);
 
 
-app.delete('/historico/:id/certificados/:certId', auth(), requireRole('admin', 'manager'), async (c) => {
+app.delete('/historico/:id/certificados/:certId', auth(), requirePermission('certificados', 'deletar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const historicoId = parseInt(c.req.param('id'));
   const certId = parseInt(c.req.param('certId'));
