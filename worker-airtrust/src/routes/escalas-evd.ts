@@ -26,7 +26,7 @@ import { z } from 'zod';
 import type { Env, Variables } from '../types';
 import type { D1Database } from '@cloudflare/workers-types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { verificarHabilitacaoModelo } from './escalas-alocacoes-helpers-internal';
 
@@ -1388,7 +1388,7 @@ evdRoutes.get('/:id', async (c) => {
 });
 
 // POST /api/evd/publicacoes
-evdRoutes.post('/publicacoes', requireRole('admin', 'manager'), async (c) => {
+evdRoutes.post('/publicacoes', requirePermission('escalas', 'criar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const userIdRaw = c.get('userId');
@@ -1547,7 +1547,7 @@ evdRoutes.get('/:id/justificativas', async (c) => {
 });
 
 // POST /api/evd/:id/justificativas
-evdRoutes.post('/:id/justificativas', requireRole('admin', 'manager'), async (c) => {
+evdRoutes.post('/:id/justificativas', requirePermission('escalas', 'editar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const evdId = c.req.param('id');
@@ -1586,7 +1586,7 @@ evdRoutes.post('/:id/justificativas', requireRole('admin', 'manager'), async (c)
 });
 
 // POST /api/evd
-evdRoutes.post('/', requireRole('admin', 'manager'), async (c) => {
+evdRoutes.post('/', requirePermission('escalas', 'criar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const body = await c.req.json();
@@ -1731,7 +1731,7 @@ evdRoutes.post('/', requireRole('admin', 'manager'), async (c) => {
 });
 
 // PUT /api/evd/:id
-evdRoutes.put('/:id', requireRole('admin', 'manager'), async (c) => {
+evdRoutes.put('/:id', requirePermission('escalas', 'editar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const id = c.req.param('id');
@@ -1986,7 +1986,7 @@ evdRoutes.put('/:id', requireRole('admin', 'manager'), async (c) => {
 });
 
 // DELETE /api/evd/:id
-evdRoutes.delete('/:id', requireRole('admin', 'manager'), async (c) => {
+evdRoutes.delete('/:id', requirePermission('escalas', 'deletar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const id = c.req.param('id');
@@ -2004,7 +2004,7 @@ evdRoutes.delete('/:id', requireRole('admin', 'manager'), async (c) => {
 });
 
 // POST /api/evd/:id/publicar
-evdRoutes.post('/:id/publicar', requireRole('admin', 'manager'), async (c) => {
+evdRoutes.post('/:id/publicar', requirePermission('escalas', 'editar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const id = c.req.param('id');
