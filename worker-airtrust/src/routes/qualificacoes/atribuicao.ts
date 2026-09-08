@@ -14,7 +14,7 @@ import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { auth } from '../../middleware/auth';
 import { getTenantContext } from '../../middleware/tenant';
-import { requireRole } from '../../middleware/rbac';
+import { requirePermission } from '../../middleware/rbac';
 import {
   appendEmployeeSectorFilter,
   assertFuncionarioInScope,
@@ -162,7 +162,7 @@ async function renovacaoPertenceEmpresa(
 router.post(
   '/',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'editar', 'admin', 'manager'),
   safe(async (c) => {
     const db: D1Database = c.env.DB;
     const tenantCtx = getTenantContext(c);
@@ -292,7 +292,7 @@ router.post(
 router.post(
   '/renovar',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'editar', 'admin', 'manager'),
   safe(async (c) => {
     const db: D1Database = c.env.DB;
     const tenantCtx = getTenantContext(c);
@@ -426,7 +426,7 @@ router.get(
 router.put(
   '/renovacoes/:id',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'editar', 'admin', 'manager'),
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
@@ -517,7 +517,7 @@ router.put(
 router.delete(
   '/renovacoes/:id',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'editar', 'admin', 'manager'),
   safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
