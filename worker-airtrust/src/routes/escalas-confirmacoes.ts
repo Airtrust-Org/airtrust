@@ -7,7 +7,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaIdSafe, getEscalaVerificada } from './escalas-shared';
 
 const confirmacoes = new Hono<{ Bindings: Env }>();
@@ -110,7 +110,7 @@ confirmacoes.get('/minha-escala/confirmacao-status', auth(), async (c) => {
 });
 
 // GET /:id/confirmacoes — lista de confirmações para admin
-confirmacoes.get('/:id/confirmacoes', auth(), requireRole('admin', 'manager'), async (c) => {
+confirmacoes.get('/:id/confirmacoes', auth(), requirePermission('escalas', 'visualizar', 'admin', 'manager'), async (c) => {
   const { id } = c.req.param();
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
