@@ -18,7 +18,7 @@ export interface RateLimitConfig {
   maxRequests: number;
   windowSeconds: number;
   keyPrefix: string;
-  keyExtractor?: (c: Parameters<MiddlewareHandler<{ Bindings: Env }>>[0]) => string;
+  keyExtractor?: (c: Context<AppEnv>) => string;
   failureMode?: RateLimitFailureMode;
   allowLocalFallback?: boolean;
   allowLocalFallbackOutsideProduction?: boolean;
@@ -105,10 +105,9 @@ function normalizeCfConnectingIp(value: string | undefined): string | null {
 }
 
 
-export function tenantAwareKeyExtractor(c: Parameters<MiddlewareHandler<{ Bindings: Env }>>[0]): string {
+export function tenantAwareKeyExtractor(c: Context<AppEnv>): string {
   const ip = normalizeCfConnectingIp(c.req.header('CF-Connecting-IP')) || 'unknown-ip';
-  const typedContext = c as unknown as Context<AppEnv>;
-  const empresaId = typedContext.get('empresaId') || 'unknown-tenant';
+  const empresaId = c.get('empresaId') || 'unknown-tenant';
   return `tenant:${empresaId}:ip:${ip}`;
 }
 
@@ -129,7 +128,7 @@ export function resolveRateLimitIdentifier(
   return { identifier: `missing:${requestId || crypto.randomUUID()}`, source: 'request' };
 }
 
-function unavailableResponse(c: Parameters<MiddlewareHandler<{ Bindings: Env }>>[0]) {
+function unavailableResponse(c: Context<AppEnv>) {
   c.header('Retry-After', '30');
   return c.json(
     {
@@ -141,7 +140,7 @@ function unavailableResponse(c: Parameters<MiddlewareHandler<{ Bindings: Env }>>
   );
 }
 
-export function rateLimiter(config: RateLimitConfig): MiddlewareHandler<{ Bindings: Env }> {
+export function rateLimiter(config: RateLimitConfig): MiddlewareHandler<AppEnv> {
   const { maxRequests, windowSeconds, keyPrefix, keyExtractor } = config;
   const failureMode = inferFailureMode(config);
 
