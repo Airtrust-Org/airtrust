@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { registrarAuditoria } from '../utils/auditoria';
 import { gerarAlertasCMA } from '../utils/escala-engine';
 import { syncFuncionarioFeriasForMonth } from '../shared/syncEscalaEventosExternos';
@@ -259,7 +259,7 @@ crud.get('/:id', auth(), async (c) => {
 });
 
 // POST / — criar nova escala mensal
-crud.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+crud.post('/', auth(), requirePermission('escalas', 'criar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const userId = String((c as unknown as { get: (key: string) => unknown }).get('userId') || '');
@@ -330,7 +330,7 @@ crud.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
 });
 
 // POST /gerar-ano — auto-cria as 12 escalas mensais
-crud.post('/gerar-ano', auth(), requireRole('admin', 'manager'), async (c) => {
+crud.post('/gerar-ano', auth(), requirePermission('escalas', 'criar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const userId = String((c as unknown as { get: (key: string) => unknown }).get('userId') || '');
@@ -387,7 +387,7 @@ crud.post('/gerar-ano', auth(), requireRole('admin', 'manager'), async (c) => {
 });
 
 // PUT /:id — atualizar escala
-crud.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+crud.put('/:id', auth(), requirePermission('escalas', 'editar', 'admin', 'manager'), async (c) => {
   const { id } = c.req.param();
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
@@ -441,7 +441,7 @@ crud.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
 });
 
 // DELETE /:id — soft delete (com cascade em tripulacoes e eventos)
-crud.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+crud.delete('/:id', auth(), requirePermission('escalas', 'deletar', 'admin', 'manager'), async (c) => {
   const { id } = c.req.param();
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);

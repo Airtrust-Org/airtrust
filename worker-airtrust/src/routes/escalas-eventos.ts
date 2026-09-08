@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { verificarConflitosEscala } from '../utils/escala-engine';
 import { getEmpresaIdSafe, getEscalaVerificada, parseBody, EventoSchema } from './escalas-shared';
 
@@ -117,7 +117,7 @@ async function replaceConflictingEvents(
 }
 
 // POST /:id/eventos — adicionar evento/alocação
-eventos.post('/:id/eventos', auth(), requireRole('admin', 'manager'), async (c) => {
+eventos.post('/:id/eventos', auth(), requirePermission('escalas', 'criar', 'admin', 'manager'), async (c) => {
   const { id: escala_id } = c.req.param();
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
@@ -240,7 +240,7 @@ eventos.get('/:id/eventos', auth(), async (c) => {
 });
 
 // PUT /:id/eventos/:eventoId — atualizar evento
-eventos.put('/:id/eventos/:eventoId', auth(), requireRole('admin', 'manager'), async (c) => {
+eventos.put('/:id/eventos/:eventoId', auth(), requirePermission('escalas', 'editar', 'admin', 'manager'), async (c) => {
   const { id, eventoId } = c.req.param();
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
@@ -372,7 +372,7 @@ eventos.put('/:id/eventos/:eventoId', auth(), requireRole('admin', 'manager'), a
 });
 
 // DELETE /:id/eventos/:eventoId — soft delete evento
-eventos.delete('/:id/eventos/:eventoId', auth(), requireRole('admin', 'manager'), async (c) => {
+eventos.delete('/:id/eventos/:eventoId', auth(), requirePermission('escalas', 'deletar', 'admin', 'manager'), async (c) => {
   const { id, eventoId } = c.req.param();
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
