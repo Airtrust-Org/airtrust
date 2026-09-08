@@ -10,7 +10,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { auth } from '../middleware/auth';
-import { hasRole, requireRole } from '../middleware/rbac';
+import { hasRole, requireRole, requirePermission } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
