@@ -7,7 +7,7 @@
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
 
@@ -24,7 +24,7 @@ function reportsErrorResponse(c: Context<{ Bindings: Env }>, error: string, code
 }
 
 app.use('*', auth());
-app.use('*', requireRole('admin', 'manager'));
+app.use('*', requirePermission('simuladores', 'visualizar', 'admin', 'manager'));
 
 app.get('/uso', async (c) => {
   const logger = createLogger(c, 'SimuladoresRelatorios.uso');
