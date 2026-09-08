@@ -14,6 +14,10 @@ const integrityMiddleware = readFileSync(
   join(workerRoot, 'src/middleware/lms-completion-integrity.ts'),
   'utf8',
 );
+const lmsAssetSession = readFileSync(
+  join(workerRoot, 'src/lib/lms/lms-asset-session.ts'),
+  'utf8',
+);
 const persistedProgressMiddleware = readFileSync(
   join(workerRoot, 'src/middleware/lms-completion-persisted-progress.ts'),
   'utf8',
@@ -138,7 +142,10 @@ describe('guard:lms-completion-single-entry-point', () => {
   it('17. scopes all completion evidence by matrícula and authenticated tenant', () => {
     expect(integrityMiddleware).toContain('WHERE m.id = ?');
     expect(integrityMiddleware).toContain('AND m.empresa_id = ?');
-    expect(integrityMiddleware).toContain('Number(payload.empresa_id ?? 0) === row.empresa_id');
+    expect(integrityMiddleware).toContain('assetSessionMatchesEnrollment(payload');
+    expect(lmsAssetSession).toContain('Number(payload.empresa_id ?? 0) === params.empresaId');
+    expect(lmsAssetSession).toContain('Number(payload.asset_matricula_id ?? 0) === params.matriculaId');
+    expect(lmsAssetSession).toContain('Number(payload.asset_curso_id ?? 0) === params.cursoId');
     expect(persistedProgressMiddleware).toContain('AND m.empresa_id = ?');
     expect(enrollmentMiddleware).toContain('AND c.empresa_id = ?');
     expect(reversalMiddleware).toContain('WHERE m.id = ? AND m.empresa_id = ?');
