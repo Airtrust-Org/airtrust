@@ -2,7 +2,7 @@ import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { API_BASE_URL } from '@/react-app/config/api';
 import {
@@ -19,7 +19,14 @@ function wrapperFor(queryClient: QueryClient) {
     React.createElement(QueryClientProvider, { client: queryClient }, children);
 }
 
+const FAKE_JWT =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZXhwIjo5OTk5OTk5OTk5OTl9.fakesig';
+
 describe('useSalvarProgresso optimistic rollback', () => {
+  beforeEach(() => {
+    localStorage.setItem('airtrust_token', FAKE_JWT);
+  });
+
   it('restores every affected LMS cache when the PATCH fails', async () => {
     let releaseRequest!: () => void;
     const requestGate = new Promise<void>((resolve) => {
@@ -35,7 +42,7 @@ describe('useSalvarProgresso optimistic rollback', () => {
 
     const queryClient = new QueryClient({
       defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
+        queries: { retry: false, gcTime: Infinity },
         mutations: { retry: false },
       },
     });
