@@ -28,7 +28,7 @@
 import { Hono } from 'hono';
 import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaIdOptional, getEmpresaIdSafe, getEscalaVerificada } from './escalas-shared';
 
 // ── Prefixed sub-modules ────────────────────────────────────────────────────
@@ -263,7 +263,7 @@ escalas.get('/:id/alertas', auth(), async (c) => {
 // ================================================================
 // POST /:id/notificar — envia para todos os tripulantes da escala
 // ================================================================
-escalas.post('/:id/notificar', auth(), requireRole('admin', 'manager'), async (c) => {
+escalas.post('/:id/notificar', auth(), requirePermission('escalas', 'editar', 'admin', 'manager'), async (c) => {
   const { id } = c.req.param();
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
