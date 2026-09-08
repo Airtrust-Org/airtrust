@@ -29,7 +29,7 @@ import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { verificarHabilitacaoModelo } from './escalas-alocacoes-helpers-internal';
-
+import { CANCELLED_STATUS_VALUES, COMPLETED_STATUS_VALUES, TRAINING_CONFIRMED_STATUS_VALUES, TRAINING_IN_PROGRESS_STATUS_VALUES, isConfirmedTrainingStatus, isInProgressTrainingStatus, normalizeTrainingStatusForCompatibility, sqlStatusEqualsAny, sqlStatusNotEqualsAny } from '../lib/status/status-codes';
 const evdRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 evdRoutes.use('*', auth());
@@ -546,7 +546,7 @@ async function findTrainingCommitment(
 ): Promise<TrainingCommitment | null> {
   const map = (row: Record<string, unknown> | null): TrainingCommitment | null => {
     if (!row) return null;
-    const status = String(row.status || 'PLANEJADO').toUpperCase();
+    const status = normalizeTrainingStatusForCompatibility(String(row.status || 'PLANEJADO')) ?? 'PLANEJADO';
     return {
       treinamentoId: Number(row.id),
       titulo: String(row.titulo || row.codigo_turma || 'Treinamento'),
@@ -554,7 +554,7 @@ async function findTrainingCommitment(
       status,
       horaInicio: (row.hora_inicio as string | null) || null,
       horaFim: (row.hora_fim as string | null) || null,
-      confirmed: status === 'CONFIRMADO' || status === 'EM_ANDAMENTO',
+      confirmed: isConfirmedTrainingStatus(status) || isInProgressTrainingStatus(status),
     };
   };
 
@@ -578,9 +578,9 @@ async function findTrainingCommitment(
           AND td.deleted_at IS NULL
           AND td.status = 'ATIVO'
           AND date(td.data) = date(?)
-          AND UPPER(COALESCE(t.status, 'PLANEJADO')) NOT IN ('CANCELADO', 'CONCLUIDO')
+          AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(t.status, 'PLANEJADO'))", [...CANCELLED_STATUS_VALUES, ...COMPLETED_STATUS_VALUES])}
           ${personFilter}
-        ORDER BY CASE WHEN UPPER(COALESCE(t.status, 'PLANEJADO')) IN ('CONFIRMADO', 'EM_ANDAMENTO') THEN 0 ELSE 1 END,
+        ORDER BY CASE WHEN ${sqlStatusEqualsAny("UPPER(COALESCE(t.status, 'PLANEJADO'))", [...TRAINING_CONFIRMED_STATUS_VALUES, ...TRAINING_IN_PROGRESS_STATUS_VALUES])} THEN 0 ELSE 1 END,
                  td.hora_inicio
         LIMIT 1`,
     )
@@ -597,14 +597,14 @@ async function findTrainingCommitment(
          FROM treinamentos_planejados t
         WHERE t.empresa_id = ?
           AND t.deleted_at IS NULL
-          AND UPPER(COALESCE(t.status, 'PLANEJADO')) NOT IN ('CANCELADO', 'CONCLUIDO')
+          AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(t.status, 'PLANEJADO'))", [...CANCELLED_STATUS_VALUES, ...COMPLETED_STATUS_VALUES])}
           AND date(COALESCE(t.data_prevista, t.data_inicio)) = date(?)
           AND NOT EXISTS (
             SELECT 1 FROM treinamentos_dias d
              WHERE d.treinamento_id = t.id AND d.deleted_at IS NULL
           )
           ${personFilter}
-        ORDER BY CASE WHEN UPPER(COALESCE(t.status, 'PLANEJADO')) IN ('CONFIRMADO', 'EM_ANDAMENTO') THEN 0 ELSE 1 END
+        ORDER BY CASE WHEN ${sqlStatusEqualsAny("UPPER(COALESCE(t.status, 'PLANEJADO'))", [...TRAINING_CONFIRMED_STATUS_VALUES, ...TRAINING_IN_PROGRESS_STATUS_VALUES])} THEN 0 ELSE 1 END
         LIMIT 1`,
     )
     .bind(empresaId, data, funcionarioId, funcionarioId, funcionarioId)
@@ -793,7 +793,7 @@ async function hasCrewConflict(params: {
         WHERE empresa_id = ?
           AND data = ?
           AND deleted_at IS NULL
-          AND UPPER(COALESCE(status, 'RASCUNHO')) != 'CANCELADA'
+          AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(status, 'RASCUNHO'))", CANCELLED_STATUS_VALUES)}
           AND (
             pic_id IN (${placeholders})
             OR sic_id IN (${placeholders})
