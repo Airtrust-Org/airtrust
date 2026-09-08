@@ -281,6 +281,16 @@ describe('EVD operational regression coverage', () => {
         first: () => null,
       },
       {
+        match: (q) => q.includes('FROM treinamentos_dias td'),
+        first: () => null,
+      },
+      {
+        match: (q) =>
+          q.includes('FROM treinamentos_planejados t') &&
+          q.includes('date(COALESCE(t.data_prevista, t.data_inicio))'),
+        first: () => null,
+      },
+      {
         match: (q) => q.includes('COALESCE(MAX(revisao), -1) + 1 AS next_revisao'),
         first: () => ({ next_revisao: 2 }),
       },
@@ -327,6 +337,19 @@ describe('EVD operational regression coverage', () => {
     const updateCall = calls.find((c) => c.method === 'run' && c.query.includes("UPDATE escala_voo_diaria") && c.query.includes("SET status = 'PUBLICADA'"));
     expect(updateCall?.args[2]).toBe(77);
     expect(updateCall?.args[3]).toBe('2026-07-11');
+
+    const trainingQueries = calls.filter(
+      (c) => c.query.includes('FROM treinamentos_dias td') || c.query.includes('FROM treinamentos_planejados t'),
+    );
+    expect(trainingQueries.length).toBeGreaterThan(0);
+    for (const call of trainingQueries) {
+      expect(call.query).toContain("UPPER(COALESCE(t.status, 'PLANEJADO')) <> 'CANCELADA'");
+      expect(call.query).toContain("UPPER(COALESCE(t.status, 'PLANEJADO')) <> 'CANCELADO'");
+      expect(call.query).toContain("UPPER(COALESCE(t.status, 'PLANEJADO')) <> 'CONCLUIDA'");
+      expect(call.query).toContain("UPPER(COALESCE(t.status, 'PLANEJADO')) <> 'CONCLUIDO'");
+      expect(call.query).toContain("UPPER(COALESCE(t.status, 'PLANEJADO')) = 'CONFIRMADO'");
+      expect(call.query).toContain("UPPER(COALESCE(t.status, 'PLANEJADO')) = 'EM_ANDAMENTO'");
+    }
   });
 
   it('rejeita criação em POST /evd quando conflito de tripulação é detectado', async () => {
@@ -376,6 +399,11 @@ describe('EVD operational regression coverage', () => {
       success: false,
       error: 'Tripulante já alocado em outra escala diária na mesma data/intervalo.',
     });
+    const conflictCall = calls.find(
+      (c) => c.method === 'all' && c.query.includes('pic_id IN (') && c.query.includes('OR sic_id IN ('),
+    );
+    expect(conflictCall?.query).toContain("UPPER(COALESCE(status, 'RASCUNHO')) <> 'CANCELADA'");
+    expect(conflictCall?.query).toContain("UPPER(COALESCE(status, 'RASCUNHO')) <> 'CANCELADO'");
     expect(calls.some((c) => c.method === 'run' && c.query.includes('INSERT INTO escala_voo_diaria'))).toBe(false);
   });
 
