@@ -176,6 +176,28 @@ function getGetCacheTtlMs(pathname: string): number {
   return 15_000; // default: 15s (era 1.5s)
 }
 
+function shouldBackoffResponse(response: Response, pathname: string): boolean {
+  const isEscalasEndpoint = /\/api\/escalas(\/|$)/i.test(pathname);
+  return response.status === 429 || (response.status >= 500 && !isEscalasEndpoint);
+}
+
+function getRetryAfterMs(response: Response): number {
+  const retryAfterHeader = response.headers.get('Retry-After')?.trim();
+  if (retryAfterHeader) {
+    const delaySeconds = Number(retryAfterHeader);
+    if (Number.isFinite(delaySeconds) && delaySeconds >= 0) {
+      return Math.max(delaySeconds * 1000, 5000);
+    }
+
+    const retryAt = Date.parse(retryAfterHeader);
+    if (Number.isFinite(retryAt)) {
+      return Math.max(retryAt - Date.now(), 5000);
+    }
+  }
+
+  return response.status === 429 ? 15000 : 5000;
+}
+
 function buildResolvedUrl(rawInput: string, apiOrigin: string): URL | null {
   try {
     const parsed = new URL(rawInput, window.location.origin);
@@ -319,7 +341,7 @@ export function installGlobalApiFetch(apiBaseUrl: string = API_BASE_URL): void {
         resolved.origin === defaultOrigin ||
         (altOrigin ? resolved.origin === altOrigin : false));
 
-    if (!resolved || !isApiRequest || method !== 'GET' || bypassGetCache || authenticated) {
+    if (!resolved || !isApiRequest || method !== 'GET' || bypassGetCache) {
       const response = await performFetchWithFallback();
       notifyMutationDataChange(method, resolved?.pathname || null, response);
       return response;
@@ -333,6 +355,26 @@ export function installGlobalApiFetch(apiBaseUrl: string = API_BASE_URL): void {
       // Preserve the actual server status/body that initiated backoff. The local
       // marker is explicit and never fabricates a 429 that the server did not send.
       return responseFromSnapshot(activeBackoff.snapshot, true);
+    }
+
+    if (authenticated) {
+      // Authenticated GETs must not be cached as successful data, but they still
+      // need endpoint-level pressure relief when the server explicitly returns
+      // 429/5xx. This is local suppression only: no request is automatically
+      // replayed, and mutations remain on the direct path above.
+      const response = await performFetchWithFallback();
+      if (shouldBackoffResponse(response, resolved.pathname)) {
+        const snapshot = await responseToSnapshot(response);
+        const retryAfterMs = getRetryAfterMs(response);
+        endpointBackoff.set(
+          endpointKey,
+          { snapshot, until: Date.now() + retryAfterMs },
+          retryAfterMs,
+        );
+      } else {
+        endpointBackoff.delete(endpointKey);
+      }
+      return response;
     }
 
     const requestKey = `${tenantScope}:${method}:${normalizeUrlForKey(resolved.toString())}`;
@@ -354,16 +396,8 @@ export function installGlobalApiFetch(apiBaseUrl: string = API_BASE_URL): void {
         recentGetCache.set(requestKey, snapshot, getGetCacheTtlMs(resolved.pathname));
       }
 
-      const isEscalasEndpoint = /\/api\/escalas(\/|$)/i.test(resolved.pathname);
-      const shouldBackoff =
-        response.status === 429 || (response.status >= 500 && !isEscalasEndpoint);
-      if (shouldBackoff) {
-        const retryAfterHeader = response.headers.get('Retry-After');
-        const retryAfterMs = retryAfterHeader
-          ? Math.max(Number.parseInt(retryAfterHeader, 10) * 1000, 5000)
-          : response.status === 429
-            ? 15000
-            : 5000;
+      if (shouldBackoffResponse(response, resolved.pathname)) {
+        const retryAfterMs = getRetryAfterMs(response);
         endpointBackoff.set(
           endpointKey,
           { snapshot, until: Date.now() + retryAfterMs },
