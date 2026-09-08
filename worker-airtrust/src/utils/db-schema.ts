@@ -1,16 +1,17 @@
 /**
  * DB SCHEMA UTILS - Cache de introspação de schema D1
  *
- * Problema auditado: hasUsuariosEmpresasTable() e PRAGMA table_info()
- * eram chamados em CADA request, adicionando 2-4 queries desnecessárias.
+ * Problema auditado: probes de sqlite_master / PRAGMA table_info()
+ * eram chamados em CADA request, adicionando queries desnecessárias.
  *
- * Solução: cache em memória do worker (valid por lifetime do worker — até
+ * Solução: cache em memória do worker (válido por lifetime do worker — até
  * próximo deploy). O schema não muda sem deploy, então o cache é safe.
  */
 
 // ===== CACHE DE MÓDULO =====
 // Cada worker instance mantém seu próprio cache; ao reiniciar/deploy, o cache é zerado.
 let _hasUsuariosEmpresas: boolean | null = null;
+const _tableExistenceCache = new Map<string, boolean>();
 
 interface UsuariosSchema {
   hasActive: boolean;
@@ -27,6 +28,27 @@ let _hasRefreshTokensEmpresaId: boolean | null = null;
 
 const USUARIOS_EMPRESAS_SQL =
   "SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = 'usuarios_empresas' LIMIT 1";
+
+/**
+ * Retorna se uma tabela existe no schema atual.
+ * O nome é bindado como valor, nunca interpolado como identificador SQL.
+ * Resultado cacheado após a primeira chamada para o lifetime da instância.
+ */
+export async function hasSchemaTable(db: D1Database, tableName: string): Promise<boolean> {
+  const normalizedTableName = String(tableName || '').trim().toLowerCase();
+  if (!normalizedTableName) return false;
+
+  const cached = _tableExistenceCache.get(normalizedTableName);
+  if (cached !== undefined) return cached;
+
+  const result = await db
+    .prepare("SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
+    .bind(normalizedTableName)
+    .first<{ found: number }>();
+  const exists = Boolean(result?.found);
+  _tableExistenceCache.set(normalizedTableName, exists);
+  return exists;
+}
 
 /**
  * Retorna se a tabela usuarios_empresas existe.
@@ -85,8 +107,8 @@ export async function hasRefreshTokensAccessTokenJtiColumn(db: D1Database): Prom
  */
 export function resetSchemaCache(): void {
   _hasUsuariosEmpresas = null;
+  _tableExistenceCache.clear();
   _usuariosSchema = null;
   _hasRefreshTokensEmpresaId = null;
   _hasRefreshTokensAccessTokenJti = null;
 }
-

@@ -80,7 +80,7 @@ describe('GET /qualificacoes/tipos com filtro ativo', () => {
     expect(sql).toContain('qt.deleted_at IS NULL');
     expect(sql).toContain('qt.empresa_id = ?');
     expect(sql).not.toContain('qt.ativo =');
-    expect(executedBindings[0]).toContain(MOCK_EMPRESA_ID);
+    expect(executedBindings.some((bindings) => bindings.includes(MOCK_EMPRESA_ID))).toBe(true);
   });
 
   it('ativo=1 adiciona qt.ativo = 1', async () => {
@@ -130,6 +130,6 @@ describe('GET /qualificacoes/tipos com filtro ativo', () => {
 
   it('empresa_id correto está nos bindings (tenant isolation)', async () => {
     await makeReq('?ativo=1');
-    expect(executedBindings[0]).toContain(MOCK_EMPRESA_ID);
+    expect(executedBindings.some((bindings) => bindings.includes(MOCK_EMPRESA_ID))).toBe(true);
   });
 });
