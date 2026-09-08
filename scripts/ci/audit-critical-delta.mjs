@@ -70,19 +70,47 @@ function runNpmAudit(workspaceDir) {
   return report;
 }
 
+function directBlockedAdvisories(vulnerability) {
+  return Array.isArray(vulnerability?.via)
+    ? vulnerability.via.filter(
+        (item) =>
+          typeof item === 'object' &&
+          item !== null &&
+          BLOCKED_SEVERITIES.has(String(item.severity).toLowerCase()),
+      )
+    : [];
+}
+
+function inheritedBlockedAdvisories(vulnerabilities, packageName, seen = new Set()) {
+  if (seen.has(packageName)) return [];
+  const vulnerability = vulnerabilities?.[packageName];
+  if (!vulnerability || !Array.isArray(vulnerability.via)) return [];
+
+  const nextSeen = new Set(seen);
+  nextSeen.add(packageName);
+  const advisories = [...directBlockedAdvisories(vulnerability)];
+
+  for (const item of vulnerability.via) {
+    if (typeof item !== 'string') continue;
+    advisories.push(...inheritedBlockedAdvisories(vulnerabilities, item, nextSeen));
+  }
+
+  const deduped = new Map();
+  for (const advisory of advisories) {
+    const severity = String(advisory.severity).toLowerCase();
+    const identity = advisory.source ?? advisory.url ?? advisory.title ?? advisory.name ?? 'unknown-advisory';
+    const range = advisory.range ?? 'unknown-range';
+    deduped.set(`${severity}|${identity}|${range}`, advisory);
+  }
+  return [...deduped.values()];
+}
+
 export function collectBlockedSignatures(report, workspaceName) {
   const signatures = new Set();
   const vulnerabilities = report?.vulnerabilities ?? {};
 
   for (const [packageName, vulnerability] of Object.entries(vulnerabilities)) {
-    const blockedAdvisories = Array.isArray(vulnerability?.via)
-      ? vulnerability.via.filter(
-          (item) =>
-            typeof item === 'object' &&
-            item !== null &&
-            BLOCKED_SEVERITIES.has(String(item.severity).toLowerCase()),
-        )
-      : [];
+    const blockedAdvisories = directBlockedAdvisories(vulnerability);
 
     for (const advisory of blockedAdvisories) {
       const severity = String(advisory.severity).toLowerCase();
@@ -98,13 +126,31 @@ export function collectBlockedSignatures(report, workspaceName) {
 
     const aggregateSeverity = String(vulnerability?.severity).toLowerCase();
     if (BLOCKED_SEVERITIES.has(aggregateSeverity) && blockedAdvisories.length === 0) {
-      signatures.add([
-        workspaceName,
-        aggregateSeverity,
-        packageName,
-        `aggregate-${aggregateSeverity}`,
-        vulnerability.range ?? 'unknown-range',
-      ].join('|'));
+      const inherited = inheritedBlockedAdvisories(vulnerabilities, packageName);
+      if (inherited.length > 0) {
+        for (const advisory of inherited) {
+          const severity = String(advisory.severity).toLowerCase();
+          const advisoryIdentity = advisory.source ?? advisory.url ?? advisory.title ?? advisory.name ?? 'unknown-advisory';
+          signatures.add([
+            workspaceName,
+            severity,
+            packageName,
+            advisoryIdentity,
+            advisory.range ?? 'unknown-range',
+          ].join('|'));
+        }
+      } else {
+        // Fail closed when npm reports a blocked aggregate but does not expose
+        // a resolvable advisory chain. Keep the aggregate signature so an
+        // unexplained high/critical delta can never disappear silently.
+        signatures.add([
+          workspaceName,
+          aggregateSeverity,
+          packageName,
+          `aggregate-${aggregateSeverity}`,
+          vulnerability.range ?? 'unknown-range',
+        ].join('|'));
+      }
     }
   }
 
