@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { verificarConflitosEscala, verificarCMAAutomatico } from '../utils/escala-engine';
 import {
   getEmpresaIdSafe,
@@ -126,7 +126,7 @@ async function resolveAeronaveDescricao(
 }
 
 // POST /:id/tripulacoes — adicionar tripulação
-tripulacoes.post('/:id/tripulacoes', auth(), requireRole('admin', 'manager'), async (c) => {
+tripulacoes.post('/:id/tripulacoes', auth(), requirePermission('escalas', 'criar', 'admin', 'manager'), async (c) => {
   const { id: escala_id } = c.req.param();
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
@@ -646,7 +646,7 @@ tripulacoes.get('/:id/tripulacoes', auth(), async (c) => {
 tripulacoes.delete(
   '/:id/tripulacoes/:tripId',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('escalas', 'deletar', 'admin', 'manager'),
   async (c) => {
     const { id, tripId } = c.req.param();
     const db = c.env.DB;
@@ -730,7 +730,7 @@ tripulacoes.delete(
 );
 
 // PUT /:id/tripulacoes/:tripId — editar tripulação
-tripulacoes.put('/:id/tripulacoes/:tripId', auth(), requireRole('admin', 'manager'), async (c) => {
+tripulacoes.put('/:id/tripulacoes/:tripId', auth(), requirePermission('escalas', 'editar', 'admin', 'manager'), async (c) => {
   const { id, tripId } = c.req.param();
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
