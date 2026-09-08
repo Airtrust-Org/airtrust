@@ -97,6 +97,7 @@ test('governed FRMS catalogue is derived from reviewed 128-parameter baseline', 
 test('FRMS production readiness checks assignment profile revision and all governed parameters', () => {
   const s = read(SCRIPT);
   assert.match(s, /FROM frms_profile_assignments/);
+  assert.match(s, /JOIN empresas e ON e\.id = f\.empresa_id AND e\.ativo = 1 AND e\.deleted_at IS NULL/);
   assert.match(s, /FROM frms_regulatory_profiles/);
   assert.match(s, /FROM frms_config_revisions/);
   assert.match(s, /FROM frms_config_parameters/);

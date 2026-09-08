@@ -206,7 +206,10 @@ async function inspectAuthAuthority() {
 async function inspectFrmsGovernance(requiredKeys) {
   const today = new Date().toISOString().slice(0, 10);
   const tenantRows = await query(
-    `SELECT DISTINCT f.empresa_id AS empresa_id FROM frms_jornada j JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER) AND f.deleted_at IS NULL WHERE j.deleted_at IS NULL AND f.empresa_id IS NOT NULL ORDER BY f.empresa_id`,
+    `SELECT DISTINCT f.empresa_id AS empresa_id FROM frms_jornada j ` +
+      `JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER) AND f.deleted_at IS NULL ` +
+      `JOIN empresas e ON e.id = f.empresa_id AND e.ativo = 1 AND e.deleted_at IS NULL ` +
+      `WHERE j.deleted_at IS NULL AND f.empresa_id IS NOT NULL ORDER BY f.empresa_id`,
   );
   const reasons = {};
   const missingAssignmentTenantIds = [];
