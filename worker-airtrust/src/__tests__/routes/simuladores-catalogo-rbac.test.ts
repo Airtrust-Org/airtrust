@@ -9,6 +9,19 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
+
+vi.mock('../../middleware/rbac', () => ({
+  requirePermission:
+    (_module: string, _action: string, ...requiredRoles: string[]) =>
+    async (c: any, next: () => Promise<void>) => {
+      const role = String(c.get('userRole') || '').toLowerCase();
+      if (!requiredRoles.map((item) => item.toLowerCase()).includes(role)) {
+        return c.json({ success: false, error: 'Permissão negada' }, 403);
+      }
+      await next();
+    },
+}));
+
 import catalogoRoutes from '../../routes/simuladores-catalogo';
 
 function createEnv(): Env {
