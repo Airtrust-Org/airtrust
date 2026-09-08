@@ -8,7 +8,7 @@ import type { Env } from '../../types';
 import { z } from 'zod';
 import { auth } from '../../middleware/auth';
 import { getTenantContext } from '../../middleware/tenant';
-import { requireRole } from '../../middleware/rbac';
+import { requirePermission } from '../../middleware/rbac';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../../utils/auditoria';
 import {
   safe,
@@ -141,7 +141,7 @@ const renovarSchema = z
 writeRouter.post(
   '/:id/renovar',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'editar', 'admin', 'manager'),
   requireOperacoesHistorico('reissue'),
   safe(async (c) => {
     const db = c.env.DB;
@@ -535,7 +535,7 @@ writeRouter.post(
 writeRouter.post(
   '/',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'editar', 'admin', 'manager'),
   requireOperacoesHistorico('create'),
   safe(async (c) => {
     const db = c.env.DB;
@@ -936,7 +936,7 @@ Alternativamente, edite ou exclua o registro existente antes de criar um novo.`,
 writeRouter.put(
   '/:id',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'editar', 'admin', 'manager'),
   requireOperacoesHistorico('update'),
   safe(async (c) => {
     const db = c.env.DB;
@@ -1173,7 +1173,7 @@ writeRouter.put(
 writeRouter.patch(
   '/:id/reagendar',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'editar', 'admin', 'manager'),
   requireOperacoesHistorico('update'),
   safe(async (c) => {
     const db = c.env.DB;
@@ -1302,7 +1302,7 @@ writeRouter.patch(
 writeRouter.post(
   '/:id/confirmar',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'editar', 'admin', 'manager'),
   requireOperacoesHistorico('complete'),
   safe(async (c) => {
     const db = c.env.DB;
@@ -1456,7 +1456,7 @@ writeRouter.post(
 writeRouter.patch(
   '/:id/cancelar',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'editar', 'admin', 'manager'),
   requireOperacoesHistorico('cancel'),
   safe(async (c) => {
     const db = c.env.DB;
@@ -1527,7 +1527,7 @@ writeRouter.patch(
 writeRouter.delete(
   '/:id',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'editar', 'admin', 'manager'),
   requireOperacoesHistorico('delete'),
   safe(async (c) => {
     const db = c.env.DB;
