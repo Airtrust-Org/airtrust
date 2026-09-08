@@ -1285,7 +1285,31 @@ export function useSalvarProgresso() {
         body: JSON.stringify(dto),
       }),
     onMutate: async (vars) => {
+      const detailKey = lmsKeys.matriculaDetalhe(vars.matriculaId);
+      const matriculasKey = lmsKeys.minhasMatriculas();
+      const eadKey = lmsKeys.minhasEAD();
+
+      await Promise.all([
+        qc.cancelQueries({ queryKey: detailKey }),
+        qc.cancelQueries({ queryKey: matriculasKey }),
+        qc.cancelQueries({ queryKey: eadKey }),
+      ]);
+
+      const previous = {
+        detalhe: qc.getQueryData<LmsCursoDetalhe>(detailKey),
+        matriculas: qc.getQueryData<LmsMatricula[]>(matriculasKey),
+        ead: qc.getQueryData<LmsMatriculaEAD[]>(eadKey),
+      };
+
       updateCachedMatriculaProgress(qc, vars);
+      return previous;
+    },
+    onError: (_error, vars, previous) => {
+      if (!previous) return;
+
+      qc.setQueryData(lmsKeys.matriculaDetalhe(vars.matriculaId), previous.detalhe);
+      qc.setQueryData(lmsKeys.minhasMatriculas(), previous.matriculas);
+      qc.setQueryData(lmsKeys.minhasEAD(), previous.ead);
     },
     onSuccess: (data, vars) => {
       updateCachedMatriculaProgress(qc, vars, data);
