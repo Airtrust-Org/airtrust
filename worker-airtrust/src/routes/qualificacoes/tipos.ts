@@ -12,7 +12,7 @@
 import { Hono, type Context } from 'hono';
 import type { Env } from '../../types';
 import { auth } from '../../middleware/auth';
-import { requireRole } from '../../middleware/rbac';
+import { requirePermission } from '../../middleware/rbac';
 import { getTenantContext } from '../../middleware/tenant';
 import { ApiError, forbidden } from '../../middleware/error-handler';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../../utils/auditoria';
@@ -668,6 +668,7 @@ async function syncTipoSetores(
 router.get(
   '/',
   auth(),
+  requirePermission('qualificacoes', 'visualizar', 'admin', 'manager', 'instructor', 'student', 'viewer', 'editor'),
   safe(async (c) => {
     const db: D1Database = c.env.DB;
     const { empresaId } = getTenantContext(c);
@@ -901,7 +902,7 @@ router.get(
 router.post(
   '/',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'criar', 'admin', 'manager'),
   safe(async (c) => {
     const db: D1Database = c.env.DB;
     const { empresaId } = getTenantContext(c);
@@ -1194,7 +1195,7 @@ router.post(
 router.put(
   '/:id',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'editar', 'admin', 'manager'),
   requireOperacoesTipo('update'),
   safe(async (c) => {
     const db: D1Database = c.env.DB;
@@ -1802,7 +1803,7 @@ router.put(
 router.delete(
   '/:id',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('qualificacoes', 'deletar', 'admin', 'manager'),
   requireOperacoesTipo('delete'),
   safe(async (c) => {
     const db = c.env.DB;
