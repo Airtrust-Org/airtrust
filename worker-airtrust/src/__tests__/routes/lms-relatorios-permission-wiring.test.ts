@@ -5,7 +5,7 @@ import path from 'node:path';
 describe('LMS reports dynamic permission wiring', () => {
   it('uses the canonical relatorios module while preserving admin/manager baseline', () => {
     const source = fs.readFileSync(
-      path.resolve(process.cwd(), 'worker-airtrust/src/routes/lms-relatorios.ts'),
+      path.resolve(process.cwd(), 'src/routes/lms-relatorios.ts'),
       'utf8',
     );
     expect(source).toContain(
