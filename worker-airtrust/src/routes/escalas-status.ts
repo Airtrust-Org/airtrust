@@ -7,7 +7,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import {
   getEmpresaIdSafe,
   getEscalaVerificada,
@@ -45,7 +45,11 @@ function parseSnapshotMetadata(payloadJson?: string | null): SnapshotMetadata | 
 }
 
 // PATCH /:id/status — alterar status (state machine)
-status.patch('/:id/status', auth(), requireRole('admin', 'manager'), async (c) => {
+status.patch(
+  '/:id/status',
+  auth(),
+  requirePermission('escalas', 'editar', 'admin', 'manager'),
+  async (c) => {
   const { id } = c.req.param();
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
@@ -97,7 +101,7 @@ status.patch('/:id/status', auth(), requireRole('admin', 'manager'), async (c) =
       }
       // Primeira publicação: numero_revisao permanece 0
 
-      await db
+      const updateResult = await db
         .prepare(
           `UPDATE escalas_mensais
               SET status = 'publicada',
@@ -105,10 +109,23 @@ status.patch('/:id/status', auth(), requireRole('admin', 'manager'), async (c) =
                   publicado_por = ?,
                   publicado_em = ?,
                   updated_at = ?
-            WHERE id = ?`,
+            WHERE id = ?
+              AND empresa_id = ?
+              AND status = ?
+              AND COALESCE(numero_revisao, 0) = ?`,
         )
-        .bind(numeroRevisao, userId, now, now, id)
+        .bind(numeroRevisao, userId, now, now, id, empresaId, statusAtual, Number(escala.numero_revisao ?? 0))
         .run();
+
+      // A publicação precisa vencer a versão que foi lida acima. Sem este
+      // compare-and-set, dois POSTs concorrentes poderiam ambos gerar
+      // snapshots/eventos a partir da mesma revisão.
+      if (updateResult.meta.changes !== 1) {
+        return c.json(
+          { success: false, error: 'A escala foi alterada por outra publicação. Atualize e tente novamente.' },
+          409,
+        );
+      }
     } else {
       const updates: string[] = ['status = ?', 'updated_at = ?'];
       const vals: unknown[] = [parsed.data.status, now];
@@ -119,10 +136,24 @@ status.patch('/:id/status', auth(), requireRole('admin', 'manager'), async (c) =
       }
 
       vals.push(id);
-      await db
-        .prepare(`UPDATE escalas_mensais SET ${updates.join(', ')} WHERE id = ?`)
-        .bind(...vals)
+      const updateResult = await db
+        .prepare(
+          `UPDATE escalas_mensais
+              SET ${updates.join(', ')}
+            WHERE id = ?
+              AND empresa_id = ?
+              AND status = ?
+              AND COALESCE(numero_revisao, 0) = ?`,
+        )
+        .bind(...vals, empresaId, statusAtual, Number(escala.numero_revisao ?? 0))
         .run();
+
+      if (updateResult.meta.changes !== 1) {
+        return c.json(
+          { success: false, error: 'A escala foi alterada por outra operação. Atualize e tente novamente.' },
+          409,
+        );
+      }
     }
 
     // Auditoria
@@ -353,7 +384,8 @@ status.patch('/:id/status', auth(), requireRole('admin', 'manager'), async (c) =
   } catch (e) {
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
-});
+  },
+);
 
 // GET /:id/snapshot-publicado — último snapshot real da publicação
 status.get('/:id/snapshot-publicado', auth(), async (c) => {

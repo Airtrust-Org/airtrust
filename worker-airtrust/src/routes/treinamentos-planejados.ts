@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { forbidden } from '../middleware/error-handler';
 import { syncTreinamentoPlanejadoIntegration } from '../services/treinamentos-planejados-integration';
@@ -1984,7 +1984,7 @@ treinamentosPlanejadosRoutes.get('/planejados/:id', async (c) => {
   });
 });
 
-treinamentosPlanejadosRoutes.post('/planejados', requireRole('admin', 'manager'), async (c) => {
+treinamentosPlanejadosRoutes.post('/planejados', requirePermission('agendamentos', 'criar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const parsed = eventoSchema.safeParse(await c.req.json());
@@ -2186,7 +2186,7 @@ treinamentosPlanejadosRoutes.post('/planejados', requireRole('admin', 'manager')
 
 treinamentosPlanejadosRoutes.post(
   '/planejados/:id/convocacoes/preview',
-  requireRole('admin', 'manager'),
+  requirePermission('agendamentos', 'visualizar', 'admin', 'manager'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
@@ -2260,7 +2260,7 @@ treinamentosPlanejadosRoutes.post(
 
 treinamentosPlanejadosRoutes.post(
   '/planejados/:id/convocacoes',
-  requireRole('admin', 'manager'),
+  requirePermission('agendamentos', 'editar', 'admin', 'manager'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
@@ -2395,7 +2395,7 @@ treinamentosPlanejadosRoutes.post(
 
 treinamentosPlanejadosRoutes.post(
   '/planejados/:id/convocacoes/reenvio',
-  requireRole('admin', 'manager'),
+  requirePermission('agendamentos', 'editar', 'admin', 'manager'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
@@ -2487,7 +2487,7 @@ treinamentosPlanejadosRoutes.post(
 
 treinamentosPlanejadosRoutes.patch(
   '/planejados/:id',
-  requireRole('admin', 'manager'),
+  requirePermission('agendamentos', 'editar', 'admin', 'manager'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
@@ -2894,7 +2894,7 @@ treinamentosPlanejadosRoutes.patch(
 
 treinamentosPlanejadosRoutes.post(
   '/planejados/:id/participantes',
-  requireRole('admin', 'manager'),
+  requirePermission('agendamentos', 'criar', 'admin', 'manager'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
@@ -2956,7 +2956,7 @@ treinamentosPlanejadosRoutes.post(
 
 treinamentosPlanejadosRoutes.patch(
   '/planejados/:id/presenca',
-  requireRole('admin', 'manager'),
+  requirePermission('agendamentos', 'editar', 'admin', 'manager'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
@@ -3102,7 +3102,7 @@ treinamentosPlanejadosRoutes.get('/planejados/:id/conclusao/preview', async (c) 
 
 treinamentosPlanejadosRoutes.patch(
   '/planejados/:id/conclusao-lote',
-  requireRole('admin', 'manager'),
+  requirePermission('agendamentos', 'editar', 'admin', 'manager'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
@@ -3375,7 +3375,7 @@ treinamentosPlanejadosRoutes.patch(
 
 treinamentosPlanejadosRoutes.patch(
   '/planejados/:id/participantes/conclusao',
-  requireRole('admin', 'manager'),
+  requirePermission('agendamentos', 'editar', 'admin', 'manager'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
@@ -3482,7 +3482,7 @@ treinamentosPlanejadosRoutes.patch(
 
 treinamentosPlanejadosRoutes.patch(
   '/planejados/:id/dias/:diaId/presencas',
-  requireRole('admin', 'manager'),
+  requirePermission('agendamentos', 'editar', 'admin', 'manager'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
@@ -3555,7 +3555,7 @@ treinamentosPlanejadosRoutes.patch(
 
 treinamentosPlanejadosRoutes.delete(
   '/planejados/:id',
-  requireRole('admin', 'manager'),
+  requirePermission('agendamentos', 'deletar', 'admin', 'manager'),
   async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
@@ -3615,7 +3615,7 @@ treinamentosPlanejadosRoutes.delete(
 //
 // ?dryRun=true — preview only, no mutations. Retorna turmas e contagem de participantes
 //                com/sem historico existente.
-treinamentosPlanejadosRoutes.post('/planejados/backfill-sync', requireRole('admin'), async (c) => {
+treinamentosPlanejadosRoutes.post('/planejados/backfill-sync', requirePermission('agendamentos', 'criar', 'admin'), async (c) => {
   const db = c.env.DB;
   const empresaId = c.get('empresaId');
   const url = new URL(c.req.url);
