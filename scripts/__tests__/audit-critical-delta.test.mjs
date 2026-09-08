@@ -68,3 +68,109 @@ test('does not fail a neutral delta because of the historical baseline', () => {
   const baseline = new Set(['root|high|legacy|99|*']);
   assert.deepEqual(findNewBlockedSignatures(baseline, new Set(baseline)), []);
 });
+
+
+test('resolves inherited blocked advisories instead of signing aggregate package ranges', () => {
+  const signatures = collectBlockedSignatures(
+    report({
+      wrapper: { severity: 'high', range: '>=4.0.0', via: ['leaf'] },
+      leaf: {
+        severity: 'high',
+        range: '<2.0.0',
+        via: [{ source: 4242, severity: 'high', range: '<2.0.0' }],
+      },
+    }),
+    'worker',
+  );
+
+  assert.deepEqual([...signatures].sort(), [
+    'worker|high|leaf|4242|<2.0.0',
+    'worker|high|wrapper|4242|<2.0.0',
+  ]);
+});
+
+test('does not flag an inherited advisory as new when only the aggregate affected range changes', () => {
+  const base = collectBlockedSignatures(
+    report({
+      wrapper: { severity: 'high', range: '4.0.0 - 4.9.0', via: ['leaf'] },
+      leaf: {
+        severity: 'high',
+        range: '<2.0.0',
+        via: [{ source: 4242, severity: 'high', range: '<2.0.0' }],
+      },
+    }),
+    'worker',
+  );
+  const head = collectBlockedSignatures(
+    report({
+      wrapper: { severity: 'high', range: '>=4.0.0', via: ['leaf'] },
+      leaf: {
+        severity: 'high',
+        range: '<2.0.0',
+        via: [{ source: 4242, severity: 'high', range: '<2.0.0' }],
+      },
+    }),
+    'worker',
+  );
+
+  assert.deepEqual(findNewBlockedSignatures(base, head), []);
+});
+
+test('still flags a genuinely new inherited high advisory', () => {
+  const base = collectBlockedSignatures(
+    report({
+      wrapper: { severity: 'high', range: '>=4.0.0', via: ['leaf'] },
+      leaf: {
+        severity: 'high',
+        range: '<2.0.0',
+        via: [{ source: 4242, severity: 'high', range: '<2.0.0' }],
+      },
+    }),
+    'worker',
+  );
+  const head = collectBlockedSignatures(
+    report({
+      wrapper: { severity: 'high', range: '>=4.0.0', via: ['leaf'] },
+      leaf: {
+        severity: 'high',
+        range: '<3.0.0',
+        via: [
+          { source: 4242, severity: 'high', range: '<2.0.0' },
+          { source: 9001, severity: 'high', range: '<3.0.0' },
+        ],
+      },
+    }),
+    'worker',
+  );
+
+  assert.deepEqual(findNewBlockedSignatures(base, head), [
+    'worker|high|leaf|9001|<3.0.0',
+    'worker|high|wrapper|9001|<3.0.0',
+  ]);
+});
+
+test('fails closed with aggregate signature when inherited advisory chain cannot be resolved', () => {
+  const signatures = collectBlockedSignatures(
+    report({
+      wrapper: { severity: 'high', range: '>=4.0.0', via: ['missing-package'] },
+    }),
+    'worker',
+  );
+
+  assert.deepEqual([...signatures], ['worker|high|wrapper|aggregate-high|>=4.0.0']);
+});
+
+test('handles cyclic inherited package references without recursion failure', () => {
+  const signatures = collectBlockedSignatures(
+    report({
+      alpha: { severity: 'high', range: '*', via: ['beta'] },
+      beta: { severity: 'high', range: '*', via: ['alpha'] },
+    }),
+    'worker',
+  );
+
+  assert.deepEqual([...signatures].sort(), [
+    'worker|high|alpha|aggregate-high|*',
+    'worker|high|beta|aggregate-high|*',
+  ]);
+});
