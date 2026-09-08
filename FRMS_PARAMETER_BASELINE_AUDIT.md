@@ -62,8 +62,8 @@ document.
 | ALERTA_VIOLACAO_PCT | 101 | types.ts | OPERATIONAL_POLICY |
 | FDP_ALERTA_RESTANTE_HORAS | 3 | types.ts | OPERATIONAL_POLICY |
 | HV_DIA_ALERTA_RESTANTE_HORAS | 2 | types.ts | OPERATIONAL_POLICY |
-| REPOUSO_PLATAFORMA_MINIMO_HORAS | 3 | types.ts | OFFSHORE_BENCHMARK (repouso em plataforma) — **⚠ sem documento-fonte citado** (IOGP 690-2 / contrato Petrobras / outro?); só o rótulo "OFFSHORE_BENCHMARK" está no código, sem referência ao documento normativo específico |
-| REPOUSO_PLATAFORMA_MAXIMO_HORAS | 6 | types.ts | OFFSHORE_BENCHMARK — **⚠ sem documento-fonte citado**, idem |
+| REPOUSO_PLATAFORMA_MINIMO_HORAS | 3 | types.ts | REGULATORY_CONTEXT_BASELINE — Lei 13.475/2017 art. 38(I): interrupção de jornada fora da base, na hipótese aplicável, deve ser **superior a 3 h**; não é repouso pós-jornada. |
+| REPOUSO_PLATAFORMA_MAXIMO_HORAS | 6 | types.ts | REGULATORY_CONTEXT_BASELINE — Lei 13.475/2017 art. 38(I): a mesma interrupção deve ser **inferior a 6 h**; art. 38(II) trata separadamente a faixa >6 h e <10 h com acomodação mais robusta. |
 | CICLO_EMBARCADO_DIA_INICIO | 1 | types.ts | OFFSHORE_BENCHMARK (ciclo embarcado) — **⚠ sem documento-fonte citado** |
 | CICLO_EMBARCADO_DIA_MAX | 15 | types.ts | OFFSHORE_BENCHMARK — 15 dias é consistente com o padrão comum de rotação offshore 14/14 ou 15/15, mas **nenhuma fonte contratual/documental é citada no código** confirmando qual rotação real está em vigor |
 | CICLO_EMBARCADO_PCT_MIN | 0 | types.ts | OFFSHORE_BENCHMARK |

@@ -28,8 +28,8 @@ The review separated four layers that must not be conflated:
 | `REPOUSO_MINIMO_HORAS` | 12 h | `REGULATORY_CONTEXT_BASELINE` | 12 h is traceable to the ordinary B117.23(a) case, but B117.23(b)-(d) contain conditional calculations. The constant is not a complete implementation of the regulation. |
 | `HV_28_DIAS_HORAS` | 93 h | `REGULATORY` | RBAC 117 EMD 01 B117.25(a)(4) explicitly establishes 93 h/28 consecutive days for helicopter operations under the applicable appendix. |
 | `HV_365_DIAS_HORAS` | 930 h | `REGULATORY` | RBAC 117 EMD 01 B117.25(a)(4) explicitly establishes 930 h/365 consecutive days for helicopter operations under the applicable appendix. The older characterization of 930 h solely as an internal margin over 960 h must not be used as the current provenance statement. |
-| `REPOUSO_PLATAFORMA_MINIMO_HORAS` | 3 h | `UNVERIFIED_OPERATIONAL_POLICY` | No reviewed RBAC, current Costa do Sol ACT, signed sector CCT, or reviewed IOGP 690-2 material establishes this 3 h value. |
-| `REPOUSO_PLATAFORMA_MAXIMO_HORAS` | 6 h | `UNVERIFIED_OPERATIONAL_POLICY` | No reviewed authoritative source establishes this 6 h value. |
+| `REPOUSO_PLATAFORMA_MINIMO_HORAS` | 3 h | `REGULATORY_CONTEXT_BASELINE` | Lei 13.475/2017 art. 38(I) establishes, for the applicable Article 5(II), (IV) and (V) services with minimum/simple crew, an interruption of duty outside the contractual base **superior to 3 h and inferior to 6 h**, provided the required rest accommodation is supplied. The legacy parameter name must not be presented as post-duty "rest". |
+| `REPOUSO_PLATAFORMA_MAXIMO_HORAS` | 6 h | `REGULATORY_CONTEXT_BASELINE` | Same Article 38(I) context. The 6 h threshold is **exclusive**; Article 38(II) separately addresses interruptions above 6 h and below 10 h under stronger accommodation conditions. This pair is therefore not a universal offshore-rest rule. |
 | `CICLO_EMBARCADO_DIA_MAX` | 15 days | `UNVERIFIED_OPERATIONAL_POLICY` | The Costa do Sol ACT provides mission-roster maxima but does not mandate a universal 15-day cycle. No reviewed IOGP/Petrobras source establishes 15 days as an external requirement. |
 
 ## Meaning of `UNVERIFIED_OPERATIONAL_POLICY`
@@ -49,12 +49,14 @@ The signed Costa do Sol Táxi Aéreo ACT 2025/2027 is authoritative for the labo
 
 Those provisions do **not** prove the AirTrust 15-day fatigue-model constant and do **not** establish the 3 h/6 h platform-rest pair. They must be modeled as a separate tenant/applicability layer if the product later enforces them directly.
 
-## Official statutory cross-check: reserve is not platform rest
+## Official statutory cross-check: interruption is not reserve or post-duty rest
 
-The official text of Lei 13.475/2017 distinguishes **reserva** (a crewmember being available at the workplace) from **repouso** (the post-duty uninterrupted period free from service). It must not be used as a source for `REPOUSO_PLATAFORMA_*`.
+The official text of Lei 13.475/2017 distinguishes **interrupção de jornada** (Article 38), **reserva** (Article 44) and **repouso pós-jornada** (Articles 46–48). The legacy `REPOUSO_PLATAFORMA_*` names correspond most closely to the Article 38 interruption window, not to reserve or post-duty rest.
 
-- Article 44, paragraph 2 sets reserve at 3–6 hours only for the Article 5(I) regular/non-regular public-air-transport category.
-- Article 44, paragraph 3 sets reserve at 3–10 hours for Article 5(II)–(V), which includes taxi-air services.
+- Article 38(I) applies to Article 5(II), (IV) and (V) services, including taxi-air service, when using minimum/simple crew, and requires an interruption **greater than 3 h and less than 6 h** plus the specified accommodation.
+- Article 38(II) separately covers interruption **greater than 6 h and less than 10 h** with individual rooms and stronger accommodation conditions.
+- Article 44 sets different reserve limits and must not be used as the source for this pair.
+- Articles 46–48 define post-duty rest and likewise must not be conflated with the legacy parameter name.
 - Article 41, paragraphs 2–4 separately establishes the 21-day mission / 17-day work-at-location outer framework and the corresponding post-mission leave calculation for Article 5(II)–(V); this is not a fixed 15-day fatigue cycle.
 
 Official source: [Lei 13.475/2017, arts. 41 and 44](https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2017/lei/l13475.htm).
