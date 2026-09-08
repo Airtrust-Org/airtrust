@@ -14,6 +14,11 @@ import {
   resolveQualificacaoAlertTemplateKey,
 } from '../utils/whatsapp-templates';
 import { createStructuredConsole } from '../utils/logger';
+import {
+  CANCELLED_STATUS_VALUES,
+  QUALIFICACAO_STATUS,
+  sqlStatusNotEqualsAny,
+} from '../lib/status/status-codes';
 
 interface NotificacaoConfig {
   id: number;
@@ -159,9 +164,11 @@ export async function processarNotificacoes(env: Env): Promise<ProcessamentoNoti
   }
 }
 
-async function carregarQualificacoesParaNotificar(env: Env, empresaId: number): Promise<QualificacaoParaNotificar[]> {
-  const { results } = await env.DB.prepare(
-    `
+export function buildQualificacoesParaNotificarQuery(): string {
+  const qualificationStatusExpr =
+    `UPPER(COALESCE(qh.status, '${QUALIFICACAO_STATUS.CONCLUIDA}'))`;
+
+  return `
     SELECT
       qh.id,
       qh.funcionario_id,
@@ -200,7 +207,7 @@ async function carregarQualificacoesParaNotificar(env: Env, empresaId: number): 
       AND f.deleted_at IS NULL
       AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
       AND qh.data_vencimento IS NOT NULL
-      AND COALESCE(qh.status, 'CONCLUIDA') != 'CANCELADA'
+      AND ${sqlStatusNotEqualsAny(qualificationStatusExpr, CANCELLED_STATUS_VALUES)}
       AND qh.empresa_id = ?
       AND f.empresa_id = ?
       AND qh.id IN (
@@ -211,8 +218,16 @@ async function carregarQualificacoesParaNotificar(env: Env, empresaId: number): 
           AND empresa_id = ?
         GROUP BY funcionario_id, qualificacao_id, qualificacao_codigo
       )
-  `,
-  ).bind(empresaId, empresaId, empresaId).all<QualificacaoParaNotificar>();
+  `;
+}
+
+async function carregarQualificacoesParaNotificar(
+  env: Env,
+  empresaId: number,
+): Promise<QualificacaoParaNotificar[]> {
+  const { results } = await env.DB.prepare(buildQualificacoesParaNotificarQuery())
+    .bind(empresaId, empresaId, empresaId)
+    .all<QualificacaoParaNotificar>();
 
   return results ?? [];
 }
