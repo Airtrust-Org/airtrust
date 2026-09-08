@@ -14,7 +14,7 @@ import type { Env } from '../types';
 import { notFound, badRequest, forbidden } from '../middleware/error-handler';
 import { isValidEmail, isValidCPF, sanitizeString } from '../utils/security';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import {
   requireOperationalAccess,
@@ -149,7 +149,7 @@ async function sincronizarCertificacoesComStatus(
  *
  * RBAC: admin, manager
  */
-app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+app.post('/', auth(), requirePermission('funcionarios', 'criar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const body = await c.req.json();
   const empresaId = getEmpresaId(c);
@@ -362,7 +362,7 @@ app.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
 app.put(
   '/:id',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('funcionarios', 'editar', 'admin', 'manager'),
   requireOperacoesFuncionario('update'),
   async (c) => {
     const db = c.env.DB;
@@ -595,7 +595,7 @@ app.put(
  * POST /api/funcionarios/:id/reativar
  * Reativa um funcionário do tenant preservando todo o histórico.
  */
-app.post('/:id/reativar', auth(), requireRole('admin', 'manager'), async (c) => {
+app.post('/:id/reativar', auth(), requirePermission('funcionarios', 'editar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
   if (!Number.isInteger(id) || id <= 0) badRequest('ID inválido');
@@ -682,7 +682,7 @@ app.post('/:id/reativar', auth(), requireRole('admin', 'manager'), async (c) => 
 app.delete(
   '/:id',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('funcionarios', 'deletar', 'admin', 'manager'),
   requireOperacoesFuncionario('delete'),
   async (c) => {
     const db = c.env.DB;
