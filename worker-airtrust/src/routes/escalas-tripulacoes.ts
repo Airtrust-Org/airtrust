@@ -921,7 +921,7 @@ tripulacoes.put('/:id/tripulacoes/:tripId', auth(), requirePermission('escalas',
 tripulacoes.post(
   '/:id/tripulacoes/:tripId/regenerar-eventos',
   auth(),
-  requireRole('admin', 'manager'),
+  requirePermission('escalas', 'editar', 'admin', 'manager'),
   async (c) => {
     const { id, tripId } = c.req.param();
     const db = c.env.DB;
