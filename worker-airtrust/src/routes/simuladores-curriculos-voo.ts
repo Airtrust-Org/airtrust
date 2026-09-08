@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { requireOperacoes } from './simuladores-modelos-rbac';
 import { audit } from './simuladores-shared';
 
@@ -198,7 +198,7 @@ app.use('/modelos-sessao/:id', async (c, next) => {
 });
 
 // GET /api/simuladores/curriculos-voo - list flight trainings and curriculum coverage.
-app.get('/curriculos-voo', requireRole('admin', 'manager'), async (c) => {
+app.get('/curriculos-voo', requirePermission('simuladores', 'visualizar', 'admin', 'manager'), async (c) => {
   const empresaId = getTenantContext(c).empresaId;
   const rows = await c.env.DB
     .prepare(
@@ -233,7 +233,7 @@ app.get('/curriculos-voo', requireRole('admin', 'manager'), async (c) => {
 });
 
 // GET /api/simuladores/curriculos-voo/:qualificacaoTipoId - ordered curriculum and model catalog.
-app.get('/curriculos-voo/:qualificacaoTipoId', requireRole('admin', 'manager'), async (c) => {
+app.get('/curriculos-voo/:qualificacaoTipoId', requirePermission('simuladores', 'visualizar', 'admin', 'manager'), async (c) => {
   const empresaId = getTenantContext(c).empresaId;
   const qualificacaoTipoId = Number(c.req.param('qualificacaoTipoId'));
   if (!Number.isInteger(qualificacaoTipoId) || qualificacaoTipoId <= 0) {
@@ -248,7 +248,7 @@ app.get('/curriculos-voo/:qualificacaoTipoId', requireRole('admin', 'manager'), 
 // PUT /api/simuladores/curriculos-voo/:qualificacaoTipoId - replace ordered curriculum atomically.
 app.put(
   '/curriculos-voo/:qualificacaoTipoId',
-  requireRole('admin', 'manager'),
+  requirePermission('simuladores', 'editar', 'admin', 'manager'),
   requireOperacoes('update'),
   async (c) => {
     const empresaId = getTenantContext(c).empresaId;
