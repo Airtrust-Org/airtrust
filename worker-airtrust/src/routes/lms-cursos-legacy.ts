@@ -7,7 +7,7 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 import { unzipSync, strFromU8 } from 'fflate';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { resolveScormLaunchFileHref, resolveScormVersion } from '../lib/lms/scorm-manifest-parser';
 import { requireOperacoesCurso, applyLmsCursosDomainReadFilter, assertLmsCursoDetailDomainAccess, resolveAndValidateCursoDominioCodigo } from './lms-cursos-rbac';
@@ -1918,8 +1918,8 @@ async function handleLmsStats(c: Context) {
 
 // ── KPIs / Stats ─────────────────────────────────────────────────────────────
 
-app.get('/stats', requireRole('admin', 'manager'), handleLmsStats);
-app.get('/cursos/stats', requireRole('admin', 'manager'), handleLmsStats);
+app.get('/stats', requirePermission('lms', 'visualizar', 'admin', 'manager'), handleLmsStats);
+app.get('/cursos/stats', requirePermission('lms', 'visualizar', 'admin', 'manager'), handleLmsStats);
 
 // ── Detalhes de curso ────────────────────────────────────────────────────────
 
@@ -1994,7 +1994,7 @@ app.get('/:id{[0-9]+}', async (c) => {
 
 // ── Criar curso ──────────────────────────────────────────────────────────────
 
-app.post('/', requireRole('admin', 'manager'), async (c) => {
+app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
@@ -2181,7 +2181,7 @@ app.post('/', requireRole('admin', 'manager'), async (c) => {
 
 // ── Editar curso ─────────────────────────────────────────────────────────────
 
-app.put('/:id', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+app.put('/:id', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2404,7 +2404,7 @@ app.put('/:id', requireRole('admin', 'manager'), requireOperacoesCurso('update')
   return c.json({ success: true, data: curso });
 });
 
-app.post('/sync-ead', requireRole('admin', 'manager'), async (c) => {
+app.post('/sync-ead', requirePermission('lms', 'editar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
 
@@ -2425,7 +2425,7 @@ app.post('/sync-ead', requireRole('admin', 'manager'), async (c) => {
 
 // ── Upload endpoints (specific paths before generic /:id) ─────────────────────
 
-app.post('/:id/thumbnail-upload', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+app.post('/:id/thumbnail-upload', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2461,7 +2461,7 @@ app.post('/:id/thumbnail-upload', requireRole('admin', 'manager'), requireOperac
 // Content-Type: application/octet-stream (body = zip raw bytes)
 // ou multipart/form-data com campo "file"
 
-app.post('/:id/content-upload/init', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+app.post('/:id/content-upload/init', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2490,7 +2490,7 @@ app.post('/:id/content-upload/init', requireRole('admin', 'manager'), requireOpe
   });
 });
 
-app.post('/:id/content-upload/file', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+app.post('/:id/content-upload/file', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2527,7 +2527,7 @@ app.post('/:id/content-upload/file', requireRole('admin', 'manager'), requireOpe
   });
 });
 
-app.post('/:id/content-upload/complete', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+app.post('/:id/content-upload/complete', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2574,7 +2574,7 @@ app.post('/:id/content-upload/complete', requireRole('admin', 'manager'), requir
   });
 });
 
-app.post('/:id/scorm-upload', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+app.post('/:id/scorm-upload', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2650,7 +2650,7 @@ app.post('/:id/scorm-upload', requireRole('admin', 'manager'), requireOperacoesC
 // POST /api/lms/cursos/:id/upload/h5p
 // O .h5p é um ZIP renomeado — extraímos e guardamos no R2 sob lms/h5p/{empresa_id}/{curso_id}/
 
-app.post('/:id/upload/h5p', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+app.post('/:id/upload/h5p', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2736,7 +2736,7 @@ app.post('/:id/upload/h5p', requireRole('admin', 'manager'), requireOperacoesCur
 });
 
 // Alias para compatibilidade com prompt 2.4: /upload/scorm
-app.post('/:id/upload/scorm', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+app.post('/:id/upload/scorm', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   // Forward to /:id/scorm-upload handler logic inline (avoid duplication by delegating)
   c.req.param = Object.assign(c.req.param.bind(c.req), { bind: c.req.param.bind(c.req) });
   // Re-dispatch via internal redirect is not Hono-native; instead we call the existing handler
@@ -2785,7 +2785,7 @@ function guessMime(filename: string): string {
 
 const LMS_PDF_MAX_BYTES = 200 * 1024 * 1024; // 200 MB
 
-app.post('/:id/upload/pdf', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+app.post('/:id/upload/pdf', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2842,7 +2842,7 @@ app.post('/:id/upload/pdf', requireRole('admin', 'manager'), requireOperacoesCur
 
 const LMS_PPTX_MAX_BYTES = 200 * 1024 * 1024; // 200 MB
 
-app.post('/:id/upload/pptx', requireRole('admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+app.post('/:id/upload/pptx', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
@@ -2922,7 +2922,7 @@ app.post('/:id/upload/pptx', requireRole('admin', 'manager'), requireOperacoesCu
 // ── Desativar (soft delete) ──────────────────────────────────────────────────
 // MUST BE LAST: generic /:id route needs to come after all specific /:id/path routes
 
-app.delete('/:id', requireRole('admin', 'manager'), requireOperacoesCurso('delete'), async (c) => {
+app.delete('/:id', requirePermission('lms', 'deletar', 'admin', 'manager'), requireOperacoesCurso('delete'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
