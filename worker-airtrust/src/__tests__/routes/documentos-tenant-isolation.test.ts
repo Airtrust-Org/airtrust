@@ -40,6 +40,7 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
 });
 
 vi.mock('../../middleware/rbac', () => ({
+  requirePermission: () => async (_c: any, next: () => Promise<void>) => { await next(); },
   requireRole: (requiredRole: string) => async (c: MockContext, next: () => Promise<void>) => {
     if (String(c.get('userRole') || '').toLowerCase() !== String(requiredRole).toLowerCase()) {
       return c.json({ success: false, error: 'Permissão negada. Acesso restrito a: admin' }, 403);
