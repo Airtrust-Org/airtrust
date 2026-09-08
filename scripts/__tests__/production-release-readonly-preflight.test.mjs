@@ -103,6 +103,8 @@ test('FRMS production readiness checks assignment profile revision and all gover
   assert.match(s, /REQUIRED_PARAMETERS_INCOMPLETE/);
   assert.match(s, /requiredGovernedParameterCount/);
   assert.match(s, /notReadyTenantCount/);
+  assert.match(s, /missingAssignmentTenantIds/);
+  assert.match(s, /assignments\.length === 0\) missingAssignmentTenantIds\.push\(empresaId\)/);
 });
 
 test('multi-profile auth authority is checked structurally and fail-closed', () => {
