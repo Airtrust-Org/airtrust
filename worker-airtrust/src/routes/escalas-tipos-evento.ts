@@ -8,7 +8,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaIdSafe } from './escalas-shared';
 
 const tiposEvento = new Hono<{ Bindings: Env }>();
@@ -180,7 +180,7 @@ tiposEvento.get('/', auth(), async (c) => {
 });
 
 // POST /api/escalas/tipos-evento-config
-tiposEvento.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
+tiposEvento.post('/', auth(), requirePermission('escalas', 'criar', 'admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaIdSafe(c);
     const body = await c.req.json();
@@ -248,7 +248,7 @@ tiposEvento.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
 });
 
 // PUT /api/escalas/tipos-evento-config/:id
-tiposEvento.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+tiposEvento.put('/:id', auth(), requirePermission('escalas', 'editar', 'admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaIdSafe(c);
     const id = c.req.param('id');
@@ -309,7 +309,7 @@ tiposEvento.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
 });
 
 // DELETE /api/escalas/tipos-evento-config/:id
-tiposEvento.delete('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
+tiposEvento.delete('/:id', auth(), requirePermission('escalas', 'deletar', 'admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaIdSafe(c);
     const id = c.req.param('id');
