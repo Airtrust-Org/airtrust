@@ -574,8 +574,6 @@ async function traverseAllAccessibleLinkedRoutes(page: Page) {
 }
 
 test.describe('staging audit #201 — authenticated cross-module UI regression', () => {
-  test.describe.configure({ mode: 'serial' });
-
   test('desktop canonical routes render safely in light and dark modes', async ({ page }) => {
     test.setTimeout(6 * 60 * 1_000);
     for (const theme of ['light', 'dark'] as const) {
