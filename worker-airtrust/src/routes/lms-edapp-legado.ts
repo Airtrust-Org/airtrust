@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import type { AuthenticatedRequestEnv } from '../utils/tenant-context';
 import { getEmpresaIdSafe } from '../utils/tenant-context';
 
@@ -47,7 +47,7 @@ async function countPendingLegacyImports(db: D1Database, empresaId: number) {
   return Number(pendentes?.total || 0);
 }
 
-app.get('/legado/edapp/resumo', requireRole('admin', 'manager'), async (c) => {
+app.get('/legado/edapp/resumo', requirePermission('lms', 'visualizar', 'admin', 'manager'), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   if (!empresaId) {
     return c.json(
@@ -101,7 +101,7 @@ app.get('/legado/edapp/resumo', requireRole('admin', 'manager'), async (c) => {
   });
 });
 
-app.get('/legado/edapp/historico', requireRole('admin', 'manager'), async (c) => {
+app.get('/legado/edapp/historico', requirePermission('lms', 'visualizar', 'admin', 'manager'), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   if (!empresaId) {
     return c.json({ success: false, error: 'Empresa não identificada' }, 400);
@@ -199,7 +199,7 @@ app.get('/legado/edapp/historico', requireRole('admin', 'manager'), async (c) =>
   });
 });
 
-app.post('/legado/edapp/importar', requireRole('admin', 'manager'), (c) =>
+app.post('/legado/edapp/importar', requirePermission('lms', 'editar', 'admin', 'manager'), (c) =>
   c.json(
     {
       success: false,
