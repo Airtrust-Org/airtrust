@@ -414,7 +414,17 @@ authRoutes.options('/*', (c) => {
  * GET /api/auth/invite/validate?token=...
  * Valida token de convite para criação de senha
  */
-authRoutes.get('/invite/validate', async (c) => {
+authRoutes.get(
+  '/invite/validate',
+  rateLimiter({
+    maxRequests: 20,
+    windowSeconds: 60,
+    keyPrefix: 'auth-invite-validate',
+    failureMode: 'closed',
+    allowLocalFallback: false,
+    allowLocalFallbackOutsideProduction: true,
+  }),
+  async (c) => {
   const token = String(c.req.query('token') || '').trim();
   if (!token) {
     throw badRequest('token é obrigatório', 'MISSING_TOKEN');
@@ -475,7 +485,8 @@ authRoutes.get('/invite/validate', async (c) => {
       expiresAt: convite.expires_at,
     },
   });
-});
+  },
+);
 
 /** Valida força mínima da senha — reutilizar em todo endpoint que define senha */
 function validatePassword(senha: string): void {
@@ -539,7 +550,17 @@ async function issuePasswordResetToken(
  * POST /api/auth/invite/accept
  * Define senha inicial a partir de token de convite
  */
-authRoutes.post('/invite/accept', async (c) => {
+authRoutes.post(
+  '/invite/accept',
+  rateLimiter({
+    maxRequests: 5,
+    windowSeconds: 60,
+    keyPrefix: 'auth-invite-accept',
+    failureMode: 'closed',
+    allowLocalFallback: false,
+    allowLocalFallbackOutsideProduction: true,
+  }),
+  async (c) => {
   const body = await c.req.json<{ token?: string; senha?: string; password?: string }>();
   const token = String(body?.token || '').trim();
   const senha = String(body?.senha || body?.password || '');
@@ -662,7 +683,8 @@ authRoutes.post('/invite/accept', async (c) => {
     success: true,
     message: 'Senha criada com sucesso. Faça login para continuar.',
   });
-});
+  },
+);
 
 /**
  * POST /api/auth/forgot-password
