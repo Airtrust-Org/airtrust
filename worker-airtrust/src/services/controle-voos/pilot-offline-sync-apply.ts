@@ -701,9 +701,32 @@ async function currentStateConflict(input: {
     });
   }
 
+  const localStages = input.stages.filter((stage) => stage.sourceStageId === null);
+  if (serverStages.length > 0 && localStages.length > 0) {
+    throw new ApiError(
+      'Criacao adicional de etapa offline ainda nao e suportada quando o voo ja possui etapas',
+      400,
+      'CONTROLE_VOOS_PILOT_SYNC_STAGE_CREATE_UNSUPPORTED',
+    );
+  }
+  if (serverStages.length === 0 && (input.stages.length !== 1 || localStages.length !== 1)) {
+    throw new ApiError(
+      'Primeira sincronizacao de etapas suporta exatamente uma etapa manual',
+      400,
+      'CONTROLE_VOOS_PILOT_SYNC_INITIAL_STAGE_SHAPE_INVALID',
+    );
+  }
+
   const serverById = new Map<number, EtapaRow>(serverStages.map((stage) => [stage.id, stage]));
   for (const stage of sourceStages) {
     const current = serverById.get(stage.sourceStageId as number);
+    if (current && Number(current.numero_etapa) !== Number(stage.input.numero_etapa)) {
+      throw new ApiError(
+        'Reordenacao de etapas offline ainda nao e suportada nesta versao',
+        400,
+        'CONTROLE_VOOS_PILOT_SYNC_STAGE_REORDER_UNSUPPORTED',
+      );
+    }
     if (!current || current.updated_at !== stage.sourceStageUpdatedAt) {
       return recordOfflineSyncConflict(input.db, {
         empresaId: input.empresaId,
