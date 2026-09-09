@@ -221,7 +221,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('id="refresh-canonical-package"');
     expect(pilotIndex).toContain('id="finalize-rdv-server"');
     expect(pilotIndex).toContain('id="send-rdv-coordination"');
-    expect(pilotIndex).toContain('Transmitir o rascunho offline não envia automaticamente o RDV à Coordenação');
+    expect(pilotIndex).toMatch(/Transmitir o rascunho\s+offline não envia automaticamente o RDV à Coordenação/);
     expect(pilotApp).toContain("'/rdv/finalizar-preenchimento'");
     expect(pilotApp).toContain("'/rdv/enviar'");
     expect(pilotApp).toContain("'/rdv/alertas'");
