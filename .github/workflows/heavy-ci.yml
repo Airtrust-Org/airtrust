@@ -47,6 +47,15 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
+      - name: Disable unrelated Google Chrome apt source
+        run: |
+          # GitHub-hosted runners include the Chrome repository even though
+          # these gates do not install google-chrome-stable. A transient
+          # metadata mismatch there must not block unrelated sqlite/ripgrep
+          # installs or Playwright's own Chromium dependency setup.
+          sudo rm -f \
+            /etc/apt/sources.list.d/google-chrome.list \
+            /etc/apt/sources.list.d/google-chrome.sources
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3
       - run: npm run test:coverage
 
@@ -74,6 +83,15 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
+      - name: Disable unrelated Google Chrome apt source
+        run: |
+          # GitHub-hosted runners include the Chrome repository even though
+          # these gates do not install google-chrome-stable. A transient
+          # metadata mismatch there must not block unrelated sqlite/ripgrep
+          # installs or Playwright's own Chromium dependency setup.
+          sudo rm -f \
+            /etc/apt/sources.list.d/google-chrome.list \
+            /etc/apt/sources.list.d/google-chrome.sources
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3
       - run: cd worker-airtrust && npx vitest run --shard=1/2
 
@@ -102,6 +120,15 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
+      - name: Disable unrelated Google Chrome apt source
+        run: |
+          # GitHub-hosted runners include the Chrome repository even though
+          # these gates do not install google-chrome-stable. A transient
+          # metadata mismatch there must not block unrelated sqlite/ripgrep
+          # installs or Playwright's own Chromium dependency setup.
+          sudo rm -f \
+            /etc/apt/sources.list.d/google-chrome.list \
+            /etc/apt/sources.list.d/google-chrome.sources
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3 git
       - run: cd worker-airtrust && npx vitest run --shard=2/2
 
@@ -129,6 +156,15 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
+      - name: Disable unrelated Google Chrome apt source
+        run: |
+          # GitHub-hosted runners include the Chrome repository even though
+          # these gates do not install google-chrome-stable. A transient
+          # metadata mismatch there must not block unrelated sqlite/ripgrep
+          # installs or Playwright's own Chromium dependency setup.
+          sudo rm -f \
+            /etc/apt/sources.list.d/google-chrome.list \
+            /etc/apt/sources.list.d/google-chrome.sources
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3
       - name: Run LMS smoke against isolated local D1
         shell: bash
@@ -181,6 +217,15 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
+      - name: Disable unrelated Google Chrome apt source
+        run: |
+          # GitHub-hosted runners include the Chrome repository even though
+          # these gates do not install google-chrome-stable. A transient
+          # metadata mismatch there must not block unrelated sqlite/ripgrep
+          # installs or Playwright's own Chromium dependency setup.
+          sudo rm -f \
+            /etc/apt/sources.list.d/google-chrome.list \
+            /etc/apt/sources.list.d/google-chrome.sources
       - run: npx playwright install --with-deps chromium
       - name: Run public auth-boundary E2E with dev bypass disabled
         shell: bash
