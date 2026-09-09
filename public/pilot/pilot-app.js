@@ -552,6 +552,7 @@ async function prepareFlightPackage(flightId) {
     await loadCachedPackages();
     openPackageRecord(persisted);
     await updateStorageEstimate();
+    return persisted;
   } catch (error) {
     const authFailure = error instanceof PilotOnlineRequestError && error.status === 401;
     setSessionMessage(
@@ -559,6 +560,7 @@ async function prepareFlightPackage(flightId) {
       'error',
       authFailure,
     );
+    return null;
   } finally {
     refreshOnlineButton.disabled = !navigator.onLine;
   }
@@ -741,9 +743,11 @@ async function getCoordinationState() {
     };
   }
 
-  const [latestSync, latestConflict] = await Promise.all([
+  const [latestSync, latestConflict, finalizeReceipt, sendReceipt] = await Promise.all([
     latestAcceptedSyncReceiptForFlight(flightId),
     latestConflictForFlight(flightId),
+    latestWorkflowReceiptForFlight(flightId, 'finalize'),
+    latestWorkflowReceiptForFlight(flightId, 'send_coordination'),
   ]);
   const syncTime = String(latestSync?.value?.received_at_local || '');
   const conflictTime = String(
@@ -763,9 +767,47 @@ async function getCoordinationState() {
     };
   }
 
+  const packagePreparedAt = String(activePackageRecord?.value?.prepared_at || '');
   const packageMatchesAcceptedSync =
     Boolean(rdv && latestSync) &&
     Number(rdv.versao) === Number(latestSync.value?.server_result?.server_entity_version);
+
+  const workflowBlocker = (receipt, action) => {
+    if (!receipt?.value || !rdv) return null;
+    const value = receipt.value;
+    const expectedVersion = Number(value.expected_version);
+    const resultVersion = Number(value.server_result?.versao || 0);
+    const receiptTime = String(value.updated_at_local || receipt.updatedAt || '');
+    const refreshedAfterReceipt = Boolean(packagePreparedAt && receiptTime && packagePreparedAt > receiptTime);
+    const desiredReached =
+      action === 'finalize'
+        ? rdv.status === 'preenchimento_finalizado' && Number(rdv.versao) > expectedVersion
+        : rdv.workflow_status === 'enviado' && Number(rdv.versao) > expectedVersion;
+
+    if (value.state === 'confirmed') {
+      if (resultVersion > 0 && Number(rdv.versao) < resultVersion) {
+        return 'A ação já foi confirmada pelo servidor. Atualize o pacote antes de continuar.';
+      }
+      if (!desiredReached && resultVersion > 0 && Number(rdv.versao) <= resultVersion) {
+        return 'O receipt confirmado ainda não está refletido neste pacote. Atualize do servidor.';
+      }
+      return null;
+    }
+
+    if (value.state === 'sending' || value.state === 'outcome_unknown') {
+      if (!refreshedAfterReceipt) {
+        return 'O resultado da última ação ainda é incerto. Atualize do servidor antes de repetir.';
+      }
+      if (desiredReached) return null;
+      if (Number(rdv.versao) === expectedVersion) return null;
+      return 'O servidor avançou para outro estado após a tentativa. Revise o pacote antes de nova ação.';
+    }
+
+    return null;
+  };
+
+  const finalizeBlocker = workflowBlocker(finalizeReceipt, 'finalize');
+  const sendBlocker = workflowBlocker(sendReceipt, 'send_coordination');
 
   const editableWorkflow = ['rascunho', 'devolvido', 'reaberto'].includes(
     String(rdv?.workflow_status || ''),
@@ -779,10 +821,13 @@ async function getCoordinationState() {
     flightId,
     rdv,
     latestSync,
+    finalizeReceipt,
+    sendReceipt,
     packageMatchesAcceptedSync,
     canFinalize:
       navigator.onLine &&
       !coordinationInFlight &&
+      !finalizeBlocker &&
       Boolean(rdv) &&
       rdv.status === 'rascunho' &&
       editableWorkflow &&
@@ -790,13 +835,14 @@ async function getCoordinationState() {
     canSend:
       navigator.onLine &&
       !coordinationInFlight &&
+      !finalizeBlocker &&
+      !sendBlocker &&
       Boolean(rdv) &&
       rdv.status === 'preenchimento_finalizado' &&
       sendableWorkflow,
-    reason: null,
+    reason: sendBlocker || finalizeBlocker || null,
   };
 }
-
 async function refreshCoordinationControls() {
   refreshCanonicalPackageButton.disabled =
     !navigator.onLine || !vault?.isUnlocked() || !activePackageRecord || coordinationInFlight;
@@ -1784,7 +1830,8 @@ async function finalizeCanonicalRdv() {
       'ok',
     );
     try {
-      await prepareFlightPackage(state.flightId);
+      const refreshed = await prepareFlightPackage(state.flightId);
+      if (!refreshed) throw new Error('PACKAGE_REFRESH_FAILED');
     } catch (refreshError) {
       console.error('[Pilot Offline] Falha ao atualizar pacote após finalização confirmada:', refreshError);
       setCoordinationMessage(
@@ -1915,7 +1962,8 @@ async function sendCanonicalRdvToCoordination() {
       'ok',
     );
     try {
-      await prepareFlightPackage(state.flightId);
+      const refreshed = await prepareFlightPackage(state.flightId);
+      if (!refreshed) throw new Error('PACKAGE_REFRESH_FAILED');
     } catch (refreshError) {
       console.error('[Pilot Offline] Falha ao atualizar pacote após handoff confirmado:', refreshError);
       setCoordinationMessage(
