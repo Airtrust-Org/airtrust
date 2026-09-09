@@ -34,6 +34,7 @@ APPROVED_MIGRATIONS=(
   "0478_edb_anac_receipt_integrity.sql"
   "0479_edb_relational_integrity.sql"
   "0480_edb_diary_lifecycle_integrity.sql"
+  "0489_a02_natural_keys_tenant_scoped.sql"
 )
 
 apply=false
@@ -170,6 +171,9 @@ validate_postconditions() {
     0476_frms_pvtb_v2_operational_load.sql)
       bash scripts/staging/validate-0476-postconditions.sh --target="$db_name"
       ;;
+    0489_a02_natural_keys_tenant_scoped.sql)
+      bash scripts/staging/validate-0489-postconditions.sh --target="$db_name"
+      ;;
   esac
 }
 
@@ -238,6 +242,11 @@ echo "PREFLIGHT_OK=true"
 if [[ "$migration_basename" == 0461_* || "$migration_basename" == 0462_* ]]; then
   node scripts/staging/preflight-0461-0462.mjs --migration="$migration_basename"
   echo "SPECIALIZED_PREFLIGHT_OK=true"
+fi
+
+if [[ "$migration_basename" == "0489_a02_natural_keys_tenant_scoped.sql" ]]; then
+  bash scripts/staging/validate-0489-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0489_OK=true"
 fi
 
 ledger_count="$(read_ledger_count)"
