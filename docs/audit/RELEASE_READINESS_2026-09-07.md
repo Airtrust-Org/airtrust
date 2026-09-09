@@ -1,64 +1,43 @@
-# AirTrust Release Readiness — 2026-09-08
+# AirTrust Release Readiness — 2026-09-09
 
 ## Baseline de código
 
 - Branch avaliada: `main`
-- **Release code SHA:** `ee2b7e83ec136f13279c59bc964380202b19f8f2`
-- Última integração de código: **#569 — Wrangler 4.130.0 + Cloudflare Workers Types v5**
+- **Release code SHA:** `e3ba052e2796c2ea33ccb7685334f441b897c54d`
+- Última integração: **#576 — evidência read-only F4-03 de validade histórica**
 - PRs abertas após a integração: **0**
 - Produção alterada por esta consolidação: **não**
 - Staging alterado por esta consolidação: **não**
 - Migration remota executada por esta consolidação: **não**
 
-Este documento é uma camada documental sobre o release code SHA acima. A eventual integração deste próprio arquivo não altera a baseline funcional avaliada e não deve iniciar uma cadeia artificial de atualização de SHA documental.
+Este documento registra o estado de release do SHA funcional acima. A eventual integração desta atualização documental não deve ser tratada como mudança funcional que invalida a baseline avaliada.
 
 ## CI final da baseline
 
-### #569
+O SHA `e3ba052e2796c2ea33ccb7685334f441b897c54d` possui os workflows oficiais pós-merge concluídos com sucesso:
 
-A #569 foi integrada somente após:
+- **CI (fast gates): PASS** — run `34300482192`;
+- **CI (heavy gates): PASS** — run `34300482275`;
+- checks associados ao SHA: `lms-smoke`, `public-e2e`, `frontend-coverage`, `worker-tests-1`, `worker-tests-2` e `airtrust-gcb` concluídos com sucesso.
 
-- Dependency Review: PASS;
-- PR Check: PASS;
-- CI fast: PASS;
-- CI heavy: PASS;
-- `frontend-coverage`: PASS;
-- `worker-tests-1`: PASS;
-- `worker-tests-2`: PASS;
-- `public-e2e`: PASS;
-- `lms-smoke`: PASS;
-- `airtrust-gcb`: PASS.
+Nenhum PR permanece aberto e nenhum gate conhecido está falhando no SHA atual.
 
-Nenhum threshold de segurança foi reduzido e nenhuma allowlist foi adicionada.
+## Proveniência de staging
 
-### `main` pós-merge
+O último deploy oficial de staging comprovado é:
 
-O SHA `ee2b7e83ec136f13279c59bc964380202b19f8f2` passou também os workflows pós-merge:
+- workflow: `Deploy Staging (Official)`;
+- run: `34229190521`;
+- conclusão: `success`;
+- release servido e validado naquele ciclo: `ccbf23568327ff1cea11b39e387c1a2af5fde6dc`.
 
-- **CI (fast gates): PASS**
-- **CI (heavy gates): PASS**
-- LMS smoke: PASS
-- public E2E: PASS
-- frontend coverage: PASS
-- worker shard 1: PASS
-- worker shard 2: PASS
-- AirTrust GCB: PASS
+O `main` atual está **99 commits à frente** de `ccbf2356` e zero atrás. Portanto:
 
-## Integrações relevantes desta reta final
+- os PASS runtime obtidos em staging para `ccbf2356` permanecem evidência válida daquele release;
+- eles **não** constituem prova runtime do SHA atual;
+- para nova promoção de staging, publicar `e3ba052e…` pelo workflow oficial e executar somente os QA governados invalidados pelo delta.
 
-Além das correções anteriores já consolidadas, a baseline contém:
-
-- #560 — compatibilidade de status em notificações;
-- #561 — compatibilidade de status EVD;
-- #562 — `scorm-again` 3.3.2;
-- #463 — `react-pdf` 10.5.0;
-- #564 — SECURITY F5-08: isolamento do runtime SCORM do bearer amplo da sessão;
-- #563 — visão mensal integrada restrita ao setor Tripulação nas seis fontes;
-- #568 — FRMS: enquadramento correto da interrupção de jornada fora da base e limites legais exclusivos `>3h` e `<6h`;
-- #570 — FRMS: remoção das atribuições indevidas a Borbély/ICAO para o modelo empresarial de triagem;
-- #569 — Wrangler 4.130.0 + Workers Types v5, com Dependency Review e CI completos.
-
-A tentativa Wrangler 4.129.0 permaneceu rejeitada e foi substituída; nenhuma dependência HIGH foi aceita por relaxamento de gate.
+O delta contém mudanças reais em Worker/frontend, incluindo RBAC/tenant isolation, LMS, FRMS, escalas, auth/cache, hardening e guards; staging não deve ser tratado como equivalente ao `main` atual antes de nova publicação.
 
 ## Estado técnico por frente
 
@@ -67,153 +46,78 @@ A tentativa Wrangler 4.129.0 permaneceu rejeitada e foi substituída; nenhuma de
 **CODE-READY.**
 
 - nenhuma PR corretiva aberta;
-- baseline pós-merge com fast + heavy verdes;
-- nenhuma regressão conhecida pendente de código no escopo das auditorias já tratadas.
+- fast + heavy verdes no SHA atual;
+- nenhuma regressão conhecida pendente de código no escopo das auditorias fechadas.
 
 ### Segurança de aplicação
 
 **CODE-READY; ADMIN ACTIONS permanecem separadas.**
 
-- F5-08 fechado;
-- SCO same-origin não recebe `Authorization: Bearer`;
-- commit SCORM usa capability curta HttpOnly;
-- Dependency Review permaneceu fail-closed durante a atualização de Wrangler.
-
-A rotação administrativa R2 de #500 não foi executada e continua sendo decisão de owner/admin.
+O HEAD atual está sanitizado e protegido por guards. A #500 continua exigindo ação administrativa fora do código: rotação/revogação das credenciais R2 expostas historicamente, validação de workloads/secrets, revisão de uso e decisão formal sobre resposta ao histórico Git. Não executar automaticamente.
 
 ### LMS / SCORM
 
-**CODE-READY.**
+**CODE-READY / STAGING-PROOF-STALE-FOR-CURRENT-SHA.**
 
-- `scorm-again` 3.3.2 integrado;
-- runtime SCORM endurecido;
-- smoke LMS passou no heavy da baseline e no pós-merge.
+O runtime SCORM e seus guards estão integrados e os smokes do SHA atual passam em CI. O workflow `staging-lms-scorm-qa` passou integralmente no release `ccbf2356`, cobrindo upload ZIP real, Quality Gate, ativação, rejeição, timeout e cleanup. Esse PASS deve ser revalidado somente após o SHA atual ser publicado em staging.
 
 ### FRMS
 
-**CÓDIGO/RASTREABILIDADE CORRIGIDOS; resta uma decisão de governança.**
+**CÓDIGO E RASTREABILIDADE CORRIGIDOS; fail-closed preservado.**
 
-A investigação de 2026-09-08 resolveu a antiga ambiguidade 3h/6h:
+A lógica de interrupção de jornada fora da base, limites `>3h` e `<6h`, rastreabilidade e remoção de atribuições indevidas foram integradas. A ausência de configuração governada FRMS no tenant QA/staging produz `503/UNKNOWN` intencional, sem fallback global; isso é blocker de fixture/governança de staging, não defeito de código a ser mascarado.
 
-- Lei 13.475/2017, art. 38, trata de **interrupção de jornada fora da base** para as categorias aplicáveis;
-- os limites são exclusivos: **superior a 3h e inferior a 6h**;
-- #568 corrigiu runtime, testes, terminologia e rastreabilidade.
+### eDB / semântica regulatória
 
-#570 removeu afirmações de que o modelo empresarial implementava Borbély calibrado ou ICAO Doc 9966.
+**Fail-closed com dois blockers externos específicos.**
 
-O único ponto residual da #455 é `CICLO_EMBARCADO_DIA_MAX=15`:
+- #91: IFR e S-76C foram resolvidos; falta fonte aprovada Costa do Sol/OEM aplicável à semântica/origem de ciclos do **AW139**. A regra do S-76C não pode ser generalizada.
+- #93: falta contrato/OpenAPI oficial vigente da ANAC, ambiente de homologação e credenciais/escopos oficiais.
 
-- não foi encontrada fonte RBAC/CCT/IOGP/Petrobras que estabeleça esse valor como limite universal para aeronautas de táxi aéreo offshore;
-- o material sindical revisado usa outro enquadramento de missão e não valida 15 dias;
-- o valor permanece **parâmetro interno configurável de triagem**, não requisito regulatório;
-- falta aprovação governada do operador/model owner ou substituição por política formalmente aprovada.
+Esses blockers afetam a integração regulatória eDB e não devem ser tratados como regressão de módulos não-eDB já code-ready.
 
-Nenhuma fonte externa será inventada para fechar esse item.
+### MRO / Controle de Voos / UX
 
-### eDB — semântica
+**CODE-CLOSED / RESIDUAL-RUNTIME-QA.**
 
-**Reduzido a um blocker material de AW139 + dependência externa ANAC.**
-
-Resolvido:
-
-- `starts` = acionamentos de motor; não é ciclo regulatório;
-- IFR real/simulado para Costa do Sol: MGO Rev.14 diferencia `IFR-R` e `IFR-C`;
-- S-76C: o PMA Costa do Sol PRG-MNT-001 Rev.04 estabelece **1 pouso = 1 ciclo de aeronave** e ciclos de motor via **DECU**;
-- discrepância técnica estruturada, ledger e fail-closed já existem.
-
-Ainda aberto na #91:
-
-- fonte aprovada Costa do Sol/OEM para a semântica/origem de ciclos do **AW139**;
-- a regra S-76C não pode ser generalizada por heurística para outro modelo ou tenant.
-
-Ainda aberto na #93:
-
-- contrato/OpenAPI oficial vigente da ANAC;
-- ambiente de homologação e credenciais/escopos oficiais.
-
-Até essas fontes existirem, os campos afetados continuam fail-closed.
-
-### MRO / Controle de Voos / Escalas
-
-**CODE-READY no escopo das correções integradas.**
-
-A visão mensal integrada mantém o filtro de Tripulação em todas as seis fontes. Os achados residuais de layout que exigem prova visual autenticada pertencem à #496, não a código conhecido pendente.
+A #496 concentra somente provas runtime residuais. Evidência real em `ccbf2356` já passou para MRO mobile e LMS/SCORM; o audit transversal teve falha conhecida por ausência de configuração governada FRMS no tenant QA, com comportamento fail-closed esperado. N-07 Pasta 360 e N-09 SGSO ainda precisam de vias governadas específicas ou fixture autorizada; não executar staging writes ad-hoc.
 
 ### Health / observabilidade
 
-**INSTRUMENTAÇÃO INTERNA PRESENTE; PROVA EXTERNA PENDENTE.**
+**CODE-CONFIG-CLOSED / EXTERNAL-PROOF-PENDING.**
 
-#493 continua exigindo evidência provider-side/runtime de:
+A #493 permanece restrita à comprovação provider-side de monitor independente, destino/owner e entrega real de alerta. Configuração em código não substitui prova operacional externa.
 
-- monitor independente ativo;
-- destino de alerta;
-- entrega efetiva do alerta.
+### Dados históricos / integridade — #414
 
-Documentação de configuração desejada não é tratada como prova operacional.
+**IDENTIFICAÇÃO/PROVENIÊNCIA RESOLVIDAS; WRITE PRODUTIVO NÃO AUTORIZADO.**
 
-### Dados históricos / integridade
+A investigação read-only recuperou evidência pré-incidente e reduziu deterministicamente o reparo a seis históricos ainda divergentes: `4595`, `4610`, `4628`, `4632`, `4634`, `4670`.
 
-**#414 permanece fail-closed.**
+Os demais registros do conjunto histórico atingido já coincidem com a evidência original; candidatos amplos fora do conjunto de 18 não devem ser incluídos por heurística. Para os seis, a fonte autoritativa do before-value permanece o certificado pré-incidente. Nenhum repair deve ser executado sem autorização explícita, recovery point e plano de rollback aplicáveis ao write produtivo.
 
-Os snapshots versionados disponíveis são anteriores ao incidente 0435 e não identificam com segurança as 18 linhas afetadas. Nenhum repair heurístico deve ser executado.
+### FOLGA Costa do Sol — #265
 
-## Pendências realmente externas / governadas
+**PRODUCTION-CONFIG-CLOSED / READONLY-FUNCTIONAL-VALIDATION-PENDING.**
 
-### #500 — R2 / credenciais
+O write autorizado `AMBAS -> FOLGA` no tenant 6 já foi executado e confirmado por readback autenticado. **Não repetir esse write.** O residual é exclusivamente validação funcional read-only contra escala publicada: proposta apenas em folga, rejeição de dia de trabalho e coerência de label/fluxo.
 
-**ADMIN-BLOCKED.**  
-Exige rotação/revogação no provedor, atualização de segredos e decisão sobre tratamento de histórico. Não executar automaticamente.
+## Pendências irreduzíveis atuais
 
-### #496 — staging UX autenticado
-
-**STAGING-PROOF-PENDING.**  
-Faltam provas autenticadas residuais no mesmo SHA de release. Os workflows relevantes são governados por `workflow_dispatch`; o conector GitHub disponível nesta execução não expõe criação de dispatch. Reexecutar run antigo validaria SHA antigo e produziria evidência inválida.
-
-### #493 — monitor externo
-
-**OPS-PROOF-PENDING / ADMIN-BLOCKED.**  
-Requer prova real no provedor/canal externo.
-
-### #455 — FRMS 15 dias
-
-**GOVERNANCE-PENDING.**  
-O valor é hoje política interna do modelo de triagem e precisa de aprovação formal do responsável pela política/modelo ou nova revisão governada.
-
-### #414 — incidente 0435
-
-**AUTHORITATIVE-DATA-PENDING.**  
-Requer fonte histórica autoritativa capaz de identificar as 18 linhas exatas.
-
-### #265 — FOLGA Costa do Sol
-
-**PRODUCTION-CONFIG-APPLIED / FUNCTIONAL-QA-PENDING.**  
-Em 06/09/2026 houve autorização explícita e o write canônico foi executado no tenant 6: `AMBAS -> FOLGA`, com readback autenticado confirmando `FOLGA` e sem writes não relacionados. Não repetir esse write. O residual é exclusivamente validação funcional read-only: provar proposta apenas em folga, rejeição de dia de trabalho e coerência do label/fluxo com escala publicada. A tentativa automatizada posterior não chegou a autenticar porque o workflow não recebeu uma identidade de smoke de produção.
-
-### #93 — ANAC eDB
-
-**EXTERNAL-CONTRACT-PENDING.**  
-Requer OpenAPI/contrato vigente, homologação e credenciais oficiais.
-
-### #91 — ciclos AW139
-
-**AUTHORITATIVE-MAINTENANCE-SOURCE-PENDING.**  
-IFR e S-76C foram resolvidos; falta a fonte aprovada aplicável ao AW139.
+1. **#500 — ADMIN-SECURITY-BLOCKED:** rotação/revogação R2 + resposta ao histórico Git.
+2. **#493 — ADMIN/PROVIDER-PROOF-BLOCKED:** monitor independente e entrega real de alerta.
+3. **#496 — RESIDUAL-RUNTIME-QA:** nova publicação do SHA atual em staging e provas governadas específicas restantes.
+4. **#414 — PRODUCTION-WRITE-AUTH-BLOCKED:** seis linhas identificadas; requer autorização explícita + recovery point antes de qualquer repair.
+5. **#265 — READONLY-FUNCTIONAL-QA-PENDING:** configuração produtiva já aplicada; falta somente prova funcional read-only.
+6. **#91 — AUTHORITATIVE-MAINTENANCE-SOURCE-PENDING:** ciclos AW139.
+7. **#93 — EXTERNAL-CONTRACT-PENDING:** contrato/homologação/credenciais ANAC.
 
 ## Decisão técnica atual
 
-**CODE-READY / CI-GREEN / OPERATIONALLY BLOCKED FOR UNCONDITIONAL RELEASE**
+**CODE-READY / CI-GREEN / CURRENT-MAIN-NOT-YET-STAGING-PROVEN.**
 
-A baseline funcional `ee2b7e83ec136f13279c59bc964380202b19f8f2` está sem PR corretiva aberta conhecida e passou fast + heavy antes e depois da última integração.
+O SHA funcional `e3ba052e2796c2ea33ccb7685334f441b897c54d` está sem PR corretiva aberta conhecida e com CI oficial verde. O passo técnico seguinte para promover esse candidato é um deploy **somente de staging** pelo workflow oficial, seguido dos QA governados aplicáveis ao delta.
 
-Isso não equivale a autorização para executar indiscriminadamente ações administrativas ou writes de produção.
-
-Antes de um release real, devem ser satisfeitos ou formalmente aceitos, conforme o escopo do release:
-
-1. staging smoke autenticado no **mesmo release code SHA**;
-2. confirmação de backup/recovery point e critérios de rollback;
-3. resolução ou aceitação formal dos bloqueios operacionais pertinentes;
-4. autorização explícita para qualquer write de produção, migration, rotação de segredo ou mudança administrativa.
-
-Os itens #91/#93 só bloqueiam a promoção do eDB para integração regulatória oficial; eles não devem ser artificialmente tratados como regressão de módulos não-eDB já code-ready.
+Isso não constitui autorização para deploy de produção, migration, write D1/R2 produtivo, rotação de segredo, ANAC submission ou qualquer ação administrativa/provedor. Esses itens continuam exigindo autorização específica e atual.
 
 Nenhum blocker deve ser transformado em PASS por inferência, reutilização de evidência de SHA anterior ou relaxamento de gate.
