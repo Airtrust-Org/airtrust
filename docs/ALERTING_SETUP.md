@@ -9,6 +9,19 @@
 > runtime do monitor e do canal de entrega. A observabilidade do Worker é
 > configurada separadamente em `worker-airtrust/wrangler.toml`.
 
+## Monitor externo canônico em GitHub Actions
+
+O workflow `.github/workflows/production-external-health-monitor.yml` é a superfície
+independente do runtime Cloudflare escolhida para o health-check canônico de produção.
+Ele consulta `https://api.airtrust.online/api/health` a cada 30 minutos, com três
+tentativas limitadas, e usa GitHub Issues como canal persistente de alerta/recuperação.
+
+A configuração deve continuar classificada como **PENDING RUNTIME PROOF** até o primeiro
+run em `main` concluir com sucesso, inclusive a criação e fechamento automático da issue
+`[TEST] AirTrust production health alert delivery`. Depois dessa prova, o registro da
+#493 pode declarar monitor + entrega configurados sem inferir Slack, e-mail, SMS,
+PagerDuty ou qualquer outro canal que não tenha evidência própria.
+
 ---
 
 ## 📊 Alertas propostos (pendentes de prova externa)
