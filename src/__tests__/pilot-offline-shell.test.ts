@@ -15,6 +15,7 @@ const pilotManifest = JSON.parse(read('public/pilot/pilot.webmanifest')) as {
 const pilotApp = read('public/pilot/pilot-app.js');
 const pilotVault = read('public/pilot/pilot-vault.js');
 const pilotRdvDraft = read('public/pilot/pilot-rdv-draft.js');
+const pilotSync = read('public/pilot/pilot-sync.js');
 const pilotLease = read('public/pilot/pilot-lease.js');
 const pilotLeaseTrust = read('public/pilot/pilot-lease-trust.js');
 const pilotSw = read('public/pilot/pilot-sw.js');
@@ -42,6 +43,7 @@ describe('Pilot Offline shell', () => {
     assertParses(pilotApp);
     assertParses(pilotVault);
     assertParses(pilotRdvDraft);
+    assertParses(pilotSync);
     assertParses(pilotLease);
     assertParses(pilotLeaseTrust);
     assertParses(pilotSw);
@@ -63,8 +65,12 @@ describe('Pilot Offline shell', () => {
     expect(pilotVault).toContain("'flight_packages'");
     expect(pilotVault).toContain("'offline_leases'");
     expect(pilotVault).toContain("'stage_drafts'");
+    expect(pilotVault).toContain("'outbox'");
+    expect(pilotVault).toContain("'sync_receipts'");
+    expect(pilotVault).toContain("'conflicts'");
     expect(pilotVault).toContain('async putJsonBatch(entries)');
     expect(pilotVault).toContain('async getOrCreateDeviceId()');
+    expect(pilotVault).toContain('async deleteJson(storeName, id)');
     expect(pilotVault).toContain("name: 'PBKDF2'");
     expect(pilotVault).toContain("name: 'AES-GCM'");
     expect(pilotVault).toContain('crypto.subtle.encrypt');
@@ -81,9 +87,10 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v3'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v4'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-rdv-draft.js'");
+    expect(pilotSw).toContain("'/pilot/pilot-sync.js'");
     expect(pilotSw).toContain("'/pilot/pilot-lease.js'");
     expect(pilotSw).toContain("'/pilot/pilot-lease-trust.js'");
     expect(pilotSw).toContain("url.pathname.startsWith(PILOT_SCOPE_PATH)");
@@ -134,7 +141,7 @@ describe('Pilot Offline shell', () => {
 
   it('mantem o pacote-base read-only e separa rascunho local de sincronizacao', () => {
     expect(pilotIndex).toContain('não é Diário de Bordo oficial');
-    expect(pilotIndex).toContain('Sincronização e envio à Coordenação continuam fora desta entrega');
+    expect(pilotIndex).toContain('outbox cifrada e receipt idempotente');
     expect(pilotApp).toContain("contract?.read_only !== true");
     expect(pilotApp).toContain("contract?.sync_supported !== false");
     expect(pilotApp).toContain("contract?.regulated_edb !== false");
@@ -162,6 +169,36 @@ describe('Pilot Offline shell', () => {
     expect(batchIndex).toBeGreaterThan(-1);
     expect(readRdvIndex).toBeGreaterThan(batchIndex);
     expect(readyIndex).toBeGreaterThan(readRdvIndex);
+  });
+
+  it('separa persistencia local de transmissao e exige receipt antes de remover a outbox', () => {
+    expect(pilotIndex).toContain('id="sync-rdv-now"');
+    expect(pilotIndex).toContain('“Transmitido” só será');
+    expect(pilotApp).toContain("await vault.putJson(\n        'outbox'");
+    expect(pilotApp).toContain("await vault.getJson('sync_receipts'");
+    const receiptIndex = pilotApp.indexOf("await vault.getJson(\n    'sync_receipts'");
+    const deleteIndex = pilotApp.indexOf("await vault.deleteJson('outbox'", receiptIndex);
+    expect(receiptIndex).toBeGreaterThan(-1);
+    expect(deleteIndex).toBeGreaterThan(receiptIndex);
+  });
+
+  it('gera comando de sync deterministico sem incluir bearer e sem derivar ciclos', () => {
+    expect(pilotSync).toContain("command_type: PILOT_SYNC_COMMAND_TYPE");
+    expect(pilotSync).toContain("entity_type: PILOT_SYNC_ENTITY_TYPE");
+    expect(pilotSync).toContain("operation_type: PILOT_SYNC_OPERATION_TYPE");
+    expect(pilotSync).toContain('payload_hash');
+    expect(pilotSync).toContain('canonicalJson(getSyncHashMaterial(command))');
+    expect(pilotSync).toContain('ciclos: parseInteger(form.ciclos)');
+    expect(pilotSync).not.toContain('Authorization');
+    expect(pilotSync).not.toContain('airtrust_token');
+  });
+
+  it('reenvia outbox pendente ao recuperar conectividade sem last-write-wins', () => {
+    expect(pilotApp).toContain("record.value?.status === 'pending'");
+    expect(pilotApp).toContain("void drainPilotOutbox()");
+    expect(pilotApp).toContain("result.status === 'conflict'");
+    expect(pilotApp).toContain('O rascunho local foi preservado');
+    expect(pilotApp).not.toContain('last-write-wins');
   });
 
   it('captura quick actions de horario com sequencia monotona sem inferir ciclos', () => {
