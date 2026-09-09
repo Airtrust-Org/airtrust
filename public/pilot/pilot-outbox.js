@@ -21,38 +21,16 @@ export async function sha256Hex(value) {
 }
 
 export async function buildReadyToTransmitCommand({
-  packageData,
+  syncPayload,
   rdvDraft,
   stageDrafts,
   localSequence,
   deviceId,
 }) {
-  const payload = {
-    contract: {
-      name: 'airtrust-pilot-offline-sync-bundle',
-      version: 1,
-      regulated_edb: false,
-      handoff_requested: false,
-    },
-    identity: {
-      tenant_id: Number(rdvDraft.tenant_id),
-      user_id: Number(rdvDraft.user_id),
-      funcionario_id: rdvDraft.funcionario_id == null ? null : Number(rdvDraft.funcionario_id),
-      flight_id: Number(rdvDraft.flight_id),
-      device_id: String(deviceId),
-    },
-    source: {
-      package_id: String(rdvDraft.source_package_id),
-      flight_version: Number(rdvDraft.source_flight_version || 0),
-      rdv_id: rdvDraft.source_rdv_id ?? null,
-      rdv_version: Number(rdvDraft.source_rdv_version || 0),
-      stages: stageDrafts.map((stage) => ({
-        source_stage_id: stage.source_stage_id ?? null,
-        base_server_updated_at: stage.source_stage_updated_at || null,
-      })),
-    },
-    rdv: structuredClone(packageData.rdv),
-    stages: structuredClone(packageData.stages),
+  const payload = structuredClone(syncPayload);
+  payload.identity = {
+    ...payload.identity,
+    device_id: String(deviceId),
   };
 
   const payloadHash = await sha256Hex(payload);
