@@ -45,7 +45,7 @@ jobs:
           [[ "$STAGING_API_BASE_URL" == 'https://airtrust-api-staging.airtrust.workers.dev' ]] || exit 1
           [[ "$STAGING_FRONTEND_BASE_URL" == 'https://staging.airtrust.pages.dev' ]] || exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Require Worker and frontend provenance to match expected SHA
         shell: bash
@@ -90,8 +90,8 @@ jobs:
       E2E_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
       CI: 'true'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -133,7 +133,7 @@ jobs:
 
       - name: Upload Playwright evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: staging-audit-201-ui-${{ github.run_id }}
           path: |

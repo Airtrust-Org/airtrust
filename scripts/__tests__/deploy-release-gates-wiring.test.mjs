@@ -12,5 +12,5 @@ test('staging and production guards verify only the official gates', () => {
   assert.doesNotMatch(production, /ignoredJobs/);
   assert.match(production, /checks:\s*read/);
   assert.match(production, /statuses:\s*read/);
-  assert.match(staging, /uses: actions\/checkout@v4/);
+  assert.match(staging, /uses: actions\/checkout@v7/);
 });
