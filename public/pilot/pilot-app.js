@@ -314,7 +314,7 @@ function validateOfflinePackage(packageData, expectedFlightId) {
     contract?.name !== 'airtrust-pilot-offline-package' ||
     Number(contract?.version) !== 1 ||
     contract?.read_only !== true ||
-    contract?.sync_supported !== false ||
+    typeof contract?.sync_supported !== 'boolean' ||
     contract?.regulated_edb !== false
   ) {
     throw new Error('Pacote offline incompatível com esta versão do Pilot App.');
