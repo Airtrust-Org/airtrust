@@ -4,7 +4,7 @@
 --
 -- Runtime contract:
 --   cpf       -> stored/compared as normalized digits; exact equality
---   matricula -> sanitized/trimmed by the canonical CRUD; exact case-sensitive equality
+--   matricula -> canonical identity ignores surrounding whitespace; case-sensitive equality
 --   email     -> canonical identity/linkage is case-insensitive and trim-insensitive
 --
 -- Cross-tenant reuse is intentionally allowed.
@@ -19,7 +19,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_funcionarios_cpf_empresa_active
   WHERE deleted_at IS NULL AND cpf IS NOT NULL AND trim(cpf) != '';
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_funcionarios_matricula_empresa_active
-  ON funcionarios(empresa_id, matricula)
+  ON funcionarios(empresa_id, TRIM(matricula))
   WHERE deleted_at IS NULL AND matricula IS NOT NULL AND trim(matricula) != '';
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_funcionarios_email_empresa_active
