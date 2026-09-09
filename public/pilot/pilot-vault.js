@@ -246,6 +246,25 @@ export class PilotVault {
     await transactionDone(transaction);
   }
 
+  async decryptRecord(storeName, record) {
+    const plaintext = await crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: base64ToBytes(record.iv),
+        additionalData: recordAad(storeName, record.id),
+      },
+      this.masterKey,
+      base64ToBytes(record.ciphertext),
+    );
+
+    return {
+      id: record.id,
+      value: JSON.parse(new TextDecoder().decode(plaintext)),
+      localRevision: Number(record.local_revision || 0),
+      updatedAt: record.updated_at || null,
+    };
+  }
+
   async getJson(storeName, id) {
     this.assertStore(storeName);
     this.assertUnlocked();
@@ -255,20 +274,17 @@ export class PilotVault {
     await transactionDone(transaction);
     if (!record) return null;
 
-    const plaintext = await crypto.subtle.decrypt(
-      {
-        name: 'AES-GCM',
-        iv: base64ToBytes(record.iv),
-        additionalData: recordAad(storeName, id),
-      },
-      this.masterKey,
-      base64ToBytes(record.ciphertext),
-    );
+    return this.decryptRecord(storeName, record);
+  }
 
-    return {
-      value: JSON.parse(new TextDecoder().decode(plaintext)),
-      localRevision: Number(record.local_revision || 0),
-      updatedAt: record.updated_at || null,
-    };
+  async listJson(storeName) {
+    this.assertStore(storeName);
+    this.assertUnlocked();
+
+    const transaction = this.database.transaction(storeName, 'readonly');
+    const records = await requestResult(transaction.objectStore(storeName).getAll());
+    await transactionDone(transaction);
+
+    return Promise.all(records.map((record) => this.decryptRecord(storeName, record)));
   }
 }
