@@ -22,28 +22,63 @@
       body { margin: 0; min-height: 100vh; background: #f3f7fb; }
       button, input, textarea { font: inherit; }
       button, input { min-height: 48px; }
-      .shell { max-width: 900px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) 18px max(32px, env(safe-area-inset-bottom)); }
+      button { border: 0; border-radius: 12px; padding: 0 18px; font-weight: 800; cursor: pointer; }
+      button.primary { background: #12356a; color: #fff; }
+      button.secondary { background: #e9f0f7; color: #12356a; }
+      button.ghost { background: transparent; color: #12356a; border: 1px solid #c8d4e2; }
+      button:disabled { cursor: not-allowed; opacity: .55; }
+      .shell {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: max(20px, env(safe-area-inset-top)) 18px max(32px, env(safe-area-inset-bottom));
+      }
       .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
       .brand { display: flex; align-items: center; gap: 12px; }
       .brand img { width: 48px; height: 48px; object-fit: contain; }
       h1 { margin: 0; font-size: clamp(1.35rem, 3vw, 2rem); }
+      h2, h3 { color: #10213d; }
       .subtitle { margin: 3px 0 0; color: #52637a; font-size: .9rem; }
-      .pill { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 8px 12px; font-weight: 700; font-size: .86rem; border: 1px solid #c8d4e2; background: #fff; }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-weight: 700;
+        font-size: .86rem;
+        border: 1px solid #c8d4e2;
+        background: #fff;
+      }
       .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
-      .card { background: #fff; border: 1px solid #d9e2ec; border-radius: 18px; padding: 18px; box-shadow: 0 10px 30px rgba(18, 53, 106, .08); margin-top: 14px; }
+      .card {
+        background: #fff;
+        border: 1px solid #d9e2ec;
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 10px 30px rgba(18, 53, 106, .08);
+        margin-top: 14px;
+      }
       .card h2 { margin: 0 0 8px; font-size: 1.05rem; }
+      .card h3 { margin: 0; font-size: 1rem; }
       .muted { color: #66758a; line-height: 1.5; }
       .warning { border-color: #f1c56d; background: #fffaf0; }
+      .success-card { border-color: #b9dfce; background: #f4fbf8; }
       label { display: block; font-weight: 700; margin: 14px 0 7px; }
-      input, textarea { width: 100%; border: 1px solid #b8c6d8; border-radius: 12px; background: #fff; padding: 12px 14px; color: #10213d; }
-      textarea { min-height: 180px; resize: vertical; line-height: 1.55; }
-      input:focus, textarea:focus, button:focus-visible { outline: 3px solid rgba(50, 195, 230, .35); outline-offset: 2px; }
+      input, textarea {
+        width: 100%;
+        border: 1px solid #b8c6d8;
+        border-radius: 12px;
+        background: #fff;
+        padding: 12px 14px;
+        color: #10213d;
+      }
+      textarea { min-height: 150px; resize: vertical; line-height: 1.55; }
+      input:focus, textarea:focus, button:focus-visible, a:focus-visible {
+        outline: 3px solid rgba(50, 195, 230, .35);
+        outline-offset: 2px;
+      }
       .row { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
       .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
-      button { border: 0; border-radius: 12px; padding: 0 18px; font-weight: 800; cursor: pointer; }
-      button.primary { background: #12356a; color: #fff; }
-      button.secondary { background: #e9f0f7; color: #12356a; }
-      button:disabled { cursor: not-allowed; opacity: .55; }
       .statusline { display: flex; align-items: center; gap: 8px; min-height: 28px; margin-top: 12px; font-weight: 700; }
       .ok { color: #176b49; }
       .attention { color: #9a5c00; }
@@ -52,10 +87,52 @@
       .meta { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-top: 12px; }
       .meta > div { background: #f7f9fc; border-radius: 12px; padding: 12px; }
       .meta strong { display: block; margin-top: 4px; word-break: break-word; }
-      @media (max-width: 640px) {
+      .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+      .list { display: grid; gap: 10px; margin-top: 14px; }
+      .flight-item {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 12px;
+        align-items: center;
+        padding: 14px;
+        border: 1px solid #dbe4ee;
+        border-radius: 14px;
+        background: #f9fbfd;
+      }
+      .flight-title { font-weight: 850; }
+      .flight-subtitle { margin-top: 4px; color: #66758a; font-size: .88rem; line-height: 1.45; }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 4px 9px;
+        font-size: .76rem;
+        font-weight: 800;
+        background: #e9f0f7;
+        color: #12356a;
+        margin-top: 6px;
+      }
+      .detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-top: 14px; }
+      .detail-grid > div { border: 1px solid #e1e8f0; border-radius: 12px; padding: 12px; }
+      .detail-grid span { display: block; color: #66758a; font-size: .78rem; }
+      .detail-grid strong { display: block; margin-top: 4px; }
+      .stage {
+        border-left: 4px solid #12356a;
+        padding: 12px 14px;
+        background: #f7f9fc;
+        border-radius: 10px;
+        margin-top: 10px;
+      }
+      .small-list { margin: 8px 0 0; padding-left: 20px; line-height: 1.6; }
+      .signin-link { color: #12356a; font-weight: 800; }
+      details summary { cursor: pointer; font-weight: 800; }
+      @media (max-width: 700px) {
         .topbar { align-items: flex-start; flex-direction: column; }
-        .row, .meta { grid-template-columns: 1fr; }
+        .row, .meta, .detail-grid { grid-template-columns: 1fr; }
         .pill { align-self: flex-start; }
+        .flight-item { grid-template-columns: 1fr; }
+        .flight-item button { width: 100%; }
+        .section-head { flex-direction: column; }
       }
     </style>
   </head>
@@ -66,7 +143,7 @@
           <img src="/airtrust-site-logo-20260830-192.png" alt="" />
           <div>
             <h1>AirTrust Pilot</h1>
-            <p class="subtitle">Runtime offline isolado — fase de validação</p>
+            <p class="subtitle">Workspace operacional offline — validação read-only</p>
           </div>
         </div>
         <div id="connectivity" class="pill" aria-live="polite">
@@ -76,17 +153,18 @@
       </header>
 
       <section class="card warning">
-        <h2>Ambiente de validação local</h2>
+        <h2>Consulta offline de voo real</h2>
         <p class="muted">
-          Esta primeira implementação comprova persistência offline e recuperação após refresh.
-          Ela ainda não carrega um RDV real e não é Diário de Bordo oficial.
+          Esta fase permite baixar um voo autorizado e consultá-lo sem rede após desbloquear o
+          armazenamento local. Edição real, lease offline, sincronização e envio à Coordenação
+          ainda permanecem desabilitados. Este conteúdo não é Diário de Bordo oficial.
         </p>
       </section>
 
       <section id="unlock-card" class="card">
         <h2 id="unlock-title">Preparar armazenamento offline</h2>
         <p id="unlock-help" class="muted">
-          Crie um PIN local para proteger o rascunho armazenado neste tablet.
+          Crie um PIN local para proteger os dados armazenados neste tablet.
         </p>
         <div class="row">
           <div>
@@ -104,25 +182,74 @@
         <div id="unlock-status" class="statusline" aria-live="polite"></div>
       </section>
 
-      <section id="editor-card" class="card hidden">
-        <h2>Teste de rascunho offline</h2>
-        <p class="muted">
-          Digite algo, aguarde “Salvo no tablet”, ative o modo avião e recarregue esta página.
-          Depois desbloqueie com o mesmo PIN.
-        </p>
-        <label for="draft">Observações do voo — teste sintético</label>
-        <textarea id="draft" placeholder="Ex.: teste de persistência durante o voo"></textarea>
-        <div id="save-status" class="statusline attention" aria-live="polite">Nenhuma alteração local.</div>
-        <div class="meta">
-          <div><span class="muted">Revisão local</span><strong id="revision">0</strong></div>
-          <div><span class="muted">Último salvamento</span><strong id="last-saved">—</strong></div>
-          <div><span class="muted">Armazenamento</span><strong id="storage">Verificando…</strong></div>
-        </div>
-        <div class="actions">
-          <button id="save-now" class="primary" type="button">Salvar agora</button>
-          <button id="lock" class="secondary" type="button">Bloquear</button>
-        </div>
-      </section>
+      <div id="workspace" class="hidden">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>Pacotes de voo</h2>
+              <p class="muted">Pacotes baixados ficam cifrados no IndexedDB deste dispositivo.</p>
+            </div>
+            <div class="actions">
+              <button id="refresh-online" class="secondary" type="button">Atualizar voos online</button>
+              <button id="lock" class="ghost" type="button">Bloquear</button>
+            </div>
+          </div>
+          <div id="session-status" class="statusline" aria-live="polite"></div>
+          <div class="meta">
+            <div><span class="muted">Pacotes locais</span><strong id="cached-count">0</strong></div>
+            <div><span class="muted">Armazenamento</span><strong id="storage">Verificando…</strong></div>
+            <div><span class="muted">Modo</span><strong>Consulta read-only</strong></div>
+          </div>
+        </section>
+
+        <section id="cached-flights-card" class="card">
+          <h2>No tablet</h2>
+          <p class="muted">
+            Estes voos podem ser abertos sem internet. A presença local não substitui um lease
+            operacional futuro nem habilita edição.
+          </p>
+          <div id="cached-flights" class="list"></div>
+        </section>
+
+        <section id="online-flights-card" class="card">
+          <h2>Meus voos autorizados</h2>
+          <p class="muted">
+            A lista online usa a sessão AirTrust atual apenas para esta consulta e para o download.
+          </p>
+          <div id="online-flights" class="list"></div>
+        </section>
+
+        <section id="flight-detail-card" class="card hidden">
+          <div class="section-head">
+            <div>
+              <h2 id="detail-title">Voo</h2>
+              <p id="detail-subtitle" class="muted"></p>
+            </div>
+            <button id="close-detail" class="secondary" type="button">Voltar aos voos</button>
+          </div>
+          <div id="detail-status" class="statusline ok"></div>
+          <div id="flight-detail"></div>
+        </section>
+
+        <details id="diagnostic-card" class="card">
+          <summary>Diagnóstico de durabilidade local</summary>
+          <p class="muted">
+            Campo sintético mantido apenas para validar persistência contínua: após “Salvo no
+            tablet”, refresh ou modo avião deve preservar exatamente o texto.
+          </p>
+          <label for="draft">Observação sintética</label>
+          <textarea id="draft" placeholder="Teste de persistência local"></textarea>
+          <div id="save-status" class="statusline attention" aria-live="polite">Nenhuma alteração local.</div>
+          <div class="meta">
+            <div><span class="muted">Revisão local</span><strong id="revision">0</strong></div>
+            <div><span class="muted">Último salvamento</span><strong id="last-saved">—</strong></div>
+            <div><span class="muted">Finalidade</span><strong>Diagnóstico</strong></div>
+          </div>
+          <div class="actions">
+            <button id="save-now" class="secondary" type="button">Salvar diagnóstico</button>
+          </div>
+        </details>
+      </div>
     </main>
     <script type="module" src="/pilot/pilot-app.js"></script>
   </body>
