@@ -43,7 +43,7 @@ export async function buscarAcumuloTripulante(
     referenceAt: mes ? `${mes}-01` : hoje,
     funcionarioId: Number(tripulanteId),
   });
-  const limites = asOperationalLimitesMap(operationalContext.parameters);
+  const limites = asOperationalLimitesMap(operationalContext.parameters, operationalContext.cyclePolicyApproved);
 
   // Nome do tripulante
   const funcRow = await db
@@ -597,7 +597,7 @@ export async function buscarAcumuloFrota(
     ? `${mesReferencia}-${String(diasNoMes(...(mesReferencia.split('-').map(Number) as [number, number]))).padStart(2, '0')}`
     : new Date().toISOString().slice(0, 10);
   const limitesPromise = resolveFrmsOperationalContext(db, { empresaId, referenceAt }).then(
-    (ctx) => asOperationalLimitesMap(ctx.parameters),
+    (ctx) => asOperationalLimitesMap(ctx.parameters, ctx.cyclePolicyApproved),
   );
 
   if (mesReferencia) {
