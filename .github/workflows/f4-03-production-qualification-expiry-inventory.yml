@@ -107,9 +107,55 @@ jobs:
           console.log('- writes: none');
           NODE
 
+      - name: Require read-only R2-capable Worker credential
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo "WORKER_TOKEN_MISSING" >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo "CLOUDFLARE_ACCOUNT_ID_MISSING" >&2; exit 1; }
+
+      - name: Ensure PDF text extractor
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v pdftotext >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq poppler-utils
+          fi
+          command -v pdftotext >/dev/null 2>&1
+
+      - name: Recover pre-incident certificate expiry evidence
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          F4_03_CERTIFICATE_RECOVERY_CONFIRMATION: AIRTRUST_PRODUCTION_READONLY_F4_03_CERTIFICATE_RECOVERY
+        run: |
+          set -euo pipefail
+          node scripts/validation/f4-03-production-certificate-recovery.mjs > "$RUNNER_TEMP/f4-03-certificate-recovery.json"
+          node - "$RUNNER_TEMP/f4-03-certificate-recovery.json" >> "$GITHUB_STEP_SUMMARY" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          console.log('');
+          console.log('## F4-03 immutable certificate recovery — production read-only');
+          console.log('');
+          console.log(`- pre-incident certificate sources: \`${data.preincident_certificate_source_count}\``);
+          console.log(`- expiry dates recovered: \`${data.recovered_expiry_count}\``);
+          console.log(`- recovered expiries differing from current: \`${data.recovered_difference_count}\``);
+          console.log(`- object download failures: \`${data.object_download_failures}\``);
+          console.log(`- text extraction failures: \`${data.extraction_failures}\``);
+          console.log('- raw R2 keys/PDF text/person identity: not emitted');
+          console.log('- writes: none');
+          NODE
+
       - uses: actions/upload-artifact@v4
         with:
           name: f4-03-production-readonly-inventory-${{ github.sha }}
-          path: ${{ runner.temp }}/f4-03-inventory.json
+          path: |
+            ${{ runner.temp }}/f4-03-inventory.json
+            ${{ runner.temp }}/f4-03-certificate-recovery.json
           if-no-files-found: error
           retention-days: 7
