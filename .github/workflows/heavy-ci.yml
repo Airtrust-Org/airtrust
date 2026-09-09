@@ -47,7 +47,7 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3
+      - run: sudo rm -f /etc/apt/sources.list.d/google-chrome.list && sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3
       - run: npm run test:coverage
 
   worker-tests-1:
@@ -74,7 +74,7 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3
+      - run: sudo rm -f /etc/apt/sources.list.d/google-chrome.list && sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3
       - run: cd worker-airtrust && npx vitest run --shard=1/2
 
   worker-tests-2:
@@ -102,7 +102,7 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3 git
+      - run: sudo rm -f /etc/apt/sources.list.d/google-chrome.list && sudo rm -f /etc/apt/sources.list.d/google-chrome.list && sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3 git
       - run: cd worker-airtrust && npx vitest run --shard=2/2
 
   lms-smoke:
@@ -129,7 +129,7 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3
+      - run: sudo rm -f /etc/apt/sources.list.d/google-chrome.list && sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3
       - name: Run LMS smoke against isolated local D1
         shell: bash
         run: |
@@ -181,6 +181,8 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
+      - name: Sanitize runner APT sources before Playwright dependencies
+        run: sudo rm -f /etc/apt/sources.list.d/google-chrome.list
       - run: npx playwright install --with-deps chromium
       - name: Run public auth-boundary E2E with dev bypass disabled
         shell: bash
