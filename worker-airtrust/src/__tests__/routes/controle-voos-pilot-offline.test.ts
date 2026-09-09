@@ -14,6 +14,8 @@ const {
   verifyPilotOfflineLeaseEnvelope,
   assertPilotOfflineSyncEnabled,
   assertOfflineSyncReceiptSchemaReady,
+  isOfflineSyncReceiptSchemaReady,
+  isPilotOfflineSyncEnabled,
   assertOfflineSyncCommandHash,
   parseOfflineSyncBatch,
   applyPilotOfflineSnapshotCommand,
@@ -63,6 +65,8 @@ const {
   })),
   assertPilotOfflineSyncEnabled: vi.fn(),
   assertOfflineSyncReceiptSchemaReady: vi.fn(async () => undefined),
+  isOfflineSyncReceiptSchemaReady: vi.fn(async () => true),
+  isPilotOfflineSyncEnabled: vi.fn(() => false),
   assertOfflineSyncCommandHash: vi.fn(async () => undefined),
   parseOfflineSyncBatch: vi.fn(),
   applyPilotOfflineSnapshotCommand: vi.fn(async ({ command }: any) => ({
@@ -120,6 +124,8 @@ vi.mock('../../services/controle-voos/pilot-offline-lease', () => ({
 vi.mock('../../services/controle-voos/pilot-offline-sync', () => ({
   assertPilotOfflineSyncEnabled,
   assertOfflineSyncReceiptSchemaReady,
+  isOfflineSyncReceiptSchemaReady,
+  isPilotOfflineSyncEnabled,
   assertOfflineSyncCommandHash,
   parseOfflineSyncBatch,
 }));
@@ -381,6 +387,30 @@ describe('Pilot offline package', () => {
     expect(body.data.etapas).toHaveLength(1);
     expect(body.data.abastecimentos[0]).toMatchObject({ id: 20, tem_anexo: true });
     expect(body.data.abastecimentos[0].anexo_r2_key).toBeUndefined();
+  });
+
+  it('anuncia sync somente quando flag e schema 0488 estao prontos', async () => {
+    isPilotOfflineSyncEnabled.mockReturnValueOnce(true);
+    isOfflineSyncReceiptSchemaReady.mockResolvedValueOnce(true);
+    const enabledResponse = await createApp().request(
+      'http://localhost/api/controle-voos/voos/42/offline-package',
+      { headers: { Authorization: 'Bearer test' } },
+      createEnv(),
+    );
+    expect(enabledResponse.status).toBe(200);
+    const enabledBody = (await enabledResponse.json()) as any;
+    expect(enabledBody.data.contract.sync_supported).toBe(true);
+
+    isPilotOfflineSyncEnabled.mockReturnValueOnce(true);
+    isOfflineSyncReceiptSchemaReady.mockResolvedValueOnce(false);
+    const missingSchemaResponse = await createApp().request(
+      'http://localhost/api/controle-voos/voos/42/offline-package',
+      { headers: { Authorization: 'Bearer test' } },
+      createEnv(),
+    );
+    expect(missingSchemaResponse.status).toBe(200);
+    const missingSchemaBody = (await missingSchemaResponse.json()) as any;
+    expect(missingSchemaBody.data.contract.sync_supported).toBe(false);
   });
 
   it('emite lease somente para ator vinculado ao voo e em estado editavel', async () => {
