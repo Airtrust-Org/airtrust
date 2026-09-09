@@ -298,7 +298,7 @@ export default function ControleVoosRdvDetalhe() {
       }
       const refreshed = await refetchRdv();
       const canonicalVersion = refreshed.data?.versao;
-      if (!Number.isInteger(canonicalVersion)) {
+      if (typeof canonicalVersion !== 'number' || !Number.isInteger(canonicalVersion)) {
         throw new Error('Não foi possível confirmar a versão atual do RDV.');
       }
       await finalizarMutation.mutateAsync({ vooId: id, versao: canonicalVersion });
