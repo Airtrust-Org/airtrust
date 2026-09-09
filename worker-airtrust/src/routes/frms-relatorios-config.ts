@@ -35,7 +35,10 @@ import {
   marcarNotificacaoLida,
   marcarTodasNotificacoesLidas,
 } from '../lib/frms/db-service';
-import { FrmsParameterResolutionError } from '../lib/frms/parameter-governance';
+import {
+  FRMS_APPROVED_OPERATIONAL_POLICY_SOURCE,
+  FrmsParameterResolutionError,
+} from '../lib/frms/parameter-governance';
 import {
   safe,
   type FrmsAppContext,
@@ -53,6 +56,7 @@ const GOVERNED_SOURCE_TYPES = [
   'REGULATORY_CONTEXT_BASELINE',
   'OPERATIONAL_POLICY_WITH_REGULATORY_CONTEXT',
   'UNVERIFIED_OPERATIONAL_POLICY',
+  FRMS_APPROVED_OPERATIONAL_POLICY_SOURCE,
 ] as const;
 
 function isoDateToday(): string {

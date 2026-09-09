@@ -224,7 +224,7 @@ export async function recalcularPipeline(
     referenceAt: jornada.data,
     jornadaId: jornada.id,
   });
-  limites = asOperationalLimitesMap(operationalContext.parameters);
+  limites = asOperationalLimitesMap(operationalContext.parameters, operationalContext.cyclePolicyApproved);
   provenance = {
     configRevisionId: operationalContext.configRevisionId,
     modelVersion: operationalContext.modelVersion,
@@ -750,7 +750,7 @@ export async function salvarJornada(
     referenceAt: input.data,
     funcionarioId: Number(input.tripulante_id),
   });
-  const limites = asOperationalLimitesMap(operationalContext.parameters);
+  const limites = asOperationalLimitesMap(operationalContext.parameters, operationalContext.cyclePolicyApproved);
   void legacyLimites;
 
   // Calcular duração da jornada
@@ -912,7 +912,7 @@ export async function atualizarJornada(
     funcionarioId: Number(merged.tripulante_id ?? existing.tripulante_id),
     jornadaId: id,
   });
-  const limites = asOperationalLimitesMap(operationalContext.parameters);
+  const limites = asOperationalLimitesMap(operationalContext.parameters, operationalContext.cyclePolicyApproved);
 
   // Revalidar repouso plataforma
   merged.repouso_plataforma_valido = validarRepousoPlataforma(
@@ -1285,7 +1285,7 @@ export async function importarApus(
         referenceAt: input.data,
         funcionarioId: Number(input.tripulante_id),
       });
-      const limites = asOperationalLimitesMap(operationalContext.parameters);
+      const limites = asOperationalLimitesMap(operationalContext.parameters, operationalContext.cyclePolicyApproved);
       const repousoValido = validarRepousoPlataforma(
         input.repouso_plataforma_inicio ?? null,
         input.repouso_plataforma_fim ?? null,

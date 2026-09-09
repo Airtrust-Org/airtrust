@@ -90,6 +90,26 @@ describe('FRMS parameter governance V2', () => {
     expect(Object.isFrozen(set.values)).toBe(true);
   });
 
+  it('fails closed the embarked-cycle factor for legacy or unverified revision provenance', () => {
+    for (const source_type of ['INTERNAL_POLICY', 'UNVERIFIED_OPERATIONAL_POLICY']) {
+      const set = buildResolvedParameterSet(
+        revision({ source_type }),
+        [parameter('CICLO_EMBARCADO_ATIVO', 1)],
+        ['CICLO_EMBARCADO_ATIVO'],
+      );
+      expect(set.cyclePolicyApproved).toBe(false);
+    }
+  });
+
+  it('enables the embarked-cycle approval bit only for an explicitly approved operational policy revision', () => {
+    const set = buildResolvedParameterSet(
+      revision({ source_type: 'APPROVED_OPERATIONAL_POLICY' }),
+      [parameter('CICLO_EMBARCADO_ATIVO', 1)],
+      ['CICLO_EMBARCADO_ATIVO'],
+    );
+    expect(set.cyclePolicyApproved).toBe(true);
+  });
+
   it('continues past a 1,000-item chunk and completes only after the final chunk', async () => {
     const processed: number[] = [];
     const outcome = await processRecalcRunInChunks({

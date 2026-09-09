@@ -160,7 +160,7 @@ export async function sincronizarCheckinComFrms(
     jornadaId: jornada.id,
     checkinId,
   });
-  const limites = asOperationalLimitesMap(operationalContext.parameters);
+  const limites = asOperationalLimitesMap(operationalContext.parameters, operationalContext.cyclePolicyApproved);
   const cfgSono = resolverFrmsConfig(limites);
   const duracaoSonoMin = horasSonoParaMinutos(horasSono);
   const apresentacaoMin = hhmmToMinutes(jornada.hora_apresentacao);

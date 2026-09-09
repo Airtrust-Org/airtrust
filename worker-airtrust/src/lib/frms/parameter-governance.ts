@@ -11,6 +11,7 @@ import { resolveFortnightPolicy, type FrmsFortnightPolicy } from './fortnight-in
 
 export const FRMS_OFFSHORE_PROFILE = 'HELICOPTER_OFFSHORE' as const;
 export const FRMS_LEGACY_MODEL_VERSION = 'LEGACY_MODEL_V2' as const;
+export const FRMS_APPROVED_OPERATIONAL_POLICY_SOURCE = 'APPROVED_OPERATIONAL_POLICY' as const;
 
 export type FrmsRevisionStatus = 'DRAFT' | 'ACTIVE' | 'SUPERSEDED' | 'RETIRED';
 export type FrmsRecalcStatus = 'PENDING' | 'RUNNING' | 'COMPLETE' | 'FAILED' | 'SUPERSEDED';
@@ -51,6 +52,7 @@ export interface ResolvedFrmsParameterSet {
   revision: Readonly<FrmsConfigRevision>;
   values: Readonly<Record<string, number>>;
   modelVersion: string;
+  cyclePolicyApproved: boolean;
 }
 
 /**
@@ -87,6 +89,7 @@ export interface FrmsOperationalContext {
   effectiveFrom: string;
   effectiveTo: string | null;
   parameters: Readonly<Record<string, number>>;
+  cyclePolicyApproved: boolean;
   fadigaPolicy: FadigaBusinessPolicy;
   fortnightPolicy: FrmsFortnightPolicy;
 }
@@ -123,6 +126,7 @@ export async function resolveFrmsOperationalContext(
     configRevisionId: parameterSet.revision.id, modelVersion: parameterSet.modelVersion,
     effectiveFrom: parameterSet.revision.effective_from, effectiveTo: parameterSet.revision.effective_to,
     parameters: parameterSet.values,
+    cyclePolicyApproved: parameterSet.cyclePolicyApproved,
     fadigaPolicy: resolveFadigaBusinessPolicy(parameterSet.values),
     fortnightPolicy: resolveFortnightPolicy(parameterSet.values),
   });
@@ -210,10 +214,19 @@ export function buildResolvedParameterSet(
       );
     }
   }
+
+  // The legacy embarked-cycle factor is an internal model assumption whose
+  // 15-day provenance is explicitly unresolved. Keep persisted values byte-for-
+  // byte auditable; approval is separate metadata and is injected only into the
+  // operational calculation context.
+  const cyclePolicyApproved =
+    revision.source_type === FRMS_APPROVED_OPERATIONAL_POLICY_SOURCE;
+
   return Object.freeze({
     revision: Object.freeze({ ...revision }),
     values: Object.freeze({ ...values }),
     modelVersion: revision.policy_version,
+    cyclePolicyApproved,
   });
 }
 
@@ -230,7 +243,10 @@ export function asGovernedLimites(
       );
     }
   }
-  const candidate: unknown = { ...parameterSet.values };
+  const candidate: unknown = {
+    ...parameterSet.values,
+    CICLO_EMBARCADO_POLICY_APPROVED: parameterSet.cyclePolicyApproved ? 1 : 0,
+  };
   if (!isGovernedLimitesMap(candidate, requiredKeys)) {
     throw new FrmsParameterResolutionError(
       'FRMS_PARAMETER_REQUIRED_MISSING',
@@ -255,7 +271,10 @@ function isGovernedLimitesMap(
  * call on `FrmsOperationalContext.parameters`, since `resolveFrmsOperationalContext`
  * already guarantees every `LIMITES_DEFAULT` key is present and numeric.
  */
-export function asOperationalLimitesMap(parameters: Readonly<Record<string, number>>): LimitesMap {
+export function asOperationalLimitesMap(
+  parameters: Readonly<Record<string, number>>,
+  cyclePolicyApproved = false,
+): LimitesMap {
   const requiredKeys = Object.keys(LIMITES_DEFAULT) as (keyof LimitesMap)[];
   if (!isGovernedLimitesMap(parameters, requiredKeys)) {
     throw new FrmsParameterResolutionError(
@@ -263,7 +282,10 @@ export function asOperationalLimitesMap(parameters: Readonly<Record<string, numb
       'Governed operational context does not satisfy the calculation contract.',
     );
   }
-  return parameters;
+  return Object.freeze({
+    ...parameters,
+    CICLO_EMBARCADO_POLICY_APPROVED: cyclePolicyApproved ? 1 : 0,
+  });
 }
 
 export interface FrmsRecalcRun {

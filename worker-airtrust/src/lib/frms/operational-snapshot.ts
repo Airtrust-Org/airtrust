@@ -971,7 +971,7 @@ export async function listFrmsOperationalSnapshot(
     empresaId: params.empresaId,
     referenceAt: params.hoje ?? params.dataFim,
   });
-  const limites = asOperationalLimitesMap(operationalContext.parameters);
+  const limites = asOperationalLimitesMap(operationalContext.parameters, operationalContext.cyclePolicyApproved);
   const frmsConfig = resolverFrmsConfig(limites);
 
   const requestedStart = params.dataInicio;

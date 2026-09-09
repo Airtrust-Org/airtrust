@@ -165,8 +165,15 @@ describe('1. Oráculo independente vs implementação produtiva', () => {
     }
   });
 
-  it('ciclo embarcado coincide com o oráculo em toda a faixa', () => {
-    const limites = { ...L, CICLO_EMBARCADO_DIA_INICIO: 1, CICLO_EMBARCADO_DIA_MAX: 14 };
+  it('ciclo embarcado aprovado coincide matematicamente com o oráculo em toda a faixa', () => {
+    // Este vetor valida somente a matemática da curva histórica. A autorização
+    // operacional da política é coberta separadamente pelos testes de governance.
+    const limites = {
+      ...L,
+      CICLO_EMBARCADO_POLICY_APPROVED: 1,
+      CICLO_EMBARCADO_DIA_INICIO: 1,
+      CICLO_EMBARCADO_DIA_MAX: 14,
+    };
     for (let dia = 0; dia <= 20; dia++) {
       const expected = dia < 1 ? 0 : oracle.embarkedCyclePenalty(dia, 1, 14, 0, -0.15);
       expect(calcFatorCicloEmbarcado(dia, limites)).toBeCloseTo(expected, TOL_FRACTION_DIGITS);

@@ -3919,7 +3919,7 @@ frmsRoutes.post(
       referenceAt: new Date().toISOString().slice(0, 10),
       funcionarioId: Number(parsed.data.tripulante_id),
     });
-    const limites = asOperationalLimitesMap(operationalContextEscala.parameters);
+    const limites = asOperationalLimitesMap(operationalContextEscala.parameters, operationalContextEscala.cyclePolicyApproved);
 
     // Buscar histórico existente do tripulante (365 dias)
     const dataInicio = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);

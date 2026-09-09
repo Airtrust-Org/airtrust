@@ -294,6 +294,7 @@ const PROVENANCE_TYPES = [
   { value: 'REGULATORY_CONTEXT_BASELINE', label: 'Baseline com contexto regulatório' },
   { value: 'OPERATIONAL_POLICY_WITH_REGULATORY_CONTEXT', label: 'Política operacional com contexto regulatório' },
   { value: 'UNVERIFIED_OPERATIONAL_POLICY', label: 'Política operacional ainda não verificada' },
+  { value: 'APPROVED_OPERATIONAL_POLICY', label: 'Política operacional aprovada para uso no modelo' },
 ] as const;
 
 function todayIsoDate() {

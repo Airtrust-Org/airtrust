@@ -313,6 +313,10 @@ export function calcFatorCicloEmbarcado(
   diaDoCiclo: number | null | undefined,
   limites: LimitesMap,
 ): number {
+  // The historical 15-day curve is not a regulatory/contractual limit. It may
+  // influence an operational result only after an explicit governed policy
+  // approval. Missing approval is fail-closed.
+  if (limites.CICLO_EMBARCADO_POLICY_APPROVED !== 1) return 0;
   if (!limites.CICLO_EMBARCADO_ATIVO) return 0;
   if (diaDoCiclo == null || diaDoCiclo < limites.CICLO_EMBARCADO_DIA_INICIO) return 0;
   const escala = resolverEscalaFatores(limites);

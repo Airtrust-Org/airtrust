@@ -276,7 +276,7 @@ export async function frmsDailyCheck(env: Env): Promise<{
         referenceAt: dataOperacional,
         funcionarioId: trip.id,
       });
-      const limites = asOperationalLimitesMap(operationalContext.parameters);
+      const limites = asOperationalLimitesMap(operationalContext.parameters, operationalContext.cyclePolicyApproved);
 
       // 1. Recalcular acúmulo rolling no último dia operacional confirmado pela ingestão SIGVOOS.
       const acumulo = await recalcularAcumuloRolling(db, trip.id, dataOperacional, limites);

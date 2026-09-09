@@ -80,3 +80,14 @@ It does not by itself close issue #455. Before treating the V1 baseline as a com
 3. the runtime decision is redesigned so these legacy fatigue-model parameters are clearly separated from enforceable regulatory/labor constraints.
 
 Until then, historical equivalence may be demonstrated, but compliance provenance for the 15-day and 3 h/6 h numbers remains fail-closed.
+
+### Runtime enforcement added after the provenance review
+
+The persisted baseline remains unchanged for audit/history, including `CICLO_EMBARCADO_DIA_MAX=15` and `CICLO_EMBARCADO_ATIVO=1`. Runtime use is now separated from storage provenance:
+
+- revisions classified as `INTERNAL_POLICY`, `UNVERIFIED_OPERATIONAL_POLICY`, regulatory context, or any other source type do **not** authorize the 15-day embarked-cycle penalty by themselves;
+- the factor is operationally enabled only when a new immutable governed revision is explicitly classified as `APPROVED_OPERATIONAL_POLICY`;
+- that classification still requires the normal tenant-scoped admin flow, source reference, reason, effective date, audit trail and recalculation ledger;
+- the approval marker is runtime metadata, not a persisted numeric parameter, so historical parameter rows are not rewritten and restore/history remain exact.
+
+This closes the unsafe-default path without asserting that 15 days is a legal, CCT, IOGP or Petrobras limit.
