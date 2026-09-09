@@ -76,7 +76,7 @@ describe('A-02 residual migration - DB validation', () => {
     ).toThrow(/UNIQUE constraint failed/);
   });
 
-  it('keeps matricula case-sensitive, matching the current runtime equality contract', () => {
+  it('keeps matricula case-sensitive while ignoring surrounding whitespace', () => {
     const out = runSqlite(`
       ${baseSchema}
       ${mig0489}
@@ -95,7 +95,7 @@ describe('A-02 residual migration - DB validation', () => {
         INSERT INTO funcionarios (nome, cpf, matricula, email, empresa_id)
           VALUES ('A', '111', 'ABC-1', 'a@example.com', 1);
         INSERT INTO funcionarios (nome, cpf, matricula, email, empresa_id)
-          VALUES ('B', '222', 'ABC-1', 'b@example.com', 1);
+          VALUES ('B', '222', ' ABC-1 ', 'b@example.com', 1);
       `),
     ).toThrow(/UNIQUE constraint failed/);
   });
