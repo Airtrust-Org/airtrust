@@ -67,8 +67,13 @@ describe('Pilot Offline shell', () => {
   });
 
   it('baixa pacote real autorizado sem transformar token em dado offline', () => {
-    expect(pilotApp).toContain("'/api/controle-voos/voos/meus'");
+    expect(pilotApp).toContain("'/controle-voos/voos/meus'");
     expect(pilotApp).toContain("'/offline-package'");
+    expect(pilotApp).toContain("const PRODUCTION_API_BASE_URL = 'https://api.airtrust.online/api'");
+    expect(pilotApp).toContain(
+      "const STAGING_API_BASE_URL = 'https://airtrust-api-staging.airtrust.workers.dev/api'",
+    );
+    expect(pilotApp).toContain('const API_BASE_URL = resolvePilotApiBase()');
     expect(pilotApp).toContain("'airtrust_token'");
     expect(pilotApp).toContain("Authorization: 'Bearer ' + token");
     expect(pilotApp).toContain("containsForbiddenPackageKey(packageData)");
