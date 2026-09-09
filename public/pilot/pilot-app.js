@@ -15,6 +15,10 @@ import {
   validateRdvForm,
   validateStageDrafts,
 } from '/pilot/pilot-rdv-draft.js';
+import {
+  buildOfflineSyncCommand,
+  verifyOfflineSyncCommandHash,
+} from '/pilot/pilot-sync.js';
 
 const DRAFT_ID = 'phase1-synthetic-rdv-draft';
 const SAVE_DELAY_MS = 180;
@@ -83,6 +87,9 @@ const rdvLeaseUntilLabel = document.querySelector('#rdv-lease-until');
 const rdvFormFields = document.querySelector('#rdv-form-fields');
 const rdvStageFields = document.querySelector('#rdv-stage-fields');
 const closeRdvEditorButton = document.querySelector('#close-rdv-editor');
+const syncRdvButton = document.querySelector('#sync-rdv-now');
+const rdvSyncStatus = document.querySelector('#rdv-sync-status');
+const rdvServerSyncStatus = document.querySelector('#rdv-server-sync-status');
 
 let vault;
 let provisioned = false;
@@ -100,6 +107,7 @@ let operationalNextSequence = 0;
 let operationalSaveTimer = null;
 let operationalSaveChain = Promise.resolve();
 let timingSequence = 0;
+let operationalSyncInFlight = false;
 
 function setConnectivity() {
   const online = navigator.onLine;
@@ -564,6 +572,82 @@ function offlineLeaseRecordId(flightId) {
 
 function rdvDraftRecordId(flightId) {
   return 'flight:' + String(flightId) + ':rdv';
+}
+
+function outboxRecordId(operationId) {
+  return 'operation:' + String(operationId);
+}
+
+function syncReceiptRecordId(operationId) {
+  return 'operation:' + String(operationId);
+}
+
+function setRdvSyncMessage(message, kind = 'attention') {
+  rdvSyncStatus.className = 'statusline ' + kind;
+  rdvSyncStatus.textContent = message;
+}
+
+function setServerSyncStatus(message) {
+  rdvServerSyncStatus.textContent = message;
+}
+
+function updateSyncButtonState() {
+  syncRdvButton.disabled =
+    !navigator.onLine ||
+    !vault?.isUnlocked() ||
+    !activeRdvDraft ||
+    !activeVerifiedLease ||
+    operationalSyncInFlight;
+}
+
+async function listPendingOutboxForFlight(flightId) {
+  const records = await vault.listJson('outbox');
+  return records
+    .filter(
+      (record) =>
+        Number(record.value?.command?.flight_id) === Number(flightId) &&
+        record.value?.status === 'pending',
+    )
+    .sort((left, right) =>
+      String(left.value?.created_at || left.updatedAt || '').localeCompare(
+        String(right.value?.created_at || right.updatedAt || ''),
+      ),
+    );
+}
+
+async function refreshOutboxStatusForActiveFlight() {
+  const packageData = activePackageData();
+  if (!packageData || !vault?.isUnlocked()) {
+    setServerSyncStatus('Não sincronizado');
+    updateSyncButtonState();
+    return;
+  }
+  const flightId = Number(packageData.voo?.id || 0);
+  const pending = await listPendingOutboxForFlight(flightId);
+  if (pending.length > 0) {
+    setServerSyncStatus('Pendente de transmissão');
+    setRdvSyncMessage(
+      navigator.onLine
+        ? 'Existe uma transmissão pendente. O Pilot App tentará reenviar de forma idempotente.'
+        : 'Transmissão pendente preservada na outbox cifrada até a conexão voltar.',
+      'attention',
+    );
+  } else if (activeRdvDraft?.sync_state === 'accepted_requires_refresh') {
+    setServerSyncStatus('Transmitido');
+    setRdvSyncMessage(
+      'Receipt confirmado. Atualize o pacote do voo antes de iniciar nova edição.',
+      'ok',
+    );
+  } else {
+    setServerSyncStatus('Não sincronizado');
+    setRdvSyncMessage(
+      navigator.onLine
+        ? 'Rascunho salvo localmente. Transmita quando o preenchimento estiver pronto para o servidor.'
+        : 'Rascunho salvo localmente. Reconecte para transmitir.',
+      'attention',
+    );
+  }
+  updateSyncButtonState();
 }
 
 async function verifyStoredLeaseForPackage(packageData) {
