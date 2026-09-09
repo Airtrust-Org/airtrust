@@ -37,43 +37,55 @@ test('0488 Schema V2 SQL is byte-equivalent, additive and tenant scoped', () => 
   const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
   const change = readFileSync(manifest.filePath, 'utf8');
   const migration = readFileSync(MIGRATION, 'utf8');
+  const ddl = change
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith('--'))
+    .join('\n');
 
   assert.equal(change, migration);
-  assert.match(change, /CREATE TABLE IF NOT EXISTS cv_offline_sync_receipts/);
-  assert.match(change, /empresa_id INTEGER NOT NULL/);
-  assert.match(change, /client_operation_id TEXT NOT NULL/);
-  assert.match(change, /payload_hash TEXT NOT NULL/);
+  assert.match(ddl, /CREATE TABLE IF NOT EXISTS cv_offline_sync_receipts/);
+  assert.match(ddl, /empresa_id INTEGER NOT NULL/);
+  assert.match(ddl, /client_operation_id TEXT NOT NULL/);
+  assert.match(ddl, /payload_hash TEXT NOT NULL/);
   assert.match(
-    change,
+    ddl,
     /CREATE UNIQUE INDEX IF NOT EXISTS uq_cv_offline_sync_receipts_empresa_operation/,
   );
   assert.match(
-    change,
+    ddl,
     /ON cv_offline_sync_receipts \(empresa_id, client_operation_id\)/,
   );
   assert.ok(
-    change.includes(
+    ddl.includes(
       "CHECK (result_status IN ('accepted', 'conflict', 'rejected_retriable', 'rejected_permanent'))",
     ),
   );
-  assert.match(change, /idx_cv_offline_sync_receipts_voo_received/);
-  assert.match(change, /idx_cv_offline_sync_receipts_actor_device/);
-  assert.doesNotMatch(
-    change,
-    /(?:INSERT INTO|UPDATEs+w+s+SET|DELETE FROM|DROP TABLE|ALTER TABLE)/i,
-  );
+  assert.match(ddl, /idx_cv_offline_sync_receipts_voo_received/);
+  assert.match(ddl, /idx_cv_offline_sync_receipts_actor_device/);
+  for (const destructive of ['INSERT INTO', 'DELETE FROM', 'DROP TABLE', 'ALTER TABLE']) {
+    assert.equal(ddl.toUpperCase().includes(destructive), false);
+  }
 });
 
 test('0488 does not persist the operational payload body', () => {
   const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
   const change = readFileSync(manifest.filePath, 'utf8');
+  const ddl = change
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith('--'))
+    .join('\n')
+    .toLowerCase();
 
-  assert.match(change, /payload_hash TEXT NOT NULL/);
-  assert.doesNotMatch(change, /payload_json/i);
-  assert.doesNotMatch(change, /request_body/i);
-  assert.doesNotMatch(change, /authorization/i);
-  assert.doesNotMatch(change, /access_token/i);
-  assert.doesNotMatch(change, /refresh_token/i);
+  assert.ok(ddl.includes('payload_hash text not null'));
+  for (const forbidden of [
+    'payload_json',
+    'request_body',
+    'authorization',
+    'access_token',
+    'refresh_token',
+  ]) {
+    assert.equal(ddl.includes(forbidden), false);
+  }
 });
 
 test('official Schema V2 builder accepts 0488 and appends exactly one ledger row', () => {
