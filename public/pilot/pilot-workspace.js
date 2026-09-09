@@ -15,6 +15,7 @@ function text(value, fallback = '—') {
 }
 
 function numberText(value, suffix = '') {
+  if (value === null || value === undefined || value === '') return '—';
   const parsed = Number(value);
   return Number.isFinite(parsed) ? String(parsed) + suffix : '—';
 }
@@ -387,7 +388,7 @@ function renderFuel(panel, packageData) {
       card.append(
         el('span', {
           className: 'muted',
-          text: 'Consumo informado/derivável da etapa: ' + numberText(start - end) + ' ' + text(stage.unidade_combustivel, ''),
+          text: 'Diferença início–final: ' + numberText(start - end) + ' ' + text(stage.unidade_combustivel, ''),
         }),
       );
     }
