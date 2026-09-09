@@ -143,12 +143,6 @@ describe('sgso relatos beta contract', () => {
       [
         'UPDATE sgso_protocolo_sequencia SET ultimo_numero = ultimo_numero + 1',
         {
-          run: () => ({ meta: { changes: 1 } }),
-        },
-      ],
-      [
-        'SELECT ultimo_numero FROM sgso_protocolo_sequencia',
-        {
           first: () => ({ ultimo_numero: 7 }),
         },
       ],
@@ -213,6 +207,18 @@ describe('sgso relatos beta contract', () => {
     expect(insertCall?.args[2]).toBe('REL-2026-0007');
     expect(insertCall?.args[3]).toBe('INCIDENTE');
     expect(insertCall?.args[14]).toBe('Descricao funcional minima do relato');
+
+    const protocolCall = calls.find(
+      (call) =>
+        call.method === 'first' &&
+        call.query.includes('UPDATE sgso_protocolo_sequencia SET ultimo_numero = ultimo_numero + 1'),
+    );
+    expect(protocolCall?.query).toContain('RETURNING ultimo_numero');
+    expect(
+      calls.some((call) =>
+        call.query.includes('SELECT ultimo_numero FROM sgso_protocolo_sequencia'),
+      ),
+    ).toBe(false);
   });
 
   it('cria relato com relatorId e vincula escala automaticamente', async () => {
@@ -225,12 +231,6 @@ describe('sgso relatos beta contract', () => {
       ],
       [
         'UPDATE sgso_protocolo_sequencia SET ultimo_numero = ultimo_numero + 1',
-        {
-          run: () => ({ meta: { changes: 1 } }),
-        },
-      ],
-      [
-        'SELECT ultimo_numero FROM sgso_protocolo_sequencia',
         {
           first: () => ({ ultimo_numero: 8 }),
         },
