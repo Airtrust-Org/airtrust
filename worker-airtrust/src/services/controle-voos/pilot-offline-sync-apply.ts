@@ -229,90 +229,15 @@ function assertSourcePackageMatches(
   }
 }
 
-function buildStageGuard(
-  existingRdv: RdvRow | null,
-): { sql: string; bind: (params: { empresaId: number; flight: FlightRow; command: PilotOfflineSyncCommand }) => unknown[] } {
-  if (existingRdv) {
-    return {
-      sql: `
-        EXISTS (
-          SELECT 1 FROM cv_voos
-          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND versao = ?
-        )
-        AND EXISTS (
-          SELECT 1 FROM cv_rdv_operacional
-          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
-            AND versao = ? AND status = 'rascunho'
-            AND workflow_status IN ('rascunho', 'devolvido')
-        )
-      `,
-      bind: ({ empresaId, flight, command }) => [
-        flight.id,
-        empresaId,
-        command.base_flight_version,
-        existingRdv.id,
-        empresaId,
-        command.base_server_version,
-      ],
-    };
-  }
-
-  return {
-    sql: `
-      EXISTS (
-        SELECT 1 FROM cv_voos
-        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND versao = ?
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM cv_rdv_operacional
-        WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL AND status <> 'cancelado'
-      )
-    `,
-    bind: ({ empresaId, flight, command }) => [
-      flight.id,
-      empresaId,
-      command.base_flight_version,
-      flight.id,
-      empresaId,
-    ],
-  };
-}
-
 function buildStageStatements(input: {
   db: D1Database;
   empresaId: number;
   userId: number;
   flight: FlightRow;
-  command: PilotOfflineSyncCommand;
-  existingRdv: RdvRow | null;
+  newVersion: number;
   stages: PreparedStage[];
 }): D1PreparedStatement[] {
-  const guard = buildStageGuard(input.existingRdv);
   return input.stages.map((stage) => {
-    const values = [
-      stage.input.numero_etapa,
-      stage.input.origem_icao ?? null,
-      stage.input.destino_icao ?? null,
-      stage.input.horario_motor_ligado ?? null,
-      stage.input.horario_decolagem ?? null,
-      stage.input.horario_pouso ?? null,
-      stage.input.horario_motor_desligado ?? null,
-      stage.input.tempo_decolagem_pouso,
-      stage.input.tempo_total,
-      stage.input.tempo_navegacao ?? null,
-      stage.input.tempo_ifr ?? null,
-      stage.input.tempo_noturno ?? null,
-      stage.input.pousos_diurnos ?? null,
-      stage.input.pousos_noturnos ?? null,
-      stage.input.starts ?? null,
-      stage.input.pax ?? null,
-      stage.input.payload ?? null,
-      stage.input.combustivel_inicio ?? null,
-      stage.input.combustivel_fim ?? null,
-      stage.input.unidade_combustivel ?? null,
-      input.userId,
-    ];
-
     if (stage.sourceStageId !== null) {
       return input.db
         .prepare(
@@ -341,15 +266,41 @@ function buildStageStatements(input: {
                 updated_by = ?,
                 updated_at = datetime('now')
             WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
-              AND ${guard.sql}
+              AND EXISTS (
+                SELECT 1 FROM cv_rdv_operacional
+                WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
+                  AND status <> 'cancelado' AND versao = ?
+              )
           `,
         )
         .bind(
-          ...values,
+          stage.input.numero_etapa,
+          stage.input.origem_icao ?? null,
+          stage.input.destino_icao ?? null,
+          stage.input.horario_motor_ligado ?? null,
+          stage.input.horario_decolagem ?? null,
+          stage.input.horario_pouso ?? null,
+          stage.input.horario_motor_desligado ?? null,
+          stage.input.tempo_decolagem_pouso,
+          stage.input.tempo_total,
+          stage.input.tempo_navegacao ?? null,
+          stage.input.tempo_ifr ?? null,
+          stage.input.tempo_noturno ?? null,
+          stage.input.pousos_diurnos ?? null,
+          stage.input.pousos_noturnos ?? null,
+          stage.input.starts ?? null,
+          stage.input.pax ?? null,
+          stage.input.payload ?? null,
+          stage.input.combustivel_inicio ?? null,
+          stage.input.combustivel_fim ?? null,
+          stage.input.unidade_combustivel ?? null,
+          input.userId,
           stage.sourceStageId,
           input.flight.id,
           input.empresaId,
-          ...guard.bind(input),
+          input.flight.id,
+          input.empresaId,
+          input.newVersion,
         );
     }
 
@@ -371,7 +322,11 @@ function buildStageStatements(input: {
             ?, ?, ?, ?, ?,
             ?, ?, ?, 'MANUAL',
             ?, ?, datetime('now'), datetime('now')
-          WHERE ${guard.sql}
+          WHERE EXISTS (
+            SELECT 1 FROM cv_rdv_operacional
+            WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
+              AND status <> 'cancelado' AND versao = ?
+          )
         `,
       )
       .bind(
@@ -399,9 +354,37 @@ function buildStageStatements(input: {
         stage.input.unidade_combustivel ?? null,
         input.userId,
         input.userId,
-        ...guard.bind(input),
+        input.flight.id,
+        input.empresaId,
+        input.newVersion,
       );
   });
+}
+
+function buildStageRevisionCasSql(
+  stages: PreparedStage[],
+): { sql: string; binds: unknown[] } {
+  const sourceStages = stages.filter((stage) => stage.sourceStageId !== null);
+  const clauses = [
+    `(SELECT COUNT(*) FROM cv_voo_etapas WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL) = ?`,
+  ];
+  const binds: unknown[] = [];
+  // voo_id / empresa_id are prepended by the caller because they are aggregate-specific.
+  for (const stage of sourceStages) {
+    clauses.push(
+      `EXISTS (
+        SELECT 1 FROM cv_voo_etapas
+        WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
+          AND updated_at = ? AND numero_etapa = ?
+      )`,
+    );
+    binds.push(
+      stage.sourceStageId,
+      stage.sourceStageUpdatedAt,
+      stage.input.numero_etapa,
+    );
+  }
+  return { sql: clauses.join(' AND '), binds };
 }
 
 function bindRdvValues(
@@ -433,7 +416,11 @@ function buildExistingRdvUpdate(input: {
   command: PilotOfflineSyncCommand;
   existingRdv: RdvRow;
   rdv: RdvInput;
+  stages: PreparedStage[];
 }): D1PreparedStatement {
+  const stageCas = buildStageRevisionCasSql(input.stages);
+  const sourceStageCount = input.stages.filter((stage) => stage.sourceStageId !== null).length;
+
   return input.db
     .prepare(
       `
@@ -466,6 +453,7 @@ function buildExistingRdvUpdate(input: {
             SELECT 1 FROM cv_voos
             WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND versao = ?
           )
+          AND ${stageCas.sql}
       `,
     )
     .bind(
@@ -479,6 +467,18 @@ function buildExistingRdvUpdate(input: {
       input.flight.id,
       input.empresaId,
       input.command.base_flight_version,
+      input.flight.id,
+      input.empresaId,
+      sourceStageCount,
+      ...input.stages
+        .filter((stage) => stage.sourceStageId !== null)
+        .flatMap((stage) => [
+          stage.sourceStageId,
+          input.flight.id,
+          input.empresaId,
+          stage.sourceStageUpdatedAt,
+          stage.input.numero_etapa,
+        ]),
     );
 }
 
@@ -514,6 +514,10 @@ function buildNewRdvInsert(input: {
             SELECT 1 FROM cv_rdv_operacional
             WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL AND status <> 'cancelado'
           )
+          AND NOT EXISTS (
+            SELECT 1 FROM cv_voo_etapas
+            WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
+          )
       `,
     )
     .bind(
@@ -526,6 +530,8 @@ function buildNewRdvInsert(input: {
       input.flight.id,
       input.empresaId,
       input.command.base_flight_version,
+      input.flight.id,
+      input.empresaId,
       input.flight.id,
       input.empresaId,
     );
@@ -781,22 +787,23 @@ export async function applyPilotOfflineSnapshotCommand(input: {
   });
   if (conflict) return conflict;
 
-  const stageStatements = buildStageStatements({
-    ...input,
-    existingRdv,
-    stages,
-  });
   const newVersion = existingRdv ? input.command.base_server_version + 1 : 1;
   const rdvStatement = existingRdv
     ? buildExistingRdvUpdate({
         ...input,
         existingRdv,
         rdv: { ...existingRdv, ...rdvInput },
+        stages,
       })
     : buildNewRdvInsert({
         ...input,
         rdv: rdvInput,
       });
+  const stageStatements = buildStageStatements({
+    ...input,
+    newVersion,
+    stages,
+  });
   const eventStatement = buildOfflineSyncEvent({
     ...input,
     newVersion,
@@ -821,8 +828,8 @@ export async function applyPilotOfflineSnapshotCommand(input: {
   let results;
   try {
     results = await input.db.batch([
-      ...stageStatements,
       rdvStatement,
+      ...stageStatements,
       eventStatement,
       receiptStatement,
     ]);
@@ -855,7 +862,7 @@ export async function applyPilotOfflineSnapshotCommand(input: {
     throw error;
   }
 
-  const rdvMutationResult = results[stageStatements.length];
+  const rdvMutationResult = results[0];
   if (!rdvMutationResult?.meta?.changes) {
     const racedReceipt = await getOfflineSyncReceipt(
       input.db,
