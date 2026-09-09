@@ -29,9 +29,10 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("register('/pilot/pilot-sw.js'");
   });
 
-  it('usa IndexedDB cifrado em vez de sessionStorage/localStorage para o rascunho', () => {
+  it('usa IndexedDB cifrado em vez de sessionStorage/localStorage para dados operacionais', () => {
     expect(pilotVault).toContain("const DB_NAME = 'airtrust-pilot-v1'");
     expect(pilotVault).toContain("'rdv_drafts'");
+    expect(pilotVault).toContain("'flight_packages'");
     expect(pilotVault).toContain("name: 'PBKDF2'");
     expect(pilotVault).toContain("name: 'AES-GCM'");
     expect(pilotVault).toContain('crypto.subtle.encrypt');
@@ -48,7 +49,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v1'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v2'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("url.pathname.startsWith(PILOT_SCOPE_PATH)");
     expect(pilotSw).toContain("caches.match('/pilot/index.html')");
@@ -65,8 +66,37 @@ describe('Pilot Offline shell', () => {
     expect(rootIndex).toContain("!new URL(registration.scope).pathname.startsWith('/pilot/')");
   });
 
-  it('rotula explicitamente a primeira fase como teste sem RDV real ou valor regulatorio', () => {
-    expect(pilotIndex).toContain('Ela ainda não carrega um RDV real');
+  it('baixa pacote real autorizado sem transformar token em dado offline', () => {
+    expect(pilotApp).toContain("'/api/controle-voos/voos/meus'");
+    expect(pilotApp).toContain("'/offline-package'");
+    expect(pilotApp).toContain("'airtrust_token'");
+    expect(pilotApp).toContain("Authorization: 'Bearer ' + token");
+    expect(pilotApp).toContain("containsForbiddenPackageKey(packageData)");
+    expect(pilotApp).toContain("await vault.putJson(\n      'flight_packages'");
+    expect(pilotVault).toContain('async listJson(storeName)');
+  });
+
+  it('so confirma consulta offline depois do write cifrado e do read-back', () => {
+    const writeIndex = pilotApp.indexOf("await vault.putJson(\n      'flight_packages'");
+    const readBackIndex = pilotApp.indexOf(
+      "const persisted = await vault.getJson('flight_packages', recordId)",
+      writeIndex,
+    );
+    const readyIndex = pilotApp.indexOf('Consulta offline disponível.', readBackIndex);
+
+    expect(writeIndex).toBeGreaterThan(-1);
+    expect(readBackIndex).toBeGreaterThan(writeIndex);
+    expect(readyIndex).toBeGreaterThan(readBackIndex);
+
+    const writeSnippet = pilotApp.slice(writeIndex, readBackIndex);
+    expect(writeSnippet).not.toMatch(/airtrust_token|refresh_token|Authorization/);
+  });
+
+  it('mantem o pacote real explicitamente read-only e nao regulatorio', () => {
+    expect(pilotIndex).toContain('Edição real, lease offline, sincronização e envio à Coordenação');
     expect(pilotIndex).toContain('não é Diário de Bordo oficial');
+    expect(pilotApp).toContain("contract?.read_only !== true");
+    expect(pilotApp).toContain("contract?.sync_supported !== false");
+    expect(pilotApp).toContain("contract?.regulated_edb !== false");
   });
 });
