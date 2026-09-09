@@ -2,6 +2,7 @@
 // F4-03 read-only production inventory for the quarantined 0435 qualification-expiry incident.
 // Output is aggregate-only: no names, emails, document numbers, notes, row payloads, or credentials.
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const DB_NAME = 'airtrust-db';
 const CONFIRMATION = 'AIRTRUST_PRODUCTION_READONLY_F4_03';
@@ -89,6 +90,40 @@ const broad = query(`
   ORDER BY empresa_id, qualification_code
 `, 'broad_manual_signature');
 
+const structural = query(`
+  SELECT
+    qh.id AS historico_id,
+    COALESCE(qh.empresa_id, 0) AS empresa_id,
+    qh.qualificacao_id AS qualificacao_id,
+    COALESCE(qt.codigo, 'UNKNOWN') AS qualification_code,
+    qh.data_conclusao AS data_conclusao,
+    qh.data_vencimento AS current_expiry,
+    qh.certificado_arquivo_id AS certificado_arquivo_id,
+    CASE
+      WHEN qh.arquivo_url IS NULL OR TRIM(qh.arquivo_url) = '' THEN 0
+      ELSE 1
+    END AS has_arquivo_url,
+    d.id AS documento_id,
+    d.r2_key AS r2_key,
+    d.created_at AS documento_created_at,
+    d.tamanho AS documento_tamanho
+  FROM qualificacoes_historico qh
+  JOIN qualificacoes_tipos qt
+    ON qt.id = qh.qualificacao_id
+   AND qt.deleted_at IS NULL
+  LEFT JOIN documentos d
+    ON d.id = qh.certificado_arquivo_id
+  WHERE qh.deleted_at IS NULL
+    AND qh.origem_tipo = 'MANUAL'
+    AND qh.lms_matricula_id IS NULL
+    AND qh.observacoes LIKE '%LMS%'
+    AND qh.data_conclusao IS NOT NULL
+    AND qh.data_vencimento IS NOT NULL
+    AND COALESCE(qt.vencimento_fim_mes, 0) = 0
+    AND qh.data_vencimento = date(qh.data_conclusao, '+' || CAST(qt.validade AS TEXT) || ' months')
+  ORDER BY qh.id
+`, 'broad_structural_candidates');
+
 const intendedLms = query(`
   SELECT COUNT(*) AS total
   FROM qualificacoes_historico qh
@@ -116,6 +151,11 @@ const auditSchema = query(`
 
 const exactCount = exact.reduce((sum, row) => sum + Number(row.total || 0), 0);
 const broadCount = broad.reduce((sum, row) => sum + Number(row.total || 0), 0);
+if (structural.length !== broadCount) fail('STRUCTURAL_COUNT_MISMATCH');
+
+function sha256(value) {
+  return createHash('sha256').update(String(value)).digest('hex');
+}
 
 const output = {
   source_sha: process.env.GITHUB_SHA || null,
@@ -133,6 +173,23 @@ const output = {
     qualification_code: String(row.qualification_code || 'UNKNOWN').slice(0, 64),
     count: Number(row.total || 0),
   })),
+  structural_candidates: structural.map((row) => ({
+    historico_id: Number(row.historico_id || 0),
+    empresa_id: Number(row.empresa_id || 0),
+    qualificacao_id: Number(row.qualificacao_id || 0),
+    qualification_code: String(row.qualification_code || 'UNKNOWN').slice(0, 64),
+    data_conclusao: row.data_conclusao ? String(row.data_conclusao).slice(0, 10) : null,
+    current_expiry: row.current_expiry ? String(row.current_expiry).slice(0, 10) : null,
+    certificado_arquivo_id:
+      row.certificado_arquivo_id == null ? null : Number(row.certificado_arquivo_id),
+    has_arquivo_url: Number(row.has_arquivo_url || 0) === 1,
+    documento_id: row.documento_id == null ? null : Number(row.documento_id),
+    r2_key_sha256: row.r2_key ? sha256(row.r2_key) : null,
+    documento_created_at:
+      row.documento_created_at ? String(row.documento_created_at).slice(0, 19) : null,
+    documento_size_bytes:
+      row.documento_tamanho == null ? null : Number(row.documento_tamanho),
+  })),
   audit_recovery_schema: auditSchema.map((row) => ({
     table: String(row.name),
     has_before_payload: Number(row.has_before_payload || 0) === 1,
@@ -146,6 +203,7 @@ const output = {
         ? 'PARTIAL_OR_CHANGED_SINCE_INCIDENT'
         : 'INCIDENT_ROWS_NOT_IDENTIFIABLE_BY_ORIGINAL_UPDATED_AT_WINDOW',
   writes: 0,
+  structural_candidate_fields_emitted: true,
   pii_emitted: false,
 };
 
