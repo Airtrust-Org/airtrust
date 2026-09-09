@@ -147,12 +147,13 @@ name = "airtrust-api-production"
 # Production observability is explicitly enabled in source control so a release
 # cannot silently revert to an unobservable Worker. Sampling can be revisited
 # only through a reviewed config change with retained error visibility.
-[env.production.observability]
-enabled = true
-head_sampling_rate = 1
 routes = [
   { pattern = "api.airtrust.online/*", zone_name = "airtrust.online" }
 ]
+
+[env.production.observability]
+enabled = true
+head_sampling_rate = 1
 
 [env.production.browser]
 binding = "SCORM_BROWSER"
