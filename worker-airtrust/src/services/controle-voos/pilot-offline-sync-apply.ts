@@ -489,7 +489,11 @@ function buildNewRdvInsert(input: {
   flight: FlightRow;
   command: PilotOfflineSyncCommand;
   rdv: RdvInput;
+  stages: PreparedStage[];
 }): D1PreparedStatement {
+  const stageCas = buildStageRevisionCasSql(input.stages);
+  const sourceStageCount = input.stages.filter((stage) => stage.sourceStageId !== null).length;
+
   return input.db
     .prepare(
       `
@@ -514,10 +518,7 @@ function buildNewRdvInsert(input: {
             SELECT 1 FROM cv_rdv_operacional
             WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL AND status <> 'cancelado'
           )
-          AND NOT EXISTS (
-            SELECT 1 FROM cv_voo_etapas
-            WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
-          )
+          AND ${stageCas.sql}
       `,
     )
     .bind(
@@ -534,6 +535,16 @@ function buildNewRdvInsert(input: {
       input.empresaId,
       input.flight.id,
       input.empresaId,
+      sourceStageCount,
+      ...input.stages
+        .filter((stage) => stage.sourceStageId !== null)
+        .flatMap((stage) => [
+          stage.sourceStageId,
+          input.flight.id,
+          input.empresaId,
+          stage.sourceStageUpdatedAt,
+          stage.input.numero_etapa,
+        ]),
     );
 }
 
@@ -798,6 +809,7 @@ export async function applyPilotOfflineSnapshotCommand(input: {
     : buildNewRdvInsert({
         ...input,
         rdv: rdvInput,
+        stages,
       });
   const stageStatements = buildStageStatements({
     ...input,
