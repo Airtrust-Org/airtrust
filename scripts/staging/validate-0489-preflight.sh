@@ -68,6 +68,9 @@ assert_count() {
 }
 
 assert_count "table:funcionarios" "1" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'funcionarios';"
+assert_count "table:qualificacoes_tipos" "1" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos';"
+assert_count "tenant-index:qualificacoes_tipos.codigo" "1" "SELECT COUNT(*) AS count FROM pragma_index_list('qualificacoes_tipos') WHERE name = 'idx_qualificacoes_tipos_codigo_empresa_active' AND \"unique\" = 1;"
+assert_count "tenant-index-contract:qualificacoes_tipos.codigo" "1" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'idx_qualificacoes_tipos_codigo_empresa_active' AND sql LIKE '%qualificacoes_tipos(empresa_id, codigo COLLATE NOCASE)%' AND sql LIKE '%deleted_at IS NULL%';"
 
 for column in empresa_id cpf matricula email deleted_at; do
   assert_count "column:funcionarios.$column" "1" "SELECT COUNT(*) AS count FROM pragma_table_info('funcionarios') WHERE name = '$column';"
