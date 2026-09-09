@@ -215,6 +215,48 @@ function statementFor(sql: string) {
           ],
         };
       }
+      if (normalized.includes('FROM frms_location_catalog')) {
+        return {
+          results: [
+            {
+              location_code: 'SBME',
+              operational_class: 'AERODROME',
+              name: 'Macaé',
+              timezone_iana: 'America/Sao_Paulo',
+              weather_source_kind: 'REDEMET',
+              redemet_station_icao: 'SBME',
+              latitude: -22.343,
+              longitude: -41.766,
+              source_reference: 'CATALOGO-QA',
+              updated_at: '2026-09-09T09:00:00Z',
+            },
+            {
+              location_code: '9PCP',
+              operational_class: 'PLATFORM',
+              name: 'Plataforma P',
+              timezone_iana: 'America/Sao_Paulo',
+              weather_source_kind: 'NONE',
+              redemet_station_icao: null,
+              latitude: -22.5,
+              longitude: -40.0,
+              source_reference: 'CATALOGO-QA',
+              updated_at: '2026-09-09T09:00:00Z',
+            },
+            {
+              location_code: '9PCQ',
+              operational_class: 'HELIDECK',
+              name: 'Plataforma Q',
+              timezone_iana: 'America/Sao_Paulo',
+              weather_source_kind: 'NONE',
+              redemet_station_icao: null,
+              latitude: -22.5,
+              longitude: -39.97,
+              source_reference: 'CATALOGO-QA',
+              updated_at: '2026-09-09T09:00:00Z',
+            },
+          ],
+        };
+      }
       return { results: [] };
     },
     async first() {
@@ -387,6 +429,33 @@ describe('Pilot offline package', () => {
     expect(body.data.etapas).toHaveLength(1);
     expect(body.data.abastecimentos[0]).toMatchObject({ id: 20, tem_anexo: true });
     expect(body.data.abastecimentos[0].anexo_r2_key).toBeUndefined();
+    expect(body.data.workspace.contract).toMatchObject({
+      name: 'airtrust-pilot-workspace',
+      version: 1,
+      navigation_certified: false,
+      regulated_edb: false,
+    });
+    expect(body.data.workspace.route_schematic.legs[0]).toMatchObject({
+      from: 'SBME',
+      to: '9PCP',
+      data_quality: 'COMPLETE',
+    });
+    expect(body.data.workspace.route_schematic.legs[0].distance_nm).toBeGreaterThan(0);
+    expect(body.data.workspace.helideck_safety).toMatchObject({
+      status: 'AVAILABLE',
+      destination_code: '9PCP',
+      navigation_certified: false,
+    });
+    expect(body.data.workspace.helideck_safety.nearby[0]).toMatchObject({
+      code: '9PCQ',
+    });
+    expect(body.data.workspace.met_snapshot).toMatchObject({
+      status: 'UNAVAILABLE',
+      reason: 'REDEMET_NOT_CONFIGURED',
+    });
+    expect(body.data.workspace.dossier.entries.map((entry: any) => entry.category)).toEqual(
+      expect.arrayContaining(['planejamento', 'MET', 'abastecimento', 'coordenacao']),
+    );
   });
 
   it('anuncia sync somente quando flag e schema 0488 estao prontos', async () => {
