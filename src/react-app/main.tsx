@@ -64,9 +64,16 @@ if (import.meta.env.PROD) {
   // ✅ Limpar SW antigo se existir + recarregar para garantir cache limpo
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then((registrations) => {
-      if (registrations.length > 0) {
+      const legacyRegistrations = registrations.filter((registration) => {
+        try {
+          return !new URL(registration.scope).pathname.startsWith('/pilot/');
+        } catch {
+          return true;
+        }
+      });
+      if (legacyRegistrations.length > 0) {
         console.warn('[DEV] Removendo Service Workers antigos...');
-        Promise.all(registrations.map((r) => r.unregister())).then(() => {
+        Promise.all(legacyRegistrations.map((r) => r.unregister())).then(() => {
           // Recarrega UMA vez para garantir que o SW não intercepte mais requests
           if (!safeSessionGet('__sw_cleared')) {
             safeSessionSet('__sw_cleared', '1');

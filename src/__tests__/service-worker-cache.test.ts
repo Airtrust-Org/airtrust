@@ -31,6 +31,7 @@ describe('service worker cache guard', () => {
   it('limpa caches legados e recarrega clientes criticos, incluindo FRMS e Simuladores, sem cachear runtime novo', () => {
     expect(serviceWorkerSource).toContain('async function purgeLegacyAirTrustCaches()');
     expect(serviceWorkerSource).toContain('cacheName.startsWith(CACHE_PREFIX)');
+    expect(serviceWorkerSource).toContain("!cacheName.startsWith(PILOT_CACHE_PREFIX)");
     expect(serviceWorkerSource).toContain('async function forceRefreshCriticalClients()');
     expect(serviceWorkerSource).toContain('/^\\/frms(?:\\/|$)/');
     expect(serviceWorkerSource).toContain('/^\\/simuladores(?:\\/|$)/');
@@ -46,6 +47,8 @@ describe('service worker cache guard', () => {
     expect(indexHtmlSource).toContain('navigator.serviceWorker.getRegistrations()');
     expect(indexHtmlSource).not.toContain("navigator.serviceWorker.register('/sw.js', {");
     expect(indexHtmlSource).toContain('registration.unregister?.()');
+    expect(indexHtmlSource).toContain("!name.startsWith('airtrust-pilot-')");
+    expect(indexHtmlSource).toContain("!new URL(registration.scope).pathname.startsWith('/pilot/')");
     expect(indexHtmlSource).toContain("currentUrl.searchParams.set(RECOVERY_PARAM, '1');");
     expect(indexHtmlSource).toContain('window.location.replace(currentUrl.toString());');
   });
@@ -58,6 +61,9 @@ describe('service worker cache guard', () => {
     expect(serviceWorkerManagerSource).toContain('async function unregisterExistingServiceWorkers()');
     expect(serviceWorkerManagerSource).toContain('await cleanupLegacyServiceWorkers();');
     expect(serviceWorkerManagerSource).toContain('registration.unregister().catch(() => false)');
+    expect(serviceWorkerManagerSource).toContain("const PILOT_SW_SCOPE_PATH = '/pilot/'");
+    expect(serviceWorkerManagerSource).toContain("const PILOT_CACHE_PREFIX = 'airtrust-pilot-'");
+    expect(serviceWorkerManagerSource).toContain('!isPilotServiceWorkerRegistration(registration)');
     expect(serviceWorkerManagerSource).not.toContain("navigator.serviceWorker.register('/sw.js', {");
     expect(serviceWorkerManagerSource).not.toContain('useServiceWorkerUpdates');
     expect(serviceWorkerManagerSource).not.toContain('setInterval(');
