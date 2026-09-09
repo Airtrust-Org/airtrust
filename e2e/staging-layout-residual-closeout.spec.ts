@@ -77,9 +77,9 @@ test.describe.serial('layout/UX residual audit closeout', () => {
     const created = await create.json();
     expect(created?.success).toBe(true);
     const protocolo = String(created?.data?.numero_protocolo || '');
-    const id = Number(created?.data?.id || 0);
+    const id = String(created?.data?.id || '').trim();
     expect(protocolo).not.toBe('');
-    expect(id).toBeGreaterThan(0);
+    expect(id).not.toBe('');
 
     await page.goto('/sgso', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
