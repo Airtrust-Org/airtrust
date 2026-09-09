@@ -96,6 +96,7 @@ let activeVerifiedLease = null;
 let activeRdvDraft = null;
 let activeStageDrafts = [];
 let operationalLocalSequence = 0;
+let operationalNextSequence = 0;
 let operationalSaveTimer = null;
 let operationalSaveChain = Promise.resolve();
 let timingSequence = 0;
