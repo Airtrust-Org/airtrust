@@ -1,0 +1,8 @@
+{
+  "changeId": "a02-natural-keys-tenant-scoped-0489",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0489_a02_natural_keys_tenant_scoped.sql",
+  "fileHash": "046d9ee05c31c7f637bee2521aebd293227ceba64c3ae88c5e29414dce5264e4",
+  "planPath": "worker-airtrust/schema-v2/plans/a02-natural-keys-tenant-scoped-0489.md",
+  "planHash": "966a9719773661a575c05a362ebbeef9238ed4fc153605b3a1ee5ab0cc727787"
+}
