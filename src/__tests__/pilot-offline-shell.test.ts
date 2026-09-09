@@ -67,6 +67,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotVault).toContain("'stage_drafts'");
     expect(pilotVault).toContain("'outbox'");
     expect(pilotVault).toContain("'sync_receipts'");
+    expect(pilotVault).toContain("'workflow_receipts'");
     expect(pilotVault).toContain("'conflicts'");
     expect(pilotVault).toContain('async putJsonBatch(entries)');
     expect(pilotVault).toContain('async getOrCreateDeviceId()');
@@ -87,7 +88,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v4'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v5'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-rdv-draft.js'");
     expect(pilotSw).toContain("'/pilot/pilot-sync.js'");
@@ -214,6 +215,30 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("result.status === 'conflict'");
     expect(pilotApp).toContain('O rascunho local foi preservado');
     expect(pilotApp).not.toContain('last-write-wins');
+  });
+
+  it('mantem sync, finalizacao e envio a Coordenacao como acoes explicitamente separadas', () => {
+    expect(pilotIndex).toContain('id="refresh-canonical-package"');
+    expect(pilotIndex).toContain('id="finalize-rdv-server"');
+    expect(pilotIndex).toContain('id="send-rdv-coordination"');
+    expect(pilotIndex).toMatch(/Transmitir o rascunho\s+offline não envia automaticamente o RDV à Coordenação/);
+    expect(pilotApp).toContain("'/rdv/finalizar-preenchimento'");
+    expect(pilotApp).toContain("'/rdv/enviar'");
+    expect(pilotApp).toContain("'/rdv/alertas'");
+    expect(pilotApp).toContain("alert?.severidade === 'IMPEDE_ENVIO'");
+    expect(pilotApp).toContain("rdv.status === 'preenchimento_finalizado'");
+    expect(pilotApp).toContain("rdv.workflow_status === 'enviado'");
+    expect(pilotApp).toContain("const editableWorkflow = ['rascunho', 'devolvido'].includes");
+    expect(pilotApp).not.toContain("['rascunho', 'devolvido', 'reaberto'].includes");
+  });
+
+  it('persiste receipt de workflow cifrado e exige reconciliacao do ultimo sync antes de finalizar', () => {
+    expect(pilotVault).toContain("'workflow_receipts'");
+    expect(pilotApp).toContain("await vault.putJson(\n    'workflow_receipts'");
+    expect(pilotApp).toContain('packageMatchesAcceptedSync');
+    expect(pilotApp).toContain('server_entity_version');
+    expect(pilotApp).toContain('Atualize o pacote após o último receipt de transmissão antes de finalizar.');
+    expect(pilotApp).toContain('Recebimento confirmado pelo servidor');
   });
 
   it('captura quick actions de horario com sequencia monotona sem inferir ciclos', () => {

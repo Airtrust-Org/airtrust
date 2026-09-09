@@ -694,13 +694,17 @@ describe('RDV etapas — CRUD multi-tenant', () => {
       },
       PILOTO,
     );
-    const etapaId = ((await created.json()) as { data: { id: number }; meta: { versao: number } })
-      .data.id;
+    const createdBody = (await created.json()) as {
+      data: { id: number };
+      meta: { versao: number };
+    };
+    const etapaId = createdBody.data.id;
+    versao = createdBody.meta.versao;
 
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
-      { method: 'POST' },
+      { method: 'POST', body: JSON.stringify({ versao }) },
       PILOTO,
     );
     versao = await getVersao(db);

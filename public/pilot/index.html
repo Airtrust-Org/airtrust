@@ -277,6 +277,29 @@
             </div>
             <div id="lease-status" class="statusline attention" aria-live="polite"></div>
           </div>
+
+          <div class="lease-box" id="coordination-box">
+            <strong>Fechamento e Coordenação</strong>
+            <p class="muted">
+              Estas ações usam somente o estado canônico do servidor. Transmitir o rascunho
+              offline não envia automaticamente o RDV à Coordenação.
+            </p>
+            <div class="actions">
+              <button id="refresh-canonical-package" class="secondary" type="button">
+                Atualizar do servidor
+              </button>
+              <button id="finalize-rdv-server" class="secondary" type="button" disabled>
+                Finalizar preenchimento
+              </button>
+              <button id="send-rdv-coordination" class="primary" type="button" disabled>
+                Enviar à Coordenação
+              </button>
+            </div>
+            <div id="coordination-status" class="statusline attention" aria-live="polite">
+              Atualize o pacote após transmitir os dados.
+            </div>
+            <div id="coordination-receipt" class="statusline ok hidden" aria-live="polite"></div>
+          </div>
         </section>
 
         <section id="rdv-editor-card" class="card hidden">

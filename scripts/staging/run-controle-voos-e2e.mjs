@@ -448,7 +448,9 @@ async function main() {
     actor: adminA,
     tenant: 'A',
     expectedStatus: 200,
+    body: { versao: rdvVersao },
   });
+  rdvVersao += 1;
 
   // ── 14. Enviar RDV ────────────────────────────────────────────────────
   await call({
@@ -508,7 +510,9 @@ async function main() {
     actor: adminA,
     tenant: 'A',
     expectedStatus: 200,
+    body: { versao: rdvVersao },
   });
+  rdvVersao += 1;
 
   // ── 18. Reenviar ──────────────────────────────────────────────────────
   await call({

@@ -486,7 +486,7 @@ async function avancarAteEmRevisao(db: SqliteD1) {
   await request(
     db,
     '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
-    { method: 'POST' },
+    { method: 'POST', body: await transitionBody(db) },
     PILOTO,
   );
   await request(
@@ -536,7 +536,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     const finalize = await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
-      { method: 'POST' },
+      { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
     expect(finalize.status).toBe(200);
@@ -552,7 +552,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
       data: { workflow_status: string; versao: number };
     };
     expect(enviarBody.data.workflow_status).toBe('enviado');
-    expect(enviarBody.data.versao).toBe(2);
+    expect(enviarBody.data.versao).toBe(3);
 
     const revisao = await request(
       db,
@@ -583,7 +583,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
       data: { workflow_status: string; versao: number };
     };
     expect(finalizarBody.data.workflow_status).toBe('finalizado');
-    expect(finalizarBody.data.versao).toBe(5);
+    expect(finalizarBody.data.versao).toBe(6);
 
     const aprovacoes = await request(
       db,
@@ -626,7 +626,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
-      { method: 'POST' },
+      { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
     await request(
@@ -700,7 +700,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
-      { method: 'POST' },
+      { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
     runSql(db.databasePath, `DELETE FROM cv_voo_tripulantes WHERE voo_id = 601;`);
@@ -734,7 +734,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
-      { method: 'POST' },
+      { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
     const aprovar = await request(
@@ -799,7 +799,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
-      { method: 'POST' },
+      { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
 
@@ -874,7 +874,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
-      { method: 'POST' },
+      { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
 
@@ -920,7 +920,29 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     };
     expect(body.data.workflow_status).toBe('reaberto');
     expect(body.data.status).toBe('rascunho');
-    expect(body.data.versao).toBe(6);
+    expect(body.data.versao).toBe(7);
+
+    const refinalizar = await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
+      { method: 'POST', body: await transitionBody(db) },
+      PILOTO,
+    );
+    expect(refinalizar.status).toBe(409);
+    await expect(refinalizar.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_RDV_FINALIZACAO_WORKFLOW_INVALID',
+    });
+
+    const voltarParaRevisao = await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/iniciar-revisao',
+      { method: 'POST', body: await transitionBody(db) },
+      COORDENACAO,
+    );
+    expect(voltarParaRevisao.status).toBe(200);
+    await expect(voltarParaRevisao.json()).resolves.toMatchObject({
+      data: { workflow_status: 'em_revisao' },
+    });
 
     const aprovacoes = await request(
       db,
@@ -993,7 +1015,7 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
-      { method: 'POST' },
+      { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
     await request(
@@ -1123,7 +1145,7 @@ describe('RDV — RBAC por capability (usuario_permissoes + defaults de role)', 
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
-      { method: 'POST' },
+      { method: 'POST', body: await transitionBody(db) },
       { role: 'manager', userId: 10 },
     );
     await request(
@@ -1961,7 +1983,7 @@ describe('RDV — A2: versao obrigatoria e CAS nas 8 transicoes de fluxo', () =>
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
-      { method: 'POST' },
+      { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
     if (alvo === 'preenchimento_finalizado') return;
@@ -2183,7 +2205,7 @@ describe('RDV — A2: versao obrigatoria e CAS nas 8 transicoes de fluxo', () =>
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
-      { method: 'POST' },
+      { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
     const versaoConhecida = await currentVersao(db);

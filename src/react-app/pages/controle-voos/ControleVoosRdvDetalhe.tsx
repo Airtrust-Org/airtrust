@@ -275,6 +275,10 @@ export default function ControleVoosRdvDetalhe() {
   }
 
   async function handleFinalizar() {
+    if (rdv && !['rascunho', 'devolvido'].includes(rdv.workflow_status)) {
+      toast.error('Este estado do fluxo não permite finalizar novamente o preenchimento.');
+      return;
+    }
     if (!finalizarConfirm) {
       setFinalizarConfirm(true);
       return;
@@ -292,8 +296,16 @@ export default function ControleVoosRdvDetalhe() {
       return;
     }
     try {
-      await autosave.saveNow();
-      await finalizarMutation.mutateAsync(id);
+      const saved = await autosave.saveNow();
+      if (!saved) {
+        throw new Error(autosave.error || 'Não foi possível confirmar o último salvamento.');
+      }
+      const refreshed = await refetchRdv();
+      const canonicalVersion = refreshed.data?.versao;
+      if (typeof canonicalVersion !== 'number' || !Number.isInteger(canonicalVersion)) {
+        throw new Error('Não foi possível confirmar a versão atual do RDV.');
+      }
+      await finalizarMutation.mutateAsync({ vooId: id, versao: canonicalVersion });
       toast.success('Preenchimento finalizado');
       setFinalizarConfirm(false);
     } catch (error) {
@@ -816,7 +828,9 @@ export default function ControleVoosRdvDetalhe() {
                     </button>
                   )}
 
-                  {editable && rdv?.status === 'rascunho' && (
+                  {editable &&
+                    rdv?.status === 'rascunho' &&
+                    ['rascunho', 'devolvido'].includes(rdv.workflow_status) && (
                     <button
                       type="button"
                       onClick={handleFinalizar}

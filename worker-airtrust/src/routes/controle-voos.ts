@@ -33,7 +33,6 @@ import {
   buildMergedRdv,
   recordFlightEvent,
   maybeRecordSystemAudit,
-  getFuncionarioIdForUser,
   buildRdvVersionGuardedUpdate,
   mapRdvOperacionalUniqueConstraintError,
 } from '../repositories/controle-voos/rdv-repository';
@@ -47,6 +46,7 @@ import {
   assertRdvRules,
   normalizeRdvInput,
 } from '../services/controle-voos/rdv-validation';
+import { finalizeRdvPreenchimentoHandler } from './controle-voos-rdv-finalization';
 
 type OperationalReadFilters = {
   dataInicio: string;
@@ -1542,92 +1542,11 @@ controleVoos.put('/voos/:id/rdv', auth(), async (c) => {
   return c.json({ success: true, data: updated });
 });
 
-controleVoos.post('/voos/:id/rdv/finalizar-preenchimento', auth(), async (c) => {
-  const empresaId = getEmpresaIdSafe(c);
-  const userId = Number(getActorId(c));
-  const vooId = c.req.param('id');
-  const flight = await getFlightOrThrow(c.env.DB, vooId, empresaId);
-  // Confirmação do comandante: exige capability própria + vínculo de
-  // tripulação (ou Coordenação com visualizar_todos). Não usa bypass por role.
-  await assertRdvSelfScope(
-    c,
-    c.env.DB,
-    empresaId,
-    flight.id,
-    RDV_CAPABILITIES.editarRascunhoProprio,
-  );
-  const existing = await getActiveRdvByFlight(c.env.DB, flight.id, empresaId);
-
-  if (!existing) {
-    throw new ApiError('RDV nao encontrado', 404, 'CONTROLE_VOOS_RDV_NOT_FOUND');
-  }
-  if (existing.status === 'preenchimento_finalizado') {
-    throw new ApiError('RDV com preenchimento finalizado', 409, 'CONTROLE_VOOS_RDV_LOCKED');
-  }
-
-  await c.env.DB.prepare(
-    `
-    UPDATE cv_rdv_operacional
-    SET status = 'preenchimento_finalizado',
-        responsavel_preenchimento_id = COALESCE(responsavel_preenchimento_id, ?),
-        preenchido_em = COALESCE(preenchido_em, datetime('now')),
-        finalizado_operacionalmente_por = ?,
-        finalizado_operacionalmente_em = datetime('now'),
-        updated_by = ?,
-        updated_at = datetime('now')
-    WHERE id = ?
-      AND empresa_id = ?
-      AND deleted_at IS NULL
-  `,
-  )
-    .bind(userId, userId, userId, existing.id, empresaId)
-    .run();
-
-  await recordFlightEvent({
-    db: c.env.DB,
-    empresaId,
-    vooId: flight.id,
-    tipoEvento: 'rdv',
-    statusAnterior: flight.status,
-    statusNovo: flight.status,
-    descricao: 'RDV operacional com preenchimento finalizado',
-    metadata: { action: 'finalize', rdv_id: existing.id },
-    usuarioId: userId,
-  });
-
-  await maybeRecordSystemAudit(
-    c,
-    'cv_rdv_operacional',
-    'UPDATE',
-    existing.id,
-    {
-      status: existing.status,
-      finalizado_operacionalmente_em: existing.finalizado_operacionalmente_em,
-    },
-    {
-      status: 'preenchimento_finalizado',
-      finalizado_operacionalmente_por: userId,
-    },
-  );
-
-  // Confirmação/aprovação do comandante: o piloto que finaliza o
-  // preenchimento operacional está confirmando os dados como responsável
-  // pelo voo. Registrado como um evento de aprovação distinto (tipo
-  // COMANDANTE) — auditável (usuário, funcionário, versão, data,
-  // observação, status) e explicitamente NÃO chamado de assinatura digital.
-  const funcionarioId = await getFuncionarioIdForUser(c.env.DB, userId);
-  await c.env.DB.prepare(
-    `
-      INSERT INTO cv_rdv_aprovacoes (empresa_id, rdv_id, versao, tipo_aprovacao, status, usuario_id, funcionario_id, created_at)
-      VALUES (?, ?, ?, 'COMANDANTE', 'APROVADO', ?, ?, datetime('now'))
-    `,
-  )
-    .bind(empresaId, existing.id, existing.versao, userId, funcionarioId)
-    .run();
-
-  const updated = await getRdvOrThrow(c.env.DB, existing.id, empresaId);
-  return c.json({ success: true, data: updated });
-});
+controleVoos.post(
+  '/voos/:id/rdv/finalizar-preenchimento',
+  auth(),
+  finalizeRdvPreenchimentoHandler,
+);
 
 controleVoos.get('/dashboard', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);

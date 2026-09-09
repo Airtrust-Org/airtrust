@@ -90,6 +90,11 @@ const closeRdvEditorButton = document.querySelector('#close-rdv-editor');
 const syncRdvButton = document.querySelector('#sync-rdv-now');
 const rdvSyncStatus = document.querySelector('#rdv-sync-status');
 const rdvServerSyncStatus = document.querySelector('#rdv-server-sync-status');
+const refreshCanonicalPackageButton = document.querySelector('#refresh-canonical-package');
+const finalizeRdvServerButton = document.querySelector('#finalize-rdv-server');
+const sendRdvCoordinationButton = document.querySelector('#send-rdv-coordination');
+const coordinationStatus = document.querySelector('#coordination-status');
+const coordinationReceipt = document.querySelector('#coordination-receipt');
 
 let vault;
 let provisioned = false;
@@ -108,6 +113,7 @@ let operationalSaveTimer = null;
 let operationalSaveChain = Promise.resolve();
 let timingSequence = 0;
 let operationalSyncInFlight = false;
+let coordinationInFlight = false;
 
 function setConnectivity() {
   const online = navigator.onLine;
@@ -119,6 +125,7 @@ function setConnectivity() {
   text.textContent = online ? 'ONLINE' : 'OFFLINE — operação local ativa';
   connectivity.append(dot, text);
   refreshOnlineButton.disabled = !online;
+  if (activePackageRecord) void refreshCoordinationControls();
 }
 
 function formatTimestamp(value) {
@@ -257,7 +264,7 @@ async function authenticatedGet(path) {
 
 async function authenticatedPost(path, payload) {
   if (!navigator.onLine) {
-    throw new PilotOnlineRequestError('Sem conexão. Não é possível emitir um novo lease offline.');
+    throw new PilotOnlineRequestError('Sem conexão. Esta operação online não pode ser executada.');
   }
 
   const token = readCurrentAccessToken();
@@ -545,6 +552,7 @@ async function prepareFlightPackage(flightId) {
     await loadCachedPackages();
     openPackageRecord(persisted);
     await updateStorageEstimate();
+    return persisted;
   } catch (error) {
     const authFailure = error instanceof PilotOnlineRequestError && error.status === 401;
     setSessionMessage(
@@ -552,6 +560,7 @@ async function prepareFlightPackage(flightId) {
       'error',
       authFailure,
     );
+    return null;
   } finally {
     refreshOnlineButton.disabled = !navigator.onLine;
   }
@@ -580,6 +589,336 @@ function outboxRecordId(operationId) {
 
 function syncReceiptRecordId(operationId) {
   return 'operation:' + String(operationId);
+}
+
+function workflowReceiptRecordId(flightId, action, expectedVersion) {
+  return (
+    'flight:' +
+    String(flightId) +
+    ':workflow:' +
+    String(action) +
+    ':v' +
+    String(expectedVersion)
+  );
+}
+
+function setCoordinationMessage(message, kind = 'attention') {
+  coordinationStatus.className = 'statusline ' + kind;
+  coordinationStatus.textContent = message;
+}
+
+function setCoordinationReceipt(message) {
+  if (!message) {
+    coordinationReceipt.textContent = '';
+    coordinationReceipt.classList.add('hidden');
+    return;
+  }
+  coordinationReceipt.className = 'statusline ok';
+  coordinationReceipt.textContent = message;
+}
+
+async function latestAcceptedSyncReceiptForFlight(flightId) {
+  if (!vault?.isUnlocked()) return null;
+  const records = await vault.listJson('sync_receipts');
+  return (
+    records
+      .filter(
+        (record) =>
+          Number(record.value?.command_identity?.flight_id) === Number(flightId) &&
+          ['accepted', 'already_accepted'].includes(record.value?.server_result?.status),
+      )
+      .sort((left, right) =>
+        String(right.value?.received_at_local || right.updatedAt || '').localeCompare(
+          String(left.value?.received_at_local || left.updatedAt || ''),
+        ),
+      )[0] || null
+  );
+}
+
+async function latestConflictForFlight(flightId) {
+  if (!vault?.isUnlocked()) return null;
+  const records = await vault.listJson('conflicts');
+  return (
+    records
+      .filter(
+        (record) =>
+          Number(record.value?.command_identity?.flight_id) === Number(flightId) ||
+          Number(record.value?.flight_id) === Number(flightId),
+      )
+      .sort((left, right) =>
+        String(
+          right.value?.received_at_local ||
+            right.value?.created_at ||
+            right.updatedAt ||
+            '',
+        ).localeCompare(
+          String(
+            left.value?.received_at_local ||
+              left.value?.created_at ||
+              left.updatedAt ||
+              '',
+          ),
+        ),
+      )[0] || null
+  );
+}
+
+async function latestWorkflowReceiptForFlight(flightId, action = null) {
+  if (!vault?.isUnlocked()) return null;
+  const records = await vault.listJson('workflow_receipts');
+  return (
+    records
+      .filter(
+        (record) =>
+          Number(record.value?.flight_id) === Number(flightId) &&
+          (!action || record.value?.action === action),
+      )
+      .sort((left, right) =>
+        String(right.value?.updated_at_local || right.updatedAt || '').localeCompare(
+          String(left.value?.updated_at_local || left.updatedAt || ''),
+        ),
+      )[0] || null
+  );
+}
+
+async function persistWorkflowReceipt({
+  flightId,
+  action,
+  expectedVersion,
+  state,
+  serverResult = null,
+  error = null,
+}) {
+  const id = workflowReceiptRecordId(flightId, action, expectedVersion);
+  const existing = await vault.getJson('workflow_receipts', id);
+  const nextRevision = Number(existing?.localRevision || 0) + 1;
+  await vault.putJson(
+    'workflow_receipts',
+    id,
+    {
+      schema_version: 1,
+      flight_id: Number(flightId),
+      action,
+      expected_version: Number(expectedVersion),
+      state,
+      server_result: serverResult ? structuredClone(serverResult) : null,
+      error: error
+        ? {
+            code: error instanceof PilotOnlineRequestError ? error.code : null,
+            status: error instanceof PilotOnlineRequestError ? error.status : null,
+            message: error instanceof Error ? error.message : String(error),
+          }
+        : null,
+      updated_at_local: new Date().toISOString(),
+    },
+    nextRevision,
+  );
+  return vault.getJson('workflow_receipts', id);
+}
+
+async function getCoordinationState() {
+  const packageData = activePackageData();
+  if (!packageData || !vault?.isUnlocked()) {
+    return {
+      packageData,
+      flightId: 0,
+      rdv: null,
+      canFinalize: false,
+      canSend: false,
+      reason: 'Abra um pacote de voo.',
+    };
+  }
+
+  const flightId = Number(packageData.voo?.id || 0);
+  const rdv = packageData.rdv || null;
+  const unresolved = await listOutboxForFlight(flightId);
+  if (unresolved.length > 0) {
+    return {
+      packageData,
+      flightId,
+      rdv,
+      canFinalize: false,
+      canSend: false,
+      reason: 'Há uma transmissão offline pendente ou bloqueada. Resolva-a antes do fechamento.',
+    };
+  }
+
+  const [latestSync, latestConflict, finalizeReceipt, sendReceipt] = await Promise.all([
+    latestAcceptedSyncReceiptForFlight(flightId),
+    latestConflictForFlight(flightId),
+    latestWorkflowReceiptForFlight(flightId, 'finalize'),
+    latestWorkflowReceiptForFlight(flightId, 'send_coordination'),
+  ]);
+  const syncTime = String(latestSync?.value?.received_at_local || '');
+  const conflictTime = String(
+    latestConflict?.value?.received_at_local ||
+      latestConflict?.value?.created_at ||
+      latestConflict?.updatedAt ||
+      '',
+  );
+  if (latestConflict && (!syncTime || conflictTime > syncTime)) {
+    return {
+      packageData,
+      flightId,
+      rdv,
+      canFinalize: false,
+      canSend: false,
+      reason: 'Existe conflito local mais recente que o último receipt aceito.',
+    };
+  }
+
+  const packagePreparedAt = String(activePackageRecord?.value?.prepared_at || '');
+  const packageMatchesAcceptedSync =
+    Boolean(rdv && latestSync) &&
+    Number(rdv.versao) === Number(latestSync.value?.server_result?.server_entity_version);
+
+  const workflowBlocker = (receipt, action) => {
+    if (!receipt?.value || !rdv) return null;
+    const value = receipt.value;
+    const expectedVersion = Number(value.expected_version);
+    const resultVersion = Number(value.server_result?.versao || 0);
+    const receiptTime = String(value.updated_at_local || receipt.updatedAt || '');
+    const refreshedAfterReceipt = Boolean(packagePreparedAt && receiptTime && packagePreparedAt > receiptTime);
+    const desiredReached =
+      action === 'finalize'
+        ? rdv.status === 'preenchimento_finalizado' && Number(rdv.versao) > expectedVersion
+        : rdv.workflow_status === 'enviado' && Number(rdv.versao) > expectedVersion;
+
+    if (value.state === 'confirmed') {
+      if (resultVersion > 0 && Number(rdv.versao) < resultVersion) {
+        return 'A ação já foi confirmada pelo servidor. Atualize o pacote antes de continuar.';
+      }
+      if (!desiredReached && resultVersion > 0 && Number(rdv.versao) <= resultVersion) {
+        return 'O receipt confirmado ainda não está refletido neste pacote. Atualize do servidor.';
+      }
+      return null;
+    }
+
+    if (value.state === 'sending' || value.state === 'outcome_unknown') {
+      if (!refreshedAfterReceipt) {
+        return 'O resultado da última ação ainda é incerto. Atualize do servidor antes de repetir.';
+      }
+      if (desiredReached) return null;
+      if (Number(rdv.versao) === expectedVersion) return null;
+      return 'O servidor avançou para outro estado após a tentativa. Revise o pacote antes de nova ação.';
+    }
+
+    return null;
+  };
+
+  const finalizeBlocker = workflowBlocker(finalizeReceipt, 'finalize');
+  const sendBlocker = workflowBlocker(sendReceipt, 'send_coordination');
+
+  const editableWorkflow = ['rascunho', 'devolvido'].includes(
+    String(rdv?.workflow_status || ''),
+  );
+  const sendableWorkflow = ['rascunho', 'devolvido'].includes(
+    String(rdv?.workflow_status || ''),
+  );
+
+  return {
+    packageData,
+    flightId,
+    rdv,
+    latestSync,
+    finalizeReceipt,
+    sendReceipt,
+    packageMatchesAcceptedSync,
+    canFinalize:
+      navigator.onLine &&
+      !coordinationInFlight &&
+      !finalizeBlocker &&
+      Boolean(rdv) &&
+      rdv.status === 'rascunho' &&
+      editableWorkflow &&
+      packageMatchesAcceptedSync,
+    canSend:
+      navigator.onLine &&
+      !coordinationInFlight &&
+      !finalizeBlocker &&
+      !sendBlocker &&
+      Boolean(rdv) &&
+      rdv.status === 'preenchimento_finalizado' &&
+      sendableWorkflow,
+    reason: sendBlocker || finalizeBlocker || null,
+  };
+}
+async function refreshCoordinationControls() {
+  refreshCanonicalPackageButton.disabled =
+    !navigator.onLine || !vault?.isUnlocked() || !activePackageRecord || coordinationInFlight;
+  finalizeRdvServerButton.disabled = true;
+  sendRdvCoordinationButton.disabled = true;
+  setCoordinationReceipt('');
+
+  if (!activePackageRecord || !vault?.isUnlocked()) {
+    setCoordinationMessage('Abra um pacote de voo para avaliar o fechamento.', 'attention');
+    return;
+  }
+
+  const state = await getCoordinationState();
+  const rdv = state.rdv;
+  if (!rdv) {
+    setCoordinationMessage(
+      'O pacote canônico ainda não contém RDV. Transmita o rascunho e atualize do servidor.',
+      'attention',
+    );
+    return;
+  }
+
+  if (rdv.workflow_status === 'enviado') {
+    const localReceipt = await latestWorkflowReceiptForFlight(state.flightId, 'send_coordination');
+    const confirmedAt =
+      rdv.enviado_em ||
+      localReceipt?.value?.server_result?.enviado_em ||
+      localReceipt?.value?.updated_at_local ||
+      null;
+    setCoordinationMessage('RDV recebido pela Coordenação.', 'ok');
+    setCoordinationReceipt(
+      'Recebimento confirmado pelo servidor' +
+        (confirmedAt ? ' em ' + formatTimestamp(confirmedAt) : '') +
+        ' · versão ' +
+        displayText(rdv.versao) +
+        '.',
+    );
+    return;
+  }
+
+  if (state.reason) {
+    setCoordinationMessage(state.reason, 'error');
+    return;
+  }
+
+  finalizeRdvServerButton.disabled = !state.canFinalize;
+  sendRdvCoordinationButton.disabled = !state.canSend;
+
+  if (state.canFinalize) {
+    setCoordinationMessage(
+      'Dados transmitidos e pacote reconciliado. Revise e finalize o preenchimento quando estiver pronto.',
+      'ok',
+    );
+  } else if (state.canSend) {
+    setCoordinationMessage(
+      'Preenchimento finalizado no servidor. O envio à Coordenação é uma ação separada e deliberada.',
+      'ok',
+    );
+  } else if (
+    rdv.status === 'rascunho' &&
+    !state.packageMatchesAcceptedSync
+  ) {
+    setCoordinationMessage(
+      'Atualize o pacote após o último receipt de transmissão antes de finalizar.',
+      'attention',
+    );
+  } else {
+    setCoordinationMessage(
+      'Estado atual: ' +
+        displayText(rdv.status) +
+        ' · fluxo ' +
+        displayText(rdv.workflow_status) +
+        '.',
+      'attention',
+    );
+  }
 }
 
 function setRdvSyncMessage(message, kind = 'attention') {
@@ -1390,6 +1729,257 @@ async function drainPilotOutbox(options = {}) {
   }
 }
 
+async function refreshCanonicalPackageForActiveFlight() {
+  const packageData = activePackageData();
+  const flightId = Number(packageData?.voo?.id || 0);
+  if (!flightId || !navigator.onLine || coordinationInFlight) return;
+  coordinationInFlight = true;
+  await refreshCoordinationControls();
+  setCoordinationMessage('Atualizando estado canônico do servidor…', 'attention');
+  try {
+    await prepareFlightPackage(flightId);
+  } finally {
+    coordinationInFlight = false;
+    await refreshCoordinationControls();
+  }
+}
+
+async function finalizeCanonicalRdv() {
+  if (coordinationInFlight) return;
+  const state = await getCoordinationState();
+  if (!state.canFinalize || !state.rdv) {
+    await refreshCoordinationControls();
+    return;
+  }
+  const expectedVersion = Number(state.rdv.versao);
+  if (
+    !window.confirm(
+      'Finalizar o preenchimento deste RDV no servidor? Depois disso os campos ficam bloqueados até eventual devolução/reabertura.',
+    )
+  ) {
+    return;
+  }
+
+  coordinationInFlight = true;
+  let requestStarted = false;
+  let confirmedResult = null;
+
+  try {
+    await persistWorkflowReceipt({
+      flightId: state.flightId,
+      action: 'finalize',
+      expectedVersion,
+      state: 'sending',
+    });
+    await refreshCoordinationControls();
+    setCoordinationMessage('Finalizando preenchimento no servidor…', 'attention');
+
+    requestStarted = true;
+    const body = await authenticatedPost(
+      '/controle-voos/voos/' +
+        encodeURIComponent(String(state.flightId)) +
+        '/rdv/finalizar-preenchimento',
+      { versao: expectedVersion },
+    );
+    const updated = body?.data;
+    if (
+      !updated ||
+      updated.status !== 'preenchimento_finalizado' ||
+      !Number.isInteger(Number(updated.versao)) ||
+      Number(updated.versao) <= expectedVersion
+    ) {
+      throw new Error('Resposta de finalização incompatível com o Pilot App.');
+    }
+
+    await persistWorkflowReceipt({
+      flightId: state.flightId,
+      action: 'finalize',
+      expectedVersion,
+      state: 'confirmed',
+      serverResult: updated,
+    });
+    confirmedResult = updated;
+  } catch (error) {
+    if (requestStarted) {
+      try {
+        await persistWorkflowReceipt({
+          flightId: state.flightId,
+          action: 'finalize',
+          expectedVersion,
+          state: 'outcome_unknown',
+          error,
+        });
+      } catch (receiptError) {
+        console.error('[Pilot Offline] Falha ao persistir receipt de finalização:', receiptError);
+      }
+      setCoordinationMessage(
+        'Não foi possível confirmar o resultado da finalização. Atualize o pacote do servidor antes de repetir.',
+        'error',
+      );
+    } else {
+      setCoordinationMessage(
+        'A finalização não foi enviada porque o estado local de segurança não pôde ser persistido.',
+        'error',
+      );
+    }
+  }
+
+  if (confirmedResult) {
+    setCoordinationMessage(
+      'Preenchimento finalizado e confirmado pelo servidor. Atualizando pacote…',
+      'ok',
+    );
+    try {
+      const refreshed = await prepareFlightPackage(state.flightId);
+      if (!refreshed) throw new Error('PACKAGE_REFRESH_FAILED');
+    } catch (refreshError) {
+      console.error('[Pilot Offline] Falha ao atualizar pacote após finalização confirmada:', refreshError);
+      setCoordinationMessage(
+        'Preenchimento confirmado pelo servidor. A atualização do pacote falhou; use “Atualizar do servidor” antes da próxima ação.',
+        'attention',
+      );
+    }
+  }
+
+  coordinationInFlight = false;
+  try {
+    await refreshCoordinationControls();
+  } catch (refreshError) {
+    console.error('[Pilot Offline] Falha ao reconciliar controles de finalização:', refreshError);
+  }
+}
+async function sendCanonicalRdvToCoordination() {
+  if (coordinationInFlight) return;
+  const state = await getCoordinationState();
+  if (!state.canSend || !state.rdv) {
+    await refreshCoordinationControls();
+    return;
+  }
+
+  try {
+    const alertsBody = await authenticatedGet(
+      '/controle-voos/voos/' +
+        encodeURIComponent(String(state.flightId)) +
+        '/rdv/alertas',
+    );
+    const blocking = (Array.isArray(alertsBody?.data) ? alertsBody.data : []).filter(
+      (alert) => alert?.severidade === 'IMPEDE_ENVIO',
+    );
+    if (blocking.length > 0) {
+      setCoordinationMessage(
+        'Envio bloqueado: ' +
+          blocking.map((alert) => displayText(alert?.mensagem, 'Alerta operacional')).join('; '),
+        'error',
+      );
+      return;
+    }
+  } catch (error) {
+    setCoordinationMessage(
+      error instanceof Error
+        ? error.message
+        : 'Não foi possível validar os alertas antes do envio.',
+      'error',
+    );
+    return;
+  }
+
+  const expectedVersion = Number(state.rdv.versao);
+  if (
+    !window.confirm(
+      'Enviar este RDV para a fila de revisão da Coordenação? Esta ação é separada da sincronização offline.',
+    )
+  ) {
+    return;
+  }
+
+  coordinationInFlight = true;
+  let requestStarted = false;
+  let confirmedResult = null;
+
+  try {
+    await persistWorkflowReceipt({
+      flightId: state.flightId,
+      action: 'send_coordination',
+      expectedVersion,
+      state: 'sending',
+    });
+    await refreshCoordinationControls();
+    setCoordinationMessage('Enviando RDV à Coordenação…', 'attention');
+
+    requestStarted = true;
+    const body = await authenticatedPost(
+      '/controle-voos/voos/' +
+        encodeURIComponent(String(state.flightId)) +
+        '/rdv/enviar',
+      { versao: expectedVersion },
+    );
+    const updated = body?.data;
+    if (
+      !updated ||
+      updated.workflow_status !== 'enviado' ||
+      !Number.isInteger(Number(updated.versao)) ||
+      Number(updated.versao) <= expectedVersion
+    ) {
+      throw new Error('Resposta de envio à Coordenação incompatível com o Pilot App.');
+    }
+
+    await persistWorkflowReceipt({
+      flightId: state.flightId,
+      action: 'send_coordination',
+      expectedVersion,
+      state: 'confirmed',
+      serverResult: updated,
+    });
+    confirmedResult = updated;
+  } catch (error) {
+    if (requestStarted) {
+      try {
+        await persistWorkflowReceipt({
+          flightId: state.flightId,
+          action: 'send_coordination',
+          expectedVersion,
+          state: 'outcome_unknown',
+          error,
+        });
+      } catch (receiptError) {
+        console.error('[Pilot Offline] Falha ao persistir receipt de handoff:', receiptError);
+      }
+      setCoordinationMessage(
+        'Não foi possível confirmar o recebimento. Atualize o pacote do servidor antes de repetir o envio.',
+        'error',
+      );
+    } else {
+      setCoordinationMessage(
+        'O envio à Coordenação não foi iniciado porque o estado local de segurança não pôde ser persistido.',
+        'error',
+      );
+    }
+  }
+
+  if (confirmedResult) {
+    setCoordinationMessage(
+      'Recebimento pela Coordenação confirmado pelo servidor. Atualizando pacote…',
+      'ok',
+    );
+    try {
+      const refreshed = await prepareFlightPackage(state.flightId);
+      if (!refreshed) throw new Error('PACKAGE_REFRESH_FAILED');
+    } catch (refreshError) {
+      console.error('[Pilot Offline] Falha ao atualizar pacote após handoff confirmado:', refreshError);
+      setCoordinationMessage(
+        'Recebimento confirmado pelo servidor. A atualização do pacote falhou; use “Atualizar do servidor” para reconciliar a tela.',
+        'attention',
+      );
+    }
+  }
+
+  coordinationInFlight = false;
+  try {
+    await refreshCoordinationControls();
+  } catch (refreshError) {
+    console.error('[Pilot Offline] Falha ao reconciliar controles de Coordenação:', refreshError);
+  }
+}
 async function queueCurrentDraftForSync() {
   if (operationalSyncInFlight) return;
   if (activePackageData()?.contract?.sync_supported !== true) {
@@ -1873,6 +2463,7 @@ function openPackageRecord(record) {
 
   flightDetailCard.classList.remove('hidden');
   void refreshLeaseControls(record);
+  void refreshCoordinationControls();
   flightDetailCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -1885,6 +2476,11 @@ function closePackageDetail() {
   prepareEditOfflineButton.disabled = true;
   openLocalDraftButton.disabled = true;
   setLeaseMessage('Abra um pacote de voo para avaliar o lease offline.', 'attention');
+  refreshCanonicalPackageButton.disabled = true;
+  finalizeRdvServerButton.disabled = true;
+  sendRdvCoordinationButton.disabled = true;
+  setCoordinationMessage('Abra um pacote de voo para avaliar o fechamento.', 'attention');
+  setCoordinationReceipt('');
 }
 
 function renderProvisioningState() {
@@ -2032,6 +2628,7 @@ async function lockVault() {
   operationalLocalSequence = 0;
   operationalNextSequence = 0;
   operationalSyncInFlight = false;
+  coordinationInFlight = false;
   workspace.classList.add('hidden');
   closePackageDetail();
   unlockCard.classList.remove('hidden');
@@ -2068,6 +2665,13 @@ refreshOnlineButton.addEventListener('click', () => void loadOnlineFlights());
 prepareEditOfflineButton.addEventListener('click', () => void prepareOfflineEditing());
 openLocalDraftButton.addEventListener('click', () => void openExistingOperationalDraft());
 syncRdvButton.addEventListener('click', () => void queueCurrentDraftForSync());
+refreshCanonicalPackageButton.addEventListener('click', () =>
+  void refreshCanonicalPackageForActiveFlight(),
+);
+finalizeRdvServerButton.addEventListener('click', () => void finalizeCanonicalRdv());
+sendRdvCoordinationButton.addEventListener('click', () =>
+  void sendCanonicalRdvToCoordination(),
+);
 closeRdvEditorButton.addEventListener('click', () => void flushOperationalSave().then(closeOperationalEditor));
 closeDetailButton.addEventListener('click', closePackageDetail);
 draftInput.addEventListener('input', scheduleDiagnosticSave);
