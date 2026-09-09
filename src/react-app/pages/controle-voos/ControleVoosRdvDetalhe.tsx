@@ -275,6 +275,10 @@ export default function ControleVoosRdvDetalhe() {
   }
 
   async function handleFinalizar() {
+    if (rdv && !['rascunho', 'devolvido'].includes(rdv.workflow_status)) {
+      toast.error('Este estado do fluxo não permite finalizar novamente o preenchimento.');
+      return;
+    }
     if (!finalizarConfirm) {
       setFinalizarConfirm(true);
       return;
@@ -824,7 +828,9 @@ export default function ControleVoosRdvDetalhe() {
                     </button>
                   )}
 
-                  {editable && rdv?.status === 'rascunho' && (
+                  {editable &&
+                    rdv?.status === 'rascunho' &&
+                    ['rascunho', 'devolvido'].includes(rdv.workflow_status) && (
                     <button
                       type="button"
                       onClick={handleFinalizar}
