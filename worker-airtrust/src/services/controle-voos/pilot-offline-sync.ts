@@ -465,14 +465,18 @@ export function commandResultFromAccepted(input: {
 }
 
 
-export async function assertOfflineSyncReceiptSchemaReady(db: D1Database): Promise<void> {
+export async function isOfflineSyncReceiptSchemaReady(db: D1Database): Promise<boolean> {
   const row = await db
     .prepare(
       "SELECT COUNT(*) AS total FROM sqlite_master WHERE type = 'table' AND name = 'cv_offline_sync_receipts'",
     )
     .first<{ total: number }>()
     .catch(() => null);
-  if (!row || Number(row.total) !== 1) {
+  return Boolean(row && Number(row.total) === 1);
+}
+
+export async function assertOfflineSyncReceiptSchemaReady(db: D1Database): Promise<void> {
+  if (!(await isOfflineSyncReceiptSchemaReady(db))) {
     throw new ApiError(
       'Persistencia de idempotencia offline ainda nao esta disponivel neste ambiente',
       503,
