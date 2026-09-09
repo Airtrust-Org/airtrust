@@ -16,7 +16,7 @@ describe('A-02 tenant-scoped natural key migration', () => {
     expect(mig0489).toContain(
       'CREATE UNIQUE INDEX IF NOT EXISTS ux_funcionarios_matricula_empresa_active',
     );
-    expect(mig0489).toContain('ON funcionarios(empresa_id, matricula)');
+    expect(mig0489).toContain('ON funcionarios(empresa_id, TRIM(matricula))');
     expect(mig0489).toContain(
       'CREATE UNIQUE INDEX IF NOT EXISTS ux_funcionarios_email_empresa_active',
     );
