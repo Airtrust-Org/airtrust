@@ -155,10 +155,179 @@
         border: 1px solid #b9dfce;
         background: #f4fbf8;
       }
+      .pilot-workspace {
+        margin-top: 16px;
+        border: 1px solid #cdd9e7;
+        border-radius: 16px;
+        overflow: hidden;
+        background: #fbfdff;
+      }
+      .pilot-workspace-header {
+        padding: 14px 16px;
+        display: grid;
+        gap: 4px;
+        border-bottom: 1px solid #dbe4ee;
+        background: #f3f7fb;
+      }
+      .pilot-workspace-eyebrow {
+        color: #52637a;
+        font-size: .72rem;
+        font-weight: 850;
+        letter-spacing: .06em;
+      }
+      .pilot-workspace-tabs {
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        scrollbar-width: thin;
+        padding: 10px;
+        border-bottom: 1px solid #dbe4ee;
+        background: #fff;
+      }
+      .pilot-workspace-tab {
+        min-height: 48px;
+        flex: 0 0 auto;
+        border: 1px solid #d6e0eb;
+        background: #f7f9fc;
+        color: #29425f;
+        white-space: nowrap;
+        padding: 0 15px;
+      }
+      .pilot-workspace-tab.active,
+      .pilot-workspace-tab[aria-selected="true"] {
+        background: #12356a;
+        color: #fff;
+        border-color: #12356a;
+      }
+      .pilot-workspace-panel { padding: 16px; }
+      .pilot-workspace-panel[hidden] { display: none; }
+      .pilot-workspace-panel h2 { margin: 0 0 12px; }
+      .pilot-workspace-section { margin-top: 20px; }
+      .pilot-workspace-section h3 { margin-bottom: 10px; }
+      .pilot-workspace-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0,1fr));
+        gap: 9px;
+        margin-top: 10px;
+      }
+      .pilot-workspace-kv {
+        min-width: 0;
+        border: 1px solid #e0e7ef;
+        border-radius: 12px;
+        padding: 11px;
+        background: #fff;
+      }
+      .pilot-workspace-kv span {
+        display: block;
+        color: #66758a;
+        font-size: .76rem;
+      }
+      .pilot-workspace-kv strong {
+        display: block;
+        margin-top: 4px;
+        overflow-wrap: anywhere;
+      }
+      .pilot-workspace-notice {
+        margin-top: 12px;
+        border: 1px solid #cfdbea;
+        border-radius: 12px;
+        padding: 11px 12px;
+        font-weight: 700;
+        line-height: 1.45;
+        background: #f7f9fc;
+      }
+      .pilot-workspace-notice.ok { border-color: #b9dfce; background: #f4fbf8; }
+      .pilot-workspace-notice.attention { border-color: #f1c56d; background: #fffaf0; }
+      .pilot-workspace-list { display: grid; gap: 9px; margin-top: 11px; }
+      .pilot-workspace-list.compact { margin-top: 4px; }
+      .pilot-workspace-row-card,
+      .pilot-workspace-stage-card,
+      .pilot-workspace-met-card {
+        border: 1px solid #dce5ef;
+        border-radius: 13px;
+        padding: 12px;
+        background: #fff;
+      }
+      .pilot-workspace-row-card > span,
+      .pilot-fuel-node > span {
+        display: block;
+        margin-top: 5px;
+        color: #52637a;
+        line-height: 1.45;
+      }
+      .pilot-workspace-card-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .pilot-workspace-state {
+        border-radius: 999px;
+        padding: 4px 8px;
+        background: #edf3f8;
+        font-size: .72rem;
+        font-weight: 850;
+        white-space: nowrap;
+      }
+      .pilot-workspace-state.ok { background: #e4f5ec; }
+      .pilot-workspace-state.attention { background: #fff1cf; }
+      .pilot-workspace-metar {
+        margin: 10px 0 0;
+        border-radius: 10px;
+        padding: 10px;
+        background: #10213d;
+        color: #f7fbff;
+        font: 700 .78rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        overflow-wrap: anywhere;
+      }
+      .pilot-workspace-copy { margin: 0; line-height: 1.55; }
+      .pilot-workspace-subheading { display: block; margin-top: 14px; }
+      .pilot-fuel-timeline {
+        display: grid;
+        gap: 0;
+        margin-top: 12px;
+        padding-left: 15px;
+        border-left: 3px solid #c8d6e5;
+      }
+      .pilot-fuel-node {
+        position: relative;
+        margin: 0 0 12px 10px;
+        border: 1px solid #dce5ef;
+        border-radius: 12px;
+        padding: 12px;
+        background: #fff;
+      }
+      .pilot-fuel-node::before {
+        content: "";
+        position: absolute;
+        left: -31px;
+        top: 17px;
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #12356a;
+        border: 2px solid #fff;
+      }
+      .pilot-fuel-node.refuel { background: #fffaf0; }
+      .pilot-fuel-node.refuel::before { background: #b06b00; }
+      .pilot-route-svg {
+        width: 100%;
+        min-height: 180px;
+        margin-top: 12px;
+        border: 1px solid #dce5ef;
+        border-radius: 14px;
+        background: #f8fbfe;
+      }
+      .pilot-route-line { stroke: #12356a; stroke-width: 5; }
+      .pilot-route-point { fill: #12356a; }
+      .pilot-route-label { fill: #10213d; font-size: 22px; font-weight: 800; }
+      .pilot-route-distance { fill: #52637a; font-size: 15px; font-weight: 700; }
+      .technical-package { margin-top: 14px; border-top: 1px solid #e1e8f0; padding-top: 12px; }
       details summary { cursor: pointer; font-weight: 800; }
       @media (max-width: 700px) {
         .topbar { align-items: flex-start; flex-direction: column; }
-        .row, .meta, .detail-grid, .editor-grid { grid-template-columns: 1fr; }
+        .row, .meta, .detail-grid, .editor-grid, .pilot-workspace-grid { grid-template-columns: 1fr; }
         .editor-grid .wide { grid-column: auto; }
         .pill { align-self: flex-start; }
         .flight-item { grid-template-columns: 1fr; }
@@ -260,7 +429,11 @@
             <button id="close-detail" class="secondary" type="button">Voltar aos voos</button>
           </div>
           <div id="detail-status" class="statusline ok"></div>
-          <div id="flight-detail"></div>
+          <div id="pilot-workspace-view" class="pilot-workspace" aria-label="Workspace operacional do voo"></div>
+          <details class="technical-package">
+            <summary>Detalhes técnicos do pacote</summary>
+            <div id="flight-detail"></div>
+          </details>
           <div class="lease-box">
             <strong>Edição offline do RDV</strong>
             <p class="muted">

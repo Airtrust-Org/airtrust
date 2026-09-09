@@ -1,4 +1,5 @@
 import { PilotVault } from '/pilot/pilot-vault.js';
+import { renderPilotWorkspace } from '/pilot/pilot-workspace.js';
 import {
   hasTrustedPilotLeaseKeys,
   verifyPilotOfflineLease,
@@ -68,6 +69,7 @@ const detailTitle = document.querySelector('#detail-title');
 const detailSubtitle = document.querySelector('#detail-subtitle');
 const detailStatus = document.querySelector('#detail-status');
 const flightDetail = document.querySelector('#flight-detail');
+const pilotWorkspaceView = document.querySelector('#pilot-workspace-view');
 const closeDetailButton = document.querySelector('#close-detail');
 const draftInput = document.querySelector('#draft');
 const saveStatus = document.querySelector('#save-status');
@@ -2353,6 +2355,7 @@ function openPackageRecord(record) {
     formatTimestamp(record.value.prepared_at) +
     ' · consulta read-only';
   flightDetail.replaceChildren();
+  renderPilotWorkspace(pilotWorkspaceView, packageData);
 
   appendInfoGrid(flightDetail, [
     ['Status do voo', voo.status],
@@ -2473,6 +2476,7 @@ function closePackageDetail() {
   activeVerifiedLease = null;
   flightDetailCard.classList.add('hidden');
   flightDetail.replaceChildren();
+  pilotWorkspaceView.replaceChildren();
   prepareEditOfflineButton.disabled = true;
   openLocalDraftButton.disabled = true;
   setLeaseMessage('Abra um pacote de voo para avaliar o lease offline.', 'attention');

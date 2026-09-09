@@ -41,6 +41,7 @@ import {
   type PilotOfflineSyncCommand,
 } from '../services/controle-voos/pilot-offline-sync';
 import { applyPilotOfflineSnapshotCommand } from '../services/controle-voos/pilot-offline-sync-apply';
+import { buildPilotOfflineWorkspace } from '../services/controle-voos/pilot-offline-workspace';
 
 const pilotOffline = new Hono<{ Bindings: Env }>();
 
@@ -370,6 +371,7 @@ pilotOffline.get(
       fuelResult,
       origem,
       destino,
+      alternado,
       aeronave,
     ] = await Promise.all([
       getActiveRdvByFlight(c.env.DB, voo.id, empresaId),
@@ -451,6 +453,17 @@ pilotOffline.get(
         )
         .bind(voo.destino_id, empresaId)
         .first<AirportRow>(),
+      voo.alternado_destino_id
+        ? c.env.DB
+            .prepare(
+              `SELECT id, codigo, codigo_icao, codigo_iata, nome, cidade, uf, tipo
+               FROM cv_aeroportos
+               WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
+               LIMIT 1`,
+            )
+            .bind(voo.alternado_destino_id, empresaId)
+            .first<AirportRow>()
+        : Promise.resolve(null),
       voo.aeronave_id
         ? c.env.DB
             .prepare('SELECT id, modelo FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1')
@@ -459,18 +472,41 @@ pilotOffline.get(
         : Promise.resolve(null),
     ]);
 
+    const tripulantes = crewResult.results || [];
+    const etapas = stagesResult.results || [];
+    const abastecimentos = (fuelResult.results || []).map(({ anexo_r2_key, ...entry }) => ({
+      ...entry,
+      tem_anexo: Boolean(anexo_r2_key),
+    }));
+    const generatedAt = new Date().toISOString();
+    const workspace = await buildPilotOfflineWorkspace({
+      db: c.env.DB,
+      empresaId,
+      generatedAt,
+      redemetApiKey: c.env.REDEMET_API_KEY,
+      voo,
+      origem,
+      destino,
+      alternado,
+      aeronave,
+      tripulantes,
+      etapas,
+      abastecimentos,
+      rdv,
+    });
+
     const sourceRevision = {
       voo: voo.versao,
       rdv: rdv?.versao ?? 0,
-      stages: (stagesResult.results || []).map((stage) => ({
+      stages: etapas.map((stage) => ({
         id: stage.id,
         updated_at: stage.updated_at,
       })),
-      crew: (crewResult.results || []).map((member) => ({
+      crew: tripulantes.map((member) => ({
         id: member.id,
         updated_at: member.updated_at,
       })),
-      fuel: (fuelResult.results || []).map((entry) => ({
+      fuel: abastecimentos.map((entry) => ({
         id: entry.id,
         updated_at: entry.updated_at,
       })),
@@ -491,7 +527,7 @@ pilotOffline.get(
           name: 'airtrust-pilot-offline-package',
           version: 1,
           package_id: packageId,
-          generated_at: new Date().toISOString(),
+          generated_at: generatedAt,
           read_only: true,
           sync_supported: syncSupported,
           attachments_included: false,
@@ -524,13 +560,12 @@ pilotOffline.get(
         },
         origem,
         destino,
+        alternado,
         aeronave,
-        tripulantes: crewResult.results || [],
-        etapas: stagesResult.results || [],
-        abastecimentos: (fuelResult.results || []).map(({ anexo_r2_key, ...entry }) => ({
-          ...entry,
-          tem_anexo: Boolean(anexo_r2_key),
-        })),
+        tripulantes,
+        etapas,
+        abastecimentos,
+        workspace,
         rdv: rdv
           ? {
               id: rdv.id,

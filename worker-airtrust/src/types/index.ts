@@ -32,6 +32,9 @@ export interface Env {
   PILOT_OFFLINE_LEASE_TTL_MINUTES?: string;
   // Runtime gate for offline mutation sync. Defaults fail-closed when absent.
   PILOT_OFFLINE_SYNC_ENABLED?: string;
+  // REDEMET/DECEA observed weather used for read-only Pilot/MET snapshots.
+  // Secret is consumed server-side only and is never returned to the Pilot App.
+  REDEMET_API_KEY?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';

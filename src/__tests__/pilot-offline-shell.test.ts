@@ -13,6 +13,7 @@ const pilotManifest = JSON.parse(read('public/pilot/pilot.webmanifest')) as {
   display: string;
 };
 const pilotApp = read('public/pilot/pilot-app.js');
+const pilotWorkspace = read('public/pilot/pilot-workspace.js');
 const pilotVault = read('public/pilot/pilot-vault.js');
 const pilotRdvDraft = read('public/pilot/pilot-rdv-draft.js');
 const pilotSync = read('public/pilot/pilot-sync.js');
@@ -41,6 +42,7 @@ describe('Pilot Offline shell', () => {
     };
 
     assertParses(pilotApp);
+    assertParses(pilotWorkspace);
     assertParses(pilotVault);
     assertParses(pilotRdvDraft);
     assertParses(pilotSync);
@@ -88,8 +90,9 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v5'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v6'");
     expect(pilotSw).toContain("'/pilot/index.html'");
+    expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
     expect(pilotSw).toContain("'/pilot/pilot-rdv-draft.js'");
     expect(pilotSw).toContain("'/pilot/pilot-sync.js'");
     expect(pilotSw).toContain("'/pilot/pilot-lease.js'");
@@ -148,6 +151,22 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("contract?.regulated_edb !== false");
     expect(pilotIndex).toContain('Rascunho operacional local');
     expect(pilotIndex).toContain('Não sincronizado');
+  });
+
+  it('expõe o voo como workspace integrado sem promover mapa ou performance a funções certificadas', () => {
+    expect(pilotIndex).toContain('id="pilot-workspace-view"');
+    expect(pilotApp).toContain("renderPilotWorkspace");
+    expect(pilotWorkspace).toContain("['summary', 'Resumo']");
+    expect(pilotWorkspace).toContain("['planning', 'Planejamento']");
+    expect(pilotWorkspace).toContain("['met', 'MET']");
+    expect(pilotWorkspace).toContain("['fuel', 'Combustível']");
+    expect(pilotWorkspace).toContain("['dossier', 'Dossiê']");
+    expect(pilotWorkspace).toContain("['map', 'Mapa']");
+    expect(pilotWorkspace).toContain("['performance', 'Performance']");
+    expect(pilotWorkspace).toContain('MET armazenada no tablet é um snapshot');
+    expect(pilotWorkspace).toContain('Não substitui navegação ou aviônicos certificados');
+    expect(pilotWorkspace).toContain('Aguardando fonte técnica versionada');
+    expect(pilotWorkspace).not.toMatch(/tile\.openstreetmap|mapbox|googleapis.*maps/i);
   });
 
   it('mantem a edicao offline fail-closed ate haver lease assinado e chave publica confiavel', () => {
