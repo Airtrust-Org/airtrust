@@ -8,6 +8,7 @@
 
 const CACHE_VERSION = 'airtrust-v15';
 const CACHE_PREFIX = 'airtrust-';
+const PILOT_CACHE_PREFIX = 'airtrust-pilot-';
 const LOGIN_SW_RESET_PARAM = 'airtrust_sw_reset';
 const CRITICAL_PATH_PATTERNS = [
   /^\/$/,
@@ -26,7 +27,10 @@ async function purgeLegacyAirTrustCaches() {
   const cacheNames = await caches.keys();
   await Promise.all(
     cacheNames
-      .filter((cacheName) => cacheName.startsWith(CACHE_PREFIX))
+      .filter(
+        (cacheName) =>
+          cacheName.startsWith(CACHE_PREFIX) && !cacheName.startsWith(PILOT_CACHE_PREFIX),
+      )
       .map((cacheName) => caches.delete(cacheName)),
   );
 }

@@ -15,27 +15,45 @@ function shouldBypassCleanupForPath(pathname: string): boolean {
   return /^\/lms\/player\//.test(pathname);
 }
 
+const PILOT_SW_SCOPE_PATH = '/pilot/';
+const PILOT_CACHE_PREFIX = 'airtrust-pilot-';
+
 function isServiceWorkerSupported(): boolean {
   return typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
+}
+
+function isPilotServiceWorkerRegistration(registration: ServiceWorkerRegistration): boolean {
+  try {
+    return new URL(registration.scope).pathname.startsWith(PILOT_SW_SCOPE_PATH);
+  } catch {
+    return false;
+  }
+}
+
+function isLegacyAirTrustCache(name: string): boolean {
+  return name.startsWith('airtrust-') && !name.startsWith(PILOT_CACHE_PREFIX);
 }
 
 export async function clearAllCaches(): Promise<void> {
   if (typeof caches === 'undefined') return;
 
   const cacheNames = await caches.keys();
-  await Promise.all(
-    cacheNames.filter((name) => name.startsWith('airtrust-')).map((name) => caches.delete(name)),
-  );
-  console.log('[SW] Caches AirTrust limpos');
+  await Promise.all(cacheNames.filter(isLegacyAirTrustCache).map((name) => caches.delete(name)));
+  console.log('[SW] Caches AirTrust legados limpos; cache do Pilot App preservado');
 }
 
 async function unregisterExistingServiceWorkers(): Promise<ServiceWorkerRegistration[]> {
   if (!isServiceWorkerSupported()) return [];
 
   const registrations = await navigator.serviceWorker.getRegistrations();
-  await Promise.all(registrations.map((registration) => registration.unregister().catch(() => false)));
-  console.log('[SW] Service workers antigos removidos:', registrations.length);
-  return registrations;
+  const legacyRegistrations = registrations.filter(
+    (registration) => !isPilotServiceWorkerRegistration(registration),
+  );
+  await Promise.all(
+    legacyRegistrations.map((registration) => registration.unregister().catch(() => false)),
+  );
+  console.log('[SW] Service workers antigos removidos:', legacyRegistrations.length);
+  return legacyRegistrations;
 }
 
 async function cleanupLegacyServiceWorkers(): Promise<void> {
