@@ -81,17 +81,20 @@ async function gerarProtocolo(db: D1Database, empresaId: number): Promise<string
     )
     .bind(empresaId, ano)
     .run();
-  await db
+  const row = await db
     .prepare(
-      'UPDATE sgso_protocolo_sequencia SET ultimo_numero = ultimo_numero + 1 WHERE empresa_id = ? AND ano = ?',
+      'UPDATE sgso_protocolo_sequencia SET ultimo_numero = ultimo_numero + 1 WHERE empresa_id = ? AND ano = ? RETURNING ultimo_numero',
     )
     .bind(empresaId, ano)
-    .run();
-  const row = await db
-    .prepare('SELECT ultimo_numero FROM sgso_protocolo_sequencia WHERE empresa_id = ? AND ano = ?')
-    .bind(empresaId, ano)
     .first<{ ultimo_numero: number }>();
-  const num = String(row?.ultimo_numero ?? 1).padStart(4, '0');
+
+  if (!row) {
+    throw new Error(
+      `Falha ao reservar número de protocolo SGSO para empresa ${empresaId} no ano ${ano}`,
+    );
+  }
+
+  const num = String(row.ultimo_numero).padStart(4, '0');
   return `REL-${ano}-${num}`;
 }
 
