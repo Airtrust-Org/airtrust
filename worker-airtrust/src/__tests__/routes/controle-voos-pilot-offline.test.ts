@@ -456,6 +456,11 @@ describe('Pilot offline package', () => {
     expect(body.data.workspace.dossier.entries.map((entry: any) => entry.category)).toEqual(
       expect.arrayContaining(['planejamento', 'MET', 'abastecimento', 'coordenacao']),
     );
+    const metDossier = body.data.workspace.dossier.entries.find(
+      (entry: any) => entry.category === 'MET',
+    );
+    expect(metDossier.available_offline).toBe(false);
+    expect(metDossier.integrity_state).toBe('EVIDENCE_UNAVAILABLE');
   });
 
   it('anuncia sync somente quando flag e schema 0488 estao prontos', async () => {
