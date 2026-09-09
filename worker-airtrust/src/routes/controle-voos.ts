@@ -1609,7 +1609,7 @@ controleVoos.post('/voos/:id/rdv/finalizar-preenchimento', auth(), async (c) => 
     whereSql: `
       id = ? AND empresa_id = ? AND deleted_at IS NULL
       AND status = 'rascunho'
-      AND workflow_status IN ('rascunho', 'devolvido', 'reaberto')
+      AND workflow_status IN ('rascunho', 'devolvido')
     `,
     whereBindValues: [existing.id, empresaId],
     guard: { rdvId: existing.id, empresaId, expectedVersion },
