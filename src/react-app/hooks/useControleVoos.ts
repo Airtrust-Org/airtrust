@@ -542,16 +542,22 @@ export function useSalvarRdv() {
 export function useFinalizarPreenchimentoRdv() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (vooId: string | number) => {
+    mutationFn: async ({
+      vooId,
+      versao,
+    }: {
+      vooId: string | number;
+      versao: number;
+    }) => {
       const response = await apiClient.post<unknown>(
         `${API}/voos/${vooId}/rdv/finalizar-preenchimento`,
-        {},
+        { versao },
       );
       return extractPayloadRequired<CvRdv>(response);
     },
-    onSuccess: (_, vooId) => {
-      void qc.invalidateQueries({ queryKey: ['cv-rdv', vooId] });
-      void qc.invalidateQueries({ queryKey: ['cv-rdv', String(vooId)] });
+    onSuccess: (_, vars) => {
+      void qc.invalidateQueries({ queryKey: ['cv-rdv', vars.vooId] });
+      void qc.invalidateQueries({ queryKey: ['cv-rdv', String(vars.vooId)] });
       void qc.invalidateQueries({ queryKey: ['cv-dashboard'] });
     },
   });
