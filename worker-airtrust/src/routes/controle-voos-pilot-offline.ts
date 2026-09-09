@@ -169,7 +169,9 @@ pilotOffline.post(
       }
     }
 
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
+    const body = (await c.req
+      .json<Record<string, unknown>>()
+      .catch(() => ({}))) as Record<string, unknown>;
     const deviceId = validatePilotOfflineDeviceId(body.device_id);
     const appVersion = validatePilotOfflineAppVersion(body.app_version);
 
