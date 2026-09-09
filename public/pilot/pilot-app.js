@@ -809,6 +809,386 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
   renderOperationalEditor();
 }
 
+function localDateTimeNow() {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+}
+
+function nextOperationalSequence() {
+  operationalNextSequence += 1;
+  return operationalNextSequence;
+}
+
+function markOperationalPending() {
+  rdvEditorSaveStatus.className = 'statusline attention';
+  rdvEditorSaveStatus.textContent = 'Alterações locais pendentes…';
+}
+
+function refreshDraftValidationPresentation() {
+  const packageData = activePackageData();
+  if (!activeRdvDraft || !packageData) return;
+  const rdvErrors = validateRdvForm(activeRdvDraft.form, packageData);
+  const stageErrors = validateStageDrafts(activeStageDrafts);
+  const total = Object.keys(rdvErrors).length + stageErrors.length;
+
+  const existing = rdvEditorCard.querySelector('#rdv-validation-summary');
+  if (existing) existing.remove();
+
+  if (total === 0) return;
+  const summary = document.createElement('div');
+  summary.id = 'rdv-validation-summary';
+  summary.className = 'statusline error';
+  summary.textContent =
+    total + ' validação(ões) pendente(s). Os dados continuam salvos localmente.';
+  rdvEditorCard.insertBefore(summary, rdvFormFields);
+}
+
+function scheduleOperationalSave() {
+  if (!activeRdvDraft || activeStageDrafts.length === 0) return;
+  nextOperationalSequence();
+  markOperationalPending();
+  if (operationalSaveTimer !== null) window.clearTimeout(operationalSaveTimer);
+  operationalSaveTimer = window.setTimeout(() => {
+    operationalSaveTimer = null;
+    void enqueueOperationalSave();
+  }, SAVE_DELAY_MS);
+}
+
+function buildOperationalSaveEntries(sequence) {
+  const packageData = activePackageData();
+  if (!packageData || !activeRdvDraft) throw new Error('Rascunho operacional não está aberto.');
+  assertVerifiedLeaseAllowsDraft(packageData, activeVerifiedLease);
+  const now = new Date().toISOString();
+
+  activeRdvDraft.local_sequence = sequence;
+  activeRdvDraft.updated_at_claimed = now;
+  for (const stage of activeStageDrafts) {
+    stage.local_sequence = sequence;
+    stage.updated_at_claimed = now;
+  }
+
+  return [
+    {
+      storeName: 'rdv_drafts',
+      id: activeRdvDraft.entity_local_id,
+      value: structuredClone(activeRdvDraft),
+      localRevision: sequence,
+    },
+    ...activeStageDrafts.map((stage) => ({
+      storeName: 'stage_drafts',
+      id: stage.entity_local_id,
+      value: structuredClone(stage),
+      localRevision: sequence,
+    })),
+  ];
+}
+
+function enqueueOperationalSave() {
+  const requestedSequence = operationalNextSequence;
+  operationalSaveChain = operationalSaveChain
+    .then(async () => {
+      if (!vault?.isUnlocked() || !activeRdvDraft) return;
+      const packageData = activePackageData();
+      assertVerifiedLeaseAllowsDraft(packageData, activeVerifiedLease);
+
+      rdvEditorSaveStatus.className = 'statusline attention';
+      rdvEditorSaveStatus.textContent = 'Salvando no tablet…';
+
+      await vault.putJsonBatch(buildOperationalSaveEntries(requestedSequence));
+
+      const persistedRdv = await vault.getJson(
+        'rdv_drafts',
+        activeRdvDraft.entity_local_id,
+      );
+      const persistedStages = await Promise.all(
+        activeStageDrafts.map((stage) =>
+          vault.getJson('stage_drafts', stage.entity_local_id),
+        ),
+      );
+      const allVerified =
+        persistedRdv?.localRevision === requestedSequence &&
+        persistedStages.every((record) => record?.localRevision === requestedSequence);
+      if (!allVerified) {
+        throw new Error('Falha no read-back do rascunho operacional.');
+      }
+
+      operationalLocalSequence = requestedSequence;
+      rdvLocalSequenceLabel.textContent = String(operationalLocalSequence);
+      if (operationalNextSequence === requestedSequence) {
+        rdvEditorSaveStatus.className = 'statusline ok';
+        rdvEditorSaveStatus.textContent = 'Salvo no tablet.';
+      } else {
+        markOperationalPending();
+      }
+      refreshDraftValidationPresentation();
+      await updateStorageEstimate();
+    })
+    .catch((error) => {
+      console.error('[Pilot Offline] Falha ao salvar rascunho operacional:', error);
+      rdvEditorSaveStatus.className = 'statusline error';
+      rdvEditorSaveStatus.textContent =
+        'Falha ao salvar no tablet. Não continue sem revisar: ' +
+        (error instanceof Error ? error.message : 'erro desconhecido');
+    });
+  return operationalSaveChain;
+}
+
+function flushOperationalSave() {
+  if (operationalSaveTimer !== null) {
+    window.clearTimeout(operationalSaveTimer);
+    operationalSaveTimer = null;
+  }
+  if (!activeRdvDraft || operationalNextSequence === operationalLocalSequence) {
+    return operationalSaveChain;
+  }
+  return enqueueOperationalSave();
+}
+
+function createEditorField({
+  label,
+  value,
+  type = 'text',
+  inputMode,
+  wide = false,
+  readOnly = false,
+  note,
+  onInput,
+  onBlur,
+}) {
+  const wrapper = document.createElement('label');
+  if (wide) wrapper.classList.add('wide');
+  const title = document.createElement('span');
+  title.textContent = label;
+  const input = type === 'textarea' ? document.createElement('textarea') : document.createElement('input');
+  if (type !== 'textarea') input.type = type;
+  if (inputMode) input.inputMode = inputMode;
+  input.value = value ?? '';
+  input.readOnly = readOnly;
+  if (onInput) input.addEventListener('input', () => onInput(input.value, input));
+  if (onBlur) input.addEventListener('blur', () => onBlur(input.value, input));
+  wrapper.append(title, input);
+  if (note) {
+    const noteEl = document.createElement('span');
+    noteEl.className = 'field-note';
+    noteEl.textContent = note;
+    wrapper.append(noteEl);
+  }
+  return wrapper;
+}
+
+function renderRdvFormFields() {
+  rdvFormFields.replaceChildren();
+  const form = activeRdvDraft.form;
+
+  const fields = [
+    ['Número do RDV', 'numero', 'text', null, false, false],
+    ['Data do voo', 'data_voo', 'date', null, false, false],
+    ['Decolagem real', 'horario_decolagem_real', 'datetime-local', null, false, false],
+    ['Pouso real', 'horario_pouso_real', 'datetime-local', null, false, false],
+    ['Horas voadas', 'horas_voadas', 'number', 'decimal', false, true],
+    ['Pousos', 'numero_pousos', 'number', 'numeric', false, true],
+    ['Ciclos', 'ciclos', 'number', 'numeric', false, false],
+    ['Combustível decolagem', 'combustivel_decolagem', 'number', 'decimal', false, true],
+    ['Combustível pouso', 'combustivel_pouso', 'number', 'decimal', false, true],
+    ['Consumo', 'combustivel_consumo', 'number', 'decimal', false, true],
+    ['POB', 'pob', 'number', 'numeric', false, true],
+    ['Carga (kg)', 'carga_kg', 'number', 'decimal', false, true],
+    ['Ocorrências', 'ocorrencias', 'textarea', null, true, false],
+    ['Divergências do planejado', 'divergencias', 'textarea', null, true, false],
+  ];
+
+  for (const [label, key, type, inputMode, wide, aggregateManaged] of fields) {
+    rdvFormFields.append(
+      createEditorField({
+        label,
+        value: form[key],
+        type,
+        inputMode,
+        wide,
+        readOnly: aggregateManaged,
+        note:
+          key === 'ciclos'
+            ? 'Não é derivado automaticamente de pousos.'
+            : aggregateManaged
+              ? 'Calculado a partir das etapas locais.'
+              : null,
+        onInput: (value) => {
+          form[key] = value;
+          if (
+            key === 'horario_decolagem_real' ||
+            key === 'horario_pouso_real'
+          ) {
+            const hours = calcHorasVoadas(
+              form.horario_decolagem_real,
+              form.horario_pouso_real,
+            );
+            if (hours !== null) form.horas_voadas = String(hours);
+          }
+          if (key === 'combustivel_decolagem' || key === 'combustivel_pouso') {
+            const used = calcConsumoCombustivel(
+              parseNumber(form.combustivel_decolagem),
+              parseNumber(form.combustivel_pouso),
+            );
+            if (used !== null) form.combustivel_consumo = String(used);
+          }
+          scheduleOperationalSave();
+        },
+        onBlur: () => void flushOperationalSave(),
+      }),
+    );
+  }
+}
+
+function timingEventMeta(action) {
+  timingSequence += 1;
+  return {
+    action,
+    client_claimed_at: new Date().toISOString(),
+    monotonic_sequence: timingSequence,
+    last_trusted_server_time:
+      activePackageData()?.contract?.generated_at || null,
+    clock_drift_estimate_ms: null,
+  };
+}
+
+function applyQuickTiming(stage, field, action) {
+  const nowLocal = localDateTimeNow();
+  stage.fields[field] = nowLocal;
+  stage.timing_events = {
+    ...(stage.timing_events || {}),
+    [field]: timingEventMeta(action),
+  };
+  const aggregated = applySafeStageAggregates(
+    activeRdvDraft.form,
+    activeStageDrafts,
+  );
+  activeRdvDraft.form = aggregated;
+  scheduleOperationalSave();
+  renderOperationalEditor({ preserveScroll: true });
+}
+
+function renderStageFields() {
+  rdvStageFields.replaceChildren();
+
+  for (let index = 0; index < activeStageDrafts.length; index += 1) {
+    const stageDraft = activeStageDrafts[index];
+    const fields = stageDraft.fields;
+    const card = document.createElement('section');
+    card.className = 'editor-stage';
+
+    const heading = document.createElement('h3');
+    heading.textContent =
+      'Etapa ' +
+      String(fields.numero_etapa || index + 1) +
+      ' · ' +
+      displayText(fields.origem_icao) +
+      ' → ' +
+      displayText(fields.destino_icao);
+    card.append(heading);
+
+    const quick = document.createElement('div');
+    quick.className = 'actions';
+    const actions = [
+      ['PARTIDA', 'horario_motor_ligado'],
+      ['DECOLAGEM', 'horario_decolagem'],
+      ['POUSO', 'horario_pouso'],
+      ['CORTE', 'horario_motor_desligado'],
+    ];
+    for (const [label, field] of actions) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'secondary';
+      button.textContent = label;
+      button.addEventListener('click', () => applyQuickTiming(stageDraft, field, label));
+      quick.append(button);
+    }
+    card.append(quick);
+
+    const grid = document.createElement('div');
+    grid.className = 'editor-grid';
+    const stageFields = [
+      ['Origem', 'origem_icao', 'text', null],
+      ['Destino', 'destino_icao', 'text', null],
+      ['Partida motores', 'horario_motor_ligado', 'datetime-local', null],
+      ['Decolagem', 'horario_decolagem', 'datetime-local', null],
+      ['Pouso', 'horario_pouso', 'datetime-local', null],
+      ['Corte motores', 'horario_motor_desligado', 'datetime-local', null],
+      ['IFR', 'tempo_ifr', 'number', 'decimal'],
+      ['Noturno', 'tempo_noturno', 'number', 'decimal'],
+      ['Pousos diurnos', 'pousos_diurnos', 'number', 'numeric'],
+      ['Pousos noturnos', 'pousos_noturnos', 'number', 'numeric'],
+      ['Starts', 'starts', 'number', 'numeric'],
+      ['PAX / POB operacional', 'pax', 'number', 'numeric'],
+      ['Payload / carga', 'payload', 'number', 'decimal'],
+      ['Combustível início', 'combustivel_inicio', 'number', 'decimal'],
+      ['Combustível fim', 'combustivel_fim', 'number', 'decimal'],
+      ['Unidade combustível', 'unidade_combustivel', 'text', null],
+    ];
+
+    for (const [label, key, type, inputMode] of stageFields) {
+      grid.append(
+        createEditorField({
+          label,
+          value: fields[key],
+          type,
+          inputMode,
+          onInput: (value) => {
+            fields[key] = value;
+            activeRdvDraft.form = applySafeStageAggregates(
+              activeRdvDraft.form,
+              activeStageDrafts,
+            );
+            scheduleOperationalSave();
+          },
+          onBlur: () => {
+            activeRdvDraft.form = applySafeStageAggregates(
+              activeRdvDraft.form,
+              activeStageDrafts,
+            );
+            void flushOperationalSave();
+            renderRdvFormFields();
+            refreshDraftValidationPresentation();
+          },
+        }),
+      );
+    }
+
+    card.append(grid);
+    rdvStageFields.append(card);
+  }
+}
+
+function renderOperationalEditor(options = {}) {
+  if (!activeRdvDraft || !activeVerifiedLease || !activePackageRecord) return;
+  const scrollY = window.scrollY;
+  const packageData = activePackageData();
+  const voo = packageData.voo;
+
+  rdvEditorTitle.textContent = 'Etapas / RDV — ' + displayText(voo.prefixo);
+  rdvEditorSubtitle.textContent =
+    formatDate(voo.data_programacao) +
+    ' · rascunho cifrado local · sem transmissão ao servidor';
+  rdvLeaseUntilLabel.textContent = formatTimestamp(
+    activeVerifiedLease.claims.valid_until,
+  );
+  rdvLocalSequenceLabel.textContent = String(operationalLocalSequence);
+
+  renderRdvFormFields();
+  renderStageFields();
+  refreshDraftValidationPresentation();
+  rdvEditorCard.classList.remove('hidden');
+  if (options.preserveScroll) window.scrollTo({ top: scrollY });
+  else rdvEditorCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeOperationalEditor() {
+  rdvEditorCard.classList.add('hidden');
+  rdvFormFields.replaceChildren();
+  rdvStageFields.replaceChildren();
+}
+
 function appendInfoGrid(parent, entries) {
   const grid = document.createElement('div');
   grid.className = 'detail-grid';
