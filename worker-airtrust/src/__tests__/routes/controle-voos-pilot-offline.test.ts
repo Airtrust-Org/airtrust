@@ -125,9 +125,9 @@ function statementFor(sql: string) {
               horario_motor_desligado: null,
               tempo_decolagem_pouso: null,
               tempo_total: null,
-              tempo_navegacao: null,
-              tempo_ifr: null,
-              tempo_noturno: null,
+              tempo_navegacao: '00:50',
+              tempo_ifr: '00:10',
+              tempo_noturno: '00:05',
               pousos_diurnos: 0,
               pousos_noturnos: 0,
               starts: 0,
@@ -308,6 +308,11 @@ describe('Pilot offline package', () => {
     expect(body.data.rdv).toMatchObject({ id: 90, versao: 3, workflow_status: 'rascunho' });
     expect(body.data.tripulantes).toHaveLength(1);
     expect(body.data.etapas).toHaveLength(1);
+    expect(body.data.etapas[0]).toMatchObject({
+      tempo_navegacao: '00:50',
+      tempo_ifr: '00:10',
+      tempo_noturno: '00:05',
+    });
     expect(body.data.abastecimentos[0]).toMatchObject({ id: 20, tem_anexo: true });
     expect(body.data.abastecimentos[0].anexo_r2_key).toBeUndefined();
   });
