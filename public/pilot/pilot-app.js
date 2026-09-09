@@ -1335,12 +1335,19 @@ function openPackageRecord(record) {
   ]);
 
   flightDetailCard.classList.remove('hidden');
+  void refreshLeaseControls(record);
   flightDetailCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function closePackageDetail() {
+  closeOperationalEditor();
+  activePackageRecord = null;
+  activeVerifiedLease = null;
   flightDetailCard.classList.add('hidden');
   flightDetail.replaceChildren();
+  prepareEditOfflineButton.disabled = true;
+  openLocalDraftButton.disabled = true;
+  setLeaseMessage('Abra um pacote de voo para avaliar o lease offline.', 'attention');
 }
 
 function renderProvisioningState() {
@@ -1468,14 +1475,25 @@ function flushDiagnosticSave() {
   return enqueueDiagnosticSave(draftInput.value);
 }
 
-function lockVault() {
+async function lockVault() {
   if (saveTimer !== null) {
     window.clearTimeout(saveTimer);
     saveTimer = null;
   }
+  if (operationalSaveTimer !== null) {
+    window.clearTimeout(operationalSaveTimer);
+    operationalSaveTimer = null;
+  }
+  await Promise.allSettled([flushDiagnosticSave(), flushOperationalSave()]);
   vault.lock();
   cachedPackageRecords = [];
   onlineFlightRecords = [];
+  activePackageRecord = null;
+  activeVerifiedLease = null;
+  activeRdvDraft = null;
+  activeStageDrafts = [];
+  operationalLocalSequence = 0;
+  operationalNextSequence = 0;
   workspace.classList.add('hidden');
   closePackageDetail();
   unlockCard.classList.remove('hidden');
@@ -1488,6 +1506,7 @@ function lockVault() {
 window.addEventListener('online', () => {
   setConnectivity();
   if (vault?.isUnlocked()) void loadOnlineFlights();
+  if (activePackageRecord) void refreshLeaseControls(activePackageRecord);
 });
 window.addEventListener('offline', () => {
   setConnectivity();
@@ -1495,20 +1514,33 @@ window.addEventListener('offline', () => {
     onlineFlightRecords = [];
     renderOnlineFlights();
     setSessionMessage('Offline — mostrando apenas pacotes cifrados já armazenados.', 'attention');
+    if (activePackageRecord) void refreshLeaseControls(activePackageRecord);
   }
 });
 refreshOnlineButton.addEventListener('click', () => void loadOnlineFlights());
+prepareEditOfflineButton.addEventListener('click', () => void prepareOfflineEditing());
+openLocalDraftButton.addEventListener('click', () => void openExistingOperationalDraft());
+closeRdvEditorButton.addEventListener('click', () => void flushOperationalSave().then(closeOperationalEditor));
 closeDetailButton.addEventListener('click', closePackageDetail);
 draftInput.addEventListener('input', scheduleDiagnosticSave);
 draftInput.addEventListener('blur', () => void flushDiagnosticSave());
 saveNowButton.addEventListener('click', () => void flushDiagnosticSave());
-lockButton.addEventListener('click', lockVault);
+lockButton.addEventListener('click', () => void lockVault());
 unlockButton.addEventListener('click', () => void handleUnlock());
 pinInput.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && provisioned) void handleUnlock();
 });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && vault?.isUnlocked()) {
+    void flushDiagnosticSave();
+    void flushOperationalSave();
+  }
+});
 window.addEventListener('pagehide', () => {
-  if (saveTimer !== null && vault?.isUnlocked()) void flushDiagnosticSave();
+  if (vault?.isUnlocked()) {
+    void flushDiagnosticSave();
+    void flushOperationalSave();
+  }
 });
 
 setConnectivity();
