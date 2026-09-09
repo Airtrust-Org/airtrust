@@ -1567,6 +1567,13 @@ controleVoos.post('/voos/:id/rdv/finalizar-preenchimento', auth(), async (c) => 
   if (existing.status === 'preenchimento_finalizado') {
     throw new ApiError('RDV com preenchimento finalizado', 409, 'CONTROLE_VOOS_RDV_LOCKED');
   }
+  if (!['rascunho', 'devolvido'].includes(existing.workflow_status)) {
+    throw new ApiError(
+      'Finalizacao de preenchimento permitida somente em rascunho ou devolvido',
+      409,
+      'CONTROLE_VOOS_RDV_FINALIZACAO_WORKFLOW_INVALID',
+    );
+  }
 
   const payload = await parseJsonPayload(c);
   assertPayloadFields(payload, new Set(['versao']));
