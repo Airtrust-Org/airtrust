@@ -25,6 +25,11 @@ export interface Env {
 
   // Secrets (definir via: wrangler secret put <NOME>)
   JWT_SECRET: string;
+  // Pilot App offline lease signing. Private JWK must remain a Worker secret;
+  // the key id and TTL are non-secret configuration. Missing key = fail closed.
+  PILOT_OFFLINE_LEASE_PRIVATE_KEY_JWK?: string;
+  PILOT_OFFLINE_LEASE_KEY_ID?: string;
+  PILOT_OFFLINE_LEASE_TTL_MINUTES?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';
