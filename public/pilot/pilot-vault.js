@@ -342,4 +342,13 @@ export class PilotVault {
 
     return Promise.all(records.map((record) => this.decryptRecord(storeName, record)));
   }
+
+  async deleteJson(storeName, id) {
+    this.assertStore(storeName);
+    this.assertUnlocked();
+
+    const transaction = this.database.transaction(storeName, 'readwrite');
+    transaction.objectStore(storeName).delete(id);
+    await transactionDone(transaction);
+  }
 }
