@@ -1177,6 +1177,73 @@ describe('controle voos routes', () => {
     ]);
   });
 
+  it('exige versao explicita para finalizar preenchimento', async () => {
+    const db = createSqliteD1();
+
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload()),
+    });
+
+    const response = await request(db, '/api/controle-voos/voos/601/rdv/finalizar-preenchimento', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_RDV_VERSION_REQUIRED',
+    });
+  });
+
+  it('nao trava RDV incompleto: alerta impeditivo bloqueia finalizacao sem efeitos parciais', async () => {
+    const db = createSqliteD1();
+
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(
+        validRdvPayload({
+          combustivel_pouso: null,
+          combustivel_consumo: null,
+        }),
+      ),
+    });
+
+    const versao = await currentVersao(db);
+    const response = await request(db, '/api/controle-voos/voos/601/rdv/finalizar-preenchimento', {
+      method: 'POST',
+      body: JSON.stringify({ versao }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_RDV_FINALIZACAO_BLOQUEADA_POR_ALERTA',
+    });
+
+    const rdv = await db
+      .prepare('SELECT id, status, versao FROM cv_rdv_operacional WHERE voo_id = 601')
+      .first<{ id: number; status: string; versao: number }>();
+    expect(rdv).toMatchObject({ status: 'rascunho', versao });
+
+    const approvals = await db
+      .prepare(
+        `SELECT COUNT(*) AS total FROM cv_rdv_aprovacoes
+         WHERE rdv_id = ? AND empresa_id = 1 AND tipo_aprovacao = 'COMANDANTE'`,
+      )
+      .bind(rdv?.id)
+      .first<{ total: number }>();
+    expect(approvals?.total).toBe(0);
+
+    const events = await db
+      .prepare(
+        `SELECT COUNT(*) AS total FROM cv_voo_eventos
+         WHERE voo_id = 601 AND tipo_evento = 'rdv'
+           AND json_extract(metadata_json, '$.action') = 'finalize'`,
+      )
+      .first<{ total: number }>();
+    expect(events?.total).toBe(0);
+  });
+
   it('rejeita finalizacao com versao stale sem evento nem aprovacao parcial', async () => {
     const db = createSqliteD1();
 
