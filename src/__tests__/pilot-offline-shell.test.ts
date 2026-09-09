@@ -143,7 +143,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('não é Diário de Bordo oficial');
     expect(pilotIndex).toContain('outbox cifrada e receipt idempotente');
     expect(pilotApp).toContain("contract?.read_only !== true");
-    expect(pilotApp).toContain("contract?.sync_supported !== false");
+    expect(pilotApp).toContain("typeof contract?.sync_supported !== 'boolean'");
     expect(pilotApp).toContain("contract?.regulated_edb !== false");
     expect(pilotIndex).toContain('Rascunho operacional local');
     expect(pilotIndex).toContain('Não sincronizado');
@@ -169,6 +169,12 @@ describe('Pilot Offline shell', () => {
     expect(batchIndex).toBeGreaterThan(-1);
     expect(readRdvIndex).toBeGreaterThan(batchIndex);
     expect(readyIndex).toBeGreaterThan(readRdvIndex);
+  });
+
+  it('aceita capability de sync booleana sem promover o pacote a eDB regulatorio', () => {
+    expect(pilotApp).toContain("typeof contract?.sync_supported !== 'boolean'");
+    expect(pilotApp).toContain("contract?.regulated_edb !== false");
+    expect(pilotApp).toContain("contract?.sync_supported !== true");
   });
 
   it('bloqueia refresh silencioso com gravacao operacional pendente e mantem sync fail-closed', () => {
