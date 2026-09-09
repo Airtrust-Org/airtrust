@@ -97,7 +97,7 @@ describe('FRMS parameter governance V2', () => {
         [parameter('CICLO_EMBARCADO_ATIVO', 1)],
         ['CICLO_EMBARCADO_ATIVO'],
       );
-      expect(set.values.CICLO_EMBARCADO_POLICY_APPROVED).toBe(0);
+      expect(set.cyclePolicyApproved).toBe(false);
     }
   });
 
@@ -107,7 +107,7 @@ describe('FRMS parameter governance V2', () => {
       [parameter('CICLO_EMBARCADO_ATIVO', 1)],
       ['CICLO_EMBARCADO_ATIVO'],
     );
-    expect(set.values.CICLO_EMBARCADO_POLICY_APPROVED).toBe(1);
+    expect(set.cyclePolicyApproved).toBe(true);
   });
 
   it('continues past a 1,000-item chunk and completes only after the final chunk', async () => {
