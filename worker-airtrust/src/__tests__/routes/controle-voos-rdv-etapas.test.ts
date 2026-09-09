@@ -700,7 +700,7 @@ describe('RDV etapas — CRUD multi-tenant', () => {
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
-      { method: 'POST' },
+      { method: 'POST', body: JSON.stringify({ versao }) },
       PILOTO,
     );
     versao = await getVersao(db);
