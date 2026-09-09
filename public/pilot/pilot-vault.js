@@ -220,7 +220,7 @@ export class PilotVault {
     }
   }
 
-  async putJson(storeName, id, value, localRevision) {
+  async encryptJsonRecord(storeName, id, value, localRevision) {
     this.assertStore(storeName);
     this.assertUnlocked();
 
@@ -234,15 +234,44 @@ export class PilotVault {
       ),
     );
 
-    const transaction = this.database.transaction(storeName, 'readwrite');
-    transaction.objectStore(storeName).put({
+    return {
       id,
       cipher_version: 1,
       iv: bytesToBase64(iv),
       ciphertext: bytesToBase64(ciphertext),
       local_revision: Number(localRevision || 0),
       updated_at: new Date().toISOString(),
-    });
+    };
+  }
+
+  async putJson(storeName, id, value, localRevision) {
+    const record = await this.encryptJsonRecord(storeName, id, value, localRevision);
+    const transaction = this.database.transaction(storeName, 'readwrite');
+    transaction.objectStore(storeName).put(record);
+    await transactionDone(transaction);
+  }
+
+  async putJsonBatch(entries) {
+    this.assertUnlocked();
+    if (!Array.isArray(entries) || entries.length === 0) return;
+
+    const records = await Promise.all(
+      entries.map(async (entry) => ({
+        storeName: entry.storeName,
+        record: await this.encryptJsonRecord(
+          entry.storeName,
+          entry.id,
+          entry.value,
+          entry.localRevision,
+        ),
+      })),
+    );
+
+    const storeNames = [...new Set(records.map((entry) => entry.storeName))];
+    const transaction = this.database.transaction(storeNames, 'readwrite');
+    for (const { storeName, record } of records) {
+      transaction.objectStore(storeName).put(record);
+    }
     await transactionDone(transaction);
   }
 
