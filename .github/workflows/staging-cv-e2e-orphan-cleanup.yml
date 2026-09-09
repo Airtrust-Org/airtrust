@@ -49,9 +49,9 @@ jobs:
           [[ -n "$REASON" ]] || { echo "reason is required" >&2; exit 1; }
           echo "Synthetic staging D1 cleanup requested for run ${RUN_ID,,}."
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
 
