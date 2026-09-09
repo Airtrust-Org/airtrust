@@ -77,6 +77,7 @@ assert_count "cpf-index-contract" "1" "SELECT COUNT(*) AS count FROM sqlite_mast
 assert_count "matricula-index-contract" "1" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name='ux_funcionarios_matricula_empresa_active' AND UPPER(sql) LIKE '%EMPRESA_ID, TRIM(MATRICULA)%' AND sql LIKE '%deleted_at IS NULL%';"
 assert_count "email-index-contract" "1" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name='ux_funcionarios_email_empresa_active' AND UPPER(sql) LIKE '%EMPRESA_ID, LOWER(TRIM(EMAIL))%' AND sql LIKE '%deleted_at IS NULL%';"
 
+assert_count "tenant-index:qualificacoes_tipos.codigo" "1" "SELECT COUNT(*) AS count FROM pragma_index_list('qualificacoes_tipos') WHERE name = 'idx_qualificacoes_tipos_codigo_empresa_active' AND \"unique\" = 1;"
 assert_count "global-legacy-unique-indexes" "0" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name IN ('ux_funcionarios_cpf','ux_funcionarios_matricula','ux_funcionarios_email','ux_qualificacoes_tipos_codigo');"
 assert_count "ambiguous-legacy-indexes" "0" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name IN ('idx_funcionarios_cpf','idx_funcionarios_matricula');"
 
