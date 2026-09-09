@@ -96,6 +96,7 @@ import { sigvoosRouter } from './routes/integracoes_sigvoos';
 import controleVoosRoutes from './routes/controle-voos';
 import controleVoosRdvWorkflowRoutes from './routes/controle-voos-rdv-workflow';
 import controleVoosRdvEtapasRoutes from './routes/controle-voos-rdv-etapas';
+import controleVoosPilotOfflineRoutes from './routes/controle-voos-pilot-offline';
 import controleVoosFrmsContractRoutes from './routes/controle-voos-frms-contract';
 import controleVoosFrmsDispatchGateRoutes, {
   controleVoosDispatchGateGuard,
@@ -710,6 +711,7 @@ app.use('/api/controle-voos/voos/:id/status', controleVoosDispatchGateGuard());
 // Rotas estáticas/específicas do workflow (incluindo /voos/meus) devem ser
 // montadas antes do CRUD genérico /voos/:id para evitar captura de "meus" como id.
 app.route('/api/controle-voos', controleVoosRdvWorkflowRoutes);
+app.route('/api/controle-voos', controleVoosPilotOfflineRoutes);
 app.route('/api/controle-voos', controleVoosRoutes);
 app.route('/api/controle-voos', controleVoosRdvEtapasRoutes);
 app.route('/api/controle-voos', controleVoosFrmsContractRoutes);
