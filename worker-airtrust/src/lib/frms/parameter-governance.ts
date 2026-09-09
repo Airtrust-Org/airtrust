@@ -52,6 +52,7 @@ export interface ResolvedFrmsParameterSet {
   revision: Readonly<FrmsConfigRevision>;
   values: Readonly<Record<string, number>>;
   modelVersion: string;
+  cyclePolicyApproved: boolean;
 }
 
 /**
@@ -123,7 +124,10 @@ export async function resolveFrmsOperationalContext(
     regulatoryProfileId: assignment.regulatory_profile_id,
     configRevisionId: parameterSet.revision.id, modelVersion: parameterSet.modelVersion,
     effectiveFrom: parameterSet.revision.effective_from, effectiveTo: parameterSet.revision.effective_to,
-    parameters: parameterSet.values,
+    parameters: Object.freeze({
+      ...parameterSet.values,
+      CICLO_EMBARCADO_POLICY_APPROVED: parameterSet.cyclePolicyApproved ? 1 : 0,
+    }),
     fadigaPolicy: resolveFadigaBusinessPolicy(parameterSet.values),
     fortnightPolicy: resolveFortnightPolicy(parameterSet.values),
   });
@@ -213,16 +217,17 @@ export function buildResolvedParameterSet(
   }
 
   // The legacy embarked-cycle factor is an internal model assumption whose
-  // 15-day provenance is explicitly unresolved. Keep its stored parameters
-  // auditable, but expose an operational approval bit only when a new governed
-  // revision deliberately classifies the policy as approved.
-  values.CICLO_EMBARCADO_POLICY_APPROVED =
-    revision.source_type === FRMS_APPROVED_OPERATIONAL_POLICY_SOURCE ? 1 : 0;
+  // 15-day provenance is explicitly unresolved. Keep persisted values byte-for-
+  // byte auditable; approval is separate metadata and is injected only into the
+  // operational calculation context.
+  const cyclePolicyApproved =
+    revision.source_type === FRMS_APPROVED_OPERATIONAL_POLICY_SOURCE;
 
   return Object.freeze({
     revision: Object.freeze({ ...revision }),
     values: Object.freeze({ ...values }),
     modelVersion: revision.policy_version,
+    cyclePolicyApproved,
   });
 }
 
