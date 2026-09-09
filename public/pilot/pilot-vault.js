@@ -119,6 +119,32 @@ export class PilotVault {
     return Boolean(record);
   }
 
+  async getOrCreateDeviceId() {
+    const id = 'pilot-device-identity';
+    let transaction = this.database.transaction('meta', 'readonly');
+    let record = await requestResult(transaction.objectStore('meta').get(id));
+    await transactionDone(transaction);
+    if (record?.device_id) return String(record.device_id);
+
+    const deviceId = crypto.randomUUID();
+    transaction = this.database.transaction('meta', 'readwrite');
+    transaction.objectStore('meta').put({
+      id,
+      version: 1,
+      device_id: deviceId,
+      created_at: new Date().toISOString(),
+    });
+    await transactionDone(transaction);
+
+    transaction = this.database.transaction('meta', 'readonly');
+    record = await requestResult(transaction.objectStore('meta').get(id));
+    await transactionDone(transaction);
+    if (!record?.device_id) {
+      throw new Error('Falha ao persistir identidade local do tablet.');
+    }
+    return String(record.device_id);
+  }
+
   async provision(pin) {
     if (typeof pin !== 'string' || pin.length < 6) {
       throw new Error('O PIN offline deve ter pelo menos 6 caracteres.');
