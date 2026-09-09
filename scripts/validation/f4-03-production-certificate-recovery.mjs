@@ -94,8 +94,7 @@ const rows = query(`
           '/api/pasta-virtual/stream/' || CAST(d.id AS TEXT),
           '/api/certificados/stream/' || CAST(d.id AS TEXT)
         ) AND d.deleted_at IS NULL LIMIT 1),
-      (SELECT d.created_at FROM pasta_virtual pv
-        JOIN documentos d ON d.id = pv.documento_id AND d.deleted_at IS NULL
+      (SELECT pv.dataupload FROM pasta_virtual pv
         WHERE pv.certificacao_id = qh.id AND pv.deleted_at IS NULL
         ORDER BY pv.id DESC LIMIT 1)
     ) AS source_created_at
