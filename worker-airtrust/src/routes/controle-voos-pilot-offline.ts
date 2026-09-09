@@ -42,6 +42,7 @@ import {
 } from '../services/controle-voos/pilot-offline-sync';
 import { applyPilotOfflineSnapshotCommand } from '../services/controle-voos/pilot-offline-sync-apply';
 import { buildPilotOfflineWorkspace } from '../services/controle-voos/pilot-offline-workspace';
+import { loadPilotOfflineEdbShadow } from '../services/controle-voos/pilot-offline-edb-shadow';
 
 const pilotOffline = new Hono<{ Bindings: Env }>();
 
@@ -479,21 +480,29 @@ pilotOffline.get(
       tem_anexo: Boolean(anexo_r2_key),
     }));
     const generatedAt = new Date().toISOString();
-    const workspace = await buildPilotOfflineWorkspace({
-      db: c.env.DB,
-      empresaId,
-      generatedAt,
-      redemetApiKey: c.env.REDEMET_API_KEY,
-      voo,
-      origem,
-      destino,
-      alternado,
-      aeronave,
-      tripulantes,
-      etapas,
-      abastecimentos,
-      rdv,
-    });
+    const [workspace, edbShadow] = await Promise.all([
+      buildPilotOfflineWorkspace({
+        db: c.env.DB,
+        empresaId,
+        generatedAt,
+        redemetApiKey: c.env.REDEMET_API_KEY,
+        voo,
+        origem,
+        destino,
+        alternado,
+        aeronave,
+        tripulantes,
+        etapas,
+        abastecimentos,
+        rdv,
+      }),
+      loadPilotOfflineEdbShadow({
+        env: c.env,
+        tenantId: empresaId,
+        flightId: voo.id,
+        generatedAt,
+      }),
+    ]);
 
     const sourceRevision = {
       voo: voo.versao,
@@ -566,6 +575,7 @@ pilotOffline.get(
         etapas,
         abastecimentos,
         workspace,
+        edb_shadow: edbShadow,
         rdv: rdv
           ? {
               id: rdv.id,
