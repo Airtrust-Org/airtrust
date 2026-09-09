@@ -52,6 +52,8 @@ test.describe.serial('layout/UX residual audit closeout', () => {
   });
 
   test('N-09 SGSO listed synthetic record opens its real detail route', async ({ page }) => {
+    await page.goto('/sgso', { waitUntil: 'domcontentloaded' });
+    await waitForApp(page);
     const token = await readBearer(page);
     const marker = `AIRTRUST-QA-N09-${RUN_MARKER}`;
 
