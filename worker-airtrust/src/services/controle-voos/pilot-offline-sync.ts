@@ -463,3 +463,116 @@ export function commandResultFromAccepted(input: {
     conflict: null,
   };
 }
+
+
+export async function assertOfflineSyncReceiptSchemaReady(db: D1Database): Promise<void> {
+  const row = await db
+    .prepare(
+      "SELECT COUNT(*) AS total FROM sqlite_master WHERE type = 'table' AND name = 'cv_offline_sync_receipts'",
+    )
+    .first<{ total: number }>()
+    .catch(() => null);
+  if (!row || Number(row.total) !== 1) {
+    throw new ApiError(
+      'Persistencia de idempotencia offline ainda nao esta disponivel neste ambiente',
+      503,
+      'CONTROLE_VOOS_PILOT_SYNC_SCHEMA_UNAVAILABLE',
+    );
+  }
+}
+
+export async function recordOfflineSyncConflict(
+  db: D1Database,
+  input: {
+    empresaId: number;
+    command: PilotOfflineSyncCommand;
+    funcionarioId: number | null;
+    code: string;
+    detail: Record<string, unknown>;
+  },
+): Promise<PilotOfflineSyncCommandResult> {
+  try {
+    await buildOfflineSyncReceiptInsert(db, {
+      empresaId: input.empresaId,
+      command: input.command,
+      funcionarioId: input.funcionarioId,
+      canonicalEntityId: null,
+      serverEntityVersion: null,
+      resultStatus: 'conflict',
+      resultCode: input.code,
+      resultJson: input.detail,
+    }).run();
+  } catch {
+    const raced = await getOfflineSyncReceipt(
+      db,
+      input.empresaId,
+      input.command.client_operation_id,
+    );
+    if (raced) return replayReceipt(raced, input.command);
+    throw new ApiError(
+      'Falha ao registrar conflito de sincronizacao',
+      503,
+      'CONTROLE_VOOS_PILOT_SYNC_RECEIPT_WRITE_FAILED',
+    );
+  }
+
+  const receipt = await getOfflineSyncReceipt(
+    db,
+    input.empresaId,
+    input.command.client_operation_id,
+  );
+  if (!receipt) {
+    throw new ApiError(
+      'Receipt de conflito nao confirmado',
+      503,
+      'CONTROLE_VOOS_PILOT_SYNC_RECEIPT_MISSING',
+    );
+  }
+  return replayReceipt(receipt, input.command);
+}
+
+export function buildAcceptedReceiptForCreatedRdv(
+  db: D1Database,
+  input: {
+    empresaId: number;
+    command: PilotOfflineSyncCommand;
+    funcionarioId: number | null;
+  },
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `
+        INSERT INTO cv_offline_sync_receipts (
+          empresa_id, client_operation_id, voo_id, usuario_id, funcionario_id,
+          device_id, command_type, entity_type, canonical_entity_id, payload_hash,
+          base_server_version, server_entity_version, result_status, result_code,
+          result_json, received_at, updated_at
+        )
+        SELECT
+          ?, ?, ?, ?, ?, ?, ?, ?,
+          (
+            SELECT CAST(id AS TEXT)
+            FROM cv_rdv_operacional
+            WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL AND status <> 'cancelado'
+            ORDER BY id DESC
+            LIMIT 1
+          ),
+          ?, ?, 1, 'accepted', NULL, NULL, datetime('now'), datetime('now')
+        WHERE (SELECT changes()) > 0
+      `,
+    )
+    .bind(
+      input.empresaId,
+      input.command.client_operation_id,
+      input.command.flight_id,
+      input.command.user_id,
+      input.funcionarioId,
+      input.command.device_id,
+      input.command.command_type,
+      input.command.entity_type,
+      input.empresaId,
+      input.command.flight_id,
+      input.command.payload_hash,
+      input.command.base_server_version,
+    );
+}
