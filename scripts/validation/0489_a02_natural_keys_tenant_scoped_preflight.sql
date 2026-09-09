@@ -1,5 +1,7 @@
 -- PREFLIGHT A-02: 0489_a02_natural_keys_tenant_scoped.sql
--- Read-only evidence. Any row returned by sections 1-3 is a NO-GO for apply.
+-- Read-only evidence.
+-- Any row returned by sections 1-3 or 5-7 is a NO-GO for apply.
+-- Section 4 is informational only.
 
 -- 1. CPF: exact equality after the runtime has normalized CPF to digits.
 SELECT empresa_id, cpf AS canonical_cpf, COUNT(*) AS qtd
@@ -10,15 +12,13 @@ WHERE deleted_at IS NULL
 GROUP BY empresa_id, cpf
 HAVING COUNT(*) > 1;
 
--- 2. Matricula: exact, case-sensitive equality. The canonical CRUD sanitizes
--- surrounding whitespace before persistence; this migration does not invent
--- case folding that the runtime does not currently use.
-SELECT empresa_id, matricula AS canonical_matricula, COUNT(*) AS qtd
+-- 2. Matricula: trim-insensitive, case-sensitive identity.
+SELECT empresa_id, TRIM(matricula) AS canonical_matricula, COUNT(*) AS qtd
 FROM funcionarios
 WHERE deleted_at IS NULL
   AND matricula IS NOT NULL
   AND trim(matricula) != ''
-GROUP BY empresa_id, matricula
+GROUP BY empresa_id, TRIM(matricula)
 HAVING COUNT(*) > 1;
 
 -- 3. Email: canonical identity/linkage uses LOWER(TRIM(email)).
@@ -39,11 +39,29 @@ WHERE deleted_at IS NULL
 GROUP BY cpf
 HAVING COUNT(DISTINCT empresa_id) > 1;
 
--- 5. NO-GO drift check: these historical names were UNIQUE in some old
+-- 5. NO-GO legacy data drift: active CPF values must already be in the
+-- canonical digits-only representation used by current runtime writers.
+SELECT id, empresa_id, cpf
+FROM funcionarios
+WHERE deleted_at IS NULL
+  AND cpf IS NOT NULL
+  AND trim(cpf) != ''
+  AND cpf GLOB '*[^0-9]*';
+
+-- 6. NO-GO legacy data drift: the DB constraint canonicalizes surrounding
+-- whitespace for matricula. Existing active rows with non-canonical whitespace
+-- must be reviewed before apply.
+SELECT id, empresa_id, matricula
+FROM funcionarios
+WHERE deleted_at IS NULL
+  AND matricula IS NOT NULL
+  AND trim(matricula) != ''
+  AND matricula <> TRIM(matricula);
+
+-- 7. NO-GO schema drift: these historical names were UNIQUE in some old
 -- migrations but were also recreated as non-unique performance indexes in
 -- other historical states. Canonical current bootstrap does not contain them.
--- If either exists in the target environment, stop and inspect index metadata
--- before applying 0489; do not drop it blindly.
+-- If either exists in the target environment, inspect metadata before apply.
 SELECT name, sql
 FROM sqlite_master
 WHERE type = 'index'
