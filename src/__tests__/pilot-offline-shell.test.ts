@@ -171,6 +171,14 @@ describe('Pilot Offline shell', () => {
     expect(readyIndex).toBeGreaterThan(readRdvIndex);
   });
 
+  it('bloqueia refresh silencioso com gravacao operacional pendente e mantem sync fail-closed', () => {
+    expect(pilotApp).toContain("window.addEventListener('beforeunload'");
+    expect(pilotApp).toContain('operationalNextSequence !== operationalLocalSequence');
+    expect(pilotApp).toContain("event.returnValue = ''");
+    expect(pilotApp).toContain("contract?.sync_supported !== true");
+    expect(pilotApp).toContain('Sincronização ainda não foi habilitada para este pacote de voo.');
+  });
+
   it('separa persistencia local de transmissao e exige receipt antes de remover a outbox', () => {
     expect(pilotIndex).toContain('id="sync-rdv-now"');
     expect(pilotIndex).toContain('“Transmitido” só será');
