@@ -46,8 +46,21 @@ jobs:
       VITE_API_URL: http://127.0.0.1:8787
     steps:
       - uses: actions/checkout@v4
-      - name: install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ripgrep
+      - name: Ensure ripgrep is available
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v rg >/dev/null 2>&1; then
+            rg --version
+            exit 0
+          fi
+          # The hosted runner may carry third-party APT sources (notably Chrome).
+          # Disable only that runner-local source before fallback installation so
+          # unrelated repository metadata cannot make AirTrust CI fail.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ripgrep
+          rg --version
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.node-version'
