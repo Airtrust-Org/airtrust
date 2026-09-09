@@ -896,6 +896,7 @@ describe('calcFatorCicloEmbarcado', () => {
   const customLimites = {
     ...limites,
     CICLO_EMBARCADO_ATIVO: 1,
+    CICLO_EMBARCADO_POLICY_APPROVED: 1,
     CICLO_EMBARCADO_DIA_INICIO: 1,
     CICLO_EMBARCADO_DIA_MAX: 14,
     // Escala canônica: fração assinada (ver LIMITES_DEFAULT e D-03).
@@ -906,6 +907,14 @@ describe('calcFatorCicloEmbarcado', () => {
   it('retorna 0 quando funcionalidade desativada', () => {
     const off = { ...customLimites, CICLO_EMBARCADO_ATIVO: 0 };
     expect(calcFatorCicloEmbarcado(7, off)).toBe(0);
+  });
+
+  it('retorna 0 sem aprovação governada explícita da política', () => {
+    const unapproved = { ...customLimites, CICLO_EMBARCADO_POLICY_APPROVED: 0 };
+    expect(calcFatorCicloEmbarcado(7, unapproved)).toBe(0);
+    const missingApproval = { ...customLimites };
+    delete missingApproval.CICLO_EMBARCADO_POLICY_APPROVED;
+    expect(calcFatorCicloEmbarcado(7, missingApproval)).toBe(0);
   });
 
   it('retorna 0 quando diaDoCiclo é null', () => {
