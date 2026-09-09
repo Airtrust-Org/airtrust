@@ -49,6 +49,7 @@ import {
   assertRdvRules,
   normalizeRdvInput,
 } from '../services/controle-voos/rdv-validation';
+import { computeRdvAlertRules } from '../services/controle-voos/rdv-alertas';
 
 type OperationalReadFilters = {
   dataInicio: string;
@@ -1575,6 +1576,16 @@ controleVoos.post('/voos/:id/rdv/finalizar-preenchimento', auth(), async (c) => 
       'Versao do RDV desatualizada. Recarregue os dados antes de continuar.',
       409,
       'CONTROLE_VOOS_RDV_VERSION_CONFLICT',
+    );
+  }
+
+  const alerts = await computeRdvAlertRules(c.env.DB, empresaId, flight, existing);
+  const blocking = alerts.filter((alert) => alert.severidade === 'IMPEDE_ENVIO');
+  if (blocking.length > 0) {
+    throw new ApiError(
+      `Preenchimento ainda incompleto: ${blocking.map((alert) => alert.mensagem).join('; ')}`,
+      409,
+      'CONTROLE_VOOS_RDV_FINALIZACAO_BLOQUEADA_POR_ALERTA',
     );
   }
 
