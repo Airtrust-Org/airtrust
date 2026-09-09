@@ -11,7 +11,7 @@ The table exists only to remember the canonical outcome of a client operation an
 ## Data and tenant invariants
 - additive-only change; no backfill and no existing row mutation;
 - every receipt is scoped by `empresa_id`;
-- `client_operation_id` is unique only inside a tenant: `UNIQUE (empresa_id, client_operation_id)`;
+- `client_operation_id` is unique only inside a tenant through the named unique index `uq_cv_offline_sync_receipts_empresa_operation` on `(empresa_id, client_operation_id)`;
 - runtime must validate tenant, current user, current crew membership, capabilities, flight state and optimistic versions before accepting a command;
 - the table stores `payload_hash` only, never the operational request payload;
 - a repeated `client_operation_id` with the same `payload_hash` replays the prior safe result;
