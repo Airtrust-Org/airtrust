@@ -117,6 +117,7 @@ function defaultStageFromPackage(packageData) {
     horario_decolagem: toInputDateTime(voo.horario_real_partida || voo.horario_previsto_partida),
     horario_pouso: toInputDateTime(voo.horario_real_chegada || voo.horario_previsto_chegada),
     horario_motor_desligado: '',
+    tempo_navegacao: '',
     tempo_ifr: '',
     tempo_noturno: '',
     pousos_diurnos: '',
@@ -145,8 +146,9 @@ export function buildStageDraftsFromPackage(packageData) {
     horario_decolagem: toInputDateTime(stage.horario_decolagem),
     horario_pouso: toInputDateTime(stage.horario_pouso),
     horario_motor_desligado: toInputDateTime(stage.horario_motor_desligado),
-    tempo_ifr: toInputNumber(stage.tempo_ifr),
-    tempo_noturno: toInputNumber(stage.tempo_noturno),
+    tempo_navegacao: String(stage.tempo_navegacao || ''),
+    tempo_ifr: String(stage.tempo_ifr || ''),
+    tempo_noturno: String(stage.tempo_noturno || ''),
     pousos_diurnos: toInputNumber(stage.pousos_diurnos),
     pousos_noturnos: toInputNumber(stage.pousos_noturnos),
     starts: toInputNumber(stage.starts),
@@ -260,6 +262,19 @@ export function validateStageDrafts(stageDrafts) {
         stage.horario_decolagem < previous.horario_pouso
       ) {
         errors.push('Etapa ' + (index + 1) + ' inicia antes do pouso da etapa ' + index + '.');
+      }
+    }
+
+    for (const durationField of ['tempo_navegacao', 'tempo_ifr', 'tempo_noturno']) {
+      const duration = String(stage[durationField] || '').trim();
+      if (duration && !/^\d{1,3}:[0-5]\d$/.test(duration)) {
+        errors.push(
+          'Etapa ' +
+            (index + 1) +
+            ': ' +
+            durationField +
+            ' deve usar duração HH:MM.',
+        );
       }
     }
 
@@ -414,8 +429,9 @@ export function buildOfflineSyncPayload(packageData, rdvDraft, stageDrafts) {
       horario_decolagem: fromInputDateTime(fields.horario_decolagem),
       horario_pouso: fromInputDateTime(fields.horario_pouso),
       horario_motor_desligado: fromInputDateTime(fields.horario_motor_desligado),
-      tempo_ifr: parseNumber(fields.tempo_ifr),
-      tempo_noturno: parseNumber(fields.tempo_noturno),
+      tempo_navegacao: String(fields.tempo_navegacao || '').trim() || null,
+      tempo_ifr: String(fields.tempo_ifr || '').trim() || null,
+      tempo_noturno: String(fields.tempo_noturno || '').trim() || null,
       pousos_diurnos: parseInteger(fields.pousos_diurnos),
       pousos_noturnos: parseInteger(fields.pousos_noturnos),
       starts: parseInteger(fields.starts),
