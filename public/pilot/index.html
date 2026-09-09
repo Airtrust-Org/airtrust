@@ -125,10 +125,41 @@
       }
       .small-list { margin: 8px 0 0; padding-left: 20px; line-height: 1.6; }
       .signin-link { color: #12356a; font-weight: 800; }
+      .editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+      .editor-grid .wide { grid-column: 1 / -1; }
+      .editor-stage {
+        border: 1px solid #d9e2ec;
+        border-radius: 16px;
+        padding: 16px;
+        margin-top: 14px;
+        background: #f9fbfd;
+      }
+      .editor-stage h3 { margin-bottom: 8px; }
+      .field-note { display: block; margin-top: 5px; color: #66758a; font-size: .78rem; font-weight: 500; }
+      .field-error { display: block; margin-top: 5px; color: #a52727; font-size: .78rem; font-weight: 700; }
+      .lease-box {
+        margin-top: 16px;
+        border-radius: 14px;
+        border: 1px solid #c8d4e2;
+        padding: 14px;
+        background: #f7f9fc;
+      }
+      .lease-box strong { display: block; margin-bottom: 4px; }
+      .draft-banner {
+        position: sticky;
+        top: max(8px, env(safe-area-inset-top));
+        z-index: 2;
+        margin-bottom: 14px;
+        border-radius: 14px;
+        padding: 12px 14px;
+        border: 1px solid #b9dfce;
+        background: #f4fbf8;
+      }
       details summary { cursor: pointer; font-weight: 800; }
       @media (max-width: 700px) {
         .topbar { align-items: flex-start; flex-direction: column; }
-        .row, .meta, .detail-grid { grid-template-columns: 1fr; }
+        .row, .meta, .detail-grid, .editor-grid { grid-template-columns: 1fr; }
+        .editor-grid .wide { grid-column: auto; }
         .pill { align-self: flex-start; }
         .flight-item { grid-template-columns: 1fr; }
         .flight-item button { width: 100%; }
@@ -143,7 +174,7 @@
           <img src="/airtrust-site-logo-20260830-192.png" alt="" />
           <div>
             <h1>AirTrust Pilot</h1>
-            <p class="subtitle">Workspace operacional offline — validação read-only</p>
+            <p class="subtitle">Workspace operacional offline para tablet</p>
           </div>
         </div>
         <div id="connectivity" class="pill" aria-live="polite">
@@ -153,11 +184,12 @@
       </header>
 
       <section class="card warning">
-        <h2>Consulta offline de voo real</h2>
+        <h2>Pacote real + rascunho offline protegido</h2>
         <p class="muted">
-          Esta fase permite baixar um voo autorizado e consultá-lo sem rede após desbloquear o
-          armazenamento local. Edição real, lease offline, sincronização e envio à Coordenação
-          ainda permanecem desabilitados. Este conteúdo não é Diário de Bordo oficial.
+          O pacote do voo pode ser consultado sem rede. A edição do rascunho operacional só é
+          liberada após validação de um lease assinado, específico deste usuário, tenant, tablet
+          e voo. Sincronização e envio à Coordenação continuam fora desta entrega. Este conteúdo
+          não é Diário de Bordo oficial.
         </p>
       </section>
 
@@ -198,7 +230,7 @@
           <div class="meta">
             <div><span class="muted">Pacotes locais</span><strong id="cached-count">0</strong></div>
             <div><span class="muted">Armazenamento</span><strong id="storage">Verificando…</strong></div>
-            <div><span class="muted">Modo</span><strong>Consulta read-only</strong></div>
+            <div><span class="muted">Modo</span><strong>Offline protegido por lease</strong></div>
           </div>
         </section>
 
@@ -229,6 +261,59 @@
           </div>
           <div id="detail-status" class="statusline ok"></div>
           <div id="flight-detail"></div>
+          <div class="lease-box">
+            <strong>Edição offline do RDV</strong>
+            <p class="muted">
+              Antes do voo, prepare um lease online. Depois de verificado, o lease e os rascunhos
+              ficam cifrados neste tablet e podem ser usados sem conexão até a validade indicada.
+            </p>
+            <div class="actions">
+              <button id="prepare-edit-offline" class="primary" type="button">
+                Preparar edição offline
+              </button>
+              <button id="open-local-draft" class="secondary" type="button">
+                Abrir rascunho local
+              </button>
+            </div>
+            <div id="lease-status" class="statusline attention" aria-live="polite"></div>
+          </div>
+        </section>
+
+        <section id="rdv-editor-card" class="card hidden">
+          <div class="draft-banner">
+            <strong>Rascunho operacional local</strong>
+            <div id="rdv-editor-save-status" class="statusline attention" aria-live="polite">
+              Nenhuma alteração pendente.
+            </div>
+          </div>
+          <div class="section-head">
+            <div>
+              <h2 id="rdv-editor-title">Etapas / RDV</h2>
+              <p id="rdv-editor-subtitle" class="muted"></p>
+            </div>
+            <button id="close-rdv-editor" class="secondary" type="button">Fechar rascunho</button>
+          </div>
+          <div class="meta">
+            <div><span class="muted">Sequência local</span><strong id="rdv-local-sequence">0</strong></div>
+            <div><span class="muted">Lease válido até</span><strong id="rdv-lease-until">—</strong></div>
+            <div><span class="muted">Servidor</span><strong>Não sincronizado</strong></div>
+          </div>
+
+          <h3 style="margin-top:20px">RDV</h3>
+          <div id="rdv-form-fields" class="editor-grid"></div>
+
+          <h3 style="margin-top:24px">Etapas</h3>
+          <p class="muted">
+            Horários, combustíveis, PAX/POB, payload, pousos e tempos são armazenados localmente.
+            Campos não comprovados não são derivados silenciosamente.
+          </p>
+          <div id="rdv-stage-fields"></div>
+
+          <p class="muted" style="margin-top:18px">
+            Nesta fase, “Salvo no tablet” significa somente persistência cifrada local. Não significa
+            que o servidor recebeu os dados. Finalização, outbox e transmissão à Coordenação serão
+            habilitados apenas na fase de sincronização idempotente.
+          </p>
         </section>
 
         <details id="diagnostic-card" class="card">
