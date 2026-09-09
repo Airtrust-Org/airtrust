@@ -550,6 +550,7 @@ pilotOffline.get(
               divergencias: rdv.divergencias,
               status: rdv.status,
               workflow_status: rdv.workflow_status,
+              enviado_em: rdv.enviado_em,
               versao: rdv.versao,
               updated_at: rdv.updated_at,
             }
