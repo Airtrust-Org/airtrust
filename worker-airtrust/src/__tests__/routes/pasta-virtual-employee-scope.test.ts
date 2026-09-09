@@ -50,6 +50,8 @@ function createDb() {
           calls.push({ query, bindings, method: 'first' });
           if (query.includes('COUNT(*) as total')) return { total: 1 };
           if (query.includes('SELECT f.id FROM funcionarios f')) return { id: bindings[0] };
+          if (query.includes('SELECT f.cpf, f.nome')) return { cpf: null, nome: 'Instrutor QA' };
+          if (query.includes('sqlite_master')) return { name: 'documentos' };
           return null;
         },
         all: async () => {
@@ -77,7 +79,7 @@ function createDb() {
         },
         run: async () => {
           calls.push({ query, bindings, method: 'run' });
-          return { meta: { changes: 1 } };
+          return { meta: { changes: 1, last_row_id: 42 } };
         },
       });
 
@@ -203,5 +205,32 @@ describe('pasta virtual employee scope', () => {
     );
     expect(lookup?.query).toContain('f.id = ?');
     expect(lookup?.bindings).toEqual([999, 6, 10]);
+  });
+
+  it('permite upload para funcionário com CPF nulo sem erro 500', async () => {
+    const { db } = createDb();
+    const pdfContent = new Uint8Array([
+      ...[0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34], // %PDF-1.4
+      ...new Array(1024).fill(0x30),
+    ]);
+    const file = new File([pdfContent], 'documento.pdf', { type: 'application/pdf' });
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('funcionario_id', '10');
+    formData.append('tipo_documento', 'CERTIFICADO_QUALIFICACAO');
+
+    const response = await pastaVirtualRoutes.request(
+      'http://localhost/upload',
+      {
+        method: 'POST',
+        body: formData,
+      },
+      env(db),
+    );
+
+    expect(response.status).toBe(201);
+    const json = await response.json();
+    expect(json.success).toBe(true);
+    expect(json.data.id).toBe(42);
   });
 });

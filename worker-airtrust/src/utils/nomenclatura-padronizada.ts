@@ -124,7 +124,7 @@ export function gerarNomeArquivoPadronizado(params: NomeArquivoParams): string {
 
     case 'OUTRO':
     default: {
-      return `DOC-OUTROS-${cpf}-${dataStr}-${uuidShort}.pdf`;
+      return `DOC-OUTROS-${identificador}-${dataStr}-${uuidShort}.pdf`;
     }
   }
 }

@@ -764,14 +764,14 @@ app.post('/upload', auth(), async (c) => {
           LIMIT 1`,
       )
       .bind(funcionarioId, empresaId, ...employeeScope.bindings)
-      .first<{ cpf: string; nome: string }>();
+      .first<{ cpf: string | null; nome: string | null }>();
 
     if (!funcionario) {
       return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
     }
 
-    // Remover formatação do CPF (deixar apenas números)
-    const cpfLimpo = funcionario.cpf.replace(/\D/g, '');
+    // Remover formatação do CPF (deixar apenas números se presente)
+    const cpfLimpo = (funcionario.cpf || '').replace(/\D/g, '');
 
     // Parse data de realização (se fornecida, senão usa data atual do upload)
     let dataRealizacao: Date;

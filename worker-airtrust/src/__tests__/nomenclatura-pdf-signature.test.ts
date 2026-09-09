@@ -53,4 +53,25 @@ describe('validarAssinaturaPDF', () => {
     expect(validationIndex).toBeGreaterThan(-1);
     expect(uploadIndex).toBeGreaterThan(validationIndex);
   });
+
+  it('gerarNomeArquivoPadronizado handles missing or null CPF gracefully', async () => {
+    const { gerarNomeArquivoPadronizado } = await import('../utils/nomenclatura-padronizada');
+    const nomeCert = gerarNomeArquivoPadronizado({
+      tipo: 'CERTIFICADO_QUALIFICACAO',
+      nomeFuncionario: 'QA Instrutor Examinador',
+      cpf: '',
+      data: new Date(2026, 8, 9),
+      codigo: 'PP',
+      uuid: '12345678-abcd-ef01-2345-6789abcdef01',
+    });
+    expect(nomeCert).toBe('CERT-QA_INSTRUTOR_EXAMINADOR-PP-20260909-12345678.pdf');
+
+    const nomeOutro = gerarNomeArquivoPadronizado({
+      tipo: 'OUTRO',
+      nomeFuncionario: 'QA Instrutor Examinador',
+      data: new Date(2026, 8, 9),
+      uuid: '12345678-abcd-ef01-2345-6789abcdef01',
+    });
+    expect(nomeOutro).toBe('DOC-OUTROS-QA_INSTRUTOR_EXAMINADOR-20260909-12345678.pdf');
+  });
 });
