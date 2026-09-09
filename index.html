@@ -84,16 +84,25 @@
         const recoverLogin = async () => {
           const cacheNames =
             'caches' in window && typeof caches.keys === 'function' ? await caches.keys() : [];
-          const airTrustCacheNames = cacheNames.filter((name) => name.startsWith('airtrust-'));
+          const airTrustCacheNames = cacheNames.filter(
+            (name) => name.startsWith('airtrust-') && !name.startsWith('airtrust-pilot-'),
+          );
           const existingRegistrations =
             'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistrations() : [];
+          const legacyRegistrations = existingRegistrations.filter((registration) => {
+            try {
+              return !new URL(registration.scope).pathname.startsWith('/pilot/');
+            } catch {
+              return true;
+            }
+          });
           const hasController =
             'serviceWorker' in navigator && navigator.serviceWorker.controller !== null;
           const shouldReloadOnce =
-            hasController || airTrustCacheNames.length > 0 || existingRegistrations.length > 0;
+            hasController || airTrustCacheNames.length > 0 || legacyRegistrations.length > 0;
 
           await Promise.all(airTrustCacheNames.map((name) => caches.delete(name)));
-          await Promise.all(existingRegistrations.map((registration) => registration.unregister?.()));
+          await Promise.all(legacyRegistrations.map((registration) => registration.unregister?.()));
 
           if (recoveredByQuery) {
             sessionStorage.removeItem(RECOVERY_KEY);
