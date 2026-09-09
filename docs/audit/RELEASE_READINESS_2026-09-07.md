@@ -186,8 +186,8 @@ Requer fonte histórica autoritativa capaz de identificar as 18 linhas exatas.
 
 ### #265 — FOLGA Costa do Sol
 
-**PRODUCTION-WRITE-PENDING.**  
-Código e testes existem. A configuração efetiva do tenant é write autenticado de produção e requer autorização operacional específica, seguido de readback e pós-condições.
+**PRODUCTION-CONFIG-APPLIED / FUNCTIONAL-QA-PENDING.**  
+Em 06/09/2026 houve autorização explícita e o write canônico foi executado no tenant 6: `AMBAS -> FOLGA`, com readback autenticado confirmando `FOLGA` e sem writes não relacionados. Não repetir esse write. O residual é exclusivamente validação funcional read-only: provar proposta apenas em folga, rejeição de dia de trabalho e coerência do label/fluxo com escala publicada. A tentativa automatizada posterior não chegou a autenticar porque o workflow não recebeu uma identidade de smoke de produção.
 
 ### #93 — ANAC eDB
 
