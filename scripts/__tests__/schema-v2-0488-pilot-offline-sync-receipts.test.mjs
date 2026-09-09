@@ -45,9 +45,17 @@ test('0488 Schema V2 SQL is byte-equivalent, additive and tenant scoped', () => 
   assert.match(change, /payload_hash TEXT NOT NULL/);
   assert.match(
     change,
-    /CREATE UNIQUE INDEX IF NOT EXISTS uq_cv_offline_sync_receipts_empresa_operation[sS]*empresa_id, client_operation_id/,
+    /CREATE UNIQUE INDEX IF NOT EXISTS uq_cv_offline_sync_receipts_empresa_operation/,
   );
-  assert.match(change, /result_status IN ('accepted', 'conflict', 'rejected_retriable', 'rejected_permanent')/);
+  assert.match(
+    change,
+    /ON cv_offline_sync_receipts \(empresa_id, client_operation_id\)/,
+  );
+  assert.ok(
+    change.includes(
+      "CHECK (result_status IN ('accepted', 'conflict', 'rejected_retriable', 'rejected_permanent'))",
+    ),
+  );
   assert.match(change, /idx_cv_offline_sync_receipts_voo_received/);
   assert.match(change, /idx_cv_offline_sync_receipts_actor_device/);
   assert.doesNotMatch(
