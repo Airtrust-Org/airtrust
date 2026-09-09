@@ -809,7 +809,7 @@ async function getCoordinationState() {
   const finalizeBlocker = workflowBlocker(finalizeReceipt, 'finalize');
   const sendBlocker = workflowBlocker(sendReceipt, 'send_coordination');
 
-  const editableWorkflow = ['rascunho', 'devolvido', 'reaberto'].includes(
+  const editableWorkflow = ['rascunho', 'devolvido'].includes(
     String(rdv?.workflow_status || ''),
   );
   const sendableWorkflow = ['rascunho', 'devolvido'].includes(
