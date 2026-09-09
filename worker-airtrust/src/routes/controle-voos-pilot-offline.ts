@@ -35,6 +35,8 @@ import {
   assertOfflineSyncCommandHash,
   assertOfflineSyncReceiptSchemaReady,
   assertPilotOfflineSyncEnabled,
+  isOfflineSyncReceiptSchemaReady,
+  isPilotOfflineSyncEnabled,
   parseOfflineSyncBatch,
   type PilotOfflineSyncCommand,
 } from '../services/controle-voos/pilot-offline-sync';
@@ -475,6 +477,9 @@ pilotOffline.get(
     };
 
     const packageId = `pilot-offline:v1:voo:${voo.id}:v${voo.versao}:rdv:${rdv?.versao ?? 0}`;
+    const syncSupported =
+      isPilotOfflineSyncEnabled(c.env) &&
+      (await isOfflineSyncReceiptSchemaReady(c.env.DB));
 
     c.header('Cache-Control', 'no-store, max-age=0');
     c.header('Pragma', 'no-cache');
@@ -488,7 +493,7 @@ pilotOffline.get(
           package_id: packageId,
           generated_at: new Date().toISOString(),
           read_only: true,
-          sync_supported: false,
+          sync_supported: syncSupported,
           attachments_included: false,
           regulated_edb: false,
         },
