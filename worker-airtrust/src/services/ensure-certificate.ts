@@ -15,6 +15,7 @@ import {
   CertificateGenerationError,
   generateCertificateForHistorico,
 } from './generate-certificate';
+import { isCompletedStatus } from '../lib/status/status-codes';
 
 // ── Tipos públicos ─────────────────────────────────────────────────────────────
 
@@ -81,6 +82,13 @@ export async function ensureCertificateForQualification(
       return {
         state: 'SKIPPED',
         reason: `Histórico ${historicoId} não encontrado para empresa ${empresaId}`,
+      };
+    }
+
+    if (!isCompletedStatus(historico.status)) {
+      return {
+        state: 'SKIPPED',
+        reason: `Qualificação ${historicoId} não possui um status de conclusão válido (status atual: ${historico.status}).`,
       };
     }
 
