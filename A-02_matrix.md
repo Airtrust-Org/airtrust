@@ -13,3 +13,5 @@
 - O runtime atual já trata CPF e matrícula no escopo do tenant; a 0489 move essa invariável para o banco sem restaurar unicidade global.
 - O e-mail é a única chave em que a própria identidade canônica usa normalização case/trim.
 - Nenhum apply remoto é autorizado por este artefato. O script `scripts/validation/0489_a02_natural_keys_tenant_scoped_preflight.sql` deve retornar zero conflitos nas três chaves antes de qualquer aplicação governada.
+
+- Ambiguous historical names `idx_funcionarios_cpf` / `idx_funcionarios_matricula` are deliberately **not** dropped by 0489. If either exists remotely, preflight treats that as drift requiring manual metadata inspection before apply.
