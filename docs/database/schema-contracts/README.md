@@ -40,8 +40,8 @@ A snapshot can match the 13 scoped tables perfectly while the contract is still
 | `PRODUCTION_CONFIRMED` | Observed in production read-only, or an ACTIVE `airtrust_schema_changes_v2` row. Needs an in-repo `evidence` pointer. |
 | `REMOTE_APPLY_PENDING` | A reviewed manifest wires it for `Apply Schema Change V2`, but the dispatch has not run / is not confirmed here. **Preparation is not application.** |
 
-`0487` being *prepared and governed* is `REMOTE_APPLY_PENDING`, not applied.
-`0483`–`0486` likewise.
+`0487` has since been applied through the governed Schema V2 path and is `PRODUCTION_CONFIRMED`; see `docs/audit/evidence/0487-qualificacoes-renovacoes-applied-verified-2026-09-09.md`.
+`0483`–`0486` remain independently classified by their current ledger entries.
 
 ## The staleness guard
 
