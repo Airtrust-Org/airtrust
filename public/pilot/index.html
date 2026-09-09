@@ -84,7 +84,7 @@
       .attention { color: #9a5c00; }
       .error { color: #a52727; }
       .hidden { display: none !important; }
-      .meta { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-top: 12px; }
+      .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 12px; }
       .meta > div { background: #f7f9fc; border-radius: 12px; padding: 12px; }
       .meta strong { display: block; margin-top: 4px; word-break: break-word; }
       .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
@@ -231,6 +231,7 @@
             <div><span class="muted">Pacotes locais</span><strong id="cached-count">0</strong></div>
             <div><span class="muted">Armazenamento</span><strong id="storage">Verificando…</strong></div>
             <div><span class="muted">Modo</span><strong>Offline protegido por lease</strong></div>
+            <div><span class="muted">Aguardando transmissão</span><strong id="pending-count">0</strong></div>
           </div>
         </section>
 
@@ -309,10 +310,23 @@
           </p>
           <div id="rdv-stage-fields"></div>
 
+          <div class="lease-box">
+            <strong>Encerramento offline</strong>
+            <p class="muted">
+              Finalizar cria um snapshot fechado e uma operação cifrada em estado
+              ready_to_transmit. Isso não envia nada ao servidor e não equivale a handoff para a
+              Coordenação.
+            </p>
+            <div class="actions">
+              <button id="finalize-offline" class="primary" type="button">Finalizar voo offline</button>
+              <button id="reopen-local" class="secondary hidden" type="button">Reabrir rascunho local</button>
+            </div>
+            <div id="finalize-status" class="statusline attention" aria-live="polite"></div>
+          </div>
           <p class="muted" style="margin-top:18px">
-            Nesta fase, “Salvo no tablet” significa somente persistência cifrada local. Não significa
-            que o servidor recebeu os dados. Finalização, outbox e transmissão à Coordenação serão
-            habilitados apenas na fase de sincronização idempotente.
+            “Salvo no tablet” significa somente persistência cifrada local. “Pronto para
+            transmitir” significa que a outbox foi criada e verificada no tablet. Nenhum desses
+            estados significa que o servidor ou a Coordenação receberam os dados.
           </p>
         </section>
 
