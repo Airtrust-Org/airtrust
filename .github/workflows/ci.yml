@@ -57,7 +57,7 @@ jobs:
           # The hosted runner may carry third-party APT sources (notably Chrome).
           # Disable only that runner-local source before fallback installation so
           # unrelated repository metadata cannot make AirTrust CI fail.
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          grep -RIl 'dl.google.com/linux/chrome-stable' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null | xargs -r sudo rm -f
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ripgrep
           rg --version
