@@ -4,14 +4,42 @@ import type { Env } from '../../types';
 
 const {
   assertRdvSelfScope,
+  hasRdvCapability,
   getFlightOrThrow,
   getActiveRdvByFlight,
   getFuncionarioIdForUser,
+  isCrewOnFlight,
+  buildPilotOfflineLeaseClaims,
+  signPilotOfflineLease,
 } = vi.hoisted(() => ({
   assertRdvSelfScope: vi.fn(async () => undefined),
+  hasRdvCapability: vi.fn(async () => true),
   getFlightOrThrow: vi.fn(),
   getActiveRdvByFlight: vi.fn(),
   getFuncionarioIdForUser: vi.fn(async () => 77),
+  isCrewOnFlight: vi.fn(async () => true),
+  buildPilotOfflineLeaseClaims: vi.fn(() => ({
+    lease_version: 1,
+    purpose: 'offline_flight_lease',
+    tenant_id: 7,
+    user_id: 70,
+    funcionario_id: 77,
+    flight_ids: [42],
+    device_id: 'device-1234567890',
+    issued_at: '2026-09-09T10:00:00.000Z',
+    valid_from: '2026-09-09T09:55:00.000Z',
+    valid_until: '2026-09-09T22:00:00.000Z',
+    app_min_version: '1.0.0',
+    allowed_local_actions: ['open_package', 'edit_rdv_draft'],
+    nonce: 'nonce-test',
+  })),
+  signPilotOfflineLease: vi.fn(async () => ({
+    envelope_version: 1,
+    alg: 'ES256',
+    key_id: 'pilot-test-key',
+    payload: 'payload',
+    signature: 'signature',
+  })),
 }));
 
 vi.mock('../../middleware/auth', () => ({
@@ -33,12 +61,25 @@ vi.mock('../../repositories/controle-voos/rdv-repository', () => ({
   getFlightOrThrow,
   getActiveRdvByFlight,
   getFuncionarioIdForUser,
+  isCrewOnFlight,
 }));
 
 vi.mock('../../services/controle-voos/rdv-workflow', () => ({
-  RDV_CAPABILITIES: { visualizarProprio: 'voos.rdv.visualizar_proprio' },
+  RDV_CAPABILITIES: {
+    visualizarProprio: 'voos.rdv.visualizar_proprio',
+    editarRascunhoProprio: 'voos.rdv.editar_rascunho_proprio',
+    criarProprio: 'voos.rdv.criar_proprio',
+  },
   requireAnyRdvAccess: () => async (_c: any, next: () => Promise<void>) => next(),
   assertRdvSelfScope,
+  hasRdvCapability,
+}));
+
+vi.mock('../../services/controle-voos/pilot-offline-lease', () => ({
+  validatePilotOfflineDeviceId: (value: unknown) => String(value || ''),
+  validatePilotOfflineAppVersion: (value: unknown) => String(value || ''),
+  buildPilotOfflineLeaseClaims,
+  signPilotOfflineLease,
 }));
 
 import pilotOfflineRoutes from '../../routes/controle-voos-pilot-offline';
@@ -269,6 +310,77 @@ describe('Pilot offline package', () => {
     expect(body.data.etapas).toHaveLength(1);
     expect(body.data.abastecimentos[0]).toMatchObject({ id: 20, tem_anexo: true });
     expect(body.data.abastecimentos[0].anexo_r2_key).toBeUndefined();
+  });
+
+  it('emite lease somente para ator vinculado ao voo e em estado editavel', async () => {
+    const response = await createApp().request(
+      'http://localhost/api/controle-voos/voos/42/offline-lease',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer test',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          device_id: 'device-1234567890',
+          app_version: '1.0.0',
+        }),
+      },
+      createEnv(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(hasRdvCapability).toHaveBeenCalledWith(
+      expect.anything(),
+      'voos.rdv.editar_rascunho_proprio',
+    );
+    expect(isCrewOnFlight).toHaveBeenCalledWith(expect.anything(), 7, 42, 77);
+    expect(buildPilotOfflineLeaseClaims).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 7,
+        userId: 70,
+        funcionarioId: 77,
+        flightId: 42,
+        deviceId: 'device-1234567890',
+      }),
+    );
+    expect(signPilotOfflineLease).toHaveBeenCalled();
+
+    const body = (await response.json()) as any;
+    expect(body.data.lease).toMatchObject({
+      envelope_version: 1,
+      alg: 'ES256',
+      key_id: 'pilot-test-key',
+    });
+    expect(body.data.lease_meta).toMatchObject({
+      tenant_id: 7,
+      user_id: 70,
+      funcionario_id: 77,
+      flight_id: 42,
+    });
+    expect(response.headers.get('cache-control')).toContain('no-store');
+  });
+
+  it('nega lease quando o ator nao integra a tripulacao, mesmo tendo capability', async () => {
+    isCrewOnFlight.mockResolvedValueOnce(false);
+    const response = await createApp().request(
+      'http://localhost/api/controle-voos/voos/42/offline-lease',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer test',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          device_id: 'device-1234567890',
+          app_version: '1.0.0',
+        }),
+      },
+      createEnv(),
+    );
+
+    expect(response.status).toBe(403);
+    expect(signPilotOfflineLease).not.toHaveBeenCalled();
   });
 
   it('propaga a negativa de ownership/tenant antes das consultas complementares', async () => {
