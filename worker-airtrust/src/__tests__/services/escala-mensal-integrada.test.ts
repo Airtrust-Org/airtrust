@@ -302,8 +302,7 @@ describe('escala-mensal-integrada — contrato de tenant/filtros/parcialidade', 
     expect(source).toContain('if (filters.funcaoId) bindings.push(filters.funcaoId);');
   });
 
-  it('restringe todas as fontes da visão mensal ao setor Tripulação', () => {
-    expect(source).toContain("UPPER(COALESCE(${alias}.setor, '')) LIKE '%TRIPULA%'");
+  it('aplica filtros de funcionário a todas as fontes da visão mensal', () => {
     expect(source.match(/employeeFilterSql\('f', filters\)/g)).toHaveLength(6);
   });
 

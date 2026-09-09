@@ -41,6 +41,7 @@ export type IntegratedEmployeeMonth = {
   employeeName: string;
   role?: string | null;
   base?: string | null;
+  sector?: string | null;
   summary: {
     scheduledDays: number;
     trainingEvents: number;
@@ -84,6 +85,7 @@ type EmployeeRef = {
   employeeName: string;
   role: string | null;
   base: string | null;
+  sector: string | null;
 };
 
 export type IntegratedMonthlyFilters = {
@@ -360,7 +362,6 @@ function bindEmployeeFilters(base: unknown[], filters: IntegratedMonthlyFilters)
 
 function employeeFilterSql(alias = 'f', filters: IntegratedMonthlyFilters): string {
   const parts: string[] = [];
-  parts.push(`AND UPPER(COALESCE(${alias}.setor, '')) LIKE '%TRIPULA%'`);
   if (filters.employeeId) parts.push(`AND CAST(${alias}.id AS TEXT) = ?`);
   if (filters.baseId) parts.push(`AND COALESCE(${alias}.base, '') = ?`);
   // M1: a função é exposta no contrato e deve filtrar de fato (não pode ser no-op).
@@ -377,7 +378,8 @@ async function loadEmployeeRefs(db: D1Database, empresaId: number, filters: Inte
         CAST(f.id AS TEXT) AS employeeId,
         COALESCE(NULLIF(f.guerra, ''), f.nome) AS employeeName,
         COALESCE(f.funcao, f.cargo) AS role,
-        f.base AS base
+        f.base AS base,
+        f.setor AS sector
       FROM funcionarios f
       WHERE f.deleted_at IS NULL
         AND f.empresa_id = ?
@@ -911,6 +913,7 @@ export function groupIntegratedEmployeeMonths(
         employeeName: event.employeeName,
         role: null,
         base: null,
+        sector: null,
       });
     }
   }
@@ -950,6 +953,7 @@ export function groupIntegratedEmployeeMonths(
         employeeName: employee.employeeName,
         role: employee.role,
         base: employee.base,
+        sector: employee.sector,
         summary: {
           scheduledDays,
           trainingEvents: employeeEvents.filter((event) => event.source === 'TREINAMENTO').length,

@@ -55,6 +55,7 @@ type IntegratedEmployeeMonth = {
   employeeName: string;
   role?: string | null;
   base?: string | null;
+  sector?: string | null;
   summary: {
     scheduledDays: number;
     trainingEvents: number;
@@ -241,6 +242,7 @@ export default function VisaoMensalIntegradaPage() {
   const [query, setQuery] = useState('');
   const [source, setSource] = useState('');
   const [severity, setSeverity] = useState('');
+  const [sectorFilter, setSectorFilter] = useState('');
   const [onlyConflicts, setOnlyConflicts] = useState(false);
   const [onlyBlocking, setOnlyBlocking] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -251,20 +253,41 @@ export default function VisaoMensalIntegradaPage() {
     { bypassGetCache: true, retry: 1 },
   );
 
+  const availableSectors = useMemo(() => {
+    const sectors = new Set<string>();
+    for (const employee of data?.employees || []) {
+      if (employee.sector) {
+        sectors.add(employee.sector.trim());
+      }
+    }
+    return Array.from(sectors).sort();
+  }, [data?.employees]);
+
+  // Set default sector to Tripulação if available and not yet set
+  useEffect(() => {
+    if (!sectorFilter && availableSectors.some(s => s.toUpperCase().includes('TRIPULA'))) {
+      const tripulacaoSector = availableSectors.find(s => s.toUpperCase().includes('TRIPULA'));
+      if (tripulacaoSector) {
+        setSectorFilter(tripulacaoSector);
+      }
+    }
+  }, [availableSectors, sectorFilter]);
+
   const filteredEmployees = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return (data?.employees || []).filter((employee) => {
       if (normalizedQuery) {
-        const haystack = `${employee.employeeName} ${employee.role || ''} ${employee.base || ''}`.toLowerCase();
+        const haystack = `${employee.employeeName} ${employee.role || ''} ${employee.base || ''} ${employee.sector || ''}`.toLowerCase();
         if (!haystack.includes(normalizedQuery)) return false;
       }
+      if (sectorFilter && employee.sector?.trim() !== sectorFilter) return false;
       if (onlyConflicts && employee.summary.conflicts === 0) return false;
       if (onlyBlocking && employee.summary.blockingIssues === 0) return false;
       if (!sourceMatches(employee, source)) return false;
       if (!severityMatches(employee, severity)) return false;
       return true;
     });
-  }, [data?.employees, onlyBlocking, onlyConflicts, query, severity, source]);
+  }, [data?.employees, sectorFilter, onlyBlocking, onlyConflicts, query, severity, source]);
 
   const visualSummary = useMemo(() => {
     let compromissos = 0;
@@ -450,7 +473,7 @@ export default function VisaoMensalIntegradaPage() {
             <Filter className="h-4 w-4" />
             Filtros
           </div>
-          <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_180px_180px_auto_auto]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_180px_180px_180px_auto_auto]">
             <label className="flex min-h-11 items-center gap-2 rounded-md border border-slate-200 px-3">
               <Search className="h-4 w-4 text-slate-500" />
               <input
@@ -460,6 +483,19 @@ export default function VisaoMensalIntegradaPage() {
                 className="w-full border-0 text-sm outline-none"
               />
             </label>
+            <select
+              value={sectorFilter}
+              onChange={(event) => setSectorFilter(event.target.value)}
+              className="min-h-11 rounded-md border border-slate-200 px-3 text-sm"
+              aria-label="Filtrar por setor"
+            >
+              <option value="">Todos os setores</option>
+              {availableSectors.map((sectorName) => (
+                <option key={sectorName} value={sectorName}>
+                  {sectorName}
+                </option>
+              ))}
+            </select>
             <select
               value={source}
               onChange={(event) => setSource(event.target.value)}
@@ -556,7 +592,7 @@ export default function VisaoMensalIntegradaPage() {
                     <div className="border-r border-slate-200 bg-slate-50 p-3">
                       <div className="font-semibold text-slate-950">{employee.employeeName}</div>
                       <div className="mt-1 text-xs text-slate-600">
-                        {[employee.role, employee.base].filter(Boolean).join(' · ') || 'Sem função/base'}
+                        {[employee.role, employee.base, employee.sector].filter(Boolean).join(' · ') || 'Sem função/base/setor'}
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                         <span className="rounded bg-white px-2 py-1 text-slate-700">
