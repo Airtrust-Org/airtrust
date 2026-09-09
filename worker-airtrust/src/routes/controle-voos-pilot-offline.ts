@@ -150,7 +150,7 @@ pilotOffline.post(
 
     const rdv = await getActiveRdvByFlight(c.env.DB, voo.id, empresaId);
     if (rdv) {
-      const editableWorkflow = new Set(['rascunho', 'devolvido', 'reaberto']);
+      const editableWorkflow = new Set(['rascunho', 'devolvido']);
       if (rdv.status !== 'rascunho' || !editableWorkflow.has(rdv.workflow_status)) {
         throw new ApiError(
           'RDV nao esta em estado editavel para uso offline',
