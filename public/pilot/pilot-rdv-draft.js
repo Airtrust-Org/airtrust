@@ -350,3 +350,104 @@ export function assertVerifiedLeaseAllowsDraft(packageData, verifiedLease) {
   }
   return true;
 }
+
+export function collectFinalizationErrors(packageData, rdvDraft, stageDrafts) {
+  const form = rdvDraft?.form || {};
+  const errors = [];
+  const fieldErrors = validateRdvForm(form, packageData);
+  errors.push(...Object.values(fieldErrors));
+
+  const stageErrors = validateStageDrafts(stageDrafts);
+  errors.push(...stageErrors);
+
+  if (!String(form.numero || '').trim()) errors.push('Informe o número do RDV.');
+  if (!String(form.data_voo || '').trim()) errors.push('Informe a data do voo.');
+  if (!String(form.horario_decolagem_real || '').trim()) {
+    errors.push('Informe o horário real de decolagem.');
+  }
+  if (!String(form.horario_pouso_real || '').trim()) {
+    errors.push('Informe o horário real de pouso.');
+  }
+  if (!String(form.combustivel_decolagem || '').trim()) {
+    errors.push('Informe o combustível de decolagem.');
+  }
+  if (!String(form.combustivel_pouso || '').trim()) {
+    errors.push('Informe o combustível de pouso.');
+  }
+  if (!Array.isArray(packageData?.tripulantes) || packageData.tripulantes.length === 0) {
+    errors.push('O voo precisa ter ao menos um tripulante vinculado.');
+  }
+
+  return [...new Set(errors)];
+}
+
+export function buildOfflineSyncPayload(packageData, rdvDraft, stageDrafts) {
+  const identity = assertPackageIdentity(packageData);
+  const form = rdvDraft.form;
+
+  const normalizedRdv = {
+    numero: String(form.numero || '').trim(),
+    data_voo: String(form.data_voo || '').trim(),
+    horario_decolagem_real: fromInputDateTime(form.horario_decolagem_real),
+    horario_pouso_real: fromInputDateTime(form.horario_pouso_real),
+    horas_voadas: parseNumber(form.horas_voadas),
+    numero_pousos: parseInteger(form.numero_pousos),
+    ciclos: parseInteger(form.ciclos),
+    combustivel_decolagem: parseNumber(form.combustivel_decolagem),
+    combustivel_pouso: parseNumber(form.combustivel_pouso),
+    combustivel_consumo: parseNumber(form.combustivel_consumo),
+    pob: parseInteger(form.pob),
+    carga_kg: parseNumber(form.carga_kg),
+    ocorrencias: String(form.ocorrencias || '').trim() || null,
+    divergencias: String(form.divergencias || '').trim() || null,
+  };
+
+  const normalizedStages = stageDrafts.map((stage) => {
+    const fields = stage.fields;
+    return {
+      source_stage_id: stage.source_stage_id,
+      base_server_updated_at: stage.source_stage_updated_at || null,
+      numero_etapa: Number(fields.numero_etapa),
+      origem_icao: String(fields.origem_icao || '').trim().toUpperCase() || null,
+      destino_icao: String(fields.destino_icao || '').trim().toUpperCase() || null,
+      horario_motor_ligado: fromInputDateTime(fields.horario_motor_ligado),
+      horario_decolagem: fromInputDateTime(fields.horario_decolagem),
+      horario_pouso: fromInputDateTime(fields.horario_pouso),
+      horario_motor_desligado: fromInputDateTime(fields.horario_motor_desligado),
+      tempo_ifr: parseNumber(fields.tempo_ifr),
+      tempo_noturno: parseNumber(fields.tempo_noturno),
+      pousos_diurnos: parseInteger(fields.pousos_diurnos),
+      pousos_noturnos: parseInteger(fields.pousos_noturnos),
+      starts: parseInteger(fields.starts),
+      pax: parseInteger(fields.pax),
+      payload: parseNumber(fields.payload),
+      combustivel_inicio: parseNumber(fields.combustivel_inicio),
+      combustivel_fim: parseNumber(fields.combustivel_fim),
+      unidade_combustivel: String(fields.unidade_combustivel || '').trim() || null,
+      timing_events: stage.timing_events || {},
+    };
+  });
+
+  return {
+    contract: {
+      name: 'airtrust-pilot-offline-sync-bundle',
+      version: 1,
+      regulated_edb: false,
+      handoff_requested: false,
+    },
+    identity: {
+      tenant_id: identity.tenantId,
+      user_id: identity.userId,
+      funcionario_id: identity.funcionarioId,
+      flight_id: identity.flightId,
+    },
+    source: {
+      package_id: identity.packageId,
+      flight_version: Number(rdvDraft.source_flight_version || 0),
+      rdv_id: rdvDraft.source_rdv_id ?? null,
+      rdv_version: Number(rdvDraft.source_rdv_version || 0),
+    },
+    rdv: normalizedRdv,
+    stages: normalizedStages,
+  };
+}
