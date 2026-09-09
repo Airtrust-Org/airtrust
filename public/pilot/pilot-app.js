@@ -549,6 +549,266 @@ async function prepareFlightPackage(flightId) {
   }
 }
 
+function setLeaseMessage(message, kind = 'attention') {
+  leaseStatus.className = 'statusline ' + kind;
+  leaseStatus.textContent = message;
+}
+
+function activePackageData() {
+  return activePackageRecord?.value?.package || null;
+}
+
+function offlineLeaseRecordId(flightId) {
+  return 'flight:' + String(flightId) + ':lease';
+}
+
+function rdvDraftRecordId(flightId) {
+  return 'flight:' + String(flightId) + ':rdv';
+}
+
+async function verifyStoredLeaseForPackage(packageData) {
+  if (!hasTrustedPilotLeaseKeys()) {
+    throw new Error('Chave pública confiável do lease ainda não foi provisionada neste build.');
+  }
+  const identity = assertPackageIdentity(packageData);
+  const deviceId = await vault.getOrCreateDeviceId();
+  const stored = await vault.getJson('offline_leases', offlineLeaseRecordId(identity.flightId));
+  if (!stored?.value?.envelope) return null;
+
+  const verified = await verifyPilotOfflineLease(stored.value.envelope, {
+    tenantId: identity.tenantId,
+    userId: identity.userId,
+    flightId: identity.flightId,
+    deviceId,
+  });
+  return { verified, stored };
+}
+
+async function refreshLeaseControls(record) {
+  activePackageRecord = record;
+  activeVerifiedLease = null;
+  closeOperationalEditor();
+
+  if (!record) {
+    prepareEditOfflineButton.disabled = true;
+    openLocalDraftButton.disabled = true;
+    setLeaseMessage('Abra um pacote de voo para avaliar o lease offline.', 'attention');
+    return;
+  }
+
+  if (!hasTrustedPilotLeaseKeys()) {
+    prepareEditOfflineButton.disabled = true;
+    openLocalDraftButton.disabled = true;
+    setLeaseMessage(
+      'Edição bloqueada: chave pública confiável do lease ainda não foi provisionada neste build.',
+      'attention',
+    );
+    return;
+  }
+
+  prepareEditOfflineButton.disabled = !navigator.onLine;
+  openLocalDraftButton.disabled = true;
+  try {
+    const existing = await verifyStoredLeaseForPackage(record.value.package);
+    if (existing?.verified) {
+      activeVerifiedLease = existing.verified;
+      openLocalDraftButton.disabled = false;
+      setLeaseMessage(
+        'Lease válido neste tablet até ' + formatTimestamp(existing.verified.claims.valid_until) + '.',
+        'ok',
+      );
+      return;
+    }
+    setLeaseMessage(
+      navigator.onLine
+        ? 'Nenhum lease válido armazenado. Prepare a edição offline antes do voo.'
+        : 'Sem lease válido local. Reconecte antes do voo para preparar a edição.',
+      'attention',
+    );
+  } catch (error) {
+    setLeaseMessage(error instanceof Error ? error.message : 'Lease local inválido.', 'error');
+  }
+}
+
+async function prepareOfflineEditing() {
+  const packageData = activePackageData();
+  if (!packageData) return;
+
+  if (!hasTrustedPilotLeaseKeys()) {
+    setLeaseMessage(
+      'Edição bloqueada: chave pública confiável do lease ainda não foi provisionada.',
+      'error',
+    );
+    return;
+  }
+
+  prepareEditOfflineButton.disabled = true;
+  setLeaseMessage('Solicitando e verificando lease offline…', 'attention');
+
+  try {
+    const identity = assertPackageIdentity(packageData);
+    const deviceId = await vault.getOrCreateDeviceId();
+    const body = await authenticatedPost(
+      '/controle-voos/voos/' + encodeURIComponent(String(identity.flightId)) + '/offline-lease',
+      {
+        device_id: deviceId,
+        app_version: PILOT_OFFLINE_APP_VERSION,
+      },
+    );
+    const envelope = body?.data?.lease;
+    const verified = await verifyPilotOfflineLease(envelope, {
+      tenantId: identity.tenantId,
+      userId: identity.userId,
+      flightId: identity.flightId,
+      deviceId,
+    });
+
+    const recordId = offlineLeaseRecordId(identity.flightId);
+    const previous = await vault.getJson('offline_leases', recordId);
+    const revision = Number(previous?.localRevision || 0) + 1;
+    await vault.putJson(
+      'offline_leases',
+      recordId,
+      {
+        schema_version: 1,
+        envelope,
+        verified_at: verified.verified_at,
+        claims: verified.claims,
+      },
+      revision,
+    );
+
+    const persisted = await vault.getJson('offline_leases', recordId);
+    if (!persisted?.value?.envelope) {
+      throw new Error('Lease assinado não foi persistido no tablet.');
+    }
+    const readBack = await verifyPilotOfflineLease(persisted.value.envelope, {
+      tenantId: identity.tenantId,
+      userId: identity.userId,
+      flightId: identity.flightId,
+      deviceId,
+    });
+
+    activeVerifiedLease = readBack;
+    openLocalDraftButton.disabled = false;
+    setLeaseMessage(
+      'Lease verificado e salvo no tablet até ' + formatTimestamp(readBack.claims.valid_until) + '.',
+      'ok',
+    );
+    await openOrSeedOperationalDraft(packageData, readBack);
+  } catch (error) {
+    const authFailure = error instanceof PilotOnlineRequestError && error.status === 401;
+    setLeaseMessage(
+      error instanceof Error ? error.message : 'Falha ao preparar edição offline.',
+      'error',
+    );
+    if (authFailure) setSessionMessage('Sessão online necessária para emitir lease.', 'error', true);
+  } finally {
+    prepareEditOfflineButton.disabled = !navigator.onLine || !hasTrustedPilotLeaseKeys();
+  }
+}
+
+async function openExistingOperationalDraft() {
+  const packageData = activePackageData();
+  if (!packageData) return;
+
+  try {
+    const existing = await verifyStoredLeaseForPackage(packageData);
+    if (!existing?.verified) {
+      throw new Error('Nenhum lease offline válido encontrado neste tablet.');
+    }
+    activeVerifiedLease = existing.verified;
+    await openOrSeedOperationalDraft(packageData, existing.verified);
+  } catch (error) {
+    setLeaseMessage(
+      error instanceof Error ? error.message : 'Não foi possível abrir o rascunho local.',
+      'error',
+    );
+  }
+}
+
+async function openOrSeedOperationalDraft(packageData, verifiedLease) {
+  assertVerifiedLeaseAllowsDraft(packageData, verifiedLease);
+  const identity = assertPackageIdentity(packageData);
+  const rdvId = rdvDraftRecordId(identity.flightId);
+  const existingRdv = await vault.getJson('rdv_drafts', rdvId);
+  const stageRecords = (await vault.listJson('stage_drafts')).filter(
+    (record) => Number(record.value?.flight_id) === identity.flightId,
+  );
+
+  if (existingRdv) {
+    const value = existingRdv.value;
+    if (
+      Number(value.tenant_id) !== identity.tenantId ||
+      Number(value.user_id) !== identity.userId ||
+      Number(value.flight_id) !== identity.flightId
+    ) {
+      throw new Error('Rascunho local pertence a outra identidade operacional.');
+    }
+    if (String(value.source_package_id) !== identity.packageId) {
+      throw new Error(
+        'O pacote do voo mudou desde o início deste rascunho. Resolução de conflito ainda não está habilitada.',
+      );
+    }
+    const matchingStages = stageRecords
+      .filter((record) => String(record.value?.source_package_id) === identity.packageId)
+      .sort(
+        (left, right) =>
+          Number(left.value?.fields?.numero_etapa || 0) -
+          Number(right.value?.fields?.numero_etapa || 0),
+      );
+    if (matchingStages.length === 0) {
+      throw new Error('Rascunho local incompleto: etapas não encontradas.');
+    }
+
+    activeRdvDraft = value;
+    activeStageDrafts = matchingStages.map((record) => record.value);
+    operationalLocalSequence = Math.max(
+      Number(existingRdv.localRevision || value.local_sequence || 0),
+      ...matchingStages.map((record) =>
+        Number(record.localRevision || record.value?.local_sequence || 0),
+      ),
+    );
+    operationalNextSequence = operationalLocalSequence;
+  } else {
+    const snapshot = buildDraftSnapshot(packageData, 0);
+    await vault.putJsonBatch([
+      {
+        storeName: 'rdv_drafts',
+        id: snapshot.rdv.entity_local_id,
+        value: snapshot.rdv,
+        localRevision: 0,
+      },
+      ...snapshot.stages.map((stage) => ({
+        storeName: 'stage_drafts',
+        id: stage.entity_local_id,
+        value: stage,
+        localRevision: 0,
+      })),
+    ]);
+    const persistedRdv = await vault.getJson('rdv_drafts', snapshot.rdv.entity_local_id);
+    if (!persistedRdv) throw new Error('Falha ao criar rascunho RDV no tablet.');
+
+    activeRdvDraft = persistedRdv.value;
+    const persistedStages = (await vault.listJson('stage_drafts'))
+      .filter(
+        (record) =>
+          Number(record.value?.flight_id) === identity.flightId &&
+          String(record.value?.source_package_id) === identity.packageId,
+      )
+      .sort(
+        (left, right) =>
+          Number(left.value?.fields?.numero_etapa || 0) -
+          Number(right.value?.fields?.numero_etapa || 0),
+      );
+    activeStageDrafts = persistedStages.map((record) => record.value);
+    operationalLocalSequence = 0;
+    operationalNextSequence = 0;
+  }
+
+  renderOperationalEditor();
+}
+
 function appendInfoGrid(parent, entries) {
   const grid = document.createElement('div');
   grid.className = 'detail-grid';
