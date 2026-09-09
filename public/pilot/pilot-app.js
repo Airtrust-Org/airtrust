@@ -820,6 +820,268 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
   renderOperationalEditor();
 }
 
+async function refreshOutboxCount() {
+  if (!vault?.isUnlocked()) {
+    pendingCountLabel.textContent = '0';
+    return 0;
+  }
+  const records = await vault.listJson('outbox');
+  const pending = records.filter((record) => isTransmitPending(record.value));
+  pendingCountLabel.textContent = String(pending.length);
+  return pending.length;
+}
+
+function setFinalizeMessage(message, kind = 'attention') {
+  finalizeStatus.className = 'statusline ' + kind;
+  finalizeStatus.textContent = message;
+}
+
+function isOperationalDraftClosed() {
+  return activeRdvDraft?.local_state === 'ready_to_transmit';
+}
+
+function refreshFinalizationControls() {
+  const closed = isOperationalDraftClosed();
+  finalizeOfflineButton.disabled = closed || !activeVerifiedLease;
+  reopenLocalButton.classList.toggle('hidden', !closed);
+  reopenLocalButton.disabled = !closed || !activeVerifiedLease;
+
+  if (closed) {
+    setFinalizeMessage(
+      'Pronto para transmitir · operação ' +
+        String(activeRdvDraft.active_outbox_operation_id || 'local') +
+        '. O servidor ainda não recebeu estes dados.',
+      'ok',
+    );
+  } else {
+    setFinalizeMessage(
+      'Rascunho local aberto. Finalizar criará a outbox, sem transmissão automática.',
+      'attention',
+    );
+  }
+}
+
+async function finalizeOperationalDraftOffline() {
+  const packageData = activePackageData();
+  if (!packageData || !activeRdvDraft || activeStageDrafts.length === 0) return;
+
+  try {
+    assertVerifiedLeaseAllowsDraft(packageData, activeVerifiedLease);
+    await flushOperationalSave();
+
+    if (isOperationalDraftClosed()) {
+      refreshFinalizationControls();
+      return;
+    }
+
+    const errors = collectFinalizationErrors(
+      packageData,
+      activeRdvDraft,
+      activeStageDrafts,
+    );
+    if (errors.length > 0) {
+      setFinalizeMessage(
+        'Não é possível finalizar: ' + errors.slice(0, 3).join(' · '),
+        'error',
+      );
+      refreshDraftValidationPresentation();
+      return;
+    }
+
+    finalizeOfflineButton.disabled = true;
+    setFinalizeMessage('Fechando snapshot e criando outbox cifrada…', 'attention');
+
+    const nextSequence =
+      Math.max(operationalNextSequence, operationalLocalSequence) + 1;
+    const deviceId = await vault.getOrCreateDeviceId();
+    const syncPayload = buildOfflineSyncPayload(
+      packageData,
+      activeRdvDraft,
+      activeStageDrafts,
+    );
+    const command = await buildReadyToTransmitCommand({
+      syncPayload,
+      rdvDraft: activeRdvDraft,
+      stageDrafts: activeStageDrafts,
+      localSequence: nextSequence,
+      deviceId,
+    });
+    const now = new Date().toISOString();
+
+    const finalizedRdv = {
+      ...structuredClone(activeRdvDraft),
+      local_state: 'ready_to_transmit',
+      local_sequence: nextSequence,
+      updated_at_claimed: now,
+      finalized_local_at: now,
+      finalized_local_sequence: nextSequence,
+      active_outbox_operation_id: command.client_operation_id,
+    };
+    const finalizedStages = activeStageDrafts.map((stage) => ({
+      ...structuredClone(stage),
+      local_state: 'ready_to_transmit',
+      local_sequence: nextSequence,
+      updated_at_claimed: now,
+    }));
+
+    await vault.putJsonBatch([
+      {
+        storeName: 'rdv_drafts',
+        id: finalizedRdv.entity_local_id,
+        value: finalizedRdv,
+        localRevision: nextSequence,
+      },
+      ...finalizedStages.map((stage) => ({
+        storeName: 'stage_drafts',
+        id: stage.entity_local_id,
+        value: stage,
+        localRevision: nextSequence,
+      })),
+      {
+        storeName: 'outbox',
+        id: command.client_operation_id,
+        value: command,
+        localRevision: nextSequence,
+      },
+    ]);
+
+    const [persistedRdv, persistedCommand] = await Promise.all([
+      vault.getJson('rdv_drafts', finalizedRdv.entity_local_id),
+      vault.getJson('outbox', command.client_operation_id),
+    ]);
+    const persistedStages = await Promise.all(
+      finalizedStages.map((stage) =>
+        vault.getJson('stage_drafts', stage.entity_local_id),
+      ),
+    );
+
+    if (
+      persistedRdv?.value?.local_state !== 'ready_to_transmit' ||
+      persistedRdv?.value?.active_outbox_operation_id !== command.client_operation_id ||
+      persistedCommand?.value?.payload_hash !== command.payload_hash ||
+      persistedCommand?.value?.state !== 'ready_to_transmit' ||
+      persistedRdv?.localRevision !== nextSequence ||
+      persistedCommand?.localRevision !== nextSequence ||
+      !persistedStages.every(
+        (record) =>
+          record?.value?.local_state === 'ready_to_transmit' &&
+          record?.localRevision === nextSequence,
+      )
+    ) {
+      throw new Error('Falha no read-back do snapshot finalizado e da outbox.');
+    }
+
+    activeRdvDraft = persistedRdv.value;
+    activeStageDrafts = persistedStages.map((record) => record.value);
+    operationalLocalSequence = nextSequence;
+    operationalNextSequence = nextSequence;
+    rdvLocalSequenceLabel.textContent = String(nextSequence);
+    rdvEditorSaveStatus.className = 'statusline ok';
+    rdvEditorSaveStatus.textContent = 'Snapshot finalizado e salvo no tablet.';
+    await refreshOutboxCount();
+    renderOperationalEditor({ preserveScroll: true });
+    setFinalizeMessage(
+      'Pronto para transmitir. Nenhum dado foi enviado ao servidor ou à Coordenação.',
+      'ok',
+    );
+  } catch (error) {
+    setFinalizeMessage(
+      error instanceof Error
+        ? error.message
+        : 'Falha ao finalizar o voo no tablet.',
+      'error',
+    );
+    finalizeOfflineButton.disabled = false;
+  }
+}
+
+async function reopenOperationalDraftLocal() {
+  const packageData = activePackageData();
+  if (!packageData || !activeRdvDraft || !isOperationalDraftClosed()) return;
+
+  try {
+    assertVerifiedLeaseAllowsDraft(packageData, activeVerifiedLease);
+    const operationId = activeRdvDraft.active_outbox_operation_id;
+    if (!operationId) {
+      throw new Error('Rascunho fechado sem operação de outbox vinculada.');
+    }
+
+    const storedCommand = await vault.getJson('outbox', operationId);
+    if (!storedCommand?.value) {
+      throw new Error('Operação de outbox vinculada não foi encontrada.');
+    }
+
+    const nextSequence =
+      Math.max(operationalNextSequence, operationalLocalSequence) + 1;
+    const now = new Date().toISOString();
+    const superseded = supersedeLocalCommand(storedCommand.value);
+    const reopenedRdv = {
+      ...structuredClone(activeRdvDraft),
+      local_state: 'draft_local',
+      local_sequence: nextSequence,
+      updated_at_claimed: now,
+      reopened_local_at: now,
+      active_outbox_operation_id: null,
+    };
+    const reopenedStages = activeStageDrafts.map((stage) => ({
+      ...structuredClone(stage),
+      local_state: 'draft_local',
+      local_sequence: nextSequence,
+      updated_at_claimed: now,
+    }));
+
+    await vault.putJsonBatch([
+      {
+        storeName: 'rdv_drafts',
+        id: reopenedRdv.entity_local_id,
+        value: reopenedRdv,
+        localRevision: nextSequence,
+      },
+      ...reopenedStages.map((stage) => ({
+        storeName: 'stage_drafts',
+        id: stage.entity_local_id,
+        value: stage,
+        localRevision: nextSequence,
+      })),
+      {
+        storeName: 'outbox',
+        id: operationId,
+        value: superseded,
+        localRevision: nextSequence,
+      },
+    ]);
+
+    const [persistedRdv, persistedCommand] = await Promise.all([
+      vault.getJson('rdv_drafts', reopenedRdv.entity_local_id),
+      vault.getJson('outbox', operationId),
+    ]);
+    if (
+      persistedRdv?.value?.local_state !== 'draft_local' ||
+      persistedCommand?.value?.state !== 'superseded_local' ||
+      persistedRdv?.localRevision !== nextSequence
+    ) {
+      throw new Error('Falha ao reabrir o rascunho local de forma atômica.');
+    }
+
+    activeRdvDraft = persistedRdv.value;
+    activeStageDrafts = reopenedStages;
+    operationalLocalSequence = nextSequence;
+    operationalNextSequence = nextSequence;
+    rdvLocalSequenceLabel.textContent = String(nextSequence);
+    await refreshOutboxCount();
+    renderOperationalEditor({ preserveScroll: true });
+    setFinalizeMessage(
+      'Rascunho reaberto localmente. A operação anterior foi preservada como superseded_local.',
+      'attention',
+    );
+  } catch (error) {
+    setFinalizeMessage(
+      error instanceof Error ? error.message : 'Falha ao reabrir rascunho local.',
+      'error',
+    );
+  }
+}
+
 function localDateTimeNow() {
   const now = new Date();
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
