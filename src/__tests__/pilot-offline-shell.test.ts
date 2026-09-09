@@ -228,6 +228,8 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("alert?.severidade === 'IMPEDE_ENVIO'");
     expect(pilotApp).toContain("rdv.status === 'preenchimento_finalizado'");
     expect(pilotApp).toContain("rdv.workflow_status === 'enviado'");
+    expect(pilotApp).toContain("const editableWorkflow = ['rascunho', 'devolvido'].includes");
+    expect(pilotApp).not.toContain("['rascunho', 'devolvido', 'reaberto'].includes");
   });
 
   it('persiste receipt de workflow cifrado e exige reconciliacao do ultimo sync antes de finalizar', () => {
