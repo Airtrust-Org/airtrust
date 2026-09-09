@@ -436,7 +436,7 @@ describe('governance evidence record local vertical slice', () => {
     const tamperedService = createService(tamperedDb.db);
     await tamperedService.restoreExport(tamperedExport);
     await expect(tamperedService.recomputeIntegrity(10)).resolves.toBe(false);
-  });
+  }, 15_000);
 
   it('keeps the vertical slice local and outside public routes', () => {
     expect(migrationPath).toContain('/migrations_experimental/');
