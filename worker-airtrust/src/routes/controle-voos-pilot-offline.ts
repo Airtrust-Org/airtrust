@@ -11,8 +11,10 @@ import { auth } from '../middleware/auth';
 import type { Env } from '../types';
 import {
   getActiveRdvByFlight,
+  getActorId,
   getEmpresaIdSafe,
   getFlightOrThrow,
+  getFuncionarioIdForUser,
 } from '../repositories/controle-voos/rdv-repository';
 import {
   RDV_CAPABILITIES,
@@ -111,6 +113,9 @@ pilotOffline.get(
       voo.id,
       RDV_CAPABILITIES.visualizarProprio,
     );
+
+    const userId = getActorId(c);
+    const funcionarioId = await getFuncionarioIdForUser(c.env.DB, userId);
 
     const [
       rdv,
@@ -242,6 +247,11 @@ pilotOffline.get(
           sync_supported: false,
           attachments_included: false,
           regulated_edb: false,
+        },
+        identity: {
+          tenant_id: empresaId,
+          user_id: userId,
+          funcionario_id: funcionarioId,
         },
         source_revision: sourceRevision,
         voo: {
