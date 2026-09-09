@@ -1152,14 +1152,75 @@ describe('controle voos routes', () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
       data: {
+        id: number;
         status: string;
+        versao: number;
         finalizado_operacionalmente_por: number;
         finalizado_operacionalmente_em: string | null;
       };
     };
     expect(body.data.status).toBe('preenchimento_finalizado');
+    expect(body.data.versao).toBe(2);
     expect(body.data.finalizado_operacionalmente_por).toBe(10);
     expect(body.data.finalizado_operacionalmente_em).toBeTruthy();
+
+    const approvals = await db
+      .prepare(
+        `SELECT versao, tipo_aprovacao, status
+         FROM cv_rdv_aprovacoes
+         WHERE rdv_id = ? AND empresa_id = 1 AND tipo_aprovacao = 'COMANDANTE'`,
+      )
+      .bind(body.data.id)
+      .all<{ versao: number; tipo_aprovacao: string; status: string }>();
+    expect(approvals.results).toEqual([
+      { versao: 2, tipo_aprovacao: 'COMANDANTE', status: 'APROVADO' },
+    ]);
+  });
+
+  it('rejeita finalizacao com versao stale sem evento nem aprovacao parcial', async () => {
+    const db = createSqliteD1();
+
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload()),
+    });
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify({ versao: 1, ocorrencias: 'atualizacao concorrente' }),
+    });
+
+    const response = await request(db, '/api/controle-voos/voos/601/rdv/finalizar-preenchimento', {
+      method: 'POST',
+      body: JSON.stringify({ versao: 1 }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_RDV_VERSION_CONFLICT',
+    });
+
+    const rdv = await db
+      .prepare('SELECT id, status, versao FROM cv_rdv_operacional WHERE voo_id = 601')
+      .first<{ id: number; status: string; versao: number }>();
+    expect(rdv).toMatchObject({ status: 'rascunho', versao: 2 });
+
+    const approvals = await db
+      .prepare(
+        `SELECT COUNT(*) AS total FROM cv_rdv_aprovacoes
+         WHERE rdv_id = ? AND empresa_id = 1 AND tipo_aprovacao = 'COMANDANTE'`,
+      )
+      .bind(rdv?.id)
+      .first<{ total: number }>();
+    expect(approvals?.total).toBe(0);
+
+    const events = await db
+      .prepare(
+        `SELECT COUNT(*) AS total FROM cv_voo_eventos
+         WHERE voo_id = 601 AND tipo_evento = 'rdv'
+           AND json_extract(metadata_json, '$.action') = 'finalize'`,
+      )
+      .first<{ total: number }>();
+    expect(events?.total).toBe(0);
   });
 
   it('nao altera RDV ja finalizado', async () => {
