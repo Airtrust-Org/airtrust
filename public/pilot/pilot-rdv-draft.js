@@ -179,6 +179,8 @@ export function buildDraftSnapshot(packageData, previousSequence = 0) {
       source_rdv_id: packageData?.rdv?.id ?? null,
       source_rdv_version: Number(packageData?.rdv?.versao || 0),
       source_flight_version: Number(packageData?.voo?.versao || 0),
+      local_state: 'draft_local',
+      active_outbox_operation_id: null,
       local_sequence: nextSequence,
       updated_at_claimed: now,
       form: buildRdvFormFromPackage(packageData),
@@ -197,6 +199,7 @@ export function buildDraftSnapshot(packageData, previousSequence = 0) {
         packageData?.source_revision?.stages?.find(
           (entry) => Number(entry.id) === Number(stage.source_stage_id),
         )?.updated_at ?? null,
+      local_state: 'draft_local',
       local_sequence: nextSequence,
       updated_at_claimed: now,
       fields: stage,
