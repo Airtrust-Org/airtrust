@@ -183,8 +183,9 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('id="sync-rdv-now"');
     expect(pilotIndex).toContain('“Transmitido” só será');
     expect(pilotApp).toContain("await vault.putJson(\n        'outbox'");
-    expect(pilotApp).toContain("await vault.getJson('sync_receipts'");
-    const receiptIndex = pilotApp.indexOf("await vault.getJson(\n    'sync_receipts'");
+    expect(pilotApp).toMatch(/await vault\.getJson\(\s*'sync_receipts'/);
+    const persistResultIndex = pilotApp.indexOf('async function persistFinalSyncResult');
+    const receiptIndex = pilotApp.indexOf("'sync_receipts'", persistResultIndex);
     const deleteIndex = pilotApp.indexOf("await vault.deleteJson('outbox'", receiptIndex);
     expect(receiptIndex).toBeGreaterThan(-1);
     expect(deleteIndex).toBeGreaterThan(receiptIndex);
