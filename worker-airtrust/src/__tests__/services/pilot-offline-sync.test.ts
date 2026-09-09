@@ -122,11 +122,22 @@ describe('Pilot offline sync contract', () => {
     );
   });
 
-  it('recusa operation id duplicado dentro do mesmo lote', () => {
+  it('v1 aceita exatamente um comando por request para evitar aplicacao parcial de lote', () => {
     const raw = command();
-    expect(() => parseOfflineSyncBatch({ commands: [raw, raw] })).toThrowError(
+    expect(parseOfflineSyncBatch({ commands: [raw] })).toHaveLength(1);
+    expect(() =>
+      parseOfflineSyncBatch({
+        commands: [
+          raw,
+          {
+            ...raw,
+            client_operation_id: '223e4567-e89b-42d3-a456-426614174001',
+          },
+        ],
+      }),
+    ).toThrowError(
       expect.objectContaining({
-        code: 'CONTROLE_VOOS_PILOT_SYNC_DUPLICATE_OPERATION_IN_BATCH',
+        code: 'CONTROLE_VOOS_PILOT_SYNC_BATCH_SIZE_INVALID',
       }),
     );
   });
