@@ -1,0 +1,179 @@
+name: F4-03 Deterministic Production Repair
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA reviewed for F4-03 repair
+        required: true
+        type: string
+      mode:
+        description: dry-run is read-only; apply repairs exactly six reviewed rows
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - apply
+        default: dry-run
+      confirmation:
+        description: Type the exact dry-run/apply confirmation required by the workflow
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: f4-03-deterministic-production-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    name: Governed F4-03 deterministic repair
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_REF_REQUIRED" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "EXPECTED_SHA_INVALID" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo "EXPECTED_SHA_MISMATCH" >&2; exit 1; }
+          if [[ "$MODE" == "dry-run" ]]; then
+            [[ "$CONFIRMATION" == "AIRTRUST_PRODUCTION_DRYRUN_F4_03_REPAIR" ]] || {
+              echo "DRYRUN_CONFIRMATION_REQUIRED" >&2
+              exit 1
+            }
+          elif [[ "$MODE" == "apply" ]]; then
+            [[ "$CONFIRMATION" == "AIRTRUST_PRODUCTION_APPLY_F4_03_REPAIR_6_ROWS" ]] || {
+              echo "APPLY_CONFIRMATION_REQUIRED" >&2
+              exit 1
+            }
+          else
+            echo "UNSUPPORTED_MODE" >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+
+      - name: Install Worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Verify official release gates on exact SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Require production D1 and read-only R2 credentials
+        shell: bash
+        env:
+          D1_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          R2_READ_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$D1_TOKEN" ]] || { echo "PRODUCTION_D1_TOKEN_MISSING" >&2; exit 1; }
+          [[ -n "$R2_READ_TOKEN" ]] || { echo "PRODUCTION_R2_READ_TOKEN_MISSING" >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo "CLOUDFLARE_ACCOUNT_ID_MISSING" >&2; exit 1; }
+
+      - name: Ensure PDF text extractor
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v pdftotext >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq poppler-utils
+          fi
+          command -v pdftotext >/dev/null 2>&1
+
+      - name: Revalidate immutable pre-incident certificate evidence
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          F4_03_CERTIFICATE_RECOVERY_CONFIRMATION: AIRTRUST_PRODUCTION_READONLY_F4_03_CERTIFICATE_RECOVERY
+        run: |
+          set -euo pipefail
+          node scripts/validation/f4-03-production-certificate-recovery.mjs > "$RUNNER_TEMP/f4-03-certificate-evidence.json"
+          test -s "$RUNNER_TEMP/f4-03-certificate-evidence.json"
+
+      - name: Capture D1 Time Travel recovery point
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          recovery_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          recovery_output="$RUNNER_TEMP/f4-03-time-travel-info.txt"
+          npx wrangler d1 time-travel info airtrust-db --env production \
+            --timestamp="$recovery_timestamp" > "$recovery_output"
+          test -s "$recovery_output"
+          echo "F4_03_RECOVERY_TIMESTAMP_UTC=$recovery_timestamp" >> "$GITHUB_STEP_SUMMARY"
+          rm -f "$recovery_output"
+
+      - name: Execute deterministic F4-03 repair
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          F4_03_REPAIR_MODE: ${{ inputs.mode }}
+          F4_03_REPAIR_CONFIRMATION: ${{ inputs.confirmation }}
+          F4_03_PRODUCTION_DB_NAME: airtrust-db
+          F4_03_CERTIFICATE_EVIDENCE_PATH: ${{ runner.temp }}/f4-03-certificate-evidence.json
+        run: |
+          set -euo pipefail
+          node scripts/validation/f4-03-production-deterministic-repair.mjs "${{ inputs.mode }}" \
+            > "$RUNNER_TEMP/f4-03-repair-result.json"
+          test -s "$RUNNER_TEMP/f4-03-repair-result.json"
+
+      - name: Publish sanitized summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - "$RUNNER_TEMP/f4-03-repair-result.json" >> "$GITHUB_STEP_SUMMARY" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          console.log('## F4-03 deterministic production repair');
+          console.log('');
+          console.log(`- mode: \`${data.mode}\``);
+          console.log(`- source SHA: \`${data.source_sha}\``);
+          console.log(`- tenant: \`${data.empresa_id}\``);
+          console.log(`- target IDs: \`${data.target_ids.join(',')}\``);
+          console.log(`- certificate evidence verified: \`${data.certificate_evidence_verified}\``);
+          console.log(`- preflight verified: \`${data.preflight_verified}\``);
+          console.log(`- mutation executed: \`${data.mutation_executed}\``);
+          console.log(`- changed rows: \`${data.changed_rows}\``);
+          console.log(`- postconditions verified: \`${data.postconditions_verified ?? false}\``);
+          console.log('- PII emitted: no');
+          NODE
+
+      - name: Upload sanitized repair evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: f4-03-production-repair-${{ inputs.mode }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/f4-03-repair-result.json
+            ${{ runner.temp }}/f4-03-certificate-evidence.json
+          if-no-files-found: error
+          retention-days: 30
