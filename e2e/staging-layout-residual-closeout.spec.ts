@@ -88,15 +88,13 @@ test.describe.serial('layout/UX residual audit closeout', () => {
     await page.goto('/sgso?view=workspace', { waitUntil: 'domcontentloaded' });
     await waitForApp(page);
 
-    const card = page.locator('div').filter({ hasText: protocolo }).filter({
-      has: page.getByRole('button', { name: /^Abrir$/ }),
-    }).first();
+    const protocolLink = page.getByText(protocolo, { exact: true }).first();
 
-    await expect(card, 'created SGSO fixture was not present in the list').toBeVisible({
+    await expect(protocolLink, 'created SGSO fixture was not present in the list').toBeVisible({
       timeout: 20_000,
     });
 
-    await card.getByRole('button', { name: /^Abrir$/ }).click();
+    await protocolLink.click();
     await page.waitForURL(new RegExp(`/sgso/relatos/${id}(?:\\?|$)`), { timeout: 20_000 });
     await waitForApp(page);
     await expect(page.getByText(new RegExp(`Relato\\s+${protocolo}`, 'i')).first()).toBeVisible();
@@ -115,7 +113,9 @@ test.describe.serial('layout/UX residual audit closeout', () => {
       timeout: 20_000,
     });
 
-    const pastaButton = page.getByRole('button', { name: /Pasta 360/i }).first();
+    const qaRow = page.getByRole('row').filter({ hasText: /QA Participante|QA Instrutor/i }).first();
+    await expect(qaRow).toBeVisible();
+    const pastaButton = qaRow.getByRole('button', { name: /Abrir perfil/i }).first();
     await expect(pastaButton).toBeVisible();
     await pastaButton.click();
     await page.waitForURL(/\/funcionarios\/\d+\/ficha\?[^#]*tab=pasta/, { timeout: 20_000 });
