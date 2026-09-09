@@ -5,6 +5,11 @@
 **SHA-base:** `e37caed2ea250eff8c1bccec7c87e4ab93c4211b` (origin/main)
 **Classificação:** Interno — NÃO submeter à ANAC. Módulo não regulado, não substitui SIGVOOS/eDB/SDRMe.
 
+> **Atualização 2026-09-09 — Pilot App offline:** `POST .../rdv/finalizar-preenchimento`
+> agora exige `{ versao }`, aplica CAS otimista, incrementa `cv_rdv_operacional.versao`
+> e agrupa atomicamente a finalização operacional, o evento do voo e a aprovação
+> `COMANDANTE`. A ação continua sendo confirmação operacional interna, **não assinatura digital**.
+
 Este documento descreve **apenas a entrega desta branch**: o fluxo de revisão/aprovação
 Piloto → Coordenação do RDV. Para o panorama estratégico mais amplo (SIGVOOS, FRMS, ANAC),
 ver `AIRTRUST_STATUS_CONTROLE_VOOS_SIGVOOS_FRMS_ANAC.md` — **partes dele estão desatualizadas**
@@ -143,7 +148,9 @@ DEVOLVIDO --enviar (após re-finalizar preenchimento)--> ENVIADO
 (`workflow_status`); o eixo operacional `status` pode voltar a `rascunho` para destrancar
 edição do piloto, sem colapsar o eixo de workflow.
 
-Em `finalizar-preenchimento`, o backend grava em `cv_rdv_aprovacoes` um registro
+Em `finalizar-preenchimento`, o cliente deve enviar a `versao` canônica atual.
+O backend só finaliza se o CAS dessa versão vencer, incrementa `versao` e grava na mesma
+transação o evento operacional e um registro em `cv_rdv_aprovacoes`
 `tipo_aprovacao='COMANDANTE'` / `status='APROVADO'` (confirmação do piloto responsável —
 **não** é assinatura digital).
 
