@@ -27,9 +27,11 @@ CREATE TABLE IF NOT EXISTS cv_offline_sync_receipts (
   result_code TEXT,
   result_json TEXT,
   received_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (empresa_id, client_operation_id)
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cv_offline_sync_receipts_empresa_operation
+  ON cv_offline_sync_receipts (empresa_id, client_operation_id);
 
 CREATE INDEX IF NOT EXISTS idx_cv_offline_sync_receipts_voo_received
   ON cv_offline_sync_receipts (empresa_id, voo_id, received_at DESC);
