@@ -1,4 +1,20 @@
 import { PilotVault } from '/pilot/pilot-vault.js';
+import {
+  hasTrustedPilotLeaseKeys,
+  verifyPilotOfflineLease,
+} from '/pilot/pilot-lease.js';
+import { PILOT_OFFLINE_APP_VERSION } from '/pilot/pilot-lease-trust.js';
+import {
+  applySafeStageAggregates,
+  assertPackageIdentity,
+  assertVerifiedLeaseAllowsDraft,
+  buildDraftSnapshot,
+  calcConsumoCombustivel,
+  calcHorasVoadas,
+  parseNumber,
+  validateRdvForm,
+  validateStageDrafts,
+} from '/pilot/pilot-rdv-draft.js';
 
 const DRAFT_ID = 'phase1-synthetic-rdv-draft';
 const SAVE_DELAY_MS = 180;
@@ -55,6 +71,18 @@ const revisionLabel = document.querySelector('#revision');
 const lastSavedLabel = document.querySelector('#last-saved');
 const saveNowButton = document.querySelector('#save-now');
 const lockButton = document.querySelector('#lock');
+const prepareEditOfflineButton = document.querySelector('#prepare-edit-offline');
+const openLocalDraftButton = document.querySelector('#open-local-draft');
+const leaseStatus = document.querySelector('#lease-status');
+const rdvEditorCard = document.querySelector('#rdv-editor-card');
+const rdvEditorTitle = document.querySelector('#rdv-editor-title');
+const rdvEditorSubtitle = document.querySelector('#rdv-editor-subtitle');
+const rdvEditorSaveStatus = document.querySelector('#rdv-editor-save-status');
+const rdvLocalSequenceLabel = document.querySelector('#rdv-local-sequence');
+const rdvLeaseUntilLabel = document.querySelector('#rdv-lease-until');
+const rdvFormFields = document.querySelector('#rdv-form-fields');
+const rdvStageFields = document.querySelector('#rdv-stage-fields');
+const closeRdvEditorButton = document.querySelector('#close-rdv-editor');
 
 let vault;
 let provisioned = false;
@@ -63,6 +91,14 @@ let saveTimer = null;
 let saveChain = Promise.resolve();
 let cachedPackageRecords = [];
 let onlineFlightRecords = [];
+let activePackageRecord = null;
+let activeVerifiedLease = null;
+let activeRdvDraft = null;
+let activeStageDrafts = [];
+let operationalLocalSequence = 0;
+let operationalSaveTimer = null;
+let operationalSaveChain = Promise.resolve();
+let timingSequence = 0;
 
 function setConnectivity() {
   const online = navigator.onLine;
