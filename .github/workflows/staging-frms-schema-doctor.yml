@@ -56,9 +56,9 @@ jobs:
           echo "WORKFLOW_MAIN_SHA=$WORKFLOW_MAIN_SHA" >> "$GITHUB_STEP_SUMMARY"
           echo "DEPLOYED_STAGING_SHA=$EXPECTED_DEPLOYED_SHA" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -88,9 +88,9 @@ jobs:
     timeout-minutes: 15
     environment: staging
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -139,7 +139,7 @@ jobs:
 
       - name: Upload doctor report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frms-schema-doctor-${{ github.run_id }}
           path: ${{ runner.temp }}/frms-schema-doctor.json
