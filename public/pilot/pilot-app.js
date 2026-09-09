@@ -9,12 +9,19 @@ import {
   assertPackageIdentity,
   assertVerifiedLeaseAllowsDraft,
   buildDraftSnapshot,
+  buildOfflineSyncPayload,
+  collectFinalizationErrors,
   calcConsumoCombustivel,
   calcHorasVoadas,
   parseNumber,
   validateRdvForm,
   validateStageDrafts,
 } from '/pilot/pilot-rdv-draft.js';
+import {
+  buildReadyToTransmitCommand,
+  isTransmitPending,
+  supersedeLocalCommand,
+} from '/pilot/pilot-outbox.js';
 
 const DRAFT_ID = 'phase1-synthetic-rdv-draft';
 const SAVE_DELAY_MS = 180;
@@ -83,6 +90,10 @@ const rdvLeaseUntilLabel = document.querySelector('#rdv-lease-until');
 const rdvFormFields = document.querySelector('#rdv-form-fields');
 const rdvStageFields = document.querySelector('#rdv-stage-fields');
 const closeRdvEditorButton = document.querySelector('#close-rdv-editor');
+const pendingCountLabel = document.querySelector('#pending-count');
+const finalizeOfflineButton = document.querySelector('#finalize-offline');
+const reopenLocalButton = document.querySelector('#reopen-local');
+const finalizeStatus = document.querySelector('#finalize-status');
 
 let vault;
 let provisioned = false;
