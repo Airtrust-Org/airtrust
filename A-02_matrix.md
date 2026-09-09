@@ -1,14 +1,15 @@
 # A-02 Matrix: Natural Keys Tenant-Scoped
 
-| Tabela | Índice / Constraint Atual (Global) | Colunas | UNIQUE | Migration Origem | Substituição Tenant-Scoped | Risco Remoção | Situação |
-|--------|------------------------------------|---------|--------|------------------|----------------------------|---------------|----------|
-| `qualificacoes_tipos` | `ux_qualificacoes_tipos_codigo` | `codigo` | SIM | 0116 | `idx_qualificacoes_tipos_codigo_empresa_active` (0462) | Nulo | Não existe mais. DROP IF EXISTS apenas como hardening defensivo. |
-| `funcionarios` | `ux_funcionarios_cpf` | `cpf` | SIM | 0095, 0116 | Ausente | Baixo | Requer recriação tenant-scoped (0489) |
-| `funcionarios` | `idx_funcionarios_cpf` | `cpf` | SIM | 0105 | Ausente | Baixo | Requer recriação tenant-scoped (0489) |
-| `funcionarios` | `ux_funcionarios_matricula` | `matricula` | SIM | 0095, 0105 | Ausente | Baixo | Requer recriação tenant-scoped (0489) |
-| `funcionarios` | `ux_funcionarios_email` | `email` | SIM | 0095 | Ausente | Baixo | Requer recriação tenant-scoped (0489) |
+| Tabela | Chave | Contrato runtime atual | Proteção tenant-scoped proposta | Estado |
+|---|---|---|---|---|
+| `funcionarios` | `cpf` | CPF é normalizado para dígitos e comparado por igualdade exata dentro de `empresa_id` | `UNIQUE (empresa_id, cpf)` para registros ativos/não vazios | 0489 preparada; apply remoto exige preflight read-only |
+| `funcionarios` | `matricula` | CRUD sanitiza whitespace e compara `matricula = ?`; não há contrato atual de case-folding | `UNIQUE (empresa_id, matricula)` para registros ativos/não vazios | 0489 preparada; case-sensitive deliberadamente preservado |
+| `funcionarios` | `email` | CRUD grava lowercase; vínculo usuário↔funcionário usa `LOWER(TRIM(email))` | `UNIQUE (empresa_id, LOWER(TRIM(email)))` para registros ativos/não vazios | 0489 preparada; semântica alinhada ao vínculo canônico |
+| `qualificacoes_tipos` | `codigo` | Já existe substituição tenant-scoped pela 0462 | `idx_qualificacoes_tipos_codigo_empresa_active` | Fechado; `DROP IF EXISTS ux_qualificacoes_tipos_codigo` é apenas hardening defensivo |
 
-## Detalhes
+## Evidência e limites
 
-- O índice `ux_qualificacoes_tipos_codigo` **não sobreviveu** ao `DROP TABLE` da tabela na migration 0402. Ele não existe no schema final (conforme comprovado em `schema-local.sql`). O script preflight não apontará sua existência e o seu `DROP IF EXISTS` atua unicamente como hardening defensivo, caso algum banco fora do trilho canônico o tenha mantido de forma não-oficial.
-- A tabela `funcionarios` perdeu suas constraints únicas nas chaves naturais (`cpf`, `matricula`, `email`) na wave 1 de hardening (`0396`) via `DROP TABLE`. Os índices `tenant-scoped` não foram reestabelecidos, deixando essas chaves sem proteção `UNIQUE` parcial (por tenant e ativo). A migration 0489 restaura essas proteções.
+- As antigas constraints globais de `funcionarios` existiam historicamente e foram perdidas em rebuilds posteriores.
+- O runtime atual já trata CPF e matrícula no escopo do tenant; a 0489 move essa invariável para o banco sem restaurar unicidade global.
+- O e-mail é a única chave em que a própria identidade canônica usa normalização case/trim.
+- Nenhum apply remoto é autorizado por este artefato. O script `scripts/validation/0489_a02_natural_keys_tenant_scoped_preflight.sql` deve retornar zero conflitos nas três chaves antes de qualquer aplicação governada.
