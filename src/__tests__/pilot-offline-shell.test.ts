@@ -90,7 +90,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v6'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v7'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
     expect(pilotSw).toContain("'/pilot/pilot-rdv-draft.js'");
@@ -163,6 +163,10 @@ describe('Pilot Offline shell', () => {
     expect(pilotWorkspace).toContain("['dossier', 'Dossiê']");
     expect(pilotWorkspace).toContain("['map', 'Mapa']");
     expect(pilotWorkspace).toContain("['performance', 'Performance']");
+    expect(pilotWorkspace).toContain("['edb-shadow', 'eDB Shadow']");
+    expect(pilotWorkspace).toContain('NÃO OFICIAL — eDB SHADOW — SEM VALOR REGULATÓRIO');
+    expect(pilotWorkspace).toContain('não contém assinatura');
+    expect(pilotWorkspace).toContain("tabId !== 'edb-shadow'");
     expect(pilotWorkspace).toContain('MET armazenada no tablet é um snapshot');
     expect(pilotWorkspace).toContain('Não substitui navegação ou aviônicos certificados');
     expect(pilotWorkspace).toContain('Aguardando fonte técnica versionada');
