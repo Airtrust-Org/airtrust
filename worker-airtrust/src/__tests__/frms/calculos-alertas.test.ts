@@ -912,8 +912,7 @@ describe('calcFatorCicloEmbarcado', () => {
   it('retorna 0 sem aprovação governada explícita da política', () => {
     const unapproved = { ...customLimites, CICLO_EMBARCADO_POLICY_APPROVED: 0 };
     expect(calcFatorCicloEmbarcado(7, unapproved)).toBe(0);
-    const missingApproval = { ...customLimites };
-    delete missingApproval.CICLO_EMBARCADO_POLICY_APPROVED;
+    const { CICLO_EMBARCADO_POLICY_APPROVED: _approval, ...missingApproval } = customLimites;
     expect(calcFatorCicloEmbarcado(7, missingApproval)).toBe(0);
   });
 
