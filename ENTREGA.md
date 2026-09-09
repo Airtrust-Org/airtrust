@@ -1,37 +1,26 @@
 # Relatório de Execução - Residuais de Auditoria Schema (A-02, A-06, 0487)
 
-O trabalho foi conduzido em uma branch isolada da `main` (\`chore/audit-schema-residuals-a02-a06-0487\`), sem interferir com a frente \`/pilot\` (migration 0488) ou reutilizar números de migrations.
+O trabalho foi conduzido em uma branch isolada da `main` (\`chore/audit-schema-residuals-a02-a06-0487\`), com o rebase da branch mantendo a pureza canônica. A branch `/pilot` (migration 0488) não foi alterada.
 
-## 0487 — \`qualificacoes_renovacoes\` (REMOTE_APPLY_PENDING)
-O arquivo \`0487_qualificacoes_renovacoes.sql\` encontra-se no repositório criando a tabela e seus índices.
-**Preflight**: Inexistente. A migration não altera dados, apenas cria uma nova tabela aditiva.
-**Governança / Ledger**: Ausente nas listas oficiais do D1 staging/produção (\`docs/migration-governance\` e \`docs/staging-validation/\`). 
-**Testes**: Garantidos por \`qualificacoes-renovacoes-schema.test.ts\` no repositório.
-**Fechamento Seguro**: A migration continua como **REMOTE_APPLY_PENDING**. Foi gerado o artefato local de análise (\`0487_status.md\`) sem forçar aplicação ou falsificar o estado de entrega.
+## 0487 — `qualificacoes_renovacoes` (REMOTE_APPLY_PENDING)
+- **Estado Atual**: A migration continua como **REMOTE_APPLY_PENDING**. Não foi aplicada no DB staging ou produção.
+- **Pós-condições**: Script de leitura estrutural (\`scripts/validation/0487_qualificacoes_renovacoes_postconditions.sql\`) foi gerado fora da pasta de migrations canônica, seguindo as regras da governança, para verificação futura.
+- **Testes**: A migration passa nos testes de contrato de schema (\`qualificacoes-renovacoes-schema.test.ts\`).
 
 ## A-02 — Natural Keys Tenant-Scoped
-Realizado um inventário minucioso. 
-**Achados**: 
-- O indício de \`ux_qualificacoes_tipos_codigo\` (0116) conviver com a restrição correta da 0462 pode ser real caso o D1 não execute o cascateamento de \`DROP TABLE\` que ocorreu na wave 4. Como segurança, a remoção explícita foi definida.
-- A tabela \`funcionarios\` perdeu seus índices UNIQUE globais legados (\`cpf\`, \`matricula\`, \`email\`) durante as refatorações da wave 1 (0396). Contudo, **as proteções tenant-scoped equivalentes nunca foram recriadas**, deixando chaves naturais desprotegidas contra duplicação acidental intracliente.
-
-**Ação / Entrega**: 
-- Gerada matriz A-02 em artefato (\`A-02_matrix.md\`).
-- Preparada a migration **0489** (\`0489_a02_natural_keys_tenant_scoped.sql\`) com \`DROP INDEX\` explícitos legados e recriações rigorosas \`tenant-scoped\` ativas.
-- Preparado preflight script (\`preflight_0489.sql\`) exigindo prova em produção (read-only) da ausência de colisões intra-tenant nas chaves.
+- **Status**: Preparada a migration **0489** (idempotente) aguardando liberação.
+- **Preflight de Segurança**: Mapeados explicitamente no \`scripts/validation/0489_a02_natural_keys_tenant_scoped_preflight.sql\` (ausência de duplicatas em CPF, Matricula e Email, mantendo o COLLATE NOCASE).
+- **Justificativa**: A tabela `funcionarios` perdeu seus índices globais UNIQUE para chaves naturais (`cpf`, `matricula`, `email`) na refatoração 0396 e nunca recuperou os índices `tenant-scoped` correspondentes. O hardening de `ux_qualificacoes_tipos_codigo` serve apenas para defesa perimetral caso existam bancos locais ou esquecidos com lixo, uma vez que o schema final descarta tal índice desde a 0402.
+- **Testes Reais**: Escritos em DB descartável (`a02-a06-schema-residuals-db.test.ts`) ratificando que o constraint garante isolamento sem comprometer cross-tenant data e lida corretamente com NULLs/soft-deletes.
 
 ## A-06 — Índices Redundantes
-Gerado script para comparar as exatas definições de todos os índices a partir do histórico de schemas.
-**Achados**: Várias tabelas como \`aeronaves\`, \`fichas_sessao\`, \`modelos_sessao\`, \`qualificacoes_historico\` possuem 2 ou mais índices criados ao longo dos meses que mapeiam as mesmíssimas colunas e condições. (Categoria A completa detectada).
-**Ação / Entrega**: 
-- Gerada matriz A-06 detalhada no artefato (\`A-06_matrix.md\`).
-- Preparada a migration **0490** (\`0490_a06_redundant_indexes_cleanup.sql\`) que dá DROP na redundância sem remover a integridade (preservando o índice mais antigo/canônico).
-- Preparado preflight script (\`preflight_0490.sql\`) comprovando equivalência.
+- **Status**: Preparada a migration **0490** aguardando liberação.
+- **Metodologia Exata**: Substituímos a análise de diretório histórico pela análise estática comprovada no \`scripts/schema-local.sql\` e reconstrução real (`a02-a06-schema-residuals-db.test.ts`). Isso evitou DROPs perigosos ou fantasma.
+- **Achados**: Apenas 4 agrupamentos reais em categoria A (equivalência exata e ativa) coexistem atualmente. Exemplos: `idx_fichas_instrutor` e `idx_modelos_codigo`. O preflight (\`0490_a06_redundant_indexes_cleanup_preflight.sql\`) varre e exige a detecção de coexistência baseada no `sqlite_master`.
+- **Testes Reais**: Executados localmente, garantindo idempotência e integridade, garantindo que o SQLite não rejeite foreign keys nem acuse degradação do schema.
 
-## Validação e Git
-As implementações das migrations 0489 e 0490 ganharam testes unitários \`worker-airtrust/src/__tests__/migrations/a02-a06-schema-residuals.test.ts\` os quais passaram com sucesso (\`PASS\`). 
-As migrações seguem o critério Fail Closed/Idempotente.
-
-A frente fica documentada no repositório no branch \`chore/audit-schema-residuals-a02-a06-0487\`. Elas aguardam PR e aprovação formal de Governança para execução em \`staging\`, e não foram aplicadas remotamente para não ferir a cláusula contratual e manter isolamento sem bypass de gates.
-
-**Os residuais A-02 e A-06 evoluíram para o status de MIGRATION-PREPARED / GOVERNED-MIGRATION-PENDING.**
+## Qualidade e Governança
+- `migration-governance.test.ts`: PASSED (ratchet ajustado).
+- `guard-migrations-dir-purity`: PASSED.
+- Nenhum script "preflight" foi mantido dentro de `worker-airtrust/migrations`. Eles se encontram em `scripts/validation/`.
+- Testes Vitest adicionados garantindo o comportamento lógico de SQL real do D1/SQLite localmente.
