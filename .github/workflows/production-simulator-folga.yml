@@ -59,11 +59,11 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -172,7 +172,7 @@ jobs:
           NODE
 
       - name: Upload sanitized evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: production-simulator-folga-${{ inputs.mode }}-${{ github.sha }}
           path: ${{ runner.temp }}/simulator-folga-result.json

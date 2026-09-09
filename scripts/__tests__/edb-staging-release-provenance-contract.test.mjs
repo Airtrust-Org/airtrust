@@ -28,7 +28,7 @@ test('dispatch guard binds the candidate to trusted main and an exact release SH
 test('official release gates run against the candidate SHA while orchestration checkout stays trusted', () => {
   assert.match(
     WORKFLOW,
-    /Checkout trusted orchestration source[\s\S]*?uses: actions\/checkout@v4[\s\S]*?ref: \$\{\{ github\.sha \}\}/,
+    /Checkout trusted orchestration source[\s\S]*?uses: actions\/checkout@v7[\s\S]*?ref: \$\{\{ github\.sha \}\}/,
   );
   assert.match(
     WORKFLOW,
@@ -38,7 +38,7 @@ test('official release gates run against the candidate SHA while orchestration c
   const lifecycleJob = WORKFLOW.slice(indexOfOrFail(WORKFLOW, '  d1-full-lifecycle:'));
   assert.match(
     lifecycleJob,
-    /Checkout trusted QA source[\s\S]*?uses: actions\/checkout@v4[\s\S]*?ref: \$\{\{ github\.sha \}\}/,
+    /Checkout trusted QA source[\s\S]*?uses: actions\/checkout@v7[\s\S]*?ref: \$\{\{ github\.sha \}\}/,
   );
   assert.doesNotMatch(lifecycleJob, /ref:\s*\$\{\{ inputs\.expected_release_sha \}\}/);
 });

@@ -97,7 +97,7 @@ describe('deploy-airtrust.yml Release Guard checks out sources before running th
     );
     expect(validatorStepIndex).toBeGreaterThanOrEqual(0);
 
-    const checkoutStepIndex = steps.findIndex((step) => step.includes('uses: actions/checkout@v4'));
+    const checkoutStepIndex = steps.findIndex((step) => step.includes('uses: actions/checkout@v7'));
     // The guard job has no earlier step available to populate the workspace,
     // so checkout must be the very first step, not merely "before" the
     // validator somewhere in the middle.

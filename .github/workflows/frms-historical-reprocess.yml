@@ -64,7 +64,7 @@ jobs:
     timeout-minutes: 360
     steps:
       - name: Checkout approved revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -216,7 +216,7 @@ jobs:
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${AUTHORIZATION_ISSUE}/comments" >/dev/null
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -420,7 +420,7 @@ jobs:
 
       - name: Publish sanitized operation report
         if: ${{ always() && env.PRODUCTION_REPORT != '' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frms-historical-reprocess-${{ github.sha }}
           path: |

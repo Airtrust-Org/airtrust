@@ -37,7 +37,7 @@ jobs:
       STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
       STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Fail closed before any fixture action
         shell: bash
         run: |
@@ -68,8 +68,8 @@ jobs:
       STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
       STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -97,7 +97,7 @@ jobs:
           test -f "$QA_SUMMARY_PATH" || printf '{"status":"NO_SUMMARY"}\n' > "$QA_SUMMARY_PATH"
       - name: Upload sanitized QA evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: staging-runtime-fichas-lms-qa-${{ github.run_id }}
           path: ${{ runner.temp }}/staging-runtime-fichas-lms-summary.json

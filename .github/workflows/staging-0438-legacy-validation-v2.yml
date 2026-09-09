@@ -90,7 +90,7 @@ jobs:
             if (!['write', 'push', 'maintain', 'admin'].includes(permission.permission)) throw new Error('ACTOR_PERMISSION_INSUFFICIENT');
           })().catch((error) => { console.error(error.message); process.exit(1); });
           NODE
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify v2 script syntax before any staging write
         run: |
           set -euo pipefail
@@ -142,8 +142,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm --prefix worker-airtrust ci
@@ -159,8 +159,8 @@ jobs:
     needs: guard
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm ci
@@ -172,8 +172,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install dependencies
@@ -258,7 +258,7 @@ jobs:
           fi
       - name: Upload sanitized E2E evidence
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rdv-0438-legacy-functional-evidence-v2
           path: ${{ runner.temp }}/rdv-0438-evidence-v2/e2e-report.json

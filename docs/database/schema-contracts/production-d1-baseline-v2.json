@@ -208,8 +208,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-09",
-    "last_reconciled_against": "main 03979422 fix(backend): handle nullable funcionario cpf on pasta-virtual upload (#599)",
-    "schema_v2_digest": "3a824fca6bffdab4ea4690227f6552331d3171976deacc33185d810444cff6f7",
+    "last_reconciled_against": "main 32253c39 chore(ci): move remaining GitHub Actions to Node 24 v7 (#600)",
+    "schema_v2_digest": "80428bc9aa2856e6829ec8e1b796c82525c66f5861ca0d0d759c000800960466",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
