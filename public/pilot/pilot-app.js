@@ -597,6 +597,7 @@ function updateSyncButtonState() {
     !vault?.isUnlocked() ||
     !activeRdvDraft ||
     !activeVerifiedLease ||
+    activePackageData()?.contract?.sync_supported !== true ||
     operationalSyncInFlight;
 }
 
@@ -1391,6 +1392,14 @@ async function drainPilotOutbox(options = {}) {
 
 async function queueCurrentDraftForSync() {
   if (operationalSyncInFlight) return;
+  if (activePackageData()?.contract?.sync_supported !== true) {
+    setRdvSyncMessage(
+      'Sincronização ainda não foi habilitada para este pacote de voo.',
+      'attention',
+    );
+    updateSyncButtonState();
+    return;
+  }
 
   operationalSyncInFlight = true;
   updateSyncButtonState();
@@ -2073,6 +2082,18 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && vault?.isUnlocked()) {
     void flushDiagnosticSave();
     void flushOperationalSave();
+  }
+});
+window.addEventListener('beforeunload', (event) => {
+  if (
+    vault?.isUnlocked() &&
+    activeRdvDraft &&
+    operationalNextSequence !== operationalLocalSequence
+  ) {
+    // Browsers exibem uma mensagem padrao. O objetivo e impedir refresh/fechamento
+    // silencioso enquanto o IndexedDB ainda nao confirmou o read-back cifrado.
+    event.preventDefault();
+    event.returnValue = '';
   }
 });
 window.addEventListener('pagehide', () => {
