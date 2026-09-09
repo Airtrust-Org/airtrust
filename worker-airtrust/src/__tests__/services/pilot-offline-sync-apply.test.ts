@@ -249,6 +249,26 @@ describe('Pilot offline snapshot apply orchestration', () => {
     expect(database.batch).not.toHaveBeenCalled();
   });
 
+  it('allows first RDV creation over planned stages while CAS-protecting stage topology', () => {
+    const source = readFileSync(
+      join(
+        __dirname,
+        '../../services/controle-voos/pilot-offline-sync-apply.ts',
+      ),
+      'utf8',
+    );
+    const start = source.indexOf('function buildNewRdvInsert');
+    const end = source.indexOf('function buildOfflineSyncEvent');
+    const block = source.slice(start, end);
+
+    expect(block).toContain('stages: PreparedStage[]');
+    expect(block).toContain('const stageCas = buildStageRevisionCasSql(input.stages)');
+    expect(block).toContain('AND ${stageCas.sql}');
+    expect(block).not.toContain(
+      'SELECT 1 FROM cv_voo_etapas\n            WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL',
+    );
+  });
+
   it('orders the atomic D1 batch as RDV CAS, stages, event, receipt', () => {
     const source = readFileSync(
       join(
