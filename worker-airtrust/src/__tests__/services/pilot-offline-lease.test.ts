@@ -4,6 +4,7 @@ import {
   buildPilotOfflineLeaseClaims,
   signPilotOfflineLease,
   validatePilotOfflineDeviceId,
+  verifyPilotOfflineLeaseEnvelope,
 } from '../../services/controle-voos/pilot-offline-lease';
 
 function base64UrlToBytes(value: string) {
@@ -74,6 +75,73 @@ describe('pilot offline lease signing', () => {
     expect(new Date(decoded.valid_until).getTime()).toBeGreaterThan(
       new Date(decoded.issued_at).getTime(),
     );
+  });
+
+  it('revalida no servidor assinatura, contexto e validade do lease antes da sync', async () => {
+    const keyPair = (await crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign', 'verify'],
+    )) as CryptoKeyPair;
+    const privateJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+    const env = {
+      PILOT_OFFLINE_LEASE_PRIVATE_KEY_JWK: JSON.stringify(privateJwk),
+      PILOT_OFFLINE_LEASE_KEY_ID: 'pilot-test-key-2026',
+      PILOT_OFFLINE_LEASE_TTL_MINUTES: '720',
+    } as unknown as Env;
+
+    const claims = buildPilotOfflineLeaseClaims({
+      env,
+      tenantId: 7,
+      userId: 70,
+      funcionarioId: 77,
+      flightId: 42,
+      deviceId: 'device-1234567890',
+      now: new Date('2026-09-09T10:00:00.000Z'),
+    });
+    const envelope = await signPilotOfflineLease(env, claims);
+
+    await expect(
+      verifyPilotOfflineLeaseEnvelope(env, envelope, {
+        tenantId: 7,
+        userId: 70,
+        funcionarioId: 77,
+        flightId: 42,
+        deviceId: 'device-1234567890',
+        now: new Date('2026-09-09T12:00:00.000Z'),
+      }),
+    ).resolves.toMatchObject({
+      tenant_id: 7,
+      user_id: 70,
+      funcionario_id: 77,
+      flight_ids: [42],
+    });
+
+    await expect(
+      verifyPilotOfflineLeaseEnvelope(env, envelope, {
+        tenantId: 8,
+        userId: 70,
+        funcionarioId: 77,
+        flightId: 42,
+        deviceId: 'device-1234567890',
+        now: new Date('2026-09-09T12:00:00.000Z'),
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONTROLE_VOOS_PILOT_LEASE_CONTEXT_MISMATCH',
+    });
+
+    await expect(
+      verifyPilotOfflineLeaseEnvelope(env, envelope, {
+        tenantId: 7,
+        userId: 70,
+        funcionarioId: 77,
+        flightId: 42,
+        deviceId: 'device-1234567890',
+        now: new Date('2026-09-10T00:00:00.000Z'),
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONTROLE_VOOS_PILOT_LEASE_EXPIRED',
+    });
   });
 
   it('falha fechado quando a chave privada nao esta configurada', async () => {

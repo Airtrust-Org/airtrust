@@ -13,7 +13,7 @@ describe('staging governance for training dependency migration 0482', () => {
 
     expect(dispatcher).toContain('"0482_training_dependency_complete_curriculum.sql"');
     expect(dispatcher).toContain('apply-0482-training-dependency-complete-curriculum.sh');
-    expect(dispatcher).toContain(',0481,0482"');
+    expect(dispatcher).toContain(',0481,0482,0488"');
   });
 
   it('pins 0482 staging apply to official staging, exact reviewed SQL and 0481 prerequisite', () => {

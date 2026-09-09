@@ -207,9 +207,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-09-07",
-    "last_reconciled_against": "origin/main c0b8cb5a fix(schema-v2): fail closed on non-atomic table rebuilds (#497)",
-    "schema_v2_digest": "4bf5f47e6595c67d451484fa67bd07dd296e862a052e23eae22c30b03b70c032",
+    "last_reconciled_at": "2026-09-09",
+    "last_reconciled_against": "main 32253c39 chore(ci): move remaining GitHub Actions to Node 24 v7 (#600)",
+    "schema_v2_digest": "80428bc9aa2856e6829ec8e1b796c82525c66f5861ca0d0d759c000800960466",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -226,6 +226,13 @@
       "why_critical": "Canonical backing table for the active qualification-renewal request routes (HEALTH P1-26). Governed and dispatchable, but 0487 is REMOTE_APPLY_PENDING - not applied.",
       "blocked_on": "0487 governed apply + an authorized read-only production snapshot covering the qualification tables.",
       "tracking": "https://github.com/Airtrust-Org/airtrust/issues/485"
+    },
+    {
+      "table": "cv_offline_sync_receipts",
+      "introduced_by": "0488_controle_voos_pilot_offline_sync_receipts.sql",
+      "why_critical": "Durable tenant-scoped idempotency authority required before Pilot App offline mutations can be retried safely. The runtime sync flag remains fail-closed while 0488 is not applied.",
+      "blocked_on": "0488 governed schema apply plus staging idempotency/CAS/conflict validation before PILOT_OFFLINE_SYNC_ENABLED can be enabled.",
+      "tracking": "https://github.com/Airtrust-Org/airtrust/issues/580"
     }
   ],
   "schema_v2_since_baseline": [
@@ -472,6 +479,17 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "qualificacoes-renovacoes-0487.json",
       "note": "0487 preparada NAO significa aplicada. Preflight/postcondition scripts are wired in apply-schema-change-v2.yml; the dispatch has not been executed."
+    },
+    {
+      "change_file": "0488_controle_voos_pilot_offline_sync_receipts.sql",
+      "change_id": "controle-voos-pilot-offline-sync-receipts-0488",
+      "sha256": "8ea1601690c07b3260d660b0cbad57b91d5590f73e94b64d5192a6622659a449",
+      "targets": ["cv_offline_sync_receipts"],
+      "domain": "Controle de Voos / Pilot offline synchronization idempotency receipts",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-pilot-offline-sync-receipts-0488.json",
+      "note": "0488 preparada NAO significa aplicada. PILOT_OFFLINE_SYNC_ENABLED deve permanecer desabilitado ate apply governado, pos-condicoes e validacao de staging."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",

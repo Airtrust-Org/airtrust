@@ -86,11 +86,6 @@ const LARGE_FILE_LINE_CAPS = {
   // as pre-existing drift on this file, which that branch never touches —
   // both branches agree on 2677, this is the same number for two reasons.)
   'routes/lms-assets.ts': 2730,
-  // Cap raised 2026-07-26: counted 2046 — aeronave inativa (status IN ('I',
-  // 'INATIVO', 'INDISPONIVEL')) agora rejeitada em assertAeronaveBelongsToEmpresa,
-  // mesma definicao de "ativa" ja usada por GET /api/aeronaves?somente_ativas=1.
-  // Cap raised again 2026-07-26: counted 2095 — RDV draft CAS implementado.
-  'routes/controle-voos.ts': 2095,
   // Reliability remediation added atomic ficha writes and fail-closed PDF generation.
   // Extraction remains a follow-up and is not mixed into this incident closure.
   'routes/simuladores-fichas.ts': 2500,

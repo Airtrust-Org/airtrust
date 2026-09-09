@@ -188,8 +188,8 @@
         <p class="muted">
           O pacote do voo pode ser consultado sem rede. A edição do rascunho operacional só é
           liberada após validação de um lease assinado, específico deste usuário, tenant, tablet
-          e voo. Sincronização e envio à Coordenação continuam fora desta entrega. Este conteúdo
-          não é Diário de Bordo oficial.
+          e voo. A transmissão do rascunho usa outbox cifrada e receipt idempotente quando o
+          ambiente estiver explicitamente habilitado. Este conteúdo não é Diário de Bordo oficial.
         </p>
       </section>
 
@@ -296,7 +296,15 @@
           <div class="meta">
             <div><span class="muted">Sequência local</span><strong id="rdv-local-sequence">0</strong></div>
             <div><span class="muted">Lease válido até</span><strong id="rdv-lease-until">—</strong></div>
-            <div><span class="muted">Servidor</span><strong>Não sincronizado</strong></div>
+            <div><span class="muted">Servidor</span><strong id="rdv-server-sync-status">Não sincronizado</strong></div>
+          </div>
+          <div class="actions">
+            <button id="sync-rdv-now" class="primary" type="button" disabled>
+              Transmitir ao AirTrust
+            </button>
+          </div>
+          <div id="rdv-sync-status" class="statusline attention" aria-live="polite">
+            Salve o rascunho local e reconecte para transmitir.
           </div>
 
           <h3 style="margin-top:20px">RDV</h3>
@@ -310,9 +318,10 @@
           <div id="rdv-stage-fields"></div>
 
           <p class="muted" style="margin-top:18px">
-            Nesta fase, “Salvo no tablet” significa somente persistência cifrada local. Não significa
-            que o servidor recebeu os dados. Finalização, outbox e transmissão à Coordenação serão
-            habilitados apenas na fase de sincronização idempotente.
+            “Salvo no tablet” significa somente persistência cifrada local. “Transmitido” só será
+            exibido após receipt do servidor. Se a conexão cair durante o envio, a outbox cifrada
+            permanece no tablet para retry idempotente. O envio do RDV à Coordenação continua sendo
+            uma etapa separada do workflow operacional.
           </p>
         </section>
 

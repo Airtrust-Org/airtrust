@@ -100,10 +100,10 @@ describe('migration governance', () => {
     const regularPrefixes = files
       .map((file) => /^([0-9]{4})_/.exec(file)?.[1] ?? null)
       .filter((prefix): prefix is string => prefix !== null && prefix !== '9999');
-    // Ratchet raised 2026-09-06: 0487_qualificacoes_renovacoes.sql adds the
-    // missing backing table for the active renewal routes.
+    // Ratchet raised 2026-09-09: 0488_controle_voos_pilot_offline_sync_receipts.sql
+    // adds the durable idempotency authority for Pilot offline synchronization.
     // Historical #110 numbers 0477-0480 are intentionally not backfilled.
-    const expectedLatest = 487;
+    const expectedLatest = 488;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

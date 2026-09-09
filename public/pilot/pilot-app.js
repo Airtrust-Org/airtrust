@@ -15,6 +15,10 @@ import {
   validateRdvForm,
   validateStageDrafts,
 } from '/pilot/pilot-rdv-draft.js';
+import {
+  buildOfflineSyncCommand,
+  verifyOfflineSyncCommandHash,
+} from '/pilot/pilot-sync.js';
 
 const DRAFT_ID = 'phase1-synthetic-rdv-draft';
 const SAVE_DELAY_MS = 180;
@@ -83,6 +87,9 @@ const rdvLeaseUntilLabel = document.querySelector('#rdv-lease-until');
 const rdvFormFields = document.querySelector('#rdv-form-fields');
 const rdvStageFields = document.querySelector('#rdv-stage-fields');
 const closeRdvEditorButton = document.querySelector('#close-rdv-editor');
+const syncRdvButton = document.querySelector('#sync-rdv-now');
+const rdvSyncStatus = document.querySelector('#rdv-sync-status');
+const rdvServerSyncStatus = document.querySelector('#rdv-server-sync-status');
 
 let vault;
 let provisioned = false;
@@ -100,6 +107,7 @@ let operationalNextSequence = 0;
 let operationalSaveTimer = null;
 let operationalSaveChain = Promise.resolve();
 let timingSequence = 0;
+let operationalSyncInFlight = false;
 
 function setConnectivity() {
   const online = navigator.onLine;
@@ -276,7 +284,7 @@ async function authenticatedPost(path, payload) {
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     throw new PilotOnlineRequestError(
-      body?.error || body?.message || 'Falha ao preparar edição offline.',
+      body?.error || body?.message || 'Falha na operação online do Pilot App.',
       response.status,
       body?.code || null,
     );
@@ -306,7 +314,7 @@ function validateOfflinePackage(packageData, expectedFlightId) {
     contract?.name !== 'airtrust-pilot-offline-package' ||
     Number(contract?.version) !== 1 ||
     contract?.read_only !== true ||
-    contract?.sync_supported !== false ||
+    typeof contract?.sync_supported !== 'boolean' ||
     contract?.regulated_edb !== false
   ) {
     throw new Error('Pacote offline incompatível com esta versão do Pilot App.');
@@ -566,6 +574,107 @@ function rdvDraftRecordId(flightId) {
   return 'flight:' + String(flightId) + ':rdv';
 }
 
+function outboxRecordId(operationId) {
+  return 'operation:' + String(operationId);
+}
+
+function syncReceiptRecordId(operationId) {
+  return 'operation:' + String(operationId);
+}
+
+function setRdvSyncMessage(message, kind = 'attention') {
+  rdvSyncStatus.className = 'statusline ' + kind;
+  rdvSyncStatus.textContent = message;
+}
+
+function setServerSyncStatus(message) {
+  rdvServerSyncStatus.textContent = message;
+}
+
+function updateSyncButtonState() {
+  syncRdvButton.disabled =
+    !navigator.onLine ||
+    !vault?.isUnlocked() ||
+    !activeRdvDraft ||
+    !activeVerifiedLease ||
+    activePackageData()?.contract?.sync_supported !== true ||
+    operationalSyncInFlight;
+}
+
+async function listOutboxForFlight(flightId) {
+  const records = await vault.listJson('outbox');
+  return records
+    .filter(
+      (record) =>
+        Number(record.value?.command?.flight_id) === Number(flightId) &&
+        ['pending', 'blocked'].includes(record.value?.status),
+    )
+    .sort((left, right) =>
+      String(left.value?.created_at || left.updatedAt || '').localeCompare(
+        String(right.value?.created_at || right.updatedAt || ''),
+      ),
+    );
+}
+
+async function hasStoredConflictForFlight(flightId) {
+  const conflicts = await vault.listJson('conflicts');
+  return conflicts.some(
+    (record) =>
+      Number(record.value?.command_identity?.flight_id) === Number(flightId) ||
+      Number(record.value?.flight_id) === Number(flightId),
+  );
+}
+
+async function refreshOutboxStatusForActiveFlight() {
+  const packageData = activePackageData();
+  if (!packageData || !vault?.isUnlocked()) {
+    setServerSyncStatus('Não sincronizado');
+    updateSyncButtonState();
+    return;
+  }
+  const flightId = Number(packageData.voo?.id || 0);
+  const unresolved = await listOutboxForFlight(flightId);
+  const blocked = unresolved.filter((record) => record.value?.status === 'blocked');
+  const pending = unresolved.filter((record) => record.value?.status === 'pending');
+
+  if (blocked.length > 0) {
+    setServerSyncStatus('Ação necessária');
+    setRdvSyncMessage(
+      'Existe uma transmissão bloqueada. Os dados locais foram preservados para revisão.',
+      'error',
+    );
+  } else if (pending.length > 0) {
+    setServerSyncStatus('Pendente de transmissão');
+    setRdvSyncMessage(
+      navigator.onLine
+        ? 'Existe uma transmissão pendente. O Pilot App tentará reenviar de forma idempotente.'
+        : 'Transmissão pendente preservada na outbox cifrada até a conexão voltar.',
+      'attention',
+    );
+  } else if (activeRdvDraft?.sync_state === 'accepted_requires_refresh') {
+    setServerSyncStatus('Transmitido');
+    setRdvSyncMessage(
+      'Receipt confirmado. Atualize o pacote do voo antes de iniciar nova edição.',
+      'ok',
+    );
+  } else if (await hasStoredConflictForFlight(flightId)) {
+    setServerSyncStatus('Conflito');
+    setRdvSyncMessage(
+      'O servidor divergiu do pacote baixado. O rascunho local continua preservado.',
+      'error',
+    );
+  } else {
+    setServerSyncStatus('Não sincronizado');
+    setRdvSyncMessage(
+      navigator.onLine
+        ? 'Rascunho salvo localmente. Transmita quando o preenchimento estiver pronto para o servidor.'
+        : 'Rascunho salvo localmente. Reconecte para transmitir.',
+      'attention',
+    );
+  }
+  updateSyncButtonState();
+}
+
 async function verifyStoredLeaseForPackage(packageData) {
   if (!hasTrustedPilotLeaseKeys()) {
     throw new Error('Chave pública confiável do lease ainda não foi provisionada neste build.');
@@ -745,6 +854,11 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
     ) {
       throw new Error('Rascunho local pertence a outra identidade operacional.');
     }
+    if (value.sync_state === 'accepted_requires_refresh') {
+      throw new Error(
+        'Este rascunho já foi transmitido. Atualize o pacote do voo antes de iniciar nova edição.',
+      );
+    }
     if (String(value.source_package_id) !== identity.packageId) {
       throw new Error(
         'O pacote do voo mudou desde o início deste rascunho. Resolução de conflito ainda não está habilitada.',
@@ -807,6 +921,7 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
   }
 
   renderOperationalEditor();
+  void refreshOutboxStatusForActiveFlight();
 }
 
 function localDateTimeNow() {
@@ -946,6 +1061,425 @@ function flushOperationalSave() {
   return enqueueOperationalSave();
 }
 
+async function readPersistedOperationalStateForSync() {
+  const packageData = activePackageData();
+  if (!packageData || !activeRdvDraft) {
+    throw new Error('Abra o rascunho operacional antes de transmitir.');
+  }
+  if (!navigator.onLine) {
+    throw new PilotOnlineRequestError(
+      'Sem conexão. O rascunho continua salvo no tablet.',
+      0,
+      'OFFLINE',
+    );
+  }
+
+  await flushOperationalSave();
+  const identity = assertPackageIdentity(packageData);
+  const persistedRdv = await vault.getJson('rdv_drafts', rdvDraftRecordId(identity.flightId));
+  if (!persistedRdv) throw new Error('Rascunho RDV não encontrado no tablet.');
+
+  const persistedStages = (await vault.listJson('stage_drafts'))
+    .filter(
+      (record) =>
+        Number(record.value?.flight_id) === identity.flightId &&
+        String(record.value?.source_package_id) === identity.packageId,
+    )
+    .sort(
+      (left, right) =>
+        Number(left.value?.fields?.numero_etapa || 0) -
+        Number(right.value?.fields?.numero_etapa || 0),
+    );
+  if (persistedStages.length === 0) {
+    throw new Error('Etapas locais não encontradas para transmissão.');
+  }
+
+  const revision = Number(persistedRdv.localRevision || 0);
+  if (
+    revision < 1 ||
+    persistedStages.some((record) => Number(record.localRevision || 0) !== revision)
+  ) {
+    throw new Error(
+      'As revisões locais do RDV e das etapas não estão alinhadas. Salve novamente antes de transmitir.',
+    );
+  }
+
+  const rdvErrors = validateRdvForm(persistedRdv.value.form, packageData);
+  const stageErrors = validateStageDrafts(persistedStages.map((record) => record.value));
+  if (Object.keys(rdvErrors).length > 0 || stageErrors.length > 0) {
+    throw new Error(
+      'Existem validações pendentes. Corrija os campos indicados antes de transmitir.',
+    );
+  }
+
+  if (persistedRdv.value?.sync_state === 'accepted_requires_refresh') {
+    throw new Error(
+      'Este rascunho já foi transmitido. Atualize o pacote do voo antes de nova transmissão.',
+    );
+  }
+
+  const leaseRecord = await verifyStoredLeaseForPackage(packageData);
+  if (!leaseRecord?.verified || !leaseRecord.stored?.value?.envelope) {
+    throw new Error('Lease offline válido não encontrado para esta transmissão.');
+  }
+  const deviceId = await vault.getOrCreateDeviceId();
+
+  return {
+    packageData,
+    identity,
+    rdvRecord: persistedRdv,
+    stageRecords: persistedStages,
+    leaseEnvelope: leaseRecord.stored.value.envelope,
+    deviceId,
+    revision,
+  };
+}
+
+async function storeOutboxAttempt(record, patch) {
+  const next = {
+    ...record.value,
+    ...patch,
+    updated_at: new Date().toISOString(),
+  };
+  const revision = Number(record.localRevision || 0) + 1;
+  await vault.putJson('outbox', record.id, next, revision);
+  return vault.getJson('outbox', record.id);
+}
+
+async function markDraftAcceptedByServer(command, result) {
+  const draftId = rdvDraftRecordId(command.flight_id);
+  const stored = await vault.getJson('rdv_drafts', draftId);
+  if (!stored) return;
+
+  const currentSequence = Number(stored.value?.local_sequence || 0);
+  if (currentSequence !== Number(command.local_sequence)) {
+    // O servidor aceitou exatamente o snapshot enfileirado, mas existem
+    // mudanças locais posteriores. Preservamos tudo e exigimos refresh/rebase.
+    await vault.putJson(
+      'conflicts',
+      syncReceiptRecordId(command.client_operation_id) + ':local-ahead',
+      {
+        type: 'local_revision_ahead_after_server_accept',
+        command_sequence: command.local_sequence,
+        current_local_sequence: currentSequence,
+        server_entity_version: result.server_entity_version ?? null,
+        created_at: new Date().toISOString(),
+      },
+      1,
+    );
+    return;
+  }
+
+  await vault.putJson(
+    'rdv_drafts',
+    draftId,
+    {
+      ...stored.value,
+      sync_state: 'accepted_requires_refresh',
+      sync_operation_id: command.client_operation_id,
+      synced_server_version: result.server_entity_version ?? null,
+      synced_at: new Date().toISOString(),
+    },
+    stored.localRevision,
+  );
+
+  if (activeRdvDraft && Number(activeRdvDraft.flight_id) === Number(command.flight_id)) {
+    activeRdvDraft = {
+      ...activeRdvDraft,
+      sync_state: 'accepted_requires_refresh',
+      sync_operation_id: command.client_operation_id,
+      synced_server_version: result.server_entity_version ?? null,
+      synced_at: new Date().toISOString(),
+    };
+  }
+}
+
+async function persistFinalSyncResult(outboxRecord, result) {
+  const command = outboxRecord.value.command;
+  const receiptValue = {
+    schema_version: 1,
+    command_identity: {
+      client_operation_id: command.client_operation_id,
+      flight_id: command.flight_id,
+      local_sequence: command.local_sequence,
+      payload_hash: command.payload_hash,
+    },
+    server_result: structuredClone(result),
+    received_at_local: new Date().toISOString(),
+  };
+  const entries = [
+    {
+      storeName: 'sync_receipts',
+      id: syncReceiptRecordId(command.client_operation_id),
+      value: receiptValue,
+      localRevision: 1,
+    },
+  ];
+  if (result.status === 'conflict') {
+    entries.push({
+      storeName: 'conflicts',
+      id: syncReceiptRecordId(command.client_operation_id),
+      value: {
+        ...receiptValue,
+        conflict: result.conflict || null,
+      },
+      localRevision: 1,
+    });
+  }
+
+  await vault.putJsonBatch(entries);
+  const persistedReceipt = await vault.getJson(
+    'sync_receipts',
+    syncReceiptRecordId(command.client_operation_id),
+  );
+  if (
+    !persistedReceipt ||
+    persistedReceipt.value?.command_identity?.payload_hash !== command.payload_hash
+  ) {
+    throw new Error('Receipt do servidor não foi confirmado no armazenamento local.');
+  }
+
+  await vault.deleteJson('outbox', outboxRecord.id);
+
+  if (result.status === 'accepted' || result.status === 'already_accepted') {
+    await markDraftAcceptedByServer(command, result);
+  }
+}
+
+function isRetriableSyncError(error) {
+  if (!(error instanceof PilotOnlineRequestError)) return true;
+  return error.status === 0 || error.status === 408 || error.status === 429 || error.status >= 500;
+}
+
+async function drainPilotOutbox(options = {}) {
+  if (!vault?.isUnlocked() || !navigator.onLine || operationalSyncInFlight) return;
+
+  const onlyFlightId =
+    options.onlyFlightId == null ? null : Number(options.onlyFlightId);
+  const records = (await vault.listJson('outbox'))
+    .filter(
+      (record) =>
+        record.value?.status === 'pending' &&
+        (onlyFlightId === null ||
+          Number(record.value?.command?.flight_id) === onlyFlightId),
+    )
+    .sort((left, right) =>
+      String(left.value?.created_at || left.updatedAt || '').localeCompare(
+        String(right.value?.created_at || right.updatedAt || ''),
+      ),
+    );
+  if (records.length === 0) {
+    await refreshOutboxStatusForActiveFlight();
+    return;
+  }
+
+  operationalSyncInFlight = true;
+  updateSyncButtonState();
+  if (activeRdvDraft) renderOperationalEditor({ preserveScroll: true });
+
+  try {
+    for (let record of records) {
+      const command = record.value?.command;
+      if (!command || !(await verifyOfflineSyncCommandHash(command))) {
+        throw new Error(
+          'Comando da outbox falhou na verificação local de integridade. Dados preservados.',
+        );
+      }
+
+      record = await storeOutboxAttempt(record, {
+        status: 'pending',
+        attempt_count: Number(record.value?.attempt_count || 0) + 1,
+        last_attempt_at: new Date().toISOString(),
+        last_error: null,
+      });
+
+      try {
+        const body = await authenticatedPost('/controle-voos/pilot/offline-sync', {
+          commands: [command],
+        });
+        const result = body?.data?.results?.[0];
+        if (
+          !result ||
+          !['accepted', 'already_accepted', 'conflict', 'rejected_retriable', 'rejected_permanent'].includes(
+            result.status,
+          )
+        ) {
+          throw new Error('Resposta de sincronização incompatível com o Pilot App.');
+        }
+
+        if (result.status === 'rejected_retriable') {
+          await storeOutboxAttempt(record, {
+            status: 'pending',
+            last_error: {
+              code: result.error_code || 'REJECTED_RETRIABLE',
+              message: 'Servidor solicitou nova tentativa.',
+            },
+          });
+          setRdvSyncMessage('Servidor solicitou nova tentativa. Outbox preservada.', 'attention');
+          break;
+        }
+
+        if (result.status === 'rejected_permanent') {
+          await storeOutboxAttempt(record, {
+            status: 'blocked',
+            last_error: {
+              code: result.error_code || 'REJECTED_PERMANENT',
+              message: 'Comando recusado permanentemente pelo servidor.',
+            },
+          });
+          setServerSyncStatus('Ação necessária');
+          setRdvSyncMessage(
+            'A transmissão foi bloqueada pelo servidor. Os dados locais continuam preservados.',
+            'error',
+          );
+          break;
+        }
+
+        await persistFinalSyncResult(record, result);
+
+        if (result.status === 'conflict') {
+          setServerSyncStatus('Conflito');
+          setRdvSyncMessage(
+            'O servidor mudou desde o pacote baixado. O rascunho local foi preservado para resolução de conflito.',
+            'error',
+          );
+          break;
+        }
+
+        setServerSyncStatus('Transmitido');
+        setRdvSyncMessage(
+          'Receipt confirmado pelo servidor. Atualize o pacote do voo antes de nova edição.',
+          'ok',
+        );
+        if (
+          activeRdvDraft &&
+          Number(activeRdvDraft.flight_id) === Number(command.flight_id)
+        ) {
+          closeOperationalEditor();
+          setLeaseMessage(
+            'Rascunho transmitido. Atualize o pacote deste voo antes de continuar editando.',
+            'ok',
+          );
+        }
+      } catch (error) {
+        const retriable = isRetriableSyncError(error);
+        const updated = await storeOutboxAttempt(record, {
+          status: retriable ? 'pending' : 'blocked',
+          last_error: {
+            code: error instanceof PilotOnlineRequestError ? error.code : null,
+            status: error instanceof PilotOnlineRequestError ? error.status : null,
+            message: error instanceof Error ? error.message : 'Falha desconhecida',
+          },
+        });
+        record = updated || record;
+
+        setServerSyncStatus(retriable ? 'Pendente de transmissão' : 'Ação necessária');
+        setRdvSyncMessage(
+          retriable
+            ? 'A conexão/servidor não confirmou o envio. A outbox cifrada foi preservada para retry.'
+            : 'O servidor recusou a transmissão. Os dados locais foram preservados para revisão.',
+          retriable ? 'attention' : 'error',
+        );
+        break;
+      }
+    }
+  } finally {
+    operationalSyncInFlight = false;
+    updateSyncButtonState();
+    await refreshOutboxStatusForActiveFlight();
+  }
+}
+
+async function queueCurrentDraftForSync() {
+  if (operationalSyncInFlight) return;
+  if (activePackageData()?.contract?.sync_supported !== true) {
+    setRdvSyncMessage(
+      'Sincronização ainda não foi habilitada para este pacote de voo.',
+      'attention',
+    );
+    updateSyncButtonState();
+    return;
+  }
+
+  operationalSyncInFlight = true;
+  updateSyncButtonState();
+  if (activeRdvDraft) renderOperationalEditor({ preserveScroll: true });
+
+  try {
+    const state = await readPersistedOperationalStateForSync();
+    const unresolved = (await vault.listJson('outbox')).filter(
+      (record) =>
+        Number(record.value?.command?.flight_id) === state.identity.flightId &&
+        ['pending', 'blocked'].includes(record.value?.status),
+    );
+    if (unresolved.length > 0) {
+      const pending = unresolved.find((record) => record.value?.status === 'pending');
+      if (pending) {
+        setServerSyncStatus('Pendente de transmissão');
+        setRdvSyncMessage(
+          'Já existe uma operação pendente para este voo. Tentarei reconciliá-la antes de criar outra.',
+          'attention',
+        );
+      } else {
+        throw new Error(
+          'Existe uma transmissão bloqueada para este voo. Revise o conflito antes de criar nova operação.',
+        );
+      }
+    } else {
+      const command = await buildOfflineSyncCommand({
+        packageData: state.packageData,
+        rdvDraft: state.rdvRecord.value,
+        stageDrafts: state.stageRecords.map((record) => record.value),
+        leaseEnvelope: state.leaseEnvelope,
+        deviceId: state.deviceId,
+      });
+      if (!(await verifyOfflineSyncCommandHash(command))) {
+        throw new Error('Falha ao verificar o comando antes de gravar a outbox.');
+      }
+
+      const id = outboxRecordId(command.client_operation_id);
+      await vault.putJson(
+        'outbox',
+        id,
+        {
+          schema_version: 1,
+          status: 'pending',
+          created_at: new Date().toISOString(),
+          attempt_count: 0,
+          command,
+        },
+        1,
+      );
+      const readBack = await vault.getJson('outbox', id);
+      if (
+        !readBack ||
+        readBack.value?.command?.payload_hash !== command.payload_hash ||
+        !(await verifyOfflineSyncCommandHash(readBack.value.command))
+      ) {
+        throw new Error('Falha no read-back da outbox cifrada.');
+      }
+
+      setServerSyncStatus('Pendente de transmissão');
+      setRdvSyncMessage('Comando cifrado na outbox. Iniciando transmissão…', 'attention');
+    }
+  } catch (error) {
+    setRdvSyncMessage(
+      error instanceof Error ? error.message : 'Não foi possível preparar a transmissão.',
+      'error',
+    );
+    operationalSyncInFlight = false;
+    updateSyncButtonState();
+    if (activeRdvDraft) renderOperationalEditor({ preserveScroll: true });
+    return;
+  }
+
+  operationalSyncInFlight = false;
+  updateSyncButtonState();
+  await drainPilotOutbox({
+    onlyFlightId: activePackageData()?.voo?.id ?? null,
+  });
+}
+
 function createEditorField({
   label,
   value,
@@ -965,7 +1499,7 @@ function createEditorField({
   if (type !== 'textarea') input.type = type;
   if (inputMode) input.inputMode = inputMode;
   input.value = value ?? '';
-  input.readOnly = readOnly;
+  input.readOnly = readOnly || operationalSyncInFlight;
   if (onInput) input.addEventListener('input', () => onInput(input.value, input));
   if (onBlur) input.addEventListener('blur', () => onBlur(input.value, input));
   wrapper.append(title, input);
@@ -1101,6 +1635,7 @@ function renderStageFields() {
       button.type = 'button';
       button.className = 'secondary';
       button.textContent = label;
+      button.disabled = operationalSyncInFlight;
       button.addEventListener('click', () => applyQuickTiming(stageDraft, field, label));
       quick.append(button);
     }
@@ -1179,6 +1714,8 @@ function renderOperationalEditor(options = {}) {
   renderStageFields();
   refreshDraftValidationPresentation();
   rdvEditorCard.classList.remove('hidden');
+  updateSyncButtonState();
+  void refreshOutboxStatusForActiveFlight();
   if (options.preserveScroll) window.scrollTo({ top: scrollY });
   else rdvEditorCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1494,6 +2031,7 @@ async function lockVault() {
   activeStageDrafts = [];
   operationalLocalSequence = 0;
   operationalNextSequence = 0;
+  operationalSyncInFlight = false;
   workspace.classList.add('hidden');
   closePackageDetail();
   unlockCard.classList.remove('hidden');
@@ -1505,8 +2043,14 @@ async function lockVault() {
 
 window.addEventListener('online', () => {
   setConnectivity();
-  if (vault?.isUnlocked()) void loadOnlineFlights();
-  if (activePackageRecord) void refreshLeaseControls(activePackageRecord);
+  if (vault?.isUnlocked()) {
+    void loadOnlineFlights();
+    void drainPilotOutbox();
+  }
+  if (activePackageRecord) {
+    void refreshLeaseControls(activePackageRecord);
+    void refreshOutboxStatusForActiveFlight();
+  }
 });
 window.addEventListener('offline', () => {
   setConnectivity();
@@ -1514,12 +2058,16 @@ window.addEventListener('offline', () => {
     onlineFlightRecords = [];
     renderOnlineFlights();
     setSessionMessage('Offline — mostrando apenas pacotes cifrados já armazenados.', 'attention');
-    if (activePackageRecord) void refreshLeaseControls(activePackageRecord);
+    if (activePackageRecord) {
+      void refreshLeaseControls(activePackageRecord);
+      void refreshOutboxStatusForActiveFlight();
+    }
   }
 });
 refreshOnlineButton.addEventListener('click', () => void loadOnlineFlights());
 prepareEditOfflineButton.addEventListener('click', () => void prepareOfflineEditing());
 openLocalDraftButton.addEventListener('click', () => void openExistingOperationalDraft());
+syncRdvButton.addEventListener('click', () => void queueCurrentDraftForSync());
 closeRdvEditorButton.addEventListener('click', () => void flushOperationalSave().then(closeOperationalEditor));
 closeDetailButton.addEventListener('click', closePackageDetail);
 draftInput.addEventListener('input', scheduleDiagnosticSave);
@@ -1534,6 +2082,18 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && vault?.isUnlocked()) {
     void flushDiagnosticSave();
     void flushOperationalSave();
+  }
+});
+window.addEventListener('beforeunload', (event) => {
+  if (
+    vault?.isUnlocked() &&
+    activeRdvDraft &&
+    operationalNextSequence !== operationalLocalSequence
+  ) {
+    // Browsers exibem uma mensagem padrao. O objetivo e impedir refresh/fechamento
+    // silencioso enquanto o IndexedDB ainda nao confirmou o read-back cifrado.
+    event.preventDefault();
+    event.returnValue = '';
   }
 });
 window.addEventListener('pagehide', () => {

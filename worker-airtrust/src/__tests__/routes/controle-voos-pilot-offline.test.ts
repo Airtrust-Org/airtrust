@@ -11,6 +11,14 @@ const {
   isCrewOnFlight,
   buildPilotOfflineLeaseClaims,
   signPilotOfflineLease,
+  verifyPilotOfflineLeaseEnvelope,
+  assertPilotOfflineSyncEnabled,
+  assertOfflineSyncReceiptSchemaReady,
+  isOfflineSyncReceiptSchemaReady,
+  isPilotOfflineSyncEnabled,
+  assertOfflineSyncCommandHash,
+  parseOfflineSyncBatch,
+  applyPilotOfflineSnapshotCommand,
 } = vi.hoisted(() => ({
   assertRdvSelfScope: vi.fn(async () => undefined),
   hasRdvCapability: vi.fn(async () => true),
@@ -39,6 +47,36 @@ const {
     key_id: 'pilot-test-key',
     payload: 'payload',
     signature: 'signature',
+  })),
+  verifyPilotOfflineLeaseEnvelope: vi.fn(async () => ({
+    lease_version: 1,
+    purpose: 'offline_flight_lease',
+    tenant_id: 7,
+    user_id: 70,
+    funcionario_id: 77,
+    flight_ids: [42],
+    device_id: 'device-1234567890',
+    issued_at: '2026-09-09T10:00:00.000Z',
+    valid_from: '2026-09-09T09:55:00.000Z',
+    valid_until: '2026-09-09T22:00:00.000Z',
+    app_min_version: '1.0.0',
+    allowed_local_actions: ['open_package', 'edit_rdv_draft'],
+    nonce: 'nonce-test',
+  })),
+  assertPilotOfflineSyncEnabled: vi.fn(),
+  assertOfflineSyncReceiptSchemaReady: vi.fn(async () => undefined),
+  isOfflineSyncReceiptSchemaReady: vi.fn(async () => true),
+  isPilotOfflineSyncEnabled: vi.fn(() => false),
+  assertOfflineSyncCommandHash: vi.fn(async () => undefined),
+  parseOfflineSyncBatch: vi.fn(),
+  applyPilotOfflineSnapshotCommand: vi.fn(async ({ command }: any) => ({
+    client_operation_id: command.client_operation_id,
+    status: 'accepted',
+    server_received_at: '2026-09-09T20:00:00.000Z',
+    server_entity_version: 4,
+    canonical_entity_id: '90',
+    error_code: null,
+    conflict: null,
   })),
 }));
 
@@ -80,6 +118,20 @@ vi.mock('../../services/controle-voos/pilot-offline-lease', () => ({
   validatePilotOfflineAppVersion: (value: unknown) => String(value || ''),
   buildPilotOfflineLeaseClaims,
   signPilotOfflineLease,
+  verifyPilotOfflineLeaseEnvelope,
+}));
+
+vi.mock('../../services/controle-voos/pilot-offline-sync', () => ({
+  assertPilotOfflineSyncEnabled,
+  assertOfflineSyncReceiptSchemaReady,
+  isOfflineSyncReceiptSchemaReady,
+  isPilotOfflineSyncEnabled,
+  assertOfflineSyncCommandHash,
+  parseOfflineSyncBatch,
+}));
+
+vi.mock('../../services/controle-voos/pilot-offline-sync-apply', () => ({
+  applyPilotOfflineSnapshotCommand,
 }));
 
 import pilotOfflineRoutes from '../../routes/controle-voos-pilot-offline';
@@ -228,6 +280,31 @@ describe('Pilot offline package', () => {
       created_at: '2026-09-09T08:00:00Z',
       updated_at: '2026-09-09T09:00:00Z',
     });
+    parseOfflineSyncBatch.mockReturnValue([
+      {
+        client_operation_id: '123e4567-e89b-42d3-a456-426614174000',
+        tenant_id: 7,
+        user_id: 70,
+        flight_id: 42,
+        device_id: 'device-1234567890',
+        command_type: 'rdv_snapshot_upsert_v1',
+        entity_type: 'rdv_snapshot',
+        operation_type: 'upsert',
+        base_server_version: 3,
+        base_flight_version: 6,
+        local_sequence: 5,
+        claimed_at: '2026-09-09T19:30:00.000Z',
+        payload_hash: 'a'.repeat(64),
+        lease: {
+          envelope_version: 1,
+          alg: 'ES256',
+          key_id: 'pilot-test-key',
+          payload: 'payload',
+          signature: 'signature',
+        },
+        payload: {},
+      },
+    ]);
     getActiveRdvByFlight.mockResolvedValue({
       id: 90,
       empresa_id: 7,
@@ -312,6 +389,30 @@ describe('Pilot offline package', () => {
     expect(body.data.abastecimentos[0].anexo_r2_key).toBeUndefined();
   });
 
+  it('anuncia sync somente quando flag e schema 0488 estao prontos', async () => {
+    isPilotOfflineSyncEnabled.mockReturnValueOnce(true);
+    isOfflineSyncReceiptSchemaReady.mockResolvedValueOnce(true);
+    const enabledResponse = await createApp().request(
+      'http://localhost/api/controle-voos/voos/42/offline-package',
+      { headers: { Authorization: 'Bearer test' } },
+      createEnv(),
+    );
+    expect(enabledResponse.status).toBe(200);
+    const enabledBody = (await enabledResponse.json()) as any;
+    expect(enabledBody.data.contract.sync_supported).toBe(true);
+
+    isPilotOfflineSyncEnabled.mockReturnValueOnce(true);
+    isOfflineSyncReceiptSchemaReady.mockResolvedValueOnce(false);
+    const missingSchemaResponse = await createApp().request(
+      'http://localhost/api/controle-voos/voos/42/offline-package',
+      { headers: { Authorization: 'Bearer test' } },
+      createEnv(),
+    );
+    expect(missingSchemaResponse.status).toBe(200);
+    const missingSchemaBody = (await missingSchemaResponse.json()) as any;
+    expect(missingSchemaBody.data.contract.sync_supported).toBe(false);
+  });
+
   it('emite lease somente para ator vinculado ao voo e em estado editavel', async () => {
     const response = await createApp().request(
       'http://localhost/api/controle-voos/voos/42/offline-lease',
@@ -381,6 +482,140 @@ describe('Pilot offline package', () => {
 
     expect(response.status).toBe(403);
     expect(signPilotOfflineLease).not.toHaveBeenCalled();
+  });
+
+  it('sincroniza somente depois de flag, schema, contexto, crew, hash e lease validos', async () => {
+    const env = createEnv();
+    const response = await createApp().request(
+      'http://localhost/api/controle-voos/pilot/offline-sync',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer test',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ commands: [{}] }),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(assertPilotOfflineSyncEnabled).toHaveBeenCalledWith(env);
+    expect(assertOfflineSyncReceiptSchemaReady).toHaveBeenCalledWith(env.DB);
+    expect(assertOfflineSyncCommandHash).toHaveBeenCalledTimes(1);
+    expect(isCrewOnFlight).toHaveBeenCalledWith(env.DB, 7, 42, 77);
+    expect(verifyPilotOfflineLeaseEnvelope).toHaveBeenCalledWith(
+      env,
+      expect.objectContaining({ alg: 'ES256' }),
+      expect.objectContaining({
+        tenantId: 7,
+        userId: 70,
+        funcionarioId: 77,
+        flightId: 42,
+        deviceId: 'device-1234567890',
+      }),
+    );
+    expect(applyPilotOfflineSnapshotCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        db: env.DB,
+        empresaId: 7,
+        userId: 70,
+        funcionarioId: 77,
+        flight: expect.objectContaining({ id: 42 }),
+      }),
+    );
+
+    const body = (await response.json()) as any;
+    expect(body.data.results[0]).toMatchObject({
+      status: 'accepted',
+      server_entity_version: 4,
+      canonical_entity_id: '90',
+    });
+    expect(body.data.meta).toEqual({
+      count: 1,
+      sync_contract: 'rdv_snapshot_upsert_v1',
+      regulated_edb: false,
+    });
+  });
+
+  it('nao aplica nenhum comando se o lote contiver contexto diferente do usuario autenticado', async () => {
+    parseOfflineSyncBatch.mockReturnValueOnce([
+      {
+        client_operation_id: '123e4567-e89b-42d3-a456-426614174000',
+        tenant_id: 8,
+        user_id: 70,
+        flight_id: 42,
+        device_id: 'device-1234567890',
+        command_type: 'rdv_snapshot_upsert_v1',
+        entity_type: 'rdv_snapshot',
+        operation_type: 'upsert',
+        base_server_version: 3,
+        base_flight_version: 6,
+        local_sequence: 5,
+        claimed_at: '2026-09-09T19:30:00.000Z',
+        payload_hash: 'a'.repeat(64),
+        lease: {},
+        payload: {},
+      },
+    ]);
+
+    const response = await createApp().request(
+      'http://localhost/api/controle-voos/pilot/offline-sync',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer test',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ commands: [{}] }),
+      },
+      createEnv(),
+    );
+
+    expect(response.status).toBe(403);
+    expect(applyPilotOfflineSnapshotCommand).not.toHaveBeenCalled();
+  });
+
+  it('nao aplica nenhum comando quando o usuario deixou de integrar a tripulacao', async () => {
+    isCrewOnFlight.mockResolvedValueOnce(false);
+    const response = await createApp().request(
+      'http://localhost/api/controle-voos/pilot/offline-sync',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer test',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ commands: [{}] }),
+      },
+      createEnv(),
+    );
+
+    expect(response.status).toBe(403);
+    expect(verifyPilotOfflineLeaseEnvelope).not.toHaveBeenCalled();
+    expect(applyPilotOfflineSnapshotCommand).not.toHaveBeenCalled();
+  });
+
+  it('falha fechado antes de processar lote quando sync nao esta habilitada', async () => {
+    assertPilotOfflineSyncEnabled.mockImplementationOnce(() => {
+      throw new Error('SYNC_DISABLED');
+    });
+    const response = await createApp().request(
+      'http://localhost/api/controle-voos/pilot/offline-sync',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer test',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ commands: [{}] }),
+      },
+      createEnv(),
+    );
+
+    expect(response.status).toBe(403);
+    expect(parseOfflineSyncBatch).not.toHaveBeenCalled();
+    expect(applyPilotOfflineSnapshotCommand).not.toHaveBeenCalled();
   });
 
   it('propaga a negativa de ownership/tenant antes das consultas complementares', async () => {

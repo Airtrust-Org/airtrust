@@ -1,0 +1,112 @@
+// source_reference: Pilot offline sync receipts 0488 Schema V2 verification
+// operational_decision: verify reviewed hashes, tenant idempotency and additive schema contract
+// dry_run_required: false
+// rollback_plan_required: false
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+import { buildReviewedSchemaApply } from '../schema-v2/build-reviewed-schema-apply.mjs';
+
+const MANIFEST =
+  'worker-airtrust/schema-v2/controle-voos-pilot-offline-sync-receipts-0488.json';
+const MIGRATION =
+  'worker-airtrust/migrations/0488_controle_voos_pilot_offline_sync_receipts.sql';
+
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+test('pins reviewed hashes for Pilot offline sync receipts 0488', () => {
+  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+  const sql = readFileSync(manifest.filePath);
+  const plan = readFileSync(manifest.planPath);
+
+  assert.equal(
+    manifest.changeId,
+    'controle-voos-pilot-offline-sync-receipts-0488',
+  );
+  assert.equal(manifest.baselineId, 'production-d1-baseline-v2-20260714');
+  assert.equal(sha256(sql), manifest.fileHash);
+  assert.equal(sha256(plan), manifest.planHash);
+});
+
+test('0488 Schema V2 SQL is byte-equivalent, additive and tenant scoped', () => {
+  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+  const change = readFileSync(manifest.filePath, 'utf8');
+  const migration = readFileSync(MIGRATION, 'utf8');
+  const ddl = change
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith('--'))
+    .join('\n');
+
+  assert.equal(change, migration);
+  assert.match(ddl, /CREATE TABLE IF NOT EXISTS cv_offline_sync_receipts/);
+  assert.match(ddl, /empresa_id INTEGER NOT NULL/);
+  assert.match(ddl, /client_operation_id TEXT NOT NULL/);
+  assert.match(ddl, /payload_hash TEXT NOT NULL/);
+  assert.match(
+    ddl,
+    /CREATE UNIQUE INDEX IF NOT EXISTS uq_cv_offline_sync_receipts_empresa_operation/,
+  );
+  assert.match(
+    ddl,
+    /ON cv_offline_sync_receipts \(empresa_id, client_operation_id\)/,
+  );
+  assert.ok(
+    ddl.includes(
+      "CHECK (result_status IN ('accepted', 'conflict', 'rejected_retriable', 'rejected_permanent'))",
+    ),
+  );
+  assert.match(ddl, /idx_cv_offline_sync_receipts_voo_received/);
+  assert.match(ddl, /idx_cv_offline_sync_receipts_actor_device/);
+  for (const destructive of ['INSERT INTO', 'DELETE FROM', 'DROP TABLE', 'ALTER TABLE']) {
+    assert.equal(ddl.toUpperCase().includes(destructive), false);
+  }
+});
+
+test('0488 does not persist the operational payload body', () => {
+  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+  const change = readFileSync(manifest.filePath, 'utf8');
+  const ddl = change
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith('--'))
+    .join('\n')
+    .toLowerCase();
+
+  assert.ok(ddl.includes('payload_hash text not null'));
+  for (const forbidden of [
+    'payload_json',
+    'request_body',
+    'authorization',
+    'access_token',
+    'refresh_token',
+  ]) {
+    assert.equal(ddl.includes(forbidden), false);
+  }
+});
+
+test('official Schema V2 builder accepts 0488 and appends exactly one ledger row', () => {
+  const outputPath = path.join(
+    mkdtempSync(path.join(tmpdir(), 'airtrust-0488-')),
+    '0488-apply.sql',
+  );
+  const result = buildReviewedSchemaApply({
+    manifestPath: MANIFEST,
+    outputPath,
+    expectedChangeId: 'controle-voos-pilot-offline-sync-receipts-0488',
+    githubSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  });
+
+  assert.equal(
+    result.changeId,
+    'controle-voos-pilot-offline-sync-receipts-0488',
+  );
+  const applied = readFileSync(outputPath, 'utf8');
+  assert.match(applied, /CREATE TABLE IF NOT EXISTS cv_offline_sync_receipts/);
+  const ledgerRows = applied.match(/INSERT INTO airtrust_schema_changes_v2/g) ?? [];
+  assert.equal(ledgerRows.length, 1);
+  assert.match(applied, /'controle-voos-pilot-offline-sync-receipts-0488'/);
+});

@@ -52,6 +52,14 @@ describe('apply-schema-change-v2.yml — controlled single-file apply', () => {
     expect(workflow).toContain("inputs.change_id == 'qualificacoes-tipos-dominio-override-0454'");
     expect(workflow).toContain('validate-qualificacoes-tipos-dominio-override-0454.sh');
   });
+
+  it('runs the exact read-only 0488 preflight and postconditions for Pilot offline sync receipts', () => {
+    expect(workflow).toContain(
+      "inputs.change_id == 'controle-voos-pilot-offline-sync-receipts-0488'",
+    );
+    expect(workflow).toContain('validate-0488-production-preflight.sh');
+    expect(workflow).toContain('validate-0488-production-postconditions.sh');
+  });
 });
 
 describe('EAD reconciliation ledger Schema V2 change 0453', () => {
