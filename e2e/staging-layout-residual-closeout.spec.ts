@@ -96,7 +96,7 @@ test.describe.serial('layout/UX residual audit closeout', () => {
       timeout: 20_000,
     });
 
-    await card.getByRole('button', { name: /^Abrir$/ }).click();
+    await card.getByRole('button', { name: /^Abrir$/ }).first().click();
     await page.waitForURL(new RegExp(`/sgso/relatos/${id}(?:\\?|$)`), { timeout: 20_000 });
     await waitForApp(page);
     await expect(page.getByText(new RegExp(`Relato\\s+${protocolo}`, 'i')).first()).toBeVisible();
@@ -115,7 +115,10 @@ test.describe.serial('layout/UX residual audit closeout', () => {
       timeout: 20_000,
     });
 
-    const pastaButton = page.getByRole('button', { name: /Pasta 360/i }).first();
+    const pastaButton = page
+      .getByRole('button', { name: /Pasta 360|Abrir perfil/i })
+      .or(page.locator('button[title="Abrir perfil"]'))
+      .first();
     await expect(pastaButton).toBeVisible();
     await pastaButton.click();
     await page.waitForURL(/\/funcionarios\/\d+\/ficha\?[^#]*tab=pasta/, { timeout: 20_000 });
