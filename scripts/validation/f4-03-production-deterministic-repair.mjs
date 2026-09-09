@@ -90,7 +90,7 @@ if (!['dry-run', 'apply'].includes(mode)) fail('INVALID_MODE');
 const confirmation = process.env.F4_03_REPAIR_CONFIRMATION || '';
 if (mode === 'dry-run' && confirmation !== CONFIRMATION_DRY_RUN) fail('DRYRUN_CONFIRMATION_REQUIRED');
 if (mode === 'apply' && confirmation !== CONFIRMATION_APPLY) fail('APPLY_CONFIRMATION_REQUIRED');
-if ((process.env.F4_03_PRODUCTION_DB_NAME || DB_NAME) !== DB_NAME)) fail('PRODUCTION_DB_TARGET_REJECTED');
+if ((process.env.F4_03_PRODUCTION_DB_NAME || DB_NAME) !== DB_NAME) fail('PRODUCTION_DB_TARGET_REJECTED');
 
 function runWrangler(sql, label) {
   const result = spawnSync(
@@ -220,7 +220,7 @@ if (mode === 'dry-run') {
   process.exit(0);
 }
 
-const cases = TARGETS.map((t) => `HEN ${t.id} THEN '${t.targetExpiry}'`).join(' ');
+const cases = TARGETS.map((t) => `WHEN ${t.id} THEN '${t.targetExpiry}'`).join(' ');
 const guards = TARGETS.map(
   (t) =>
     `(id = ${t.id} AND qualificacao_id = ${t.qualificacaoId} AND data_conclusao = '${t.completion}' AND data_vencimento = '${t.currentExpiry}')`,
