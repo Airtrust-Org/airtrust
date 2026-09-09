@@ -102,7 +102,9 @@ describe('migration governance', () => {
       .filter((prefix): prefix is string => prefix !== null && prefix !== '9999');
     // Ratchet raised 2026-09-09: 0488_controle_voos_pilot_offline_sync_receipts.sql
     // adds the durable idempotency authority for Pilot offline synchronization.
-    // Historical #110 numbers 0477-0480 are intentionally not backfilled.\n    // 0489 adds the tenant-scoped natural-key constraints from audit A-02.\n    const expectedLatest = 489;
+    // Historical #110 numbers 0477-0480 are intentionally not backfilled.
+    // 0489 adds the tenant-scoped natural-key constraints from audit A-02.
+    const expectedLatest = 489;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
