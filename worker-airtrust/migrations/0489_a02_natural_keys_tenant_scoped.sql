@@ -11,9 +11,7 @@
 
 DROP INDEX IF EXISTS ux_qualificacoes_tipos_codigo;
 DROP INDEX IF EXISTS ux_funcionarios_cpf;
-DROP INDEX IF EXISTS idx_funcionarios_cpf;
 DROP INDEX IF EXISTS ux_funcionarios_matricula;
-DROP INDEX IF EXISTS idx_funcionarios_matricula;
 DROP INDEX IF EXISTS ux_funcionarios_email;
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_funcionarios_cpf_empresa_active
