@@ -1,78 +1,92 @@
 # eDB — decisão semântica fail-closed para ciclos, IFR e discrepâncias técnicas
 
-Data: 2026-09-04  
-Atualização de rastreabilidade: 2026-09-07  
+Data original: 2026-09-04  
+Última atualização de rastreabilidade: 2026-09-08  
 Escopo: shadow eDB / Controle de Voos  
 Status: decisão técnica de fonte; não constitui autorização/homologação ANAC.
 
 ## Fontes regulatórias
 
-A Resolução ANAC nº 773/2025, vigente desde 01/01/2026, exige no registro de cada voo:
+A Resolução ANAC nº 773/2025, vigente desde 01/01/2026, exige no registro de cada voo, conforme aplicável:
 
-- totais de pousos **e ciclos** como informações distintas (art. 6º, V);
-- tempo IFR **real e simulado** (art. 6º, VII);
-- discrepâncias técnicas **e a pessoa que as detectou** (art. 6º, XIII);
+- totais de pousos e ciclos como informações distintas (art. 6º, V);
+- tempo IFR real e simulado (art. 6º, VII);
+- discrepâncias técnicas e a pessoa que as detectou (art. 6º, XIII);
 - registro posterior das ações corretivas ou da autorização para ação corretiva retardada pelo responsável pelo retorno ao serviço (art. 8º);
 - integridade do registro e correções evidenciadas sem apagar a informação anterior (art. 3º).
 
-A mesma Resolução 773/2025 também estabelece, no art. 10, parágrafo único, que registros digitais assinados pelo piloto em comando devem ser também assinados pelo operador (ou pessoa formalmente designada) em até **15 dias para operadores RBAC 135**. Isso é requisito de lifecycle/assinatura do eDB e deve permanecer separado da semântica dos campos operacionais.
+A mesma Resolução 773/2025 também estabelece, no art. 10, parágrafo único, que registros digitais assinados pelo piloto em comando devem ser também assinados pelo operador, ou pessoa formalmente designada, em até 15 dias para operadores RBAC 135. Esse requisito de lifecycle/assinatura é independente da semântica dos campos operacionais.
 
 Fonte oficial:
 
 - https://www.anac.gov.br/assuntos/legislacao/legislacao-1/resolucoes/2025/resolucao-773
 
-A Resolução ANAC nº 458/2017 exige que registros eletrônicos preservem integridade, auditabilidade e correções identificáveis, sem permitir alteração silenciosa de conteúdo assinado.
-
-A IS 91-015B também é relevante para a semântica de ciclos sob a ótica de manutenção. Ela registra que o Diário de Bordo é referência oficial para horas de voo e ciclos escriturados nas cadernetas de célula, motor e hélice e, de forma importante, reconhece que horas/ciclos de operação de motor ou outros componentes podem depender das definições constantes dos **manuais dos fabricantes**.
+A IS 91-015B trata o Diário de Bordo como referência oficial para horas e ciclos escriturados nos registros de célula, motor e hélice e reconhece que a contagem aplicável a motor/componentes pode depender das definições dos manuais dos fabricantes.
 
 Fonte oficial:
 
 - https://www.anac.gov.br/assuntos/legislacao/legislacao-1/iac-e-is/is/is-91-015
 
-Essa rastreabilidade reforça que o AirTrust não deve criar um valor regulatório de ciclo por aproximação operacional quando a definição aplicável ao equipamento/componente não está explicitamente disponível.
+## Decisão 1 — `cv_voo_etapas.starts` não é ciclo regulatório
 
-## Decisão 1 — `cv_voo_etapas.starts` não é ciclo
-
-A documentação canônica do schema de Controle de Voos define `starts` como **acionamentos de motor**.
+A documentação canônica do schema de Controle de Voos define `starts` como acionamentos de motor. A Resolução 773 exige pousos e ciclos como campos distintos, e a fonte de manutenção pode definir ciclos de célula e de motor por regras diferentes.
 
 Portanto:
 
-- não projetar `starts` em `draft.legs[].cycles`;
-- deixar `cycles = null` enquanto não existir uma fonte operacional que declare ciclos com essa semântica;
-- quando `starts` estiver presente, emitir finding sanitizado `CYCLES_SOURCE_SEMANTICS_UNCONFIRMED`.
+- não projetar genericamente `starts` em `cycles`;
+- não projetar genericamente pousos em `cycles` sem regra aprovada por aeronave/operação;
+- deixar `cycles = null` quando não existir uma fonte operacional/manutenção explicitamente aprovada para o modelo;
+- manter finding sanitizado enquanto a semântica aplicável não estiver comprovada.
 
-Uma documentação histórica que tratou `starts` como proxy de ciclos não é suficiente para promover essa equivalência para o eDB regulatório.
+### S-76C — fonte da Costa do Sol confirmada em 2026-09-08
 
-### Refinamento regulatório de 2026-09-07
+A Costa do Sol publica o **PRG-MNT-001 — Programa de Manutenção Aeronave S-76C, Rev.04, 11/01/2021**. O item A.8 estabelece explicitamente:
 
-A Resolução 773 exige que **pousos e ciclos** sejam informados separadamente; portanto a existência de um número de pousos não autoriza copiar esse valor para `cycles`. A IS 91-015B liga ciclos ao controle de manutenção e admite dependência de definição do fabricante para motor/componente. Assim, a fonte futura de `cycles` deve ser uma destas, conforme aplicabilidade real:
+- A.8.1: para ciclos da aeronave, **um pouso corresponde a um ciclo**;
+- A.8.2: ciclos dos motores são contabilizados automaticamente pela **Digital Engine Control Unit (DECU)**;
+- A.9: ciclo de motor é a operação envolvendo partida, aceleração para potência de decolagem e corte do motor.
 
-1. contador/campo operacional explicitamente definido pelo operador e pelo programa de manutenção como ciclo aplicável ao equipamento;
-2. registro de manutenção/aircraft status cuja semântica esteja documentada;
-3. regra derivada de manual do fabricante ou documentação aprovada que defina inequivocamente o evento contado como ciclo.
+Fonte do operador:
 
-Sem uma dessas fontes, `cycles` permanece `null` e o AirTrust deve continuar fail-closed.
+- https://dradd.com.br/media/98f13708210194c475687be6106a3b84/2021/01/28/PMA_COSTA_SOL_S-76C%20rev%2004.pdf
 
-## Decisão 2 — `tempo_ifr` não identifica IFR real versus simulado
+Consequência:
 
-O campo atual `tempo_ifr` contém duração IFR sem classificação regulatória entre real e simulado.
+- a semântica de ciclo de **aeronave S-76C da Costa do Sol** está resolvida: landing count é a fonte aprovada para o contador de ciclos da aeronave;
+- o ciclo de motor S-76C deve vir da DECU/registro de manutenção correspondente, nunca do `starts` legado do AirTrust;
+- essa regra é **operator/model scoped** e não pode ser generalizada para AW139 ou outro tenant;
+- até existir vínculo explícito e governado entre tenant/modelo e essa política de fonte no pipeline regulatório, o shadow genérico deve continuar fail-closed em vez de aplicar a regra por nome de aeronave.
+
+### AW139 — ainda sem fonte Costa do Sol suficiente
+
+A revisão de fontes públicas e do acervo disponível localizou referências Leonardo/AMPI e PT6C-67C que demonstram que há contagens específicas de ciclo para célula, motor e componentes, mas não localizou o **PMA vigente da Costa do Sol para AW139** ou outra fonte operator/OEM aplicável que autorize um mapeamento único para o campo eDB `cycles`.
 
 Portanto:
 
-- não projetar `tempo_ifr` em `ifrActualMinutes`;
-- não inferir `ifrSimulatedMinutes = 0`;
-- deixar ambos os campos regulatórios sem preenchimento até existir fonte classificada;
-- quando `tempo_ifr` estiver presente, emitir finding `IFR_CLASSIFICATION_REQUIRED`.
+- não aplicar `cycles = starts`;
+- não aplicar `cycles = landings`;
+- não transportar a regra S-76C para AW139;
+- manter AW139 `cycles` fail-closed até a fonte aprovada ser incorporada.
 
-A soma ou distribuição entre IFR real/simulado não pode ser inferida.
+## Decisão 2 — IFR real versus simulado
 
-### Refinamento regulatório de 2026-09-07
+O legado `tempo_ifr` continua sendo uma duração IFR agregada, sem classificação confiável entre real e simulado. Ele não deve ser retroativamente dividido nem presumido como IFR real.
 
-A Resolução 773 usa expressamente a dupla **IFR real e simulado**. Ela não autoriza que um campo legado agregado seja presumido como IFR real e tampouco autoriza concluir que ausência de marcação de simulado significa zero. Logo, a captura futura deve preservar a classificação na origem, no momento do lançamento operacional ou por outra fonte estruturada com proveniência equivalente.
+A semântica operacional da Costa do Sol, porém, já está estabelecida no MGO `MNL-OPS-001` Rev.14, Seção 10:
+
+- `IFR-R` = IFR real;
+- `IFR-C` = IFR sob capota, correspondente ao campo regulatório de IFR simulado.
+
+Consequência:
+
+- a **semântica** IFR da #91 está resolvida para a Costa do Sol;
+- futuras fontes estruturadas podem mapear `IFR-R -> ifrActualMinutes` e `IFR-C -> ifrSimulatedMinutes`;
+- o `tempo_ifr` legado agregado permanece evidência não classificada e não satisfaz nenhum dos dois campos isoladamente;
+- ausência de IFR-C não autoriza inferir automaticamente zero sem uma fonte estruturada que expresse essa ausência.
 
 ## Decisão 3 — `cv_rdv_operacional.divergencias` não é discrepância técnica estruturada
 
-`cv_rdv_operacional.divergencias` é texto livre operacional. Ele não garante, por estrutura:
+O texto livre operacional não garante, por estrutura:
 
 - autoria/detector;
 - vínculo imutável à revisão final do voo;
@@ -81,39 +95,36 @@ A Resolução 773 usa expressamente a dupla **IFR real e simulado**. Ela não au
 - aprovação para retorno ao serviço;
 - trilha append-only.
 
-Portanto:
+Portanto, o texto livre do RDV não deve ser promovido para o campo regulatório de discrepância técnica.
 
-- não projetar esse texto em `technicalDiscrepancySummary`;
-- emitir finding `TECHNICAL_DISCREPANCY_STRUCTURED_SOURCE_REQUIRED` quando houver conteúdo;
-- a fonte regulatória futura deve usar o modelo estruturado de discrepância/manutenção/RTS, sem apagar o registro original da tripulação.
+O modelo estruturado de discrepância/manutenção/RTS já existente no AirTrust permanece a fonte correta para essa evolução.
 
 ## Postura de implementação
 
-Enquanto as fontes estruturadas não existirem, o shadow eDB deve falhar fechado:
+A regra geral continua fail-closed:
 
-- `cycles = null`;
-- `ifrActualMinutes = null`;
-- `ifrSimulatedMinutes = null`;
-- `technicalDiscrepancySummary = null`.
+- sem fonte aprovada de ciclo para o modelo/operador: `cycles = null`;
+- sem fonte IFR classificada: `ifrActualMinutes = null` e `ifrSimulatedMinutes = null`;
+- texto livre de RDV não vira discrepância técnica estruturada;
+- nenhuma inferência silenciosa pode remover gaps regulatórios.
 
-Os gaps devem permanecer visíveis por códigos sanitizados e pela validação de completude. Nenhuma dessas lacunas autoriza promover o shadow eDB para registro oficial.
+Uma regra específica de operador/modelo só pode preencher campo regulatório quando o vínculo de política e a proveniência estiverem explícitos e testados. A existência de uma regra documental válida para S-76C não autoriza aplicá-la por heurística de string de modelo em ambiente multi-tenant.
 
 ## Consequência para a issue #91
 
-A pesquisa normativa de 2026-09-07 reduz a ambiguidade jurídica, mas **não fecha** a issue #91:
+Após a revisão de 2026-09-08:
 
-- está confirmado que pousos, ciclos, IFR real e IFR simulado são campos regulatórios distintos;
-- está confirmado que `starts` não pode ser promovido para `cycles` apenas por conveniência;
-- a IS 91-015B reforça que ciclos podem depender da definição aplicável de fabricante/manutenção;
-- ainda falta identificar, no conjunto real de fontes AirTrust/SIGVOOS/operador, o campo ou regra aprovada que produza o valor de ciclo para cada aeronave/equipamento;
-- ainda falta uma fonte operacional que capture separadamente IFR real e IFR simulado.
+- `starts` está confirmado como acionamentos de motor e não como ciclo regulatório;
+- IFR real/simulado está semanticamente resolvido para a Costa do Sol pelo MGO;
+- S-76C está semanticamente resolvido pelo PMA da Costa do Sol: pouso = ciclo de aeronave; ciclo de motor = DECU;
+- o bloqueio substantivo residual é o **AW139**: falta a fonte aprovada Costa do Sol/OEM que defina a origem/contagem aplicável de ciclo de aeronave e, quando requerido, de motor;
+- o pipeline genérico deve permanecer fail-closed até que essa fonte seja incorporada de maneira tenant/model scoped.
 
-Nenhuma alteração de runtime deve ser feita até essas fontes existirem.
+## Dependências remanescentes relacionadas ao eDB
 
-## Dependências remanescentes
+- fonte aprovada e vínculo estrutural de ciclos AW139;
+- contrato oficial vigente da API DBE/ANAC antes de adaptação externa;
+- lifecycle de assinatura digital compatível com o prazo regulatório aplicável ao operador RBAC 135;
+- execução de homologação somente após contrato/credenciais oficiais.
 
-- definição e captura operacional explícita de ciclos por aeronave/equipamento;
-- captura separada de IFR real e IFR simulado;
-- integração da fonte estruturada de discrepância técnica/manutenção/RTS;
-- contrato oficial vigente da API DBE/ANAC antes de qualquer adaptação externa;
-- lifecycle de assinatura digital compatível com o prazo regulatório aplicável ao operador RBAC 135.
+Nenhuma conclusão deste documento autoriza transmissão à ANAC, deploy, migration ou write produtivo.
