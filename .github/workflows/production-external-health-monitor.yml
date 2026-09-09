@@ -1,0 +1,235 @@
+name: Production External Health Monitor
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'monitor = normal probe; delivery-test = also prove GitHub Issue delivery'
+        required: true
+        default: monitor
+        type: choice
+        options:
+          - monitor
+          - delivery-test
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/production-external-health-monitor.yml
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: production-external-health-monitor
+  cancel-in-progress: false
+
+env:
+  HEALTH_URL: https://api.airtrust.online/api/health
+
+jobs:
+  monitor:
+    name: Probe production health outside Cloudflare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe health endpoint with bounded retries
+        id: probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+
+          const endpoint = process.env.HEALTH_URL;
+          const attempts = [];
+          let healthy = false;
+          let finalStatus = 0;
+          let finalStatusField = 'missing';
+
+          for (let attempt = 1; attempt <= 3; attempt += 1) {
+            const started = Date.now();
+            try {
+              const response = await fetch(endpoint, {
+                headers: {
+                  Accept: 'application/json',
+                  'User-Agent': 'airtrust-github-external-health-monitor/1',
+                },
+                signal: AbortSignal.timeout(15_000),
+              });
+              finalStatus = response.status;
+              const raw = await response.text();
+              let payload = null;
+              try {
+                payload = JSON.parse(raw);
+              } catch {
+                payload = null;
+              }
+              finalStatusField = String(payload?.status ?? 'missing');
+              const ok =
+                response.status === 200 &&
+                payload?.success === true &&
+                payload?.status === 'healthy';
+
+              attempts.push({
+                attempt,
+                httpStatus: response.status,
+                status: finalStatusField,
+                latencyMs: Date.now() - started,
+                ok,
+              });
+
+              if (ok) {
+                healthy = true;
+                break;
+              }
+            } catch (error) {
+              attempts.push({
+                attempt,
+                httpStatus: 0,
+                status: 'request-error',
+                latencyMs: Date.now() - started,
+                ok: false,
+                errorType: error?.name || 'Error',
+              });
+            }
+
+            if (attempt < 3) {
+              await new Promise((resolve) => setTimeout(resolve, 5_000));
+            }
+          }
+
+          const evidence = {
+            endpoint,
+            healthy,
+            attempts,
+            writesToAirTrust: 0,
+            checkedAt: new Date().toISOString(),
+          };
+          console.log(JSON.stringify(evidence, null, 2));
+
+          appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            [
+              `healthy=${healthy}`,
+              `http_status=${finalStatus}`,
+              `status_field=${finalStatusField}`,
+              '',
+            ].join('\n'),
+          );
+          NODE
+
+      - name: Deliver/resolve persistent GitHub alert
+        uses: actions/github-script@v9
+        env:
+          HEALTHY: ${{ steps.probe.outputs.healthy }}
+          HTTP_STATUS: ${{ steps.probe.outputs.http_status }}
+          STATUS_FIELD: ${{ steps.probe.outputs.status_field }}
+          DELIVERY_TEST: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'delivery-test') }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
+            const alertTitle = '[ALERT] AirTrust production health monitor';
+            const testTitle = '[TEST] AirTrust production health alert delivery';
+            const healthy = process.env.HEALTHY === 'true';
+            const deliveryTest = process.env.DELIVERY_TEST === 'true';
+
+            if (deliveryTest) {
+              const created = await github.rest.issues.create({
+                owner,
+                repo,
+                title: testTitle,
+                body: [
+                  'Controlled delivery proof from the governed production external health monitor.',
+                  '',
+                  `Run: ${runUrl}`,
+                  '',
+                  '- AirTrust production writes: 0',
+                  '- Purpose: prove the independent monitor can persist an operational alert in GitHub Issues.',
+                ].join('\n'),
+              });
+
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: created.data.number,
+                body: 'DELIVERY_PROOF=PASS. The test alert was created successfully and is now being closed automatically.',
+              });
+
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: created.data.number,
+                state: 'closed',
+                state_reason: 'completed',
+              });
+            }
+
+            const listed = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existing = listed.find((issue) => !issue.pull_request && issue.title === alertTitle);
+
+            if (healthy) {
+              if (existing) {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: existing.number,
+                  body: [
+                    'Production health recovered.',
+                    '',
+                    `Run: ${runUrl}`,
+                    `HTTP: ${process.env.HTTP_STATUS}`,
+                    `status: ${process.env.STATUS_FIELD}`,
+                  ].join('\n'),
+                });
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: existing.number,
+                  state: 'closed',
+                  state_reason: 'completed',
+                });
+              }
+              core.notice('PRODUCTION_EXTERNAL_HEALTH_MONITOR=HEALTHY');
+              return;
+            }
+
+            const body = [
+              'The independent GitHub monitor could not prove AirTrust production healthy after 3 bounded attempts.',
+              '',
+              `Run: ${runUrl}`,
+              `Endpoint: ${process.env.HEALTH_URL}`,
+              `Final HTTP: ${process.env.HTTP_STATUS}`,
+              `Final status field: ${process.env.STATUS_FIELD}`,
+              '',
+              'Investigate production health, recent releases, Worker/D1/R2 status, and provider incidents.',
+              '',
+              'This monitor performs no AirTrust production writes.',
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: existing.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner,
+                repo,
+                title: alertTitle,
+                body,
+              });
+            }
+
+            core.setFailed('PRODUCTION_EXTERNAL_HEALTH_MONITOR=UNHEALTHY');
