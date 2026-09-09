@@ -23,5 +23,12 @@ describe('A-02 tenant-scoped natural key migration', () => {
     expect(mig0489).toContain('ON funcionarios(empresa_id, LOWER(TRIM(email)))');
     expect(mig0489).not.toContain('matricula COLLATE NOCASE');
     expect(mig0489).not.toContain('cpf COLLATE NOCASE');
+
+    const lastReplacementCreate = mig0489.indexOf(
+      'CREATE UNIQUE INDEX IF NOT EXISTS ux_funcionarios_email_empresa_active',
+    );
+    const firstLegacyDrop = mig0489.indexOf('DROP INDEX IF EXISTS ux_funcionarios_cpf');
+    expect(lastReplacementCreate).toBeGreaterThanOrEqual(0);
+    expect(firstLegacyDrop).toBeGreaterThan(lastReplacementCreate);
   });
 });
