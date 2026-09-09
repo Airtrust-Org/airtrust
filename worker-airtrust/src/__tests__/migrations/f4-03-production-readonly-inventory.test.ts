@@ -11,9 +11,13 @@ describe('F4-03 production read-only inventory guard', () => {
     expect(source).not.toMatch(/\.prepare\(|\.run\(|--file/);
   });
 
-  it('emits aggregate evidence without row identity or free-text fields', () => {
+  it('emits only non-PII structural candidate evidence and no free-text/person identity', () => {
+    expect(source).toContain('structural_candidate_fields_emitted: true');
+    expect(source).toContain('historico_id: Number(row.historico_id || 0)');
+    expect(source).toContain('r2_key_sha256: row.r2_key ? sha256(row.r2_key) : null');
     expect(source).toContain('pii_emitted: false');
-    expect(source).not.toMatch(/(?:employee_name|funcionario_nome|email|cpf|documento)\s*:/i);
+    expect(source).not.toMatch(/(?:employee_name|funcionario_nome|funcionario_cpf|email|cpf)\s*:/i);
     expect(source).not.toMatch(/observacoes\s+AS\s+/i);
+    expect(source).not.toContain('r2_key: row.r2_key');
   });
 });
