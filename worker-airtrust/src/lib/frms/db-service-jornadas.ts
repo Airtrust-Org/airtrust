@@ -597,15 +597,13 @@ export async function persistirAcumuloRolling(
 ): Promise<void> {
   const timestamp = now();
 
-  // Soft-delete anterior do mesmo dia
-  await db
+  const softDeleteAnterior = db
     .prepare(
       'UPDATE frms_acumulo_rolling SET deleted_at = ? WHERE tripulante_id = ? AND data_referencia = ? AND deleted_at IS NULL',
     )
-    .bind(timestamp, String(tripulanteId), dataRef)
-    .run();
+    .bind(timestamp, String(tripulanteId), dataRef);
 
-  await db
+  const inserirAtual = db
     .prepare(
       `INSERT INTO frms_acumulo_rolling (
         id, tripulante_id, data_referencia,
@@ -634,8 +632,11 @@ export async function persistirAcumuloRolling(
       acumulo.repouso_suficiente,
       timestamp,
       timestamp,
-    )
-    .run();
+    );
+
+  // D1 batch is transactional: the previous active snapshot is only soft-deleted
+  // if the replacement row is also persisted successfully.
+  await db.batch([softDeleteAnterior, inserirAtual]);
 }
 
 // ────────────────────────────────────────────────────────
