@@ -17,6 +17,11 @@ describe('F4-03 deterministic production repair governance', () => {
     expect(workflow).toContain('AIRTRUST_PRODUCTION_DRYRUN_F4_03_REPAIR');
     expect(workflow).toContain('AIRTRUST_PRODUCTION_APPLY_F4_03_REPAIR_6_ROWS');
     expect(workflow).toContain('d1 time-travel info');
+    expect(workflow).toContain('reviewed_dry_run_run_id:');
+    expect(workflow).toContain('REVIEWED_DRY_RUN_RUN_ID_REQUIRED');
+    expect(workflow).toContain('REVIEWED_DRY_RUN_SHA_MISMATCH');
+    expect(workflow).toContain('REVIEWED_DRY_RUN_ARTIFACT_MISSING');
+    expect(workflow).toContain('actions: read');
     expect(workflow).not.toMatch(/wrangler\s+(?:deploy|pages deploy)/);
   });
 
