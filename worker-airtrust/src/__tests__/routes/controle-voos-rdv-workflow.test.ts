@@ -922,6 +922,28 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     expect(body.data.status).toBe('rascunho');
     expect(body.data.versao).toBe(7);
 
+    const refinalizar = await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
+      { method: 'POST', body: await transitionBody(db) },
+      PILOTO,
+    );
+    expect(refinalizar.status).toBe(409);
+    await expect(refinalizar.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_RDV_FINALIZACAO_WORKFLOW_INVALID',
+    });
+
+    const voltarParaRevisao = await request(
+      db,
+      '/api/controle-voos/voos/601/rdv/iniciar-revisao',
+      { method: 'POST', body: await transitionBody(db) },
+      COORDENACAO,
+    );
+    expect(voltarParaRevisao.status).toBe(200);
+    await expect(voltarParaRevisao.json()).resolves.toMatchObject({
+      data: { workflow_status: 'em_revisao' },
+    });
+
     const aprovacoes = await request(
       db,
       '/api/controle-voos/voos/601/rdv/aprovacoes',
