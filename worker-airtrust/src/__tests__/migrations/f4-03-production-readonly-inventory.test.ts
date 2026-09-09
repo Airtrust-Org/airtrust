@@ -14,6 +14,9 @@ describe('F4-03 production read-only inventory guard', () => {
   it('emits only non-PII structural candidate evidence and no free-text/person identity', () => {
     expect(source).toContain('structural_candidate_fields_emitted: true');
     expect(source).toContain('historico_id: Number(row.historico_id || 0)');
+    expect(source).toContain('historico_validade_meses:');
+    expect(source).toContain('current_type_validade_meses:');
+    expect(source).toContain('current_type_vencimento_fim_mes:');
     expect(source).toContain('r2_key_sha256: row.r2_key ? sha256(row.r2_key) : null');
     expect(source).toContain('pii_emitted: false');
     expect(source).not.toMatch(/(?:employee_name|funcionario_nome|funcionario_cpf|email|cpf)\s*:/i);
