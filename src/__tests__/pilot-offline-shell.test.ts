@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { transform } from 'esbuild';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
@@ -20,16 +20,25 @@ const killSwitch = read('public/sw.js');
 const rootIndex = read('index.html');
 
 describe('Pilot Offline shell', () => {
-  it('mantem os scripts estaticos do Pilot App sintaticamente validos como ESM moderno', async () => {
-    await expect(
-      transform(pilotApp, { loader: 'js', format: 'esm', target: 'es2022' }),
-    ).resolves.toBeTruthy();
-    await expect(
-      transform(pilotVault, { loader: 'js', format: 'esm', target: 'es2022' }),
-    ).resolves.toBeTruthy();
-    await expect(
-      transform(pilotSw, { loader: 'js', format: 'esm', target: 'es2022' }),
-    ).resolves.toBeTruthy();
+  it('mantem os scripts estaticos do Pilot App sintaticamente validos como ESM moderno', () => {
+    const assertParses = (source: string) => {
+      const result = ts.transpileModule(source, {
+        compilerOptions: {
+          allowJs: true,
+          target: ts.ScriptTarget.ES2022,
+          module: ts.ModuleKind.ESNext,
+        },
+        reportDiagnostics: true,
+      });
+      const errors = (result.diagnostics ?? [])
+        .filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error)
+        .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
+      expect(errors).toEqual([]);
+    };
+
+    assertParses(pilotApp);
+    assertParses(pilotVault);
+    assertParses(pilotSw);
   });
 
   it('mantem o app instalavel estritamente no escopo /pilot/', () => {
