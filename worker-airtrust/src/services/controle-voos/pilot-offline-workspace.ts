@@ -573,8 +573,12 @@ export async function buildPilotOfflineWorkspace(options: {
           category: 'MET',
           source: 'DECEA_REDEMET',
           updated_at: options.generatedAt,
-          available_offline: true,
-          integrity_state: 'EMBEDDED_IN_PACKAGE',
+          available_offline:
+            (metSnapshot as { status?: string }).status === 'AVAILABLE',
+          integrity_state:
+            (metSnapshot as { status?: string }).status === 'AVAILABLE'
+              ? 'EMBEDDED_IN_PACKAGE'
+              : 'EVIDENCE_UNAVAILABLE',
           version: 'met-snapshot-v1',
           evidence_status: (metSnapshot as { status?: string }).status ?? 'UNAVAILABLE',
         },
