@@ -38,12 +38,12 @@ jobs:
           [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo "EXPECTED_SHA_MISMATCH" >&2; exit 1; }
 
       - name: Checkout exact reviewed main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -87,7 +87,7 @@ jobs:
           NODE
 
       - name: Upload sanitized inventory evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: n11-production-readonly-inventory-${{ github.sha }}
           path: ${{ runner.temp }}/n11-inventory.json
