@@ -35,6 +35,8 @@ export interface Env {
   // REDEMET/DECEA observed weather used for read-only Pilot/MET snapshots.
   // Secret is consumed server-side only and is never returned to the Pilot App.
   REDEMET_API_KEY?: string;
+  // Staging-only allowlist for the non-official eDB shadow pilot.
+  EDB_SHADOW_PILOT_TENANTS?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';
