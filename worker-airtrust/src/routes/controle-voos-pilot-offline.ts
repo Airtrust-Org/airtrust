@@ -8,6 +8,7 @@
  */
 import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
+import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
 import {
   getActiveRdvByFlight,
@@ -15,12 +16,20 @@ import {
   getEmpresaIdSafe,
   getFlightOrThrow,
   getFuncionarioIdForUser,
+  isCrewOnFlight,
 } from '../repositories/controle-voos/rdv-repository';
 import {
   RDV_CAPABILITIES,
   assertRdvSelfScope,
+  hasRdvCapability,
   requireAnyRdvAccess,
 } from '../services/controle-voos/rdv-workflow';
+import {
+  buildPilotOfflineLeaseClaims,
+  signPilotOfflineLease,
+  validatePilotOfflineAppVersion,
+  validatePilotOfflineDeviceId,
+} from '../services/controle-voos/pilot-offline-lease';
 
 const pilotOffline = new Hono<{ Bindings: Env }>();
 
@@ -94,6 +103,106 @@ type AircraftRow = {
   id: number;
   modelo: string | null;
 };
+
+pilotOffline.post(
+  '/voos/:id/offline-lease',
+  auth(),
+  requireAnyRdvAccess(),
+  async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    const voo = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
+    const rawUserId = getActorId(c);
+    const userId = Number(rawUserId || 0);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      throw new ApiError(
+        'Usuario autenticado invalido para lease offline',
+        401,
+        'CONTROLE_VOOS_PILOT_LEASE_ACTOR_INVALID',
+      );
+    }
+
+    const canEditOwn = await hasRdvCapability(c, RDV_CAPABILITIES.editarRascunhoProprio);
+    if (!canEditOwn) {
+      throw new ApiError(
+        'Permissao insuficiente para preparar edicao offline',
+        403,
+        'CONTROLE_VOOS_PILOT_LEASE_RBAC_FORBIDDEN',
+      );
+    }
+
+    const funcionarioId = await getFuncionarioIdForUser(c.env.DB, userId);
+    if (!funcionarioId) {
+      throw new ApiError(
+        'Usuario sem vinculo de funcionario para edicao offline',
+        403,
+        'CONTROLE_VOOS_PILOT_LEASE_NO_FUNCIONARIO',
+      );
+    }
+
+    const isCrew = await isCrewOnFlight(c.env.DB, empresaId, voo.id, funcionarioId);
+    if (!isCrew) {
+      throw new ApiError(
+        'Lease offline restrito a tripulantes do voo',
+        403,
+        'CONTROLE_VOOS_PILOT_LEASE_NOT_CREW',
+      );
+    }
+
+    const rdv = await getActiveRdvByFlight(c.env.DB, voo.id, empresaId);
+    if (rdv) {
+      const editableWorkflow = new Set(['rascunho', 'devolvido', 'reaberto']);
+      if (rdv.status !== 'rascunho' || !editableWorkflow.has(rdv.workflow_status)) {
+        throw new ApiError(
+          'RDV nao esta em estado editavel para uso offline',
+          409,
+          'CONTROLE_VOOS_PILOT_LEASE_RDV_LOCKED',
+        );
+      }
+    } else {
+      const canCreateOwn = await hasRdvCapability(c, RDV_CAPABILITIES.criarProprio);
+      if (!canCreateOwn) {
+        throw new ApiError(
+          'Permissao insuficiente para criar rascunho offline',
+          403,
+          'CONTROLE_VOOS_PILOT_LEASE_CREATE_FORBIDDEN',
+        );
+      }
+    }
+
+    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
+    const deviceId = validatePilotOfflineDeviceId(body.device_id);
+    const appVersion = validatePilotOfflineAppVersion(body.app_version);
+
+    const claims = buildPilotOfflineLeaseClaims({
+      env: c.env,
+      tenantId: empresaId,
+      userId,
+      funcionarioId,
+      flightId: voo.id,
+      deviceId,
+    });
+    const lease = await signPilotOfflineLease(c.env, claims);
+
+    c.header('Cache-Control', 'no-store, max-age=0');
+    c.header('Pragma', 'no-cache');
+
+    return c.json({
+      success: true,
+      data: {
+        lease,
+        lease_meta: {
+          key_id: lease.key_id,
+          valid_until: claims.valid_until,
+          tenant_id: empresaId,
+          user_id: userId,
+          funcionario_id: funcionarioId,
+          flight_id: voo.id,
+          app_version: appVersion,
+        },
+      },
+    });
+  },
+);
 
 pilotOffline.get(
   '/voos/:id/offline-package',
