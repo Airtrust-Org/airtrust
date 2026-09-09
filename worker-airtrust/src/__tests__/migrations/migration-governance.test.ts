@@ -103,7 +103,7 @@ describe('migration governance', () => {
     // Ratchet raised 2026-09-06: 0487_qualificacoes_renovacoes.sql adds the
     // missing backing table for the active renewal routes.
     // Historical #110 numbers 0477-0480 are intentionally not backfilled.
-    const expectedLatest = 487;
+    const expectedLatest = 488;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
