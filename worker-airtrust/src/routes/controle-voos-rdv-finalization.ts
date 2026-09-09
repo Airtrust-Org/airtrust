@@ -54,6 +54,9 @@ export async function finalizeRdvPreenchimentoHandler(
   const empresaId = getEmpresaIdSafe(c);
   const userId = Number(getActorId(c));
   const vooId = c.req.param('id');
+  if (!vooId) {
+    throw new ApiError('Voo nao informado', 400, 'CONTROLE_VOOS_INVALID_ID');
+  }
   const flight = await getFlightOrThrow(c.env.DB, vooId, empresaId);
 
   // Confirmacao operacional do comandante: capability propria + vinculo de
