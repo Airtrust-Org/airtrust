@@ -3,6 +3,29 @@ import { PilotVault } from '/pilot/pilot-vault.js';
 const DRAFT_ID = 'phase1-synthetic-rdv-draft';
 const SAVE_DELAY_MS = 180;
 const TARGET_FLIGHT_ID = new URLSearchParams(window.location.search).get('flight');
+const PRODUCTION_API_BASE_URL = 'https://api.airtrust.online/api';
+const STAGING_API_BASE_URL = 'https://airtrust-api-staging.airtrust.workers.dev/api';
+const PRODUCTION_FRONTEND_HOSTS = new Set([
+  'airtrust.online',
+  'www.airtrust.online',
+  'airtrust.pages.dev',
+  'production.airtrust.pages.dev',
+]);
+const STAGING_FRONTEND_HOSTS = new Set([
+  'staging.airtrust.pages.dev',
+  'airtrust-staging.pages.dev',
+]);
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
+
+function resolvePilotApiBase() {
+  const host = String(window.location.hostname || '').trim().toLowerCase().replace(/\.$/, '');
+  if (LOCAL_HOSTS.has(host)) return window.location.origin.replace(/\/$/, '') + '/api';
+  if (PRODUCTION_FRONTEND_HOSTS.has(host)) return PRODUCTION_API_BASE_URL;
+  if (STAGING_FRONTEND_HOSTS.has(host)) return STAGING_API_BASE_URL;
+  throw new Error('Host do Pilot App não autorizado para selecionar uma API AirTrust.');
+}
+
+const API_BASE_URL = resolvePilotApiBase();
 
 const connectivity = document.querySelector('#connectivity');
 const unlockCard = document.querySelector('#unlock-card');
@@ -128,20 +151,19 @@ async function registerPilotServiceWorker() {
   }
 }
 
-function readStorageValue(storage, key) {
+function readCurrentAccessToken() {
+  // Token é usado apenas em memória para chamadas online. Nunca entra no vault.
   try {
-    return storage?.getItem(key) || null;
+    const localToken = window.localStorage?.getItem('airtrust_token');
+    if (localToken) return localToken;
+  } catch {
+    // Storage pode ser bloqueado pelo navegador; tentamos a sessão abaixo.
+  }
+  try {
+    return window.sessionStorage?.getItem('airtrust_token') || null;
   } catch {
     return null;
   }
-}
-
-function readCurrentAccessToken() {
-  // Token é usado apenas em memória para chamadas online. Nunca entra no vault.
-  return (
-    readStorageValue(window.localStorage, 'airtrust_token') ||
-    readStorageValue(window.sessionStorage, 'airtrust_token')
-  );
 }
 
 class PilotOnlineRequestError extends Error {
@@ -167,7 +189,7 @@ async function authenticatedGet(path) {
     );
   }
 
-  const response = await fetch(path, {
+  const response = await fetch(API_BASE_URL + path, {
     method: 'GET',
     cache: 'no-store',
     credentials: 'include',
@@ -372,7 +394,7 @@ async function loadOnlineFlights() {
   refreshOnlineButton.disabled = true;
   setSessionMessage('Consultando voos autorizados…', 'attention');
   try {
-    const body = await authenticatedGet('/api/controle-voos/voos/meus');
+    const body = await authenticatedGet('/controle-voos/voos/meus');
     onlineFlightRecords = Array.isArray(body?.data) ? body.data : [];
     setSessionMessage(
       onlineFlightRecords.length > 0
@@ -402,7 +424,7 @@ async function prepareFlightPackage(flightId) {
 
   try {
     const body = await authenticatedGet(
-      '/api/controle-voos/voos/' + encodeURIComponent(String(flightId)) + '/offline-package',
+      '/controle-voos/voos/' + encodeURIComponent(String(flightId)) + '/offline-package',
     );
     const packageData = body?.data;
     validateOfflinePackage(packageData, flightId);
