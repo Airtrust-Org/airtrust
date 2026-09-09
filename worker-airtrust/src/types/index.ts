@@ -30,6 +30,8 @@ export interface Env {
   PILOT_OFFLINE_LEASE_PRIVATE_KEY_JWK?: string;
   PILOT_OFFLINE_LEASE_KEY_ID?: string;
   PILOT_OFFLINE_LEASE_TTL_MINUTES?: string;
+  // Runtime gate for offline mutation sync. Defaults fail-closed when absent.
+  PILOT_OFFLINE_SYNC_ENABLED?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';
