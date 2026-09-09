@@ -2,10 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 
-const { assertRdvSelfScope, getFlightOrThrow, getActiveRdvByFlight } = vi.hoisted(() => ({
+const {
+  assertRdvSelfScope,
+  getFlightOrThrow,
+  getActiveRdvByFlight,
+  getFuncionarioIdForUser,
+} = vi.hoisted(() => ({
   assertRdvSelfScope: vi.fn(async () => undefined),
   getFlightOrThrow: vi.fn(),
   getActiveRdvByFlight: vi.fn(),
+  getFuncionarioIdForUser: vi.fn(async () => 77),
 }));
 
 vi.mock('../../middleware/auth', () => ({
@@ -22,9 +28,11 @@ vi.mock('../../middleware/auth', () => ({
 }));
 
 vi.mock('../../repositories/controle-voos/rdv-repository', () => ({
+  getActorId: () => 70,
   getEmpresaIdSafe: () => 7,
   getFlightOrThrow,
   getActiveRdvByFlight,
+  getFuncionarioIdForUser,
 }));
 
 vi.mock('../../services/controle-voos/rdv-workflow', () => ({
@@ -249,6 +257,11 @@ describe('Pilot offline package', () => {
       sync_supported: false,
       attachments_included: false,
       regulated_edb: false,
+    });
+    expect(body.data.identity).toEqual({
+      tenant_id: 7,
+      user_id: 70,
+      funcionario_id: 77,
     });
     expect(body.data.voo).toMatchObject({ id: 42, prefixo: 'PR-TST', versao: 6 });
     expect(body.data.rdv).toMatchObject({ id: 90, versao: 3, workflow_status: 'rascunho' });
