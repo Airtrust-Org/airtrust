@@ -264,7 +264,7 @@ async function authenticatedGet(path) {
 
 async function authenticatedPost(path, payload) {
   if (!navigator.onLine) {
-    throw new PilotOnlineRequestError('Sem conexão. Não é possível emitir um novo lease offline.');
+    throw new PilotOnlineRequestError('Sem conexão. Esta operação online não pode ser executada.');
   }
 
   const token = readCurrentAccessToken();
@@ -1715,16 +1715,19 @@ async function finalizeCanonicalRdv() {
   }
 
   coordinationInFlight = true;
-  await persistWorkflowReceipt({
-    flightId: state.flightId,
-    action: 'finalize',
-    expectedVersion,
-    state: 'sending',
-  });
-  await refreshCoordinationControls();
-  setCoordinationMessage('Finalizando preenchimento no servidor…', 'attention');
+  let requestStarted = false;
 
   try {
+    await persistWorkflowReceipt({
+      flightId: state.flightId,
+      action: 'finalize',
+      expectedVersion,
+      state: 'sending',
+    });
+    await refreshCoordinationControls();
+    setCoordinationMessage('Finalizando preenchimento no servidor…', 'attention');
+
+    requestStarted = true;
     const body = await authenticatedPost(
       '/controle-voos/voos/' +
         encodeURIComponent(String(state.flightId)) +
@@ -1753,20 +1756,35 @@ async function finalizeCanonicalRdv() {
     );
     await prepareFlightPackage(state.flightId);
   } catch (error) {
-    await persistWorkflowReceipt({
-      flightId: state.flightId,
-      action: 'finalize',
-      expectedVersion,
-      state: 'outcome_unknown',
-      error,
-    });
-    setCoordinationMessage(
-      'Não foi possível confirmar o resultado da finalização. Atualize o pacote do servidor antes de repetir.',
-      'error',
-    );
+    if (requestStarted) {
+      try {
+        await persistWorkflowReceipt({
+          flightId: state.flightId,
+          action: 'finalize',
+          expectedVersion,
+          state: 'outcome_unknown',
+          error,
+        });
+      } catch (receiptError) {
+        console.error('[Pilot Offline] Falha ao persistir receipt de finalização:', receiptError);
+      }
+      setCoordinationMessage(
+        'Não foi possível confirmar o resultado da finalização. Atualize o pacote do servidor antes de repetir.',
+        'error',
+      );
+    } else {
+      setCoordinationMessage(
+        'A finalização não foi enviada porque o estado local de segurança não pôde ser persistido.',
+        'error',
+      );
+    }
   } finally {
     coordinationInFlight = false;
-    await refreshCoordinationControls();
+    try {
+      await refreshCoordinationControls();
+    } catch (refreshError) {
+      console.error('[Pilot Offline] Falha ao reconciliar controles de finalização:', refreshError);
+    }
   }
 }
 
@@ -1815,16 +1833,19 @@ async function sendCanonicalRdvToCoordination() {
   }
 
   coordinationInFlight = true;
-  await persistWorkflowReceipt({
-    flightId: state.flightId,
-    action: 'send_coordination',
-    expectedVersion,
-    state: 'sending',
-  });
-  await refreshCoordinationControls();
-  setCoordinationMessage('Enviando RDV à Coordenação…', 'attention');
+  let requestStarted = false;
 
   try {
+    await persistWorkflowReceipt({
+      flightId: state.flightId,
+      action: 'send_coordination',
+      expectedVersion,
+      state: 'sending',
+    });
+    await refreshCoordinationControls();
+    setCoordinationMessage('Enviando RDV à Coordenação…', 'attention');
+
+    requestStarted = true;
     const body = await authenticatedPost(
       '/controle-voos/voos/' +
         encodeURIComponent(String(state.flightId)) +
@@ -1853,20 +1874,35 @@ async function sendCanonicalRdvToCoordination() {
     );
     await prepareFlightPackage(state.flightId);
   } catch (error) {
-    await persistWorkflowReceipt({
-      flightId: state.flightId,
-      action: 'send_coordination',
-      expectedVersion,
-      state: 'outcome_unknown',
-      error,
-    });
-    setCoordinationMessage(
-      'Não foi possível confirmar o recebimento. Atualize o pacote do servidor antes de repetir o envio.',
-      'error',
-    );
+    if (requestStarted) {
+      try {
+        await persistWorkflowReceipt({
+          flightId: state.flightId,
+          action: 'send_coordination',
+          expectedVersion,
+          state: 'outcome_unknown',
+          error,
+        });
+      } catch (receiptError) {
+        console.error('[Pilot Offline] Falha ao persistir receipt de handoff:', receiptError);
+      }
+      setCoordinationMessage(
+        'Não foi possível confirmar o recebimento. Atualize o pacote do servidor antes de repetir o envio.',
+        'error',
+      );
+    } else {
+      setCoordinationMessage(
+        'O envio à Coordenação não foi iniciado porque o estado local de segurança não pôde ser persistido.',
+        'error',
+      );
+    }
   } finally {
     coordinationInFlight = false;
-    await refreshCoordinationControls();
+    try {
+      await refreshCoordinationControls();
+    } catch (refreshError) {
+      console.error('[Pilot Offline] Falha ao reconciliar controles de Coordenação:', refreshError);
+    }
   }
 }
 
