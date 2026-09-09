@@ -29,7 +29,16 @@ import {
   signPilotOfflineLease,
   validatePilotOfflineAppVersion,
   validatePilotOfflineDeviceId,
+  verifyPilotOfflineLeaseEnvelope,
 } from '../services/controle-voos/pilot-offline-lease';
+import {
+  assertOfflineSyncCommandHash,
+  assertOfflineSyncReceiptSchemaReady,
+  assertPilotOfflineSyncEnabled,
+  parseOfflineSyncBatch,
+  type PilotOfflineSyncCommand,
+} from '../services/controle-voos/pilot-offline-sync';
+import { applyPilotOfflineSnapshotCommand } from '../services/controle-voos/pilot-offline-sync-apply';
 
 const pilotOffline = new Hono<{ Bindings: Env }>();
 
@@ -200,6 +209,130 @@ pilotOffline.post(
           funcionario_id: funcionarioId,
           flight_id: voo.id,
           app_version: appVersion,
+        },
+      },
+    });
+  },
+);
+
+pilotOffline.post(
+  '/pilot/offline-sync',
+  auth(),
+  requireAnyRdvAccess(),
+  async (c) => {
+    assertPilotOfflineSyncEnabled(c.env);
+    await assertOfflineSyncReceiptSchemaReady(c.env.DB);
+
+    const empresaId = getEmpresaIdSafe(c);
+    const rawUserId = getActorId(c);
+    const userId = Number(rawUserId || 0);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      throw new ApiError(
+        'Usuario autenticado invalido para sincronizacao offline',
+        401,
+        'CONTROLE_VOOS_PILOT_SYNC_ACTOR_INVALID',
+      );
+    }
+
+    const body = await c.req
+      .json<Record<string, unknown>>()
+      .catch(() => null);
+    const commands = parseOfflineSyncBatch(body);
+
+    const canEditOwn = await hasRdvCapability(
+      c,
+      RDV_CAPABILITIES.editarRascunhoProprio,
+    );
+    if (!canEditOwn) {
+      throw new ApiError(
+        'Permissao insuficiente para sincronizar rascunho offline',
+        403,
+        'CONTROLE_VOOS_PILOT_SYNC_RBAC_FORBIDDEN',
+      );
+    }
+
+    const funcionarioId = await getFuncionarioIdForUser(c.env.DB, userId);
+    if (!funcionarioId) {
+      throw new ApiError(
+        'Usuario sem vinculo de funcionario para sincronizacao offline',
+        403,
+        'CONTROLE_VOOS_PILOT_SYNC_NO_FUNCIONARIO',
+      );
+    }
+
+    type AuthorizedCommand = {
+      command: PilotOfflineSyncCommand;
+      flight: Awaited<ReturnType<typeof getFlightOrThrow>>;
+    };
+    const authorized: AuthorizedCommand[] = [];
+
+    // Pre-authorize the whole batch before applying the first mutation.
+    for (const command of commands) {
+      if (command.tenant_id !== empresaId || command.user_id !== userId) {
+        throw new ApiError(
+          'Comando offline nao pertence ao tenant/usuario autenticado',
+          403,
+          'CONTROLE_VOOS_PILOT_SYNC_CONTEXT_MISMATCH',
+        );
+      }
+
+      const deviceId = validatePilotOfflineDeviceId(command.device_id);
+      await assertOfflineSyncCommandHash(command);
+
+      const flight = await getFlightOrThrow(
+        c.env.DB,
+        String(command.flight_id),
+        empresaId,
+      );
+      const isCrew = await isCrewOnFlight(
+        c.env.DB,
+        empresaId,
+        flight.id,
+        funcionarioId,
+      );
+      if (!isCrew) {
+        throw new ApiError(
+          'Sincronizacao offline restrita a tripulante atual do voo',
+          403,
+          'CONTROLE_VOOS_PILOT_SYNC_NOT_CREW',
+        );
+      }
+
+      await verifyPilotOfflineLeaseEnvelope(c.env, command.lease, {
+        tenantId: empresaId,
+        userId,
+        funcionarioId,
+        flightId: flight.id,
+        deviceId,
+      });
+
+      authorized.push({ command, flight });
+    }
+
+    const results = [];
+    for (const item of authorized) {
+      results.push(
+        await applyPilotOfflineSnapshotCommand({
+          db: c.env.DB,
+          empresaId,
+          userId,
+          funcionarioId,
+          flight: item.flight,
+          command: item.command,
+        }),
+      );
+    }
+
+    c.header('Cache-Control', 'no-store, max-age=0');
+    c.header('Pragma', 'no-cache');
+    return c.json({
+      success: true,
+      data: {
+        results,
+        meta: {
+          count: results.length,
+          sync_contract: 'rdv_snapshot_upsert_v1',
+          regulated_edb: false,
         },
       },
     });
