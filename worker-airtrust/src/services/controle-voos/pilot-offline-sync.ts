@@ -5,7 +5,7 @@ import type { PilotOfflineLeaseEnvelope } from './pilot-offline-lease';
 export const PILOT_OFFLINE_SYNC_COMMAND_TYPE = 'rdv_snapshot_upsert_v1' as const;
 export const PILOT_OFFLINE_SYNC_ENTITY_TYPE = 'rdv_snapshot' as const;
 export const PILOT_OFFLINE_SYNC_OPERATION_TYPE = 'upsert' as const;
-export const PILOT_OFFLINE_SYNC_MAX_COMMANDS = 20;
+export const PILOT_OFFLINE_SYNC_MAX_COMMANDS = 1;
 
 export type PilotOfflineSyncStatus =
   | 'accepted'
@@ -294,7 +294,7 @@ export function parseOfflineSyncBatch(value: unknown): PilotOfflineSyncCommand[]
   }
   if (value.commands.length < 1 || value.commands.length > PILOT_OFFLINE_SYNC_MAX_COMMANDS) {
     throw new ApiError(
-      `Lote offline deve conter entre 1 e ${PILOT_OFFLINE_SYNC_MAX_COMMANDS} comandos`,
+      `Pilot offline sync v1 aceita exatamente ${PILOT_OFFLINE_SYNC_MAX_COMMANDS} comando por request`,
       400,
       'CONTROLE_VOOS_PILOT_SYNC_BATCH_SIZE_INVALID',
     );
