@@ -1,0 +1,8 @@
+{
+  "changeId": "controle-voos-pilot-offline-sync-receipts-0488",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0488_controle_voos_pilot_offline_sync_receipts.sql",
+  "fileHash": "8ea1601690c07b3260d660b0cbad57b91d5590f73e94b64d5192a6622659a449",
+  "planPath": "worker-airtrust/schema-v2/plans/controle-voos-pilot-offline-sync-receipts-0488.md",
+  "planHash": "146c3534c02be32249d1b132f3bb0f403846fc1fff111e6864716d8d26625563"
+}
