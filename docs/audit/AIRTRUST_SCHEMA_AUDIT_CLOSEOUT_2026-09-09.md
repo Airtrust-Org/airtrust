@@ -9,7 +9,7 @@ A migration 0487 de `qualificacoes_renovacoes` está fora deste escopo: ela já 
 | Chave | Contrato runtime atual | Proteção tenant-scoped preparada |
 |---|---|---|
 | `cpf` | Normalizado para dígitos; igualdade exata dentro de `empresa_id` | `UNIQUE (empresa_id, cpf)` para registros ativos/não vazios |
-| `matricula` | CRUD sanitiza whitespace; igualdade exata/case-sensitive | `UNIQUE (empresa_id, matricula)` para registros ativos/não vazios |
+| `matricula` | Identidade ignora whitespace externo e preserva case | `UNIQUE (empresa_id, TRIM(matricula))` para registros ativos/não vazios |
 | `email` | CRUD grava lowercase; vínculo usuário↔funcionário usa `LOWER(TRIM(email))` | `UNIQUE (empresa_id, LOWER(TRIM(email)))` para registros ativos/não vazios |
 
 ### Evidência e segurança
@@ -19,7 +19,7 @@ A migration 0487 de `qualificacoes_renovacoes` está fora deste escopo: ela já 
 - Os nomes históricos ambíguos `idx_funcionarios_cpf` e `idx_funcionarios_matricula` não são removidos. Em diferentes estados históricos eles foram usados tanto para índices UNIQUE quanto non-UNIQUE. Se existirem no ambiente alvo, o preflight é NO-GO até inspeção de metadata.
 - `qualificacoes_tipos.codigo` já possui substituição tenant-scoped pela migration 0462; o `DROP IF EXISTS ux_qualificacoes_tipos_codigo` é hardening defensivo.
 - Nenhum remote D1 apply é autorizado por este documento.
-- O preflight read-only `scripts/validation/0489_a02_natural_keys_tenant_scoped_preflight.sql` deve retornar zero conflitos nas três chaves e zero drift ambíguo antes de qualquer aplicação governada.
+- O preflight read-only `scripts/validation/0489_a02_natural_keys_tenant_scoped_preflight.sql` deve retornar zero conflitos nas três chaves, zero drift de dados canônicos e zero drift ambíguo antes de qualquer aplicação governada.
 
 ### Testes
 
@@ -29,7 +29,7 @@ A suíte da 0489 cobre:
 - bloqueio de duplicidade dentro do mesmo tenant;
 - soft-delete;
 - NULL/vazio;
-- matrícula case-sensitive;
+- matrícula trim-insensitive e case-sensitive;
 - identidade de e-mail por `LOWER(TRIM(email))`;
 - ordenação fail-closed: CREATEs substitutos antes dos DROPs globais.
 
