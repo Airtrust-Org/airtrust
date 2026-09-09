@@ -225,6 +225,8 @@ export interface LimitesMap {
   CICLO_EMBARCADO_PCT_MIN: number;
   CICLO_EMBARCADO_PCT_MAX: number;
   CICLO_EMBARCADO_ATIVO: number;
+  /** Synthetic runtime guard from immutable revision provenance; never a legacy numeric default. */
+  CICLO_EMBARCADO_POLICY_APPROVED?: number;
 
   // ── Fator Apresentação (faixas horárias) ──
   APRESENTACAO_MADRUGADA_H_MIN: number;
