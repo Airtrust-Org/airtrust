@@ -38,3 +38,13 @@ WHERE deleted_at IS NULL
   AND trim(cpf) != ''
 GROUP BY cpf
 HAVING COUNT(DISTINCT empresa_id) > 1;
+
+-- 5. NO-GO drift check: these historical names were UNIQUE in some old
+-- migrations but were also recreated as non-unique performance indexes in
+-- other historical states. Canonical current bootstrap does not contain them.
+-- If either exists in the target environment, stop and inspect index metadata
+-- before applying 0489; do not drop it blindly.
+SELECT name, sql
+FROM sqlite_master
+WHERE type = 'index'
+  AND name IN ('idx_funcionarios_cpf', 'idx_funcionarios_matricula');
