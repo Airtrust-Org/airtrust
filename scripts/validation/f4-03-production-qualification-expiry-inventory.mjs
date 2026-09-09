@@ -98,6 +98,9 @@ const structural = query(`
     COALESCE(qt.codigo, 'UNKNOWN') AS qualification_code,
     qh.data_conclusao AS data_conclusao,
     qh.data_vencimento AS current_expiry,
+    qh.validade_meses AS historico_validade_meses,
+    qt.validade AS current_type_validade_meses,
+    COALESCE(qt.vencimento_fim_mes, 0) AS current_type_vencimento_fim_mes,
     qh.certificado_arquivo_id AS certificado_arquivo_id,
     CASE
       WHEN qh.arquivo_url IS NULL OR TRIM(qh.arquivo_url) = '' THEN 0
@@ -180,6 +183,11 @@ const output = {
     qualification_code: String(row.qualification_code || 'UNKNOWN').slice(0, 64),
     data_conclusao: row.data_conclusao ? String(row.data_conclusao).slice(0, 10) : null,
     current_expiry: row.current_expiry ? String(row.current_expiry).slice(0, 10) : null,
+    historico_validade_meses:
+      row.historico_validade_meses == null ? null : Number(row.historico_validade_meses),
+    current_type_validade_meses:
+      row.current_type_validade_meses == null ? null : Number(row.current_type_validade_meses),
+    current_type_vencimento_fim_mes: Number(row.current_type_vencimento_fim_mes || 0),
     certificado_arquivo_id:
       row.certificado_arquivo_id == null ? null : Number(row.certificado_arquivo_id),
     has_arquivo_url: Number(row.has_arquivo_url || 0) === 1,
