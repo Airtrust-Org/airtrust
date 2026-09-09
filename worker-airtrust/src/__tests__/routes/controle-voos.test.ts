@@ -250,6 +250,17 @@ async function currentVersao(db: any) {
   return r?.versao ?? 1;
 }
 
+function seedCrewForFlight601(db: SqliteD1) {
+  runSql(
+    db.databasePath,
+    `
+      INSERT INTO cv_voo_tripulantes (
+        empresa_id, voo_id, funcionario_id, funcao, created_by, updated_by
+      ) VALUES (1, 601, 1001, 'PIC', 10, 10);
+    `,
+  );
+}
+
 function seed(databasePath: string) {
   runSql(
     databasePath,
@@ -1138,6 +1149,7 @@ describe('controle voos routes', () => {
 
   it('finaliza preenchimento', async () => {
     const db = createSqliteD1();
+    seedCrewForFlight601(db);
 
     await request(db, '/api/controle-voos/voos/601/rdv', {
       method: 'PUT',
@@ -1198,6 +1210,7 @@ describe('controle voos routes', () => {
 
   it('nao trava RDV incompleto: alerta impeditivo bloqueia finalizacao sem efeitos parciais', async () => {
     const db = createSqliteD1();
+    seedCrewForFlight601(db);
 
     await request(db, '/api/controle-voos/voos/601/rdv', {
       method: 'PUT',
@@ -1292,6 +1305,7 @@ describe('controle voos routes', () => {
 
   it('nao altera RDV ja finalizado', async () => {
     const db = createSqliteD1();
+    seedCrewForFlight601(db);
 
     await request(db, '/api/controle-voos/voos/601/rdv', {
       method: 'PUT',
@@ -1653,6 +1667,7 @@ describe('controle voos routes', () => {
 
   it('registra evento rdv em criacao, atualizacao e finalizacao', async () => {
     const db = createSqliteD1();
+    seedCrewForFlight601(db);
 
     await request(db, '/api/controle-voos/voos/601/rdv', {
       method: 'PUT',
