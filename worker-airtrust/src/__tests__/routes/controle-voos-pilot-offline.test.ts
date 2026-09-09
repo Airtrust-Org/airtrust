@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 
-const assertRdvSelfScope = vi.fn(async () => undefined);
-const getFlightOrThrow = vi.fn();
-const getActiveRdvByFlight = vi.fn();
+const { assertRdvSelfScope, getFlightOrThrow, getActiveRdvByFlight } = vi.hoisted(() => ({
+  assertRdvSelfScope: vi.fn(async () => undefined),
+  getFlightOrThrow: vi.fn(),
+  getActiveRdvByFlight: vi.fn(),
+}));
 
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: any, next: () => Promise<void>) => {
@@ -139,6 +141,7 @@ function statementFor(sql: string) {
 
 function createApp() {
   const app = new Hono<{ Bindings: Env }>();
+  app.onError((error, c) => c.json({ success: false, error: error.message }, 403));
   app.route('/api/controle-voos', pilotOfflineRoutes);
   return app;
 }
@@ -258,13 +261,12 @@ describe('Pilot offline package', () => {
   it('propaga a negativa de ownership/tenant antes das consultas complementares', async () => {
     assertRdvSelfScope.mockRejectedValueOnce(new Error('NOT_CREW'));
     const env = createEnv();
-    await expect(
-      createApp().request(
-        'http://localhost/api/controle-voos/voos/42/offline-package',
-        { headers: { Authorization: 'Bearer test' } },
-        env,
-      ),
-    ).rejects.toThrow('NOT_CREW');
+    const response = await createApp().request(
+      'http://localhost/api/controle-voos/voos/42/offline-package',
+      { headers: { Authorization: 'Bearer test' } },
+      env,
+    );
+    expect(response.status).toBe(403);
     expect((env.DB.prepare as any).mock.calls).toHaveLength(0);
   });
 });
