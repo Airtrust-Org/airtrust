@@ -1716,6 +1716,7 @@ async function finalizeCanonicalRdv() {
 
   coordinationInFlight = true;
   let requestStarted = false;
+  let confirmedResult = null;
 
   try {
     await persistWorkflowReceipt({
@@ -1743,6 +1744,7 @@ async function finalizeCanonicalRdv() {
     ) {
       throw new Error('Resposta de finalização incompatível com o Pilot App.');
     }
+
     await persistWorkflowReceipt({
       flightId: state.flightId,
       action: 'finalize',
@@ -1750,11 +1752,7 @@ async function finalizeCanonicalRdv() {
       state: 'confirmed',
       serverResult: updated,
     });
-    setCoordinationMessage(
-      'Preenchimento finalizado e confirmado pelo servidor. Atualizando pacote…',
-      'ok',
-    );
-    await prepareFlightPackage(state.flightId);
+    confirmedResult = updated;
   } catch (error) {
     if (requestStarted) {
       try {
@@ -1778,16 +1776,31 @@ async function finalizeCanonicalRdv() {
         'error',
       );
     }
-  } finally {
-    coordinationInFlight = false;
+  }
+
+  if (confirmedResult) {
+    setCoordinationMessage(
+      'Preenchimento finalizado e confirmado pelo servidor. Atualizando pacote…',
+      'ok',
+    );
     try {
-      await refreshCoordinationControls();
+      await prepareFlightPackage(state.flightId);
     } catch (refreshError) {
-      console.error('[Pilot Offline] Falha ao reconciliar controles de finalização:', refreshError);
+      console.error('[Pilot Offline] Falha ao atualizar pacote após finalização confirmada:', refreshError);
+      setCoordinationMessage(
+        'Preenchimento confirmado pelo servidor. A atualização do pacote falhou; use “Atualizar do servidor” antes da próxima ação.',
+        'attention',
+      );
     }
   }
-}
 
+  coordinationInFlight = false;
+  try {
+    await refreshCoordinationControls();
+  } catch (refreshError) {
+    console.error('[Pilot Offline] Falha ao reconciliar controles de finalização:', refreshError);
+  }
+}
 async function sendCanonicalRdvToCoordination() {
   if (coordinationInFlight) return;
   const state = await getCoordinationState();
@@ -1834,6 +1847,7 @@ async function sendCanonicalRdvToCoordination() {
 
   coordinationInFlight = true;
   let requestStarted = false;
+  let confirmedResult = null;
 
   try {
     await persistWorkflowReceipt({
@@ -1861,6 +1875,7 @@ async function sendCanonicalRdvToCoordination() {
     ) {
       throw new Error('Resposta de envio à Coordenação incompatível com o Pilot App.');
     }
+
     await persistWorkflowReceipt({
       flightId: state.flightId,
       action: 'send_coordination',
@@ -1868,11 +1883,7 @@ async function sendCanonicalRdvToCoordination() {
       state: 'confirmed',
       serverResult: updated,
     });
-    setCoordinationMessage(
-      'Recebimento pela Coordenação confirmado pelo servidor. Atualizando pacote…',
-      'ok',
-    );
-    await prepareFlightPackage(state.flightId);
+    confirmedResult = updated;
   } catch (error) {
     if (requestStarted) {
       try {
@@ -1896,16 +1907,31 @@ async function sendCanonicalRdvToCoordination() {
         'error',
       );
     }
-  } finally {
-    coordinationInFlight = false;
+  }
+
+  if (confirmedResult) {
+    setCoordinationMessage(
+      'Recebimento pela Coordenação confirmado pelo servidor. Atualizando pacote…',
+      'ok',
+    );
     try {
-      await refreshCoordinationControls();
+      await prepareFlightPackage(state.flightId);
     } catch (refreshError) {
-      console.error('[Pilot Offline] Falha ao reconciliar controles de Coordenação:', refreshError);
+      console.error('[Pilot Offline] Falha ao atualizar pacote após handoff confirmado:', refreshError);
+      setCoordinationMessage(
+        'Recebimento confirmado pelo servidor. A atualização do pacote falhou; use “Atualizar do servidor” para reconciliar a tela.',
+        'attention',
+      );
     }
   }
-}
 
+  coordinationInFlight = false;
+  try {
+    await refreshCoordinationControls();
+  } catch (refreshError) {
+    console.error('[Pilot Offline] Falha ao reconciliar controles de Coordenação:', refreshError);
+  }
+}
 async function queueCurrentDraftForSync() {
   if (operationalSyncInFlight) return;
   if (activePackageData()?.contract?.sync_supported !== true) {
