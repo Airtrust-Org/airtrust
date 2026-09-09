@@ -246,6 +246,43 @@ async function authenticatedGet(path) {
   return body;
 }
 
+async function authenticatedPost(path, payload) {
+  if (!navigator.onLine) {
+    throw new PilotOnlineRequestError('Sem conexão. Não é possível emitir um novo lease offline.');
+  }
+
+  const token = readCurrentAccessToken();
+  if (!token) {
+    throw new PilotOnlineRequestError(
+      'Sessão online não disponível. Entre no AirTrust e retorne ao Pilot App.',
+      401,
+      'MISSING_LOCAL_SESSION',
+    );
+  }
+
+  const response = await fetch(API_BASE_URL + path, {
+    method: 'POST',
+    cache: 'no-store',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + token,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new PilotOnlineRequestError(
+      body?.error || body?.message || 'Falha ao preparar edição offline.',
+      response.status,
+      body?.code || null,
+    );
+  }
+  return body;
+}
+
 function containsForbiddenPackageKey(value) {
   if (!value || typeof value !== 'object') return false;
   if (Array.isArray(value)) return value.some(containsForbiddenPackageKey);
