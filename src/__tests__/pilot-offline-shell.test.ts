@@ -14,6 +14,9 @@ const pilotManifest = JSON.parse(read('public/pilot/pilot.webmanifest')) as {
 };
 const pilotApp = read('public/pilot/pilot-app.js');
 const pilotVault = read('public/pilot/pilot-vault.js');
+const pilotRdvDraft = read('public/pilot/pilot-rdv-draft.js');
+const pilotLease = read('public/pilot/pilot-lease.js');
+const pilotLeaseTrust = read('public/pilot/pilot-lease-trust.js');
 const pilotSw = read('public/pilot/pilot-sw.js');
 const swManager = read('src/lib/sw-manager.tsx');
 const killSwitch = read('public/sw.js');
@@ -38,6 +41,9 @@ describe('Pilot Offline shell', () => {
 
     assertParses(pilotApp);
     assertParses(pilotVault);
+    assertParses(pilotRdvDraft);
+    assertParses(pilotLease);
+    assertParses(pilotLeaseTrust);
     assertParses(pilotSw);
   });
 
@@ -55,6 +61,10 @@ describe('Pilot Offline shell', () => {
     expect(pilotVault).toContain("const DB_NAME = 'airtrust-pilot-v1'");
     expect(pilotVault).toContain("'rdv_drafts'");
     expect(pilotVault).toContain("'flight_packages'");
+    expect(pilotVault).toContain("'offline_leases'");
+    expect(pilotVault).toContain("'stage_drafts'");
+    expect(pilotVault).toContain('async putJsonBatch(entries)');
+    expect(pilotVault).toContain('async getOrCreateDeviceId()');
     expect(pilotVault).toContain("name: 'PBKDF2'");
     expect(pilotVault).toContain("name: 'AES-GCM'");
     expect(pilotVault).toContain('crypto.subtle.encrypt');
@@ -71,8 +81,11 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v2'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v3'");
     expect(pilotSw).toContain("'/pilot/index.html'");
+    expect(pilotSw).toContain("'/pilot/pilot-rdv-draft.js'");
+    expect(pilotSw).toContain("'/pilot/pilot-lease.js'");
+    expect(pilotSw).toContain("'/pilot/pilot-lease-trust.js'");
     expect(pilotSw).toContain("url.pathname.startsWith(PILOT_SCOPE_PATH)");
     expect(pilotSw).toContain("caches.match('/pilot/index.html')");
     expect(pilotSw).toContain("if (url.pathname.startsWith('/api/')) return;");
@@ -119,11 +132,45 @@ describe('Pilot Offline shell', () => {
     expect(writeSnippet).not.toMatch(/airtrust_token|refresh_token|Authorization/);
   });
 
-  it('mantem o pacote real explicitamente read-only e nao regulatorio', () => {
-    expect(pilotIndex).toContain('Edição real, lease offline, sincronização e envio à Coordenação');
+  it('mantem o pacote-base read-only e separa rascunho local de sincronizacao', () => {
     expect(pilotIndex).toContain('não é Diário de Bordo oficial');
+    expect(pilotIndex).toContain('Sincronização e envio à Coordenação continuam fora desta entrega');
     expect(pilotApp).toContain("contract?.read_only !== true");
     expect(pilotApp).toContain("contract?.sync_supported !== false");
     expect(pilotApp).toContain("contract?.regulated_edb !== false");
+    expect(pilotIndex).toContain('Rascunho operacional local');
+    expect(pilotIndex).toContain('Não sincronizado');
+  });
+
+  it('mantem a edicao offline fail-closed ate haver lease assinado e chave publica confiavel', () => {
+    expect(pilotLeaseTrust).toContain('TRUSTED_PILOT_LEASE_KEYS = Object.freeze([])');
+    expect(pilotLease).toContain("envelope.alg !== 'ES256'");
+    expect(pilotLease).toContain("crypto.subtle.verify");
+    expect(pilotLease).toContain("claims.purpose !== 'offline_flight_lease'");
+    expect(pilotLease).toContain("claims.device_id");
+    expect(pilotRdvDraft).toContain('assertVerifiedLeaseAllowsDraft');
+    expect(pilotApp).toContain('hasTrustedPilotLeaseKeys()');
+    expect(pilotApp).toContain('verifyPilotOfflineLease');
+    expect(pilotApp).toContain("'/offline-lease'");
+  });
+
+  it('salva RDV e etapas atomicamente e faz read-back antes de confirmar persistencia', () => {
+    expect(pilotVault).toContain("this.database.transaction(storeNames, 'readwrite')");
+    const batchIndex = pilotApp.indexOf('await vault.putJsonBatch(buildOperationalSaveEntries');
+    const readRdvIndex = pilotApp.indexOf("await vault.getJson(\n        'rdv_drafts'", batchIndex);
+    const readyIndex = pilotApp.indexOf("rdvEditorSaveStatus.textContent = 'Salvo no tablet.'", readRdvIndex);
+    expect(batchIndex).toBeGreaterThan(-1);
+    expect(readRdvIndex).toBeGreaterThan(batchIndex);
+    expect(readyIndex).toBeGreaterThan(readRdvIndex);
+  });
+
+  it('captura quick actions de horario com sequencia monotona sem inferir ciclos', () => {
+    expect(pilotApp).toContain("['PARTIDA', 'horario_motor_ligado']");
+    expect(pilotApp).toContain("['DECOLAGEM', 'horario_decolagem']");
+    expect(pilotApp).toContain("['POUSO', 'horario_pouso']");
+    expect(pilotApp).toContain("['CORTE', 'horario_motor_desligado']");
+    expect(pilotApp).toContain('monotonic_sequence: timingSequence');
+    expect(pilotRdvDraft).toContain('Ciclos não são derivados de pousos');
+    expect(pilotRdvDraft).not.toContain('next.ciclos =');
   });
 });

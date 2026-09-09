@@ -1,4 +1,20 @@
 import { PilotVault } from '/pilot/pilot-vault.js';
+import {
+  hasTrustedPilotLeaseKeys,
+  verifyPilotOfflineLease,
+} from '/pilot/pilot-lease.js';
+import { PILOT_OFFLINE_APP_VERSION } from '/pilot/pilot-lease-trust.js';
+import {
+  applySafeStageAggregates,
+  assertPackageIdentity,
+  assertVerifiedLeaseAllowsDraft,
+  buildDraftSnapshot,
+  calcConsumoCombustivel,
+  calcHorasVoadas,
+  parseNumber,
+  validateRdvForm,
+  validateStageDrafts,
+} from '/pilot/pilot-rdv-draft.js';
 
 const DRAFT_ID = 'phase1-synthetic-rdv-draft';
 const SAVE_DELAY_MS = 180;
@@ -55,6 +71,18 @@ const revisionLabel = document.querySelector('#revision');
 const lastSavedLabel = document.querySelector('#last-saved');
 const saveNowButton = document.querySelector('#save-now');
 const lockButton = document.querySelector('#lock');
+const prepareEditOfflineButton = document.querySelector('#prepare-edit-offline');
+const openLocalDraftButton = document.querySelector('#open-local-draft');
+const leaseStatus = document.querySelector('#lease-status');
+const rdvEditorCard = document.querySelector('#rdv-editor-card');
+const rdvEditorTitle = document.querySelector('#rdv-editor-title');
+const rdvEditorSubtitle = document.querySelector('#rdv-editor-subtitle');
+const rdvEditorSaveStatus = document.querySelector('#rdv-editor-save-status');
+const rdvLocalSequenceLabel = document.querySelector('#rdv-local-sequence');
+const rdvLeaseUntilLabel = document.querySelector('#rdv-lease-until');
+const rdvFormFields = document.querySelector('#rdv-form-fields');
+const rdvStageFields = document.querySelector('#rdv-stage-fields');
+const closeRdvEditorButton = document.querySelector('#close-rdv-editor');
 
 let vault;
 let provisioned = false;
@@ -63,6 +91,15 @@ let saveTimer = null;
 let saveChain = Promise.resolve();
 let cachedPackageRecords = [];
 let onlineFlightRecords = [];
+let activePackageRecord = null;
+let activeVerifiedLease = null;
+let activeRdvDraft = null;
+let activeStageDrafts = [];
+let operationalLocalSequence = 0;
+let operationalNextSequence = 0;
+let operationalSaveTimer = null;
+let operationalSaveChain = Promise.resolve();
+let timingSequence = 0;
 
 function setConnectivity() {
   const online = navigator.onLine;
@@ -203,6 +240,43 @@ async function authenticatedGet(path) {
   if (!response.ok) {
     throw new PilotOnlineRequestError(
       body?.error || body?.message || 'Falha ao consultar o AirTrust.',
+      response.status,
+      body?.code || null,
+    );
+  }
+  return body;
+}
+
+async function authenticatedPost(path, payload) {
+  if (!navigator.onLine) {
+    throw new PilotOnlineRequestError('Sem conexão. Não é possível emitir um novo lease offline.');
+  }
+
+  const token = readCurrentAccessToken();
+  if (!token) {
+    throw new PilotOnlineRequestError(
+      'Sessão online não disponível. Entre no AirTrust e retorne ao Pilot App.',
+      401,
+      'MISSING_LOCAL_SESSION',
+    );
+  }
+
+  const response = await fetch(API_BASE_URL + path, {
+    method: 'POST',
+    cache: 'no-store',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + token,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new PilotOnlineRequestError(
+      body?.error || body?.message || 'Falha ao preparar edição offline.',
       response.status,
       body?.code || null,
     );
@@ -475,6 +549,646 @@ async function prepareFlightPackage(flightId) {
   }
 }
 
+function setLeaseMessage(message, kind = 'attention') {
+  leaseStatus.className = 'statusline ' + kind;
+  leaseStatus.textContent = message;
+}
+
+function activePackageData() {
+  return activePackageRecord?.value?.package || null;
+}
+
+function offlineLeaseRecordId(flightId) {
+  return 'flight:' + String(flightId) + ':lease';
+}
+
+function rdvDraftRecordId(flightId) {
+  return 'flight:' + String(flightId) + ':rdv';
+}
+
+async function verifyStoredLeaseForPackage(packageData) {
+  if (!hasTrustedPilotLeaseKeys()) {
+    throw new Error('Chave pública confiável do lease ainda não foi provisionada neste build.');
+  }
+  const identity = assertPackageIdentity(packageData);
+  const deviceId = await vault.getOrCreateDeviceId();
+  const stored = await vault.getJson('offline_leases', offlineLeaseRecordId(identity.flightId));
+  if (!stored?.value?.envelope) return null;
+
+  const verified = await verifyPilotOfflineLease(stored.value.envelope, {
+    tenantId: identity.tenantId,
+    userId: identity.userId,
+    flightId: identity.flightId,
+    deviceId,
+  });
+  return { verified, stored };
+}
+
+async function refreshLeaseControls(record) {
+  activePackageRecord = record;
+  activeVerifiedLease = null;
+  closeOperationalEditor();
+
+  if (!record) {
+    prepareEditOfflineButton.disabled = true;
+    openLocalDraftButton.disabled = true;
+    setLeaseMessage('Abra um pacote de voo para avaliar o lease offline.', 'attention');
+    return;
+  }
+
+  if (!hasTrustedPilotLeaseKeys()) {
+    prepareEditOfflineButton.disabled = true;
+    openLocalDraftButton.disabled = true;
+    setLeaseMessage(
+      'Edição bloqueada: chave pública confiável do lease ainda não foi provisionada neste build.',
+      'attention',
+    );
+    return;
+  }
+
+  prepareEditOfflineButton.disabled = !navigator.onLine;
+  openLocalDraftButton.disabled = true;
+  try {
+    const existing = await verifyStoredLeaseForPackage(record.value.package);
+    if (existing?.verified) {
+      activeVerifiedLease = existing.verified;
+      openLocalDraftButton.disabled = false;
+      setLeaseMessage(
+        'Lease válido neste tablet até ' + formatTimestamp(existing.verified.claims.valid_until) + '.',
+        'ok',
+      );
+      return;
+    }
+    setLeaseMessage(
+      navigator.onLine
+        ? 'Nenhum lease válido armazenado. Prepare a edição offline antes do voo.'
+        : 'Sem lease válido local. Reconecte antes do voo para preparar a edição.',
+      'attention',
+    );
+  } catch (error) {
+    setLeaseMessage(error instanceof Error ? error.message : 'Lease local inválido.', 'error');
+  }
+}
+
+async function prepareOfflineEditing() {
+  const packageData = activePackageData();
+  if (!packageData) return;
+
+  if (!hasTrustedPilotLeaseKeys()) {
+    setLeaseMessage(
+      'Edição bloqueada: chave pública confiável do lease ainda não foi provisionada.',
+      'error',
+    );
+    return;
+  }
+
+  prepareEditOfflineButton.disabled = true;
+  setLeaseMessage('Solicitando e verificando lease offline…', 'attention');
+
+  try {
+    const identity = assertPackageIdentity(packageData);
+    const deviceId = await vault.getOrCreateDeviceId();
+    const body = await authenticatedPost(
+      '/controle-voos/voos/' + encodeURIComponent(String(identity.flightId)) + '/offline-lease',
+      {
+        device_id: deviceId,
+        app_version: PILOT_OFFLINE_APP_VERSION,
+      },
+    );
+    const envelope = body?.data?.lease;
+    const verified = await verifyPilotOfflineLease(envelope, {
+      tenantId: identity.tenantId,
+      userId: identity.userId,
+      flightId: identity.flightId,
+      deviceId,
+    });
+
+    const recordId = offlineLeaseRecordId(identity.flightId);
+    const previous = await vault.getJson('offline_leases', recordId);
+    const revision = Number(previous?.localRevision || 0) + 1;
+    await vault.putJson(
+      'offline_leases',
+      recordId,
+      {
+        schema_version: 1,
+        envelope,
+        verified_at: verified.verified_at,
+        claims: verified.claims,
+      },
+      revision,
+    );
+
+    const persisted = await vault.getJson('offline_leases', recordId);
+    if (!persisted?.value?.envelope) {
+      throw new Error('Lease assinado não foi persistido no tablet.');
+    }
+    const readBack = await verifyPilotOfflineLease(persisted.value.envelope, {
+      tenantId: identity.tenantId,
+      userId: identity.userId,
+      flightId: identity.flightId,
+      deviceId,
+    });
+
+    activeVerifiedLease = readBack;
+    openLocalDraftButton.disabled = false;
+    setLeaseMessage(
+      'Lease verificado e salvo no tablet até ' + formatTimestamp(readBack.claims.valid_until) + '.',
+      'ok',
+    );
+    await openOrSeedOperationalDraft(packageData, readBack);
+  } catch (error) {
+    const authFailure = error instanceof PilotOnlineRequestError && error.status === 401;
+    setLeaseMessage(
+      error instanceof Error ? error.message : 'Falha ao preparar edição offline.',
+      'error',
+    );
+    if (authFailure) setSessionMessage('Sessão online necessária para emitir lease.', 'error', true);
+  } finally {
+    prepareEditOfflineButton.disabled = !navigator.onLine || !hasTrustedPilotLeaseKeys();
+  }
+}
+
+async function openExistingOperationalDraft() {
+  const packageData = activePackageData();
+  if (!packageData) return;
+
+  try {
+    const existing = await verifyStoredLeaseForPackage(packageData);
+    if (!existing?.verified) {
+      throw new Error('Nenhum lease offline válido encontrado neste tablet.');
+    }
+    activeVerifiedLease = existing.verified;
+    await openOrSeedOperationalDraft(packageData, existing.verified);
+  } catch (error) {
+    setLeaseMessage(
+      error instanceof Error ? error.message : 'Não foi possível abrir o rascunho local.',
+      'error',
+    );
+  }
+}
+
+async function openOrSeedOperationalDraft(packageData, verifiedLease) {
+  assertVerifiedLeaseAllowsDraft(packageData, verifiedLease);
+  const identity = assertPackageIdentity(packageData);
+  const rdvId = rdvDraftRecordId(identity.flightId);
+  const existingRdv = await vault.getJson('rdv_drafts', rdvId);
+  const stageRecords = (await vault.listJson('stage_drafts')).filter(
+    (record) => Number(record.value?.flight_id) === identity.flightId,
+  );
+
+  if (existingRdv) {
+    const value = existingRdv.value;
+    if (
+      Number(value.tenant_id) !== identity.tenantId ||
+      Number(value.user_id) !== identity.userId ||
+      Number(value.flight_id) !== identity.flightId
+    ) {
+      throw new Error('Rascunho local pertence a outra identidade operacional.');
+    }
+    if (String(value.source_package_id) !== identity.packageId) {
+      throw new Error(
+        'O pacote do voo mudou desde o início deste rascunho. Resolução de conflito ainda não está habilitada.',
+      );
+    }
+    const matchingStages = stageRecords
+      .filter((record) => String(record.value?.source_package_id) === identity.packageId)
+      .sort(
+        (left, right) =>
+          Number(left.value?.fields?.numero_etapa || 0) -
+          Number(right.value?.fields?.numero_etapa || 0),
+      );
+    if (matchingStages.length === 0) {
+      throw new Error('Rascunho local incompleto: etapas não encontradas.');
+    }
+
+    activeRdvDraft = value;
+    activeStageDrafts = matchingStages.map((record) => record.value);
+    operationalLocalSequence = Math.max(
+      Number(existingRdv.localRevision || value.local_sequence || 0),
+      ...matchingStages.map((record) =>
+        Number(record.localRevision || record.value?.local_sequence || 0),
+      ),
+    );
+    operationalNextSequence = operationalLocalSequence;
+  } else {
+    const snapshot = buildDraftSnapshot(packageData, 0);
+    await vault.putJsonBatch([
+      {
+        storeName: 'rdv_drafts',
+        id: snapshot.rdv.entity_local_id,
+        value: snapshot.rdv,
+        localRevision: 0,
+      },
+      ...snapshot.stages.map((stage) => ({
+        storeName: 'stage_drafts',
+        id: stage.entity_local_id,
+        value: stage,
+        localRevision: 0,
+      })),
+    ]);
+    const persistedRdv = await vault.getJson('rdv_drafts', snapshot.rdv.entity_local_id);
+    if (!persistedRdv) throw new Error('Falha ao criar rascunho RDV no tablet.');
+
+    activeRdvDraft = persistedRdv.value;
+    const persistedStages = (await vault.listJson('stage_drafts'))
+      .filter(
+        (record) =>
+          Number(record.value?.flight_id) === identity.flightId &&
+          String(record.value?.source_package_id) === identity.packageId,
+      )
+      .sort(
+        (left, right) =>
+          Number(left.value?.fields?.numero_etapa || 0) -
+          Number(right.value?.fields?.numero_etapa || 0),
+      );
+    activeStageDrafts = persistedStages.map((record) => record.value);
+    operationalLocalSequence = 0;
+    operationalNextSequence = 0;
+  }
+
+  renderOperationalEditor();
+}
+
+function localDateTimeNow() {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+}
+
+function nextOperationalSequence() {
+  operationalNextSequence += 1;
+  return operationalNextSequence;
+}
+
+function markOperationalPending() {
+  rdvEditorSaveStatus.className = 'statusline attention';
+  rdvEditorSaveStatus.textContent = 'Alterações locais pendentes…';
+}
+
+function refreshDraftValidationPresentation() {
+  const packageData = activePackageData();
+  if (!activeRdvDraft || !packageData) return;
+  const rdvErrors = validateRdvForm(activeRdvDraft.form, packageData);
+  const stageErrors = validateStageDrafts(activeStageDrafts);
+  const total = Object.keys(rdvErrors).length + stageErrors.length;
+
+  const existing = rdvEditorCard.querySelector('#rdv-validation-summary');
+  if (existing) existing.remove();
+
+  if (total === 0) return;
+  const summary = document.createElement('div');
+  summary.id = 'rdv-validation-summary';
+  summary.className = 'statusline error';
+  summary.textContent =
+    total + ' validação(ões) pendente(s). Os dados continuam salvos localmente.';
+  rdvEditorCard.insertBefore(summary, rdvFormFields);
+}
+
+function scheduleOperationalSave() {
+  if (!activeRdvDraft || activeStageDrafts.length === 0) return;
+  nextOperationalSequence();
+  markOperationalPending();
+  if (operationalSaveTimer !== null) window.clearTimeout(operationalSaveTimer);
+  operationalSaveTimer = window.setTimeout(() => {
+    operationalSaveTimer = null;
+    void enqueueOperationalSave();
+  }, SAVE_DELAY_MS);
+}
+
+function buildOperationalSaveEntries(sequence) {
+  const packageData = activePackageData();
+  if (!packageData || !activeRdvDraft) throw new Error('Rascunho operacional não está aberto.');
+  assertVerifiedLeaseAllowsDraft(packageData, activeVerifiedLease);
+  const now = new Date().toISOString();
+
+  activeRdvDraft.local_sequence = sequence;
+  activeRdvDraft.updated_at_claimed = now;
+  for (const stage of activeStageDrafts) {
+    stage.local_sequence = sequence;
+    stage.updated_at_claimed = now;
+  }
+
+  return [
+    {
+      storeName: 'rdv_drafts',
+      id: activeRdvDraft.entity_local_id,
+      value: structuredClone(activeRdvDraft),
+      localRevision: sequence,
+    },
+    ...activeStageDrafts.map((stage) => ({
+      storeName: 'stage_drafts',
+      id: stage.entity_local_id,
+      value: structuredClone(stage),
+      localRevision: sequence,
+    })),
+  ];
+}
+
+function enqueueOperationalSave() {
+  const requestedSequence = operationalNextSequence;
+  operationalSaveChain = operationalSaveChain
+    .then(async () => {
+      if (!vault?.isUnlocked() || !activeRdvDraft) return;
+      const packageData = activePackageData();
+      assertVerifiedLeaseAllowsDraft(packageData, activeVerifiedLease);
+
+      rdvEditorSaveStatus.className = 'statusline attention';
+      rdvEditorSaveStatus.textContent = 'Salvando no tablet…';
+
+      await vault.putJsonBatch(buildOperationalSaveEntries(requestedSequence));
+
+      const persistedRdv = await vault.getJson(
+        'rdv_drafts',
+        activeRdvDraft.entity_local_id,
+      );
+      const persistedStages = await Promise.all(
+        activeStageDrafts.map((stage) =>
+          vault.getJson('stage_drafts', stage.entity_local_id),
+        ),
+      );
+      const allVerified =
+        persistedRdv?.localRevision === requestedSequence &&
+        persistedStages.every((record) => record?.localRevision === requestedSequence);
+      if (!allVerified) {
+        throw new Error('Falha no read-back do rascunho operacional.');
+      }
+
+      operationalLocalSequence = requestedSequence;
+      rdvLocalSequenceLabel.textContent = String(operationalLocalSequence);
+      if (operationalNextSequence === requestedSequence) {
+        rdvEditorSaveStatus.className = 'statusline ok';
+        rdvEditorSaveStatus.textContent = 'Salvo no tablet.';
+      } else {
+        markOperationalPending();
+      }
+      refreshDraftValidationPresentation();
+      await updateStorageEstimate();
+    })
+    .catch((error) => {
+      console.error('[Pilot Offline] Falha ao salvar rascunho operacional:', error);
+      rdvEditorSaveStatus.className = 'statusline error';
+      rdvEditorSaveStatus.textContent =
+        'Falha ao salvar no tablet. Não continue sem revisar: ' +
+        (error instanceof Error ? error.message : 'erro desconhecido');
+    });
+  return operationalSaveChain;
+}
+
+function flushOperationalSave() {
+  if (operationalSaveTimer !== null) {
+    window.clearTimeout(operationalSaveTimer);
+    operationalSaveTimer = null;
+  }
+  if (!activeRdvDraft || operationalNextSequence === operationalLocalSequence) {
+    return operationalSaveChain;
+  }
+  return enqueueOperationalSave();
+}
+
+function createEditorField({
+  label,
+  value,
+  type = 'text',
+  inputMode,
+  wide = false,
+  readOnly = false,
+  note,
+  onInput,
+  onBlur,
+}) {
+  const wrapper = document.createElement('label');
+  if (wide) wrapper.classList.add('wide');
+  const title = document.createElement('span');
+  title.textContent = label;
+  const input = type === 'textarea' ? document.createElement('textarea') : document.createElement('input');
+  if (type !== 'textarea') input.type = type;
+  if (inputMode) input.inputMode = inputMode;
+  input.value = value ?? '';
+  input.readOnly = readOnly;
+  if (onInput) input.addEventListener('input', () => onInput(input.value, input));
+  if (onBlur) input.addEventListener('blur', () => onBlur(input.value, input));
+  wrapper.append(title, input);
+  if (note) {
+    const noteEl = document.createElement('span');
+    noteEl.className = 'field-note';
+    noteEl.textContent = note;
+    wrapper.append(noteEl);
+  }
+  return wrapper;
+}
+
+function renderRdvFormFields() {
+  rdvFormFields.replaceChildren();
+  const form = activeRdvDraft.form;
+
+  const fields = [
+    ['Número do RDV', 'numero', 'text', null, false, false],
+    ['Data do voo', 'data_voo', 'date', null, false, false],
+    ['Decolagem real', 'horario_decolagem_real', 'datetime-local', null, false, false],
+    ['Pouso real', 'horario_pouso_real', 'datetime-local', null, false, false],
+    ['Horas voadas', 'horas_voadas', 'number', 'decimal', false, true],
+    ['Pousos', 'numero_pousos', 'number', 'numeric', false, true],
+    ['Ciclos', 'ciclos', 'number', 'numeric', false, false],
+    ['Combustível decolagem', 'combustivel_decolagem', 'number', 'decimal', false, true],
+    ['Combustível pouso', 'combustivel_pouso', 'number', 'decimal', false, true],
+    ['Consumo', 'combustivel_consumo', 'number', 'decimal', false, true],
+    ['POB', 'pob', 'number', 'numeric', false, true],
+    ['Carga (kg)', 'carga_kg', 'number', 'decimal', false, true],
+    ['Ocorrências', 'ocorrencias', 'textarea', null, true, false],
+    ['Divergências do planejado', 'divergencias', 'textarea', null, true, false],
+  ];
+
+  for (const [label, key, type, inputMode, wide, aggregateManaged] of fields) {
+    rdvFormFields.append(
+      createEditorField({
+        label,
+        value: form[key],
+        type,
+        inputMode,
+        wide,
+        readOnly: aggregateManaged,
+        note:
+          key === 'ciclos'
+            ? 'Não é derivado automaticamente de pousos.'
+            : aggregateManaged
+              ? 'Calculado a partir das etapas locais.'
+              : null,
+        onInput: (value) => {
+          form[key] = value;
+          if (
+            key === 'horario_decolagem_real' ||
+            key === 'horario_pouso_real'
+          ) {
+            const hours = calcHorasVoadas(
+              form.horario_decolagem_real,
+              form.horario_pouso_real,
+            );
+            if (hours !== null) form.horas_voadas = String(hours);
+          }
+          if (key === 'combustivel_decolagem' || key === 'combustivel_pouso') {
+            const used = calcConsumoCombustivel(
+              parseNumber(form.combustivel_decolagem),
+              parseNumber(form.combustivel_pouso),
+            );
+            if (used !== null) form.combustivel_consumo = String(used);
+          }
+          scheduleOperationalSave();
+        },
+        onBlur: () => void flushOperationalSave(),
+      }),
+    );
+  }
+}
+
+function timingEventMeta(action) {
+  timingSequence += 1;
+  return {
+    action,
+    client_claimed_at: new Date().toISOString(),
+    monotonic_sequence: timingSequence,
+    last_trusted_server_time:
+      activePackageData()?.contract?.generated_at || null,
+    clock_drift_estimate_ms: null,
+  };
+}
+
+function applyQuickTiming(stage, field, action) {
+  const nowLocal = localDateTimeNow();
+  stage.fields[field] = nowLocal;
+  stage.timing_events = {
+    ...(stage.timing_events || {}),
+    [field]: timingEventMeta(action),
+  };
+  const aggregated = applySafeStageAggregates(
+    activeRdvDraft.form,
+    activeStageDrafts,
+  );
+  activeRdvDraft.form = aggregated;
+  scheduleOperationalSave();
+  renderOperationalEditor({ preserveScroll: true });
+}
+
+function renderStageFields() {
+  rdvStageFields.replaceChildren();
+
+  for (let index = 0; index < activeStageDrafts.length; index += 1) {
+    const stageDraft = activeStageDrafts[index];
+    const fields = stageDraft.fields;
+    const card = document.createElement('section');
+    card.className = 'editor-stage';
+
+    const heading = document.createElement('h3');
+    heading.textContent =
+      'Etapa ' +
+      String(fields.numero_etapa || index + 1) +
+      ' · ' +
+      displayText(fields.origem_icao) +
+      ' → ' +
+      displayText(fields.destino_icao);
+    card.append(heading);
+
+    const quick = document.createElement('div');
+    quick.className = 'actions';
+    const actions = [
+      ['PARTIDA', 'horario_motor_ligado'],
+      ['DECOLAGEM', 'horario_decolagem'],
+      ['POUSO', 'horario_pouso'],
+      ['CORTE', 'horario_motor_desligado'],
+    ];
+    for (const [label, field] of actions) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'secondary';
+      button.textContent = label;
+      button.addEventListener('click', () => applyQuickTiming(stageDraft, field, label));
+      quick.append(button);
+    }
+    card.append(quick);
+
+    const grid = document.createElement('div');
+    grid.className = 'editor-grid';
+    const stageFields = [
+      ['Origem', 'origem_icao', 'text', null],
+      ['Destino', 'destino_icao', 'text', null],
+      ['Partida motores', 'horario_motor_ligado', 'datetime-local', null],
+      ['Decolagem', 'horario_decolagem', 'datetime-local', null],
+      ['Pouso', 'horario_pouso', 'datetime-local', null],
+      ['Corte motores', 'horario_motor_desligado', 'datetime-local', null],
+      ['IFR', 'tempo_ifr', 'number', 'decimal'],
+      ['Noturno', 'tempo_noturno', 'number', 'decimal'],
+      ['Pousos diurnos', 'pousos_diurnos', 'number', 'numeric'],
+      ['Pousos noturnos', 'pousos_noturnos', 'number', 'numeric'],
+      ['Starts', 'starts', 'number', 'numeric'],
+      ['PAX / POB operacional', 'pax', 'number', 'numeric'],
+      ['Payload / carga', 'payload', 'number', 'decimal'],
+      ['Combustível início', 'combustivel_inicio', 'number', 'decimal'],
+      ['Combustível fim', 'combustivel_fim', 'number', 'decimal'],
+      ['Unidade combustível', 'unidade_combustivel', 'text', null],
+    ];
+
+    for (const [label, key, type, inputMode] of stageFields) {
+      grid.append(
+        createEditorField({
+          label,
+          value: fields[key],
+          type,
+          inputMode,
+          onInput: (value) => {
+            fields[key] = value;
+            activeRdvDraft.form = applySafeStageAggregates(
+              activeRdvDraft.form,
+              activeStageDrafts,
+            );
+            scheduleOperationalSave();
+          },
+          onBlur: () => {
+            activeRdvDraft.form = applySafeStageAggregates(
+              activeRdvDraft.form,
+              activeStageDrafts,
+            );
+            void flushOperationalSave();
+            renderRdvFormFields();
+            refreshDraftValidationPresentation();
+          },
+        }),
+      );
+    }
+
+    card.append(grid);
+    rdvStageFields.append(card);
+  }
+}
+
+function renderOperationalEditor(options = {}) {
+  if (!activeRdvDraft || !activeVerifiedLease || !activePackageRecord) return;
+  const scrollY = window.scrollY;
+  const packageData = activePackageData();
+  const voo = packageData.voo;
+
+  rdvEditorTitle.textContent = 'Etapas / RDV — ' + displayText(voo.prefixo);
+  rdvEditorSubtitle.textContent =
+    formatDate(voo.data_programacao) +
+    ' · rascunho cifrado local · sem transmissão ao servidor';
+  rdvLeaseUntilLabel.textContent = formatTimestamp(
+    activeVerifiedLease.claims.valid_until,
+  );
+  rdvLocalSequenceLabel.textContent = String(operationalLocalSequence);
+
+  renderRdvFormFields();
+  renderStageFields();
+  refreshDraftValidationPresentation();
+  rdvEditorCard.classList.remove('hidden');
+  if (options.preserveScroll) window.scrollTo({ top: scrollY });
+  else rdvEditorCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeOperationalEditor() {
+  rdvEditorCard.classList.add('hidden');
+  rdvFormFields.replaceChildren();
+  rdvStageFields.replaceChildren();
+}
+
 function appendInfoGrid(parent, entries) {
   const grid = document.createElement('div');
   grid.className = 'detail-grid';
@@ -621,12 +1335,19 @@ function openPackageRecord(record) {
   ]);
 
   flightDetailCard.classList.remove('hidden');
+  void refreshLeaseControls(record);
   flightDetailCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function closePackageDetail() {
+  closeOperationalEditor();
+  activePackageRecord = null;
+  activeVerifiedLease = null;
   flightDetailCard.classList.add('hidden');
   flightDetail.replaceChildren();
+  prepareEditOfflineButton.disabled = true;
+  openLocalDraftButton.disabled = true;
+  setLeaseMessage('Abra um pacote de voo para avaliar o lease offline.', 'attention');
 }
 
 function renderProvisioningState() {
@@ -754,14 +1475,25 @@ function flushDiagnosticSave() {
   return enqueueDiagnosticSave(draftInput.value);
 }
 
-function lockVault() {
+async function lockVault() {
   if (saveTimer !== null) {
     window.clearTimeout(saveTimer);
     saveTimer = null;
   }
+  if (operationalSaveTimer !== null) {
+    window.clearTimeout(operationalSaveTimer);
+    operationalSaveTimer = null;
+  }
+  await Promise.allSettled([flushDiagnosticSave(), flushOperationalSave()]);
   vault.lock();
   cachedPackageRecords = [];
   onlineFlightRecords = [];
+  activePackageRecord = null;
+  activeVerifiedLease = null;
+  activeRdvDraft = null;
+  activeStageDrafts = [];
+  operationalLocalSequence = 0;
+  operationalNextSequence = 0;
   workspace.classList.add('hidden');
   closePackageDetail();
   unlockCard.classList.remove('hidden');
@@ -774,6 +1506,7 @@ function lockVault() {
 window.addEventListener('online', () => {
   setConnectivity();
   if (vault?.isUnlocked()) void loadOnlineFlights();
+  if (activePackageRecord) void refreshLeaseControls(activePackageRecord);
 });
 window.addEventListener('offline', () => {
   setConnectivity();
@@ -781,20 +1514,33 @@ window.addEventListener('offline', () => {
     onlineFlightRecords = [];
     renderOnlineFlights();
     setSessionMessage('Offline — mostrando apenas pacotes cifrados já armazenados.', 'attention');
+    if (activePackageRecord) void refreshLeaseControls(activePackageRecord);
   }
 });
 refreshOnlineButton.addEventListener('click', () => void loadOnlineFlights());
+prepareEditOfflineButton.addEventListener('click', () => void prepareOfflineEditing());
+openLocalDraftButton.addEventListener('click', () => void openExistingOperationalDraft());
+closeRdvEditorButton.addEventListener('click', () => void flushOperationalSave().then(closeOperationalEditor));
 closeDetailButton.addEventListener('click', closePackageDetail);
 draftInput.addEventListener('input', scheduleDiagnosticSave);
 draftInput.addEventListener('blur', () => void flushDiagnosticSave());
 saveNowButton.addEventListener('click', () => void flushDiagnosticSave());
-lockButton.addEventListener('click', lockVault);
+lockButton.addEventListener('click', () => void lockVault());
 unlockButton.addEventListener('click', () => void handleUnlock());
 pinInput.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && provisioned) void handleUnlock();
 });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && vault?.isUnlocked()) {
+    void flushDiagnosticSave();
+    void flushOperationalSave();
+  }
+});
 window.addEventListener('pagehide', () => {
-  if (saveTimer !== null && vault?.isUnlocked()) void flushDiagnosticSave();
+  if (vault?.isUnlocked()) {
+    void flushDiagnosticSave();
+    void flushOperationalSave();
+  }
 });
 
 setConnectivity();

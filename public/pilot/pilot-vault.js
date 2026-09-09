@@ -119,6 +119,32 @@ export class PilotVault {
     return Boolean(record);
   }
 
+  async getOrCreateDeviceId() {
+    const id = 'pilot-device-identity';
+    let transaction = this.database.transaction('meta', 'readonly');
+    let record = await requestResult(transaction.objectStore('meta').get(id));
+    await transactionDone(transaction);
+    if (record?.device_id) return String(record.device_id);
+
+    const deviceId = crypto.randomUUID();
+    transaction = this.database.transaction('meta', 'readwrite');
+    transaction.objectStore('meta').put({
+      id,
+      version: 1,
+      device_id: deviceId,
+      created_at: new Date().toISOString(),
+    });
+    await transactionDone(transaction);
+
+    transaction = this.database.transaction('meta', 'readonly');
+    record = await requestResult(transaction.objectStore('meta').get(id));
+    await transactionDone(transaction);
+    if (!record?.device_id) {
+      throw new Error('Falha ao persistir identidade local do tablet.');
+    }
+    return String(record.device_id);
+  }
+
   async provision(pin) {
     if (typeof pin !== 'string' || pin.length < 6) {
       throw new Error('O PIN offline deve ter pelo menos 6 caracteres.');
@@ -220,7 +246,7 @@ export class PilotVault {
     }
   }
 
-  async putJson(storeName, id, value, localRevision) {
+  async encryptJsonRecord(storeName, id, value, localRevision) {
     this.assertStore(storeName);
     this.assertUnlocked();
 
@@ -234,15 +260,44 @@ export class PilotVault {
       ),
     );
 
-    const transaction = this.database.transaction(storeName, 'readwrite');
-    transaction.objectStore(storeName).put({
+    return {
       id,
       cipher_version: 1,
       iv: bytesToBase64(iv),
       ciphertext: bytesToBase64(ciphertext),
       local_revision: Number(localRevision || 0),
       updated_at: new Date().toISOString(),
-    });
+    };
+  }
+
+  async putJson(storeName, id, value, localRevision) {
+    const record = await this.encryptJsonRecord(storeName, id, value, localRevision);
+    const transaction = this.database.transaction(storeName, 'readwrite');
+    transaction.objectStore(storeName).put(record);
+    await transactionDone(transaction);
+  }
+
+  async putJsonBatch(entries) {
+    this.assertUnlocked();
+    if (!Array.isArray(entries) || entries.length === 0) return;
+
+    const records = await Promise.all(
+      entries.map(async (entry) => ({
+        storeName: entry.storeName,
+        record: await this.encryptJsonRecord(
+          entry.storeName,
+          entry.id,
+          entry.value,
+          entry.localRevision,
+        ),
+      })),
+    );
+
+    const storeNames = [...new Set(records.map((entry) => entry.storeName))];
+    const transaction = this.database.transaction(storeNames, 'readwrite');
+    for (const { storeName, record } of records) {
+      transaction.objectStore(storeName).put(record);
+    }
     await transactionDone(transaction);
   }
 
