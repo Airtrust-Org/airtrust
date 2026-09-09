@@ -55,11 +55,11 @@ type StageRow = {
   horario_decolagem: string | null;
   horario_pouso: string | null;
   horario_motor_desligado: string | null;
-  tempo_decolagem_pouso: number | null;
-  tempo_total: number | null;
-  tempo_navegacao: number | null;
-  tempo_ifr: number | null;
-  tempo_noturno: number | null;
+  tempo_decolagem_pouso: string | null;
+  tempo_total: string | null;
+  tempo_navegacao: string | null;
+  tempo_ifr: string | null;
+  tempo_noturno: string | null;
   pousos_diurnos: number | null;
   pousos_noturnos: number | null;
   starts: number | null;
