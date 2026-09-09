@@ -229,7 +229,7 @@ describe('pasta virtual employee scope', () => {
     );
 
     expect(response.status).toBe(201);
-    const json = await response.json();
+    const json = (await response.json()) as { success: boolean; data: { id: number } };
     expect(json.success).toBe(true);
     expect(json.data.id).toBe(42);
   });
