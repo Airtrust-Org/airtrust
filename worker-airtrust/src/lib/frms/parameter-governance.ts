@@ -89,6 +89,7 @@ export interface FrmsOperationalContext {
   effectiveFrom: string;
   effectiveTo: string | null;
   parameters: Readonly<Record<string, number>>;
+  cyclePolicyApproved: boolean;
   fadigaPolicy: FadigaBusinessPolicy;
   fortnightPolicy: FrmsFortnightPolicy;
 }
@@ -124,10 +125,8 @@ export async function resolveFrmsOperationalContext(
     regulatoryProfileId: assignment.regulatory_profile_id,
     configRevisionId: parameterSet.revision.id, modelVersion: parameterSet.modelVersion,
     effectiveFrom: parameterSet.revision.effective_from, effectiveTo: parameterSet.revision.effective_to,
-    parameters: Object.freeze({
-      ...parameterSet.values,
-      CICLO_EMBARCADO_POLICY_APPROVED: parameterSet.cyclePolicyApproved ? 1 : 0,
-    }),
+    parameters: parameterSet.values,
+    cyclePolicyApproved: parameterSet.cyclePolicyApproved,
     fadigaPolicy: resolveFadigaBusinessPolicy(parameterSet.values),
     fortnightPolicy: resolveFortnightPolicy(parameterSet.values),
   });
@@ -244,7 +243,10 @@ export function asGovernedLimites(
       );
     }
   }
-  const candidate: unknown = { ...parameterSet.values };
+  const candidate: unknown = {
+    ...parameterSet.values,
+    CICLO_EMBARCADO_POLICY_APPROVED: parameterSet.cyclePolicyApproved ? 1 : 0,
+  };
   if (!isGovernedLimitesMap(candidate, requiredKeys)) {
     throw new FrmsParameterResolutionError(
       'FRMS_PARAMETER_REQUIRED_MISSING',
@@ -269,7 +271,10 @@ function isGovernedLimitesMap(
  * call on `FrmsOperationalContext.parameters`, since `resolveFrmsOperationalContext`
  * already guarantees every `LIMITES_DEFAULT` key is present and numeric.
  */
-export function asOperationalLimitesMap(parameters: Readonly<Record<string, number>>): LimitesMap {
+export function asOperationalLimitesMap(
+  parameters: Readonly<Record<string, number>>,
+  cyclePolicyApproved = false,
+): LimitesMap {
   const requiredKeys = Object.keys(LIMITES_DEFAULT) as (keyof LimitesMap)[];
   if (!isGovernedLimitesMap(parameters, requiredKeys)) {
     throw new FrmsParameterResolutionError(
@@ -277,7 +282,10 @@ export function asOperationalLimitesMap(parameters: Readonly<Record<string, numb
       'Governed operational context does not satisfy the calculation contract.',
     );
   }
-  return parameters;
+  return Object.freeze({
+    ...parameters,
+    CICLO_EMBARCADO_POLICY_APPROVED: cyclePolicyApproved ? 1 : 0,
+  });
 }
 
 export interface FrmsRecalcRun {
