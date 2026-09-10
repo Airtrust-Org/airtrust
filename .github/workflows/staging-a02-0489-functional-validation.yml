@@ -1,0 +1,220 @@
+name: Staging A-02 0489 Functional Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_STAGING_A02_0489_FUNCTIONAL'
+        required: true
+        type: string
+      runtime_sha:
+        description: 'Exact reviewed SHA currently deployed to the staging Worker'
+        required: true
+        type: string
+      release_reason:
+        description: 'Why A-02 / 0489 staging functional verification is being executed'
+        required: true
+        type: string
+
+concurrency:
+  group: staging-a02-0489-functional-validation
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+env:
+  NODE_VERSION: '24'
+  EXPECTED_CONFIRMATION: AIRTRUST_STAGING_A02_0489_FUNCTIONAL
+  ALLOWED_STAGING_DB_NAME: airtrust-db-staging-baseline-20260701
+  STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+  STAGING_VERSION_URL: https://airtrust-api-staging.airtrust.workers.dev/api/version
+
+jobs:
+  guard:
+    name: Frozen Runtime and Release Guard
+    runs-on: ubuntu-latest
+    outputs:
+      runtime_sha: ${{ steps.runtime.outputs.runtime_sha }}
+    steps:
+      - name: Validate dispatch inputs
+        env:
+          GIT_REF: ${{ github.ref }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          RUNTIME_SHA: ${{ inputs.runtime_sha }}
+          RELEASE_REASON: ${{ inputs.release_reason }}
+        run: |
+          set -euo pipefail
+          [[ "$GIT_REF" == "refs/heads/main" ]]
+          [[ "$CONFIRMATION" == "$EXPECTED_CONFIRMATION" ]]
+          [[ "$RUNTIME_SHA" =~ ^[0-9a-fA-F]{40}$ ]]
+          [[ -n "$RELEASE_REASON" ]]
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Require runtime SHA to be in current main history
+        env:
+          RUNTIME_SHA: ${{ inputs.runtime_sha }}
+        run: |
+          set -euo pipefail
+          git cat-file -e "${RUNTIME_SHA}^{commit}"
+          git merge-base --is-ancestor "$RUNTIME_SHA" HEAD
+
+      - name: Verify official release gates for runtime SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.runtime_sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Require staging Worker provenance to match runtime SHA
+        env:
+          RUNTIME_SHA: ${{ inputs.runtime_sha }}
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error --retry 3 --retry-all-errors "$STAGING_VERSION_URL")"
+          node - "$response" "${RUNTIME_SHA,,}" <<'NODE'
+          const payload = JSON.parse(process.argv[2]);
+          const expected = process.argv[3];
+          const body = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
+          if (String(body?.environment ?? '').toLowerCase() !== 'staging') throw new Error('STAGING_ENVIRONMENT_MISMATCH');
+          if (String(body?.sourceSha ?? body?.source_sha ?? '').toLowerCase() !== expected) throw new Error('STAGING_SOURCE_SHA_MISMATCH');
+          console.log(`STAGING_RUNTIME_SHA=${expected}`);
+          NODE
+
+      - id: runtime
+        name: Publish frozen runtime SHA
+        env:
+          RUNTIME_SHA: ${{ inputs.runtime_sha }}
+        run: echo "runtime_sha=${RUNTIME_SHA,,}" >> "$GITHUB_OUTPUT"
+
+  schema-d1-functional:
+    name: Staging D1 Two-Tenant Natural-Key Lifecycle
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Syntax-check A-02 functional runner
+        run: node --check scripts/staging/run-0489-functional-validation.mjs
+
+      - name: Provision disposable two-tenant fixtures
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+        run: |
+          set -euo pipefail
+          manifest="$(node scripts/staging/provision-controle-voos-e2e-fixtures.mjs --apply)"
+          [[ -n "$manifest" && -s "$manifest" ]]
+          echo "A02_0489_MANIFEST=$manifest" >> "$GITHUB_ENV"
+
+      - id: qa
+        name: Exercise cross-tenant, duplicate and soft-delete semantics
+        env:
+          STAGING_API_BASE_URL: ${{ env.STAGING_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/a02-0489-evidence"
+          set +e
+          evidence="$(node scripts/staging/run-0489-functional-validation.mjs "$A02_0489_MANIFEST")"
+          status=$?
+          set -e
+          if [[ -n "$evidence" && -s "$evidence" ]]; then
+            cp "$evidence" "$RUNNER_TEMP/a02-0489-evidence/functional-evidence.json"
+            chmod 600 "$RUNNER_TEMP/a02-0489-evidence/functional-evidence.json"
+            echo "A02_0489_EVIDENCE=$RUNNER_TEMP/a02-0489-evidence/functional-evidence.json" >> "$GITHUB_ENV"
+          fi
+          exit "$status"
+
+      - name: Enforce complete functional evidence
+        if: ${{ steps.qa.outcome == 'success' }}
+        run: |
+          node - "$A02_0489_EVIDENCE" <<'NODE'
+          const fs = require('node:fs');
+          const evidence = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (evidence.ran_fully !== true) throw new Error('A02_0489_FUNCTIONAL_EVIDENCE_NOT_COMPLETE');
+          const required = [
+            'create_shared_keys_tenant_a',
+            'create_shared_keys_tenant_b',
+            'reject_duplicate_cpf_same_tenant',
+            'reject_duplicate_trimmed_matricula_same_tenant',
+            'reject_duplicate_normalized_email_same_tenant',
+            'soft_delete_original_tenant_a',
+            'reuse_keys_after_soft_delete_tenant_a',
+            'soft_delete_replacement_tenant_a',
+            'reactivate_original_tenant_a',
+            'reject_duplicate_after_reactivation_tenant_a',
+          ];
+          for (const operation of required) {
+            const record = evidence.operations?.find((entry) => entry.operation === operation);
+            if (!record || record.result !== 'PASS') throw new Error(`MISSING_GREEN_OPERATION:${operation}`);
+          }
+          console.log(`A02_0489_FUNCTIONAL_EVIDENCE=PASS:${required.length}`);
+          NODE
+
+      - name: Cleanup disposable fixtures
+        if: ${{ always() }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${A02_0489_MANIFEST:-}" && -s "${A02_0489_MANIFEST:-}" ]]; then
+            node scripts/staging/cleanup-controle-voos-e2e-fixtures.mjs "$A02_0489_MANIFEST" --apply
+          else
+            echo "No fixture manifest exists; nothing to clean."
+          fi
+
+      - name: Revalidate 0489 postconditions after cleanup
+        if: ${{ always() }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+        run: bash scripts/staging/validate-0489-postconditions.sh
+
+      - name: Upload sanitized functional evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: a02-0489-staging-functional-evidence
+          path: ${{ runner.temp }}/a02-0489-evidence/functional-evidence.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  summary:
+    name: A-02 0489 Staging Functional Validation Passed
+    needs: [guard, schema-d1-functional]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record and enforce outcome
+        env:
+          RUNTIME_SHA: ${{ needs.guard.outputs.runtime_sha }}
+          FUNCTIONAL: ${{ needs.schema-d1-functional.result }}
+          REASON: ${{ inputs.release_reason }}
+        run: |
+          {
+            echo "## A-02 / 0489 staging functional validation"
+            echo "- runtime_sha: \`$RUNTIME_SHA\`"
+            echo "- two-tenant functional lifecycle: $FUNCTIONAL"
+            echo "- cleanup: mandatory inside schema/D1 job"
+            echo "- 0489 postconditions: revalidated after cleanup"
+            echo "- production touched: no"
+            echo "- reason: $REASON"
+          } >> "$GITHUB_STEP_SUMMARY"
+          [[ "$FUNCTIONAL" == "success" ]]
