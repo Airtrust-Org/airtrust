@@ -1,10 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(
-  new URL('../../routes/qualificacoes/historico-atomic-write.ts', import.meta.url),
-  'utf8',
-);
+const source = readFileSync('src/routes/qualificacoes/historico-atomic-write.ts', 'utf8');
 
 describe('qualificacoes historico atomic expiry-mode contract', () => {
   it('loads vencimento_fim_mes from the qualification model for create and renewal', () => {
