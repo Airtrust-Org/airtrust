@@ -225,7 +225,8 @@ jobs:
           CI=true VITE_API_URL=http://127.0.0.1:8787 \
             npx playwright test \
               --config=playwright.ci.config.ts \
-              e2e/ci/login-public-smoke.spec.ts
+              e2e/ci/login-public-smoke.spec.ts \
+              e2e/ci/pilot-offline-persistence.spec.ts
 
   airtrust-gcb:
     name: airtrust-gcb
