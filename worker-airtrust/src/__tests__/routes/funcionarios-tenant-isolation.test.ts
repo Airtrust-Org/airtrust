@@ -185,7 +185,7 @@ function createMockEnv(options?: {
       id: 103,
       empresa_id: 1,
       nome: 'Funcionario Tenant A Inativo',
-      cpf: '08328622742',
+      cpf: CPF_B1,
       matricula: 'A-103',
       email: 'inactive@example.com',
       deleted_at: '2026-09-01T00:00:00Z',
@@ -474,7 +474,7 @@ describe('funcionarios tenant isolation', () => {
       headers: jsonHeaders,
       body: JSON.stringify({
         nome: 'Novo Funcionario B',
-        cpf: '08328622742',
+        cpf: CPF_B1,
         email: 'novoB@example.com',
         matricula: 'A-102',
       }),
@@ -528,7 +528,7 @@ describe('funcionarios tenant isolation', () => {
       headers: jsonHeaders,
       body: JSON.stringify({
         nome: 'Duplicate Email',
-        cpf: '08328622742',
+        cpf: CPF_B1,
         email: '  A@EXAMPLE.COM  ',
         matricula: 'A-777',
       }),
@@ -548,7 +548,7 @@ describe('funcionarios tenant isolation', () => {
       headers: jsonHeaders,
       body: JSON.stringify({
         nome: 'Cross Email',
-        cpf: '08328622742',
+        cpf: CPF_B1,
         email: ' A@EXAMPLE.COM ',
         matricula: 'B-777',
       }),
@@ -567,7 +567,7 @@ describe('funcionarios tenant isolation', () => {
       headers: jsonHeaders,
       body: JSON.stringify({
         nome: 'Duplicate Matricula Trim',
-        cpf: '08328622742',
+        cpf: CPF_B1,
         email: 'trim@example.com',
         matricula: '  A-102  ',
       }),
@@ -584,7 +584,7 @@ describe('funcionarios tenant isolation', () => {
     const response = await request('/api/funcionarios/202', env, 2, {
       method: 'PUT',
       headers: jsonHeaders,
-      body: JSON.stringify({ nome: 'Atualizado', cpf: '08328622742' }),
+      body: JSON.stringify({ nome: 'Atualizado', cpf: CPF_B1 }),
     });
 
     expect(response.status).toBe(200);
@@ -666,7 +666,7 @@ describe('funcionarios tenant isolation', () => {
       headers: jsonHeaders,
       body: JSON.stringify({
         nome: 'Race Email',
-        cpf: '08328622742',
+        cpf: CPF_B1,
         email: 'race@example.com',
         matricula: 'R-001',
       }),
@@ -773,7 +773,7 @@ describe('funcionarios tenant isolation', () => {
       headers: jsonHeaders,
       body: JSON.stringify({
         nome: 'Novo Compat',
-        cpf: '08328622742',
+        cpf: CPF_B1,
         email: 'compat@example.com',
         matricula: 'A-777',
         sexo: null,
