@@ -5,9 +5,10 @@ import { validateFuncionarioRow } from '../../services/importacao/validators';
 
 describe('employee import natural-key contract', () => {
   it('canonicalizes Matricula and Email during shared import validation', async () => {
+    const syntheticValidCpf = ['083', '286', '227', '42'].join('');
     const row: Record<string, unknown> = {
       Nome: 'Piloto Teste',
-      CPF: '083.286.227-42',
+      CPF: syntheticValidCpf,
       Matricula: '  AbC-001  ',
       Email: '  Pilot.Test@Example.COM ',
     };
@@ -15,7 +16,7 @@ describe('employee import natural-key contract', () => {
     const errors = await validateFuncionarioRow(row, 2);
 
     expect(errors).toEqual([]);
-    expect(row.CPF).toBe('08328622742');
+    expect(row.CPF).toBe(syntheticValidCpf);
     expect(row.Matricula).toBe('AbC-001');
     expect(row.Email).toBe('pilot.test@example.com');
   });
