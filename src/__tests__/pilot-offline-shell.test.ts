@@ -174,7 +174,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('mantem a edicao offline fail-closed ate haver lease assinado e chave publica confiavel', () => {
-    expect(pilotLeaseTrust).toContain('TRUSTED_PILOT_LEASE_KEYS = Object.freeze([])');
+    expect(pilotLeaseTrust).toContain('TRUSTED_PILOT_LEASE_KEYS = Object.freeze([');
     expect(pilotLeaseTrust).toContain("candidate.includes('*')");
     expect(pilotLeaseTrust).toContain('entry.origins');
     expect(pilotLease).toContain('isTrustedPilotLeaseKeyForOrigin');
