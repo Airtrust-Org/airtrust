@@ -112,4 +112,68 @@ describe('A-02 residual migration - DB validation', () => {
       `),
     ).toThrow(/UNIQUE constraint failed/);
   });
+
+  it('detects unknown global UNIQUE autoindexes on employee natural keys', () => {
+    const driftQuery = `
+      SELECT COUNT(*) AS count
+      FROM pragma_index_list('funcionarios') AS il
+      WHERE il."unique" = 1
+        AND il.name NOT IN (
+          'ux_funcionarios_cpf',
+          'ux_funcionarios_matricula',
+          'ux_funcionarios_email'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pragma_index_info(il.name) AS ii
+          WHERE ii.name = 'empresa_id'
+        )
+        AND (
+          EXISTS (
+            SELECT 1
+            FROM pragma_index_info(il.name) AS ii
+            WHERE ii.name IN ('cpf', 'matricula', 'email')
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM sqlite_master AS sm
+            WHERE sm.type = 'index'
+              AND sm.name = il.name
+              AND sm.sql IS NOT NULL
+              AND (
+                LOWER(sm.sql) LIKE '%cpf%'
+                OR LOWER(sm.sql) LIKE '%matricula%'
+                OR LOWER(sm.sql) LIKE '%email%'
+              )
+          )
+        );
+    `;
+
+    const autoindex = runSqlite(`
+      CREATE TABLE funcionarios (
+        id INTEGER PRIMARY KEY,
+        empresa_id INTEGER NOT NULL,
+        cpf TEXT UNIQUE,
+        matricula TEXT,
+        email TEXT
+      );
+      ${driftQuery}
+    `);
+    expect(autoindex.trim()).toBe('1');
+
+    const knownLegacy = runSqlite(`
+      ${baseSchema}
+      CREATE UNIQUE INDEX ux_funcionarios_cpf ON funcionarios(cpf);
+      ${driftQuery}
+    `);
+    expect(knownLegacy.trim()).toBe('0');
+
+    const tenantScoped = runSqlite(`
+      ${baseSchema}
+      CREATE UNIQUE INDEX ux_funcionarios_cpf_empresa_active
+        ON funcionarios(empresa_id, cpf);
+      ${driftQuery}
+    `);
+    expect(tenantScoped.trim()).toBe('0');
+  });
 });
