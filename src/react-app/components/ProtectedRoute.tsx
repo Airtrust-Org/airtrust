@@ -53,6 +53,14 @@ function matchesPathPrefix(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
+export function isControleVoosSelfServicePath(pathname: string): boolean {
+  const normalizedPathname = normalizePathname(pathname);
+  return (
+    normalizedPathname === '/controle-voos/meus-voos' ||
+    /^\/controle-voos\/rdv\/[^/]+$/.test(normalizedPathname)
+  );
+}
+
 export function resolveImplicitRequiredRole(pathname: string): string[] | undefined {
   const normalizedPathname = normalizePathname(pathname);
 
@@ -166,6 +174,7 @@ export default function ProtectedRoute({
   if (
     moduleKey &&
     requiresRestrictedDevelopmentModuleAccess(moduleKey) &&
+    !isControleVoosSelfServicePath(location.pathname) &&
     !canSeeDevelopmentModules(user)
   ) {
     return (

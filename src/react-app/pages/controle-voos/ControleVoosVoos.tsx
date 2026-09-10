@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plane } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
+import ControleVoosNovoVooDialog from './components/ControleVoosNovoVooDialog';
 import { useControleVoosVoos, useControleVoosAeroportos, type CvAeroporto } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatTime } from './data/controleVoosUtils';
 import ControleVoosDateControls from './components/ControleVoosDateControls';
@@ -14,6 +17,8 @@ function buildAeroMap(aeroportos: CvAeroporto[]) {
 }
 
 export default function ControleVoosVoos() {
+  const qc = useQueryClient();
+  const [novoVooOpen, setNovoVooOpen] = useState(false);
   const { selectedDate, setSelectedDate, setToday } = useControleVoosDate();
   const { data, isLoading, error } = useControleVoosVoos({
     limit: 100,
@@ -40,9 +45,9 @@ export default function ControleVoosVoos() {
                 onToday={setToday}
               />
               <button
-                disabled
-                className="inline-flex items-center gap-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-500 cursor-not-allowed dark:bg-slate-700 dark:text-slate-400"
-                title="N1 — criação de voo em desenvolvimento"
+                type="button"
+                onClick={() => setNovoVooOpen(true)}
+                className="inline-flex items-center gap-2 rounded-lg bg-cyan-700 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-800"
               >
                 <Plane className="h-4 w-4" />+ Novo Voo
               </button>
@@ -124,6 +129,17 @@ export default function ControleVoosVoos() {
           )}
         </ControleVoosPageShell>
       </div>
+
+      <ControleVoosNovoVooDialog
+        open={novoVooOpen}
+        mode="coordenacao"
+        onClose={() => setNovoVooOpen(false)}
+        onCreated={(voo) => {
+          setSelectedDate(voo.data_programacao);
+          void qc.invalidateQueries({ queryKey: ['cv-voos'] });
+          void qc.invalidateQueries({ queryKey: ['cv-dashboard'] });
+        }}
+      />
     </AppLayout>
   );
 }
