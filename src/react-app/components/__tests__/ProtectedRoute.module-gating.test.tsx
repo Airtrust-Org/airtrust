@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import ProtectedRoute from '../ProtectedRoute';
+import ProtectedRoute, { isControleVoosSelfServicePath } from '../ProtectedRoute';
 
 const { authMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
@@ -46,6 +46,29 @@ function renderAt(pathname: string, requiredRole?: string[]) {
     </MemoryRouter>,
   );
 }
+
+describe('isControleVoosSelfServicePath', () => {
+  it.each([
+    '/controle-voos/meus-voos',
+    '/controle-voos/meus-voos/',
+    '/controle-voos/rdv/123',
+    '/controle-voos/rdv/abc-123/',
+  ])('aceita somente rotas self-service completas: %s', (pathname) => {
+    expect(isControleVoosSelfServicePath(pathname)).toBe(true);
+  });
+
+  it.each([
+    '',
+    '/',
+    '/controle-voos',
+    '/controle-voos/rdv',
+    '/controle-voos/rdv/',
+    '/controle-voos/rdv/123/extra',
+    '/controle-voos/meus-voos/extra',
+  ])('rejeita rotas fora do self-service: %s', (pathname) => {
+    expect(isControleVoosSelfServicePath(pathname)).toBe(false);
+  });
+});
 
 describe('ProtectedRoute module gating', () => {
   beforeEach(() => {
