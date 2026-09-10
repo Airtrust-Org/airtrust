@@ -51,7 +51,7 @@ Those items are being handled by a separate workstream and are not audit residua
 | AuthContext / QueryCache | Frontend auth/query stability | **CLOSED** | Remediation integrated and regression-tested. |
 | Dynamic RBAC | Employee/qualification/operational writes | **CLOSED** | Dynamic tenant-aware role guards integrated. |
 | Schema 0488 | Pilot offline sync receipts | **OUT OF THIS AUDIT CLOSEOUT** | Belongs to the separate `/pilot` workstream; not counted as an audit residual here. |
-| A-02 | Employee natural keys tenant-scoped | **GOVERNED-MIGRATION-PENDING / STAGING_CONFIRMED** | Structural staging apply run `34485516078` PASS; reviewed Worker deploy `34489086943` PASS; final two-tenant functional lifecycle run `34492881316` PASS with 10/10 required operations, cleanup V2 and postconditions green. Sanitized evidence artifact `10158594267`. Full evidence: `docs/audit/evidence/a02-0489-staging-validated-2026-09-10.md`. Only the separately authorized production Schema V2 apply remains. |
+| A-02 / #610 | Employee natural keys tenant-scoped | **CLOSED / PRODUCTION_CONFIRMED** | Staging proof completed through runs `34485516078`, `34489086943`, `34492291184` and `34492881316`. Explicitly authorized production Schema V2 run `34498650094` passed dedicated preflight, recovery-point capture, atomic schema+ledger apply, exact ledger verification, full schema revalidation and `A02_NATURAL_KEYS_0489_PRODUCTION_POSTCONDITIONS=PASS`. Production evidence: `docs/audit/evidence/a02-0489-production-applied-verified-2026-09-10.md`. |
 | A-06 | Redundant indexes cleanup | **ACCEPTED-DEBT** | Historical list reduced to four local-bootstrap candidates. No remote coexistence proof; destructive 0490 removed. Future cleanup requires read-only `sqlite_master` evidence per target. |
 | #500 | R2 credential rotation + Git history response | **ADMIN-BLOCKED** | Code sanitization is closed; provider credential rotation/revocation, workload cutover verification, provider log review and Git-history incident response require owner/admin authority. |
 | P1-04 / #611 | GitHub branch/environment protection administrative proof | **ADMIN-BLOCKED** | `main` is confirmed protected and required checks are visible; full bypass/force-push/deletion and Environment reviewer/protection proof is unavailable to the current integration. |
@@ -61,11 +61,11 @@ Those items are being handled by a separate workstream and are not audit residua
 | PERF-01 | Large bundles / residual N+1 opportunities | **ACCEPTED-DEBT** | Performance debt; no current release-blocking functional defect demonstrated. |
 | SUP-01 | Full platform migration to Supabase | **ACCEPTED-DEBT** | Strategic architecture decision; current Cloudflare/D1 platform remains the supported baseline. |
 
-## Closeout counts after A-02 staging validation
+## Closeout counts after A-02 production confirmation
 
 ```text
 OPEN_INTERNAL=0
-GOVERNED_MIGRATION_PENDING=1
+GOVERNED_MIGRATION_PENDING=0
 ADMIN_BLOCKED=2
 EXTERNAL_BLOCKED=2
 ACCEPTED_DEBT=4
@@ -73,11 +73,7 @@ ACCEPTED_DEBT=4
 
 ### GOVERNED_MIGRATION_PENDING
 
-- **A-02 / 0489 only.**
-- Repository engineering, structural staging apply, reviewed runtime deployment and two-tenant functional staging validation are complete.
-- Final staging functional run `34492881316` passed all 10 required natural-key lifecycle operations, cleanup V2 and dedicated 0489 postconditions.
-- The only remaining step is the separately authorized production Schema V2 apply using the exact then-current `main` SHA.
-- A production preflight failure must leave the migration unapplied and create a new explicit remediation decision; the audit must not be marked applied by inference.
+- **None.** A-02 / 0489 completed the explicitly authorized production Schema V2 apply and all required postconditions in run `34498650094`.
 
 ### ADMIN_BLOCKED
 
@@ -98,10 +94,14 @@ ACCEPTED_DEBT=4
 
 ## Decision
 
-The audited engineering scope is at:
+The audited engineering scope has reached:
 
 **ZERO OPEN INTERNAL AUDIT FINDINGS**
 
-A-02 has now also completed its full staging proof. It remains deliberately visible as `GOVERNED-MIGRATION-PENDING / STAGING_CONFIRMED` until an explicitly authorized production Schema V2 apply succeeds with exact ledger verification and production postconditions.
+and
 
-Administrative and external blockers are tracked separately because they cannot be closed by repository code alone. Accepted debt remains non-blocking and does not represent a demonstrated release defect.
+**ZERO GOVERNED MIGRATIONS PENDING**
+
+A-02 / 0489 is production-confirmed with exact Schema V2 ledger provenance and dedicated production postconditions. There is no remaining owned engineering defect or pending governed database migration in this reconciled audit scope.
+
+Administrative and external blockers remain separately tracked because they require owner/admin authority or authoritative third-party input. Accepted debt remains non-blocking and does not represent a demonstrated release defect.
