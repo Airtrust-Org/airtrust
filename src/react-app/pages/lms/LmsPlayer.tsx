@@ -455,10 +455,23 @@ export default function LmsPlayer() {
   }, [persistedLocation]);
 
   useEffect(() => {
-    if (matricula?.status === 'CONCLUIDO') {
+    // O backend canônico é a autoridade. Uma rejeição/409 anterior pode chegar
+    // antes do refetch que confirma a conclusão; quando a matrícula já está
+    // CONCLUIDO ou o diagnóstico canônico já foi aceito, qualquer erro/painel
+    // de conclusão mantido no estado React é stale e deve ser descartado.
+    const canonicalCompletionAccepted =
+      matricula?.status === 'CONCLUIDO' || completionDiagnostic?.status === 'accepted';
+
+    if (canonicalCompletionAccepted) {
       unresolvedRef.current = false;
       candidateStreakRef.current = 0;
-      if (!effectiveReviewMode) {
+      toast.dismiss(completionToastIdRef.current);
+      setCompletionState('idle');
+      setCompletionMessage(null);
+      setCompletionErrorInfo(null);
+      setPendingPanelOpen(false);
+
+      if (matricula?.status === 'CONCLUIDO' && !effectiveReviewMode) {
         showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
           qualificationGenerated: Boolean(matricula.qualificacao_historico_id || qualificacaoGerada),
         });
