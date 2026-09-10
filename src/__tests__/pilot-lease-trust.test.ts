@@ -37,7 +37,7 @@ describe('Pilot lease origin trust', () => {
       },
     });
     expect(TRUSTED_PILOT_LEASE_KEYS[1]).toMatchObject({
-      key_id: 'pilot-production-20260910-01',
+      key_id: 'pilot-production-20260910-02',
       origins: [
         'https://airtrust.online',
         'https://www.airtrust.online',

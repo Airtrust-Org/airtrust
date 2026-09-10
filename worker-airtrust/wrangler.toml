@@ -186,7 +186,7 @@ CONTROLE_VOOS_FRMS_IMPORT_TENANTS = "6"
 ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"
 # Pilot offline sync production activation. The private ES256 JWK is provisioned
 # only as a Worker secret; tracked configuration contains no signing material.
-PILOT_OFFLINE_LEASE_KEY_ID = "pilot-production-20260910-01"
+PILOT_OFFLINE_LEASE_KEY_ID = "pilot-production-20260910-02"
 PILOT_OFFLINE_LEASE_TTL_MINUTES = "720"
 PILOT_OFFLINE_SYNC_ENABLED = "true"
 # JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env production

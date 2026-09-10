@@ -21,13 +21,13 @@ export const TRUSTED_PILOT_LEASE_KEYS = Object.freeze([
     ],
   },
   {
-    key_id: 'pilot-production-20260910-01',
+    key_id: 'pilot-production-20260910-02',
     public_jwk: {
       key_ops: ['verify'],
       ext: true,
       kty: 'EC',
-      x: 'TPOvQjsnTeBMYb3i1n-iYJscSThpK63ZPAO3DeXOfOs',
-      y: 'Za0tSAp9BPVVqeNf8hVbjAaaoOpeUmJqjlHeHWKINxE',
+      x: 'xQD4_UYZjXxOPuKbWydQKg5rM9x1BSPQO-5bNKP4Tlg',
+      y: '6Dw0z05IEANv2GbptQsFA5XRwkVIAjJywrSbgfoCYhU',
       crv: 'P-256',
     },
     origins: [
