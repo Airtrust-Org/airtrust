@@ -74,7 +74,7 @@ describe('UI primitives coverage', () => {
     expect(body).toHaveClass('qa-content');
 
     rerender(<Card gradient>gradient</Card>);
-    expect(screen.getByText('gradient').parentElement).toHaveClass('bg-gradient-to-br');
+    expect(screen.getByText('gradient')).toHaveClass('bg-gradient-to-br');
   });
 
   it('renders EmptyState without optional action', () => {
