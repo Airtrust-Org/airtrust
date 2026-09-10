@@ -17,6 +17,11 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
 import { createLogger } from '../utils/logger';
+import {
+  classifyFuncionarioNaturalKeyConflict,
+  normalizeFuncionarioEmail,
+  normalizeFuncionarioMatricula,
+} from '../services/funcionario-natural-keys';
 import { chainQualificationLineageForFuncionarioGroups } from '../services/importacao/lineageChaining';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -177,11 +182,14 @@ async function executeStatements(params: {
         transactionFailed: false,
       };
     } catch (error) {
+      const conflict = classifyFuncionarioNaturalKeyConflict(error);
       errors.push({
         linha: 0,
-        erro: `Importação não aplicada; toda a substituição foi revertida: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        erro: conflict
+          ? `Importação não aplicada; toda a substituição foi revertida: ${conflict.message}`
+          : `Importação não aplicada; toda a substituição foi revertida: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
       });
       return { inserted: 0, updated: 0, deleted: 0, blocked: false, transactionFailed: true };
     }
@@ -204,9 +212,10 @@ async function executeStatements(params: {
           if (entry.action === 'inserted') inserted += 1;
           else updated += 1;
         } catch (error) {
+          const conflict = classifyFuncionarioNaturalKeyConflict(error);
           errors.push({
             linha: entry.linha,
-            erro: error instanceof Error ? error.message : String(error),
+            erro: conflict?.message ?? (error instanceof Error ? error.message : String(error)),
           });
         }
       }
@@ -261,6 +270,26 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
       seenCpfs.add(cpf);
     }
 
+    const matriculas = rows
+      .map((row) => normalizeFuncionarioMatricula(row['Matrícula']))
+      .filter(Boolean);
+    const duplicateMatriculas = new Set<string>();
+    const seenMatriculas = new Set<string>();
+    for (const matricula of matriculas) {
+      if (seenMatriculas.has(matricula)) duplicateMatriculas.add(matricula);
+      seenMatriculas.add(matricula);
+    }
+
+    const emails = rows
+      .map((row) => normalizeFuncionarioEmail(row.Email))
+      .filter(Boolean);
+    const duplicateEmails = new Set<string>();
+    const seenEmails = new Set<string>();
+    for (const email of emails) {
+      if (seenEmails.has(email)) duplicateEmails.add(email);
+      seenEmails.add(email);
+    }
+
     const existentesByCpf = new Map<string, string>();
     const uniqueCpfs = [...new Set(cpfs)];
     for (let offset = 0; offset < uniqueCpfs.length; offset += LOOKUP_BIND_CHUNK) {
@@ -284,6 +313,8 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
       const linha = index + 2;
       const nome = String(row.Nome || '').trim();
       const cpf = normalizeCpf(row.CPF);
+      const matricula = normalizeFuncionarioMatricula(row['Matrícula']);
+      const email = normalizeFuncionarioEmail(row.Email);
       if (!nome || !cpf) {
         errors.push({ linha, erro: 'Nome e CPF são obrigatórios', dados: row });
         continue;
@@ -294,6 +325,14 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
       }
       if (duplicateCpfs.has(cpf)) {
         errors.push({ linha, erro: `CPF duplicado na planilha: ${cpf}`, dados: row });
+        continue;
+      }
+      if (matricula && duplicateMatriculas.has(matricula)) {
+        errors.push({ linha, erro: `Matrícula duplicada na planilha: ${matricula}`, dados: row });
+        continue;
+      }
+      if (email && duplicateEmails.has(email)) {
+        errors.push({ linha, erro: `E-mail duplicado na planilha: ${email}`, dados: row });
         continue;
       }
 
@@ -318,8 +357,8 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
             .bind(
               nome,
               cpf,
-              row['Matrícula'] || null,
-              row.Email || null,
+              matricula || null,
+              email || null,
               row.Telefone || null,
               row.Nascimento || null,
               row['Admissão'] || null,
@@ -350,8 +389,8 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
             .bind(
               nome,
               cpf,
-              row['Matrícula'] || null,
-              row.Email || null,
+              matricula || null,
+              email || null,
               row.Telefone || null,
               row.Nascimento || null,
               row['Admissão'] || null,
