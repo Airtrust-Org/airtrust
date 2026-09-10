@@ -8,7 +8,7 @@ Explicitly excluded from this closeout:
 
 - `/pilot`
 - issue #580
-- active Pilot implementation PRs (including #609)
+- active Pilot implementation PRs
 - new Pilot/eDB-shadow product work
 
 Those items are being handled by a separate workstream and are not audit residuals for this closeout.
@@ -16,7 +16,7 @@ Those items are being handled by a separate workstream and are not audit residua
 ## Classification rules
 
 - **CLOSED** — implemented/integrated and backed by code, CI, governed run or functional evidence.
-- **GOVERNED-MIGRATION-PENDING** — reviewed code/migration exists, but remote application remains an explicit governed operation.
+- **GOVERNED-MIGRATION-PENDING** — reviewed code/migration exists, but the required production remote application remains an explicit governed operation.
 - **ADMIN-BLOCKED** — requires repository/provider owner/admin action or proof unavailable to the engineering integration.
 - **EXTERNAL-BLOCKED** — depends on regulator/OEM/third-party source or contract.
 - **ACCEPTED-DEBT** — non-blocking technical/architectural debt with no demonstrated operational defect.
@@ -51,17 +51,17 @@ Those items are being handled by a separate workstream and are not audit residua
 | AuthContext / QueryCache | Frontend auth/query stability | **CLOSED** | Remediation integrated and regression-tested. |
 | Dynamic RBAC | Employee/qualification/operational writes | **CLOSED** | Dynamic tenant-aware role guards integrated. |
 | Schema 0488 | Pilot offline sync receipts | **OUT OF THIS AUDIT CLOSEOUT** | Belongs to the separate `/pilot` workstream; not counted as an audit residual here. |
-| A-02 | Employee natural keys tenant-scoped | **GOVERNED-MIGRATION-PENDING** | PR #607 prepares reviewed 0489 with fail-closed preflight, exact runtime key semantics, Schema V2 manifest/plan, staging/production postconditions and recovery-governed apply path. No remote apply performed by this closeout. |
+| A-02 | Employee natural keys tenant-scoped | **GOVERNED-MIGRATION-PENDING / STAGING_CONFIRMED** | Structural staging apply run `34485516078` PASS; reviewed Worker deploy `34489086943` PASS; final two-tenant functional lifecycle run `34492881316` PASS with 10/10 required operations, cleanup V2 and postconditions green. Sanitized evidence artifact `10158594267`. Full evidence: `docs/audit/evidence/a02-0489-staging-validated-2026-09-10.md`. Only the separately authorized production Schema V2 apply remains. |
 | A-06 | Redundant indexes cleanup | **ACCEPTED-DEBT** | Historical list reduced to four local-bootstrap candidates. No remote coexistence proof; destructive 0490 removed. Future cleanup requires read-only `sqlite_master` evidence per target. |
-| #500 | R2 credential rotation + Git history response | **ADMIN-BLOCKED** | Code sanitization is closed; provider credential rotation/revocation and history response require owner/admin authority. |
-| P1-04 | GitHub branch/environment protection administrative proof | **ADMIN-BLOCKED** | `main` is confirmed protected and required checks are visible; full branch-protection/environment administrative proof is not available to the current GitHub integration. |
-| #91 | eDB cycles / IFR semantics source | **EXTERNAL-BLOCKED** | Requires authoritative OEM/regulatory source; not a code substitute. |
-| #93 | ANAC eDB homologation contract / credentials | **EXTERNAL-BLOCKED** | Requires ANAC/external contract, credentials or homologation input. |
+| #500 | R2 credential rotation + Git history response | **ADMIN-BLOCKED** | Code sanitization is closed; provider credential rotation/revocation, workload cutover verification, provider log review and Git-history incident response require owner/admin authority. |
+| P1-04 / #611 | GitHub branch/environment protection administrative proof | **ADMIN-BLOCKED** | `main` is confirmed protected and required checks are visible; full bypass/force-push/deletion and Environment reviewer/protection proof is unavailable to the current integration. |
+| #91 | eDB cycles / IFR semantics source | **EXTERNAL-BLOCKED** | IFR semantics are closed; only an authoritative operator/OEM counting source for regulatory `cycles` remains. Starts/landings must not be promoted by inference. |
+| #93 | ANAC eDB homologation contract / credentials | **EXTERNAL-BLOCKED** | Requires current ANAC API contract, homologation access/auth, DTOs/endpoints and acceptance semantics before any regulated integration can proceed. |
 | ARCH-01 | SQL/repository-pattern consolidation | **ACCEPTED-DEBT** | Architectural cleanup; current tenant/runtime guards mitigate operational risk. |
 | PERF-01 | Large bundles / residual N+1 opportunities | **ACCEPTED-DEBT** | Performance debt; no current release-blocking functional defect demonstrated. |
 | SUP-01 | Full platform migration to Supabase | **ACCEPTED-DEBT** | Strategic architecture decision; current Cloudflare/D1 platform remains the supported baseline. |
 
-## Closeout counts after PR #607 merge
+## Closeout counts after A-02 staging validation
 
 ```text
 OPEN_INTERNAL=0
@@ -74,18 +74,20 @@ ACCEPTED_DEBT=4
 ### GOVERNED_MIGRATION_PENDING
 
 - **A-02 / 0489 only.**
-- This is not an unowned engineering defect. The reviewed change is code-ready but remote D1 application remains a separately authorized, fail-closed operation.
-- A remote preflight failure must leave the migration unapplied and create a new explicit remediation decision; the audit must not be marked applied by inference.
+- Repository engineering, structural staging apply, reviewed runtime deployment and two-tenant functional staging validation are complete.
+- Final staging functional run `34492881316` passed all 10 required natural-key lifecycle operations, cleanup V2 and dedicated 0489 postconditions.
+- The only remaining step is the separately authorized production Schema V2 apply using the exact then-current `main` SHA.
+- A production preflight failure must leave the migration unapplied and create a new explicit remediation decision; the audit must not be marked applied by inference.
 
 ### ADMIN_BLOCKED
 
-- **#500** — provider credential rotation/revocation + Git history response.
-- **P1-04** — remaining GitHub administrative/environment proof beyond the access level of the current integration.
+- **#500** — provider credential rotation/revocation + workload cutover verification + access-log review + Git-history incident response.
+- **#611 / P1-04** — remaining GitHub branch-protection/ruleset and staging/production Environment administrative proof beyond the access level of the current integration.
 
 ### EXTERNAL_BLOCKED
 
-- **#91** — authoritative cycles/IFR semantics source.
-- **#93** — ANAC eDB contract/credentials/homologation.
+- **#91** — authoritative operator/OEM source or approved counting rule for regulatory `cycles`; IFR semantics are already closed.
+- **#93** — current ANAC eDB API contract, homologation credentials/procedure and acceptance semantics.
 
 ### ACCEPTED_DEBT
 
@@ -96,10 +98,10 @@ ACCEPTED_DEBT=4
 
 ## Decision
 
-After PR #607 is merged with required checks green, the audited engineering scope reaches:
+The audited engineering scope is at:
 
 **ZERO OPEN INTERNAL AUDIT FINDINGS**
 
-This statement does **not** mean that external, administrative or governed remote operations have been completed. It means there are no known unassigned internal code defects remaining from the reconciled audit scope.
+A-02 has now also completed its full staging proof. It remains deliberately visible as `GOVERNED-MIGRATION-PENDING / STAGING_CONFIRMED` until an explicitly authorized production Schema V2 apply succeeds with exact ledger verification and production postconditions.
 
-A-02 remains deliberately visible as a governed migration operation until an explicitly authorized remote apply and postconditions are completed.
+Administrative and external blockers are tracked separately because they cannot be closed by repository code alone. Accepted debt remains non-blocking and does not represent a demonstrated release defect.
