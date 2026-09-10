@@ -40,6 +40,7 @@ type QualificationTypeRow = {
   codigo: string;
   categoria: string | null;
   validade: number | string | null;
+  vencimento_fim_mes: number | string | null;
   carga_horaria: number | null;
   carga_horaria_inicial: number | null;
   carga_horaria_recorrente: number | null;
@@ -108,6 +109,13 @@ function isFutureIsoDate(value: string): boolean {
   return value > new Date().toISOString().slice(0, 10);
 }
 
+function shouldExpireAtEndOfMonth(type: QualificationTypeRow, qualificationCode: string): boolean {
+  // G1-SEM has an explicit exact-day six-month contract. Every other qualification
+  // must honor the configured model flag instead of inferring expiry mode from code.
+  if (qualificationCode === 'G1-SEM') return false;
+  return Number(type.vencimento_fim_mes || 0) === 1;
+}
+
 async function loadEmployee(
   db: D1Database,
   empresaId: number,
@@ -143,7 +151,7 @@ async function loadQualificationTypeByCode(
 ): Promise<QualificationTypeRow | null> {
   return db
     .prepare(
-      `SELECT id, codigo, categoria, validade, carga_horaria,
+      `SELECT id, codigo, categoria, validade, vencimento_fim_mes, carga_horaria,
               carga_horaria_inicial, carga_horaria_recorrente
          FROM qualificacoes_tipos
         WHERE UPPER(TRIM(COALESCE(codigo, ''))) = UPPER(TRIM(?))
@@ -163,7 +171,7 @@ async function loadQualificationTypeForRenewal(
 ): Promise<QualificationTypeRow | null> {
   return db
     .prepare(
-      `SELECT id, codigo, categoria, validade, carga_horaria,
+      `SELECT id, codigo, categoria, validade, vencimento_fim_mes, carga_horaria,
               carga_horaria_inicial, carga_horaria_recorrente
          FROM qualificacoes_tipos
         WHERE empresa_id = ?
@@ -485,7 +493,7 @@ router.post('/', auth(), requirePermission('qualificacoes', 'criar', 'admin', 'm
       completionDate: parsed.data.data_conclusao,
       explicitExpiryDate: parsed.data.data_vencimento,
       validityMonths: effectiveValidity,
-      endOfMonth: false,
+      endOfMonth: shouldExpireAtEndOfMonth(type, qualificationCode),
     });
 
     let status = normalizeWritableStatus(parsed.data.status);
@@ -692,7 +700,7 @@ router.post('/:id/renovar', auth(), requirePermission('qualificacoes', 'editar',
     const expiryDate = calculateQualificationExpiry({
       completionDate,
       validityMonths: effectiveValidity,
-      endOfMonth: qualificationCode !== 'G1-SEM',
+      endOfMonth: shouldExpireAtEndOfMonth(type, qualificationCode),
     });
     const trainingType = resolveTrainingType(
       effectiveValidity === 6 ? 'SEMESTRAL' : 'RECORRENTE',
