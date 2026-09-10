@@ -6,6 +6,7 @@ const TAB_DEFINITIONS = [
   ['fuel', 'Combustível'],
   ['dossier', 'Dossiê'],
   ['map', 'Mapa'],
+  ['edb-shadow', 'eDB Shadow'],
   ['performance', 'Performance'],
 ];
 
@@ -619,6 +620,140 @@ function renderMap(panel, workspace) {
   renderHelideckSafety(panel, workspace?.helideck_safety);
 }
 
+function renderEdbShadow(panel, packageData) {
+  panel.append(el('h2', { text: 'eDB Shadow' }));
+  const shadow = packageData?.edb_shadow;
+  const contract = shadow?.contract;
+
+  const validContract =
+    contract?.name === 'airtrust-pilot-edb-shadow' &&
+    Number(contract?.version) === 1 &&
+    contract?.classification === 'NON_OFFICIAL_SHADOW' &&
+    contract?.official_logbook === false &&
+    contract?.replaces_paper === false &&
+    contract?.contains_signature === false &&
+    contract?.persists_regulated_record === false &&
+    contract?.authorizes_return_to_service === false;
+
+  if (!validContract) {
+    appendNotice(
+      panel,
+      'Contrato eDB shadow ausente ou incompatível. Nenhuma informação eDB é considerada válida neste pacote.',
+      'error',
+    );
+    return;
+  }
+
+  const banner = el('div', {
+    className: 'pilot-edb-shadow-banner',
+    text: 'NÃO OFICIAL — eDB SHADOW — SEM VALOR REGULATÓRIO',
+  });
+  panel.append(banner);
+  appendNotice(
+    panel,
+    'Esta projeção serve somente para detectar lacunas e divergências. Não é Diário de Bordo oficial, não substitui papel, não contém assinatura e não autoriza retorno ao serviço.',
+    'attention',
+  );
+
+  if (shadow.state === 'UNAVAILABLE') {
+    appendNotice(
+      panel,
+      'Projeção shadow indisponível neste pacote: ' + text(shadow.reason),
+      'attention',
+    );
+    return;
+  }
+  if (shadow.state === 'AVAILABLE_PARTIAL') {
+    appendNotice(
+      panel,
+      'O rascunho shadow foi armazenado, mas o assessment de prontidão não ficou disponível. Não inferir prontidão.',
+      'attention',
+    );
+  }
+
+  const assessment = shadow.assessment;
+  const readiness = assessment?.readiness;
+  appendKeyValueGrid(panel, [
+    ['Estado do snapshot', shadow.state],
+    ['Gerado em', formatDateTime(shadow.generated_at)],
+    ['Status do rascunho', shadow.preview?.status],
+    ['Readiness shadow', readiness?.status],
+    ['Score técnico', readiness?.score],
+    ['Completude', readiness?.completenessPercent != null ? readiness.completenessPercent + '%' : null],
+    ['Concordância de campos', readiness?.fieldAgreementPercent != null ? readiness.fieldAgreementPercent + '%' : null],
+    ['Maior severidade', assessment?.max_severity],
+    ['Recomendação', assessment?.recommendation],
+  ]);
+
+  if (assessment) {
+    appendNotice(
+      panel,
+      assessment.official_reference_compared === false &&
+        assessment.paper_reference_required === true
+        ? 'A referência oficial em papel NÃO foi comparada. A comparação com o procedimento oficial continua obrigatória.'
+        : 'Estado da comparação oficial não comprovado.',
+      'attention',
+    );
+  }
+
+  const technicalStatus = assessment?.technical_status;
+  if (technicalStatus) {
+    const technical = el('section', { className: 'pilot-workspace-section' });
+    technical.append(el('h3', { text: 'Situação técnica shadow' }));
+    appendKeyValueGrid(technical, [
+      ['Estado', technicalStatus.status],
+      ['Fonte disponível', technicalStatus.sourceAvailable === true ? 'Sim' : 'Não'],
+      ['Efeito oficial', technicalStatus.officialEffect],
+    ]);
+    appendNotice(
+      technical,
+      'A situação técnica nesta projeção possui efeito oficial NONE.',
+      'attention',
+    );
+    panel.append(technical);
+  }
+
+  const draft = shadow.preview?.draft;
+  if (draft && typeof draft === 'object') {
+    const draftSection = el('section', { className: 'pilot-workspace-section' });
+    draftSection.append(el('h3', { text: 'Rascunho projetado' }));
+    appendKeyValueGrid(draftSection, [
+      ['Contrato', draft.schemaVersion],
+      ['Referência do voo', draft.sourceFlightReference],
+      ['Etapas projetadas', Array.isArray(draft.legs) ? draft.legs.length : null],
+      ['Volume', draft.volumeNumber],
+      ['Matrícula', draft.aircraft?.registration],
+      ['Modelo', draft.aircraft?.model],
+    ]);
+    panel.append(draftSection);
+  }
+
+  const findings = Array.isArray(shadow.preview?.findings)
+    ? shadow.preview.findings
+    : [];
+  const findingSection = el('section', { className: 'pilot-workspace-section' });
+  findingSection.append(el('h3', { text: 'Lacunas / divergências shadow' }));
+  if (findings.length === 0) {
+    appendNotice(
+      findingSection,
+      'Nenhum finding sanitizado neste snapshot. Isso não equivale a conformidade regulatória.',
+      'ok',
+    );
+  } else {
+    const list = el('div', { className: 'pilot-workspace-list' });
+    for (const finding of findings) {
+      const card = el('div', { className: 'pilot-workspace-row-card' });
+      card.append(
+        el('strong', { text: text(finding.code) }),
+        el('span', { text: text(finding.path) }),
+      );
+      list.append(card);
+    }
+    findingSection.append(list);
+  }
+  panel.append(findingSection);
+}
+
 function renderPerformance(panel, packageData) {
   panel.append(el('h2', { text: 'Performance' }));
   appendNotice(
@@ -641,6 +776,7 @@ function renderPanel(panel, tabId, packageData, workspace) {
   if (tabId === 'fuel') return renderFuel(panel, packageData);
   if (tabId === 'dossier') return renderDossier(panel, workspace);
   if (tabId === 'map') return renderMap(panel, workspace);
+  if (tabId === 'edb-shadow') return renderEdbShadow(panel, packageData);
   if (tabId === 'performance') return renderPerformance(panel, packageData);
 }
 
@@ -681,7 +817,12 @@ export function renderPilotWorkspace(container, packageData) {
     }
   }
 
-  TAB_DEFINITIONS.forEach(([tabId, label], index) => {
+  const visibleTabs =
+    packageData?.edb_shadow?.state && packageData.edb_shadow.state !== 'DISABLED'
+      ? TAB_DEFINITIONS
+      : TAB_DEFINITIONS.filter(([tabId]) => tabId !== 'edb-shadow');
+
+  visibleTabs.forEach(([tabId, label], index) => {
     const button = el('button', {
       className: 'pilot-workspace-tab',
       text: label,

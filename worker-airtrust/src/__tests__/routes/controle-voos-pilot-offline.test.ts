@@ -453,6 +453,18 @@ describe('Pilot offline package', () => {
       status: 'UNAVAILABLE',
       reason: 'REDEMET_NOT_CONFIGURED',
     });
+    expect(body.data.edb_shadow).toMatchObject({
+      state: 'DISABLED',
+      reason: 'SHADOW_PILOT_DISABLED',
+      contract: {
+        classification: 'NON_OFFICIAL_SHADOW',
+        official_logbook: false,
+        replaces_paper: false,
+        contains_signature: false,
+        persists_regulated_record: false,
+        authorizes_return_to_service: false,
+      },
+    });
     expect(body.data.workspace.dossier.entries.map((entry: any) => entry.category)).toEqual(
       expect.arrayContaining(['planejamento', 'MET', 'abastecimento', 'coordenacao']),
     );
