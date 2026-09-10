@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ControleVoosNovoVooDialog from '../ControleVoosNovoVooDialog';
 
@@ -42,8 +42,13 @@ function renderDialog(mode: 'coordenacao' | 'pilot' = 'pilot', open = true) {
   return { onClose, onCreated };
 }
 
+async function waitForAirportCatalog() {
+  const origem = screen.getByLabelText('Origem');
+  await waitFor(() => expect(within(origem).getByRole('option', { name: /SBSP/ })).toBeInTheDocument());
+}
+
 async function fillRequiredFields() {
-  await screen.findByRole('option', { name: /SBSP/ });
+  await waitForAirportCatalog();
   fireEvent.change(screen.getByLabelText('Prefixo'), { target: { value: 'pr-abc' } });
   fireEvent.change(screen.getByLabelText('Origem'), { target: { value: '1' } });
   fireEvent.change(screen.getByLabelText('Destino'), { target: { value: '2' } });
@@ -67,7 +72,7 @@ describe('ControleVoosNovoVooDialog', () => {
     const { onClose } = renderDialog('pilot');
 
     expect(screen.getByText('Carregando catálogos…')).toBeInTheDocument();
-    expect(await screen.findByRole('option', { name: /SBSP/ })).toBeInTheDocument();
+    await waitForAirportCatalog();
     expect(getMock).toHaveBeenCalledTimes(3);
 
     fireEvent.click(screen.getByRole('button', { name: 'Fechar' }));
@@ -85,7 +90,7 @@ describe('ControleVoosNovoVooDialog', () => {
   it('valida campos obrigatórios antes de chamar a API', async () => {
     mockCatalogos();
     renderDialog('pilot');
-    await screen.findByRole('option', { name: /SBSP/ });
+    await waitForAirportCatalog();
 
     const prefixo = screen.getByLabelText('Prefixo');
     fireEvent.change(prefixo, { target: { value: 'PR-ABC' } });
@@ -98,7 +103,7 @@ describe('ControleVoosNovoVooDialog', () => {
   it('impede origem e destino iguais', async () => {
     mockCatalogos();
     renderDialog('pilot');
-    await screen.findByRole('option', { name: /SBSP/ });
+    await waitForAirportCatalog();
 
     fireEvent.change(screen.getByLabelText('Prefixo'), { target: { value: 'PR-ABC' } });
     fireEvent.change(screen.getByLabelText('Origem'), { target: { value: '1' } });
