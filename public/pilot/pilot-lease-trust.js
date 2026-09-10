@@ -1,10 +1,26 @@
 export const PILOT_OFFLINE_APP_VERSION = '1.0.0';
 
-// Fail-closed by design. A production/staging key is added only in the same
-// governed change that provisions the matching private JWK as a Worker secret.
-// Every key must name exact trusted frontend origins. Wildcards are rejected.
+// Fail-closed by design. Only public verification keys are tracked here.
+// The matching private JWK must remain a Worker secret, and every public key
+// must name exact trusted frontend origins. Wildcards are rejected.
 // Never commit a private key here.
-export const TRUSTED_PILOT_LEASE_KEYS = Object.freeze([]);
+export const TRUSTED_PILOT_LEASE_KEYS = Object.freeze([
+  {
+    key_id: 'pilot-staging-20260910-01',
+    public_jwk: {
+      key_ops: ['verify'],
+      ext: true,
+      kty: 'EC',
+      x: 'vfAAWPkfh03Nq0XcBVyv0heeILGgWmlVM1x9mm4Slo8',
+      y: 'K6dEh06_CeK2jjHxNI5sF1r4oL0cNr6ec8_H-VV_Jxo',
+      crv: 'P-256',
+    },
+    origins: [
+      'https://staging.airtrust.pages.dev',
+      'https://airtrust-staging.pages.dev',
+    ],
+  },
+]);
 
 export function normalizePilotLeaseOrigin(value) {
   const candidate = String(value || '').trim();
