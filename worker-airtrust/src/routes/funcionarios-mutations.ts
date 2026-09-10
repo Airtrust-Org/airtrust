@@ -11,7 +11,7 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { notFound, badRequest, forbidden } from '../middleware/error-handler';
+import { ApiError, notFound, badRequest, forbidden } from '../middleware/error-handler';
 import { isValidEmail, isValidCPF, sanitizeString } from '../utils/security';
 import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
@@ -38,6 +38,12 @@ import {
   getEmployeeSectorAccess,
 } from '../services/employee-sector-access';
 import { vincularUsuarioAoFuncionarioPorEmail } from '../services/vinculo-usuario-funcionario';
+import {
+  classifyFuncionarioNaturalKeyConflict,
+  normalizeFuncionarioCpf,
+  normalizeFuncionarioEmail,
+  normalizeFuncionarioMatricula,
+} from '../services/funcionario-natural-keys';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -126,6 +132,77 @@ async function resolveSetorPayload(
   };
 }
 
+function rethrowFuncionarioNaturalKeyConflict(error: unknown): never {
+  const conflict = classifyFuncionarioNaturalKeyConflict(error);
+  if (conflict) {
+    throw new ApiError(conflict.message, 409, conflict.code);
+  }
+  throw error;
+}
+
+async function assertFuncionarioNaturalKeysAvailable(params: {
+  db: D1Database;
+  empresaId: number;
+  cpf?: string | null;
+  matricula?: string | null;
+  email?: string | null;
+  excludeId?: number;
+}): Promise<void> {
+  const { db, empresaId, cpf, matricula, email, excludeId } = params;
+  const excludeSql = excludeId ? ' AND id != ?' : '';
+
+  if (matricula) {
+    const statement = db.prepare(
+      `SELECT id FROM funcionarios
+       WHERE empresa_id = ?
+         AND deleted_at IS NULL
+         AND TRIM(matricula) = ?
+         ${excludeSql}
+       LIMIT 1`,
+    );
+    const duplicate = excludeId
+      ? await statement.bind(empresaId, matricula, excludeId).first()
+      : await statement.bind(empresaId, matricula).first();
+    if (duplicate) {
+      badRequest('Matrícula já cadastrada para outro funcionário nesta empresa');
+    }
+  }
+
+  if (cpf) {
+    const statement = db.prepare(
+      `SELECT id FROM funcionarios
+       WHERE empresa_id = ?
+         AND deleted_at IS NULL
+         AND cpf = ?
+         ${excludeSql}
+       LIMIT 1`,
+    );
+    const duplicate = excludeId
+      ? await statement.bind(empresaId, cpf, excludeId).first()
+      : await statement.bind(empresaId, cpf).first();
+    if (duplicate) {
+      badRequest('CPF já cadastrado para outro funcionário nesta empresa');
+    }
+  }
+
+  if (email) {
+    const statement = db.prepare(
+      `SELECT id FROM funcionarios
+       WHERE empresa_id = ?
+         AND deleted_at IS NULL
+         AND LOWER(TRIM(email)) = ?
+         ${excludeSql}
+       LIMIT 1`,
+    );
+    const duplicate = excludeId
+      ? await statement.bind(empresaId, email, excludeId).first()
+      : await statement.bind(empresaId, email).first();
+    if (duplicate) {
+      badRequest('E-mail já cadastrado para outro funcionário nesta empresa');
+    }
+  }
+}
+
 async function sincronizarCertificacoesComStatus(
   db: D1Database,
   params: Parameters<typeof syncFuncionarioCertificacoes>[1],
@@ -162,13 +239,19 @@ app.post('/', auth(), requirePermission('funcionarios', 'criar', 'admin', 'manag
     badRequest('Campos obrigatórios: nome, cpf, email');
   }
 
-  // Validar email
-  if (!isValidEmail(body.email)) {
+  const normalizedEmail = normalizeFuncionarioEmail(body.email);
+  const normalizedCpf = normalizeFuncionarioCpf(body.cpf);
+  const normalizedMatricula = body.matricula
+    ? sanitizeString(normalizeFuncionarioMatricula(body.matricula))
+    : '';
+
+  // Validar email já na forma canônica persistida.
+  if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
     badRequest('Email inválido');
   }
 
-  // Validar CPF
-  if (!isValidCPF(body.cpf)) {
+  // Validar CPF já na forma canônica persistida.
+  if (!normalizedCpf || !isValidCPF(normalizedCpf)) {
     badRequest('CPF inválido');
   }
 
@@ -187,29 +270,13 @@ app.post('/', auth(), requirePermission('funcionarios', 'criar', 'admin', 'manag
     setorId: setorPayload.setorId,
   });
 
-  // Verificar se matricula já existe no tenant (APENAS se fornecida)
-  if (body.matricula) {
-    const existing = await db
-      .prepare(
-        'SELECT id FROM funcionarios WHERE matricula = ? AND empresa_id = ? AND deleted_at IS NULL',
-      )
-      .bind(body.matricula, empresaId)
-      .first();
-
-    if (existing) {
-      badRequest('Matrícula já cadastrada');
-    }
-  }
-
-  // CPF pode existir em outro tenant; bloqueia apenas duplicidade dentro da empresa atual.
-  const existingCPF = await db
-    .prepare('SELECT id FROM funcionarios WHERE cpf = ? AND empresa_id = ? AND deleted_at IS NULL')
-    .bind(body.cpf.replace(/\D/g, ''), empresaId)
-    .first();
-
-  if (existingCPF) {
-    badRequest('CPF já cadastrado nesta empresa');
-  }
+  await assertFuncionarioNaturalKeysAvailable({
+    db,
+    empresaId,
+    cpf: normalizedCpf,
+    matricula: normalizedMatricula || null,
+    email: normalizedEmail,
+  });
 
   const insertColumns: string[] = [];
   const insertValues: string[] = [];
@@ -226,15 +293,15 @@ app.post('/', auth(), requirePermission('funcionarios', 'criar', 'admin', 'manag
     insertValues.push(expression);
   };
 
-  addInsertValue('matricula', body.matricula ? sanitizeString(body.matricula) : null);
+  addInsertValue('matricula', normalizedMatricula || null);
   addInsertValue('nome', body.nome ? sanitizeString(body.nome) : null);
   addInsertValue('guerra', body.guerra || null);
-  addInsertValue('cpf', body.cpf ? body.cpf.replace(/\D/g, '') : null);
+  addInsertValue('cpf', normalizedCpf);
   addInsertValue('rg', body.rg || null);
   addInsertValue('nascimento', body.nascimento || null);
   addInsertValue('sexo', body.sexo || null);
   addInsertValue('nacionalidade', body.nacionalidade || 'Brasileira');
-  addInsertValue('email', body.email ? body.email.toLowerCase() : null);
+  addInsertValue('email', normalizedEmail);
   addInsertValue('telefone', body.telefone || null);
   addInsertValue('telefone_emergencia', body.telefone_emergencia || null);
   addInsertValue('contato_emergencia_nome', body.contato_emergencia_nome || null);
@@ -289,10 +356,15 @@ app.post('/', auth(), requirePermission('funcionarios', 'criar', 'admin', 'manag
     VALUES (${insertValues.join(', ')})
   `;
 
-  const result = await db
-    .prepare(query)
-    .bind(...insertBindings)
-    .run();
+  let result: D1Result<unknown>;
+  try {
+    result = await db
+      .prepare(query)
+      .bind(...insertBindings)
+      .run();
+  } catch (error) {
+    rethrowFuncionarioNaturalKeyConflict(error);
+  }
   const novoId = Number(result.meta.last_row_id);
 
   const novoFuncionario = await db
@@ -318,7 +390,7 @@ app.post('/', auth(), requirePermission('funcionarios', 'criar', 'admin', 'manag
       db,
       empresaId,
       novoId,
-      body.email,
+      normalizedEmail,
     );
   } catch (vinculoError) {
     console.error('[Funcionarios] Erro ao vincular usuário por e-mail:', vinculoError);
@@ -389,35 +461,31 @@ app.put(
     await assertFuncionarioInScope(db, empresaId, id, access);
     const dadosAnteriores = { ...existing };
 
-    if (body.email && !isValidEmail(body.email)) {
+    const normalizedEmail =
+      body.email !== undefined ? normalizeFuncionarioEmail(body.email) : undefined;
+    const normalizedCpf =
+      body.cpf !== undefined ? normalizeFuncionarioCpf(body.cpf) : undefined;
+    const normalizedMatricula =
+      body.matricula !== undefined
+        ? sanitizeString(normalizeFuncionarioMatricula(body.matricula))
+        : undefined;
+
+    if (normalizedEmail !== undefined && normalizedEmail && !isValidEmail(normalizedEmail)) {
       badRequest('Email inválido');
     }
 
-    if (body.matricula) {
-      const duplicateMatricula = await db
-        .prepare(
-          'SELECT id FROM funcionarios WHERE matricula = ? AND empresa_id = ? AND id != ? AND deleted_at IS NULL',
-        )
-        .bind(body.matricula, empresaId, id)
-        .first();
-
-      if (duplicateMatricula) {
-        badRequest('Matrícula já cadastrada para outro funcionário');
-      }
+    if (normalizedCpf !== undefined && normalizedCpf && !isValidCPF(normalizedCpf)) {
+      badRequest('CPF inválido');
     }
 
-    if (body.cpf) {
-      const duplicateCPF = await db
-        .prepare(
-          'SELECT id FROM funcionarios WHERE cpf = ? AND empresa_id = ? AND id != ? AND deleted_at IS NULL',
-        )
-        .bind(body.cpf.replace(/\D/g, ''), empresaId, id)
-        .first();
-
-      if (duplicateCPF) {
-        badRequest('CPF já cadastrado para outro funcionário nesta empresa');
-      }
-    }
+    await assertFuncionarioNaturalKeysAvailable({
+      db,
+      empresaId,
+      cpf: normalizedCpf || null,
+      matricula: normalizedMatricula || null,
+      email: normalizedEmail || null,
+      excludeId: id,
+    });
 
     const updates: string[] = [];
     const bindings: unknown[] = [];
@@ -428,16 +496,16 @@ app.put(
     };
 
     if (body.matricula !== undefined) {
-      addUpdate('matricula', body.matricula ? sanitizeString(body.matricula) : null);
+      addUpdate('matricula', normalizedMatricula || null);
     }
     if (body.nome !== undefined) {
       addUpdate('nome', body.nome ? sanitizeString(body.nome) : null);
     }
     if (body.cpf !== undefined) {
-      addUpdate('cpf', body.cpf ? body.cpf.replace(/\D/g, '') : null);
+      addUpdate('cpf', normalizedCpf || null);
     }
     if (body.email !== undefined) {
-      addUpdate('email', body.email ? body.email.toLowerCase() : null);
+      addUpdate('email', normalizedEmail || null);
     }
     if (body.telefone !== undefined) addUpdate('telefone', body.telefone || null);
     if (body.cargo !== undefined) addUpdate('cargo', body.cargo);
@@ -539,12 +607,17 @@ app.put(
       updates.push("updated_at = datetime('now')");
     }
 
-    const updateResult = await db
-      .prepare(
-        `UPDATE funcionarios SET ${updates.join(', ')} WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
-      )
-      .bind(...bindings, id, empresaId)
-      .run();
+    let updateResult: D1Result<unknown>;
+    try {
+      updateResult = await db
+        .prepare(
+          `UPDATE funcionarios SET ${updates.join(', ')} WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+        )
+        .bind(...bindings, id, empresaId)
+        .run();
+    } catch (error) {
+      rethrowFuncionarioNaturalKeyConflict(error);
+    }
 
     if ((updateResult.meta?.changes ?? 0) !== 1) {
       notFound('Funcionário não foi atualizado');
@@ -610,27 +683,16 @@ app.post('/:id/reativar', auth(), requirePermission('funcionarios', 'editar', 'a
 
   if (!funcionario) notFound('Funcionário inativo não encontrado');
 
-  if (funcionario.cpf) {
-    const duplicateCpf = await db
-      .prepare(
-        'SELECT id FROM funcionarios WHERE cpf = ? AND empresa_id = ? AND id != ? AND deleted_at IS NULL',
-      )
-      .bind(funcionario.cpf, empresaId, id)
-      .first();
-    if (duplicateCpf) badRequest('Existe outro funcionário ativo com o mesmo CPF nesta empresa');
-  }
-
-  if (funcionario.matricula) {
-    const duplicateMatricula = await db
-      .prepare(
-        'SELECT id FROM funcionarios WHERE matricula = ? AND empresa_id = ? AND id != ? AND deleted_at IS NULL',
-      )
-      .bind(funcionario.matricula, empresaId, id)
-      .first();
-    if (duplicateMatricula) {
-      badRequest('Existe outro funcionário ativo com a mesma matrícula nesta empresa');
-    }
-  }
+  await assertFuncionarioNaturalKeysAvailable({
+    db,
+    empresaId,
+    cpf: funcionario.cpf ? normalizeFuncionarioCpf(funcionario.cpf) : null,
+    matricula: funcionario.matricula
+      ? normalizeFuncionarioMatricula(funcionario.matricula)
+      : null,
+    email: funcionario.email ? normalizeFuncionarioEmail(funcionario.email) : null,
+    excludeId: id,
+  });
 
   const columns = await getFuncionariosColumns(db);
   const assignments = ['deleted_at = NULL'];
@@ -638,12 +700,17 @@ app.post('/:id/reativar', auth(), requirePermission('funcionarios', 'editar', 'a
   if (columns.has('ativo')) assignments.push('ativo = 1');
   if (columns.has('updated_at')) assignments.push("updated_at = datetime('now')");
 
-  const result = await db
-    .prepare(
-      `UPDATE funcionarios SET ${assignments.join(', ')} WHERE id = ? AND empresa_id = ? AND deleted_at IS NOT NULL`,
-    )
-    .bind(id, empresaId)
-    .run();
+  let result: D1Result<unknown>;
+  try {
+    result = await db
+      .prepare(
+        `UPDATE funcionarios SET ${assignments.join(', ')} WHERE id = ? AND empresa_id = ? AND deleted_at IS NOT NULL`,
+      )
+      .bind(id, empresaId)
+      .run();
+  } catch (error) {
+    rethrowFuncionarioNaturalKeyConflict(error);
+  }
 
   if ((result.meta?.changes ?? 0) !== 1) notFound('Funcionário não foi reativado');
 

@@ -7,6 +7,10 @@
 
 import type { D1Database } from '@cloudflare/workers-types';
 import { normalizeCPF, isValidCPF } from '../../utils/cpf';
+import {
+  normalizeFuncionarioEmail,
+  normalizeFuncionarioMatricula,
+} from '../funcionario-natural-keys';
 import { parseFlexibleDate, isValidISODate } from '../../utils/dates';
 import {
   FUNCIONARIOS_REQUIRED,
@@ -87,15 +91,17 @@ export async function validateFuncionarioRow(
     }
   }
 
-  // 4. Matrícula: não pode estar vazia
-  // Duplicatas são tratadas pelo import() conforme o modo
-  if (!row.Matricula || String(row.Matricula).trim().length === 0) {
-    // Erro já foi capturado em campos obrigatórios
+  // 4. Matrícula: canonicalizar TRIM, preservando case.
+  // Duplicatas são tratadas pelo import() conforme o modo / constraint A-02.
+  if (row.Matricula && String(row.Matricula).trim().length > 0) {
+    row.Matricula = normalizeFuncionarioMatricula(row.Matricula);
   }
 
-  // 5. Email: formato válido (apenas se fornecido)
+  // 5. Email: canonicalizar LOWER(TRIM(...)) e validar se fornecido.
   if (row.Email && String(row.Email).trim() !== '') {
-    if (!isValidEmail(row.Email)) {
+    const normalizedEmail = normalizeFuncionarioEmail(row.Email);
+    row.Email = normalizedEmail;
+    if (!isValidEmail(normalizedEmail)) {
       errors.push({
         line: lineNumber,
         field: 'Email',

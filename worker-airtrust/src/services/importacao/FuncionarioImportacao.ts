@@ -134,6 +134,16 @@ export class FuncionarioImportacao {
         const row = rows[i];
         console.log(`[DEBUG] Linha ${i + 1}/${rows.length} - Iniciando...`);
         const cpf = normalizeCPF(row.CPF);
+        const email =
+          row.Email !== null && row.Email !== undefined && String(row.Email).trim() !== ''
+            ? String(row.Email)
+            : null;
+        const matricula =
+          row.Matricula !== null &&
+          row.Matricula !== undefined &&
+          String(row.Matricula).trim() !== ''
+            ? String(row.Matricula)
+            : null;
 
         // Converter datas usando parseFlexibleDate (já foi feito em validators, mas garantir)
         const nascimento = parseFlexibleDate(row.Nascimento);
@@ -217,7 +227,7 @@ export class FuncionarioImportacao {
           }
           if (row.Email !== null && row.Email !== undefined && String(row.Email).trim() !== '') {
             updateFields.push('email = ?');
-            updateValues.push(row.Email);
+            updateValues.push(email);
           }
           if (
             row.Telefone !== null &&
@@ -237,7 +247,7 @@ export class FuncionarioImportacao {
             String(row.Matricula).trim() !== ''
           ) {
             updateFields.push('matricula = ?');
-            updateValues.push(row.Matricula);
+            updateValues.push(matricula);
           }
 
           // Escopo imutável: a importação só pode atualizar o registro previamente localizado no tenant.
@@ -280,10 +290,10 @@ export class FuncionarioImportacao {
               row.CANAC || null,
               row.Sispat || null,
               row.Prestserv || null,
-              row.Email || null,
+              email,
               row.Telefone || null,
               admissao,
-              row.Matricula,
+              matricula,
               this.empresaId,
             )
             .run();
