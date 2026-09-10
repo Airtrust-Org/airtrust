@@ -49,11 +49,12 @@ describe('HomePerfil quick access cards', () => {
       'Trocar Senha',
     ]);
     expect(cards.map((card) => card.title)).not.toContain('Minha Escala');
+    expect(cards.map((card) => card.title)).not.toContain('Meus Voos');
     expect(cards.map((card) => card.title)).not.toContain('Minhas Sessões de Simulador');
     expect(cards.map((card) => card.title)).not.toContain('Minhas Fichas de Treinamento de Voo');
   });
 
-  it('mantem rotina operacional para contexto de tripulacao', () => {
+  it('mantem rotina operacional para contexto de tripulacao e mostra Meus Voos', () => {
     const cards = buildHomeAccessCards({
       role: 'ALUNO',
       can: canAll,
@@ -63,7 +64,25 @@ describe('HomePerfil quick access cards', () => {
 
     expect(cards.map((card) => card.title)).toContain('Fadiga Diária');
     expect(cards.map((card) => card.title)).toContain('Minha Escala');
+    expect(cards.map((card) => card.title)).toContain('Meus Voos');
     expect(cards.map((card) => card.title)).not.toContain('Minha Pasta 360');
+
+    const meusVoos = cards.find((card) => card.title === 'Meus Voos');
+    expect(meusVoos?.route).toBe('/controle-voos/meus-voos');
+    expect(meusVoos?.description).toBe(
+      'Consulte os voos atribuídos a você e prepare o voo para operação offline.',
+    );
+  });
+
+  it('nao mostra Meus Voos fora do contexto de tripulacao', () => {
+    const cards = buildHomeAccessCards({
+      role: 'ALUNO',
+      can: canAll,
+      homeProfile: 'STUDENT_ADMINISTRATIVO',
+      funcionarioId: 7,
+    });
+
+    expect(cards.map((card) => card.title)).not.toContain('Meus Voos');
   });
 
   it('mantem fichas próprias somente no perfil ALUNO, mesmo com permissions amplas', () => {
@@ -103,7 +122,6 @@ describe('HomePerfil quick access cards', () => {
       'Avalie e assine as fichas dos participantes sob sua instrução.',
     );
 
-    // Terminologia legada não deve mais aparecer
     expect(cards.map((card) => card.title)).not.toContain('Minhas Fichas de Simulador');
     expect(cards.map((card) => card.title)).not.toContain('Avaliar / Assinar Fichas');
   });

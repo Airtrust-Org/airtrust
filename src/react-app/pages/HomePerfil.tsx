@@ -16,6 +16,7 @@ import {
   LockKeyhole,
   HeartPulse,
   BookOpen,
+  PlaneTakeoff,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
@@ -41,7 +42,7 @@ interface AccessCard {
   title: string;
   description: string;
   route: string;
-  color: string; // tailwind bg class for icon bg
+  color: string;
   iconColor: string;
 }
 
@@ -77,8 +78,6 @@ export function buildHomeAccessCards(params: {
   const isLearnerRole = role === 'ALUNO' || role === 'USUARIO';
   const isInstructorRole = role === 'INSTRUTOR';
 
-  // Manutenção tem uma home deliberadamente enxuta: fadiga, Pasta 360 e senha.
-  // Não reaproveitar permissões amplas de simulador/fichas para montar a experiência.
   if (isMaintenanceHome) {
     if (isRestrictedOperationalRole) {
       cards.push({
@@ -120,7 +119,6 @@ export function buildHomeAccessCards(params: {
     return cards;
   }
 
-  // Fadiga Diária — perfis operacionais com rotina de jornada.
   if (isRestrictedOperationalRole) {
     cards.push({
       icon: <HeartPulse className="w-7 h-7" />,
@@ -132,7 +130,6 @@ export function buildHomeAccessCards(params: {
     });
   }
 
-  // Minha Escala
   if (can('self.escala')) {
     cards.push({
       icon: <CalendarDays className="w-7 h-7" />,
@@ -144,7 +141,20 @@ export function buildHomeAccessCards(params: {
     });
   }
 
-  // Minhas sessões de simulador (ALUNO vê onde é participante, INSTRUTOR onde é instrutor)
+  // A Coordenação prepara o voo e atribui a tripulação. Para o tripulante,
+  // "Meus Voos" é a porta de entrada operacional; o Pilot App continua como
+  // workspace técnico/offline do voo selecionado.
+  if (isFlightCrewHome) {
+    cards.push({
+      icon: <PlaneTakeoff className="w-7 h-7" />,
+      title: 'Meus Voos',
+      description: 'Consulte os voos atribuídos a você e prepare o voo para operação offline.',
+      route: '/controle-voos/meus-voos',
+      color: 'bg-cyan-50',
+      iconColor: 'text-cyan-700',
+    });
+  }
+
   if (can('simuladores.view')) {
     cards.push({
       icon: <CalendarClock className="w-7 h-7" />,
@@ -161,9 +171,6 @@ export function buildHomeAccessCards(params: {
     });
   }
 
-  // Guias do Instrutor — biblioteca de material de preparação de sessão.
-  // Gate visual apenas; a autorização real é validada no backend por
-  // simuladores.guias_instrutor.read (vínculo ativo instrutor↔empresa).
   if (isInstructorRole) {
     cards.push({
       icon: <BookOpen className="w-7 h-7" />,
@@ -175,9 +182,6 @@ export function buildHomeAccessCards(params: {
     });
   }
 
-  // Fichas próprias são uma responsabilidade do perfil ALUNO. Mesmo que
-  // a mesma pessoa também seja instrutor, elas só aparecem quando o perfil
-  // ativo é ALUNO (USUARIO permanece como compatibilidade do perfil legado).
   if (isLearnerRole && can('self.ficha')) {
     cards.push({
       icon: <ClipboardList className="w-7 h-7" />,
@@ -189,9 +193,6 @@ export function buildHomeAccessCards(params: {
     });
   }
 
-  // Avaliar / assinar fichas é responsabilidade do perfil INSTRUTOR. A
-  // capability continua sendo exigida, mas não mistura a experiência do
-  // aluno mesmo quando a mesma conta possui os dois papéis.
   if (isInstructorRole && can('simuladores.evaluate')) {
     cards.push({
       icon: <PenLine className="w-7 h-7" />,
@@ -307,7 +308,6 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
   return (
     <AppLayout>
       <div className="min-h-[calc(100vh-48px)] bg-slate-50">
-        {/* Saudação */}
         <div className="bg-white border-b border-slate-100 px-4 py-4 sm:px-6 sm:py-6">
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-0.5">
             {perfilLabel}
@@ -324,34 +324,21 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
               </p>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Setor
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-slate-700">
-                    {funcionarioContext.setor || '-'}
-                  </p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Setor</p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">{funcionarioContext.setor || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Funcao
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-slate-700">
-                    {funcionarioContext.funcao || '-'}
-                  </p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Funcao</p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">{funcionarioContext.funcao || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Cargo
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-slate-700">
-                    {funcionarioContext.cargo || '-'}
-                  </p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cargo</p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">{funcionarioContext.cargo || '-'}</p>
                 </div>
               </div>
             </section>
           )}
 
-          {/* Cards de acesso */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {cards.map((card, i) => (
               <button
@@ -360,21 +347,15 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
                 className="group flex items-center gap-3 bg-white rounded-2xl border border-slate-200 p-4 text-left shadow-sm active:scale-[0.98] hover:shadow-md hover:border-primary/30 transition-all duration-150 animate-fade-in"
                 style={{ animationDelay: `${i * 50}ms` }}
               >
-                <div
-                  className={`w-11 h-11 sm:w-12 sm:h-12 shrink-0 rounded-xl flex items-center justify-center ${card.color} ${card.iconColor}`}
-                >
+                <div className={`w-11 h-11 sm:w-12 sm:h-12 shrink-0 rounded-xl flex items-center justify-center ${card.color} ${card.iconColor}`}>
                   {card.icon}
                 </div>
-
                 <div className="flex-1 min-w-0">
                   <h2 className="text-sm sm:text-base font-semibold text-slate-900 group-hover:text-primary transition-colors leading-tight">
                     {card.title}
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed line-clamp-2">
-                    {card.description}
-                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed line-clamp-2">{card.description}</p>
                 </div>
-
                 <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
             ))}
@@ -400,12 +381,8 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
                         <BellRing className="w-4 h-4" />
                         Notificações de fichas
                       </div>
-                      <h2 className="mt-2 text-base sm:text-lg font-semibold text-slate-900">
-                        O que ainda depende de você
-                      </h2>
-                      <p className="mt-1 text-xs sm:text-sm text-slate-500">
-                        Pendências e atualizações das suas fichas de treinamento de voo.
-                      </p>
+                      <h2 className="mt-2 text-base sm:text-lg font-semibold text-slate-900">O que ainda depende de você</h2>
+                      <p className="mt-1 text-xs sm:text-sm text-slate-500">Pendências e atualizações das suas fichas de treinamento de voo.</p>
                     </div>
                     {notificacoes.length > 0 && (
                       <button
@@ -442,27 +419,20 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
                             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
                               <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" />
                             </div>
-
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-2">
-                                <h3 className="text-sm font-semibold text-slate-900 leading-snug">
-                                  {notificacao.titulo}
-                                </h3>
+                                <h3 className="text-sm font-semibold text-slate-900 leading-snug">{notificacao.titulo}</h3>
                                 <span className="text-xs font-medium text-slate-400 whitespace-nowrap mt-0.5 hidden sm:inline">
                                   {formatarData(notificacao.created_at)}
                                 </span>
                               </div>
-                              <p className="mt-1 text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-2">
-                                {notificacao.mensagem}
-                              </p>
+                              <p className="mt-1 text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-2">{notificacao.mensagem}</p>
                               <div className="mt-2 flex items-center justify-between gap-2">
                                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
                                   {notificacao.acao_primaria || 'Abrir'}
                                   <ChevronRight className="w-3.5 h-3.5" />
                                 </span>
-                                <span className="text-xs text-slate-400 sm:hidden">
-                                  {formatarData(notificacao.created_at)}
-                                </span>
+                                <span className="text-xs text-slate-400 sm:hidden">{formatarData(notificacao.created_at)}</span>
                               </div>
                             </div>
                           </div>
