@@ -56,10 +56,20 @@ binding = "AI"
 [env.staging]
 name = "airtrust-api-staging"
 
+# Persist Worker invocation/custom/error logs. Staging captures every request so
+# governed QA can correlate a release SHA with runtime failures.
 [env.staging.observability]
 enabled = true
 head_sampling_rate = 1
 
+# Workers Paid plan active on this account since 2026-08-23. The Free plan's
+# 10ms CPU-per-invocation hard limit repeatedly caused error 1102 on
+# CPU-heavy operations (bcrypt login, SCORM Quality Gate Browser Run). This
+# raises the staging Worker's CPU budget accordingly. Confirmed accepted by
+# a live (non-dry-run) wrangler deploy — previously this exact config was
+# rejected outright under Free ("CPU limits are not supported for the Free
+# plan"). Staging only; production is intentionally left unchanged pending
+# its own explicit authorization.
 [env.staging.limits]
 cpu_ms = 30000
 
@@ -72,8 +82,15 @@ binding = "CF_VERSION_METADATA"
 [env.staging.vars]
 ENVIRONMENT = "staging"
 CORS_ORIGINS = "https://staging.airtrust.pages.dev,https://airtrust-staging.pages.dev,https://airtrust-api-staging.airtrust.workers.dev"
+# Placeholder tracked in git. Real APP_VERSION is injected by
+# scripts/deploy-staging-worker-safe.sh and .github/workflows/deploy-staging.yml.
+# Absent/unstamped remote staging must never publish as "dev-local".
 APP_VERSION = "managed-by-script"
 APP_BUILD_TIME = "managed-by-script"
+# Provenance chain (source -> bundle -> manifest). Placeholders tracked in
+# git; real values are injected by scripts/deploy-staging-worker-safe.sh and
+# .github/workflows/deploy-staging.yml from the release manifest computed at
+# deploy time. Never hand-edit these for a real deploy.
 AIRTRUST_SOURCE_SHA = "managed-by-script"
 AIRTRUST_SOURCE_TREE = "managed-by-script"
 AIRTRUST_WORKER_BUNDLE_SHA256 = "managed-by-script"
@@ -81,11 +98,30 @@ AIRTRUST_RELEASE_MANIFEST_SHA256 = "managed-by-script"
 CONTROLE_VOOS_SIGVOOS_RUNTIME_PREVIEW_ENABLED = "true"
 CONTROLE_VOOS_SIGVOOS_REAL_API_PREVIEW_ENABLED = "true"
 CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED = "true"
+# Protótipo eDB shadow: somente staging, allowlist explícita e sem suporte a `all`.
+# Costa do Sol é o tenant canônico empresa_id=6. Remover/limpar esta variável
+# desativa todas as rotas e a capability no próximo deploy de configuração.
 EDB_SHADOW_PILOT_TENANTS = "6"
+# FRMS IOGP observacional em staging. Somente Costa do Sol (empresa_id=6).
+# O pipeline persiste evidência separada e nunca altera o effectiveness canônico.
 FRMS_IOGP_SHADOW_MODE_TENANTS = "6"
+# Popular cv_voos/cv_voo_etapas/cv_voo_tripulantes a partir do MESMO payload SIGVOOS
+# que o sync FRMS já busca (via runSigvoosImporterBatch, idempotente, falha isolada).
+# É a fonte leg-level do Operational Load V1. Allowlist explícita; `all` só após canário.
+# Limpar a variável desativa (config change, sem deploy de código).
 CONTROLE_VOOS_FRMS_IMPORT_TENANTS = "6"
+# Feature flag: shared simulator sessions (paridade com produção; ausente
+# aqui fazia /api/capabilities retornar simulador_shared_sessions=false em
+# staging, escondendo o toggle "Sessão compartilhada" já implementado e
+# testado em ModalNovaSessao/SharedSessionForm).
 SIMULATOR_SHARED_SESSIONS_ENABLED = "true"
+# One-off EAD incident executor. The endpoint remains fail-closed after its
+# single reviewed run; this non-secret flag only permits the official executor.
 ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"
+# JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env staging
+# CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env staging
+# CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env staging
+# REDEMET_API_KEY deve ser configurado via secret para habilitar meteorologia observada.
 
 [[env.staging.r2_buckets]]
 binding = "BUCKET"
@@ -96,6 +132,9 @@ preview_bucket_name = "airtrust-storage-staging"
 binding = "DB"
 database_name = "airtrust-db-staging-baseline-20260701"
 database_id = "bf9963f4-eb12-439b-a830-20bbf577ac22"
+# Staging schema changes are applied only by explicit governed runners that
+# resolve reviewed SQL paths themselves. Keep Wrangler's generic migration
+# enumerator isolated from the historical chain, matching production safety.
 migrations_dir = "./migrations_staging_disabled"
 
 [env.staging.ai]
@@ -105,6 +144,9 @@ binding = "AI"
 [env.production]
 name = "airtrust-api-production"
 
+# Production observability is explicitly enabled in source control so a release
+# cannot silently revert to an unobservable Worker. Sampling can be revisited
+# only through a reviewed config change with retained error visibility.
 routes = [
   { pattern = "api.airtrust.online/*", zone_name = "airtrust.online" }
 ]
@@ -122,17 +164,35 @@ binding = "CF_VERSION_METADATA"
 [env.production.vars]
 ENVIRONMENT = "production"
 CORS_ORIGINS = "https://airtrust.online,https://www.airtrust.online,https://airtrust.pages.dev,https://production.airtrust.pages.dev,https://api.airtrust.online"
+# Placeholder tracked in git. The real APP_VERSION is injected by scripts/deploy-worker-only.sh
 APP_VERSION = "managed-by-script"
+# Placeholder tracked in git. The real APP_BUILD_TIME is injected by scripts/deploy-worker-only.sh
 APP_BUILD_TIME = "managed-by-script"
+# Feature flag: shared simulator sessions (2026-06-09 controlled activation)
 SIMULATOR_SHARED_SESSIONS_ENABLED = "true"
+# Feature flag: SIGVOOS shadow compare read-only (2026-06-30 controlled activation)
 CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED = "true"
+# FRMS IOGP em produção: coleta SOMENTE evidência observacional separada
+# (pousos/setores SIGVOOS + REDEMET quando configurado), sem modificar score,
+# bloqueio, fatorização ou effectiveness. Allowlist explícita; `all` é inválido.
 FRMS_IOGP_PRODUCTION_EVIDENCE_TENANTS = "6"
+# Ponte SIGVOOS → Controle de Voos em produção: popula cv_voos/cv_voo_etapas/
+# cv_voo_tripulantes a partir do MESMO payload que o sync FRMS já busca. Fonte
+# leg-level do Operational Load V1. Idempotente, falha isolada (não afeta o FRMS).
+# Allowlist explícita (empresa_id=6 Costa do Sol); `all` só após canário.
 CONTROLE_VOOS_FRMS_IMPORT_TENANTS = "6"
+# One-off EAD incident executor. The endpoint remains fail-closed after its
+# single reviewed run; this non-secret flag only permits the official executor.
 ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"
-# Pilot offline sync production activation. Private signing JWK remains a Worker secret.
+# Pilot offline sync production activation. The private ES256 JWK is provisioned
+# only as a Worker secret; tracked configuration contains no signing material.
 PILOT_OFFLINE_LEASE_KEY_ID = "pilot-production-20260910-01"
 PILOT_OFFLINE_LEASE_TTL_MINUTES = "720"
 PILOT_OFFLINE_SYNC_ENABLED = "true"
+# JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env production
+# CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env production
+# CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env production
+# REDEMET_API_KEY deve ser configurado via secret para habilitar meteorologia observada.
 
 [[env.production.r2_buckets]]
 binding = "BUCKET"
@@ -143,17 +203,23 @@ preview_bucket_name = "airtrust-storage"
 binding = "DB"
 database_name = "airtrust-db"
 database_id = "7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae"
+# Production schema is governed exclusively through Schema V2 explicit-file
+# execution. Keep Wrangler's generic migrations command isolated from the
+# historical ./migrations chain, which is not replay-safe in production.
 migrations_dir = "./migrations_production_disabled"
 
 [env.production.ai]
 binding = "AI"
 
 # ===== CRON TRIGGERS (PRODUÇÃO) =====
+# Dispatcher de manutenção: a cada 10 minutos
+# Notificações + FRMS: diariamente às 8h UTC (5h BRT)
+# Backups: diário 3h, semanal domingo 4h, mensal dia 1 às 5h
 [env.production.triggers]
 crons = [
-  "*/10 * * * *",
-  "0 8 * * *",
-  "0 3 * * *",
-  "0 4 * * SUN",
-  "0 5 1 * *"
+  "*/10 * * * *",  # Dispatcher de manutenção programada
+  "0 8 * * *",      # Notificações diárias + stats + FRMS
+  "0 3 * * *",      # Backup diário 3h UTC
+  "0 4 * * SUN",    # Backup semanal domingo 4h UTC
+  "0 5 1 * *"       # Backup mensal dia 1 às 5h UTC
 ]
