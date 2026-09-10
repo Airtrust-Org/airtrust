@@ -22,13 +22,27 @@ const stagingKey = {
 };
 
 describe('Pilot lease origin trust', () => {
-  it('tracks only public staging verification keys with exact origin scope', () => {
-    expect(TRUSTED_PILOT_LEASE_KEYS).toHaveLength(1);
+  it('tracks only public verification keys with exact staging and production origin scope', () => {
+    expect(TRUSTED_PILOT_LEASE_KEYS).toHaveLength(2);
     expect(TRUSTED_PILOT_LEASE_KEYS[0]).toMatchObject({
       key_id: 'pilot-staging-20260910-01',
       origins: [
         'https://staging.airtrust.pages.dev',
         'https://airtrust-staging.pages.dev',
+      ],
+      public_jwk: {
+        kty: 'EC',
+        crv: 'P-256',
+        key_ops: ['verify'],
+      },
+    });
+    expect(TRUSTED_PILOT_LEASE_KEYS[1]).toMatchObject({
+      key_id: 'pilot-production-20260910-01',
+      origins: [
+        'https://airtrust.online',
+        'https://www.airtrust.online',
+        'https://airtrust.pages.dev',
+        'https://production.airtrust.pages.dev',
       ],
       public_jwk: {
         kty: 'EC',
@@ -43,8 +57,17 @@ describe('Pilot lease origin trust', () => {
       hasTrustedPilotLeaseKeyForOrigin('https://airtrust-staging.pages.dev'),
     ).toBe(true);
     expect(hasTrustedPilotLeaseKeyForOrigin('https://airtrust.online')).toBe(
-      false,
+      true,
     );
+    expect(hasTrustedPilotLeaseKeyForOrigin('https://www.airtrust.online')).toBe(
+      true,
+    );
+    expect(hasTrustedPilotLeaseKeyForOrigin('https://airtrust.pages.dev')).toBe(
+      true,
+    );
+    expect(
+      hasTrustedPilotLeaseKeyForOrigin('https://production.airtrust.pages.dev'),
+    ).toBe(true);
   });
 
   it('accepts only an exact key id on an exact allowlisted origin', () => {
@@ -123,6 +146,6 @@ describe('Pilot lease origin trust', () => {
     expect(
       hasTrustedPilotLeaseKeyForOrigin('https://airtrust.online', [stagingKey]),
     ).toBe(false);
-    expect(TRUSTED_PILOT_LEASE_KEYS).toHaveLength(1);
+    expect(TRUSTED_PILOT_LEASE_KEYS).toHaveLength(2);
   });
 });
