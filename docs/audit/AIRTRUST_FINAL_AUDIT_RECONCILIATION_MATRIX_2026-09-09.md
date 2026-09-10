@@ -52,22 +52,22 @@ Those items are being handled by a separate workstream and are not audit residua
 | Dynamic RBAC | Employee/qualification/operational writes | **CLOSED** | Dynamic tenant-aware role guards integrated. |
 | Schema 0488 | Pilot offline sync receipts | **OUT OF THIS AUDIT CLOSEOUT** | Belongs to the separate `/pilot` workstream; not counted as an audit residual here. |
 | A-02 / #610 | Employee natural keys tenant-scoped | **CLOSED / PRODUCTION_CONFIRMED** | Staging proof completed through runs `34485516078`, `34489086943`, `34492291184` and `34492881316`. Explicitly authorized production Schema V2 run `34498650094` passed dedicated preflight, recovery-point capture, atomic schema+ledger apply, exact ledger verification, full schema revalidation and `A02_NATURAL_KEYS_0489_PRODUCTION_POSTCONDITIONS=PASS`. Production evidence: `docs/audit/evidence/a02-0489-production-applied-verified-2026-09-10.md`. |
+| #91 | eDB cycles / IFR semantics source | **CLOSED / SOURCE_CONFIRMED** | IFR real/simulated semantics are established by Costa do Sol MGO. The later review of Costa do Sol `MNL-MNT-001` MGM Rev. 10 supplies the missing flight-cycle definition: a flight stage is a flight cycle composed of one takeoff and one landing in sequence. ANAC requires flight cycles separately from landings. Existing AirTrust explicit regulatory-source contracts/tests preserve fail-closed behavior and never promote `starts` or landing count by inference. Evidence: `docs/regulatory/edb/EDB_CYCLES_COSTA_DO_SOL_MGM_REV10_SOURCE_DECISION_20260910.md`. |
 | A-06 | Redundant indexes cleanup | **ACCEPTED-DEBT** | Historical list reduced to four local-bootstrap candidates. No remote coexistence proof; destructive 0490 removed. Future cleanup requires read-only `sqlite_master` evidence per target. |
 | #500 | R2 credential rotation + Git history response | **ADMIN-BLOCKED** | Code sanitization is closed; provider credential rotation/revocation, workload cutover verification, provider log review and Git-history incident response require owner/admin authority. |
 | P1-04 / #611 | GitHub branch/environment protection administrative proof | **ADMIN-BLOCKED** | `main` is confirmed protected and required checks are visible; full bypass/force-push/deletion and Environment reviewer/protection proof is unavailable to the current integration. |
-| #91 | eDB cycles / IFR semantics source | **EXTERNAL-BLOCKED** | IFR semantics are closed; only an authoritative operator/OEM counting source for regulatory `cycles` remains. Starts/landings must not be promoted by inference. |
 | #93 | ANAC eDB homologation contract / credentials | **EXTERNAL-BLOCKED** | Requires current ANAC API contract, homologation access/auth, DTOs/endpoints and acceptance semantics before any regulated integration can proceed. |
 | ARCH-01 | SQL/repository-pattern consolidation | **ACCEPTED-DEBT** | Architectural cleanup; current tenant/runtime guards mitigate operational risk. |
 | PERF-01 | Large bundles / residual N+1 opportunities | **ACCEPTED-DEBT** | Performance debt; no current release-blocking functional defect demonstrated. |
 | SUP-01 | Full platform migration to Supabase | **ACCEPTED-DEBT** | Strategic architecture decision; current Cloudflare/D1 platform remains the supported baseline. |
 
-## Closeout counts after A-02 production confirmation
+## Closeout counts after A-02 production confirmation and #91 source resolution
 
 ```text
 OPEN_INTERNAL=0
 GOVERNED_MIGRATION_PENDING=0
 ADMIN_BLOCKED=2
-EXTERNAL_BLOCKED=2
+EXTERNAL_BLOCKED=1
 ACCEPTED_DEBT=4
 ```
 
@@ -82,8 +82,11 @@ ACCEPTED_DEBT=4
 
 ### EXTERNAL_BLOCKED
 
-- **#91** — authoritative operator/OEM source or approved counting rule for regulatory `cycles`; IFR semantics are already closed.
-- **#93** — current ANAC eDB API contract, homologation credentials/procedure and acceptance semantics.
+- **#93 only.** Current ANAC eDB API contract, homologation credentials/procedure and acceptance semantics remain unavailable.
+
+### CLOSED SOURCE BLOCKER
+
+- **#91** — Costa do Sol flight-cycle semantics are now grounded in the controlled MGM Rev. 10. The runtime remains explicit-source/fail-closed; engine starts and landing counts are not silently promoted.
 
 ### ACCEPTED_DEBT
 
@@ -102,6 +105,6 @@ and
 
 **ZERO GOVERNED MIGRATIONS PENDING**
 
-A-02 / 0489 is production-confirmed with exact Schema V2 ledger provenance and dedicated production postconditions. There is no remaining owned engineering defect or pending governed database migration in this reconciled audit scope.
+A-02 / 0489 is production-confirmed with exact Schema V2 ledger provenance and dedicated production postconditions. The prior #91 external semantic-source gap is also resolved by the controlled Costa do Sol maintenance source while preserving fail-closed runtime behavior.
 
-Administrative and external blockers remain separately tracked because they require owner/admin authority or authoritative third-party input. Accepted debt remains non-blocking and does not represent a demonstrated release defect.
+Two administrative blockers and one external ANAC integration-contract blocker remain separately tracked because they require owner/admin authority or authoritative third-party input. Accepted debt remains non-blocking and does not represent a demonstrated release defect.
