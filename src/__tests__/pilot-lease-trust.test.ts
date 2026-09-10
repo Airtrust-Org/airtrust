@@ -22,11 +22,29 @@ const stagingKey = {
 };
 
 describe('Pilot lease origin trust', () => {
-  it('keeps the tracked trust store fail-closed until a governed key is provisioned', () => {
-    expect(TRUSTED_PILOT_LEASE_KEYS).toEqual([]);
+  it('tracks only public staging verification keys with exact origin scope', () => {
+    expect(TRUSTED_PILOT_LEASE_KEYS).toHaveLength(1);
+    expect(TRUSTED_PILOT_LEASE_KEYS[0]).toMatchObject({
+      key_id: 'pilot-staging-20260910-01',
+      origins: [
+        'https://staging.airtrust.pages.dev',
+        'https://airtrust-staging.pages.dev',
+      ],
+      public_jwk: {
+        kty: 'EC',
+        crv: 'P-256',
+        key_ops: ['verify'],
+      },
+    });
     expect(
       hasTrustedPilotLeaseKeyForOrigin('https://staging.airtrust.pages.dev'),
-    ).toBe(false);
+    ).toBe(true);
+    expect(
+      hasTrustedPilotLeaseKeyForOrigin('https://airtrust-staging.pages.dev'),
+    ).toBe(true);
+    expect(hasTrustedPilotLeaseKeyForOrigin('https://airtrust.online')).toBe(
+      false,
+    );
   });
 
   it('accepts only an exact key id on an exact allowlisted origin', () => {
@@ -105,6 +123,6 @@ describe('Pilot lease origin trust', () => {
     expect(
       hasTrustedPilotLeaseKeyForOrigin('https://airtrust.online', [stagingKey]),
     ).toBe(false);
-    expect(TRUSTED_PILOT_LEASE_KEYS).toEqual([]);
+    expect(TRUSTED_PILOT_LEASE_KEYS).toHaveLength(1);
   });
 });
