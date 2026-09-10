@@ -118,6 +118,37 @@ describe('ProtectedRoute module gating', () => {
     expect(screen.queryByText('conteudo liberado')).toBeNull();
   });
 
+  it('permite Meus Voos para tripulante mesmo com Controle de Voos ainda restrito no menu de desenvolvimento', () => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { name: 'Piloto', email: 'piloto@empresa.com', role: 'ALUNO' },
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['controle_voos'] }],
+      empresaAtualId: 1,
+    });
+
+    renderAt('/controle-voos/meus-voos');
+
+    expect(screen.queryByText('protected.denied.title')).toBeNull();
+    expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
+  });
+
+  it('permite RDV individual self-service do tripulante sem liberar o restante do Controle de Voos', () => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { name: 'Piloto', email: 'piloto@empresa.com', role: 'ALUNO' },
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['controle_voos'] }],
+      empresaAtualId: 1,
+    });
+
+    renderAt('/controle-voos/rdv/123');
+    expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
+
+    renderAt('/controle-voos');
+    expect(screen.getByText('protected.denied.title')).toBeInTheDocument();
+  });
+
   it.each([
     ['/mro', ['dashboard', 'funcionarios', 'mro']],
     ['/controle-voos', ['dashboard', 'funcionarios', 'controle_voos']],
