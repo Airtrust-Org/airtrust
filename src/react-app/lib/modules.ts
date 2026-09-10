@@ -230,7 +230,7 @@ export const PRODUCT_MODULES: ProductModule[] = [
   {
     key: 'controle_voos',
     label: 'Controle de Voos',
-    status: 'beta',
+    status: 'pilot',
     defaultForPilot: false,
     description:
       'Programação de voos, tripulação, RDV, jornada, indisponibilidade e relatórios operacionais.',
