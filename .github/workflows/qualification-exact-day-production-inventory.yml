@@ -1,0 +1,119 @@
+name: Qualification Exact-Day Production Readonly Inventory
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/validation/qualification-exact-day-production-inventory.marker
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA reviewed for the read-only inventory
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_PRODUCTION_READONLY_EXACT_DAY_EXPIRY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: qualification-exact-day-production-readonly-inventory
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    name: Read-only exact-day qualification expiry inventory
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha || github.sha }}
+          CONFIRMATION: ${{ inputs.confirmation || 'AIRTRUST_PRODUCTION_READONLY_EXACT_DAY_EXPIRY' }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_REF_REQUIRED" >&2; exit 1; }
+          [[ "$CONFIRMATION" == "AIRTRUST_PRODUCTION_READONLY_EXACT_DAY_EXPIRY" ]] || { echo "READONLY_CONFIRMATION_REQUIRED" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "EXPECTED_SHA_INVALID" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo "EXPECTED_SHA_MISMATCH" >&2; exit 1; }
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Wait for official release gates on this exact main SHA
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if node scripts/ci/verify-release-gates.mjs; then
+              echo "RELEASE_GATES_GREEN"
+              exit 0
+            fi
+            if [[ "$attempt" -eq 30 ]]; then
+              echo "RELEASE_GATES_TIMEOUT_OR_FAILURE" >&2
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+
+      - run: npm --prefix worker-airtrust ci
+
+      - name: Require read-only D1 credential
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo "D1_READ_TOKEN_MISSING" >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo "CLOUDFLARE_ACCOUNT_ID_MISSING" >&2; exit 1; }
+
+      - name: Inventory exact-day production expiry mismatches
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXACT_DAY_EXPIRY_CONFIRMATION: AIRTRUST_PRODUCTION_READONLY_EXACT_DAY_EXPIRY
+          EXACT_DAY_EXPIRY_DB_NAME: airtrust-db
+        run: |
+          set -euo pipefail
+          node scripts/validation/qualification-exact-day-production-inventory.mjs > "$RUNNER_TEMP/exact-day-expiry-inventory.json"
+          node - "$RUNNER_TEMP/exact-day-expiry-inventory.json" >> "$GITHUB_STEP_SUMMARY" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          console.log('## Exact-day qualification expiry — production read-only');
+          console.log('');
+          console.log(`- source SHA: \`${data.source_sha}\``);
+          console.log(`- exact-day population: \`${data.exact_day_population_count}\``);
+          console.log(`- exact matches: \`${data.exact_matches_count}\``);
+          console.log(`- strong month-end bug signatures: \`${data.strong_month_end_signature_count}\``);
+          console.log(`- other mismatches (not auto-classified): \`${data.other_mismatch_count}\``);
+          console.log(`- reported M / 2026-07-17 signatures: \`${data.reported_signature_count}\``);
+          console.log('- writes: none');
+          console.log('- PII: not queried/emitted');
+          NODE
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: qualification-exact-day-production-inventory-${{ github.sha }}
+          path: ${{ runner.temp }}/exact-day-expiry-inventory.json
+          if-no-files-found: error
+          retention-days: 7
