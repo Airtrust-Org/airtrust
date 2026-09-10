@@ -48,7 +48,11 @@ describe('operational reliability audit ratchets', () => {
   it('keeps employee mutations tenant-scoped and reports certification drift', () => {
     const source = read('worker-airtrust/src/routes/funcionarios-mutations.ts');
 
-    expect(source).toContain('cpf = ? AND empresa_id = ?');
+    expect(source).toContain('WHERE empresa_id = ?');
+    expect(source).toContain('AND cpf = ?');
+    expect(source).toContain('AND TRIM(matricula) = ?');
+    expect(source).toContain('AND LOWER(TRIM(email)) = ?');
+    expect(source).toContain('AND deleted_at IS NULL');
     expect(source).toContain("addInsertValue('is_examinador'");
     expect(source).toContain("addUpdate('is_examinador'");
     expect(source).toContain("app.post('/:id/reativar'");
