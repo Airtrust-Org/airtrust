@@ -38,9 +38,9 @@ export function RowActionsMenu({
 
       <MenuItems
         transition
-        className={`absolute z-50 mt-2 w-52 origin-top rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg outline-none transition data-[closed]:scale-95 data-[closed]:opacity-0 dark:border-slate-700 dark:bg-slate-900 ${
-          align === 'right' ? 'right-0' : 'left-0'
-        }`}
+        portal
+        anchor={align === 'right' ? 'bottom end' : 'bottom start'}
+        className="z-[100] w-52 origin-top rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg outline-none transition [--anchor-gap:0.5rem] data-[closed]:scale-95 data-[closed]:opacity-0 dark:border-slate-700 dark:bg-slate-900"
       >
         {availableActions.map((action) => {
           const Icon = action.icon;
