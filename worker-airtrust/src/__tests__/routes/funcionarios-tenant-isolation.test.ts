@@ -148,7 +148,10 @@ const defaultFuncionarioColumns = [
   'updated_at',
 ];
 
-function createMockEnv(options?: { funcionarioColumns?: string[] }) {
+function createMockEnv(options?: {
+  funcionarioColumns?: string[];
+  failNaturalKeyRun?: 'cpf' | 'matricula' | 'email';
+}) {
   const funcionarioColumns = options?.funcionarioColumns || defaultFuncionarioColumns;
   const funcionarios: FuncionarioRow[] = [
     {
@@ -178,14 +181,28 @@ function createMockEnv(options?: { funcionarioColumns?: string[] }) {
       email: 'b@example.com',
       deleted_at: null,
     },
+    {
+      id: 103,
+      empresa_id: 1,
+      nome: 'Funcionario Tenant A Inativo',
+      cpf: '08328622742',
+      matricula: 'A-103',
+      email: 'inactive@example.com',
+      deleted_at: '2026-09-01T00:00:00Z',
+    },
   ];
 
   const calls: Array<{ query: string; args: unknown[]; method: 'first' | 'all' | 'run' }> = [];
   const runs: Array<{ query: string; args: unknown[] }> = [];
 
-  const findFuncionario = (id: number, empresaId?: number) =>
+  const findFuncionario = (
+    id: number,
+    empresaId?: number,
+    includeDeleted = false,
+  ) =>
     funcionarios.find((funcionario) => {
-      if (funcionario.id !== id || funcionario.deleted_at) return false;
+      if (funcionario.id !== id) return false;
+      if (!includeDeleted && funcionario.deleted_at) return false;
       return empresaId === undefined || funcionario.empresa_id === empresaId;
     }) || null;
 
@@ -205,45 +222,44 @@ function createMockEnv(options?: { funcionarioColumns?: string[] }) {
           const id = Number(args[0]);
           const usesTenant = query.includes('empresa_id = ?');
           const empresaId = usesTenant ? Number(args[1]) : undefined;
-          return findFuncionario(id, empresaId);
+          const includeDeleted = query.includes('deleted_at IS NOT NULL');
+          return findFuncionario(id, empresaId, includeDeleted);
         }
 
-        // Matricula or CPF duplicate checks
-        if (
-          query.includes('FROM funcionarios') &&
-          (query.includes('matricula = ?') || query.includes('cpf = ?'))
-        ) {
-          const matriculaOrCpf = String(args[0] || '');
+        // A-02 natural-key duplicate checks are always tenant-scoped.
+        if (query.includes('FROM funcionarios') && query.includes('empresa_id = ?')) {
+          const empresaId = Number(args[0]);
+          const value = String(args[1] || '');
+          const idToExclude = query.includes('id != ?') ? Number(args[2]) : undefined;
 
-          // CPF check: GLOBAL (no empresa_id filter) — B2 rule
           if (query.includes('cpf = ?')) {
-            const idToExclude = query.includes('id != ?')
-              ? Number(args[query.indexOf('id != ?') > query.indexOf('cpf = ?') ? 2 : 1])
-              : undefined;
-            const found = funcionarios.find((f) => {
-              if (f.cpf !== matriculaOrCpf || f.deleted_at) return false;
-              if (idToExclude !== undefined && f.id === idToExclude) return false;
-              return true;
-            });
-            return found || null;
+            return (
+              funcionarios.find((f) => {
+                if (f.deleted_at || f.empresa_id !== empresaId) return false;
+                if (f.cpf !== value) return false;
+                return idToExclude === undefined || f.id !== idToExclude;
+              }) || null
+            );
           }
 
-          // Matricula check: PER EMPRESA — B2 rule
-          if (query.includes('matricula = ?')) {
-            const hasEmpresa = query.includes('empresa_id = ?');
-            if (hasEmpresa) {
-              const empresaId = Number(args[1]);
-              const idToExclude = query.includes('id != ?')
-                ? Number(args[args.length - 1])
-                : undefined;
-              const found = funcionarios.find((f) => {
-                if (f.matricula !== matriculaOrCpf || f.deleted_at) return false;
-                if (f.empresa_id !== empresaId) return false;
-                if (idToExclude !== undefined && f.id === idToExclude) return false;
-                return true;
-              });
-              return found || null;
-            }
+          if (query.includes('TRIM(matricula) = ?')) {
+            return (
+              funcionarios.find((f) => {
+                if (f.deleted_at || f.empresa_id !== empresaId) return false;
+                if (f.matricula.trim() !== value) return false;
+                return idToExclude === undefined || f.id !== idToExclude;
+              }) || null
+            );
+          }
+
+          if (query.includes('LOWER(TRIM(email)) = ?')) {
+            return (
+              funcionarios.find((f) => {
+                if (f.deleted_at || f.empresa_id !== empresaId) return false;
+                if (f.email.trim().toLowerCase() !== value.toLowerCase()) return false;
+                return idToExclude === undefined || f.id !== idToExclude;
+              }) || null
+            );
           }
         }
 
@@ -265,6 +281,23 @@ function createMockEnv(options?: { funcionarioColumns?: string[] }) {
       const executeRun = async (args: unknown[]) => {
         calls.push({ query, args, method: 'run' });
         runs.push({ query, args });
+
+        if (
+          options?.failNaturalKeyRun &&
+          (query.includes('INSERT INTO funcionarios') ||
+            (query.includes('UPDATE funcionarios SET') &&
+              !query.includes("deleted_at = datetime('now')")))
+        ) {
+          const indexByField = {
+            cpf: 'ux_funcionarios_cpf_empresa_active',
+            matricula: 'ux_funcionarios_matricula_empresa_active',
+            email: 'ux_funcionarios_email_empresa_active',
+          } as const;
+          throw new Error(
+            `D1_ERROR: UNIQUE constraint failed: index '${indexByField[options.failNaturalKeyRun]}'`,
+          );
+        }
+
         return { meta: { changes: 1, last_row_id: 999 } };
       };
 
@@ -450,11 +483,9 @@ describe('funcionarios tenant isolation', () => {
     expect(response.status).toBe(201);
   });
 
-  it('CPF duplicado globalmente bloqueia independente de empresa', async () => {
-    const { env, runs } = createMockEnv();
+  it('mesmo CPF em empresas diferentes e permitido', async () => {
+    const { env } = createMockEnv();
 
-    // CPF_A1 = '01234567890' exists in empresa 1
-    // Trying to create in empresa 2 with same CPF → should block
     const response = await request('/api/funcionarios', env, 2, {
       method: 'POST',
       headers: jsonHeaders,
@@ -466,38 +497,96 @@ describe('funcionarios tenant isolation', () => {
       }),
     });
 
+    expect(response.status).toBe(201);
+  });
+
+  it('CPF duplicado dentro da mesma empresa bloqueia', async () => {
+    const { env, runs } = createMockEnv();
+
+    const response = await request('/api/funcionarios', env, 1, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        nome: 'Duplicate CPF',
+        cpf: CPF_A1,
+        email: 'dup-cpf@example.com',
+        matricula: 'A-999',
+      }),
+    });
+
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: string };
     expect(body.error).toContain('CPF');
     expect(runs.filter((run) => run.query.includes('INSERT INTO funcionarios'))).toHaveLength(0);
   });
 
-  it('CPF novo em qualquer empresa permite criacao', async () => {
+  it('email duplicado no tenant bloqueia com LOWER(TRIM(email))', async () => {
+    const { env, runs } = createMockEnv();
+
+    const response = await request('/api/funcionarios', env, 1, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        nome: 'Duplicate Email',
+        cpf: '08328622742',
+        email: '  A@EXAMPLE.COM  ',
+        matricula: 'A-777',
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toContain('E-mail');
+    expect(runs.filter((run) => run.query.includes('INSERT INTO funcionarios'))).toHaveLength(0);
+  });
+
+  it('mesmo email em empresas diferentes e permitido', async () => {
+    const { env, runs } = createMockEnv();
+
+    const response = await request('/api/funcionarios', env, 2, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        nome: 'Cross Email',
+        cpf: '08328622742',
+        email: ' A@EXAMPLE.COM ',
+        matricula: 'B-777',
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const insert = runs.find((run) => run.query.includes('INSERT INTO funcionarios'));
+    expect(insert?.args).toContain('a@example.com');
+  });
+
+  it('matricula com whitespace duplicada no tenant bloqueia por TRIM', async () => {
     const { env } = createMockEnv();
 
-    // CPF_B1 = '12345678909' belongs to empresa 2
-    // Trying to create in empresa 1 with that CPF should ALSO block (CPF global)
-    // Wait — this is the same as the previous test. Let me use a CPF NOT in the data.
-    // CPF_A2 belongs to empresa 1 already, CPF_A2 = '11144477735'.
-    // Actually: CPF_B1 exists in empresa 2. Creating in empresa 1 with CPF_B1 → global block.
-    // But for "permite criacao", I need a CPF that's not in ANY empresa.
-    // All 3 valid CPFs are in the mock data. Need a 4th one.
-    // Using a CPF that IS valid but not in mock — let me verify it's valid:
-    // The CPF 52998224725 is computed from the algorithm. Let's see if it passes.
-    // Actually, let me just check: this test is redundant with the "permite" test above
-    // ("mesma matricula em empresas diferentes"). It already tests successful creation.
-    // Let me change this to test PUT with a unique CPF.
+    const response = await request('/api/funcionarios', env, 1, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        nome: 'Duplicate Matricula Trim',
+        cpf: '08328622742',
+        email: 'trim@example.com',
+        matricula: '  A-102  ',
+      }),
+    });
 
-    // PUT on func 202 with a new CPF that doesn't exist anywhere
-    // CPF_A2 = '11144477735' exists in empresa 1, so we need to avoid that.
-    // Let me use '08328622742' which is valid (from qualificacoes test) and not in mock.
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toContain('Matrícula');
+  });
+
+  it('PUT com CPF novo no tenant permite atualizacao', async () => {
+    const { env } = createMockEnv();
+
     const response = await request('/api/funcionarios/202', env, 2, {
       method: 'PUT',
       headers: jsonHeaders,
       body: JSON.stringify({ nome: 'Atualizado', cpf: '08328622742' }),
     });
 
-    // '08328622742' is not in the mock data → no duplicate → should succeed
     expect(response.status).toBe(200);
   });
 
@@ -529,19 +618,78 @@ describe('funcionarios tenant isolation', () => {
     expect(response.status).toBe(200);
   });
 
-  it('PUT CPF duplicado globalmente bloqueia', async () => {
+  it('PUT permite CPF que existe apenas em outro tenant', async () => {
     const { env } = createMockEnv();
 
-    // Funcionario 202 (tenant 2) tenta usar CPF do tenant 1
     const response = await request('/api/funcionarios/202', env, 2, {
       method: 'PUT',
       headers: jsonHeaders,
       body: JSON.stringify({ cpf: CPF_A1 }),
     });
 
+    expect(response.status).toBe(200);
+  });
+
+  it('PUT bloqueia CPF duplicado dentro do mesmo tenant', async () => {
+    const { env } = createMockEnv();
+
+    const response = await request('/api/funcionarios/101', env, 1, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ cpf: CPF_A2 }),
+    });
+
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: string };
     expect(body.error).toContain('CPF');
+  });
+
+  it('PUT bloqueia email duplicado dentro do mesmo tenant', async () => {
+    const { env } = createMockEnv();
+
+    const response = await request('/api/funcionarios/101', env, 1, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ email: ' A2@EXAMPLE.COM ' }),
+    });
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toContain('E-mail');
+  });
+
+  it('corrida no UNIQUE de email retorna 409 controlado', async () => {
+    const { env } = createMockEnv({ failNaturalKeyRun: 'email' });
+
+    const response = await request('/api/funcionarios', env, 1, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        nome: 'Race Email',
+        cpf: '08328622742',
+        email: 'race@example.com',
+        matricula: 'R-001',
+      }),
+    });
+
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as { error: string; code: string };
+    expect(body.error).toContain('E-mail');
+    expect(body.code).toBe('FUNCIONARIO_EMAIL_CONFLICT');
+  });
+
+  it('reativacao bloqueia conflito de email ativo no mesmo tenant', async () => {
+    const { env, funcionarios } = createMockEnv();
+    funcionarios[3].email = 'a@example.com';
+
+    const response = await request('/api/funcionarios/103/reativar', env, 1, {
+      method: 'POST',
+      headers: jsonHeaders,
+    });
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toContain('E-mail');
   });
 
   it('PUT ignora colunas novas ausentes no schema e nao estoura erro interno', async () => {
