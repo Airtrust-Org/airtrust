@@ -17,6 +17,10 @@ type Aeronave = { id: number; codigo?: string | null; prefixo?: string | null; m
 type QuickCatalog = 'aeroportos' | 'tipos' | 'naturezas';
 type QuickTarget = 'origem_id' | 'destino_id' | 'tipo_voo_id' | 'natureza_voo_id';
 type QuickCreateState = { catalog: QuickCatalog; target: QuickTarget };
+type QuickCreated =
+  | { catalog: 'aeroportos'; item: CvAeroporto }
+  | { catalog: 'tipos'; item: CvTipoVoo }
+  | { catalog: 'naturezas'; item: CvNaturezaVoo };
 
 function extract<T>(response: unknown): T {
   const envelope = response as ApiEnvelope<T>;
@@ -134,7 +138,6 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
 
   const fieldClass = 'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-cyan-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100';
   const labelRowClass = 'flex items-center justify-between gap-2';
-
   const openQuick = (catalog: QuickCatalog, target: QuickTarget) => setQuickCreate({ catalog, target });
 
   return (
@@ -206,10 +209,10 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
           state={quickCreate}
           onClose={() => setQuickCreate(null)}
           onCreated={(created) => {
-            if (quickCreate.catalog === 'aeroportos') setAeroportos((items) => [...items, created as CvAeroporto]);
-            if (quickCreate.catalog === 'tipos') setTipos((items) => [...items, created as CvTipoVoo]);
-            if (quickCreate.catalog === 'naturezas') setNaturezas((items) => [...items, created as CvNaturezaVoo]);
-            set(quickCreate.target, String(created.id));
+            if (created.catalog === 'aeroportos') setAeroportos((items) => [...items, created.item]);
+            if (created.catalog === 'tipos') setTipos((items) => [...items, created.item]);
+            if (created.catalog === 'naturezas') setNaturezas((items) => [...items, created.item]);
+            set(quickCreate.target, String(created.item.id));
             setQuickCreate(null);
           }}
         />
@@ -225,14 +228,13 @@ function QuickCatalogDialog({
 }: {
   state: QuickCreateState;
   onClose: () => void;
-  onCreated: (item: { id: number; [key: string]: unknown }) => void;
+  onCreated: (created: QuickCreated) => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ codigo: '', nome: '', codigo_icao: '', cidade: '', uf: '', tipo: 'aeroporto', descricao: '' });
   const fieldClass = 'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white';
   const label = state.catalog === 'aeroportos' ? 'aeródromo' : state.catalog === 'tipos' ? 'tipo de voo' : 'natureza do voo';
-
   const setField = (field: keyof typeof form, value: string) => setForm((prev) => ({ ...prev, [field]: value }));
 
   async function submit(event: React.FormEvent) {
@@ -252,8 +254,13 @@ function QuickCatalogDialog({
         payload.tipo = form.tipo;
       }
       const response = await apiClient.post<unknown>(`/controle-voos/catalogos/${state.catalog}`, payload);
-      const created = extract<{ id: number; [key: string]: unknown }>(response);
-      onCreated(created);
+      if (state.catalog === 'aeroportos') {
+        onCreated({ catalog: 'aeroportos', item: extract<CvAeroporto>(response) });
+      } else if (state.catalog === 'tipos') {
+        onCreated({ catalog: 'tipos', item: extract<CvTipoVoo>(response) });
+      } else {
+        onCreated({ catalog: 'naturezas', item: extract<CvNaturezaVoo>(response) });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível cadastrar.');
     } finally {
