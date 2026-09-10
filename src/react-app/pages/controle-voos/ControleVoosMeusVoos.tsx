@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { FileText, PlaneTakeoff } from 'lucide-react';
+import { FileText, PlaneTakeoff, TabletSmartphone } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
@@ -22,7 +22,7 @@ export default function ControleVoosMeusVoos() {
         <ControleVoosPageShell>
           <ControleVoosPageHeader
             title="Meus voos"
-            description="Voos em que você está escalado como tripulante — inicie, continue ou envie o RDV"
+            description="Voos atribuídos a você pela Coordenação — consulte o RDV ou prepare o voo para uso no tablet"
           />
 
           {isLoading && (
@@ -41,7 +41,7 @@ export default function ControleVoosMeusVoos() {
             <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center dark:border-slate-700 dark:bg-slate-900">
               <PlaneTakeoff className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
               <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                Nenhum voo atribuído a você foi encontrado. Verifique com a Coordenação se seu cadastro de funcionário está vinculado à sua conta.
+                Nenhum voo atribuído a você foi encontrado. Quando a Coordenação incluir você como tripulante de um voo, ele aparecerá aqui automaticamente.
               </p>
             </div>
           )}
@@ -57,7 +57,7 @@ export default function ControleVoosMeusVoos() {
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Origem → Destino</th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Prev. saída</th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status voo</th>
-                      <th className="px-4 py-3 w-32" />
+                      <th className="px-4 py-3 min-w-56" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -74,12 +74,20 @@ export default function ControleVoosMeusVoos() {
                           <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{formatTime(voo.horario_previsto_partida)}</td>
                           <td className="px-4 py-3"><ControleVoosStatusBadge status={voo.status} /></td>
                           <td className="px-4 py-3">
-                            <Link
-                              to={`/controle-voos/rdv/${voo.id}`}
-                              className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline dark:text-purple-400"
-                            >
-                              <FileText className="h-3.5 w-3.5" /> Meu RDV
-                            </Link>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <Link
+                                to={`/controle-voos/rdv/${voo.id}`}
+                                className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline dark:text-purple-400"
+                              >
+                                <FileText className="h-3.5 w-3.5" /> Meu RDV
+                              </Link>
+                              <a
+                                href={`/pilot/?flight=${voo.id}`}
+                                className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-400"
+                              >
+                                <TabletSmartphone className="h-3.5 w-3.5" /> Abrir no Pilot App
+                              </a>
+                            </div>
                           </td>
                         </tr>
                       );
