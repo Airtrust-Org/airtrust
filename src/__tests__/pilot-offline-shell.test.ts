@@ -179,6 +179,8 @@ describe('Pilot Offline shell', () => {
     expect(pilotLeaseTrust).toContain('entry.origins');
     expect(pilotLease).toContain('isTrustedPilotLeaseKeyForOrigin');
     expect(pilotLease).toContain('resolveCurrentOrigin');
+    expect(pilotLease).toContain('globalThis.location?.origin');
+    expect(pilotLease).not.toContain('options?.origin');
     expect(pilotLease).toContain("envelope.alg !== 'ES256'");
     expect(pilotLease).toContain("crypto.subtle.verify");
     expect(pilotLease).toContain("claims.purpose !== 'offline_flight_lease'");
