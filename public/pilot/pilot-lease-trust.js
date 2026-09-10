@@ -20,6 +20,23 @@ export const TRUSTED_PILOT_LEASE_KEYS = Object.freeze([
       'https://airtrust-staging.pages.dev',
     ],
   },
+  {
+    key_id: 'pilot-production-20260910-01',
+    public_jwk: {
+      key_ops: ['verify'],
+      ext: true,
+      kty: 'EC',
+      x: 'TPOvQjsnTeBMYb3i1n-iYJscSThpK63ZPAO3DeXOfOs',
+      y: 'Za0tSAp9BPVVqeNf8hVbjAaaoOpeUmJqjlHeHWKINxE',
+      crv: 'P-256',
+    },
+    origins: [
+      'https://airtrust.online',
+      'https://www.airtrust.online',
+      'https://airtrust.pages.dev',
+      'https://production.airtrust.pages.dev',
+    ],
+  },
 ]);
 
 export function normalizePilotLeaseOrigin(value) {
