@@ -239,17 +239,22 @@ if ! node scripts/staging/migration-ledger-preflight.mjs \
 fi
 echo "PREFLIGHT_OK=true"
 
+ledger_count="$(read_ledger_count)"
+
 if [[ "$migration_basename" == 0461_* || "$migration_basename" == 0462_* ]]; then
   node scripts/staging/preflight-0461-0462.mjs --migration="$migration_basename"
   echo "SPECIALIZED_PREFLIGHT_OK=true"
 fi
 
-if [[ "$migration_basename" == "0489_a02_natural_keys_tenant_scoped.sql" ]]; then
+# A first 0489 apply must pass the physical/data preflight. A safe rerun after
+# the ledger already contains exactly one 0489 entry must skip that pre-apply
+# check (the replacement indexes now intentionally exist) and fall through to
+# the normal already-applied path below, which validates postconditions and
+# exits without another write.
+if [[ "$migration_basename" == "0489_a02_natural_keys_tenant_scoped.sql" && "$ledger_count" == "0" ]]; then
   bash scripts/staging/validate-0489-preflight.sh --target="$db_name"
   echo "SPECIALIZED_PREFLIGHT_0489_OK=true"
 fi
-
-ledger_count="$(read_ledger_count)"
 
 if [[ -n "$edb_manifest_name" ]]; then
   manifest_path="release/worker-airtrust/schema-v2/$edb_manifest_name"
