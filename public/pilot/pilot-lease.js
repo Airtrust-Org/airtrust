@@ -1,6 +1,7 @@
 import {
   PILOT_OFFLINE_APP_VERSION,
   TRUSTED_PILOT_LEASE_KEYS,
+  isTrustedPilotLeaseKeyForOrigin,
 } from '/pilot/pilot-lease-trust.js';
 
 function base64UrlToBytes(value) {
@@ -27,12 +28,22 @@ function versionAtLeast(current, minimum) {
   return true;
 }
 
-function findTrustedKey(keyId) {
-  return TRUSTED_PILOT_LEASE_KEYS.find((entry) => entry.key_id === keyId) || null;
+function resolveCurrentOrigin(options) {
+  return String(options?.origin || globalThis.location?.origin || '').trim();
 }
 
-export function hasTrustedPilotLeaseKeys() {
-  return TRUSTED_PILOT_LEASE_KEYS.length > 0;
+function findTrustedKey(keyId, origin) {
+  return (
+    TRUSTED_PILOT_LEASE_KEYS.find((entry) =>
+      isTrustedPilotLeaseKeyForOrigin(entry, keyId, origin),
+    ) || null
+  );
+}
+
+export function hasTrustedPilotLeaseKeys(origin = globalThis.location?.origin) {
+  return TRUSTED_PILOT_LEASE_KEYS.some((entry) =>
+    isTrustedPilotLeaseKeyForOrigin(entry, entry?.key_id, origin),
+  );
 }
 
 export async function verifyPilotOfflineLease(envelope, options) {
@@ -47,9 +58,13 @@ export async function verifyPilotOfflineLease(envelope, options) {
     throw new Error('Envelope de lease offline inválido.');
   }
 
-  const trusted = findTrustedKey(envelope.key_id);
+  const expected = options || {};
+  const trustedOrigin = resolveCurrentOrigin(expected);
+  const trusted = findTrustedKey(envelope.key_id, trustedOrigin);
   if (!trusted?.public_jwk) {
-    throw new Error('Chave pública confiável do lease offline não foi provisionada neste app.');
+    throw new Error(
+      'Chave pública confiável do lease offline não foi provisionada para esta origem.',
+    );
   }
 
   const key = await crypto.subtle.importKey(
@@ -78,7 +93,6 @@ export async function verifyPilotOfflineLease(envelope, options) {
     throw new Error('Payload do lease offline inválido.');
   }
 
-  const expected = options || {};
   const now = expected.now instanceof Date ? expected.now : new Date();
   const validFrom = new Date(claims.valid_from || '');
   const validUntil = new Date(claims.valid_until || '');
