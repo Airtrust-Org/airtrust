@@ -67,19 +67,18 @@ assert_count() {
   echo "POSTCONDITION_OK=$label"
 }
 
-
 for idx in ux_funcionarios_cpf_empresa_active ux_funcionarios_matricula_empresa_active ux_funcionarios_email_empresa_active; do
   assert_count "index:$idx" "1" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = '$idx';"
   assert_count "unique-index:$idx" "1" "SELECT COUNT(*) AS count FROM pragma_index_list('funcionarios') WHERE name = '$idx' AND \"unique\" = 1;"
 done
 
-assert_count "cpf-index-contract" "1" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name='ux_funcionarios_cpf_empresa_active' AND sql LIKE '%empresa_id, cpf%' AND sql LIKE '%deleted_at IS NULL%';"
-assert_count "matricula-index-contract" "1" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name='ux_funcionarios_matricula_empresa_active' AND UPPER(sql) LIKE '%EMPRESA_ID, TRIM(MATRICULA)%' AND sql LIKE '%deleted_at IS NULL%';"
-assert_count "email-index-contract" "1" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name='ux_funcionarios_email_empresa_active' AND UPPER(sql) LIKE '%EMPRESA_ID, LOWER(TRIM(EMAIL))%' AND sql LIKE '%deleted_at IS NULL%';"
+assert_count "cpf-index-contract" "1" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name='ux_funcionarios_cpf_empresa_active' AND INSTR(LOWER(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(sql,''),' ',''),char(9),''),char(10),''),char(13),'')), 'onfuncionarios(empresa_id,cpf)') > 0 AND INSTR(LOWER(COALESCE(sql,'')), 'deleted_at is null') > 0 AND INSTR(LOWER(COALESCE(sql,'')), 'cpf is not null') > 0;"
+assert_count "matricula-index-contract" "1" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name='ux_funcionarios_matricula_empresa_active' AND INSTR(LOWER(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(sql,''),' ',''),char(9),''),char(10),''),char(13),'')), 'onfuncionarios(empresa_id,trim(matricula))') > 0 AND INSTR(LOWER(COALESCE(sql,'')), 'deleted_at is null') > 0 AND INSTR(LOWER(COALESCE(sql,'')), 'matricula is not null') > 0;"
+assert_count "email-index-contract" "1" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name='ux_funcionarios_email_empresa_active' AND INSTR(LOWER(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(sql,''),' ',''),char(9),''),char(10),''),char(13),'')), 'onfuncionarios(empresa_id,lower(trim(email)))') > 0 AND INSTR(LOWER(COALESCE(sql,'')), 'deleted_at is null') > 0 AND INSTR(LOWER(COALESCE(sql,'')), 'email is not null') > 0;"
 
 assert_count "tenant-index:qualificacoes_tipos.codigo" "1" "SELECT COUNT(*) AS count FROM pragma_index_list('qualificacoes_tipos') WHERE name = 'idx_qualificacoes_tipos_codigo_empresa_active' AND \"unique\" = 1;"
 assert_count "global-legacy-unique-indexes" "0" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name IN ('ux_funcionarios_cpf','ux_funcionarios_matricula','ux_funcionarios_email','ux_qualificacoes_tipos_codigo');"
-assert_count "global-natural-key-unique-indexes" "0" "SELECT COUNT(*) AS count FROM pragma_index_list('funcionarios') AS il WHERE il.\"unique\" = 1 AND NOT EXISTS (SELECT 1 FROM pragma_index_info(il.name) AS ii WHERE ii.name = 'empresa_id') AND (EXISTS (SELECT 1 FROM pragma_index_info(il.name) AS ii WHERE ii.name IN ('cpf','matricula','email')) OR EXISTS (SELECT 1 FROM sqlite_master AS sm WHERE sm.type = 'index' AND sm.name = il.name AND sm.sql IS NOT NULL AND (LOWER(sm.sql) LIKE '%cpf%' OR LOWER(sm.sql) LIKE '%matricula%' OR LOWER(sm.sql) LIKE '%email%')));"
+assert_count "global-natural-key-unique-indexes" "0" "SELECT COUNT(*) AS count FROM pragma_index_list('funcionarios') AS il WHERE il.\"unique\" = 1 AND NOT EXISTS (SELECT 1 FROM pragma_index_info(il.name) AS ii WHERE ii.name = 'empresa_id') AND (EXISTS (SELECT 1 FROM pragma_index_info(il.name) AS ii WHERE ii.name IN ('cpf','matricula','email')) OR EXISTS (SELECT 1 FROM sqlite_master AS sm WHERE sm.type = 'index' AND sm.name = il.name AND sm.sql IS NOT NULL AND (INSTR(LOWER(sm.sql), 'cpf') > 0 OR INSTR(LOWER(sm.sql), 'matricula') > 0 OR INSTR(LOWER(sm.sql), 'email') > 0)));"
 assert_count "ambiguous-legacy-indexes" "0" "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name IN ('idx_funcionarios_cpf','idx_funcionarios_matricula');"
 
 assert_count "duplicate-cpf" "0" "SELECT COUNT(*) AS count FROM (SELECT empresa_id, cpf FROM funcionarios WHERE deleted_at IS NULL AND cpf IS NOT NULL AND trim(cpf) != '' GROUP BY empresa_id, cpf HAVING COUNT(*) > 1);"
