@@ -474,7 +474,7 @@ describe('funcionarios tenant isolation', () => {
       headers: jsonHeaders,
       body: JSON.stringify({
         nome: 'Novo Funcionario B',
-        cpf: CPF_B1,
+        cpf: CPF_A1,
         email: 'novoB@example.com',
         matricula: 'A-102',
       }),
@@ -548,7 +548,7 @@ describe('funcionarios tenant isolation', () => {
       headers: jsonHeaders,
       body: JSON.stringify({
         nome: 'Cross Email',
-        cpf: CPF_B1,
+        cpf: CPF_A1,
         email: ' A@EXAMPLE.COM ',
         matricula: 'B-777',
       }),
@@ -584,7 +584,7 @@ describe('funcionarios tenant isolation', () => {
     const response = await request('/api/funcionarios/202', env, 2, {
       method: 'PUT',
       headers: jsonHeaders,
-      body: JSON.stringify({ nome: 'Atualizado', cpf: CPF_B1 }),
+      body: JSON.stringify({ nome: 'Atualizado', cpf: CPF_A2 }),
     });
 
     expect(response.status).toBe(200);
