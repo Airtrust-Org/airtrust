@@ -28,8 +28,8 @@ function versionAtLeast(current, minimum) {
   return true;
 }
 
-function resolveCurrentOrigin(options) {
-  return String(options?.origin || globalThis.location?.origin || '').trim();
+function resolveCurrentOrigin() {
+  return String(globalThis.location?.origin || '').trim();
 }
 
 function findTrustedKey(keyId, origin) {
@@ -40,7 +40,8 @@ function findTrustedKey(keyId, origin) {
   );
 }
 
-export function hasTrustedPilotLeaseKeys(origin = globalThis.location?.origin) {
+export function hasTrustedPilotLeaseKeys() {
+  const origin = resolveCurrentOrigin();
   return TRUSTED_PILOT_LEASE_KEYS.some((entry) =>
     isTrustedPilotLeaseKeyForOrigin(entry, entry?.key_id, origin),
   );
@@ -59,7 +60,7 @@ export async function verifyPilotOfflineLease(envelope, options) {
   }
 
   const expected = options || {};
-  const trustedOrigin = resolveCurrentOrigin(expected);
+  const trustedOrigin = resolveCurrentOrigin();
   const trusted = findTrustedKey(envelope.key_id, trustedOrigin);
   if (!trusted?.public_jwk) {
     throw new Error(
