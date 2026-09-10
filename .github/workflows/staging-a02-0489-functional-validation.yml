@@ -107,8 +107,10 @@ jobs:
       - name: Install Worker dependencies
         run: npm --prefix worker-airtrust ci
 
-      - name: Syntax-check A-02 functional runner
-        run: node --check scripts/staging/run-0489-functional-validation.mjs
+      - name: Syntax-check A-02 functional runner and cleanup
+        run: |
+          node --check scripts/staging/run-0489-functional-validation.mjs
+          node --check scripts/staging/cleanup-controle-voos-e2e-fixtures-v2.mjs
 
       - name: Provision disposable two-tenant fixtures
         env:
@@ -174,7 +176,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -n "${A02_0489_MANIFEST:-}" && -s "${A02_0489_MANIFEST:-}" ]]; then
-            node scripts/staging/cleanup-controle-voos-e2e-fixtures.mjs "$A02_0489_MANIFEST" --apply
+            node scripts/staging/cleanup-controle-voos-e2e-fixtures-v2.mjs "$A02_0489_MANIFEST" --apply
           else
             echo "No fixture manifest exists; nothing to clean."
           fi
