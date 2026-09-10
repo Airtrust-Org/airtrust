@@ -93,8 +93,8 @@ jobs:
           RUNTIME_SHA: ${{ inputs.runtime_sha }}
         run: echo "runtime_sha=${RUNTIME_SHA,,}" >> "$GITHUB_OUTPUT"
 
-  functional:
-    name: Two-Tenant Natural-Key Lifecycle
+  schema-d1-functional:
+    name: Staging D1 Two-Tenant Natural-Key Lifecycle
     needs: guard
     runs-on: ubuntu-latest
     environment: staging
@@ -198,21 +198,21 @@ jobs:
 
   summary:
     name: A-02 0489 Staging Functional Validation Passed
-    needs: [guard, functional]
+    needs: [guard, schema-d1-functional]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - name: Record and enforce outcome
         env:
           RUNTIME_SHA: ${{ needs.guard.outputs.runtime_sha }}
-          FUNCTIONAL: ${{ needs.functional.result }}
+          FUNCTIONAL: ${{ needs.schema-d1-functional.result }}
           REASON: ${{ inputs.release_reason }}
         run: |
           {
             echo "## A-02 / 0489 staging functional validation"
             echo "- runtime_sha: \`$RUNTIME_SHA\`"
             echo "- two-tenant functional lifecycle: $FUNCTIONAL"
-            echo "- cleanup: mandatory inside functional job"
+            echo "- cleanup: mandatory inside schema/D1 job"
             echo "- 0489 postconditions: revalidated after cleanup"
             echo "- production touched: no"
             echo "- reason: $REASON"
