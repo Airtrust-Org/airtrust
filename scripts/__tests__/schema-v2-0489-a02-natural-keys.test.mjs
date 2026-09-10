@@ -82,4 +82,40 @@ test('staging recovery runner allowlists 0489 and executes dedicated guards', ()
   assert.match(runner, /0489_a02_natural_keys_tenant_scoped\.sql/);
   assert.match(runner, /validate-0489-preflight\.sh/);
   assert.match(runner, /validate-0489-postconditions\.sh/);
+
+  const ledgerRead = runner.indexOf('ledger_count="$(read_ledger_count)"');
+  const specializedPreflight = runner.indexOf(
+    'bash scripts/staging/validate-0489-preflight.sh --target="$db_name"',
+  );
+  assert.ok(ledgerRead >= 0);
+  assert.ok(specializedPreflight > ledgerRead);
+  assert.match(
+    runner,
+    /0489_a02_natural_keys_tenant_scoped\.sql" && "\$ledger_count" == "0"/,
+  );
+});
+
+test('0489 preflight and postconditions detect unexpected global natural-key uniqueness', () => {
+  const stagingPreflight = readFileSync('scripts/staging/validate-0489-preflight.sh', 'utf8');
+  const productionPreflight = readFileSync(
+    'scripts/schema-v2/validate-0489-production-preflight.sh',
+    'utf8',
+  );
+  const stagingPost = readFileSync('scripts/staging/validate-0489-postconditions.sh', 'utf8');
+  const productionPost = readFileSync(
+    'scripts/schema-v2/validate-0489-production-postconditions.sh',
+    'utf8',
+  );
+
+  for (const preflight of [stagingPreflight, productionPreflight]) {
+    assert.match(preflight, /unexpected-global-natural-key-unique-indexes/);
+    assert.match(preflight, /pragma_index_list\('funcionarios'\)/);
+    assert.match(preflight, /pragma_index_info\(il\.name\)/);
+  }
+
+  for (const post of [stagingPost, productionPost]) {
+    assert.match(post, /global-natural-key-unique-indexes/);
+    assert.match(post, /pragma_index_list\('funcionarios'\)/);
+    assert.match(post, /pragma_index_info\(il\.name\)/);
+  }
 });
