@@ -2,7 +2,9 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import Badge from '../Badge';
 import Button from '../Button';
+import Card, { CardContent, CardHeader } from '../Card';
 import ContentCard from '../ContentCard';
+import EmptyState from '../EmptyState';
 
 describe('UI primitives coverage', () => {
   it.each([
@@ -53,5 +55,45 @@ describe('UI primitives coverage', () => {
   it('renders ContentCard with default className', () => {
     render(<ContentCard>plain</ContentCard>);
     expect(screen.getByText('plain')).toBeInTheDocument();
+  });
+
+  it('covers Card default and gradient branches plus header/content helpers', () => {
+    const { rerender } = render(
+      <Card className="qa-card">
+        <CardHeader className="qa-header">header</CardHeader>
+        <CardContent className="qa-content">body</CardContent>
+      </Card>,
+    );
+
+    const card = screen.getByText('header').parentElement?.parentElement;
+    expect(card).toHaveClass('qa-card');
+    expect(card).toHaveClass('bg-white/80');
+    expect(screen.getByText('header').parentElement).toHaveClass('qa-header');
+    expect(screen.getByText('body').parentElement).toHaveClass('qa-content');
+
+    rerender(<Card gradient>gradient</Card>);
+    expect(screen.getByText('gradient').parentElement).toHaveClass('bg-gradient-to-br');
+  });
+
+  it('renders EmptyState without optional action', () => {
+    render(<EmptyState icon={<span>icon</span>} title="Nada aqui" description="Sem registros" />);
+    expect(screen.getByText('icon')).toBeInTheDocument();
+    expect(screen.getByText('Nada aqui')).toBeInTheDocument();
+    expect(screen.getByText('Sem registros')).toBeInTheDocument();
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('renders and executes EmptyState action', () => {
+    const onClick = vi.fn();
+    render(
+      <EmptyState
+        icon={<span>icon</span>}
+        title="Nada aqui"
+        description="Sem registros"
+        action={{ label: 'Criar', onClick }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Criar' }));
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 });
