@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, PlaneTakeoff, TabletSmartphone } from 'lucide-react';
+import { FileText, PlaneTakeoff, Plus, TabletSmartphone } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
+import ControleVoosNovoVooDialog from './components/ControleVoosNovoVooDialog';
 import { useMeusVoos, useControleVoosAeroportos, type CvAeroporto } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatTime } from './data/controleVoosUtils';
 
@@ -12,6 +15,8 @@ function buildAeroMap(aeroportos: CvAeroporto[]) {
 }
 
 export default function ControleVoosMeusVoos() {
+  const qc = useQueryClient();
+  const [novoVooOpen, setNovoVooOpen] = useState(false);
   const { data: voos = [], isLoading, error } = useMeusVoos();
   const { data: aeroportos = [] } = useControleVoosAeroportos();
   const aeroMap = buildAeroMap(aeroportos);
@@ -22,8 +27,16 @@ export default function ControleVoosMeusVoos() {
         <ControleVoosPageShell>
           <ControleVoosPageHeader
             title="Meus voos"
-            description="Voos atribuídos a você pela Coordenação — consulte o RDV ou prepare o voo para uso no tablet"
-          />
+            description="Voos atribuídos a você ou criados por você — preencha o RDV e prepare o voo para uso no tablet"
+          >
+            <button
+              type="button"
+              onClick={() => setNovoVooOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-cyan-700 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-800"
+            >
+              <Plus className="h-4 w-4" /> Criar meu voo
+            </button>
+          </ControleVoosPageHeader>
 
           {isLoading && (
             <div className="rounded-xl border border-slate-200 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-900">
@@ -41,7 +54,7 @@ export default function ControleVoosMeusVoos() {
             <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center dark:border-slate-700 dark:bg-slate-900">
               <PlaneTakeoff className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
               <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                Nenhum voo atribuído a você foi encontrado. Quando a Coordenação incluir você como tripulante de um voo, ele aparecerá aqui automaticamente.
+                Nenhum voo encontrado. Você pode criar seu próprio voo agora ou aguardar um voo atribuído pela Coordenação.
               </p>
             </div>
           )}
@@ -99,10 +112,19 @@ export default function ControleVoosMeusVoos() {
           )}
 
           <p className="mt-4 text-xs text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 rounded-lg px-3 py-2">
-            RDV operacional interno N1. Uso operacional interno e não regulado.
+            O voo criado pelo piloto nasce como planejado e vinculado somente ao próprio tripulante. O envio do RDV à Coordenação continua sendo uma ação separada.
           </p>
         </ControleVoosPageShell>
       </div>
+
+      <ControleVoosNovoVooDialog
+        open={novoVooOpen}
+        mode="pilot"
+        onClose={() => setNovoVooOpen(false)}
+        onCreated={() => {
+          void qc.invalidateQueries({ queryKey: ['cv-meus-voos'] });
+        }}
+      />
     </AppLayout>
   );
 }
