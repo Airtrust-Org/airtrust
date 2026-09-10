@@ -176,4 +176,64 @@ describe('A-02 residual migration - DB validation', () => {
     `);
     expect(tenantScoped.trim()).toBe('0');
   });
+
+  it('fails closed when a known legacy index name was repurposed', () => {
+    const contractQuery = `
+      SELECT COUNT(*) AS count
+      FROM sqlite_master AS sm
+      WHERE sm.type = 'index'
+        AND sm.name = 'ux_funcionarios_cpf'
+        AND LOWER(
+          REPLACE(
+            REPLACE(
+              REPLACE(
+                REPLACE(COALESCE(sm.sql, ''), ' ', ''),
+                char(9),
+                ''
+              ),
+              char(10),
+              ''
+            ),
+            char(13),
+            ''
+          )
+        ) <> 'createuniqueindexux_funcionarios_cpfonfuncionarios(cpf)wheredeleted_atisnull';
+    `;
+
+    const expectedLegacy = runSqlite(`
+      ${baseSchema}
+      CREATE UNIQUE INDEX ux_funcionarios_cpf
+        ON funcionarios(cpf)
+        WHERE deleted_at IS NULL;
+      ${contractQuery}
+    `);
+    expect(expectedLegacy.trim()).toBe('0');
+
+    const repurposedColumn = runSqlite(`
+      ${baseSchema}
+      CREATE UNIQUE INDEX ux_funcionarios_cpf
+        ON funcionarios(email)
+        WHERE deleted_at IS NULL;
+      ${contractQuery}
+    `);
+    expect(repurposedColumn.trim()).toBe('1');
+
+    const repurposedCollation = runSqlite(`
+      ${baseSchema}
+      CREATE UNIQUE INDEX ux_funcionarios_cpf
+        ON funcionarios(cpf COLLATE NOCASE)
+        WHERE deleted_at IS NULL;
+      ${contractQuery}
+    `);
+    expect(repurposedCollation.trim()).toBe('1');
+
+    const repurposedLifecycle = runSqlite(`
+      ${baseSchema}
+      CREATE UNIQUE INDEX ux_funcionarios_cpf
+        ON funcionarios(cpf);
+      ${contractQuery}
+    `);
+    expect(repurposedLifecycle.trim()).toBe('1');
+  });
+
 });
