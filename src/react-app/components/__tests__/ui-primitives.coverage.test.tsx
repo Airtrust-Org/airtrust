@@ -65,11 +65,13 @@ describe('UI primitives coverage', () => {
       </Card>,
     );
 
-    const card = screen.getByText('header').parentElement?.parentElement;
+    const header = screen.getByText('header');
+    const body = screen.getByText('body');
+    const card = header.parentElement;
     expect(card).toHaveClass('qa-card');
     expect(card).toHaveClass('bg-white/80');
-    expect(screen.getByText('header').parentElement).toHaveClass('qa-header');
-    expect(screen.getByText('body').parentElement).toHaveClass('qa-content');
+    expect(header).toHaveClass('qa-header');
+    expect(body).toHaveClass('qa-content');
 
     rerender(<Card gradient>gradient</Card>);
     expect(screen.getByText('gradient').parentElement).toHaveClass('bg-gradient-to-br');
