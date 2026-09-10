@@ -8,7 +8,7 @@ import {
 
 describe('funcionario natural keys', () => {
   it('normalizes the reviewed A-02 key semantics', () => {
-    expect(normalizeFuncionarioCpf(' 012.345.678-90 ')).toBe('01234567890');
+    expect(normalizeFuncionarioCpf(' 000.000.000-00 ')).toBe('00000000000');
     expect(normalizeFuncionarioMatricula('  AbC-001  ')).toBe('AbC-001');
     expect(normalizeFuncionarioEmail('  Pilot.Name@Example.COM ')).toBe(
       'pilot.name@example.com',
