@@ -111,6 +111,14 @@ test('0489 preflight and postconditions detect unexpected global natural-key uni
     assert.match(preflight, /unexpected-global-natural-key-unique-indexes/);
     assert.match(preflight, /pragma_index_list\('funcionarios'\)/);
     assert.match(preflight, /pragma_index_info\(il\.name\)/);
+    assert.match(preflight, /legacy-contract:ux_funcionarios_cpf/);
+    assert.match(preflight, /legacy-contract:ux_funcionarios_matricula/);
+    assert.match(preflight, /legacy-contract:ux_funcionarios_email/);
+    assert.match(preflight, /legacy-contract:ux_qualificacoes_tipos_codigo/);
+    assert.match(
+      preflight,
+      /createuniqueindexux_funcionarios_cpfonfuncionarios\(cpf\)wheredeleted_atisnull/,
+    );
   }
 
   for (const post of [stagingPost, productionPost]) {
