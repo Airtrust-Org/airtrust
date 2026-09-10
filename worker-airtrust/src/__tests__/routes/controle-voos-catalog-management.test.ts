@@ -55,6 +55,7 @@ const migrationPath = join(
   dirname(fileURLToPath(import.meta.url)),
   '../../../migrations/0410_controle_voos_n1_schema.sql',
 );
+const INSERTABLE_CATALOG_TABLE = /INSERT\s+INTO\s+(cv_aeroportos|cv_tipos_voo|cv_naturezas_voo|cv_motivos_operacionais)\b/i;
 
 function sqlString(value: unknown): string {
   if (value === null || value === undefined) return 'NULL';
@@ -99,7 +100,13 @@ function createDb(): D1Database & { path: string } {
         run: async () => {
           const resolved = interpolate(sql, binds);
           exec(path, resolved);
-          const last = query<{ id: number }>(path, 'SELECT last_insert_rowid() AS id')[0]?.id || 0;
+          const tableMatch = sql.match(INSERTABLE_CATALOG_TABLE);
+          const last = tableMatch
+            ? query<{ id: number }>(
+                path,
+                `SELECT id FROM ${tableMatch[1]} ORDER BY id DESC LIMIT 1`,
+              )[0]?.id || 0
+            : 0;
           return { meta: { changes: 1, last_row_id: last } };
         },
       };
