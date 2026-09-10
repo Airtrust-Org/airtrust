@@ -79,7 +79,7 @@ jobs:
       - name: Require read-only D1 credential
         shell: bash
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
@@ -89,7 +89,7 @@ jobs:
       - name: Inventory exact-day production expiry mismatches
         shell: bash
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           EXACT_DAY_EXPIRY_CONFIRMATION: AIRTRUST_PRODUCTION_READONLY_EXACT_DAY_EXPIRY
           EXACT_DAY_EXPIRY_DB_NAME: airtrust-db
