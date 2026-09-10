@@ -55,7 +55,7 @@ afterEach(() => {
 });
 
 describe('ControleVoosMeusVoos', () => {
-  it('mostra estado vazio quando o piloto nao tem voos atribuidos', async () => {
+  it('mostra estado vazio quando o piloto nao tem voos atribuidos ou criados', async () => {
     getMock.mockImplementation(async (url: string) => {
       if (url.includes('/voos/meus')) return apiOk([]);
       if (url.includes('/catalogos/aeroportos')) return apiOk([]);
@@ -64,7 +64,8 @@ describe('ControleVoosMeusVoos', () => {
 
     renderWithClient(<ControleVoosMeusVoos />);
 
-    await waitFor(() => expect(screen.getByText(/Nenhum voo atribuído a você/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Nenhum voo encontrado/)).toBeInTheDocument());
+    expect(screen.getByText(/Você pode criar seu próprio voo agora/)).toBeInTheDocument();
   });
 
   it('lista voos atribuidos ao piloto autenticado', async () => {
