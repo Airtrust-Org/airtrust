@@ -90,7 +90,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v7'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v8'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
     expect(pilotSw).toContain("'/pilot/pilot-rdv-draft.js'");
@@ -175,6 +175,12 @@ describe('Pilot Offline shell', () => {
 
   it('mantem a edicao offline fail-closed ate haver lease assinado e chave publica confiavel', () => {
     expect(pilotLeaseTrust).toContain('TRUSTED_PILOT_LEASE_KEYS = Object.freeze([])');
+    expect(pilotLeaseTrust).toContain("candidate.includes('*')");
+    expect(pilotLeaseTrust).toContain('entry.origins');
+    expect(pilotLease).toContain('isTrustedPilotLeaseKeyForOrigin');
+    expect(pilotLease).toContain('resolveCurrentOrigin');
+    expect(pilotLease).toContain('globalThis.location?.origin');
+    expect(pilotLease).not.toContain('options?.origin');
     expect(pilotLease).toContain("envelope.alg !== 'ES256'");
     expect(pilotLease).toContain("crypto.subtle.verify");
     expect(pilotLease).toContain("claims.purpose !== 'offline_flight_lease'");
