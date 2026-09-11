@@ -1,0 +1,51 @@
+name: Diagnose PR635 frontend coverage
+
+on:
+  push:
+    branches:
+      - feat/controle-voos-cadastros-operacionais-20260910
+
+permissions:
+  contents: read
+
+env:
+  CI: 'true'
+  VITE_API_URL: http://127.0.0.1:8787
+
+jobs:
+  frontend-coverage-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Verify exact source SHA
+        run: test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+      - run: npm ci
+      - run: npm --prefix worker-airtrust ci
+      - name: Install CI system dependencies
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources 2>/dev/null || true
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends sqlite3
+      - name: Run frontend coverage and preserve failure
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:coverage 2>&1 | tee frontend-coverage.log
+      - name: Upload frontend coverage log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr635-frontend-coverage-log
+          path: frontend-coverage.log
+          if-no-files-found: error
+          retention-days: 1
