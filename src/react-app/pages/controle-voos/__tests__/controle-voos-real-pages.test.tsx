@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import ControleVoosRelatorios from '../ControleVoosRelatorios';
@@ -8,8 +9,26 @@ import ControleVoosJornadas from '../ControleVoosJornadas';
 import ControleVoosTabelas from '../ControleVoosTabelas';
 import { fetchWithAuth } from '@/react-app/config/api';
 
+const { apiGetMock, apiPostMock, apiPatchMock } = vi.hoisted(() => ({
+  apiGetMock: vi.fn(),
+  apiPostMock: vi.fn(),
+  apiPatchMock: vi.fn(),
+}));
+
 vi.mock('@/react-app/config/api', () => ({
   fetchWithAuth: vi.fn(),
+}));
+
+vi.mock('@/react-app/services/apiClient', () => ({
+  apiClient: {
+    get: apiGetMock,
+    post: apiPostMock,
+    patch: apiPatchMock,
+  },
+}));
+
+vi.mock('@/react-app/hooks/usePermissions', () => ({
+  usePermissions: () => ({ isAdmin: true, isGestor: false }),
 }));
 
 vi.mock('@/react-app/components/AppLayout', () => ({
@@ -70,6 +89,9 @@ function jsonResponse(body: unknown, ok = true, status = 200) {
 describe('controle voos real pages', () => {
   afterEach(() => {
     vi.clearAllMocks();
+    apiGetMock.mockReset();
+    apiPostMock.mockReset();
+    apiPatchMock.mockReset();
     vi.useRealTimers();
   });
 
@@ -78,7 +100,7 @@ describe('controle voos real pages', () => {
     expect(tabelasSource).not.toContain('controleVoosMockData');
     expect(jornadasSource).not.toContain('controleVoosMockData');
     expect(relatoriosSource).toContain('/api/controle-voos/relatorios/resumo-operacional');
-    expect(tabelasSource).toContain('/api/controle-voos/catalogos/');
+    expect(tabelasSource).toContain('/controle-voos/catalogos/');
     expect(jornadasSource).toContain('/api/controle-voos/jornadas');
     expect(jornadasSource).not.toContain('/api/frms/operational-snapshot?');
     expect(jornadasSource).not.toContain('/api/frms/acumulo-frota?mes=');
@@ -136,18 +158,17 @@ describe('controle voos real pages', () => {
     expect(screen.getByText('Meteorologia')).toBeInTheDocument();
   });
 
-  it('mostra erro quando catalogos reais falham', async () => {
-    vi.mocked(fetchWithAuth).mockResolvedValue(
-      jsonResponse({ success: false, error: 'Falha no catálogo' }, false, 500),
+  it('mostra erro quando catálogos reais falham via apiClient', async () => {
+    apiGetMock.mockRejectedValue(new Error('Falha no catálogo'));
+
+    render(
+      <MemoryRouter>
+        <ControleVoosTabelas />
+      </MemoryRouter>,
     );
 
-    render(<ControleVoosTabelas />);
-
-    await waitFor(() =>
-      expect(screen.getByText('Erro ao carregar tabelas operacionais.')).toBeInTheDocument(),
-    );
-
-    expect(screen.getByText('Falha no catálogo')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Falha no catálogo')).toBeInTheDocument());
+    expect(apiGetMock).toHaveBeenCalledWith('/controle-voos/catalogos/aeroportos?ativo=true');
   });
 
   it('carrega jornadas do endpoint canonico do Controle de Voos sem usar FRMS', async () => {
