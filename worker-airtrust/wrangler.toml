@@ -184,11 +184,12 @@ CONTROLE_VOOS_FRMS_IMPORT_TENANTS = "6"
 # One-off EAD incident executor. The endpoint remains fail-closed after its
 # single reviewed run; this non-secret flag only permits the official executor.
 ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"
-# Pilot offline sync production activation. The private ES256 JWK is provisioned
-# only as a Worker secret; tracked configuration contains no signing material.
+# Pilot offline lease trust can remain provisioned, but mutation sync stays
+# fail-closed in production until #580 has versioned real-device iPad + Android
+# acceptance evidence for the exact staging release SHA.
 PILOT_OFFLINE_LEASE_KEY_ID = "pilot-production-20260910-02"
 PILOT_OFFLINE_LEASE_TTL_MINUTES = "720"
-PILOT_OFFLINE_SYNC_ENABLED = "true"
+PILOT_OFFLINE_SYNC_ENABLED = "false"
 # JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env production
 # CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env production
 # CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env production
