@@ -152,12 +152,12 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
         </div>
 
         <form onSubmit={submit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <label className="text-sm">
-            <span className={labelRowClass}>
-              <span>Aeronave / Prefixo</span>
+          <div className="text-sm">
+            <div className={labelRowClass}>
+              <label htmlFor="controle-voos-aeronave">Aeronave / Prefixo</label>
               {mode === 'coordenacao' && <Link to="/configuracoes" className="text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300">Gerenciar frota</Link>}
-            </span>
-            <select className={fieldClass} value={form.aeronave_id} onChange={(e) => selectAircraft(e.target.value)} required>
+            </div>
+            <select id="controle-voos-aeronave" className={fieldClass} value={form.aeronave_id} onChange={(e) => selectAircraft(e.target.value)} required>
               <option value="">Selecione</option>
               {aeronaves.map((aeronave) => (
                 <option key={aeronave.id} value={aeronave.id}>
@@ -165,25 +165,37 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
                 </option>
               ))}
             </select>
-          </label>
+          </div>
           <label className="text-sm">Data<input type="date" className={fieldClass} value={form.data_programacao} onChange={(e) => set('data_programacao', e.target.value)} required /></label>
 
-          <label className="text-sm">
-            <span className={labelRowClass}><span>Origem</span>{canManageCatalogs && <button type="button" onClick={() => openQuick('aeroportos', 'origem_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}</span>
-            <select className={fieldClass} value={form.origem_id} onChange={(e) => set('origem_id', e.target.value)} required><option value="">Selecione</option>{aeroportos.map((a) => <option key={a.id} value={a.id}>{a.codigo_icao || a.codigo} — {a.nome}</option>)}</select>
-          </label>
-          <label className="text-sm">
-            <span className={labelRowClass}><span>Destino</span>{canManageCatalogs && <button type="button" onClick={() => openQuick('aeroportos', 'destino_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}</span>
-            <select className={fieldClass} value={form.destino_id} onChange={(e) => set('destino_id', e.target.value)} required><option value="">Selecione</option>{aeroportos.map((a) => <option key={a.id} value={a.id}>{a.codigo_icao || a.codigo} — {a.nome}</option>)}</select>
-          </label>
-          <label className="text-sm">
-            <span className={labelRowClass}><span>Tipo de voo</span>{canManageCatalogs && <button type="button" onClick={() => openQuick('tipos', 'tipo_voo_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}</span>
-            <select className={fieldClass} value={form.tipo_voo_id} onChange={(e) => set('tipo_voo_id', e.target.value)} required><option value="">Selecione</option>{tipos.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}</select>
-          </label>
-          <label className="text-sm">
-            <span className={labelRowClass}><span>Natureza</span>{canManageCatalogs && <button type="button" onClick={() => openQuick('naturezas', 'natureza_voo_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}</span>
-            <select className={fieldClass} value={form.natureza_voo_id} onChange={(e) => set('natureza_voo_id', e.target.value)} required><option value="">Selecione</option>{naturezas.map((n) => <option key={n.id} value={n.id}>{n.nome}</option>)}</select>
-          </label>
+          <div className="text-sm">
+            <div className={labelRowClass}>
+              <label htmlFor="controle-voos-origem">Origem</label>
+              {canManageCatalogs && <button type="button" onClick={() => openQuick('aeroportos', 'origem_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}
+            </div>
+            <select id="controle-voos-origem" className={fieldClass} value={form.origem_id} onChange={(e) => set('origem_id', e.target.value)} required><option value="">Selecione</option>{aeroportos.map((a) => <option key={a.id} value={a.id}>{a.codigo_icao || a.codigo} — {a.nome}</option>)}</select>
+          </div>
+          <div className="text-sm">
+            <div className={labelRowClass}>
+              <label htmlFor="controle-voos-destino">Destino</label>
+              {canManageCatalogs && <button type="button" onClick={() => openQuick('aeroportos', 'destino_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}
+            </div>
+            <select id="controle-voos-destino" className={fieldClass} value={form.destino_id} onChange={(e) => set('destino_id', e.target.value)} required><option value="">Selecione</option>{aeroportos.map((a) => <option key={a.id} value={a.id}>{a.codigo_icao || a.codigo} — {a.nome}</option>)}</select>
+          </div>
+          <div className="text-sm">
+            <div className={labelRowClass}>
+              <label htmlFor="controle-voos-tipo">Tipo de voo</label>
+              {canManageCatalogs && <button type="button" onClick={() => openQuick('tipos', 'tipo_voo_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}
+            </div>
+            <select id="controle-voos-tipo" className={fieldClass} value={form.tipo_voo_id} onChange={(e) => set('tipo_voo_id', e.target.value)} required><option value="">Selecione</option>{tipos.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}</select>
+          </div>
+          <div className="text-sm">
+            <div className={labelRowClass}>
+              <label htmlFor="controle-voos-natureza">Natureza</label>
+              {canManageCatalogs && <button type="button" onClick={() => openQuick('naturezas', 'natureza_voo_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}
+            </div>
+            <select id="controle-voos-natureza" className={fieldClass} value={form.natureza_voo_id} onChange={(e) => set('natureza_voo_id', e.target.value)} required><option value="">Selecione</option>{naturezas.map((n) => <option key={n.id} value={n.id}>{n.nome}</option>)}</select>
+          </div>
           <label className="text-sm">Saída prevista<input type="datetime-local" className={fieldClass} value={form.horario_previsto_partida} onChange={(e) => set('horario_previsto_partida', e.target.value)} required /></label>
           <label className="text-sm">Chegada prevista<input type="datetime-local" className={fieldClass} value={form.horario_previsto_chegada} onChange={(e) => set('horario_previsto_chegada', e.target.value)} required /></label>
           {mode === 'pilot' && <label className="text-sm">Minha função<select className={fieldClass} value={form.funcao} onChange={(e) => set('funcao', e.target.value)}><option value="PIC">PIC</option><option value="SIC">SIC</option></select></label>}
