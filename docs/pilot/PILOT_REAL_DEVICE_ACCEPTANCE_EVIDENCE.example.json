@@ -1,0 +1,84 @@
+{
+  "status": "PENDING",
+  "staging_release_sha": "REPLACE_WITH_EXACT_40_CHAR_STAGING_SHA",
+  "validated_at": "REPLACE_WITH_ISO_8601_TIMESTAMP",
+  "rows": [
+    {
+      "platform": "ipad",
+      "mode": "safari",
+      "orientation": "portrait",
+      "device_model": "REPLACE",
+      "os_version": "REPLACE",
+      "browser_version": "REPLACE",
+      "result": "PENDING",
+      "scenario_results": {
+        "1_vault_unlock": "PENDING",
+        "2_download_authorized_package": "PENDING",
+        "3_local_package_readiness": "PENDING",
+        "4_rdv_saved_on_tablet": "PENDING",
+        "5_airplane_offline": "PENDING",
+        "6_refresh_reopen_offline": "PENDING",
+        "7_restore_exact_saved_value": "PENDING",
+        "8_continue_offline_revision": "PENDING",
+        "9_reconnect_transmit": "PENDING",
+        "10_idempotent_receipt_no_duplicate": "PENDING",
+        "11_explicit_conflict_handling": "PENDING",
+        "12_finalize_separate_from_sync": "PENDING",
+        "13_coordination_handoff_receipt": "PENDING",
+        "14_service_worker_scope_isolated": "PENDING",
+        "15_touch_scroll_no_critical_overflow": "PENDING"
+      }
+    },
+    {
+      "platform": "ipad",
+      "mode": "safari",
+      "orientation": "landscape",
+      "device_model": "REPLACE",
+      "os_version": "REPLACE",
+      "browser_version": "REPLACE",
+      "result": "PENDING",
+      "scenario_results": {}
+    },
+    {
+      "platform": "ipad",
+      "mode": "pwa",
+      "orientation": "n/a",
+      "device_model": "REPLACE",
+      "os_version": "REPLACE",
+      "browser_version": "installed-home-screen",
+      "result": "PENDING",
+      "scenario_results": {}
+    },
+    {
+      "platform": "android",
+      "mode": "chrome",
+      "orientation": "portrait",
+      "device_model": "REPLACE",
+      "os_version": "REPLACE",
+      "browser_version": "REPLACE",
+      "result": "PENDING",
+      "scenario_results": {}
+    },
+    {
+      "platform": "android",
+      "mode": "chrome",
+      "orientation": "landscape",
+      "device_model": "REPLACE",
+      "os_version": "REPLACE",
+      "browser_version": "REPLACE",
+      "result": "PENDING",
+      "scenario_results": {}
+    },
+    {
+      "platform": "android",
+      "mode": "pwa",
+      "orientation": "n/a",
+      "device_model": "REPLACE",
+      "os_version": "REPLACE",
+      "browser_version": "installed-pwa",
+      "result": "PENDING",
+      "scenario_results": {}
+    }
+  ],
+  "notes": "Do not include credentials, tokens, personal data or sensitive operational payloads. A row may be PASS only when all mandatory scenarios applicable to it are PASS."
+}
