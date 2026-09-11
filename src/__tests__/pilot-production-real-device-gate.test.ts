@@ -7,12 +7,24 @@ const wranglerPath = resolve(root, 'worker-airtrust/wrangler.toml');
 const evidencePath = resolve(root, 'docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json');
 const wrangler = readFileSync(wranglerPath, 'utf8');
 
-function productionVars(): string {
+function environmentVars(environment: 'staging' | 'production'): string {
   const match = wrangler.match(
-    /\[env\.production\.vars\]([\s\S]*?)(?=\n\[\[env\.production\.|\n\[env\.production\.|$)/,
+    new RegExp(
+      `\\[env\\.${environment}\\.vars\\]([\\s\\S]*?)(?=\\n\\[\\[env\\.${environment}\\.|\\n\\[env\\.${environment}\\.|$)`,
+    ),
   );
-  if (!match) throw new Error('env.production.vars ausente em worker-airtrust/wrangler.toml');
+  if (!match) {
+    throw new Error(`env.${environment}.vars ausente em worker-airtrust/wrangler.toml`);
+  }
   return match[1];
+}
+
+function productionVars(): string {
+  return environmentVars('production');
+}
+
+function stagingVars(): string {
+  return environmentVars('staging');
 }
 
 function isProductionPilotSyncEnabled(): boolean {
@@ -43,6 +55,25 @@ const requiredRows = [
 ] as const;
 
 describe('Pilot production real-device gate', () => {
+  it('mantem a configuracao Pilot de staging versionada sem promover segredo e preserva producao fail-closed', () => {
+    const staging = stagingVars();
+    const production = productionVars();
+
+    expect(staging).toMatch(
+      /^PILOT_OFFLINE_LEASE_KEY_ID\s*=\s*"pilot-staging-20260910-01"\s*$/m,
+    );
+    expect(staging).toMatch(/^PILOT_OFFLINE_LEASE_TTL_MINUTES\s*=\s*"720"\s*$/m);
+    expect(staging).toMatch(/^PILOT_OFFLINE_SYNC_ENABLED\s*=\s*"true"\s*$/m);
+
+    expect(production).toMatch(
+      /^PILOT_OFFLINE_LEASE_KEY_ID\s*=\s*"pilot-production-20260910-02"\s*$/m,
+    );
+    expect(production).toMatch(/^PILOT_OFFLINE_LEASE_TTL_MINUTES\s*=\s*"720"\s*$/m);
+    expect(production).toMatch(/^PILOT_OFFLINE_SYNC_ENABLED\s*=\s*"false"\s*$/m);
+
+    expect(wrangler).not.toMatch(/^PILOT_OFFLINE_LEASE_PRIVATE_KEY_JWK\s*=/m);
+  });
+
   it('mantem sync de producao fail-closed ate existir evidencia real completa da #580', () => {
     if (!isProductionPilotSyncEnabled()) {
       expect(isProductionPilotSyncEnabled()).toBe(false);
