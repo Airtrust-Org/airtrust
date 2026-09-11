@@ -172,7 +172,7 @@ jobs:
         run: |
           node --check scripts/staging/provision-controle-voos-e2e-fixtures.mjs
           node --check scripts/staging/smoke-controle-voos-catalogs.mjs
-          node --check scripts/staging/cleanup-controle-voos-e2e-fixtures.mjs
+          node --check scripts/staging/cleanup-controle-voos-e2e-fixtures-v2.mjs
 
       - name: Provision disposable two-tenant fixtures
         env:
@@ -248,7 +248,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -n "${CV_CATALOG_MANIFEST:-}" && -s "${CV_CATALOG_MANIFEST:-}" ]]; then
-            node scripts/staging/cleanup-controle-voos-e2e-fixtures.mjs "$CV_CATALOG_MANIFEST" --apply
+            node scripts/staging/cleanup-controle-voos-e2e-fixtures-v2.mjs "$CV_CATALOG_MANIFEST" --apply
           else
             echo "No fixture manifest exists; nothing to clean."
           fi
