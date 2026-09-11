@@ -7,7 +7,7 @@ const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8'
 const workflow = read('.github/workflows/staging-controle-voos-catalog-validation.yml');
 const smoke = read('scripts/staging/smoke-controle-voos-catalogs.mjs');
 const provision = read('scripts/staging/provision-controle-voos-e2e-fixtures.mjs');
-const cleanup = read('scripts/staging/cleanup-controle-voos-e2e-fixtures.mjs');
+const cleanup = read('scripts/staging/cleanup-controle-voos-e2e-fixtures-v2.mjs');
 
 describe('staging Controle de Voos operational catalog validation', () => {
   it('is explicit workflow_dispatch, staging-only and release-gated', () => {
@@ -24,12 +24,13 @@ describe('staging Controle de Voos operational catalog validation', () => {
     expect(workflow).not.toContain('run_migrations');
   });
 
-  it('uses disposable two-tenant fixtures and always cleans them up', () => {
+  it('uses disposable two-tenant fixtures and the schema-safe V2 cleanup path', () => {
     expect(workflow).toContain('provision-controle-voos-e2e-fixtures.mjs --apply');
     expect(workflow).toContain('smoke-controle-voos-catalogs.mjs');
     expect(workflow).toContain('Cleanup disposable fixtures');
     expect(workflow).toContain('if: ${{ always() }}');
-    expect(workflow).toContain('cleanup-controle-voos-e2e-fixtures.mjs');
+    expect(workflow).toContain('cleanup-controle-voos-e2e-fixtures-v2.mjs');
+    expect(workflow).not.toContain('node scripts/staging/cleanup-controle-voos-e2e-fixtures.mjs');
     expect(workflow).toContain('CLOUDFLARE_D1_MIGRATION_API_TOKEN');
     expect(provision).toContain("role: 'manager'");
     expect(provision).toContain("role: 'viewer'");
@@ -38,6 +39,9 @@ describe('staging Controle de Voos operational catalog validation', () => {
     expect(cleanup).toContain('cv_tipos_voo');
     expect(cleanup).toContain('cv_naturezas_voo');
     expect(cleanup).toContain('cv_motivos_operacionais');
+    expect(cleanup).toMatch(/DELETE FROM auditoria WHERE usuario_id IN/);
+    expect(cleanup).not.toMatch(/DELETE FROM auditoria WHERE[^;]*empresa_id/s);
+    expect(cleanup).toContain('CLEANUP_POSTCONDITION_FAILED');
   });
 
   it('covers all four operational catalogs and their required live invariants', () => {
