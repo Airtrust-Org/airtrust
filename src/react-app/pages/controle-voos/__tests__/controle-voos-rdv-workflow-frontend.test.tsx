@@ -24,6 +24,9 @@ vi.mock('../components/ControleVoosPageHeader', () => ({
     </header>
   ),
 }));
+vi.mock('../components/ControleVoosNovoVooDialog', () => ({
+  default: () => null,
+}));
 
 vi.mock('@/react-app/services/apiClient', () => ({
   apiClient: {

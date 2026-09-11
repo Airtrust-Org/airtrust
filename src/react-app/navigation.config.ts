@@ -225,7 +225,7 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
           title: 'Tela em preview - nao usar como fonte operacional',
         },
         { id: 'controle_voos-relatorios', label: 'Relatórios', path: '/controle-voos/relatorios' },
-        { id: 'controle_voos-tabelas', label: 'Tabelas', path: '/controle-voos/tabelas' },
+        { id: 'controle_voos-tabelas', label: 'Cadastros Operacionais', path: '/controle-voos/tabelas' },
       ],
     },
   ],

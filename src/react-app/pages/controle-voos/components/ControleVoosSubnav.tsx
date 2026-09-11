@@ -17,7 +17,7 @@ export const CONTROLE_VOOS_NAV_LINKS: ControleVoosNavLink[] = [
   { to: '/controle-voos/indisponibilidades', label: 'Indisponibilidades', preview: true },
   { to: '/controle-voos/hangaragem', label: 'Hangaragem', preview: true },
   { to: '/controle-voos/relatorios', label: 'Relatórios' },
-  { to: '/controle-voos/tabelas', label: 'Tabelas' },
+  { to: '/controle-voos/tabelas', label: 'Cadastros Operacionais' },
 ];
 
 export const PREVIEW_BADGE_TITLE = 'Tela em preview - nao usar como fonte operacional';
@@ -106,4 +106,3 @@ export default function ControleVoosSubnav() {
     </div>
   );
 }
-

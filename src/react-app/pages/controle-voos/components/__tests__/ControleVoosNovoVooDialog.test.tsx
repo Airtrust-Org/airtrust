@@ -1,10 +1,12 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ControleVoosNovoVooDialog from '../ControleVoosNovoVooDialog';
 
-const { getMock, postMock } = vi.hoisted(() => ({
+const { getMock, postMock, permissionsMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
   postMock: vi.fn(),
+  permissionsMock: vi.fn(),
 }));
 
 vi.mock('@/react-app/services/apiClient', () => ({
@@ -14,51 +16,71 @@ vi.mock('@/react-app/services/apiClient', () => ({
   },
 }));
 
+vi.mock('@/react-app/hooks/usePermissions', () => ({
+  usePermissions: () => permissionsMock(),
+}));
+
 const aeroportos = [
   { id: 1, codigo: 'SBSP', codigo_icao: 'SBSP', nome: 'Congonhas' },
   { id: 2, codigo: 'SBRJ', codigo_icao: 'SBRJ', nome: 'Santos Dumont' },
 ];
 const tipos = [{ id: 10, nome: 'Táxi aéreo' }];
 const naturezas = [{ id: 20, nome: 'Transporte' }];
+const aeronaves = [{ id: 30, codigo: 'PR-ABC', prefixo: 'PR-ABC', modelo: 'AW139', status: 'ATIVA' }];
 
 function mockCatalogos() {
   getMock
     .mockResolvedValueOnce({ success: true, data: aeroportos })
     .mockResolvedValueOnce({ success: true, data: { data: tipos } })
-    .mockResolvedValueOnce({ success: true, data: naturezas });
+    .mockResolvedValueOnce({ success: true, data: naturezas })
+    .mockResolvedValueOnce({ success: true, data: aeronaves });
 }
 
 function renderDialog(mode: 'coordenacao' | 'pilot' = 'pilot', open = true) {
   const onClose = vi.fn();
   const onCreated = vi.fn();
   render(
-    <ControleVoosNovoVooDialog
-      open={open}
-      mode={mode}
-      onClose={onClose}
-      onCreated={onCreated}
-    />,
+    <MemoryRouter>
+      <ControleVoosNovoVooDialog
+        open={open}
+        mode={mode}
+        onClose={onClose}
+        onCreated={onCreated}
+      />
+    </MemoryRouter>,
   );
   return { onClose, onCreated };
 }
 
+const aeronaveSelect = () => screen.getByLabelText(/Aeronave \/ Prefixo/);
+const origemSelect = () => screen.getByLabelText(/^Origem/);
+const destinoSelect = () => screen.getByLabelText(/^Destino/);
+const tipoSelect = () => screen.getByLabelText(/^Tipo de voo/);
+const naturezaSelect = () => screen.getByLabelText(/^Natureza/);
+
 async function waitForAirportCatalog() {
-  const origem = screen.getByLabelText('Origem');
+  const origem = origemSelect();
   await waitFor(() => expect(within(origem).getByRole('option', { name: /SBSP/ })).toBeInTheDocument());
+  await waitFor(() =>
+    expect(within(aeronaveSelect()).getByRole('option', { name: /PR-ABC/ })).toBeInTheDocument(),
+  );
 }
 
 async function fillRequiredFields() {
   await waitForAirportCatalog();
-  fireEvent.change(screen.getByLabelText('Prefixo'), { target: { value: 'pr-abc' } });
-  fireEvent.change(screen.getByLabelText('Origem'), { target: { value: '1' } });
-  fireEvent.change(screen.getByLabelText('Destino'), { target: { value: '2' } });
-  fireEvent.change(screen.getByLabelText('Tipo de voo'), { target: { value: '10' } });
-  fireEvent.change(screen.getByLabelText('Natureza'), { target: { value: '20' } });
+  fireEvent.change(aeronaveSelect(), { target: { value: '30' } });
+  fireEvent.change(origemSelect(), { target: { value: '1' } });
+  fireEvent.change(destinoSelect(), { target: { value: '2' } });
+  fireEvent.change(tipoSelect(), { target: { value: '10' } });
+  fireEvent.change(naturezaSelect(), { target: { value: '20' } });
 }
 
 describe('ControleVoosNovoVooDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getMock.mockReset();
+    postMock.mockReset();
+    permissionsMock.mockReturnValue({ isAdmin: true, isGestor: false });
   });
 
   it('não renderiza nem carrega catálogos quando fechado', () => {
@@ -67,13 +89,14 @@ describe('ControleVoosNovoVooDialog', () => {
     expect(getMock).not.toHaveBeenCalled();
   });
 
-  it('carrega catálogos e fecha pelo botão de fechar', async () => {
+  it('carrega catálogos e frota canônica e fecha pelo botão de fechar', async () => {
     mockCatalogos();
     const { onClose } = renderDialog('pilot');
 
-    expect(screen.getByText('Carregando catálogos…')).toBeInTheDocument();
+    expect(screen.getByText('Carregando cadastros operacionais…')).toBeInTheDocument();
     await waitForAirportCatalog();
-    expect(getMock).toHaveBeenCalledTimes(3);
+    expect(getMock).toHaveBeenCalledTimes(4);
+    expect(getMock).toHaveBeenNthCalledWith(4, '/aeronaves?somente_ativas=1');
 
     fireEvent.click(screen.getByRole('button', { name: 'Fechar' }));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -92,11 +115,9 @@ describe('ControleVoosNovoVooDialog', () => {
     renderDialog('pilot');
     await waitForAirportCatalog();
 
-    const prefixo = screen.getByLabelText('Prefixo');
-    fireEvent.change(prefixo, { target: { value: 'PR-ABC' } });
-    fireEvent.submit(prefixo.closest('form')!);
+    fireEvent.submit(aeronaveSelect().closest('form')!);
 
-    expect(await screen.findByText('Preencha prefixo, origem, destino, tipo e natureza do voo.')).toBeInTheDocument();
+    expect(await screen.findByText('Selecione aeronave, origem, destino, tipo e natureza do voo.')).toBeInTheDocument();
     expect(postMock).not.toHaveBeenCalled();
   });
 
@@ -105,18 +126,18 @@ describe('ControleVoosNovoVooDialog', () => {
     renderDialog('pilot');
     await waitForAirportCatalog();
 
-    fireEvent.change(screen.getByLabelText('Prefixo'), { target: { value: 'PR-ABC' } });
-    fireEvent.change(screen.getByLabelText('Origem'), { target: { value: '1' } });
-    fireEvent.change(screen.getByLabelText('Destino'), { target: { value: '1' } });
-    fireEvent.change(screen.getByLabelText('Tipo de voo'), { target: { value: '10' } });
-    fireEvent.change(screen.getByLabelText('Natureza'), { target: { value: '20' } });
-    fireEvent.submit(screen.getByLabelText('Prefixo').closest('form')!);
+    fireEvent.change(aeronaveSelect(), { target: { value: '30' } });
+    fireEvent.change(origemSelect(), { target: { value: '1' } });
+    fireEvent.change(destinoSelect(), { target: { value: '1' } });
+    fireEvent.change(tipoSelect(), { target: { value: '10' } });
+    fireEvent.change(naturezaSelect(), { target: { value: '20' } });
+    fireEvent.submit(aeronaveSelect().closest('form')!);
 
     expect(await screen.findByText('Origem e destino devem ser diferentes.')).toBeInTheDocument();
     expect(postMock).not.toHaveBeenCalled();
   });
 
-  it('cria voo self-service com função do piloto, normaliza prefixo e fecha', async () => {
+  it('cria voo self-service com aeronave canônica, função do piloto e fecha', async () => {
     mockCatalogos();
     const created = { id: 77, prefixo: 'PR-ABC', data_programacao: '2026-09-10' };
     postMock.mockResolvedValue({ success: true, data: created });
@@ -131,6 +152,7 @@ describe('ControleVoosNovoVooDialog', () => {
     const [endpoint, body] = postMock.mock.calls[0];
     expect(endpoint).toBe('/controle-voos/voos/meus/criar');
     expect(body).toMatchObject({
+      aeronave_id: 30,
       prefixo: 'PR-ABC',
       origem_id: 1,
       destino_id: 2,
@@ -147,7 +169,7 @@ describe('ControleVoosNovoVooDialog', () => {
 
   it('cria voo da Coordenação sem enviar função de tripulante', async () => {
     mockCatalogos();
-    const created = { id: 88, prefixo: 'PR-XYZ', data_programacao: '2026-09-10' };
+    const created = { id: 88, prefixo: 'PR-ABC', data_programacao: '2026-09-10' };
     postMock.mockResolvedValue({ success: true, data: { data: created } });
     const { onCreated } = renderDialog('coordenacao');
 
@@ -158,6 +180,7 @@ describe('ControleVoosNovoVooDialog', () => {
     await waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
     const [endpoint, body] = postMock.mock.calls[0];
     expect(endpoint).toBe('/controle-voos/voos');
+    expect(body).toMatchObject({ aeronave_id: 30, prefixo: 'PR-ABC' });
     expect(body).not.toHaveProperty('funcao');
     expect(onCreated).toHaveBeenCalledWith(created);
   });
