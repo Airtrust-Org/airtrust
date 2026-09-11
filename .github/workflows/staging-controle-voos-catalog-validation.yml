@@ -1,0 +1,287 @@
+name: Staging Controle de Voos Catalog Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_STAGING_CV_CATALOGS to continue'
+        required: true
+        type: string
+      pr_number:
+        description: 'Reviewed same-repository PR anchoring the exact staging release SHA'
+        required: true
+        type: string
+      release_sha:
+        description: 'Exact 40-character SHA already deployed to staging'
+        required: true
+        type: string
+      release_reason:
+        description: 'Why the operational catalog validation is being executed'
+        required: true
+        type: string
+
+concurrency:
+  group: staging-controle-voos-catalog-validation
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+env:
+  NODE_VERSION: '24'
+  EXPECTED_CONFIRMATION: AIRTRUST_STAGING_CV_CATALOGS
+  ALLOWED_STAGING_DB_NAME: airtrust-db-staging-baseline-20260701
+  STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+  STAGING_VERSION_URL: https://airtrust-api-staging.airtrust.workers.dev/api/version
+
+jobs:
+  guard:
+    name: Staging Catalog Validation Guard
+    runs-on: ubuntu-latest
+    outputs:
+      release_sha: ${{ steps.release.outputs.release_sha }}
+    steps:
+      - name: Validate dispatch inputs and reviewed release provenance
+        shell: bash
+        env:
+          GIT_REF: ${{ github.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_REASON: ${{ inputs.release_reason }}
+        run: |
+          set -euo pipefail
+          [[ "$GIT_REF" == "refs/heads/main" ]] || { echo "Validation only runs from main." >&2; exit 1; }
+          [[ "$CONFIRMATION" == "$EXPECTED_CONFIRMATION" ]] || { echo "Invalid confirmation." >&2; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "release_sha must be 40 hex chars." >&2; exit 1; }
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "pr_number must be positive." >&2; exit 1; }
+          [[ -n "$RELEASE_REASON" ]] || { echo "release_reason required." >&2; exit 1; }
+
+          export RELEASE_SHA="${RELEASE_SHA,,}" PR_NUMBER GITHUB_REPOSITORY GITHUB_ACTOR
+          node <<'NODE'
+          (async () => {
+            const headers = {
+              authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+              accept: 'application/vnd.github+json',
+              'x-github-api-version': '2022-11-28',
+            };
+            const repo = process.env.GITHUB_REPOSITORY;
+            const releaseSha = process.env.RELEASE_SHA;
+            async function get(path) {
+              const response = await fetch(`https://api.github.com${path}`, { headers });
+              if (!response.ok) throw new Error(`${path}:${response.status}`);
+              return response.json();
+            }
+            const pr = await get(`/repos/${repo}/pulls/${process.env.PR_NUMBER}`);
+            if (pr.base?.ref !== 'main') throw new Error('PR_BASE_NOT_MAIN');
+            if (pr.head?.repo?.full_name !== repo || pr.head?.repo?.fork) throw new Error('PR_FROM_FORK_REJECTED');
+            if (pr.state === 'open') {
+              if (pr.head?.sha?.toLowerCase() !== releaseSha) throw new Error('OPEN_PR_HEAD_MISMATCH');
+            } else if (pr.merged === true) {
+              if (pr.merge_commit_sha?.toLowerCase() !== releaseSha) throw new Error('MERGED_PR_SHA_MISMATCH');
+              const main = await get(`/repos/${repo}/git/ref/heads/main`);
+              if (main.object?.sha?.toLowerCase() !== releaseSha) throw new Error('RELEASE_SHA_NOT_CURRENT_MAIN');
+            } else {
+              throw new Error('PR_NOT_OPEN_OR_MERGED');
+            }
+            const permission = await get(`/repos/${repo}/collaborators/${process.env.GITHUB_ACTOR}/permission`);
+            if (!['write', 'push', 'maintain', 'admin'].includes(permission.permission)) {
+              throw new Error('ACTOR_PERMISSION_INSUFFICIENT');
+            }
+          })().catch((error) => {
+            console.error(error.message);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Checkout trusted pipeline
+        uses: actions/checkout@v7
+
+      - name: Verify official release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Require staging Worker provenance to match release SHA
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error --retry 3 --retry-all-errors "$STAGING_VERSION_URL")"
+          node - "$response" "${RELEASE_SHA,,}" <<'NODE'
+          const payload = JSON.parse(process.argv[2]);
+          const expected = process.argv[3];
+          const body = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
+          if (String(body?.environment ?? '').toLowerCase() !== 'staging') throw new Error('STAGING_ENVIRONMENT_MISMATCH');
+          const actual = String(body?.sourceSha ?? body?.source_sha ?? '').toLowerCase();
+          if (actual !== expected) throw new Error(`STAGING_SOURCE_SHA_MISMATCH:${actual}`);
+          NODE
+
+      - id: release
+        name: Publish validated release SHA
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: echo "release_sha=${RELEASE_SHA,,}" >> "$GITHUB_OUTPUT"
+
+  d1-credentials:
+    name: Check Staging D1 Fixture Credentials
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Require staging-only D1 credential
+        shell: bash
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$TOKEN" && -n "$ACCOUNT_ID" ]]
+
+  functional:
+    name: D1 Operational Catalog RBAC and Tenant Smoke
+    needs: [guard, d1-credentials]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout exact release
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.release_sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix worker-airtrust ci
+
+      - name: Validate smoke scripts before any fixture write
+        run: |
+          node --check scripts/staging/provision-controle-voos-e2e-fixtures.mjs
+          node --check scripts/staging/smoke-controle-voos-catalogs.mjs
+          node --check scripts/staging/cleanup-controle-voos-e2e-fixtures.mjs
+
+      - name: Provision disposable two-tenant fixtures
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+        run: |
+          set -euo pipefail
+          manifest="$(node scripts/staging/provision-controle-voos-e2e-fixtures.mjs --apply)"
+          [[ -n "$manifest" && -s "$manifest" ]]
+          chmod 600 "$manifest"
+          echo "CV_CATALOG_MANIFEST=$manifest" >> "$GITHUB_ENV"
+
+      - id: smoke
+        name: Run operational catalog API smoke
+        env:
+          STAGING_API_BASE_URL: ${{ env.STAGING_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cv-catalog-evidence"
+          set +e
+          report="$(node scripts/staging/smoke-controle-voos-catalogs.mjs "$CV_CATALOG_MANIFEST")"
+          status=$?
+          set -e
+          if [[ -n "$report" && -s "$report" ]]; then
+            cp "$report" "$RUNNER_TEMP/cv-catalog-evidence/report.json"
+            chmod 600 "$RUNNER_TEMP/cv-catalog-evidence/report.json"
+            echo "CV_CATALOG_REPORT=$RUNNER_TEMP/cv-catalog-evidence/report.json" >> "$GITHUB_ENV"
+          fi
+          exit "$status"
+
+      - name: Require all catalog, RBAC, inactivation and tenant checks
+        if: ${{ steps.smoke.outcome == 'success' }}
+        run: |
+          node - "$CV_CATALOG_REPORT" <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (report.ranFully !== true || Number(report.failed) !== 0) throw new Error('CATALOG_SMOKE_NOT_GREEN');
+          const catalogs = ['aeroportos', 'tipos', 'naturezas', 'motivos'];
+          const suffixes = [
+            'viewer_create_403',
+            'manager_create',
+            'created_id',
+            'duplicate_code_409',
+            'cross_tenant_patch_404',
+            'manager_patch',
+            'viewer_read_active',
+            'active_visible_after_update',
+            'tenant_b_read',
+            'tenant_b_does_not_see_tenant_a',
+            'manager_inactivate',
+            'read_active_after_inactivate',
+            'inactive_excluded_from_active',
+            'read_inactive_after_inactivate',
+            'inactive_preserved',
+          ];
+          for (const catalog of catalogs) {
+            for (const suffix of suffixes) {
+              const operation = `${catalog}:${suffix}`;
+              const row = report.operations?.find((entry) => entry.operation === operation);
+              if (!row || row.result !== 'PASS') throw new Error(`MISSING_GREEN_OPERATION:${operation}`);
+            }
+          }
+          console.log(`CONTROLE_VOOS_CATALOG_STAGING_EVIDENCE=PASS:${catalogs.length * suffixes.length}`);
+          NODE
+
+      - name: Cleanup disposable fixtures
+        if: ${{ always() }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${CV_CATALOG_MANIFEST:-}" && -s "${CV_CATALOG_MANIFEST:-}" ]]; then
+            node scripts/staging/cleanup-controle-voos-e2e-fixtures.mjs "$CV_CATALOG_MANIFEST" --apply
+          else
+            echo "No fixture manifest exists; nothing to clean."
+          fi
+
+      - name: Upload sanitized validation evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: controle-voos-catalog-staging-evidence
+          path: ${{ runner.temp }}/cv-catalog-evidence/report.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  summary:
+    name: Controle de Voos Catalog Validation Passed
+    needs: [guard, d1-credentials, functional]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record and enforce outcome
+        env:
+          RELEASE_SHA: ${{ needs.guard.outputs.release_sha }}
+          CREDENTIALS: ${{ needs.d1-credentials.result }}
+          FUNCTIONAL: ${{ needs.functional.result }}
+          REASON: ${{ inputs.release_reason }}
+        run: |
+          {
+            echo "## Controle de Voos staging catalog validation"
+            echo "- release_sha: \`$RELEASE_SHA\`"
+            echo "- staging D1 fixture credentials: $CREDENTIALS"
+            echo "- operational catalogs/RBAC/tenant smoke: $FUNCTIONAL"
+            echo "- migrations applied: no"
+            echo "- production touched: no"
+            echo "- reason: $REASON"
+          } >> "$GITHUB_STEP_SUMMARY"
+          [[ "$CREDENTIALS" == "success" && "$FUNCTIONAL" == "success" ]]
