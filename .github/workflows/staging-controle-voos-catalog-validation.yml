@@ -148,7 +148,7 @@ jobs:
           [[ -n "$TOKEN" && -n "$ACCOUNT_ID" ]]
 
   functional:
-    name: Operational Catalog RBAC and Tenant Smoke
+    name: D1 Operational Catalog RBAC and Tenant Smoke
     needs: [guard, d1-credentials]
     runs-on: ubuntu-latest
     environment: staging
