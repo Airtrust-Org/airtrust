@@ -52,21 +52,27 @@ function renderDialog(mode: 'coordenacao' | 'pilot' = 'pilot', open = true) {
   return { onClose, onCreated };
 }
 
+const aeronaveSelect = () => screen.getByLabelText(/Aeronave \/ Prefixo/);
+const origemSelect = () => screen.getByLabelText(/^Origem/);
+const destinoSelect = () => screen.getByLabelText(/^Destino/);
+const tipoSelect = () => screen.getByLabelText(/^Tipo de voo/);
+const naturezaSelect = () => screen.getByLabelText(/^Natureza/);
+
 async function waitForAirportCatalog() {
-  const origem = screen.getByLabelText('Origem');
+  const origem = origemSelect();
   await waitFor(() => expect(within(origem).getByRole('option', { name: /SBSP/ })).toBeInTheDocument());
   await waitFor(() =>
-    expect(within(screen.getByLabelText('Aeronave / Prefixo')).getByRole('option', { name: /PR-ABC/ })).toBeInTheDocument(),
+    expect(within(aeronaveSelect()).getByRole('option', { name: /PR-ABC/ })).toBeInTheDocument(),
   );
 }
 
 async function fillRequiredFields() {
   await waitForAirportCatalog();
-  fireEvent.change(screen.getByLabelText('Aeronave / Prefixo'), { target: { value: '30' } });
-  fireEvent.change(screen.getByLabelText('Origem'), { target: { value: '1' } });
-  fireEvent.change(screen.getByLabelText('Destino'), { target: { value: '2' } });
-  fireEvent.change(screen.getByLabelText('Tipo de voo'), { target: { value: '10' } });
-  fireEvent.change(screen.getByLabelText('Natureza'), { target: { value: '20' } });
+  fireEvent.change(aeronaveSelect(), { target: { value: '30' } });
+  fireEvent.change(origemSelect(), { target: { value: '1' } });
+  fireEvent.change(destinoSelect(), { target: { value: '2' } });
+  fireEvent.change(tipoSelect(), { target: { value: '10' } });
+  fireEvent.change(naturezaSelect(), { target: { value: '20' } });
 }
 
 describe('ControleVoosNovoVooDialog', () => {
@@ -109,8 +115,7 @@ describe('ControleVoosNovoVooDialog', () => {
     renderDialog('pilot');
     await waitForAirportCatalog();
 
-    const aeronave = screen.getByLabelText('Aeronave / Prefixo');
-    fireEvent.submit(aeronave.closest('form')!);
+    fireEvent.submit(aeronaveSelect().closest('form')!);
 
     expect(await screen.findByText('Selecione aeronave, origem, destino, tipo e natureza do voo.')).toBeInTheDocument();
     expect(postMock).not.toHaveBeenCalled();
@@ -121,12 +126,12 @@ describe('ControleVoosNovoVooDialog', () => {
     renderDialog('pilot');
     await waitForAirportCatalog();
 
-    fireEvent.change(screen.getByLabelText('Aeronave / Prefixo'), { target: { value: '30' } });
-    fireEvent.change(screen.getByLabelText('Origem'), { target: { value: '1' } });
-    fireEvent.change(screen.getByLabelText('Destino'), { target: { value: '1' } });
-    fireEvent.change(screen.getByLabelText('Tipo de voo'), { target: { value: '10' } });
-    fireEvent.change(screen.getByLabelText('Natureza'), { target: { value: '20' } });
-    fireEvent.submit(screen.getByLabelText('Aeronave / Prefixo').closest('form')!);
+    fireEvent.change(aeronaveSelect(), { target: { value: '30' } });
+    fireEvent.change(origemSelect(), { target: { value: '1' } });
+    fireEvent.change(destinoSelect(), { target: { value: '1' } });
+    fireEvent.change(tipoSelect(), { target: { value: '10' } });
+    fireEvent.change(naturezaSelect(), { target: { value: '20' } });
+    fireEvent.submit(aeronaveSelect().closest('form')!);
 
     expect(await screen.findByText('Origem e destino devem ser diferentes.')).toBeInTheDocument();
     expect(postMock).not.toHaveBeenCalled();
