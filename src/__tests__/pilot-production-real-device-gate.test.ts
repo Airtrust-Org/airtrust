@@ -55,7 +55,7 @@ const requiredRows = [
 ] as const;
 
 describe('Pilot production real-device gate', () => {
-  it('mantem a configuracao Pilot de staging versionada sem promover segredo e preserva producao fail-closed', () => {
+  it('mantem a configuracao Pilot versionada e permite ativacao de producao somente com o gate de evidencia', () => {
     const staging = stagingVars();
     const production = productionVars();
 
@@ -69,7 +69,7 @@ describe('Pilot production real-device gate', () => {
       /^PILOT_OFFLINE_LEASE_KEY_ID\s*=\s*"pilot-production-20260910-02"\s*$/m,
     );
     expect(production).toMatch(/^PILOT_OFFLINE_LEASE_TTL_MINUTES\s*=\s*"720"\s*$/m);
-    expect(production).toMatch(/^PILOT_OFFLINE_SYNC_ENABLED\s*=\s*"false"\s*$/m);
+    expect(production).toMatch(/^PILOT_OFFLINE_SYNC_ENABLED\s*=\s*"true"\s*$/m);
 
     expect(wrangler).not.toMatch(/^PILOT_OFFLINE_LEASE_PRIVATE_KEY_JWK\s*=/m);
   });
