@@ -292,15 +292,32 @@ async function main() {
   assert(caeReceived.status === 200, `CAE_RECEBIDA retornou ${caeReceived.status}`);
   assert(caeReceived.json?.data?.workflow_status === 'CAE_RECEBIDA', 'status CAE_RECEBIDA não persistiu');
 
-  const pairingBlocks = proposalPairingBlocks(manualProposal);
+  // Segunda retomada real: a comparação CAE deve partir exclusivamente do snapshot
+  // persistido, não de objetos mantidos em memória antes de CAE_RECEBIDA.
+  const resumedWithCae = await authFetch(
+    baseUrl,
+    token,
+    `/api/simuladores/planejamento-v2/rascunhos/${encodeURIComponent(draftId)}`,
+  );
+  assert(resumedWithCae.status === 200, `retomada pós-CAE retornou ${resumedWithCae.status}`);
+  assert(resumedWithCae.json?.data?.workflow_status === 'CAE_RECEBIDA', 'retomada pós-CAE perdeu status');
+  assert(resumedWithCae.json?.data?.cae_document?.slots?.length === 1, 'retomada pós-CAE perdeu disponibilidade');
+  assert(resumedWithCae.json?.data?.proposal?.qa_marker === MARKER, 'retomada pós-CAE perdeu proposta persistida');
+
+  const persistedProposal = resumedWithCae.json.data.proposal;
+  const persistedNeeds = Array.isArray(resumedWithCae.json?.data?.base_needs)
+    ? resumedWithCae.json.data.base_needs
+    : [];
+  assert(persistedNeeds.length === needs.length, 'retomada pós-CAE perdeu necessidades-base persistidas');
+  const pairingBlocks = proposalPairingBlocks(persistedProposal);
   const pairingBeforeCae = pairingSignature(pairingBlocks);
   const compared = await authFetch(baseUrl, token, '/api/simuladores/planejamento-v2/comparar-cae', {
     method: 'POST',
     body: JSON.stringify({
       reference_date: referenceDate,
-      session_needs: needs,
+      session_needs: persistedNeeds,
       pairing_blocks: pairingBlocks,
-      cae_availability: caeDocument,
+      cae_availability: resumedWithCae.json.data.cae_document,
     }),
   });
   assert(compared.status === 200, `comparação CAE retornou ${compared.status}`);
@@ -363,6 +380,17 @@ async function main() {
   assert(reopenedFinal.json?.data?.workflow_status === finalStatus, 'reabertura final perdeu status');
   assert(reopenedFinal.json?.data?.locks?.length === 1, 'reabertura final perdeu lock manual');
   assert(reopenedFinal.json?.data?.cae_document?.slots?.length === 1, 'reabertura final perdeu CAE');
+  const persistedFinalPairing = pairingSignature(
+    proposalPairingBlocks(reopenedFinal.json?.data?.proposal || {}),
+  );
+  assert(
+    JSON.stringify(persistedFinalPairing) === JSON.stringify(pairingBeforeCae),
+    'reabertura final não preservou exatamente a dupla/singleton comparada com CAE',
+  );
+  assert(
+    Number(reopenedFinal.json?.data?.proposal?.cae_comparison?.unmatched_crew_blocks || 0) === 1,
+    'reabertura final perdeu evidência do singleton sem dupla',
+  );
 
   const list = await authFetch(baseUrl, token, '/api/simuladores/planejamento-v2/rascunhos');
   assert(
@@ -412,9 +440,11 @@ async function main() {
     manual_pair_lock_persisted: true,
     resumed_before_cae: true,
     cae_received_persisted: true,
+    resumed_after_cae_before_compare: true,
     cae_compared: true,
     pairing_preserved_after_cae: true,
     singleton_preserved_after_cae: true,
+    final_pairing_persisted: true,
     final_status: finalStatus,
     reopened_final: true,
     list_contains_draft: true,

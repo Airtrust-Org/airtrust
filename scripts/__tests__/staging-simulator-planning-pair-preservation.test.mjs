@@ -14,6 +14,12 @@ test('staging simulator QA compares CAE against the persisted proposal pairing',
   assert.match(source, /const pairingAfterCae = pairingSignature/);
   assert.match(source, /comparação CAE alterou as duplas\/singles da proposta/);
   assert.match(source, /pairing_preserved_after_cae: true/);
+  assert.match(source, /const resumedWithCae = await authFetch/);
+  assert.match(source, /session_needs: persistedNeeds/);
+  assert.match(source, /cae_availability: resumedWithCae\.json\.data\.cae_document/);
+  assert.match(source, /reabertura final não preservou exatamente a dupla\/singleton comparada com CAE/);
+  assert.match(source, /resumed_after_cae_before_compare: true/);
+  assert.match(source, /final_pairing_persisted: true/);
   assert.match(source, /QA-PARTICIPANTE-CHARLIE/);
   assert.match(source, /reparear QA não preservou Charlie como singleton/);
   assert.match(source, /singleton_preserved_after_cae: true/);
@@ -25,6 +31,8 @@ test('staging simulator QA uses the dedicated compare-cae endpoint without regen
   assert.match(source, /\/api\/simuladores\/planejamento-v2\/comparar-cae/);
   assert.doesNotMatch(source, /generateProposal\(cae/i);
   assert.match(workflow, /Generate, persist, resume and reconcile CAE planning/);
+  assert.match(workflow, /persisted draft resumed again before CAE comparison: PASS/);
+  assert.match(workflow, /final reopened draft preserves compared pair\/single composition: PASS/);
 });
 
 test('staging simulator fixture provisions three needs so a pair and a singleton coexist', () => {
