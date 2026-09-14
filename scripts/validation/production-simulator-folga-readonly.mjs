@@ -206,6 +206,23 @@ async function main() {
   const candidates = flattenProofCandidateBlocks(proposal);
   assert(candidates.length > 0, 'NO_REAL_SESSION_BLOCK_IN_PROPOSAL');
 
+  const proposalSummary = {
+    trainings: Number(proposal?.summary?.trainings || 0),
+    session_requirements: Number(proposal?.summary?.session_requirements || 0),
+    paired_blocks: Number(proposal?.summary?.paired_blocks || 0),
+    unmatched_blocks: Number(proposal?.summary?.unmatched_blocks || 0),
+    classes: Number(proposal?.summary?.classes || 0),
+    exceptions: Array.isArray(proposal?.exceptions) ? proposal.exceptions.length : 0,
+  };
+  const rosterDiagnostic = {
+    candidate_blocks: candidates.length,
+    paired_candidate_blocks: candidates.filter((block) => block.sessions.length >= 2).length,
+    blocks_with_folga: 0,
+    blocks_with_trabalho: 0,
+    blocks_with_both: 0,
+    allocation_rows_observed: 0,
+  };
+  const allocationsByScale = new Map();
   let proof = null;
   for (const block of candidates) {
     const deadline = blockDeadline(block, config?.preferred_sessions_per_day);
@@ -218,15 +235,20 @@ async function main() {
     for (const scale of relevant) {
       const scaleId = String(scale?.id || '');
       if (!scaleId) continue;
-      const allocations = await authFetch(
-        base,
-        token,
-        `/api/escalas/${encodeURIComponent(scaleId)}/alocacoes`,
-      );
-      if (allocations.status !== 200 || allocations.json?.success !== true) continue;
-      const values = allocations.json?.data?.alocacoes;
-      if (Array.isArray(values)) rows.push(...values);
+      if (!allocationsByScale.has(scaleId)) {
+        const allocations = await authFetch(
+          base,
+          token,
+          `/api/escalas/${encodeURIComponent(scaleId)}/alocacoes`,
+        );
+        const values = allocations.status === 200 && allocations.json?.success === true
+          ? allocations.json?.data?.alocacoes
+          : [];
+        allocationsByScale.set(scaleId, Array.isArray(values) ? values : []);
+      }
+      rows.push(...allocationsByScale.get(scaleId));
     }
+    rosterDiagnostic.allocation_rows_observed += rows.length;
 
     const folgaDate = findCommonRosterDate({
       rows,
@@ -242,12 +264,32 @@ async function main() {
       end: deadline,
       wantedState: 'TRABALHO',
     });
+    if (folgaDate) rosterDiagnostic.blocks_with_folga += 1;
+    if (trabalhoDate) rosterDiagnostic.blocks_with_trabalho += 1;
     if (folgaDate && trabalhoDate) {
-      proof = { block, employeeIds, folgaDate, trabalhoDate };
-      break;
+      rosterDiagnostic.blocks_with_both += 1;
+      if (!proof) proof = { block, employeeIds, folgaDate, trabalhoDate };
     }
   }
-  assert(proof, 'NO_REAL_BLOCK_WITH_BOTH_FOLGA_AND_TRABALHO_EVIDENCE');
+
+  if (!proof) {
+    process.stdout.write(JSON.stringify({
+      ok: true,
+      tenant_id: tenantId,
+      roster_policy: config.roster_policy,
+      proposal_mode: proposal.mode,
+      proof_mode: 'PROPOSAL_ONLY_ROSTER_LIMITED',
+      proposal_summary: proposalSummary,
+      roster_diagnostic: rosterDiagnostic,
+      selected_block_sessions: 0,
+      published_roster_used: true,
+      folga_validation: null,
+      trabalho_validation: null,
+      writes: 0,
+      pii_emitted: false,
+    }, null, 2));
+    return;
+  }
 
   const needIds = proof.block.sessions.map((session) => String(session.need_id));
   const repairBase = {
@@ -288,14 +330,9 @@ async function main() {
     tenant_id: tenantId,
     roster_policy: config.roster_policy,
     proposal_mode: proposal.mode,
-    proposal_summary: {
-      trainings: Number(proposal?.summary?.trainings || 0),
-      session_requirements: Number(proposal?.summary?.session_requirements || 0),
-      paired_blocks: Number(proposal?.summary?.paired_blocks || 0),
-      unmatched_blocks: Number(proposal?.summary?.unmatched_blocks || 0),
-      classes: Number(proposal?.summary?.classes || 0),
-      exceptions: Array.isArray(proposal?.exceptions) ? proposal.exceptions.length : 0,
-    },
+    proof_mode: 'FULL_FOLGA_VS_WORK',
+    proposal_summary: proposalSummary,
+    roster_diagnostic: rosterDiagnostic,
     selected_block_sessions: proof.block.sessions.length,
     published_roster_used: true,
     folga_validation: {

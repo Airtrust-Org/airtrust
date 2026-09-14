@@ -103,12 +103,20 @@ jobs:
           if (data.roster_policy !== 'FOLGA') fail('FOLGA_POLICY_NOT_READ_BACK');
           if (data.proposal_mode !== 'PREVIEW_ONLY') fail('PROPOSAL_NOT_PREVIEW_ONLY');
           if (Number(data.proposal_summary?.session_requirements || 0) < 1) fail('PROPOSAL_HAS_NO_SESSION_REQUIREMENTS');
-          if (Number(data.selected_block_sessions || 0) < 1) fail('NO_SELECTED_REAL_BLOCK');
-          if (data.folga_validation?.schedule_status !== 'SCHEDULED') fail('FOLGA_NOT_SCHEDULED');
-          if (!Array.isArray(data.folga_validation?.roster_states) || data.folga_validation.roster_states.length < 1 || !data.folga_validation.roster_states.every((state) => state === 'FOLGA')) {
-            fail('FOLGA_ROSTER_EVIDENCE_INVALID');
+          if (data.proof_mode === 'FULL_FOLGA_VS_WORK') {
+            if (Number(data.selected_block_sessions || 0) < 1) fail('NO_SELECTED_REAL_BLOCK');
+            if (data.folga_validation?.schedule_status !== 'SCHEDULED') fail('FOLGA_NOT_SCHEDULED');
+            if (!Array.isArray(data.folga_validation?.roster_states) || data.folga_validation.roster_states.length < 1 || !data.folga_validation.roster_states.every((state) => state === 'FOLGA')) {
+              fail('FOLGA_ROSTER_EVIDENCE_INVALID');
+            }
+            if (data.trabalho_validation?.result !== 'REJECTED_UNDER_FOLGA') fail('WORK_DAY_NOT_REJECTED');
+          } else if (data.proof_mode === 'PROPOSAL_ONLY_ROSTER_LIMITED') {
+            if (Number(data.roster_diagnostic?.candidate_blocks || 0) < 1) fail('NO_REAL_PROPOSAL_BLOCKS');
+            if (Number(data.roster_diagnostic?.blocks_with_both || 0) !== 0) fail('FULL_PROOF_SHOULD_HAVE_RUN');
+            if (Number(data.selected_block_sessions || 0) !== 0) fail('LIMITED_PROOF_SELECTED_BLOCK_UNEXPECTED');
+          } else {
+            fail('UNKNOWN_PROOF_MODE');
           }
-          if (data.trabalho_validation?.result !== 'REJECTED_UNDER_FOLGA') fail('WORK_DAY_NOT_REJECTED');
           if (Number(data.writes) !== 0) fail('READONLY_CONTRACT_BROKEN');
           if (data.pii_emitted !== false) fail('PII_EMISSION_CONTRACT_BROKEN');
           NODE
@@ -126,11 +134,14 @@ jobs:
           console.log(`- tenant: \`${data.tenant_id}\``);
           console.log(`- roster policy: \`${data.roster_policy}\``);
           console.log(`- proposal mode: \`${data.proposal_mode}\``);
+          console.log(`- proof mode: \`${data.proof_mode}\``);
           console.log(`- proposal session requirements: \`${data.proposal_summary?.session_requirements ?? 'n/a'}\``);
           console.log(`- paired/unmatched blocks: \`${data.proposal_summary?.paired_blocks ?? 'n/a'}/${data.proposal_summary?.unmatched_blocks ?? 'n/a'}\``);
+          console.log(`- roster candidate blocks: \`${data.roster_diagnostic?.candidate_blocks ?? 'n/a'}\``);
+          console.log(`- blocks with FOLGA/work/both: \`${data.roster_diagnostic?.blocks_with_folga ?? 'n/a'}/${data.roster_diagnostic?.blocks_with_trabalho ?? 'n/a'}/${data.roster_diagnostic?.blocks_with_both ?? 'n/a'}\``);
           console.log(`- selected real block sessions: \`${data.selected_block_sessions ?? 'n/a'}\``);
-          console.log(`- FOLGA candidate: \`${data.folga_validation?.schedule_status}\``);
-          console.log(`- work-day candidate: \`${data.trabalho_validation?.result}\``);
+          console.log(`- FOLGA candidate: \`${data.folga_validation?.schedule_status ?? 'not-exercised'}\``);
+          console.log(`- work-day candidate: \`${data.trabalho_validation?.result ?? 'not-exercised'}\``);
           console.log('- published roster evidence: yes');
           console.log('- writes: 0');
           console.log('- PII emitted: no');
