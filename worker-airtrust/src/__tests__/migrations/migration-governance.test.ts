@@ -108,6 +108,7 @@ describe('migration governance', () => {
     // 0492 normalizes the canonical sector/function organization.
     // 0493 adds annual simulator curriculum cycles with a 2026=C2 rotation base.
     // 0494 adds tenant-scoped LMS enrollment reconciliation acknowledgements.
+    // A parallel feature was initially numbered 0494 and is renumbered to 0495 later in this branch.
     const expectedLatest = 494;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
@@ -134,7 +135,9 @@ describe('migration governance', () => {
     expect(localConfigured.length).toBeGreaterThan(0);
     expect(localConfigured.every((value) => value === './migrations')).toBe(true);
 
-    expect(readdirSync(productionDisabledMigrationsDir).filter((file) => file.endsWith('.sql'))).toEqual([]);
+    expect(
+      readdirSync(productionDisabledMigrationsDir).filter((file) => file.endsWith('.sql')),
+    ).toEqual([]);
     expect(remoteConfigured).not.toContain('./migrations_experimental');
   });
 

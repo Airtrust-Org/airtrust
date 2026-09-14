@@ -16,6 +16,10 @@ export type SimulatorTrainingSessionNeed = {
   session_order: number;
   duration_minutes: number;
   training_session_count: number;
+  curriculum_cycle?: number | null;
+  curriculum_reference_year?: number | null;
+  training_program_id?: number | null;
+  training_program_type?: string | null;
 };
 
 export type SimulatorTrainingSessionBlock = {
@@ -57,14 +61,14 @@ function roleKind(value: string | null): 'PIC' | 'SIC' | 'OTHER' {
 
 function daysDistance(left: string, right: string): number {
   return Math.abs(
-    Math.round(
-      (Date.parse(`${left}T00:00:00Z`) - Date.parse(`${right}T00:00:00Z`)) / 86_400_000,
-    ),
+    Math.round((Date.parse(`${left}T00:00:00Z`) - Date.parse(`${right}T00:00:00Z`)) / 86_400_000),
   );
 }
 
 function isRecurrentFlightTraining(session: SimulatorTrainingSessionNeed): boolean {
-  const identity = normalizeText(`${session.qualification_code || ''} ${session.qualification_name}`);
+  const identity = normalizeText(
+    `${session.qualification_code || ''} ${session.qualification_name}`,
+  );
   return (
     identity.includes('CURRICULO DE VOO') ||
     identity.includes('PERIODICO') ||
@@ -174,11 +178,14 @@ export function pairSimulatorTrainingSessions(
         return (
           (!crossTraining || allowCrossTraining) &&
           canShareSimulatorTrainingSessions(primary, partner) &&
-          daysDistance(primary.expiry_date, partner.expiry_date) <= Math.max(0, maxAnticipationDays) &&
+          daysDistance(primary.expiry_date, partner.expiry_date) <=
+            Math.max(0, maxAnticipationDays) &&
           (!pairEligibility || pairEligibility(primary, partner))
         );
       })
-      .sort((a, b) => compareTuple(partnerScore(primary, a.partner), partnerScore(primary, b.partner)));
+      .sort((a, b) =>
+        compareTuple(partnerScore(primary, a.partner), partnerScore(primary, b.partner)),
+      );
 
     const selected = candidates[0];
     const sessions = [primary];
@@ -194,7 +201,10 @@ export function pairSimulatorTrainingSessions(
 
     const targetDate = sessions.map((session) => session.expiry_date).sort()[0];
     blocks.push({
-      block_id: sessions.map((session) => session.need_id).sort().join('+'),
+      block_id: sessions
+        .map((session) => session.need_id)
+        .sort()
+        .join('+'),
       equipment: primary.equipment,
       duration_minutes: primary.duration_minutes,
       target_date: targetDate,
@@ -223,9 +233,7 @@ function splitOperationalCohorts(
   blocks: SimulatorTrainingSessionBlock[],
 ): SimulatorTrainingSessionBlock[][] {
   const ordered = [...blocks].sort(
-    (a, b) =>
-      a.target_date.localeCompare(b.target_date) ||
-      a.block_id.localeCompare(b.block_id),
+    (a, b) => a.target_date.localeCompare(b.target_date) || a.block_id.localeCompare(b.block_id),
   );
   const visited = new Set<number>();
   const cohorts: SimulatorTrainingSessionBlock[][] = [];
@@ -252,8 +260,7 @@ function splitOperationalCohorts(
     cohorts.push(
       cohort.sort(
         (a, b) =>
-          a.target_date.localeCompare(b.target_date) ||
-          a.block_id.localeCompare(b.block_id),
+          a.target_date.localeCompare(b.target_date) || a.block_id.localeCompare(b.block_id),
       ),
     );
   }

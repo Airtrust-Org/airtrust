@@ -699,7 +699,7 @@ function mapTreinamentoToForm(item: TreinamentoPlanejado): TreinamentoFormState 
     sala: item.sala || '',
     equipamento_descricao: item.equipamento_descricao || '',
     limite_participantes: item.limite_participantes ? String(item.limite_participantes) : '',
-    tipo_treinamento: 'RECORRENTE',
+    tipo_treinamento: item.programa_tipo_treinamento === 'INICIAL' ? 'INICIAL' : 'RECORRENTE',
     dias:
       item.dias && item.dias.length > 0
         ? item.dias

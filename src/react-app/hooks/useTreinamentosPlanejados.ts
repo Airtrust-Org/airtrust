@@ -150,6 +150,10 @@ export interface TreinamentoPlanejado {
   qualificacao_tipo_id: number;
   qualificacao_nome?: string | null;
   qualificacao_codigo?: string | null;
+  programa_treinamento_id?: number | null;
+  programa_tipo_treinamento?:
+    'INICIAL' | 'RECORRENTE' | 'SEMESTRAL' | 'UPGRADE' | 'ESPECIFICO' | null;
+  programa_nome?: string | null;
   data_prevista: string;
   hora_inicio?: string | null;
   hora_fim?: string | null;
@@ -280,6 +284,7 @@ export interface TreinamentoPlanejadoInput {
   equipamento_descricao?: string | null;
   limite_participantes?: number | null;
   tipo_treinamento?: 'INICIAL' | 'RECORRENTE';
+  programa_treinamento_id?: number | null;
   instrutor_ids?: number[];
   dias?: Array<{
     data: string;

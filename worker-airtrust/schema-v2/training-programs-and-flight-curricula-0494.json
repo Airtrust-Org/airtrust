@@ -1,0 +1,8 @@
+{
+  "changeId": "training-programs-and-flight-curricula-0494",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0494_training_programs_and_flight_curricula.sql",
+  "fileHash": "1951c8adf37fe0870fe53f83e4571e8dd2674016b75e257d0b05ac0d6c956504",
+  "planPath": "worker-airtrust/schema-v2/plans/training-programs-and-flight-curricula-0494.md",
+  "planHash": "3d1e52045d1f80d0948d2873e1bfe7fff0257478af26520be3681a5a722820f6"
+}
