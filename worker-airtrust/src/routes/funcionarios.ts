@@ -184,6 +184,7 @@ app.get('/', auth(), async (c) => {
   const hasIsExaminador = cols.has('is_examinador');
   const hasIsChecador = cols.has('is_checador');
   const hasSetorId = cols.has('setor_id');
+  const hasFuncaoId = cols.has('funcao_id');
 
   // Construir WHERE clauses (main query uses alias `f`; countRecords does not)
   const whereClausesQuery: string[] = ['f.deleted_at IS NULL'];
@@ -405,6 +406,7 @@ app.get('/', auth(), async (c) => {
       ? "CASE WHEN COALESCE(f.ativo, 1) = 1 THEN 'ATIVO' ELSE 'INATIVO' END AS status, COALESCE(f.ativo, 1) AS ativo"
       : "'ATIVO' AS status, 1 AS ativo";
   const setorIdSelect = hasSetorId ? 'f.setor_id' : 'NULL AS setor_id';
+  const funcaoIdSelect = hasFuncaoId ? 'f.funcao_id' : 'NULL AS funcao_id';
   const setorSelect = hasSetorId ? 'COALESCE(s.nome, f.setor) AS setor' : 'f.setor AS setor';
   const setoresJoin = hasSetorId
     ? `LEFT JOIN setores s
@@ -416,7 +418,7 @@ app.get('/', auth(), async (c) => {
   const query = `
     SELECT 
       f.id, f.matricula, f.nome, f.guerra, f.cpf, f.email, f.telefone,
-      f.cargo, ${setorIdSelect}, ${setorSelect}, f.funcao,
+      f.cargo, ${setorIdSelect}, ${setorSelect}, f.funcao, ${funcaoIdSelect},
       ${aeronaveSelectExpr} AS aeronave,
       f.quinzena,
       f.codigo_anac,
@@ -820,130 +822,139 @@ app.get('/:fid/ferias', auth(), async (c) => {
   return c.json({ success: true, data: rows.results || [] });
 });
 
-app.post('/:fid/ferias', auth(), requirePermission('funcionarios', 'editar', 'admin', 'manager'), async (c) => {
-  const db = c.env.DB;
-  const funcionarioId = c.req.param('fid');
-  const empresaId = getEmpresaId(c);
-  const access = await getEmployeeSectorAccess(c, empresaId);
-  const sectorScope = await buildFuncionarioScopeCompat(db, access, 'funcionarios');
-  const userId = String(extrairUsuarioAuditoria(c) || 'system');
-  const body = (await c.req.json().catch(() => null)) as {
-    data_inicio?: string;
-    data_fim?: string;
-    tipo?: string;
-    observacoes?: string | null;
-  } | null;
+app.post(
+  '/:fid/ferias',
+  auth(),
+  requirePermission('funcionarios', 'editar', 'admin', 'manager'),
+  async (c) => {
+    const db = c.env.DB;
+    const funcionarioId = c.req.param('fid');
+    const empresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const sectorScope = await buildFuncionarioScopeCompat(db, access, 'funcionarios');
+    const userId = String(extrairUsuarioAuditoria(c) || 'system');
+    const body = (await c.req.json().catch(() => null)) as {
+      data_inicio?: string;
+      data_fim?: string;
+      tipo?: string;
+      observacoes?: string | null;
+    } | null;
 
-  const dataInicio = String(body?.data_inicio || '');
-  const dataFim = String(body?.data_fim || '');
-  const tipo = String(body?.tipo || 'FERIAS')
-    .trim()
-    .toUpperCase();
-  const observacoes = body?.observacoes || null;
+    const dataInicio = String(body?.data_inicio || '');
+    const dataFim = String(body?.data_fim || '');
+    const tipo = String(body?.tipo || 'FERIAS')
+      .trim()
+      .toUpperCase();
+    const observacoes = body?.observacoes || null;
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataInicio) || !/^\d{4}-\d{2}-\d{2}$/.test(dataFim)) {
-    return c.json({ success: false, error: 'Datas devem estar no formato YYYY-MM-DD' }, 400);
-  }
-  if (dataFim < dataInicio) {
-    return c.json({ success: false, error: 'data_fim deve ser >= data_inicio' }, 400);
-  }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dataInicio) || !/^\d{4}-\d{2}-\d{2}$/.test(dataFim)) {
+      return c.json({ success: false, error: 'Datas devem estar no formato YYYY-MM-DD' }, 400);
+    }
+    if (dataFim < dataInicio) {
+      return c.json({ success: false, error: 'data_fim deve ser >= data_inicio' }, 400);
+    }
 
-  const funcionario = await db
-    .prepare(
-      `SELECT id FROM funcionarios
+    const funcionario = await db
+      .prepare(
+        `SELECT id FROM funcionarios
         WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?
           AND ${sectorScope.clause}
         LIMIT 1`,
-    )
-    .bind(funcionarioId, empresaId, ...sectorScope.bindings)
-    .first<{ id: string }>();
+      )
+      .bind(funcionarioId, empresaId, ...sectorScope.bindings)
+      .first<{ id: string }>();
 
-  if (!funcionario) {
-    return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
-  }
+    if (!funcionario) {
+      return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
+    }
 
-  const sobreposicao = await db
-    .prepare(
-      `SELECT id, data_inicio, data_fim, tipo
+    const sobreposicao = await db
+      .prepare(
+        `SELECT id, data_inicio, data_fim, tipo
          FROM funcionario_ferias
         WHERE funcionario_id = ?
           AND deleted_at IS NULL
           AND NOT (data_fim < ? OR data_inicio > ?)
         LIMIT 1`,
-    )
-    .bind(funcionarioId, dataInicio, dataFim)
-    .first<{ id: string; data_inicio: string; data_fim: string; tipo: string }>();
+      )
+      .bind(funcionarioId, dataInicio, dataFim)
+      .first<{ id: string; data_inicio: string; data_fim: string; tipo: string }>();
 
-  if (sobreposicao) {
-    return c.json(
-      {
-        success: false,
-        code: 'SOBREPOSICAO_PERIODO',
-        error: `Já existe ${sobreposicao.tipo} no período de ${sobreposicao.data_inicio} a ${sobreposicao.data_fim}`,
-        conflito: sobreposicao,
-      },
-      409,
-    );
-  }
+    if (sobreposicao) {
+      return c.json(
+        {
+          success: false,
+          code: 'SOBREPOSICAO_PERIODO',
+          error: `Já existe ${sobreposicao.tipo} no período de ${sobreposicao.data_inicio} a ${sobreposicao.data_fim}`,
+          conflito: sobreposicao,
+        },
+        409,
+      );
+    }
 
-  const id = crypto.randomUUID();
-  await db
-    .prepare(
-      `INSERT INTO funcionario_ferias
+    const id = crypto.randomUUID();
+    await db
+      .prepare(
+        `INSERT INTO funcionario_ferias
        (id, funcionario_id, data_inicio, data_fim, tipo, observacoes, escala_alocacao_id, criado_por, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, NULL, ?, datetime('now'), datetime('now'))`,
-    )
-    .bind(id, funcionarioId, dataInicio, dataFim, tipo, observacoes, userId)
-    .run();
+      )
+      .bind(id, funcionarioId, dataInicio, dataFim, tipo, observacoes, userId)
+      .run();
 
-  try {
-    await replaceManagedEscalaEvents({
-      db,
-      empresaId,
-      funcionarioId,
-      origem: 'funcionario_ferias',
-      linkId: `func_ferias:${id}`,
-      tipoEvento: tipo === 'AFT' ? 'licenca' : 'ferias',
-      dataInicio,
-      dataFim,
-      createdBy: userId,
-      status: 'confirmado',
-      observacoes,
-      motivoAutomatico:
-        'Gerado automaticamente a partir do lançamento global de férias/afastamento.',
-      replaceAutoTipos: ['voo', 'folga'],
-    });
-  } catch (error) {
-    console.error('[funcionarios/ferias] sync escala_eventos error:', error);
-  }
-
-  return c.json(
-    {
-      success: true,
-      data: {
-        id,
-        funcionario_id: funcionarioId,
-        data_inicio: dataInicio,
-        data_fim: dataFim,
-        tipo,
+    try {
+      await replaceManagedEscalaEvents({
+        db,
+        empresaId,
+        funcionarioId,
+        origem: 'funcionario_ferias',
+        linkId: `func_ferias:${id}`,
+        tipoEvento: tipo === 'AFT' ? 'licenca' : 'ferias',
+        dataInicio,
+        dataFim,
+        createdBy: userId,
+        status: 'confirmado',
         observacoes,
+        motivoAutomatico:
+          'Gerado automaticamente a partir do lançamento global de férias/afastamento.',
+        replaceAutoTipos: ['voo', 'folga'],
+      });
+    } catch (error) {
+      console.error('[funcionarios/ferias] sync escala_eventos error:', error);
+    }
+
+    return c.json(
+      {
+        success: true,
+        data: {
+          id,
+          funcionario_id: funcionarioId,
+          data_inicio: dataInicio,
+          data_fim: dataFim,
+          tipo,
+          observacoes,
+        },
       },
-    },
-    201,
-  );
-});
+      201,
+    );
+  },
+);
 
-app.delete('/:fid/ferias/:feriasId', auth(), requirePermission('funcionarios', 'deletar', 'admin', 'manager'), async (c) => {
-  const db = c.env.DB;
-  const funcionarioId = c.req.param('fid');
-  const feriasId = c.req.param('feriasId');
-  const empresaId = getEmpresaId(c);
-  const access = await getEmployeeSectorAccess(c, empresaId);
-  const sectorScope = await buildFuncionarioScopeCompat(db, access, 'f');
+app.delete(
+  '/:fid/ferias/:feriasId',
+  auth(),
+  requirePermission('funcionarios', 'deletar', 'admin', 'manager'),
+  async (c) => {
+    const db = c.env.DB;
+    const funcionarioId = c.req.param('fid');
+    const feriasId = c.req.param('feriasId');
+    const empresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const sectorScope = await buildFuncionarioScopeCompat(db, access, 'f');
 
-  const periodo = await db
-    .prepare(
-      `SELECT
+    const periodo = await db
+      .prepare(
+        `SELECT
          ff.id,
          ff.funcionario_id,
          ff.tipo,
@@ -958,62 +969,63 @@ app.delete('/:fid/ferias/:feriasId', auth(), requirePermission('funcionarios', '
          AND f.empresa_id = ?
          AND ${sectorScope.clause}
        LIMIT 1`,
-    )
-    .bind(feriasId, funcionarioId, empresaId, ...sectorScope.bindings)
-    .first<{
-      id: string;
-      funcionario_id: string;
-      tipo: string;
-      data_inicio: string;
-      data_fim: string;
-      escala_alocacao_id: string | null;
-    }>();
+      )
+      .bind(feriasId, funcionarioId, empresaId, ...sectorScope.bindings)
+      .first<{
+        id: string;
+        funcionario_id: string;
+        tipo: string;
+        data_inicio: string;
+        data_fim: string;
+        escala_alocacao_id: string | null;
+      }>();
 
-  if (!periodo) {
-    return c.json({ success: false, error: 'Período não encontrado' }, 404);
-  }
+    if (!periodo) {
+      return c.json({ success: false, error: 'Período não encontrado' }, 404);
+    }
 
-  if (periodo.escala_alocacao_id) {
-    return c.json(
-      {
-        success: false,
-        error:
-          'Este período foi gerado a partir de uma situação da escala. Remova a situação na escala correspondente.',
-      },
-      409,
-    );
-  }
+    if (periodo.escala_alocacao_id) {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Este período foi gerado a partir de uma situação da escala. Remova a situação na escala correspondente.',
+        },
+        409,
+      );
+    }
 
-  const now = new Date().toISOString();
-  await db
-    .prepare(
-      `UPDATE funcionario_ferias
+    const now = new Date().toISOString();
+    await db
+      .prepare(
+        `UPDATE funcionario_ferias
           SET deleted_at = ?, updated_at = ?
         WHERE id = ?
           AND funcionario_id = ?
           AND deleted_at IS NULL`,
-    )
-    .bind(now, now, feriasId, funcionarioId)
-    .run();
+      )
+      .bind(now, now, feriasId, funcionarioId)
+      .run();
 
-  await removeManagedEscalaEvents({
-    db,
-    funcionarioId,
-    origem: 'funcionario_ferias',
-    linkId: `func_ferias:${feriasId}`,
-  });
+    await removeManagedEscalaEvents({
+      db,
+      funcionarioId,
+      origem: 'funcionario_ferias',
+      linkId: `func_ferias:${feriasId}`,
+    });
 
-  return c.json({
-    success: true,
-    data: {
-      id: periodo.id,
-      funcionario_id: periodo.funcionario_id,
-      tipo: periodo.tipo,
-      data_inicio: periodo.data_inicio,
-      data_fim: periodo.data_fim,
-    },
-  });
-});
+    return c.json({
+      success: true,
+      data: {
+        id: periodo.id,
+        funcionario_id: periodo.funcionario_id,
+        tipo: periodo.tipo,
+        data_inicio: periodo.data_inicio,
+        data_fim: periodo.data_fim,
+      },
+    });
+  },
+);
 
 /**
  * GET /api/funcionarios/:id
@@ -1075,6 +1087,7 @@ app.get('/:id', auth(), async (c) => {
   const hasStatus = cols.has('status');
   const hasAtivo = cols.has('ativo');
   const hasSetorId = cols.has('setor_id');
+  const hasFuncaoId = cols.has('funcao_id');
 
   const statusExpr = hasStatus
     ? `${buildNormalizedFuncionarioStatusExpr('funcionarios')} AS status`
@@ -1082,6 +1095,7 @@ app.get('/:id', auth(), async (c) => {
       ? "CASE WHEN ativo = 1 THEN 'ATIVO' ELSE 'INATIVO' END AS status"
       : "'ATIVO' AS status";
   const setorIdSelect = hasSetorId ? 'setor_id' : 'NULL AS setor_id';
+  const funcaoIdSelect = hasFuncaoId ? 'funcao_id' : 'NULL AS funcao_id';
 
   // Query com TODOS os campos incluindo dados pessoais, profissionais e endereço
   const funcionario = await db
@@ -1090,7 +1104,7 @@ app.get('/:id', auth(), async (c) => {
     SELECT 
       id, matricula, nome, guerra, cpf, rg, 
       nascimento, email, telefone,
-      funcao, cargo, setor, ${setorIdSelect}, base, aeronave, modelo_aeronave_id,
+      funcao, ${funcaoIdSelect}, cargo, setor, ${setorIdSelect}, base, aeronave, modelo_aeronave_id,
       admissao, codigo_anac,
       nivel_icao, data_realizacao_icao, validade_icao, 
       cma, data_realizacao_cma, validade_cma, 

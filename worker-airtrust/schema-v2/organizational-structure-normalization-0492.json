@@ -1,0 +1,8 @@
+{
+  "changeId": "organizational-structure-normalization-0492",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0492_organizational_structure_normalization.sql",
+  "fileHash": "f32f38e9f97c580745c1c36f0bc1cf764c11879d7f4bb143eb660179feb3ad04",
+  "planPath": "worker-airtrust/schema-v2/plans/organizational-structure-normalization-0492.md",
+  "planHash": "2b121ab9daaecca72d09ed80b4e5cd1a7c01693d8b850d8fc744877702011aaa"
+}

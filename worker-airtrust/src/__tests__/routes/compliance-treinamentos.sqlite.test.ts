@@ -54,7 +54,9 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
   const db = sqlite.database;
   db.exec(`
     ALTER TABLE setores ADD COLUMN nome TEXT;
-    UPDATE setores SET nome = CASE id WHEN 10 THEN 'Manutenção' WHEN 11 THEN 'Operações' ELSE 'Outro' END;
+    ALTER TABLE setores ADD COLUMN codigo TEXT;
+    UPDATE setores SET nome = CASE id WHEN 10 THEN 'Manutenção' WHEN 11 THEN 'Operações' ELSE 'Outro' END,
+                       codigo = CASE id WHEN 10 THEN 'MAN' WHEN 11 THEN 'OPS' ELSE 'OUT' END;
 
     ALTER TABLE qualificacoes_tipos ADD COLUMN nome TEXT;
     UPDATE qualificacoes_tipos SET nome = codigo;
@@ -528,5 +530,32 @@ describe('training compliance engine', () => {
       .prepare('SELECT escopo, setor_id, funcao_id FROM treinamento_requisitos WHERE id=90')
       .get() as any;
     expect(row).toMatchObject({ escopo: 'FUNCAO', setor_id: null, funcao_id: 1 });
+  });
+
+  it('usa o mapa canônico setor-função mesmo quando ainda não há funcionário no cargo', async () => {
+    sqlite.database.exec(`
+      INSERT INTO funcoes (id, empresa_id, codigo, nome) VALUES (3, 1, 'ENG', 'Engenheiro');
+      CREATE TABLE setores_funcoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        empresa_id INTEGER NOT NULL,
+        setor_id INTEGER NOT NULL,
+        funcao_id INTEGER NOT NULL,
+        ativo INTEGER NOT NULL DEFAULT 1,
+        deleted_at TEXT
+      );
+      INSERT INTO setores_funcoes (empresa_id,setor_id,funcao_id) VALUES
+        (1,10,1),(1,10,3);
+    `);
+
+    const response = await createApp(sqlite.asD1()).request('/catalogos');
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(body.data.setor_funcoes).toEqual([
+      { setor_id: 10, funcao_id: 1 },
+      { setor_id: 10, funcao_id: 3 },
+    ]);
+    expect(body.data.funcoes.map((item: any) => item.id)).toEqual([3, 1]);
+    expect(body.data.funcoes.map((item: any) => item.nome)).toEqual(['Engenheiro', 'Mecânico']);
   });
 });

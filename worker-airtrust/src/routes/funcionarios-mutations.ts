@@ -44,6 +44,11 @@ import {
   normalizeFuncionarioEmail,
   normalizeFuncionarioMatricula,
 } from '../services/funcionario-natural-keys';
+import {
+  isCanonicalSectorFunctionPair,
+  resolveCanonicalFunction,
+  resolveCanonicalSector,
+} from '../services/organizational-structure';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -94,42 +99,55 @@ async function resolveSetorPayload(
   body: Record<string, unknown>,
 ): Promise<{ setorId: number | null; setorNome: string | null }> {
   const explicitSetorId = Number(body.setor_id || 0);
-  if (Number.isInteger(explicitSetorId) && explicitSetorId > 0) {
-    const setor = await db
-      .prepare(
-        'SELECT id, nome FROM setores WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1',
-      )
-      .bind(explicitSetorId, empresaId)
-      .first<{ id: number; nome: string | null }>();
-
-    if (!setor?.id) {
-      badRequest('Setor informado não existe na empresa');
-    }
-
-    return { setorId: Number(setor.id), setorNome: setor.nome || null };
-  }
-
   const setorTexto = String(body.setor || '').trim();
-  if (!setorTexto) {
-    return { setorId: null, setorNome: null };
+  const resolved = await resolveCanonicalSector(db, empresaId, {
+    setorId: body.setor_id,
+    setorText: body.setor,
+  });
+
+  if (Number.isInteger(explicitSetorId) && explicitSetorId > 0 && !resolved) {
+    badRequest('Setor informado não existe na empresa');
   }
-
-  const setor = await db
-    .prepare(
-      `SELECT id, nome
-         FROM setores
-        WHERE empresa_id = ?
-          AND deleted_at IS NULL
-          AND (LOWER(TRIM(nome)) = LOWER(TRIM(?)) OR LOWER(TRIM(COALESCE(codigo, ''))) = LOWER(TRIM(?)))
-        LIMIT 1`,
-    )
-    .bind(empresaId, setorTexto, setorTexto)
-    .first<{ id: number; nome: string | null }>();
-
   return {
-    setorId: setor?.id ? Number(setor.id) : null,
-    setorNome: setor?.nome || setorTexto,
+    setorId: resolved?.id ?? null,
+    setorNome: resolved?.nome ?? (setorTexto || null),
   };
+}
+
+async function resolveFuncaoPayload(
+  db: D1Database,
+  empresaId: number,
+  body: Record<string, unknown>,
+  fallback?: Record<string, unknown> | null,
+): Promise<{ funcaoId: number | null; funcaoNome: string | null }> {
+  const hasExplicitId =
+    body.funcao_id !== undefined && body.funcao_id !== null && String(body.funcao_id).trim() !== '';
+  const funcaoText = body.funcao !== undefined ? body.funcao : fallback?.funcao;
+  const cargoText = body.cargo !== undefined ? body.cargo : fallback?.cargo;
+  const resolved = await resolveCanonicalFunction(db, empresaId, {
+    funcaoId: body.funcao_id,
+    funcaoText,
+    cargoText,
+  });
+  if (hasExplicitId && !resolved) {
+    badRequest('Cargo/função informado não existe na empresa');
+  }
+  const raw = String(funcaoText || '').trim();
+  return {
+    funcaoId: resolved?.id ?? null,
+    funcaoNome: resolved?.nome ?? (raw || null),
+  };
+}
+
+async function assertCanonicalOrgPair(
+  db: D1Database,
+  empresaId: number,
+  setorId: number | null,
+  funcaoId: number | null,
+): Promise<void> {
+  if (!(await isCanonicalSectorFunctionPair(db, empresaId, setorId, funcaoId))) {
+    badRequest('O cargo/função selecionado não pertence ao setor informado');
+  }
 }
 
 function rethrowFuncionarioNaturalKeyConflict(error: unknown): never {
@@ -233,6 +251,8 @@ app.post('/', auth(), requirePermission('funcionarios', 'criar', 'admin', 'manag
   const access = await getEmployeeSectorAccess(c, empresaId);
   const funcionarioColumns = await getFuncionariosColumns(db);
   const setorPayload = await resolveSetorPayload(db, empresaId, body as Record<string, unknown>);
+  const funcaoPayload = await resolveFuncaoPayload(db, empresaId, body as Record<string, unknown>);
+  await assertCanonicalOrgPair(db, empresaId, setorPayload.setorId, funcaoPayload.funcaoId);
 
   // Validações obrigatórias (matrícula OPCIONAL agora)
   if (!body.nome || !body.cpf || !body.email) {
@@ -305,8 +325,9 @@ app.post('/', auth(), requirePermission('funcionarios', 'criar', 'admin', 'manag
   addInsertValue('telefone', body.telefone || null);
   addInsertValue('telefone_emergencia', body.telefone_emergencia || null);
   addInsertValue('contato_emergencia_nome', body.contato_emergencia_nome || null);
-  addInsertValue('funcao', body.funcao || null);
-  addInsertValue('cargo', body.cargo || null);
+  addInsertValue('funcao_id', funcaoPayload.funcaoId);
+  addInsertValue('funcao', funcaoPayload.funcaoNome);
+  addInsertValue('cargo', body.cargo || funcaoPayload.funcaoNome || null);
   addInsertValue('setor', setorPayload.setorNome);
   addInsertValue('setor_id', setorPayload.setorId);
   addInsertValue('base', body.base || null);
@@ -460,11 +481,14 @@ app.put(
 
     await assertFuncionarioInScope(db, empresaId, id, access);
     const dadosAnteriores = { ...existing };
+    let effectiveSetorId = Number((existing as Record<string, unknown>).setor_id || 0) || null;
+    let effectiveFuncaoId = Number((existing as Record<string, unknown>).funcao_id || 0) || null;
+    let resolvedFuncaoForUpdate: { funcaoId: number | null; funcaoNome: string | null } | null =
+      null;
 
     const normalizedEmail =
       body.email !== undefined ? normalizeFuncionarioEmail(body.email) : undefined;
-    const normalizedCpf =
-      body.cpf !== undefined ? normalizeFuncionarioCpf(body.cpf) : undefined;
+    const normalizedCpf = body.cpf !== undefined ? normalizeFuncionarioCpf(body.cpf) : undefined;
     const normalizedMatricula =
       body.matricula !== undefined
         ? sanitizeString(normalizeFuncionarioMatricula(body.matricula))
@@ -534,9 +558,23 @@ app.put(
       });
       addUpdate('setor', setorPayload.setorNome);
       addUpdate('setor_id', setorPayload.setorId);
+      effectiveSetorId = setorPayload.setorId;
     }
 
-    if (body.funcao !== undefined) addUpdate('funcao', body.funcao);
+    if (body.funcao_id !== undefined || body.funcao !== undefined || body.cargo !== undefined) {
+      resolvedFuncaoForUpdate = await resolveFuncaoPayload(
+        db,
+        empresaId,
+        body as Record<string, unknown>,
+        existing as Record<string, unknown>,
+      );
+      effectiveFuncaoId = resolvedFuncaoForUpdate.funcaoId;
+      addUpdate('funcao_id', resolvedFuncaoForUpdate.funcaoId);
+      if (body.funcao !== undefined || resolvedFuncaoForUpdate.funcaoNome) {
+        addUpdate('funcao', resolvedFuncaoForUpdate.funcaoNome);
+      }
+    }
+    await assertCanonicalOrgPair(db, empresaId, effectiveSetorId, effectiveFuncaoId);
     if (body.quinzena !== undefined)
       addUpdate('quinzena', normalizeFuncionarioQuinzena(body.quinzena));
     if (body.codigo_anac !== undefined) addUpdate('codigo_anac', body.codigo_anac);
@@ -668,79 +706,84 @@ app.put(
  * POST /api/funcionarios/:id/reativar
  * Reativa um funcionário do tenant preservando todo o histórico.
  */
-app.post('/:id/reativar', auth(), requirePermission('funcionarios', 'editar', 'admin', 'manager'), async (c) => {
-  const db = c.env.DB;
-  const id = Number(c.req.param('id'));
-  if (!Number.isInteger(id) || id <= 0) badRequest('ID inválido');
+app.post(
+  '/:id/reativar',
+  auth(),
+  requirePermission('funcionarios', 'editar', 'admin', 'manager'),
+  async (c) => {
+    const db = c.env.DB;
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id <= 0) badRequest('ID inválido');
 
-  const empresaId = getEmpresaId(c);
-  const funcionario = await db
-    .prepare(
-      'SELECT * FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NOT NULL',
-    )
-    .bind(id, empresaId)
-    .first<Record<string, unknown>>();
-
-  if (!funcionario) notFound('Funcionário inativo não encontrado');
-
-  await assertFuncionarioNaturalKeysAvailable({
-    db,
-    empresaId,
-    cpf: funcionario.cpf ? normalizeFuncionarioCpf(funcionario.cpf) : null,
-    matricula: funcionario.matricula
-      ? normalizeFuncionarioMatricula(funcionario.matricula)
-      : null,
-    email: funcionario.email ? normalizeFuncionarioEmail(funcionario.email) : null,
-    excludeId: id,
-  });
-
-  const columns = await getFuncionariosColumns(db);
-  const assignments = ['deleted_at = NULL'];
-  if (columns.has('status')) assignments.push("status = 'ATIVO'");
-  if (columns.has('ativo')) assignments.push('ativo = 1');
-  if (columns.has('updated_at')) assignments.push("updated_at = datetime('now')");
-
-  let result: D1Result<unknown>;
-  try {
-    result = await db
+    const empresaId = getEmpresaId(c);
+    const funcionario = await db
       .prepare(
-        `UPDATE funcionarios SET ${assignments.join(', ')} WHERE id = ? AND empresa_id = ? AND deleted_at IS NOT NULL`,
+        'SELECT * FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NOT NULL',
       )
       .bind(id, empresaId)
-      .run();
-  } catch (error) {
-    rethrowFuncionarioNaturalKeyConflict(error);
-  }
+      .first<Record<string, unknown>>();
 
-  if ((result.meta?.changes ?? 0) !== 1) notFound('Funcionário não foi reativado');
+    if (!funcionario) notFound('Funcionário inativo não encontrado');
 
-  const auditoriaInfo = extrairUsuarioAuditoria(c);
-  const dadosNovos = await db
-    .prepare('SELECT * FROM funcionarios WHERE id = ? AND empresa_id = ?')
-    .bind(id, empresaId)
-    .first();
-  await registrarAuditoria({
-    db,
-    tabela: 'funcionarios',
-    acao: 'UPDATE',
-    registro_id: id,
-    dados_anteriores: funcionario,
-    dados_novos: dadosNovos,
-    ...auditoriaInfo,
-  });
-
-  try {
-    await publishDomainEvent(db, 'funcionarios', 'FUNCIONARIO_REATIVADO', {
-      origem_modulo: 'funcionarios',
-      funcionario_id: String(id),
-      empresa_id: empresaId,
+    await assertFuncionarioNaturalKeysAvailable({
+      db,
+      empresaId,
+      cpf: funcionario.cpf ? normalizeFuncionarioCpf(funcionario.cpf) : null,
+      matricula: funcionario.matricula
+        ? normalizeFuncionarioMatricula(funcionario.matricula)
+        : null,
+      email: funcionario.email ? normalizeFuncionarioEmail(funcionario.email) : null,
+      excludeId: id,
     });
-  } catch (error) {
-    console.error('domain_event_error', error);
-  }
 
-  return c.json({ success: true, message: 'Funcionário reativado com sucesso' });
-});
+    const columns = await getFuncionariosColumns(db);
+    const assignments = ['deleted_at = NULL'];
+    if (columns.has('status')) assignments.push("status = 'ATIVO'");
+    if (columns.has('ativo')) assignments.push('ativo = 1');
+    if (columns.has('updated_at')) assignments.push("updated_at = datetime('now')");
+
+    let result: D1Result<unknown>;
+    try {
+      result = await db
+        .prepare(
+          `UPDATE funcionarios SET ${assignments.join(', ')} WHERE id = ? AND empresa_id = ? AND deleted_at IS NOT NULL`,
+        )
+        .bind(id, empresaId)
+        .run();
+    } catch (error) {
+      rethrowFuncionarioNaturalKeyConflict(error);
+    }
+
+    if ((result.meta?.changes ?? 0) !== 1) notFound('Funcionário não foi reativado');
+
+    const auditoriaInfo = extrairUsuarioAuditoria(c);
+    const dadosNovos = await db
+      .prepare('SELECT * FROM funcionarios WHERE id = ? AND empresa_id = ?')
+      .bind(id, empresaId)
+      .first();
+    await registrarAuditoria({
+      db,
+      tabela: 'funcionarios',
+      acao: 'UPDATE',
+      registro_id: id,
+      dados_anteriores: funcionario,
+      dados_novos: dadosNovos,
+      ...auditoriaInfo,
+    });
+
+    try {
+      await publishDomainEvent(db, 'funcionarios', 'FUNCIONARIO_REATIVADO', {
+        origem_modulo: 'funcionarios',
+        funcionario_id: String(id),
+        empresa_id: empresaId,
+      });
+    } catch (error) {
+      console.error('domain_event_error', error);
+    }
+
+    return c.json({ success: true, message: 'Funcionário reativado com sucesso' });
+  },
+);
 
 /**
  * DELETE /api/funcionarios/:id
