@@ -15,7 +15,9 @@ function createDatabase() {
   const dir = mkdtempSync(join(tmpdir(), 'airtrust-org-0492-'));
   tempDirs.push(dir);
   const dbPath = join(dir, 'test.sqlite');
-  const setup = execSql(dbPath, `
+  const setup = execSql(
+    dbPath,
+    `
     PRAGMA foreign_keys=ON;
     CREATE TABLE empresas (id INTEGER PRIMARY KEY);
     CREATE TABLE setores (
@@ -103,7 +105,8 @@ function createDatabase() {
     ) VALUES
       (6,100,'SETOR',11,NULL,NULL,1),(6,100,'SETOR',21,NULL,NULL,1),
       (6,101,'SETOR',15,NULL,NULL,1),(7,700,'SETOR',111,NULL,NULL,1);
-  `);
+  `,
+  );
   expect(setup.code, setup.stderr).toBe(0);
   return dbPath;
 }
@@ -127,20 +130,26 @@ describe('0492 organizational structure normalization', () => {
     );
     expect(sourceSectors.every((row) => row.ativo === 0 && Boolean(row.deleted_at))).toBe(true);
 
-    const liveSourceRefs = querySql<{ n: number }>(dbPath, `
+    const liveSourceRefs = querySql<{ n: number }>(
+      dbPath,
+      `
       SELECT
         (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=6 AND deleted_at IS NULL AND setor_id IN (15,21)) +
         (SELECT COUNT(*) FROM qualificacoes_tipos_setores WHERE empresa_id=6 AND deleted_at IS NULL AND setor_id IN (15,21)) +
         (SELECT COUNT(*) FROM lms_cursos_setores WHERE empresa_id=6 AND deleted_at IS NULL AND setor_id IN (15,21)) +
         (SELECT COUNT(*) FROM setores_gestores WHERE empresa_id=6 AND deleted_at IS NULL AND setor_id IN (15,21)) +
         (SELECT COUNT(*) FROM treinamento_requisitos WHERE empresa_id=6 AND deleted_at IS NULL AND setor_id IN (15,21)) AS n;
-    `);
+    `,
+    );
     expect(liveSourceRefs[0]?.n).toBe(0);
 
-    const trip = querySql<{ id: number; cargo: string; funcao: string; funcao_id: number }>(dbPath, `
+    const trip = querySql<{ id: number; cargo: string; funcao: string; funcao_id: number }>(
+      dbPath,
+      `
       SELECT id,cargo,funcao,funcao_id FROM funcionarios
        WHERE empresa_id=6 AND setor_id=10 AND deleted_at IS NULL ORDER BY id;
-    `);
+    `,
+    );
     expect(trip).toEqual([
       { id: 1, cargo: 'Copiloto', funcao: 'Copiloto', funcao_id: 2 },
       { id: 2, cargo: 'Copiloto', funcao: 'Copiloto', funcao_id: 2 },
@@ -154,10 +163,13 @@ describe('0492 organizational structure normalization', () => {
     expect(engineer.funcao).toBe('Coordenador de Engenharia');
     expect(engineer.funcao_id).toBeGreaterThan(0);
 
-    const supply = querySql<{ setor_id: number; setor: string; cargo: string; funcao: string; funcao_id: number }>(
-      dbPath,
-      'SELECT setor_id,setor,cargo,funcao,funcao_id FROM funcionarios WHERE id=5;',
-    )[0];
+    const supply = querySql<{
+      setor_id: number;
+      setor: string;
+      cargo: string;
+      funcao: string;
+      funcao_id: number;
+    }>(dbPath, 'SELECT setor_id,setor,cargo,funcao,funcao_id FROM funcionarios WHERE id=5;')[0];
     expect(supply).toMatchObject({
       setor_id: 31,
       setor: 'Logística',
@@ -174,10 +186,13 @@ describe('0492 organizational structure normalization', () => {
     expect(qa.status).toBe('INATIVO');
     expect(qa.deleted_at).toBeTruthy();
 
-    const unmapped = querySql<{ n: number }>(dbPath, `
+    const unmapped = querySql<{ n: number }>(
+      dbPath,
+      `
       SELECT COUNT(*) AS n FROM funcionarios
        WHERE empresa_id=6 AND deleted_at IS NULL AND COALESCE(ativo,1)=1 AND funcao_id IS NULL;
-    `);
+    `,
+    );
     expect(unmapped[0]?.n).toBe(0);
 
     const tenant7 = querySql<Record<string, unknown>>(
@@ -191,6 +206,47 @@ describe('0492 organizational structure normalization', () => {
       funcao_id: null,
       deleted_at: null,
     });
+  });
+
+  it('resolves canonical sectors by tenant-local identity instead of environment-specific IDs', () => {
+    const dbPath = createDatabase();
+    const shifted = execSql(
+      dbPath,
+      `
+      PRAGMA foreign_keys=OFF;
+      UPDATE setores SET id=id+1000 WHERE empresa_id=6;
+      UPDATE funcionarios SET setor_id=setor_id+1000 WHERE empresa_id=6;
+      UPDATE qualificacoes_tipos_setores SET setor_id=setor_id+1000 WHERE empresa_id=6;
+      UPDATE lms_cursos_setores SET setor_id=setor_id+1000 WHERE empresa_id=6;
+      UPDATE setores_gestores SET setor_id=setor_id+1000 WHERE empresa_id=6;
+      UPDATE treinamento_requisitos SET setor_id=setor_id+1000 WHERE empresa_id=6 AND setor_id IS NOT NULL;
+    `,
+    );
+    expect(shifted.code, shifted.stderr).toBe(0);
+
+    const applied = execSql(dbPath, migration);
+    expect(applied.code, applied.stderr).toBe(0);
+
+    const trip = querySql<{ setor_id: number; cargo: string; funcao: string }>(
+      dbPath,
+      'SELECT setor_id,cargo,funcao FROM funcionarios WHERE id=1;',
+    )[0];
+    expect(trip).toEqual({ setor_id: 1010, cargo: 'Copiloto', funcao: 'Copiloto' });
+
+    const supply = querySql<{ setor_id: number; setor: string }>(
+      dbPath,
+      'SELECT setor_id,setor FROM funcionarios WHERE id=5;',
+    )[0];
+    expect(supply).toEqual({ setor_id: 1031, setor: 'Logística' });
+
+    const liveSources = querySql<{ n: number }>(
+      dbPath,
+      `
+      SELECT COUNT(*) AS n FROM setores
+       WHERE empresa_id=6 AND codigo IN ('CTM','QUA') AND deleted_at IS NULL;
+    `,
+    );
+    expect(liveSources[0]?.n).toBe(0);
   });
 
   it('enforces tenant ownership for normalized function IDs', () => {

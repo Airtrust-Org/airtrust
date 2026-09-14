@@ -25,7 +25,6 @@ assert_count "prerequisite-0491" 1 "SELECT COUNT(*) AS count FROM airtrust_schem
 assert_count "unapplied-change" 0 "SELECT COUNT(*) AS count FROM airtrust_schema_changes_v2 WHERE change_id='$CHANGE_ID';"
 for table in funcionarios funcoes setores qualificacoes_tipos_setores lms_cursos_setores setores_gestores treinamento_requisitos; do assert_count "prerequisite-$table" 1 "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='$table';"; done
 assert_count "funcao-id-not-yet-present" 0 "SELECT COUNT(*) AS count FROM pragma_table_info('funcionarios') WHERE name='funcao_id';"
-assert_count "approved-sector-identities" 6 "SELECT COUNT(*) AS count FROM setores WHERE empresa_id=6 AND deleted_at IS NULL AND ativo=1 AND ((id=10 AND nome='Tripulação') OR (id=11 AND nome='Manutenção') OR (id=15 AND nome='Qualidade') OR (id=21 AND nome='CTM') OR (id=28 AND nome='QSMS') OR (id=31 AND nome='Logística'));"
+assert_count "approved-sector-identities" 6 "SELECT COUNT(*) AS count FROM setores WHERE empresa_id=6 AND deleted_at IS NULL AND ativo=1 AND ((codigo='TRI' AND nome='Tripulação') OR (codigo='MAN' AND nome='Manutenção') OR (codigo='QUA' AND nome='Qualidade') OR (codigo='CTM' AND nome='CTM') OR (codigo='QSMS' AND nome='QSMS') OR (codigo='LOGISTICA' AND nome='Logística'));"
 assert_count "canonical-flight-functions" 2 "SELECT COUNT(*) AS count FROM funcoes WHERE empresa_id=6 AND deleted_at IS NULL AND ativo=1 AND ((codigo='PIC' AND nome='Comandante') OR (codigo='SIC' AND nome='Copiloto'));"
-assert_count "source-sector-cross-tenant" 0 "SELECT COUNT(*) AS count FROM setores WHERE id IN (15,21) AND empresa_id<>6 AND deleted_at IS NULL;"
 echo "ORGANIZATIONAL_STRUCTURE_0492_PRODUCTION_PREFLIGHT=PASS"
