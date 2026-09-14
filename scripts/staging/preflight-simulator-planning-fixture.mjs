@@ -30,6 +30,9 @@ SELECT
   (SELECT COUNT(*) FROM funcionarios f JOIN qa ON qa.id=f.empresa_id
     WHERE f.matricula IN ('QA-PARTICIPANTE-ALFA','QA-PARTICIPANTE-BRAVO') AND f.deleted_at IS NULL) AS alfa_bravo_active,
   (SELECT COUNT(*) FROM funcionarios f JOIN qa ON qa.id=f.empresa_id
+    WHERE f.matricula IN ('QA-PARTICIPANTE-ALFA','QA-PARTICIPANTE-BRAVO')
+      AND f.deleted_at IS NULL AND f.quinzena IS NULL) AS alfa_bravo_scale_baseline,
+  (SELECT COUNT(*) FROM funcionarios f JOIN qa ON qa.id=f.empresa_id
     WHERE f.matricula='QA-PARTICIPANTE-CHARLIE') AS charlie_rows,
   (SELECT COUNT(*) FROM funcionarios f JOIN qa ON qa.id=f.empresa_id
     JOIN funcionarios alfa ON alfa.empresa_id=f.empresa_id AND alfa.matricula='QA-PARTICIPANTE-ALFA' AND alfa.deleted_at IS NULL
@@ -42,6 +45,7 @@ SELECT
         AND COALESCE(f.is_instrutor,0)=0
         AND COALESCE(f.is_checador,0)=0
         AND COALESCE(f.is_examinador,0)=0
+        AND (f.quinzena IS NULL OR f.quinzena='primeira')
         AND f.setor IS alfa.setor
         AND f.setor_id IS alfa.setor_id
       )) AS charlie_divergent,
@@ -130,6 +134,7 @@ SELECT
 const numeric = Object.fromEntries(Object.entries(checks).map(([key, value]) => [key, Number(value || 0)]));
 const compatible = numeric.tenant_active === 1
   && numeric.alfa_bravo_active === 2
+  && numeric.alfa_bravo_scale_baseline === 2
   && numeric.charlie_rows <= 1
   && numeric.charlie_divergent === 0
   && numeric.config_exact === 1

@@ -39,7 +39,9 @@ test('staging simulator fixture provisions three needs so a pair and a singleton
   const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
   assert.match(seed, /QA-PARTICIPANTE-CHARLIE/);
   assert.match(seed, /history_count = 3/);
-  assert.match(seed, /allocation_count = 3/);
+  assert.match(seed, /fixed_scale_count = 3/);
+  assert.match(seed, /allocation_count = 0/);
+  assert.match(seed, /roster_count = 0/);
   assert.match(workflow, /explicit unmatched singleton preserved after CAE comparison: PASS/);
 });
 
@@ -58,6 +60,20 @@ test('staging simulator runtime QA does not mutate planning policy through the A
   assert.match(source, /generatedProposal\?\.config\?\.planning_horizon_days/);
 });
 
+test('staging simulator runtime QA requires employee Escala 1/2 and derives a common date without monthly roster', () => {
+  const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
+  const preflight = readFileSync('scripts/staging/preflight-simulator-planning-fixture.mjs', 'utf8');
+  assert.match(source, /roster_pairing\?\.source === 'FUNCIONARIO_ESCALA_1_2'/);
+  assert.match(source, /employees_with_fixed_fortnight/);
+  assert.match(source, /Escala 1\/2 não produziu data comum para Alfa\+Bravo/);
+  assert.match(seed, /_qa_sim_planning_requires_scale_baseline/);
+  assert.match(seed, /SET quinzena = 'primeira'/);
+  assert.match(seed, /SET quinzena = NULL/);
+  assert.match(preflight, /alfa_bravo_scale_baseline/);
+  assert.doesNotMatch(seed, /INSERT OR IGNORE INTO escalas_mensais/);
+  assert.doesNotMatch(seed, /INSERT OR IGNORE INTO escala_alocacoes/);
+});
+
 test('staging simulator planning QA never reapplies the canonical examiner base fixture', () => {
   const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
   assert.doesNotMatch(workflow, /seed-qa-examiner-training\.mjs --apply/);
@@ -73,13 +89,13 @@ test('staging simulator fixture treats planning policy as immutable baseline', (
   assert.match(seed, /planejamento_simulador_regra_quinzena = 'AMBAS'/);
 });
 
-test('staging simulator fixture never publishes or reuses an unrelated roster', () => {
+test('staging simulator fixture proves planning without a published monthly roster', () => {
   const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
-  assert.match(seed, /_qa_sim_planning_requires_isolated_roster/);
-  assert.match(seed, /id <> \$\{e\(QA_ROSTER_ID\)\}/);
-  assert.doesNotMatch(seed, /UPDATE escalas_mensais\s+SET status = 'publicada'/);
-  assert.match(seed, /em\.id = \$\{e\(QA_ROSTER_ID\)\}/);
-  assert.match(seed, /em\.observacoes = \$\{e\(PLANNING_MARKER\)\}/);
+  assert.match(seed, /Não criar escala mensal nem alocações publicadas/);
+  assert.match(seed, /roster_count INTEGER NOT NULL CHECK \(roster_count = 0\)/);
+  assert.match(seed, /allocation_count INTEGER NOT NULL CHECK \(allocation_count = 0\)/);
+  assert.doesNotMatch(seed, /INSERT OR IGNORE INTO escalas_mensais/);
+  assert.doesNotMatch(seed, /INSERT OR IGNORE INTO escala_alocacoes/);
 });
 
 test('staging simulator rollback fails closed if disposable QA artifacts remain active', () => {
@@ -102,6 +118,7 @@ test('staging simulator workflow pre-cleans stale disposable fixture before prov
 test('staging simulator read-only audit surfaces disposable fixture residue', () => {
   const audit = readFileSync('scripts/staging/audit-simulator-matrix-baseline.mjs', 'utf8');
   assert.match(audit, /qaPlanningResidue/);
+  assert.match(audit, /base_scale_overrides/);
   assert.match(audit, /qa_planning_hygiene_clean/);
   assert.match(audit, /RUN_GOVERNED_PERSISTENCE_QA_WITH_FAIL_CLOSED_PRE_CLEAN/);
 });
@@ -112,7 +129,7 @@ test('staging simulator fixture reactivates only its exact soft-deleted Charlie 
   assert.match(seed, /_qa_sim_planning_requires_charlie_signature/);
   assert.match(seed, /f\.matricula = \${e\(PARTICIPANTE3_CODIGO\)}/);
   assert.match(seed, /SELECT COUNT\(\*\)[\s\S]*PARTICIPANTE3_CODIGO[\s\S]*\) <= 1/);
-  assert.match(seed, /UPDATE funcionarios\s+SET deleted_at = NULL,[\s\S]*matricula = \${e\(PARTICIPANTE3_CODIGO\)}/);
+  assert.match(seed, /UPDATE funcionarios\s+SET quinzena = 'primeira',[\s\S]*deleted_at = NULL,[\s\S]*matricula = \${e\(PARTICIPANTE3_CODIGO\)}/);
   assert.doesNotMatch(seed, /UPDATE funcionarios\s+SET nome = 'QA Participante Charlie'/);
   assert.match(seed, /nome = 'QA Participante Charlie'/);
   assert.match(seed, /cargo = 'Participante QA'/);

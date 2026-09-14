@@ -246,6 +246,26 @@ SELECT CASE WHEN EXISTS (
 ) THEN 1 ELSE 0 END;
 DROP TABLE _qa_sim_planning_requires_config;
 
+-- A fixture altera temporariamente apenas a Escala 1/2 dos dois participantes
+-- base sintéticos. O baseline esperado é NULL e o rollback restaura exatamente
+-- esse estado; qualquer divergência falha fechado antes da primeira escrita.
+CREATE TABLE IF NOT EXISTS _qa_sim_planning_requires_scale_baseline (
+  ok INTEGER NOT NULL CHECK (ok = 1)
+);
+DELETE FROM _qa_sim_planning_requires_scale_baseline;
+INSERT INTO _qa_sim_planning_requires_scale_baseline(ok)
+SELECT CASE WHEN (
+  SELECT COUNT(*)
+  FROM funcionarios f
+  JOIN empresas emp ON emp.id = f.empresa_id
+  WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+    AND emp.deleted_at IS NULL
+    AND f.matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)})
+    AND f.deleted_at IS NULL
+    AND f.quinzena IS NULL
+) = 2 THEN 1 ELSE 0 END;
+DROP TABLE _qa_sim_planning_requires_scale_baseline;
+
 -- Limpa apenas drafts anteriores deste smoke no tenant sintético.
 UPDATE treinamentos_planejados
 SET deleted_at = datetime('now'), updated_at = datetime('now')
@@ -426,11 +446,11 @@ WHERE ms.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO
 -- Terceiro participante existe apenas para provar que a comparação CAE não repara singles silenciosamente.
 INSERT INTO funcionarios (
   nome, matricula, cargo, setor, setor_id, status, is_instrutor, is_checador, is_examinador, ativo, empresa_id,
-  created_at, updated_at, deleted_at
+  quinzena, created_at, updated_at, deleted_at
 )
 SELECT
   'QA Participante Charlie', ${e(PARTICIPANTE3_CODIGO)}, 'Participante QA', alfa.setor, alfa.setor_id,
-  'ATIVO', 0, 0, 0, 1, emp.id, datetime('now'), datetime('now'), NULL
+  'ATIVO', 0, 0, 0, 1, emp.id, 'primeira', datetime('now'), datetime('now'), NULL
 FROM empresas emp
 JOIN funcionarios alfa
   ON alfa.empresa_id = emp.id
@@ -448,7 +468,8 @@ WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
 -- fixture. Nenhum nome/cargo/papel é normalizado aqui: a assinatura acima já
 -- deve ter provado ownership antes de remover o soft-delete.
 UPDATE funcionarios
-SET deleted_at = NULL,
+SET quinzena = 'primeira',
+    deleted_at = NULL,
     updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND matricula = ${e(PARTICIPANTE3_CODIGO)}
@@ -468,6 +489,17 @@ WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
       AND alfa.setor IS funcionarios.setor
       AND alfa.setor_id IS funcionarios.setor_id
   );
+
+-- Escala 1/2 temporária para o teste: os três participantes trabalham na
+-- Escala 1 e, portanto, têm folga derivável na janela operacional 2. Nenhuma
+-- escala mensal publicada é criada ou consultada para isso.
+UPDATE funcionarios
+SET quinzena = 'primeira',
+    updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)})
+  AND deleted_at IS NULL
+  AND quinzena IS NULL;
 
 -- Três históricos QA com o mesmo vencimento: dois formam uma dupla bloqueada e o terceiro permanece singleton.
 INSERT INTO qualificacoes_historico (
@@ -526,139 +558,10 @@ WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
       AND matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
   );
 
--- Escala publicada sintética: sem ela, o planner deve e continuará falhando
--- fechado como DESCONHECIDO. Não tocar escalas pré-existentes do mesmo mês.
-CREATE TABLE IF NOT EXISTS _qa_sim_planning_requires_isolated_roster (
-  ok INTEGER NOT NULL CHECK (ok = 1)
-);
-DELETE FROM _qa_sim_planning_requires_isolated_roster;
-INSERT INTO _qa_sim_planning_requires_isolated_roster(ok)
-SELECT CASE WHEN NOT EXISTS (
-  SELECT 1
-  FROM escalas_mensais
-  WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-    AND id <> ${e(QA_ROSTER_ID)}
-    AND mes = CAST(strftime('%m', date('now', '+90 days')) AS INTEGER)
-    AND ano = CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER)
-    AND deleted_at IS NULL
-) THEN 1 ELSE 0 END;
-DROP TABLE _qa_sim_planning_requires_isolated_roster;
-
--- Os três participantes ficam em FOLGA exclusivamente nesta escala reservada.
-INSERT OR IGNORE INTO escalas_mensais (
-  id, mes, ano, titulo, status, observacoes, empresa_id,
-  created_by, created_at, updated_at, deleted_at
-)
-SELECT
-  ${e(QA_ROSTER_ID)},
-  CAST(strftime('%m', date('now', '+90 days')) AS INTEGER),
-  CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER),
-  'QA Simulator Planning Roster', 'publicada', ${e(PLANNING_MARKER)},
-  emp.id, 'qa-simulator-planning', datetime('now'), datetime('now'), NULL
-FROM empresas emp
-WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
-  AND emp.deleted_at IS NULL;
-
-UPDATE escalas_mensais
-SET mes = CAST(strftime('%m', date('now', '+90 days')) AS INTEGER),
-    ano = CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER),
-    titulo = 'QA Simulator Planning Roster',
-    status = 'publicada',
-    observacoes = ${e(PLANNING_MARKER)},
-    deleted_at = NULL,
-    updated_at = datetime('now')
-WHERE id = ${e(QA_ROSTER_ID)}
-  AND empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-  AND NOT EXISTS (
-    SELECT 1
-    FROM escalas_mensais other
-    WHERE other.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-      AND other.id <> ${e(QA_ROSTER_ID)}
-      AND other.mes = CAST(strftime('%m', date('now', '+90 days')) AS INTEGER)
-      AND other.ano = CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER)
-      AND other.deleted_at IS NULL
-  );
-
-INSERT OR IGNORE INTO escala_alocacoes (
-  id, escala_id, funcionario_id, aeronave_id, funcao,
-  situacao_tipo, situacao_cor, quinzena_id, data_inicio, data_fim,
-  status, observacoes, created_by, created_at, updated_at, deleted_at
-)
-SELECT
-  CASE f.matricula
-    WHEN ${e(PARTICIPANTE1_CODIGO)} THEN ${e(QA_ALLOCATION_IDS[0])}
-    WHEN ${e(PARTICIPANTE2_CODIGO)} THEN ${e(QA_ALLOCATION_IDS[1])}
-    ELSE ${e(QA_ALLOCATION_IDS[2])}
-  END,
-  em.id, CAST(f.id AS TEXT), NULL, NULL, 'FOLGA', '#64748b', NULL,
-  date('now'), date('now', '+120 days'), 'confirmado',
-  ${e(PLANNING_MARKER)}, 'qa-simulator-planning',
-  datetime('now'), datetime('now'), NULL
-FROM empresas emp
-JOIN funcionarios f
-  ON f.empresa_id = emp.id
- AND f.matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
- AND f.deleted_at IS NULL
-JOIN escalas_mensais em
-  ON em.empresa_id = emp.id
- AND em.id = ${e(QA_ROSTER_ID)}
- AND em.status = 'publicada'
- AND em.observacoes = ${e(PLANNING_MARKER)}
- AND em.deleted_at IS NULL
-WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
-  AND emp.deleted_at IS NULL;
-
-UPDATE escala_alocacoes
-SET escala_id = (
-      SELECT em.id
-      FROM escalas_mensais em
-      WHERE em.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-        AND em.id = ${e(QA_ROSTER_ID)}
-        AND em.status = 'publicada'
-        AND em.observacoes = ${e(PLANNING_MARKER)}
-        AND em.deleted_at IS NULL
-      LIMIT 1
-    ),
-    funcionario_id = CASE id
-      WHEN ${e(QA_ALLOCATION_IDS[0])} THEN CAST((
-        SELECT f.id FROM funcionarios f
-        WHERE f.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-          AND f.matricula = ${e(PARTICIPANTE1_CODIGO)}
-          AND f.deleted_at IS NULL
-        LIMIT 1
-      ) AS TEXT)
-      WHEN ${e(QA_ALLOCATION_IDS[1])} THEN CAST((
-        SELECT f.id FROM funcionarios f
-        WHERE f.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-          AND f.matricula = ${e(PARTICIPANTE2_CODIGO)}
-          AND f.deleted_at IS NULL
-        LIMIT 1
-      ) AS TEXT)
-      ELSE CAST((
-        SELECT f.id FROM funcionarios f
-        WHERE f.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-          AND f.matricula = ${e(PARTICIPANTE3_CODIGO)}
-          AND f.deleted_at IS NULL
-        LIMIT 1
-      ) AS TEXT)
-    END,
-    aeronave_id = NULL,
-    funcao = NULL,
-    situacao_tipo = 'FOLGA',
-    situacao_cor = '#64748b',
-    quinzena_id = NULL,
-    data_inicio = date('now'),
-    data_fim = date('now', '+120 days'),
-    status = 'confirmado',
-    observacoes = ${e(PLANNING_MARKER)},
-    created_by = 'qa-simulator-planning',
-    deleted_at = NULL,
-    updated_at = datetime('now')
-WHERE id IN (${allocationIds})
-  AND escala_id IN (
-    SELECT id FROM escalas_mensais
-    WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-  );
+-- Não criar escala mensal nem alocações publicadas: este aceite existe justamente
+-- para provar que o planejamento futuro funciona somente com Escala 1/2 do
+-- funcionário + calendário operacional de quinzenas. Resíduos de versões antigas
+-- já foram removidos pelo pre-clean governado.
 
 -- Pós-condições atômicas. Qualquer divergência aborta o batch inteiro.
 CREATE TABLE IF NOT EXISTS _qa_sim_planning_post_guard (
@@ -668,14 +571,16 @@ CREATE TABLE IF NOT EXISTS _qa_sim_planning_post_guard (
   model_count INTEGER NOT NULL CHECK (model_count = 1),
   model_version_count INTEGER NOT NULL CHECK (model_version_count = 1),
   participant_count INTEGER NOT NULL CHECK (participant_count = 3),
+  fixed_scale_count INTEGER NOT NULL CHECK (fixed_scale_count = 3),
   history_count INTEGER NOT NULL CHECK (history_count = 3),
-  allocation_count INTEGER NOT NULL CHECK (allocation_count = 3),
+  roster_count INTEGER NOT NULL CHECK (roster_count = 0),
+  allocation_count INTEGER NOT NULL CHECK (allocation_count = 0),
   config_count INTEGER NOT NULL CHECK (config_count = 1)
 );
 DELETE FROM _qa_sim_planning_post_guard;
 INSERT INTO _qa_sim_planning_post_guard (
   tenant_count, category_count, qualification_count, model_count,
-  model_version_count, participant_count, history_count, allocation_count, config_count
+  model_version_count, participant_count, fixed_scale_count, history_count, roster_count, allocation_count, config_count
 )
 SELECT
   (SELECT COUNT(*) FROM empresas
@@ -716,15 +621,19 @@ SELECT
     WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
       AND matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
       AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM funcionarios
+    WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+      AND matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
+      AND quinzena = 'primeira'
+      AND deleted_at IS NULL),
   (SELECT COUNT(*) FROM qualificacoes_historico
     WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
       AND observacoes = ${e(PLANNING_MARKER)}
       AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM escalas_mensais
+    WHERE id = ${e(QA_ROSTER_ID)} AND deleted_at IS NULL),
   (SELECT COUNT(*) FROM escala_alocacoes
-    WHERE id IN (${allocationIds})
-      AND deleted_at IS NULL
-      AND data_inicio <= date('now')
-      AND data_fim >= date('now', '+90 days')),
+    WHERE id IN (${allocationIds}) AND deleted_at IS NULL),
   (SELECT COUNT(*) FROM empresas_config
     WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
       AND planejamento_simulador_antecedencia_dias >= 90
@@ -808,6 +717,14 @@ WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   )
   AND deleted_at IS NULL;
 
+-- Restaura exatamente o baseline dos dois participantes base sintéticos.
+UPDATE funcionarios
+SET quinzena = NULL, updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)})
+  AND quinzena = 'primeira'
+  AND deleted_at IS NULL;
+
 UPDATE funcionarios
 SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
@@ -886,6 +803,7 @@ CREATE TABLE IF NOT EXISTS _qa_sim_planning_rollback_guard (
   allocation_count INTEGER NOT NULL CHECK (allocation_count = 0),
   roster_count INTEGER NOT NULL CHECK (roster_count = 0),
   history_count INTEGER NOT NULL CHECK (history_count = 0),
+  base_scale_override_count INTEGER NOT NULL CHECK (base_scale_override_count = 0),
   charlie_count INTEGER NOT NULL CHECK (charlie_count = 0),
   model_version_count INTEGER NOT NULL CHECK (model_version_count = 0),
   model_count INTEGER NOT NULL CHECK (model_count = 0),
@@ -894,7 +812,7 @@ CREATE TABLE IF NOT EXISTS _qa_sim_planning_rollback_guard (
 );
 DELETE FROM _qa_sim_planning_rollback_guard;
 INSERT INTO _qa_sim_planning_rollback_guard (
-  draft_count, allocation_count, roster_count, history_count, charlie_count,
+  draft_count, allocation_count, roster_count, history_count, base_scale_override_count, charlie_count,
   model_version_count, model_count, qualification_count, category_count
 )
 SELECT
@@ -910,6 +828,11 @@ SELECT
   (SELECT COUNT(*) FROM qualificacoes_historico
     WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
       AND observacoes=${e(PLANNING_MARKER)} AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM funcionarios
+    WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
+      AND matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)})
+      AND quinzena IS NOT NULL
+      AND deleted_at IS NULL),
   (SELECT COUNT(*) FROM funcionarios
     WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
       AND matricula=${e(PARTICIPANTE3_CODIGO)} AND deleted_at IS NULL),
