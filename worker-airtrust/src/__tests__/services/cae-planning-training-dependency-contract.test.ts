@@ -37,12 +37,18 @@ describe('training dependency -> complete simulator planning contract', () => {
     expect(participantMaterializationAt).toBeGreaterThan(guardAt);
   });
 
-  it('keeps exact CAE time selection a second-stage step after day-level proposal generation', () => {
-    const route = read('worker-airtrust/src/routes/simuladores-planejamento-v2.ts');
+  it('keeps exact CAE time selection exclusively in the second-stage comparison route', () => {
+    const proposalRoute = read('worker-airtrust/src/routes/simuladores-planejamento-v2.ts');
+    const comparisonRoute = read('worker-airtrust/src/routes/simuladores-planejamento-v2-crew.ts');
+    const frontend = read('src/react-app/pages/simuladores/planejamento/PlanejamentoSimuladoresV3.tsx');
     const scheduler = read('worker-airtrust/src/services/cae-planning-session-scheduler.ts');
 
-    expect(route).toContain('if (body?.cae_availability !== undefined');
-    expect(route).toContain('scheduleSimulatorTrainingBlocks');
+    expect(proposalRoute).not.toContain('body?.cae_availability');
+    expect(proposalRoute).not.toContain('scheduleSimulatorTrainingBlocks');
+    expect(comparisonRoute).toContain("'/comparar-cae'");
+    expect(comparisonRoute).toContain('scheduleSimulatorTrainingBlocks');
+    expect(frontend).toContain("'/api/simuladores/planejamento-v2/comparar-cae'");
+    expect(frontend).not.toContain('generateProposal(caeDocument');
     expect(scheduler).toContain('simulatorTrainingTimeQualityRank');
     expect(scheduler).toContain("timeQuality: SimulatorTrainingTimeQuality");
     expect(scheduler).toContain('time_quality: chosen.timeQuality');

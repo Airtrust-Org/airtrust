@@ -1,0 +1,8 @@
+{
+  "changeId": "simulator-planning-curriculum-metadata-0490",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0490_simulator_planning_curriculum_metadata.sql",
+  "fileHash": "a9b0582b6bfa7345dfde2621c5b2a36d63b595a7a27b99df62951117cf77525f",
+  "planPath": "worker-airtrust/schema-v2/plans/simulator-planning-curriculum-metadata-0490.md",
+  "planHash": "3f12fa81cac413b77fe12f593be728570b6cb9973696ba85396cf0884c4add01"
+}

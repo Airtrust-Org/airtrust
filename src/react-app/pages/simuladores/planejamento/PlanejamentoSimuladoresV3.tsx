@@ -112,7 +112,9 @@ type Proposal = {
     type?: string;
     employee_name?: string;
     qualification_name?: string;
+    qualification_code?: string | null;
     expiry_date?: string;
+    invalid_sessions?: Array<{ code?: string; name?: string }>;
   }>;
 };
 
@@ -226,6 +228,23 @@ function draftStatusLabel(value?: DraftWorkflowStatus | null) {
   return 'Não salvo';
 }
 
+function planningExceptionMessage(item: Proposal['exceptions'][number]) {
+  const qualification = item.qualification_code || item.qualification_name || 'treinamento';
+  const person = item.employee_name ? ` · ${item.employee_name}` : '';
+  const expiry = item.expiry_date ? ` · vence ${formatDate(item.expiry_date)}` : '';
+  if (item.type === 'CURRICULO_NAO_CONFIGURADO') {
+    return `${qualification}: currículo de sessões ainda não configurado${person}${expiry}.`;
+  }
+  if (item.type === 'DURACAO_SESSAO_AUSENTE') {
+    const sessions = item.invalid_sessions?.map((session) => session.code || session.name).filter(Boolean).join(', ');
+    return `${qualification}: há sessão sem duração válida${sessions ? ` (${sessions})` : ''}${person}${expiry}.`;
+  }
+  if (item.type === 'CURRICULO_AMBIGUO') {
+    return `${qualification}: currículo/equipamento ambíguo${person}${expiry}.`;
+  }
+  return `${qualification}: item requer revisão${person}${expiry}.`;
+}
+
 function uniqueNeeds(classes: PlanningClass[]): SessionNeed[] {
   const byId = new Map<string, SessionNeed>();
   for (const trainingClass of classes) {
@@ -279,10 +298,7 @@ export default function PlanejamentoSimuladoresV3() {
     void loadDrafts();
   }, [loadConfig, loadDrafts]);
 
-  const generateProposal = async (
-    availability?: CaeAvailabilityDocument | null,
-    preserveDraft = false,
-  ): Promise<Proposal | null> => {
+  const generateProposal = async (): Promise<Proposal | null> => {
     if (!inicio || !fim || inicio > fim) {
       showToast.error('Informe um período de vencimentos válido.');
       return null;
@@ -296,25 +312,18 @@ export default function PlanejamentoSimuladoresV3() {
           vencimento_inicio: inicio,
           vencimento_fim: fim,
           data_referencia: todayIso(),
-          ...(availability ? { cae_availability: availability } : {}),
         }),
       });
       setProposal(data);
       setBaseNeeds(uniqueNeeds(data.classes));
       setLocks([]);
       setSwap(null);
-      if (!preserveDraft && !availability) {
-        setDraftId(null);
-        setDraftStatus(null);
-        setCaeFileName(null);
-        setCaeFileKey(null);
-        setCaeDocument(null);
-      }
-      if (availability && data.cae_comparison) {
-        showToast.success(`${data.cae_comparison.scheduled_blocks} sessão(ões) alocada(s) nos slots CAE.`);
-      } else {
-        showToast.success(`Proposta criada com ${data.summary.session_requirements} sessão(ões).`);
-      }
+      setDraftId(null);
+      setDraftStatus(null);
+      setCaeFileName(null);
+      setCaeFileKey(null);
+      setCaeDocument(null);
+      showToast.success(`Proposta criada com ${data.summary.session_requirements} sessão(ões).`);
       return data;
     } catch (error) {
       showToast.error(frontendErrorMessage(error));
@@ -535,23 +544,44 @@ export default function PlanejamentoSimuladoresV3() {
   };
 
   const compareCae = async () => {
-    if (!caeDocument) return;
-    let nextProposal: Proposal | null = null;
-    let nextBaseNeeds = baseNeeds;
-    if (locks.length > 0) {
-      nextProposal = await rePair(locks, caeDocument);
-    } else {
-      nextProposal = await generateProposal(caeDocument, true);
-      if (nextProposal) nextBaseNeeds = uniqueNeeds(nextProposal.classes);
-    }
-    if (!nextProposal) return;
-    const comparison = nextProposal.cae_comparison;
-    const status: DraftWorkflowStatus =
-      comparison && comparison.no_slot_blocks === 0 && comparison.unmatched_crew_blocks === 0
-        ? 'PLANEJADO'
-        : 'REPLANEJAR';
-    if (draftId) {
-      await persistDraft(status, { proposal: nextProposal, baseNeeds: nextBaseNeeds }, true);
+    if (!caeDocument || !proposal || baseNeeds.length === 0) return;
+    try {
+      setLoading(true);
+      const pairingBlocks = proposal.classes.flatMap((trainingClass) =>
+        trainingClass.blocks.map((block) => ({
+          need_ids: block.sessions.map((session) => session.need_id),
+        })),
+      );
+      const data = await apiJson<RepairResponse>('/api/simuladores/planejamento-v2/comparar-cae', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reference_date: todayIso(),
+          session_needs: baseNeeds,
+          pairing_blocks: pairingBlocks,
+          cae_availability: caeDocument,
+        }),
+      });
+      const nextProposal: Proposal = {
+        ...proposal,
+        classes: data.classes,
+        cae_comparison: data.cae_comparison,
+        summary: { ...proposal.summary, ...data.summary },
+      };
+      setProposal(nextProposal);
+      const comparison = nextProposal.cae_comparison;
+      const status: DraftWorkflowStatus =
+        comparison && comparison.no_slot_blocks === 0 && comparison.unmatched_crew_blocks === 0
+          ? 'PLANEJADO'
+          : 'REPLANEJAR';
+      if (draftId) {
+        await persistDraft(status, { proposal: nextProposal, baseNeeds }, true);
+      }
+      showToast.success(`${comparison?.scheduled_blocks || 0} sessão(ões) alocada(s) nos slots CAE.`);
+    } catch (error) {
+      showToast.error(frontendErrorMessage(error));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -737,11 +767,11 @@ export default function PlanejamentoSimuladoresV3() {
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/50">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Regra da empresa</div>
             <div className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-100">{rosterPolicyLabel(config?.roster_policy)}</div>
-            <div className="mt-0.5 text-xs text-slate-500">Só aparecem trocas com equipamento/sessão compatíveis e disponibilidade comum na quinzena.</div>
+            <div className="mt-0.5 text-xs text-slate-500">A proposta usa vencimentos, currículo e escala publicada. A disponibilidade CAE entra somente na etapa 2.</div>
           </div>
           <button
             type="button"
-            onClick={() => void generateProposal(null)}
+            onClick={() => void generateProposal()}
             disabled={loading}
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
           >
@@ -900,7 +930,7 @@ export default function PlanejamentoSimuladoresV3() {
           <div>
             <h3 className="text-base font-semibold text-slate-900 dark:text-white">2. Disponibilidade da CAE</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Salve a proposta e aguarde a CAE. Quando a resposta chegar, retome este planejamento, envie o PDF e o AirTrust revalidará a escala na data exata de cada slot.
+              A proposta acima é independente da CAE. Quando a resposta chegar, envie o PDF para comparar os slots com as duplas já propostas e definir as datas, sem gerar uma nova proposta.
             </p>
           </div>
           <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200">
@@ -939,8 +969,17 @@ export default function PlanejamentoSimuladoresV3() {
 
       {proposal?.exceptions && proposal.exceptions.length > 0 && (
         <section className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
-          <div className="flex items-center gap-2 font-semibold text-amber-900 dark:text-amber-200"><AlertTriangle className="h-4 w-4" /> Exceções para revisão</div>
-          <div className="mt-2 text-sm text-amber-800 dark:text-amber-300">{proposal.exceptions.length} item(ns) não puderam entrar automaticamente na proposta.</div>
+          <div className="flex items-center gap-2 font-semibold text-amber-900 dark:text-amber-200"><AlertTriangle className="h-4 w-4" /> Itens bloqueados na proposta</div>
+          <div className="mt-2 text-sm text-amber-800 dark:text-amber-300">
+            {proposal.exceptions.length} necessidade(s) foram encontrada(s), mas ainda não podem virar sessão automaticamente.
+          </div>
+          <div className="mt-3 space-y-2">
+            {proposal.exceptions.map((item, index) => (
+              <div key={`${item.type || 'REVISAO'}-${item.employee_name || index}-${item.expiry_date || index}`} className="rounded-lg border border-amber-200/80 bg-white/70 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-slate-950/40 dark:text-amber-200">
+                {planningExceptionMessage(item)}
+              </div>
+            ))}
+          </div>
         </section>
       )}
     </div>

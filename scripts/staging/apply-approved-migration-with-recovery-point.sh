@@ -35,6 +35,7 @@ APPROVED_MIGRATIONS=(
   "0479_edb_relational_integrity.sql"
   "0480_edb_diary_lifecycle_integrity.sql"
   "0489_a02_natural_keys_tenant_scoped.sql"
+  "0490_simulator_planning_curriculum_metadata.sql"
 )
 
 apply=false
@@ -174,6 +175,9 @@ validate_postconditions() {
     0489_a02_natural_keys_tenant_scoped.sql)
       bash scripts/staging/validate-0489-postconditions.sh --target="$db_name"
       ;;
+    0490_simulator_planning_curriculum_metadata.sql)
+      bash scripts/staging/validate-0490-postconditions.sh --target="$db_name"
+      ;;
   esac
 }
 
@@ -254,6 +258,10 @@ fi
 if [[ "$migration_basename" == "0489_a02_natural_keys_tenant_scoped.sql" && "$ledger_count" == "0" ]]; then
   bash scripts/staging/validate-0489-preflight.sh --target="$db_name"
   echo "SPECIALIZED_PREFLIGHT_0489_OK=true"
+fi
+if [[ "$migration_basename" == "0490_simulator_planning_curriculum_metadata.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0490-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0490_OK=true"
 fi
 
 if [[ -n "$edb_manifest_name" ]]; then

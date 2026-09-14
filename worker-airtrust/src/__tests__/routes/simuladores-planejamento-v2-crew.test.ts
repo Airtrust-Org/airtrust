@@ -25,6 +25,13 @@ vi.mock('../../services/employee-sector-access', () => ({
   buildFuncionarioScopeWhere: vi.fn().mockReturnValue({ clause: '1 = 1', bindings: [] }),
 }));
 
+vi.mock('../../services/cae-planning-roster-d1', () => ({
+  resolvePublishedRosterDayFromD1: vi.fn().mockResolvedValue({
+    state: 'FOLGA',
+    reason: 'Folga publicada para o teste.',
+  }),
+}));
+
 import router from '../../routes/simuladores-planejamento-v2-crew';
 
 function need(employeeId: number, name: string) {
@@ -233,5 +240,66 @@ describe('simulator planning V2 manual crew replacement', () => {
     expect(response.status).toBe(400);
     const body = await response.json() as any;
     expect(body.error).toContain('sem disponibilidade comum');
+  });
+
+
+  it('compares CAE slots against the exact existing proposal without re-pairing an unmatched crew member', async () => {
+    const app = buildApp();
+    const response = await app.request(
+      '/api/simuladores/planejamento-v2/comparar-cae',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          reference_date: '2027-06-01',
+          session_needs: [need(10, 'Filipe'), need(20, 'Adriana'), need(30, 'Castro')],
+          pairing_blocks: [
+            { need_ids: ['10:1:101', '30:1:101'] },
+            { need_ids: ['20:1:101'] },
+          ],
+          cae_availability: {
+            schema_version: 'airtrust.cae_availability.v1',
+            provider: 'CAE',
+            source: {
+              kind: 'TEXT',
+              filename: 'availability.txt',
+              received_at: '2027-06-01T10:00:00Z',
+              extracted_at: '2027-06-01T10:00:00Z',
+            },
+            slots: [
+              {
+                external_ref: 'AW139-2027-06-15-1000',
+                equipment: 'AW139',
+                date: '2027-06-15',
+                start_time: '10:00',
+                end_time: '14:00',
+                duration_minutes: 240,
+                state: 'OFFERED',
+                company: 'TEST',
+                participants_mentioned: [],
+                confidence: 1,
+              },
+            ],
+            warnings: [],
+          },
+        }),
+      },
+      { DB: buildDb() } as unknown as Env,
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as any;
+    expect(body.data.summary).toMatchObject({
+      session_requirements: 3,
+      paired_blocks: 1,
+      unmatched_blocks: 1,
+    });
+    const blocks = body.data.classes.flatMap((trainingClass: any) => trainingClass.blocks);
+    const paired = blocks.find((block: any) => block.sessions.length === 2);
+    expect(paired.sessions.map((session: any) => session.employee_name).sort()).toEqual(['Castro', 'Filipe']);
+    expect(paired.schedule_status).toBe('SCHEDULED');
+    const unmatched = blocks.find((block: any) => block.sessions.length === 1);
+    expect(unmatched.sessions[0].employee_name).toBe('Adriana');
+    expect(unmatched.schedule_status).toBe('UNMATCHED_CREW');
   });
 });
