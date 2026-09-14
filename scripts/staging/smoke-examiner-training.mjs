@@ -143,6 +143,85 @@ export function sanitizeScheduleConflict(response) {
   };
 }
 
+export function examinerSessionCandidateDates({
+  runId = process.env.GITHUB_RUN_ID || 'local',
+  runAttempt = process.env.GITHUB_RUN_ATTEMPT || '1',
+  now = new Date(),
+  count = 8,
+} = {}) {
+  const seedText = `${runId}:${runAttempt}`;
+  let seed = 0;
+  for (const char of seedText) seed = (seed * 31 + char.charCodeAt(0)) % 61;
+  const firstOffsetDays = 7 + seed;
+  const base = new Date(`${saoPauloTodayDateKey(now)}T12:00:00Z`);
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(base.getTime() + (firstOffsetDays + index) * 86400000);
+    return date.toISOString().slice(0, 10);
+  });
+}
+
+export function sanitizeSimpleSessionCreate(response) {
+  const rawCode = typeof response?.json?.code === 'string' ? response.json.code : '';
+  const rawMessage = String(response?.json?.error || response?.json?.message || '');
+  return {
+    status: response?.status ?? null,
+    errorCode: rawCode ? rawCode.replace(/[^A-Z0-9_]/gi, '').slice(0, 80) : null,
+    message: rawMessage
+      ? rawMessage.replace(/\b\d{3,}\b/g, '[id]').replace(/\s+/g, ' ').slice(0, 160)
+      : null,
+  };
+}
+
+export async function createSimpleSessionInAvailableDate({ candidates, createSession }) {
+  const attempts = [];
+  for (const [index, date] of candidates.entries()) {
+    const response = await createSession(date);
+    const diagnostic = sanitizeSimpleSessionCreate(response);
+    const sessionId =
+      response?.json?.data?.id ??
+      response?.json?.data?.sessao_id ??
+      response?.json?.data?.sessaoId ??
+      response?.json?.data?.sessao?.id ??
+      null;
+    const attempt = {
+      attempt: index + 1,
+      date,
+      status: diagnostic.status,
+      errorCode: diagnostic.errorCode,
+      message: diagnostic.message,
+      discardReason: null,
+    };
+
+    if ((response?.status === 201 || response?.status === 200) && sessionId) {
+      attempt.discardReason = 'selected';
+      attempts.push(attempt);
+      return { response, selectedDate: date, sessionId, attempts };
+    }
+
+    if (response?.status === 409 && diagnostic.errorCode === 'SCHEDULE_CONFLICT') {
+      attempt.discardReason = 'schedule_conflict';
+      attempts.push(attempt);
+      continue;
+    }
+
+    // A qualification-sync 409 may mean the primary session was already saved.
+    // Never retry it as if it were a harmless schedule collision: doing so would
+    // create additional sessions and hide a real integration failure.
+    attempt.discardReason = `hard_fail_http_${response?.status ?? 'unknown'}`;
+    attempts.push(attempt);
+    const error = new Error(
+      `B_simple_session falhou em ${date}: HTTP ${response?.status ?? 'unknown'}${diagnostic.errorCode ? ` (${diagnostic.errorCode})` : ''}`,
+    );
+    error.attempts = attempts;
+    error.sessionId = sessionId;
+    throw error;
+  }
+
+  const error = new Error('B_simple_session sem data disponível após conflitos de agenda');
+  error.attempts = attempts;
+  throw error;
+}
+
 export async function createPdfSessionInAvailableSlot({ candidates, createSession }) {
   const attempts = [];
   for (const [index, candidate] of candidates.entries()) {
@@ -287,30 +366,34 @@ async function main() {
   // a guaranteed 400 here that silently cascaded into C/D/G being skipped
   // while still counting as passing in the final ok-check — fixed.
   let simpleSessionId = null;
-  const randomDayOffset1 = 7 + Math.floor(Math.random() * 10000);
-  const data1 = new Date(Date.now() + randomDayOffset1 * 86400000).toISOString().slice(0, 10);
+  let data1 = null;
   {
-    const created = await authFetch(baseUrl, token, '/api/simuladores/sessoes', {
-      method: 'POST',
-      body: JSON.stringify({
-        data: data1,
-        horario_inicio: '08:00',
-        horario_fim: '09:00',
-        tipo_sessao: 'PER',
-        simulador_id: simuladorId,
-        instrutor_id: instrutorId,
-        participantes: [
-          { funcionario_id: participante1Id, funcao: 'PF' },
-          { funcionario_id: participante2Id, funcao: 'PM' },
-        ],
-        observacoes: 'QA smoke — sessão simples (rollback via seed --rollback)',
-      }),
+    const selection = await createSimpleSessionInAvailableDate({
+      candidates: examinerSessionCandidateDates(),
+      createSession: (candidateDate) =>
+        authFetch(baseUrl, token, '/api/simuladores/sessoes', {
+          method: 'POST',
+          body: JSON.stringify({
+            data: candidateDate,
+            // Reserve the full 2h window that scenario C will convert into a
+            // shared session. This avoids selecting a 1h slot whose adjacent
+            // hour is already occupied and then failing only during conversion.
+            horario_inicio: '08:00',
+            horario_fim: '10:00',
+            tipo_sessao: 'PER',
+            simulador_id: simuladorId,
+            instrutor_id: instrutorId,
+            participantes: [
+              { funcionario_id: participante1Id, funcao: 'PF' },
+              { funcionario_id: participante2Id, funcao: 'PM' },
+            ],
+            observacoes: 'QA smoke — sessão simples (rollback via seed --rollback)',
+          }),
+        }),
     });
-    simpleSessionId =
-      created.json?.data?.id ??
-      created.json?.data?.sessao_id ??
-      created.json?.data?.sessaoId ??
-      null;
+    const created = selection.response;
+    data1 = selection.selectedDate;
+    simpleSessionId = selection.sessionId;
     const editOk = simpleSessionId
       ? (
           await authFetch(baseUrl, token, `/api/simuladores/sessoes/${simpleSessionId}`, {
@@ -320,9 +403,11 @@ async function main() {
         ).status === 200
       : false;
     report.scenarios.B_simple_session = {
-      ok: created.status === 201 || created.status === 200,
+      ok: (created.status === 201 || created.status === 200) && editOk,
       createStatus: created.status,
       editOk,
+      selectedDate: data1,
+      attempts: selection.attempts,
       sessionId: simpleSessionId,
     };
   }

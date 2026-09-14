@@ -156,20 +156,13 @@ describe('smoke-examiner-training: PDF fixture date/time', () => {
     );
   });
 
-  it('keeps the other scenarios (B/C/D, F) scheduled on future days, never today, to avoid conflicting with the dedicated PDF-day fixture', () => {
+  it('keeps B/C/D on deterministic future dates and F at least 8 days in the future', () => {
     const source = readFileSync(join(ROOT, 'scripts/staging/smoke-examiner-training.mjs'), 'utf8');
-    const offsetDeclarations = [...source.matchAll(/const randomDayOffset(\d) = (\d+) \+/g)];
-    assert.equal(
-      offsetDeclarations.length,
-      2,
-      'esperado exatamente dois offsets de dia futuro (B/C/D e F)',
-    );
-    for (const [, , minDays] of offsetDeclarations) {
-      assert.ok(
-        Number(minDays) >= 7,
-        'offset mínimo dos demais cenários deve permanecer >= 7 dias no futuro',
-      );
-    }
+    assert.match(source, /examinerSessionCandidateDates\(\)/);
+    assert.match(source, /const firstOffsetDays = 7 \+ seed/);
+    const fOffset = source.match(/const randomDayOffset2 = (\d+) \+/);
+    assert.ok(fOffset, 'cenário F deve continuar explicitamente futuro');
+    assert.ok(Number(fOffset[1]) >= 8);
   });
 
   it('retries a recognized 400 schedule conflict and selects the next free slot', async () => {

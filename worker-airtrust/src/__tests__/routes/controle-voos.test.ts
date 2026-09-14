@@ -972,6 +972,26 @@ describe('controle voos routes', () => {
     });
   });
 
+
+  it('aceita cancelamento com motivo operacional pelo endpoint dedicado de status', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos/601/status', {
+      method: 'POST',
+      body: JSON.stringify({
+        status: 'cancelado',
+        versao: 1,
+        cancelado_motivo_id: 501,
+        descricao: 'QA cleanup RDV CAS',
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: { id: 601, status: 'cancelado', cancelado_motivo_id: 501, versao: 2 },
+    });
+  });
+
   it('status: duas chamadas concorrentes com a mesma versao — exatamente uma grava, a outra recebe 409, versao avanca uma unica vez', async () => {
     const db = createSqliteD1();
 
