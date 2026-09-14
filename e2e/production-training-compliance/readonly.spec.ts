@@ -183,11 +183,27 @@ test('production training compliance UI and APIs are coherent and read-only', as
     await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
   }
 
-  const rulesP = waitApi(page, '/api/compliance-treinamentos/regras');
   await page.getByRole('button', { name: 'Configuração da matriz', exact: true }).click();
+  const trainingSelector = page
+    .getByText('Treinamento / modelo de qualificação', { exact: true })
+    .locator('..')
+    .locator('select');
+  await expect(trainingSelector).toBeVisible();
+  const selectableTipoIds = await trainingSelector
+    .locator('option')
+    .evaluateAll((options) =>
+      options.map((option) => (option as HTMLOptionElement).value).filter(Boolean),
+    );
+  expect(selectableTipoIds.length).toBeGreaterThan(0);
+  const selectedTipoId = selectableTipoIds[0];
+  const rulesP = waitApi(
+    page,
+    '/api/compliance-treinamentos/regras',
+    (url) => url.searchParams.get('qualificacao_tipo_id') === selectedTipoId,
+  );
+  await trainingSelector.selectOption(selectedTipoId);
   const rules = await rulesP.then(payload);
   expect(Array.isArray(rules.data)).toBe(true);
-  await expect(page.getByText('Treinamento / modelo de qualificação')).toBeVisible();
 
   guard.assertClean();
 });
