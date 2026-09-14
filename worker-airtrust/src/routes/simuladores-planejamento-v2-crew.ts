@@ -553,4 +553,148 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
   });
 });
 
+
+/**
+ * Compara uma proposta já formada com a disponibilidade CAE sem recalcular
+ * duplas. `pairing_blocks` é a partição exata da proposta salva/visível:
+ * blocos com 2 necessidades permanecem como dupla e blocos com 1 necessidade
+ * permanecem sem dupla. A CAE entra apenas para definir datas/horários.
+ */
+app.post('/comparar-cae', requirePermission('simuladores', 'editar', 'admin', 'manager'), async (c) => {
+  const empresaId = getTenantContext(c).empresaId;
+  const body = (await c.req.json().catch(() => null)) as {
+    reference_date?: unknown;
+    session_needs?: unknown;
+    pairing_blocks?: unknown;
+    cae_availability?: unknown;
+  } | null;
+  const referenceDate = String(body?.reference_date || new Date().toISOString().slice(0, 10));
+  const rawNeeds = Array.isArray(body?.session_needs) ? body.session_needs : [];
+  const needs = rawNeeds.map(parseNeed).filter((item): item is SimulatorTrainingSessionNeed => Boolean(item));
+  const rawBlocks = Array.isArray(body?.pairing_blocks) ? body.pairing_blocks : [];
+  if (
+    !isIsoDate(referenceDate) ||
+    rawNeeds.length === 0 || rawNeeds.length > MAX_NEEDS || needs.length !== rawNeeds.length ||
+    rawBlocks.length === 0 || rawBlocks.length > MAX_NEEDS ||
+    body?.cae_availability == null
+  ) {
+    return c.json({ success: false, error: 'Comparação CAE inválida' }, 400);
+  }
+
+  try {
+    await assertNeedsInTenantAndScope({ c, db: c.env.DB, empresaId, needs });
+  } catch (error) {
+    return c.json({ success: false, error: error instanceof Error ? error.message : 'Sessões inválidas' }, 400);
+  }
+
+  const config = await loadConfig(c.env.DB, empresaId);
+  const needById = new Map(needs.map((need) => [need.need_id, need]));
+  const used = new Set<string>();
+  const blocks: SimulatorTrainingSessionBlock[] = [];
+
+  for (const raw of rawBlocks) {
+    if (!raw || typeof raw !== 'object') {
+      return c.json({ success: false, error: 'Bloco da proposta inválido' }, 400);
+    }
+    const ids = Array.isArray((raw as Record<string, unknown>).need_ids)
+      ? ((raw as Record<string, unknown>).need_ids as unknown[]).map((value) => String(value || ''))
+      : [];
+    if (ids.length < 1 || ids.length > 2 || new Set(ids).size !== ids.length) {
+      return c.json({ success: false, error: 'Bloco da proposta deve conter uma ou duas sessões' }, 400);
+    }
+    const sessions = ids.map((id) => needById.get(id));
+    if (sessions.some((session) => !session) || ids.some((id) => used.has(id))) {
+      return c.json({ success: false, error: 'Bloco da proposta contém sessão ausente ou duplicada' }, 400);
+    }
+    const resolved = sessions as SimulatorTrainingSessionNeed[];
+    const first = resolved[0];
+    if (resolved.length === 2) {
+      const second = resolved[1];
+      if (
+        !canShareSimulatorTrainingSessions(first, second) ||
+        daysDistance(first.expiry_date, second.expiry_date) > config.planning_horizon_days
+      ) {
+        return c.json({ success: false, error: 'Dupla preservada incompatível com currículo/equipamento/horizonte' }, 400);
+      }
+    }
+    ids.forEach((id) => used.add(id));
+    blocks.push({
+      block_id: ids.slice().sort().join('+'),
+      equipment: first.equipment,
+      duration_minutes: first.duration_minutes,
+      target_date: resolved.map((session) => session.expiry_date).sort()[0],
+      pairing: resolved.length === 2 ? pairKind(resolved[0], resolved[1]) : 'SEM_DUPLA',
+      sessions: resolved,
+    });
+  }
+
+  if (used.size !== needs.length) {
+    return c.json({ success: false, error: 'A proposta informada não contém todas as sessões' }, 400);
+  }
+
+  const validation = validateAndNormalizeCaeAvailability(body.cae_availability);
+  if (!validation.ok) {
+    return c.json(
+      {
+        success: false,
+        error: 'Disponibilidade CAE inválida',
+        code: 'CAE_AVAILABILITY_INVALID',
+        details: validation.errors,
+        warnings: validation.warnings,
+      },
+      400,
+    );
+  }
+
+  const baseClasses = buildSimulatorTrainingClasses(blocks);
+  const rosterCache = new Map<string, Awaited<ReturnType<typeof resolvePublishedRosterDayFromD1>>>();
+  const schedule = await scheduleSimulatorTrainingBlocks({
+    blocks,
+    slots: validation.data.slots,
+    referenceDate,
+    preferredSessionsPerDay: config.preferred_sessions_per_day,
+    checkRoster: async (employeeId, _employeeName, date) => {
+      const key = `${employeeId}:${date}`;
+      let roster = rosterCache.get(key);
+      if (!roster) {
+        roster = await resolvePublishedRosterDayFromD1({ db: c.env.DB, empresaId, employeeId, date });
+        rosterCache.set(key, roster);
+      }
+      const eligibility = evaluateRosterEligibility(config.roster_policy, roster.state);
+      return {
+        eligible: eligibility.eligible,
+        state: roster.state,
+        reason: `${eligibility.reason} ${roster.reason}`.trim(),
+      };
+    },
+  });
+  const scheduledById = new Map(schedule.scheduled.map((block) => [block.block_id, block]));
+  const classes = baseClasses.map((trainingClass) => ({
+    ...trainingClass,
+    blocks: trainingClass.blocks.map((block) => scheduledById.get(block.block_id) || block),
+  }));
+  const unmatched = blocks.filter((block) => block.pairing === 'SEM_DUPLA').length;
+
+  return c.json({
+    success: true,
+    data: {
+      classes,
+      cae_comparison: {
+        source_slots: validation.data.slots.length,
+        scheduled_blocks: schedule.scheduled.filter((block) => block.schedule_status === 'SCHEDULED').length,
+        unmatched_crew_blocks: schedule.scheduled.filter((block) => block.schedule_status === 'UNMATCHED_CREW').length,
+        no_slot_blocks: schedule.scheduled.filter((block) => block.schedule_status === 'NO_CAE_SLOT').length,
+        remaining_slots: schedule.remaining_slots,
+        warnings: validation.warnings,
+      },
+      summary: {
+        session_requirements: needs.length,
+        paired_blocks: blocks.length - unmatched,
+        unmatched_blocks: unmatched,
+        classes: baseClasses.length,
+      },
+    },
+  });
+});
+
 export default app;
