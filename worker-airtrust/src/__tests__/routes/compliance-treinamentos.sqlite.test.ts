@@ -337,6 +337,33 @@ describe('training compliance engine', () => {
     });
   });
 
+  it('mantém matrícula EAD não iniciada como não realizada, sem inflar em andamento', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 101, 'SETOR_FUNCAO', 11, 2, 'OBRIGATORIA', 'REGULATORIO');
+
+      INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id)
+      VALUES (500, 1, 'PBN EAD', 101);
+      INSERT INTO lms_matriculas
+        (id, empresa_id, curso_id, funcionario_id, status, data_conclusao, created_at, updated_at)
+      VALUES (700, 1, 500, 1002, 'NAO_INICIADO', NULL, '2026-09-10', '2026-09-10');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request('/funcionarios/1002');
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(body.data.nao_realizados).toBe(1);
+    expect(body.data.em_andamento).toBe(0);
+    expect(body.data.requisitos[0]).toMatchObject({
+      qualificacao_tipo_id: 101,
+      status_compliance: 'NAO_REALIZADO',
+      curso_ead_titulo: 'PBN EAD',
+      lms_status: 'NAO_INICIADO',
+    });
+  });
+
   it('preserva conclusão EAD válida quando existe matrícula mais recente ainda em andamento', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
