@@ -97,3 +97,15 @@ test('staging simulator read-only audit surfaces disposable fixture residue', ()
   assert.match(audit, /qa_planning_hygiene_clean/);
   assert.match(audit, /RUN_GOVERNED_PERSISTENCE_QA_WITH_FAIL_CLOSED_PRE_CLEAN/);
 });
+
+
+test('staging simulator fixture never adopts or deletes a foreign Charlie participant', () => {
+  const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
+  assert.match(seed, /_qa_sim_planning_requires_charlie_absent/);
+  assert.match(seed, /f\.matricula = \${e\(PARTICIPANTE3_CODIGO\)}/);
+  assert.doesNotMatch(seed, /UPDATE funcionarios\s+SET nome = 'QA Participante Charlie'/);
+  assert.match(seed, /nome = 'QA Participante Charlie'/);
+  assert.match(seed, /cargo = 'Participante QA'/);
+  assert.match(seed, /alfa\.setor IS funcionarios\.setor/);
+  assert.match(seed, /alfa\.setor_id IS funcionarios\.setor_id/);
+});

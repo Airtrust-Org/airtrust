@@ -77,6 +77,24 @@ SELECT CASE
 END;
 DROP TABLE _qa_sim_planning_requires_tenant;
 
+-- Charlie pertence exclusivamente a este fixture descartável. Se uma linha ativa
+-- com a matrícula reservada já existir após o pre-clean, falhar fechado em vez
+-- de reutilizar/normalizar um participante que possa pertencer a outro QA.
+CREATE TABLE IF NOT EXISTS _qa_sim_planning_requires_charlie_absent (
+  ok INTEGER NOT NULL CHECK (ok = 1)
+);
+DELETE FROM _qa_sim_planning_requires_charlie_absent;
+INSERT INTO _qa_sim_planning_requires_charlie_absent(ok)
+SELECT CASE WHEN NOT EXISTS (
+  SELECT 1 FROM funcionarios f
+  JOIN empresas emp ON emp.id = f.empresa_id
+  WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+    AND emp.deleted_at IS NULL
+    AND f.matricula = ${e(PARTICIPANTE3_CODIGO)}
+    AND f.deleted_at IS NULL
+) THEN 1 ELSE 0 END;
+DROP TABLE _qa_sim_planning_requires_charlie_absent;
+
 -- A política de planejamento do tenant QA é baseline canônico, não fixture descartável.
 -- Falhar fechado se ela divergir; nunca sobrescrevê-la para fazer o smoke passar.
 CREATE TABLE IF NOT EXISTS _qa_sim_planning_requires_config (
@@ -297,12 +315,6 @@ WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
       AND matricula = ${e(PARTICIPANTE3_CODIGO)}
       AND deleted_at IS NULL
   );
-
-UPDATE funcionarios
-SET nome = 'QA Participante Charlie', cargo = 'Participante QA', status = 'ATIVO', ativo = 1,
-    deleted_at = NULL, updated_at = datetime('now')
-WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-  AND matricula = ${e(PARTICIPANTE3_CODIGO)};
 
 -- Três históricos QA com o mesmo vencimento: dois formam uma dupla bloqueada e o terceiro permanece singleton.
 INSERT INTO qualificacoes_historico (
@@ -595,7 +607,22 @@ UPDATE funcionarios
 SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND matricula = ${e(PARTICIPANTE3_CODIGO)}
-  AND deleted_at IS NULL;
+  AND nome = 'QA Participante Charlie'
+  AND cargo = 'Participante QA'
+  AND status = 'ATIVO'
+  AND COALESCE(ativo, 1) = 1
+  AND COALESCE(instrutor_simulador, 0) = 0
+  AND COALESCE(checador_simulador, 0) = 0
+  AND deleted_at IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM funcionarios alfa
+    WHERE alfa.empresa_id = funcionarios.empresa_id
+      AND alfa.matricula = ${e(PARTICIPANTE1_CODIGO)}
+      AND alfa.deleted_at IS NULL
+      AND alfa.setor IS funcionarios.setor
+      AND alfa.setor_id IS funcionarios.setor_id
+  );
 
 DELETE FROM modelos_sessao_versionamento
 WHERE modelo_id IN (
