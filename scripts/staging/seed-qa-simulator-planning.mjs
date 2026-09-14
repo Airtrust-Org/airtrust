@@ -141,6 +141,28 @@ SELECT CASE WHEN
       )
   )
   AND NOT EXISTS (
+    SELECT 1
+    FROM modelos_sessao_versionamento msv
+    LEFT JOIN modelos_sessao ms
+      ON ms.id = msv.modelo_id
+     AND ms.empresa_id = msv.empresa_id
+    WHERE (
+      msv.codigo_canonico = ${e(PLANNING_MODEL_CODE)}
+      OR ms.codigo = ${e(PLANNING_MODEL_CODE)}
+    )
+      AND NOT (
+        msv.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+        AND COALESCE(ms.empresa_id, -1) = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+        AND COALESCE(ms.codigo, '') = ${e(PLANNING_MODEL_CODE)}
+        AND msv.codigo_canonico = ${e(PLANNING_MODEL_CODE)}
+        AND msv.versao_numero = 1
+        AND msv.versao_matriz = 'QA_SIMULATOR_PLANNING'
+        AND msv.is_current = 1
+        AND msv.modelo_anterior_id IS NULL
+        AND msv.efetivo_ate IS NULL
+      )
+  )
+  AND NOT EXISTS (
     SELECT 1 FROM escalas_mensais em
     WHERE em.id = ${e(QA_ROSTER_ID)}
       AND NOT (
