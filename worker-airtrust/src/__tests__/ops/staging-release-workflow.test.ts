@@ -801,7 +801,8 @@ describe('scripts/staging/smoke-examiner-training.mjs — matches the real POST 
     // review) and were silently masking scenarios C/D/G as skipped-not-failed.
     const source = readFileSync(join(ROOT, 'scripts/staging/smoke-examiner-training.mjs'), 'utf8');
     const bIndex = source.indexOf("'/api/simuladores/sessoes'");
-    const bBlock = source.slice(bIndex, bIndex + 500);
+    const cIndex = source.indexOf('// C. Conversão simples', bIndex);
+    const bBlock = source.slice(bIndex, cIndex);
     expect(bBlock).toContain('horario_inicio');
     expect(bBlock).toContain('horario_fim');
     expect(bBlock).not.toMatch(/[^_]hora_inicio/);
