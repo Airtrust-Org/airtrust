@@ -159,6 +159,26 @@ SELECT CASE WHEN
         AND COALESCE(ea.created_by, '') = 'qa-simulator-planning'
       )
   )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM qualificacoes_historico qh
+    LEFT JOIN funcionarios f
+      ON f.id = qh.funcionario_id AND f.empresa_id = qh.empresa_id
+    LEFT JOIN qualificacoes_tipos qt
+      ON qt.id = qh.qualificacao_id AND qt.empresa_id = qh.empresa_id
+    WHERE qh.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+      AND qh.observacoes = ${e(PLANNING_MARKER)}
+      AND qh.deleted_at IS NULL
+      AND NOT (
+        f.matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
+        AND f.deleted_at IS NULL
+        AND UPPER(COALESCE(qt.codigo, '')) = UPPER(${e(PLANNING_QUAL_CODE)})
+        AND qt.deleted_at IS NULL
+        AND UPPER(COALESCE(qh.qualificacao_codigo, '')) = UPPER(${e(PLANNING_QUAL_CODE)})
+        AND COALESCE(qh.categoria, '') = 'TREINAMENTO'
+        AND COALESCE(qh.carga_horaria, -1) = 2
+      )
+  )
 THEN 1 ELSE 0 END;
 DROP TABLE _qa_sim_planning_requires_reserved_signatures;
 
@@ -427,7 +447,18 @@ SET data_conclusao = date('now', '-275 days'),
     deleted_at = NULL,
     updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-  AND observacoes = ${e(PLANNING_MARKER)};
+  AND observacoes = ${e(PLANNING_MARKER)}
+  AND qualificacao_id = (
+    SELECT id FROM qualificacoes_tipos
+    WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+      AND UPPER(codigo) = UPPER(${e(PLANNING_QUAL_CODE)})
+    LIMIT 1
+  )
+  AND funcionario_id IN (
+    SELECT id FROM funcionarios
+    WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+      AND matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
+  );
 
 -- Escala publicada sintética: sem ela, o planner deve e continuará falhando
 -- fechado como DESCONHECIDO. Não tocar escalas pré-existentes do mesmo mês.
@@ -641,6 +672,35 @@ function buildRollbackSql() {
   const e = sqlString;
   const allocationIds = QA_ALLOCATION_IDS.map(e).join(', ');
   return `
+-- Antes de qualquer cleanup, provar que o marcador de histórico reservado não
+-- foi reutilizado por outra fixture/dado. O pre-clean também passa por aqui.
+CREATE TABLE IF NOT EXISTS _qa_sim_planning_requires_history_signatures (
+  ok INTEGER NOT NULL CHECK (ok = 1)
+);
+DELETE FROM _qa_sim_planning_requires_history_signatures;
+INSERT INTO _qa_sim_planning_requires_history_signatures(ok)
+SELECT CASE WHEN NOT EXISTS (
+  SELECT 1
+  FROM qualificacoes_historico qh
+  LEFT JOIN funcionarios f
+    ON f.id = qh.funcionario_id AND f.empresa_id = qh.empresa_id
+  LEFT JOIN qualificacoes_tipos qt
+    ON qt.id = qh.qualificacao_id AND qt.empresa_id = qh.empresa_id
+  WHERE qh.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+    AND qh.observacoes = ${e(PLANNING_MARKER)}
+    AND qh.deleted_at IS NULL
+    AND NOT (
+      f.matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
+      AND f.deleted_at IS NULL
+      AND UPPER(COALESCE(qt.codigo, '')) = UPPER(${e(PLANNING_QUAL_CODE)})
+      AND qt.deleted_at IS NULL
+      AND UPPER(COALESCE(qh.qualificacao_codigo, '')) = UPPER(${e(PLANNING_QUAL_CODE)})
+      AND COALESCE(qh.categoria, '') = 'TREINAMENTO'
+      AND COALESCE(qh.carga_horaria, -1) = 2
+    )
+) THEN 1 ELSE 0 END;
+DROP TABLE _qa_sim_planning_requires_history_signatures;
+
 UPDATE treinamentos_planejados
 SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
@@ -669,6 +729,17 @@ UPDATE qualificacoes_historico
 SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND observacoes = ${e(PLANNING_MARKER)}
+  AND qualificacao_id = (
+    SELECT id FROM qualificacoes_tipos
+    WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+      AND UPPER(codigo) = UPPER(${e(PLANNING_QUAL_CODE)})
+    LIMIT 1
+  )
+  AND funcionario_id IN (
+    SELECT id FROM funcionarios
+    WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+      AND matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
+  )
   AND deleted_at IS NULL;
 
 UPDATE funcionarios

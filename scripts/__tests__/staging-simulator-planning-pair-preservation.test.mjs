@@ -134,3 +134,12 @@ test('staging simulator fixture rejects foreign reserved artifacts and cleanup i
   assert.match(seed, /cor = '#64748b'/);
   assert.match(seed, /COALESCE\(lms_integrada, 0\) = 0/);
 });
+
+test('staging simulator history cleanup is signature-gated and never marker-only', () => {
+  const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
+  assert.match(seed, /_qa_sim_planning_requires_history_signatures/);
+  assert.match(seed, /UPPER\(COALESCE\(qh\.qualificacao_codigo, ''\)\) = UPPER\(\$\{e\(PLANNING_QUAL_CODE\)\}\)/);
+  assert.match(seed, /f\.matricula IN \(\$\{e\(PARTICIPANTE1_CODIGO\)\}, \$\{e\(PARTICIPANTE2_CODIGO\)\}, \$\{e\(PARTICIPANTE3_CODIGO\)\}\)/);
+  assert.match(seed, /UPDATE qualificacoes_historico[\s\S]*qualificacao_id = \([\s\S]*PLANNING_QUAL_CODE[\s\S]*funcionario_id IN \(/);
+  assert.doesNotMatch(seed, /UPDATE qualificacoes_historico[\s\S]{0,220}observacoes = \$\{e\(PLANNING_MARKER\)\};/);
+});
