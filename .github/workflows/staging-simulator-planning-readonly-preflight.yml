@@ -162,16 +162,7 @@ jobs:
             echo '- production target/data used: no'
             echo '- staging mutation performed: no'
             if [[ -f "$REPORT_PATH" ]]; then
-              node --input-type=module <<'NODE'
-              import { readFileSync } from 'node:fs';
-              const raw = readFileSync(process.env.REPORT_PATH, 'utf8');
-              const data = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
-              console.log(`- diagnosis: ${data.diagnosis}`);
-              console.log(`- qa fixture present: ${data.qa_fixture_present}`);
-              console.log(`- planning hygiene clean: ${data.qa_planning_hygiene_clean}`);
-              console.log(`- next action: ${data.next_action}`);
-              console.log(`- residue counts: ${JSON.stringify(data.qa_planning_residue || {})}`);
-              NODE
+              node --input-type=module -e 'import { readFileSync } from "node:fs"; const raw=readFileSync(process.env.REPORT_PATH,"utf8"); const data=JSON.parse(raw.slice(raw.indexOf("{"),raw.lastIndexOf("}")+1)); console.log(`- diagnosis: ${data.diagnosis}`); console.log(`- qa fixture present: ${data.qa_fixture_present}`); console.log(`- planning hygiene clean: ${data.qa_planning_hygiene_clean}`); console.log(`- next action: ${data.next_action}`); console.log(`- residue counts: ${JSON.stringify(data.qa_planning_residue || {})}`);'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 

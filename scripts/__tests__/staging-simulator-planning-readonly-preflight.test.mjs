@@ -38,4 +38,5 @@ test('simulator planning readiness fails closed on tenant or schema drift', () =
   assert.match(workflow, /QA_BASE_FIXTURE_MISSING/);
   assert.match(workflow, /operation: SELECT\/PRAGMA only/);
   assert.match(workflow, /staging mutation performed: no/);
+  assert.doesNotMatch(workflow, /Publish sanitized readiness summary[\s\S]*<<'NODE'/);
 });
