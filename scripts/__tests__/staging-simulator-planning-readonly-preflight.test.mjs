@@ -44,7 +44,7 @@ test('simulator planning readiness fails closed on tenant or schema drift', () =
 
 test('read-only preflight checks simulator fixture schema compatibility', () => {
   const workflow = readFileSync('.github/workflows/staging-simulator-planning-readonly-preflight.yml', 'utf8');
-  assert.match(workflow, /preflight-simulator-planning-schema\.mjs/);
+  assert.match(workflow, /Require simulator-planning fixture schema compatibility \(read-only\)[\s\S]*CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN \}\}[\s\S]*CLOUDFLARE_ACCOUNT_ID: \$\{\{ secrets\.CLOUDFLARE_ACCOUNT_ID \}\}[\s\S]*preflight-simulator-planning-schema\.mjs/);
   const preflight = readFileSync('scripts/staging/preflight-simulator-planning-schema.mjs', 'utf8');
   assert.match(preflight, /READ_ONLY_SCHEMA_PREFLIGHT/);
   assert.match(preflight, /fixture_schema_compatible/);

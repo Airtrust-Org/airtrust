@@ -122,6 +122,9 @@ jobs:
         run: npm --prefix worker-airtrust ci
 
       - name: Require simulator-planning fixture schema compatibility (read-only)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/staging/preflight-simulator-planning-schema.mjs
 
       - name: Audit tenant isolation and planning-fixture residue read-only
