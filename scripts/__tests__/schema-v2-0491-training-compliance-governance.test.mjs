@@ -65,6 +65,10 @@ test('staging 0491 postconditions are read-only and reject production',()=>{
   assert.match(src,/ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"/);
   assert.doesNotMatch(src,/wrangler[^\n]+--file/i);
   assert.match(src,/legacy-backfill-missing/);
+  assert.match(src,/cross-tenant-qualification/);
+  assert.match(src,/cross-tenant-sector/);
+  assert.match(src,/cross-tenant-function/);
+  assert.match(src,/cross-tenant-employee/);
   execFileSync('bash',['-n',file]);
   assert.throws(()=>execFileSync('bash',[file,'--target=airtrust-db'],{stdio:'pipe'}));
 });
