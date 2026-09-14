@@ -52,7 +52,9 @@ The same release updates Planning V2 and the flight-curriculum routes so `ordem_
 
 ## Staging
 
-Staging apply is allowed only through the reviewed staging schema-change workflow after exact-SHA review, read-only 0490 preflight, D1 Time Travel recovery-point capture and dedicated postconditions. No local/manual remote D1 write is authorized by this plan.
+Do **not** apply 0490 to the canonical staging D1. The production target is tenant `empresa_id=6` (Costa do Sol), while the canonical staging database currently uses `empresa_id=6` for the synthetic `edb_pilot_smoke` tenant and does not contain the production M2026.07 simulator matrix. Replaying production tenant data into that staging tenant would violate environment/tenant isolation.
+
+The 0490 data transition is validated with the disposable SQLite migration harness and production read-only preflight. Runtime proposal-first / CAE behavior is validated in staging against the isolated `qa_examiner_training` simulator-planning fixture. Any future production-like staging clone needs a separately reviewed mapping/import plan; no local/manual remote D1 write is authorized by this plan.
 
 ## Production
 

@@ -56,31 +56,17 @@ test('production workflow wires dedicated 0490 preflight and postconditions', ()
   assert.match(workflow, /validate-0490-production-postconditions\.sh/);
 });
 
-test('staging recovery path allowlists 0490 but remains fail-closed behind its dedicated preflight', () => {
+test('canonical staging refuses production-tenant 0490', () => {
   const workflow = readFileSync('.github/workflows/staging-d1-schema-change.yml', 'utf8');
   const runner = readFileSync('scripts/staging/apply-approved-migration-with-recovery-point.sh', 'utf8');
-  assert.match(workflow, /0490_simulator_planning_curriculum_metadata\.sql/);
-  assert.match(runner, /0490_simulator_planning_curriculum_metadata\.sql/);
-  assert.match(runner, /validate-0490-preflight\.sh/);
-  assert.match(runner, /validate-0490-postconditions\.sh/);
-  const ledgerRead = runner.indexOf('ledger_count="$(read_ledger_count)"');
-  const specializedPreflight = runner.indexOf('bash scripts/staging/validate-0490-preflight.sh --target="$db_name"');
-  assert.ok(ledgerRead >= 0);
-  assert.ok(specializedPreflight > ledgerRead);
-  assert.match(runner, /0490_simulator_planning_curriculum_metadata\.sql" && "\$ledger_count" == "0"/);
+  assert.doesNotMatch(workflow, /0490_simulator_planning_curriculum_metadata\.sql/);
+  assert.doesNotMatch(runner, /0490_simulator_planning_curriculum_metadata\.sql/);
 });
 
 test('0490 read-only guards freeze the reviewed tenant, cycle, duration and dependency invariants', () => {
-  const scripts = [
-    readFileSync('scripts/staging/validate-0490-preflight.sh', 'utf8'),
-    readFileSync('scripts/schema-v2/validate-0490-production-preflight.sh', 'utf8'),
-  ];
-  for (const source of scripts) {
-    assert.match(source, /qualification-types/);
-    assert.match(source, /aw139-current-recurrent/);
-    assert.match(source, /s76-code-state/);
-    assert.match(source, /duration-conflicts/);
-    assert.match(source, /ordered-outside-approved-c2/);
+  const source = readFileSync('scripts/schema-v2/validate-0490-production-preflight.sh', 'utf8');
+  for (const pattern of [/qualification-types/, /aw139-current-recurrent/, /s76-code-state/, /duration-conflicts/, /ordered-outside-approved-c2/]) {
+    assert.match(source, pattern);
   }
   const post = readFileSync('scripts/schema-v2/validate-0490-production-postconditions.sh', 'utf8');
   assert.match(post, /recurrent-duration-120/);
