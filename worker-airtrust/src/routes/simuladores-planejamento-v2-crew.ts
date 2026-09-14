@@ -19,13 +19,16 @@ import {
   type SimulatorTrainingSessionBlock,
   type SimulatorTrainingSessionNeed,
 } from '../services/cae-planning-session-proposal';
-import { createRosterAwarePairEligibility } from '../services/cae-planning-roster-pairing';
-import { scheduleSimulatorTrainingBlocks } from '../services/cae-planning-session-scheduler';
-import { resolvePublishedRosterDayFromD1 } from '../services/cae-planning-roster-d1';
 import {
-  resolveRosterDayFromPublishedAllocations,
-  type PublishedRosterAllocationRow,
-} from '../services/cae-planning-roster-state';
+  createEmployeeFortnightPairEligibility,
+  loadEmployeeFortnightAssignments,
+  loadOperationalFortnightWindows,
+  resolveEmployeeFortnightDay,
+  resolveEmployeeFortnightDayFromD1,
+  type EmployeeFortnightAssignment,
+} from '../services/cae-planning-employee-fortnight';
+import type { OperationalFortnightWindow } from '../services/operational-fortnight-calendar';
+import { scheduleSimulatorTrainingBlocks } from '../services/cae-planning-session-scheduler';
 import { validateAndNormalizeCaeAvailability } from '../services/cae-availability';
 import {
   curriculumReferenceYear,
@@ -235,115 +238,43 @@ async function assertNeedsInTenantAndScope(params: {
   }
 }
 
-function buildFortnightWindows(referenceDate: string, targetDate: string, horizonDays: number) {
-  const earliest = referenceDate > addDaysIso(targetDate, -horizonDays)
-    ? referenceDate
-    : addDaysIso(targetDate, -horizonDays);
-  const windows: Array<{ start: string; end: string }> = [];
-  const startMonth = earliest.slice(0, 7);
-  const endMonth = targetDate.slice(0, 7);
-  let cursor = `${startMonth}-01`;
-
-  while (cursor.slice(0, 7) <= endMonth) {
-    const [year, month] = cursor.split('-').map(Number);
-    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-    const first = { start: `${cursor.slice(0, 7)}-01`, end: `${cursor.slice(0, 7)}-15` };
-    const second = {
-      start: `${cursor.slice(0, 7)}-16`,
-      end: `${cursor.slice(0, 7)}-${String(lastDay).padStart(2, '0')}`,
-    };
-    for (const window of [first, second]) {
-      if (window.start >= earliest && window.end <= targetDate) windows.push(window);
-    }
-    const next = new Date(Date.UTC(year, month, 1));
-    cursor = next.toISOString().slice(0, 7) + '-01';
-  }
-
-  return windows.sort((a, b) => b.end.localeCompare(a.end));
-}
-
-async function loadPublishedAllocations(params: {
-  db: D1Database;
-  empresaId: number;
-  employeeIds: number[];
-  startDate: string;
-  endDate: string;
-}): Promise<PublishedRosterAllocationRow[]> {
-  if (params.employeeIds.length === 0) return [];
-  const placeholders = params.employeeIds.map(() => '?').join(', ');
-  const rows = await params.db
-    .prepare(
-      `SELECT
-         CAST(ea.id AS TEXT) AS allocation_id,
-         CAST(ea.funcionario_id AS INTEGER) AS employee_id,
-         ea.data_inicio AS date_start,
-         ea.data_fim AS date_end,
-         ea.aeronave_id AS aircraft_id,
-         ea.funcao AS function_code,
-         ea.situacao_tipo AS situation_type,
-         est.bloqueia_alocacao AS situation_blocks_allocation,
-         ea.quinzena_id AS fortnight_id,
-         eq.numero AS fortnight_number,
-         CAST(em.id AS TEXT) AS monthly_roster_id,
-         em.status AS monthly_roster_status,
-         COALESCE(CAST(ea.updated_at AS TEXT), CAST(em.updated_at AS TEXT)) AS source_revision
-       FROM escala_alocacoes ea
-       JOIN escalas_mensais em
-         ON em.id = ea.escala_id
-        AND em.empresa_id = ?
-        AND em.deleted_at IS NULL
-       LEFT JOIN escalas_quinzenas eq
-         ON eq.id = ea.quinzena_id
-        AND eq.deleted_at IS NULL
-       LEFT JOIN escala_situacao_tipos est
-         ON UPPER(est.codigo) = UPPER(COALESCE(ea.situacao_tipo, ''))
-        AND est.deleted_at IS NULL
-      WHERE CAST(ea.funcionario_id AS INTEGER) IN (${placeholders})
-        AND ea.deleted_at IS NULL
-        AND COALESCE(LOWER(ea.status), '') != 'cancelado'
-        AND LOWER(COALESCE(em.status, '')) = 'publicada'
-        AND ea.data_inicio <= ?
-        AND ea.data_fim >= ?
-      ORDER BY ea.funcionario_id, ea.data_inicio, ea.data_fim, ea.id`,
-    )
-    .bind(params.empresaId, ...params.employeeIds, params.endDate, params.startDate)
-    .all<PublishedRosterAllocationRow>();
-  return rows.results || [];
-}
-
 function findSharedWindow(params: {
   anchor: SimulatorTrainingSessionNeed;
   candidate: SimulatorTrainingSessionNeed;
   referenceDate: string;
   horizonDays: number;
   rosterPolicy: 'FOLGA' | 'TRABALHO' | 'AMBAS';
-  allocations: PublishedRosterAllocationRow[];
+  assignments: Map<number, EmployeeFortnightAssignment>;
+  windows: OperationalFortnightWindow[];
 }) {
   const targetDate = [params.anchor.expiry_date, params.candidate.expiry_date].sort()[0];
-  const windows = buildFortnightWindows(params.referenceDate, targetDate, params.horizonDays);
-  for (const window of windows) {
-    for (let date = window.end; date >= window.start; date = addDaysIso(date, -1)) {
-      const anchorRoster = resolveRosterDayFromPublishedAllocations({
-        employee_id: params.anchor.employee_id,
-        date,
-        allocations: params.allocations,
-      });
-      const candidateRoster = resolveRosterDayFromPublishedAllocations({
-        employee_id: params.candidate.employee_id,
-        date,
-        allocations: params.allocations,
-      });
-      const anchorEligibility = evaluateRosterEligibility(params.rosterPolicy, anchorRoster.state);
-      const candidateEligibility = evaluateRosterEligibility(params.rosterPolicy, candidateRoster.state);
-      if (anchorEligibility.eligible && candidateEligibility.eligible) {
-        return {
-          window_start: window.start,
-          window_end: window.end,
-          common_date: date,
-          anchor_state: anchorRoster.state,
-          candidate_state: candidateRoster.state,
-        };
-      }
+  const earliestDate = params.referenceDate > addDaysIso(targetDate, -params.horizonDays)
+    ? params.referenceDate
+    : addDaysIso(targetDate, -params.horizonDays);
+  for (let date = targetDate; date >= earliestDate; date = addDaysIso(date, -1)) {
+    const anchorRoster = resolveEmployeeFortnightDay({
+      employeeId: params.anchor.employee_id,
+      date,
+      assignments: params.assignments,
+      windows: params.windows,
+    });
+    const candidateRoster = resolveEmployeeFortnightDay({
+      employeeId: params.candidate.employee_id,
+      date,
+      assignments: params.assignments,
+      windows: params.windows,
+    });
+    const anchorEligibility = evaluateRosterEligibility(params.rosterPolicy, anchorRoster.state);
+    const candidateEligibility = evaluateRosterEligibility(params.rosterPolicy, candidateRoster.state);
+    if (anchorEligibility.eligible && candidateEligibility.eligible) {
+      const window = params.windows.find((item) => item.start_date <= date && item.end_date >= date);
+      return {
+        window_start: window?.start_date || date,
+        window_end: window?.end_date || date,
+        common_date: date,
+        anchor_state: anchorRoster.state,
+        candidate_state: candidateRoster.state,
+      };
     }
   }
   return null;
@@ -394,13 +325,10 @@ app.post('/candidatos', requirePermission('simuladores', 'visualizar', 'admin', 
     ? referenceDate
     : addDaysIso(earliestTarget, -config.planning_horizon_days);
   const employeeIds = [...new Set([anchor.employee_id, ...structurallyCompatible.map((item) => item.employee_id)])];
-  const allocations = await loadPublishedAllocations({
-    db: c.env.DB,
-    empresaId,
-    employeeIds,
-    startDate,
-    endDate: latestTarget,
-  });
+  const [assignments, windows] = await Promise.all([
+    loadEmployeeFortnightAssignments({ db: c.env.DB, empresaId, employeeIds }),
+    loadOperationalFortnightWindows({ db: c.env.DB, empresaId, startDate, endDate: latestTarget }),
+  ]);
 
   const available = structurallyCompatible
     .map((candidate) => {
@@ -410,7 +338,8 @@ app.post('/candidatos', requirePermission('simuladores', 'visualizar', 'admin', 
         referenceDate,
         horizonDays: config.planning_horizon_days,
         rosterPolicy: config.roster_policy,
-        allocations,
+        assignments,
+        windows,
       });
       return shared ? { ...candidate, availability: shared } : null;
     })
@@ -477,13 +406,10 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
       ? referenceDate
       : addDaysIso(earliestTarget, -config.planning_horizon_days);
     const employeeIds = [...new Set(parsedLocks.flatMap(({ anchor, partner }) => [anchor.employee_id, partner.employee_id]))];
-    const allocations = await loadPublishedAllocations({
-      db: c.env.DB,
-      empresaId,
-      employeeIds,
-      startDate,
-      endDate: latestTarget,
-    });
+    const [assignments, windows] = await Promise.all([
+      loadEmployeeFortnightAssignments({ db: c.env.DB, empresaId, employeeIds }),
+      loadOperationalFortnightWindows({ db: c.env.DB, empresaId, startDate, endDate: latestTarget }),
+    ]);
 
     for (const { anchor, partner } of parsedLocks) {
       const shared = findSharedWindow({
@@ -492,7 +418,8 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
         referenceDate,
         horizonDays: config.planning_horizon_days,
         rosterPolicy: config.roster_policy,
-        allocations,
+        assignments,
+        windows,
       });
       if (!shared) {
         return c.json({ success: false, error: `Dupla ${anchor.employee_name} / ${partner.employee_name} sem disponibilidade comum na quinzena permitida` }, 400);
@@ -512,19 +439,17 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
   const remaining = needs.filter((need) => !used.has(need.need_id));
   const remainingEmployeeIds = [...new Set(remaining.map((need) => need.employee_id))];
   const remainingLatestTarget = remaining.map((need) => need.expiry_date).sort().at(-1) || referenceDate;
-  const remainingAllocations = await loadPublishedAllocations({
-    db: c.env.DB,
-    empresaId,
-    employeeIds: remainingEmployeeIds,
-    startDate: referenceDate,
-    endDate: remainingLatestTarget,
-  });
-  const automaticRoster = createRosterAwarePairEligibility({
+  const [remainingAssignments, remainingWindows] = await Promise.all([
+    loadEmployeeFortnightAssignments({ db: c.env.DB, empresaId, employeeIds: remainingEmployeeIds }),
+    loadOperationalFortnightWindows({ db: c.env.DB, empresaId, startDate: referenceDate, endDate: remainingLatestTarget }),
+  ]);
+  const automaticRoster = createEmployeeFortnightPairEligibility({
     needs: remaining,
     referenceDate,
     horizonDays: config.planning_horizon_days,
     rosterPolicy: config.roster_policy,
-    allocations: remainingAllocations,
+    assignments: remainingAssignments,
+    windows: remainingWindows,
   });
   const automaticBlocks = pairSimulatorTrainingSessions(
     remaining,
@@ -542,7 +467,7 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
     if (!validation.ok) {
       return c.json({ success: false, error: 'Disponibilidade CAE inválida', details: validation.errors }, 400);
     }
-    const rosterCache = new Map<string, Awaited<ReturnType<typeof resolvePublishedRosterDayFromD1>>>();
+    const rosterCache = new Map<string, Awaited<ReturnType<typeof resolveEmployeeFortnightDayFromD1>>>();
     const schedule = await scheduleSimulatorTrainingBlocks({
       blocks,
       slots: validation.data.slots,
@@ -552,7 +477,7 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
         const key = `${employeeId}:${date}`;
         let roster = rosterCache.get(key);
         if (!roster) {
-          roster = await resolvePublishedRosterDayFromD1({ db: c.env.DB, empresaId, employeeId, date });
+          roster = await resolveEmployeeFortnightDayFromD1({ db: c.env.DB, empresaId, employeeId, date });
           rosterCache.set(key, roster);
         }
         const eligibility = evaluateRosterEligibility(config.roster_policy, roster.state);
@@ -688,7 +613,7 @@ app.post('/comparar-cae', requirePermission('simuladores', 'editar', 'admin', 'm
   }
 
   const baseClasses = buildSimulatorTrainingClasses(blocks);
-  const rosterCache = new Map<string, Awaited<ReturnType<typeof resolvePublishedRosterDayFromD1>>>();
+  const rosterCache = new Map<string, Awaited<ReturnType<typeof resolveEmployeeFortnightDayFromD1>>>();
   const schedule = await scheduleSimulatorTrainingBlocks({
     blocks,
     slots: validation.data.slots,
@@ -698,7 +623,7 @@ app.post('/comparar-cae', requirePermission('simuladores', 'editar', 'admin', 'm
       const key = `${employeeId}:${date}`;
       let roster = rosterCache.get(key);
       if (!roster) {
-        roster = await resolvePublishedRosterDayFromD1({ db: c.env.DB, empresaId, employeeId, date });
+        roster = await resolveEmployeeFortnightDayFromD1({ db: c.env.DB, empresaId, employeeId, date });
         rosterCache.set(key, roster);
       }
       const eligibility = evaluateRosterEligibility(config.roster_policy, roster.state);

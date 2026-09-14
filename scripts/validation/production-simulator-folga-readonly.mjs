@@ -22,23 +22,14 @@ export function addDaysIso(value, days) {
   return date.toISOString().slice(0, 10);
 }
 
-export function blockDeadline(block, preferredSessionsPerDay = 1) {
-  const perDay = Math.max(1, Math.trunc(Number(preferredSessionsPerDay) || 1));
-  return (block.sessions || [])
-    .map((session) => {
-      const remainingAfter = Math.max(
-        0,
-        Number(session.training_session_count || 0) - Number(session.session_order || 0),
-      );
-      return addDaysIso(String(session.expiry_date), -Math.floor(remainingAfter / perDay));
-    })
-    .sort()[0] || String(block.target_date || '');
-}
-
 export function flattenPairedBlocks(proposal) {
   return (proposal?.classes || [])
     .flatMap((trainingClass) => trainingClass?.blocks || [])
-    .filter((block) => Array.isArray(block?.sessions) && block.sessions.length >= 2);
+    .filter((block) => Array.isArray(block?.sessions) && block.sessions.length >= 2)
+    .sort((left, right) =>
+      String(left.target_date || '').localeCompare(String(right.target_date || '')) ||
+      String(left.block_id || '').localeCompare(String(right.block_id || '')),
+    );
 }
 
 export function flattenProofCandidateBlocks(proposal) {
@@ -50,46 +41,6 @@ export function flattenProofCandidateBlocks(proposal) {
       String(left.target_date || '').localeCompare(String(right.target_date || '')) ||
       String(left.block_id || '').localeCompare(String(right.block_id || '')),
     );
-}
-
-function eachDay(start, end) {
-  const days = [];
-  for (let day = start; day <= end; day = addDaysIso(day, 1)) days.push(day);
-  return days;
-}
-
-function rowCoversDate(row, date) {
-  return String(row?.data_inicio || '') <= date && String(row?.data_fim || '') >= date;
-}
-
-export function classifyRosterRowsForEmployee(rows, employeeId, date) {
-  const active = rows.filter(
-    (row) =>
-      String(row?.funcionario_id) === String(employeeId) &&
-      String(row?.status || '').toLowerCase() !== 'cancelado' &&
-      rowCoversDate(row, date),
-  );
-  if (active.length === 0) return 'DESCONHECIDO';
-
-  const folga = active.some((row) => String(row?.situacao_tipo || '').trim().toUpperCase() === 'FOLGA');
-  const work = active.some(
-    (row) =>
-      !String(row?.situacao_tipo || '').trim() &&
-      (row?.aeronave_id != null || Boolean(String(row?.funcao || '').trim())),
-  );
-
-  if (folga && work) return 'DESCONHECIDO';
-  if (folga) return 'FOLGA';
-  if (work) return 'TRABALHO';
-  return 'DESCONHECIDO';
-}
-
-export function findCommonRosterDate({ rows, employeeIds, start, end, wantedState }) {
-  for (const date of eachDay(start, end)) {
-    const states = employeeIds.map((id) => classifyRosterRowsForEmployee(rows, id, date));
-    if (states.every((state) => state === wantedState)) return date;
-  }
-  return null;
 }
 
 function slotEnd(startTime, durationMinutes, date) {
@@ -150,16 +101,22 @@ async function authFetch(base, token, path, options = {}) {
   });
 }
 
-function relevantScale(scale, start, end) {
-  const year = Number(scale?.ano);
-  const month = Number(scale?.mes);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return false;
-  const first = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`;
-  const next = month === 12
-    ? `${String(year + 1).padStart(4, '0')}-01-01`
-    : `${String(year).padStart(4, '0')}-${String(month + 1).padStart(2, '0')}-01`;
-  const last = addDaysIso(next, -1);
-  return first <= end && last >= start;
+async function findRealFixedFortnightPairProof({ base, token, proposal, referenceDate }) {
+  for (const block of flattenPairedBlocks(proposal)) {
+    const [anchor, partner] = block.sessions;
+    const candidates = await authFetch(base, token, '/api/simuladores/planejamento-v2/candidatos', {
+      method: 'POST',
+      body: JSON.stringify({ reference_date: referenceDate, anchor, candidates: [partner] }),
+    });
+    if (candidates.status !== 200 || candidates.json?.success !== true) continue;
+    const match = (candidates.json?.data?.candidates || []).find(
+      (candidate) => String(candidate?.need_id || '') === String(partner.need_id),
+    );
+    const commonDate = String(match?.availability?.common_date || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(commonDate)) continue;
+    return { block, commonDate };
+  }
+  return null;
 }
 
 async function main() {
@@ -196,15 +153,12 @@ async function main() {
   assert(proposal?.mode === 'PREVIEW_ONLY', 'PROPOSAL_NOT_PREVIEW_ONLY');
   assert(proposal?.config?.roster_policy === 'FOLGA', 'PROPOSAL_POLICY_NOT_FOLGA');
 
-  const publishedScalesResult = await authFetch(base, token, '/api/escalas?status=publicada');
-  assert(
-    publishedScalesResult.status === 200 && publishedScalesResult.json?.success === true,
-    'PUBLISHED_ROSTER_LIST_FAILED',
-  );
-  const scales = Array.isArray(publishedScalesResult.json?.data) ? publishedScalesResult.json.data : [];
-
-  const candidates = flattenProofCandidateBlocks(proposal);
-  assert(candidates.length > 0, 'NO_REAL_SESSION_BLOCK_IN_PROPOSAL');
+  const blocks = flattenProofCandidateBlocks(proposal);
+  assert(blocks.length > 0, 'NO_REAL_SESSION_BLOCK_IN_PROPOSAL');
+  const pairing = proposal?.summary?.roster_pairing || {};
+  assert(pairing.source === 'FUNCIONARIO_ESCALA_1_2', 'PLANNER_NOT_USING_EMPLOYEE_FIXED_SCALE');
+  assert(Number(pairing.employees_with_fixed_fortnight || 0) > 0, 'NO_EMPLOYEE_FIXED_SCALE_IN_PROPOSAL');
+  assert(Number(pairing.eligible_date_count || 0) > 0, 'NO_DERIVED_ELIGIBLE_FOLGA_DATE');
 
   const proposalSummary = {
     trainings: Number(proposal?.summary?.trainings || 0),
@@ -214,77 +168,29 @@ async function main() {
     classes: Number(proposal?.summary?.classes || 0),
     exceptions: Array.isArray(proposal?.exceptions) ? proposal.exceptions.length : 0,
   };
-  const rosterDiagnostic = {
-    candidate_blocks: candidates.length,
-    paired_candidate_blocks: candidates.filter((block) => block.sessions.length >= 2).length,
-    blocks_with_folga: 0,
-    blocks_with_trabalho: 0,
-    blocks_with_both: 0,
-    allocation_rows_observed: 0,
+  const fixedScaleDiagnostic = {
+    source: pairing.source,
+    employees_with_fixed_fortnight: Number(pairing.employees_with_fixed_fortnight || 0),
+    employees_with_eligible_dates: Number(pairing.employees_with_eligible_dates || 0),
+    eligible_date_count: Number(pairing.eligible_date_count || 0),
+    calendar_windows: Number(pairing.calendar_windows || 0),
+    calendar_fallback_windows: Number(pairing.calendar_fallback_windows || 0),
+    paired_candidate_blocks: flattenPairedBlocks(proposal).length,
   };
-  const allocationsByScale = new Map();
-  let proof = null;
-  for (const block of candidates) {
-    const deadline = blockDeadline(block, config?.preferred_sessions_per_day);
-    if (!deadline || deadline < referenceDate) continue;
-    const employeeIds = [...new Set(block.sessions.map((session) => Number(session.employee_id)))];
-    if (employeeIds.length < 1 || employeeIds.some((id) => !Number.isFinite(id) || id <= 0)) continue;
 
-    const relevant = scales.filter((scale) => relevantScale(scale, referenceDate, deadline));
-    const rows = [];
-    for (const scale of relevant) {
-      const scaleId = String(scale?.id || '');
-      if (!scaleId) continue;
-      if (!allocationsByScale.has(scaleId)) {
-        const allocations = await authFetch(
-          base,
-          token,
-          `/api/escalas/${encodeURIComponent(scaleId)}/alocacoes`,
-        );
-        const values = allocations.status === 200 && allocations.json?.success === true
-          ? allocations.json?.data?.alocacoes
-          : [];
-        allocationsByScale.set(scaleId, Array.isArray(values) ? values : []);
-      }
-      rows.push(...allocationsByScale.get(scaleId));
-    }
-    rosterDiagnostic.allocation_rows_observed += rows.length;
-
-    const folgaDate = findCommonRosterDate({
-      rows,
-      employeeIds,
-      start: referenceDate,
-      end: deadline,
-      wantedState: 'FOLGA',
-    });
-    const trabalhoDate = findCommonRosterDate({
-      rows,
-      employeeIds,
-      start: referenceDate,
-      end: deadline,
-      wantedState: 'TRABALHO',
-    });
-    if (folgaDate) rosterDiagnostic.blocks_with_folga += 1;
-    if (trabalhoDate) rosterDiagnostic.blocks_with_trabalho += 1;
-    if (folgaDate && trabalhoDate) {
-      rosterDiagnostic.blocks_with_both += 1;
-      if (!proof) proof = { block, employeeIds, folgaDate, trabalhoDate };
-    }
-  }
-
+  const proof = await findRealFixedFortnightPairProof({ base, token, proposal, referenceDate });
   if (!proof) {
     process.stdout.write(JSON.stringify({
       ok: true,
       tenant_id: tenantId,
       roster_policy: config.roster_policy,
       proposal_mode: proposal.mode,
-      proof_mode: 'PROPOSAL_ONLY_ROSTER_LIMITED',
+      proof_mode: 'FIXED_SCALE_PROPOSAL_NO_PAIR_AVAILABLE',
       proposal_summary: proposalSummary,
-      roster_diagnostic: rosterDiagnostic,
+      fixed_scale_diagnostic: fixedScaleDiagnostic,
       selected_block_sessions: 0,
-      published_roster_used: true,
+      monthly_published_roster_required: false,
       folga_validation: null,
-      trabalho_validation: null,
       writes: 0,
       pii_emitted: false,
     }, null, 2));
@@ -292,56 +198,38 @@ async function main() {
   }
 
   const needIds = proof.block.sessions.map((session) => String(session.need_id));
-  const repairBase = {
-    reference_date: referenceDate,
-    session_needs: proof.block.sessions,
-    locks: [],
-  };
-
-  const folgaResult = await authFetch(base, token, '/api/simuladores/planejamento-v2/reparear', {
+  const comparison = await authFetch(base, token, '/api/simuladores/planejamento-v2/comparar-cae', {
     method: 'POST',
     body: JSON.stringify({
-      ...repairBase,
-      cae_availability: buildSyntheticCaeAvailability(proof.block, proof.folgaDate),
+      reference_date: referenceDate,
+      session_needs: proof.block.sessions,
+      pairing_blocks: [{ need_ids: needIds }],
+      cae_availability: buildSyntheticCaeAvailability(proof.block, proof.commonDate),
     }),
   });
-  assert(folgaResult.status === 200 && folgaResult.json?.success === true, 'FOLGA_REPAIR_FAILED');
-  const folgaBlock = findMatchingScheduledBlock(folgaResult.json, needIds);
-  assert(folgaBlock?.schedule_status === 'SCHEDULED', 'FOLGA_NOT_SCHEDULED');
-  const folgaStates = (folgaBlock?.roster || []).map((row) => String(row?.state || ''));
+  assert(comparison.status === 200 && comparison.json?.success === true, 'CAE_COMPARISON_FAILED');
+  const scheduled = findMatchingScheduledBlock(comparison.json, needIds);
+  assert(scheduled?.schedule_status === 'SCHEDULED', 'FIXED_SCALE_FOLGA_NOT_SCHEDULED');
+  const rosterStates = (scheduled?.roster || []).map((row) => String(row?.state || ''));
   assert(
-    folgaStates.length >= proof.employeeIds.length && folgaStates.every((state) => state === 'FOLGA'),
-    'FOLGA_ROSTER_NOT_PROVEN',
+    rosterStates.length >= proof.block.sessions.length && rosterStates.every((state) => state === 'FOLGA'),
+    'FIXED_SCALE_FOLGA_NOT_PROVEN',
   );
-
-  const trabalhoResult = await authFetch(base, token, '/api/simuladores/planejamento-v2/reparear', {
-    method: 'POST',
-    body: JSON.stringify({
-      ...repairBase,
-      cae_availability: buildSyntheticCaeAvailability(proof.block, proof.trabalhoDate),
-    }),
-  });
-  assert(trabalhoResult.status === 200 && trabalhoResult.json?.success === true, 'TRABALHO_REPAIR_FAILED');
-  const trabalhoBlock = findMatchingScheduledBlock(trabalhoResult.json, needIds);
-  assert(trabalhoBlock && trabalhoBlock.schedule_status !== 'SCHEDULED', 'TRABALHO_WAS_SCHEDULED_UNDER_FOLGA_POLICY');
 
   process.stdout.write(JSON.stringify({
     ok: true,
     tenant_id: tenantId,
     roster_policy: config.roster_policy,
     proposal_mode: proposal.mode,
-    proof_mode: 'FULL_FOLGA_VS_WORK',
+    proof_mode: 'FULL_FIXED_SCALE_FOLGA',
     proposal_summary: proposalSummary,
-    roster_diagnostic: rosterDiagnostic,
+    fixed_scale_diagnostic: fixedScaleDiagnostic,
     selected_block_sessions: proof.block.sessions.length,
-    published_roster_used: true,
+    monthly_published_roster_required: false,
     folga_validation: {
-      schedule_status: folgaBlock.schedule_status,
-      roster_states: [...new Set(folgaStates)],
-    },
-    trabalho_validation: {
-      schedule_status: trabalhoBlock.schedule_status,
-      result: 'REJECTED_UNDER_FOLGA',
+      schedule_status: scheduled.schedule_status,
+      roster_states: [...new Set(rosterStates)],
+      common_date_resolved: true,
     },
     writes: 0,
     pii_emitted: false,

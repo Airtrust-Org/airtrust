@@ -2,12 +2,12 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveSimulatorPlanningConfig } from '../../services/cae-planning-policy';
 
-const { resolvePublishedRosterDayFromD1 } = vi.hoisted(() => ({
-  resolvePublishedRosterDayFromD1: vi.fn(),
+const { resolveEmployeeFortnightDayFromD1 } = vi.hoisted(() => ({
+  resolveEmployeeFortnightDayFromD1: vi.fn(),
 }));
 
-vi.mock('../../services/cae-planning-roster-d1', () => ({
-  resolvePublishedRosterDayFromD1,
+vi.mock('../../services/cae-planning-employee-fortnight', () => ({
+  resolveEmployeeFortnightDayFromD1,
 }));
 
 import { executeSimulatorPlanningApproval } from '../../services/cae-planning-approval';
@@ -141,12 +141,12 @@ function createDb(options: {
 
 describe('CAE approval live revalidation', () => {
   beforeEach(() => {
-    resolvePublishedRosterDayFromD1.mockReset();
-    resolvePublishedRosterDayFromD1.mockResolvedValue({ state: 'FOLGA' });
+    resolveEmployeeFortnightDayFromD1.mockReset();
+    resolveEmployeeFortnightDayFromD1.mockResolvedValue({ state: 'FOLGA' });
   });
 
   it('não aprova nem materializa quando João muda de FOLGA para TRABALHO', async () => {
-    resolvePublishedRosterDayFromD1.mockResolvedValue({ state: 'TRABALHO' });
+    resolveEmployeeFortnightDayFromD1.mockResolvedValue({ state: 'TRABALHO' });
     const updates: Array<{ sql: string; binds: unknown[] }> = [];
     const db = createDb({ snapshot: baseSnapshot(), updates });
 

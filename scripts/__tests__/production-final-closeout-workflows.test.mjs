@@ -44,9 +44,9 @@ test('production simulator functional proof is manually dispatchable, SHA-pinned
   assert.match(workflow, /EXPECTED_SHA_MISMATCH/);
   assert.match(workflow, /environment: production/);
   assert.match(workflow, /production-simulator-folga-readonly\.mjs/);
-  assert.match(workflow, /FULL_FOLGA_VS_WORK/);
-  assert.match(workflow, /PROPOSAL_ONLY_ROSTER_LIMITED/);
-  assert.match(workflow, /FULL_PROOF_SHOULD_HAVE_RUN/);
+  assert.match(workflow, /FULL_FIXED_SCALE_FOLGA/);
+  assert.match(workflow, /FIXED_SCALE_PROPOSAL_NO_PAIR_AVAILABLE/);
+  assert.match(workflow, /MONTHLY_ROSTER_DEPENDENCY_NOT_REMOVED/);
   assert.match(workflow, /writes: 0/);
   assert.doesNotMatch(workflow, /method:\s*'PUT'/);
   assert.doesNotMatch(workflow, /method:\s*'DELETE'/);

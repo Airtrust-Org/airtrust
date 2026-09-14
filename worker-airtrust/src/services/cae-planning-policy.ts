@@ -178,8 +178,9 @@ export type RosterEligibility = {
 };
 
 /**
- * O estado da quinzena deve ser resolvido da fonte canônica da escala para a DATA candidata.
- * Este helper nunca persiste/infere quinzena por funcionário.
+ * Avalia a política da empresa sobre o estado operacional da DATA candidata.
+ * No planejamento futuro de simulador, o estado é derivado da Escala 1/2
+ * cadastrada no funcionário e do calendário operacional de quinzenas.
  */
 export function evaluateRosterEligibility(
   policy: SimulatorRosterPolicy,

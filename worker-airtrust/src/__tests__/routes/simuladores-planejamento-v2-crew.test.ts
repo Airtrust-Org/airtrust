@@ -25,13 +25,6 @@ vi.mock('../../services/employee-sector-access', () => ({
   buildFuncionarioScopeWhere: vi.fn().mockReturnValue({ clause: '1 = 1', bindings: [] }),
 }));
 
-vi.mock('../../services/cae-planning-roster-d1', () => ({
-  resolvePublishedRosterDayFromD1: vi.fn().mockResolvedValue({
-    state: 'FOLGA',
-    reason: 'Folga publicada para o teste.',
-  }),
-}));
-
 import router from '../../routes/simuladores-planejamento-v2-crew';
 
 function need(employeeId: number, name: string) {
@@ -54,53 +47,6 @@ function need(employeeId: number, name: string) {
   };
 }
 
-const allocations = [
-  {
-    allocation_id: 'filipe-folga',
-    employee_id: 10,
-    date_start: '2027-06-01',
-    date_end: '2027-06-30',
-    aircraft_id: null,
-    function_code: null,
-    situation_type: 'FOLGA',
-    situation_blocks_allocation: 0,
-    fortnight_id: 1,
-    fortnight_number: 1,
-    monthly_roster_id: 'junho',
-    monthly_roster_status: 'publicada',
-    source_revision: '1',
-  },
-  {
-    allocation_id: 'adriana-trabalho',
-    employee_id: 20,
-    date_start: '2027-06-01',
-    date_end: '2027-06-30',
-    aircraft_id: 77,
-    function_code: 'SIC',
-    situation_type: null,
-    situation_blocks_allocation: 0,
-    fortnight_id: 1,
-    fortnight_number: 1,
-    monthly_roster_id: 'junho',
-    monthly_roster_status: 'publicada',
-    source_revision: '1',
-  },
-  {
-    allocation_id: 'castro-folga',
-    employee_id: 30,
-    date_start: '2027-06-01',
-    date_end: '2027-06-30',
-    aircraft_id: null,
-    function_code: null,
-    situation_type: 'FOLGA',
-    situation_blocks_allocation: 0,
-    fortnight_id: 1,
-    fortnight_number: 1,
-    monthly_roster_id: 'junho',
-    monthly_roster_status: 'publicada',
-    source_revision: '1',
-  },
-];
 
 function buildDb() {
   return {
@@ -131,6 +77,21 @@ function buildDb() {
           if (query.includes('FROM funcionarios f')) {
             return { results: [10, 20, 30].map((id) => ({ id })) };
           }
+          if (query.includes('FROM funcionarios')) {
+            const employeeIds = new Set(bound.slice(1).map(Number));
+            const rows = [
+              { employee_id: 10, quinzena: 'primeira' },
+              { employee_id: 20, quinzena: 'segunda' },
+              { employee_id: 30, quinzena: 'primeira' },
+            ];
+            return { results: rows.filter((row) => employeeIds.has(row.employee_id)) };
+          }
+          if (query.includes('FROM escalas_quinzenas')) {
+            return { results: [] };
+          }
+          if (query.includes('FROM escala_alocacoes')) {
+            throw new Error('PLANNER_MUST_NOT_DEPEND_ON_PUBLISHED_MONTHLY_ROSTER');
+          }
           if (query.includes('FROM modelos_sessao')) {
             return {
               results: [
@@ -143,10 +104,6 @@ function buildDb() {
                 },
               ],
             };
-          }
-          if (query.includes('FROM escala_alocacoes')) {
-            const employeeIds = new Set(bound.slice(1, -2).map(Number));
-            return { results: allocations.filter((row) => employeeIds.has(row.employee_id)) };
           }
           return { results: [] };
         },
@@ -163,7 +120,7 @@ function buildApp() {
 }
 
 describe('simulator planning V2 manual crew replacement', () => {
-  it('lists only candidates with a common published FOLGA window', async () => {
+  it('lists candidates from employee Escala 1/2 even without a published future monthly roster', async () => {
     const app = buildApp();
     const response = await app.request(
       '/api/simuladores/planejamento-v2/candidatos',
@@ -184,7 +141,7 @@ describe('simulator planning V2 manual crew replacement', () => {
     expect(body.data.candidates.map((candidate: any) => candidate.employee_name)).toEqual(['Castro']);
   });
 
-  it('re-pairs Filipe with Castro and leaves Adriana unmatched under FOLGA policy', async () => {
+  it('re-pairs employees with the same fixed work scale and leaves the opposite scale unmatched under FOLGA policy', async () => {
     const app = buildApp();
     const response = await app.request(
       '/api/simuladores/planejamento-v2/reparear',
@@ -216,7 +173,7 @@ describe('simulator planning V2 manual crew replacement', () => {
     expect(unmatched.sessions[0].employee_name).toBe('Adriana');
   });
 
-  it('rejects a manual pair without a common FOLGA window', async () => {
+  it('rejects a manual pair whose fixed Escala 1/2 has no common FOLGA window', async () => {
     const app = buildApp();
     const response = await app.request(
       '/api/simuladores/planejamento-v2/reparear',
@@ -268,9 +225,9 @@ describe('simulator planning V2 manual crew replacement', () => {
             },
             slots: [
               {
-                external_ref: 'AW139-2027-06-15-1000',
+                external_ref: 'AW139-2027-06-20-1000',
                 equipment: 'AW139',
-                date: '2027-06-15',
+                date: '2027-06-20',
                 start_time: '10:00',
                 end_time: '14:00',
                 duration_minutes: 240,

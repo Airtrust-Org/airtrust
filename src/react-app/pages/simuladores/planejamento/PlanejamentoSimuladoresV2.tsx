@@ -477,7 +477,7 @@ export default function PlanejamentoSimuladoresV2() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h3 className="text-base font-semibold text-slate-900 dark:text-white">2. Disponibilidade da CAE</h3>
-            <p className="mt-1 text-sm text-slate-500">Depois da proposta, envie o PDF da CAE. O AirTrust encaixa cada sessão nos slots e confere a escala publicada conforme a regra da empresa.</p>
+            <p className="mt-1 text-sm text-slate-500">Depois da proposta, envie o PDF da CAE. O AirTrust encaixa cada sessão nos slots e confere a folga pela Escala 1/2 cadastrada no funcionário.</p>
           </div>
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200">
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}

@@ -19,9 +19,10 @@ import {
   type SimulatorTrainingSessionNeed,
 } from '../services/cae-planning-session-proposal';
 import {
-  createRosterAwarePairEligibility,
-  loadPublishedRosterAllocations,
-} from '../services/cae-planning-roster-pairing';
+  createEmployeeFortnightPairEligibility,
+  loadEmployeeFortnightAssignments,
+  loadOperationalFortnightWindows,
+} from '../services/cae-planning-employee-fortnight';
 import { loadPendingTrainingDependencyQualifications } from '../services/cae-planning-dependency-source';
 import { SIMULATOR_TRAINING_TIME_POLICY } from '../services/cae-planning-time-policy';
 import {
@@ -521,19 +522,17 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
       .map((need) => need.expiry_date)
       .sort()
       .at(-1) || referencia;
-  const rosterAllocations = await loadPublishedRosterAllocations({
-    db,
-    empresaId,
-    employeeIds,
-    startDate: referencia,
-    endDate: latestExpiry,
-  });
-  const rosterPairing = createRosterAwarePairEligibility({
+  const [fortnightAssignments, fortnightWindows] = await Promise.all([
+    loadEmployeeFortnightAssignments({ db, empresaId, employeeIds }),
+    loadOperationalFortnightWindows({ db, empresaId, startDate: referencia, endDate: latestExpiry }),
+  ]);
+  const rosterPairing = createEmployeeFortnightPairEligibility({
     needs: sessionNeeds,
     referenceDate: referencia,
     horizonDays: config.planning_horizon_days,
     rosterPolicy: config.roster_policy,
-    allocations: rosterAllocations,
+    assignments: fortnightAssignments,
+    windows: fortnightWindows,
   });
 
   const blocks = pairSimulatorTrainingSessions(
@@ -580,9 +579,12 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
         unmatched_blocks: unmatched,
         classes: baseClasses.length,
         roster_pairing: {
-          allocation_rows: rosterAllocations.length,
+          source: 'FUNCIONARIO_ESCALA_1_2',
+          employees_with_fixed_fortnight: rosterPairing.employeesWithFixedFortnight,
           employees_with_eligible_dates: rosterPairing.employeesWithEligibleDates,
           eligible_date_count: rosterPairing.eligibleDateCount,
+          calendar_windows: fortnightWindows.length,
+          calendar_fallback_windows: fortnightWindows.filter((window) => window.source === 'DEFAULT').length,
         },
       },
       trainings,

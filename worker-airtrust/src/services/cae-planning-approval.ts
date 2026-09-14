@@ -143,7 +143,7 @@ import {
   resolveSimulatorPlanningConfig,
   type SimulatorPlanningConfigRow,
 } from './cae-planning-policy';
-import { resolvePublishedRosterDayFromD1 } from './cae-planning-roster-d1';
+import { resolveEmployeeFortnightDayFromD1 } from './cae-planning-employee-fortnight';
 import { validateInstructorAssignment } from './cae-planning-resource-assignment';
 
 async function writePlanningAudit(params: {
@@ -286,7 +286,7 @@ export async function resolveSimulatorPlanningLiveState(params: {
       ...participant.roster_by_date,
     };
     for (const date of Object.keys(participant.roster_by_date)) {
-      const roster = await resolvePublishedRosterDayFromD1({
+      const roster = await resolveEmployeeFortnightDayFromD1({
         db,
         empresaId,
         employeeId: participant.employee_id,

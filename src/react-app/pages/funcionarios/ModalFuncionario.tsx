@@ -42,10 +42,10 @@ interface Props {
 type QuinzenaPreferencia = '' | 'primeira' | 'segunda' | 'personalizada';
 
 const QUINZENA_OPTIONS: Array<{ value: QuinzenaPreferencia; label: string }> = [
-  { value: '', label: 'Sem preferencia' },
-  { value: 'primeira', label: '1a Quinzena' },
-  { value: 'segunda', label: '2a Quinzena' },
-  { value: 'personalizada', label: 'Flexivel' },
+  { value: '', label: 'Sem escala definida' },
+  { value: 'primeira', label: 'Escala 1' },
+  { value: 'segunda', label: 'Escala 2' },
+  { value: 'personalizada', label: 'Personalizada' },
 ];
 
 type OptionItem = {
@@ -1693,7 +1693,7 @@ export default function ModalFuncionario({
                 </h3>
                 <div className="mt-4">
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Quinzena preferencial
+                    Escala de trabalho
                   </label>
                   <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                     {QUINZENA_OPTIONS.map((opcao) => {
