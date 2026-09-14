@@ -109,6 +109,7 @@ SELECT CASE WHEN
         AND COALESCE(f.is_instrutor, 0) = 0
         AND COALESCE(f.is_checador, 0) = 0
         AND COALESCE(f.is_examinador, 0) = 0
+        AND (f.quinzena IS NULL OR f.quinzena IN ('primeira', 'segunda'))
         AND f.setor IS alfa.setor
         AND f.setor_id IS alfa.setor_id
       )
@@ -246,14 +247,13 @@ SELECT CASE WHEN EXISTS (
 ) THEN 1 ELSE 0 END;
 DROP TABLE _qa_sim_planning_requires_config;
 
--- A fixture altera temporariamente apenas a Escala 1/2 dos dois participantes
--- base sintéticos. O baseline esperado é NULL e o rollback restaura exatamente
--- esse estado; qualquer divergência falha fechado antes da primeira escrita.
-CREATE TABLE IF NOT EXISTS _qa_sim_planning_requires_scale_baseline (
+-- Os dois participantes base já devem ter Escala 1/2 válida. Este fixture
+-- não os normaliza nem altera; Charlie é descartável e herda a escala de Alfa.
+CREATE TABLE IF NOT EXISTS _qa_sim_planning_requires_fixed_scale (
   ok INTEGER NOT NULL CHECK (ok = 1)
 );
-DELETE FROM _qa_sim_planning_requires_scale_baseline;
-INSERT INTO _qa_sim_planning_requires_scale_baseline(ok)
+DELETE FROM _qa_sim_planning_requires_fixed_scale;
+INSERT INTO _qa_sim_planning_requires_fixed_scale(ok)
 SELECT CASE WHEN (
   SELECT COUNT(*)
   FROM funcionarios f
@@ -262,9 +262,9 @@ SELECT CASE WHEN (
     AND emp.deleted_at IS NULL
     AND f.matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)})
     AND f.deleted_at IS NULL
-    AND f.quinzena IS NULL
+    AND f.quinzena IN ('primeira', 'segunda')
 ) = 2 THEN 1 ELSE 0 END;
-DROP TABLE _qa_sim_planning_requires_scale_baseline;
+DROP TABLE _qa_sim_planning_requires_fixed_scale;
 
 -- Limpa apenas drafts anteriores deste smoke no tenant sintético.
 UPDATE treinamentos_planejados
@@ -450,12 +450,13 @@ INSERT INTO funcionarios (
 )
 SELECT
   'QA Participante Charlie', ${e(PARTICIPANTE3_CODIGO)}, 'Participante QA', alfa.setor, alfa.setor_id,
-  'ATIVO', 0, 0, 0, 1, emp.id, 'primeira', datetime('now'), datetime('now'), NULL
+  'ATIVO', 0, 0, 0, 1, emp.id, alfa.quinzena, datetime('now'), datetime('now'), NULL
 FROM empresas emp
 JOIN funcionarios alfa
   ON alfa.empresa_id = emp.id
  AND alfa.matricula = ${e(PARTICIPANTE1_CODIGO)}
  AND alfa.deleted_at IS NULL
+ AND alfa.quinzena IN ('primeira', 'segunda')
 WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
   AND emp.deleted_at IS NULL
   AND NOT EXISTS (
@@ -468,7 +469,15 @@ WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
 -- fixture. Nenhum nome/cargo/papel é normalizado aqui: a assinatura acima já
 -- deve ter provado ownership antes de remover o soft-delete.
 UPDATE funcionarios
-SET quinzena = 'primeira',
+SET quinzena = (
+      SELECT alfa.quinzena
+      FROM funcionarios alfa
+      WHERE alfa.empresa_id = funcionarios.empresa_id
+        AND alfa.matricula = ${e(PARTICIPANTE1_CODIGO)}
+        AND alfa.deleted_at IS NULL
+        AND alfa.quinzena IN ('primeira', 'segunda')
+      LIMIT 1
+    ),
     deleted_at = NULL,
     updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
@@ -490,16 +499,8 @@ WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
       AND alfa.setor_id IS funcionarios.setor_id
   );
 
--- Escala 1/2 temporária para o teste: os três participantes trabalham na
--- Escala 1 e, portanto, têm folga derivável na janela operacional 2. Nenhuma
--- escala mensal publicada é criada ou consultada para isso.
-UPDATE funcionarios
-SET quinzena = 'primeira',
-    updated_at = datetime('now')
-WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-  AND matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)})
-  AND deleted_at IS NULL
-  AND quinzena IS NULL;
+-- Alfa e Bravo permanecem intocados. Charlie herda a Escala 1/2 de Alfa,
+-- garantindo uma dupla com folga/trabalho derivável sem escala mensal publicada.
 
 -- Três históricos QA com o mesmo vencimento: dois formam uma dupla bloqueada e o terceiro permanece singleton.
 INSERT INTO qualificacoes_historico (
@@ -624,7 +625,7 @@ SELECT
   (SELECT COUNT(*) FROM funcionarios
     WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
       AND matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
-      AND quinzena = 'primeira'
+      AND quinzena IN ('primeira', 'segunda')
       AND deleted_at IS NULL),
   (SELECT COUNT(*) FROM qualificacoes_historico
     WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
@@ -717,13 +718,7 @@ WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   )
   AND deleted_at IS NULL;
 
--- Restaura exatamente o baseline dos dois participantes base sintéticos.
-UPDATE funcionarios
-SET quinzena = NULL, updated_at = datetime('now')
-WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-  AND matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)})
-  AND quinzena = 'primeira'
-  AND deleted_at IS NULL;
+-- Alfa e Bravo são baseline canônico do tenant QA e nunca são alterados pelo fixture.
 
 UPDATE funcionarios
 SET deleted_at = datetime('now'), updated_at = datetime('now')
@@ -803,7 +798,6 @@ CREATE TABLE IF NOT EXISTS _qa_sim_planning_rollback_guard (
   allocation_count INTEGER NOT NULL CHECK (allocation_count = 0),
   roster_count INTEGER NOT NULL CHECK (roster_count = 0),
   history_count INTEGER NOT NULL CHECK (history_count = 0),
-  base_scale_override_count INTEGER NOT NULL CHECK (base_scale_override_count = 0),
   charlie_count INTEGER NOT NULL CHECK (charlie_count = 0),
   model_version_count INTEGER NOT NULL CHECK (model_version_count = 0),
   model_count INTEGER NOT NULL CHECK (model_count = 0),
@@ -812,7 +806,7 @@ CREATE TABLE IF NOT EXISTS _qa_sim_planning_rollback_guard (
 );
 DELETE FROM _qa_sim_planning_rollback_guard;
 INSERT INTO _qa_sim_planning_rollback_guard (
-  draft_count, allocation_count, roster_count, history_count, base_scale_override_count, charlie_count,
+  draft_count, allocation_count, roster_count, history_count, charlie_count,
   model_version_count, model_count, qualification_count, category_count
 )
 SELECT
@@ -828,11 +822,6 @@ SELECT
   (SELECT COUNT(*) FROM qualificacoes_historico
     WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
       AND observacoes=${e(PLANNING_MARKER)} AND deleted_at IS NULL),
-  (SELECT COUNT(*) FROM funcionarios
-    WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
-      AND matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)})
-      AND quinzena IS NOT NULL
-      AND deleted_at IS NULL),
   (SELECT COUNT(*) FROM funcionarios
     WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
       AND matricula=${e(PARTICIPANTE3_CODIGO)} AND deleted_at IS NULL),

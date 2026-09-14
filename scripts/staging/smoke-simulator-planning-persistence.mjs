@@ -198,23 +198,23 @@ async function main() {
 
   const candidates = await authFetch(baseUrl, token, '/api/simuladores/planejamento-v2/candidatos', {
     method: 'POST',
-    body: JSON.stringify({ reference_date: referenceDate, anchor: alfaNeed, candidates: [bravoNeed] }),
+    body: JSON.stringify({ reference_date: referenceDate, anchor: alfaNeed, candidates: [charlieNeed] }),
   });
   assert(candidates.status === 200, `candidatos QA retornou ${candidates.status}`);
-  const bravoCandidate = (candidates.json?.data?.candidates || []).find(
-    (candidate) => String(candidate?.need_id || '') === String(bravoNeed.need_id),
+  const charlieCandidate = (candidates.json?.data?.candidates || []).find(
+    (candidate) => String(candidate?.need_id || '') === String(charlieNeed.need_id),
   );
-  const fixedScaleCommonDate = String(bravoCandidate?.availability?.common_date || '');
-  assert(/^\d{4}-\d{2}-\d{2}$/.test(fixedScaleCommonDate), 'Escala 1/2 não produziu data comum para Alfa+Bravo');
+  const fixedScaleCommonDate = String(charlieCandidate?.availability?.common_date || '');
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(fixedScaleCommonDate), 'Escala 1/2 não produziu data comum para Alfa+Charlie');
   assert(
-    ['FOLGA', 'TRABALHO'].includes(String(bravoCandidate?.availability?.anchor_state || '')) &&
-      ['FOLGA', 'TRABALHO'].includes(String(bravoCandidate?.availability?.candidate_state || '')),
+    ['FOLGA', 'TRABALHO'].includes(String(charlieCandidate?.availability?.anchor_state || '')) &&
+      ['FOLGA', 'TRABALHO'].includes(String(charlieCandidate?.availability?.candidate_state || '')),
     'candidatos QA retornou estado DESCONHECIDO apesar da Escala 1/2 sintética',
   );
 
   const locks = [{
     anchor_need_id: String(alfaNeed.need_id),
-    partner_need_id: String(bravoNeed.need_id),
+    partner_need_id: String(charlieNeed.need_id),
   }];
 
   const repaired = await authFetch(baseUrl, token, '/api/simuladores/planejamento-v2/reparear', {
@@ -225,12 +225,12 @@ async function main() {
   assert(Array.isArray(repaired.json?.data?.classes), 'reparear QA sem classes');
   const repairedPairing = pairingSignature(proposalPairingBlocks({ classes: repaired.json.data.classes }));
   assert(repairedPairing.length === 2, `reparear QA deveria produzir 2 blocos; recebeu ${repairedPairing.length}`);
-  assert(repairedPairing.some((item) => item === String(charlieNeed.need_id)), 'reparear QA não preservou Charlie como singleton');
+  assert(repairedPairing.some((item) => item === String(bravoNeed.need_id)), 'reparear QA não preservou Bravo como singleton');
   assert(
     repairedPairing.some(
-      (item) => item.includes(String(alfaNeed.need_id)) && item.includes(String(bravoNeed.need_id)),
+      (item) => item.includes(String(alfaNeed.need_id)) && item.includes(String(charlieNeed.need_id)),
     ),
-    'reparear QA não preservou lock Alfa+Bravo',
+    'reparear QA não preservou lock Alfa+Charlie',
   );
 
   const manualProposal = withQaMarker(

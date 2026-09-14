@@ -21,7 +21,7 @@ test('staging simulator QA compares CAE against the persisted proposal pairing',
   assert.match(source, /resumed_after_cae_before_compare: true/);
   assert.match(source, /final_pairing_persisted: true/);
   assert.match(source, /QA-PARTICIPANTE-CHARLIE/);
-  assert.match(source, /reparear QA não preservou Charlie como singleton/);
+  assert.match(source, /reparear QA não preservou Bravo como singleton/);
   assert.match(source, /singleton_preserved_after_cae: true/);
   assert.match(source, /unmatched_crew_blocks \|\| 0\) === 1/);
   assert.match(source, /finalStatus === 'REPLANEJAR'/);
@@ -65,11 +65,12 @@ test('staging simulator runtime QA requires employee Escala 1/2 and derives a co
   const preflight = readFileSync('scripts/staging/preflight-simulator-planning-fixture.mjs', 'utf8');
   assert.match(source, /roster_pairing\?\.source === 'FUNCIONARIO_ESCALA_1_2'/);
   assert.match(source, /employees_with_fixed_fortnight/);
-  assert.match(source, /Escala 1\/2 não produziu data comum para Alfa\+Bravo/);
-  assert.match(seed, /_qa_sim_planning_requires_scale_baseline/);
-  assert.match(seed, /SET quinzena = 'primeira'/);
-  assert.match(seed, /SET quinzena = NULL/);
-  assert.match(preflight, /alfa_bravo_scale_baseline/);
+  assert.match(source, /Escala 1\/2 não produziu data comum para Alfa\+Charlie/);
+  assert.match(seed, /_qa_sim_planning_requires_fixed_scale/);
+  assert.match(seed, /alfa\.quinzena/);
+  assert.doesNotMatch(seed, /SET quinzena = NULL/);
+  assert.match(preflight, /alfa_bravo_fixed_scale_valid/);
+  assert.doesNotMatch(preflight, /numeric\.conflicting_rosters === 0/);
   assert.doesNotMatch(seed, /INSERT OR IGNORE INTO escalas_mensais/);
   assert.doesNotMatch(seed, /INSERT OR IGNORE INTO escala_alocacoes/);
 });
@@ -118,7 +119,7 @@ test('staging simulator workflow pre-cleans stale disposable fixture before prov
 test('staging simulator read-only audit surfaces disposable fixture residue', () => {
   const audit = readFileSync('scripts/staging/audit-simulator-matrix-baseline.mjs', 'utf8');
   assert.match(audit, /qaPlanningResidue/);
-  assert.match(audit, /base_scale_overrides/);
+  assert.doesNotMatch(audit, /base_scale_overrides/);
   assert.match(audit, /qa_planning_hygiene_clean/);
   assert.match(audit, /RUN_GOVERNED_PERSISTENCE_QA_WITH_FAIL_CLOSED_PRE_CLEAN/);
 });
@@ -129,7 +130,7 @@ test('staging simulator fixture reactivates only its exact soft-deleted Charlie 
   assert.match(seed, /_qa_sim_planning_requires_charlie_signature/);
   assert.match(seed, /f\.matricula = \${e\(PARTICIPANTE3_CODIGO\)}/);
   assert.match(seed, /SELECT COUNT\(\*\)[\s\S]*PARTICIPANTE3_CODIGO[\s\S]*\) <= 1/);
-  assert.match(seed, /UPDATE funcionarios\s+SET quinzena = 'primeira',[\s\S]*deleted_at = NULL,[\s\S]*matricula = \${e\(PARTICIPANTE3_CODIGO\)}/);
+  assert.match(seed, /UPDATE funcionarios\s+SET quinzena = \([\s\S]*SELECT alfa\.quinzena[\s\S]*deleted_at = NULL,[\s\S]*matricula = \${e\(PARTICIPANTE3_CODIGO\)}/);
   assert.doesNotMatch(seed, /UPDATE funcionarios\s+SET nome = 'QA Participante Charlie'/);
   assert.match(seed, /nome = 'QA Participante Charlie'/);
   assert.match(seed, /cargo = 'Participante QA'/);
