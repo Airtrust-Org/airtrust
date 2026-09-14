@@ -76,6 +76,11 @@ jobs:
         run: |
           node --test scripts/ci/check-ci-schema-bootstrap.test.mjs
           node scripts/ci/check-ci-schema-bootstrap.mjs
+      - name: validate staging simulator planning read-only preflight
+        run: |
+          node --test scripts/__tests__/staging-simulator-matrix-baseline-audit.test.mjs
+          node --test scripts/__tests__/staging-simulator-planning-readonly-preflight.test.mjs
+
       - name: validate staging FRMS schema doctor (read-only contract)
         run: node --test scripts/__tests__/staging-frms-schema-doctor.test.mjs
       - name: validate staging FRMS 0464 bootstrap repair governance
