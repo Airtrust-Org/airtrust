@@ -107,12 +107,13 @@ jobs:
           const token = extractAccessToken(loginPayload);
           const claims = decodeJwtPayload(token);
           const tenantId = Number(claims?.empresa_id || 0);
-          const role = String(claims?.role || '').toLowerCase();
+          const rawRole = String(claims?.role || '').trim().toLowerCase();
+          const role = rawRole === 'admin' ? 'administrador' : rawRole === 'manager' ? 'gestor' : rawRole;
 
           if (tenantId !== Number(process.env.EXPECTED_TENANT_ID)) {
             throw new Error(`PRODUCTION_TENANT_MISMATCH:${tenantId}`);
           }
-          if (!['admin', 'manager'].includes(role)) {
+          if (!['administrador', 'gestor'].includes(role)) {
             throw new Error(`PRODUCTION_ROLE_NOT_AUTHORIZED:${role || 'missing'}`);
           }
 
