@@ -1,3 +1,7 @@
+// source_reference: training compliance 0491 Schema V2 governance and reviewed migration artifacts
+// operational_decision: verify fail-closed production/staging wiring without executing remote writes
+// dry_run_required: false
+// rollback_plan_required: false
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
