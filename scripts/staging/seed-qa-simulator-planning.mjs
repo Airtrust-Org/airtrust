@@ -11,8 +11,6 @@
 // artifacts identified by reserved natural codes/markers. The synthetic QA
 // tenant configuration is a precondition only; this fixture never mutates it.
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -907,26 +905,23 @@ function main() {
     );
   }
 
-  const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-staging-sim-planning-'));
-  const sqlFile = join(tempDir, rollback ? 'rollback.sql' : 'seed.sql');
-  writeFileSync(sqlFile, sql, 'utf8');
-  try {
-    const result = spawnSync(
-      'npx',
-      ['wrangler', 'd1', 'execute', dbName, '--remote', '--file', sqlFile, '--json'],
-      {
-        cwd: join(process.cwd(), 'worker-airtrust'),
-        encoding: 'utf8',
-        env: process.env,
-      },
-    );
-    if (result.status !== 0) {
-      throw new Error(result.stderr || result.stdout || 'wrangler d1 execute falhou');
-    }
-    console.log(rollback ? 'SIMULATOR_PLANNING_QA_ROLLBACK_APPLIED' : 'SIMULATOR_PLANNING_QA_SEED_APPLIED');
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
+  // Use --command instead of --file for this small governed fixture. Remote
+  // --file enters D1's bulk-import/reset path, which can fail with D1_RESET_DO
+  // before executing otherwise valid SQL. --command executes the same bounded
+  // statement batch through D1's normal query API and remains fail-closed.
+  const result = spawnSync(
+    'npx',
+    ['wrangler', 'd1', 'execute', dbName, '--remote', '--command', sql, '--json'],
+    {
+      cwd: join(process.cwd(), 'worker-airtrust'),
+      encoding: 'utf8',
+      env: process.env,
+    },
+  );
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || 'wrangler d1 execute falhou');
   }
+  console.log(rollback ? 'SIMULATOR_PLANNING_QA_ROLLBACK_APPLIED' : 'SIMULATOR_PLANNING_QA_SEED_APPLIED');
 }
 
 try {
