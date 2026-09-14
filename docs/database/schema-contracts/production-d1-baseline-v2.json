@@ -364,7 +364,7 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-14",
-    "last_reconciled_against": "simulator annual curriculum cycles 0493 (prepared; remote apply pending)",
+    "last_reconciled_against": "simulator annual curriculum cycles 0493 production apply verified",
     "schema_v2_digest": "89dd823680b637c5483bbb59cc5826a01a7efe06cf9d5466ba0a5386d19d2ef4",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
@@ -804,9 +804,10 @@
       ],
       "domain": "simulator annual recurrent curriculum cycle rotation and canonical session membership",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REMOTE_APPLY_PENDING",
+      "governance_state": "PRODUCTION_CONFIRMED",
       "reviewed_manifest": "simulator-annual-curriculum-cycles-0493.json",
-      "note": "0493 is reviewed and prepared only. It keeps G1/G1-SEM/G2 identities stable and configures C1/C2/C3 as annual child curricula with 2026=C2, 2027=C3, 2028=C1. Production apply requires exact-SHA authorization, read-only preflight, D1 Time Travel recovery point and postconditions."
+      "note": "0493 was applied through the governed Schema V2 production workflow on 2026-09-14 at exact source SHA 676e46708be7f156eeea344dfefe43cf56b5a780 and postconditions passed. It keeps G1/G1-SEM/G2 identities stable and configures C1/C2/C3 with 2026=C2, 2027=C3, 2028=C1.",
+      "evidence": "docs/audit/evidence/0493-simulator-annual-curriculum-cycles-applied-verified-2026-09-14.md"
     }
   ]
 }
