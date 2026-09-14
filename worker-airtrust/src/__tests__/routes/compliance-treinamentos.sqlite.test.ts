@@ -256,6 +256,35 @@ describe('training compliance engine', () => {
     expect(pilotoBody.data.nao_realizados).toBe(1);
   });
 
+  it('usa a realização mais recente da qualificação, não o vencimento mais distante', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 100, 'FUNCAO', 1, 'OBRIGATORIA', 'REGULATORIO');
+
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at) VALUES
+        (1000, 100, 'MNT-12', 'MANUTENCAO', '2025-01-01', '2027-01-01',
+         'CONCLUIDA', 0, 1, '2025-01-01', '2025-01-01'),
+        (1000, 100, 'MNT-12', 'MANUTENCAO', '2026-08-01', '2026-09-01',
+         'CONCLUIDA', 0, 1, '2026-08-01', '2026-08-01');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request('/funcionarios/1000');
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(body.data.compliance_pct).toBe(0);
+    expect(body.data.requisitos[0]).toMatchObject({
+      qualificacao_tipo_id: 100,
+      ultima_data: '2026-08-01',
+      data_validade: '2026-09-01',
+      status_compliance: 'VENCIDO',
+      evidencia_origem: 'QUALIFICACAO',
+    });
+  });
+
   it('reconhece conclusão EAD diretamente vinculada ao tipo como evidência de compliance', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos

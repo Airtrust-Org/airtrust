@@ -308,7 +308,7 @@ async function loadQualificationEvidence(
                 qh.${dataCol} AS data_realizacao, ${vencSelect} AS data_vencimento,
                 ROW_NUMBER() OVER (
                   PARTITION BY qh.funcionario_id, qh.${tipoCol}
-                  ORDER BY datetime(COALESCE(${vencSelect}, qh.${dataCol}, ${updatedExpr})) DESC, qh.id DESC
+                  ORDER BY datetime(COALESCE(qh.${dataCol}, ${updatedExpr}, ${vencSelect})) DESC, qh.id DESC
                 ) AS rn
            FROM qualificacoes_historico qh
            JOIN funcionarios f ON f.id = qh.funcionario_id
