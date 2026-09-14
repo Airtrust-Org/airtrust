@@ -260,18 +260,26 @@ async function main() {
   assert(caeReceived.status === 200, `CAE_RECEBIDA retornou ${caeReceived.status}`);
   assert(caeReceived.json?.data?.workflow_status === 'CAE_RECEBIDA', 'status CAE_RECEBIDA não persistiu');
 
-  const compared = await authFetch(baseUrl, token, '/api/simuladores/planejamento-v2/reparear', {
+  const pairingBlocks = manualProposal.classes.flatMap((trainingClass) =>
+    (trainingClass.blocks || []).map((block) => ({
+      need_ids: (block.sessions || []).map((session) => String(session.need_id)),
+    })),
+  );
+  const compared = await authFetch(baseUrl, token, '/api/simuladores/planejamento-v2/comparar-cae', {
     method: 'POST',
     body: JSON.stringify({
       reference_date: referenceDate,
       session_needs: needs,
-      locks,
+      pairing_blocks: pairingBlocks,
       cae_availability: caeDocument,
     }),
   });
   assert(compared.status === 200, `comparação CAE retornou ${compared.status}`);
   const comparison = compared.json?.data?.cae_comparison;
   assert(comparison && typeof comparison === 'object', 'comparação CAE ausente');
+  const comparedNeedIds = new Set(uniqueNeeds({ classes: compared.json?.data?.classes || [] }).map((need) => String(need.need_id)));
+  assert(comparedNeedIds.size === needs.length, 'comparação CAE alterou a composição da proposta');
+  for (const need of needs) assert(comparedNeedIds.has(String(need.need_id)), 'comparação CAE substituiu uma necessidade existente');
   const finalStatus =
     Number(comparison.no_slot_blocks || 0) === 0 &&
     Number(comparison.unmatched_crew_blocks || 0) === 0
