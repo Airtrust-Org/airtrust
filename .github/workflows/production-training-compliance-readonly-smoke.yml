@@ -1,0 +1,128 @@
+name: Production Training Compliance Readonly Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_production_sha:
+        description: Exact Worker/Pages SHA currently deployed to production
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_PRODUCTION_TRAINING_COMPLIANCE_READONLY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-training-compliance-readonly-smoke
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  PROD_API_BASE_URL: https://api.airtrust.online
+  PROD_FRONTEND_BASE_URL: https://airtrust.online
+
+jobs:
+  guard:
+    name: Production Training Compliance Readonly Guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Validate immutable target and provenance
+        shell: bash
+        env:
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_ONLY >&2; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_PRODUCTION_TRAINING_COMPLIANCE_READONLY' ]] || { echo CONFIRMATION_REJECTED >&2; exit 1; }
+          [[ "$EXPECTED_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_PRODUCTION_SHA_INVALID >&2; exit 1; }
+          git cat-file -e "$EXPECTED_PRODUCTION_SHA^{commit}"
+          git merge-base --is-ancestor "$EXPECTED_PRODUCTION_SHA" HEAD
+          RELEASE_SHA="$GITHUB_SHA" node scripts/ci/verify-release-gates.mjs
+          RELEASE_SHA="$EXPECTED_PRODUCTION_SHA" node scripts/ci/verify-release-gates.mjs
+          EXPECTED_PRODUCTION_SHA="$EXPECTED_PRODUCTION_SHA" node --input-type=module <<'NODE'
+          const expected = process.env.EXPECTED_PRODUCTION_SHA.toLowerCase();
+          const api = process.env.PROD_API_BASE_URL;
+          const response = await fetch(`${api}/api/version`, {
+            headers: { Accept: 'application/json', 'User-Agent': 'airtrust-production-compliance-readonly/1' },
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!response.ok) throw new Error(`PRODUCTION_VERSION_HTTP_${response.status}`);
+          const json = await response.json();
+          const body = json?.data && typeof json.data === 'object' ? json.data : json;
+          const live = String(body?.sourceSha ?? body?.source_sha ?? '').toLowerCase();
+          if (live !== expected) throw new Error(`PRODUCTION_WORKER_SHA_MISMATCH:${live || 'missing'}`);
+          const { assertLiveFrontendShaFromOrigin } = await import('./e2e/lib/live-sha-guard.mjs');
+          await assertLiveFrontendShaFromOrigin(process.env.PROD_FRONTEND_BASE_URL, expected.slice(0, 7));
+          console.log(`PRODUCTION_TRAINING_COMPLIANCE_PROVENANCE=PASS:${expected}`);
+          NODE
+
+  browser:
+    name: Authenticated Production Compliance UI/API Readonly E2E
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+      E2E_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Require production smoke credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$E2E_EMAIL" && -n "$E2E_PASSWORD" ]] || { echo PRODUCTION_SMOKE_CREDENTIALS_MISSING >&2; exit 1; }
+          [[ "$E2E_EMAIL" != *'staging.airtrust.invalid'* ]] || { echo STAGING_QA_IDENTITY_REJECTED >&2; exit 1; }
+      - name: Run production Compliance read-only E2E
+        run: npx playwright test --config=e2e/production-training-compliance.config.ts
+      - name: Upload sanitized Playwright result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-training-compliance-readonly-${{ inputs.expected_production_sha }}
+          path: test-results/production-training-compliance/results.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  summary:
+    name: Production Training Compliance Readonly Summary
+    needs: [guard, browser]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish result
+        shell: bash
+        env:
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+        run: |
+          {
+            echo '## Production Training Compliance read-only smoke'
+            echo ''
+            echo "- production SHA: \`$EXPECTED_PRODUCTION_SHA\`"
+            echo '- provenance + required release gates: `${{ needs.guard.result }}`'
+            echo '- authenticated UI/API E2E: `${{ needs.browser.result }}`'
+            echo '- operational writes: `none` (authentication POSTs only)'
+          } >> "$GITHUB_STEP_SUMMARY"
+          [[ '${{ needs.guard.result }}' == success && '${{ needs.browser.result }}' == success ]]
