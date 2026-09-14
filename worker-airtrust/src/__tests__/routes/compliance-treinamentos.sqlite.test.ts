@@ -369,6 +369,50 @@ describe('training compliance engine', () => {
     expect(body.data.map((person: any) => person.id)).toEqual([1001, 1002]);
   });
 
+  it('filtra pessoas por status geral mesmo sem treinamento específico', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at)
+      VALUES (1000, 100, 'MNT-12', 'MANUTENCAO', '2026-01-01', '2027-01-01',
+              'CONCLUIDA', 0, 1, '2026-01-01', '2026-01-01');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request('/pessoas?status=NAO_REALIZADO');
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(body.data.map((person: any) => person.id)).toEqual([1001, 1002]);
+  });
+
+  it('não mistura requisitos recomendados nos drill-downs operacionais obrigatórios', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 101, 'EMPRESA', 'RECOMENDADA', 'EMPRESA');
+
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at)
+      VALUES (1000, 101, 'OPS-12', 'OPERACOES', '2020-01-01', '2021-01-01',
+              'CONCLUIDA', 0, 1, '2020-01-01', '2020-01-01');
+    `);
+
+    const byTraining = await createApp(sqlite.asD1()).request('/pessoas?qualificacao_tipo_id=101');
+    const byStatus = await createApp(sqlite.asD1()).request('/pessoas?status=VENCIDO');
+    const trainingBody = (await byTraining.json()) as any;
+    const statusBody = (await byStatus.json()) as any;
+
+    expect(byTraining.status).toBe(200);
+    expect(trainingBody.data).toEqual([]);
+    expect(byStatus.status).toBe(200);
+    expect(statusBody.data).toEqual([]);
+  });
+
   it('rejeita status inválido no drill-down de pessoas', async () => {
     const response = await createApp(sqlite.asD1()).request(
       '/pessoas?qualificacao_tipo_id=100&status=QUALQUER',
