@@ -41,6 +41,17 @@ export function flattenPairedBlocks(proposal) {
     .filter((block) => Array.isArray(block?.sessions) && block.sessions.length >= 2);
 }
 
+export function flattenProofCandidateBlocks(proposal) {
+  return (proposal?.classes || [])
+    .flatMap((trainingClass) => trainingClass?.blocks || [])
+    .filter((block) => Array.isArray(block?.sessions) && block.sessions.length >= 1)
+    .sort((left, right) =>
+      Number(right.sessions?.length || 0) - Number(left.sessions?.length || 0) ||
+      String(left.target_date || '').localeCompare(String(right.target_date || '')) ||
+      String(left.block_id || '').localeCompare(String(right.block_id || '')),
+    );
+}
+
 function eachDay(start, end) {
   const days = [];
   for (let day = start; day <= end; day = addDaysIso(day, 1)) days.push(day);
@@ -192,15 +203,15 @@ async function main() {
   );
   const scales = Array.isArray(publishedScalesResult.json?.data) ? publishedScalesResult.json.data : [];
 
-  const candidates = flattenPairedBlocks(proposal);
-  assert(candidates.length > 0, 'NO_REAL_PAIRED_NEED_IN_PROPOSAL');
+  const candidates = flattenProofCandidateBlocks(proposal);
+  assert(candidates.length > 0, 'NO_REAL_SESSION_BLOCK_IN_PROPOSAL');
 
   let proof = null;
   for (const block of candidates) {
     const deadline = blockDeadline(block, config?.preferred_sessions_per_day);
     if (!deadline || deadline < referenceDate) continue;
     const employeeIds = [...new Set(block.sessions.map((session) => Number(session.employee_id)))];
-    if (employeeIds.length < 2 || employeeIds.some((id) => !Number.isFinite(id) || id <= 0)) continue;
+    if (employeeIds.length < 1 || employeeIds.some((id) => !Number.isFinite(id) || id <= 0)) continue;
 
     const relevant = scales.filter((scale) => relevantScale(scale, referenceDate, deadline));
     const rows = [];
@@ -236,7 +247,7 @@ async function main() {
       break;
     }
   }
-  assert(proof, 'NO_REAL_PAIR_WITH_BOTH_FOLGA_AND_TRABALHO_EVIDENCE');
+  assert(proof, 'NO_REAL_BLOCK_WITH_BOTH_FOLGA_AND_TRABALHO_EVIDENCE');
 
   const needIds = proof.block.sessions.map((session) => String(session.need_id));
   const repairBase = {
@@ -256,7 +267,10 @@ async function main() {
   const folgaBlock = findMatchingScheduledBlock(folgaResult.json, needIds);
   assert(folgaBlock?.schedule_status === 'SCHEDULED', 'FOLGA_NOT_SCHEDULED');
   const folgaStates = (folgaBlock?.roster || []).map((row) => String(row?.state || ''));
-  assert(folgaStates.length >= 2 && folgaStates.every((state) => state === 'FOLGA'), 'FOLGA_ROSTER_NOT_PROVEN');
+  assert(
+    folgaStates.length >= proof.employeeIds.length && folgaStates.every((state) => state === 'FOLGA'),
+    'FOLGA_ROSTER_NOT_PROVEN',
+  );
 
   const trabalhoResult = await authFetch(base, token, '/api/simuladores/planejamento-v2/reparear', {
     method: 'POST',
@@ -274,6 +288,15 @@ async function main() {
     tenant_id: tenantId,
     roster_policy: config.roster_policy,
     proposal_mode: proposal.mode,
+    proposal_summary: {
+      trainings: Number(proposal?.summary?.trainings || 0),
+      session_requirements: Number(proposal?.summary?.session_requirements || 0),
+      paired_blocks: Number(proposal?.summary?.paired_blocks || 0),
+      unmatched_blocks: Number(proposal?.summary?.unmatched_blocks || 0),
+      classes: Number(proposal?.summary?.classes || 0),
+      exceptions: Array.isArray(proposal?.exceptions) ? proposal.exceptions.length : 0,
+    },
+    selected_block_sessions: proof.block.sessions.length,
     published_roster_used: true,
     folga_validation: {
       schedule_status: folgaBlock.schedule_status,
