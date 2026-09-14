@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { normalizeCurriculumModelIds } from '../../routes/simuladores-curriculos-voo';
 
@@ -32,5 +34,19 @@ describe('flight training curriculum model list', () => {
       ok: false,
       error: 'Um currículo pode conter no máximo 50 sessões',
     });
+  });
+});
+
+
+describe('flight training curriculum persistence semantics', () => {
+  it('treats only ordered qualification links as curriculum membership', () => {
+    const route = readFileSync(
+      join(__dirname, '../../routes/simuladores-curriculos-voo.ts'),
+      'utf8',
+    );
+    const orderedMembershipPredicates = route.match(/ordem_no_treinamento IS NOT NULL/g) || [];
+    expect(orderedMembershipPredicates.length).toBeGreaterThanOrEqual(3);
+    expect(route).toContain('AND ms.ordem_no_treinamento IS NOT NULL');
+    expect(route).toContain('AND ordem_no_treinamento IS NOT NULL');
   });
 });

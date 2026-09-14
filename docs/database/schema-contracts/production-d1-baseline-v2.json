@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-09-09",
-    "last_reconciled_against": "PR #607 A-02 Schema V2 0489 closeout",
-    "schema_v2_digest": "2e57e5b88ce0f91c6acb74ab6d39e8c9f71e194c13f51378c4155f1fb8bdcd6d",
+    "last_reconciled_at": "2026-09-13",
+    "last_reconciled_against": "simulator planning curriculum metadata 0490 (prepared; remote apply pending)",
+    "schema_v2_digest": "ba7048f5690be68db7e7c759eedddec9c97d150f898fdc0e91356137032bfe09",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -739,6 +739,19 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "a02-natural-keys-tenant-scoped-0489.json",
       "note": "0489 is prepared and governed but not remotely applied by this PR. Production apply requires the dedicated fail-closed preflight and Schema V2 workflow."
+    },
+    {
+      "change_file": "0490_simulator_planning_curriculum_metadata.sql",
+      "change_id": "simulator-planning-curriculum-metadata-0490",
+      "sha256": "a9b0582b6bfa7345dfde2621c5b2a36d63b595a7a27b99df62951117cf77525f",
+      "targets": [
+        "treinamentos_planejados"
+      ],
+      "domain": "simulator planning curriculum metadata and dependency snapshot semantics",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "simulator-planning-curriculum-metadata-0490.json",
+      "note": "0490 is reviewed and prepared only. Production apply requires the dedicated read-only preflight, exact-SHA Schema V2 workflow, recovery point and postconditions; merge does not imply remote application."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",

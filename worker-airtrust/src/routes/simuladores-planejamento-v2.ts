@@ -8,7 +8,6 @@ import {
   getEmployeeSectorAccess,
 } from '../services/employee-sector-access';
 import {
-  evaluateRosterEligibility,
   isInsidePlanningHorizon,
   resolveSimulatorPlanningConfig,
   type SimulatorPlanningConfigRow,
@@ -23,9 +22,6 @@ import {
   createRosterAwarePairEligibility,
   loadPublishedRosterAllocations,
 } from '../services/cae-planning-roster-pairing';
-import { scheduleSimulatorTrainingBlocks } from '../services/cae-planning-session-scheduler';
-import { resolvePublishedRosterDayFromD1 } from '../services/cae-planning-roster-d1';
-import { validateAndNormalizeCaeAvailability } from '../services/cae-availability';
 import { loadPendingTrainingDependencyQualifications } from '../services/cae-planning-dependency-source';
 import { SIMULATOR_TRAINING_TIME_POLICY } from '../services/cae-planning-time-policy';
 import {
@@ -265,7 +261,6 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
     vencimento_inicio?: unknown;
     vencimento_fim?: unknown;
     data_referencia?: unknown;
-    cae_availability?: unknown;
   } | null;
   const inicio = String(body?.vencimento_inicio || '');
   const fim = String(body?.vencimento_fim || '');
@@ -482,70 +477,11 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
   const baseClasses = buildSimulatorTrainingClasses(blocks);
   const unmatched = blocks.filter((block) => block.pairing === 'SEM_DUPLA').length;
 
-  let classes: unknown = baseClasses;
-  let caeComparison: unknown = null;
-  if (body?.cae_availability !== undefined && body?.cae_availability !== null) {
-    const validation = validateAndNormalizeCaeAvailability(body.cae_availability);
-    if (!validation.ok) {
-      return c.json(
-        {
-          success: false,
-          error: 'Disponibilidade CAE inválida',
-          code: 'CAE_AVAILABILITY_INVALID',
-          details: validation.errors,
-          warnings: validation.warnings,
-        },
-        400,
-      );
-    }
-
-    const rosterCache = new Map<string, Awaited<ReturnType<typeof resolvePublishedRosterDayFromD1>>>();
-    const schedule = await scheduleSimulatorTrainingBlocks({
-      blocks,
-      slots: validation.data.slots,
-      referenceDate: referencia,
-      preferredSessionsPerDay: config.preferred_sessions_per_day,
-      checkRoster: async (employeeId, _employeeName, date) => {
-        const key = `${employeeId}:${date}`;
-        let roster = rosterCache.get(key);
-        if (!roster) {
-          roster = await resolvePublishedRosterDayFromD1({ db, empresaId, employeeId, date });
-          rosterCache.set(key, roster);
-        }
-        const eligibility = evaluateRosterEligibility(config.roster_policy, roster.state);
-        return {
-          eligible: eligibility.eligible,
-          state: roster.state,
-          reason: `${eligibility.reason} ${roster.reason}`.trim(),
-        };
-      },
-    });
-    const scheduledById = new Map(schedule.scheduled.map((block) => [block.block_id, block]));
-    classes = baseClasses.map((trainingClass) => ({
-      ...trainingClass,
-      blocks: trainingClass.blocks.map((block) => scheduledById.get(block.block_id) || block),
-    }));
-    const scheduledBlocks = schedule.scheduled.filter((block) => block.schedule_status === 'SCHEDULED');
-    const scheduledCount = scheduledBlocks.length;
-    const noSlotCount = schedule.scheduled.filter((block) => block.schedule_status === 'NO_CAE_SLOT').length;
-    caeComparison = {
-      source_slots: validation.data.slots.length,
-      scheduled_blocks: scheduledCount,
-      business_hour_blocks: scheduledBlocks.filter(
-        (block) => block.scheduled_slot?.time_quality === 'BUSINESS',
-      ).length,
-      daytime_blocks: scheduledBlocks.filter(
-        (block) => block.scheduled_slot?.time_quality === 'DAYTIME',
-      ).length,
-      night_fallback_blocks: scheduledBlocks.filter(
-        (block) => block.scheduled_slot?.time_quality === 'NIGHT',
-      ).length,
-      unmatched_crew_blocks: schedule.scheduled.filter((block) => block.schedule_status === 'UNMATCHED_CREW').length,
-      no_slot_blocks: noSlotCount,
-      remaining_slots: schedule.remaining_slots,
-      warnings: validation.warnings,
-    };
-  }
+  // CAE availability is intentionally excluded from proposal generation.
+  // Exact slots are compared later by POST /comparar-cae against this already
+  // formed proposal, preserving its pairs and unmatched single blocks.
+  const classes: unknown = baseClasses;
+  const caeComparison: unknown = null;
 
   return c.json({
     success: true,

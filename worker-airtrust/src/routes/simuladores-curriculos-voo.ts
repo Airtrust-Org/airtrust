@@ -107,7 +107,8 @@ async function loadCurriculumDetail(db: D1Database, empresaId: number, qualifica
           AND ms.deleted_at IS NULL
           AND COALESCE(ms.ativo, 1) = 1
           AND ms.qualificacao_tipo_id = ?
-        ORDER BY COALESCE(ms.ordem_no_treinamento, 999999), ms.id`,
+          AND ms.ordem_no_treinamento IS NOT NULL
+        ORDER BY ms.ordem_no_treinamento, ms.id`,
     )
     .bind(empresaId, qualificacaoTipoId)
     .all<CurriculumModelRow>();
@@ -219,6 +220,7 @@ app.get('/curriculos-voo', requirePermission('simuladores', 'visualizar', 'admin
           AND ms.empresa_id = qt.empresa_id
           AND ms.deleted_at IS NULL
           AND COALESCE(ms.ativo, 1) = 1
+          AND ms.ordem_no_treinamento IS NOT NULL
         WHERE qt.empresa_id = ?
           AND qt.deleted_at IS NULL
           AND COALESCE(qt.ativo, 1) = 1
@@ -276,7 +278,8 @@ app.put(
             AND deleted_at IS NULL
             AND COALESCE(ativo, 1) = 1
             AND qualificacao_tipo_id = ?
-          ORDER BY COALESCE(ordem_no_treinamento, 999999), id`,
+            AND ordem_no_treinamento IS NOT NULL
+          ORDER BY ordem_no_treinamento, id`,
       )
       .bind(empresaId, qualificacaoTipoId)
       .all<CurriculumModelRow>();
