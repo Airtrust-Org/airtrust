@@ -1,3 +1,7 @@
+// source_reference: staging simulator-planning QA governance (#648)
+// operational_decision: tests only; no database target or remote mutation.
+// dry_run_required: not applicable; static source assertions only.
+// rollback_plan_required: not applicable; tests perform no writes.
 import { readFileSync } from 'node:fs';
 import { strict as assert } from 'node:assert';
 import test from 'node:test';
@@ -46,10 +50,50 @@ test('staging simulator runtime QA does not mutate planning policy through the A
   assert.match(source, /generatedProposal\?\.config\?\.planning_horizon_days/);
 });
 
-
 test('staging simulator planning QA never reapplies the canonical examiner base fixture', () => {
   const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
   assert.doesNotMatch(workflow, /seed-qa-examiner-training\.mjs --apply/);
   assert.match(seed, /f\.matricula IN \(\$\{e\(PARTICIPANTE1_CODIGO\)\}, \$\{e\(PARTICIPANTE2_CODIGO\)\}\)/);
   assert.match(seed, /\) = 2 THEN 1 ELSE 0/);
+});
+
+test('staging simulator fixture treats planning policy as immutable baseline', () => {
+  const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
+  assert.doesNotMatch(seed, /INSERT INTO empresas_config/);
+  assert.doesNotMatch(seed, /ON CONFLICT\(empresa_id\) DO UPDATE SET[\s\S]*planejamento_simulador_regra_quinzena/);
+  assert.match(seed, /_qa_sim_planning_requires_config/);
+  assert.match(seed, /planejamento_simulador_regra_quinzena = 'AMBAS'/);
+});
+
+test('staging simulator fixture never publishes or reuses an unrelated roster', () => {
+  const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
+  assert.match(seed, /_qa_sim_planning_requires_isolated_roster/);
+  assert.match(seed, /id <> \$\{e\(QA_ROSTER_ID\)\}/);
+  assert.doesNotMatch(seed, /UPDATE escalas_mensais\s+SET status = 'publicada'/);
+  assert.match(seed, /em\.id = \$\{e\(QA_ROSTER_ID\)\}/);
+  assert.match(seed, /em\.observacoes = \$\{e\(PLANNING_MARKER\)\}/);
+});
+
+test('staging simulator rollback fails closed if disposable QA artifacts remain active', () => {
+  const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
+  assert.match(seed, /_qa_sim_planning_rollback_guard/);
+  assert.match(seed, /draft_count INTEGER NOT NULL CHECK \(draft_count = 0\)/);
+  assert.match(seed, /allocation_count INTEGER NOT NULL CHECK \(allocation_count = 0\)/);
+  assert.match(seed, /roster_count INTEGER NOT NULL CHECK \(roster_count = 0\)/);
+  assert.match(seed, /model_version_count INTEGER NOT NULL CHECK \(model_version_count = 0\)/);
+});
+
+test('staging simulator workflow pre-cleans stale disposable fixture before provisioning', () => {
+  const preClean = workflow.indexOf('Remove stale synthetic simulator-planning artifacts before provisioning');
+  const provision = workflow.indexOf('Provision only synthetic simulator-planning data');
+  assert.ok(preClean >= 0, 'workflow sem pre-clean de fixture antiga');
+  assert.ok(provision > preClean, 'pre-clean precisa ocorrer antes do provisionamento');
+  assert.match(workflow, /seed-qa-simulator-planning\.mjs --rollback --apply/);
+});
+
+test('staging simulator read-only audit surfaces disposable fixture residue', () => {
+  const audit = readFileSync('scripts/staging/audit-simulator-matrix-baseline.mjs', 'utf8');
+  assert.match(audit, /qaPlanningResidue/);
+  assert.match(audit, /qa_planning_hygiene_clean/);
+  assert.match(audit, /RUN_GOVERNED_PERSISTENCE_QA_WITH_FAIL_CLOSED_PRE_CLEAN/);
 });

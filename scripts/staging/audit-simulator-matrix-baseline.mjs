@@ -27,8 +27,18 @@ const qaStats = qaTenant ? d1(`SELECT
   (SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=${Number(qaTenant.id)} AND deleted_at IS NULL) AS qtypes,
   (SELECT COUNT(*) FROM modelos_sessao WHERE empresa_id=${Number(qaTenant.id)} AND deleted_at IS NULL) AS models,
   (SELECT COUNT(*) FROM modelos_sessao_versionamento WHERE empresa_id=${Number(qaTenant.id)} AND is_current=1) AS current_versions;`)[0] : null;
+const qaPlanningResidue = qaTenant ? d1(`SELECT
+  (SELECT COUNT(*) FROM treinamentos_planejados WHERE empresa_id=${Number(qaTenant.id)} AND planejamento_origem='SIMULADOR_V3_PERSISTED' AND planejamento_snapshot_json LIKE '%QA_SIMULATOR_PLANNING_SMOKE%' AND deleted_at IS NULL) AS drafts,
+  (SELECT COUNT(*) FROM escalas_mensais WHERE empresa_id=${Number(qaTenant.id)} AND id='QA-SIM-PLN-ROSTER' AND deleted_at IS NULL) AS roster,
+  (SELECT COUNT(*) FROM escala_alocacoes WHERE id IN ('QA-SIM-PLN-ALFA-FOLGA','QA-SIM-PLN-BRAVO-FOLGA','QA-SIM-PLN-CHARLIE-FOLGA') AND deleted_at IS NULL) AS allocations,
+  (SELECT COUNT(*) FROM qualificacoes_historico WHERE empresa_id=${Number(qaTenant.id)} AND observacoes='QA_ONLY_SIMULATOR_PLANNING' AND deleted_at IS NULL) AS histories,
+  (SELECT COUNT(*) FROM modelos_sessao WHERE empresa_id=${Number(qaTenant.id)} AND codigo='QA-SIM-PLN-S01' AND deleted_at IS NULL) AS models,
+  (SELECT COUNT(*) FROM modelos_sessao_versionamento WHERE empresa_id=${Number(qaTenant.id)} AND codigo_canonico='QA-SIM-PLN-S01' AND versao_matriz='QA_SIMULATOR_PLANNING') AS versions,
+  (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${Number(qaTenant.id)} AND matricula='QA-PARTICIPANTE-CHARLIE' AND deleted_at IS NULL) AS charlie;`)[0] : null;
 const migration0490Rows = d1(`SELECT COUNT(*) AS count FROM d1_migrations WHERE name='0490_simulator_planning_curriculum_metadata.sql';`);
 const migration0490Ledgered = Number(migration0490Rows[0]?.count || 0) > 0;
+const residueCount = Object.values(qaPlanningResidue || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+const qaPlanningHygieneClean = residueCount === 0;
 
 const identityIsolated = tenant6?.codigo === 'edb_pilot_smoke' && Boolean(qaTenant);
 const qaFixturePresent = Boolean(qaStats) && Number(qaStats.models || 0) > 0 && Number(qaStats.current_versions || 0) > 0;
@@ -44,14 +54,19 @@ console.log(JSON.stringify({
   qa_tenant: qaTenant,
   qa_fixture: qaStats,
   qa_fixture_present: qaFixturePresent,
+  qa_planning_residue: qaPlanningResidue,
+  qa_planning_hygiene_clean: qaPlanningHygieneClean,
   migration_0490_ledgered_in_staging: migration0490Ledgered,
   assertions: {
     tenant_6_is_edb_pilot_smoke: tenant6?.codigo === 'edb_pilot_smoke',
     qa_examiner_training_exists: Boolean(qaTenant),
     production_tenant_0490_not_ledgered: !migration0490Ledgered,
+    disposable_planning_fixture_clean: qaPlanningHygieneClean,
   },
   next_action: safe
-    ? 'DEPLOY_REVIEWED_STAGING_SHA_THEN_RUN_STAGING_SIMULATOR_PLANNING_PERSISTENCE_QA'
+    ? (qaPlanningHygieneClean
+      ? 'DEPLOY_REVIEWED_STAGING_SHA_THEN_RUN_STAGING_SIMULATOR_PLANNING_PERSISTENCE_QA'
+      : 'RUN_GOVERNED_PERSISTENCE_QA_WITH_FAIL_CLOSED_PRE_CLEAN')
     : 'STOP_AND_RECONCILE_STAGING_TENANT_IDENTITY',
 }, null, 2));
 if (!safe) process.exitCode = 3;

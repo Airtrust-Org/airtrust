@@ -9,7 +9,7 @@
 // confirmation phrase below.
 // rollback_plan_required: --rollback --apply soft-deletes only QA planning
 // artifacts identified by reserved natural codes/markers. The synthetic QA
-// tenant configuration row is left in its deterministic QA defaults.
+// tenant configuration is a precondition only; this fixture never mutates it.
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -77,29 +77,27 @@ SELECT CASE
 END;
 DROP TABLE _qa_sim_planning_requires_tenant;
 
--- Configuração determinística somente do tenant sintético.
-INSERT INTO empresas_config (
-  empresa_id,
-  planejamento_simulador_antecedencia_dias,
-  planejamento_simulador_regra_quinzena,
-  planejamento_simulador_permitir_sessao_compartilhada,
-  planejamento_simulador_preferir_mesmo_treinamento,
-  planejamento_simulador_preferir_mesma_sessao,
-  planejamento_simulador_aprovacao_obrigatoria,
-  updated_at
-)
-SELECT emp.id, 120, 'AMBAS', 1, 1, 1, 1, datetime('now')
-FROM empresas emp
-WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
-  AND emp.deleted_at IS NULL
-ON CONFLICT(empresa_id) DO UPDATE SET
-  planejamento_simulador_antecedencia_dias = excluded.planejamento_simulador_antecedencia_dias,
-  planejamento_simulador_regra_quinzena = excluded.planejamento_simulador_regra_quinzena,
-  planejamento_simulador_permitir_sessao_compartilhada = excluded.planejamento_simulador_permitir_sessao_compartilhada,
-  planejamento_simulador_preferir_mesmo_treinamento = excluded.planejamento_simulador_preferir_mesmo_treinamento,
-  planejamento_simulador_preferir_mesma_sessao = excluded.planejamento_simulador_preferir_mesma_sessao,
-  planejamento_simulador_aprovacao_obrigatoria = excluded.planejamento_simulador_aprovacao_obrigatoria,
-  updated_at = datetime('now');
+-- A política de planejamento do tenant QA é baseline canônico, não fixture descartável.
+-- Falhar fechado se ela divergir; nunca sobrescrevê-la para fazer o smoke passar.
+CREATE TABLE IF NOT EXISTS _qa_sim_planning_requires_config (
+  ok INTEGER NOT NULL CHECK (ok = 1)
+);
+DELETE FROM _qa_sim_planning_requires_config;
+INSERT INTO _qa_sim_planning_requires_config(ok)
+SELECT CASE WHEN EXISTS (
+  SELECT 1
+  FROM empresas_config ec
+  JOIN empresas emp ON emp.id = ec.empresa_id
+  WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+    AND emp.deleted_at IS NULL
+    AND ec.planejamento_simulador_antecedencia_dias = 120
+    AND ec.planejamento_simulador_regra_quinzena = 'AMBAS'
+    AND ec.planejamento_simulador_permitir_sessao_compartilhada = 1
+    AND ec.planejamento_simulador_preferir_mesmo_treinamento = 1
+    AND ec.planejamento_simulador_preferir_mesma_sessao = 1
+    AND ec.planejamento_simulador_aprovacao_obrigatoria = 1
+) THEN 1 ELSE 0 END;
+DROP TABLE _qa_sim_planning_requires_config;
 
 -- Limpa apenas drafts anteriores deste smoke no tenant sintético.
 UPDATE treinamentos_planejados
@@ -353,7 +351,24 @@ WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND observacoes = ${e(PLANNING_MARKER)};
 
 -- Escala publicada sintética: sem ela, o planner deve e continuará falhando
--- fechado como DESCONHECIDO. Os três participantes ficam em FOLGA no período.
+-- fechado como DESCONHECIDO. Não tocar escalas pré-existentes do mesmo mês.
+CREATE TABLE IF NOT EXISTS _qa_sim_planning_requires_isolated_roster (
+  ok INTEGER NOT NULL CHECK (ok = 1)
+);
+DELETE FROM _qa_sim_planning_requires_isolated_roster;
+INSERT INTO _qa_sim_planning_requires_isolated_roster(ok)
+SELECT CASE WHEN NOT EXISTS (
+  SELECT 1
+  FROM escalas_mensais
+  WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+    AND id <> ${e(QA_ROSTER_ID)}
+    AND mes = CAST(strftime('%m', date('now', '+90 days')) AS INTEGER)
+    AND ano = CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER)
+    AND deleted_at IS NULL
+) THEN 1 ELSE 0 END;
+DROP TABLE _qa_sim_planning_requires_isolated_roster;
+
+-- Os três participantes ficam em FOLGA exclusivamente nesta escala reservada.
 INSERT OR IGNORE INTO escalas_mensais (
   id, mes, ano, titulo, status, observacoes, empresa_id,
   created_by, created_at, updated_at, deleted_at
@@ -388,13 +403,6 @@ WHERE id = ${e(QA_ROSTER_ID)}
       AND other.deleted_at IS NULL
   );
 
-UPDATE escalas_mensais
-SET status = 'publicada', updated_at = datetime('now')
-WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-  AND mes = CAST(strftime('%m', date('now', '+90 days')) AS INTEGER)
-  AND ano = CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER)
-  AND deleted_at IS NULL;
-
 INSERT OR IGNORE INTO escala_alocacoes (
   id, escala_id, funcionario_id, aeronave_id, funcao,
   situacao_tipo, situacao_cor, quinzena_id, data_inicio, data_fim,
@@ -417,9 +425,9 @@ JOIN funcionarios f
  AND f.deleted_at IS NULL
 JOIN escalas_mensais em
   ON em.empresa_id = emp.id
- AND em.mes = CAST(strftime('%m', date('now', '+90 days')) AS INTEGER)
- AND em.ano = CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER)
+ AND em.id = ${e(QA_ROSTER_ID)}
  AND em.status = 'publicada'
+ AND em.observacoes = ${e(PLANNING_MARKER)}
  AND em.deleted_at IS NULL
 WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
   AND emp.deleted_at IS NULL;
@@ -429,9 +437,9 @@ SET escala_id = (
       SELECT em.id
       FROM escalas_mensais em
       WHERE em.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-        AND em.mes = CAST(strftime('%m', date('now', '+90 days')) AS INTEGER)
-        AND em.ano = CAST(strftime('%Y', date('now', '+90 days')) AS INTEGER)
+        AND em.id = ${e(QA_ROSTER_ID)}
         AND em.status = 'publicada'
+        AND em.observacoes = ${e(PLANNING_MARKER)}
         AND em.deleted_at IS NULL
       LIMIT 1
     ),
@@ -618,6 +626,53 @@ SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND UPPER(codigo) = UPPER(${e(PLANNING_CATEGORY_CODE)})
   AND deleted_at IS NULL;
+
+-- Pós-condição fail-closed do rollback: nenhum artefato descartável pode ficar ativo.
+CREATE TABLE IF NOT EXISTS _qa_sim_planning_rollback_guard (
+  draft_count INTEGER NOT NULL CHECK (draft_count = 0),
+  allocation_count INTEGER NOT NULL CHECK (allocation_count = 0),
+  roster_count INTEGER NOT NULL CHECK (roster_count = 0),
+  history_count INTEGER NOT NULL CHECK (history_count = 0),
+  charlie_count INTEGER NOT NULL CHECK (charlie_count = 0),
+  model_version_count INTEGER NOT NULL CHECK (model_version_count = 0),
+  model_count INTEGER NOT NULL CHECK (model_count = 0),
+  qualification_count INTEGER NOT NULL CHECK (qualification_count = 0),
+  category_count INTEGER NOT NULL CHECK (category_count = 0)
+);
+DELETE FROM _qa_sim_planning_rollback_guard;
+INSERT INTO _qa_sim_planning_rollback_guard (
+  draft_count, allocation_count, roster_count, history_count, charlie_count,
+  model_version_count, model_count, qualification_count, category_count
+)
+SELECT
+  (SELECT COUNT(*) FROM treinamentos_planejados
+    WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
+      AND planejamento_origem='SIMULADOR_V3_PERSISTED'
+      AND planejamento_snapshot_json LIKE '%${DRAFT_MARKER}%'
+      AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM escala_alocacoes WHERE id IN (${allocationIds}) AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM escalas_mensais
+    WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
+      AND id=${e(QA_ROSTER_ID)} AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM qualificacoes_historico
+    WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
+      AND observacoes=${e(PLANNING_MARKER)} AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM funcionarios
+    WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
+      AND matricula=${e(PARTICIPANTE3_CODIGO)} AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM modelos_sessao_versionamento
+    WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
+      AND codigo_canonico=${e(PLANNING_MODEL_CODE)} AND versao_matriz='QA_SIMULATOR_PLANNING'),
+  (SELECT COUNT(*) FROM modelos_sessao
+    WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
+      AND codigo=${e(PLANNING_MODEL_CODE)} AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM qualificacoes_tipos
+    WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
+      AND UPPER(codigo)=UPPER(${e(PLANNING_QUAL_CODE)}) AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM qualificacoes_categorias
+    WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
+      AND UPPER(codigo)=UPPER(${e(PLANNING_CATEGORY_CODE)}) AND deleted_at IS NULL);
+DROP TABLE _qa_sim_planning_rollback_guard;
 `;
 }
 
