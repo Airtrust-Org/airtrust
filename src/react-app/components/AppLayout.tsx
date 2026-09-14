@@ -373,6 +373,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           Qualificações
                         </Link>
                       )}
+                      {showQualificacoes && (isAdmin || isGestor) && (
+                        <Link
+                          to="/treinamentos/compliance"
+                          onClick={() => setTreinamentosOpen(false)}
+                          className={`flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/treinamentos/compliance') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'}`}
+                        >
+                          <ShieldCheck className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+                          Compliance de Treinamentos
+                        </Link>
+                      )}
                       {showLms && (
                         <Link
                           to="/lms"
@@ -655,13 +665,24 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   {(treinamentosMobileOpen || isInTreinamentosPath) && (
                     <div className="ml-7 flex flex-col gap-0.5">
                       {showQualificacoes && (
-                        <Link
-                          to="/qualificacoes"
-                          onClick={() => setMobileMenuOpen(false)}
-                          className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/qualificacoes') || isActivePath('/treinamentos/planejados') || isActivePath('/treinamentos/solicitacoes') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}
-                        >
-                          <BadgeCheck className="h-3.5 w-3.5 shrink-0" /> Qualificações
-                        </Link>
+                        <>
+                          <Link
+                            to="/qualificacoes"
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/qualificacoes') || isActivePath('/treinamentos/planejados') || isActivePath('/treinamentos/solicitacoes') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}
+                          >
+                            <BadgeCheck className="h-3.5 w-3.5 shrink-0" /> Qualificações
+                          </Link>
+                          {(isAdmin || isGestor) && (
+                            <Link
+                              to="/treinamentos/compliance"
+                              onClick={() => setMobileMenuOpen(false)}
+                              className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/treinamentos/compliance') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5 shrink-0" /> Compliance
+                            </Link>
+                          )}
+                        </>
                       )}
                       {showLms && (
                         <Link

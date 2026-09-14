@@ -70,6 +70,7 @@ import setoresGestores from './routes/setores-gestores';
 import adminOperationalDomainRbac from './routes/admin-operational-domain-rbac';
 import meOperationalAccess from './routes/me-operational-access';
 import matrizTreinamento from './routes/matriz-treinamento';
+import complianceTreinamentos from './routes/compliance-treinamentos';
 import aeronaves from './routes/aeronaves';
 import modelosAeronave from './routes/modelos-aeronave';
 // FASE 4: Ficha 360°, Compliance e Alertas
@@ -515,6 +516,10 @@ app.route('/api/me/operational-access', meOperationalAccess);
 app.use('/api/matriz-treinamento', noCacheMiddleware());
 app.use('/api/matriz-treinamento/*', noCacheMiddleware());
 app.route('/api/matriz-treinamento', matrizTreinamento);
+
+app.use('/api/compliance-treinamentos', noCacheMiddleware());
+app.use('/api/compliance-treinamentos/*', noCacheMiddleware());
+app.route('/api/compliance-treinamentos', complianceTreinamentos);
 
 /**
  * Aeronaves Endpoints (registradas antes do lookup para ter prioridade)

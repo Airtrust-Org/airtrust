@@ -45,6 +45,7 @@ import {
   type TreinamentoPlanejadoConvocacaoPreview,
 } from '@/react-app/hooks/useTreinamentosPlanejados';
 import { lmsKeys } from '@/react-app/hooks/useLms';
+import { TrainingComplianceApplicabilityEditor } from '@/react-app/components/compliance/TrainingComplianceApplicabilityEditor';
 import { useAeronavesConfig } from '@/react-app/hooks/useAeronavesConfig';
 import { API_BASE_URL, getAccessToken, fetchWithAuth } from '@/react-app/config/api';
 import { clearApiCacheByPattern, useApi } from '@/react-app/hooks/useApi';
@@ -3198,9 +3199,7 @@ export default function Qualificacoes() {
                                         showToast.success('Categoria deletada com sucesso!');
                                         setCategorias(categorias.filter((c) => c.id !== cat.id));
                                       } else {
-                                        const errorData = await response
-                                          .json()
-                                          .catch(() => ({}));
+                                        const errorData = await response.json().catch(() => ({}));
                                         if (response.status === 403) {
                                           showToast.error(
                                             'Permissão negada. Apenas administradores podem deletar categorias.',
@@ -4787,6 +4786,13 @@ export default function Qualificacoes() {
                 Sem setor vinculado, o modelo fica transversal.
               </p>
             </FormField>
+          </div>
+
+          <div className="md:col-span-2">
+            <TrainingComplianceApplicabilityEditor
+              qualificacaoTipoId={editingTipo?.id}
+              title="Quem precisa desta qualificação / treinamento"
+            />
           </div>
 
           <FormField label="Validade (meses)">
