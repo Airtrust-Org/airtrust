@@ -4,7 +4,7 @@
   "base_schema": "scripts/schema-local.sql",
   "canonical_bootstrap_command": "npm run setup:lms:local:reset",
   "bootstrap_script": "scripts/setup-local-lms-smoke-db.sh",
-  "reviewed_through_schema_v2_change": "0487_qualificacoes_renovacoes.sql",
+  "reviewed_through_schema_v2_change": "0495_training_programs_and_flight_curricula.sql",
   "critical_tables": [
     "token_blocklist",
     "audit_logs",
@@ -31,5 +31,6 @@
     "Every migration referenced by the bootstrap must exist in worker-airtrust/migrations.",
     "A Schema V2 change newer than reviewed_through_schema_v2_change that targets a critical table fails closed until this contract/bootstrap is reviewed.",
     "No remote D1 target is permitted by this guard or bootstrap."
-  ]
+  ],
+  "review_note": "Reviewed 2026-09-14: 0495 adds nullable program identity to qualificacoes_historico plus simulator/training-program structures. The canonical LMS CI bootstrap must not replay 0495 because its tenant-6 operational seeds depend on production simulator identities; LMS smoke paths do not require those operational seeds. The Schema V2 migration remains covered by dedicated fixture tests and governed remote apply."
 }

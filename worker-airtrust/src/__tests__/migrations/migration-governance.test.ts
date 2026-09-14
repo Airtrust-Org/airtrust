@@ -108,7 +108,8 @@ describe('migration governance', () => {
     // 0492 normalizes the canonical sector/function organization.
     // 0493 adds annual simulator curriculum cycles with a 2026=C2 rotation base.
     // 0494 adds tenant-scoped LMS enrollment reconciliation acknowledgements.
-    const expectedLatest = 494;
+    // 0495 separates qualification identity from Initial/Periodic/Semiannual training programs.
+    const expectedLatest = 495;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
@@ -134,7 +135,9 @@ describe('migration governance', () => {
     expect(localConfigured.length).toBeGreaterThan(0);
     expect(localConfigured.every((value) => value === './migrations')).toBe(true);
 
-    expect(readdirSync(productionDisabledMigrationsDir).filter((file) => file.endsWith('.sql'))).toEqual([]);
+    expect(
+      readdirSync(productionDisabledMigrationsDir).filter((file) => file.endsWith('.sql')),
+    ).toEqual([]);
     expect(remoteConfigured).not.toContain('./migrations_experimental');
   });
 

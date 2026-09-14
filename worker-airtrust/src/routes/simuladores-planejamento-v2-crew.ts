@@ -68,9 +68,7 @@ function addDaysIso(value: string, days: number): string {
 
 function daysDistance(left: string, right: string): number {
   return Math.abs(
-    Math.round(
-      (Date.parse(`${left}T00:00:00Z`) - Date.parse(`${right}T00:00:00Z`)) / 86_400_000,
-    ),
+    Math.round((Date.parse(`${left}T00:00:00Z`) - Date.parse(`${right}T00:00:00Z`)) / 86_400_000),
   );
 }
 
@@ -83,18 +81,39 @@ function parseNeed(value: unknown): SimulatorTrainingSessionNeed | null {
   const order = Number(row.session_order);
   const duration = Number(row.duration_minutes);
   const trainingCount = Number(row.training_session_count);
+  const programIdRaw = Number(row.training_program_id);
+  const programId = Number.isInteger(programIdRaw) && programIdRaw > 0 ? programIdRaw : null;
+  const curriculumCycleRaw = Number(row.curriculum_cycle);
+  const curriculumCycle =
+    Number.isInteger(curriculumCycleRaw) && curriculumCycleRaw > 0 ? curriculumCycleRaw : null;
+  const curriculumYearRaw = Number(row.curriculum_reference_year);
+  const curriculumReferenceYearValue =
+    Number.isInteger(curriculumYearRaw) && curriculumYearRaw >= 1900 ? curriculumYearRaw : null;
   const expiry = String(row.expiry_date || '').slice(0, 10);
   const needId = String(row.need_id || '');
+  const allowedNeedIds = new Set([
+    `${employeeId}:${qualificationTypeId}:${modelId}`,
+    `${employeeId}:${qualificationTypeId}:legacy:${modelId}`,
+    ...(programId ? [`${employeeId}:${qualificationTypeId}:${programId}:${modelId}`] : []),
+  ]);
   if (
-    !Number.isInteger(employeeId) || employeeId <= 0 ||
-    !Number.isInteger(qualificationTypeId) || qualificationTypeId <= 0 ||
-    !Number.isInteger(modelId) || modelId <= 0 ||
-    !Number.isInteger(order) || order <= 0 ||
-    !Number.isFinite(duration) || duration <= 0 || duration > 24 * 60 ||
-    !Number.isInteger(trainingCount) || trainingCount <= 0 ||
+    !Number.isInteger(employeeId) ||
+    employeeId <= 0 ||
+    !Number.isInteger(qualificationTypeId) ||
+    qualificationTypeId <= 0 ||
+    !Number.isInteger(modelId) ||
+    modelId <= 0 ||
+    !Number.isInteger(order) ||
+    order <= 0 ||
+    !Number.isFinite(duration) ||
+    duration <= 0 ||
+    duration > 24 * 60 ||
+    !Number.isInteger(trainingCount) ||
+    trainingCount <= 0 ||
     !isIsoDate(expiry) ||
-    needId !== `${employeeId}:${qualificationTypeId}:${modelId}`
-  ) return null;
+    !allowedNeedIds.has(needId)
+  )
+    return null;
 
   return {
     need_id: needId,
@@ -112,6 +131,11 @@ function parseNeed(value: unknown): SimulatorTrainingSessionNeed | null {
     session_order: order,
     duration_minutes: duration,
     training_session_count: trainingCount,
+    curriculum_cycle: curriculumCycle,
+    curriculum_reference_year: curriculumReferenceYearValue,
+    training_program_id: programId,
+    training_program_type:
+      row.training_program_type == null ? null : String(row.training_program_type),
   };
 }
 
@@ -145,7 +169,8 @@ async function assertNeedsInTenantAndScope(params: {
 }): Promise<void> {
   const employeeIds = [...new Set(params.needs.map((item) => item.employee_id))];
   const modelIds = [...new Set(params.needs.map((item) => item.session_model_id))];
-  if (employeeIds.length === 0 || modelIds.length === 0) throw new Error('Nenhuma sessão válida informada');
+  if (employeeIds.length === 0 || modelIds.length === 0)
+    throw new Error('Nenhuma sessão válida informada');
 
   const access = await getEmployeeSectorAccess(params.c, params.empresaId);
   const scope = buildFuncionarioScopeWhere(access, 'f');
@@ -193,7 +218,7 @@ async function assertNeedsInTenantAndScope(params: {
   for (const need of params.needs) {
     const model = modelById.get(need.session_model_id);
     const referenceYear = curriculumReferenceYear(need.expiry_date);
-    const curriculumKey = `${need.qualification_type_id}:${referenceYear ?? 'none'}`;
+    const curriculumKey = `${need.qualification_type_id}:${need.training_program_id ?? 'auto'}:${referenceYear ?? 'none'}:${need.employee_id}`;
     let resolvedCurriculum = resolvedCurriculumCache.get(curriculumKey);
     if (!resolvedCurriculumCache.has(curriculumKey)) {
       resolvedCurriculum = referenceYear
@@ -202,6 +227,8 @@ async function assertNeedsInTenantAndScope(params: {
             empresaId: params.empresaId,
             qualificationTypeId: need.qualification_type_id,
             referenceYear,
+            employeeId: need.employee_id,
+            requestedProgramId: need.training_program_id ?? null,
           })
         : null;
       resolvedCurriculumCache.set(curriculumKey, resolvedCurriculum);
@@ -230,7 +257,8 @@ async function assertNeedsInTenantAndScope(params: {
       !model ||
       Number(model.qualificacao_tipo_id) !== need.qualification_type_id ||
       Number(model.duracao_estimada) !== need.duration_minutes ||
-      (model.ordem_no_treinamento != null && Number(model.ordem_no_treinamento) !== need.session_order) ||
+      (model.ordem_no_treinamento != null &&
+        Number(model.ordem_no_treinamento) !== need.session_order) ||
       (modelEquipment !== 'UNIVERSAL' && modelEquipment !== need.equipment)
     ) {
       throw new Error('Sessão informada não corresponde ao currículo vigente do tenant');
@@ -248,9 +276,10 @@ function findSharedWindow(params: {
   windows: OperationalFortnightWindow[];
 }) {
   const targetDate = [params.anchor.expiry_date, params.candidate.expiry_date].sort()[0];
-  const earliestDate = params.referenceDate > addDaysIso(targetDate, -params.horizonDays)
-    ? params.referenceDate
-    : addDaysIso(targetDate, -params.horizonDays);
+  const earliestDate =
+    params.referenceDate > addDaysIso(targetDate, -params.horizonDays)
+      ? params.referenceDate
+      : addDaysIso(targetDate, -params.horizonDays);
   for (let date = targetDate; date >= earliestDate; date = addDaysIso(date, -1)) {
     const anchorRoster = resolveEmployeeFortnightDay({
       employeeId: params.anchor.employee_id,
@@ -265,9 +294,14 @@ function findSharedWindow(params: {
       windows: params.windows,
     });
     const anchorEligibility = evaluateRosterEligibility(params.rosterPolicy, anchorRoster.state);
-    const candidateEligibility = evaluateRosterEligibility(params.rosterPolicy, candidateRoster.state);
+    const candidateEligibility = evaluateRosterEligibility(
+      params.rosterPolicy,
+      candidateRoster.state,
+    );
     if (anchorEligibility.eligible && candidateEligibility.eligible) {
-      const window = params.windows.find((item) => item.start_date <= date && item.end_date >= date);
+      const window = params.windows.find(
+        (item) => item.start_date <= date && item.end_date >= date,
+      );
       return {
         window_start: window?.start_date || date,
         window_end: window?.end_date || date,
@@ -286,67 +320,91 @@ function pairKind(left: SimulatorTrainingSessionNeed, right: SimulatorTrainingSe
     : ('TREINAMENTOS_COMPATIVEIS' as const);
 }
 
-app.post('/candidatos', requirePermission('simuladores', 'visualizar', 'admin', 'manager'), async (c) => {
-  const empresaId = getTenantContext(c).empresaId;
-  const body = (await c.req.json().catch(() => null)) as {
-    reference_date?: unknown;
-    anchor?: unknown;
-    candidates?: unknown;
-  } | null;
-  const referenceDate = String(body?.reference_date || new Date().toISOString().slice(0, 10));
-  const anchor = parseNeed(body?.anchor);
-  const candidateValues = Array.isArray(body?.candidates) ? body?.candidates : [];
-  const candidates = candidateValues.map(parseNeed).filter((item): item is SimulatorTrainingSessionNeed => Boolean(item));
-  if (!isIsoDate(referenceDate) || !anchor || candidates.length > MAX_CANDIDATES || candidates.length !== candidateValues.length) {
-    return c.json({ success: false, error: 'Consulta de tripulantes inválida' }, 400);
-  }
+app.post(
+  '/candidatos',
+  requirePermission('simuladores', 'visualizar', 'admin', 'manager'),
+  async (c) => {
+    const empresaId = getTenantContext(c).empresaId;
+    const body = (await c.req.json().catch(() => null)) as {
+      reference_date?: unknown;
+      anchor?: unknown;
+      candidates?: unknown;
+    } | null;
+    const referenceDate = String(body?.reference_date || new Date().toISOString().slice(0, 10));
+    const anchor = parseNeed(body?.anchor);
+    const candidateValues = Array.isArray(body?.candidates) ? body?.candidates : [];
+    const candidates = candidateValues
+      .map(parseNeed)
+      .filter((item): item is SimulatorTrainingSessionNeed => Boolean(item));
+    if (
+      !isIsoDate(referenceDate) ||
+      !anchor ||
+      candidates.length > MAX_CANDIDATES ||
+      candidates.length !== candidateValues.length
+    ) {
+      return c.json({ success: false, error: 'Consulta de tripulantes inválida' }, 400);
+    }
 
-  const needs = [anchor, ...candidates];
-  try {
-    await assertNeedsInTenantAndScope({ c, db: c.env.DB, empresaId, needs });
-  } catch (error) {
-    return c.json({ success: false, error: error instanceof Error ? error.message : 'Tripulantes inválidos' }, 400);
-  }
+    const needs = [anchor, ...candidates];
+    try {
+      await assertNeedsInTenantAndScope({ c, db: c.env.DB, empresaId, needs });
+    } catch (error) {
+      return c.json(
+        { success: false, error: error instanceof Error ? error.message : 'Tripulantes inválidos' },
+        400,
+      );
+    }
 
-  const config = await loadConfig(c.env.DB, empresaId);
-  const structurallyCompatible = candidates.filter(
-    (candidate) =>
-      canShareSimulatorTrainingSessions(anchor, candidate) &&
-      daysDistance(anchor.expiry_date, candidate.expiry_date) <= config.planning_horizon_days,
-  );
-  if (structurallyCompatible.length === 0) {
-    return c.json({ success: true, data: { candidates: [] } });
-  }
+    const config = await loadConfig(c.env.DB, empresaId);
+    const structurallyCompatible = candidates.filter(
+      (candidate) =>
+        canShareSimulatorTrainingSessions(anchor, candidate) &&
+        daysDistance(anchor.expiry_date, candidate.expiry_date) <= config.planning_horizon_days,
+    );
+    if (structurallyCompatible.length === 0) {
+      return c.json({ success: true, data: { candidates: [] } });
+    }
 
-  const targetDates = structurallyCompatible.map((candidate) => [anchor.expiry_date, candidate.expiry_date].sort()[0]);
-  const earliestTarget = targetDates.sort()[0];
-  const latestTarget = targetDates.sort().at(-1) as string;
-  const startDate = referenceDate > addDaysIso(earliestTarget, -config.planning_horizon_days)
-    ? referenceDate
-    : addDaysIso(earliestTarget, -config.planning_horizon_days);
-  const employeeIds = [...new Set([anchor.employee_id, ...structurallyCompatible.map((item) => item.employee_id)])];
-  const [assignments, windows] = await Promise.all([
-    loadEmployeeFortnightAssignments({ db: c.env.DB, empresaId, employeeIds }),
-    loadOperationalFortnightWindows({ db: c.env.DB, empresaId, startDate, endDate: latestTarget }),
-  ]);
+    const targetDates = structurallyCompatible.map(
+      (candidate) => [anchor.expiry_date, candidate.expiry_date].sort()[0],
+    );
+    const earliestTarget = targetDates.sort()[0];
+    const latestTarget = targetDates.sort().at(-1) as string;
+    const startDate =
+      referenceDate > addDaysIso(earliestTarget, -config.planning_horizon_days)
+        ? referenceDate
+        : addDaysIso(earliestTarget, -config.planning_horizon_days);
+    const employeeIds = [
+      ...new Set([anchor.employee_id, ...structurallyCompatible.map((item) => item.employee_id)]),
+    ];
+    const [assignments, windows] = await Promise.all([
+      loadEmployeeFortnightAssignments({ db: c.env.DB, empresaId, employeeIds }),
+      loadOperationalFortnightWindows({
+        db: c.env.DB,
+        empresaId,
+        startDate,
+        endDate: latestTarget,
+      }),
+    ]);
 
-  const available = structurallyCompatible
-    .map((candidate) => {
-      const shared = findSharedWindow({
-        anchor,
-        candidate,
-        referenceDate,
-        horizonDays: config.planning_horizon_days,
-        rosterPolicy: config.roster_policy,
-        assignments,
-        windows,
-      });
-      return shared ? { ...candidate, availability: shared } : null;
-    })
-    .filter(Boolean);
+    const available = structurallyCompatible
+      .map((candidate) => {
+        const shared = findSharedWindow({
+          anchor,
+          candidate,
+          referenceDate,
+          horizonDays: config.planning_horizon_days,
+          rosterPolicy: config.roster_policy,
+          assignments,
+          windows,
+        });
+        return shared ? { ...candidate, availability: shared } : null;
+      })
+      .filter(Boolean);
 
-  return c.json({ success: true, data: { candidates: available } });
-});
+    return c.json({ success: true, data: { candidates: available } });
+  },
+);
 
 app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manager'), async (c) => {
   const empresaId = getTenantContext(c).empresaId;
@@ -358,11 +416,15 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
   } | null;
   const referenceDate = String(body?.reference_date || new Date().toISOString().slice(0, 10));
   const rawNeeds = Array.isArray(body?.session_needs) ? body?.session_needs : [];
-  const needs = rawNeeds.map(parseNeed).filter((item): item is SimulatorTrainingSessionNeed => Boolean(item));
+  const needs = rawNeeds
+    .map(parseNeed)
+    .filter((item): item is SimulatorTrainingSessionNeed => Boolean(item));
   const rawLocks = Array.isArray(body?.locks) ? body?.locks : [];
   if (
     !isIsoDate(referenceDate) ||
-    rawNeeds.length === 0 || rawNeeds.length > MAX_NEEDS || needs.length !== rawNeeds.length ||
+    rawNeeds.length === 0 ||
+    rawNeeds.length > MAX_NEEDS ||
+    needs.length !== rawNeeds.length ||
     rawLocks.length > MAX_LOCKS
   ) {
     return c.json({ success: false, error: 'Repareamento inválido' }, 400);
@@ -371,27 +433,40 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
   try {
     await assertNeedsInTenantAndScope({ c, db: c.env.DB, empresaId, needs });
   } catch (error) {
-    return c.json({ success: false, error: error instanceof Error ? error.message : 'Sessões inválidas' }, 400);
+    return c.json(
+      { success: false, error: error instanceof Error ? error.message : 'Sessões inválidas' },
+      400,
+    );
   }
 
   const config = await loadConfig(c.env.DB, empresaId);
   const needById = new Map(needs.map((need) => [need.need_id, need]));
   const used = new Set<string>();
   const lockedBlocks: SimulatorTrainingSessionBlock[] = [];
-  const parsedLocks: Array<{ anchor: SimulatorTrainingSessionNeed; partner: SimulatorTrainingSessionNeed }> = [];
+  const parsedLocks: Array<{
+    anchor: SimulatorTrainingSessionNeed;
+    partner: SimulatorTrainingSessionNeed;
+  }> = [];
 
   for (const raw of rawLocks) {
-    if (!raw || typeof raw !== 'object') return c.json({ success: false, error: 'Override de dupla inválido' }, 400);
+    if (!raw || typeof raw !== 'object')
+      return c.json({ success: false, error: 'Override de dupla inválido' }, 400);
     const value = raw as Record<string, unknown>;
     const anchor = needById.get(String(value.anchor_need_id || ''));
     const partner = needById.get(String(value.partner_need_id || ''));
     if (
-      !anchor || !partner || anchor.need_id === partner.need_id ||
-      used.has(anchor.need_id) || used.has(partner.need_id) ||
+      !anchor ||
+      !partner ||
+      anchor.need_id === partner.need_id ||
+      used.has(anchor.need_id) ||
+      used.has(partner.need_id) ||
       !canShareSimulatorTrainingSessions(anchor, partner) ||
       daysDistance(anchor.expiry_date, partner.expiry_date) > config.planning_horizon_days
     ) {
-      return c.json({ success: false, error: 'Dupla manual incompatível com currículo/equipamento/horizonte' }, 400);
+      return c.json(
+        { success: false, error: 'Dupla manual incompatível com currículo/equipamento/horizonte' },
+        400,
+      );
     }
     used.add(anchor.need_id);
     used.add(partner.need_id);
@@ -399,16 +474,28 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
   }
 
   if (parsedLocks.length > 0) {
-    const targetDates = parsedLocks.map(({ anchor, partner }) => [anchor.expiry_date, partner.expiry_date].sort()[0]);
+    const targetDates = parsedLocks.map(
+      ({ anchor, partner }) => [anchor.expiry_date, partner.expiry_date].sort()[0],
+    );
     const earliestTarget = [...targetDates].sort()[0];
     const latestTarget = [...targetDates].sort().at(-1) as string;
-    const startDate = referenceDate > addDaysIso(earliestTarget, -config.planning_horizon_days)
-      ? referenceDate
-      : addDaysIso(earliestTarget, -config.planning_horizon_days);
-    const employeeIds = [...new Set(parsedLocks.flatMap(({ anchor, partner }) => [anchor.employee_id, partner.employee_id]))];
+    const startDate =
+      referenceDate > addDaysIso(earliestTarget, -config.planning_horizon_days)
+        ? referenceDate
+        : addDaysIso(earliestTarget, -config.planning_horizon_days);
+    const employeeIds = [
+      ...new Set(
+        parsedLocks.flatMap(({ anchor, partner }) => [anchor.employee_id, partner.employee_id]),
+      ),
+    ];
     const [assignments, windows] = await Promise.all([
       loadEmployeeFortnightAssignments({ db: c.env.DB, empresaId, employeeIds }),
-      loadOperationalFortnightWindows({ db: c.env.DB, empresaId, startDate, endDate: latestTarget }),
+      loadOperationalFortnightWindows({
+        db: c.env.DB,
+        empresaId,
+        startDate,
+        endDate: latestTarget,
+      }),
     ]);
 
     for (const { anchor, partner } of parsedLocks) {
@@ -422,11 +509,20 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
         windows,
       });
       if (!shared) {
-        return c.json({ success: false, error: `Dupla ${anchor.employee_name} / ${partner.employee_name} sem disponibilidade comum na quinzena permitida` }, 400);
+        return c.json(
+          {
+            success: false,
+            error: `Dupla ${anchor.employee_name} / ${partner.employee_name} sem disponibilidade comum na quinzena permitida`,
+          },
+          400,
+        );
       }
       const sessions = [anchor, partner];
       lockedBlocks.push({
-        block_id: sessions.map((session) => session.need_id).sort().join('+'),
+        block_id: sessions
+          .map((session) => session.need_id)
+          .sort()
+          .join('+'),
         equipment: anchor.equipment,
         duration_minutes: anchor.duration_minutes,
         target_date: sessions.map((session) => session.expiry_date).sort()[0],
@@ -438,10 +534,23 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
 
   const remaining = needs.filter((need) => !used.has(need.need_id));
   const remainingEmployeeIds = [...new Set(remaining.map((need) => need.employee_id))];
-  const remainingLatestTarget = remaining.map((need) => need.expiry_date).sort().at(-1) || referenceDate;
+  const remainingLatestTarget =
+    remaining
+      .map((need) => need.expiry_date)
+      .sort()
+      .at(-1) || referenceDate;
   const [remainingAssignments, remainingWindows] = await Promise.all([
-    loadEmployeeFortnightAssignments({ db: c.env.DB, empresaId, employeeIds: remainingEmployeeIds }),
-    loadOperationalFortnightWindows({ db: c.env.DB, empresaId, startDate: referenceDate, endDate: remainingLatestTarget }),
+    loadEmployeeFortnightAssignments({
+      db: c.env.DB,
+      empresaId,
+      employeeIds: remainingEmployeeIds,
+    }),
+    loadOperationalFortnightWindows({
+      db: c.env.DB,
+      empresaId,
+      startDate: referenceDate,
+      endDate: remainingLatestTarget,
+    }),
   ]);
   const automaticRoster = createEmployeeFortnightPairEligibility({
     needs: remaining,
@@ -465,9 +574,15 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
   if (body?.cae_availability !== undefined && body?.cae_availability !== null) {
     const validation = validateAndNormalizeCaeAvailability(body.cae_availability);
     if (!validation.ok) {
-      return c.json({ success: false, error: 'Disponibilidade CAE inválida', details: validation.errors }, 400);
+      return c.json(
+        { success: false, error: 'Disponibilidade CAE inválida', details: validation.errors },
+        400,
+      );
     }
-    const rosterCache = new Map<string, Awaited<ReturnType<typeof resolveEmployeeFortnightDayFromD1>>>();
+    const rosterCache = new Map<
+      string,
+      Awaited<ReturnType<typeof resolveEmployeeFortnightDayFromD1>>
+    >();
     const schedule = await scheduleSimulatorTrainingBlocks({
       blocks,
       slots: validation.data.slots,
@@ -477,7 +592,12 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
         const key = `${employeeId}:${date}`;
         let roster = rosterCache.get(key);
         if (!roster) {
-          roster = await resolveEmployeeFortnightDayFromD1({ db: c.env.DB, empresaId, employeeId, date });
+          roster = await resolveEmployeeFortnightDayFromD1({
+            db: c.env.DB,
+            empresaId,
+            employeeId,
+            date,
+          });
           rosterCache.set(key, roster);
         }
         const eligibility = evaluateRosterEligibility(config.roster_policy, roster.state);
@@ -495,9 +615,13 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
     }));
     caeComparison = {
       source_slots: validation.data.slots.length,
-      scheduled_blocks: schedule.scheduled.filter((block) => block.schedule_status === 'SCHEDULED').length,
-      unmatched_crew_blocks: schedule.scheduled.filter((block) => block.schedule_status === 'UNMATCHED_CREW').length,
-      no_slot_blocks: schedule.scheduled.filter((block) => block.schedule_status === 'NO_CAE_SLOT').length,
+      scheduled_blocks: schedule.scheduled.filter((block) => block.schedule_status === 'SCHEDULED')
+        .length,
+      unmatched_crew_blocks: schedule.scheduled.filter(
+        (block) => block.schedule_status === 'UNMATCHED_CREW',
+      ).length,
+      no_slot_blocks: schedule.scheduled.filter((block) => block.schedule_status === 'NO_CAE_SLOT')
+        .length,
       remaining_slots: schedule.remaining_slots,
       warnings: validation.warnings,
     };
@@ -519,148 +643,190 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
   });
 });
 
-
 /**
  * Compara uma proposta já formada com a disponibilidade CAE sem recalcular
  * duplas. `pairing_blocks` é a partição exata da proposta salva/visível:
  * blocos com 2 necessidades permanecem como dupla e blocos com 1 necessidade
  * permanecem sem dupla. A CAE entra apenas para definir datas/horários.
  */
-app.post('/comparar-cae', requirePermission('simuladores', 'editar', 'admin', 'manager'), async (c) => {
-  const empresaId = getTenantContext(c).empresaId;
-  const body = (await c.req.json().catch(() => null)) as {
-    reference_date?: unknown;
-    session_needs?: unknown;
-    pairing_blocks?: unknown;
-    cae_availability?: unknown;
-  } | null;
-  const referenceDate = String(body?.reference_date || new Date().toISOString().slice(0, 10));
-  const rawNeeds = Array.isArray(body?.session_needs) ? body.session_needs : [];
-  const needs = rawNeeds.map(parseNeed).filter((item): item is SimulatorTrainingSessionNeed => Boolean(item));
-  const rawBlocks = Array.isArray(body?.pairing_blocks) ? body.pairing_blocks : [];
-  if (
-    !isIsoDate(referenceDate) ||
-    rawNeeds.length === 0 || rawNeeds.length > MAX_NEEDS || needs.length !== rawNeeds.length ||
-    rawBlocks.length === 0 || rawBlocks.length > MAX_NEEDS ||
-    body?.cae_availability == null
-  ) {
-    return c.json({ success: false, error: 'Comparação CAE inválida' }, 400);
-  }
-
-  try {
-    await assertNeedsInTenantAndScope({ c, db: c.env.DB, empresaId, needs });
-  } catch (error) {
-    return c.json({ success: false, error: error instanceof Error ? error.message : 'Sessões inválidas' }, 400);
-  }
-
-  const config = await loadConfig(c.env.DB, empresaId);
-  const needById = new Map(needs.map((need) => [need.need_id, need]));
-  const used = new Set<string>();
-  const blocks: SimulatorTrainingSessionBlock[] = [];
-
-  for (const raw of rawBlocks) {
-    if (!raw || typeof raw !== 'object') {
-      return c.json({ success: false, error: 'Bloco da proposta inválido' }, 400);
+app.post(
+  '/comparar-cae',
+  requirePermission('simuladores', 'editar', 'admin', 'manager'),
+  async (c) => {
+    const empresaId = getTenantContext(c).empresaId;
+    const body = (await c.req.json().catch(() => null)) as {
+      reference_date?: unknown;
+      session_needs?: unknown;
+      pairing_blocks?: unknown;
+      cae_availability?: unknown;
+    } | null;
+    const referenceDate = String(body?.reference_date || new Date().toISOString().slice(0, 10));
+    const rawNeeds = Array.isArray(body?.session_needs) ? body.session_needs : [];
+    const needs = rawNeeds
+      .map(parseNeed)
+      .filter((item): item is SimulatorTrainingSessionNeed => Boolean(item));
+    const rawBlocks = Array.isArray(body?.pairing_blocks) ? body.pairing_blocks : [];
+    if (
+      !isIsoDate(referenceDate) ||
+      rawNeeds.length === 0 ||
+      rawNeeds.length > MAX_NEEDS ||
+      needs.length !== rawNeeds.length ||
+      rawBlocks.length === 0 ||
+      rawBlocks.length > MAX_NEEDS ||
+      body?.cae_availability == null
+    ) {
+      return c.json({ success: false, error: 'Comparação CAE inválida' }, 400);
     }
-    const ids = Array.isArray((raw as Record<string, unknown>).need_ids)
-      ? ((raw as Record<string, unknown>).need_ids as unknown[]).map((value) => String(value || ''))
-      : [];
-    if (ids.length < 1 || ids.length > 2 || new Set(ids).size !== ids.length) {
-      return c.json({ success: false, error: 'Bloco da proposta deve conter uma ou duas sessões' }, 400);
+
+    try {
+      await assertNeedsInTenantAndScope({ c, db: c.env.DB, empresaId, needs });
+    } catch (error) {
+      return c.json(
+        { success: false, error: error instanceof Error ? error.message : 'Sessões inválidas' },
+        400,
+      );
     }
-    const sessions = ids.map((id) => needById.get(id));
-    if (sessions.some((session) => !session) || ids.some((id) => used.has(id))) {
-      return c.json({ success: false, error: 'Bloco da proposta contém sessão ausente ou duplicada' }, 400);
-    }
-    const resolved = sessions as SimulatorTrainingSessionNeed[];
-    const first = resolved[0];
-    if (resolved.length === 2) {
-      const second = resolved[1];
-      if (
-        !canShareSimulatorTrainingSessions(first, second) ||
-        daysDistance(first.expiry_date, second.expiry_date) > config.planning_horizon_days
-      ) {
-        return c.json({ success: false, error: 'Dupla preservada incompatível com currículo/equipamento/horizonte' }, 400);
+
+    const config = await loadConfig(c.env.DB, empresaId);
+    const needById = new Map(needs.map((need) => [need.need_id, need]));
+    const used = new Set<string>();
+    const blocks: SimulatorTrainingSessionBlock[] = [];
+
+    for (const raw of rawBlocks) {
+      if (!raw || typeof raw !== 'object') {
+        return c.json({ success: false, error: 'Bloco da proposta inválido' }, 400);
       }
+      const ids = Array.isArray((raw as Record<string, unknown>).need_ids)
+        ? ((raw as Record<string, unknown>).need_ids as unknown[]).map((value) =>
+            String(value || ''),
+          )
+        : [];
+      if (ids.length < 1 || ids.length > 2 || new Set(ids).size !== ids.length) {
+        return c.json(
+          { success: false, error: 'Bloco da proposta deve conter uma ou duas sessões' },
+          400,
+        );
+      }
+      const sessions = ids.map((id) => needById.get(id));
+      if (sessions.some((session) => !session) || ids.some((id) => used.has(id))) {
+        return c.json(
+          { success: false, error: 'Bloco da proposta contém sessão ausente ou duplicada' },
+          400,
+        );
+      }
+      const resolved = sessions as SimulatorTrainingSessionNeed[];
+      const first = resolved[0];
+      if (resolved.length === 2) {
+        const second = resolved[1];
+        if (
+          !canShareSimulatorTrainingSessions(first, second) ||
+          daysDistance(first.expiry_date, second.expiry_date) > config.planning_horizon_days
+        ) {
+          return c.json(
+            {
+              success: false,
+              error: 'Dupla preservada incompatível com currículo/equipamento/horizonte',
+            },
+            400,
+          );
+        }
+      }
+      ids.forEach((id) => used.add(id));
+      blocks.push({
+        block_id: ids.slice().sort().join('+'),
+        equipment: first.equipment,
+        duration_minutes: first.duration_minutes,
+        target_date: resolved.map((session) => session.expiry_date).sort()[0],
+        pairing: resolved.length === 2 ? pairKind(resolved[0], resolved[1]) : 'SEM_DUPLA',
+        sessions: resolved,
+      });
     }
-    ids.forEach((id) => used.add(id));
-    blocks.push({
-      block_id: ids.slice().sort().join('+'),
-      equipment: first.equipment,
-      duration_minutes: first.duration_minutes,
-      target_date: resolved.map((session) => session.expiry_date).sort()[0],
-      pairing: resolved.length === 2 ? pairKind(resolved[0], resolved[1]) : 'SEM_DUPLA',
-      sessions: resolved,
+
+    if (used.size !== needs.length) {
+      return c.json(
+        { success: false, error: 'A proposta informada não contém todas as sessões' },
+        400,
+      );
+    }
+
+    const validation = validateAndNormalizeCaeAvailability(body.cae_availability);
+    if (!validation.ok) {
+      return c.json(
+        {
+          success: false,
+          error: 'Disponibilidade CAE inválida',
+          code: 'CAE_AVAILABILITY_INVALID',
+          details: validation.errors,
+          warnings: validation.warnings,
+        },
+        400,
+      );
+    }
+
+    const baseClasses = buildSimulatorTrainingClasses(blocks);
+    const rosterCache = new Map<
+      string,
+      Awaited<ReturnType<typeof resolveEmployeeFortnightDayFromD1>>
+    >();
+    const schedule = await scheduleSimulatorTrainingBlocks({
+      blocks,
+      slots: validation.data.slots,
+      referenceDate,
+      preferredSessionsPerDay: config.preferred_sessions_per_day,
+      checkRoster: async (employeeId, _employeeName, date) => {
+        const key = `${employeeId}:${date}`;
+        let roster = rosterCache.get(key);
+        if (!roster) {
+          roster = await resolveEmployeeFortnightDayFromD1({
+            db: c.env.DB,
+            empresaId,
+            employeeId,
+            date,
+          });
+          rosterCache.set(key, roster);
+        }
+        const eligibility = evaluateRosterEligibility(config.roster_policy, roster.state);
+        return {
+          eligible: eligibility.eligible,
+          state: roster.state,
+          reason: `${eligibility.reason} ${roster.reason}`.trim(),
+        };
+      },
     });
-  }
+    const scheduledById = new Map(schedule.scheduled.map((block) => [block.block_id, block]));
+    const classes = baseClasses.map((trainingClass) => ({
+      ...trainingClass,
+      blocks: trainingClass.blocks.map((block) => scheduledById.get(block.block_id) || block),
+    }));
+    const unmatched = blocks.filter((block) => block.pairing === 'SEM_DUPLA').length;
 
-  if (used.size !== needs.length) {
-    return c.json({ success: false, error: 'A proposta informada não contém todas as sessões' }, 400);
-  }
-
-  const validation = validateAndNormalizeCaeAvailability(body.cae_availability);
-  if (!validation.ok) {
-    return c.json(
-      {
-        success: false,
-        error: 'Disponibilidade CAE inválida',
-        code: 'CAE_AVAILABILITY_INVALID',
-        details: validation.errors,
-        warnings: validation.warnings,
+    return c.json({
+      success: true,
+      data: {
+        classes,
+        cae_comparison: {
+          source_slots: validation.data.slots.length,
+          scheduled_blocks: schedule.scheduled.filter(
+            (block) => block.schedule_status === 'SCHEDULED',
+          ).length,
+          unmatched_crew_blocks: schedule.scheduled.filter(
+            (block) => block.schedule_status === 'UNMATCHED_CREW',
+          ).length,
+          no_slot_blocks: schedule.scheduled.filter(
+            (block) => block.schedule_status === 'NO_CAE_SLOT',
+          ).length,
+          remaining_slots: schedule.remaining_slots,
+          warnings: validation.warnings,
+        },
+        summary: {
+          session_requirements: needs.length,
+          paired_blocks: blocks.length - unmatched,
+          unmatched_blocks: unmatched,
+          classes: baseClasses.length,
+        },
       },
-      400,
-    );
-  }
-
-  const baseClasses = buildSimulatorTrainingClasses(blocks);
-  const rosterCache = new Map<string, Awaited<ReturnType<typeof resolveEmployeeFortnightDayFromD1>>>();
-  const schedule = await scheduleSimulatorTrainingBlocks({
-    blocks,
-    slots: validation.data.slots,
-    referenceDate,
-    preferredSessionsPerDay: config.preferred_sessions_per_day,
-    checkRoster: async (employeeId, _employeeName, date) => {
-      const key = `${employeeId}:${date}`;
-      let roster = rosterCache.get(key);
-      if (!roster) {
-        roster = await resolveEmployeeFortnightDayFromD1({ db: c.env.DB, empresaId, employeeId, date });
-        rosterCache.set(key, roster);
-      }
-      const eligibility = evaluateRosterEligibility(config.roster_policy, roster.state);
-      return {
-        eligible: eligibility.eligible,
-        state: roster.state,
-        reason: `${eligibility.reason} ${roster.reason}`.trim(),
-      };
-    },
-  });
-  const scheduledById = new Map(schedule.scheduled.map((block) => [block.block_id, block]));
-  const classes = baseClasses.map((trainingClass) => ({
-    ...trainingClass,
-    blocks: trainingClass.blocks.map((block) => scheduledById.get(block.block_id) || block),
-  }));
-  const unmatched = blocks.filter((block) => block.pairing === 'SEM_DUPLA').length;
-
-  return c.json({
-    success: true,
-    data: {
-      classes,
-      cae_comparison: {
-        source_slots: validation.data.slots.length,
-        scheduled_blocks: schedule.scheduled.filter((block) => block.schedule_status === 'SCHEDULED').length,
-        unmatched_crew_blocks: schedule.scheduled.filter((block) => block.schedule_status === 'UNMATCHED_CREW').length,
-        no_slot_blocks: schedule.scheduled.filter((block) => block.schedule_status === 'NO_CAE_SLOT').length,
-        remaining_slots: schedule.remaining_slots,
-        warnings: validation.warnings,
-      },
-      summary: {
-        session_requirements: needs.length,
-        paired_blocks: blocks.length - unmatched,
-        unmatched_blocks: unmatched,
-        classes: baseClasses.length,
-      },
-    },
-  });
-});
+    });
+  },
+);
 
 export default app;

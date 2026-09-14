@@ -1,7 +1,4 @@
-import type {
-  SimulatorPlanningConfig,
-  SimulatorRosterDayState,
-} from './cae-planning-policy';
+import type { SimulatorPlanningConfig, SimulatorRosterDayState } from './cae-planning-policy';
 import { evaluateRosterEligibility } from './cae-planning-policy';
 
 export type ProposalParticipantSnapshot = {
@@ -11,6 +8,10 @@ export type ProposalParticipantSnapshot = {
   qualification_history_id?: number | null;
   qualification_expiry_date?: string | null;
   training_id: string | number;
+  training_program_id?: number | null;
+  training_program_type?: string | null;
+  curriculum_cycle?: number | null;
+  curriculum_reference_year?: number | null;
   session_model_ids: Array<string | number>;
   roster_by_date: Record<string, SimulatorRosterDayState>;
 };
@@ -134,8 +135,10 @@ export function revalidateSimulatorPlanningProposal(
         message: 'Equipamento operacional do tripulante mudou.',
       });
     }
-    if (before.qualification_history_id !== current.qualification_history_id ||
-        before.qualification_expiry_date !== current.qualification_expiry_date) {
+    if (
+      before.qualification_history_id !== current.qualification_history_id ||
+      before.qualification_expiry_date !== current.qualification_expiry_date
+    ) {
       issues.push({
         code: 'QUALIFICATION_STATE_CHANGED',
         severity: 'BLOCK',
@@ -151,7 +154,10 @@ export function revalidateSimulatorPlanningProposal(
         message: 'O treinamento aplicável mudou.',
       });
     }
-    if (before.session_model_ids.map(String).join('|') !== current.session_model_ids.map(String).join('|')) {
+    if (
+      before.session_model_ids.map(String).join('|') !==
+      current.session_model_ids.map(String).join('|')
+    ) {
       issues.push({
         code: 'PARTICIPANT_CURRICULUM_CHANGED',
         severity: 'BLOCK',

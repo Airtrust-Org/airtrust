@@ -9,6 +9,13 @@ import {
   loadSimulatorCurriculumCycleConfig,
   resolveAnnualCurriculumCycle,
 } from '../services/simulator-curriculum-cycles';
+import {
+  listTrainingPrograms,
+  loadTrainingProgramModels,
+  selectTrainingProgram,
+  trainingProgramTablesAvailable,
+  type TrainingProgram,
+} from '../services/training-programs';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -244,9 +251,114 @@ async function loadLegacyCurriculumSessions(
   return rows.results || [];
 }
 
-async function loadCurriculumDetail(db: D1Database, empresaId: number, qualificacaoTipoId: number) {
+async function loadProgramCurriculumDetail(params: {
+  db: D1Database;
+  empresaId: number;
+  qualification: CurriculumQualificationRow;
+  program: TrainingProgram;
+}) {
+  const available = await loadCanonicalModelCatalog(params.db, params.empresaId);
+  const catalogById = new Map(available.map((row) => [Number(row.id), row]));
+  const referenceYear = new Date().getUTCFullYear();
+  const totalCycles = Math.max(1, Number(params.program.total_ciclos || 1));
+  const activeCycle =
+    totalCycles > 1
+      ? resolveAnnualCurriculumCycle({
+          referenceYear,
+          baseYear: Number(params.program.ano_base || referenceYear),
+          baseCycle: Number(params.program.ciclo_ano_base || 1),
+          totalCycles,
+        })
+      : 1;
+  const cycles = [];
+  for (let cycle = 1; cycle <= totalCycles; cycle += 1) {
+    const programModels = await loadTrainingProgramModels({
+      db: params.db,
+      empresaId: params.empresaId,
+      programId: params.program.id,
+      cycle,
+    });
+    const sessions: CurriculumModelRow[] = programModels.map((item) => {
+      const catalog = catalogById.get(Number(item.modelo_sessao_id));
+      return {
+        id: Number(item.modelo_sessao_id),
+        codigo: item.codigo_canonico,
+        codigo_canonico: item.codigo_canonico,
+        nome: item.nome,
+        modelo_aeronave: item.modelo_aeronave,
+        duracao_estimada: item.duracao_estimada,
+        ordem_no_treinamento: item.ordem,
+        gera_qualificacao: catalog?.gera_qualificacao ?? 0,
+        qualificacao_tipo_id: params.qualification.id,
+        qualificacao_tipo_codigo: params.qualification.codigo,
+        qualificacao_tipo_nome: params.qualification.nome,
+        ciclo: cycle,
+        ativo: catalog?.ativo ?? 1,
+      };
+    });
+    cycles.push({
+      cycle,
+      sessions,
+      total_sessions: sessions.length,
+      total_minutes: sessions.reduce(
+        (sum, row) => sum + Math.max(0, Number(row.duracao_estimada || 0)),
+        0,
+      ),
+    });
+  }
+  const active = cycles.find((row) => row.cycle === activeCycle) || cycles[0];
+  return {
+    qualification: params.qualification,
+    program: {
+      id: params.program.id,
+      codigo: params.program.codigo,
+      nome: params.program.nome,
+      tipo_treinamento: params.program.tipo_treinamento,
+      carga_horaria: params.program.carga_horaria,
+      validade_meses: params.program.validade_meses,
+      uso_unico: params.program.uso_unico,
+      total_ciclos: totalCycles,
+      proximo_programa_id: params.program.proximo_programa_id,
+    },
+    sessions: active?.sessions || [],
+    available_models: available,
+    total_sessions: active?.total_sessions || 0,
+    total_minutes: active?.total_minutes || 0,
+    cycle_config:
+      totalCycles > 1
+        ? {
+            total_cycles: totalCycles,
+            base_year: Number(params.program.ano_base || referenceYear),
+            base_cycle: Number(params.program.ciclo_ano_base || 1),
+            reference_year: referenceYear,
+            active_cycle: activeCycle,
+          }
+        : null,
+    cycles,
+  };
+}
+
+async function loadCurriculumDetail(
+  db: D1Database,
+  empresaId: number,
+  qualificacaoTipoId: number,
+  programaTreinamentoId?: number | null,
+) {
   const qualification = await loadVooQualification(db, empresaId, qualificacaoTipoId);
   if (!qualification) return null;
+
+  if (await trainingProgramTablesAvailable(db)) {
+    const program = await selectTrainingProgram({
+      db,
+      empresaId,
+      qualificationTypeId: qualificacaoTipoId,
+      requestedProgramId: programaTreinamentoId ?? null,
+    });
+    if (program) {
+      return loadProgramCurriculumDetail({ db, empresaId, qualification, program });
+    }
+    if (programaTreinamentoId) return null;
+  }
 
   const available = await loadCanonicalModelCatalog(db, empresaId);
   const cycleConfig = await loadSimulatorCurriculumCycleConfig({
@@ -309,6 +421,105 @@ async function loadCurriculumDetail(db: D1Database, empresaId: number, qualifica
     cycle_config: null,
     cycles: [],
   };
+}
+
+async function replaceProgramCurriculum(params: {
+  db: D1Database;
+  empresaId: number;
+  qualificacaoTipoId: number;
+  program: TrainingProgram;
+  cycle: number;
+  ids: number[];
+}) {
+  const totalCycles = Math.max(1, Number(params.program.total_ciclos || 1));
+  if (!Number.isInteger(params.cycle) || params.cycle < 1 || params.cycle > totalCycles) {
+    return { ok: false as const, status: 422 as const, error: 'Ciclo curricular inválido' };
+  }
+
+  const catalog = await loadCanonicalModelCatalog(params.db, params.empresaId, false);
+  const catalogById = new Map(catalog.map((row) => [Number(row.id), row]));
+  const selected = params.ids
+    .map((id) => catalogById.get(id))
+    .filter(Boolean) as CurriculumModelRow[];
+  if (selected.length !== params.ids.length) {
+    return {
+      ok: false as const,
+      status: 422 as const,
+      error: 'Há sessão inexistente, inativa, histórica ou de outro tenant',
+    };
+  }
+
+  for (const row of selected) {
+    if (!Number.isFinite(Number(row.duracao_estimada)) || Number(row.duracao_estimada) <= 0) {
+      return {
+        ok: false as const,
+        status: 422 as const,
+        error: `A sessão ${row.codigo_canonico || row.codigo} precisa ter duração válida antes de entrar no currículo`,
+      };
+    }
+  }
+
+  const equipmentSet = new Set(
+    selected
+      .map((row) => normalizeEquipment(row.modelo_aeronave))
+      .filter((equipment) => equipment !== 'UNIVERSAL'),
+  );
+  if (equipmentSet.size > 1) {
+    return {
+      ok: false as const,
+      status: 422 as const,
+      error: 'Um currículo de voo não pode misturar modelos de aeronave diferentes',
+    };
+  }
+
+  const previousRows = await params.db
+    .prepare(
+      `SELECT id, modelo_sessao_id, codigo_canonico, ordem
+         FROM treinamento_programa_modelos
+        WHERE empresa_id = ?
+          AND programa_id = ?
+          AND ciclo = ?
+          AND deleted_at IS NULL
+        ORDER BY ordem, id`,
+    )
+    .bind(params.empresaId, params.program.id, params.cycle)
+    .all<{ id: number; modelo_sessao_id: number; codigo_canonico: string; ordem: number }>();
+  const previous = previousRows.results || [];
+
+  const statements: ReturnType<D1Database['prepare']>[] = [];
+  if (previous.length > 0) {
+    statements.push(
+      params.db
+        .prepare(
+          `UPDATE treinamento_programa_modelos
+              SET deleted_at = datetime('now'), updated_at = datetime('now')
+            WHERE empresa_id = ? AND programa_id = ? AND ciclo = ? AND deleted_at IS NULL`,
+        )
+        .bind(params.empresaId, params.program.id, params.cycle),
+    );
+  }
+  selected.forEach((row, index) => {
+    statements.push(
+      params.db
+        .prepare(
+          `INSERT INTO treinamento_programa_modelos
+             (empresa_id, programa_id, ciclo, modelo_sessao_id, codigo_canonico, ordem,
+              created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+        )
+        .bind(
+          params.empresaId,
+          params.program.id,
+          params.cycle,
+          Number(row.id),
+          String(row.codigo_canonico || row.codigo).trim(),
+          index + 1,
+        ),
+    );
+  });
+  if (statements.length > 0) await params.db.batch(statements);
+
+  return { ok: true as const, previous, selected };
 }
 
 async function replaceCycleCurriculum(params: {
@@ -506,6 +717,106 @@ app.get(
   requirePermission('simuladores', 'visualizar', 'admin', 'manager'),
   async (c) => {
     const empresaId = getTenantContext(c).empresaId;
+    if (await trainingProgramTablesAvailable(c.env.DB)) {
+      const programRows = await c.env.DB.prepare(
+        `SELECT qt.id,
+                  qt.codigo,
+                  qt.nome,
+                  p.id AS programa_id,
+                  p.codigo AS programa_codigo,
+                  p.nome AS programa_nome,
+                  p.tipo_treinamento,
+                  p.carga_horaria AS carga_horaria_programa,
+                  p.validade_meses AS validade_meses_programa,
+                  p.uso_unico,
+                  p.total_ciclos,
+                  p.ano_base,
+                  p.ciclo_ano_base
+             FROM qualificacoes_tipos qt
+             INNER JOIN qualificacoes_categorias qc
+               ON qc.id = qt.categoria_id
+              AND qc.empresa_id = qt.empresa_id
+              AND qc.deleted_at IS NULL
+              AND COALESCE(qc.ativo, 1) = 1
+             INNER JOIN treinamento_programas p
+               ON p.qualificacao_tipo_id = qt.id
+              AND p.empresa_id = qt.empresa_id
+              AND p.deleted_at IS NULL
+              AND p.ativo = 1
+            WHERE qt.empresa_id = ?
+              AND qt.deleted_at IS NULL
+              AND COALESCE(qt.ativo, 1) = 1
+              AND UPPER(TRIM(COALESCE(qc.codigo, ''))) = 'VOO'
+            ORDER BY COALESCE(qt.codigo, ''), qt.nome,
+                     CASE p.tipo_treinamento
+                       WHEN 'INICIAL' THEN 1
+                       WHEN 'RECORRENTE' THEN 2
+                       WHEN 'SEMESTRAL' THEN 3
+                       WHEN 'UPGRADE' THEN 4
+                       ELSE 9
+                     END,
+                     p.id`,
+      )
+        .bind(empresaId)
+        .all<Record<string, unknown>>();
+      const metricRows = await c.env.DB.prepare(
+        `SELECT pm.programa_id,
+                  pm.ciclo,
+                  COUNT(pm.id) AS total_sessoes,
+                  COALESCE(SUM(COALESCE(ms.duracao_estimada, 0)), 0) AS total_minutos
+             FROM treinamento_programa_modelos pm
+             INNER JOIN modelos_sessao_versionamento msv
+               ON msv.empresa_id = pm.empresa_id
+              AND msv.codigo_canonico = pm.codigo_canonico
+              AND msv.is_current = 1
+             INNER JOIN modelos_sessao ms
+               ON ms.id = msv.modelo_id
+              AND ms.empresa_id = pm.empresa_id
+              AND ms.deleted_at IS NULL
+              AND COALESCE(ms.ativo, 1) = 1
+            WHERE pm.empresa_id = ?
+              AND pm.deleted_at IS NULL
+            GROUP BY pm.programa_id, pm.ciclo`,
+      )
+        .bind(empresaId)
+        .all<{
+          programa_id: number;
+          ciclo: number;
+          total_sessoes: number;
+          total_minutos: number;
+        }>();
+      const metricByKey = new Map(
+        (metricRows.results || []).map((row) => [
+          `${Number(row.programa_id)}:${Number(row.ciclo)}`,
+          row,
+        ]),
+      );
+      const referenceYear = new Date().getUTCFullYear();
+      const data = (programRows.results || []).map((row) => {
+        const totalCycles = Math.max(1, Number(row.total_ciclos || 1));
+        const activeCycle =
+          totalCycles > 1
+            ? resolveAnnualCurriculumCycle({
+                referenceYear,
+                baseYear: Number(row.ano_base || referenceYear),
+                baseCycle: Number(row.ciclo_ano_base || 1),
+                totalCycles,
+              })
+            : 1;
+        const metric = metricByKey.get(`${Number(row.programa_id)}:${activeCycle}`);
+        return {
+          ...row,
+          total_sessoes: Number(metric?.total_sessoes || 0),
+          sessoes_ordenadas: Number(metric?.total_sessoes || 0),
+          total_minutos: Number(metric?.total_minutos || 0),
+          total_ciclos: totalCycles,
+          ciclo_ativo: activeCycle,
+          ano_referencia: referenceYear,
+        };
+      });
+      return c.json({ success: true, data });
+    }
+
     const rows = await c.env.DB.prepare(
       `SELECT qt.id,
               qt.codigo,
@@ -613,7 +924,17 @@ app.get(
       return c.json({ success: false, error: 'Treinamento inválido' }, 400);
     }
 
-    const detail = await loadCurriculumDetail(c.env.DB, empresaId, qualificacaoTipoId);
+    const programaTreinamentoIdRaw = Number(c.req.query('programa_id'));
+    const programaTreinamentoId =
+      Number.isInteger(programaTreinamentoIdRaw) && programaTreinamentoIdRaw > 0
+        ? programaTreinamentoIdRaw
+        : null;
+    const detail = await loadCurriculumDetail(
+      c.env.DB,
+      empresaId,
+      qualificacaoTipoId,
+      programaTreinamentoId,
+    );
     if (!detail) return c.json({ success: false, error: 'Treinamento de voo não encontrado' }, 404);
     return c.json({ success: true, data: detail });
   },
@@ -639,10 +960,71 @@ app.put(
     const body = (await c.req.json().catch(() => null)) as {
       modelo_ids?: unknown;
       ciclo?: unknown;
+      programa_id?: unknown;
     } | null;
     const normalized = normalizeCurriculumModelIds(body?.modelo_ids);
     if (!normalized.ok) return c.json({ success: false, error: normalized.error }, 422);
     const ids = normalized.ids;
+
+    if (await trainingProgramTablesAvailable(c.env.DB)) {
+      const programId = Number(body?.programa_id);
+      if (!Number.isInteger(programId) || programId <= 0) {
+        return c.json({ success: false, error: 'Programa de treinamento obrigatório' }, 422);
+      }
+      const program = await selectTrainingProgram({
+        db: c.env.DB,
+        empresaId,
+        qualificationTypeId: qualificacaoTipoId,
+        requestedProgramId: programId,
+      });
+      if (!program) {
+        return c.json({ success: false, error: 'Programa de treinamento inválido' }, 422);
+      }
+      const totalCycles = Math.max(1, Number(program.total_ciclos || 1));
+      const cycle = totalCycles > 1 ? Number(body?.ciclo) : 1;
+      const replaced = await replaceProgramCurriculum({
+        db: c.env.DB,
+        empresaId,
+        qualificacaoTipoId,
+        program,
+        cycle,
+        ids,
+      });
+      if (!replaced.ok) {
+        return c.json({ success: false, error: replaced.error }, replaced.status);
+      }
+
+      await audit(c.env.DB, {
+        tabela: 'treinamento_programa_modelos',
+        acao: 'TRAINING_PROGRAM_CURRICULUM_REPLACE',
+        registro_id: program.id,
+        dados_anteriores: {
+          qualificacao_tipo_id: qualificacaoTipoId,
+          programa_id: program.id,
+          tipo_treinamento: program.tipo_treinamento,
+          ciclo: cycle,
+          modelo_ids: replaced.previous.map((row) => Number(row.modelo_sessao_id)),
+          codigos_canonicos: replaced.previous.map((row) => row.codigo_canonico),
+        },
+        dados_novos: {
+          qualificacao_tipo_id: qualificacaoTipoId,
+          programa_id: program.id,
+          tipo_treinamento: program.tipo_treinamento,
+          ciclo: cycle,
+          modelo_ids: ids,
+          codigos_canonicos: replaced.selected.map((row) => row.codigo_canonico || row.codigo),
+          total_sessoes: ids.length,
+        },
+      });
+
+      const detail = await loadCurriculumDetail(
+        c.env.DB,
+        empresaId,
+        qualificacaoTipoId,
+        program.id,
+      );
+      return c.json({ success: true, data: detail });
+    }
 
     const cycleConfig = await loadSimulatorCurriculumCycleConfig({
       db: c.env.DB,

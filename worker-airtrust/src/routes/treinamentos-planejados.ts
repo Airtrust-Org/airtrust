@@ -6,6 +6,7 @@ import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { forbidden } from '../middleware/error-handler';
 import { syncTreinamentoPlanejadoIntegration } from '../services/treinamentos-planejados-integration';
+import { resolveProgramForHistoryType, selectTrainingProgram } from '../services/training-programs';
 import { extrairUsuarioAuditoria, registrarAuditoria } from '../utils/auditoria';
 import {
   filterRequestedSetorIdsByAccess,
@@ -210,6 +211,7 @@ const diaSchema = z.object({
 
 const eventoSchema = z.object({
   qualificacao_tipo_id: z.number().int().positive(),
+  programa_treinamento_id: z.number().int().positive().optional().nullable(),
   titulo: z.string().trim().min(3).max(200),
   descricao: z.string().trim().max(4000).optional().nullable(),
   observacoes: z.string().trim().max(4000).optional().nullable(),
@@ -308,6 +310,9 @@ type EventoRow = {
   qualificacao_tipo_id: number;
   qualificacao_nome: string | null;
   qualificacao_codigo: string | null;
+  programa_treinamento_id: number | null;
+  programa_tipo_treinamento: string | null;
+  programa_nome: string | null;
   data_prevista: string;
   hora_inicio: string | null;
   hora_fim: string | null;
@@ -842,6 +847,9 @@ function serializeEvento(
     qualificacao_tipo_id: Number(row.qualificacao_tipo_id),
     qualificacao_nome: row.qualificacao_nome,
     qualificacao_codigo: row.qualificacao_codigo,
+    programa_treinamento_id: row.programa_treinamento_id,
+    programa_tipo_treinamento: row.programa_tipo_treinamento,
+    programa_nome: row.programa_nome,
     data_prevista: row.data_prevista,
     hora_inicio: row.hora_inicio,
     hora_fim: row.hora_fim,
@@ -952,7 +960,11 @@ async function trySyncTreinamentoPlanejadoIntegration(
     await syncTreinamentoPlanejadoIntegration(params);
     return true;
   } catch (error) {
-    console.error('treinamento_integration_pending', { empresaId: params.empresaId, treinamentoId: params.treinamentoId, errorName: error instanceof Error ? error.name : 'UnknownError' });
+    console.error('treinamento_integration_pending', {
+      empresaId: params.empresaId,
+      treinamentoId: params.treinamentoId,
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+    });
     return false;
   }
 }
@@ -1023,6 +1035,9 @@ async function listTreinamentosPlanejadosBase(
                     t.qualificacao_tipo_id,
                     qt.nome AS qualificacao_nome,
                     qt.codigo AS qualificacao_codigo,
+                    t.programa_treinamento_id,
+                    prog.tipo_treinamento AS programa_tipo_treinamento,
+                    prog.nome AS programa_nome,
                     t.data_prevista,
                     t.hora_inicio,
                     t.hora_fim,
@@ -1044,6 +1059,11 @@ async function listTreinamentosPlanejadosBase(
                     SUM(CASE WHEN COALESCE(tp.presente, 0) = 1 THEN 1 ELSE 0 END) AS presentes_total
                FROM treinamentos_planejados t
                LEFT JOIN qualificacoes_tipos qt ON qt.id = t.qualificacao_tipo_id AND qt.deleted_at IS NULL
+               LEFT JOIN treinamento_programas prog
+                 ON prog.id = t.programa_treinamento_id
+                AND prog.empresa_id = t.empresa_id
+                AND prog.qualificacao_tipo_id = t.qualificacao_tipo_id
+                AND prog.deleted_at IS NULL
                LEFT JOIN funcionarios instr ON instr.id = t.instrutor_id AND instr.deleted_at IS NULL
                LEFT JOIN treinamentos_participantes tp ON tp.treinamento_id = t.id
               WHERE t.empresa_id = ?
@@ -1340,6 +1360,9 @@ async function loadStandalonePlannedQualificationItems(
       qualificacao_tipo_id: Number(row.qualificacao_tipo_id || 0),
       qualificacao_nome: row.qualificacao_nome,
       qualificacao_codigo: row.qualificacao_codigo,
+      programa_treinamento_id: null,
+      programa_tipo_treinamento: null,
+      programa_nome: null,
       data_prevista: String(row.data_planejada || '').slice(0, 10),
       hora_inicio: null,
       hora_fim: null,
@@ -1613,6 +1636,9 @@ async function loadSimulatorSessionItems(
         qualificacao_tipo_id: Number(row.linked_qualificacao_tipo_id || 0),
         qualificacao_nome: row.linked_qualificacao_nome,
         qualificacao_codigo: row.linked_qualificacao_codigo,
+        programa_treinamento_id: null,
+        programa_tipo_treinamento: null,
+        programa_nome: null,
         data_prevista: row.data_prevista,
         hora_inicio: row.hora_inicio,
         hora_fim: row.hora_fim,
@@ -1984,205 +2010,246 @@ treinamentosPlanejadosRoutes.get('/planejados/:id', async (c) => {
   });
 });
 
-treinamentosPlanejadosRoutes.post('/planejados', requirePermission('agendamentos', 'criar', 'admin', 'manager'), async (c) => {
-  const db = c.env.DB;
-  const empresaId = getEmpresaId(c);
-  const parsed = eventoSchema.safeParse(await c.req.json());
-  if (!parsed.success) {
-    return c.json(
-      { success: false, error: 'Dados inválidos', details: parsed.error.flatten() },
-      400,
-    );
-  }
+treinamentosPlanejadosRoutes.post(
+  '/planejados',
+  requirePermission('agendamentos', 'criar', 'admin', 'manager'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaId(c);
+    const parsed = eventoSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json(
+        { success: false, error: 'Dados inválidos', details: parsed.error.flatten() },
+        400,
+      );
+    }
 
-  const input = parsed.data;
-  const participanteIds = normalizePositiveIds(input.participante_ids || []);
-  const instrutorIds = normalizePositiveIds([
-    ...(input.instrutor_ids || []),
-    ...(input.instrutor_id ? [input.instrutor_id] : []),
-    ...(input.dias || []).flatMap((dia) => (dia.instrutor_id ? [dia.instrutor_id] : [])),
-  ]);
-  const referenceError = await validateTrainingReferences({
-    db,
-    empresaId,
-    qualificacaoTipoId: input.qualificacao_tipo_id,
-    participanteIds,
-    instrutorIds,
-    ...collectResourceIdsFromDias(input.dias),
-  });
-  if (referenceError) {
-    return c.json({ success: false, error: referenceError }, 400);
-  }
-  if (input.data_inicio && input.data_fim && input.data_fim < input.data_inicio) {
-    return c.json(
-      { success: false, error: 'A data final deve ser igual ou posterior à inicial' },
-      400,
-    );
-  }
-  if (input.limite_participantes && participanteIds.length > input.limite_participantes) {
-    return c.json(
-      { success: false, error: 'Quantidade de participantes excede o limite da turma' },
-      400,
-    );
-  }
-  const dias =
-    input.dias && input.dias.length > 0
-      ? input.dias
-      : [
-          {
-            data: input.data_prevista,
-            hora_inicio: input.hora_inicio || '08:00',
-            hora_fim: input.hora_fim || '17:00',
-            local: input.local,
-            instrutor_id: input.instrutor_id,
-          },
-        ];
-  if (new Set(dias.map((dia) => dia.data)).size !== dias.length) {
-    return c.json({ success: false, error: 'Dias efetivos duplicados não são permitidos' }, 400);
-  }
-  const dataInicio = input.data_inicio || dias[0].data;
-  const dataFim = input.data_fim || dias[dias.length - 1].data;
-  if (dias.some((dia) => dia.data < dataInicio || dia.data > dataFim)) {
-    return c.json({ success: false, error: 'Dia efetivo fora do período da turma' }, 400);
-  }
-  if (dias.some((dia) => dia.hora_fim <= dia.hora_inicio)) {
-    return c.json({ success: false, error: 'O horário final deve ser posterior ao inicial' }, 400);
-  }
-  const ua = extrairUsuarioAuditoria(c);
+    const input = parsed.data;
+    const participanteIds = normalizePositiveIds(input.participante_ids || []);
+    const instrutorIds = normalizePositiveIds([
+      ...(input.instrutor_ids || []),
+      ...(input.instrutor_id ? [input.instrutor_id] : []),
+      ...(input.dias || []).flatMap((dia) => (dia.instrutor_id ? [dia.instrutor_id] : [])),
+    ]);
+    const referenceError = await validateTrainingReferences({
+      db,
+      empresaId,
+      qualificacaoTipoId: input.qualificacao_tipo_id,
+      participanteIds,
+      instrutorIds,
+      ...collectResourceIdsFromDias(input.dias),
+    });
+    if (referenceError) {
+      return c.json({ success: false, error: referenceError }, 400);
+    }
+    if (input.data_inicio && input.data_fim && input.data_fim < input.data_inicio) {
+      return c.json(
+        { success: false, error: 'A data final deve ser igual ou posterior à inicial' },
+        400,
+      );
+    }
+    if (input.limite_participantes && participanteIds.length > input.limite_participantes) {
+      return c.json(
+        { success: false, error: 'Quantidade de participantes excede o limite da turma' },
+        400,
+      );
+    }
+    const trainingProgram = input.programa_treinamento_id
+      ? await selectTrainingProgram({
+          db,
+          empresaId,
+          qualificationTypeId: input.qualificacao_tipo_id,
+          requestedProgramId: input.programa_treinamento_id,
+        })
+      : input.tipo_treinamento
+        ? await resolveProgramForHistoryType({
+            db,
+            empresaId,
+            qualificationTypeId: input.qualificacao_tipo_id,
+            trainingType: input.tipo_treinamento,
+          })
+        : null;
+    if (input.programa_treinamento_id && !trainingProgram) {
+      return c.json(
+        {
+          success: false,
+          error: 'Programa de treinamento inválido para a qualificação selecionada',
+        },
+        400,
+      );
+    }
+    const cargaHorariaPrevista =
+      trainingProgram?.carga_horaria ?? input.carga_horaria_prevista ?? null;
+    const dias =
+      input.dias && input.dias.length > 0
+        ? input.dias
+        : [
+            {
+              data: input.data_prevista,
+              hora_inicio: input.hora_inicio || '08:00',
+              hora_fim: input.hora_fim || '17:00',
+              local: input.local,
+              instrutor_id: input.instrutor_id,
+            },
+          ];
+    if (new Set(dias.map((dia) => dia.data)).size !== dias.length) {
+      return c.json({ success: false, error: 'Dias efetivos duplicados não são permitidos' }, 400);
+    }
+    const dataInicio = input.data_inicio || dias[0].data;
+    const dataFim = input.data_fim || dias[dias.length - 1].data;
+    if (dias.some((dia) => dia.data < dataInicio || dia.data > dataFim)) {
+      return c.json({ success: false, error: 'Dia efetivo fora do período da turma' }, 400);
+    }
+    if (dias.some((dia) => dia.hora_fim <= dia.hora_inicio)) {
+      return c.json(
+        { success: false, error: 'O horário final deve ser posterior ao inicial' },
+        400,
+      );
+    }
+    const ua = extrairUsuarioAuditoria(c);
 
-  // M12: proteção contra duplo-submit/retry. Sem transação interativa no D1, usamos uma
-  // janela curta de deduplicação por chave natural — se uma turma idêntica acabou de ser
-  // criada, devolvemos a existente de forma idempotente em vez de duplicar.
-  const duplicate = await db
-    .prepare(
-      `SELECT id FROM treinamentos_planejados
+    // M12: proteção contra duplo-submit/retry. Sem transação interativa no D1, usamos uma
+    // janela curta de deduplicação por chave natural — se uma turma idêntica acabou de ser
+    // criada, devolvemos a existente de forma idempotente em vez de duplicar.
+    const duplicate = await db
+      .prepare(
+        `SELECT id FROM treinamentos_planejados
         WHERE empresa_id = ?
           AND qualificacao_tipo_id = ?
           AND data_prevista = ?
           AND COALESCE(titulo, '') = COALESCE(?, '')
+          AND COALESCE(programa_treinamento_id, 0) = COALESCE(?, 0)
           AND deleted_at IS NULL
           AND UPPER(COALESCE(status, 'PLANEJADO')) <> 'CANCELADO'
           AND created_at >= datetime('now', '-20 seconds')
         ORDER BY id DESC LIMIT 1`,
-    )
-    .bind(empresaId, input.qualificacao_tipo_id, input.data_prevista, input.titulo)
-    .first<{ id: number }>();
-  if (duplicate?.id) {
-    return c.json({ success: true, data: { id: duplicate.id, deduplicated: true } }, 200);
-  }
+      )
+      .bind(
+        empresaId,
+        input.qualificacao_tipo_id,
+        input.data_prevista,
+        input.titulo,
+        trainingProgram?.id ?? null,
+      )
+      .first<{ id: number }>();
+    if (duplicate?.id) {
+      return c.json({ success: true, data: { id: duplicate.id, deduplicated: true } }, 200);
+    }
 
-  const result = await db
-    .prepare(
-      `INSERT INTO treinamentos_planejados (
-        empresa_id, qualificacao_tipo_id, data_prevista, hora_inicio, hora_fim, status,
+    const result = await db
+      .prepare(
+        `INSERT INTO treinamentos_planejados (
+        empresa_id, qualificacao_tipo_id, programa_treinamento_id, data_prevista, hora_inicio, hora_fim, status,
         instrutor_id, local, carga_horaria_prevista, titulo, descricao, observacoes,
         codigo_turma, modalidade, data_inicio, data_fim, base, sala,
         equipamento_descricao, limite_participantes,
         created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-    )
-    .bind(
-      empresaId,
-      input.qualificacao_tipo_id,
-      input.data_prevista,
-      toNullableText(input.hora_inicio),
-      toNullableText(input.hora_fim),
-      input.status,
-      input.instrutor_id ?? null,
-      toNullableText(input.local),
-      input.carga_horaria_prevista ?? null,
-      input.titulo,
-      toNullableText(input.descricao),
-      toNullableText(input.observacoes),
-      toNullableText(input.codigo_turma),
-      input.modalidade,
-      dataInicio,
-      dataFim,
-      toNullableText(input.base),
-      toNullableText(input.sala),
-      toNullableText(input.equipamento_descricao),
-      input.limite_participantes ?? null,
-      ua.usuario_id ?? null,
-    )
-    .run();
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+      )
+      .bind(
+        empresaId,
+        input.qualificacao_tipo_id,
+        trainingProgram?.id ?? null,
+        input.data_prevista,
+        toNullableText(input.hora_inicio),
+        toNullableText(input.hora_fim),
+        input.status,
+        input.instrutor_id ?? null,
+        toNullableText(input.local),
+        cargaHorariaPrevista,
+        input.titulo,
+        toNullableText(input.descricao),
+        toNullableText(input.observacoes),
+        toNullableText(input.codigo_turma),
+        input.modalidade,
+        dataInicio,
+        dataFim,
+        toNullableText(input.base),
+        toNullableText(input.sala),
+        toNullableText(input.equipamento_descricao),
+        input.limite_participantes ?? null,
+        ua.usuario_id ?? null,
+      )
+      .run();
 
-  const treinamentoId = Number(result.meta.last_row_id || 0);
-  try {
-    await replaceParticipantes(db, treinamentoId, participanteIds);
-    await replaceDias(db, empresaId, treinamentoId, dias);
-    await replaceInstrutores(db, empresaId, treinamentoId, instrutorIds, input.instrutor_id);
-    await syncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
-  } catch (error) {
-    // M12: a criação não é atômica no D1. Em falha de uma etapa, desfazemos o estado
-    // parcial (incluindo histórico planejado gerado pela sync) para permitir retry seguro.
-    const safeRun = (sql: string, binds: unknown[]) =>
-      db
-        .prepare(sql)
-        .bind(...binds)
-        .run()
-        .catch(() => undefined);
-    await safeRun(
-      `DELETE FROM treinamentos_presencas
+    const treinamentoId = Number(result.meta.last_row_id || 0);
+    try {
+      await replaceParticipantes(db, treinamentoId, participanteIds);
+      await replaceDias(db, empresaId, treinamentoId, dias);
+      await replaceInstrutores(db, empresaId, treinamentoId, instrutorIds, input.instrutor_id);
+      await syncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
+    } catch (error) {
+      // M12: a criação não é atômica no D1. Em falha de uma etapa, desfazemos o estado
+      // parcial (incluindo histórico planejado gerado pela sync) para permitir retry seguro.
+      const safeRun = (sql: string, binds: unknown[]) =>
+        db
+          .prepare(sql)
+          .bind(...binds)
+          .run()
+          .catch(() => undefined);
+      await safeRun(
+        `DELETE FROM treinamentos_presencas
         WHERE treinamento_dia_id IN (SELECT id FROM treinamentos_dias WHERE treinamento_id = ?)`,
-      [treinamentoId],
-    );
-    await safeRun('DELETE FROM treinamentos_dias WHERE treinamento_id = ? AND empresa_id = ?', [
-      treinamentoId,
-      empresaId,
-    ]);
-    await safeRun(
-      'DELETE FROM treinamentos_instrutores WHERE treinamento_id = ? AND empresa_id = ?',
-      [treinamentoId, empresaId],
-    );
-    await safeRun('DELETE FROM treinamentos_participantes WHERE treinamento_id = ?', [
-      treinamentoId,
-    ]);
-    await safeRun(
-      `DELETE FROM qualificacoes_historico
+        [treinamentoId],
+      );
+      await safeRun('DELETE FROM treinamentos_dias WHERE treinamento_id = ? AND empresa_id = ?', [
+        treinamentoId,
+        empresaId,
+      ]);
+      await safeRun(
+        'DELETE FROM treinamentos_instrutores WHERE treinamento_id = ? AND empresa_id = ?',
+        [treinamentoId, empresaId],
+      );
+      await safeRun('DELETE FROM treinamentos_participantes WHERE treinamento_id = ?', [
+        treinamentoId,
+      ]);
+      await safeRun(
+        `DELETE FROM qualificacoes_historico
         WHERE empresa_id = ? AND status = 'PLANEJADA' AND COALESCE(observacoes, '') LIKE ?`,
-      [empresaId, `%Origem: Treinamento Planejado #${treinamentoId}%`],
-    );
-    await safeRun('DELETE FROM treinamentos_planejados WHERE id = ? AND empresa_id = ?', [
-      treinamentoId,
-      empresaId,
-    ]);
-    console.error('treinamento_create_partial_rollback', {
-      treinamentoId,
-      error: (error as Error)?.message,
+        [empresaId, `%Origem: Treinamento Planejado #${treinamentoId}%`],
+      );
+      await safeRun('DELETE FROM treinamentos_planejados WHERE id = ? AND empresa_id = ?', [
+        treinamentoId,
+        empresaId,
+      ]);
+      console.error('treinamento_create_partial_rollback', {
+        treinamentoId,
+        error: (error as Error)?.message,
+      });
+      return c.json(
+        {
+          success: false,
+          error: 'Falha ao criar a turma; nenhuma alteração foi mantida. Tente novamente.',
+        },
+        500,
+      );
+    }
+
+    await registrarAuditoria({
+      db,
+      tabela: 'treinamentos_planejados',
+      acao: 'INSERT',
+      registro_id: treinamentoId,
+      dados_novos: {
+        titulo: input.titulo,
+        data_prevista: input.data_prevista,
+        status: input.status,
+        participante_ids: participanteIds,
+      },
+      ...ua,
     });
+
     return c.json(
       {
-        success: false,
-        error: 'Falha ao criar a turma; nenhuma alteração foi mantida. Tente novamente.',
+        success: true,
+        data: {
+          id: treinamentoId,
+        },
       },
-      500,
+      201,
     );
-  }
-
-  await registrarAuditoria({
-    db,
-    tabela: 'treinamentos_planejados',
-    acao: 'INSERT',
-    registro_id: treinamentoId,
-    dados_novos: {
-      titulo: input.titulo,
-      data_prevista: input.data_prevista,
-      status: input.status,
-      participante_ids: participanteIds,
-    },
-    ...ua,
-  });
-
-  return c.json(
-    {
-      success: true,
-      data: {
-        id: treinamentoId,
-      },
-    },
-    201,
-  );
-});
+  },
+);
 
 treinamentosPlanejadosRoutes.post(
   '/planejados/:id/convocacoes/preview',
@@ -2564,6 +2631,34 @@ treinamentosPlanejadosRoutes.patch(
         400,
       );
     }
+    const effectiveQualificationId = input.qualificacao_tipo_id ?? existing.qualificacao_tipo_id;
+    const trainingProgram =
+      input.programa_treinamento_id !== undefined
+        ? input.programa_treinamento_id
+          ? await selectTrainingProgram({
+              db,
+              empresaId,
+              qualificationTypeId: effectiveQualificationId,
+              requestedProgramId: input.programa_treinamento_id,
+            })
+          : null
+        : input.tipo_treinamento !== undefined
+          ? await resolveProgramForHistoryType({
+              db,
+              empresaId,
+              qualificationTypeId: effectiveQualificationId,
+              trainingType: input.tipo_treinamento,
+            })
+          : null;
+    if (input.programa_treinamento_id && !trainingProgram) {
+      return c.json(
+        {
+          success: false,
+          error: 'Programa de treinamento inválido para a qualificação selecionada',
+        },
+        400,
+      );
+    }
     if (input.status === 'CONCLUIDO') {
       const { items } = await listEventos(db, empresaId, { treinamentoId });
       const treinamentoAtual = items[0];
@@ -2617,6 +2712,14 @@ treinamentosPlanejadosRoutes.patch(
       updates.push('qualificacao_tipo_id = ?');
       params.push(input.qualificacao_tipo_id);
     }
+    if (input.programa_treinamento_id !== undefined || input.tipo_treinamento !== undefined) {
+      updates.push('programa_treinamento_id = ?');
+      params.push(trainingProgram?.id ?? null);
+      if (trainingProgram?.carga_horaria != null) {
+        updates.push('carga_horaria_prevista = ?');
+        params.push(trainingProgram.carga_horaria);
+      }
+    }
     if (input.titulo !== undefined) {
       updates.push('titulo = ?');
       params.push(input.titulo);
@@ -2649,7 +2752,7 @@ treinamentosPlanejadosRoutes.patch(
       updates.push('instrutor_id = ?');
       params.push(input.instrutor_id ?? null);
     }
-    if (input.carga_horaria_prevista !== undefined) {
+    if (input.carga_horaria_prevista !== undefined && trainingProgram?.carga_horaria == null) {
       updates.push('carga_horaria_prevista = ?');
       params.push(input.carga_horaria_prevista ?? null);
     }
@@ -2870,7 +2973,12 @@ treinamentosPlanejadosRoutes.patch(
         : false;
     });
 
-    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId, removedParticipants });
+    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({
+      db,
+      empresaId,
+      treinamentoId,
+      removedParticipants,
+    });
 
     const ua = extrairUsuarioAuditoria(c);
     await registrarAuditoria({
@@ -2887,7 +2995,17 @@ treinamentosPlanejadosRoutes.patch(
       },
       ...ua,
     });
-    if (!integrationOk) return c.json({ success: false, error: 'Alteração salva, mas a integração de qualificações/escala ficou pendente. Tente sincronizar novamente.', code: 'TRAINING_INTEGRATION_PENDING', data: { id: treinamentoId, committed: true, retryable: true } }, 409);
+    if (!integrationOk)
+      return c.json(
+        {
+          success: false,
+          error:
+            'Alteração salva, mas a integração de qualificações/escala ficou pendente. Tente sincronizar novamente.',
+          code: 'TRAINING_INTEGRATION_PENDING',
+          data: { id: treinamentoId, committed: true, retryable: true },
+        },
+        409,
+      );
     return c.json({ success: true, data: { id: treinamentoId } });
   },
 );
@@ -2932,8 +3050,15 @@ treinamentosPlanejadosRoutes.post(
     }
     const previousParticipants = await loadParticipanteLinks(db, treinamentoId);
     await replaceParticipantes(db, treinamentoId, participanteIds);
-    const removedParticipants = previousParticipants.filter((participant) => !participanteIds.includes(participant.funcionario_id));
-    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId, removedParticipants });
+    const removedParticipants = previousParticipants.filter(
+      (participant) => !participanteIds.includes(participant.funcionario_id),
+    );
+    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({
+      db,
+      empresaId,
+      treinamentoId,
+      removedParticipants,
+    });
 
     const ua = extrairUsuarioAuditoria(c);
     await registrarAuditoria({
@@ -2946,7 +3071,17 @@ treinamentosPlanejadosRoutes.post(
       },
       ...ua,
     });
-    if (!integrationOk) return c.json({ success: false, error: 'Participantes salvos, mas a integração de qualificações/escala ficou pendente. Tente sincronizar novamente.', code: 'TRAINING_INTEGRATION_PENDING', data: { id: treinamentoId, committed: true, retryable: true } }, 409);
+    if (!integrationOk)
+      return c.json(
+        {
+          success: false,
+          error:
+            'Participantes salvos, mas a integração de qualificações/escala ficou pendente. Tente sincronizar novamente.',
+          code: 'TRAINING_INTEGRATION_PENDING',
+          data: { id: treinamentoId, committed: true, retryable: true },
+        },
+        409,
+      );
     return c.json({
       success: true,
       data: { id: treinamentoId, participante_ids: participanteIds },
@@ -3038,7 +3173,11 @@ treinamentosPlanejadosRoutes.patch(
       .bind(...params)
       .run();
 
-    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
+    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({
+      db,
+      empresaId,
+      treinamentoId,
+    });
 
     const ua = extrairUsuarioAuditoria(c);
     await registrarAuditoria({
@@ -3056,7 +3195,17 @@ treinamentosPlanejadosRoutes.patch(
       },
       ...ua,
     });
-    if (!integrationOk) return c.json({ success: false, error: 'Presença salva, mas a integração de qualificações/escala ficou pendente. Tente sincronizar novamente.', code: 'TRAINING_INTEGRATION_PENDING', data: { id: treinamentoId, committed: true, retryable: true } }, 409);
+    if (!integrationOk)
+      return c.json(
+        {
+          success: false,
+          error:
+            'Presença salva, mas a integração de qualificações/escala ficou pendente. Tente sincronizar novamente.',
+          code: 'TRAINING_INTEGRATION_PENDING',
+          data: { id: treinamentoId, committed: true, retryable: true },
+        },
+        409,
+      );
     return c.json({
       success: true,
       data: { id: treinamentoId, funcionario_id: parsed.data.funcionario_id },
@@ -3263,7 +3412,11 @@ treinamentosPlanejadosRoutes.patch(
     if (conclusionStatements.length > 0) await db.batch(conclusionStatements);
     let integrationOk = true;
     if (atualizados > 0) {
-      integrationOk = await trySyncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
+      integrationOk = await trySyncTreinamentoPlanejadoIntegration({
+        db,
+        empresaId,
+        treinamentoId,
+      });
       await registrarAuditoria({
         db,
         tabela: 'treinamentos_planejados',
@@ -3280,7 +3433,17 @@ treinamentosPlanejadosRoutes.patch(
         ...ua,
       });
     }
-    if (!integrationOk) return c.json({ success: false, error: 'Conclusão salva, mas a integração de qualificações/escala ficou pendente. Tente sincronizar novamente.', code: 'TRAINING_INTEGRATION_PENDING', data: { id: treinamentoId, committed: true, retryable: true, atualizados, erros } }, 409);
+    if (!integrationOk)
+      return c.json(
+        {
+          success: false,
+          error:
+            'Conclusão salva, mas a integração de qualificações/escala ficou pendente. Tente sincronizar novamente.',
+          code: 'TRAINING_INTEGRATION_PENDING',
+          data: { id: treinamentoId, committed: true, retryable: true, atualizados, erros },
+        },
+        409,
+      );
     const { items: itemsAtualizados } = await listEventos(db, empresaId, { treinamentoId });
     const treinamentoAtualizado = itemsAtualizados[0];
     if (!treinamentoAtualizado) {
@@ -3443,7 +3606,11 @@ treinamentosPlanejadosRoutes.patch(
       )
       .run();
 
-    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
+    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({
+      db,
+      empresaId,
+      treinamentoId,
+    });
     await registrarAuditoria({
       db,
       tabela: 'treinamentos_planejados',
@@ -3457,7 +3624,22 @@ treinamentosPlanejadosRoutes.patch(
       },
       ...ua,
     });
-    if (!integrationOk) return c.json({ success: false, error: 'Conclusão salva, mas a integração de qualificação/escala ficou pendente. Tente sincronizar novamente.', code: 'TRAINING_INTEGRATION_PENDING', data: { id: treinamentoId, funcionario_id: parsed.data.funcionario_id, committed: true, retryable: true } }, 409);
+    if (!integrationOk)
+      return c.json(
+        {
+          success: false,
+          error:
+            'Conclusão salva, mas a integração de qualificação/escala ficou pendente. Tente sincronizar novamente.',
+          code: 'TRAINING_INTEGRATION_PENDING',
+          data: {
+            id: treinamentoId,
+            funcionario_id: parsed.data.funcionario_id,
+            committed: true,
+            retryable: true,
+          },
+        },
+        409,
+      );
     const generated = await db
       .prepare(
         `SELECT qualificacao_historico_id
@@ -3584,8 +3766,22 @@ treinamentosPlanejadosRoutes.delete(
       .bind(treinamentoId, empresaId)
       .run();
 
-    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
-    if (!integrationOk) return c.json({ success: false, error: 'Treinamento marcado como cancelado, mas a integração ficou pendente. Repita a exclusão para concluir a reconciliação.', code: 'TRAINING_INTEGRATION_PENDING', data: { id: treinamentoId, committed: true, retryable: true } }, 409);
+    const integrationOk = await trySyncTreinamentoPlanejadoIntegration({
+      db,
+      empresaId,
+      treinamentoId,
+    });
+    if (!integrationOk)
+      return c.json(
+        {
+          success: false,
+          error:
+            'Treinamento marcado como cancelado, mas a integração ficou pendente. Repita a exclusão para concluir a reconciliação.',
+          code: 'TRAINING_INTEGRATION_PENDING',
+          data: { id: treinamentoId, committed: true, retryable: true },
+        },
+        409,
+      );
     await db
       .prepare(
         `UPDATE treinamentos_planejados
@@ -3615,18 +3811,21 @@ treinamentosPlanejadosRoutes.delete(
 //
 // ?dryRun=true — preview only, no mutations. Retorna turmas e contagem de participantes
 //                com/sem historico existente.
-treinamentosPlanejadosRoutes.post('/planejados/backfill-sync', requirePermission('agendamentos', 'criar', 'admin'), async (c) => {
-  const db = c.env.DB;
-  const empresaId = c.get('empresaId');
-  const url = new URL(c.req.url);
-  const dryRun = url.searchParams.get('dryRun') === 'true';
+treinamentosPlanejadosRoutes.post(
+  '/planejados/backfill-sync',
+  requirePermission('agendamentos', 'criar', 'admin'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = c.get('empresaId');
+    const url = new URL(c.req.url);
+    const dryRun = url.searchParams.get('dryRun') === 'true';
 
-  if (dryRun) {
-    try {
-      // Carrega turmas ativas com participantes (mesmo critério do apply).
-      const turmasInfo = await db
-        .prepare(
-          `SELECT id, codigo_turma, status
+    if (dryRun) {
+      try {
+        // Carrega turmas ativas com participantes (mesmo critério do apply).
+        const turmasInfo = await db
+          .prepare(
+            `SELECT id, codigo_turma, status
              FROM treinamentos_planejados
             WHERE empresa_id = ?
               AND deleted_at IS NULL
@@ -3637,32 +3836,32 @@ treinamentosPlanejadosRoutes.post('/planejados/backfill-sync', requirePermission
                 WHERE deleted_at IS NULL
               )
             ORDER BY id`,
-        )
-        .bind(empresaId)
-        .all<{ id: number; codigo_turma: string | null; status: string }>();
+          )
+          .bind(empresaId)
+          .all<{ id: number; codigo_turma: string | null; status: string }>();
 
-      if (turmasInfo.results.length === 0) {
-        return c.json({
-          success: true,
-          data: {
-            dryRun: true,
-            totalTurmas: 0,
-            resumo: {
-              totalParticipantes: 0,
-              comHistoricoExistente: 0,
-              semHistorico: 0,
-              participantesConcluidos: 0,
+        if (turmasInfo.results.length === 0) {
+          return c.json({
+            success: true,
+            data: {
+              dryRun: true,
+              totalTurmas: 0,
+              resumo: {
+                totalParticipantes: 0,
+                comHistoricoExistente: 0,
+                semHistorico: 0,
+                participantesConcluidos: 0,
+              },
+              turmas: [],
             },
-            turmas: [],
-          },
-        });
-      }
+          });
+        }
 
-      // Carrega todos os participantes das turmas ativas (sem GROUP BY — agregação em JS).
-      // NOTA: treinamentos_participantes NÃO tem coluna deleted_at (usa hard-delete).
-      const participantes = await db
-        .prepare(
-          `SELECT tp.treinamento_id, tp.qualificacao_historico_id, tp.resultado
+        // Carrega todos os participantes das turmas ativas (sem GROUP BY — agregação em JS).
+        // NOTA: treinamentos_participantes NÃO tem coluna deleted_at (usa hard-delete).
+        const participantes = await db
+          .prepare(
+            `SELECT tp.treinamento_id, tp.qualificacao_historico_id, tp.resultado
              FROM treinamentos_participantes tp
             WHERE tp.treinamento_id IN (
                 SELECT id FROM treinamentos_planejados
@@ -3672,104 +3871,104 @@ treinamentosPlanejadosRoutes.post('/planejados/backfill-sync', requirePermission
                   AND qualificacao_tipo_id IS NOT NULL
               )
             ORDER BY tp.treinamento_id`,
-        )
-        .bind(empresaId)
-        .all<{
-          treinamento_id: number;
-          qualificacao_historico_id: number | null;
-          resultado: string | null;
-        }>();
+          )
+          .bind(empresaId)
+          .all<{
+            treinamento_id: number;
+            qualificacao_historico_id: number | null;
+            resultado: string | null;
+          }>();
 
-      // Agregação em JavaScript (evita GROUP BY que está causando erro no D1).
-      const STATUS_CONCLUIDO = new Set([
-        'APROVADO',
-        'REPROVADO',
-        'CANCELADO',
-        'aprovado',
-        'reprovado',
-        'cancelado',
-      ]);
+        // Agregação em JavaScript (evita GROUP BY que está causando erro no D1).
+        const STATUS_CONCLUIDO = new Set([
+          'APROVADO',
+          'REPROVADO',
+          'CANCELADO',
+          'aprovado',
+          'reprovado',
+          'cancelado',
+        ]);
 
-      type Contagem = {
-        total: number;
-        comHistorico: number;
-        semHistorico: number;
-        concluidos: number;
-      };
-      const contagemMap = new Map<number, Contagem>();
-
-      for (const p of participantes.results) {
-        let c = contagemMap.get(p.treinamento_id);
-        if (!c) {
-          c = { total: 0, comHistorico: 0, semHistorico: 0, concluidos: 0 };
-          contagemMap.set(p.treinamento_id, c);
-        }
-        c.total++;
-        if (p.qualificacao_historico_id) {
-          c.comHistorico++;
-        } else {
-          c.semHistorico++;
-        }
-        if (p.resultado && STATUS_CONCLUIDO.has(p.resultado)) {
-          c.concluidos++;
-        }
-      }
-
-      const turmas = turmasInfo.results.map((t) => {
-        const c = contagemMap.get(t.id) || {
-          total: 0,
-          comHistorico: 0,
-          semHistorico: 0,
-          concluidos: 0,
+        type Contagem = {
+          total: number;
+          comHistorico: number;
+          semHistorico: number;
+          concluidos: number;
         };
-        return {
-          turmaId: t.id,
-          codigoTurma: t.codigo_turma ?? null,
-          status: t.status ?? '',
-          totalParticipantes: c.total,
-          comHistoricoExistente: c.comHistorico,
-          semHistorico: c.semHistorico,
-          participantesConcluidos: c.concluidos,
-        };
-      });
+        const contagemMap = new Map<number, Contagem>();
 
-      const totalTurmas = turmas.length;
-      const totalParticipantes = turmas.reduce((s, t) => s + t.totalParticipantes, 0);
-      const totalComHistorico = turmas.reduce((s, t) => s + t.comHistoricoExistente, 0);
-      const totalSemHistorico = turmas.reduce((s, t) => s + t.semHistorico, 0);
-      const totalConcluidos = turmas.reduce((s, t) => s + t.participantesConcluidos, 0);
+        for (const p of participantes.results) {
+          let c = contagemMap.get(p.treinamento_id);
+          if (!c) {
+            c = { total: 0, comHistorico: 0, semHistorico: 0, concluidos: 0 };
+            contagemMap.set(p.treinamento_id, c);
+          }
+          c.total++;
+          if (p.qualificacao_historico_id) {
+            c.comHistorico++;
+          } else {
+            c.semHistorico++;
+          }
+          if (p.resultado && STATUS_CONCLUIDO.has(p.resultado)) {
+            c.concluidos++;
+          }
+        }
 
-      return c.json({
-        success: true,
-        data: {
-          dryRun: true,
-          totalTurmas,
-          resumo: {
-            totalParticipantes,
-            comHistoricoExistente: totalComHistorico,
-            semHistorico: totalSemHistorico,
-            participantesConcluidos: totalConcluidos,
+        const turmas = turmasInfo.results.map((t) => {
+          const c = contagemMap.get(t.id) || {
+            total: 0,
+            comHistorico: 0,
+            semHistorico: 0,
+            concluidos: 0,
+          };
+          return {
+            turmaId: t.id,
+            codigoTurma: t.codigo_turma ?? null,
+            status: t.status ?? '',
+            totalParticipantes: c.total,
+            comHistoricoExistente: c.comHistorico,
+            semHistorico: c.semHistorico,
+            participantesConcluidos: c.concluidos,
+          };
+        });
+
+        const totalTurmas = turmas.length;
+        const totalParticipantes = turmas.reduce((s, t) => s + t.totalParticipantes, 0);
+        const totalComHistorico = turmas.reduce((s, t) => s + t.comHistoricoExistente, 0);
+        const totalSemHistorico = turmas.reduce((s, t) => s + t.semHistorico, 0);
+        const totalConcluidos = turmas.reduce((s, t) => s + t.participantesConcluidos, 0);
+
+        return c.json({
+          success: true,
+          data: {
+            dryRun: true,
+            totalTurmas,
+            resumo: {
+              totalParticipantes,
+              comHistoricoExistente: totalComHistorico,
+              semHistorico: totalSemHistorico,
+              participantesConcluidos: totalConcluidos,
+            },
+            turmas,
           },
-          turmas,
-        },
-      });
-    } catch (err) {
-      console.error('[backfill-sync dry-run]', err);
-      return c.json(
-        {
-          success: false,
-          error: 'Dry-run error: ' + (err instanceof Error ? err.message : String(err)),
-          code: 'DRY_RUN_ERROR',
-        },
-        500,
-      );
+        });
+      } catch (err) {
+        console.error('[backfill-sync dry-run]', err);
+        return c.json(
+          {
+            success: false,
+            error: 'Dry-run error: ' + (err instanceof Error ? err.message : String(err)),
+            code: 'DRY_RUN_ERROR',
+          },
+          500,
+        );
+      }
     }
-  }
 
-  // Apply mode
-  const turmas = await db
-    .prepare(
-      `SELECT id FROM treinamentos_planejados
+    // Apply mode
+    const turmas = await db
+      .prepare(
+        `SELECT id FROM treinamentos_planejados
          WHERE empresa_id = ?
            AND deleted_at IS NULL
            AND status NOT IN ('CANCELADO', 'CONCLUIDO')
@@ -3779,47 +3978,48 @@ treinamentosPlanejadosRoutes.post('/planejados/backfill-sync', requirePermission
              WHERE deleted_at IS NULL
            )
          ORDER BY id`,
-    )
-    .bind(empresaId)
-    .all<{ id: number }>();
+      )
+      .bind(empresaId)
+      .all<{ id: number }>();
 
-  const ids = turmas.results.map((r) => r.id as number);
-  let processadas = 0;
-  const erros: Array<{ id: number; erro: string }> = [];
+    const ids = turmas.results.map((r) => r.id as number);
+    let processadas = 0;
+    const erros: Array<{ id: number; erro: string }> = [];
 
-  for (const treinamentoId of ids) {
-    try {
-      await syncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
-      processadas++;
-    } catch (err) {
-      erros.push({ id: treinamentoId, erro: String(err) });
+    for (const treinamentoId of ids) {
+      try {
+        await syncTreinamentoPlanejadoIntegration({ db, empresaId, treinamentoId });
+        processadas++;
+      } catch (err) {
+        erros.push({ id: treinamentoId, erro: String(err) });
+      }
     }
-  }
 
-  if (erros.length > 0) {
-    return c.json(
-      {
-        success: false,
-        error: 'Backfill concluído com falhas; consulte os itens retornados e tente novamente.',
-        code: 'BACKFILL_PARTIAL_FAILURE',
-        data: {
-          total: ids.length,
-          processadas,
-          erros,
+    if (erros.length > 0) {
+      return c.json(
+        {
+          success: false,
+          error: 'Backfill concluído com falhas; consulte os itens retornados e tente novamente.',
+          code: 'BACKFILL_PARTIAL_FAILURE',
+          data: {
+            total: ids.length,
+            processadas,
+            erros,
+          },
         },
-      },
-      500,
-    );
-  }
+        500,
+      );
+    }
 
-  return c.json({
-    success: true,
-    data: {
-      total: ids.length,
-      processadas,
-      erros: [],
-    },
-  });
-});
+    return c.json({
+      success: true,
+      data: {
+        total: ids.length,
+        processadas,
+        erros: [],
+      },
+    });
+  },
+);
 
 export default treinamentosPlanejadosRoutes;

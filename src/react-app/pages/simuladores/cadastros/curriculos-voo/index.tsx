@@ -14,6 +14,13 @@ interface CurriculoResumo {
   total_ciclos?: number;
   ciclo_ativo?: number;
   ano_referencia?: number;
+  programa_id?: number | null;
+  programa_codigo?: string | null;
+  programa_nome?: string | null;
+  tipo_treinamento?: string | null;
+  carga_horaria_programa?: number | null;
+  validade_meses_programa?: number | null;
+  uso_unico?: number | null;
 }
 
 interface ModeloCurriculo {
@@ -41,6 +48,17 @@ interface CurriculoCiclo {
 
 interface CurriculoDetalhe {
   qualification: { id: number; codigo: string | null; nome: string };
+  program?: {
+    id: number;
+    codigo: string;
+    nome: string;
+    tipo_treinamento: string;
+    carga_horaria: number | null;
+    validade_meses: number | null;
+    uso_unico: number;
+    total_ciclos: number;
+    proximo_programa_id: number | null;
+  } | null;
   sessions: ModeloCurriculo[];
   available_models: ModeloCurriculo[];
   total_sessions: number;
@@ -69,6 +87,15 @@ function formatDuration(minutes: number | null | undefined) {
   return `${hours}h ${rest}min`;
 }
 
+function formatProgramType(value: string | null | undefined) {
+  const normalized = String(value || '').toUpperCase();
+  if (normalized === 'INICIAL') return 'Inicial';
+  if (normalized === 'RECORRENTE') return 'Periódico';
+  if (normalized === 'SEMESTRAL') return 'Semestral';
+  if (normalized === 'UPGRADE') return 'Upgrade';
+  if (normalized === 'ESPECIFICO') return 'Específico';
+  return value || 'Currículo';
+}
 function resolveCycleForYear(
   year: number,
   baseYear: number,
@@ -82,6 +109,7 @@ function resolveCycleForYear(
 export default function CurriculosVooPage({ embedded = false, onBack }: CurriculosVooPageProps) {
   const [curriculos, setCurriculos] = useState<CurriculoResumo[]>([]);
   const [selecionadoId, setSelecionadoId] = useState<number | null>(null);
+  const [selecionadoProgramaId, setSelecionadoProgramaId] = useState<number | null>(null);
   const [detalhe, setDetalhe] = useState<CurriculoDetalhe | null>(null);
   const [draftIds, setDraftIds] = useState<number[]>([]);
   const [selectedCycle, setSelectedCycle] = useState<number | null>(null);
@@ -101,7 +129,14 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
         throw new Error(payload.error || 'Falha ao carregar currículos');
       const rows = Array.isArray(payload.data) ? payload.data : [];
       setCurriculos(rows);
-      if (!preservarSelecao && rows.length > 0) setSelecionadoId(Number(rows[0].id));
+      if (!preservarSelecao && rows.length > 0) {
+        setSelecionadoId(Number(rows[0].id));
+        setSelecionadoProgramaId(
+          Number.isInteger(Number(rows[0].programa_id)) && Number(rows[0].programa_id) > 0
+            ? Number(rows[0].programa_id)
+            : null,
+        );
+      }
     } catch (error) {
       console.error(error);
       toast.error('Não foi possível carregar os currículos de voo');
@@ -110,11 +145,11 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
     }
   };
 
-  const carregarDetalhe = async (qualificacaoId: number) => {
+  const carregarDetalhe = async (qualificacaoId: number, programaId: number | null) => {
     setLoadingDetail(true);
     try {
       const response = await appFetch(
-        `/api/simuladores/curriculos-voo/${qualificacaoId}?_=${Date.now()}`,
+        `/api/simuladores/curriculos-voo/${qualificacaoId}?${programaId ? `programa_id=${programaId}&` : ''}_=${Date.now()}`,
         { cache: 'no-store' },
       );
       const payload = await response.json();
@@ -144,8 +179,8 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
   }, []);
 
   useEffect(() => {
-    if (selecionadoId) void carregarDetalhe(selecionadoId);
-  }, [selecionadoId]);
+    if (selecionadoId) void carregarDetalhe(selecionadoId, selecionadoProgramaId);
+  }, [selecionadoId, selecionadoProgramaId]);
 
   const modelById = useMemo(
     () => new Map((detalhe?.available_models || []).map((row) => [Number(row.id), row])),
@@ -162,7 +197,7 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
     const selected = new Set(draftIds);
     return detalhe.available_models.filter((row) => {
       if (selected.has(Number(row.id))) return false;
-      if (detalhe.cycle_config) return true;
+      if (detalhe.program || detalhe.cycle_config) return true;
       return (
         !row.qualificacao_tipo_id || Number(row.qualificacao_tipo_id) === detalhe.qualification.id
       );
@@ -192,7 +227,7 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
   };
 
   const remover = (row: ModeloCurriculo) => {
-    if (!detalhe?.cycle_config && Number(row.gera_qualificacao || 0) === 1) {
+    if (!detalhe?.program && !detalhe?.cycle_config && Number(row.gera_qualificacao || 0) === 1) {
       toast.warning(
         'Esta sessão gera a qualificação. Desative essa geração no Modelo de Sessão antes de removê-la do currículo.',
       );
@@ -233,6 +268,7 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             modelo_ids: draftIds,
+            ...(detalhe.program ? { programa_id: detalhe.program.id } : {}),
             ...(detalhe.cycle_config ? { ciclo: selectedCycle } : {}),
           }),
         },
@@ -314,12 +350,20 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
           ) : (
             <div className="space-y-1.5">
               {curriculos.map((row) => {
-                const active = Number(row.id) === selecionadoId;
+                const rowProgramId =
+                  Number.isInteger(Number(row.programa_id)) && Number(row.programa_id) > 0
+                    ? Number(row.programa_id)
+                    : null;
+                const active =
+                  Number(row.id) === selecionadoId && rowProgramId === selecionadoProgramaId;
                 const incompleteOrder = Number(row.total_sessoes) > Number(row.sessoes_ordenadas);
                 return (
                   <button
-                    key={row.id}
-                    onClick={() => setSelecionadoId(Number(row.id))}
+                    key={`${row.id}:${rowProgramId ?? 'legacy'}`}
+                    onClick={() => {
+                      setSelecionadoId(Number(row.id));
+                      setSelecionadoProgramaId(rowProgramId);
+                    }}
                     className={`w-full rounded-md border px-3 py-2.5 text-left transition-colors ${
                       active
                         ? 'border-indigo-300 bg-indigo-50 dark:border-indigo-700 dark:bg-indigo-950/40'
@@ -330,14 +374,26 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-gray-900 dark:text-slate-100">
                           {row.codigo ? `${row.codigo} — ` : ''}
-                          {row.nome}
+                          {row.tipo_treinamento
+                            ? formatProgramType(row.tipo_treinamento)
+                            : row.nome}
                         </p>
+                        {row.programa_nome && (
+                          <p className="mt-0.5 truncate text-xs text-gray-600 dark:text-slate-300">
+                            {row.programa_nome}
+                          </p>
+                        )}
                         <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">
-                          {row.total_ciclos && row.ciclo_ativo && row.ano_referencia
+                          {Number(row.total_ciclos || 1) > 1 &&
+                          row.ciclo_ativo &&
+                          row.ano_referencia
                             ? `${row.total_ciclos} ciclos • ${row.ano_referencia}: C${row.ciclo_ativo} • `
                             : ''}
                           {Number(row.total_sessoes)} sessões •{' '}
                           {formatDuration(Number(row.total_minutos))}
+                          {row.carga_horaria_programa
+                            ? ` • programa ${Number(row.carga_horaria_programa)}h`
+                            : ''}
                         </p>
                       </div>
                       {incompleteOrder && (
@@ -378,10 +434,21 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
                 <div>
                   <p className="text-base font-semibold text-gray-900 dark:text-slate-100">
                     {detalhe.qualification.codigo ? `${detalhe.qualification.codigo} — ` : ''}
-                    {detalhe.qualification.nome}
+                    {detalhe.program
+                      ? formatProgramType(detalhe.program.tipo_treinamento)
+                      : detalhe.qualification.nome}
                   </p>
+                  {detalhe.program && (
+                    <p className="mt-0.5 text-sm text-gray-700 dark:text-slate-300">
+                      {detalhe.program.nome}
+                    </p>
+                  )}
                   <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                    {draftIds.length} sessões • {formatDuration(totalDraftMinutes)} de carga total
+                    {draftIds.length} sessões • {formatDuration(totalDraftMinutes)} de sessões
+                    {detalhe.program?.carga_horaria
+                      ? ` • carga do programa ${detalhe.program.carga_horaria}h`
+                      : ''}
+                    {detalhe.program?.uso_unico ? ' • executado uma única vez' : ''}
                   </p>
                 </div>
                 {dirty && (
@@ -461,8 +528,8 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
                   </Button>
                 </div>
                 <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
-                  {detalhe.cycle_config
-                    ? `${detalhe.available_models.length} modelos canônicos cadastrados • ${detalhe.available_models.filter((row) => Number(row.ativo ?? 1) === 1).length} ativos. Versões históricas, remediações e duplicidades técnicas ficam ocultas.`
+                  {detalhe.program || detalhe.cycle_config
+                    ? `${detalhe.available_models.length} modelos canônicos cadastrados • ${detalhe.available_models.filter((row) => Number(row.ativo ?? 1) === 1).length} ativos. Modelos podem ser reutilizados entre programas quando o conteúdo for realmente comum; versões históricas e remediações ficam ocultas.`
                     : 'Modelos já vinculados a outro treinamento não aparecem como opção de inclusão.'}
                 </p>
               </div>

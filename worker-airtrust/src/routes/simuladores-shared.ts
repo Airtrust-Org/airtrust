@@ -15,6 +15,7 @@ import {
   sqlStatusNotEqualsAny,
 } from '../lib/status/status-codes';
 import { replaceManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
+import { loadTrainingProgramByModel } from '../services/training-programs';
 
 // ── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -660,6 +661,11 @@ export async function criarQualificacoesPlanejadas(
   }
 
   const requisitos = await carregarRequisitosModeloSessao(db, params.modeloId, params.empresaId);
+  const trainingProgram = await loadTrainingProgramByModel({
+    db,
+    empresaId: params.empresaId,
+    modelSessionId: params.modeloId,
+  });
 
   // Structured session qualification typing only — never substring of code/title.
   const TIPO_TREINAMENTO_MAP: Record<string, string> = {
@@ -683,10 +689,12 @@ export async function criarQualificacoesPlanejadas(
   if (/[0-9]/.test(tipoRaw) || tipoRaw.includes('/') || tipoRaw.includes('-')) {
     return { criadas: 0, puladas: 0, conflitosUniques: 0, bloqueadasDataPassada: 0 };
   }
-  const tipoTreinamento = TIPO_TREINAMENTO_MAP[tipoRaw];
+  const tipoTreinamento = trainingProgram?.tipo_treinamento || TIPO_TREINAMENTO_MAP[tipoRaw];
   if (!tipoTreinamento) {
     return { criadas: 0, puladas: 0, conflitosUniques: 0, bloqueadasDataPassada: 0 };
   }
+  const cargaHorariaPrograma = trainingProgram?.carga_horaria ?? modelo.duracao_estimada ?? null;
+  const validadePrograma = trainingProgram?.validade_meses ?? modelo.qual_validade ?? null;
 
   const stmts: ReturnType<typeof db.prepare>[] = [];
   let criadas = 0;
@@ -768,29 +776,50 @@ export async function criarQualificacoesPlanejadas(
       }
     }
 
-    stmts.push(
-      db
-        .prepare(
-          `INSERT INTO qualificacoes_historico
-             (funcionario_id, qualificacao_id, qualificacao_codigo, categoria,
-              data_conclusao, validade_meses, status, renovada,
-              carga_horaria, tipo_treinamento, empresa_id, sessao_id,
-              created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, '${QUALIFICACAO_STATUS.PLANEJADA}', 0, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-        )
-        .bind(
-          part.funcionario_id,
-          modelo.qualificacao_tipo_id,
-          modelo.qual_codigo,
-          modelo.qual_categoria || null,
-          params.data,
-          modelo.qual_validade || null,
-          modelo.duracao_estimada || null,
-          tipoTreinamento,
-          params.empresaId,
-          params.sessaoId,
-        ),
-    );
+    const historicoStmt = trainingProgram
+      ? db
+          .prepare(
+            `INSERT INTO qualificacoes_historico
+               (funcionario_id, qualificacao_id, qualificacao_codigo, categoria,
+                data_conclusao, validade_meses, status, renovada, carga_horaria,
+                tipo_treinamento, programa_treinamento_id, empresa_id, sessao_id,
+                created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, '${QUALIFICACAO_STATUS.PLANEJADA}', 0, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+          )
+          .bind(
+            part.funcionario_id,
+            modelo.qualificacao_tipo_id,
+            modelo.qual_codigo,
+            modelo.qual_categoria || null,
+            params.data,
+            validadePrograma,
+            cargaHorariaPrograma,
+            tipoTreinamento,
+            trainingProgram.id,
+            params.empresaId,
+            params.sessaoId,
+          )
+      : db
+          .prepare(
+            `INSERT INTO qualificacoes_historico
+               (funcionario_id, qualificacao_id, qualificacao_codigo, categoria,
+                data_conclusao, validade_meses, status, renovada, carga_horaria,
+                tipo_treinamento, empresa_id, sessao_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, '${QUALIFICACAO_STATUS.PLANEJADA}', 0, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+          )
+          .bind(
+            part.funcionario_id,
+            modelo.qualificacao_tipo_id,
+            modelo.qual_codigo,
+            modelo.qual_categoria || null,
+            params.data,
+            modelo.qual_validade || null,
+            modelo.duracao_estimada || null,
+            tipoTreinamento,
+            params.empresaId,
+            params.sessaoId,
+          );
+    stmts.push(historicoStmt);
   }
 
   if (stmts.length > 0) {

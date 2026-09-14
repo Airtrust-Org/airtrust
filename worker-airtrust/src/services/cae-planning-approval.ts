@@ -230,6 +230,8 @@ export async function resolveSimulatorPlanningLiveState(params: {
             empresaId,
             qualificationTypeId: Number(participant.training_id),
             referenceYear,
+            employeeId: participant.employee_id,
+            requestedProgramId: participant.training_program_id ?? null,
           })
         : null;
 

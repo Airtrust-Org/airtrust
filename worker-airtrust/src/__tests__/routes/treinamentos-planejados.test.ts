@@ -209,6 +209,7 @@ describe('treinamentos planejados router', () => {
     expect(insertCall?.args).toEqual([
       1,
       9,
+      null,
       '2026-06-20',
       '08:00',
       '12:00',

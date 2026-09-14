@@ -362,6 +362,9 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
     let configuredModels = modelsByQualification.get(qualificationTypeId) || [];
     let curriculumCycle: number | null = null;
     let curriculumReferenceYearValue: number | null = null;
+    let curriculumProgramId: number | null = null;
+    let curriculumProgramType: string | null = null;
+    let curriculumProgramName: string | null = null;
 
     if (cycleManagedQualificationIdSet.has(qualificationTypeId)) {
       curriculumReferenceYearValue = curriculumReferenceYear(expiry);
@@ -371,6 +374,7 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
             empresaId,
             qualificationTypeId,
             referenceYear: curriculumReferenceYearValue,
+            employeeId: Number(qualification.funcionario_id),
           })
         : null;
       if (!resolved || resolved.unresolved_items > 0 || resolved.models.length === 0) {
@@ -389,6 +393,9 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
         continue;
       }
       curriculumCycle = resolved.cycle;
+      curriculumProgramId = resolved.program_id;
+      curriculumProgramType = resolved.program_type;
+      curriculumProgramName = resolved.program?.nome ?? null;
       configuredModels = resolved.models.map((model) => ({
         id: Number(model.id),
         qualificacao_tipo_id: qualificationTypeId,
@@ -485,6 +492,9 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
       source_planning_id: qualification.source_planning_id ?? null,
       curriculum_cycle: curriculumCycle,
       curriculum_reference_year: curriculumReferenceYearValue,
+      training_program_id: curriculumProgramId,
+      training_program_type: curriculumProgramType,
+      training_program_name: curriculumProgramName,
       sessions: ordered.map((model, index) => ({
         model_id: Number(model.id),
         code: model.codigo,
@@ -512,6 +522,10 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
         session_order: order,
         duration_minutes: Number(model.duracao_estimada),
         training_session_count: ordered.length,
+        curriculum_cycle: curriculumCycle,
+        curriculum_reference_year: curriculumReferenceYearValue,
+        training_program_id: curriculumProgramId,
+        training_program_type: curriculumProgramType,
       });
     });
   }

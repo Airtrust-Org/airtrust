@@ -35,7 +35,11 @@ const LARGE_FILE_LINE_CAPS = {
   'routes/escalas-evd.ts': 2162,
   // Cap raised 2026-08-03: counted 3826 after explicit partial-source diagnostics,
   // tenant-timezone guards, atomic PATCH writes and propagated scale-sync failures.
-  'routes/treinamentos-planejados.ts': 3826,
+  // Cap raised 2026-09-14: counted 4026 after training-program identity was wired
+  // through planned-training create/update/list, so Initial/Periodic/Semiannual
+  // workload and qualification-history provenance are explicit instead of inferred.
+  // Program selection and curriculum resolution remain extracted in services/training-programs.ts.
+  'routes/treinamentos-planejados.ts': 4026,
   // Cap raised 2026-07-30: counted 3507 (hotfix/lms-compliance-final — all four
   // completion call sites (scorm/commit, xapi/statements, POST /:id/finalizar,
   // PATCH /:id/status) now delegate the entire completion write (Histórico,

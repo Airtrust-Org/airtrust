@@ -26,6 +26,10 @@ type EventoContextRow = {
   qualificacao_carga_horaria: number | null;
   qualificacao_carga_horaria_inicial: number | null;
   qualificacao_carga_horaria_recorrente: number | null;
+  programa_treinamento_id: number | null;
+  programa_tipo_treinamento: string | null;
+  programa_carga_horaria: number | null;
+  programa_validade_meses: number | null;
   data_prevista: string;
   data_inicio: string | null;
   data_fim: string | null;
@@ -189,6 +193,10 @@ async function loadEventoContext(
                 qt.carga_horaria AS qualificacao_carga_horaria,
                 qt.carga_horaria_inicial AS qualificacao_carga_horaria_inicial,
                 qt.carga_horaria_recorrente AS qualificacao_carga_horaria_recorrente,
+                t.programa_treinamento_id,
+                tp.tipo_treinamento AS programa_tipo_treinamento,
+                tp.carga_horaria AS programa_carga_horaria,
+                tp.validade_meses AS programa_validade_meses,
                 t.data_prevista,
                 t.data_inicio,
                 t.data_fim,
@@ -205,6 +213,12 @@ async function loadEventoContext(
                 t.created_by
            FROM treinamentos_planejados t
            LEFT JOIN qualificacoes_tipos qt ON qt.id = t.qualificacao_tipo_id AND qt.deleted_at IS NULL
+           LEFT JOIN treinamento_programas tp
+             ON tp.id = t.programa_treinamento_id
+            AND tp.empresa_id = t.empresa_id
+            AND tp.qualificacao_tipo_id = t.qualificacao_tipo_id
+            AND tp.deleted_at IS NULL
+            AND tp.ativo = 1
            LEFT JOIN funcionarios instr ON instr.id = t.instrutor_id AND instr.deleted_at IS NULL
           WHERE t.id = ? AND t.empresa_id = ? AND t.deleted_at IS NULL`,
       )
@@ -456,23 +470,29 @@ async function upsertHistoricoPlanejadoForParticipante(
   }
 
   const marker = buildOrigemMarker(evento.id);
-  const tipoTreinamento = resolveTipoTreinamento(
-    evento.qualificacao_validade,
-    evento.carga_horaria_prevista,
-    evento.qualificacao_carga_horaria_inicial,
-  );
+  const tipoTreinamento =
+    normalizeTipoTreinamento(evento.programa_tipo_treinamento) ||
+    resolveTipoTreinamento(
+      evento.qualificacao_validade,
+      evento.carga_horaria_prevista,
+      evento.qualificacao_carga_horaria_inicial,
+    );
   const cargaHoraria =
-    evento.carga_horaria_prevista ??
-    resolveCargaHorariaByTipo({
-      tipoTreinamento,
-      cargaInicial: evento.qualificacao_carga_horaria_inicial,
-      cargaRecorrente: evento.qualificacao_carga_horaria_recorrente,
-      cargaPadrao: evento.qualificacao_carga_horaria,
-    });
+    evento.programa_treinamento_id && evento.programa_carga_horaria != null
+      ? evento.programa_carga_horaria
+      : (evento.carga_horaria_prevista ??
+        resolveCargaHorariaByTipo({
+          tipoTreinamento,
+          cargaInicial: evento.qualificacao_carga_horaria_inicial,
+          cargaRecorrente: evento.qualificacao_carga_horaria_recorrente,
+          cargaPadrao: evento.qualificacao_carga_horaria,
+        }));
   const validadeMeses =
-    typeof evento.qualificacao_validade === 'number' && evento.qualificacao_validade > 0
-      ? evento.qualificacao_validade
-      : 12;
+    typeof evento.programa_validade_meses === 'number' && evento.programa_validade_meses > 0
+      ? evento.programa_validade_meses
+      : typeof evento.qualificacao_validade === 'number' && evento.qualificacao_validade > 0
+        ? evento.qualificacao_validade
+        : 12;
   const vencimentoFimMes = Number(evento.qualificacao_vencimento_fim_mes || 0) === 0 ? 0 : 1;
   const dataVencimento = calcularDataVencimento(
     evento.data_prevista,
@@ -539,6 +559,7 @@ async function upsertHistoricoPlanejadoForParticipante(
                 status = '${QUALIFICACAO_STATUS.PLANEJADA}',
                 carga_horaria = ?,
                 tipo_treinamento = ?,
+                programa_treinamento_id = ?,
                 updated_at = datetime('now')
           WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
@@ -552,6 +573,7 @@ async function upsertHistoricoPlanejadoForParticipante(
         observacoes,
         cargaHoraria,
         tipoTreinamento,
+        evento.programa_treinamento_id,
         existing.id,
         empresaId,
       )
@@ -566,8 +588,8 @@ async function upsertHistoricoPlanejadoForParticipante(
       `INSERT INTO qualificacoes_historico
         (funcionario_id, qualificacao_id, qualificacao_codigo, categoria,
          data_conclusao, data_vencimento, validade_meses, instrutor, observacoes,
-         status, renovada, carga_horaria, tipo_treinamento, empresa_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '${QUALIFICACAO_STATUS.PLANEJADA}', 0, ?, ?, ?, datetime('now'), datetime('now'))`,
+         status, renovada, carga_horaria, tipo_treinamento, programa_treinamento_id, empresa_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '${QUALIFICACAO_STATUS.PLANEJADA}', 0, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
     )
     .bind(
       participante.funcionario_id,
@@ -581,6 +603,7 @@ async function upsertHistoricoPlanejadoForParticipante(
       observacoes,
       cargaHoraria,
       tipoTreinamento,
+      evento.programa_treinamento_id,
       empresaId,
     )
     .run();
