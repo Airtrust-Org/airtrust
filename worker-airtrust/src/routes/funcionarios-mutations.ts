@@ -706,11 +706,7 @@ app.put(
  * POST /api/funcionarios/:id/reativar
  * Reativa um funcionário do tenant preservando todo o histórico.
  */
-app.post(
-  '/:id/reativar',
-  auth(),
-  requirePermission('funcionarios', 'editar', 'admin', 'manager'),
-  async (c) => {
+app.post('/:id/reativar', auth(), requirePermission('funcionarios', 'editar', 'admin', 'manager'), async (c) => {
     const db = c.env.DB;
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id) || id <= 0) badRequest('ID inválido');
@@ -782,8 +778,7 @@ app.post(
     }
 
     return c.json({ success: true, message: 'Funcionário reativado com sucesso' });
-  },
-);
+});
 
 /**
  * DELETE /api/funcionarios/:id

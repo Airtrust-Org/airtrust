@@ -105,7 +105,8 @@ describe('migration governance', () => {
     // Historical #110 numbers 0477-0480 are intentionally not backfilled.
     // 0489 adds tenant-scoped natural keys; 0490 restores simulator planning curriculum metadata.
     // 0491 adds the canonical training-compliance requirements matrix.
-    const expectedLatest = 491;
+    // 0492 normalizes the canonical sector/function organization.
+    const expectedLatest = 492;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
