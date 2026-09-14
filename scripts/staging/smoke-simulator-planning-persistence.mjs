@@ -71,6 +71,26 @@ function uniqueNeeds(proposal) {
   return [...byId.values()];
 }
 
+function pairingSignature(blocks) {
+  return (blocks || [])
+    .map((block) =>
+      (block?.need_ids || block?.sessions?.map((session) => session?.need_id) || [])
+        .map((needId) => String(needId))
+        .sort()
+        .join('+'),
+    )
+    .filter(Boolean)
+    .sort();
+}
+
+function proposalPairingBlocks(proposal) {
+  return (proposal?.classes || []).flatMap((trainingClass) =>
+    (trainingClass.blocks || []).map((block) => ({
+      need_ids: (block.sessions || []).map((session) => String(session.need_id)),
+    })),
+  );
+}
+
 function withQaMarker(proposal, className) {
   return {
     ...proposal,
@@ -260,11 +280,8 @@ async function main() {
   assert(caeReceived.status === 200, `CAE_RECEBIDA retornou ${caeReceived.status}`);
   assert(caeReceived.json?.data?.workflow_status === 'CAE_RECEBIDA', 'status CAE_RECEBIDA não persistiu');
 
-  const pairingBlocks = manualProposal.classes.flatMap((trainingClass) =>
-    (trainingClass.blocks || []).map((block) => ({
-      need_ids: (block.sessions || []).map((session) => String(session.need_id)),
-    })),
-  );
+  const pairingBlocks = proposalPairingBlocks(manualProposal);
+  const pairingBeforeCae = pairingSignature(pairingBlocks);
   const compared = await authFetch(baseUrl, token, '/api/simuladores/planejamento-v2/comparar-cae', {
     method: 'POST',
     body: JSON.stringify({
@@ -280,6 +297,11 @@ async function main() {
   const comparedNeedIds = new Set(uniqueNeeds({ classes: compared.json?.data?.classes || [] }).map((need) => String(need.need_id)));
   assert(comparedNeedIds.size === needs.length, 'comparação CAE alterou a composição da proposta');
   for (const need of needs) assert(comparedNeedIds.has(String(need.need_id)), 'comparação CAE substituiu uma necessidade existente');
+  const pairingAfterCae = pairingSignature(proposalPairingBlocks({ classes: compared.json?.data?.classes || [] }));
+  assert(
+    JSON.stringify(pairingAfterCae) === JSON.stringify(pairingBeforeCae),
+    `comparação CAE alterou as duplas/singles da proposta: antes=${JSON.stringify(pairingBeforeCae)} depois=${JSON.stringify(pairingAfterCae)}`,
+  );
   const finalStatus =
     Number(comparison.no_slot_blocks || 0) === 0 &&
     Number(comparison.unmatched_crew_blocks || 0) === 0
@@ -375,6 +397,7 @@ async function main() {
     resumed_before_cae: true,
     cae_received_persisted: true,
     cae_compared: true,
+    pairing_preserved_after_cae: true,
     final_status: finalStatus,
     reopened_final: true,
     list_contains_draft: true,
