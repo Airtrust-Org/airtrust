@@ -462,7 +462,7 @@ export default function App() {
                       <Route
                         path="/treinamentos/compliance"
                         element={
-                          <ProtectedRoute>
+                          <ProtectedRoute requiredRole={['ADMIN', 'GESTOR']}>
                             <ComplianceTreinamentosPage />
                           </ProtectedRoute>
                         }

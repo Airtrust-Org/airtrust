@@ -373,7 +373,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           Qualificações
                         </Link>
                       )}
-                      {showQualificacoes && (
+                      {showQualificacoes && (isAdmin || isGestor) && (
                         <Link
                           to="/treinamentos/compliance"
                           onClick={() => setTreinamentosOpen(false)}
@@ -673,13 +673,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           >
                             <BadgeCheck className="h-3.5 w-3.5 shrink-0" /> Qualificações
                           </Link>
-                          <Link
-                            to="/treinamentos/compliance"
-                            onClick={() => setMobileMenuOpen(false)}
-                            className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/treinamentos/compliance') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}
-                          >
-                            <ShieldCheck className="h-3.5 w-3.5 shrink-0" /> Compliance
-                          </Link>
+                          {(isAdmin || isGestor) && (
+                            <Link
+                              to="/treinamentos/compliance"
+                              onClick={() => setMobileMenuOpen(false)}
+                              className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/treinamentos/compliance') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5 shrink-0" /> Compliance
+                            </Link>
+                          )}
                         </>
                       )}
                       {showLms && (
