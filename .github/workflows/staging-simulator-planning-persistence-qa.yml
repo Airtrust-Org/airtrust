@@ -134,6 +134,12 @@ jobs:
           npm ci
           npm --prefix worker-airtrust ci
 
+      - name: Validate stale simulator-planning cleanup in dry-run mode
+        run: node scripts/staging/seed-qa-simulator-planning.mjs --rollback
+
+      - name: Remove stale synthetic simulator-planning artifacts before provisioning
+        run: node scripts/staging/seed-qa-simulator-planning.mjs --rollback --apply
+
       - name: Validate isolated simulator-planning fixture in dry-run mode
         run: node scripts/staging/seed-qa-simulator-planning.mjs
 
