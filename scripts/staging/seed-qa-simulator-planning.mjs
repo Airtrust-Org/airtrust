@@ -168,7 +168,8 @@ SELECT CASE WHEN
       ON qt.id = qh.qualificacao_id AND qt.empresa_id = qh.empresa_id
     WHERE qh.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
       AND qh.observacoes = ${e(PLANNING_MARKER)}
-      AND qh.deleted_at IS NULL
+      -- Inclui linhas ativas e soft-deletadas: o seed reativa históricos reservados,
+      -- então uma colisão divergente deve falhar antes de qualquer normalização.
       AND NOT (
         f.matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
         AND f.deleted_at IS NULL
