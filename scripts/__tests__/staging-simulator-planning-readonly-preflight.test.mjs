@@ -49,3 +49,9 @@ test('read-only preflight checks simulator fixture schema compatibility', () => 
   assert.match(preflight, /READ_ONLY_SCHEMA_PREFLIGHT/);
   assert.match(preflight, /fixture_schema_compatible/);
 });
+
+test('read-only preflight checks semantic simulator fixture ownership', () => {
+  const workflow = readFileSync('.github/workflows/staging-simulator-planning-readonly-preflight.yml', 'utf8');
+  assert.match(workflow, /preflight-simulator-planning-fixture\.mjs/);
+  assert.match(workflow, /Require simulator-planning fixture ownership preconditions \(read-only\)/);
+});

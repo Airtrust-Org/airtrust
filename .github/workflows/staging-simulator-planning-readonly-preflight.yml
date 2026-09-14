@@ -127,6 +127,12 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/staging/preflight-simulator-planning-schema.mjs
 
+      - name: Require simulator-planning fixture ownership preconditions (read-only)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/staging/preflight-simulator-planning-fixture.mjs
+
       - name: Audit tenant isolation and planning-fixture residue read-only
         shell: bash
         env:

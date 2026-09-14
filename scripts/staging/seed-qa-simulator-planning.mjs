@@ -75,23 +75,46 @@ SELECT CASE
 END;
 DROP TABLE _qa_sim_planning_requires_tenant;
 
--- Charlie pertence exclusivamente a este fixture descartável. Se uma linha ativa
--- com a matrícula reservada já existir após o pre-clean, falhar fechado em vez
--- de reutilizar/normalizar um participante que possa pertencer a outro QA.
-CREATE TABLE IF NOT EXISTS _qa_sim_planning_requires_charlie_absent (
+-- Charlie pertence exclusivamente a este fixture descartável. O cleanup usa
+-- soft-delete; por isso uma linha reservada já existente pode ser reativada
+-- somente quando sua assinatura continua inequívoca e idêntica à fixture.
+CREATE TABLE IF NOT EXISTS _qa_sim_planning_requires_charlie_signature (
   ok INTEGER NOT NULL CHECK (ok = 1)
 );
-DELETE FROM _qa_sim_planning_requires_charlie_absent;
-INSERT INTO _qa_sim_planning_requires_charlie_absent(ok)
-SELECT CASE WHEN NOT EXISTS (
-  SELECT 1 FROM funcionarios f
-  JOIN empresas emp ON emp.id = f.empresa_id
-  WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
-    AND emp.deleted_at IS NULL
-    AND f.matricula = ${e(PARTICIPANTE3_CODIGO)}
-    AND f.deleted_at IS NULL
-) THEN 1 ELSE 0 END;
-DROP TABLE _qa_sim_planning_requires_charlie_absent;
+DELETE FROM _qa_sim_planning_requires_charlie_signature;
+INSERT INTO _qa_sim_planning_requires_charlie_signature(ok)
+SELECT CASE WHEN
+  (SELECT COUNT(*)
+   FROM funcionarios f
+   JOIN empresas emp ON emp.id = f.empresa_id
+   WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+     AND emp.deleted_at IS NULL
+     AND f.matricula = ${e(PARTICIPANTE3_CODIGO)}) <= 1
+  AND NOT EXISTS (
+    SELECT 1
+    FROM funcionarios f
+    JOIN empresas emp ON emp.id = f.empresa_id
+    JOIN funcionarios alfa
+      ON alfa.empresa_id = emp.id
+     AND alfa.matricula = ${e(PARTICIPANTE1_CODIGO)}
+     AND alfa.deleted_at IS NULL
+    WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+      AND emp.deleted_at IS NULL
+      AND f.matricula = ${e(PARTICIPANTE3_CODIGO)}
+      AND NOT (
+        COALESCE(f.nome, '') = 'QA Participante Charlie'
+        AND COALESCE(f.cargo, '') = 'Participante QA'
+        AND COALESCE(f.status, '') = 'ATIVO'
+        AND COALESCE(f.ativo, 1) = 1
+        AND COALESCE(f.is_instrutor, 0) = 0
+        AND COALESCE(f.is_checador, 0) = 0
+        AND COALESCE(f.is_examinador, 0) = 0
+        AND f.setor IS alfa.setor
+        AND f.setor_id IS alfa.setor_id
+      )
+  )
+THEN 1 ELSE 0 END;
+DROP TABLE _qa_sim_planning_requires_charlie_signature;
 
 -- Todas as demais identidades reservadas podem ser reativadas somente quando
 -- pertencem inequivocamente a este fixture. Qualquer colisão de código/ID com
@@ -192,9 +215,7 @@ SELECT CASE WHEN
       -- então uma colisão divergente deve falhar antes de qualquer normalização.
       AND NOT (
         f.matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
-        AND f.deleted_at IS NULL
         AND UPPER(COALESCE(qt.codigo, '')) = UPPER(${e(PLANNING_QUAL_CODE)})
-        AND qt.deleted_at IS NULL
         AND UPPER(COALESCE(qh.qualificacao_codigo, '')) = UPPER(${e(PLANNING_QUAL_CODE)})
         AND COALESCE(qh.categoria, '') = 'TREINAMENTO'
         AND COALESCE(qh.carga_horaria, -1) = 2
@@ -421,7 +442,31 @@ WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
     SELECT 1 FROM funcionarios
     WHERE empresa_id = emp.id
       AND matricula = ${e(PARTICIPANTE3_CODIGO)}
-      AND deleted_at IS NULL
+  );
+
+-- Reativa exclusivamente a identidade Charlie previamente criada pela própria
+-- fixture. Nenhum nome/cargo/papel é normalizado aqui: a assinatura acima já
+-- deve ter provado ownership antes de remover o soft-delete.
+UPDATE funcionarios
+SET deleted_at = NULL,
+    updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND matricula = ${e(PARTICIPANTE3_CODIGO)}
+  AND nome = 'QA Participante Charlie'
+  AND cargo = 'Participante QA'
+  AND status = 'ATIVO'
+  AND COALESCE(ativo, 1) = 1
+  AND COALESCE(is_instrutor, 0) = 0
+  AND COALESCE(is_checador, 0) = 0
+  AND COALESCE(is_examinador, 0) = 0
+  AND EXISTS (
+    SELECT 1
+    FROM funcionarios alfa
+    WHERE alfa.empresa_id = funcionarios.empresa_id
+      AND alfa.matricula = ${e(PARTICIPANTE1_CODIGO)}
+      AND alfa.deleted_at IS NULL
+      AND alfa.setor IS funcionarios.setor
+      AND alfa.setor_id IS funcionarios.setor_id
   );
 
 -- Três históricos QA com o mesmo vencimento: dois formam uma dupla bloqueada e o terceiro permanece singleton.
