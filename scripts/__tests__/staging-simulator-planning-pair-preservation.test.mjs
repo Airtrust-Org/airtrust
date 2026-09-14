@@ -188,3 +188,18 @@ test('staging simulator fixture avoids D1 remote file-import reset path', () => 
   assert.doesNotMatch(seed, /'--remote', '--file'/);
   assert.doesNotMatch(seed, /mkdtempSync|writeFileSync|rmSync/);
 });
+
+
+test('staging simulator QA gates schema compatibility before any D1 mutation', () => {
+  const workflow = readFileSync('.github/workflows/staging-simulator-planning-persistence-qa.yml', 'utf8');
+  const schemaGate = workflow.indexOf('Require simulator-planning fixture schema compatibility (read-only)');
+  const firstMutation = workflow.indexOf('Remove stale synthetic simulator-planning artifacts before provisioning');
+  assert.ok(schemaGate >= 0 && firstMutation > schemaGate);
+  const preflight = readFileSync('scripts/staging/preflight-simulator-planning-schema.mjs', 'utf8');
+  assert.match(preflight, /PRAGMA table_info/);
+  assert.match(preflight, /is_instrutor/);
+  assert.match(preflight, /is_checador/);
+  assert.match(preflight, /is_examinador/);
+  assert.match(preflight, /planejamento_snapshot_json/);
+  assert.doesNotMatch(preflight, /\b(INSERT|UPDATE|DELETE|DROP|ALTER)\b[^\n]*FROM/i);
+});

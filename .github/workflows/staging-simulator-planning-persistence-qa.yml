@@ -134,6 +134,9 @@ jobs:
           npm ci
           npm --prefix worker-airtrust ci
 
+      - name: Require simulator-planning fixture schema compatibility (read-only)
+        run: node scripts/staging/preflight-simulator-planning-schema.mjs
+
       - name: Validate stale simulator-planning cleanup in dry-run mode
         run: node scripts/staging/seed-qa-simulator-planning.mjs --rollback
 

@@ -40,3 +40,12 @@ test('simulator planning readiness fails closed on tenant or schema drift', () =
   assert.match(workflow, /staging mutation performed: no/);
   assert.doesNotMatch(workflow, /Publish sanitized readiness summary[\s\S]*<<'NODE'/);
 });
+
+
+test('read-only preflight checks simulator fixture schema compatibility', () => {
+  const workflow = readFileSync('.github/workflows/staging-simulator-planning-readonly-preflight.yml', 'utf8');
+  assert.match(workflow, /preflight-simulator-planning-schema\.mjs/);
+  const preflight = readFileSync('scripts/staging/preflight-simulator-planning-schema.mjs', 'utf8');
+  assert.match(preflight, /READ_ONLY_SCHEMA_PREFLIGHT/);
+  assert.match(preflight, /fixture_schema_compatible/);
+});

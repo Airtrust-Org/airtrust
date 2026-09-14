@@ -121,6 +121,9 @@ jobs:
       - name: Install worker dependencies
         run: npm --prefix worker-airtrust ci
 
+      - name: Require simulator-planning fixture schema compatibility (read-only)
+        run: node scripts/staging/preflight-simulator-planning-schema.mjs
+
       - name: Audit tenant isolation and planning-fixture residue read-only
         shell: bash
         env:
