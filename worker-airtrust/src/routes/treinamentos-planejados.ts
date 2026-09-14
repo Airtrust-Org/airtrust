@@ -2573,14 +2573,10 @@ treinamentosPlanejadosRoutes.patch(
 
     const existing = await db
       .prepare(
-        'SELECT id, qualificacao_tipo_id, programa_treinamento_id FROM treinamentos_planejados WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        'SELECT id, qualificacao_tipo_id FROM treinamentos_planejados WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
       )
       .bind(treinamentoId, empresaId)
-      .first<{
-        id: number;
-        qualificacao_tipo_id: number;
-        programa_treinamento_id: number | null;
-      }>();
+      .first<{ id: number; qualificacao_tipo_id: number }>();
 
     if (!existing) {
       return c.json({ success: false, error: 'Treinamento planejado não encontrado' }, 404);
