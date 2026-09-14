@@ -6,12 +6,15 @@ import {
   classifyRosterRowsForEmployee,
   findCommonRosterDate,
   flattenPairedBlocks,
+  flattenProofCandidateBlocks,
 } from '../../../../scripts/validation/production-simulator-folga-readonly.mjs';
 
 describe('production simulator FOLGA read-only proof helpers', () => {
-  it('reads the real proposal classes/blocks shape', () => {
-    const block = { sessions: [{ need_id: 'a' }, { need_id: 'b' }] };
-    expect(flattenPairedBlocks({ classes: [{ blocks: [block] }] })).toEqual([block]);
+  it('reads paired blocks and keeps singleton blocks as functional proof candidates', () => {
+    const paired = { block_id: 'paired', target_date: '2026-10-10', sessions: [{ need_id: 'a' }, { need_id: 'b' }] };
+    const singleton = { block_id: 'solo', target_date: '2026-10-09', sessions: [{ need_id: 'c' }] };
+    expect(flattenPairedBlocks({ classes: [{ blocks: [singleton, paired] }] })).toEqual([paired]);
+    expect(flattenProofCandidateBlocks({ classes: [{ blocks: [singleton, paired] }] })).toEqual([paired, singleton]);
   });
 
   it('classifies explicit published FOLGA and operational work without names/PII', () => {
