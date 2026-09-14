@@ -109,3 +109,20 @@ test('staging simulator fixture never adopts or deletes a foreign Charlie partic
   assert.match(seed, /alfa\.setor IS funcionarios\.setor/);
   assert.match(seed, /alfa\.setor_id IS funcionarios\.setor_id/);
 });
+
+
+test('staging simulator fixture rejects foreign reserved artifacts and cleanup is signature-gated', () => {
+  const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
+  assert.match(seed, /_qa_sim_planning_requires_reserved_signatures/);
+  assert.match(seed, /qa-simulator-planning/);
+  assert.match(seed, /QA Planejamento Persistente — Sessão 1/);
+  assert.match(seed, /QA Simulador — Planejamento Persistente/);
+  assert.match(seed, /COALESCE\(ea\.escala_id, ''\) = \$\{e\(QA_ROSTER_ID\)\}/);
+  assert.match(seed, /COALESCE\(ea\.observacoes, ''\) = \$\{e\(PLANNING_MARKER\)\}/);
+  assert.match(seed, /COALESCE\(ea\.created_by, ''\) = 'qa-simulator-planning'/);
+  assert.match(seed, /titulo = 'QA Simulator Planning Roster'/);
+  assert.match(seed, /modelo_aeronave = 'AW139'/);
+  assert.match(seed, /dominio_codigo = 'OPERACOES'/);
+  assert.match(seed, /cor = '#64748b'/);
+  assert.match(seed, /COALESCE\(lms_integrada, 0\) = 0/);
+});

@@ -95,6 +95,73 @@ SELECT CASE WHEN NOT EXISTS (
 ) THEN 1 ELSE 0 END;
 DROP TABLE _qa_sim_planning_requires_charlie_absent;
 
+-- Todas as demais identidades reservadas podem ser reativadas somente quando
+-- pertencem inequivocamente a este fixture. Qualquer colisão de código/ID com
+-- assinatura divergente falha fechado antes de qualquer normalização.
+CREATE TABLE IF NOT EXISTS _qa_sim_planning_requires_reserved_signatures (
+  ok INTEGER NOT NULL CHECK (ok = 1)
+);
+DELETE FROM _qa_sim_planning_requires_reserved_signatures;
+INSERT INTO _qa_sim_planning_requires_reserved_signatures(ok)
+SELECT CASE WHEN
+  NOT EXISTS (
+    SELECT 1 FROM qualificacoes_categorias qc
+    WHERE qc.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+      AND UPPER(qc.codigo) = UPPER(${e(PLANNING_CATEGORY_CODE)})
+      AND NOT (
+        COALESCE(qc.nome, '') = 'QA Simulador — Planejamento Persistente'
+        AND COALESCE(qc.descricao, '') = 'Categoria sintética de staging para o aceite do Planejamento de Simulador V3.'
+        AND COALESCE(qc.cor, '') = '#64748b'
+        AND COALESCE(qc.dominio_codigo, '') = 'OPERACOES'
+        AND COALESCE(qc.lms_integrada, 0) = 0
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM qualificacoes_tipos qt
+    WHERE qt.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+      AND UPPER(qt.codigo) = UPPER(${e(PLANNING_QUAL_CODE)})
+      AND NOT (
+        COALESCE(qt.nome, '') = 'QA Simulador AW139 — Planejamento Persistente'
+        AND COALESCE(qt.tipo, '') = 'TREINAMENTO'
+        AND COALESCE(qt.descricao, '') = 'Fixture sintética de staging para QA do Planejamento de Simulador V3.'
+        AND COALESCE(qt.observacoes, '') = ${e(PLANNING_MARKER)}
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM modelos_sessao ms
+    WHERE ms.codigo = ${e(PLANNING_MODEL_CODE)}
+      AND NOT (
+        ms.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+        AND COALESCE(ms.nome, '') = 'QA Planejamento Persistente — Sessão 1'
+        AND COALESCE(ms.tipo, '') = 'RECORRENTE'
+        AND COALESCE(ms.descricao, '') = 'Fixture sintética de staging para proposta V3.'
+        AND COALESCE(ms.duracao_estimada, -1) = 120
+        AND COALESCE(ms.ordem_no_treinamento, -1) = 1
+        AND COALESCE(ms.modelo_aeronave, '') = 'AW139'
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM escalas_mensais em
+    WHERE em.id = ${e(QA_ROSTER_ID)}
+      AND NOT (
+        em.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+        AND COALESCE(em.titulo, '') = 'QA Simulator Planning Roster'
+        AND COALESCE(em.observacoes, '') = ${e(PLANNING_MARKER)}
+        AND COALESCE(em.created_by, '') = 'qa-simulator-planning'
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM escala_alocacoes ea
+    WHERE ea.id IN (${allocationIds})
+      AND NOT (
+        COALESCE(ea.escala_id, '') = ${e(QA_ROSTER_ID)}
+        AND COALESCE(ea.observacoes, '') = ${e(PLANNING_MARKER)}
+        AND COALESCE(ea.created_by, '') = 'qa-simulator-planning'
+      )
+  )
+THEN 1 ELSE 0 END;
+DROP TABLE _qa_sim_planning_requires_reserved_signatures;
+
 -- A política de planejamento do tenant QA é baseline canônico, não fixture descartável.
 -- Falhar fechado se ela divergir; nunca sobrescrevê-la para fazer o smoke passar.
 CREATE TABLE IF NOT EXISTS _qa_sim_planning_requires_config (
@@ -584,17 +651,18 @@ WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
 UPDATE escala_alocacoes
 SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE id IN (${allocationIds})
-  AND escala_id IN (
-    SELECT id FROM escalas_mensais
-    WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
-  )
+  AND escala_id = ${e(QA_ROSTER_ID)}
+  AND observacoes = ${e(PLANNING_MARKER)}
+  AND created_by = 'qa-simulator-planning'
   AND deleted_at IS NULL;
 
 UPDATE escalas_mensais
 SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE id = ${e(QA_ROSTER_ID)}
   AND empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND titulo = 'QA Simulator Planning Roster'
   AND observacoes = ${e(PLANNING_MARKER)}
+  AND created_by = 'qa-simulator-planning'
   AND deleted_at IS NULL;
 
 UPDATE qualificacoes_historico
@@ -630,6 +698,12 @@ WHERE modelo_id IN (
   FROM modelos_sessao
   WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
     AND codigo = ${e(PLANNING_MODEL_CODE)}
+    AND nome = 'QA Planejamento Persistente — Sessão 1'
+    AND tipo = 'RECORRENTE'
+    AND descricao = 'Fixture sintética de staging para proposta V3.'
+    AND duracao_estimada = 120
+    AND ordem_no_treinamento = 1
+    AND modelo_aeronave = 'AW139'
 )
   AND empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND codigo_canonico = ${e(PLANNING_MODEL_CODE)}
@@ -639,12 +713,21 @@ UPDATE modelos_sessao
 SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND codigo = ${e(PLANNING_MODEL_CODE)}
+  AND nome = 'QA Planejamento Persistente — Sessão 1'
+  AND tipo = 'RECORRENTE'
+  AND descricao = 'Fixture sintética de staging para proposta V3.'
+  AND duracao_estimada = 120
+  AND ordem_no_treinamento = 1
+  AND modelo_aeronave = 'AW139'
   AND deleted_at IS NULL;
 
 UPDATE qualificacoes_tipos
 SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND UPPER(codigo) = UPPER(${e(PLANNING_QUAL_CODE)})
+  AND nome = 'QA Simulador AW139 — Planejamento Persistente'
+  AND tipo = 'TREINAMENTO'
+  AND descricao = 'Fixture sintética de staging para QA do Planejamento de Simulador V3.'
   AND observacoes = ${e(PLANNING_MARKER)}
   AND deleted_at IS NULL;
 
@@ -652,6 +735,11 @@ UPDATE qualificacoes_categorias
 SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND UPPER(codigo) = UPPER(${e(PLANNING_CATEGORY_CODE)})
+  AND nome = 'QA Simulador — Planejamento Persistente'
+  AND descricao = 'Categoria sintética de staging para o aceite do Planejamento de Simulador V3.'
+  AND cor = '#64748b'
+  AND dominio_codigo = 'OPERACOES'
+  AND COALESCE(lms_integrada, 0) = 0
   AND deleted_at IS NULL;
 
 -- Pós-condição fail-closed do rollback: nenhum artefato descartável pode ficar ativo.
