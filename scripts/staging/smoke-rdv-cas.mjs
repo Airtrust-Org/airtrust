@@ -92,16 +92,21 @@ async function fetchCancellationMotivoId(baseUrl, token) {
   return motivo.id;
 }
 
-// Helper reutilizavel: cancela um voo sintetico pelo endpoint oficial,
-// enviando todos os campos exigidos pelo contrato de PATCH /voos/:id
-// (versao para o CAS de cv_voos, cancelado_motivo_id para a transicao de
-// cancelamento). Nunca usa SQL. Nunca deve ser lido como hard-delete: a
-// linha permanece na tabela com status 'cancelado', unico cleanup que a
-// API expõe.
+// Helper reutilizavel: cancela um voo sintetico pelo endpoint oficial de
+// transicao de status. O PATCH generico /voos/:id deliberadamente proibe
+// `status`; usar esse PATCH fazia o cleanup receber 400
+// CONTROLE_VOOS_FORBIDDEN_FIELD e deixar residuo. A rota /status exige o CAS
+// de cv_voos (`versao`) e motivo operacional para cancelamento. Nunca usa SQL
+// e nunca e hard-delete: a linha permanece com status 'cancelado'.
 async function cancelSyntheticFlight(baseUrl, token, { vooId, versao, canceladoMotivoId }) {
-  const res = await authFetch(baseUrl, token, `/api/controle-voos/voos/${vooId}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ status: 'cancelado', versao, cancelado_motivo_id: canceladoMotivoId }),
+  const res = await authFetch(baseUrl, token, `/api/controle-voos/voos/${vooId}/status`, {
+    method: 'POST',
+    body: JSON.stringify({
+      status: 'cancelado',
+      versao,
+      cancelado_motivo_id: canceladoMotivoId,
+      descricao: 'QA smoke cleanup RDV CAS',
+    }),
   });
   const ok = res.status >= 200 && res.status < 300 && res.json?.data?.status === 'cancelado';
   return { ok, status: res.status, json: res.json };
@@ -118,21 +123,21 @@ async function cleanupResidualFlight(baseUrl, token, canceladoMotivoId, vooId) {
   const getRes = await authFetch(baseUrl, token, `/api/controle-voos/voos/${vooId}`);
   if (getRes.status !== 200 || !getRes.json?.data) {
     console.log(`[E2E] Residuo ${vooId}: ignorado (nao encontrado neste tenant; status ${getRes.status}).`);
-    return;
+    return true;
   }
 
   const flight = getRes.json.data;
   if (!String(flight.prefixo || '').includes(SMOKE_PREFIX_MARKER)) {
     console.log(`[E2E] Residuo ${vooId}: ignorado (prefixo '${flight.prefixo}' nao identifica voo sintetico deste smoke).`);
-    return;
+    return true;
   }
   if (!CANCELLABLE_STATUSES.has(flight.status)) {
     console.log(`[E2E] Residuo ${vooId}: ignorado (status '${flight.status}' nao permite cancelamento).`);
-    return;
+    return true;
   }
   if (typeof flight.versao !== 'number') {
     console.log(`[E2E] Residuo ${vooId}: ignorado (versao atual nao pode ser determinada).`);
-    return;
+    return true;
   }
 
   const result = await cancelSyntheticFlight(baseUrl, token, {
@@ -142,9 +147,10 @@ async function cleanupResidualFlight(baseUrl, token, canceladoMotivoId, vooId) {
   });
   if (result.ok) {
     console.log(`[E2E] Residuo ${vooId}: cancelado com sucesso (cleanup via API; nao e hard-delete).`);
-  } else {
-    console.error(`[E2E] Residuo ${vooId}: CLEANUP_FALHOU (${result.status} - ${JSON.stringify(result.json)})`);
+    return true;
   }
+  console.error(`[E2E] Residuo ${vooId}: CLEANUP_FALHOU (${result.status} - ${JSON.stringify(result.json)})`);
+  return false;
 }
 
 async function run() {
@@ -174,6 +180,7 @@ async function run() {
   // vooId so e conhecido apos a etapa 1; declarado aqui para o cleanup no
   // finally poder usa-lo mesmo se uma etapa posterior falhar.
   let vooId;
+  let cleanupFailed = false;
 
   try {
     // 1. Criar um voo sintético
@@ -307,8 +314,6 @@ async function run() {
     assert(sucessoCount === 1, `Esperava exatamente 1 sucesso concorrente, teve ${sucessoCount}`);
     assert(conflitoCount === 1, `Esperava exatamente 1 conflito 409, teve ${conflitoCount}`);
     console.log('[E2E] Proteção de CAS (409) validada com sucesso.');
-
-    console.log('\n✅ E2E Sintético do RDV CAS concluído com sucesso!');
   } finally {
     // Cleanup: cancelar (via endpoint oficial) o voo sintético desta execução,
     // mesmo que uma assertion acima tenha falhado. Isto NAO e um hard-delete
@@ -318,14 +323,14 @@ async function run() {
     if (vooId) {
       console.log(`\n[E2E] Executando cleanup (cancelamento) do voo sintético ${vooId}...`);
       try {
-        // PATCH /voos/:id exige `versao` (CAS de cv_voos, independente do CAS
-        // de cv_rdv_operacional exercitado acima) — buscar o estado atual do
-        // voo imediatamente antes do PATCH, em vez de reaproveitar a versao
-        // da criacao, para o cleanup continuar correto mesmo se algum passo
-        // futuro do teste vier a alterar o voo.
+        // A transicao /voos/:id/status exige `versao` (CAS de cv_voos,
+        // independente do CAS de cv_rdv_operacional exercitado acima). Buscar
+        // o estado atual imediatamente antes do POST evita reutilizar a versao
+        // da criacao caso algum passo futuro venha a alterar o voo.
         const vooAtualRes = await authFetch(EXPECTED_API_URL, token, `/api/controle-voos/voos/${vooId}`);
         const vooVersaoAtual = vooAtualRes.json?.data?.versao;
         if (vooAtualRes.status !== 200 || typeof vooVersaoAtual !== 'number') {
+          cleanupFailed = true;
           console.error(`[E2E] CLEANUP_FALHOU: nao foi possivel ler a versao atual do voo ${vooId} (${vooAtualRes.status} - ${JSON.stringify(vooAtualRes.json)})`);
         } else {
           const result = await cancelSyntheticFlight(EXPECTED_API_URL, token, {
@@ -336,10 +341,12 @@ async function run() {
           if (result.ok) {
             console.log(`[E2E] Voo ${vooId} cancelado com sucesso (cleanup via API; resíduo de linha cancelada é esperado, não um hard-delete nem restauração do baseline).`);
           } else {
+            cleanupFailed = true;
             console.error(`[E2E] CLEANUP_FALHOU: cancelamento do voo ${vooId} retornou ${result.status} - ${JSON.stringify(result.json)}`);
           }
         }
       } catch (cleanupErr) {
+        cleanupFailed = true;
         console.error(`[E2E] CLEANUP_FALHOU: excecao ao cancelar o voo ${vooId}:`, cleanupErr);
       }
     } else {
@@ -351,12 +358,24 @@ async function run() {
     console.log('\n[E2E] Tentando cleanup dos residuos conhecidos (22-26) — somente se inequivocamente QA...');
     for (const residualVooId of KNOWN_RESIDUAL_VOO_IDS) {
       try {
-        await cleanupResidualFlight(EXPECTED_API_URL, token, canceladoMotivoId, residualVooId);
+        const residualOk = await cleanupResidualFlight(
+          EXPECTED_API_URL,
+          token,
+          canceladoMotivoId,
+          residualVooId,
+        );
+        if (!residualOk) cleanupFailed = true;
       } catch (residualErr) {
+        cleanupFailed = true;
         console.error(`[E2E] Residuo ${residualVooId}: CLEANUP_FALHOU (excecao):`, residualErr);
       }
     }
   }
+
+  if (cleanupFailed) {
+    throw new Error('RDV CAS funcional passou, mas o cleanup governado falhou; staging nao pode ficar verde com residuo ativo.');
+  }
+  console.log('\n✅ E2E Sintético do RDV CAS concluído com sucesso, incluindo cleanup governado!');
 }
 
 run().catch(e => {
