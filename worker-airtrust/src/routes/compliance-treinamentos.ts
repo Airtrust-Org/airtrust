@@ -84,6 +84,11 @@ type Evidence = {
   lms_status?: string | null;
 };
 
+type LmsEvidenceState = {
+  latest: Evidence | undefined;
+  latestCompleted: Evidence | undefined;
+};
+
 async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
   const row = await db
     .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1")
@@ -306,8 +311,11 @@ async function loadQualificationEvidence(
   return map;
 }
 
-async function loadLmsEvidence(db: D1Database, empresaId: number): Promise<Map<string, Evidence>> {
-  const map = new Map<string, Evidence>();
+async function loadLmsEvidence(
+  db: D1Database,
+  empresaId: number,
+): Promise<Map<string, LmsEvidenceState>> {
+  const map = new Map<string, LmsEvidenceState>();
   if (!(await tableExists(db, 'lms_matriculas')) || !(await tableExists(db, 'lms_cursos')))
     return map;
   const { results } = await db
@@ -336,8 +344,7 @@ async function loadLmsEvidence(db: D1Database, empresaId: number): Promise<Map<s
     }>();
   for (const row of results || []) {
     const key = `${row.funcionario_id}:${row.tipo_id}`;
-    if (map.has(key)) continue;
-    map.set(key, {
+    const evidence: Evidence = {
       funcionario_id: row.funcionario_id,
       tipo_id: row.tipo_id,
       data_realizacao: row.data_conclusao,
@@ -346,7 +353,13 @@ async function loadLmsEvidence(db: D1Database, empresaId: number): Promise<Map<s
       origem_id: row.id,
       origem_titulo: row.titulo,
       lms_status: row.status,
-    });
+    };
+    const state = map.get(key) || { latest: undefined, latestCompleted: undefined };
+    if (!state.latest) state.latest = evidence;
+    if (!state.latestCompleted && String(row.status || '').toUpperCase() === 'CONCLUIDO') {
+      state.latestCompleted = evidence;
+    }
+    map.set(key, state);
   }
   return map;
 }
@@ -362,9 +375,14 @@ function latestEvidence(
   return lms.data_realizacao > history.data_realizacao ? lms : history;
 }
 
-function computeRequirement(rule: Rule, history: Evidence | undefined, lms: Evidence | undefined) {
+function computeRequirement(
+  rule: Rule,
+  history: Evidence | undefined,
+  lms: LmsEvidenceState | undefined,
+) {
   const today = new Date().toISOString().slice(0, 10);
-  const evidence = latestEvidence(history, lms?.lms_status === 'CONCLUIDO' ? lms : undefined);
+  const evidence = latestEvidence(history, lms?.latestCompleted);
+  const currentLms = lms?.latest;
   let status_compliance: ComplianceStatus = 'NAO_REALIZADO';
   let data_validade: string | null = null;
   let dias_para_vencer: number | null = null;
@@ -390,8 +408,8 @@ function computeRequirement(rule: Rule, history: Evidence | undefined, lms: Evid
             : 'CONFORME';
     }
   } else if (
-    lms &&
-    ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(lms.lms_status || '').toUpperCase())
+    currentLms &&
+    ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(currentLms.lms_status || '').toUpperCase())
   ) {
     status_compliance = 'EM_ANDAMENTO';
   }
@@ -425,8 +443,8 @@ function computeRequirement(rule: Rule, history: Evidence | undefined, lms: Evid
     status_compliance,
     evidencia_origem: evidence?.origem ?? null,
     evidencia_id: evidence?.origem_id ?? null,
-    curso_ead_titulo: lms?.origem_titulo ?? null,
-    lms_status: lms?.lms_status ?? null,
+    curso_ead_titulo: currentLms?.origem_titulo ?? evidence?.origem_titulo ?? null,
+    lms_status: currentLms?.lms_status ?? lms?.latestCompleted?.lms_status ?? null,
   };
 }
 
