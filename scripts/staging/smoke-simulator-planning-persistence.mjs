@@ -149,11 +149,12 @@ async function main() {
   const funcionarios = rows(funcionariosRes.json);
   const alfa = funcionarios.find((item) => item?.matricula === 'QA-PARTICIPANTE-ALFA');
   const bravo = funcionarios.find((item) => item?.matricula === 'QA-PARTICIPANTE-BRAVO');
+  const charlie = funcionarios.find((item) => item?.matricula === 'QA-PARTICIPANTE-CHARLIE');
   const qualification = rows(tiposRes.json).find((item) => String(item?.codigo || '').toUpperCase() === QUAL_CODE);
   const model = rows(modelosRes.json).find((item) => item?.codigo === MODEL_CODE);
   assert(
-    alfa?.id && bravo?.id && qualification?.id && model?.id,
-    `fixture QA de planejamento incompleta: alfa=${Boolean(alfa?.id)} bravo=${Boolean(bravo?.id)} tipo=${Boolean(qualification?.id)} modelo=${Boolean(model?.id)}`,
+    alfa?.id && bravo?.id && charlie?.id && qualification?.id && model?.id,
+    `fixture QA de planejamento incompleta: alfa=${Boolean(alfa?.id)} bravo=${Boolean(bravo?.id)} charlie=${Boolean(charlie?.id)} tipo=${Boolean(qualification?.id)} modelo=${Boolean(model?.id)}`,
   );
 
   const inicio = isoDay(60);
@@ -177,13 +178,18 @@ async function main() {
     (need) =>
       Number(need.qualification_type_id) === Number(qualification.id) &&
       Number(need.session_model_id) === Number(model.id) &&
-      [Number(alfa.id), Number(bravo.id)].includes(Number(need.employee_id)),
+      [Number(alfa.id), Number(bravo.id), Number(charlie.id)].includes(Number(need.employee_id)),
   );
-  assert(needs.length === 2, `proposta QA esperava 2 necessidades; recebeu ${needs.length}`);
+  assert(needs.length === 3, `proposta QA esperava 3 necessidades; recebeu ${needs.length}`);
 
+  const needByEmployee = new Map(needs.map((need) => [Number(need.employee_id), need]));
+  const alfaNeed = needByEmployee.get(Number(alfa.id));
+  const bravoNeed = needByEmployee.get(Number(bravo.id));
+  const charlieNeed = needByEmployee.get(Number(charlie.id));
+  assert(alfaNeed && bravoNeed && charlieNeed, 'não foi possível mapear as 3 necessidades QA');
   const locks = [{
-    anchor_need_id: String(needs[0].need_id),
-    partner_need_id: String(needs[1].need_id),
+    anchor_need_id: String(alfaNeed.need_id),
+    partner_need_id: String(bravoNeed.need_id),
   }];
 
   const repaired = await authFetch(baseUrl, token, '/api/simuladores/planejamento-v2/reparear', {
@@ -192,6 +198,16 @@ async function main() {
   });
   assert(repaired.status === 200, `reparear QA retornou ${repaired.status}`);
   assert(Array.isArray(repaired.json?.data?.classes), 'reparear QA sem classes');
+  const repairedPairing = pairingSignature(proposalPairingBlocks({ classes: repaired.json.data.classes }));
+  assert(repairedPairing.length === 2, `reparear QA deveria produzir 2 blocos; recebeu ${repairedPairing.length}`);
+  assert(repairedPairing.some((item) => item === String(charlieNeed.need_id)), 'reparear QA não preservou Charlie como singleton');
+  assert(
+    repairedPairing.some(
+      (item) => item.includes(String(alfaNeed.need_id)) && item.includes(String(bravoNeed.need_id)),
+    ),
+    'reparear QA não preservou lock Alfa+Bravo',
+  );
+
   const manualProposal = withQaMarker(
     {
       ...generatedProposal,
@@ -302,11 +318,15 @@ async function main() {
     JSON.stringify(pairingAfterCae) === JSON.stringify(pairingBeforeCae),
     `comparação CAE alterou as duplas/singles da proposta: antes=${JSON.stringify(pairingBeforeCae)} depois=${JSON.stringify(pairingAfterCae)}`,
   );
+  assert(Number(comparison.unmatched_crew_blocks || 0) === 1, 'comparação CAE deveria manter exatamente 1 singleton sem dupla');
+  assert(Number(comparison.no_slot_blocks || 0) === 0, 'comparação CAE não deveria perder o slot da dupla bloqueada');
+  assert(Number(comparison.scheduled_blocks || 0) === 1, 'comparação CAE deveria agendar exatamente a dupla bloqueada');
   const finalStatus =
     Number(comparison.no_slot_blocks || 0) === 0 &&
     Number(comparison.unmatched_crew_blocks || 0) === 0
       ? 'PLANEJADO'
       : 'REPLANEJAR';
+  assert(finalStatus === 'REPLANEJAR', 'singleton sem dupla deveria exigir REPLANEJAR');
 
   const finalProposal = withQaMarker(
     {
@@ -398,6 +418,7 @@ async function main() {
     cae_received_persisted: true,
     cae_compared: true,
     pairing_preserved_after_cae: true,
+    singleton_preserved_after_cae: true,
     final_status: finalStatus,
     reopened_final: true,
     list_contains_draft: true,

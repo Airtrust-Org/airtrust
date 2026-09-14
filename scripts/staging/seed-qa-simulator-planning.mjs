@@ -23,13 +23,14 @@ const CONFIRMATION_PHRASE = 'AIRTRUST_STAGING_SIMULATOR_PLANNING_QA_SEED';
 const EMPRESA_CODIGO = 'qa_examiner_training';
 const PARTICIPANTE1_CODIGO = 'QA-PARTICIPANTE-ALFA';
 const PARTICIPANTE2_CODIGO = 'QA-PARTICIPANTE-BRAVO';
+const PARTICIPANTE3_CODIGO = 'QA-PARTICIPANTE-CHARLIE';
 const PLANNING_CATEGORY_CODE = 'QA-SIM-PLN-CAT';
 const PLANNING_QUAL_CODE = 'QA-SIM-PLN-AW139';
 const PLANNING_MODEL_CODE = 'QA-SIM-PLN-S01';
 const PLANNING_MARKER = 'QA_ONLY_SIMULATOR_PLANNING';
 const DRAFT_MARKER = 'QA_SIMULATOR_PLANNING_SMOKE';
 const QA_ROSTER_ID = 'QA-SIM-PLN-ROSTER';
-const QA_ALLOCATION_IDS = ['QA-SIM-PLN-ALFA-FOLGA', 'QA-SIM-PLN-BRAVO-FOLGA'];
+const QA_ALLOCATION_IDS = ['QA-SIM-PLN-ALFA-FOLGA', 'QA-SIM-PLN-BRAVO-FOLGA', 'QA-SIM-PLN-CHARLIE-FOLGA'];
 
 function sqlString(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
@@ -268,7 +269,35 @@ WHERE ms.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO
     WHERE msv.modelo_id = ms.id
   );
 
--- Dois históricos QA com o mesmo vencimento para formar uma dupla real.
+-- Terceiro participante existe apenas para provar que a comparação CAE não repara singles silenciosamente.
+INSERT INTO funcionarios (
+  nome, matricula, cargo, setor, setor_id, status, instrutor_simulador, checador_simulador, ativo, empresa_id,
+  created_at, updated_at, deleted_at
+)
+SELECT
+  'QA Participante Charlie', ${e(PARTICIPANTE3_CODIGO)}, 'Participante QA', alfa.setor, alfa.setor_id,
+  'ATIVO', 0, 0, 1, emp.id, datetime('now'), datetime('now'), NULL
+FROM empresas emp
+JOIN funcionarios alfa
+  ON alfa.empresa_id = emp.id
+ AND alfa.matricula = ${e(PARTICIPANTE1_CODIGO)}
+ AND alfa.deleted_at IS NULL
+WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+  AND emp.deleted_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM funcionarios
+    WHERE empresa_id = emp.id
+      AND matricula = ${e(PARTICIPANTE3_CODIGO)}
+      AND deleted_at IS NULL
+  );
+
+UPDATE funcionarios
+SET nome = 'QA Participante Charlie', cargo = 'Participante QA', status = 'ATIVO', ativo = 1,
+    deleted_at = NULL, updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND matricula = ${e(PARTICIPANTE3_CODIGO)};
+
+-- Três históricos QA com o mesmo vencimento: dois formam uma dupla bloqueada e o terceiro permanece singleton.
 INSERT INTO qualificacoes_historico (
   funcionario_id, qualificacao_id, qualificacao_codigo,
   data_conclusao, data_vencimento, validade_meses,
@@ -283,7 +312,7 @@ SELECT
 FROM empresas emp
 JOIN funcionarios f
   ON f.empresa_id = emp.id
- AND f.matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)})
+ AND f.matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
  AND f.deleted_at IS NULL
 JOIN qualificacoes_tipos qt
   ON qt.empresa_id = emp.id
@@ -315,7 +344,7 @@ WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND observacoes = ${e(PLANNING_MARKER)};
 
 -- Escala publicada sintética: sem ela, o planner deve e continuará falhando
--- fechado como DESCONHECIDO. Os dois participantes ficam em FOLGA no período.
+-- fechado como DESCONHECIDO. Os três participantes ficam em FOLGA no período.
 INSERT OR IGNORE INTO escalas_mensais (
   id, mes, ano, titulo, status, observacoes, empresa_id,
   created_by, created_at, updated_at, deleted_at
@@ -365,7 +394,8 @@ INSERT OR IGNORE INTO escala_alocacoes (
 SELECT
   CASE f.matricula
     WHEN ${e(PARTICIPANTE1_CODIGO)} THEN ${e(QA_ALLOCATION_IDS[0])}
-    ELSE ${e(QA_ALLOCATION_IDS[1])}
+    WHEN ${e(PARTICIPANTE2_CODIGO)} THEN ${e(QA_ALLOCATION_IDS[1])}
+    ELSE ${e(QA_ALLOCATION_IDS[2])}
   END,
   em.id, CAST(f.id AS TEXT), NULL, NULL, 'FOLGA', '#64748b', NULL,
   date('now'), date('now', '+120 days'), 'confirmado',
@@ -374,7 +404,7 @@ SELECT
 FROM empresas emp
 JOIN funcionarios f
   ON f.empresa_id = emp.id
- AND f.matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)})
+ AND f.matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
  AND f.deleted_at IS NULL
 JOIN escalas_mensais em
   ON em.empresa_id = emp.id
@@ -404,10 +434,17 @@ SET escala_id = (
           AND f.deleted_at IS NULL
         LIMIT 1
       ) AS TEXT)
-      ELSE CAST((
+      WHEN ${e(QA_ALLOCATION_IDS[1])} THEN CAST((
         SELECT f.id FROM funcionarios f
         WHERE f.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
           AND f.matricula = ${e(PARTICIPANTE2_CODIGO)}
+          AND f.deleted_at IS NULL
+        LIMIT 1
+      ) AS TEXT)
+      ELSE CAST((
+        SELECT f.id FROM funcionarios f
+        WHERE f.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+          AND f.matricula = ${e(PARTICIPANTE3_CODIGO)}
           AND f.deleted_at IS NULL
         LIMIT 1
       ) AS TEXT)
@@ -437,14 +474,15 @@ CREATE TABLE IF NOT EXISTS _qa_sim_planning_post_guard (
   qualification_count INTEGER NOT NULL CHECK (qualification_count = 1),
   model_count INTEGER NOT NULL CHECK (model_count = 1),
   model_version_count INTEGER NOT NULL CHECK (model_version_count = 1),
-  history_count INTEGER NOT NULL CHECK (history_count = 2),
-  allocation_count INTEGER NOT NULL CHECK (allocation_count = 2),
+  participant_count INTEGER NOT NULL CHECK (participant_count = 3),
+  history_count INTEGER NOT NULL CHECK (history_count = 3),
+  allocation_count INTEGER NOT NULL CHECK (allocation_count = 3),
   config_count INTEGER NOT NULL CHECK (config_count = 1)
 );
 DELETE FROM _qa_sim_planning_post_guard;
 INSERT INTO _qa_sim_planning_post_guard (
   tenant_count, category_count, qualification_count, model_count,
-  model_version_count, history_count, allocation_count, config_count
+  model_version_count, participant_count, history_count, allocation_count, config_count
 )
 SELECT
   (SELECT COUNT(*) FROM empresas
@@ -481,6 +519,10 @@ SELECT
      AND msv.versao_matriz = 'QA_SIMULATOR_PLANNING'
      AND msv.is_current = 1
      AND msv.efetivo_ate IS NULL),
+  (SELECT COUNT(*) FROM funcionarios
+    WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+      AND matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
+      AND deleted_at IS NULL),
   (SELECT COUNT(*) FROM qualificacoes_historico
     WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
       AND observacoes = ${e(PLANNING_MARKER)}
@@ -530,6 +572,12 @@ UPDATE qualificacoes_historico
 SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND observacoes = ${e(PLANNING_MARKER)}
+  AND deleted_at IS NULL;
+
+UPDATE funcionarios
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND matricula = ${e(PARTICIPANTE3_CODIGO)}
   AND deleted_at IS NULL;
 
 DELETE FROM modelos_sessao_versionamento
