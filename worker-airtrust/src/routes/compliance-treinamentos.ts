@@ -442,10 +442,7 @@ function computeRequirement(
             ? 'VENCENDO'
             : 'CONFORME';
     }
-  } else if (
-    currentLms &&
-    String(currentLms.lms_status || '').toUpperCase() === 'EM_ANDAMENTO'
-  ) {
+  } else if (currentLms && String(currentLms.lms_status || '').toUpperCase() === 'EM_ANDAMENTO') {
     status_compliance = 'EM_ANDAMENTO';
   }
 
@@ -695,24 +692,45 @@ app.get('/catalogos', requireRole('admin', 'manager'), async (c) => {
     )
     .bind(empresaId)
     .all<{ id: number; codigo: string | null; nome: string }>();
-  const allowedFunctionIds =
-    access.mode === 'all'
-      ? null
-      : new Set(
-          employees.map((employee) => employee.funcao_id).filter((id): id is number => id !== null),
-        );
-  const functionRows = (functions.results || []).filter(
-    (funcao) => allowedFunctionIds === null || allowedFunctionIds.has(Number(funcao.id)),
-  );
-  const setorFuncoes = Array.from(
-    new Map(
-      employees
-        .filter((employee) => employee.setor_id !== null && employee.funcao_id !== null)
-        .map((employee) => [
-          `${employee.setor_id}:${employee.funcao_id}`,
-          { setor_id: employee.setor_id as number, funcao_id: employee.funcao_id as number },
-        ]),
-    ).values(),
+  const hasCanonicalSetorFuncoes = await tableExists(db, 'setores_funcoes');
+  let setorFuncoes: Array<{ setor_id: number; funcao_id: number }>;
+  if (hasCanonicalSetorFuncoes) {
+    const mapSql =
+      access.mode === 'all'
+        ? `SELECT sf.setor_id,sf.funcao_id
+             FROM setores_funcoes sf
+            WHERE sf.empresa_id=? AND sf.deleted_at IS NULL AND COALESCE(sf.ativo,1)=1
+            ORDER BY sf.setor_id,sf.funcao_id`
+        : access.setorIds.length > 0
+          ? `SELECT sf.setor_id,sf.funcao_id
+               FROM setores_funcoes sf
+              WHERE sf.empresa_id=? AND sf.setor_id IN (${access.setorIds.map(() => '?').join(',')})
+                AND sf.deleted_at IS NULL AND COALESCE(sf.ativo,1)=1
+              ORDER BY sf.setor_id,sf.funcao_id`
+          : `SELECT setor_id,funcao_id FROM setores_funcoes WHERE 1=0`;
+    const mapBindings = access.mode === 'all' ? [empresaId] : [empresaId, ...access.setorIds];
+    const mapped = await db
+      .prepare(mapSql)
+      .bind(...mapBindings)
+      .all<{ setor_id: number; funcao_id: number }>();
+    setorFuncoes = mapped.results || [];
+  } else {
+    setorFuncoes = Array.from(
+      new Map(
+        employees
+          .filter((employee) => employee.setor_id !== null && employee.funcao_id !== null)
+          .map((employee) => [
+            `${employee.setor_id}:${employee.funcao_id}`,
+            { setor_id: employee.setor_id as number, funcao_id: employee.funcao_id as number },
+          ]),
+      ).values(),
+    );
+  }
+  const allowedFunctionIds = new Set(setorFuncoes.map((pair) => Number(pair.funcao_id)));
+  const functionRows = (functions.results || []).filter((funcao) =>
+    hasCanonicalSetorFuncoes
+      ? allowedFunctionIds.has(Number(funcao.id))
+      : access.mode === 'all' || allowedFunctionIds.has(Number(funcao.id)),
   );
 
   return c.json({

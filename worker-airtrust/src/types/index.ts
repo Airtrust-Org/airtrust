@@ -192,7 +192,9 @@ export interface Funcionario {
   telefone?: string;
   cargo?: string;
   setor?: string;
+  setor_id?: number | null;
   funcao?: string;
+  funcao_id?: number | null;
   aeronave?: string;
   codigo_anac?: string;
   nascimento?: string;

@@ -8,6 +8,11 @@ import { getEmpresaId } from '../middleware/tenant';
 
 const funcoes = new Hono<{ Bindings: Env }>();
 
+async function funcionariosHasFuncaoId(db: D1Database): Promise<boolean> {
+  const rows = await db.prepare("PRAGMA table_info('funcionarios')").all<{ name: string }>();
+  return (rows.results || []).some((row) => row.name === 'funcao_id');
+}
+
 type FuncaoPayload = {
   codigo?: unknown;
   nome?: unknown;
@@ -206,15 +211,22 @@ funcoes.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
       const novoRotulo = String(
         body.nome ?? anterior.nome ?? body.codigo ?? anterior.codigo ?? '',
       ).trim();
+      const hasFuncaoId = await funcionariosHasFuncaoId(db);
       statements.push(
         db
           .prepare(
             `UPDATE funcionarios SET funcao = ?, updated_at = datetime('now')
               WHERE empresa_id = ? AND deleted_at IS NULL
-                AND NULLIF(TRIM(COALESCE(funcao, '')), '') IS NOT NULL
-                AND UPPER(TRIM(funcao)) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))`,
+                AND (${hasFuncaoId ? 'funcao_id = ? OR ' : ''}(
+                  NULLIF(TRIM(COALESCE(funcao, '')), '') IS NOT NULL
+                  AND UPPER(TRIM(funcao)) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))
+                ))`,
           )
-          .bind(novoRotulo, empresaId, anterior.nome || '', anterior.codigo || ''),
+          .bind(
+            ...(hasFuncaoId
+              ? [novoRotulo, empresaId, Number(id), anterior.nome || '', anterior.codigo || '']
+              : [novoRotulo, empresaId, anterior.nome || '', anterior.codigo || '']),
+          ),
       );
     }
     await db.batch(statements);
@@ -263,15 +275,22 @@ funcoes.delete('/:id', auth(), requireRole('admin'), async (c) => {
     }
 
     const funcao = existing[0] as { codigo?: string | null; nome?: string | null };
+    const hasFuncaoId = await funcionariosHasFuncaoId(db);
     const emUso = await db
       .prepare(
         `SELECT COUNT(*) AS total FROM funcionarios
           WHERE empresa_id = ? AND deleted_at IS NULL
             AND UPPER(COALESCE(status, 'ATIVO')) = 'ATIVO'
-            AND NULLIF(TRIM(COALESCE(funcao, '')), '') IS NOT NULL
-            AND UPPER(TRIM(funcao)) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))`,
+            AND (${hasFuncaoId ? 'funcao_id = ? OR ' : ''}(
+              NULLIF(TRIM(COALESCE(funcao, '')), '') IS NOT NULL
+              AND UPPER(TRIM(funcao)) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))
+            ))`,
       )
-      .bind(empresaId, funcao.nome || '', funcao.codigo || '')
+      .bind(
+        ...(hasFuncaoId
+          ? [empresaId, Number(id), funcao.nome || '', funcao.codigo || '']
+          : [empresaId, funcao.nome || '', funcao.codigo || '']),
+      )
       .first<{ total: number }>();
     if (Number(emUso?.total || 0) > 0) {
       throw new ApiError('Função em uso por funcionários ativos não pode ser excluída', 409);

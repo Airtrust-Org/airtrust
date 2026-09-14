@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-14",
-    "last_reconciled_against": "training compliance requirements 0491 (prepared; remote apply pending)",
-    "schema_v2_digest": "1086fd153b48b1429d69169088549861fc3194bba1ea4bb4ff0e023d41094e14",
+    "last_reconciled_against": "organizational structure normalization 0492 (prepared; remote apply pending)",
+    "schema_v2_digest": "d85e3c6e08865d0226dfab861e65b38235c8237eb002779dd20690b06c92f726",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -777,6 +777,22 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "training-compliance-requirements-0491.json",
       "note": "0491 is reviewed and prepared only. It adds the canonical tenant-scoped training requirement matrix and backfills existing active function requirements; merge does not imply staging or production apply."
+    },
+    {
+      "change_file": "0492_organizational_structure_normalization.sql",
+      "change_id": "organizational-structure-normalization-0492",
+      "sha256": "f32f38e9f97c580745c1c36f0bc1cf764c11879d7f4bb143eb660179feb3ad04",
+      "targets": [
+        "funcionarios",
+        "funcoes_aliases",
+        "setores_aliases",
+        "setores_funcoes"
+      ],
+      "domain": "canonical employee organizational sector/function identity and approved tenant-6 normalization",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "organizational-structure-normalization-0492.json",
+      "note": "0492 is reviewed and prepared only. It adds canonical employee function IDs, sector/function mappings and aliases, and carries the user-approved tenant-6 organization normalization. Merge does not imply staging or production apply."
     }
   ]
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
 
-import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { API_BASE_URL, getAccessToken, fetchWithAuth } from '@/react-app/config/api';
 import { CARGOS, SETORES } from '@/config/constants';
 import {
   X,
@@ -258,8 +258,10 @@ export default function ModalFuncionario({
     email: '',
     telefone: '',
     funcao: '',
+    funcao_id: '',
     cargo: '',
     setor: '',
+    setor_id: '',
     modelo_aeronave_id: '',
     base: '',
     matricula: '',
@@ -297,6 +299,9 @@ export default function ModalFuncionario({
   const [modelosAeronave, setModelosAeronave] = useState<OptionItem[]>([]);
   const [funcoesList, setFuncoesList] = useState<OptionItem[]>([]);
   const [setoresList, setSetoresList] = useState<OptionItem[]>([]);
+  const [setorFuncoes, setSetorFuncoes] = useState<Array<{ setor_id: number; funcao_id: number }>>(
+    [],
+  );
   const [qualificacoes, setQualificacoes] = useState<QualItem[]>([]);
   const [licencas, setLicencas] = useState<Licenca[]>([]);
   const [modalLicencaAberto, setModalLicencaAberto] = useState(false);
@@ -308,7 +313,25 @@ export default function ModalFuncionario({
       try {
         const token = getAccessToken();
         const timestamp = new Date().getTime();
-        // Carregar funções do endpoint
+        const complianceCatalogResponse = await fetchWithAuth(
+          `${API_BASE_URL}/compliance-treinamentos/catalogos?t=${timestamp}`,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache',
+              Pragma: 'no-cache',
+              Authorization: token ? `Bearer ${token}` : '',
+            },
+          },
+        );
+        if (complianceCatalogResponse.ok) {
+          const catalog = await complianceCatalogResponse.json();
+          setFuncoesList(catalog.data?.funcoes || []);
+          setSetoresList(catalog.data?.setores || []);
+          setSetorFuncoes(catalog.data?.setor_funcoes || []);
+        }
+
+        // Compatibilidade: os endpoints diretos continuam como fallback de catálogo.
         const funcResponse = await fetch(`${API_BASE_URL}/funcoes?t=${timestamp}`, {
           headers: {
             'Content-Type': 'application/json',
@@ -317,7 +340,7 @@ export default function ModalFuncionario({
             Authorization: token ? `Bearer ${token}` : '',
           },
         });
-        if (funcResponse.ok) {
+        if (funcResponse.ok && !complianceCatalogResponse.ok) {
           const funcData = await funcResponse.json();
           setFuncoesList(funcData.data || []);
         } else {
@@ -340,7 +363,7 @@ export default function ModalFuncionario({
             Authorization: token ? `Bearer ${token}` : '',
           },
         });
-        if (setResponse.ok) {
+        if (setResponse.ok && !complianceCatalogResponse.ok) {
           const setData = await setResponse.json();
           setSetoresList(setData.data || []);
         } else {
@@ -411,8 +434,10 @@ export default function ModalFuncionario({
           email: '',
           telefone: '',
           funcao: '',
+          funcao_id: '',
           cargo: '',
           setor: '',
+          setor_id: '',
           modelo_aeronave_id: '',
           base: '',
           matricula: '',
@@ -441,6 +466,7 @@ export default function ModalFuncionario({
           cidade: '',
           estado: '',
           observacoes: '',
+          quinzena: '',
         });
         return;
       }
@@ -571,8 +597,10 @@ export default function ModalFuncionario({
           email: f.email || '',
           telefone: f.telefone || '',
           funcao: f.funcao || '',
-          cargo: f.cargo || '',
+          funcao_id: f.funcao_id ? String(f.funcao_id) : '',
+          cargo: f.cargo || f.funcao || '',
           setor: f.setor || '',
+          setor_id: f.setor_id ? String(f.setor_id) : '',
           modelo_aeronave_id: f.modelo_aeronave_id || f.modelo_id || '', // ✅ Backend usa 'modelo_id'
           base: f.base || '',
           matricula: f.matricula || '',
@@ -619,6 +647,39 @@ export default function ModalFuncionario({
   ) => {
     const { name, value, type } = e.target;
     const checked = (e.target as HTMLInputElement).checked;
+
+    if (name === 'setor_id') {
+      const setorSelecionado = setoresList.find((item) => String(item.id) === value);
+      const allowedFunctionIds = new Set(
+        setorFuncoes
+          .filter((pair) => pair.setor_id === Number(value))
+          .map((pair) => pair.funcao_id),
+      );
+      setFormData((prev) => {
+        const keepFunction =
+          !prev.funcao_id ||
+          allowedFunctionIds.size === 0 ||
+          allowedFunctionIds.has(Number(prev.funcao_id));
+        return {
+          ...prev,
+          setor_id: value,
+          setor: setorSelecionado?.nome || '',
+          ...(keepFunction ? {} : { funcao_id: '', funcao: '', cargo: '' }),
+        };
+      });
+      return;
+    }
+
+    if (name === 'funcao_id') {
+      const funcaoSelecionada = funcoesList.find((item) => String(item.id) === value);
+      setFormData((prev) => ({
+        ...prev,
+        funcao_id: value,
+        funcao: funcaoSelecionada?.nome || '',
+        cargo: funcaoSelecionada?.nome || '',
+      }));
+      return;
+    }
 
     // Aplicar máscaras para campos específicos
     if (name === 'matricula') {
@@ -707,8 +768,10 @@ export default function ModalFuncionario({
       contato_emergencia_nome: formData.contato_emergencia_nome?.trim() || null,
 
       // Profissionais (usar nomes do backend)
+      funcao_id: formData.funcao_id ? Number(formData.funcao_id) : null,
       funcao: formData.funcao?.trim() || null,
-      cargo: formData.cargo?.trim() || null,
+      cargo: formData.cargo?.trim() || formData.funcao?.trim() || null,
+      setor_id: formData.setor_id ? Number(formData.setor_id) : null,
       setor: formData.setor?.trim() || null,
       modelo_aeronave_id: formData.modelo_aeronave_id?.trim() || null, // ✅ Suporta múltiplas aeronaves (IDs separados por vírgula)
       base: formData.base?.trim()?.toUpperCase() || null,
@@ -1017,8 +1080,8 @@ export default function ModalFuncionario({
                     Função <span className="text-red-600">*</span>
                   </label>
                   <select
-                    name="funcao"
-                    value={formData.funcao}
+                    name="funcao_id"
+                    value={formData.funcao_id}
                     onChange={handleChange}
                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary"
                     required
@@ -1026,13 +1089,22 @@ export default function ModalFuncionario({
                     <option value="">✓ Selecione a função</option>
                     {funcoesList
                       .filter(
-                        (it) => it.deleted_at == null && (it.ativo === undefined || it.ativo === 1),
+                        (it) =>
+                          it.deleted_at == null &&
+                          (it.ativo === undefined || it.ativo === 1) &&
+                          (!formData.setor_id ||
+                            setorFuncoes.length === 0 ||
+                            setorFuncoes.some(
+                              (pair) =>
+                                pair.setor_id === Number(formData.setor_id) &&
+                                pair.funcao_id === it.id,
+                            )),
                       )
                       .sort((a: OptionItem, b: OptionItem) =>
                         String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'),
                       )
                       .map((func: OptionItem) => (
-                        <option key={func.id} value={func.nome}>
+                        <option key={func.id} value={func.id}>
                           {func.nome}
                         </option>
                       ))}
@@ -1048,8 +1120,8 @@ export default function ModalFuncionario({
                     Setor <span className="text-red-600">*</span>
                   </label>
                   <select
-                    name="setor"
-                    value={formData.setor}
+                    name="setor_id"
+                    value={formData.setor_id}
                     onChange={handleChange}
                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary"
                     required
@@ -1063,7 +1135,7 @@ export default function ModalFuncionario({
                         String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'),
                       )
                       .map((set: OptionItem) => (
-                        <option key={set.id} value={set.nome}>
+                        <option key={set.id} value={set.id}>
                           {set.nome}
                         </option>
                       ))}

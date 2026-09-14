@@ -23,6 +23,12 @@ import {
   normalizeFuncionarioMatricula,
 } from '../services/funcionario-natural-keys';
 import { chainQualificationLineageForFuncionarioGroups } from '../services/importacao/lineageChaining';
+import {
+  isCanonicalSectorFunctionPair,
+  resolveCanonicalFunction,
+  resolveCanonicalSector,
+  tenantHasCanonicalSectorFunctionMap,
+} from '../services/organizational-structure';
 
 const app = new Hono<{ Bindings: Env }>();
 const MAX_IMPORT_ROWS = 500;
@@ -280,9 +286,7 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
       seenMatriculas.add(matricula);
     }
 
-    const emails = rows
-      .map((row) => normalizeFuncionarioEmail(row.Email))
-      .filter(Boolean);
+    const emails = rows.map((row) => normalizeFuncionarioEmail(row.Email)).filter(Boolean);
     const duplicateEmails = new Set<string>();
     const seenEmails = new Set<string>();
     for (const email of emails) {
@@ -340,6 +344,50 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
         .trim()
         .toLowerCase();
       const modeloAeronaveId = aeronaveKey ? (modeloMap.get(aeronaveKey) ?? null) : null;
+      const setorText = String(row.Setor || row.Departamento || '').trim();
+      const funcaoText = String(row['Função'] || '').trim();
+      const cargoText = String(row.Cargo || '').trim();
+      const [canonicalSetor, canonicalFuncao, hasCanonicalMap] = await Promise.all([
+        resolveCanonicalSector(db, empresaId, { setorText }),
+        resolveCanonicalFunction(db, empresaId, { funcaoText, cargoText }),
+        tenantHasCanonicalSectorFunctionMap(db, empresaId),
+      ]);
+      if (hasCanonicalMap && setorText && !canonicalSetor) {
+        errors.push({
+          linha,
+          erro: `Setor não pertence ao cadastro canônico: ${setorText}`,
+          dados: row,
+        });
+        continue;
+      }
+      if (hasCanonicalMap && (funcaoText || cargoText) && !canonicalFuncao) {
+        errors.push({
+          linha,
+          erro: `Cargo/função não pertence ao cadastro canônico: ${funcaoText || cargoText}`,
+          dados: row,
+        });
+        continue;
+      }
+      if (
+        !(await isCanonicalSectorFunctionPair(
+          db,
+          empresaId,
+          canonicalSetor?.id ?? null,
+          canonicalFuncao?.id ?? null,
+        ))
+      ) {
+        errors.push({
+          linha,
+          erro: `Cargo/função ${canonicalFuncao?.nome || funcaoText || cargoText} não pertence ao setor ${canonicalSetor?.nome || setorText}`,
+          dados: row,
+        });
+        continue;
+      }
+      const setorId = canonicalSetor?.id ?? null;
+      const setorNome = canonicalSetor?.nome ?? (setorText || null);
+      const funcaoId = canonicalFuncao?.id ?? null;
+      const funcaoNome = canonicalFuncao?.nome ?? (funcaoText || null);
+      const cargoNome = canonicalFuncao?.nome ?? (cargoText || funcaoText || null);
       const existenteId = existentesByCpf.get(cpf);
       if (existenteId) {
         entries.push({
@@ -349,7 +397,7 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
             .prepare(
               `UPDATE funcionarios SET
                  nome = ?, cpf = ?, matricula = ?, email = ?, telefone = ?, nascimento = ?, admissao = ?,
-                 cargo = ?, funcao = ?, modelo_aeronave_id = ?, codigo_anac = ?, licenca = ?,
+                 cargo = ?, funcao = ?, funcao_id = ?, setor = ?, setor_id = ?, modelo_aeronave_id = ?, codigo_anac = ?, licenca = ?,
                  is_instrutor = ?, is_examinador = ?, ativo = ?, deleted_at = NULL,
                  updated_at = datetime('now')
                WHERE id = ? AND empresa_id = ?`,
@@ -362,8 +410,11 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
               row.Telefone || null,
               row.Nascimento || null,
               row['Admissão'] || null,
-              row.Cargo || null,
-              row['Função'] || null,
+              cargoNome,
+              funcaoNome,
+              funcaoId,
+              setorNome,
+              setorId,
               modeloAeronaveId,
               row['Código ANAC'] || null,
               row['Licença'] || null,
@@ -382,9 +433,9 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
             .prepare(
               `INSERT INTO funcionarios (
                  nome, cpf, matricula, email, telefone, nascimento, admissao,
-                 cargo, funcao, modelo_aeronave_id, codigo_anac, licenca,
+                 cargo, funcao, funcao_id, setor, setor_id, modelo_aeronave_id, codigo_anac, licenca,
                  is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
             )
             .bind(
               nome,
@@ -394,8 +445,11 @@ app.post('/funcionarios', auth(), requireRole('admin', 'manager'), async (c) => 
               row.Telefone || null,
               row.Nascimento || null,
               row['Admissão'] || null,
-              row.Cargo || null,
-              row['Função'] || null,
+              cargoNome,
+              funcaoNome,
+              funcaoId,
+              setorNome,
+              setorId,
               modeloAeronaveId,
               row['Código ANAC'] || null,
               row['Licença'] || null,
