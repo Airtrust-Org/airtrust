@@ -1,0 +1,8 @@
+{
+  "changeId": "simulator-annual-curriculum-cycles-0493",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0493_simulator_annual_curriculum_cycles.sql",
+  "fileHash": "933f4e471564b9f4516ca818e155e488fdbb59d2f502a9fe7784adbf7d2cebf8",
+  "planPath": "worker-airtrust/schema-v2/plans/simulator-annual-curriculum-cycles-0493.md",
+  "planHash": "5107fdd36229d749ea69c019da032019b80ed0a43241d0475fea716aecb1c510"
+}

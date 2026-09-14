@@ -25,6 +25,11 @@ import {
 import { loadPendingTrainingDependencyQualifications } from '../services/cae-planning-dependency-source';
 import { SIMULATOR_TRAINING_TIME_POLICY } from '../services/cae-planning-time-policy';
 import {
+  curriculumReferenceYear,
+  loadResolvedSimulatorCurriculum,
+  loadSimulatorCycleManagedQualificationIds,
+} from '../services/simulator-curriculum-cycles';
+import {
   buildRenewalSqlPredicates,
   hasHistoricoRenovacaoDeColumn,
 } from './qualificacoes/historico';
@@ -216,8 +221,8 @@ function chooseModelsForQualification(
   const identity = normalizeEquipment(
     `${qualification.qualificacao_codigo || ''} ${qualification.qualificacao_nome}`,
   );
-  const matched = [...groups.entries()].find(([equipment]) =>
-    equipment !== 'UNIVERSAL' && identity.includes(equipment),
+  const matched = [...groups.entries()].find(
+    ([equipment]) => equipment !== 'UNIVERSAL' && identity.includes(equipment),
   );
   if (matched) {
     return {
@@ -274,7 +279,17 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
   const access = await getEmployeeSectorAccess(c, empresaId);
   const scope = buildFuncionarioScopeWhere(access, 'f');
   const models = await loadModels(db, empresaId);
-  const qualificationTypeIds = [...new Set(models.map((model) => Number(model.qualificacao_tipo_id)))];
+  const cycleManagedQualificationIds = await loadSimulatorCycleManagedQualificationIds(
+    db,
+    empresaId,
+  );
+  const cycleManagedQualificationIdSet = new Set(cycleManagedQualificationIds);
+  const qualificationTypeIds = [
+    ...new Set([
+      ...models.map((model) => Number(model.qualificacao_tipo_id)),
+      ...cycleManagedQualificationIds,
+    ]),
+  ];
   const qualificationHistory = await loadQualifications({
     db,
     empresaId,
@@ -300,7 +315,8 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
   // obligation when a destination completion already occurred after its source.
   const dependencyKeys = new Set(
     dependencyQualifications.map(
-      (qualification) => `${Number(qualification.funcionario_id)}:${Number(qualification.qualificacao_tipo_id)}`,
+      (qualification) =>
+        `${Number(qualification.funcionario_id)}:${Number(qualification.qualificacao_tipo_id)}`,
     ),
   );
   const qualifications: QualificationRow[] = [
@@ -339,9 +355,50 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
 
   for (const qualification of qualifications) {
     const expiry = String(qualification.data_vencimento).slice(0, 10);
-    if (!isInsidePlanningHorizon({ reference_date: referencia, expiry_date: expiry, config })) continue;
-    const configuredModels =
-      modelsByQualification.get(Number(qualification.qualificacao_tipo_id)) || [];
+    if (!isInsidePlanningHorizon({ reference_date: referencia, expiry_date: expiry, config }))
+      continue;
+    const qualificationTypeId = Number(qualification.qualificacao_tipo_id);
+    let configuredModels = modelsByQualification.get(qualificationTypeId) || [];
+    let curriculumCycle: number | null = null;
+    let curriculumReferenceYearValue: number | null = null;
+
+    if (cycleManagedQualificationIdSet.has(qualificationTypeId)) {
+      curriculumReferenceYearValue = curriculumReferenceYear(expiry);
+      const resolved = curriculumReferenceYearValue
+        ? await loadResolvedSimulatorCurriculum({
+            db,
+            empresaId,
+            qualificationTypeId,
+            referenceYear: curriculumReferenceYearValue,
+          })
+        : null;
+      if (!resolved || resolved.unresolved_items > 0 || resolved.models.length === 0) {
+        exceptions.push({
+          type: 'CURRICULO_CICLO_NAO_CONFIGURADO',
+          employee_id: qualification.funcionario_id,
+          employee_name: qualification.funcionario_nome,
+          qualification_name: qualification.qualificacao_nome,
+          qualification_code: qualification.qualificacao_codigo,
+          expiry_date: expiry,
+          curriculum_cycle: resolved?.cycle ?? null,
+          curriculum_reference_year: curriculumReferenceYearValue,
+          unresolved_items: resolved?.unresolved_items ?? null,
+          planning_source: qualification.planning_source || 'QUALIFICATION_HISTORY',
+        });
+        continue;
+      }
+      curriculumCycle = resolved.cycle;
+      configuredModels = resolved.models.map((model) => ({
+        id: Number(model.id),
+        qualificacao_tipo_id: qualificationTypeId,
+        codigo: model.codigo_canonico || model.codigo,
+        nome: model.nome,
+        duracao_estimada: model.duracao_estimada,
+        ordem_no_treinamento: model.ordem_no_treinamento,
+        modelo_aeronave: model.modelo_aeronave,
+      }));
+    }
+
     if (configuredModels.length === 0) {
       exceptions.push({
         type: 'CURRICULO_NAO_CONFIGURADO',
@@ -389,7 +446,8 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
         Number(a.id) - Number(b.id),
     );
     const invalidDuration = ordered.some(
-      (model) => !Number.isFinite(Number(model.duracao_estimada)) || Number(model.duracao_estimada) <= 0,
+      (model) =>
+        !Number.isFinite(Number(model.duracao_estimada)) || Number(model.duracao_estimada) <= 0,
     );
     if (invalidDuration) {
       exceptions.push({
@@ -400,7 +458,11 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
         qualification_code: qualification.qualificacao_codigo,
         expiry_date: expiry,
         invalid_sessions: ordered
-          .filter((model) => !Number.isFinite(Number(model.duracao_estimada)) || Number(model.duracao_estimada) <= 0)
+          .filter(
+            (model) =>
+              !Number.isFinite(Number(model.duracao_estimada)) ||
+              Number(model.duracao_estimada) <= 0,
+          )
           .map((model) => ({ code: model.codigo, name: model.nome })),
         planning_source: qualification.planning_source || 'QUALIFICATION_HISTORY',
       });
@@ -420,6 +482,8 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
       remaining_source: remaining.source,
       planning_source: qualification.planning_source || 'QUALIFICATION_HISTORY',
       source_planning_id: qualification.source_planning_id ?? null,
+      curriculum_cycle: curriculumCycle,
+      curriculum_reference_year: curriculumReferenceYearValue,
       sessions: ordered.map((model, index) => ({
         model_id: Number(model.id),
         code: model.codigo,
@@ -452,7 +516,11 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
   }
 
   const employeeIds = [...new Set(sessionNeeds.map((need) => need.employee_id))];
-  const latestExpiry = sessionNeeds.map((need) => need.expiry_date).sort().at(-1) || referencia;
+  const latestExpiry =
+    sessionNeeds
+      .map((need) => need.expiry_date)
+      .sort()
+      .at(-1) || referencia;
   const rosterAllocations = await loadPublishedRosterAllocations({
     db,
     empresaId,
