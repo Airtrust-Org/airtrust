@@ -4,7 +4,11 @@ import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaId } from '../middleware/tenant';
 import type { Env } from '../types';
-import { CANCELLED_STATUS_VALUES, sqlStatusEqualsAny } from '../lib/status/status-codes';
+import {
+  CANCELLED_STATUS_VALUES,
+  PLANNED_QUALIFICATION_STATUS_VALUES,
+  sqlStatusEqualsAny,
+} from '../lib/status/status-codes';
 import { classificarStatusPorVencimento, diasEntreDatas } from '../lib/status/operational-status';
 import { extrairUsuarioAuditoria, registrarAuditoria } from '../utils/auditoria';
 import {
@@ -314,6 +318,7 @@ async function loadQualificationEvidence(
           WHERE ${empresaExpr}
             ${deletedExpr}
             AND NOT (${sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES)})
+            AND NOT (${sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES)})
        )
        SELECT id, funcionario_id, tipo_id, data_realizacao, data_vencimento
          FROM ranked WHERE rn = 1`,

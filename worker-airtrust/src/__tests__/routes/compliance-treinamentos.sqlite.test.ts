@@ -260,6 +260,28 @@ describe('training compliance engine', () => {
     expect(pilotoBody.data.nao_realizados).toBe(1);
   });
 
+  it('não trata qualificação planejada como evidência concluída', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at)
+      VALUES (1000, 100, 'MNT-12', 'MANUTENCAO', '2026-09-20', '2027-09-20',
+              'PLANEJADA', 0, 1, '2026-09-14', '2026-09-14');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request('/pessoas?status=NAO_REALIZADO');
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(body.data.map((person: any) => person.id)).toContain(1000);
+    expect(body.data.find((person: any) => person.id === 1000).nao_realizados).toBe(1);
+    expect(body.data.find((person: any) => person.id === 1000).conformes).toBe(0);
+  });
+
   it('usa a realização mais recente da qualificação, não o vencimento mais distante', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
