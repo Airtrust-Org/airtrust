@@ -494,22 +494,22 @@ export default function FichaFuncionarioPage() {
         }
 
         const fichaJson = await fichaRes.json();
-        const matrizRes = await fetchWithAuth(
-          `${API_BASE_URL}/matriz-treinamento/requisitos/${id}`,
+        const complianceRes = await fetchWithAuth(
+          `${API_BASE_URL}/compliance-treinamentos/funcionarios/${id}`,
         );
-        let matrizJson: { data?: MatrizRequisito[] } = {};
+        let complianceJson: { data?: { requisitos?: MatrizRequisito[] } } = {};
 
-        if (!matrizRes.ok) {
-          console.warn('[FichaFuncionarioPage] Falha ao carregar matriz de treinamento', {
+        if (!complianceRes.ok) {
+          console.warn('[FichaFuncionarioPage] Falha ao carregar compliance de treinamentos', {
             funcionarioId: id,
-            status: matrizRes.status,
+            status: complianceRes.status,
           });
         } else {
-          matrizJson = await matrizRes.json();
+          complianceJson = await complianceRes.json();
         }
 
         setFicha(fichaJson.data);
-        setRequisitosFuncao((matrizJson.data || []) as MatrizRequisito[]);
+        setRequisitosFuncao((complianceJson.data?.requisitos || []) as MatrizRequisito[]);
       } catch (err) {
         setError('Erro ao carregar dados do funcionário');
       } finally {

@@ -65,14 +65,16 @@ export default function AbaTreinamentos({
   funcionarioId: number | string;
 }) {
   const requisitosQuery = useQuery({
-    queryKey: ['matriz-treinamento', 'requisitos-funcionario', funcionarioId],
+    queryKey: ['training-compliance', 'employee-requirements', funcionarioId],
     enabled: Boolean(funcionarioId),
     queryFn: async (): Promise<RequisitoMatriz[]> => {
       const response = await fetchWithAuth(
-        `/api/matriz-treinamento/requisitos/${funcionarioId}?t=${Date.now()}`,
+        `/api/compliance-treinamentos/funcionarios/${funcionarioId}?t=${Date.now()}`,
       );
-      const json = (await response.json().catch(() => ({}))) as { data?: RequisitoMatriz[] };
-      return json.data || [];
+      const json = (await response.json().catch(() => ({}))) as {
+        data?: { requisitos?: RequisitoMatriz[] };
+      };
+      return json.data?.requisitos || [];
     },
   });
 

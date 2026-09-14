@@ -154,6 +154,43 @@ describe('training compliance engine', () => {
     );
   });
 
+  it('preserva a matriz legada por função enquanto o schema V2 ainda não foi aplicado', async () => {
+    sqlite.database.exec(`
+      DROP TABLE treinamento_requisitos;
+      CREATE TABLE matriz_treinamento_funcao (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        empresa_id INTEGER NOT NULL,
+        funcao_id INTEGER NOT NULL,
+        qualificacao_tipo_id INTEGER NOT NULL,
+        obrigatoriedade TEXT NOT NULL DEFAULT 'OBRIGATORIA',
+        nivel_requerido INTEGER,
+        critico_operacional INTEGER NOT NULL DEFAULT 0,
+        origem TEXT NOT NULL DEFAULT 'REGULATORIO',
+        observacoes TEXT,
+        ativo INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        deleted_at TEXT
+      );
+      INSERT INTO matriz_treinamento_funcao
+        (empresa_id, funcao_id, qualificacao_tipo_id, obrigatoriedade, origem)
+      VALUES (1, 1, 100, 'OBRIGATORIA', 'REGULATORIO');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request('/funcionarios/1000');
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(body.meta.schema_ready).toBe(false);
+    expect(body.data.configurado).toBe(true);
+    expect(body.data.total_obrigatorios).toBe(1);
+    expect(body.data.requisitos[0]).toMatchObject({
+      qualificacao_tipo_id: 100,
+      escopo: 'FUNCAO',
+      status_compliance: 'NAO_REALIZADO',
+    });
+  });
+
   it('distingue regra NAO_APLICA de ausencia de configuracao', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
