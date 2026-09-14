@@ -95,5 +95,50 @@ test('training compliance canonical staging flow is live and read-only', async (
   await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Cargo' })).toBeVisible();
 
+  const sectorsP = waitApi(page, '/api/compliance-treinamentos/setores');
+  await page.getByRole('button', { name: 'Setores', exact: true }).click();
+  const sectors = await sectorsP.then(payload);
+  expect(Array.isArray(sectors.data)).toBe(true);
+  if (sectors.data.length > 0) {
+    expect(Array.isArray(sectors.data[0].cargos)).toBe(true);
+    await expect(page.getByRole('columnheader', { name: 'Setor / cargo' })).toBeVisible();
+  }
+
+  const reconciliationP = waitApi(page, '/api/compliance-treinamentos/reconciliacao');
+  await page.getByRole('button', { name: 'Matrículas × Matriz', exact: true }).click();
+  const reconciliation = await reconciliationP.then(payload);
+  expect(Number.isInteger(reconciliation.data.resumo.matriculas_ativas)).toBe(true);
+  expect(Array.isArray(reconciliation.data.gaps_matricula)).toBe(true);
+  expect(Array.isArray(reconciliation.data.matriculas_revisao)).toBe(true);
+
+  await page.getByRole('button', { name: 'Configuração da matriz', exact: true }).click();
+  await expect(page.getByText('Matriz por organização', { exact: true })).toBeVisible();
+  const orgSector = page.getByLabel('Setor', { exact: true });
+  const sectorOptions = await orgSector
+    .locator('option')
+    .evaluateAll((options) =>
+      options.map((option) => (option as HTMLOptionElement).value).filter(Boolean),
+    );
+  if (sectorOptions.length > 0) {
+    const orgMatrixP = waitApi(
+      page,
+      '/api/compliance-treinamentos/matriz-organizacao',
+      (url) => url.searchParams.get('setor_id') === sectorOptions[0],
+    );
+    await orgSector.selectOption(sectorOptions[0]);
+    const orgMatrix = await orgMatrixP.then(payload);
+    expect(Array.isArray(orgMatrix.data)).toBe(true);
+    if (orgMatrix.data.length > 0) {
+      expect(Number.isInteger(orgMatrix.data[0].impacto?.pessoas)).toBe(true);
+      expect(Number.isInteger(orgMatrix.data[0].impacto?.atingidas_neste_nivel)).toBe(true);
+      expect(orgMatrix.data[0].impacto.atingidas_neste_nivel).toBeLessThanOrEqual(
+        orgMatrix.data[0].impacto.pessoas,
+      );
+      await expect(
+        page.getByRole('columnheader', { name: 'Impacto antes de salvar' }),
+      ).toBeVisible();
+    }
+  }
+
   guard.assertClean();
 });

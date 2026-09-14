@@ -39,6 +39,9 @@ function assertSummary(data: any) {
   for (const key of [
     'pessoas',
     'pessoas_sem_configuracao',
+    'setores_sem_matriz',
+    'cargos_sem_matriz',
+    'matriculas_sem_requisito',
     'requisitos_obrigatorios',
     'conformes',
     'vencendo',
@@ -108,6 +111,7 @@ test('production training compliance UI and APIs are coherent and read-only', as
     trainingsP.then(payload),
   ]);
   expect(capabilities.data.schema_ready).toBe(true);
+  expect(capabilities.data.reconciliation_ready).toBe(true);
   expect(capabilities.data.scopes).toEqual(
     expect.arrayContaining(['EMPRESA', 'SETOR', 'FUNCAO', 'SETOR_FUNCAO', 'FUNCIONARIO']),
   );
@@ -183,7 +187,60 @@ test('production training compliance UI and APIs are coherent and read-only', as
     await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
   }
 
+  const sectorsP = waitApi(page, '/api/compliance-treinamentos/setores');
+  await page.getByRole('button', { name: 'Setores', exact: true }).click();
+  const sectors = await sectorsP.then(payload);
+  expect(Array.isArray(sectors.data)).toBe(true);
+  for (const sector of sectors.data) {
+    expectCount(sector.pessoas, 'sector.pessoas');
+    expectCount(sector.requisitos_obrigatorios, 'sector.requisitos_obrigatorios');
+    expect(Array.isArray(sector.cargos)).toBe(true);
+  }
+
+  const reconciliationP = waitApi(page, '/api/compliance-treinamentos/reconciliacao');
+  await page.getByRole('button', { name: 'Matrículas × Matriz', exact: true }).click();
+  const reconciliation = await reconciliationP.then(payload);
+  for (const key of [
+    'matriculas_ativas',
+    'matriculas_alinhadas',
+    'gaps_matricula_acionaveis',
+    'matriculados_sem_requisito',
+    'nao_aplica_matriculados',
+  ])
+    expectCount(reconciliation.data.resumo[key], `reconciliation.${key}`);
+  expect(Array.isArray(reconciliation.data.gaps_matricula)).toBe(true);
+  expect(Array.isArray(reconciliation.data.matriculas_revisao)).toBe(true);
+
   await page.getByRole('button', { name: 'Configuração da matriz', exact: true }).click();
+  await expect(page.getByText('Matriz por organização', { exact: true })).toBeVisible();
+  const orgSector = page.getByLabel('Setor', { exact: true });
+  const orgSectorIds = await orgSector
+    .locator('option')
+    .evaluateAll((options) =>
+      options.map((option) => (option as HTMLOptionElement).value).filter(Boolean),
+    );
+  if (orgSectorIds.length > 0) {
+    const orgMatrixP = waitApi(
+      page,
+      '/api/compliance-treinamentos/matriz-organizacao',
+      (url) => url.searchParams.get('setor_id') === orgSectorIds[0],
+    );
+    await orgSector.selectOption(orgSectorIds[0]);
+    const orgMatrix = await orgMatrixP.then(payload);
+    expect(Array.isArray(orgMatrix.data)).toBe(true);
+    if (orgMatrix.data.length > 0) {
+      expect(Number.isInteger(orgMatrix.data[0].impacto?.pessoas)).toBe(true);
+      expect(Number.isInteger(orgMatrix.data[0].impacto?.atingidas_neste_nivel)).toBe(true);
+      expect(orgMatrix.data[0].impacto.atingidas_neste_nivel).toBeLessThanOrEqual(
+        orgMatrix.data[0].impacto.pessoas,
+      );
+      await expect(
+        page.getByRole('columnheader', { name: 'Impacto antes de salvar' }),
+      ).toBeVisible();
+    }
+  }
+
+  await page.getByRole('button', { name: 'Por treinamento', exact: true }).click();
   const trainingSelector = page
     .getByText('Treinamento / modelo de qualificação', { exact: true })
     .locator('..')

@@ -534,6 +534,119 @@ async function buildSnapshot(db: D1Database, empresaId: number, access: Employee
   return { employees, rules, people };
 }
 
+type LmsEnrollment = {
+  id: number;
+  funcionario_id: number;
+  curso_id: number;
+  curso_titulo: string;
+  qualificacao_tipo_id: number | null;
+  qualificacao_tipo_nome: string | null;
+  qualificacao_tipo_codigo: string | null;
+  funcionario_nome: string;
+  status: string;
+  setor_id: number | null;
+  setor_nome: string | null;
+  funcao_id: number | null;
+  funcao_nome: string | null;
+};
+
+type ReconciliationDecision = {
+  matricula_id: number;
+  decisao: 'MANTER_AVULSA';
+  observacoes: string | null;
+  updated_at: string;
+};
+
+async function loadLmsEnrollments(db: D1Database, empresaId: number): Promise<LmsEnrollment[]> {
+  if (!(await tableExists(db, 'lms_matriculas')) || !(await tableExists(db, 'lms_cursos')))
+    return [];
+  const funcionarioCols = await columnSet(db, 'funcionarios');
+  const activeExpr = funcionarioCols.has('ativo') ? 'AND COALESCE(f.ativo, 1) = 1' : '';
+  const statusExpr = funcionarioCols.has('status')
+    ? "AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'"
+    : '';
+  const deletedFuncionario = funcionarioCols.has('deleted_at') ? 'AND f.deleted_at IS NULL' : '';
+  const { results } = await db
+    .prepare(
+      `SELECT m.id, m.funcionario_id, m.curso_id, c.titulo AS curso_titulo,
+              c.qualificacao_tipo_id, qt.nome AS qualificacao_tipo_nome, qt.codigo AS qualificacao_tipo_codigo,
+              f.nome AS funcionario_nome, m.status,
+              f.setor_id, s.nome AS setor_nome, f.funcao_id, fn.nome AS funcao_nome
+         FROM lms_matriculas m
+         JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id AND c.deleted_at IS NULL
+         LEFT JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id AND qt.deleted_at IS NULL
+         JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id
+         LEFT JOIN setores s ON s.id=f.setor_id AND s.empresa_id=f.empresa_id AND s.deleted_at IS NULL
+         LEFT JOIN funcoes fn ON fn.id=f.funcao_id AND fn.empresa_id=f.empresa_id AND fn.deleted_at IS NULL
+        WHERE m.empresa_id=? AND m.deleted_at IS NULL
+          AND UPPER(COALESCE(m.status,'')) <> 'CANCELADO'
+          ${deletedFuncionario} ${activeExpr} ${statusExpr}
+        ORDER BY c.titulo, f.nome, m.id`,
+    )
+    .bind(empresaId)
+    .all<LmsEnrollment>();
+  return results || [];
+}
+
+async function loadReconciliationDecisions(
+  db: D1Database,
+  empresaId: number,
+): Promise<Map<number, ReconciliationDecision>> {
+  const map = new Map<number, ReconciliationDecision>();
+  if (!(await tableExists(db, 'treinamento_matricula_reconciliacoes'))) return map;
+  const { results } = await db
+    .prepare(
+      `SELECT matricula_id, decisao, observacoes, updated_at
+         FROM treinamento_matricula_reconciliacoes
+        WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL`,
+    )
+    .bind(empresaId)
+    .all<ReconciliationDecision>();
+  for (const row of results || []) map.set(Number(row.matricula_id), row);
+  return map;
+}
+
+async function loadActiveLmsCourses(db: D1Database, empresaId: number) {
+  if (!(await tableExists(db, 'lms_cursos')))
+    return [] as Array<{ id: number; titulo: string; qualificacao_tipo_id: number }>;
+  const cols = await columnSet(db, 'lms_cursos');
+  const ativoExpr = cols.has('ativo') ? 'AND COALESCE(ativo,1)=1' : '';
+  const deletedExpr = cols.has('deleted_at') ? 'AND deleted_at IS NULL' : '';
+  const { results } = await db
+    .prepare(
+      `SELECT id,titulo,qualificacao_tipo_id FROM lms_cursos
+        WHERE empresa_id=? AND qualificacao_tipo_id IS NOT NULL ${ativoExpr} ${deletedExpr}
+        ORDER BY titulo`,
+    )
+    .bind(empresaId)
+    .all<{ id: number; titulo: string; qualificacao_tipo_id: number }>();
+  return results || [];
+}
+
+function orgRuleApplies(rule: Rule, setorId: number, funcaoId: number | null): boolean {
+  if (rule.escopo === 'FUNCIONARIO') return false;
+  if (rule.escopo === 'EMPRESA') return true;
+  if (rule.escopo === 'SETOR') return rule.setor_id === setorId;
+  if (rule.escopo === 'FUNCAO') return Boolean(funcaoId && rule.funcao_id === funcaoId);
+  return Boolean(funcaoId && rule.setor_id === setorId && rule.funcao_id === funcaoId);
+}
+
+function aggregateCompliancePeople(people: Awaited<ReturnType<typeof buildSnapshot>>['people']) {
+  const total = people.reduce((sum, p) => sum + p.total_obrigatorios, 0);
+  const conformes = people.reduce((sum, p) => sum + p.conformes, 0);
+  return {
+    pessoas: people.length,
+    pessoas_sem_configuracao: people.filter((p) => !p.configurado).length,
+    requisitos_obrigatorios: total,
+    conformes,
+    vencendo: people.reduce((sum, p) => sum + p.vencendo, 0),
+    vencidos: people.reduce((sum, p) => sum + p.vencidos, 0),
+    nao_realizados: people.reduce((sum, p) => sum + p.nao_realizados, 0),
+    em_andamento: people.reduce((sum, p) => sum + p.em_andamento, 0),
+    compliance_pct: total > 0 ? Math.round((conformes / total) * 1000) / 10 : null,
+  };
+}
+
 async function validateRuleReferences(
   db: D1Database,
   empresaId: number,
@@ -578,6 +691,21 @@ async function validateRuleReferences(
       .bind(funcaoId, empresaId)
       .first();
     if (!funcao) throw new ApiError('Função inválida para a empresa atual', 400);
+  }
+  if (
+    escopo === 'SETOR_FUNCAO' &&
+    setorId &&
+    funcaoId &&
+    (await tableExists(db, 'setores_funcoes'))
+  ) {
+    const pair = await db
+      .prepare(
+        `SELECT 1 AS ok FROM setores_funcoes
+          WHERE empresa_id=? AND setor_id=? AND funcao_id=? AND ativo=1 AND deleted_at IS NULL LIMIT 1`,
+      )
+      .bind(empresaId, setorId, funcaoId)
+      .first<{ ok: number }>();
+    if (!pair) throw new ApiError('Cargo/função não pertence ao setor selecionado', 400);
   }
   if (funcionarioId) {
     const funcionario = await db
@@ -649,6 +777,7 @@ app.get('/capabilities', async (c) => {
     success: true,
     data: {
       schema_ready: schemaReady,
+      reconciliation_ready: await tableExists(db, 'treinamento_matricula_reconciliacoes'),
       scopes: SCOPES,
       obrigatoriedades: OBRIGATORIEDADES,
       origens: ORIGENS,
@@ -1042,6 +1171,449 @@ app.get('/treinamentos', requireRole('admin', 'manager'), async (c) => {
   return c.json({ success: true, data });
 });
 
+app.get('/setores', requireRole('admin', 'manager'), async (c) => {
+  const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
+  const requestedSetorId = asPositiveInt(c.req.query('setor_id'));
+  const people = snapshot.people.filter(
+    (person) => !requestedSetorId || person.setor_id === requestedSetorId,
+  );
+  const sectors = new Map<
+    number | null,
+    { setor_id: number | null; setor_nome: string; people: typeof people }
+  >();
+  for (const person of people) {
+    const key = person.setor_id;
+    const current = sectors.get(key) || {
+      setor_id: key,
+      setor_nome: person.setor_nome || 'Sem setor',
+      people: [],
+    };
+    current.people.push(person);
+    sectors.set(key, current);
+  }
+  const data = Array.from(sectors.values())
+    .map((sector) => {
+      const cargos = new Map<
+        number | null,
+        { funcao_id: number | null; funcao_nome: string; people: typeof people }
+      >();
+      for (const person of sector.people) {
+        const key = person.funcao_id;
+        const current = cargos.get(key) || {
+          funcao_id: key,
+          funcao_nome: person.funcao_nome || 'Sem cargo',
+          people: [],
+        };
+        current.people.push(person);
+        cargos.set(key, current);
+      }
+      return {
+        setor_id: sector.setor_id,
+        setor_nome: sector.setor_nome,
+        ...aggregateCompliancePeople(sector.people),
+        cargos: Array.from(cargos.values())
+          .map((cargo) => ({
+            funcao_id: cargo.funcao_id,
+            funcao_nome: cargo.funcao_nome,
+            ...aggregateCompliancePeople(cargo.people),
+          }))
+          .sort((a, b) => a.funcao_nome.localeCompare(b.funcao_nome, 'pt-BR')),
+      };
+    })
+    .sort((a, b) => a.setor_nome.localeCompare(b.setor_nome, 'pt-BR'));
+  return c.json({ success: true, data });
+});
+
+app.get('/matriz-organizacao', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const setorId = asPositiveInt(c.req.query('setor_id'));
+  const funcaoId = asPositiveInt(c.req.query('funcao_id'));
+  if (!setorId) throw new ApiError('setor_id é obrigatório', 400);
+  if (access.mode !== 'all' && !filterRequestedSetorIdsByAccess([setorId], access).length) {
+    throw new ApiError('Setor fora do escopo do gestor', 403);
+  }
+  if (funcaoId && (await tableExists(db, 'setores_funcoes'))) {
+    const pair = await db
+      .prepare(
+        `SELECT 1 AS ok FROM setores_funcoes
+          WHERE empresa_id=? AND setor_id=? AND funcao_id=? AND ativo=1 AND deleted_at IS NULL LIMIT 1`,
+      )
+      .bind(empresaId, setorId, funcaoId)
+      .first<{ ok: number }>();
+    if (!pair) throw new ApiError('Cargo/função não pertence ao setor selecionado', 400);
+  }
+  const tipoCols = await columnSet(db, 'qualificacoes_tipos');
+  const tipoAtivoExpr = tipoCols.has('ativo') ? 'AND COALESCE(ativo,1)=1' : '';
+  const tipoDeletedExpr = tipoCols.has('deleted_at') ? 'AND deleted_at IS NULL' : '';
+  const [rules, tiposResult, allEmployees, historyMap, lmsMap] = await Promise.all([
+    loadRules(db, empresaId),
+    db
+      .prepare(
+        `SELECT id,codigo,nome FROM qualificacoes_tipos
+          WHERE empresa_id=? ${tipoDeletedExpr} ${tipoAtivoExpr}
+          ORDER BY nome`,
+      )
+      .bind(empresaId)
+      .all<{ id: number; codigo: string | null; nome: string }>(),
+    loadEmployees(db, empresaId),
+    loadQualificationEvidence(db, empresaId),
+    loadLmsEvidence(db, empresaId),
+  ]);
+  const selectedEmployees = filterEmployeesByAccess(allEmployees, access).filter(
+    (employee) => employee.setor_id === setorId && (!funcaoId || employee.funcao_id === funcaoId),
+  );
+  const directScope: Scope = funcaoId ? 'SETOR_FUNCAO' : 'SETOR';
+  const data = (tiposResult.results || []).map((tipo) => {
+    const candidates = rules
+      .filter(
+        (rule) =>
+          rule.qualificacao_tipo_id === Number(tipo.id) && orgRuleApplies(rule, setorId, funcaoId),
+      )
+      .sort((a, b) => specificity(b.escopo) - specificity(a.escopo) || b.id - a.id);
+    const effective = candidates[0] || null;
+    const direct =
+      rules.find(
+        (rule) =>
+          rule.qualificacao_tipo_id === Number(tipo.id) &&
+          rule.escopo === directScope &&
+          rule.setor_id === setorId &&
+          (directScope === 'SETOR' || rule.funcao_id === funcaoId),
+      ) || null;
+    const preview = selectedEmployees.map((employee) => {
+      const employeeEffective = rules
+        .filter(
+          (rule) => rule.qualificacao_tipo_id === Number(tipo.id) && ruleApplies(rule, employee),
+        )
+        .sort((a, b) => specificity(b.escopo) - specificity(a.escopo) || b.id - a.id)[0];
+      const requirement =
+        employeeEffective && employeeEffective.obrigatoriedade !== 'NAO_APLICA'
+          ? computeRequirement(
+              employeeEffective,
+              historyMap.get(`${employee.id}:${tipo.id}`),
+              lmsMap.get(`${employee.id}:${tipo.id}`),
+            )
+          : null;
+      return {
+        employee,
+        effective: employeeEffective || null,
+        requirement,
+        overriddenByMoreSpecific: Boolean(
+          employeeEffective && specificity(employeeEffective.escopo) > specificity(directScope),
+        ),
+      };
+    });
+    const impact = {
+      pessoas: selectedEmployees.length,
+      atingidas_neste_nivel: preview.filter((item) => !item.overriddenByMoreSpecific).length,
+      override_mais_especifico: preview.filter((item) => item.overriddenByMoreSpecific).length,
+      com_requisito: preview.filter((item) => item.requirement !== null).length,
+      sem_requisito: preview.filter((item) => item.requirement === null).length,
+      conformes: preview.filter((item) => item.requirement?.status_compliance === 'CONFORME')
+        .length,
+      vencendo: preview.filter((item) => item.requirement?.status_compliance === 'VENCENDO').length,
+      vencidos: preview.filter((item) => item.requirement?.status_compliance === 'VENCIDO').length,
+      nunca_realizados: preview.filter(
+        (item) => item.requirement?.status_compliance === 'NAO_REALIZADO',
+      ).length,
+      em_andamento: preview.filter((item) => item.requirement?.status_compliance === 'EM_ANDAMENTO')
+        .length,
+      matriculados: selectedEmployees.filter((employee) =>
+        Boolean(lmsMap.get(`${employee.id}:${tipo.id}`)?.latest),
+      ).length,
+      sem_matricula: selectedEmployees.filter(
+        (employee) => !lmsMap.get(`${employee.id}:${tipo.id}`)?.latest,
+      ).length,
+    };
+    return {
+      qualificacao_tipo_id: Number(tipo.id),
+      qualificacao_tipo_codigo: tipo.codigo,
+      qualificacao_tipo_nome: tipo.nome,
+      impacto: impact,
+      efetiva: effective
+        ? { id: effective.id, escopo: effective.escopo, obrigatoriedade: effective.obrigatoriedade }
+        : null,
+      direta: direct
+        ? { id: direct.id, escopo: direct.escopo, obrigatoriedade: direct.obrigatoriedade }
+        : null,
+    };
+  });
+  return c.json({ success: true, data, meta: { escopo_direto: directScope } });
+});
+
+app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const setorId = asPositiveInt(c.req.query('setor_id'));
+  const funcaoId = asPositiveInt(c.req.query('funcao_id'));
+  const snapshot = await buildSnapshot(db, empresaId, access);
+  const people = snapshot.people.filter(
+    (person) =>
+      (!setorId || person.setor_id === setorId) && (!funcaoId || person.funcao_id === funcaoId),
+  );
+  const peopleById = new Map(people.map((person) => [person.id, person]));
+  const allowedIds = new Set(people.map((person) => person.id));
+  const [allEnrollments, decisions, courses] = await Promise.all([
+    loadLmsEnrollments(db, empresaId),
+    loadReconciliationDecisions(db, empresaId),
+    loadActiveLmsCourses(db, empresaId),
+  ]);
+  const enrollments = allEnrollments.filter((row) => allowedIds.has(Number(row.funcionario_id)));
+  const enrollmentKeys = new Set(
+    enrollments
+      .filter((row) => row.qualificacao_tipo_id !== null)
+      .map((row) => `${row.funcionario_id}:${row.qualificacao_tipo_id}`),
+  );
+  const courseByType = new Map<number, Array<{ id: number; titulo: string }>>();
+  for (const course of courses) {
+    const key = Number(course.qualificacao_tipo_id);
+    const current = courseByType.get(key) || [];
+    current.push({ id: Number(course.id), titulo: course.titulo });
+    courseByType.set(key, current);
+  }
+  const gaps = new Map<
+    number,
+    {
+      qualificacao_tipo_id: number;
+      qualificacao_tipo_nome: string | null;
+      qualificacao_tipo_codigo: string | null;
+      funcionarios: Array<{ id: number; nome: string; status_compliance: ComplianceStatus }>;
+    }
+  >();
+  let requisitosSemMatricula = 0;
+  for (const person of people) {
+    for (const req of person.requisitos.filter((item) => item.obrigatoriedade === 'OBRIGATORIA')) {
+      const key = `${person.id}:${req.qualificacao_tipo_id}`;
+      if (enrollmentKeys.has(key)) continue;
+      requisitosSemMatricula += 1;
+      if (!['NAO_REALIZADO', 'VENCIDO', 'VENCENDO'].includes(req.status_compliance)) continue;
+      const current = gaps.get(req.qualificacao_tipo_id) || {
+        qualificacao_tipo_id: req.qualificacao_tipo_id,
+        qualificacao_tipo_nome: req.qualificacao_tipo_nome,
+        qualificacao_tipo_codigo: req.qualificacao_tipo_codigo,
+        funcionarios: [],
+      };
+      current.funcionarios.push({
+        id: person.id,
+        nome: person.nome,
+        status_compliance: req.status_compliance,
+      });
+      gaps.set(req.qualificacao_tipo_id, current);
+    }
+  }
+  const matriculasRevisao = [] as Array<Record<string, unknown>>;
+  let alinhadas = 0;
+  let avulsasReconciliadas = 0;
+  for (const enrollment of enrollments) {
+    const employee = peopleById.get(Number(enrollment.funcionario_id));
+    if (!employee) continue;
+    const effective = enrollment.qualificacao_tipo_id
+      ? resolvedRules(snapshot.rules, employee).find(
+          (rule) => rule.qualificacao_tipo_id === Number(enrollment.qualificacao_tipo_id),
+        )
+      : undefined;
+    let situacao:
+      | 'MATRICULA_COM_REQUISITO'
+      | 'MATRICULADO_SEM_REQUISITO'
+      | 'NAO_APLICA_MATRICULADO'
+      | 'CURSO_SEM_MODELO'
+      | 'MATRICULA_AVULSA_RECONCILIADA';
+    if (!enrollment.qualificacao_tipo_id) situacao = 'CURSO_SEM_MODELO';
+    else if (effective?.obrigatoriedade === 'NAO_APLICA') situacao = 'NAO_APLICA_MATRICULADO';
+    else if (effective) situacao = 'MATRICULA_COM_REQUISITO';
+    else if (decisions.get(Number(enrollment.id))?.decisao === 'MANTER_AVULSA') {
+      situacao = 'MATRICULA_AVULSA_RECONCILIADA';
+    } else situacao = 'MATRICULADO_SEM_REQUISITO';
+    if (situacao === 'MATRICULA_COM_REQUISITO') {
+      alinhadas += 1;
+      continue;
+    }
+    if (situacao === 'MATRICULA_AVULSA_RECONCILIADA') avulsasReconciliadas += 1;
+    matriculasRevisao.push({
+      matricula_id: Number(enrollment.id),
+      funcionario_id: Number(enrollment.funcionario_id),
+      funcionario_nome: enrollment.funcionario_nome,
+      setor_id: enrollment.setor_id,
+      setor_nome: enrollment.setor_nome,
+      funcao_id: enrollment.funcao_id,
+      funcao_nome: enrollment.funcao_nome,
+      curso_id: Number(enrollment.curso_id),
+      curso_titulo: enrollment.curso_titulo,
+      qualificacao_tipo_id: enrollment.qualificacao_tipo_id,
+      qualificacao_tipo_nome: enrollment.qualificacao_tipo_nome,
+      qualificacao_tipo_codigo: enrollment.qualificacao_tipo_codigo,
+      matricula_status: enrollment.status,
+      situacao,
+      regra_efetiva: effective
+        ? { id: effective.id, escopo: effective.escopo, obrigatoriedade: effective.obrigatoriedade }
+        : null,
+      decisao: decisions.get(Number(enrollment.id)) || null,
+    });
+  }
+  const gapsMatricula = Array.from(gaps.values())
+    .map((gap) => ({
+      ...gap,
+      pessoas: gap.funcionarios.length,
+      vencendo: gap.funcionarios.filter((p) => p.status_compliance === 'VENCENDO').length,
+      vencidos: gap.funcionarios.filter((p) => p.status_compliance === 'VENCIDO').length,
+      nunca_realizados: gap.funcionarios.filter((p) => p.status_compliance === 'NAO_REALIZADO')
+        .length,
+      cursos_ead: courseByType.get(gap.qualificacao_tipo_id) || [],
+    }))
+    .sort((a, b) =>
+      String(a.qualificacao_tipo_nome || '').localeCompare(
+        String(b.qualificacao_tipo_nome || ''),
+        'pt-BR',
+      ),
+    );
+  const summary = {
+    matriculas_ativas: enrollments.length,
+    matriculas_alinhadas: alinhadas,
+    requisitos_sem_matricula: requisitosSemMatricula,
+    gaps_matricula_acionaveis: gapsMatricula.reduce((sum, item) => sum + item.pessoas, 0),
+    matriculados_sem_requisito: matriculasRevisao.filter(
+      (r) => r.situacao === 'MATRICULADO_SEM_REQUISITO',
+    ).length,
+    nao_aplica_matriculados: matriculasRevisao.filter(
+      (r) => r.situacao === 'NAO_APLICA_MATRICULADO',
+    ).length,
+    cursos_sem_modelo: matriculasRevisao.filter((r) => r.situacao === 'CURSO_SEM_MODELO').length,
+    matriculas_avulsas_reconciliadas: avulsasReconciliadas,
+  };
+  return c.json({
+    success: true,
+    data: { resumo: summary, gaps_matricula: gapsMatricula, matriculas_revisao: matriculasRevisao },
+    meta: { reconciliation_ready: await tableExists(db, 'treinamento_matricula_reconciliacoes') },
+  });
+});
+
+app.post('/reconciliacao/:matriculaId/decisao', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  if (!(await tableExists(db, 'treinamento_matricula_reconciliacoes'))) {
+    throw new ApiError('Schema de reconciliação de matrículas ainda não aplicado', 409);
+  }
+  const matriculaId = asPositiveInt(c.req.param('matriculaId'));
+  if (!matriculaId) throw new ApiError('Matrícula inválida', 400);
+  const enrollment = await db
+    .prepare(
+      `SELECT id,funcionario_id FROM lms_matriculas
+        WHERE id=? AND empresa_id=? AND deleted_at IS NULL AND UPPER(COALESCE(status,''))<>'CANCELADO'`,
+    )
+    .bind(matriculaId, empresaId)
+    .first<{ id: number; funcionario_id: number }>();
+  if (!enrollment) throw new ApiError('Matrícula não encontrada', 404);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  await assertFuncionarioInScope(db, empresaId, Number(enrollment.funcionario_id), access);
+  const payload = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const decisao = String(payload.decisao || '')
+    .trim()
+    .toUpperCase();
+  if (decisao !== 'MANTER_AVULSA') throw new ApiError('Decisão de reconciliação inválida', 400);
+  const observacoes = payload.observacoes
+    ? String(payload.observacoes).trim().slice(0, 1000)
+    : null;
+  const existing = await db
+    .prepare(
+      `SELECT id FROM treinamento_matricula_reconciliacoes
+        WHERE empresa_id=? AND matricula_id=? AND ativo=1 AND deleted_at IS NULL LIMIT 1`,
+    )
+    .bind(empresaId, matriculaId)
+    .first<{ id: number }>();
+  const userIdRaw = c.get('userId' as never) as unknown;
+  const userId = Number(userIdRaw);
+  let id: number;
+  if (existing) {
+    id = Number(existing.id);
+    await db
+      .prepare(
+        `UPDATE treinamento_matricula_reconciliacoes
+            SET decisao='MANTER_AVULSA',observacoes=?,decidido_por=?,updated_at=datetime('now')
+          WHERE id=? AND empresa_id=?`,
+      )
+      .bind(observacoes, Number.isInteger(userId) && userId > 0 ? userId : null, id, empresaId)
+      .run();
+  } else {
+    const result = await db
+      .prepare(
+        `INSERT INTO treinamento_matricula_reconciliacoes
+          (empresa_id,matricula_id,decisao,observacoes,decidido_por)
+         VALUES (?,?,'MANTER_AVULSA',?,?)`,
+      )
+      .bind(
+        empresaId,
+        matriculaId,
+        observacoes,
+        Number.isInteger(userId) && userId > 0 ? userId : null,
+      )
+      .run();
+    id = Number(result.meta.last_row_id);
+  }
+  await registrarAuditoria({
+    db,
+    tabela: 'treinamento_matricula_reconciliacoes',
+    acao: existing ? 'UPDATE' : 'INSERT',
+    registro_id: id,
+    dados_novos: {
+      empresa_id: empresaId,
+      matricula_id: matriculaId,
+      decisao: 'MANTER_AVULSA',
+      observacoes,
+    },
+    ...extrairUsuarioAuditoria(c),
+  });
+  return c.json({
+    success: true,
+    data: { id, matricula_id: matriculaId, decisao: 'MANTER_AVULSA' },
+  });
+});
+
+app.delete('/reconciliacao/:matriculaId/decisao', requireRole('admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const matriculaId = asPositiveInt(c.req.param('matriculaId'));
+  if (!matriculaId) throw new ApiError('Matrícula inválida', 400);
+  if (!(await tableExists(db, 'treinamento_matricula_reconciliacoes')))
+    return c.json({ success: true });
+  const enrollment = await db
+    .prepare('SELECT funcionario_id FROM lms_matriculas WHERE id=? AND empresa_id=? LIMIT 1')
+    .bind(matriculaId, empresaId)
+    .first<{ funcionario_id: number }>();
+  if (!enrollment) throw new ApiError('Matrícula não encontrada', 404);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  await assertFuncionarioInScope(db, empresaId, Number(enrollment.funcionario_id), access);
+  const existing = await db
+    .prepare(
+      `SELECT id,decisao,observacoes FROM treinamento_matricula_reconciliacoes
+        WHERE empresa_id=? AND matricula_id=? AND ativo=1 AND deleted_at IS NULL LIMIT 1`,
+    )
+    .bind(empresaId, matriculaId)
+    .first<Record<string, unknown>>();
+  if (existing) {
+    await db
+      .prepare(
+        `UPDATE treinamento_matricula_reconciliacoes
+            SET ativo=0,deleted_at=datetime('now'),updated_at=datetime('now')
+          WHERE id=? AND empresa_id=?`,
+      )
+      .bind(Number(existing.id), empresaId)
+      .run();
+    await registrarAuditoria({
+      db,
+      tabela: 'treinamento_matricula_reconciliacoes',
+      acao: 'DELETE',
+      registro_id: Number(existing.id),
+      dados_anteriores: existing,
+      ...extrairUsuarioAuditoria(c),
+    });
+  }
+  return c.json({ success: true });
+});
+
 app.get('/resumo', requireRole('admin', 'manager'), async (c) => {
   const empresaId = getEmpresaId(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
@@ -1086,11 +1658,45 @@ app.get('/resumo', requireRole('admin', 'manager'), async (c) => {
       compliance_pct: s.total > 0 ? Math.round((s.conformes / s.total) * 1000) / 10 : null,
     }))
     .sort((a, b) => a.setor_nome.localeCompare(b.setor_nome, 'pt-BR'));
+  const setoresSemMatriz = setores.filter(
+    (setor) => setor.pessoas > 0 && setor.pessoas_sem_configuracao === setor.pessoas,
+  ).length;
+  const byRole = new Map<string, { pessoas: number; sem: number }>();
+  for (const person of people) {
+    const key = `${person.setor_id ?? 0}:${person.funcao_id ?? 0}`;
+    const current = byRole.get(key) || { pessoas: 0, sem: 0 };
+    current.pessoas += 1;
+    if (!person.configurado) current.sem += 1;
+    byRole.set(key, current);
+  }
+  const cargosSemMatriz = Array.from(byRole.values()).filter(
+    (cargo) => cargo.pessoas > 0 && cargo.sem === cargo.pessoas,
+  ).length;
+  let matriculasSemRequisito = 0;
+  if (await tableExists(c.env.DB, 'lms_matriculas')) {
+    const [enrollments, decisions] = await Promise.all([
+      loadLmsEnrollments(c.env.DB, empresaId),
+      loadReconciliationDecisions(c.env.DB, empresaId),
+    ]);
+    const peopleById = new Map(people.map((person) => [person.id, person]));
+    for (const enrollment of enrollments) {
+      const employee = peopleById.get(Number(enrollment.funcionario_id));
+      if (!employee || !enrollment.qualificacao_tipo_id) continue;
+      const effective = resolvedRules(snapshot.rules, employee).find(
+        (rule) => rule.qualificacao_tipo_id === Number(enrollment.qualificacao_tipo_id),
+      );
+      if (!effective && decisions.get(Number(enrollment.id))?.decisao !== 'MANTER_AVULSA')
+        matriculasSemRequisito += 1;
+    }
+  }
   return c.json({
     success: true,
     data: {
       pessoas: people.length,
       pessoas_sem_configuracao: people.filter((p) => !p.configurado).length,
+      setores_sem_matriz: setoresSemMatriz,
+      cargos_sem_matriz: cargosSemMatriz,
+      matriculas_sem_requisito: matriculasSemRequisito,
       requisitos_obrigatorios: totalObrigatorios,
       conformes,
       vencendo: people.reduce((sum, p) => sum + p.vencendo, 0),

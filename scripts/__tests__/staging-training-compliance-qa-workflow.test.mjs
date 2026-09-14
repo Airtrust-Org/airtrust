@@ -31,3 +31,11 @@ test('browser QA stays read-only and proves never-realized compliance', () => {
   assert.match(spec, /guard\.assertClean\(\)/);
   assert.doesNotMatch(spec, /request\.(post|put|patch|delete)/i);
 });
+
+test('organizational and enrollment reconciliation schemas are validated before browser QA', () => {
+  assert.match(workflow, /validate-0491-postconditions\.sh/);
+  assert.match(workflow, /validate-0492-postconditions\.sh/);
+  assert.match(workflow, /validate-0494-postconditions\.sh/);
+  assert.match(spec, /matriz-organizacao/);
+  assert.match(spec, /reconciliacao/);
+});

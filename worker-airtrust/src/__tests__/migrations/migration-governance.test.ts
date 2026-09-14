@@ -107,7 +107,8 @@ describe('migration governance', () => {
     // 0491 adds the canonical training-compliance requirements matrix.
     // 0492 normalizes the canonical sector/function organization.
     // 0493 adds annual simulator curriculum cycles with a 2026=C2 rotation base.
-    const expectedLatest = 493;
+    // 0494 adds tenant-scoped LMS enrollment reconciliation acknowledgements.
+    const expectedLatest = 494;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
