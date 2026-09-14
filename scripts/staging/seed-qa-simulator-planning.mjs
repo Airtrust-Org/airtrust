@@ -64,7 +64,16 @@ SELECT CASE
     WHERE codigo = ${e(EMPRESA_CODIGO)}
       AND deleted_at IS NULL
       AND COALESCE(ativo, 1) = 1
-  ) THEN 1 ELSE 0
+  )
+  AND (
+    SELECT COUNT(*)
+    FROM funcionarios f
+    JOIN empresas emp ON emp.id = f.empresa_id
+    WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+      AND emp.deleted_at IS NULL
+      AND f.matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)})
+      AND f.deleted_at IS NULL
+  ) = 2 THEN 1 ELSE 0
 END;
 DROP TABLE _qa_sim_planning_requires_tenant;
 
