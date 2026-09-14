@@ -1,4 +1,4 @@
--- Migration 0494: canonical training programs + flight curricula.
+-- Migration 0495: canonical training programs + flight curricula.
 --
 -- OPERATIONAL MARKERS (guard:operational-sql-sources):
 --   source_reference: user-approved Initial -> Periodic program architecture (2026-09-14) + existing 0493 flight-cycle baseline.
@@ -138,21 +138,21 @@ WHERE qc.empresa_id=6 AND qc.deleted_at IS NULL AND COALESCE(qc.ativo,1)=1
 LIMIT 1;
 
 -- Fail closed if the flight qualification identities drifted.
-CREATE TABLE IF NOT EXISTS _0494_preflight_guard(id INTEGER PRIMARY KEY CHECK(id=1));
-CREATE TRIGGER IF NOT EXISTS _0494_preflight_validate
-BEFORE INSERT ON _0494_preflight_guard BEGIN
+CREATE TABLE IF NOT EXISTS _0495_preflight_guard(id INTEGER PRIMARY KEY CHECK(id=1));
+CREATE TRIGGER IF NOT EXISTS _0495_preflight_validate
+BEFORE INSERT ON _0495_preflight_guard BEGIN
   SELECT CASE WHEN (SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='G1' AND id=33 AND deleted_at IS NULL)<>1
-    THEN RAISE(ABORT,'0494 preflight: G1 drifted') END;
+    THEN RAISE(ABORT,'0495 preflight: G1 drifted') END;
   SELECT CASE WHEN (SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='G1-SEM' AND id=106 AND deleted_at IS NULL)<>1
-    THEN RAISE(ABORT,'0494 preflight: G1-SEM drifted') END;
+    THEN RAISE(ABORT,'0495 preflight: G1-SEM drifted') END;
   SELECT CASE WHEN (SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='G2' AND id=40 AND deleted_at IS NULL)<>1
-    THEN RAISE(ABORT,'0494 preflight: G2 drifted') END;
+    THEN RAISE(ABORT,'0495 preflight: G2 drifted') END;
   SELECT CASE WHEN (SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='G2-SEM' AND deleted_at IS NULL)<>1
-    THEN RAISE(ABORT,'0494 preflight: G2-SEM missing or ambiguous') END;
+    THEN RAISE(ABORT,'0495 preflight: G2-SEM missing or ambiguous') END;
 END;
-INSERT INTO _0494_preflight_guard(id) VALUES(1);
-DROP TRIGGER IF EXISTS _0494_preflight_validate;
-DROP TABLE IF EXISTS _0494_preflight_guard;
+INSERT INTO _0495_preflight_guard(id) VALUES(1);
+DROP TRIGGER IF EXISTS _0495_preflight_validate;
+DROP TABLE IF EXISTS _0495_preflight_guard;
 -- Every active VOO qualification is represented by at least one program.
 -- Initial and recurring are distinct when their workloads exist; G1/G2 semiannual
 -- obligations keep their own qualification identity because they coexist with annual renewal.
@@ -316,7 +316,7 @@ WHERE g2.empresa_id=6 AND g2.codigo='G2' AND g2.deleted_at IS NULL
   );
 
 -- Bind explicit history type to its program without reclassifying ambiguous legacy rows.
-CREATE TRIGGER IF NOT EXISTS trg_qualificacoes_historico_programa_insert_0494
+CREATE TRIGGER IF NOT EXISTS trg_qualificacoes_historico_programa_insert_0495
 AFTER INSERT ON qualificacoes_historico
 WHEN NEW.programa_treinamento_id IS NULL AND NEW.qualificacao_id IS NOT NULL AND NEW.tipo_treinamento IS NOT NULL
 BEGIN
@@ -327,7 +327,7 @@ BEGIN
      ORDER BY p.id LIMIT 1
   ) WHERE id=NEW.id;
 END;
-CREATE TRIGGER IF NOT EXISTS trg_qualificacoes_historico_programa_update_0494
+CREATE TRIGGER IF NOT EXISTS trg_qualificacoes_historico_programa_update_0495
 AFTER UPDATE OF qualificacao_id,tipo_treinamento,programa_treinamento_id ON qualificacoes_historico
 WHEN NEW.programa_treinamento_id IS NULL AND NEW.qualificacao_id IS NOT NULL AND NEW.tipo_treinamento IS NOT NULL
 BEGIN
@@ -343,27 +343,27 @@ END;
 -- been inferred from workload. New writes carry the explicit program id and the
 -- trigger only enriches new rows that already have an explicit training type.
 
-CREATE TABLE IF NOT EXISTS _0494_post_guard(id INTEGER PRIMARY KEY CHECK(id=1));
-CREATE TRIGGER IF NOT EXISTS _0494_post_validate BEFORE INSERT ON _0494_post_guard BEGIN
+CREATE TABLE IF NOT EXISTS _0495_post_guard(id INTEGER PRIMARY KEY CHECK(id=1));
+CREATE TRIGGER IF NOT EXISTS _0495_post_validate BEFORE INSERT ON _0495_post_guard BEGIN
   SELECT CASE WHEN (SELECT COUNT(*) FROM treinamento_programas p JOIN qualificacoes_tipos q ON q.id=p.qualificacao_tipo_id WHERE p.empresa_id=6 AND q.codigo='G1' AND p.deleted_at IS NULL AND p.tipo_treinamento IN ('INICIAL','RECORRENTE'))<>2
-    THEN RAISE(ABORT,'0494 post: G1 Initial/Periodic programs missing') END;
+    THEN RAISE(ABORT,'0495 post: G1 Initial/Periodic programs missing') END;
   SELECT CASE WHEN (SELECT COUNT(*) FROM treinamento_programas p JOIN qualificacoes_tipos q ON q.id=p.qualificacao_tipo_id WHERE p.empresa_id=6 AND q.codigo='G2' AND p.deleted_at IS NULL AND p.tipo_treinamento IN ('INICIAL','RECORRENTE'))<>2
-    THEN RAISE(ABORT,'0494 post: G2 Initial/Periodic programs missing') END;
+    THEN RAISE(ABORT,'0495 post: G2 Initial/Periodic programs missing') END;
   SELECT CASE WHEN (SELECT COUNT(*) FROM treinamento_programa_modelos pm JOIN treinamento_programas p ON p.id=pm.programa_id WHERE pm.empresa_id=6 AND p.codigo='G1:INICIAL' AND pm.deleted_at IS NULL)<>12
-    THEN RAISE(ABORT,'0494 post: G1 Initial curriculum must have 12 sessions') END;
+    THEN RAISE(ABORT,'0495 post: G1 Initial curriculum must have 12 sessions') END;
   SELECT CASE WHEN (SELECT COUNT(*) FROM treinamento_programa_modelos pm JOIN treinamento_programas p ON p.id=pm.programa_id WHERE pm.empresa_id=6 AND p.codigo='G2:INICIAL' AND pm.deleted_at IS NULL)<>12
-    THEN RAISE(ABORT,'0494 post: G2 Initial curriculum must have 12 sessions') END;
+    THEN RAISE(ABORT,'0495 post: G2 Initial curriculum must have 12 sessions') END;
   SELECT CASE WHEN (SELECT COUNT(*) FROM treinamento_programa_modelos pm JOIN treinamento_programas p ON p.id=pm.programa_id WHERE pm.empresa_id=6 AND p.codigo='G1:RECORRENTE' AND pm.deleted_at IS NULL)<>12
-    THEN RAISE(ABORT,'0494 post: G1 Periodic curriculum must have 12 cycle rows') END;
+    THEN RAISE(ABORT,'0495 post: G1 Periodic curriculum must have 12 cycle rows') END;
   SELECT CASE WHEN (SELECT COUNT(*) FROM treinamento_programa_modelos pm JOIN treinamento_programas p ON p.id=pm.programa_id WHERE pm.empresa_id=6 AND p.codigo='G2:RECORRENTE' AND pm.deleted_at IS NULL)<>9
-    THEN RAISE(ABORT,'0494 post: G2 Periodic curriculum must have 9 cycle rows') END;
+    THEN RAISE(ABORT,'0495 post: G2 Periodic curriculum must have 9 cycle rows') END;
   SELECT CASE WHEN (SELECT COUNT(*) FROM treinamento_programa_modelos pm JOIN treinamento_programas p ON p.id=pm.programa_id WHERE pm.empresa_id=6 AND p.codigo='G1-SEM:SEMESTRAL' AND pm.deleted_at IS NULL)<>6
-    THEN RAISE(ABORT,'0494 post: G1-SEM curriculum must have 6 cycle rows') END;
+    THEN RAISE(ABORT,'0495 post: G1-SEM curriculum must have 6 cycle rows') END;
   SELECT CASE WHEN (SELECT COUNT(*) FROM treinamento_programa_modelos pm JOIN treinamento_programas p ON p.id=pm.programa_id WHERE pm.empresa_id=6 AND p.codigo='G2-SEM:SEMESTRAL' AND pm.deleted_at IS NULL)<>2
-    THEN RAISE(ABORT,'0494 post: G2-SEM curriculum must have 2 sessions') END;
+    THEN RAISE(ABORT,'0495 post: G2-SEM curriculum must have 2 sessions') END;
   SELECT CASE WHEN (SELECT COUNT(*) FROM treinamento_programas WHERE empresa_id=6 AND codigo IN ('D3:INICIAL','D3:RECORRENTE') AND deleted_at IS NULL)<>2
-    THEN RAISE(ABORT,'0494 post: CRM D3 Initial/Periodic programs missing') END;
+    THEN RAISE(ABORT,'0495 post: CRM D3 Initial/Periodic programs missing') END;
 END;
-INSERT INTO _0494_post_guard(id) VALUES(1);
-DROP TRIGGER IF EXISTS _0494_post_validate;
-DROP TABLE IF EXISTS _0494_post_guard;
+INSERT INTO _0495_post_guard(id) VALUES(1);
+DROP TRIGGER IF EXISTS _0495_post_validate;
+DROP TABLE IF EXISTS _0495_post_guard;

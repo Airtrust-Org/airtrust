@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-14",
-    "last_reconciled_against": "training enrollment reconciliation 0494 and training programs/flight curricula reviewed",
-    "schema_v2_digest": "8f9fcd957a068e2442a24ae206501954f50a27df6ad8bb5cef256b5abb02b08a",
+    "last_reconciled_against": "training enrollment reconciliation 0494 and training programs/flight curricula 0495 reviewed",
+    "schema_v2_digest": "84aa6fa2933148c5d4fe619d0c8ee87612c07020ac7e325ac6e8cb46a5613d1a",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -825,9 +825,9 @@
       "note": "0494 is additive and stores only explicit MANTER_AVULSA acknowledgements. It never infers or creates compliance requirements from historical enrollments. Merge does not authorize staging or production apply."
     },
     {
-      "change_file": "0494_training_programs_and_flight_curricula.sql",
-      "change_id": "training-programs-and-flight-curricula-0494",
-      "sha256": "1951c8adf37fe0870fe53f83e4571e8dd2674016b75e257d0b05ac0d6c956504",
+      "change_file": "0495_training_programs_and_flight_curricula.sql",
+      "change_id": "training-programs-and-flight-curricula-0495",
+      "sha256": "5172dfb74ca6e469fa72fcee6eb16f0148195d62de03a71a321ca2681ccb0c7e",
       "targets": [
         "qualificacoes_historico",
         "treinamento_programa_modelos",
@@ -837,8 +837,8 @@
       "domain": "canonical training programs, Initial-to-Periodic succession, and simulator flight curriculum membership",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
-      "reviewed_manifest": "training-programs-and-flight-curricula-0494.json",
-      "note": "0494 is reviewed and prepared only. It separates qualification identity from Initial/Periodic/Semiannual programs, maps canonical session curricula, adds the SK76 semiannual qualification/program, and persists explicit program identity on new planned/history records. Merge does not imply staging or production apply."
+      "reviewed_manifest": "training-programs-and-flight-curricula-0495.json",
+      "note": "0495 is reviewed and prepared only. It separates qualification identity from Initial/Periodic/Semiannual programs, maps canonical session curricula, adds the SK76 semiannual qualification/program, and persists explicit program identity on new planned/history records. Merge does not imply staging or production apply."
     }
   ]
 }

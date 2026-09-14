@@ -1,4 +1,4 @@
-# Schema V2 plan — Training Programs and Flight Curricula (0494)
+# Schema V2 plan — Training Programs and Flight Curricula (0495)
 
 ## Objective
 Separate the qualification identity from the program used to obtain or renew it.
@@ -25,7 +25,7 @@ A single qualification can therefore have distinct **Initial**, **Periodic/Recur
 
 ## Runtime rollout
 1. Merge only after migration, route, planning, certificate/history and UI tests pass for the exact SHA.
-2. Apply 0494 through the governed Schema V2 workflow before deploying Worker/Pages.
+2. Apply 0495 through the governed Schema V2 workflow before deploying Worker/Pages.
 3. Validate Currículos de Voo shows every active VOO qualification program, including AW139 Initial, SK76 Initial and SK76 Semiannual.
 4. Validate AW139/SK76 Initial curricula are 12 ordered sessions and recurring curricula still resolve 2026=C2, 2027=C3, 2028=C1.
 5. Validate a newly planned Initial writes `tipo_treinamento=INICIAL`, the program id and the Initial workload; its next renewal resolves Periodic.

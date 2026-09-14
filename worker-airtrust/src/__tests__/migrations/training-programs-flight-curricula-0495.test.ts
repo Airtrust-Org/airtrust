@@ -12,19 +12,19 @@ const migration0493Path = join(
 );
 const migrationPath = join(
   ROOT,
-  'worker-airtrust/migrations/0494_training_programs_and_flight_curricula.sql',
+  'worker-airtrust/migrations/0495_training_programs_and_flight_curricula.sql',
 );
 const changePath = join(
   ROOT,
-  'worker-airtrust/schema-v2/changes/0494_training_programs_and_flight_curricula.sql',
+  'worker-airtrust/schema-v2/changes/0495_training_programs_and_flight_curricula.sql',
 );
 const planPath = join(
   ROOT,
-  'worker-airtrust/schema-v2/plans/training-programs-and-flight-curricula-0494.md',
+  'worker-airtrust/schema-v2/plans/training-programs-and-flight-curricula-0495.md',
 );
 const manifestPath = join(
   ROOT,
-  'worker-airtrust/schema-v2/training-programs-and-flight-curricula-0494.json',
+  'worker-airtrust/schema-v2/training-programs-and-flight-curricula-0495.json',
 );
 const migration0493 = readFileSync(migration0493Path, 'utf8');
 const migration = readFileSync(migrationPath, 'utf8');
@@ -36,7 +36,7 @@ function sqlQuote(value: string) {
 }
 
 function createDatabase() {
-  const dir = mkdtempSync(join(tmpdir(), 'airtrust-training-programs-0494-'));
+  const dir = mkdtempSync(join(tmpdir(), 'airtrust-training-programs-0495-'));
   tempDirs.push(dir);
   const dbPath = join(dir, 'test.sqlite');
   const base = execSql(
@@ -148,7 +148,7 @@ afterEach(() => {
   while (tempDirs.length) rmSync(tempDirs.pop()!, { recursive: true, force: true });
 });
 
-describe('0494 training programs and flight curricula', () => {
+describe('0495 training programs and flight curricula', () => {
   it('keeps the migration and reviewed Schema V2 change byte-identical with pinned hashes', () => {
     const migrationSql = readFileSync(migrationPath, 'utf8');
     const changeSql = readFileSync(changePath, 'utf8');
@@ -156,10 +156,10 @@ describe('0494 training programs and flight curricula', () => {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, string>;
     expect(changeSql).toBe(migrationSql);
     expect(manifest).toMatchObject({
-      changeId: 'training-programs-and-flight-curricula-0494',
+      changeId: 'training-programs-and-flight-curricula-0495',
       baselineId: 'production-d1-baseline-v2-20260714',
-      filePath: 'worker-airtrust/schema-v2/changes/0494_training_programs_and_flight_curricula.sql',
-      planPath: 'worker-airtrust/schema-v2/plans/training-programs-and-flight-curricula-0494.md',
+      filePath: 'worker-airtrust/schema-v2/changes/0495_training_programs_and_flight_curricula.sql',
+      planPath: 'worker-airtrust/schema-v2/plans/training-programs-and-flight-curricula-0495.md',
     });
     expect(manifest.fileHash).toBe(sha256(changeSql));
     expect(manifest.planHash).toBe(sha256(plan));
