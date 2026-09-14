@@ -124,6 +124,18 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
       updated_at TEXT,
       deleted_at TEXT
     );
+    CREATE TABLE treinamento_matricula_reconciliacoes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      empresa_id INTEGER NOT NULL,
+      matricula_id INTEGER NOT NULL,
+      decisao TEXT NOT NULL,
+      observacoes TEXT,
+      decidido_por INTEGER,
+      ativo INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      deleted_at TEXT
+    );
   `);
 }
 
@@ -530,6 +542,151 @@ describe('training compliance engine', () => {
       .prepare('SELECT escopo, setor_id, funcao_id FROM treinamento_requisitos WHERE id=90')
       .get() as any;
     expect(row).toMatchObject({ escopo: 'FUNCAO', setor_id: null, funcao_id: 1 });
+  });
+
+  it('agrega compliance por setor e por cargo', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 100, 'SETOR_FUNCAO', 10, 1, 'OBRIGATORIA', 'EMPRESA');
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at)
+      VALUES (1000, 100, 'MNT-12', 'MANUTENCAO', '2026-01-01', '2027-01-01',
+              'CONCLUIDA', 0, 1, '2026-01-01', '2026-01-01');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request('/setores');
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    const manutencao = body.data.find((item: any) => item.setor_id === 10);
+    expect(manutencao).toMatchObject({
+      setor_nome: 'Manutenção',
+      pessoas: 2,
+      requisitos_obrigatorios: 2,
+      conformes: 1,
+      nao_realizados: 1,
+      compliance_pct: 50,
+    });
+    expect(manutencao.cargos).toEqual([
+      expect.objectContaining({ funcao_nome: 'Mecânico', pessoas: 2, compliance_pct: 50 }),
+    ]);
+  });
+
+  it('reconcilia matrícula sem requisito e requisito obrigatório sem matrícula sem inferir regra', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 100, 'SETOR_FUNCAO', 10, 1, 'OBRIGATORIA', 'EMPRESA');
+      INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id) VALUES
+        (500, 1, 'PBN EAD', 101),
+        (501, 1, 'MNT EAD', 100);
+      INSERT INTO lms_matriculas
+        (id, empresa_id, curso_id, funcionario_id, status, data_conclusao, created_at, updated_at)
+      VALUES (700, 1, 500, 1000, 'NAO_INICIADO', NULL, '2026-09-10', '2026-09-10');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request('/reconciliacao');
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    expect(body.data.resumo.matriculados_sem_requisito).toBe(1);
+    expect(body.data.resumo.gaps_matricula_acionaveis).toBe(2);
+    expect(body.data.matriculas_revisao[0]).toMatchObject({
+      matricula_id: 700,
+      situacao: 'MATRICULADO_SEM_REQUISITO',
+      funcionario_id: 1000,
+      qualificacao_tipo_id: 101,
+    });
+    const mntGap = body.data.gaps_matricula.find((item: any) => item.qualificacao_tipo_id === 100);
+    expect(mntGap).toMatchObject({ pessoas: 2, nunca_realizados: 2 });
+    expect(mntGap.cursos_ead).toEqual([{ id: 501, titulo: 'MNT EAD' }]);
+  });
+
+  it('persiste decisão de manter matrícula avulsa e permite reabrir a reconciliação', async () => {
+    sqlite.database.exec(`
+      INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id)
+      VALUES (500, 1, 'PBN EAD', 101);
+      INSERT INTO lms_matriculas
+        (id, empresa_id, curso_id, funcionario_id, status, data_conclusao, created_at, updated_at)
+      VALUES (700, 1, 500, 1000, 'NAO_INICIADO', NULL, '2026-09-10', '2026-09-10');
+    `);
+    const app = createApp(sqlite.asD1());
+    const saved = await app.request('/reconciliacao/700/decisao', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ decisao: 'MANTER_AVULSA', observacoes: 'Capacitação pontual' }),
+    });
+    expect(saved.status).toBe(200);
+    const reconciled = (await (await app.request('/reconciliacao')).json()) as any;
+    expect(reconciled.data.resumo.matriculas_avulsas_reconciliadas).toBe(1);
+    expect(reconciled.data.matriculas_revisao[0].situacao).toBe('MATRICULA_AVULSA_RECONCILIADA');
+
+    const reopened = await app.request('/reconciliacao/700/decisao', { method: 'DELETE' });
+    expect(reopened.status).toBe(200);
+    const after = (await (await app.request('/reconciliacao')).json()) as any;
+    expect(after.data.matriculas_revisao[0].situacao).toBe('MATRICULADO_SEM_REQUISITO');
+  });
+
+  it('expõe a matriz por organização com regra efetiva e override direto', async () => {
+    sqlite.database.exec(`
+      CREATE TABLE setores_funcoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, empresa_id INTEGER NOT NULL, setor_id INTEGER NOT NULL,
+        funcao_id INTEGER NOT NULL, ativo INTEGER NOT NULL DEFAULT 1, deleted_at TEXT
+      );
+      INSERT INTO setores_funcoes (empresa_id,setor_id,funcao_id) VALUES (1,10,1);
+      INSERT INTO treinamento_requisitos
+        (id, empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (80, 1, 100, 'EMPRESA', 'RECOMENDADA', 'EMPRESA');
+      INSERT INTO treinamento_requisitos
+        (id, empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
+      VALUES (81, 1, 100, 'SETOR_FUNCAO', 10, 1, 'OBRIGATORIA', 'EMPRESA');
+      INSERT INTO treinamento_requisitos
+        (id, empresa_id, qualificacao_tipo_id, escopo, funcionario_id, obrigatoriedade, origem)
+      VALUES (82, 1, 100, 'FUNCIONARIO', 1001, 'NAO_APLICA', 'EMPRESA');
+    `);
+    const response = await createApp(sqlite.asD1()).request(
+      '/matriz-organizacao?setor_id=10&funcao_id=1',
+    );
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    const row = body.data.find((item: any) => item.qualificacao_tipo_id === 100);
+    expect(row).toMatchObject({
+      efetiva: { id: 81, escopo: 'SETOR_FUNCAO', obrigatoriedade: 'OBRIGATORIA' },
+      direta: { id: 81, escopo: 'SETOR_FUNCAO', obrigatoriedade: 'OBRIGATORIA' },
+      impacto: {
+        pessoas: 2,
+        atingidas_neste_nivel: 1,
+        override_mais_especifico: 1,
+        com_requisito: 1,
+        sem_requisito: 1,
+        matriculados: 0,
+        sem_matricula: 2,
+      },
+    });
+  });
+
+  it('rejeita regra setor+função fora do mapa canônico', async () => {
+    sqlite.database.exec(`
+      CREATE TABLE setores_funcoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, empresa_id INTEGER NOT NULL, setor_id INTEGER NOT NULL,
+        funcao_id INTEGER NOT NULL, ativo INTEGER NOT NULL DEFAULT 1, deleted_at TEXT
+      );
+      INSERT INTO setores_funcoes (empresa_id,setor_id,funcao_id) VALUES (1,10,1);
+    `);
+    const response = await createApp(sqlite.asD1()).request('/regras', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        qualificacao_tipo_id: 100,
+        escopo: 'SETOR_FUNCAO',
+        setor_id: 10,
+        funcao_id: 2,
+        obrigatoriedade: 'OBRIGATORIA',
+      }),
+    });
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('Cargo/função não pertence ao setor selecionado');
   });
 
   it('usa o mapa canônico setor-função mesmo quando ainda não há funcionário no cargo', async () => {

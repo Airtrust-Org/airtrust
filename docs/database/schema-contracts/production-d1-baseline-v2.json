@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-14",
-    "last_reconciled_against": "simulator annual curriculum cycles 0493 production apply verified",
-    "schema_v2_digest": "89dd823680b637c5483bbb59cc5826a01a7efe06cf9d5466ba0a5386d19d2ef4",
+    "last_reconciled_against": "training enrollment reconciliation 0494 reviewed; 0491/0492 production apply verified",
+    "schema_v2_digest": "8f9fcd957a068e2442a24ae206501954f50a27df6ad8bb5cef256b5abb02b08a",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -774,9 +774,10 @@
       ],
       "domain": "canonical training compliance applicability requirements and legacy matrix backfill",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REMOTE_APPLY_PENDING",
+      "governance_state": "PRODUCTION_CONFIRMED",
       "reviewed_manifest": "training-compliance-requirements-0491.json",
-      "note": "0491 is reviewed and prepared only. It adds the canonical tenant-scoped training requirement matrix and backfills existing active function requirements; merge does not imply staging or production apply."
+      "note": "0491 was applied through the governed Schema V2 production workflow on 2026-09-14 at exact source SHA 181e52baa77ad1855cb2833410aaf38944689e35 and production Compliance E2E passed.",
+      "evidence": "docs/audit/evidence/0491-training-compliance-requirements-applied-verified-2026-09-14.md"
     },
     {
       "change_file": "0492_organizational_structure_normalization.sql",
@@ -790,9 +791,10 @@
       ],
       "domain": "canonical employee organizational sector/function identity and approved tenant-6 normalization",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REMOTE_APPLY_PENDING",
+      "governance_state": "PRODUCTION_CONFIRMED",
       "reviewed_manifest": "organizational-structure-normalization-0492.json",
-      "note": "0492 is reviewed and prepared only. It resolves sector identity by tenant-local code/name (never environment-specific numeric IDs), adds canonical employee function IDs, sector/function mappings and aliases, and carries the user-approved tenant-6 organization normalization. Merge does not imply staging or production apply."
+      "note": "0492 was applied through the governed Schema V2 production workflow on 2026-09-14 at exact source SHA 42b26db935d793bb960a0a1e81e451e8e913048b; postconditions and authenticated Compliance E2E passed.",
+      "evidence": "docs/audit/evidence/0492-organizational-structure-normalization-applied-verified-2026-09-14.md"
     },
     {
       "change_file": "0493_simulator_annual_curriculum_cycles.sql",
@@ -808,6 +810,19 @@
       "reviewed_manifest": "simulator-annual-curriculum-cycles-0493.json",
       "note": "0493 was applied through the governed Schema V2 production workflow on 2026-09-14 at exact source SHA 676e46708be7f156eeea344dfefe43cf56b5a780 and postconditions passed. It keeps G1/G1-SEM/G2 identities stable and configures C1/C2/C3 with 2026=C2, 2027=C3, 2028=C1.",
       "evidence": "docs/audit/evidence/0493-simulator-annual-curriculum-cycles-applied-verified-2026-09-14.md"
+    },
+    {
+      "change_file": "0494_training_enrollment_reconciliation.sql",
+      "change_id": "training-enrollment-reconciliation-0494",
+      "sha256": "ddabeaa1b96554bd4a8547598edd39ec3879424f888ecf8e314991152d6368f5",
+      "targets": [
+        "treinamento_matricula_reconciliacoes"
+      ],
+      "domain": "explicit tenant-scoped reconciliation of LMS enrollments against the canonical training requirement matrix",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-enrollment-reconciliation-0494.json",
+      "note": "0494 is additive and stores only explicit MANTER_AVULSA acknowledgements. It never infers or creates compliance requirements from historical enrollments. Merge does not authorize staging or production apply."
     }
   ]
 }

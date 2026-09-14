@@ -133,6 +133,9 @@ export function TrainingComplianceApplicabilityEditor({
       queryClient.invalidateQueries({ queryKey: ['training-compliance', 'summary'] }),
       queryClient.invalidateQueries({ queryKey: ['training-compliance', 'people'] }),
       queryClient.invalidateQueries({ queryKey: ['training-compliance', 'trainings'] }),
+      queryClient.invalidateQueries({ queryKey: ['training-compliance', 'sectors'] }),
+      queryClient.invalidateQueries({ queryKey: ['training-compliance', 'reconciliation'] }),
+      queryClient.invalidateQueries({ queryKey: ['training-compliance', 'org-matrix'] }),
     ]);
   };
 

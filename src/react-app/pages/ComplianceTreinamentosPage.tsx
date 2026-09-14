@@ -12,12 +12,17 @@ import {
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import { TrainingComplianceApplicabilityEditor } from '@/react-app/components/compliance/TrainingComplianceApplicabilityEditor';
+import { TrainingComplianceOrganizationEditor } from '@/react-app/components/compliance/TrainingComplianceOrganizationEditor';
+import { TrainingEnrollmentReconciliation } from '@/react-app/components/compliance/TrainingEnrollmentReconciliation';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { useQualificacaoTipos } from '@/react-app/hooks/useQualificacoesExt';
 
 type Summary = {
   pessoas: number;
   pessoas_sem_configuracao: number;
+  setores_sem_matriz: number;
+  cargos_sem_matriz: number;
+  matriculas_sem_requisito: number;
   requisitos_obrigatorios: number;
   conformes: number;
   vencendo: number;
@@ -62,6 +67,33 @@ type Training = {
   nao_realizados: number;
   em_andamento: number;
   compliance_pct: number;
+};
+
+type SectorCompliance = {
+  setor_id: number | null;
+  setor_nome: string;
+  pessoas: number;
+  pessoas_sem_configuracao: number;
+  requisitos_obrigatorios: number;
+  conformes: number;
+  vencendo: number;
+  vencidos: number;
+  nao_realizados: number;
+  em_andamento: number;
+  compliance_pct: number | null;
+  cargos: Array<{
+    funcao_id: number | null;
+    funcao_nome: string;
+    pessoas: number;
+    pessoas_sem_configuracao: number;
+    requisitos_obrigatorios: number;
+    conformes: number;
+    vencendo: number;
+    vencidos: number;
+    nao_realizados: number;
+    em_andamento: number;
+    compliance_pct: number | null;
+  }>;
 };
 
 type Catalogs = {
@@ -131,7 +163,13 @@ function Kpi({
 export default function ComplianceTreinamentosPage() {
   const [setorId, setSetorId] = useState<number | null>(null);
   const [funcaoId, setFuncaoId] = useState<number | null>(null);
-  const [tab, setTab] = useState<'treinamentos' | 'pessoas' | 'configuracao'>('treinamentos');
+  const [tab, setTab] = useState<
+    'treinamentos' | 'pessoas' | 'setores' | 'reconciliacao' | 'configuracao'
+  >('treinamentos');
+  const [configurationMode, setConfigurationMode] = useState<'organizacao' | 'treinamento'>(
+    'organizacao',
+  );
+  const [expandedSectors, setExpandedSectors] = useState<Set<number | null>>(new Set());
   const [selectedTipoId, setSelectedTipoId] = useState<number | null>(null);
   const [drilldown, setDrilldown] = useState<{
     qualificacao_tipo_id?: number;
@@ -143,7 +181,7 @@ export default function ComplianceTreinamentosPage() {
   const capabilities = useQuery({
     queryKey: ['training-compliance', 'capabilities'],
     queryFn: async () =>
-      readJson<{ schema_ready: boolean }>(
+      readJson<{ schema_ready: boolean; reconciliation_ready: boolean }>(
         await fetchWithAuth('/api/compliance-treinamentos/capabilities'),
       ),
   });
@@ -182,6 +220,16 @@ export default function ComplianceTreinamentosPage() {
     queryFn: async () =>
       readJson<Training[]>(
         await fetchWithAuth(`/api/compliance-treinamentos/treinamentos${filter}`),
+      ),
+  });
+  const sectors = useQuery({
+    queryKey: ['training-compliance', 'sectors', setorId],
+    enabled: schemaReady && tab === 'setores',
+    queryFn: async () =>
+      readJson<SectorCompliance[]>(
+        await fetchWithAuth(
+          `/api/compliance-treinamentos/setores${setorId ? `?setor_id=${setorId}` : ''}`,
+        ),
       ),
   });
 
@@ -303,7 +351,7 @@ export default function ComplianceTreinamentosPage() {
                 label="Sem configuração"
                 value={summary.data?.pessoas_sem_configuracao ?? 0}
                 icon={AlertTriangle}
-                helper="sem qualquer regra aplicável"
+                helper={`${summary.data?.cargos_sem_matriz ?? 0} cargo(s) · ${summary.data?.setores_sem_matriz ?? 0} setor(es) · ${summary.data?.matriculas_sem_requisito ?? 0} matrícula(s) sem requisito`}
               />
               <Kpi
                 label="Vencendo"
@@ -337,6 +385,8 @@ export default function ComplianceTreinamentosPage() {
                   [
                     ['treinamentos', 'Treinamentos'],
                     ['pessoas', 'Pessoas'],
+                    ['setores', 'Setores'],
+                    ['reconciliacao', 'Matrículas × Matriz'],
                     ['configuracao', 'Configuração da matriz'],
                   ] as const
                 ).map(([value, label]) => (
@@ -512,39 +562,172 @@ export default function ComplianceTreinamentosPage() {
                 </div>
               ) : null}
 
+              {tab === 'setores' ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50 text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Setor / cargo</th>
+                        <th className="px-3 py-3 text-right">Pessoas</th>
+                        <th className="px-3 py-3 text-right">Requisitos</th>
+                        <th className="px-3 py-3 text-right">Compliance</th>
+                        <th className="px-3 py-3 text-right">Vencendo</th>
+                        <th className="px-3 py-3 text-right">Vencidos</th>
+                        <th className="px-3 py-3 text-right">Nunca fez</th>
+                        <th className="px-3 py-3 text-right">Em andamento</th>
+                        <th className="px-3 py-3 text-right">Sem configuração</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(sectors.data || []).flatMap((sector) => {
+                        const expanded = expandedSectors.has(sector.setor_id);
+                        const rows = [
+                          <tr
+                            key={`sector-${sector.setor_id ?? 'none'}`}
+                            className="bg-white hover:bg-slate-50"
+                          >
+                            <td className="px-4 py-3">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedSectors((old) => {
+                                    const next = new Set(old);
+                                    if (next.has(sector.setor_id)) next.delete(sector.setor_id);
+                                    else next.add(sector.setor_id);
+                                    return next;
+                                  })
+                                }
+                                className="font-semibold text-primary hover:underline"
+                              >
+                                {expanded ? '▾' : '▸'} {sector.setor_nome}
+                              </button>
+                            </td>
+                            <td className="px-3 py-3 text-right">{sector.pessoas}</td>
+                            <td className="px-3 py-3 text-right">
+                              {sector.requisitos_obrigatorios}
+                            </td>
+                            <td className="px-3 py-3 text-right font-semibold">
+                              {sector.compliance_pct == null ? '—' : `${sector.compliance_pct}%`}
+                            </td>
+                            <td className="px-3 py-3 text-right text-amber-700">
+                              {sector.vencendo}
+                            </td>
+                            <td className="px-3 py-3 text-right text-red-700">{sector.vencidos}</td>
+                            <td className="px-3 py-3 text-right text-orange-700">
+                              {sector.nao_realizados}
+                            </td>
+                            <td className="px-3 py-3 text-right text-blue-700">
+                              {sector.em_andamento}
+                            </td>
+                            <td className="px-3 py-3 text-right">
+                              {sector.pessoas_sem_configuracao}
+                            </td>
+                          </tr>,
+                        ];
+                        if (expanded) {
+                          rows.push(
+                            ...sector.cargos.map((cargo) => (
+                              <tr
+                                key={`cargo-${sector.setor_id}-${cargo.funcao_id}`}
+                                className="bg-slate-50/70"
+                              >
+                                <td className="px-4 py-2 pl-9 text-slate-700">
+                                  {cargo.funcao_nome}
+                                </td>
+                                <td className="px-3 py-2 text-right">{cargo.pessoas}</td>
+                                <td className="px-3 py-2 text-right">
+                                  {cargo.requisitos_obrigatorios}
+                                </td>
+                                <td className="px-3 py-2 text-right font-medium">
+                                  {cargo.compliance_pct == null ? '—' : `${cargo.compliance_pct}%`}
+                                </td>
+                                <td className="px-3 py-2 text-right text-amber-700">
+                                  {cargo.vencendo}
+                                </td>
+                                <td className="px-3 py-2 text-right text-red-700">
+                                  {cargo.vencidos}
+                                </td>
+                                <td className="px-3 py-2 text-right text-orange-700">
+                                  {cargo.nao_realizados}
+                                </td>
+                                <td className="px-3 py-2 text-right text-blue-700">
+                                  {cargo.em_andamento}
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  {cargo.pessoas_sem_configuracao}
+                                </td>
+                              </tr>
+                            )),
+                          );
+                        }
+                        return rows;
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+
+              {tab === 'reconciliacao' ? (
+                <TrainingEnrollmentReconciliation setorId={setorId} funcaoId={funcaoId} />
+              ) : null}
+
               {tab === 'configuracao' ? (
                 <div className="space-y-4 p-4">
-                  <div className="max-w-xl">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Treinamento / modelo de qualificação
-                    </label>
-                    <select
-                      value={selectedTipoId ?? ''}
-                      onChange={(event) =>
-                        setSelectedTipoId(event.target.value ? Number(event.target.value) : null)
-                      }
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setConfigurationMode('organizacao')}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium ${configurationMode === 'organizacao' ? 'bg-white text-primary shadow-sm' : 'text-slate-600'}`}
                     >
-                      <option value="">Selecione um treinamento</option>
-                      {tipos.map((tipo) => (
-                        <option key={String(tipo.id)} value={String(tipo.id)}>
-                          {tipo.nome}
-                          {tipo.codigo ? ` (${tipo.codigo})` : ''}
-                        </option>
-                      ))}
-                    </select>
+                      Por organização
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfigurationMode('treinamento')}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium ${configurationMode === 'treinamento' ? 'bg-white text-primary shadow-sm' : 'text-slate-600'}`}
+                    >
+                      Por treinamento
+                    </button>
                   </div>
-                  {selectedTipoId ? (
-                    <TrainingComplianceApplicabilityEditor
-                      qualificacaoTipoId={selectedTipoId}
-                      title="Aplicabilidade canônica"
-                    />
+                  {configurationMode === 'organizacao' ? (
+                    <TrainingComplianceOrganizationEditor />
                   ) : (
-                    <div className="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">
-                      Selecione um treinamento para definir empresa, setor e cargo. Alterações
-                      feitas aqui aparecem também nos modelos de qualificação e nos cursos EAD
-                      vinculados.
-                    </div>
+                    <>
+                      <div className="max-w-xl">
+                        <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Treinamento / modelo de qualificação
+                        </label>
+                        <select
+                          value={selectedTipoId ?? ''}
+                          onChange={(event) =>
+                            setSelectedTipoId(
+                              event.target.value ? Number(event.target.value) : null,
+                            )
+                          }
+                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                        >
+                          <option value="">Selecione um treinamento</option>
+                          {tipos.map((tipo) => (
+                            <option key={String(tipo.id)} value={String(tipo.id)}>
+                              {tipo.nome}
+                              {tipo.codigo ? ` (${tipo.codigo})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {selectedTipoId ? (
+                        <TrainingComplianceApplicabilityEditor
+                          qualificacaoTipoId={selectedTipoId}
+                          title="Aplicabilidade canônica"
+                        />
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">
+                          Selecione um treinamento para definir empresa, setor e cargo. Alterações
+                          feitas aqui aparecem também nos modelos de qualificação e nos cursos EAD
+                          vinculados.
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               ) : null}

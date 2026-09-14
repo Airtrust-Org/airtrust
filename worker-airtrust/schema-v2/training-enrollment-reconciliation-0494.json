@@ -1,0 +1,8 @@
+{
+  "changeId": "training-enrollment-reconciliation-0494",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0494_training_enrollment_reconciliation.sql",
+  "fileHash": "ddabeaa1b96554bd4a8547598edd39ec3879424f888ecf8e314991152d6368f5",
+  "planPath": "worker-airtrust/schema-v2/plans/training-enrollment-reconciliation-0494.md",
+  "planHash": "a9bfafd7c4f1720011e654f7bf44268edcd4bdbe604a75c758d3dcccb6514dfc"
+}
