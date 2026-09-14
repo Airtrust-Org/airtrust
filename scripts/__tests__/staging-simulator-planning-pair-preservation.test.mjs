@@ -155,3 +155,19 @@ test('staging simulator seed rejects divergent soft-deleted reserved history bef
   assert.doesNotMatch(reservedGuard, /qh\.deleted_at IS NULL/);
   assert.match(reservedGuard, /UPPER\(COALESCE\(qh\.qualificacao_codigo, ''\)\) = UPPER\(\$\{e\(PLANNING_QUAL_CODE\)\}\)/);
 });
+
+
+test('staging simulator seed rejects foreign reserved model-version rows before normalization', () => {
+  const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
+  const reservedGuardStart = seed.indexOf('_qa_sim_planning_requires_reserved_signatures');
+  const configGuardStart = seed.indexOf('_qa_sim_planning_requires_config');
+  assert.ok(reservedGuardStart >= 0 && configGuardStart > reservedGuardStart);
+  const reservedGuard = seed.slice(reservedGuardStart, configGuardStart);
+  assert.match(reservedGuard, /FROM modelos_sessao_versionamento msv/);
+  assert.match(reservedGuard, /msv\.codigo_canonico = \$\{e\(PLANNING_MODEL_CODE\)\}/);
+  assert.match(reservedGuard, /msv\.versao_matriz = 'QA_SIMULATOR_PLANNING'/);
+  assert.match(reservedGuard, /msv\.versao_numero = 1/);
+  assert.match(reservedGuard, /msv\.is_current = 1/);
+  assert.match(reservedGuard, /msv\.modelo_anterior_id IS NULL/);
+  assert.match(reservedGuard, /msv\.efetivo_ate IS NULL/);
+});
