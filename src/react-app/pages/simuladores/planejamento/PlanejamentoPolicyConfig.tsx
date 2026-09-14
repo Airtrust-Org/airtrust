@@ -22,13 +22,13 @@ const OPTIONS: Array<{
 }> = [
   {
     value: 'FOLGA',
-    title: 'Fora da quinzena',
-    description: 'Planejar somente em dias de folga na escala publicada.',
+    title: 'Folga da Escala 1/2',
+    description: 'Planejar na quinzena oposta à Escala 1/2 cadastrada no funcionário.',
   },
   {
     value: 'TRABALHO',
-    title: 'Dentro da quinzena',
-    description: 'Planejar somente em dias da quinzena de trabalho.',
+    title: 'Quinzena de trabalho',
+    description: 'Planejar na quinzena correspondente à Escala 1/2 cadastrada no funcionário.',
   },
   {
     value: 'AMBAS',
@@ -123,7 +123,7 @@ export default function PlanejamentoPolicyConfig() {
       {expanded && (
         <div className="border-t border-slate-200 px-4 py-4 dark:border-slate-800">
           <p className="mb-3 text-sm text-slate-500">
-            Esta regra vale para todas as propostas da empresa e é conferida contra a escala publicada em cada data candidata.
+            Esta regra usa a Escala 1/2 cadastrada em cada funcionário e o calendário operacional de quinzenas; não depende da escala mensal já estar publicada.
           </p>
           <div className="grid gap-2 md:grid-cols-3">
             {OPTIONS.map((option) => {

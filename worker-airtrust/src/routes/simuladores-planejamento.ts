@@ -18,7 +18,7 @@ import {
 import { syncTreinamentoPlanejadoIntegration } from '../services/treinamentos-planejados-integration';
 import { validateAndNormalizeCaeAvailability } from '../services/cae-availability';
 import { matchCaeAvailabilityBatch, type CaeBatchPlanningNeed } from '../services/cae-planning-batch';
-import { resolvePublishedRosterDayFromD1 } from '../services/cae-planning-roster-d1';
+import { resolveEmployeeFortnightDayFromD1 } from '../services/cae-planning-employee-fortnight';
 import { resolveIndividualNextModel } from '../services/cae-planning-participant-model-resolver';
 import {
   resolveGlobalSimulatorForEquipment,
@@ -505,14 +505,13 @@ async function insertProposal(params: {
     .map((candidate) => `${candidate.funcionarioId}:${candidateModelIds(candidate).join(',')}`)
     .sort()
     .join('|');
-  // O estado de escala é resolvido apenas para a data do slot CAE selecionado
-  // (a data candidata real da sessão). Sem slot, não há data candidata ainda
-  // e roster_by_date fica vazio — a revalidação live não terá nada a comparar
-  // até que um slot seja confirmado.
+  // A disponibilidade é derivada da Escala 1/2 cadastrada no funcionário
+  // para a data real do slot CAE. A escala mensal publicada pode gerar alerta
+  // operacional, mas não é pré-requisito do planejamento futuro.
   const rosterByDateByParticipant = new Map<number, Record<string, string>>();
   if (params.caeSlot) {
     for (const candidate of params.candidates) {
-      const resolved = await resolvePublishedRosterDayFromD1({
+      const resolved = await resolveEmployeeFortnightDayFromD1({
         db: params.db,
         empresaId: params.empresaId,
         employeeId: candidate.funcionarioId,
@@ -569,7 +568,7 @@ async function insertProposal(params: {
     curriculum: first.snapshot,
     window_policy: first.politicaJanela,
     selected_window_type: first.janelaTipo,
-    source: 'qualificacoes_historico + modelos_sessao + escalas_quinzenas',
+    source: 'qualificacoes_historico + modelos_sessao + funcionarios.quinzena + escalas_quinzenas',
   };
   const planningKey = buildPlanningKey({
     qualificacaoTipoId: first.qualificacaoTipoId,

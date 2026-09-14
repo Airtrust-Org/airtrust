@@ -9,62 +9,9 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { getEmpresaIdSafe } from './escalas-shared';
+import { getDefaultOperationalFortnightRange } from '../services/operational-fortnight-calendar';
 
 const quinzenas = new Hono<{ Bindings: Env }>();
-
-const OPERATIONAL_QUINZENA_PRESETS: Record<
-  number,
-  Record<string, { inicio: string; fim: string }>
-> = {
-  2025: {
-    '12_1': { inicio: '2025-12-15', fim: '2025-12-29' },
-  },
-  2026: {
-    '1_1': { inicio: '2025-12-30', fim: '2026-01-14' },
-    '1_2': { inicio: '2026-01-15', fim: '2026-01-30' },
-    '2_1': { inicio: '2026-01-31', fim: '2026-02-14' },
-    '2_2': { inicio: '2026-02-15', fim: '2026-02-28' },
-    '3_1': { inicio: '2026-03-01', fim: '2026-03-15' },
-    '3_2': { inicio: '2026-03-16', fim: '2026-03-31' },
-    '4_1': { inicio: '2026-04-01', fim: '2026-04-15' },
-    '4_2': { inicio: '2026-04-16', fim: '2026-04-30' },
-    '5_1': { inicio: '2026-05-01', fim: '2026-05-16' },
-    '5_2': { inicio: '2026-05-17', fim: '2026-05-31' },
-    '6_1': { inicio: '2026-06-01', fim: '2026-06-15' },
-    '6_2': { inicio: '2026-06-16', fim: '2026-06-30' },
-    '7_1': { inicio: '2026-07-01', fim: '2026-07-15' },
-    '7_2': { inicio: '2026-07-16', fim: '2026-07-31' },
-    '8_1': { inicio: '2026-08-01', fim: '2026-08-16' },
-    '8_2': { inicio: '2026-08-17', fim: '2026-08-31' },
-    '9_1': { inicio: '2026-09-01', fim: '2026-09-15' },
-    '9_2': { inicio: '2026-09-16', fim: '2026-09-30' },
-    '10_1': { inicio: '2026-10-01', fim: '2026-10-15' },
-    '10_2': { inicio: '2026-10-16', fim: '2026-10-31' },
-    '11_1': { inicio: '2026-11-01', fim: '2026-11-15' },
-    '11_2': { inicio: '2026-11-16', fim: '2026-11-30' },
-    '12_1': { inicio: '2026-12-01', fim: '2026-12-14' },
-    '12_2': { inicio: '2026-12-15', fim: '2026-12-29' },
-  },
-};
-
-function getDefaultQuinzenaRange(ano: number, mes: number, numero: 1 | 2) {
-  const preset = OPERATIONAL_QUINZENA_PRESETS[ano]?.[`${mes}_${numero}`];
-  if (preset) {
-    return preset;
-  }
-
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const lastDay = new Date(ano, mes, 0).getDate();
-  const primeiraQuinzenaFim = Math.min(16, lastDay);
-  const segundaQuinzenaInicio = Math.min(primeiraQuinzenaFim + 1, lastDay);
-  const prefix = `${ano}-${pad(mes)}`;
-
-  if (numero === 1) {
-    return { inicio: `${prefix}-01`, fim: `${prefix}-${pad(primeiraQuinzenaFim)}` };
-  }
-
-  return { inicio: `${prefix}-${pad(segundaQuinzenaInicio)}`, fim: `${prefix}-${pad(lastDay)}` };
-}
 
 const QuinzenaSchema = z.object({
   ano: z.number().min(2024).max(2040),
@@ -103,8 +50,8 @@ quinzenas.post('/gerar-ano', auth(), requirePermission('escalas', 'criar', 'admi
     const ano = Number(body.ano || new Date().getFullYear());
     const stmts = [];
     for (let mes = 1; mes <= 12; mes++) {
-      const primeira = getDefaultQuinzenaRange(ano, mes, 1);
-      const segunda = getDefaultQuinzenaRange(ano, mes, 2);
+      const primeira = getDefaultOperationalFortnightRange(ano, mes, 1);
+      const segunda = getDefaultOperationalFortnightRange(ano, mes, 2);
       stmts.push(
         c.env.DB.prepare(
           `INSERT INTO escalas_quinzenas (empresa_id, ano, mes, numero, data_inicio, data_fim)
@@ -114,7 +61,7 @@ quinzenas.post('/gerar-ano', auth(), requirePermission('escalas', 'criar', 'admi
              data_fim = excluded.data_fim,
              updated_at = datetime('now'),
              deleted_at = NULL`,
-        ).bind(empresaId, ano, mes, primeira.inicio, primeira.fim),
+        ).bind(empresaId, ano, mes, primeira.start, primeira.end),
       );
       stmts.push(
         c.env.DB.prepare(
@@ -125,7 +72,7 @@ quinzenas.post('/gerar-ano', auth(), requirePermission('escalas', 'criar', 'admi
              data_fim = excluded.data_fim,
              updated_at = datetime('now'),
              deleted_at = NULL`,
-        ).bind(empresaId, ano, mes, segunda.inicio, segunda.fim),
+        ).bind(empresaId, ano, mes, segunda.start, segunda.end),
       );
     }
     await c.env.DB.batch(stmts);
