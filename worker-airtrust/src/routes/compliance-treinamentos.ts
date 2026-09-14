@@ -192,13 +192,43 @@ async function loadEmployees(db: D1Database, empresaId: number): Promise<Employe
 }
 
 async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
-  if (!(await tableExists(db, 'treinamento_requisitos'))) return [];
+  const hasV2 = await tableExists(db, 'treinamento_requisitos');
   const tipoCols = await columnSet(db, 'qualificacoes_tipos');
   const validadeExpr = tipoCols.has('validade')
     ? 'qt.validade'
     : tipoCols.has('validade_meses')
       ? 'qt.validade_meses'
       : 'NULL';
+
+  if (!hasV2) {
+    if (!(await tableExists(db, 'matriz_treinamento_funcao'))) return [];
+    const { results } = await db
+      .prepare(
+        `SELECT m.id, m.empresa_id, m.qualificacao_tipo_id,
+                qt.nome AS qualificacao_tipo_nome, qt.codigo AS qualificacao_tipo_codigo,
+                ${validadeExpr} AS validade_meses,
+                'FUNCAO' AS escopo, NULL AS setor_id, NULL AS setor_nome,
+                m.funcao_id, fn.nome AS funcao_nome,
+                NULL AS funcionario_id, NULL AS funcionario_nome,
+                m.obrigatoriedade, m.nivel_requerido, m.critico_operacional,
+                m.origem, NULL AS referencia_normativa, m.observacoes,
+                NULL AS vigencia_inicio, NULL AS vigencia_fim, NULL AS prazo_inicial_dias,
+                0 AS auto_matricular_ead, m.ativo, m.created_at, m.updated_at
+           FROM matriz_treinamento_funcao m
+           JOIN qualificacoes_tipos qt
+             ON qt.id = m.qualificacao_tipo_id
+            AND qt.empresa_id = m.empresa_id
+            AND qt.deleted_at IS NULL
+           LEFT JOIN funcoes fn
+             ON fn.id = m.funcao_id AND fn.empresa_id = m.empresa_id AND fn.deleted_at IS NULL
+          WHERE m.empresa_id = ? AND m.ativo = 1 AND m.deleted_at IS NULL
+          ORDER BY qt.nome ASC, m.id ASC`,
+      )
+      .bind(empresaId)
+      .all<Rule>();
+    return results || [];
+  }
+
   const { results } = await db
     .prepare(
       `SELECT tr.id, tr.empresa_id, tr.qualificacao_tipo_id,
