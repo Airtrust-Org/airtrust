@@ -2,7 +2,7 @@
   "changeId": "training-compliance-requirements-0491",
   "baselineId": "production-d1-baseline-v2-20260714",
   "filePath": "worker-airtrust/schema-v2/changes/0491_training_compliance_requirements.sql",
-  "fileHash": "887237706905d16cf5c026170342307851fdbfc819774e118bf5a2e61293cb76",
+  "fileHash": "a4ce45a5d8da1896f6d52cb800fb19d29ea8c4ed35201b7aed66f1d25a5480fc",
   "planPath": "worker-airtrust/schema-v2/plans/training-compliance-requirements-0491.md",
   "planHash": "480b34a0696d01d2e7256f2e882cc646c51df83c0cc080e572901abfd36b2632"
 }

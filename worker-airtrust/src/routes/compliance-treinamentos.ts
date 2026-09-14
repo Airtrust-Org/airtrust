@@ -679,11 +679,16 @@ app.get('/regras', requireRole('admin', 'manager'), async (c) => {
   const setorId = asPositiveInt(c.req.query('setor_id'));
   const funcaoId = asPositiveInt(c.req.query('funcao_id'));
   const escopo = String(c.req.query('escopo') || '').toUpperCase();
+  const scopedFunctionIds = new Set(
+    scopedEmployees.map((employee) => employee.funcao_id).filter((id): id is number => id !== null),
+  );
   const data = rules.filter((rule) => {
     const visibleByAccess =
       access.mode === 'all' ||
       rule.escopo === 'EMPRESA' ||
-      rule.escopo === 'FUNCAO' ||
+      (rule.escopo === 'FUNCAO' &&
+        rule.funcao_id !== null &&
+        scopedFunctionIds.has(rule.funcao_id)) ||
       (rule.setor_id !== null && access.setorIds.includes(rule.setor_id)) ||
       (rule.funcionario_id !== null && scopedEmployeeIds.has(rule.funcionario_id));
     return (
@@ -759,9 +764,11 @@ app.put('/regras/:id', requireRole('admin', 'manager'), async (c) => {
     .first<Record<string, unknown>>();
   if (!existing) throw new ApiError('Regra não encontrada', 404);
   const patch = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const existingData = await validateRuleReferences(db, empresaId, existing);
+  await assertIndividualRuleWithinAccess(db, empresaId, access, existingData);
   const merged = { ...existing, ...patch };
   const data = await validateRuleReferences(db, empresaId, merged);
-  const access = await getEmployeeSectorAccess(c, empresaId);
   await assertIndividualRuleWithinAccess(db, empresaId, access, data);
   await db
     .prepare(

@@ -65,6 +65,42 @@ CREATE INDEX IF NOT EXISTS idx_treinamento_requisitos_vigencia
   ON treinamento_requisitos (empresa_id, vigencia_inicio, vigencia_fim)
   WHERE ativo = 1 AND deleted_at IS NULL;
 
+CREATE TRIGGER IF NOT EXISTS trg_treinamento_requisitos_tenant_insert
+BEFORE INSERT ON treinamento_requisitos
+FOR EACH ROW
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM qualificacoes_tipos qt WHERE qt.id = NEW.qualificacao_tipo_id AND qt.empresa_id = NEW.empresa_id
+  ) THEN RAISE(ABORT, 'treinamento_requisitos: qualificacao fora do tenant') END;
+  SELECT CASE WHEN NEW.setor_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM setores s WHERE s.id = NEW.setor_id AND s.empresa_id = NEW.empresa_id
+  ) THEN RAISE(ABORT, 'treinamento_requisitos: setor fora do tenant') END;
+  SELECT CASE WHEN NEW.funcao_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM funcoes f WHERE f.id = NEW.funcao_id AND f.empresa_id = NEW.empresa_id
+  ) THEN RAISE(ABORT, 'treinamento_requisitos: funcao fora do tenant') END;
+  SELECT CASE WHEN NEW.funcionario_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM funcionarios f WHERE f.id = NEW.funcionario_id AND f.empresa_id = NEW.empresa_id
+  ) THEN RAISE(ABORT, 'treinamento_requisitos: funcionario fora do tenant') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_treinamento_requisitos_tenant_update
+BEFORE UPDATE OF empresa_id, qualificacao_tipo_id, setor_id, funcao_id, funcionario_id ON treinamento_requisitos
+FOR EACH ROW
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM qualificacoes_tipos qt WHERE qt.id = NEW.qualificacao_tipo_id AND qt.empresa_id = NEW.empresa_id
+  ) THEN RAISE(ABORT, 'treinamento_requisitos: qualificacao fora do tenant') END;
+  SELECT CASE WHEN NEW.setor_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM setores s WHERE s.id = NEW.setor_id AND s.empresa_id = NEW.empresa_id
+  ) THEN RAISE(ABORT, 'treinamento_requisitos: setor fora do tenant') END;
+  SELECT CASE WHEN NEW.funcao_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM funcoes f WHERE f.id = NEW.funcao_id AND f.empresa_id = NEW.empresa_id
+  ) THEN RAISE(ABORT, 'treinamento_requisitos: funcao fora do tenant') END;
+  SELECT CASE WHEN NEW.funcionario_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM funcionarios f WHERE f.id = NEW.funcionario_id AND f.empresa_id = NEW.empresa_id
+  ) THEN RAISE(ABORT, 'treinamento_requisitos: funcionario fora do tenant') END;
+END;
+
 INSERT OR IGNORE INTO treinamento_requisitos (
   empresa_id,
   qualificacao_tipo_id,

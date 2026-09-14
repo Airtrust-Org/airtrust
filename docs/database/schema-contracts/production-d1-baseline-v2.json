@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-09-13",
-    "last_reconciled_against": "simulator planning curriculum metadata 0490 (prepared; remote apply pending)",
-    "schema_v2_digest": "ba7048f5690be68db7e7c759eedddec9c97d150f898fdc0e91356137032bfe09",
+    "last_reconciled_at": "2026-09-14",
+    "last_reconciled_against": "training compliance requirements 0491 (prepared; remote apply pending)",
+    "schema_v2_digest": "1086fd153b48b1429d69169088549861fc3194bba1ea4bb4ff0e023d41094e14",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -764,6 +764,19 @@
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REPO_EXPECTED",
       "reviewed_manifest": null
+    },
+    {
+      "change_file": "0491_training_compliance_requirements.sql",
+      "change_id": "training-compliance-requirements-0491",
+      "sha256": "a4ce45a5d8da1896f6d52cb800fb19d29ea8c4ed35201b7aed66f1d25a5480fc",
+      "targets": [
+        "treinamento_requisitos"
+      ],
+      "domain": "canonical training compliance applicability requirements and legacy matrix backfill",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-requirements-0491.json",
+      "note": "0491 is reviewed and prepared only. It adds the canonical tenant-scoped training requirement matrix and backfills existing active function requirements; merge does not imply staging or production apply."
     }
   ]
 }

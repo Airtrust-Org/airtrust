@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../../middleware/error-handler';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
@@ -15,9 +16,17 @@ vi.mock('../../middleware/rbac', () => ({
   requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
+const sectorAccessMock = vi.hoisted(() => ({
+  access: { mode: 'all', setorIds: [], funcionarioId: null } as
+    | { mode: 'all'; setorIds: []; funcionarioId: null }
+    | { mode: 'restricted'; setorIds: number[]; funcionarioId: null },
+}));
+
 vi.mock('../../services/employee-sector-access', () => ({
-  getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [], funcionarioId: null })),
-  filterRequestedSetorIdsByAccess: vi.fn((ids: number[]) => ids),
+  getEmployeeSectorAccess: vi.fn(async () => sectorAccessMock.access),
+  filterRequestedSetorIdsByAccess: vi.fn((ids: number[], access: { mode: string; setorIds: number[] }) =>
+    access.mode === 'all' ? ids : ids.filter((id) => access.setorIds.includes(id)),
+  ),
   assertFuncionarioInScope: vi.fn(async () => undefined),
 }));
 
@@ -25,6 +34,12 @@ import complianceRouter from '../../routes/compliance-treinamentos';
 
 function createApp(db: D1Database) {
   const app = new Hono<{ Bindings: Env }>();
+  app.onError((error, c) => {
+    if (error instanceof ApiError) {
+      return c.json({ success: false, error: error.message }, error.statusCode as 400 | 403 | 404 | 409 | 500);
+    }
+    return c.json({ success: false, error: 'INTERNAL' }, 500);
+  });
   app.route('/', complianceRouter);
   return {
     request: (path: string, init?: RequestInit) => app.request(path, init, { DB: db } as Env),
@@ -110,6 +125,7 @@ describe('training compliance engine', () => {
   let sqlite: SqliteD1Database;
 
   beforeEach(() => {
+    sectorAccessMock.access = { mode: 'all', setorIds: [], funcionarioId: null };
     sqlite = new SqliteD1Database();
     patchComplianceSchema(sqlite);
   });
@@ -203,4 +219,41 @@ describe('training compliance engine', () => {
     expect(body.data.nao_realizados).toBe(3);
     expect(body.data.setores.some((s: any) => s.setor_nome === 'Outro')).toBe(false);
   });
+  it('restringe gestor às funções presentes nos setores sob sua gestão', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 100, 'FUNCAO', 1, 'OBRIGATORIA', 'REGULATORIO');
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 101, 'FUNCAO', 2, 'OBRIGATORIA', 'REGULATORIO');
+    `);
+    sectorAccessMock.access = { mode: 'restricted', setorIds: [10], funcionarioId: null };
+
+    const response = await createApp(sqlite.asD1()).request('/regras');
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(body.data.map((rule: any) => rule.funcao_id)).toEqual([1]);
+  });
+
+  it('impede gestor setorial de converter uma regra global existente em regra do seu setor', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (id, empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem)
+      VALUES (90, 1, 100, 'FUNCAO', 1, 'OBRIGATORIA', 'REGULATORIO');
+    `);
+    sectorAccessMock.access = { mode: 'restricted', setorIds: [10], funcionarioId: null };
+
+    const response = await createApp(sqlite.asD1()).request('/regras/90', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ escopo: 'SETOR', setor_id: 10, funcao_id: null }),
+    });
+
+    expect(response.status).toBe(403);
+    const row = sqlite.database.prepare('SELECT escopo, setor_id, funcao_id FROM treinamento_requisitos WHERE id=90').get() as any;
+    expect(row).toMatchObject({ escopo: 'FUNCAO', setor_id: null, funcao_id: 1 });
+  });
+
 });
