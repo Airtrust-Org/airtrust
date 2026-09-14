@@ -226,9 +226,44 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  d1-cleanup-simulator-planning-fixture:
+    name: Staging D1 Cleanup Synthetic Simulator Planning Fixture
+    needs: [guard, d1-provision-simulator-planning-fixture, qa]
+    if: always() && needs.d1-provision-simulator-planning-fixture.result != 'skipped'
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CONFIRM_STAGING_SIMULATOR_PLANNING_QA_SEED: AIRTRUST_STAGING_SIMULATOR_PLANNING_QA_SEED
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Require governed staging D1 cleanup credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo 'STAGING_D1_TOKEN_MISSING' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
+
+      - name: Install cleanup dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Validate synthetic fixture rollback in dry-run mode
+        run: node scripts/staging/seed-qa-simulator-planning.mjs --rollback
+
+      - name: Roll back only synthetic simulator-planning fixture
+        run: node scripts/staging/seed-qa-simulator-planning.mjs --rollback --apply
+
   result:
     name: Staging Simulator Planning Persistence QA Passed
-    needs: [guard, d1-provision-simulator-planning-fixture, qa]
+    needs: [guard, d1-provision-simulator-planning-fixture, qa, d1-cleanup-simulator-planning-fixture]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -238,10 +273,12 @@ jobs:
           GUARD: ${{ needs.guard.result }}
           FIXTURE: ${{ needs.d1-provision-simulator-planning-fixture.result }}
           QA: ${{ needs.qa.result }}
+          CLEANUP: ${{ needs.d1-cleanup-simulator-planning-fixture.result }}
         run: |
           set -euo pipefail
-          echo "guard=$GUARD fixture=$FIXTURE qa=$QA"
+          echo "guard=$GUARD fixture=$FIXTURE qa=$QA cleanup=$CLEANUP"
           [[ "$GUARD" == 'success' ]]
           [[ "$FIXTURE" == 'success' ]]
           [[ "$QA" == 'success' ]]
+          [[ "$CLEANUP" == 'success' ]]
           echo 'STAGING_SIMULATOR_PLANNING_PERSISTENCE_QA_PASS'

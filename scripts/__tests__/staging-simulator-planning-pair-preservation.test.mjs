@@ -30,3 +30,11 @@ test('staging simulator fixture provisions three needs so a pair and a singleton
   assert.match(seed, /allocation_count = 3/);
   assert.match(workflow, /explicit unmatched singleton preserved after CAE comparison: PASS/);
 });
+
+test('staging simulator QA always rolls back the synthetic planning fixture after evidence collection', () => {
+  assert.match(workflow, /name: Staging D1 Cleanup Synthetic Simulator Planning Fixture/);
+  assert.match(workflow, /if: always\(\) && needs\.d1-provision-simulator-planning-fixture\.result != 'skipped'/);
+  assert.match(workflow, /seed-qa-simulator-planning\.mjs --rollback --apply/);
+  assert.match(workflow, /CLEANUP: \$\{\{ needs\.d1-cleanup-simulator-planning-fixture\.result \}\}/);
+  assert.match(workflow, /\[\[ "\$CLEANUP" == 'success' \]\]/);
+});
