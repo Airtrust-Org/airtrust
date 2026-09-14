@@ -76,7 +76,7 @@ test('workflow is governed staging-only and cannot deploy infrastructure', () =>
   const workflow = read(WORKFLOW);
   assert.match(workflow, /AIRTRUST_EDB_STAGING_PILOT_POSITIVE/);
   assert.match(workflow, /refs\/heads\/main/);
-  assert.match(workflow, /environment:\s*\n\s*staging/);
+  assert.match(workflow, /environment:\s*(?:staging|\n\s*staging)/);
   assert.match(workflow, /permissions:\s*\n\s*contents:\s*read/);
   assert.match(workflow, /QA_EDB_PILOT_PASSWORD:\s*\$\{\{ secrets\.STAGING_SMOKE_PASSWORD \}\}/);
   assert.match(workflow, /CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
