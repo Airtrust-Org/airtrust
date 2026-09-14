@@ -1,0 +1,123 @@
+name: Production Simulator 0490 Read-Only Preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA reviewed for simulator 0490 read-only preflight
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_PRODUCTION_SIMULATOR_0490_READONLY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-simulator-0490-readonly-preflight
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  CHANGE_ID: simulator-planning-curriculum-metadata-0490
+
+jobs:
+  guard:
+    name: Production simulator 0490 read-only guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EVENT_REF" == 'refs/heads/main' ]] || { echo 'MAIN_REF_REQUIRED' >&2; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_PRODUCTION_SIMULATOR_0490_READONLY' ]] || { echo 'READONLY_CONFIRMATION_REQUIRED' >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'EXPECTED_SHA_INVALID' >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$EVENT_SHA" ]] || { echo 'EXPECTED_SHA_MISMATCH' >&2; exit 1; }
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Require canonical release gates on exact SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+  preflight:
+    name: Production simulator 0490 D1 read-only preflight
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+
+      - name: Install worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Require production D1 read credential
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo 'PRODUCTION_D1_READ_TOKEN_MISSING' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
+
+      - name: Verify reviewed 0490 bundle locally
+        run: node --test scripts/__tests__/schema-v2-0490-simulator-planning-curriculum.test.mjs
+
+      - name: Run dedicated production 0490 preflight read-only
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0490-production-preflight.sh --target=airtrust-db | tee "$RUNNER_TEMP/simulator-0490-preflight.txt"
+
+      - name: Publish sanitized result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '## Production simulator 0490 read-only preflight'
+            echo
+            echo "- main SHA: \`${GITHUB_SHA}\`"
+            echo "- change: \`${CHANGE_ID}\`"
+            if grep -q 'SIMULATOR_PLANNING_CURRICULUM_0490_PRODUCTION_PREFLIGHT=PASS' "$RUNNER_TEMP/simulator-0490-preflight.txt" 2>/dev/null; then
+              echo '- 0490 physical-state readiness: `PASS`'
+            else
+              echo '- 0490 physical-state readiness: `FAIL/BLOCKED`'
+            fi
+            echo '- writes: `none`'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized read-only evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-simulator-0490-readonly-${{ github.sha }}
+          path: ${{ runner.temp }}/simulator-0490-preflight.txt
+          if-no-files-found: warn
+          retention-days: 30

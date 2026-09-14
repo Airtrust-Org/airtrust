@@ -74,3 +74,14 @@ test('0490 read-only guards freeze the reviewed tenant, cycle, duration and depe
   assert.match(post, /ordered-curriculum-mismatch/);
   assert.match(post, /open-dependency-unordered-models/);
 });
+
+
+test('dedicated production 0490 readiness workflow is read-only and fail-closed', () => {
+  const workflow = readFileSync('.github/workflows/production-simulator-0490-readonly-preflight.yml', 'utf8');
+  assert.match(workflow, /AIRTRUST_PRODUCTION_SIMULATOR_0490_READONLY/);
+  assert.match(workflow, /environment: production/);
+  assert.match(workflow, /verify-release-gates\.mjs/);
+  assert.match(workflow, /validate-0490-production-preflight\.sh --target=airtrust-db/);
+  assert.match(workflow, /writes: `none`/);
+  assert.doesNotMatch(workflow, /apply-schema-change-v2|0490_simulator_planning_curriculum_metadata\.sql --remote|wrangler d1 execute/);
+});
