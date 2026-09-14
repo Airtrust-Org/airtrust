@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Response } from '@playwright/test';
-import { assertLiveFrontendShaFromPage } from '../lib/live-sha-guard.mjs';
+import { assertProductionFrontendShaFromPage } from '../lib/production-live-sha-guard.mjs';
 import { installProductionReadOnlyGuard } from '../lib/production-read-only-network-guard.mjs';
 
 const EXPECTED_SHA = String(process.env.EXPECTED_PRODUCTION_SHA || '')
@@ -75,7 +75,7 @@ async function login(page: Page) {
   expect(PASSWORD).not.toBe('');
   expect(EMAIL).not.toMatch(/staging\.airtrust\.invalid$/i);
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await assertLiveFrontendShaFromPage(page, EXPECTED_SHA.slice(0, 7), 'production-login');
+  await assertProductionFrontendShaFromPage(page, EXPECTED_SHA.slice(0, 7), 'production-login');
   await page.locator('input[type="email"]').fill(EMAIL);
   await page.locator('input[type="password"]').fill(PASSWORD);
   await page.getByRole('button', { name: /entrar|sign in/i }).click();
@@ -92,7 +92,11 @@ test('production training compliance UI and APIs are coherent and read-only', as
   const summaryP = waitApi(page, '/api/compliance-treinamentos/resumo');
   const trainingsP = waitApi(page, '/api/compliance-treinamentos/treinamentos');
   await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
-  await assertLiveFrontendShaFromPage(page, EXPECTED_SHA.slice(0, 7), 'production-compliance');
+  await assertProductionFrontendShaFromPage(
+    page,
+    EXPECTED_SHA.slice(0, 7),
+    'production-compliance',
+  );
   await expect(page.getByRole('heading', { name: 'Compliance de Treinamentos' })).toBeVisible();
   await expect(page.getByRole('combobox').first()).toContainText('Todos os setores');
   await expect(page.getByRole('combobox').nth(1)).toContainText('Todos os cargos');
