@@ -34,6 +34,7 @@ const qaPlanningResidue = qaTenant ? d1(`SELECT
   (SELECT COUNT(*) FROM qualificacoes_historico WHERE empresa_id=${Number(qaTenant.id)} AND observacoes='QA_ONLY_SIMULATOR_PLANNING' AND deleted_at IS NULL) AS histories,
   (SELECT COUNT(*) FROM modelos_sessao WHERE empresa_id=${Number(qaTenant.id)} AND codigo='QA-SIM-PLN-S01' AND deleted_at IS NULL) AS models,
   (SELECT COUNT(*) FROM modelos_sessao_versionamento WHERE empresa_id=${Number(qaTenant.id)} AND codigo_canonico='QA-SIM-PLN-S01' AND versao_matriz='QA_SIMULATOR_PLANNING') AS versions,
+  (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${Number(qaTenant.id)} AND matricula IN ('QA-PARTICIPANTE-ALFA','QA-PARTICIPANTE-BRAVO') AND quinzena IS NOT NULL AND deleted_at IS NULL) AS base_scale_overrides,
   (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${Number(qaTenant.id)} AND matricula='QA-PARTICIPANTE-CHARLIE' AND deleted_at IS NULL) AS charlie;`)[0] : null;
 const migration0490Rows = d1(`SELECT COUNT(*) AS count FROM d1_migrations WHERE name='0490_simulator_planning_curriculum_metadata.sql';`);
 const migration0490Ledgered = Number(migration0490Rows[0]?.count || 0) > 0;
