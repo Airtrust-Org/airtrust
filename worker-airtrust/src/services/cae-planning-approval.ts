@@ -1,5 +1,9 @@
 import type { RevalidationResult } from './cae-planning-revalidation';
 import { resolveIndividualNextModel } from './cae-planning-participant-model-resolver';
+import {
+  curriculumReferenceYear,
+  loadResolvedSimulatorCurriculum,
+} from './simulator-curriculum-cycles';
 
 export type SimulatorProposalStatus =
   | 'PROPOSTO'
@@ -16,11 +20,7 @@ export type SimulatorProposalStatus =
  * does not need a risky table rebuild just to add AGUARDANDO_APROVACAO.
  */
 export type SimulatorApprovalStatus =
-  | 'RASCUNHO'
-  | 'PENDENTE'
-  | 'APROVADO'
-  | 'DEVOLVIDO'
-  | 'NAO_EXIGIDO';
+  'RASCUNHO' | 'PENDENTE' | 'APROVADO' | 'DEVOLVIDO' | 'NAO_EXIGIDO';
 
 export type SimulatorApprovalDecision = 'APROVAR' | 'DEVOLVER';
 
@@ -139,7 +139,10 @@ import {
   type SimulatorPlanningLiveState,
   type SimulatorPlanningSourceSnapshot,
 } from './cae-planning-revalidation';
-import { resolveSimulatorPlanningConfig, type SimulatorPlanningConfigRow } from './cae-planning-policy';
+import {
+  resolveSimulatorPlanningConfig,
+  type SimulatorPlanningConfigRow,
+} from './cae-planning-policy';
 import { resolvePublishedRosterDayFromD1 } from './cae-planning-roster-d1';
 import { validateInstructorAssignment } from './cae-planning-resource-assignment';
 
@@ -220,29 +223,58 @@ export async function resolveSimulatorPlanningLiveState(params: {
     // falso positivo por causa de outros modelos existirem na qualificação.
     let liveSessionModelIds = participant.session_model_ids;
     try {
-      const sessionModels = await db
-        .prepare(
-          `SELECT id, ordem_no_treinamento
-             FROM modelos_sessao
-            WHERE empresa_id = ?
-              AND qualificacao_tipo_id = ?
-              AND deleted_at IS NULL
-            ORDER BY COALESCE(ordem_no_treinamento, 9999), id`,
-        )
-        .bind(empresaId, participant.training_id)
-        .all<{ id: number; ordem_no_treinamento: number | null }>();
-      const liveModels = (sessionModels.results || [])
-        .map((model) => ({ id: Number(model.id), ordem_no_treinamento: model.ordem_no_treinamento }))
-        .filter((model) => Number.isInteger(model.id) && model.id > 0);
-      const resolved = await resolveIndividualNextModel({
-        db,
-        empresaId,
-        employeeId: participant.employee_id,
-        cycleStartDate,
-        models: liveModels,
-      });
-      if (resolved) {
-        liveSessionModelIds = [resolved.modelId];
+      const referenceYear = curriculumReferenceYear(qualificationExpiry);
+      const cycleCurriculum = referenceYear
+        ? await loadResolvedSimulatorCurriculum({
+            db,
+            empresaId,
+            qualificationTypeId: Number(participant.training_id),
+            referenceYear,
+          })
+        : null;
+
+      let liveModels: Array<{ id: number; ordem_no_treinamento: number | null }>;
+      if (cycleCurriculum) {
+        if (cycleCurriculum.unresolved_items > 0 || cycleCurriculum.models.length === 0) {
+          liveSessionModelIds = [];
+          liveModels = [];
+        } else {
+          liveModels = cycleCurriculum.models.map((model) => ({
+            id: Number(model.id),
+            ordem_no_treinamento: model.ordem_no_treinamento,
+          }));
+        }
+      } else {
+        const sessionModels = await db
+          .prepare(
+            `SELECT id, ordem_no_treinamento
+               FROM modelos_sessao
+              WHERE empresa_id = ?
+                AND qualificacao_tipo_id = ?
+                AND deleted_at IS NULL
+              ORDER BY COALESCE(ordem_no_treinamento, 9999), id`,
+          )
+          .bind(empresaId, participant.training_id)
+          .all<{ id: number; ordem_no_treinamento: number | null }>();
+        liveModels = (sessionModels.results || [])
+          .map((model) => ({
+            id: Number(model.id),
+            ordem_no_treinamento: model.ordem_no_treinamento,
+          }))
+          .filter((model) => Number.isInteger(model.id) && model.id > 0);
+      }
+
+      if (liveModels.length > 0) {
+        const resolved = await resolveIndividualNextModel({
+          db,
+          empresaId,
+          employeeId: participant.employee_id,
+          cycleStartDate,
+          models: liveModels,
+        });
+        if (resolved) {
+          liveSessionModelIds = [resolved.modelId];
+        }
       }
     } catch {
       // Fail-closed rules still rely on the snapshot; this fallback avoids masking
@@ -325,7 +357,10 @@ export async function executeSimulatorPlanningApproval(params: {
       .bind(empresaId)
       .first<SimulatorPlanningConfigRow>();
     const config = resolveSimulatorPlanningConfig(configRow || {});
-    let submitted: { planning_status: SimulatorProposalStatus; approval_status: SimulatorApprovalStatus };
+    let submitted: {
+      planning_status: SimulatorProposalStatus;
+      approval_status: SimulatorApprovalStatus;
+    };
     try {
       submitted = submitSimulatorProposalForApproval({
         planning_status: row.planejamento_status,
@@ -368,7 +403,11 @@ export async function executeSimulatorPlanningApproval(params: {
   }
 
   if (!row.planejamento_snapshot_json) {
-    return { success: false, error: 'Snapshot da proposta ausente', blockers: ['SNAPSHOT_MISSING'] };
+    return {
+      success: false,
+      error: 'Snapshot da proposta ausente',
+      blockers: ['SNAPSHOT_MISSING'],
+    };
   }
 
   let snapshot: SimulatorPlanningSourceSnapshot & {
@@ -378,7 +417,11 @@ export async function executeSimulatorPlanningApproval(params: {
   try {
     snapshot = JSON.parse(row.planejamento_snapshot_json);
   } catch {
-    return { success: false, error: 'Snapshot da proposta inválido', blockers: ['SNAPSHOT_INVALID'] };
+    return {
+      success: false,
+      error: 'Snapshot da proposta inválido',
+      blockers: ['SNAPSHOT_INVALID'],
+    };
   }
 
   // Uma proposta APROVADA precisa ser, por definição, materializável: exige
@@ -417,7 +460,7 @@ export async function executeSimulatorPlanningApproval(params: {
       };
     }
     const simulatorRow = await db
-      .prepare("SELECT status FROM simuladores WHERE id = ? AND deleted_at IS NULL")
+      .prepare('SELECT status FROM simuladores WHERE id = ? AND deleted_at IS NULL')
       .bind(Number(snapshot.simulator_id))
       .first<{ status: string | null }>();
     if (!simulatorRow || String(simulatorRow.status || '').toUpperCase() !== 'ATIVO') {

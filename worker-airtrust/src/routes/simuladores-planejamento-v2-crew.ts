@@ -27,6 +27,10 @@ import {
   type PublishedRosterAllocationRow,
 } from '../services/cae-planning-roster-state';
 import { validateAndNormalizeCaeAvailability } from '../services/cae-availability';
+import {
+  curriculumReferenceYear,
+  loadResolvedSimulatorCurriculum,
+} from '../services/simulator-curriculum-cycles';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -179,8 +183,45 @@ async function assertNeedsInTenantAndScope(params: {
       modelo_aeronave: string | null;
     }>();
   const modelById = new Map((models.results || []).map((row) => [Number(row.id), row]));
+  const resolvedCurriculumCache = new Map<
+    string,
+    Awaited<ReturnType<typeof loadResolvedSimulatorCurriculum>>
+  >();
   for (const need of params.needs) {
     const model = modelById.get(need.session_model_id);
+    const referenceYear = curriculumReferenceYear(need.expiry_date);
+    const curriculumKey = `${need.qualification_type_id}:${referenceYear ?? 'none'}`;
+    let resolvedCurriculum = resolvedCurriculumCache.get(curriculumKey);
+    if (!resolvedCurriculumCache.has(curriculumKey)) {
+      resolvedCurriculum = referenceYear
+        ? await loadResolvedSimulatorCurriculum({
+            db: params.db,
+            empresaId: params.empresaId,
+            qualificationTypeId: need.qualification_type_id,
+            referenceYear,
+          })
+        : null;
+      resolvedCurriculumCache.set(curriculumKey, resolvedCurriculum);
+    }
+
+    if (resolvedCurriculum) {
+      const curriculumModel = resolvedCurriculum.models.find(
+        (row) => Number(row.id) === need.session_model_id,
+      );
+      const equipment = normalizeEquipment(curriculumModel?.modelo_aeronave);
+      if (
+        resolvedCurriculum.unresolved_items > 0 ||
+        !model ||
+        !curriculumModel ||
+        Number(curriculumModel.duracao_estimada) !== need.duration_minutes ||
+        Number(curriculumModel.ordem_no_treinamento) !== need.session_order ||
+        (equipment !== 'UNIVERSAL' && equipment !== need.equipment)
+      ) {
+        throw new Error('Sessão informada não corresponde ao ciclo curricular vigente do tenant');
+      }
+      continue;
+    }
+
     const modelEquipment = normalizeEquipment(model?.modelo_aeronave);
     if (
       !model ||

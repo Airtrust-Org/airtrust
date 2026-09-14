@@ -106,7 +106,8 @@ describe('migration governance', () => {
     // 0489 adds tenant-scoped natural keys; 0490 restores simulator planning curriculum metadata.
     // 0491 adds the canonical training-compliance requirements matrix.
     // 0492 normalizes the canonical sector/function organization.
-    const expectedLatest = 492;
+    // 0493 adds annual simulator curriculum cycles with a 2026=C2 rotation base.
+    const expectedLatest = 493;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

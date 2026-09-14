@@ -11,6 +11,9 @@ interface CurriculoResumo {
   total_sessoes: number;
   total_minutos: number;
   sessoes_ordenadas: number;
+  total_ciclos?: number;
+  ciclo_ativo?: number;
+  ano_referencia?: number;
 }
 
 interface ModeloCurriculo {
@@ -24,6 +27,16 @@ interface ModeloCurriculo {
   qualificacao_tipo_id: number | null;
   qualificacao_tipo_codigo?: string | null;
   qualificacao_tipo_nome?: string | null;
+  codigo_canonico?: string | null;
+  ciclo?: number | null;
+  ativo?: number | null;
+}
+
+interface CurriculoCiclo {
+  cycle: number;
+  sessions: ModeloCurriculo[];
+  total_sessions: number;
+  total_minutes: number;
 }
 
 interface CurriculoDetalhe {
@@ -32,6 +45,14 @@ interface CurriculoDetalhe {
   available_models: ModeloCurriculo[];
   total_sessions: number;
   total_minutes: number;
+  cycle_config: {
+    total_cycles: number;
+    base_year: number;
+    base_cycle: number;
+    reference_year: number;
+    active_cycle: number;
+  } | null;
+  cycles: CurriculoCiclo[];
 }
 
 interface CurriculosVooPageProps {
@@ -48,11 +69,22 @@ function formatDuration(minutes: number | null | undefined) {
   return `${hours}h ${rest}min`;
 }
 
+function resolveCycleForYear(
+  year: number,
+  baseYear: number,
+  baseCycle: number,
+  totalCycles: number,
+) {
+  const offset = (((year - baseYear) % totalCycles) + totalCycles) % totalCycles;
+  return ((baseCycle - 1 + offset) % totalCycles) + 1;
+}
+
 export default function CurriculosVooPage({ embedded = false, onBack }: CurriculosVooPageProps) {
   const [curriculos, setCurriculos] = useState<CurriculoResumo[]>([]);
   const [selecionadoId, setSelecionadoId] = useState<number | null>(null);
   const [detalhe, setDetalhe] = useState<CurriculoDetalhe | null>(null);
   const [draftIds, setDraftIds] = useState<number[]>([]);
+  const [selectedCycle, setSelectedCycle] = useState<number | null>(null);
   const [modeloParaAdicionar, setModeloParaAdicionar] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -65,7 +97,8 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
         cache: 'no-store',
       });
       const payload = await response.json();
-      if (!response.ok || !payload.success) throw new Error(payload.error || 'Falha ao carregar currículos');
+      if (!response.ok || !payload.success)
+        throw new Error(payload.error || 'Falha ao carregar currículos');
       const rows = Array.isArray(payload.data) ? payload.data : [];
       setCurriculos(rows);
       if (!preservarSelecao && rows.length > 0) setSelecionadoId(Number(rows[0].id));
@@ -85,9 +118,16 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
         { cache: 'no-store' },
       );
       const payload = await response.json();
-      if (!response.ok || !payload.success) throw new Error(payload.error || 'Falha ao carregar currículo');
-      setDetalhe(payload.data);
-      setDraftIds((payload.data.sessions || []).map((row: ModeloCurriculo) => Number(row.id)));
+      if (!response.ok || !payload.success)
+        throw new Error(payload.error || 'Falha ao carregar currículo');
+      const nextDetail = payload.data as CurriculoDetalhe;
+      setDetalhe(nextDetail);
+      const cycle = nextDetail.cycle_config?.active_cycle ?? null;
+      setSelectedCycle(cycle);
+      const sessions = cycle
+        ? nextDetail.cycles.find((row) => Number(row.cycle) === Number(cycle))?.sessions || []
+        : nextDetail.sessions || [];
+      setDraftIds(sessions.map((row: ModeloCurriculo) => Number(row.id)));
       setModeloParaAdicionar('');
     } catch (error) {
       console.error(error);
@@ -122,7 +162,10 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
     const selected = new Set(draftIds);
     return detalhe.available_models.filter((row) => {
       if (selected.has(Number(row.id))) return false;
-      return !row.qualificacao_tipo_id || Number(row.qualificacao_tipo_id) === detalhe.qualification.id;
+      if (detalhe.cycle_config) return true;
+      return (
+        !row.qualificacao_tipo_id || Number(row.qualificacao_tipo_id) === detalhe.qualification.id
+      );
     });
   }, [detalhe, draftIds]);
 
@@ -131,7 +174,13 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
     0,
   );
 
-  const originalIds = detalhe?.sessions.map((row) => Number(row.id)) || [];
+  const originalIds = detalhe
+    ? detalhe.cycle_config && selectedCycle
+      ? detalhe.cycles
+          .find((row) => Number(row.cycle) === Number(selectedCycle))
+          ?.sessions.map((row) => Number(row.id)) || []
+      : detalhe.sessions.map((row) => Number(row.id))
+    : [];
   const dirty = JSON.stringify(originalIds) !== JSON.stringify(draftIds);
 
   const mover = (index: number, direction: -1 | 1) => {
@@ -143,8 +192,10 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
   };
 
   const remover = (row: ModeloCurriculo) => {
-    if (Number(row.gera_qualificacao || 0) === 1) {
-      toast.warning('Esta sessão gera a qualificação. Desative essa geração no Modelo de Sessão antes de removê-la do currículo.');
+    if (!detalhe?.cycle_config && Number(row.gera_qualificacao || 0) === 1) {
+      toast.warning(
+        'Esta sessão gera a qualificação. Desative essa geração no Modelo de Sessão antes de removê-la do currículo.',
+      );
       return;
     }
     setDraftIds((current) => current.filter((id) => id !== Number(row.id)));
@@ -158,6 +209,19 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
     setModeloParaAdicionar('');
   };
 
+  const selecionarCiclo = (cycle: number) => {
+    if (!detalhe?.cycle_config || cycle === selectedCycle) return;
+    if (dirty) {
+      toast.warning('Salve as alterações deste ciclo antes de trocar de ciclo.');
+      return;
+    }
+    const sessions =
+      detalhe.cycles.find((row) => Number(row.cycle) === Number(cycle))?.sessions || [];
+    setSelectedCycle(cycle);
+    setDraftIds(sessions.map((row) => Number(row.id)));
+    setModeloParaAdicionar('');
+  };
+
   const salvar = async () => {
     if (!detalhe) return;
     setSaving(true);
@@ -167,15 +231,29 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ modelo_ids: draftIds }),
+          body: JSON.stringify({
+            modelo_ids: draftIds,
+            ...(detalhe.cycle_config ? { ciclo: selectedCycle } : {}),
+          }),
         },
       );
       const payload = await response.json();
-      if (!response.ok || !payload.success) throw new Error(payload.error || 'Falha ao salvar currículo');
-      setDetalhe(payload.data);
-      setDraftIds((payload.data.sessions || []).map((row: ModeloCurriculo) => Number(row.id)));
+      if (!response.ok || !payload.success)
+        throw new Error(payload.error || 'Falha ao salvar currículo');
+      const nextDetail = payload.data as CurriculoDetalhe;
+      setDetalhe(nextDetail);
+      const sessions =
+        nextDetail.cycle_config && selectedCycle
+          ? nextDetail.cycles.find((row) => Number(row.cycle) === Number(selectedCycle))
+              ?.sessions || []
+          : nextDetail.sessions || [];
+      setDraftIds(sessions.map((row: ModeloCurriculo) => Number(row.id)));
       await carregarCurriculos(true);
-      toast.success('Currículo de voo atualizado');
+      toast.success(
+        detalhe.cycle_config && selectedCycle
+          ? `Ciclo ${selectedCycle} atualizado`
+          : 'Currículo de voo atualizado',
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível salvar o currículo');
     } finally {
@@ -196,9 +274,12 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
               Gestão
             </button>
           )}
-          <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">Currículos de Voo</h2>
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">
+            Currículos de Voo
+          </h2>
           <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-            Defina quais modelos de sessão compõem cada treinamento e a ordem S1…SN usada no planejamento.
+            Defina quais modelos de sessão compõem cada treinamento e a ordem S1…SN usada no
+            planejamento.
           </p>
         </div>
         {detalhe && (
@@ -213,12 +294,17 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
         <section className="rounded-lg border border-gray-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
           <div className="mb-3 flex items-center gap-2">
             <BookOpenCheck className="h-4 w-4 text-indigo-600" />
-            <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">Treinamentos de voo</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+              Treinamentos de voo
+            </p>
           </div>
           {loading ? (
             <div className="space-y-2">
               {[0, 1, 2, 3].map((item) => (
-                <div key={item} className="h-14 animate-pulse rounded-md bg-slate-100 dark:bg-slate-800" />
+                <div
+                  key={item}
+                  className="h-14 animate-pulse rounded-md bg-slate-100 dark:bg-slate-800"
+                />
               ))}
             </div>
           ) : curriculos.length === 0 ? (
@@ -243,10 +329,15 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-gray-900 dark:text-slate-100">
-                          {row.codigo ? `${row.codigo} — ` : ''}{row.nome}
+                          {row.codigo ? `${row.codigo} — ` : ''}
+                          {row.nome}
                         </p>
                         <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">
-                          {Number(row.total_sessoes)} sessões • {formatDuration(Number(row.total_minutos))}
+                          {row.total_ciclos && row.ciclo_ativo && row.ano_referencia
+                            ? `${row.total_ciclos} ciclos • ${row.ano_referencia}: C${row.ciclo_ativo} • `
+                            : ''}
+                          {Number(row.total_sessoes)} sessões •{' '}
+                          {formatDuration(Number(row.total_minutos))}
                         </p>
                       </div>
                       {incompleteOrder && (
@@ -264,22 +355,30 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
 
         <section className="min-w-0 rounded-lg border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
           {!selecionadoId ? (
-            <div className="py-12 text-center text-sm text-gray-500">Selecione um treinamento para configurar o currículo.</div>
+            <div className="py-12 text-center text-sm text-gray-500">
+              Selecione um treinamento para configurar o currículo.
+            </div>
           ) : loadingDetail ? (
             <div className="space-y-3">
               <div className="h-6 w-64 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
               {[0, 1, 2, 3].map((item) => (
-                <div key={item} className="h-16 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+                <div
+                  key={item}
+                  className="h-16 animate-pulse rounded bg-slate-100 dark:bg-slate-800"
+                />
               ))}
             </div>
           ) : !detalhe ? (
-            <div className="py-12 text-center text-sm text-red-600">Não foi possível carregar este currículo.</div>
+            <div className="py-12 text-center text-sm text-red-600">
+              Não foi possível carregar este currículo.
+            </div>
           ) : (
             <div className="space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-4 dark:border-slate-800">
                 <div>
                   <p className="text-base font-semibold text-gray-900 dark:text-slate-100">
-                    {detalhe.qualification.codigo ? `${detalhe.qualification.codigo} — ` : ''}{detalhe.qualification.nome}
+                    {detalhe.qualification.codigo ? `${detalhe.qualification.codigo} — ` : ''}
+                    {detalhe.qualification.nome}
                   </p>
                   <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
                     {draftIds.length} sessões • {formatDuration(totalDraftMinutes)} de carga total
@@ -292,6 +391,50 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
                 )}
               </div>
 
+              {detalhe.cycle_config && (
+                <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 dark:border-indigo-900/60 dark:bg-indigo-950/20">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                        Ciclos do currículo
+                      </p>
+                      <p className="mt-0.5 text-xs text-gray-600 dark:text-slate-400">
+                        Rotação anual automática •{' '}
+                        {Array.from({ length: detalhe.cycle_config.total_cycles }, (_, index) => {
+                          const year = detalhe.cycle_config!.base_year + index;
+                          const cycle = resolveCycleForYear(
+                            year,
+                            detalhe.cycle_config!.base_year,
+                            detalhe.cycle_config!.base_cycle,
+                            detalhe.cycle_config!.total_cycles,
+                          );
+                          return `${year}: C${cycle}`;
+                        }).join(' • ')}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-indigo-700 shadow-sm dark:bg-slate-900 dark:text-indigo-300">
+                      {detalhe.cycle_config.reference_year}: C{detalhe.cycle_config.active_cycle}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {detalhe.cycles.map((cycle) => (
+                      <button
+                        type="button"
+                        key={cycle.cycle}
+                        onClick={() => selecionarCiclo(cycle.cycle)}
+                        className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                          Number(selectedCycle) === Number(cycle.cycle)
+                            ? 'border-indigo-500 bg-indigo-600 text-white'
+                            : 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+                        }`}
+                      >
+                        Ciclo {cycle.cycle} · {cycle.total_sessions} sessões
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <select
@@ -300,11 +443,17 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
                     className="min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   >
                     <option value="">Adicionar modelo de sessão...</option>
-                    {availableToAdd.map((row) => (
-                      <option key={row.id} value={row.id}>
-                        {row.codigo} — {row.nome} • {row.modelo_aeronave || 'Universal'} • {formatDuration(row.duracao_estimada)}
-                      </option>
-                    ))}
+                    {availableToAdd.map((row) => {
+                      const inactive = Number(row.ativo ?? 1) !== 1;
+                      return (
+                        <option key={row.id} value={row.id} disabled={inactive}>
+                          {row.codigo_canonico || row.codigo} — {row.nome} •{' '}
+                          {row.modelo_aeronave || 'Universal'} •{' '}
+                          {formatDuration(row.duracao_estimada)}
+                          {inactive ? ' • INATIVO' : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                   <Button variant="secondary" onClick={adicionar} disabled={!modeloParaAdicionar}>
                     <Plus className="mr-2 h-4 w-4" />
@@ -312,7 +461,9 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
                   </Button>
                 </div>
                 <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
-                  Modelos já vinculados a outro treinamento não aparecem como opção de inclusão.
+                  {detalhe.cycle_config
+                    ? `${detalhe.available_models.length} modelos canônicos cadastrados • ${detalhe.available_models.filter((row) => Number(row.ativo ?? 1) === 1).length} ativos. Versões históricas, remediações e duplicidades técnicas ficam ocultas.`
+                    : 'Modelos já vinculados a outro treinamento não aparecem como opção de inclusão.'}
                 </p>
               </div>
 
@@ -332,11 +483,14 @@ export default function CurriculosVooPage({ embedded = false, onBack }: Curricul
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-gray-900 dark:text-slate-100">
-                          {row.codigo} — {row.nome}
+                          {row.codigo_canonico || row.codigo} — {row.nome}
                         </p>
                         <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">
-                          {row.modelo_aeronave || 'Universal'} • {formatDuration(row.duracao_estimada)}
-                          {Number(row.gera_qualificacao || 0) === 1 ? ' • gera/renova a qualificação' : ''}
+                          {row.modelo_aeronave || 'Universal'} •{' '}
+                          {formatDuration(row.duracao_estimada)}
+                          {Number(row.gera_qualificacao || 0) === 1
+                            ? ' • gera/renova a qualificação'
+                            : ''}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
