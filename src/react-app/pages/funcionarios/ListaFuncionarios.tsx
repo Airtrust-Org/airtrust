@@ -33,6 +33,7 @@ import { formatarCPF, formatarTelefone, formatarMatricula } from '../../utils/fo
 import { useDebounce } from '@/react-app/hooks/useDebounce';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { buildPasta360Url } from '@/react-app/utils/pasta360';
+import { buildFuncionarioRosterStats } from './funcionarioRosterStats';
 
 interface Coluna {
   id: string;
@@ -581,26 +582,8 @@ export function ListaFuncionarios({
     if (!cb) return;
 
     const total = pagination.total;
-    const ativos = funcionarios.filter((f) => (f.status || '').toUpperCase() === 'ATIVO').length;
-    const inativos = funcionarios.filter((f) => (f.status || '').toUpperCase() !== 'ATIVO').length;
-    const byModelo: Record<string, { cmd: number; cop: number }> = {};
-    for (const f of funcionarios) {
-      if ((f.status || '').toUpperCase() !== 'ATIVO') continue;
-      const modelo = (f.aeronave || '')
-        .trim()
-        .toUpperCase()
-        .replace(/[\s-]+/g, '');
-      const modeloKey = modelo.includes('AW139')
-        ? 'AW139'
-        : modelo.includes('SK76') || modelo.includes('S76')
-          ? 'SK76'
-          : modelo || 'Outros';
-      if (!byModelo[modeloKey]) byModelo[modeloKey] = { cmd: 0, cop: 0 };
-      const cargoOuFuncao = resolveFuncionarioRoleLabel(f).toLowerCase();
-      if (cargoOuFuncao.includes('comandante')) byModelo[modeloKey].cmd++;
-      else if (cargoOuFuncao.includes('copiloto')) byModelo[modeloKey].cop++;
-    }
-    cb({ total, ativos, inativos, byModelo });
+    const rosterStats = buildFuncionarioRosterStats(funcionarios);
+    cb({ total, ...rosterStats });
   }, [pagination.total, funcionarios]);
 
   return (
