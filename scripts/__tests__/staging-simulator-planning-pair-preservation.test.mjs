@@ -143,3 +143,15 @@ test('staging simulator history cleanup is signature-gated and never marker-only
   assert.match(seed, /UPDATE qualificacoes_historico[\s\S]*qualificacao_id = \([\s\S]*PLANNING_QUAL_CODE[\s\S]*funcionario_id IN \(/);
   assert.doesNotMatch(seed, /UPDATE qualificacoes_historico[\s\S]{0,220}observacoes = \$\{e\(PLANNING_MARKER\)\};/);
 });
+
+
+test('staging simulator seed rejects divergent soft-deleted reserved history before reactivation', () => {
+  const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
+  const reservedGuardStart = seed.indexOf('_qa_sim_planning_requires_reserved_signatures');
+  const configGuardStart = seed.indexOf('_qa_sim_planning_requires_config');
+  assert.ok(reservedGuardStart >= 0 && configGuardStart > reservedGuardStart);
+  const reservedGuard = seed.slice(reservedGuardStart, configGuardStart);
+  assert.match(reservedGuard, /qh\.observacoes = \$\{e\(PLANNING_MARKER\)\}/);
+  assert.doesNotMatch(reservedGuard, /qh\.deleted_at IS NULL/);
+  assert.match(reservedGuard, /UPPER\(COALESCE\(qh\.qualificacao_codigo, ''\)\) = UPPER\(\$\{e\(PLANNING_QUAL_CODE\)\}\)/);
+});
