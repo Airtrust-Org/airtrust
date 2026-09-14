@@ -25,6 +25,10 @@ import { resolveTrainingEntryPath } from './lib/training-entry';
 const TrocarSenhaPage = lazyWithRetry(() => import('./pages/TrocarSenhaPage'), 'TrocarSenhaPage');
 const Funcionarios = lazyWithRetry(() => import('./pages/Funcionarios'), 'Funcionarios');
 const Qualificacoes = lazyWithRetry(() => import('./pages/Qualificacoes'), 'Qualificacoes');
+const ComplianceTreinamentosPage = lazyWithRetry(
+  () => import('./pages/ComplianceTreinamentosPage'),
+  'ComplianceTreinamentosPage',
+);
 const DashboardQualificacoes = lazyWithRetry(
   () => import('./pages/DashboardQualificacoes'),
   'DashboardQualificacoes',
@@ -452,6 +456,14 @@ export default function App() {
                         element={
                           <ProtectedRoute>
                             <Qualificacoes />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/treinamentos/compliance"
+                        element={
+                          <ProtectedRoute>
+                            <ComplianceTreinamentosPage />
                           </ProtectedRoute>
                         }
                       />

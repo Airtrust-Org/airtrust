@@ -28,6 +28,7 @@ import {
 import { toast } from 'sonner';
 import AppLayout from '@/react-app/components/AppLayout';
 import Button from '@/react-app/components/Button';
+import { TrainingComplianceApplicabilityEditor } from '@/react-app/components/compliance/TrainingComplianceApplicabilityEditor';
 import PageHeader from '@/react-app/components/PageHeader';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { useAuth } from '@/react-app/hooks/useAuth';
@@ -1260,6 +1261,14 @@ function CourseDrawer({
                           </div>
                         ) : null}
                       </div>
+                      {form.qualificacao_tipo_id ? (
+                        <TrainingComplianceApplicabilityEditor
+                          qualificacaoTipoId={form.qualificacao_tipo_id}
+                          title="Aplicabilidade de compliance desta qualificação"
+                          compact
+                        />
+                      ) : null}
+
                       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                         <div className="flex items-center justify-between gap-3">
                           <div>
