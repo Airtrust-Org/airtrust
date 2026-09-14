@@ -66,8 +66,8 @@ jobs:
           const body = json?.data && typeof json.data === 'object' ? json.data : json;
           const live = String(body?.sourceSha ?? body?.source_sha ?? '').toLowerCase();
           if (live !== expected) throw new Error(`PRODUCTION_WORKER_SHA_MISMATCH:${live || 'missing'}`);
-          const { assertLiveFrontendShaFromOrigin } = await import('./e2e/lib/live-sha-guard.mjs');
-          await assertLiveFrontendShaFromOrigin(process.env.PROD_FRONTEND_BASE_URL, expected.slice(0, 7));
+          const { assertProductionFrontendShaFromOrigin } = await import('./e2e/lib/production-live-sha-guard.mjs');
+          await assertProductionFrontendShaFromOrigin(process.env.PROD_FRONTEND_BASE_URL, expected.slice(0, 7));
           console.log(`PRODUCTION_TRAINING_COMPLIANCE_PROVENANCE=PASS:${expected}`);
           NODE
 
