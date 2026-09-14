@@ -51,7 +51,9 @@ const PROFILE_TEST_MATCH =
       ? /simulator-planning-persistence\.spec\.ts$/
       : AUDIT_PROFILE === 'lms-scorm'
         ? /lms-scorm-staging\.spec\.ts$/
-        : /destructive-actions\.spec\.ts$/;
+        : AUDIT_PROFILE === 'training-compliance'
+          ? /training-compliance\.spec\.ts$/
+          : /destructive-actions\.spec\.ts$/;
 
 export default defineConfig({
   testDir: './frontend-pr-ui-qa',
