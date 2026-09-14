@@ -205,6 +205,7 @@ jobs:
             echo '- CAE_RECEBIDA persistence: PASS'
             echo '- CAE comparison and PLANEJADO/REPLANEJAR transition: PASS'
             echo '- exact pair/single composition preserved after CAE comparison: PASS'
+            echo '- explicit unmatched singleton preserved after CAE comparison: PASS'
             echo '- final persisted reopen/list: PASS'
             echo '- cross-tenant draft lookup: 404'
             echo '- real browser resume: PASS'
