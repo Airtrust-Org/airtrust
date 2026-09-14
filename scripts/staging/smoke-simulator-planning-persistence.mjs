@@ -125,18 +125,6 @@ async function main() {
   const loginResult = await login(baseUrl, email, password);
   const token = extractAccessToken(loginResult);
 
-  // Keep the synthetic QA tenant deterministic for pairing without changing any real company policy.
-  const configUpdate = await authFetch(baseUrl, token, '/api/simuladores/planejamento-v2/config', {
-    method: 'PUT',
-    body: JSON.stringify({ roster_policy: 'AMBAS' }),
-  });
-  assert(configUpdate.status === 200, `config QA retornou ${configUpdate.status}`);
-  assert(configUpdate.json?.data?.roster_policy === 'AMBAS', 'config QA não confirmou AMBAS');
-  assert(
-    Number(configUpdate.json?.data?.planning_horizon_days || 0) >= 90,
-    'config QA não confirmou horizonte >= 90 dias',
-  );
-
   const [funcionariosRes, tiposRes, modelosRes] = await Promise.all([
     authFetch(baseUrl, token, '/api/funcionarios'),
     authFetch(baseUrl, token, `/api/qualificacoes/tipos?search=${encodeURIComponent(QUAL_CODE)}&limit=20`),
@@ -173,6 +161,14 @@ async function main() {
   assert(generated.status === 200, `gerar proposta retornou ${generated.status}`);
   const generatedProposal = generated.json?.data;
   assert(generatedProposal && Array.isArray(generatedProposal.classes), 'proposta QA sem classes');
+  assert(
+    generatedProposal?.config?.roster_policy === 'AMBAS',
+    'fixture QA não expôs política canônica AMBAS na proposta',
+  );
+  assert(
+    Number(generatedProposal?.config?.planning_horizon_days || 0) >= 90,
+    'fixture QA não expôs horizonte canônico >= 90 dias na proposta',
+  );
 
   const needs = uniqueNeeds(generatedProposal).filter(
     (need) =>
