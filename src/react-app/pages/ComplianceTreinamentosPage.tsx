@@ -94,14 +94,19 @@ function Kpi({
   value,
   icon: Icon,
   helper,
+  onClick,
 }: {
   label: string;
   value: string | number;
   icon: typeof ShieldCheck;
   helper?: string;
+  onClick?: () => void;
 }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+  const className = `rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm ${
+    onClick ? 'cursor-pointer transition hover:border-primary/40 hover:shadow-md' : ''
+  }`;
+  const content = (
+    <>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
@@ -112,7 +117,14 @@ function Kpi({
           <Icon className="h-5 w-5" />
         </div>
       </div>
-    </div>
+    </>
+  );
+  return onClick ? (
+    <button type="button" onClick={onClick} className={className}>
+      {content}
+    </button>
+  ) : (
+    <div className={className}>{content}</div>
   );
 }
 
@@ -122,8 +134,8 @@ export default function ComplianceTreinamentosPage() {
   const [tab, setTab] = useState<'treinamentos' | 'pessoas' | 'configuracao'>('treinamentos');
   const [selectedTipoId, setSelectedTipoId] = useState<number | null>(null);
   const [drilldown, setDrilldown] = useState<{
-    qualificacao_tipo_id: number;
-    qualificacao_nome: string;
+    qualificacao_tipo_id?: number;
+    qualificacao_nome?: string;
     status?: 'VENCENDO' | 'VENCIDO' | 'NAO_REALIZADO' | 'EM_ANDAMENTO';
   } | null>(null);
   const { tipos } = useQualificacaoTipos(true, 500);
@@ -193,6 +205,13 @@ export default function ComplianceTreinamentosPage() {
       qualificacao_nome: item.qualificacao_tipo_nome,
       status,
     });
+    setTab('pessoas');
+  };
+
+  const openStatusDrilldown = (
+    status: 'VENCENDO' | 'VENCIDO' | 'NAO_REALIZADO' | 'EM_ANDAMENTO',
+  ) => {
+    setDrilldown({ status });
     setTab('pessoas');
   };
 
@@ -286,17 +305,29 @@ export default function ComplianceTreinamentosPage() {
                 icon={AlertTriangle}
                 helper="sem qualquer regra aplicável"
               />
-              <Kpi label="Vencendo" value={summary.data?.vencendo ?? 0} icon={Clock3} />
-              <Kpi label="Vencidos" value={summary.data?.vencidos ?? 0} icon={XCircle} />
+              <Kpi
+                label="Vencendo"
+                value={summary.data?.vencendo ?? 0}
+                icon={Clock3}
+                onClick={() => openStatusDrilldown('VENCENDO')}
+              />
+              <Kpi
+                label="Vencidos"
+                value={summary.data?.vencidos ?? 0}
+                icon={XCircle}
+                onClick={() => openStatusDrilldown('VENCIDO')}
+              />
               <Kpi
                 label="Nunca realizados"
                 value={summary.data?.nao_realizados ?? 0}
                 icon={AlertTriangle}
+                onClick={() => openStatusDrilldown('NAO_REALIZADO')}
               />
               <Kpi
                 label="Em andamento"
                 value={summary.data?.em_andamento ?? 0}
                 icon={GraduationCap}
+                onClick={() => openStatusDrilldown('EM_ANDAMENTO')}
               />
             </div>
 
@@ -412,8 +443,14 @@ export default function ComplianceTreinamentosPage() {
                   {drilldown ? (
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
                       <span>
-                        Pessoas de <strong>{drilldown.qualificacao_nome}</strong>
-                        {drilldown.status ? ` · ${drilldown.status.replace(/_/g, ' ')}` : ''}
+                        {drilldown.qualificacao_nome ? (
+                          <>
+                            Pessoas de <strong>{drilldown.qualificacao_nome}</strong>
+                            {drilldown.status ? ` · ${drilldown.status.replace(/_/g, ' ')}` : ''}
+                          </>
+                        ) : (
+                          <>Pessoas · {drilldown.status?.replace(/_/g, ' ')}</>
+                        )}
                       </span>
                       <button
                         type="button"

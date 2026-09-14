@@ -932,13 +932,15 @@ app.get('/pessoas', requireRole('admin', 'manager'), async (c) => {
   const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
   const data = snapshot.people
     .filter((person) => {
-      const matchesRequirement = !qualificacaoTipoId
-        ? true
-        : person.requisitos.some(
-            (requisito) =>
-              requisito.qualificacao_tipo_id === qualificacaoTipoId &&
-              (!statusCompliance || requisito.status_compliance === statusCompliance),
-          );
+      const matchesRequirement =
+        !qualificacaoTipoId && !statusCompliance
+          ? true
+          : person.requisitos.some(
+              (requisito) =>
+                requisito.obrigatoriedade === 'OBRIGATORIA' &&
+                (!qualificacaoTipoId || requisito.qualificacao_tipo_id === qualificacaoTipoId) &&
+                (!statusCompliance || requisito.status_compliance === statusCompliance),
+            );
       return (
         (!setorId || person.setor_id === setorId) &&
         (!funcaoId || person.funcao_id === funcaoId) &&
