@@ -24,8 +24,9 @@ const sectorAccessMock = vi.hoisted(() => ({
 
 vi.mock('../../services/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => sectorAccessMock.access),
-  filterRequestedSetorIdsByAccess: vi.fn((ids: number[], access: { mode: string; setorIds: number[] }) =>
-    access.mode === 'all' ? ids : ids.filter((id) => access.setorIds.includes(id)),
+  filterRequestedSetorIdsByAccess: vi.fn(
+    (ids: number[], access: { mode: string; setorIds: number[] }) =>
+      access.mode === 'all' ? ids : ids.filter((id) => access.setorIds.includes(id)),
   ),
   assertFuncionarioInScope: vi.fn(async () => undefined),
 }));
@@ -36,7 +37,10 @@ function createApp(db: D1Database) {
   const app = new Hono<{ Bindings: Env }>();
   app.onError((error, c) => {
     if (error instanceof ApiError) {
-      return c.json({ success: false, error: error.message }, error.statusCode as 400 | 403 | 404 | 409 | 500);
+      return c.json(
+        { success: false, error: error.message },
+        error.statusCode as 400 | 403 | 404 | 409 | 500,
+      );
     }
     return c.json({ success: false, error: 'INTERNAL' }, 500);
   });
@@ -343,6 +347,38 @@ describe('training compliance engine', () => {
     });
   });
 
+  it('permite drill-down de pessoas por treinamento e status de compliance', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at)
+      VALUES (1000, 100, 'MNT-12', 'MANUTENCAO', '2026-01-01', '2027-01-01',
+              'CONCLUIDA', 0, 1, '2026-01-01', '2026-01-01');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request(
+      '/pessoas?qualificacao_tipo_id=100&status=NAO_REALIZADO',
+    );
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(body.data.map((person: any) => person.id)).toEqual([1001, 1002]);
+  });
+
+  it('rejeita status inválido no drill-down de pessoas', async () => {
+    const response = await createApp(sqlite.asD1()).request(
+      '/pessoas?qualificacao_tipo_id=100&status=QUALQUER',
+    );
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('Status de compliance inválido');
+  });
+
   it('mantém isolamento de tenant no cálculo organizacional', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
@@ -395,8 +431,9 @@ describe('training compliance engine', () => {
     });
 
     expect(response.status).toBe(403);
-    const row = sqlite.database.prepare('SELECT escopo, setor_id, funcao_id FROM treinamento_requisitos WHERE id=90').get() as any;
+    const row = sqlite.database
+      .prepare('SELECT escopo, setor_id, funcao_id FROM treinamento_requisitos WHERE id=90')
+      .get() as any;
     expect(row).toMatchObject({ escopo: 'FUNCAO', setor_id: null, funcao_id: 1 });
   });
-
 });

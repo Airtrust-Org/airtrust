@@ -121,6 +121,11 @@ export default function ComplianceTreinamentosPage() {
   const [funcaoId, setFuncaoId] = useState<number | null>(null);
   const [tab, setTab] = useState<'treinamentos' | 'pessoas' | 'configuracao'>('treinamentos');
   const [selectedTipoId, setSelectedTipoId] = useState<number | null>(null);
+  const [drilldown, setDrilldown] = useState<{
+    qualificacao_tipo_id: number;
+    qualificacao_nome: string;
+    status?: 'VENCENDO' | 'VENCIDO' | 'NAO_REALIZADO' | 'EM_ANDAMENTO';
+  } | null>(null);
   const { tipos } = useQualificacaoTipos(true, 500);
 
   const capabilities = useQuery({
@@ -145,10 +150,19 @@ export default function ComplianceTreinamentosPage() {
       readJson<Summary>(await fetchWithAuth(`/api/compliance-treinamentos/resumo${filter}`)),
   });
   const people = useQuery({
-    queryKey: ['training-compliance', 'people', setorId, funcaoId],
+    queryKey: ['training-compliance', 'people', setorId, funcaoId, drilldown],
     enabled: schemaReady && tab === 'pessoas',
-    queryFn: async () =>
-      readJson<Person[]>(await fetchWithAuth(`/api/compliance-treinamentos/pessoas${filter}`)),
+    queryFn: async () => {
+      const params = new URLSearchParams(filter.startsWith('?') ? filter.slice(1) : '');
+      if (drilldown?.qualificacao_tipo_id) {
+        params.set('qualificacao_tipo_id', String(drilldown.qualificacao_tipo_id));
+      }
+      if (drilldown?.status) params.set('status', drilldown.status);
+      const query = params.toString();
+      return readJson<Person[]>(
+        await fetchWithAuth(`/api/compliance-treinamentos/pessoas${query ? `?${query}` : ''}`),
+      );
+    },
   });
   const trainings = useQuery({
     queryKey: ['training-compliance', 'trainings', setorId, funcaoId],
@@ -169,6 +183,18 @@ export default function ComplianceTreinamentosPage() {
     );
     return all.filter((item) => allowed.has(item.id));
   }, [catalogs.data, setorId]);
+
+  const openPeopleDrilldown = (
+    item: Training,
+    status?: 'VENCENDO' | 'VENCIDO' | 'NAO_REALIZADO' | 'EM_ANDAMENTO',
+  ) => {
+    setDrilldown({
+      qualificacao_tipo_id: item.qualificacao_tipo_id,
+      qualificacao_nome: item.qualificacao_tipo_nome,
+      status,
+    });
+    setTab('pessoas');
+  };
 
   const handleSetor = (value: string) => {
     const next = value ? Number(value) : null;
@@ -247,7 +273,9 @@ export default function ComplianceTreinamentosPage() {
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
               <Kpi
                 label="Compliance"
-                value={summary.data?.compliance_pct == null ? '—' : `${summary.data.compliance_pct}%`}
+                value={
+                  summary.data?.compliance_pct == null ? '—' : `${summary.data.compliance_pct}%`
+                }
                 icon={ShieldCheck}
                 helper={`${summary.data?.conformes ?? 0}/${summary.data?.requisitos_obrigatorios ?? 0} requisitos atendidos`}
               />
@@ -310,9 +338,13 @@ export default function ComplianceTreinamentosPage() {
                       {(trainings.data || []).map((item) => (
                         <tr key={item.qualificacao_tipo_id} className="hover:bg-slate-50">
                           <td className="px-4 py-3">
-                            <div className="font-medium text-slate-900">
+                            <button
+                              type="button"
+                              onClick={() => openPeopleDrilldown(item)}
+                              className="text-left font-medium text-primary hover:underline"
+                            >
                               {item.qualificacao_tipo_nome}
-                            </div>
+                            </button>
                             <div className="text-xs text-slate-400">
                               {item.qualificacao_tipo_codigo || '—'}
                             </div>
@@ -321,13 +353,45 @@ export default function ComplianceTreinamentosPage() {
                           <td className="px-3 py-3 text-right font-semibold">
                             {item.compliance_pct == null ? '—' : `${item.compliance_pct}%`}
                           </td>
-                          <td className="px-3 py-3 text-right text-amber-700">{item.vencendo}</td>
-                          <td className="px-3 py-3 text-right text-red-700">{item.vencidos}</td>
+                          <td className="px-3 py-3 text-right text-amber-700">
+                            <button
+                              type="button"
+                              onClick={() => openPeopleDrilldown(item, 'VENCENDO')}
+                              className="hover:underline"
+                              disabled={!item.vencendo}
+                            >
+                              {item.vencendo}
+                            </button>
+                          </td>
+                          <td className="px-3 py-3 text-right text-red-700">
+                            <button
+                              type="button"
+                              onClick={() => openPeopleDrilldown(item, 'VENCIDO')}
+                              className="hover:underline"
+                              disabled={!item.vencidos}
+                            >
+                              {item.vencidos}
+                            </button>
+                          </td>
                           <td className="px-3 py-3 text-right text-orange-700">
-                            {item.nao_realizados}
+                            <button
+                              type="button"
+                              onClick={() => openPeopleDrilldown(item, 'NAO_REALIZADO')}
+                              className="hover:underline"
+                              disabled={!item.nao_realizados}
+                            >
+                              {item.nao_realizados}
+                            </button>
                           </td>
                           <td className="px-3 py-3 text-right text-blue-700">
-                            {item.em_andamento}
+                            <button
+                              type="button"
+                              onClick={() => openPeopleDrilldown(item, 'EM_ANDAMENTO')}
+                              className="hover:underline"
+                              disabled={!item.em_andamento}
+                            >
+                              {item.em_andamento}
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -344,53 +408,70 @@ export default function ComplianceTreinamentosPage() {
               ) : null}
 
               {tab === 'pessoas' ? (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-slate-50 text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3 text-left">Pessoa</th>
-                        <th className="px-3 py-3 text-left">Setor</th>
-                        <th className="px-3 py-3 text-left">Cargo</th>
-                        <th className="px-3 py-3 text-right">Compliance</th>
-                        <th className="px-3 py-3 text-right">Pendências</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {(people.data || []).map((item) => {
-                        const pending = item.vencidos + item.nao_realizados + item.em_andamento;
-                        return (
-                          <tr key={item.id} className="hover:bg-slate-50">
-                            <td className="px-4 py-3">
-                              <Link
-                                to={`/funcionarios/${item.id}`}
-                                className="font-medium text-primary hover:underline"
+                <div>
+                  {drilldown ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                      <span>
+                        Pessoas de <strong>{drilldown.qualificacao_nome}</strong>
+                        {drilldown.status ? ` · ${drilldown.status.replace(/_/g, ' ')}` : ''}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setDrilldown(null)}
+                        className="font-semibold text-blue-700 hover:underline"
+                      >
+                        Limpar filtro
+                      </button>
+                    </div>
+                  ) : null}
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-slate-50 text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3 text-left">Pessoa</th>
+                          <th className="px-3 py-3 text-left">Setor</th>
+                          <th className="px-3 py-3 text-left">Cargo</th>
+                          <th className="px-3 py-3 text-right">Compliance</th>
+                          <th className="px-3 py-3 text-right">Pendências</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {(people.data || []).map((item) => {
+                          const pending = item.vencidos + item.nao_realizados + item.em_andamento;
+                          return (
+                            <tr key={item.id} className="hover:bg-slate-50">
+                              <td className="px-4 py-3">
+                                <Link
+                                  to={`/funcionarios/${item.id}`}
+                                  className="font-medium text-primary hover:underline"
+                                >
+                                  {item.nome}
+                                </Link>
+                              </td>
+                              <td className="px-3 py-3 text-slate-600">
+                                {item.setor_nome || 'Sem setor'}
+                              </td>
+                              <td className="px-3 py-3 text-slate-600">
+                                {item.funcao_nome || 'Sem cargo'}
+                              </td>
+                              <td className="px-3 py-3 text-right font-semibold">
+                                {!item.configurado
+                                  ? 'Sem configuração'
+                                  : item.total_obrigatorios === 0
+                                    ? 'Sem obrigatórios'
+                                    : `${item.compliance_pct}%`}
+                              </td>
+                              <td
+                                className={`px-3 py-3 text-right font-semibold ${pending ? 'text-red-700' : item.configurado ? 'text-emerald-700' : 'text-amber-700'}`}
                               >
-                                {item.nome}
-                              </Link>
-                            </td>
-                            <td className="px-3 py-3 text-slate-600">
-                              {item.setor_nome || 'Sem setor'}
-                            </td>
-                            <td className="px-3 py-3 text-slate-600">
-                              {item.funcao_nome || 'Sem cargo'}
-                            </td>
-                            <td className="px-3 py-3 text-right font-semibold">
-                              {!item.configurado
-                                ? 'Sem configuração'
-                                : item.total_obrigatorios === 0
-                                  ? 'Sem obrigatórios'
-                                  : `${item.compliance_pct}%`}
-                            </td>
-                            <td
-                              className={`px-3 py-3 text-right font-semibold ${pending ? 'text-red-700' : item.configurado ? 'text-emerald-700' : 'text-amber-700'}`}
-                            >
-                              {!item.configurado ? '—' : pending}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                                {!item.configurado ? '—' : pending}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : null}
 
@@ -424,7 +505,8 @@ export default function ComplianceTreinamentosPage() {
                   ) : (
                     <div className="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">
                       Selecione um treinamento para definir empresa, setor e cargo. Alterações
-                      feitas aqui aparecem também nos modelos de qualificação e nos cursos EAD vinculados.
+                      feitas aqui aparecem também nos modelos de qualificação e nos cursos EAD
+                      vinculados.
                     </div>
                   )}
                 </div>

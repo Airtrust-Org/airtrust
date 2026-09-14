@@ -161,7 +161,6 @@ function resolvedRules(rules: Rule[], employee: Employee): Rule[] {
   return Array.from(byType.values());
 }
 
-
 async function loadEmployees(db: D1Database, empresaId: number): Promise<Employee[]> {
   const cols = await columnSet(db, 'funcionarios');
   const hasSetorId = cols.has('setor_id');
@@ -913,17 +912,40 @@ app.get('/pessoas', requireRole('admin', 'manager'), async (c) => {
   const access = await getEmployeeSectorAccess(c, empresaId);
   const setorId = asPositiveInt(c.req.query('setor_id'));
   const funcaoId = asPositiveInt(c.req.query('funcao_id'));
+  const qualificacaoTipoId = asPositiveInt(c.req.query('qualificacao_tipo_id'));
+  const statusCompliance = String(c.req.query('status') || '')
+    .trim()
+    .toUpperCase();
+  const allowedStatus = new Set([
+    'CONFORME',
+    'VENCENDO',
+    'VENCIDO',
+    'NAO_REALIZADO',
+    'EM_ANDAMENTO',
+  ]);
+  if (statusCompliance && !allowedStatus.has(statusCompliance)) {
+    throw new ApiError('Status de compliance inválido', 400);
+  }
   const q = String(c.req.query('q') || '')
     .trim()
     .toLowerCase();
   const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
   const data = snapshot.people
-    .filter(
-      (person) =>
+    .filter((person) => {
+      const matchesRequirement = !qualificacaoTipoId
+        ? true
+        : person.requisitos.some(
+            (requisito) =>
+              requisito.qualificacao_tipo_id === qualificacaoTipoId &&
+              (!statusCompliance || requisito.status_compliance === statusCompliance),
+          );
+      return (
         (!setorId || person.setor_id === setorId) &&
         (!funcaoId || person.funcao_id === funcaoId) &&
-        (!q || person.nome.toLowerCase().includes(q)),
-    )
+        (!q || person.nome.toLowerCase().includes(q)) &&
+        matchesRequirement
+      );
+    })
     .map(({ requisitos: _requisitos, ...person }) => person);
   return c.json({ success: true, data });
 });
