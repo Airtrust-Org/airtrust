@@ -169,6 +169,18 @@ async function main() {
     Number(generatedProposal?.config?.planning_horizon_days || 0) >= 90,
     'fixture QA não expôs horizonte canônico >= 90 dias na proposta',
   );
+  assert(
+    generatedProposal?.summary?.roster_pairing?.source === 'FUNCIONARIO_ESCALA_1_2',
+    'proposta QA não declarou Escala 1/2 do funcionário como fonte de disponibilidade',
+  );
+  assert(
+    Number(generatedProposal?.summary?.roster_pairing?.employees_with_fixed_fortnight || 0) >= 3,
+    'proposta QA não encontrou as três Escalas 1/2 sintéticas',
+  );
+  assert(
+    Number(generatedProposal?.summary?.roster_pairing?.eligible_date_count || 0) > 0,
+    'proposta QA não derivou datas elegíveis da Escala 1/2',
+  );
 
   const needs = uniqueNeeds(generatedProposal).filter(
     (need) =>
@@ -183,6 +195,23 @@ async function main() {
   const bravoNeed = needByEmployee.get(Number(bravo.id));
   const charlieNeed = needByEmployee.get(Number(charlie.id));
   assert(alfaNeed && bravoNeed && charlieNeed, 'não foi possível mapear as 3 necessidades QA');
+
+  const candidates = await authFetch(baseUrl, token, '/api/simuladores/planejamento-v2/candidatos', {
+    method: 'POST',
+    body: JSON.stringify({ reference_date: referenceDate, anchor: alfaNeed, candidates: [bravoNeed] }),
+  });
+  assert(candidates.status === 200, `candidatos QA retornou ${candidates.status}`);
+  const bravoCandidate = (candidates.json?.data?.candidates || []).find(
+    (candidate) => String(candidate?.need_id || '') === String(bravoNeed.need_id),
+  );
+  const fixedScaleCommonDate = String(bravoCandidate?.availability?.common_date || '');
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(fixedScaleCommonDate), 'Escala 1/2 não produziu data comum para Alfa+Bravo');
+  assert(
+    ['FOLGA', 'TRABALHO'].includes(String(bravoCandidate?.availability?.anchor_state || '')) &&
+      ['FOLGA', 'TRABALHO'].includes(String(bravoCandidate?.availability?.candidate_state || '')),
+    'candidatos QA retornou estado DESCONHECIDO apesar da Escala 1/2 sintética',
+  );
+
   const locks = [{
     anchor_need_id: String(alfaNeed.need_id),
     partner_need_id: String(bravoNeed.need_id),
@@ -246,7 +275,7 @@ async function main() {
   const startTime = '08:00';
   const duration = Number(firstBlock.duration_minutes);
   const end = plusMinutes(startTime, duration);
-  const slotDate = String(firstBlock.target_date);
+  const slotDate = fixedScaleCommonDate;
   const caeDocument = {
     schema_version: 'airtrust.cae_availability.v1',
     provider: 'CAE',
