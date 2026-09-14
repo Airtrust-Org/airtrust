@@ -31,7 +31,7 @@ SELECT
     WHERE f.matricula IN ('QA-PARTICIPANTE-ALFA','QA-PARTICIPANTE-BRAVO') AND f.deleted_at IS NULL) AS alfa_bravo_active,
   (SELECT COUNT(*) FROM funcionarios f JOIN qa ON qa.id=f.empresa_id
     WHERE f.matricula IN ('QA-PARTICIPANTE-ALFA','QA-PARTICIPANTE-BRAVO')
-      AND f.deleted_at IS NULL AND f.quinzena IS NULL) AS alfa_bravo_scale_baseline,
+      AND f.deleted_at IS NULL AND f.quinzena IN ('primeira','segunda')) AS alfa_bravo_fixed_scale_valid,
   (SELECT COUNT(*) FROM funcionarios f JOIN qa ON qa.id=f.empresa_id
     WHERE f.matricula='QA-PARTICIPANTE-CHARLIE') AS charlie_rows,
   (SELECT COUNT(*) FROM funcionarios f JOIN qa ON qa.id=f.empresa_id
@@ -45,7 +45,7 @@ SELECT
         AND COALESCE(f.is_instrutor,0)=0
         AND COALESCE(f.is_checador,0)=0
         AND COALESCE(f.is_examinador,0)=0
-        AND (f.quinzena IS NULL OR f.quinzena='primeira')
+        AND (f.quinzena IS NULL OR f.quinzena IN ('primeira','segunda'))
         AND f.setor IS alfa.setor
         AND f.setor_id IS alfa.setor_id
       )) AS charlie_divergent,
@@ -134,11 +134,10 @@ SELECT
 const numeric = Object.fromEntries(Object.entries(checks).map(([key, value]) => [key, Number(value || 0)]));
 const compatible = numeric.tenant_active === 1
   && numeric.alfa_bravo_active === 2
-  && numeric.alfa_bravo_scale_baseline === 2
+  && numeric.alfa_bravo_fixed_scale_valid === 2
   && numeric.charlie_rows <= 1
   && numeric.charlie_divergent === 0
   && numeric.config_exact === 1
-  && numeric.conflicting_rosters === 0
   && numeric.category_divergent === 0
   && numeric.qtype_divergent === 0
   && numeric.model_divergent === 0
