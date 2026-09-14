@@ -1,4 +1,4 @@
-const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v8';
+const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v9';
 const PILOT_SCOPE_PATH = '/pilot/';
 const PRECACHE_URLS = [
   '/pilot/',
@@ -75,8 +75,10 @@ self.addEventListener('fetch', (event) => {
           if (response.ok) {
             const cache = await caches.open(PILOT_CACHE_VERSION);
             await cache.put('/pilot/index.html', response.clone());
+            return response;
           }
-          return response;
+          const cached = await caches.match('/pilot/index.html');
+          return cached || response;
         } catch {
           const cached = await caches.match('/pilot/index.html');
           return (
