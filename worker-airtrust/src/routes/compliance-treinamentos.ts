@@ -444,7 +444,7 @@ function computeRequirement(
     }
   } else if (
     currentLms &&
-    ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(currentLms.lms_status || '').toUpperCase())
+    String(currentLms.lms_status || '').toUpperCase() === 'EM_ANDAMENTO'
   ) {
     status_compliance = 'EM_ANDAMENTO';
   }
