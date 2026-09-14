@@ -259,7 +259,7 @@ export default function ControleVoosRdvDetalhe() {
   }
 
   async function handleManualSave() {
-    if (!id || !form) return;
+    if (!id || !form || !voo) return;
     const errors = collectFieldErrors(form, voo, trechos);
     if (Object.keys(errors).length > 0) {
       toast.error(
@@ -283,7 +283,7 @@ export default function ControleVoosRdvDetalhe() {
       setFinalizarConfirm(true);
       return;
     }
-    if (!id || !form) return;
+    if (!id || !form || !voo) return;
     const errors = collectFieldErrors(form, voo, trechos);
     if (
       errors.numero ||
