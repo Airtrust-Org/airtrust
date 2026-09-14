@@ -161,8 +161,16 @@ INSERT OR IGNORE INTO funcoes (codigo,nome,descricao,categoria,ativo,empresa_id,
 ('ORG_ASSIST_SEG_OP','Assistente de Segurança Operacional','Função organizacional canônica','SEGURANCA_OPERACIONAL',1,6,datetime('now'),datetime('now'));
 
 -- Legacy labels resolve to the approved canonical organization on future edits/imports.
-INSERT OR IGNORE INTO setores_aliases(empresa_id,alias,setor_id) VALUES
-  (6,'CTM',11),(6,'Qualidade',28);
+INSERT OR IGNORE INTO setores_aliases(empresa_id,alias,setor_id)
+  SELECT 6,'CTM',id FROM setores
+   WHERE empresa_id=6 AND deleted_at IS NULL AND COALESCE(ativo,1)=1
+     AND (UPPER(TRIM(codigo))='MAN' OR UPPER(TRIM(nome))=UPPER('Manutenção'))
+   ORDER BY id LIMIT 1;
+INSERT OR IGNORE INTO setores_aliases(empresa_id,alias,setor_id)
+  SELECT 6,'Qualidade',id FROM setores
+   WHERE empresa_id=6 AND deleted_at IS NULL AND COALESCE(ativo,1)=1
+     AND (UPPER(TRIM(codigo))='QSMS' OR UPPER(TRIM(nome))='QSMS')
+   ORDER BY id LIMIT 1;
 INSERT OR IGNORE INTO funcoes_aliases(empresa_id,alias,funcao_id)
   SELECT 6,'1º Oficial',id FROM funcoes WHERE empresa_id=6 AND codigo='SIC' AND deleted_at IS NULL;
 INSERT OR IGNORE INTO funcoes_aliases(empresa_id,alias,funcao_id)
@@ -176,108 +184,190 @@ INSERT OR IGNORE INTO funcoes_aliases(empresa_id,alias,funcao_id)
 INSERT OR IGNORE INTO funcoes_aliases(empresa_id,alias,funcao_id)
   SELECT 6,'Auxiliar de Suprimentos II',id FROM funcoes WHERE empresa_id=6 AND codigo='ORG_AUX_SUPR' AND deleted_at IS NULL;
 
--- Canonical Setor -> Cargo/Função map is independent of current employee headcount.
-WITH mapping(setor_id,funcao_nome) AS (VALUES
-  (14,'Auxiliar de Serviços Gerais'),(14,'Coordenador de Base'),(14,'Gerente de Bases'),(14,'Vigia'),
-  (25,'Consultor Comercial'),(25,'Gerente Comercial'),
-  (26,'Analista de Compras'),(26,'Coordenador de Compras e Logística'),
-  (27,'Analista Financeiro'),(27,'Auxiliar Financeiro'),
-  (29,'Advogado'),
-  (31,'Auxiliar de Suprimentos'),
-  (11,'Analista de CTM I'),(11,'Analista de Suprimentos II'),(11,'Auxiliar de CTM I'),
-  (11,'Auxiliar de Manutenção'),(11,'Auxiliar de Serviços Gerais'),(11,'Coordenador de Engenharia'),(11,'Mecânico'),
-  (24,'Agente de Atendimento'),(24,'Agente de Rampa'),(24,'Assistente de Operações'),
-  (24,'Auxiliar de Coordenação de Voo'),(24,'Coordenador de Voo'),(24,'Gerente de Operações'),(24,'Motorista'),
-  (28,'Auxiliar de QSMS'),(28,'Técnico de Segurança do Trabalho'),
-  (30,'Assistente Administrativo e de RH'),
-  (5,'Assistente de Segurança Operacional'),
-  (10,'Comandante'),(10,'Copiloto')
+-- Canonical Setor -> Cargo/Função map is resolved by tenant-local sector identity, never by environment-specific IDs.
+WITH mapping(setor_codigo,setor_nome,funcao_nome) AS (VALUES
+  ('ADM','Administrativo','Auxiliar de Serviços Gerais'),('ADM','Administrativo','Coordenador de Base'),
+  ('ADM','Administrativo','Gerente de Bases'),('ADM','Administrativo','Vigia'),
+  ('COMERCIAL','Comercial','Consultor Comercial'),('COMERCIAL','Comercial','Gerente Comercial'),
+  ('COMPRAS','Compras','Analista de Compras'),('COMPRAS','Compras','Coordenador de Compras e Logística'),
+  ('CONTROLADORIA','Controladoria','Analista Financeiro'),('CONTROLADORIA','Controladoria','Auxiliar Financeiro'),
+  ('JURIDICO','Jurídico','Advogado'),
+  ('LOGISTICA','Logística','Auxiliar de Suprimentos'),
+  ('MAN','Manutenção','Analista de CTM I'),('MAN','Manutenção','Analista de Suprimentos II'),
+  ('MAN','Manutenção','Auxiliar de CTM I'),('MAN','Manutenção','Auxiliar de Manutenção'),
+  ('MAN','Manutenção','Auxiliar de Serviços Gerais'),('MAN','Manutenção','Coordenador de Engenharia'),
+  ('MAN','Manutenção','Mecânico'),
+  ('OPERACOES_CS','Operações','Agente de Atendimento'),('OPERACOES_CS','Operações','Agente de Rampa'),
+  ('OPERACOES_CS','Operações','Assistente de Operações'),('OPERACOES_CS','Operações','Auxiliar de Coordenação de Voo'),
+  ('OPERACOES_CS','Operações','Coordenador de Voo'),('OPERACOES_CS','Operações','Gerente de Operações'),
+  ('OPERACOES_CS','Operações','Motorista'),
+  ('QSMS','QSMS','Auxiliar de QSMS'),('QSMS','QSMS','Técnico de Segurança do Trabalho'),
+  ('RH_CS','Recursos Humanos','Assistente Administrativo e de RH'),
+  ('SEGURANCA','Segurança Operacional','Assistente de Segurança Operacional'),
+  ('TRI','Tripulação','Comandante'),('TRI','Tripulação','Copiloto')
 )
 INSERT OR IGNORE INTO setores_funcoes(empresa_id,setor_id,funcao_id)
 SELECT 6,s.id,f.id
   FROM mapping m
-  JOIN setores s ON s.id=m.setor_id AND s.empresa_id=6 AND s.deleted_at IS NULL AND COALESCE(s.ativo,1)=1
+  JOIN setores s ON s.empresa_id=6 AND s.deleted_at IS NULL AND COALESCE(s.ativo,1)=1
+                AND (UPPER(TRIM(s.codigo))=UPPER(TRIM(m.setor_codigo))
+                     OR UPPER(TRIM(s.nome))=UPPER(TRIM(m.setor_nome)))
   JOIN funcoes f ON f.empresa_id=6 AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
                 AND UPPER(TRIM(f.nome))=UPPER(TRIM(m.funcao_nome));
 
--- Merge qualification visibility: CTM -> Manutenção (21 -> 11), Qualidade -> QSMS (15 -> 28).
+-- Merge qualification visibility: CTM -> Manutenção and Qualidade -> QSMS.
+WITH sector_merge(source_id,target_id) AS (
+  SELECT src.id,tgt.id FROM setores src JOIN setores tgt ON tgt.empresa_id=src.empresa_id
+   WHERE src.empresa_id=6 AND src.deleted_at IS NULL AND COALESCE(src.ativo,1)=1
+     AND tgt.deleted_at IS NULL AND COALESCE(tgt.ativo,1)=1
+     AND ((UPPER(TRIM(src.codigo))='CTM' AND (UPPER(TRIM(tgt.codigo))='MAN' OR UPPER(TRIM(tgt.nome))=UPPER('Manutenção')))
+       OR (UPPER(TRIM(src.codigo))='QUA' AND (UPPER(TRIM(tgt.codigo))='QSMS' OR UPPER(TRIM(tgt.nome))='QSMS')))
+)
 UPDATE qualificacoes_tipos_setores
    SET deleted_at = datetime('now'), updated_at = datetime('now')
- WHERE empresa_id = 6 AND deleted_at IS NULL AND setor_id IN (15,21)
+ WHERE empresa_id = 6 AND deleted_at IS NULL
+   AND setor_id IN (SELECT source_id FROM sector_merge)
    AND EXISTS (
-     SELECT 1 FROM qualificacoes_tipos_setores target
-      WHERE target.empresa_id = 6 AND target.deleted_at IS NULL
-        AND target.tipo_id = qualificacoes_tipos_setores.tipo_id
-        AND target.setor_id = CASE qualificacoes_tipos_setores.setor_id WHEN 15 THEN 28 WHEN 21 THEN 11 END
-        AND target.id <> qualificacoes_tipos_setores.id
+     SELECT 1 FROM sector_merge sm
+     JOIN qualificacoes_tipos_setores target
+       ON target.empresa_id=6 AND target.deleted_at IS NULL
+      AND target.tipo_id=qualificacoes_tipos_setores.tipo_id
+      AND target.setor_id=sm.target_id
+      AND target.id<>qualificacoes_tipos_setores.id
+     WHERE sm.source_id=qualificacoes_tipos_setores.setor_id
    );
+WITH sector_merge(source_id,target_id) AS (
+  SELECT src.id,tgt.id FROM setores src JOIN setores tgt ON tgt.empresa_id=src.empresa_id
+   WHERE src.empresa_id=6 AND src.deleted_at IS NULL AND COALESCE(src.ativo,1)=1
+     AND tgt.deleted_at IS NULL AND COALESCE(tgt.ativo,1)=1
+     AND ((UPPER(TRIM(src.codigo))='CTM' AND (UPPER(TRIM(tgt.codigo))='MAN' OR UPPER(TRIM(tgt.nome))=UPPER('Manutenção')))
+       OR (UPPER(TRIM(src.codigo))='QUA' AND (UPPER(TRIM(tgt.codigo))='QSMS' OR UPPER(TRIM(tgt.nome))='QSMS')))
+)
 UPDATE qualificacoes_tipos_setores
-   SET setor_id = CASE setor_id WHEN 15 THEN 28 WHEN 21 THEN 11 END,
+   SET setor_id = (SELECT target_id FROM sector_merge WHERE source_id=qualificacoes_tipos_setores.setor_id),
        updated_at = datetime('now')
- WHERE empresa_id = 6 AND deleted_at IS NULL AND setor_id IN (15,21);
+ WHERE empresa_id = 6 AND deleted_at IS NULL
+   AND setor_id IN (SELECT source_id FROM sector_merge);
 
 -- Merge LMS catalog visibility with duplicate protection.
+WITH sector_merge(source_id,target_id) AS (
+  SELECT src.id,tgt.id FROM setores src JOIN setores tgt ON tgt.empresa_id=src.empresa_id
+   WHERE src.empresa_id=6 AND src.deleted_at IS NULL AND COALESCE(src.ativo,1)=1
+     AND tgt.deleted_at IS NULL AND COALESCE(tgt.ativo,1)=1
+     AND ((UPPER(TRIM(src.codigo))='CTM' AND (UPPER(TRIM(tgt.codigo))='MAN' OR UPPER(TRIM(tgt.nome))=UPPER('Manutenção')))
+       OR (UPPER(TRIM(src.codigo))='QUA' AND (UPPER(TRIM(tgt.codigo))='QSMS' OR UPPER(TRIM(tgt.nome))='QSMS')))
+)
 UPDATE lms_cursos_setores
    SET deleted_at = datetime('now'), updated_at = datetime('now')
- WHERE empresa_id = 6 AND deleted_at IS NULL AND setor_id IN (15,21)
+ WHERE empresa_id = 6 AND deleted_at IS NULL
+   AND setor_id IN (SELECT source_id FROM sector_merge)
    AND EXISTS (
-     SELECT 1 FROM lms_cursos_setores target
-      WHERE target.empresa_id = 6 AND target.deleted_at IS NULL
-        AND target.curso_id = lms_cursos_setores.curso_id
-        AND target.setor_id = CASE lms_cursos_setores.setor_id WHEN 15 THEN 28 WHEN 21 THEN 11 END
-        AND target.id <> lms_cursos_setores.id
+     SELECT 1 FROM sector_merge sm
+     JOIN lms_cursos_setores target
+       ON target.empresa_id=6 AND target.deleted_at IS NULL
+      AND target.curso_id=lms_cursos_setores.curso_id
+      AND target.setor_id=sm.target_id
+      AND target.id<>lms_cursos_setores.id
+     WHERE sm.source_id=lms_cursos_setores.setor_id
    );
+WITH sector_merge(source_id,target_id) AS (
+  SELECT src.id,tgt.id FROM setores src JOIN setores tgt ON tgt.empresa_id=src.empresa_id
+   WHERE src.empresa_id=6 AND src.deleted_at IS NULL AND COALESCE(src.ativo,1)=1
+     AND tgt.deleted_at IS NULL AND COALESCE(tgt.ativo,1)=1
+     AND ((UPPER(TRIM(src.codigo))='CTM' AND (UPPER(TRIM(tgt.codigo))='MAN' OR UPPER(TRIM(tgt.nome))=UPPER('Manutenção')))
+       OR (UPPER(TRIM(src.codigo))='QUA' AND (UPPER(TRIM(tgt.codigo))='QSMS' OR UPPER(TRIM(tgt.nome))='QSMS')))
+)
 UPDATE lms_cursos_setores
-   SET setor_id = CASE setor_id WHEN 15 THEN 28 WHEN 21 THEN 11 END,
+   SET setor_id = (SELECT target_id FROM sector_merge WHERE source_id=lms_cursos_setores.setor_id),
        updated_at = datetime('now')
- WHERE empresa_id = 6 AND deleted_at IS NULL AND setor_id IN (15,21);
+ WHERE empresa_id = 6 AND deleted_at IS NULL
+   AND setor_id IN (SELECT source_id FROM sector_merge);
 
 -- Merge manager assignments without duplicating the same manager/user on the target sector.
+WITH sector_merge(source_id,target_id) AS (
+  SELECT src.id,tgt.id FROM setores src JOIN setores tgt ON tgt.empresa_id=src.empresa_id
+   WHERE src.empresa_id=6 AND src.deleted_at IS NULL AND COALESCE(src.ativo,1)=1
+     AND tgt.deleted_at IS NULL AND COALESCE(tgt.ativo,1)=1
+     AND ((UPPER(TRIM(src.codigo))='CTM' AND (UPPER(TRIM(tgt.codigo))='MAN' OR UPPER(TRIM(tgt.nome))=UPPER('Manutenção')))
+       OR (UPPER(TRIM(src.codigo))='QUA' AND (UPPER(TRIM(tgt.codigo))='QSMS' OR UPPER(TRIM(tgt.nome))='QSMS')))
+)
 UPDATE setores_gestores
    SET deleted_at = datetime('now'), ativo = 0, updated_at = datetime('now')
- WHERE empresa_id = 6 AND deleted_at IS NULL AND setor_id IN (15,21)
+ WHERE empresa_id = 6 AND deleted_at IS NULL
+   AND setor_id IN (SELECT source_id FROM sector_merge)
    AND EXISTS (
-     SELECT 1 FROM setores_gestores target
-      WHERE target.empresa_id = 6 AND target.deleted_at IS NULL
-        AND target.setor_id = CASE setores_gestores.setor_id WHEN 15 THEN 28 WHEN 21 THEN 11 END
-        AND target.id <> setores_gestores.id
-        AND (
-          (setores_gestores.usuario_id IS NOT NULL AND target.usuario_id = setores_gestores.usuario_id)
-          OR
-          (setores_gestores.usuario_id IS NULL AND target.usuario_id IS NULL
-           AND setores_gestores.gestor_id IS NOT NULL AND target.gestor_id = setores_gestores.gestor_id)
-        )
+     SELECT 1 FROM sector_merge sm
+     JOIN setores_gestores target
+       ON target.empresa_id=6 AND target.deleted_at IS NULL
+      AND target.setor_id=sm.target_id AND target.id<>setores_gestores.id
+      AND ((setores_gestores.usuario_id IS NOT NULL AND target.usuario_id=setores_gestores.usuario_id)
+        OR (setores_gestores.usuario_id IS NULL AND target.usuario_id IS NULL
+            AND setores_gestores.gestor_id IS NOT NULL AND target.gestor_id=setores_gestores.gestor_id))
+     WHERE sm.source_id=setores_gestores.setor_id
    );
+WITH sector_merge(source_id,target_id) AS (
+  SELECT src.id,tgt.id FROM setores src JOIN setores tgt ON tgt.empresa_id=src.empresa_id
+   WHERE src.empresa_id=6 AND src.deleted_at IS NULL AND COALESCE(src.ativo,1)=1
+     AND tgt.deleted_at IS NULL AND COALESCE(tgt.ativo,1)=1
+     AND ((UPPER(TRIM(src.codigo))='CTM' AND (UPPER(TRIM(tgt.codigo))='MAN' OR UPPER(TRIM(tgt.nome))=UPPER('Manutenção')))
+       OR (UPPER(TRIM(src.codigo))='QUA' AND (UPPER(TRIM(tgt.codigo))='QSMS' OR UPPER(TRIM(tgt.nome))='QSMS')))
+)
 UPDATE setores_gestores
-   SET setor_id = CASE setor_id WHEN 15 THEN 28 WHEN 21 THEN 11 END,
+   SET setor_id = (SELECT target_id FROM sector_merge WHERE source_id=setores_gestores.setor_id),
        updated_at = datetime('now')
- WHERE empresa_id = 6 AND deleted_at IS NULL AND setor_id IN (15,21);
+ WHERE empresa_id = 6 AND deleted_at IS NULL
+   AND setor_id IN (SELECT source_id FROM sector_merge);
 
 -- Merge canonical compliance rules with duplicate protection.
+WITH sector_merge(source_id,target_id) AS (
+  SELECT src.id,tgt.id FROM setores src JOIN setores tgt ON tgt.empresa_id=src.empresa_id
+   WHERE src.empresa_id=6 AND src.deleted_at IS NULL AND COALESCE(src.ativo,1)=1
+     AND tgt.deleted_at IS NULL AND COALESCE(tgt.ativo,1)=1
+     AND ((UPPER(TRIM(src.codigo))='CTM' AND (UPPER(TRIM(tgt.codigo))='MAN' OR UPPER(TRIM(tgt.nome))=UPPER('Manutenção')))
+       OR (UPPER(TRIM(src.codigo))='QUA' AND (UPPER(TRIM(tgt.codigo))='QSMS' OR UPPER(TRIM(tgt.nome))='QSMS')))
+)
 UPDATE treinamento_requisitos
    SET deleted_at = datetime('now'), ativo = 0, updated_at = datetime('now')
- WHERE empresa_id = 6 AND deleted_at IS NULL AND ativo = 1 AND setor_id IN (15,21)
+ WHERE empresa_id = 6 AND deleted_at IS NULL AND ativo = 1
+   AND setor_id IN (SELECT source_id FROM sector_merge)
    AND EXISTS (
-     SELECT 1 FROM treinamento_requisitos target
-      WHERE target.empresa_id = 6 AND target.deleted_at IS NULL AND target.ativo = 1
-        AND target.qualificacao_tipo_id = treinamento_requisitos.qualificacao_tipo_id
-        AND target.escopo = treinamento_requisitos.escopo
-        AND COALESCE(target.funcao_id,0) = COALESCE(treinamento_requisitos.funcao_id,0)
-        AND COALESCE(target.funcionario_id,0) = COALESCE(treinamento_requisitos.funcionario_id,0)
-        AND target.setor_id = CASE treinamento_requisitos.setor_id WHEN 15 THEN 28 WHEN 21 THEN 11 END
-        AND target.id <> treinamento_requisitos.id
+     SELECT 1 FROM sector_merge sm
+     JOIN treinamento_requisitos target
+       ON target.empresa_id=6 AND target.deleted_at IS NULL AND target.ativo=1
+      AND target.qualificacao_tipo_id=treinamento_requisitos.qualificacao_tipo_id
+      AND target.escopo=treinamento_requisitos.escopo
+      AND COALESCE(target.funcao_id,0)=COALESCE(treinamento_requisitos.funcao_id,0)
+      AND COALESCE(target.funcionario_id,0)=COALESCE(treinamento_requisitos.funcionario_id,0)
+      AND target.setor_id=sm.target_id AND target.id<>treinamento_requisitos.id
+     WHERE sm.source_id=treinamento_requisitos.setor_id
    );
+WITH sector_merge(source_id,target_id) AS (
+  SELECT src.id,tgt.id FROM setores src JOIN setores tgt ON tgt.empresa_id=src.empresa_id
+   WHERE src.empresa_id=6 AND src.deleted_at IS NULL AND COALESCE(src.ativo,1)=1
+     AND tgt.deleted_at IS NULL AND COALESCE(tgt.ativo,1)=1
+     AND ((UPPER(TRIM(src.codigo))='CTM' AND (UPPER(TRIM(tgt.codigo))='MAN' OR UPPER(TRIM(tgt.nome))=UPPER('Manutenção')))
+       OR (UPPER(TRIM(src.codigo))='QUA' AND (UPPER(TRIM(tgt.codigo))='QSMS' OR UPPER(TRIM(tgt.nome))='QSMS')))
+)
 UPDATE treinamento_requisitos
-   SET setor_id = CASE setor_id WHEN 15 THEN 28 WHEN 21 THEN 11 END,
+   SET setor_id = (SELECT target_id FROM sector_merge WHERE source_id=treinamento_requisitos.setor_id),
        updated_at = datetime('now')
- WHERE empresa_id = 6 AND deleted_at IS NULL AND setor_id IN (15,21);
+ WHERE empresa_id = 6 AND deleted_at IS NULL
+   AND setor_id IN (SELECT source_id FROM sector_merge);
 
--- Merge employees in historical/active records and keep legacy sector text aligned.
+-- Merge employees and keep legacy sector text aligned.
+WITH sector_merge(source_id,target_id,target_name) AS (
+  SELECT src.id,tgt.id,tgt.nome FROM setores src JOIN setores tgt ON tgt.empresa_id=src.empresa_id
+   WHERE src.empresa_id=6 AND src.deleted_at IS NULL AND COALESCE(src.ativo,1)=1
+     AND tgt.deleted_at IS NULL AND COALESCE(tgt.ativo,1)=1
+     AND ((UPPER(TRIM(src.codigo))='CTM' AND (UPPER(TRIM(tgt.codigo))='MAN' OR UPPER(TRIM(tgt.nome))=UPPER('Manutenção')))
+       OR (UPPER(TRIM(src.codigo))='QUA' AND (UPPER(TRIM(tgt.codigo))='QSMS' OR UPPER(TRIM(tgt.nome))='QSMS')))
+)
 UPDATE funcionarios
-   SET setor_id = CASE setor_id WHEN 15 THEN 28 WHEN 21 THEN 11 END,
-       setor = CASE setor_id WHEN 15 THEN 'QSMS' WHEN 21 THEN 'Manutenção' ELSE setor END,
+   SET setor_id = (SELECT target_id FROM sector_merge WHERE source_id=funcionarios.setor_id),
+       setor = (SELECT target_name FROM sector_merge WHERE source_id=funcionarios.setor_id),
        updated_at = datetime('now')
- WHERE empresa_id = 6 AND deleted_at IS NULL AND setor_id IN (15,21);
+ WHERE empresa_id = 6 AND deleted_at IS NULL
+   AND setor_id IN (SELECT source_id FROM sector_merge);
 
 -- User-approved role corrections.
 UPDATE funcionarios
@@ -286,25 +376,49 @@ UPDATE funcionarios
    AND UPPER(TRIM(COALESCE(funcao,''))) = UPPER('Coord de Engenharia');
 
 UPDATE funcionarios
-   SET setor_id = 31, setor = 'Logística', cargo = 'Auxiliar de Suprimentos',
+   SET setor_id = (
+         SELECT id FROM setores WHERE empresa_id=6 AND deleted_at IS NULL AND COALESCE(ativo,1)=1
+           AND (UPPER(TRIM(codigo))='LOGISTICA' OR UPPER(TRIM(nome))=UPPER('Logística'))
+         ORDER BY id LIMIT 1
+       ),
+       setor = 'Logística', cargo = 'Auxiliar de Suprimentos',
        funcao = 'Auxiliar de Suprimentos', updated_at = datetime('now')
  WHERE empresa_id = 6 AND deleted_at IS NULL
-   AND setor_id = 11
+   AND setor_id IN (
+     SELECT id FROM setores WHERE empresa_id=6 AND deleted_at IS NULL AND COALESCE(ativo,1)=1
+       AND (UPPER(TRIM(codigo))='MAN' OR UPPER(TRIM(nome))=UPPER('Manutenção'))
+   )
+   AND EXISTS (
+     SELECT 1 FROM setores WHERE empresa_id=6 AND deleted_at IS NULL AND COALESCE(ativo,1)=1
+       AND (UPPER(TRIM(codigo))='LOGISTICA' OR UPPER(TRIM(nome))=UPPER('Logística'))
+   )
    AND (UPPER(TRIM(COALESCE(cargo,''))) = UPPER('Auxiliar de Suprimentos')
         OR UPPER(TRIM(COALESCE(funcao,''))) IN (UPPER('Auxiliar de Suprimentos'),UPPER('Auxiliar de Suprimentos II')));
 
 -- Tripulação is canonicalized to exactly Comandante or Copiloto.
 UPDATE funcionarios
    SET cargo = 'Copiloto', funcao = 'Copiloto', updated_at = datetime('now')
- WHERE empresa_id = 6 AND deleted_at IS NULL AND setor_id = 10
+ WHERE empresa_id = 6 AND deleted_at IS NULL
+   AND setor_id IN (
+     SELECT id FROM setores WHERE empresa_id=6 AND deleted_at IS NULL AND COALESCE(ativo,1)=1
+       AND (UPPER(TRIM(codigo))='TRI' OR UPPER(TRIM(nome))=UPPER('Tripulação'))
+   )
    AND UPPER(REPLACE(REPLACE(TRIM(COALESCE(cargo,'')),'º',''),'°','')) IN ('1 OFICIAL','1O OFICIAL','PRIMEIRO OFICIAL');
 UPDATE funcionarios
    SET cargo = 'Copiloto', funcao = 'Copiloto', updated_at = datetime('now')
- WHERE empresa_id = 6 AND deleted_at IS NULL AND setor_id = 10
+ WHERE empresa_id = 6 AND deleted_at IS NULL
+   AND setor_id IN (
+     SELECT id FROM setores WHERE empresa_id=6 AND deleted_at IS NULL AND COALESCE(ativo,1)=1
+       AND (UPPER(TRIM(codigo))='TRI' OR UPPER(TRIM(nome))=UPPER('Tripulação'))
+   )
    AND UPPER(TRIM(COALESCE(funcao,''))) = UPPER('Copiloto');
 UPDATE funcionarios
    SET cargo = 'Comandante', funcao = 'Comandante', updated_at = datetime('now')
- WHERE empresa_id = 6 AND deleted_at IS NULL AND setor_id = 10
+ WHERE empresa_id = 6 AND deleted_at IS NULL
+   AND setor_id IN (
+     SELECT id FROM setores WHERE empresa_id=6 AND deleted_at IS NULL AND COALESCE(ativo,1)=1
+       AND (UPPER(TRIM(codigo))='TRI' OR UPPER(TRIM(nome))=UPPER('Tripulação'))
+   )
    AND UPPER(TRIM(COALESCE(funcao,''))) = UPPER('Comandante');
 
 -- Remove synthetic QA employee fixtures from active operational scope, preserving history.
@@ -330,7 +444,15 @@ UPDATE funcionarios
        updated_at = datetime('now')
  WHERE empresa_id = 6 AND deleted_at IS NULL AND funcao_id IS NOT NULL;
 
--- Retire merged source sectors only after all live references are moved.
+-- Retire merged source sectors only after all live references are moved and a target exists.
+WITH sector_merge(source_id,target_id) AS (
+  SELECT src.id,tgt.id FROM setores src JOIN setores tgt ON tgt.empresa_id=src.empresa_id
+   WHERE src.empresa_id=6 AND src.deleted_at IS NULL AND COALESCE(src.ativo,1)=1
+     AND tgt.deleted_at IS NULL AND COALESCE(tgt.ativo,1)=1
+     AND ((UPPER(TRIM(src.codigo))='CTM' AND (UPPER(TRIM(tgt.codigo))='MAN' OR UPPER(TRIM(tgt.nome))=UPPER('Manutenção')))
+       OR (UPPER(TRIM(src.codigo))='QUA' AND (UPPER(TRIM(tgt.codigo))='QSMS' OR UPPER(TRIM(tgt.nome))='QSMS')))
+)
 UPDATE setores
    SET ativo = 0, deleted_at = datetime('now'), updated_at = datetime('now')
- WHERE empresa_id = 6 AND deleted_at IS NULL AND id IN (15,21);
+ WHERE empresa_id = 6 AND deleted_at IS NULL
+   AND id IN (SELECT source_id FROM sector_merge);
