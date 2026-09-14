@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-14",
-    "last_reconciled_against": "training enrollment reconciliation 0494 and training programs/flight curricula 0495 reviewed",
-    "schema_v2_digest": "84aa6fa2933148c5d4fe619d0c8ee87612c07020ac7e325ac6e8cb46a5613d1a",
+    "last_reconciled_against": "training enrollment reconciliation 0494 production apply verified; training programs/flight curricula 0495 reviewed",
+    "schema_v2_digest": "bae96e82afbd08720fd3914ddac2975558f5534ee5a16be8b549c652652d1563",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -820,9 +820,10 @@
       ],
       "domain": "explicit tenant-scoped reconciliation of LMS enrollments against the canonical training requirement matrix",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REMOTE_APPLY_PENDING",
+      "governance_state": "PRODUCTION_CONFIRMED",
       "reviewed_manifest": "training-enrollment-reconciliation-0494.json",
-      "note": "0494 is additive and stores only explicit MANTER_AVULSA acknowledgements. It never infers or creates compliance requirements from historical enrollments. Merge does not authorize staging or production apply."
+      "note": "0494 was applied through the governed Schema V2 production workflow on 2026-09-14 at exact source SHA 2d5514f345f1d2eb338452abb141f4059e3d898c; preflight, recovery point, atomic apply, ledger verification, schema contract and postconditions passed.",
+      "evidence": "docs/audit/evidence/0494-training-enrollment-reconciliation-applied-verified-2026-09-14.md"
     },
     {
       "change_file": "0495_training_programs_and_flight_curricula.sql",
