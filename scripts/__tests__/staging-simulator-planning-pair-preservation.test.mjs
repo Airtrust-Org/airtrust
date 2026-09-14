@@ -38,3 +38,10 @@ test('staging simulator QA always rolls back the synthetic planning fixture afte
   assert.match(workflow, /CLEANUP: \$\{\{ needs\.d1-cleanup-simulator-planning-fixture\.result \}\}/);
   assert.match(workflow, /\[\[ "\$CLEANUP" == 'success' \]\]/);
 });
+
+test('staging simulator runtime QA does not mutate planning policy through the API', () => {
+  assert.doesNotMatch(source, /planejamento-v2\/config/);
+  assert.doesNotMatch(source, /roster_policy: 'AMBAS'/);
+  assert.match(source, /generatedProposal\?\.config\?\.roster_policy === 'AMBAS'/);
+  assert.match(source, /generatedProposal\?\.config\?\.planning_horizon_days/);
+});
