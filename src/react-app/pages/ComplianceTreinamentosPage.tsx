@@ -17,18 +17,20 @@ import { useQualificacaoTipos } from '@/react-app/hooks/useQualificacoesExt';
 
 type Summary = {
   pessoas: number;
+  pessoas_sem_configuracao: number;
   requisitos_obrigatorios: number;
   conformes: number;
   vencendo: number;
   vencidos: number;
   nao_realizados: number;
   em_andamento: number;
-  compliance_pct: number;
+  compliance_pct: number | null;
   setores: Array<{
     setor_id: number | null;
     setor_nome: string;
     pessoas: number;
-    compliance_pct: number;
+    pessoas_sem_configuracao: number;
+    compliance_pct: number | null;
   }>;
 };
 
@@ -39,13 +41,14 @@ type Person = {
   setor_nome: string | null;
   funcao_id: number | null;
   funcao_nome: string | null;
+  configurado: boolean;
   total_obrigatorios: number;
   conformes: number;
   vencendo: number;
   vencidos: number;
   nao_realizados: number;
   em_andamento: number;
-  compliance_pct: number;
+  compliance_pct: number | null;
 };
 
 type Training = {
@@ -241,14 +244,20 @@ export default function ComplianceTreinamentosPage() {
 
         {schemaReady ? (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
               <Kpi
                 label="Compliance"
-                value={`${summary.data?.compliance_pct ?? 100}%`}
+                value={summary.data?.compliance_pct == null ? '—' : `${summary.data.compliance_pct}%`}
                 icon={ShieldCheck}
                 helper={`${summary.data?.conformes ?? 0}/${summary.data?.requisitos_obrigatorios ?? 0} requisitos atendidos`}
               />
               <Kpi label="Pessoas" value={summary.data?.pessoas ?? 0} icon={Users} />
+              <Kpi
+                label="Sem configuração"
+                value={summary.data?.pessoas_sem_configuracao ?? 0}
+                icon={AlertTriangle}
+                helper="sem qualquer regra aplicável"
+              />
               <Kpi label="Vencendo" value={summary.data?.vencendo ?? 0} icon={Clock3} />
               <Kpi label="Vencidos" value={summary.data?.vencidos ?? 0} icon={XCircle} />
               <Kpi
@@ -310,7 +319,7 @@ export default function ComplianceTreinamentosPage() {
                           </td>
                           <td className="px-3 py-3 text-right">{item.pessoas}</td>
                           <td className="px-3 py-3 text-right font-semibold">
-                            {item.compliance_pct}%
+                            {item.compliance_pct == null ? '—' : `${item.compliance_pct}%`}
                           </td>
                           <td className="px-3 py-3 text-right text-amber-700">{item.vencendo}</td>
                           <td className="px-3 py-3 text-right text-red-700">{item.vencidos}</td>
@@ -366,12 +375,16 @@ export default function ComplianceTreinamentosPage() {
                               {item.funcao_nome || 'Sem cargo'}
                             </td>
                             <td className="px-3 py-3 text-right font-semibold">
-                              {item.compliance_pct}%
+                              {!item.configurado
+                                ? 'Sem configuração'
+                                : item.total_obrigatorios === 0
+                                  ? 'Sem obrigatórios'
+                                  : `${item.compliance_pct}%`}
                             </td>
                             <td
-                              className={`px-3 py-3 text-right font-semibold ${pending ? 'text-red-700' : 'text-emerald-700'}`}
+                              className={`px-3 py-3 text-right font-semibold ${pending ? 'text-red-700' : item.configurado ? 'text-emerald-700' : 'text-amber-700'}`}
                             >
-                              {pending}
+                              {!item.configurado ? '—' : pending}
                             </td>
                           </tr>
                         );
@@ -429,10 +442,15 @@ export default function ComplianceTreinamentosPage() {
                           {item.setor_nome}
                         </span>
                         <span className="text-sm font-bold text-slate-900">
-                          {item.compliance_pct}%
+                          {item.compliance_pct == null ? '—' : `${item.compliance_pct}%`}
                         </span>
                       </div>
-                      <p className="mt-1 text-xs text-slate-500">{item.pessoas} pessoa(s)</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {item.pessoas} pessoa(s)
+                        {item.pessoas_sem_configuracao > 0
+                          ? ` · ${item.pessoas_sem_configuracao} sem configuração`
+                          : ''}
+                      </p>
                     </div>
                   ))}
                 </div>

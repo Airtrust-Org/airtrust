@@ -145,7 +145,7 @@ function ruleApplies(rule: Rule, employee: Employee): boolean {
   return rule.funcionario_id === employee.id;
 }
 
-function effectiveRules(rules: Rule[], employee: Employee): Rule[] {
+function resolvedRules(rules: Rule[], employee: Employee): Rule[] {
   const byType = new Map<number, Rule>();
   for (const rule of rules) {
     if (!ruleApplies(rule, employee)) continue;
@@ -158,8 +158,9 @@ function effectiveRules(rules: Rule[], employee: Employee): Rule[] {
       byType.set(rule.qualificacao_tipo_id, rule);
     }
   }
-  return Array.from(byType.values()).filter((rule) => rule.obrigatoriedade !== 'NAO_APLICA');
+  return Array.from(byType.values());
 }
+
 
 async function loadEmployees(db: D1Database, empresaId: number): Promise<Employee[]> {
   const cols = await columnSet(db, 'funcionarios');
@@ -470,13 +471,16 @@ async function buildSnapshot(db: D1Database, empresaId: number, access: Employee
   const employees = filterEmployeesByAccess(allEmployees, access);
 
   const people = employees.map((employee) => {
-    const requirements = effectiveRules(rules, employee).map((rule) =>
-      computeRequirement(
-        rule,
-        historyMap.get(`${employee.id}:${rule.qualificacao_tipo_id}`),
-        lmsMap.get(`${employee.id}:${rule.qualificacao_tipo_id}`),
-      ),
-    );
+    const resolved = resolvedRules(rules, employee);
+    const requirements = resolved
+      .filter((rule) => rule.obrigatoriedade !== 'NAO_APLICA')
+      .map((rule) =>
+        computeRequirement(
+          rule,
+          historyMap.get(`${employee.id}:${rule.qualificacao_tipo_id}`),
+          lmsMap.get(`${employee.id}:${rule.qualificacao_tipo_id}`),
+        ),
+      );
     const mandatory = requirements.filter((r) => r.obrigatoriedade === 'OBRIGATORIA');
     const compliant = mandatory.filter(
       (r) => r.status_compliance === 'CONFORME' || r.status_compliance === 'VENCENDO',
@@ -485,13 +489,14 @@ async function buildSnapshot(db: D1Database, empresaId: number, access: Employee
     return {
       ...employee,
       requisitos: requirements,
+      configurado: resolved.length > 0,
       total_obrigatorios: total,
       conformes: compliant,
       vencendo: mandatory.filter((r) => r.status_compliance === 'VENCENDO').length,
       vencidos: mandatory.filter((r) => r.status_compliance === 'VENCIDO').length,
       nao_realizados: mandatory.filter((r) => r.status_compliance === 'NAO_REALIZADO').length,
       em_andamento: mandatory.filter((r) => r.status_compliance === 'EM_ANDAMENTO').length,
-      compliance_pct: total > 0 ? Math.round((compliant / total) * 1000) / 10 : 100,
+      compliance_pct: total > 0 ? Math.round((compliant / total) * 1000) / 10 : null,
     };
   });
 
@@ -977,6 +982,7 @@ app.get('/resumo', requireRole('admin', 'manager'), async (c) => {
       setor_id: number | null;
       setor_nome: string;
       pessoas: number;
+      pessoas_sem_configuracao: number;
       total: number;
       conformes: number;
     }
@@ -987,10 +993,12 @@ app.get('/resumo', requireRole('admin', 'manager'), async (c) => {
       setor_id: key,
       setor_nome: person.setor_nome || 'Sem setor',
       pessoas: 0,
+      pessoas_sem_configuracao: 0,
       total: 0,
       conformes: 0,
     };
     current.pessoas += 1;
+    if (!person.configurado) current.pessoas_sem_configuracao += 1;
     current.total += person.total_obrigatorios;
     current.conformes += person.conformes;
     bySector.set(key, current);
@@ -998,13 +1006,14 @@ app.get('/resumo', requireRole('admin', 'manager'), async (c) => {
   const setores = Array.from(bySector.values())
     .map((s) => ({
       ...s,
-      compliance_pct: s.total > 0 ? Math.round((s.conformes / s.total) * 1000) / 10 : 100,
+      compliance_pct: s.total > 0 ? Math.round((s.conformes / s.total) * 1000) / 10 : null,
     }))
     .sort((a, b) => a.setor_nome.localeCompare(b.setor_nome, 'pt-BR'));
   return c.json({
     success: true,
     data: {
       pessoas: people.length,
+      pessoas_sem_configuracao: people.filter((p) => !p.configurado).length,
       requisitos_obrigatorios: totalObrigatorios,
       conformes,
       vencendo: people.reduce((sum, p) => sum + p.vencendo, 0),
@@ -1012,7 +1021,7 @@ app.get('/resumo', requireRole('admin', 'manager'), async (c) => {
       nao_realizados: people.reduce((sum, p) => sum + p.nao_realizados, 0),
       em_andamento: people.reduce((sum, p) => sum + p.em_andamento, 0),
       compliance_pct:
-        totalObrigatorios > 0 ? Math.round((conformes / totalObrigatorios) * 1000) / 10 : 100,
+        totalObrigatorios > 0 ? Math.round((conformes / totalObrigatorios) * 1000) / 10 : null,
       setores,
     },
     meta: { schema_ready: await tableExists(c.env.DB, 'treinamento_requisitos') },
