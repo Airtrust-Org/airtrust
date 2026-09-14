@@ -130,6 +130,51 @@ describe('training compliance engine', () => {
     patchComplianceSchema(sqlite);
   });
 
+  it('nao trata pessoa sem regra aplicavel como 100% conforme', async () => {
+    const app = createApp(sqlite.asD1());
+    const personResponse = await app.request('/funcionarios/1002');
+    const personBody = (await personResponse.json()) as any;
+    const summaryResponse = await app.request('/resumo');
+    const summaryBody = (await summaryResponse.json()) as any;
+
+    expect(personResponse.status).toBe(200);
+    expect(personBody.data.configurado).toBe(false);
+    expect(personBody.data.total_obrigatorios).toBe(0);
+    expect(personBody.data.compliance_pct).toBeNull();
+
+    expect(summaryResponse.status).toBe(200);
+    expect(summaryBody.data.requisitos_obrigatorios).toBe(0);
+    expect(summaryBody.data.compliance_pct).toBeNull();
+    expect(summaryBody.data.pessoas_sem_configuracao).toBe(3);
+    expect(summaryBody.data.setores).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ setor_nome: 'Manutenção', compliance_pct: null }),
+        expect.objectContaining({ setor_nome: 'Operações', compliance_pct: null }),
+      ]),
+    );
+  });
+
+  it('distingue regra NAO_APLICA de ausencia de configuracao', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 100, 'SETOR_FUNCAO', 10, 1, 'NAO_APLICA', 'EMPRESA');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request('/funcionarios/1000');
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(body.data.configurado).toBe(true);
+    expect(body.data.total_obrigatorios).toBe(0);
+    expect(body.data.compliance_pct).toBeNull();
+    expect(body.data.requisitos).toEqual([]);
+  });
+
   it('detecta treinamento nunca realizado para novo funcionário mesmo sem vencimento prévio', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
