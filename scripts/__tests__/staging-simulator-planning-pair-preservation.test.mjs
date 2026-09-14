@@ -107,10 +107,12 @@ test('staging simulator read-only audit surfaces disposable fixture residue', ()
 });
 
 
-test('staging simulator fixture never adopts or deletes a foreign Charlie participant', () => {
+test('staging simulator fixture reactivates only its exact soft-deleted Charlie identity', () => {
   const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
-  assert.match(seed, /_qa_sim_planning_requires_charlie_absent/);
+  assert.match(seed, /_qa_sim_planning_requires_charlie_signature/);
   assert.match(seed, /f\.matricula = \${e\(PARTICIPANTE3_CODIGO\)}/);
+  assert.match(seed, /SELECT COUNT\(\*\)[\s\S]*PARTICIPANTE3_CODIGO[\s\S]*\) <= 1/);
+  assert.match(seed, /UPDATE funcionarios\s+SET deleted_at = NULL,[\s\S]*matricula = \${e\(PARTICIPANTE3_CODIGO\)}/);
   assert.doesNotMatch(seed, /UPDATE funcionarios\s+SET nome = 'QA Participante Charlie'/);
   assert.match(seed, /nome = 'QA Participante Charlie'/);
   assert.match(seed, /cargo = 'Participante QA'/);
@@ -154,6 +156,8 @@ test('staging simulator seed rejects divergent soft-deleted reserved history bef
   assert.match(reservedGuard, /qh\.observacoes = \$\{e\(PLANNING_MARKER\)\}/);
   assert.doesNotMatch(reservedGuard, /qh\.deleted_at IS NULL/);
   assert.match(reservedGuard, /UPPER\(COALESCE\(qh\.qualificacao_codigo, ''\)\) = UPPER\(\$\{e\(PLANNING_QUAL_CODE\)\}\)/);
+  assert.doesNotMatch(reservedGuard, /f\.deleted_at IS NULL/);
+  assert.doesNotMatch(reservedGuard, /qt\.deleted_at IS NULL/);
 });
 
 
@@ -202,4 +206,17 @@ test('staging simulator QA gates schema compatibility before any D1 mutation', (
   assert.match(preflight, /is_examinador/);
   assert.match(preflight, /planejamento_snapshot_json/);
   assert.doesNotMatch(preflight, /\b(INSERT|UPDATE|DELETE|DROP|ALTER)\b[^\n]*FROM/i);
+});
+
+test('staging simulator QA checks semantic fixture ownership before any D1 mutation', () => {
+  const workflow = readFileSync('.github/workflows/staging-simulator-planning-persistence-qa.yml', 'utf8');
+  const semanticGate = workflow.indexOf('Require simulator-planning fixture ownership preconditions (read-only)');
+  const firstMutation = workflow.indexOf('Remove stale synthetic simulator-planning artifacts before provisioning');
+  assert.ok(semanticGate >= 0 && firstMutation > semanticGate);
+  const preflight = readFileSync('scripts/staging/preflight-simulator-planning-fixture.mjs', 'utf8');
+  assert.match(preflight, /READ_ONLY_FIXTURE_PREFLIGHT/);
+  assert.match(preflight, /fixture_preconditions_compatible/);
+  assert.match(preflight, /history_divergent/);
+  assert.match(preflight, /charlie_divergent/);
+  assert.doesNotMatch(preflight, /\b(INSERT|UPDATE|DELETE|DROP|ALTER)\b/);
 });
