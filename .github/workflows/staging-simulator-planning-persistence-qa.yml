@@ -134,12 +134,6 @@ jobs:
           npm ci
           npm --prefix worker-airtrust ci
 
-      - name: Validate canonical examiner fixture in dry-run mode
-        run: node scripts/staging/seed-qa-examiner-training.mjs
-
-      - name: Provision canonical synthetic examiner tenant
-        run: node scripts/staging/seed-qa-examiner-training.mjs --apply
-
       - name: Validate isolated simulator-planning fixture in dry-run mode
         run: node scripts/staging/seed-qa-simulator-planning.mjs
 

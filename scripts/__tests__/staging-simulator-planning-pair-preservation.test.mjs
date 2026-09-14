@@ -45,3 +45,11 @@ test('staging simulator runtime QA does not mutate planning policy through the A
   assert.match(source, /generatedProposal\?\.config\?\.roster_policy === 'AMBAS'/);
   assert.match(source, /generatedProposal\?\.config\?\.planning_horizon_days/);
 });
+
+
+test('staging simulator planning QA never reapplies the canonical examiner base fixture', () => {
+  const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
+  assert.doesNotMatch(workflow, /seed-qa-examiner-training\.mjs --apply/);
+  assert.match(seed, /f\.matricula IN \(\$\{e\(PARTICIPANTE1_CODIGO\)\}, \$\{e\(PARTICIPANTE2_CODIGO\)\}\)/);
+  assert.match(seed, /\) = 2 THEN 1 ELSE 0/);
+});
