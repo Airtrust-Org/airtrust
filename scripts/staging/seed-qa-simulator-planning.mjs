@@ -404,12 +404,12 @@ WHERE ms.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO
 
 -- Terceiro participante existe apenas para provar que a comparação CAE não repara singles silenciosamente.
 INSERT INTO funcionarios (
-  nome, matricula, cargo, setor, setor_id, status, instrutor_simulador, checador_simulador, ativo, empresa_id,
+  nome, matricula, cargo, setor, setor_id, status, is_instrutor, is_checador, is_examinador, ativo, empresa_id,
   created_at, updated_at, deleted_at
 )
 SELECT
   'QA Participante Charlie', ${e(PARTICIPANTE3_CODIGO)}, 'Participante QA', alfa.setor, alfa.setor_id,
-  'ATIVO', 0, 0, 1, emp.id, datetime('now'), datetime('now'), NULL
+  'ATIVO', 0, 0, 0, 1, emp.id, datetime('now'), datetime('now'), NULL
 FROM empresas emp
 JOIN funcionarios alfa
   ON alfa.empresa_id = emp.id
@@ -771,8 +771,9 @@ WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND cargo = 'Participante QA'
   AND status = 'ATIVO'
   AND COALESCE(ativo, 1) = 1
-  AND COALESCE(instrutor_simulador, 0) = 0
-  AND COALESCE(checador_simulador, 0) = 0
+  AND COALESCE(is_instrutor, 0) = 0
+  AND COALESCE(is_checador, 0) = 0
+  AND COALESCE(is_examinador, 0) = 0
   AND deleted_at IS NULL
   AND EXISTS (
     SELECT 1

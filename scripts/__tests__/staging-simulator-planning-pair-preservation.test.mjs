@@ -173,6 +173,15 @@ test('staging simulator seed rejects foreign reserved model-version rows before 
 });
 
 
+test('staging simulator fixture uses canonical funcionario role columns', () => {
+  const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
+  assert.match(seed, /is_instrutor, is_checador, is_examinador/);
+  assert.match(seed, /COALESCE\(is_instrutor, 0\) = 0/);
+  assert.match(seed, /COALESCE\(is_checador, 0\) = 0/);
+  assert.match(seed, /COALESCE\(is_examinador, 0\) = 0/);
+  assert.doesNotMatch(seed, /instrutor_simulador|checador_simulador/);
+});
+
 test('staging simulator fixture avoids D1 remote file-import reset path', () => {
   const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
   assert.match(seed, /'--remote', '--command', sql, '--json'/);
