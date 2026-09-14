@@ -171,3 +171,11 @@ test('staging simulator seed rejects foreign reserved model-version rows before 
   assert.match(reservedGuard, /msv\.modelo_anterior_id IS NULL/);
   assert.match(reservedGuard, /msv\.efetivo_ate IS NULL/);
 });
+
+
+test('staging simulator fixture avoids D1 remote file-import reset path', () => {
+  const seed = readFileSync('scripts/staging/seed-qa-simulator-planning.mjs', 'utf8');
+  assert.match(seed, /'--remote', '--command', sql, '--json'/);
+  assert.doesNotMatch(seed, /'--remote', '--file'/);
+  assert.doesNotMatch(seed, /mkdtempSync|writeFileSync|rmSync/);
+});
