@@ -38,7 +38,7 @@ test('training compliance canonical staging flow is live and read-only', async (
   const summaryP = waitApi(page, '/api/compliance-treinamentos/resumo');
   const trainingsP = waitApi(page, '/api/compliance-treinamentos/treinamentos');
 
-  await page.goto('/compliance-treinamentos', { waitUntil: 'domcontentloaded' });
+  await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
   if (SHORT_SHA) await assertLiveFrontendShaFromPage(page, SHORT_SHA, 'training-compliance');
   await expect(page.getByRole('heading', { name: 'Compliance de Treinamentos' })).toBeVisible();
   await expect(page.getByRole('combobox').first()).toContainText('Todos os setores');

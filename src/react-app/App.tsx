@@ -468,6 +468,10 @@ export default function App() {
                         }
                       />
                       <Route
+                        path="/compliance-treinamentos"
+                        element={<Navigate to="/treinamentos/compliance" replace />}
+                      />
+                      <Route
                         path="/qualificacoes/dashboard"
                         element={
                           <ProtectedRoute>
