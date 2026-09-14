@@ -1,6 +1,16 @@
 name: Production Simulator FOLGA Functional Readonly Proof
 
 on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA reviewed for the production simulator read-only proof
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_PRODUCTION_SIMULATOR_FOLGA_READONLY
+        required: true
+        type: string
   push:
     branches: [main]
     paths:
@@ -24,6 +34,19 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - name: Validate immutable manual dispatch
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_REF_REQUIRED" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "EXPECTED_SHA_INVALID" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo "EXPECTED_SHA_MISMATCH" >&2; exit 1; }
+          [[ "$CONFIRMATION" == "AIRTRUST_PRODUCTION_SIMULATOR_FOLGA_READONLY" ]] || { echo "READONLY_CONFIRMATION_REQUIRED" >&2; exit 1; }
+
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
