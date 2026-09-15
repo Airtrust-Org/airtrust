@@ -22,6 +22,8 @@ test('lifecycle fixture is reserved to the canonical synthetic tenant and fails 
   assert.match(seed, /AIRTRUST_STAGING_TRAINING_COMPLIANCE_LIFECYCLE_QA/);
   assert.match(seed, /QA-COMP-LIFE-/);
   assert.match(seed, /airtrust-db-staging-baseline-20260701/);
+  assert.match(seed, /DELETE FROM lms_xapi_statements/);
+  assert.match(seed, /scorm_package_r2_prefix/);
   execFileSync('node', ['--check', 'scripts/staging/seed-qa-training-compliance-lifecycle.mjs']);
 });
 
@@ -32,6 +34,9 @@ test('browser simulation covers organization, enrollment, progress, completion a
     'RECOMENDADA',
     'Matricular gaps (sem e-mail)',
     'EM_ANDAMENTO',
+    '/progresso',
+    'progresso_pct: 50',
+    '/api/lms/assets/session',
     '/api/lms/xapi/statements',
     'completion: true',
     'MANTER_AVULSA',
