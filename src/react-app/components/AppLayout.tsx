@@ -37,6 +37,7 @@ import { canAccessModule } from '@/react-app/lib/module-access';
 import { apiClient } from '@/react-app/services/apiClient';
 import {
   canSeeAdministrativeDashboard,
+  canSeeControleVoosDevelopmentModule,
   canSeeDevelopmentModules,
 } from '@/react-app/lib/development-module-nav';
 interface AppLayoutProps {
@@ -149,6 +150,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const modulosAtivos = empresaAtual?.modulos_ativos;
   const canSeeAdminDashboard = canSeeAdministrativeDashboard(user);
   const canSeeRestrictedDevelopmentNav = canSeeDevelopmentModules(user);
+  const canSeeControleVoosNav = canSeeControleVoosDevelopmentModule(user);
 
   // Flags de acesso a módulos
   const showDashboard = canAccessModule('dashboard', modulosAtivos) && canSeeAdminDashboard;
@@ -172,7 +174,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     canAccessModule('controle_voos', modulosAtivos) &&
     !isAluno &&
     !isInstrutor &&
-    canSeeRestrictedDevelopmentNav;
+    canSeeControleVoosNav;
   const showTreinamentosPlanejados =
     canAccessModule('treinamentos_planejados', modulosAtivos) && !isAluno && !isInstrutor;
 

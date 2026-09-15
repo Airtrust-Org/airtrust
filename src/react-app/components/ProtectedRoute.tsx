@@ -4,7 +4,10 @@ import { useAuth } from '@/react-app/hooks/useAuth';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useOperationalAccess, type OperationalDomain } from '@/react-app/hooks/useOperationalAccess';
 import { useLanguage } from '@/react-app/i18n/useLanguage';
-import { canSeeDevelopmentModules } from '@/react-app/lib/development-module-nav';
+import {
+  canSeeControleVoosDevelopmentModule,
+  canSeeDevelopmentModules,
+} from '@/react-app/lib/development-module-nav';
 import {
   canAccessModule,
   getModuleKeyForPath,
@@ -171,11 +174,15 @@ export default function ProtectedRoute({
     );
   }
 
+  const canAccessRestrictedDevelopmentModule =
+    moduleKey === 'controle_voos'
+      ? canSeeControleVoosDevelopmentModule(user) || isControleVoosRestrictedAccessPath(location.pathname)
+      : canSeeDevelopmentModules(user);
+
   if (
     moduleKey &&
     requiresRestrictedDevelopmentModuleAccess(moduleKey) &&
-    !isControleVoosRestrictedAccessPath(location.pathname) &&
-    !canSeeDevelopmentModules(user)
+    !canAccessRestrictedDevelopmentModule
   ) {
     return (
       <RouteStatusScreen

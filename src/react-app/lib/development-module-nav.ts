@@ -37,6 +37,12 @@ export function isPrimaryAdmin(user: DevelopmentModuleVisibilityUser | null | un
 export function canSeeDevelopmentModules(
   user: DevelopmentModuleVisibilityUser | null | undefined,
 ): boolean {
+  return isPrimaryAdmin(user);
+}
+
+export function canSeeControleVoosDevelopmentModule(
+  user: DevelopmentModuleVisibilityUser | null | undefined,
+): boolean {
   if (!user) return false;
   return PRIMARY_ADMIN_ROLES.has(normalizeRole(user.role));
 }

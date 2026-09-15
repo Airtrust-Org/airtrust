@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/react-app/hooks/useAuth';
-import { canSeeDevelopmentModules } from '@/react-app/lib/development-module-nav';
+import { canSeeControleVoosDevelopmentModule } from '@/react-app/lib/development-module-nav';
 
 export interface ControleVoosNavLink {
   to: string;
@@ -27,7 +27,7 @@ export const PREVIEW_BADGE_TITLE = 'Tela em preview - nao usar como fonte operac
 export function getVisibleControleVoosNavLinks(
   user?: { email?: string | null; role?: string | null } | null,
 ): ControleVoosNavLink[] {
-  if (canSeeDevelopmentModules(user)) return CONTROLE_VOOS_NAV_LINKS;
+  if (canSeeControleVoosDevelopmentModule(user)) return CONTROLE_VOOS_NAV_LINKS;
   return CONTROLE_VOOS_NAV_LINKS.filter((link) => link.to === '/controle-voos/meus-voos');
 }
 
