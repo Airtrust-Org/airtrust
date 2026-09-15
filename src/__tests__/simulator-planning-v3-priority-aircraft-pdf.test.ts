@@ -39,6 +39,14 @@ describe('simulator planning V3 priority, aircraft filter and report UX', () => 
     expect(route).toContain('satisfies_qualification_type_ids');
   });
 
+  it('uses the canonical legacy-completion rule before promoting Semestral to Periódico', () => {
+    const route = source(ROUTE);
+    expect(route).toContain('AND data_conclusao IS NOT NULL');
+    expect(route).toContain("AND date(data_conclusao) <= date('now')");
+    expect(route).toContain("'CONCLUIDA','CONCLUIDO','RENOVADA','VALIDA','VÁLIDA','VENCIDA','PROXIMA_VENCIMENTO','VENCENDO','VENCENDO_30'");
+    expect(route).toContain("OR TRIM(COALESCE(status,'')) = ''");
+  });
+
   it('renders the PDF with visual hierarchy, status palettes and summary cards', () => {
     const page = source(PAGE);
     expect(page).toContain("doc.setFillColor(...navy)");
