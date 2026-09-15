@@ -18,6 +18,7 @@ import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import {
   ensureMatriculaCycle,
   hasActiveMatriculaCycle,
+  resetMatriculaForNewCycle,
   syncMatriculaCycleFromMatricula,
 } from '../services/lms-matricula-cycle';
 import {
@@ -169,7 +170,7 @@ async function sendMatriculaEmail(
     dataExpiracao?: string | null;
     isNovoCiclo: boolean;
   },
-): Promise<void> {
+): Promise<'ENVIADO' | 'SEM_EMAIL' | 'FALHA'> {
   try {
     const funcionario = await db
       .prepare(
@@ -181,7 +182,7 @@ async function sendMatriculaEmail(
 
     if (!funcionario?.email) {
       createLogger(c, 'LmsMatriculas.email').info('lms_matricula_email_missing', { funcionarioId: params.funcionarioId, cursoId: params.cursoId, empresaId: params.empresaId });
-      return;
+      return 'SEM_EMAIL';
     }
 
     const frontendUrl = String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '');
@@ -241,11 +242,14 @@ async function sendMatriculaEmail(
 
     if (sent) {
       createLogger(c, 'LmsMatriculas.email').info('lms_matricula_email_sent', { funcionarioId: params.funcionarioId, cursoId: params.cursoId, empresaId: params.empresaId });
+      return 'ENVIADO';
     }
+    return 'FALHA';
   } catch (err) {
     createLogger(c, 'LmsMatriculas.email').error('lms_matricula_email_failed', toError(err), {
       funcionarioId: params.funcionarioId, cursoId: params.cursoId, empresaId: params.empresaId,
     });
+    return 'FALHA';
   }
 }
 
@@ -301,6 +305,7 @@ const MatriculaCreateSchema = z.object({
     .optional()
     .nullable(),
   observacoes: z.string().optional().nullable(),
+  enviar_convite_email: z.boolean().optional().default(true),
 });
 
 const MatriculaLoteSchema = z.object({
@@ -312,6 +317,11 @@ const MatriculaLoteSchema = z.object({
     .optional()
     .nullable(),
   observacoes: z.string().optional().nullable(),
+  enviar_convite_email: z.boolean().optional().default(true),
+});
+
+const ConviteMatriculaLoteSchema = z.object({
+  matricula_ids: z.array(z.number().int().positive()).min(1).max(200),
 });
 
 const ScormCommitSchema = z.object({
@@ -945,7 +955,7 @@ app.post('/', async (c) => {
   if (!parsed.success)
     throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
 
-  const { funcionario_id, curso_id, data_expiracao, observacoes } = parsed.data;
+  const { funcionario_id, curso_id, data_expiracao, observacoes, enviar_convite_email } = parsed.data;
 
   if (!canManage) {
     if (!callerFuncionarioId) {
@@ -996,6 +1006,47 @@ app.post('/', async (c) => {
   });
 
   if (existente) {
+    const reativavel =
+      Boolean(existente.deleted_at) || String(existente.status || '').toUpperCase() === 'CANCELADO';
+    if (reativavel) {
+      await resetMatriculaForNewCycle(db, {
+        matriculaId: existente.id,
+        dataExpiracao: data_expiracao ?? null,
+        observacoes: observacoes ?? null,
+        matriculadoPor: Number.isFinite(userId) && userId > 0 ? userId : null,
+        origin: 'MANUAL',
+        empresaId,
+      });
+      await createLmsInAppNotification(db, {
+        funcionarioId: funcionario_id,
+        empresaId,
+        tipo: 'lms_nova_matricula',
+        titulo: 'Novo treinamento LMS',
+        mensagem: `Você foi matriculado em ${curso.titulo}.`,
+        referenciaId: existente.id,
+        referenciaTipo: 'lms_matricula',
+      });
+      await logLmsMatriculaAudit(db, c, {
+        action: 'LMS_MATRICULA_REATIVADA',
+        matriculaId: existente.id,
+        oldValues: { status: existente.status, deleted_at: existente.deleted_at },
+        newValues: { curso_id, funcionario_id, data_expiracao: data_expiracao ?? null },
+      });
+      if (enviar_convite_email)
+        await sendMatriculaEmail(c, c.env, db, {
+          funcionarioId: funcionario_id,
+          empresaId,
+          cursoId: curso_id,
+          cursoTitulo: curso.titulo,
+          dataExpiracao: data_expiracao ?? null,
+          isNovoCiclo: false,
+        });
+      const reativada = await readMatriculaForCourseList(db, {
+        matriculaId: existente.id,
+        empresaId,
+      });
+      return c.json({ success: true, data: reativada ?? { id: existente.id, reativada: true } }, 200);
+    }
     await logLmsMatriculaAudit(db, c, {
       action: 'LMS_MATRICULA_PRESERVADA',
       matriculaId: existente.id,
@@ -1055,6 +1106,7 @@ app.post('/', async (c) => {
     await ensureMatriculaCycle(db, {
       matriculaId,
       origin: 'MANUAL',
+      empresaId,
     });
     await createLmsInAppNotification(db, {
       funcionarioId: funcionario_id,
@@ -1076,7 +1128,8 @@ app.post('/', async (c) => {
         data_expiracao: data_expiracao ?? null,
       },
     });
-    await sendMatriculaEmail(c, c.env, db, {
+    if (enviar_convite_email)
+      await sendMatriculaEmail(c, c.env, db, {
       funcionarioId: funcionario_id,
       empresaId,
       cursoId: curso_id,
@@ -1147,7 +1200,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
   if (!parsed.success)
     throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
 
-  const { funcionario_ids, curso_id, data_expiracao, observacoes } = parsed.data;
+  const { funcionario_ids, curso_id, data_expiracao, observacoes, enviar_convite_email } = parsed.data;
   const funcionarioIdsUnicos = [...new Set(funcionario_ids)];
 
   const curso = await db
@@ -1228,7 +1281,50 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
       });
 
       if (existente) {
-        results.ignoradas++;
+        const reativavel =
+          Boolean(existente.deleted_at) || String(existente.status || '').toUpperCase() === 'CANCELADO';
+        if (!reativavel) {
+          results.ignoradas++;
+          continue;
+        }
+        await resetMatriculaForNewCycle(db, {
+          matriculaId: existente.id,
+          dataExpiracao: data_expiracao ?? null,
+          observacoes: observacoes ?? null,
+          matriculadoPor: Number.isFinite(userId) && userId > 0 ? userId : null,
+          origin: 'MANUAL',
+          empresaId,
+        });
+        await createLmsInAppNotification(db, {
+          funcionarioId,
+          empresaId,
+          tipo: 'lms_nova_matricula',
+          titulo: 'Novo treinamento LMS',
+          mensagem: `Você foi matriculado em ${curso.titulo}.`,
+          referenciaId: existente.id,
+          referenciaTipo: 'lms_matricula',
+        });
+        await logLmsMatriculaAudit(db, c, {
+          action: 'LMS_MATRICULA_REATIVADA',
+          matriculaId: existente.id,
+          oldValues: { status: existente.status, deleted_at: existente.deleted_at },
+          newValues: { curso_id, funcionario_id: funcionarioId, data_expiracao: data_expiracao ?? null },
+        });
+        if (enviar_convite_email)
+          await sendMatriculaEmail(c, c.env, db, {
+            funcionarioId,
+            empresaId,
+            cursoId: curso_id,
+            cursoTitulo: curso.titulo,
+            dataExpiracao: data_expiracao ?? null,
+            isNovoCiclo: false,
+          });
+        const matriculaReativada = await readMatriculaForCourseList(db, {
+          matriculaId: existente.id,
+          empresaId,
+        });
+        if (matriculaReativada) matriculasCriadas.push(matriculaReativada);
+        results.criadas++;
         continue;
       }
       const insertResult = await db
@@ -1248,6 +1344,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
       await ensureMatriculaCycle(db, {
         matriculaId,
         origin: 'MANUAL',
+        empresaId,
       });
       await createLmsInAppNotification(db, {
         funcionarioId,
@@ -1270,7 +1367,8 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           observacoes: observacoes ?? null,
         },
       });
-      await sendMatriculaEmail(c, c.env, db, {
+      if (enviar_convite_email)
+        await sendMatriculaEmail(c, c.env, db, {
         funcionarioId,
         empresaId,
         cursoId: curso_id,
@@ -1308,6 +1406,57 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
   }
 
   return c.json({ success: true, data: { ...results, matriculas: matriculasCriadas } });
+});
+
+// ── Enviar/re-enviar convite de matrícula sob comando explícito ────────────────
+
+app.post('/convites/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaIdSafe(c);
+  const parsed = ConviteMatriculaLoteSchema.safeParse(await c.req.json<unknown>());
+  if (!parsed.success)
+    throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
+
+  const ids = [...new Set(parsed.data.matricula_ids)];
+  const placeholders = ids.map(() => '?').join(',');
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const scope = employeeSectorSql(access, 'f');
+  const { results } = await db
+    .prepare(
+      `SELECT m.id,m.funcionario_id,m.curso_id,m.data_expiracao,c.titulo AS curso_titulo
+         FROM lms_matriculas m
+         JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id AND c.deleted_at IS NULL
+         JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id
+        WHERE m.empresa_id=? AND m.id IN (${placeholders}) AND m.deleted_at IS NULL
+          AND UPPER(COALESCE(m.status,'')) IN ('NAO_INICIADO','EM_ANDAMENTO')
+          AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
+          AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'
+          AND ${scope.clause}`,
+    )
+    .bind(empresaId, ...ids, ...scope.bindings)
+    .all<{ id:number; funcionario_id:number; curso_id:number; data_expiracao:string|null; curso_titulo:string }>();
+
+  const encontrados = new Set((results || []).map((row) => Number(row.id)));
+  const summary = { enviados: 0, sem_email: 0, falhas: 0, nao_encontradas: ids.filter((id) => !encontrados.has(id)).length };
+  for (const row of results || []) {
+    const status = await sendMatriculaEmail(c, c.env, db, {
+      funcionarioId: Number(row.funcionario_id),
+      empresaId,
+      cursoId: Number(row.curso_id),
+      cursoTitulo: row.curso_titulo,
+      dataExpiracao: row.data_expiracao,
+      isNovoCiclo: false,
+    });
+    if (status === 'ENVIADO') summary.enviados += 1;
+    else if (status === 'SEM_EMAIL') summary.sem_email += 1;
+    else summary.falhas += 1;
+    await logLmsMatriculaAudit(db, c, {
+      action: 'LMS_MATRICULA_CONVITE_EMAIL',
+      matriculaId: Number(row.id),
+      newValues: { resultado: status, curso_id: row.curso_id, funcionario_id: row.funcionario_id },
+    });
+  }
+  return c.json({ success: true, data: summary });
 });
 
 // ── Cancelar matrícula ────────────────────────────────────────────────────────

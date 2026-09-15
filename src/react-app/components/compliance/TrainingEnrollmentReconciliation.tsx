@@ -26,6 +26,19 @@ type Reconciliation = {
     funcionarios: Array<{ id: number; nome: string; status_compliance: string }>;
     cursos_ead: Array<{ id: number; titulo: string }>;
   }>;
+  convites_matricula: Array<{
+    matricula_id: number;
+    funcionario_id: number;
+    funcionario_nome: string;
+    curso_id: number;
+    curso_titulo: string;
+    qualificacao_tipo_id: number | null;
+    qualificacao_tipo_nome: string | null;
+    setor_id: number | null;
+    setor_nome: string | null;
+    funcao_id: number | null;
+    funcao_nome: string | null;
+  }>;
   matriculas_revisao: Array<{
     matricula_id: number;
     funcionario_id: number;
@@ -98,6 +111,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
           funcionario_ids: gap.funcionarios.map((f) => f.id),
           curso_id: cursoId,
           observacoes: 'Matrícula criada pela reconciliação do Compliance de Treinamentos.',
+          enviar_convite_email: false,
         }),
       });
       return readJson<{ criadas: number; ignoradas: number; erros: number }>(response);
@@ -110,6 +124,26 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
     },
     onError: (error) =>
       showToast.error(error instanceof Error ? error.message : 'Erro ao matricular gaps'),
+  });
+
+  const invite = useMutation({
+    mutationFn: async (matriculaIds: number[]) => {
+      const response = await fetchWithAuth('/api/lms/matriculas/convites/lote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matricula_ids: matriculaIds }),
+      });
+      return readJson<{ enviados: number; sem_email: number; falhas: number; nao_encontradas: number }>(
+        response,
+      );
+    },
+    onSuccess: (data) => {
+      showToast.success(
+        `${data.enviados} convite(s) enviado(s); ${data.sem_email} sem e-mail; ${data.falhas} falha(s).`,
+      );
+    },
+    onError: (error) =>
+      showToast.error(error instanceof Error ? error.message : 'Erro ao enviar convites'),
   });
 
   const reconcile = useMutation({
@@ -197,7 +231,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
       <section>
         <h3 className="font-semibold text-slate-900">Necessidade obrigatória sem matrícula</h3>
         <p className="mt-1 text-sm text-slate-500">
-          A matrícula em lote só acontece quando você clicar em “Matricular gaps agora”.
+          A matrícula em lote só acontece quando você clicar em “Matricular gaps”. Nenhum e-mail é enviado nessa etapa.
         </p>
         <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
           <table className="min-w-full text-sm">
@@ -257,7 +291,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                       onClick={() => enroll.mutate(gap)}
                       className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
                     >
-                      <UserPlus className="h-4 w-4" /> Matricular gaps agora
+                      <UserPlus className="h-4 w-4" /> Matricular gaps (sem e-mail)
                     </button>
                   </td>
                 </tr>
@@ -271,6 +305,43 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
               ) : null}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section>
+        <h3 className="font-semibold text-slate-900">Convites de matrícula por e-mail</h3>
+        <p className="mt-1 text-sm text-slate-500">
+          A matrícula e o convite são etapas separadas. Envie o e-mail somente quando a matriz já estiver revisada.
+        </p>
+        <div className="mt-3 space-y-2">
+          {Array.from(
+            (data.convites_matricula || []).reduce((map, row) => {
+              const current = map.get(row.curso_id) || { titulo: row.curso_titulo, ids: [] as number[] };
+              current.ids.push(row.matricula_id);
+              map.set(row.curso_id, current);
+              return map;
+            }, new Map<number, { titulo: string; ids: number[] }>()),
+          ).map(([cursoId, group]) => (
+            <div key={cursoId} className="flex flex-col gap-2 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="font-medium text-slate-800">{group.titulo}</div>
+                <div className="text-xs text-slate-500">{group.ids.length} matrícula(s) ainda não iniciada(s)</div>
+              </div>
+              <button
+                type="button"
+                disabled={invite.isPending}
+                onClick={() => invite.mutate(group.ids)}
+                className="rounded-lg border border-primary px-3 py-2 text-xs font-semibold text-primary disabled:opacity-40"
+              >
+                Enviar/re-enviar convite por e-mail
+              </button>
+            </div>
+          ))}
+          {!data.convites_matricula?.length ? (
+            <div className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
+              Nenhuma matrícula não iniciada disponível para convite.
+            </div>
+          ) : null}
         </div>
       </section>
 

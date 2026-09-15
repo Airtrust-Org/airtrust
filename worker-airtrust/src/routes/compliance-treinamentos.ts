@@ -1470,6 +1470,23 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
         'pt-BR',
       ),
     );
+  const convitesMatricula = enrollments
+    .filter(
+      (row) => String(row.status || '').toUpperCase() === 'NAO_INICIADO',
+    )
+    .map((row) => ({
+      matricula_id: Number(row.id),
+      funcionario_id: Number(row.funcionario_id),
+      funcionario_nome: row.funcionario_nome,
+      curso_id: Number(row.curso_id),
+      curso_titulo: row.curso_titulo,
+      qualificacao_tipo_id: row.qualificacao_tipo_id,
+      qualificacao_tipo_nome: row.qualificacao_tipo_nome,
+      setor_id: row.setor_id,
+      setor_nome: row.setor_nome,
+      funcao_id: row.funcao_id,
+      funcao_nome: row.funcao_nome,
+    }));
   const summary = {
     matriculas_ativas: enrollments.length,
     matriculas_alinhadas: alinhadas,
@@ -1486,7 +1503,12 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
   };
   return c.json({
     success: true,
-    data: { resumo: summary, gaps_matricula: gapsMatricula, matriculas_revisao: matriculasRevisao },
+    data: {
+      resumo: summary,
+      gaps_matricula: gapsMatricula,
+      matriculas_revisao: matriculasRevisao,
+      convites_matricula: convitesMatricula,
+    },
     meta: { reconciliation_ready: await tableExists(db, 'treinamento_matricula_reconciliacoes') },
   });
 });

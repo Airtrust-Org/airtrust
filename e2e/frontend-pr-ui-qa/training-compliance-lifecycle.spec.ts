@@ -254,20 +254,39 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   const gapRow = page.locator('tbody tr').filter({ hasText: requiredTypeCode }).first();
   await expect(gapRow).toBeVisible();
   const enrollResponseP = waitResponse(page, '/api/lms/matriculas/lote', 'POST');
-  await gapRow.getByRole('button', { name: 'Matricular gaps agora' }).click();
+  await gapRow.getByRole('button', { name: 'Matricular gaps (sem e-mail)' }).click();
   const enrollResponse = await enrollResponseP;
   expect(enrollResponse.ok()).toBe(true);
   const enrollPayload = await enrollResponse.json();
   expect(enrollPayload.data).toMatchObject({ criadas: 2, ignoradas: 0, erros: 0 });
+  expect(enrollResponse.request().postDataJSON()).toMatchObject({
+    funcionario_ids: expect.arrayContaining(employeeIds),
+    curso_id: requiredCourseId,
+    enviar_convite_email: false,
+  });
   await expect.poll(async () => {
     const current = await reconciliation(page, sector.id, fn.id);
     return current.gaps_matricula.some((item: any) => item.qualificacao_tipo_codigo === requiredTypeCode);
   }).toBe(false);
 
-  // Idempotency: same explicit enrollment request preserves existing records.
+  // Invitation is a separate explicit step. Synthetic employees have no e-mail, so no external mail is emitted.
+  const requiredInviteText = page.getByText(requiredCourseTitle, { exact: true }).last();
+  const requiredInviteGroup = requiredInviteText.locator(
+    'xpath=ancestor::div[button[contains(normalize-space(.), "Enviar/re-enviar convite por e-mail")]][1]',
+  );
+  await expect(requiredInviteGroup).toBeVisible();
+  const inviteResponseP = waitResponse(page, '/api/lms/matriculas/convites/lote', 'POST');
+  await requiredInviteGroup.getByRole('button', { name: 'Enviar/re-enviar convite por e-mail' }).click();
+  const inviteResponse = await inviteResponseP;
+  expect(inviteResponse.ok()).toBe(true);
+  expect(await inviteResponse.json()).toMatchObject({
+    data: { enviados: 0, sem_email: 2, falhas: 0, nao_encontradas: 0 },
+  });
+
+  // Idempotency: same explicit enrollment request preserves existing records and remains silent when requested.
   const idempotent = await api(page, '/api/lms/matriculas/lote', {
     method: 'POST',
-    body: { funcionario_ids: employeeIds, curso_id: requiredCourseId, observacoes: 'QA lifecycle idempotency' },
+    body: { funcionario_ids: employeeIds, curso_id: requiredCourseId, observacoes: 'QA lifecycle idempotency', enviar_convite_email: false },
   });
   expect(idempotent.ok).toBe(true);
   expect(idempotent.json.data).toMatchObject({ criadas: 0, ignoradas: 2, erros: 0 });
@@ -418,7 +437,7 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   // Enroll the newly exposed peer gap. Historical enrollment is preserved and not duplicated.
   const orphanGapRow = page.locator('tbody tr').filter({ hasText: orphanTypeCode }).first();
   const enrollPeerP = waitResponse(page, '/api/lms/matriculas/lote', 'POST');
-  await orphanGapRow.getByRole('button', { name: 'Matricular gaps agora' }).click();
+  await orphanGapRow.getByRole('button', { name: 'Matricular gaps (sem e-mail)' }).click();
   const enrollPeer = await enrollPeerP;
   expect(enrollPeer.ok()).toBe(true);
   expect((await enrollPeer.json()).data).toMatchObject({ criadas: 1, ignoradas: 0, erros: 0 });

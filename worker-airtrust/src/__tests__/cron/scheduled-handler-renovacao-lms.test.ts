@@ -13,6 +13,11 @@ describe('renovacao automatica LMS por qualificacao EAD', () => {
     const sql = compactSql(buildQualificacoesEadRenovacaoResilienteQuery());
 
     expect(sql).toContain('COALESCE(qh.renovada, 0) = 0');
+    expect(sql).toContain('FROM treinamento_requisitos tr');
+    expect(sql).toContain("tr.obrigatoriedade = 'OBRIGATORIA'");
+    expect(sql).toContain('COALESCE(tr.auto_matricular_ead, 0) = 1');
+    expect(sql).toContain("WHEN 'FUNCIONARIO' THEN 5");
+    expect(sql).toContain("WHEN 'SETOR_FUNCAO' THEN 4");
     expect(sql).toContain('AND NOT EXISTS ( SELECT 1 FROM qualificacoes_historico qh2');
     expect(sql).toContain(")) <= date('now', '+' || ? || ' days')");
     expect(sql).not.toContain("BETWEEN date('now')");

@@ -1,0 +1,150 @@
+name: Production Training Enrollment Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA reviewed for cleanup
+        required: true
+        type: string
+      mode:
+        description: dry-run is read-only; apply cancels only provably unstarted enrollments
+        required: true
+        type: choice
+        options: [dry-run, apply]
+        default: dry-run
+      confirmation:
+        description: Exact confirmation required by the selected mode
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        description: Required for apply; successful dry-run run on this same SHA
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-training-enrollment-cleanup
+  cancel-in-progress: false
+
+jobs:
+  d1_cleanup:
+    name: Governed Production D1 Training Enrollment Cleanup
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_REF_REQUIRED >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_SHA_INVALID >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo EXPECTED_SHA_MISMATCH >&2; exit 1; }
+          if [[ "$MODE" == dry-run ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_DRYRUN_UNSTARTED_ENROLLMENT_CLEANUP ]] || { echo DRYRUN_CONFIRMATION_REQUIRED >&2; exit 1; }
+          elif [[ "$MODE" == apply ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_APPLY_UNSTARTED_ENROLLMENT_CLEANUP ]] || { echo APPLY_CONFIRMATION_REQUIRED >&2; exit 1; }
+          else
+            echo INVALID_MODE >&2; exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+      - run: npm --prefix worker-airtrust ci
+
+      - name: Verify official release gates on exact SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Require production D1 credential
+        env:
+          D1_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$D1_TOKEN" ]] || { echo PRODUCTION_D1_TOKEN_MISSING >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo CLOUDFLARE_ACCOUNT_ID_MISSING >&2; exit 1; }
+
+      - name: Verify reviewed dry-run predecessor and load exact candidate set
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_RUN: ${{ inputs.reviewed_dry_run_run_id }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_RUN" =~ ^[1-9][0-9]*$ ]] || { echo REVIEWED_DRY_RUN_RUN_ID_REQUIRED >&2; exit 1; }
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN")"
+          [[ "$(jq -r .name <<<"$run_json")" == 'Production Training Enrollment Cleanup' ]] || { echo REVIEWED_WORKFLOW_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .conclusion <<<"$run_json")" == success ]] || { echo REVIEWED_DRY_RUN_NOT_SUCCESSFUL >&2; exit 1; }
+          [[ "$(jq -r .head_sha <<<"$run_json")" == "$EXPECTED_SHA" ]] || { echo REVIEWED_DRY_RUN_SHA_MISMATCH >&2; exit 1; }
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED_RUN" --repo "$GITHUB_REPOSITORY" --name "production-training-enrollment-cleanup-dry-run-$EXPECTED_SHA" --dir "$RUNNER_TEMP/reviewed"
+          evidence="$RUNNER_TEMP/reviewed/result.json"
+          test -s "$evidence"
+          count="$(jq -r .candidate_count "$evidence")"
+          hash="$(jq -r .candidate_hash "$evidence")"
+          [[ "$count" =~ ^[1-9][0-9]*$ ]] || { echo REVIEWED_COUNT_INVALID >&2; exit 1; }
+          [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || { echo REVIEWED_HASH_INVALID >&2; exit 1; }
+          echo "TRAINING_ENROLLMENT_EXPECTED_COUNT=$count" >> "$GITHUB_ENV"
+          echo "TRAINING_ENROLLMENT_EXPECTED_HASH=$hash" >> "$GITHUB_ENV"
+          echo "REVIEWED_DRY_RUN_VERIFIED=$REVIEWED_RUN count=$count hash=${hash:0:12}..." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Capture D1 Time Travel recovery point
+        if: ${{ inputs.mode == 'apply' }}
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ts="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$ts" > "$RUNNER_TEMP/recovery.txt"
+          test -s "$RUNNER_TEMP/recovery.txt"
+          echo "TRAINING_ENROLLMENT_RECOVERY_TIMESTAMP_UTC=$ts" >> "$GITHUB_STEP_SUMMARY"
+          rm -f "$RUNNER_TEMP/recovery.txt"
+
+      - name: Execute reviewed cleanup
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TRAINING_ENROLLMENT_CLEANUP_MODE: ${{ inputs.mode }}
+          TRAINING_ENROLLMENT_CLEANUP_CONFIRMATION: ${{ inputs.confirmation }}
+          TRAINING_ENROLLMENT_PRODUCTION_DB_NAME: airtrust-db
+        run: |
+          set -euo pipefail
+          node scripts/production/cleanup-unstarted-training-enrollments.mjs "${{ inputs.mode }}" > "$RUNNER_TEMP/result.json"
+          test -s "$RUNNER_TEMP/result.json"
+
+      - name: Publish sanitized summary
+        run: |
+          set -euo pipefail
+          jq '{mode,source_sha,empresa_id,candidate_count,candidate_hash,distinct_people,distinct_courses,cycle_origins,protected_status_counts,mutation_executed,changed_enrollments,post_candidate_count,postconditions_verified,pii_emitted}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-training-enrollment-cleanup-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: error
+          retention-days: 30

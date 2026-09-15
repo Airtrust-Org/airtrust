@@ -170,6 +170,34 @@ const reconciliationData = {
       cursos_ead: [{ id: 77, titulo: 'CRM EAD' }],
     },
   ],
+  convites_matricula: [
+    {
+      matricula_id: 701,
+      funcionario_id: 1,
+      funcionario_nome: 'Pessoa A',
+      curso_id: 77,
+      curso_titulo: 'CRM EAD',
+      qualificacao_tipo_id: 100,
+      qualificacao_tipo_nome: 'CRM Periódico',
+      setor_id: 3,
+      setor_nome: 'Operações',
+      funcao_id: 9,
+      funcao_nome: 'Coordenador de Voo',
+    },
+    {
+      matricula_id: 702,
+      funcionario_id: 2,
+      funcionario_nome: 'Pessoa B',
+      curso_id: 77,
+      curso_titulo: 'CRM EAD',
+      qualificacao_tipo_id: 100,
+      qualificacao_tipo_nome: 'CRM Periódico',
+      setor_id: 3,
+      setor_nome: 'Operações',
+      funcao_id: 9,
+      funcao_nome: 'Coordenador de Voo',
+    },
+  ],
   matriculas_revisao: [
     {
       matricula_id: 501,
@@ -228,6 +256,8 @@ describe('Training enrollment reconciliation', () => {
         return ok(reconciliationData);
       }
       if (url === '/api/lms/matriculas/lote') return ok({ criadas: 2, ignoradas: 0, erros: 0 });
+      if (url === '/api/lms/matriculas/convites/lote')
+        return ok({ enviados: 2, sem_email: 0, falhas: 0, nao_encontradas: 0 });
       if (url.includes('/reconciliacao/') && url.endsWith('/decisao')) return ok({ id: 1 });
       if (url.includes('/regras')) return ok({ id: 700 });
       throw new Error(`unexpected url ${url}`);
@@ -240,13 +270,35 @@ describe('Training enrollment reconciliation', () => {
     expect(screen.getByText('Sem setor')).toBeInTheDocument();
     expect(screen.getByText(/Sem modelo/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Matricular gaps agora/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Matricular gaps \(sem e-mail\)/ }));
     await waitFor(() =>
       expect(fetchWithAuthMock).toHaveBeenCalledWith(
         '/api/lms/matriculas/lote',
         expect.objectContaining({ method: 'POST' }),
       ),
     );
+    const enrollmentCall = fetchWithAuthMock.mock.calls.find(
+      ([url]) => url === '/api/lms/matriculas/lote',
+    );
+    expect(JSON.parse(String((enrollmentCall?.[1] as RequestInit)?.body))).toMatchObject({
+      funcionario_ids: [1, 2],
+      curso_id: 77,
+      enviar_convite_email: false,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Enviar\/re-enviar convite por e-mail/ }));
+    await waitFor(() =>
+      expect(fetchWithAuthMock).toHaveBeenCalledWith(
+        '/api/lms/matriculas/convites/lote',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+    const inviteCall = fetchWithAuthMock.mock.calls.find(
+      ([url]) => url === '/api/lms/matriculas/convites/lote',
+    );
+    expect(JSON.parse(String((inviteCall?.[1] as RequestInit)?.body))).toEqual({
+      matricula_ids: [701, 702],
+    });
 
     const rowA = screen.getByText('Pessoa A').closest('tr')!;
     fireEvent.change(within(rowA).getByRole('combobox'), {

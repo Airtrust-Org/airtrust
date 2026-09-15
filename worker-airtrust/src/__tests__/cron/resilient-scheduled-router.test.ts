@@ -123,6 +123,8 @@ describe('bounded cron discovery', () => {
 
   it('usa keyset e limite explícito na renovação EAD', () => {
     const sql = compactSql(buildQualificacoesEadRenovacaoResilienteQuery());
+    expect(sql).toContain('FROM treinamento_requisitos tr');
+    expect(sql).toContain('COALESCE(tr.auto_matricular_ead, 0) = 1');
     expect(sql).toContain('AND qh.id > ?');
     expect(sql).toContain('ORDER BY qh.id ASC');
     expect(sql).toContain('LIMIT ?');
