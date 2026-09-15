@@ -2285,24 +2285,36 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       });
 
       if (requiresExplicitScormCompletion(existing.tipo_conteudo, completionDiagnostic)) {
+        const administrativeReason = typeof observacoes === 'string' ? observacoes.trim() : '', governedAdministrativeCompletion = hasRole(c, 'admin') && administrativeReason.length >= 10;
+        if (!governedAdministrativeCompletion) {
+          await logLmsMatriculaAudit(db, c, {
+            action: 'SCORM_COMPLETION_REJECTED',
+            matriculaId,
+            newValues: {
+              origem: 'admin-patch-status-endpoint',
+              completion_diagnostic: completionDiagnostic,
+            },
+          });
+          return c.json(
+            {
+              success: false,
+              error:
+                'Nao foi possivel confirmar a conclusao com os dados SCORM disponiveis. Cursos SCORM exigem status final explicito passed/completed ou conclusao administrativa governada.',
+              code: 'SCORM_COMPLETION_REJECTED',
+              data: { completion_diagnostic: completionDiagnostic },
+            },
+            409,
+          );
+        }
         await logLmsMatriculaAudit(db, c, {
-          action: 'SCORM_COMPLETION_REJECTED',
+          action: 'LMS_ADMINISTRATIVE_COMPLETION_OVERRIDE_ACCEPTED',
           matriculaId,
           newValues: {
             origem: 'admin-patch-status-endpoint',
+            administrative_reason: administrativeReason,
             completion_diagnostic: completionDiagnostic,
           },
         });
-        return c.json(
-          {
-            success: false,
-            error:
-              'Nao foi possivel confirmar a conclusao com os dados SCORM disponiveis. Cursos SCORM exigem status final explicito passed/completed.',
-            code: 'SCORM_COMPLETION_REJECTED',
-            data: { completion_diagnostic: completionDiagnostic },
-          },
-          409,
-        );
       }
     }
 

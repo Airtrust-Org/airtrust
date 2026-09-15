@@ -369,6 +369,7 @@ export interface JwtPayload {
   asset_scope?: 'pptx_viewer' | 'course_assets';
   asset_curso_id?: number;
   asset_matricula_id?: number;
+  asset_scorm_package_prefix?: string;
   asset_preview?: boolean;
   nome?: string;
   empresa_id?: number; // Multi-tenant: ID da empresa ativa

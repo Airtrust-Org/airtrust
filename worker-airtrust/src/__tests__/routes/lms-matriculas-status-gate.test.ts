@@ -194,7 +194,7 @@ describe('PATCH /:id/status — qualification gate', () => {
       ['FROM lms_progresso_scorm', { first: () => null }], // sem registro SCORM
     ]);
 
-    const res = await patchStatus(makeApp(), db, 200, { status: 'CONCLUIDO', observacoes: 'conclusao manual' });
+    const res = await patchStatus(makeApp(), db, 200, { status: 'CONCLUIDO', observacoes: 'curto' });
 
     expect(res.status).toBe(409);
     const body = await res.json() as { success: boolean; code?: string };
@@ -269,7 +269,7 @@ describe('PATCH /:id/status — qualification gate', () => {
       ['FROM lms_progresso_scorm', { first: () => scormCandidate }],
     ]);
 
-    const res = await patchStatus(makeApp(), db, 200, { status: 'CONCLUIDO', observacoes: 'checkpoint final' });
+    const res = await patchStatus(makeApp(), db, 200, { status: 'CONCLUIDO' });
 
     expect(res.status).toBe(409);
     const body = await res.json() as {
@@ -285,6 +285,52 @@ describe('PATCH /:id/status — qualification gate', () => {
     });
     expect(writes).toHaveLength(0);
     expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
+  });
+
+  it('aceita conclusao administrativa governada por admin sem fabricar evidencia SCORM', async () => {
+    hasRoleMock.mockReturnValue(true);
+
+    const scormSemConclusao = {
+      lesson_status: 'incomplete',
+      completion_status: null,
+      success_status: null,
+      score_raw: 100,
+      score_max: 100,
+      score_scaled: 1,
+      session_time: '01:00:00',
+      total_time: '02:00:00',
+      suspend_data: JSON.stringify({ module: 1 }),
+      cmi_json: JSON.stringify({
+        'cmi.core.lesson_status': 'incomplete',
+        'cmi.core.lesson_location': '12/55',
+      }),
+    };
+    const updatedMatricula = { ...scormMatriculaWithQual, status: 'CONCLUIDO', progresso_pct: 100 };
+    const reason =
+      'Correcao administrativa autorizada apos incidente SCORM documentado e revisao da evidencia disponivel.';
+
+    const { db } = createMockDb([
+      ['c.tipo_conteudo, c.scorm_mastery_score', { first: () => scormMatriculaWithQual }],
+      ['FROM lms_progresso_scorm', { first: () => scormSemConclusao }],
+      ['SET observacoes = ?', {}],
+      ['SELECT * FROM lms_matriculas WHERE id = ? AND empresa_id = ?', { first: () => updatedMatricula }],
+    ]);
+
+    const res = await patchStatus(makeApp(), db, 200, { status: 'CONCLUIDO', observacoes: reason });
+
+    expect(res.status).toBe(200);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
+    expect(logAuditMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: 'LMS_ADMINISTRATIVE_COMPLETION_OVERRIDE_ACCEPTED',
+        entityId: 200,
+        newValues: expect.objectContaining({
+          administrative_reason: reason,
+          completion_diagnostic: expect.objectContaining({ explicit_completion: false }),
+        }),
+      }),
+    );
   });
 
   // ── 4. Admin CONCLUIDO + SCORM + evidência robusta → 200 + qualificação ───
