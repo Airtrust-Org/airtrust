@@ -10,7 +10,7 @@ const PRIMARY_ADMIN_EMAIL_ALLOWLIST = new Set(
 );
 
 const PRIMARY_ADMIN_ROLES = new Set(['ADMIN', 'ADMINISTRADOR']);
-const OPERATIONAL_DASHBOARD_ROLES = new Set(['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER']);
+const OPERATIONAL_DASHTBOARD_ROLES = new Set(['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER']);
 
 function normalizeEmail(email: string | null | undefined): string {
   return String(email || '')
@@ -37,17 +37,18 @@ export function isPrimaryAdmin(user: DevelopmentModuleVisibilityUser | null | un
 export function canSeeDevelopmentModules(
   user: DevelopmentModuleVisibilityUser | null | undefined,
 ): boolean {
-  return isPrimaryAdmin(user);
+  if (!user) return false;
+  return PRIMARY_ADMIN_ROLES.has(normalizeRole(user.role));
 }
 
 export function canSeeOperationalDashboard(
   user: DevelopmentModuleVisibilityUser | null | undefined,
 ): boolean {
   if (!user) return false;
-  return OPERATIONAL_DASHBOARD_ROLES.has(normalizeRole(user.role));
+  return OPERATIONAL_DASHTBOARD_ROLES.has(normalizeRole(user.role));
 }
 
-export function canSeeAdministrativeDashboard(
+export function canSeeAdministrativeDataboard(
   user: DevelopmentModuleVisibilityUser | null | undefined,
 ): boolean {
   return canSeeOperationalDashboard(user);
