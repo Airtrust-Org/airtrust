@@ -17,6 +17,10 @@ const orphanCourseTitle = `${CODE} EAD legado`;
 const employee1Name = `${CODE} Pessoa 1`;
 const employee2Name = `${CODE} Pessoa 2`;
 
+// This workflow owns one mutable staging fixture. A Playwright retry would reuse
+// partially-mutated D1 state, so retry only after the workflow has cleaned/reseeded it.
+test.describe.configure({ retries: 0 });
+
 type ApiResult<T = any> = { status: number; ok: boolean; json: T };
 
 function waitResponse(page: Page, path: string, method?: string): Promise<Response> {
@@ -89,6 +93,36 @@ async function reconciliation(page: Page, sectorId: number, functionId: number) 
 
 function requirement(person: any, code: string) {
   return (person.requisitos || []).find((item: any) => item.qualificacao_tipo_codigo === code);
+}
+
+async function completeWithCanonicalXapi(page: Page, enrollmentId: number, label: string) {
+  const result = await api(page, '/api/lms/xapi/statements', {
+    method: 'POST',
+    body: {
+      matricula_id: enrollmentId,
+      actor: { name: `${CODE} ${label}` },
+      verb: {
+        id: 'http://adlnet.gov/expapi/verbs/passed',
+        display: { 'pt-BR': 'aprovou' },
+      },
+      object: {
+        id: `urn:airtrust:qa:training-compliance:${CODE}:${label}`,
+        objectType: 'Activity',
+      },
+      result: {
+        success: true,
+        completion: true,
+        score: { raw: 100, max: 100, min: 0, scaled: 1 },
+      },
+    },
+  });
+  expect(result.status, JSON.stringify(result.json)).toBe(201);
+  expect(result.ok, JSON.stringify(result.json)).toBe(true);
+  expect(result.json.data).toMatchObject({
+    matricula_id: enrollmentId,
+    novo_status: 'CONCLUIDO',
+    progresso_efetivo: 100,
+  });
 }
 
 async function chooseOrgScope(page: Page, sectorId: number, functionId?: number) {
@@ -324,20 +358,12 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   s = await filteredSummary(page, sector.id, fn.id);
   expect(s).toMatchObject({ requisitos_obrigatorios: 2, conformes: 0, nao_realizados: 1, em_andamento: 1, compliance_pct: 0 });
 
-  const complete1 = await api(page, `/api/lms/matriculas/${e1EnrollmentId}/status`, {
-    method: 'PATCH',
-    body: { status: 'CONCLUIDO', observacoes: 'QA lifecycle completion 1' },
-  });
-  expect(complete1.ok, JSON.stringify(complete1.json)).toBe(true);
+  await completeWithCanonicalXapi(page, Number(e1EnrollmentId), 'completion-1');
   await expect.poll(async () => requirement(await employeeSnapshot(page, employeeIds[0]), requiredTypeCode)?.status_compliance).toBe('CONFORME');
   s = await filteredSummary(page, sector.id, fn.id);
   expect(s).toMatchObject({ requisitos_obrigatorios: 2, conformes: 1, nao_realizados: 1, em_andamento: 0, compliance_pct: 50 });
 
-  const complete2 = await api(page, `/api/lms/matriculas/${e2EnrollmentId}/status`, {
-    method: 'PATCH',
-    body: { status: 'CONCLUIDO', observacoes: 'QA lifecycle completion 2' },
-  });
-  expect(complete2.ok, JSON.stringify(complete2.json)).toBe(true);
+  await completeWithCanonicalXapi(page, Number(e2EnrollmentId), 'completion-2');
   await expect.poll(async () => (await filteredSummary(page, sector.id, fn.id)).compliance_pct).toBe(100);
 
   const trainings = await api(

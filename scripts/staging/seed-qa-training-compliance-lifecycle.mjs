@@ -151,6 +151,15 @@ WHERE empresa_id=${tenantId} AND funcionario_id IN (
 ) AND qualificacao_id IN (
   SELECT id FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)})
 );
+DELETE FROM lms_xapi_statements
+WHERE empresa_id=${tenantId} AND matricula_id IN (
+  SELECT m.id FROM lms_matriculas m
+  JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+  WHERE m.empresa_id=${tenantId} AND c.observacoes=${esc(marker)}
+    AND m.funcionario_id IN (
+      SELECT id FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)})
+    )
+);
 UPDATE lms_matriculas
 SET status='CANCELADO',deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND curso_id IN (
