@@ -1,4 +1,4 @@
-const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v9';
+const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v10';
 const PILOT_SCOPE_PATH = '/pilot/';
 const PRECACHE_URLS = [
   '/pilot/',
@@ -11,9 +11,9 @@ const PRECACHE_URLS = [
   '/pilot/pilot-lease.js',
   '/pilot/pilot-lease-trust.js',
   '/pilot/pilot.webmanifest',
-  '/airtrust-site-logo-20260830-192.png',
-  '/airtrust-site-logo-20260830-512.png',
-  '/airtrust-site-logo-apple-20260830.png',
+  '/airtrust-brand-icon-20260915-192.png',
+  '/airtrust-brand-icon-20260915-512.png',
+  '/airtrust-brand-icon-20260915-180.png',
 ];
 
 async function precachePilotShell() {

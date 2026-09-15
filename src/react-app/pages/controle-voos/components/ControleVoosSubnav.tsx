@@ -6,7 +6,6 @@ export interface ControleVoosNavLink {
   to: string;
   label: string;
   exact?: boolean;
-  preview?: boolean;
 }
 
 export const CONTROLE_VOOS_NAV_LINKS: ControleVoosNavLink[] = [
@@ -16,13 +15,12 @@ export const CONTROLE_VOOS_NAV_LINKS: ControleVoosNavLink[] = [
   { to: '/controle-voos/meus-voos', label: 'Meus voos' },
   { to: '/controle-voos/coordenacao/fila', label: 'Fila da Coordenação' },
   { to: '/controle-voos/jornadas', label: 'Jornadas' },
-  { to: '/controle-voos/indisponibilidades', label: 'Indisponibilidades', preview: true },
-  { to: '/controle-voos/hangaragem', label: 'Hangaragem', preview: true },
+  { to: '/controle-voos/indisponibilidades', label: 'Indisponibilidades' },
+  { to: '/controle-voos/hangaragem', label: 'Hangaragem' },
   { to: '/controle-voos/relatorios', label: 'Relatórios' },
   { to: '/controle-voos/tabelas', label: 'Cadastros Operacionais' },
 ];
 
-export const PREVIEW_BADGE_TITLE = 'Tela em preview - nao usar como fonte operacional';
 
 export function getVisibleControleVoosNavLinks(
   user?: { email?: string | null; role?: string | null } | null,
@@ -70,7 +68,6 @@ export default function ControleVoosSubnav() {
             {visibleLinks.map((link) => (
               <option key={link.to} value={link.to}>
                 {link.label}
-                {link.preview ? ' (Preview)' : ''}
               </option>
             ))}
           </select>
@@ -88,7 +85,6 @@ export default function ControleVoosSubnav() {
               <Link
                 key={link.to}
                 to={`${link.to}${search}`}
-                title={link.preview ? PREVIEW_BADGE_TITLE : undefined}
                 aria-current={active ? 'page' : undefined}
                 className={`flex min-h-[44px] items-center whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                   active
@@ -96,17 +92,7 @@ export default function ControleVoosSubnav() {
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
                 }`}
               >
-                <span className="inline-flex items-center gap-2">
-                  <span>{link.label}</span>
-                  {link.preview && (
-                    <span
-                      title={PREVIEW_BADGE_TITLE}
-                      className="rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
-                    >
-                      Preview
-                    </span>
-                  )}
-                </span>
+                <span>{link.label}</span>
               </Link>
             );
           })}

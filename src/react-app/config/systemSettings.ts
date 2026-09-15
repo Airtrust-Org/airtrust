@@ -216,7 +216,8 @@ export function applySystemSettingsToDocument(settings: SystemSettings): void {
 
   document.title = settings.appName || DEFAULT_SYSTEM_SETTINGS.appName;
 
-  const faviconHref = resolveBrandingUrl(settings.faviconDataUrl) || '/favicon.svg';
+  const faviconHref =
+    resolveBrandingUrl(settings.faviconDataUrl) || '/airtrust-brand-icon-20260915-192.png';
   const faviconType =
     faviconHref.startsWith('data:image/png') || faviconHref.endsWith('.png')
       ? 'image/png'
@@ -241,5 +242,5 @@ export function applySystemSettingsToDocument(settings: SystemSettings): void {
 }
 
 export function getSystemLogoSrc(settings: SystemSettings): string {
-  return resolveBrandingUrl(settings.logoDataUrl) || '/airtrust-logo.svg';
+  return resolveBrandingUrl(settings.logoDataUrl) || '/airtrust-logo-20260915.png';
 }
