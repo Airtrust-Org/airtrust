@@ -76,7 +76,7 @@ describe('navigation module gating', () => {
     expect(visible.map((item) => item.id)).not.toContain('treinamentos_planejados');
   });
 
-  it('oculta modulos de desenvolvimento para admin nao allowlisted', () => {
+  it('libera Controle de Voos para admin comum sem liberar MRO em desenvolvimento', () => {
     const visible = getVisibleNavigationItems(
       NAVIGATION_CONFIG.main_menu,
       ['dashboard', 'mro', 'controle_voos'],
@@ -89,7 +89,7 @@ describe('navigation module gating', () => {
     );
 
     expect(visible.map((item) => item.id)).not.toContain('mro');
-    expect(visible.map((item) => item.id)).not.toContain('controle_voos');
+    expect(visible.map((item) => item.id)).toContain('controle_voos');
   });
 
   it('exibe dashboard operacional para gestor setorial', () => {
