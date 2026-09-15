@@ -73,26 +73,17 @@ async function employeeSnapshot(page: Page, employeeId: number) {
   return result.json.data;
 }
 
-async function persistProgressViaXapi(page: Page, matriculaId: number, suffix: string) {
-  return api(page, '/api/lms/xapi/statements', {
-    method: 'POST',
-    body: {
-      matricula_id: matriculaId,
-      actor: { name: `QA lifecycle ${CODE}` },
-      verb: {
-        id: 'http://adlnet.gov/expapi/verbs/experienced',
-        display: { 'pt-BR': 'avançou' },
-      },
-      object: { id: `urn:airtrust:qa:${CODE}:${suffix}`, objectType: 'Activity' },
-      result: {
-        completion: false,
-        score: { raw: 10, max: 100, min: 0, scaled: 0.1 },
-      },
-    },
-  });
-}
-
 async function completeViaXapi(page: Page, matriculaId: number, suffix: string) {
+  // Mirror a real player launch: mint a short-lived, enrollment-scoped asset
+  // capability before the terminal xAPI request. The completion integrity gate
+  // deliberately rejects xAPI completion without this session.
+  const session = await api(page, '/api/lms/assets/session', {
+    method: 'POST',
+    body: { matricula_id: matriculaId },
+  });
+  expect(session.ok, JSON.stringify(session.json)).toBe(true);
+  expect(session.json.data).toMatchObject({ active: true, matriculaId });
+
   return api(page, '/api/lms/xapi/statements', {
     method: 'POST',
     body: {
@@ -358,25 +349,28 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   const e2EnrollmentId = enrollmentByEmployee.get(employeeIds[1]);
   expect(e1EnrollmentId).toBeTruthy();
   expect(e2EnrollmentId).toBeTruthy();
-  const progress = await api(page, `/api/lms/matriculas/${e1EnrollmentId}/status`, {
+  // Persist real progress before the terminal xAPI event; completion is fail-closed
+  // unless progress evidence existed before the completion request.
+  const progress = await api(page, `/api/lms/matriculas/${e1EnrollmentId}/progresso`, {
     method: 'PATCH',
-    body: { status: 'EM_ANDAMENTO', observacoes: 'QA lifecycle progress' },
+    body: { progresso_pct: 50 },
   });
   expect(progress.ok, JSON.stringify(progress.json)).toBe(true);
   await expect.poll(async () => requirement(await employeeSnapshot(page, employeeIds[0]), requiredTypeCode)?.status_compliance).toBe('EM_ANDAMENTO');
   s = await filteredSummary(page, sector.id, fn.id);
   expect(s).toMatchObject({ requisitos_obrigatorios: 2, conformes: 0, nao_realizados: 1, em_andamento: 1, compliance_pct: 0 });
 
-  const persisted1 = await persistProgressViaXapi(page, Number(e1EnrollmentId), 'progress-1');
-  expect(persisted1.ok, JSON.stringify(persisted1.json)).toBe(true);
   const complete1 = await completeViaXapi(page, Number(e1EnrollmentId), 'completion-1');
   expect(complete1.ok, JSON.stringify(complete1.json)).toBe(true);
   await expect.poll(async () => requirement(await employeeSnapshot(page, employeeIds[0]), requiredTypeCode)?.status_compliance).toBe('CONFORME');
   s = await filteredSummary(page, sector.id, fn.id);
   expect(s).toMatchObject({ requisitos_obrigatorios: 2, conformes: 1, nao_realizados: 1, em_andamento: 0, compliance_pct: 50 });
 
-  const persisted2 = await persistProgressViaXapi(page, Number(e2EnrollmentId), 'progress-2');
-  expect(persisted2.ok, JSON.stringify(persisted2.json)).toBe(true);
+  const progress2 = await api(page, `/api/lms/matriculas/${e2EnrollmentId}/progresso`, {
+    method: 'PATCH',
+    body: { progresso_pct: 50 },
+  });
+  expect(progress2.ok, JSON.stringify(progress2.json)).toBe(true);
   const complete2 = await completeViaXapi(page, Number(e2EnrollmentId), 'completion-2');
   expect(complete2.ok, JSON.stringify(complete2.json)).toBe(true);
   await expect.poll(async () => (await filteredSummary(page, sector.id, fn.id)).compliance_pct).toBe(100);

@@ -46,6 +46,8 @@ const requiredTypeName = `${code} Treinamento obrigatório`;
 const orphanTypeName = `${code} Treinamento legado`;
 const requiredCourseTitle = `${code} EAD obrigatório`;
 const orphanCourseTitle = `${code} EAD legado`;
+const requiredPackagePrefix = `qa/h5p/${code}/required/`;
+const orphanPackagePrefix = `qa/h5p/${code}/orphan/`;
 const tenantId = `(SELECT id FROM empresas WHERE codigo=${esc(TENANT)} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)`;
 const sectorId = `(SELECT id FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(sectorCode)} AND deleted_at IS NULL LIMIT 1)`;
 const invalidSectorId = `(SELECT id FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(invalidSectorCode)} AND deleted_at IS NULL LIMIT 1)`;
@@ -99,10 +101,10 @@ INSERT INTO qualificacoes_tipos(tipo,codigo,nome,descricao,categoria_id,categori
 SELECT 'TREINAMENTO',${esc(orphanTypeCode)},${esc(orphanTypeName)},${esc(marker)},qc.id,qc.nome,1,12,0,${esc(marker)},1,qc.empresa_id,datetime('now'),datetime('now'),NULL
 FROM qualificacoes_categorias qc WHERE qc.empresa_id=${tenantId} AND qc.codigo=${esc(categoryCode)} AND qc.deleted_at IS NULL;
 
-INSERT INTO lms_cursos(empresa_id,titulo,descricao,categoria,carga_horaria_minutos,qualificacao_tipo_id,gerar_qualificacao_ao_concluir,ativo,publicado,version_tag,tipo_conteudo,observacoes,created_at,updated_at,deleted_at)
-VALUES (${tenantId},${esc(requiredCourseTitle)},${esc(marker)},'QA',60,${requiredTypeId},1,1,1,${esc(code)},'h5p',${esc(marker)},datetime('now'),datetime('now'),NULL);
-INSERT INTO lms_cursos(empresa_id,titulo,descricao,categoria,carga_horaria_minutos,qualificacao_tipo_id,gerar_qualificacao_ao_concluir,ativo,publicado,version_tag,tipo_conteudo,observacoes,created_at,updated_at,deleted_at)
-VALUES (${tenantId},${esc(orphanCourseTitle)},${esc(marker)},'QA',60,${orphanTypeId},1,1,1,${esc(code)},'h5p',${esc(marker)},datetime('now'),datetime('now'),NULL);
+INSERT INTO lms_cursos(empresa_id,titulo,descricao,categoria,carga_horaria_minutos,qualificacao_tipo_id,gerar_qualificacao_ao_concluir,ativo,publicado,version_tag,tipo_conteudo,scorm_package_r2_prefix,observacoes,created_at,updated_at,deleted_at)
+VALUES (${tenantId},${esc(requiredCourseTitle)},${esc(marker)},'QA',60,${requiredTypeId},1,1,1,${esc(code)},'h5p',${esc(requiredPackagePrefix)},${esc(marker)},datetime('now'),datetime('now'),NULL);
+INSERT INTO lms_cursos(empresa_id,titulo,descricao,categoria,carga_horaria_minutos,qualificacao_tipo_id,gerar_qualificacao_ao_concluir,ativo,publicado,version_tag,tipo_conteudo,scorm_package_r2_prefix,observacoes,created_at,updated_at,deleted_at)
+VALUES (${tenantId},${esc(orphanCourseTitle)},${esc(marker)},'QA',60,${orphanTypeId},1,1,1,${esc(code)},'h5p',${esc(orphanPackagePrefix)},${esc(marker)},datetime('now'),datetime('now'),NULL);
 
 -- Historical enrollment with no requirement: deliberately creates the reconciliation case.
 INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id,status,progresso_pct,tentativas,observacoes,created_at,updated_at,deleted_at)
@@ -150,6 +152,15 @@ WHERE empresa_id=${tenantId} AND funcionario_id IN (
   SELECT id FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)})
 ) AND qualificacao_id IN (
   SELECT id FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)})
+);
+DELETE FROM lms_xapi_statements
+WHERE empresa_id=${tenantId} AND matricula_id IN (
+  SELECT m.id FROM lms_matriculas m
+  JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+  WHERE m.empresa_id=${tenantId} AND c.observacoes=${esc(marker)}
+    AND m.funcionario_id IN (
+      SELECT id FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)})
+    )
 );
 UPDATE lms_matriculas
 SET status='CANCELADO',deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
