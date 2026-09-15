@@ -43,7 +43,7 @@ describe('appFetch routing', () => {
 
   it('keeps public assets outside the authenticated client', async () => {
     const { appFetch } = await import('../app-fetch');
-    await appFetch('/assets/airtrust-logo.svg');
+    await appFetch('/assets/airtrust-logo-20260915.png');
 
     expect(apiFetchMock).toHaveBeenCalledTimes(1);
     expect(fetchWithAuthMock).not.toHaveBeenCalled();

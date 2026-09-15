@@ -105,7 +105,8 @@ describe('AppLayout module gating', () => {
 
     expect(screen.getByRole('link', { name: 'LMS / Cursos EAD' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Painel' })).toBeNull();
-    expect(screen.getByRole('link', { name: 'SGSO PRÉVIA' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'SGSO' })).toBeInTheDocument();
+    expect(screen.queryByText('PRÉVIA')).toBeNull();
   });
 
   it('mantém a entrada LMS para aluno quando o módulo está ativo', () => {

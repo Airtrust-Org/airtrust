@@ -67,27 +67,27 @@ describe('AirTrust PWA installation', () => {
     expect(manifest.icons).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          src: '/airtrust-site-logo-20260830-192.png',
+          src: '/airtrust-brand-icon-20260915-192.png',
           sizes: '192x192',
           purpose: 'any',
         }),
         expect.objectContaining({
-          src: '/airtrust-site-logo-20260830-512.png',
+          src: '/airtrust-brand-icon-20260915-512.png',
           sizes: '512x512',
           purpose: 'any',
         }),
         expect.objectContaining({
-          src: '/airtrust-site-logo-apple-20260830.png',
+          src: '/airtrust-brand-icon-20260915-180.png',
           sizes: '180x180',
           purpose: 'any',
         }),
       ]),
     );
     expect(manifest.icons.some((icon) => icon.purpose?.includes('maskable'))).toBe(false);
-    expect(installPageSource).toContain('src="/airtrust-logo.svg?v=site-logo-20260830"');
+    expect(installPageSource).toContain('src="/airtrust-logo-20260915.png"');
     expect(installPageSource).not.toContain('src="/airtrust-icon.svg"');
     expect(indexHtmlSource).toContain(
-      'rel="apple-touch-icon" sizes="180x180" href="/airtrust-site-logo-apple-20260830.png"',
+      'rel="apple-touch-icon" sizes="180x180" href="/airtrust-brand-icon-20260915-180.png"',
     );
   });
 
