@@ -109,7 +109,8 @@ describe('migration governance', () => {
     // 0493 adds annual simulator curriculum cycles with a 2026=C2 rotation base.
     // 0494 adds tenant-scoped LMS enrollment reconciliation acknowledgements.
     // 0495 separates qualification identity from Initial/Periodic/Semiannual training programs.
-    const expectedLatest = 495;
+    // 0496 completes the 120-minute durations required by Initial/Semiannual simulator curricula.
+    const expectedLatest = 496;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

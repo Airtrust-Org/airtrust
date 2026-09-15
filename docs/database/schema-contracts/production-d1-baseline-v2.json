@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-14",
-    "last_reconciled_against": "training enrollment reconciliation 0494 and training programs/flight curricula 0495 production applies verified",
-    "schema_v2_digest": "bae96e82afbd08720fd3914ddac2975558f5534ee5a16be8b549c652652d1563",
+    "last_reconciled_against": "0496 training-program session duration correction reviewed; production apply pending",
+    "schema_v2_digest": "45d0c727a8c8346f15e691b146be7e3a2f641ddd57180585cfc014f4763dc75d",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -841,6 +841,17 @@
       "reviewed_manifest": "training-programs-and-flight-curricula-0495.json",
       "note": "0495 was applied through the governed Schema V2 production workflow on 2026-09-14 at exact source SHA b0e7d1f1f5d72d8e9160010382e28716f0df4dd3. The migration post-guard passed atomically, proving the required Initial/Periodic/Semiannual program and curriculum seed invariants; Worker and Pages were then deployed from the same SHA and production external health passed.",
       "evidence": "docs/audit/evidence/0495-training-programs-flight-curricula-applied-verified-2026-09-14.md"
+    },
+    {
+      "change_file": "0496_training_program_session_durations.sql",
+      "change_id": "training-program-session-durations-0496",
+      "sha256": "3df9a41f5c111b805f81a9efc37da5303d2f032242d8f5cc3bec777583eee1c5",
+      "targets": [],
+      "domain": "operational data correction for 120-minute AW139/SK76 Initial and SK76 Semiannual simulator session durations",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-program-session-durations-0496.json",
+      "note": "0496 is reviewed and prepared only. It changes operational duration data, not schema shape. Production apply requires the governed Schema V2 workflow, recovery point and migration post-guards."
     }
   ]
 }

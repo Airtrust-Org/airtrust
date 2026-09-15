@@ -97,7 +97,16 @@ export async function employeeHasCompletedQualification(params: {
 }): Promise<boolean> {
   const row = await params.db
     .prepare(
-      `SELECT id FROM qualificacoes_historico WHERE empresa_id=? AND funcionario_id=? AND qualificacao_id=? AND deleted_at IS NULL AND UPPER(COALESCE(status,'')) IN ('CONCLUIDA','RENOVADA','VALIDA','VÁLIDA') ORDER BY COALESCE(data_conclusao,'') DESC,id DESC LIMIT 1`,
+      `SELECT id FROM qualificacoes_historico
+        WHERE empresa_id=? AND funcionario_id=? AND qualificacao_id=?
+          AND deleted_at IS NULL
+          AND data_conclusao IS NOT NULL
+          AND date(data_conclusao) <= date('now')
+          AND (
+            UPPER(TRIM(COALESCE(status,''))) IN ('CONCLUIDA','CONCLUIDO','RENOVADA','VALIDA','VÁLIDA','VENCIDA','PROXIMA_VENCIMENTO','VENCENDO','VENCENDO_30')
+            OR TRIM(COALESCE(status,'')) = ''
+          )
+        ORDER BY date(data_conclusao) DESC,id DESC LIMIT 1`,
     )
     .bind(params.empresaId, params.employeeId, params.qualificationTypeId)
     .first<{ id: number }>();
