@@ -364,7 +364,7 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-14",
-    "last_reconciled_against": "training enrollment reconciliation 0494 production apply verified; training programs/flight curricula 0495 reviewed",
+    "last_reconciled_against": "training enrollment reconciliation 0494 and training programs/flight curricula 0495 production applies verified",
     "schema_v2_digest": "bae96e82afbd08720fd3914ddac2975558f5534ee5a16be8b549c652652d1563",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
@@ -837,9 +837,10 @@
       ],
       "domain": "canonical training programs, Initial-to-Periodic succession, and simulator flight curriculum membership",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REMOTE_APPLY_PENDING",
+      "governance_state": "PRODUCTION_CONFIRMED",
       "reviewed_manifest": "training-programs-and-flight-curricula-0495.json",
-      "note": "0495 is reviewed and prepared only. It separates qualification identity from Initial/Periodic/Semiannual programs, maps canonical session curricula, adds the SK76 semiannual qualification/program, and persists explicit program identity on new planned/history records. Merge does not imply staging or production apply."
+      "note": "0495 was applied through the governed Schema V2 production workflow on 2026-09-14 at exact source SHA b0e7d1f1f5d72d8e9160010382e28716f0df4dd3. The migration post-guard passed atomically, proving the required Initial/Periodic/Semiannual program and curriculum seed invariants; Worker and Pages were then deployed from the same SHA and production external health passed.",
+      "evidence": "docs/audit/evidence/0495-training-programs-flight-curricula-applied-verified-2026-09-14.md"
     }
   ]
 }
