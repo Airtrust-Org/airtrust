@@ -1,0 +1,102 @@
+name: Temporary Compliance Final Validation Orchestrator
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/compliance-final-validation-orchestrator.yml'
+
+permissions:
+  contents: read
+  actions: write
+  checks: read
+  statuses: read
+
+concurrency:
+  group: temporary-compliance-final-validation
+  cancel-in-progress: false
+
+env:
+  STAGING_RUNTIME_SHA: 1d9da9b0fef04269d070f5ad464db69da532d0ca
+  PRODUCTION_RUNTIME_SHA: 1d9da9b0fef04269d070f5ad464db69da532d0ca
+
+jobs:
+  orchestrate:
+    name: Dispatch canonical Compliance validation workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Wait for exact main gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 80); do
+            main_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+            if RELEASE_SHA="$main_sha" GITHUB_TOKEN="$GH_TOKEN" node scripts/ci/verify-release-gates.mjs; then
+              echo "CURRENT_MAIN_GATES=PASS:$main_sha"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo CURRENT_MAIN_GATES_TIMEOUT >&2
+          exit 1
+      - name: Run canonical final validation sequence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          dispatch_and_wait() {
+            local workflow="$1"
+            shift
+            local before
+            before="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+            gh workflow run "$workflow" --repo "$GITHUB_REPOSITORY" --ref main "$@"
+            local run_id=""
+            for i in $(seq 1 40); do
+              run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+              if [[ -n "$run_id" && "$run_id" != "$before" && "$run_id" != "0" ]]; then
+                break
+              fi
+              sleep 3
+            done
+            [[ -n "$run_id" && "$run_id" != "$before" && "$run_id" != "0" ]] || {
+              echo "DISPATCH_RUN_NOT_FOUND:$workflow" >&2
+              exit 1
+            }
+            echo "RUN=$workflow:$run_id"
+            gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
+          }
+
+          dispatch_and_wait staging-training-compliance-lifecycle-qa.yml \
+            -f confirmation=AIRTRUST_STAGING_TRAINING_COMPLIANCE_LIFECYCLE_QA \
+            -f expected_deployed_sha="$STAGING_RUNTIME_SHA"
+
+          dispatch_and_wait staging-training-compliance-qa.yml \
+            -f confirmation=AIRTRUST_STAGING_TRAINING_COMPLIANCE_QA \
+            -f expected_deployed_sha="$STAGING_RUNTIME_SHA"
+
+          dispatch_and_wait production-training-compliance-readonly-smoke.yml \
+            -f expected_production_sha="$PRODUCTION_RUNTIME_SHA" \
+            -f confirmation=AIRTRUST_PRODUCTION_TRAINING_COMPLIANCE_READONLY
+      - name: Publish closeout summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Temporary Compliance final validation orchestrator'
+            echo ''
+            echo "- staging runtime SHA: \`$STAGING_RUNTIME_SHA\`"
+            echo "- production runtime SHA: \`$PRODUCTION_RUNTIME_SHA\`"
+            echo '- deploy performed by this workflow: `none`'
+            echo '- production data writes: `none`'
+          } >> "$GITHUB_STEP_SUMMARY"

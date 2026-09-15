@@ -57,16 +57,21 @@ const PROFILE_TEST_MATCH =
             ? /training-compliance-lifecycle\.spec\.ts$/
             : /destructive-actions\.spec\.ts$/;
 
+const isMutatingSinglePassProfile =
+  AUDIT_PROFILE === 'lms-scorm' || AUDIT_PROFILE === 'training-compliance-lifecycle';
+const profileTimeout = AUDIT_PROFILE === 'training-compliance-lifecycle' ? 180_000 : 90_000;
+
 export default defineConfig({
   testDir: './frontend-pr-ui-qa',
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
-  // The staging LMS SCORM profile mutates only disposable synthetic fixtures.
-  // Do not retry it: a retry after a partial activation would test deduplication
-  // instead of the intended first-upload acceptance path.
-  retries: AUDIT_PROFILE === 'lms-scorm' ? 0 : process.env.CI ? 1 : 0,
+  // Mutating staging profiles operate on disposable synthetic fixtures, but a
+  // retry after partial state changes would validate a different lifecycle.
+  retries: isMutatingSinglePassProfile ? 0 : process.env.CI ? 1 : 0,
   workers: 1,
-  timeout: 90_000,
+  // The full Compliance lifecycle intentionally exercises several persisted
+  // transitions and can exceed the generic 90 s UI budget on hosted runners.
+  timeout: profileTimeout,
   reporter: [
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
     ['json', { outputFile: 'test-results/frontend-pr-ui-qa/results.json' }],
