@@ -47,8 +47,6 @@ interface AppLayoutProps {
 const NAV_ACTIVE = 'whitespace-nowrap bg-primary/10 text-primary font-semibold dark:bg-blue-500/15 dark:text-blue-200';
 const NAV_INACTIVE =
   'whitespace-nowrap text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100';
-const PREVIEW_BADGE_CLASS =
-  'ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
 
 type SigvoosRefreshPreviewResponse = {
   mode: 'preview';
@@ -442,7 +440,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium ${isActivePath('/sgso') ? NAV_ACTIVE : NAV_INACTIVE}`}
                 >
                   SGSO
-                  <span className={PREVIEW_BADGE_CLASS}>PRÉVIA</span>
                 </Link>
               )}
               {!isAluno && !isInstrutor && showMro && (
@@ -451,7 +448,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium ${isActivePath('/mro') ? NAV_ACTIVE : NAV_INACTIVE}`}
                 >
                   Manutenção
-                  <span className={PREVIEW_BADGE_CLASS}>PRÉVIA</span>
                 </Link>
               )}
               {!isAluno && !isInstrutor && showControleVoos && (
@@ -765,7 +761,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 >
                   <ShieldCheck className="h-4 w-4 shrink-0" />
                   SGSO
-                  <span className={PREVIEW_BADGE_CLASS}>PRÉVIA</span>
                 </Link>
               )}
               {!isAluno && !isInstrutor && showMro && (
@@ -774,7 +769,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   className={`flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium ${isActivePath('/mro') ? NAV_ACTIVE : NAV_INACTIVE}`}
                 >
                   Manutenção
-                  <span className={PREVIEW_BADGE_CLASS}>PRÉVIA</span>
                 </Link>
               )}
               {!isAluno && !isInstrutor && showControleVoos && (

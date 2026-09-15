@@ -8,7 +8,7 @@ vi.mock('../../hooks/useAuth', () => ({
 }));
 
 vi.mock('../../hooks/useSystemSettings', () => ({
-  useSystemSettings: () => ({ logoSrc: '/airtrust-logo.svg' }),
+  useSystemSettings: () => ({ logoSrc: '/airtrust-logo-20260915.png' }),
 }));
 
 vi.mock('../../i18n/useLanguage', () => ({
