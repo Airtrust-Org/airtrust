@@ -1,13 +1,15 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ControleVoosSubnav, {
   CONTROLE_VOOS_NAV_LINKS,
+  getVisibleControleVoosNavLinks,
   isControleVoosLinkActive,
   resolveActiveControleVoosLink,
 } from '../components/ControleVoosSubnav';
 
 const mockNavigate = vi.fn();
+const authMock = vi.fn();
 
 vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-router-dom')>();
@@ -17,7 +19,21 @@ vi.mock('react-router-dom', async (importOriginal) => {
   };
 });
 
+vi.mock('@/react-app/hooks/useAuth', () => ({
+  useAuth: () => authMock(),
+}));
+
 describe('ControleVoosSubnav navigation contract (N-03)', () => {
+  beforeEach(() => {
+    mockNavigate.mockClear();
+    authMock.mockReturnValue({
+      user: {
+        email: 'filipe.daumas@icloud.com',
+        role: 'ADMINISTRADOR',
+      },
+    });
+  });
+
   it('contains exactly 10 canonical options without loss of routes', () => {
     expect(CONTROLE_VOOS_NAV_LINKS).toHaveLength(10);
     const paths = CONTROLE_VOOS_NAV_LINKS.map((link) => link.to);
@@ -33,6 +49,14 @@ describe('ControleVoosSubnav navigation contract (N-03)', () => {
       '/controle-voos/relatorios',
       '/controle-voos/tabelas',
     ]);
+  });
+
+  it('limits pilot navigation to self-service routes instead of showing denied tabs', () => {
+    const links = getVisibleControleVoosNavLinks({
+      email: 'piloto@empresa.com',
+      role: 'ALUNO',
+    });
+    expect(links.map((link) => link.to)).toEqual(['/controle-voos/meus-voos']);
   });
 
   it('correctly resolves active link on exact and nested routes', () => {
@@ -67,7 +91,7 @@ describe('ControleVoosSubnav navigation contract (N-03)', () => {
     expect(activeForNested.label).toBe('Fila da Coordenação');
   });
 
-  it('renders mobile accessible select with all 10 options and touch target height >= 44px', () => {
+  it('renders mobile accessible select with all 10 options for the primary admin', () => {
     render(
       <MemoryRouter initialEntries={['/controle-voos/relatorios']}>
         <ControleVoosSubnav />
@@ -88,8 +112,24 @@ describe('ControleVoosSubnav navigation contract (N-03)', () => {
     );
   });
 
+  it('renders only Meus voos for pilot/aluno', () => {
+    authMock.mockReturnValue({
+      user: { email: 'piloto@empresa.com', role: 'ALUNO' },
+    });
+    render(
+      <MemoryRouter initialEntries={['/controle-voos/meus-voos']}>
+        <ControleVoosSubnav />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(screen.getByRole('link')).toHaveTextContent('Meus voos');
+    expect(screen.queryByText('Cadastros Operacionais')).toBeNull();
+    expect(screen.queryByText('Fila da Coordenação')).toBeNull();
+  });
+
   it('navigates via mobile select while preserving query search params', () => {
-    mockNavigate.mockClear();
     render(
       <MemoryRouter initialEntries={['/controle-voos?data=2026-09-04']}>
         <ControleVoosSubnav />

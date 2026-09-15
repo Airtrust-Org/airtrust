@@ -1,4 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/react-app/hooks/useAuth';
+import { canSeeControleVoosDevelopmentModule } from '@/react-app/lib/development-module-nav';
 
 export interface ControleVoosNavLink {
   to: string;
@@ -22,6 +24,13 @@ export const CONTROLE_VOOS_NAV_LINKS: ControleVoosNavLink[] = [
 
 export const PREVIEW_BADGE_TITLE = 'Tela em preview - nao usar como fonte operacional';
 
+export function getVisibleControleVoosNavLinks(
+  user?: { email?: string | null; role?: string | null } | null,
+): ControleVoosNavLink[] {
+  if (canSeeControleVoosDevelopmentModule(user)) return CONTROLE_VOOS_NAV_LINKS;
+  return CONTROLE_VOOS_NAV_LINKS.filter((link) => link.to === '/controle-voos/meus-voos');
+}
+
 export function isControleVoosLinkActive(pathname: string, link: ControleVoosNavLink): boolean {
   if (link.exact) {
     return pathname === '/controle-voos' || pathname === '/controle-voos/dashboard';
@@ -39,12 +48,13 @@ export function resolveActiveControleVoosLink(pathname: string): ControleVoosNav
 export default function ControleVoosSubnav() {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
-
-  const activeLink = resolveActiveControleVoosLink(pathname);
+  const { user } = useAuth();
+  const visibleLinks = getVisibleControleVoosNavLinks(user);
+  const activeLink =
+    visibleLinks.find((link) => isControleVoosLinkActive(pathname, link)) || visibleLinks[0];
 
   return (
     <div className="mb-5">
-      {/* Mobile navigation: accessible native select with >=44px touch target, zero horizontal clipping */}
       <div className="sm:hidden">
         <label htmlFor="controle-voos-mobile-nav" className="sr-only">
           Navegação do Controle de Voos
@@ -57,7 +67,7 @@ export default function ControleVoosSubnav() {
             onChange={(event) => navigate(`${event.target.value}${search}`)}
             className="w-full min-h-[44px] rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-800 shadow-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           >
-            {CONTROLE_VOOS_NAV_LINKS.map((link) => (
+            {visibleLinks.map((link) => (
               <option key={link.to} value={link.to}>
                 {link.label}
                 {link.preview ? ' (Preview)' : ''}
@@ -67,13 +77,12 @@ export default function ControleVoosSubnav() {
         </div>
       </div>
 
-      {/* Desktop/tablet navigation: horizontal tab strip with touch targets and full a11y */}
       <nav
         aria-label="Navegação do Controle de Voos"
         className="hidden sm:block -mx-1 overflow-x-auto px-1"
       >
         <div className="flex gap-1 min-w-max">
-          {CONTROLE_VOOS_NAV_LINKS.map((link) => {
+          {visibleLinks.map((link) => {
             const active = isControleVoosLinkActive(pathname, link);
             return (
               <Link

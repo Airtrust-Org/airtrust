@@ -1,5 +1,6 @@
 import { PRODUCT_MODULE_BY_KEY } from './modules';
 import {
+  canSeeControleVoosDevelopmentModule,
   canSeeOperationalDashboard,
   shouldShowRestrictedDevelopmentNavItems,
 } from './development-module-nav';
@@ -237,11 +238,12 @@ export function getVisibleNavigationItems<
       return false;
     }
 
-    if (
-      RESTRICTED_DEVELOPMENT_NAV_MODULES.has(resolvedModuleKey) &&
-      !canSeeRestrictedDevelopmentNavItems
-    ) {
-      return false;
+    if (RESTRICTED_DEVELOPMENT_NAV_MODULES.has(resolvedModuleKey)) {
+      if (resolvedModuleKey === 'controle_voos') {
+        if (!canSeeControleVoosDevelopmentModule(options.user)) return false;
+      } else if (!canSeeRestrictedDevelopmentNavItems) {
+        return false;
+      }
     }
 
     return true;

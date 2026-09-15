@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import ProtectedRoute, { isControleVoosSelfServicePath } from '../ProtectedRoute';
+import ProtectedRoute, { isControleVoosRestrictedAccessPath } from '../ProtectedRoute';
 
 const { authMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
@@ -47,14 +47,14 @@ function renderAt(pathname: string, requiredRole?: string[]) {
   );
 }
 
-describe('isControleVoosSelfServicePath', () => {
+describe('isControleVoosRestrictedAccessPath', () => {
   it.each([
     '/controle-voos/meus-voos',
     '/controle-voos/meus-voos/',
     '/controle-voos/rdv/123',
     '/controle-voos/rdv/abc-123/',
-  ])('aceita somente rotas self-service completas: %s', (pathname) => {
-    expect(isControleVoosSelfServicePath(pathname)).toBe(true);
+  ])('aceita rotas explicitamente liberadas do Controle de Voos: %s', (pathname) => {
+    expect(isControleVoosRestrictedAccessPath(pathname)).toBe(true);
   });
 
   it.each([
@@ -63,10 +63,11 @@ describe('isControleVoosSelfServicePath', () => {
     '/controle-voos',
     '/controle-voos/rdv',
     '/controle-voos/rdv/',
+    '/controle-voos/tabelas',
     '/controle-voos/rdv/123/extra',
     '/controle-voos/meus-voos/extra',
-  ])('rejeita rotas fora do self-service: %s', (pathname) => {
-    expect(isControleVoosSelfServicePath(pathname)).toBe(false);
+  ])('rejeita rotas fora das exceções explícitas: %s', (pathname) => {
+    expect(isControleVoosRestrictedAccessPath(pathname)).toBe(false);
   });
 });
 
@@ -154,6 +155,21 @@ describe('ProtectedRoute module gating', () => {
 
     expect(screen.queryByText('protected.denied.title')).toBeNull();
     expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
+  });
+
+  it('mantem Cadastros Operacionais bloqueado para tripulante', () => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { name: 'Piloto', email: 'piloto@empresa.com', role: 'ALUNO' },
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['controle_voos'] }],
+      empresaAtualId: 1,
+    });
+
+    renderAt('/controle-voos/tabelas');
+
+    expect(screen.getByText('protected.denied.title')).toBeInTheDocument();
+    expect(screen.queryByText('conteudo liberado')).toBeNull();
   });
 
   it('permite RDV individual self-service do tripulante sem liberar o restante do Controle de Voos', () => {
