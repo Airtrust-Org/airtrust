@@ -33,8 +33,9 @@ describe('simulator planning V3 priority, aircraft filter and report UX', () => 
   it('surfaces recurring-over-semiannual coverage instead of presenting mixed curricula as neutral', () => {
     const page = source(PAGE);
     const route = source(ROUTE);
-    expect(page).toContain('Periódico prioritário');
-    expect(page).toContain('renova');
+    expect(page).toContain('Periódico selecionado · atende também');
+    expect(page).toContain('Periódico · também atende a obrigação Semestral');
+    expect(page).not.toContain('Periódico prioritário · renova');
     expect(route).toContain('RECORRENTE_PRIORITARIO_SOBRE_SEMESTRAL');
     expect(route).toContain('satisfies_qualification_type_ids');
   });
