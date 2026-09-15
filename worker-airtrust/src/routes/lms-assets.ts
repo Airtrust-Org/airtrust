@@ -156,7 +156,7 @@ export function resolveProbedScormLocation(params: {
 
 // ── Helpers MIME ──────────────────────────────────────────────────────────────
 
-function guessMime(filename: string): string {
+export function guessMime(filename: string): string {
   const ext = filename.split('.').pop()?.toLowerCase() ?? '';
   const map: Record<string, string> = {
     html: 'text/html; charset=utf-8',
@@ -170,6 +170,7 @@ function guessMime(filename: string): string {
     jpg: 'image/jpeg',
     jpeg: 'image/jpeg',
     gif: 'image/gif',
+    webp: 'image/webp',
     svg: 'image/svg+xml',
     mp4: 'video/mp4',
     webm: 'video/webm',
