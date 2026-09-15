@@ -63,6 +63,63 @@ describe('session-level simulator proposal', () => {
     expect(blocks.map((block) => block.sessions[0].session_order).sort()).toEqual([1, 2, 3, 4]);
   });
 
+  it('keeps Irene with Nery across the periodic cycle instead of choosing lower-id Caio promoted from Semestral', () => {
+    const needs = [1, 2, 3, 4].flatMap((order) => {
+      const irene = need(
+        `irene-s${order}`,
+        71,
+        33,
+        'AW139 — Currículo de Voo - Periódico Anual (FFS)',
+        order,
+        '2026-09-23',
+        'Copiloto',
+      );
+      irene.requirement_qualification_type_id = 33;
+
+      const caioPromoted = need(
+        `caio-s${order}`,
+        5,
+        33,
+        'AW139 — Currículo de Voo - Periódico Anual (FFS)',
+        order,
+        '2026-09-30',
+        'Comandante',
+      );
+      caioPromoted.requirement_qualification_type_id = 106;
+      caioPromoted.coverage_reason = 'RECORRENTE_PRIORITARIO_SOBRE_SEMESTRAL';
+
+      const nery = need(
+        `nery-s${order}`,
+        33,
+        33,
+        'AW139 — Currículo de Voo - Periódico Anual (FFS)',
+        order,
+        '2026-09-30',
+        'Comandante',
+      );
+      nery.requirement_qualification_type_id = 33;
+      return [caioPromoted, irene, nery];
+    });
+
+    const blocks = pairSimulatorTrainingSessions(needs, 90);
+    const ireneBlocks = blocks.filter((block) =>
+      block.sessions.some((session) => session.employee_id === 71),
+    );
+
+    expect(ireneBlocks).toHaveLength(4);
+    expect(
+      ireneBlocks.every(
+        (block) =>
+          block.sessions.map((session) => session.employee_id).sort().join(',') === '33,71',
+      ),
+    ).toBe(true);
+    expect(
+      blocks.filter(
+        (block) => block.pairing === 'SEM_DUPLA' && block.sessions[0].employee_id === 5,
+      ),
+    ).toHaveLength(4);
+  });
+
   it('keeps the full curriculum denominator when only later sessions remain', () => {
     const late = need(
       'late',
