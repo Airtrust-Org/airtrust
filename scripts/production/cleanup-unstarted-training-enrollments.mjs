@@ -120,16 +120,21 @@ runWrangler(`UPDATE lms_matricula_ciclos SET status='CANCELADO',updated_at=datet
 
 runWrangler(`UPDATE lms_matriculas AS m SET status='CANCELADO',deleted_at=datetime('now'),updated_at=datetime('now') WHERE ${SAFE_WHERE}`, 'enrollments');
 
-// D1 meta.changes includes trigger side effects, so it is not a reliable count of
-// enrollment rows changed. Verify the exact reviewed ids by querying their final state.
-const reviewedIds = before.ids.join(',');
-const changedRows = select(`SELECT COUNT(*) AS n FROM lms_matriculas
+// D1/SQLite meta.changes can include trigger/side-effect writes and therefore is not
+// an authoritative count of the enrollment rows changed. Verify the exact reviewed
+// candidate IDs after the UPDATE instead.
+const appliedIds = before.ids.join(',');
+const appliedRows = select(`SELECT id FROM lms_matriculas
   WHERE empresa_id=${EMPRESA_ID}
-    AND id IN (${reviewedIds})
+    AND id IN (${appliedIds})
     AND UPPER(COALESCE(status,''))='CANCELADO'
-    AND deleted_at IS NOT NULL`, 'changed_enrollments');
-const changed = Number(changedRows[0]?.n ?? 0);
-if (changed !== expectedCount) fail(`APPLY_ENROLLMENT_POSTCOUNT_MISMATCH_EXPECTED_${expectedCount}_FOUND_${changed}`);
+    AND deleted_at IS NOT NULL
+  ORDER BY id`, 'applied_enrollments');
+const changedIds = appliedRows.map((row) => Number(row.id)).sort((a,b) => a-b);
+const changedHash = createHash('sha256').update(changedIds.join(',')).digest('hex');
+if (changedIds.length !== expectedCount) fail(`APPLY_POST_COUNT_MISMATCH_EXPECTED_${expectedCount}_FOUND_${changedIds.length}`);
+if (changedHash !== expectedHash) fail('APPLY_POST_SET_CHANGED');
+const changed = changedIds.length;
 
 const after = readState();
 if (after.candidate_count !== 0) fail(`POST_CANDIDATES_REMAIN_${after.candidate_count}`);

@@ -1,3 +1,7 @@
+// source_reference: staging Training Compliance lifecycle QA workflow, synthetic fixture, and browser spec.
+// operational_decision: static contract test only; referenced DML belongs exclusively to the isolated staging QA fixture/rollback.
+// dry_run_required: not applicable; this test reads source text and executes only local syntax validation, with no remote D1 mutation.
+// rollback_plan_required: the governed staging lifecycle workflow always rolls back its synthetic fixture; this test performs no write.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -22,6 +26,8 @@ test('lifecycle fixture is reserved to the canonical synthetic tenant and fails 
   assert.match(seed, /AIRTRUST_STAGING_TRAINING_COMPLIANCE_LIFECYCLE_QA/);
   assert.match(seed, /QA-COMP-LIFE-/);
   assert.match(seed, /airtrust-db-staging-baseline-20260701/);
+  assert.match(seed, /DELETE FROM lms_xapi_statements/);
+  assert.match(seed, /scorm_package_r2_prefix/);
   execFileSync('node', ['--check', 'scripts/staging/seed-qa-training-compliance-lifecycle.mjs']);
 });
 
@@ -32,6 +38,9 @@ test('browser simulation covers organization, enrollment, progress, completion a
     'RECOMENDADA',
     'Matricular gaps (sem e-mail)',
     'EM_ANDAMENTO',
+    '/progresso',
+    'progresso_pct: 50',
+    '/api/lms/assets/session',
     '/api/lms/xapi/statements',
     'completion: true',
     'MANTER_AVULSA',
