@@ -20,6 +20,12 @@ export type SimulatorTrainingSessionNeed = {
   curriculum_reference_year?: number | null;
   training_program_id?: number | null;
   training_program_type?: string | null;
+  training_program_name?: string | null;
+  requirement_qualification_type_id?: number | null;
+  requirement_qualification_code?: string | null;
+  requirement_qualification_name?: string | null;
+  coverage_reason?: 'RECORRENTE_PRIORITARIO_SOBRE_SEMESTRAL' | null;
+  satisfies_qualification_type_ids?: number[];
 };
 
 export type SimulatorTrainingSessionBlock = {
@@ -91,6 +97,23 @@ export function canShareSimulatorTrainingSessions(
   if (left.equipment !== right.equipment) return false;
   if (left.duration_minutes !== right.duration_minutes) return false;
   if (left.session_order !== right.session_order) return false;
+  if (left.qualification_type_id === right.qualification_type_id) return true;
+  return isRecurrentFlightTraining(left) && isRecurrentFlightTraining(right);
+}
+
+/**
+ * Manual session reassignment may deliberately combine different curriculum
+ * positions. It remains fail-closed on crew identity, equipment, duration and
+ * recurrent-flight compatibility. Automatic pairing stays stricter and still
+ * prefers the same session position through canShareSimulatorTrainingSessions.
+ */
+export function canManuallyShareSimulatorTrainingSessions(
+  left: SimulatorTrainingSessionNeed,
+  right: SimulatorTrainingSessionNeed,
+): boolean {
+  if (left.employee_id === right.employee_id) return false;
+  if (left.equipment !== right.equipment) return false;
+  if (left.duration_minutes !== right.duration_minutes) return false;
   if (left.qualification_type_id === right.qualification_type_id) return true;
   return isRecurrentFlightTraining(left) && isRecurrentFlightTraining(right);
 }

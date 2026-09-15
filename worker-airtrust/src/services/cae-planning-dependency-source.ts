@@ -96,6 +96,24 @@ export async function loadPendingTrainingDependencyQualifications(params: {
                  )
                )
           )
+          AND NOT EXISTS (
+            SELECT 1
+              FROM qualificacoes_historico qh_source_renewal
+             WHERE qh_source_renewal.empresa_id = t.empresa_id
+               AND qh_source_renewal.funcionario_id = f.id
+               AND qh_source_renewal.qualificacao_id = CAST(
+                 json_extract(t.planejamento_snapshot_json, '$.dependency.source_qualification_id') AS INTEGER
+               )
+               AND qh_source_renewal.deleted_at IS NULL
+               AND UPPER(COALESCE(qh_source_renewal.status, '')) IN ('CONCLUIDA','RENOVADA','VALIDA','VÁLIDA')
+               AND qh_source_renewal.data_conclusao IS NOT NULL
+               AND date(qh_source_renewal.data_conclusao) > date(
+                 COALESCE(
+                   CAST(json_extract(t.planejamento_snapshot_json, '$.dependency.source_completion_date') AS TEXT),
+                   '0001-01-01'
+                 )
+               )
+          )
         ORDER BY date(t.planejamento_vencimento_referencia), f.nome, qt.nome, t.id`,
     )
     .bind(

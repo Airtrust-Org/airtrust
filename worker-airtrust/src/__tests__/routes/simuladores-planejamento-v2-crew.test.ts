@@ -47,7 +47,6 @@ function need(employeeId: number, name: string) {
   };
 }
 
-
 function buildDb() {
   return {
     prepare: vi.fn((query: string) => {
@@ -102,6 +101,13 @@ function buildDb() {
                   ordem_no_treinamento: 1,
                   modelo_aeronave: 'AW139',
                 },
+                {
+                  id: 102,
+                  qualificacao_tipo_id: 1,
+                  duracao_estimada: 120,
+                  ordem_no_treinamento: 2,
+                  modelo_aeronave: 'AW139',
+                },
               ],
             };
           }
@@ -137,8 +143,10 @@ describe('simulator planning V2 manual crew replacement', () => {
     );
 
     expect(response.status).toBe(200);
-    const body = await response.json() as any;
-    expect(body.data.candidates.map((candidate: any) => candidate.employee_name)).toEqual(['Castro']);
+    const body = (await response.json()) as any;
+    expect(body.data.candidates.map((candidate: any) => candidate.employee_name)).toEqual([
+      'Castro',
+    ]);
   });
 
   it('re-pairs employees with the same fixed work scale and leaves the opposite scale unmatched under FOLGA policy', async () => {
@@ -163,12 +171,15 @@ describe('simulator planning V2 manual crew replacement', () => {
     );
 
     expect(response.status).toBe(200);
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.data.summary.paired_blocks).toBe(1);
     expect(body.data.summary.unmatched_blocks).toBe(1);
     const blocks = body.data.classes.flatMap((trainingClass: any) => trainingClass.blocks);
     const locked = blocks.find((block: any) => block.sessions.length === 2);
-    expect(locked.sessions.map((session: any) => session.employee_name).sort()).toEqual(['Castro', 'Filipe']);
+    expect(locked.sessions.map((session: any) => session.employee_name).sort()).toEqual([
+      'Castro',
+      'Filipe',
+    ]);
     const unmatched = blocks.find((block: any) => block.pairing === 'SEM_DUPLA');
     expect(unmatched.sessions[0].employee_name).toBe('Adriana');
   });
@@ -195,10 +206,116 @@ describe('simulator planning V2 manual crew replacement', () => {
     );
 
     expect(response.status).toBe(400);
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.error).toContain('sem disponibilidade comum');
   });
 
+  it('offers another pending session for the same participant without requiring the same automatic session order', async () => {
+    const app = buildApp();
+    const anchor = need(10, 'Filipe');
+    const current = need(30, 'Castro');
+    const sessionTwo = {
+      ...current,
+      need_id: '30:1:102',
+      session_model_id: 102,
+      session_code: 'S2',
+      session_name: 'Sessão 2',
+      session_order: 2,
+    };
+    const response = await app.request(
+      '/api/simuladores/planejamento-v2/alternativas-sessao',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          reference_date: '2027-06-01',
+          anchor,
+          current,
+          candidates: [sessionTwo],
+        }),
+      },
+      { DB: buildDb() } as unknown as Env,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    const alternative = body.data.alternatives.find((item: any) => item.kind === 'SESSION_NEED');
+    expect(alternative).toMatchObject({
+      recommended: false,
+      selected_need: { need_id: '30:1:102', session_order: 2 },
+    });
+    expect(alternative.availability.common_date).toMatch(/^2027-06-/);
+  });
+
+  it('accepts an explicit manual lock between different session positions when equipment and duration match', async () => {
+    const app = buildApp();
+    const sessionTwo = {
+      ...need(30, 'Castro'),
+      need_id: '30:1:102',
+      session_model_id: 102,
+      session_code: 'S2',
+      session_name: 'Sessão 2',
+      session_order: 2,
+    };
+    const response = await app.request(
+      '/api/simuladores/planejamento-v2/reparear',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          reference_date: '2027-06-01',
+          session_needs: [need(10, 'Filipe'), sessionTwo],
+          locks: [{ anchor_need_id: '10:1:101', partner_need_id: '30:1:102' }],
+        }),
+      },
+      { DB: buildDb() } as unknown as Env,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    const paired = body.data.classes.flatMap((trainingClass: any) => trainingClass.blocks)[0];
+    expect(paired.sessions.map((session: any) => session.session_order).sort()).toEqual([1, 2]);
+  });
+
+  it('preserves periodic-over-semiannual coverage metadata through manual re-pairing', async () => {
+    const app = buildApp();
+    const promoted = {
+      ...need(30, 'Nivaldo'),
+      requirement_qualification_type_id: 106,
+      requirement_qualification_code: 'G1-SEM',
+      requirement_qualification_name: 'AW139 — Currículo de Voo - Semestral (FFS)',
+      coverage_reason: 'RECORRENTE_PRIORITARIO_SOBRE_SEMESTRAL',
+      satisfies_qualification_type_ids: [1, 106],
+      training_program_name: 'AW139 — Currículo de Voo — Periódico',
+    };
+    const response = await app.request(
+      '/api/simuladores/planejamento-v2/reparear',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          reference_date: '2027-06-01',
+          session_needs: [need(10, 'Filipe'), promoted],
+          locks: [{ anchor_need_id: '10:1:101', partner_need_id: '30:1:101' }],
+        }),
+      },
+      { DB: buildDb() } as unknown as Env,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    const nivaldo = body.data.classes
+      .flatMap((trainingClass: any) => trainingClass.blocks)
+      .flatMap((block: any) => block.sessions)
+      .find((session: any) => session.employee_name === 'Nivaldo');
+    expect(nivaldo).toMatchObject({
+      requirement_qualification_type_id: 106,
+      requirement_qualification_code: 'G1-SEM',
+      coverage_reason: 'RECORRENTE_PRIORITARIO_SOBRE_SEMESTRAL',
+      satisfies_qualification_type_ids: [1, 106],
+      training_program_name: 'AW139 — Currículo de Voo — Periódico',
+    });
+  });
 
   it('compares CAE slots against the exact existing proposal without re-pairing an unmatched crew member', async () => {
     const app = buildApp();
@@ -210,10 +327,7 @@ describe('simulator planning V2 manual crew replacement', () => {
         body: JSON.stringify({
           reference_date: '2027-06-01',
           session_needs: [need(10, 'Filipe'), need(20, 'Adriana'), need(30, 'Castro')],
-          pairing_blocks: [
-            { need_ids: ['10:1:101', '30:1:101'] },
-            { need_ids: ['20:1:101'] },
-          ],
+          pairing_blocks: [{ need_ids: ['10:1:101', '30:1:101'] }, { need_ids: ['20:1:101'] }],
           cae_availability: {
             schema_version: 'airtrust.cae_availability.v1',
             provider: 'CAE',
@@ -245,7 +359,7 @@ describe('simulator planning V2 manual crew replacement', () => {
     );
 
     expect(response.status).toBe(200);
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.data.summary).toMatchObject({
       session_requirements: 3,
       paired_blocks: 1,
@@ -253,7 +367,10 @@ describe('simulator planning V2 manual crew replacement', () => {
     });
     const blocks = body.data.classes.flatMap((trainingClass: any) => trainingClass.blocks);
     const paired = blocks.find((block: any) => block.sessions.length === 2);
-    expect(paired.sessions.map((session: any) => session.employee_name).sort()).toEqual(['Castro', 'Filipe']);
+    expect(paired.sessions.map((session: any) => session.employee_name).sort()).toEqual([
+      'Castro',
+      'Filipe',
+    ]);
     expect(paired.schedule_status).toBe('SCHEDULED');
     const unmatched = blocks.find((block: any) => block.sessions.length === 1);
     expect(unmatched.sessions[0].employee_name).toBe('Adriana');

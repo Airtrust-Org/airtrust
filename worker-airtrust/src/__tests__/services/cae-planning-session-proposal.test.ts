@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildSimulatorTrainingClasses,
+  canManuallyShareSimulatorTrainingSessions,
+  canShareSimulatorTrainingSessions,
   pairSimulatorTrainingSessions,
   type SimulatorTrainingSessionNeed,
 } from '../../services/cae-planning-session-proposal';
@@ -36,8 +38,24 @@ function need(
 describe('session-level simulator proposal', () => {
   it('pairs all four sessions of a recurrent training instead of only the first', () => {
     const needs = [1, 2, 3, 4].flatMap((order) => [
-      need(`a-${order}`, 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', order, '2027-03-15', 'Comandante'),
-      need(`b-${order}`, 20, 1, 'AW139 — Currículo de Voo - Anual (FFS)', order, '2027-03-15', 'Copiloto'),
+      need(
+        `a-${order}`,
+        10,
+        1,
+        'AW139 — Currículo de Voo - Anual (FFS)',
+        order,
+        '2027-03-15',
+        'Comandante',
+      ),
+      need(
+        `b-${order}`,
+        20,
+        1,
+        'AW139 — Currículo de Voo - Anual (FFS)',
+        order,
+        '2027-03-15',
+        'Copiloto',
+      ),
     ]);
     const blocks = pairSimulatorTrainingSessions(needs, 60);
     expect(blocks).toHaveLength(4);
@@ -46,7 +64,15 @@ describe('session-level simulator proposal', () => {
   });
 
   it('keeps the full curriculum denominator when only later sessions remain', () => {
-    const late = need('late', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 4, '2027-03-15', 'Comandante');
+    const late = need(
+      'late',
+      10,
+      1,
+      'AW139 — Currículo de Voo - Anual (FFS)',
+      4,
+      '2027-03-15',
+      'Comandante',
+    );
     late.training_session_count = 2;
     const [block] = pairSimulatorTrainingSessions([late], 60);
     expect(block.sessions[0].session_order).toBe(4);
@@ -56,21 +82,78 @@ describe('session-level simulator proposal', () => {
   it('allows an annual session to share with a semestral session when duration/equipment match', () => {
     const blocks = pairSimulatorTrainingSessions(
       [
-        need('per-1', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-03-15', 'Comandante'),
-        need('sem-1', 20, 2, 'AW139 — Currículo de Voo - Semestral (FFS)', 1, '2027-03-30', 'Copiloto'),
+        need(
+          'per-1',
+          10,
+          1,
+          'AW139 — Currículo de Voo - Anual (FFS)',
+          1,
+          '2027-03-15',
+          'Comandante',
+        ),
+        need(
+          'sem-1',
+          20,
+          2,
+          'AW139 — Currículo de Voo - Semestral (FFS)',
+          1,
+          '2027-03-30',
+          'Copiloto',
+        ),
       ],
       60,
     );
     expect(blocks).toHaveLength(1);
     expect(blocks[0].pairing).toBe('TREINAMENTOS_COMPATIVEIS');
-    expect(blocks[0].sessions.map((session) => session.qualification_type_id).sort()).toEqual([1, 2]);
+    expect(blocks[0].sessions.map((session) => session.qualification_type_id).sort()).toEqual([
+      1, 2,
+    ]);
+  });
+
+  it('keeps automatic pairing strict by session order but allows an explicit manual session reassignment', () => {
+    const first = need(
+      'a',
+      10,
+      1,
+      'AW139 — Currículo de Voo - Anual (FFS)',
+      1,
+      '2027-03-15',
+      'Comandante',
+    );
+    const second = need(
+      'b',
+      20,
+      1,
+      'AW139 — Currículo de Voo - Anual (FFS)',
+      2,
+      '2027-03-15',
+      'Copiloto',
+    );
+    expect(canShareSimulatorTrainingSessions(first, second)).toBe(false);
+    expect(canManuallyShareSimulatorTrainingSessions(first, second)).toBe(true);
   });
 
   it('does not cross-pair annual and semestral when shared sessions are disabled by company policy', () => {
     const blocks = pairSimulatorTrainingSessions(
       [
-        need('per-1', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-03-15', 'Comandante'),
-        need('sem-1', 20, 2, 'AW139 — Currículo de Voo - Semestral (FFS)', 1, '2027-03-30', 'Copiloto'),
+        need(
+          'per-1',
+          10,
+          1,
+          'AW139 — Currículo de Voo - Anual (FFS)',
+          1,
+          '2027-03-15',
+          'Comandante',
+        ),
+        need(
+          'sem-1',
+          20,
+          2,
+          'AW139 — Currículo de Voo - Semestral (FFS)',
+          1,
+          '2027-03-30',
+          'Copiloto',
+        ),
       ],
       60,
       false,
@@ -92,9 +175,33 @@ describe('session-level simulator proposal', () => {
   });
 
   it('applies an operational predicate without weakening curricular compatibility', () => {
-    const primary = need('a', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-06-17', 'Comandante');
-    const unavailable = need('b', 20, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-06-17', 'Copiloto');
-    const available = need('c', 30, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-06-17', 'Copiloto');
+    const primary = need(
+      'a',
+      10,
+      1,
+      'AW139 — Currículo de Voo - Anual (FFS)',
+      1,
+      '2027-06-17',
+      'Comandante',
+    );
+    const unavailable = need(
+      'b',
+      20,
+      1,
+      'AW139 — Currículo de Voo - Anual (FFS)',
+      1,
+      '2027-06-17',
+      'Copiloto',
+    );
+    const available = need(
+      'c',
+      30,
+      1,
+      'AW139 — Currículo de Voo - Anual (FFS)',
+      1,
+      '2027-06-17',
+      'Copiloto',
+    );
 
     const blocks = pairSimulatorTrainingSessions(
       [primary, unavailable, available],
@@ -103,9 +210,13 @@ describe('session-level simulator proposal', () => {
       (_left, right) => right.employee_id !== 20,
     );
 
-    const paired = blocks.find((block) => block.sessions.some((session) => session.employee_id === 10));
+    const paired = blocks.find((block) =>
+      block.sessions.some((session) => session.employee_id === 10),
+    );
     expect(paired?.sessions.map((session) => session.employee_id).sort()).toEqual([10, 30]);
-    expect(blocks.some((block) => block.pairing === 'SEM_DUPLA' && block.sessions[0].employee_id === 20)).toBe(true);
+    expect(
+      blocks.some((block) => block.pairing === 'SEM_DUPLA' && block.sessions[0].employee_id === 20),
+    ).toBe(true);
   });
 
   it('creates a stable class name by equipment and target month', () => {

@@ -15,15 +15,22 @@ describe('training dependency -> complete simulator planning contract', () => {
     expect(route).toContain('const ordered = [...remainingRows].sort');
     expect(route).toContain('ordered.forEach((model, index) =>');
     expect(route).toContain('training_session_count: ordered.length');
-    expect(route).toContain("planning_source: qualification.planning_source || 'QUALIFICATION_HISTORY'");
+    expect(route).toContain(
+      "planning_source: qualification.planning_source || 'QUALIFICATION_HISTORY'",
+    );
 
     expect(source).toContain("'TRAINING_DEPENDENCY' AS planning_source");
     expect(source).toContain('t.empresa_id = ?');
     expect(source).toContain('f.empresa_id = t.empresa_id');
     expect(source).toContain('qt.empresa_id = t.empresa_id');
-    expect(source).toContain("'PROPOSTO', 'PLANEJADO', 'AGUARDANDO_DISPONIBILIDADE', 'CONFIRMADO', 'REPLANEJAR'");
+    expect(source).toContain(
+      "'PROPOSTO', 'PLANEJADO', 'AGUARDANDO_DISPONIBILIDADE', 'CONFIRMADO', 'REPLANEJAR'",
+    );
     expect(source).toContain('NOT EXISTS (');
     expect(source).toContain("UPPER(COALESCE(qh_done.status, '')) = 'CONCLUIDA'");
+    expect(source).toContain('qh_source_renewal.qualificacao_id = CAST(');
+    expect(source).toContain('$.dependency.source_qualification_id');
+    expect(source).toContain('date(qh_source_renewal.data_conclusao) > date(');
   });
 
   it('blocks direct partial materialization of a raw dependency seed', () => {
@@ -32,7 +39,9 @@ describe('training dependency -> complete simulator planning contract', () => {
     const participantMaterializationAt = materialization.indexOf('const snapshotParticipants');
 
     expect(materialization).toContain("snapshot.generated_by === 'TRAINING_DEPENDENCY'");
-    expect(materialization).toContain("snapshot.materialization_strategy === 'TRAINING_PLAN_REQUIRED'");
+    expect(materialization).toContain(
+      "snapshot.materialization_strategy === 'TRAINING_PLAN_REQUIRED'",
+    );
     expect(guardAt).toBeGreaterThan(0);
     expect(participantMaterializationAt).toBeGreaterThan(guardAt);
   });
@@ -40,7 +49,9 @@ describe('training dependency -> complete simulator planning contract', () => {
   it('keeps exact CAE time selection exclusively in the second-stage comparison route', () => {
     const proposalRoute = read('worker-airtrust/src/routes/simuladores-planejamento-v2.ts');
     const comparisonRoute = read('worker-airtrust/src/routes/simuladores-planejamento-v2-crew.ts');
-    const frontend = read('src/react-app/pages/simuladores/planejamento/PlanejamentoSimuladoresV3.tsx');
+    const frontend = read(
+      'src/react-app/pages/simuladores/planejamento/PlanejamentoSimuladoresV3.tsx',
+    );
     const scheduler = read('worker-airtrust/src/services/cae-planning-session-scheduler.ts');
 
     expect(proposalRoute).not.toContain('body?.cae_availability');
@@ -50,7 +61,7 @@ describe('training dependency -> complete simulator planning contract', () => {
     expect(frontend).toContain("'/api/simuladores/planejamento-v2/comparar-cae'");
     expect(frontend).not.toContain('generateProposal(caeDocument');
     expect(scheduler).toContain('simulatorTrainingTimeQualityRank');
-    expect(scheduler).toContain("timeQuality: SimulatorTrainingTimeQuality");
+    expect(scheduler).toContain('timeQuality: SimulatorTrainingTimeQuality');
     expect(scheduler).toContain('time_quality: chosen.timeQuality');
   });
 });
