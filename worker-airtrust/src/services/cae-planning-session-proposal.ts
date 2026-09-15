@@ -83,6 +83,13 @@ function isRecurrentFlightTraining(session: SimulatorTrainingSessionNeed): boole
   );
 }
 
+function requirementQualificationTypeId(session: SimulatorTrainingSessionNeed): number {
+  const requirement = Number(session.requirement_qualification_type_id);
+  return Number.isInteger(requirement) && requirement > 0
+    ? requirement
+    : Number(session.qualification_type_id);
+}
+
 /**
  * Compartilhamento cruzado é deliberadamente conservador nesta camada:
  * mesmo equipamento, mesma duração e mesma posição curricular. O conteúdo
@@ -121,14 +128,17 @@ export function canManuallyShareSimulatorTrainingSessions(
 function partnerScore(
   primary: SimulatorTrainingSessionNeed,
   partner: SimulatorTrainingSessionNeed,
-): [number, number, number, number, number] {
+): [number, number, number, number, number, number] {
   const sameTraining = primary.qualification_type_id === partner.qualification_type_id;
+  const sameRequirement =
+    requirementQualificationTypeId(primary) === requirementQualificationTypeId(partner);
   const sameModel = primary.session_model_id === partner.session_model_id;
   const complementaryRole =
     (roleKind(primary.employee_role) === 'PIC' && roleKind(partner.employee_role) === 'SIC') ||
     (roleKind(primary.employee_role) === 'SIC' && roleKind(partner.employee_role) === 'PIC');
   return [
     sameTraining ? 0 : 1,
+    sameRequirement ? 0 : 1,
     sameModel ? 0 : 1,
     complementaryRole ? 0 : 1,
     daysDistance(primary.expiry_date, partner.expiry_date),
@@ -173,9 +183,15 @@ function normalizeTrainingSessionCounts(
  * pode cumprir S1 com uma pessoa e S2 com outra; Periódico e Semestral podem
  * compartilhar quando as sessões forem compatíveis.
  *
- * pairEligibility é uma restrição operacional adicional (por exemplo, escala
- * publicada/quinzena). Ela nunca amplia compatibilidade curricular: somente
- * pode eliminar uma dupla que já seria estruturalmente válida.
+ * Quando há mais de um candidato estruturalmente compatível, a necessidade
+ * original do treinamento é critério operacional antes do desempate técnico.
+ * Assim dois pilotos que realmente precisam do mesmo Periódico são pareados
+ * antes de um terceiro que só foi elevado do Semestral para aproveitar o
+ * Periódico. employee_id só estabiliza um empate operacional verdadeiro.
+ *
+ * pairEligibility é uma restrição operacional adicional (por exemplo, Escala
+ * 1/2). Ela nunca amplia compatibilidade curricular: somente pode eliminar
+ * uma dupla que já seria estruturalmente válida.
  */
 export function pairSimulatorTrainingSessions(
   needs: SimulatorTrainingSessionNeed[],

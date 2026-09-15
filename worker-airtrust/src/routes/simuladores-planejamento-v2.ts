@@ -189,7 +189,12 @@ async function loadEmployeeCompletedQualificationKeys(params: {
         WHERE empresa_id=? AND deleted_at IS NULL
           AND funcionario_id IN (${employeePlaceholders})
           AND qualificacao_id IN (${qualificationPlaceholders})
-          AND UPPER(COALESCE(status,'')) IN ('CONCLUIDA','RENOVADA','VALIDA','VÁLIDA')`,
+          AND data_conclusao IS NOT NULL
+          AND date(data_conclusao) <= date('now')
+          AND (
+            UPPER(TRIM(COALESCE(status,''))) IN ('CONCLUIDA','CONCLUIDO','RENOVADA','VALIDA','VÁLIDA','VENCIDA','PROXIMA_VENCIMENTO','VENCENDO','VENCENDO_30')
+            OR TRIM(COALESCE(status,'')) = ''
+          )`,
     )
     .bind(params.empresaId, ...employeeIds, ...qualificationTypeIds)
     .all<{ funcionario_id: number; qualificacao_id: number }>();
