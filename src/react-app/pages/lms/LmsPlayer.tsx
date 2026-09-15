@@ -88,12 +88,12 @@ export function resolveLmsDisplayProgress(params: {
 }
 
 /**
- * Quantas vezes toleramos um diagnóstico "candidate" (SCORM ainda não
- * confirmou status explícito) antes de parar de tentar e mostrar o
- * estado terminal. Evita spinner/toast infinito quando o pacote nunca
- * envia passed/failed.
+ * Quantas reconsultas canônicas toleramos após o SCORM sinalizar conclusão.
+ * Se a mesma resposta `candidate` permanecer após esse limite, o player sai
+ * do saving e preserva o progresso, em vez de manter um toast infinito.
  */
-const MAX_SCORM_CANDIDATE_ATTEMPTS = 2;
+const MAX_SCORM_CANDIDATE_RECHECKS = 1;
+const SCORM_CANDIDATE_RECHECK_DELAY_MS = 1_000;
 
 const SCORM_UNRESOLVED_MESSAGE =
   'O conteúdo chegou ao fim, mas não enviou a confirmação SCORM. Seu progresso foi preservado.';
@@ -142,6 +142,7 @@ export default function LmsPlayer() {
   const [completionState, setCompletionState] = useState<
     'idle' | 'saving' | 'pending' | 'error' | 'unresolved'
   >('idle');
+  const [candidateRetryTick, setCandidateRetryTick] = useState(0);
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
   // Código/razão sanitizados do último lms:completion-error. Preservados para
   // diagnóstico — a UI mostra mensagem útil sem colapsar tudo em texto genérico.
@@ -208,7 +209,7 @@ export default function LmsPlayer() {
   }, [completionState]);
 
   const completionToastIdRef = useRef(`lms-scorm-completion-${id}`);
-  const candidateStreakRef = useRef(0);
+  const candidateRetryTimerRef = useRef<number | null>(null);
   const unresolvedRef = useRef(false);
   // Torna o "Sair do curso" idempotente: um handshake em andamento não dispara outro.
   const leavingRef = useRef(false);
@@ -259,6 +260,14 @@ export default function LmsPlayer() {
     currentSlideIndex != null && maxVisitedSlide > 0 && currentSlideIndex < maxVisitedSlide;
   const assetMatriculaId = matricula?.id ?? null;
   const assetContentType = matricula?.tipo_conteudo ?? null;
+
+  useEffect(() => {
+    return () => {
+      if (candidateRetryTimerRef.current !== null) {
+        window.clearTimeout(candidateRetryTimerRef.current);
+      }
+    };
+  }, []);
   // ── Session identity ──────────────────────────────────────────────
   // Freeze the launch URL per logical session so the iframe is never
   // recreated during progress saves, refetches, or token rotations.
@@ -463,8 +472,12 @@ export default function LmsPlayer() {
       matricula?.status === 'CONCLUIDO' || completionDiagnostic?.status === 'accepted';
 
     if (canonicalCompletionAccepted) {
+      if (candidateRetryTimerRef.current !== null) {
+        window.clearTimeout(candidateRetryTimerRef.current);
+        candidateRetryTimerRef.current = null;
+      }
       unresolvedRef.current = false;
-      candidateStreakRef.current = 0;
+      setCandidateRetryTick(0);
       toast.dismiss(completionToastIdRef.current);
       setCompletionState('idle');
       setCompletionMessage(null);
@@ -486,9 +499,11 @@ export default function LmsPlayer() {
     }
 
     if (completionDiagnostic?.status === 'candidate') {
-      candidateStreakRef.current += 1;
-
-      if (isScormContent && candidateStreakRef.current > MAX_SCORM_CANDIDATE_ATTEMPTS) {
+      if (isScormContent && candidateRetryTick >= MAX_SCORM_CANDIDATE_RECHECKS) {
+        if (candidateRetryTimerRef.current !== null) {
+          window.clearTimeout(candidateRetryTimerRef.current);
+          candidateRetryTimerRef.current = null;
+        }
         unresolvedRef.current = true;
         toast.dismiss(completionToastIdRef.current);
         setCompletionState('unresolved');
@@ -502,17 +517,35 @@ export default function LmsPlayer() {
           ? 'Conclusão recebida, mas ainda não confirmada pelo servidor.'
           : 'Conclusão recebida. Salvando progresso...',
       );
+
+      // React Query may retain the same diagnostic object when the server
+      // still returns `candidate`. Drive a bounded recheck with local state so
+      // the player cannot keep an infinite saving toast solely because that
+      // object identity did not change.
+      if (isScormContent && candidateRetryTimerRef.current === null) {
+        candidateRetryTimerRef.current = window.setTimeout(() => {
+          candidateRetryTimerRef.current = null;
+          void Promise.resolve(refetchMatricula()).finally(() => {
+            setCandidateRetryTick((value) => value + 1);
+          });
+        }, SCORM_CANDIDATE_RECHECK_DELAY_MS);
+      }
       return;
     }
 
-    candidateStreakRef.current = 0;
+    if (candidateRetryTimerRef.current !== null) {
+      window.clearTimeout(candidateRetryTimerRef.current);
+      candidateRetryTimerRef.current = null;
+    }
+    if (candidateRetryTick !== 0) {
+      setCandidateRetryTick(0);
+    }
 
     if (
       completionState !== 'idle' &&
       completionDiagnostic &&
       completionDiagnostic.code !== 'SCORM_NONE' &&
-      completionDiagnostic.status !== 'accepted' &&
-      completionDiagnostic.status !== 'candidate'
+      completionDiagnostic.status !== 'accepted'
     ) {
       showCompletionToast(
         'error',
@@ -521,12 +554,14 @@ export default function LmsPlayer() {
     }
   }, [
     completionDiagnostic,
+    candidateRetryTick,
     completionState,
     effectiveReviewMode,
     isScormContent,
     matricula?.qualificacao_historico_id,
     matricula?.status,
     qualificacaoGerada,
+    refetchMatricula,
   ]);
 
   useEffect(() => {

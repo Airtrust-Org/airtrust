@@ -182,51 +182,62 @@ describe('LmsPlayer — matrícula 402 (SCORM_STATUS_INCONSISTENT)', () => {
     expect(screen.getByText(/Nota: 100%/)).toBeInTheDocument();
   });
 
-  it('após tentativas limitadas, sai do loop de saving/pending e mostra estado terminal sem repetir refetch', async () => {
-    const { rerender } = renderPlayer();
+  it('encerra o saving quando o diagnóstico candidate permanece idêntico após a reconsulta', async () => {
+    vi.useFakeTimers();
 
-    // Simula o backend continuando a devolver o mesmo diagnóstico
-    // "candidate" a cada refetch (comportamento real observado: o pacote
-    // nunca emite passed/completed, então nunca vira accepted).
-    for (let i = 0; i < 4; i += 1) {
-      matriculaMock = {
-        ...matriculaMock,
-        completion_diagnostic: { ...SCORM_STATUS_INCONSISTENT_DIAGNOSTIC },
-      };
+    try {
+      renderPlayer();
+
       await act(async () => {
-        rerender(
-          <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-            <MemoryRouter initialEntries={['/lms/player/scorm/402']}>
-              <Routes>
-                <Route path="/lms/player/scorm/:matriculaId" element={<LmsPlayer />} />
-              </Routes>
-            </MemoryRouter>
-          </QueryClientProvider>,
-        );
+        await vi.advanceTimersByTimeAsync(1_000);
       });
-    }
 
-    await waitFor(() => {
       expect(
         screen.getByText(
           'O conteúdo chegou ao fim, mas não enviou a confirmação SCORM. Seu progresso foi preservado.',
         ),
       ).toBeInTheDocument();
-    });
+      expect(refetchMatriculaMock).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-    // Estado terminal: ações finitas, sem spinner infinito.
-    expect(screen.getByText('Sair e reabrir o curso')).toBeInTheDocument();
-    expect(screen.getByText('Voltar ao catálogo')).toBeInTheDocument();
-    expect(screen.queryByText(/Confirmar conclusao/i)).not.toBeInTheDocument();
+  it('após tentativas limitadas, sai do loop de saving/pending e mostra estado terminal sem repetir refetch', async () => {
+    vi.useFakeTimers();
 
-    // Um sinal adicional de "pending" do pacote não deve reabrir o ciclo.
-    refetchMatriculaMock.mockClear();
-    await dispatchPlayerMessage({
-      type: 'lms:completion-pending',
-      matriculaId: 402,
-      stage: 'pending',
-    });
-    expect(refetchMatriculaMock).not.toHaveBeenCalled();
+    try {
+      renderPlayer();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+
+      expect(
+        screen.getByText(
+          'O conteúdo chegou ao fim, mas não enviou a confirmação SCORM. Seu progresso foi preservado.',
+        ),
+      ).toBeInTheDocument();
+
+      // Estado terminal: ações finitas, sem spinner infinito.
+      expect(screen.getByText('Sair e reabrir o curso')).toBeInTheDocument();
+      expect(screen.getByText('Voltar ao catálogo')).toBeInTheDocument();
+      expect(screen.queryByText(/Confirmar conclusao/i)).not.toBeInTheDocument();
+
+      // Um sinal adicional de "pending" do pacote não deve reabrir o ciclo.
+      // `waitFor` da helper abaixo precisa usar relógio real; o timer do
+      // candidato já foi avançado deterministicamente acima.
+      vi.useRealTimers();
+      refetchMatriculaMock.mockClear();
+      await dispatchPlayerMessage({
+        type: 'lms:completion-pending',
+        matriculaId: 402,
+        stage: 'pending',
+      });
+      expect(refetchMatriculaMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('vira CONCLUIDO normalmente quando o diagnóstico passa a accepted (fluxo saudável não regride)', async () => {
