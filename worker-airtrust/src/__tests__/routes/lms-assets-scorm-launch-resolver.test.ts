@@ -78,10 +78,12 @@ function makeR2Object(key: string) {
  * active — plus (optionally) a legacy flat-prefix copy for courses that
  * predate the versioned-candidate system.
  */
-function createMultiCandidateBucket(opts: {
-  legacyFlatCopy?: boolean;
-  activePrefixHasFile?: boolean;
-} = {}) {
+function createMultiCandidateBucket(
+  opts: {
+    legacyFlatCopy?: boolean;
+    activePrefixHasFile?: boolean;
+  } = {},
+) {
   const { legacyFlatCopy = false, activePrefixHasFile = true } = opts;
   const keys = new Set<string>();
   keys.add(`${SUPERSEDED_PREFIX}index.html`);
@@ -116,7 +118,12 @@ function createMockDb(scormPackageR2Prefix: string | null) {
       bind: () => ({
         first: async () => {
           if (query.includes('FROM lms_cursos')) {
-            return { id: CURSO_ID, ativo: 1, publicado: 1, scorm_package_r2_prefix: scormPackageR2Prefix };
+            return {
+              id: CURSO_ID,
+              ativo: 1,
+              publicado: 1,
+              scorm_package_r2_prefix: scormPackageR2Prefix,
+            };
           }
           if (query.includes('FROM lms_matriculas')) {
             return { id: 1 };
@@ -167,6 +174,28 @@ describe('SCORM asset resolution — active/pinned candidate prefix (BUG 1 regre
       role: 'admin',
       sub: '42',
     });
+  });
+
+  it('honors a matrícula-scoped package pin even after the course activates a newer package', async () => {
+    verifyJWTMock.mockResolvedValue({
+      empresa_id: EMPRESA_ID,
+      funcionario_id: 42,
+      role: 'admin',
+      sub: '42',
+      token_type: 'lms_asset',
+      asset_scope: 'course_assets',
+      asset_curso_id: CURSO_ID,
+      asset_matricula_id: 346,
+      asset_scorm_package_prefix: SUPERSEDED_PREFIX,
+    });
+    const bucket = createMultiCandidateBucket();
+    const env = makeEnv(bucket, ACTIVE_PREFIX);
+
+    const res = await getAsset(`/api/lms/scorm/assets/${EMPRESA_ID}/${CURSO_ID}/index.html`, env);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-LMS-Asset-Key')).toBe(`${SUPERSEDED_PREFIX}index.html`);
+    expect(res.headers.get('X-LMS-Asset-Key')).not.toContain('7503f97e-active');
   });
 
   it('serves the file from the ACTIVE candidate prefix, not the lexicographically-first superseded one', async () => {
@@ -221,7 +250,9 @@ describe('SCORM asset resolution — active/pinned candidate prefix (BUG 1 regre
 
     expect(res.status).toBe(200);
     expect(res.headers.get('X-LMS-Asset-Key')).toBe(`${ACTIVE_PREFIX}index.html`);
-    expect(res.headers.get('X-LMS-Asset-Key')).not.toBe(`lms/scorm/${EMPRESA_ID}/${CURSO_ID}/index.html`);
+    expect(res.headers.get('X-LMS-Asset-Key')).not.toBe(
+      `lms/scorm/${EMPRESA_ID}/${CURSO_ID}/index.html`,
+    );
   });
 
   it('preserves legacy listing-fallback behavior for courses with no versioned candidate prefix set', async () => {
@@ -231,7 +262,9 @@ describe('SCORM asset resolution — active/pinned candidate prefix (BUG 1 regre
     const res = await getAsset(`/api/lms/scorm/assets/${EMPRESA_ID}/${CURSO_ID}/index.html`, env);
 
     expect(res.status).toBe(200);
-    expect(res.headers.get('X-LMS-Asset-Key')).toBe(`lms/scorm/${EMPRESA_ID}/${CURSO_ID}/index.html`);
+    expect(res.headers.get('X-LMS-Asset-Key')).toBe(
+      `lms/scorm/${EMPRESA_ID}/${CURSO_ID}/index.html`,
+    );
   });
 
   it('a request that already carries the exact active-candidate path in the wildcard resolves directly without touching list()', async () => {
