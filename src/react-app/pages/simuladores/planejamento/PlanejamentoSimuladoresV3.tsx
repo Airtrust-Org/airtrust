@@ -252,7 +252,13 @@ function equipmentLabel(value?: string | null) {
 
 function sessionCoverageLabel(session: SessionNeed) {
   if (session.coverage_reason !== 'RECORRENTE_PRIORITARIO_SOBRE_SEMESTRAL') return null;
-  return `Periódico prioritário · renova ${session.requirement_qualification_name || 'Semestral'}`;
+  const originalRequirementId = Number(session.requirement_qualification_type_id || 0);
+  const promotedFromSemiannual =
+    originalRequirementId > 0 && originalRequirementId !== Number(session.qualification_type_id);
+  if (promotedFromSemiannual) {
+    return `Periódico selecionado · atende também ${session.requirement_qualification_name || 'a obrigação Semestral'}`;
+  }
+  return 'Periódico · também atende a obrigação Semestral';
 }
 
 function pairingLabel(value: PlanningBlock['pairing']) {
