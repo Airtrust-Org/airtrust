@@ -31,5 +31,8 @@ test('apply binds to the exact reviewed candidate set', () => {
   assert.match(script, /TRAINING_ENROLLMENT_EXPECTED_COUNT/);
   assert.match(script, /TRAINING_ENROLLMENT_EXPECTED_HASH/);
   assert.match(script, /CANDIDATE_SET_CHANGED/);
+  assert.match(script, /D1 meta\.changes includes trigger side effects/);
+  assert.match(script, /APPLY_ENROLLMENT_POSTCOUNT_MISMATCH/);
+  assert.doesNotMatch(script, /update\.meta\?\.changes/);
   assert.match(workflow, /production-training-enrollment-cleanup-dry-run-\$EXPECTED_SHA/);
 });
