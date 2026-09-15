@@ -83,6 +83,35 @@ export function buildQualificacoesEadRenovacaoResilienteQuery(): string {
             UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD'
             OR UPPER(TRIM(COALESCE(qt.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
           )
+          AND COALESCE((
+            SELECT CASE
+              WHEN tr.obrigatoriedade = 'OBRIGATORIA' AND COALESCE(tr.auto_matricular_ead, 0) = 1 THEN 1
+              ELSE 0
+            END
+              FROM treinamento_requisitos tr
+             WHERE tr.empresa_id = qh.empresa_id
+               AND tr.qualificacao_tipo_id = qt.id
+               AND tr.ativo = 1
+               AND tr.deleted_at IS NULL
+               AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio) <= date('now'))
+               AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim) >= date('now'))
+               AND (
+                 tr.escopo = 'EMPRESA'
+                 OR (tr.escopo = 'SETOR' AND tr.setor_id = f.setor_id)
+                 OR (tr.escopo = 'FUNCAO' AND tr.funcao_id = f.funcao_id)
+                 OR (tr.escopo = 'SETOR_FUNCAO' AND tr.setor_id = f.setor_id AND tr.funcao_id = f.funcao_id)
+                 OR (tr.escopo = 'FUNCIONARIO' AND tr.funcionario_id = f.id)
+               )
+             ORDER BY CASE tr.escopo
+               WHEN 'FUNCIONARIO' THEN 5
+               WHEN 'SETOR_FUNCAO' THEN 4
+               WHEN 'FUNCAO' THEN 3
+               WHEN 'SETOR' THEN 2
+               WHEN 'EMPRESA' THEN 1
+               ELSE 0
+             END DESC, tr.id DESC
+             LIMIT 1
+          ), 0) = 1
           AND COALESCE(qh.renovada, 0) = 0
           AND (qh.data_vencimento IS NOT NULL OR qh.data_conclusao IS NOT NULL)
           AND NOT EXISTS (

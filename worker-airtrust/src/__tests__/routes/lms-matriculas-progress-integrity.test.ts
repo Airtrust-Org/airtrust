@@ -6,12 +6,14 @@ import type { Env } from '../../types';
 const {
   ensureMatriculaCycleMock,
   syncMatriculaCycleFromMatriculaMock,
+  resetMatriculaForNewCycleMock,
   completeLmsMatriculaMock,
   logAuditMock,
   sendEmailMock,
 } = vi.hoisted(() => ({
   ensureMatriculaCycleMock: vi.fn(),
   syncMatriculaCycleFromMatriculaMock: vi.fn(),
+  resetMatriculaForNewCycleMock: vi.fn(),
   completeLmsMatriculaMock: vi.fn(),
   logAuditMock: vi.fn(),
   sendEmailMock: vi.fn(),
@@ -60,6 +62,7 @@ vi.mock('../../services/lms-matricula-cycle', () => ({
       !record.deleted_at &&
       ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(record.status)),
     ),
+  resetMatriculaForNewCycle: resetMatriculaForNewCycleMock,
   syncMatriculaCycleFromMatricula: syncMatriculaCycleFromMatriculaMock,
 }));
 
@@ -131,6 +134,7 @@ describe('lms matriculas progress integrity', () => {
     vi.clearAllMocks();
     ensureMatriculaCycleMock.mockResolvedValue(undefined);
     syncMatriculaCycleFromMatriculaMock.mockResolvedValue(undefined);
+    resetMatriculaForNewCycleMock.mockResolvedValue(9001);
     completeLmsMatriculaMock.mockResolvedValue({
       outcome: 'qualification_not_required',
       qualificacaoHistoricoId: null,
@@ -249,6 +253,64 @@ describe('lms matriculas progress integrity', () => {
         erros: 0,
       },
     });
+    expect(calls.some((call) => call.query.includes('INSERT INTO lms_matriculas'))).toBe(false);
+  });
+
+  it('cria matrícula nova no lote sem email quando o Compliance pede etapa silenciosa', async () => {
+    const { db } = createMockDb([
+      ['SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CRM EAD', qualificacao_tipo_id: 100 }) }],
+      ['SELECT id, nome, setor_id FROM funcionarios', { all: () => ({ results: [{ id: 77, nome: 'Aluno QA', setor_id: 1 }] }) }],
+      ['FROM lms_matriculas\n        WHERE curso_id = ?', { first: () => null }],
+      ['INSERT INTO lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 777 } }) }],
+      ['INSERT OR IGNORE INTO notificacoes_inapp', { run: () => ({ meta: { changes: 1 } }) }],
+      ['SELECT m.*, f.nome AS funcionario_nome', { first: () => ({ id: 777, curso_id: 9, funcionario_id: 77, status: 'NAO_INICIADO' }) }],
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+    const response = await app.fetch(
+      new Request('http://localhost/lote', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ funcionario_ids: [77], curso_id: 9, enviar_convite_email: false }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ success: true, data: { criadas: 1, ignoradas: 0, erros: 0 } });
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(ensureMatriculaCycleMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ matriculaId: 777, origin: 'MANUAL', empresaId: 1 }),
+    );
+  });
+
+  it('reativa matrícula cancelada no lote sem enviar email quando solicitado pelo Compliance', async () => {
+    const { db, calls } = createMockDb([
+      ['SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CRM EAD', qualificacao_tipo_id: 100 }) }],
+      ['SELECT id, nome, setor_id FROM funcionarios', { all: () => ({ results: [{ id: 77, nome: 'Aluno QA', setor_id: 1 }] }) }],
+      ['FROM lms_matriculas\n        WHERE curso_id = ?', { first: () => ({ id: 501, status: 'CANCELADO', deleted_at: '2026-09-15 00:00:00' }) }],
+      ['INSERT OR IGNORE INTO notificacoes_inapp', { run: () => ({ meta: { changes: 1 } }) }],
+      ['SELECT m.*, f.nome AS funcionario_nome', { first: () => ({ id: 501, curso_id: 9, funcionario_id: 77, status: 'NAO_INICIADO' }) }],
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+    const response = await app.fetch(
+      new Request('http://localhost/lote', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ funcionario_ids: [77], curso_id: 9, enviar_convite_email: false }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ success: true, data: { criadas: 1, ignoradas: 0, erros: 0 } });
+    expect(resetMatriculaForNewCycleMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ matriculaId: 501, origin: 'MANUAL', empresaId: 1 }),
+    );
+    expect(sendEmailMock).not.toHaveBeenCalled();
     expect(calls.some((call) => call.query.includes('INSERT INTO lms_matriculas'))).toBe(false);
   });
 

@@ -28,6 +28,7 @@ if (apply && process.env.CONFIRM_STAGING_COMPLIANCE_LIFECYCLE_QA !== CONFIRM)
   throw new Error('STAGING_CONFIRMATION_MISSING');
 
 const sectorCode = `${code}-SEC`;
+const invalidSectorCode = `${code}-ALTSEC`;
 const functionCode = `${code}-FUN`;
 const invalidFunctionCode = `${code}-ALT`;
 const employee1Code = `${code}-E1`;
@@ -36,6 +37,7 @@ const categoryCode = `${code}-CAT`;
 const requiredTypeCode = `${code}-REQ`;
 const orphanTypeCode = `${code}-ORPH`;
 const sectorName = `${code} Setor`;
+const invalidSectorName = `${code} Setor alternativo`;
 const functionName = `${code} Cargo`;
 const invalidFunctionName = `${code} Cargo não vinculado`;
 const employee1Name = `${code} Pessoa 1`;
@@ -46,6 +48,7 @@ const requiredCourseTitle = `${code} EAD obrigatório`;
 const orphanCourseTitle = `${code} EAD legado`;
 const tenantId = `(SELECT id FROM empresas WHERE codigo=${esc(TENANT)} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)`;
 const sectorId = `(SELECT id FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(sectorCode)} AND deleted_at IS NULL LIMIT 1)`;
+const invalidSectorId = `(SELECT id FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(invalidSectorCode)} AND deleted_at IS NULL LIMIT 1)`;
 const functionId = `(SELECT id FROM funcoes WHERE empresa_id=${tenantId} AND codigo=${esc(functionCode)} AND deleted_at IS NULL LIMIT 1)`;
 const employee1Id = `(SELECT id FROM funcionarios WHERE empresa_id=${tenantId} AND matricula=${esc(employee1Code)} AND deleted_at IS NULL LIMIT 1)`;
 const employee2Id = `(SELECT id FROM funcionarios WHERE empresa_id=${tenantId} AND matricula=${esc(employee2Code)} AND deleted_at IS NULL LIMIT 1)`;
@@ -67,6 +70,9 @@ DROP TABLE _qa_compliance_lifecycle_guard;
 INSERT INTO setores(codigo,nome,descricao,responsavel,ativo,empresa_id,created_at,updated_at,deleted_at)
 SELECT ${esc(sectorCode)},${esc(sectorName)},${esc(marker)},'QA',1,id,datetime('now'),datetime('now'),NULL
 FROM empresas WHERE id=${tenantId};
+INSERT INTO setores(codigo,nome,descricao,responsavel,ativo,empresa_id,created_at,updated_at,deleted_at)
+SELECT ${esc(invalidSectorCode)},${esc(invalidSectorName)},${esc(marker)},'QA',1,id,datetime('now'),datetime('now'),NULL
+FROM empresas WHERE id=${tenantId};
 
 INSERT INTO funcoes(codigo,nome,descricao,categoria,ativo,empresa_id,created_at,updated_at,deleted_at)
 SELECT ${esc(functionCode)},${esc(functionName)},${esc(marker)},'QA',1,id,datetime('now'),datetime('now'),NULL FROM empresas WHERE id=${tenantId};
@@ -75,6 +81,8 @@ SELECT ${esc(invalidFunctionCode)},${esc(invalidFunctionName)},${esc(marker)},'Q
 
 INSERT INTO setores_funcoes(empresa_id,setor_id,funcao_id,ativo,created_at,updated_at,deleted_at)
 VALUES (${tenantId},${sectorId},${functionId},1,datetime('now'),datetime('now'),NULL);
+INSERT INTO setores_funcoes(empresa_id,setor_id,funcao_id,ativo,created_at,updated_at,deleted_at)
+VALUES (${tenantId},${invalidSectorId},(SELECT id FROM funcoes WHERE empresa_id=${tenantId} AND codigo=${esc(invalidFunctionCode)} AND deleted_at IS NULL LIMIT 1),1,datetime('now'),datetime('now'),NULL);
 
 INSERT INTO funcionarios(nome,matricula,cargo,funcao,setor,setor_id,funcao_id,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
 VALUES (${esc(employee1Name)},${esc(employee1Code)},${esc(functionName)},${esc(functionName)},${esc(sectorName)},${sectorId},${functionId},'ATIVO',0,0,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);
@@ -101,7 +109,7 @@ INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id,status,progresso_p
 VALUES (${tenantId},${orphanCourseId},${employee1Id},'NAO_INICIADO',0,0,${esc(marker)},datetime('now'),datetime('now'),NULL);
 
 CREATE TABLE IF NOT EXISTS _qa_compliance_lifecycle_post(
-  sector_count INTEGER NOT NULL CHECK(sector_count=1),
+  sector_count INTEGER NOT NULL CHECK(sector_count=2),
   function_count INTEGER NOT NULL CHECK(function_count=2),
   pair_count INTEGER NOT NULL CHECK(pair_count=1),
   employee_count INTEGER NOT NULL CHECK(employee_count=2),
@@ -113,7 +121,7 @@ CREATE TABLE IF NOT EXISTS _qa_compliance_lifecycle_post(
 DELETE FROM _qa_compliance_lifecycle_post;
 INSERT INTO _qa_compliance_lifecycle_post
 SELECT
- (SELECT COUNT(*) FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(sectorCode)} AND deleted_at IS NULL),
+ (SELECT COUNT(*) FROM setores WHERE empresa_id=${tenantId} AND codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)}) AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM funcoes WHERE empresa_id=${tenantId} AND codigo IN (${esc(functionCode)},${esc(invalidFunctionCode)}) AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM setores_funcoes WHERE empresa_id=${tenantId} AND setor_id=${sectorId} AND funcao_id=${functionId} AND ativo=1 AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)}) AND deleted_at IS NULL),
@@ -155,12 +163,12 @@ WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)};
 UPDATE funcionarios SET ativo=0,status='INATIVO',deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)});
 UPDATE setores_funcoes SET ativo=0,deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
-WHERE empresa_id=${tenantId} AND setor_id IN (SELECT id FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(sectorCode)})
-  AND funcao_id IN (SELECT id FROM funcoes WHERE empresa_id=${tenantId} AND codigo=${esc(functionCode)});
+WHERE empresa_id=${tenantId} AND setor_id IN (SELECT id FROM setores WHERE empresa_id=${tenantId} AND codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)}))
+  AND funcao_id IN (SELECT id FROM funcoes WHERE empresa_id=${tenantId} AND codigo IN (${esc(functionCode)},${esc(invalidFunctionCode)}));
 UPDATE funcoes SET ativo=0,deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND codigo IN (${esc(functionCode)},${esc(invalidFunctionCode)});
 UPDATE setores SET ativo=0,deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
-WHERE empresa_id=${tenantId} AND codigo=${esc(sectorCode)};
+WHERE empresa_id=${tenantId} AND codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)});
 UPDATE qualificacoes_tipos SET ativo=0,deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)});
 UPDATE qualificacoes_categorias SET ativo=0,deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
@@ -170,7 +178,7 @@ CREATE TABLE IF NOT EXISTS _qa_compliance_lifecycle_cleanup(active_count INTEGER
 DELETE FROM _qa_compliance_lifecycle_cleanup;
 INSERT INTO _qa_compliance_lifecycle_cleanup(active_count)
 SELECT
- (SELECT COUNT(*) FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(sectorCode)} AND deleted_at IS NULL)
+ (SELECT COUNT(*) FROM setores WHERE empresa_id=${tenantId} AND codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)}) AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM funcoes WHERE empresa_id=${tenantId} AND codigo IN (${esc(functionCode)},${esc(invalidFunctionCode)}) AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)}) AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)}) AND deleted_at IS NULL)

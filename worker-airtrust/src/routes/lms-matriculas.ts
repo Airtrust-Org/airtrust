@@ -18,6 +18,7 @@ import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import {
   ensureMatriculaCycle,
   hasActiveMatriculaCycle,
+  resetMatriculaForNewCycle,
   syncMatriculaCycleFromMatricula,
 } from '../services/lms-matricula-cycle';
 import {
@@ -35,7 +36,6 @@ import {
   shouldPreferIncomingScormState,
 } from '../services/lms-progress-guardrails';
 import { logAudit } from '../utils/db';
-import { sendEmail } from '../lib/email';
 import type { Env } from '../types';
 import {
   assertFuncionarioInScope,
@@ -47,9 +47,11 @@ import { ensureCertificateForQualification } from '../services/ensure-certificat
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 import { collectByBindChunks } from '../utils/d1-bind-chunks';
 import { createLogger, toError } from '../utils/logger';
+import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
+app.route('/convites', lmsMatriculasConvitesRoutes);
 
 function getCallerFuncionarioId(c: Context): number | null {
   const raw = c.get('funcionarioId' as never) as unknown;
@@ -153,102 +155,6 @@ async function createLmsInAppNotification(
     .run();
 }
 
-/**
- * Envia e-mail de notificação de matrícula ao funcionário.
- * Fire-and-forget: nunca lança exceção, loga warnings em caso de falha.
- */
-async function sendMatriculaEmail(
-  c: Context,
-  env: Env,
-  db: D1Database,
-  params: {
-    funcionarioId: number;
-    empresaId: number;
-    cursoId: number;
-    cursoTitulo: string;
-    dataExpiracao?: string | null;
-    isNovoCiclo: boolean;
-  },
-): Promise<void> {
-  try {
-    const funcionario = await db
-      .prepare(
-        `SELECT nome, email FROM funcionarios
-          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
-      )
-      .bind(params.funcionarioId, params.empresaId)
-      .first<{ nome: string; email: string | null }>();
-
-    if (!funcionario?.email) {
-      createLogger(c, 'LmsMatriculas.email').info('lms_matricula_email_missing', { funcionarioId: params.funcionarioId, cursoId: params.cursoId, empresaId: params.empresaId });
-      return;
-    }
-
-    const frontendUrl = String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '');
-    const cursoUrl = `${frontendUrl}/lms/cursos/${params.cursoId}`;
-
-    const nomeAluno = funcionario.nome || `Funcionário ${params.funcionarioId}`;
-    const actionLabel = params.isNovoCiclo ? 'Novo ciclo de treinamento' : 'Novo treinamento';
-    const subject = `${actionLabel}: ${params.cursoTitulo}`;
-
-    const validadeLinha = params.dataExpiracao
-      ? `<p><strong>Prazo de conclusão:</strong> ${params.dataExpiracao.split('-').reverse().join('/')}</p>`
-      : '';
-
-    const htmlContent = `
-      <div style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
-        <h2 style="color:#1e40af;margin-bottom:16px">${actionLabel}</h2>
-        <p>Olá <strong>${nomeAluno}</strong>,</p>
-        <p>Você foi matriculado no curso:</p>
-        <div style="background:#f0f9ff;border-left:4px solid #3b82f6;padding:12px 16px;margin:12px 0;border-radius:4px">
-          <p style="font-size:16px;font-weight:600;margin:0;color:#1e3a5f">${params.cursoTitulo}</p>
-        </div>
-        ${validadeLinha}
-        <p>Para acessar o curso, clique no botão abaixo:</p>
-        <p style="margin:24px 0">
-          <a href="${cursoUrl}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block">
-            Acessar curso
-          </a>
-        </p>
-        <p style="color:#6b7280;font-size:12px;margin-top:24px">
-          Este e-mail foi enviado automaticamente pela plataforma AirTrust.
-        </p>
-      </div>`;
-
-    const textContent = [
-      `${actionLabel}: ${params.cursoTitulo}`,
-      '',
-      `Olá ${nomeAluno},`,
-      '',
-      `Você foi matriculado no curso: ${params.cursoTitulo}`,
-      params.dataExpiracao
-        ? `Prazo de conclusão: ${params.dataExpiracao.split('-').reverse().join('/')}`
-        : '',
-      '',
-      `Acesse o curso em: ${cursoUrl}`,
-      '',
-      'Este e-mail foi enviado automaticamente pela plataforma AirTrust.',
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    const sent = await sendEmail(env, {
-      to: [{ email: funcionario.email, name: nomeAluno }],
-      subject,
-      textContent,
-      htmlContent,
-    });
-
-    if (sent) {
-      createLogger(c, 'LmsMatriculas.email').info('lms_matricula_email_sent', { funcionarioId: params.funcionarioId, cursoId: params.cursoId, empresaId: params.empresaId });
-    }
-  } catch (err) {
-    createLogger(c, 'LmsMatriculas.email').error('lms_matricula_email_failed', toError(err), {
-      funcionarioId: params.funcionarioId, cursoId: params.cursoId, empresaId: params.empresaId,
-    });
-  }
-}
-
 async function findLatestMatriculaForFuncionario(
   db: D1Database,
   params: { cursoId: number; funcionarioId: number; empresaId: number },
@@ -301,6 +207,7 @@ const MatriculaCreateSchema = z.object({
     .optional()
     .nullable(),
   observacoes: z.string().optional().nullable(),
+  enviar_convite_email: z.boolean().optional().default(true),
 });
 
 const MatriculaLoteSchema = z.object({
@@ -312,6 +219,7 @@ const MatriculaLoteSchema = z.object({
     .optional()
     .nullable(),
   observacoes: z.string().optional().nullable(),
+  enviar_convite_email: z.boolean().optional().default(true),
 });
 
 const ScormCommitSchema = z.object({
@@ -945,7 +853,7 @@ app.post('/', async (c) => {
   if (!parsed.success)
     throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
 
-  const { funcionario_id, curso_id, data_expiracao, observacoes } = parsed.data;
+  const { funcionario_id, curso_id, data_expiracao, observacoes, enviar_convite_email } = parsed.data;
 
   if (!canManage) {
     if (!callerFuncionarioId) {
@@ -996,6 +904,47 @@ app.post('/', async (c) => {
   });
 
   if (existente) {
+    const reativavel =
+      Boolean(existente.deleted_at) || String(existente.status || '').toUpperCase() === 'CANCELADO';
+    if (reativavel) {
+      await resetMatriculaForNewCycle(db, {
+        matriculaId: existente.id,
+        dataExpiracao: data_expiracao ?? null,
+        observacoes: observacoes ?? null,
+        matriculadoPor: Number.isFinite(userId) && userId > 0 ? userId : null,
+        origin: 'MANUAL',
+        empresaId,
+      });
+      await createLmsInAppNotification(db, {
+        funcionarioId: funcionario_id,
+        empresaId,
+        tipo: 'lms_nova_matricula',
+        titulo: 'Novo treinamento LMS',
+        mensagem: `Você foi matriculado em ${curso.titulo}.`,
+        referenciaId: existente.id,
+        referenciaTipo: 'lms_matricula',
+      });
+      await logLmsMatriculaAudit(db, c, {
+        action: 'LMS_MATRICULA_REATIVADA',
+        matriculaId: existente.id,
+        oldValues: { status: existente.status, deleted_at: existente.deleted_at },
+        newValues: { curso_id, funcionario_id, data_expiracao: data_expiracao ?? null },
+      });
+      if (enviar_convite_email)
+        await sendMatriculaEmail(c, c.env, db, {
+          funcionarioId: funcionario_id,
+          empresaId,
+          cursoId: curso_id,
+          cursoTitulo: curso.titulo,
+          dataExpiracao: data_expiracao ?? null,
+          isNovoCiclo: false,
+        });
+      const reativada = await readMatriculaForCourseList(db, {
+        matriculaId: existente.id,
+        empresaId,
+      });
+      return c.json({ success: true, data: reativada ?? { id: existente.id, reativada: true } }, 200);
+    }
     await logLmsMatriculaAudit(db, c, {
       action: 'LMS_MATRICULA_PRESERVADA',
       matriculaId: existente.id,
@@ -1055,6 +1004,7 @@ app.post('/', async (c) => {
     await ensureMatriculaCycle(db, {
       matriculaId,
       origin: 'MANUAL',
+      empresaId,
     });
     await createLmsInAppNotification(db, {
       funcionarioId: funcionario_id,
@@ -1076,7 +1026,8 @@ app.post('/', async (c) => {
         data_expiracao: data_expiracao ?? null,
       },
     });
-    await sendMatriculaEmail(c, c.env, db, {
+    if (enviar_convite_email)
+      await sendMatriculaEmail(c, c.env, db, {
       funcionarioId: funcionario_id,
       empresaId,
       cursoId: curso_id,
@@ -1147,7 +1098,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
   if (!parsed.success)
     throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
 
-  const { funcionario_ids, curso_id, data_expiracao, observacoes } = parsed.data;
+  const { funcionario_ids, curso_id, data_expiracao, observacoes, enviar_convite_email } = parsed.data;
   const funcionarioIdsUnicos = [...new Set(funcionario_ids)];
 
   const curso = await db
@@ -1228,7 +1179,50 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
       });
 
       if (existente) {
-        results.ignoradas++;
+        const reativavel =
+          Boolean(existente.deleted_at) || String(existente.status || '').toUpperCase() === 'CANCELADO';
+        if (!reativavel) {
+          results.ignoradas++;
+          continue;
+        }
+        await resetMatriculaForNewCycle(db, {
+          matriculaId: existente.id,
+          dataExpiracao: data_expiracao ?? null,
+          observacoes: observacoes ?? null,
+          matriculadoPor: Number.isFinite(userId) && userId > 0 ? userId : null,
+          origin: 'MANUAL',
+          empresaId,
+        });
+        await createLmsInAppNotification(db, {
+          funcionarioId,
+          empresaId,
+          tipo: 'lms_nova_matricula',
+          titulo: 'Novo treinamento LMS',
+          mensagem: `Você foi matriculado em ${curso.titulo}.`,
+          referenciaId: existente.id,
+          referenciaTipo: 'lms_matricula',
+        });
+        await logLmsMatriculaAudit(db, c, {
+          action: 'LMS_MATRICULA_REATIVADA',
+          matriculaId: existente.id,
+          oldValues: { status: existente.status, deleted_at: existente.deleted_at },
+          newValues: { curso_id, funcionario_id: funcionarioId, data_expiracao: data_expiracao ?? null },
+        });
+        if (enviar_convite_email)
+          await sendMatriculaEmail(c, c.env, db, {
+            funcionarioId,
+            empresaId,
+            cursoId: curso_id,
+            cursoTitulo: curso.titulo,
+            dataExpiracao: data_expiracao ?? null,
+            isNovoCiclo: false,
+          });
+        const matriculaReativada = await readMatriculaForCourseList(db, {
+          matriculaId: existente.id,
+          empresaId,
+        });
+        if (matriculaReativada) matriculasCriadas.push(matriculaReativada);
+        results.criadas++;
         continue;
       }
       const insertResult = await db
@@ -1248,6 +1242,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
       await ensureMatriculaCycle(db, {
         matriculaId,
         origin: 'MANUAL',
+        empresaId,
       });
       await createLmsInAppNotification(db, {
         funcionarioId,
@@ -1270,7 +1265,8 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           observacoes: observacoes ?? null,
         },
       });
-      await sendMatriculaEmail(c, c.env, db, {
+      if (enviar_convite_email)
+        await sendMatriculaEmail(c, c.env, db, {
         funcionarioId,
         empresaId,
         cursoId: curso_id,

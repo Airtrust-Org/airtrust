@@ -515,6 +515,23 @@ export const openApiSpec = {
         },
       },
     },
+    '/api/lms/matriculas/convites/lote': {
+      post: {
+        tags: ['LMS'],
+        summary: 'Enviar ou reenviar convite por e-mail para matrículas existentes',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/LmsMatriculaConviteLoteInput' } } },
+        },
+        responses: {
+          '200': { description: 'Convites processados' },
+          '400': { description: 'Dados inválidos' },
+          '401': { description: 'Não autenticado' },
+          '403': { description: 'Sem permissão' },
+        },
+      },
+    },
     '/api/lms/matriculas/curso/{curso_id}': {
       get: {
         tags: ['LMS'],
@@ -955,6 +972,7 @@ export const openApiSpec = {
           curso_id: { type: 'integer', minimum: 1 },
           data_expiracao: { type: 'string', nullable: true, pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
           observacoes: { type: 'string', nullable: true },
+          enviar_convite_email: { type: 'boolean', default: true },
         },
       },
       LmsMatriculaLoteInput: {
@@ -970,6 +988,14 @@ export const openApiSpec = {
           curso_id: { type: 'integer', minimum: 1 },
           data_expiracao: { type: 'string', nullable: true, pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
           observacoes: { type: 'string', nullable: true },
+          enviar_convite_email: { type: 'boolean', default: true },
+        },
+      },
+      LmsMatriculaConviteLoteInput: {
+        type: 'object',
+        required: ['matricula_ids'],
+        properties: {
+          matricula_ids: { type: 'array', minItems: 1, maxItems: 200, items: { type: 'integer', minimum: 1 } },
         },
       },
       LmsScormCommitInput: {

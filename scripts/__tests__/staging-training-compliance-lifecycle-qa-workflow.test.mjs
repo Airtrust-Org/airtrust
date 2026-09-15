@@ -30,12 +30,12 @@ test('browser simulation covers organization, enrollment, progress, completion a
     'OBRIGATORIA',
     'NAO_APLICA',
     'RECOMENDADA',
-    'Matricular gaps agora',
+    'Matricular gaps (sem e-mail)',
     'EM_ANDAMENTO',
     'CONCLUIDO',
     'MANTER_AVULSA',
     'REABRIR',
     'VINCULAR_SETOR_FUNCAO',
-  ]) assert.match(spec, new RegExp(token));
+  ]) assert.ok(spec.includes(token), `missing lifecycle token: ${token}`);
   assert.match(spec, /PRODUCTION_TARGET_REJECTED/);
 });
