@@ -1,0 +1,8 @@
+{
+  "changeId": "training-program-session-durations-0496",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0496_training_program_session_durations.sql",
+  "fileHash": "3df9a41f5c111b805f81a9efc37da5303d2f032242d8f5cc3bec777583eee1c5",
+  "planPath": "worker-airtrust/schema-v2/plans/training-program-session-durations-0496.md",
+  "planHash": "34982f7d08ba40dfa0d7ce961e6389bb057577054bb461517c1aa0359b3772f9"
+}
