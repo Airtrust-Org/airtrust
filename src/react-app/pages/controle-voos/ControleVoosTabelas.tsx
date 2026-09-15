@@ -179,13 +179,15 @@ export default function ControleVoosTabelas() {
             description="Cadastros usados exclusivamente na programação e execução dos voos. Aeronaves e modelos continuam como cadastros mestres em Configurações."
           >
             <div className="flex flex-wrap items-center gap-2">
-              <Link
-                to="/configuracoes"
-                className="inline-flex min-h-[40px] items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-              >
-                <Plane className="h-4 w-4" />
-                Gerenciar frota
-              </Link>
+              {canManage && (
+                <Link
+                  to="/configuracoes"
+                  className="inline-flex min-h-[40px] items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                >
+                  <Plane className="h-4 w-4" />
+                  Gerenciar frota
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={() => void reload()}
