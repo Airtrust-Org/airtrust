@@ -92,9 +92,12 @@ function requirement(person: any, code: string) {
 }
 
 async function chooseOrgScope(page: Page, sectorId: number, functionId?: number) {
-  const sector = page.getByLabel('Setor', { exact: true });
+  const matrixSection = page.locator('section').filter({
+    has: page.getByRole('heading', { name: 'Matriz por organização', exact: true }),
+  });
+  const sector = matrixSection.locator('select').nth(0);
   await sector.selectOption(String(sectorId));
-  const fn = page.getByLabel('Cargo / função', { exact: true });
+  const fn = matrixSection.locator('select').nth(1);
   if (functionId) await fn.selectOption(String(functionId));
   else await fn.selectOption('');
 }
