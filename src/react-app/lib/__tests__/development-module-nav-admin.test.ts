@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { canSeeDevelopmentModules, isPrimaryAdmin } from '../development-module-nav';
+import {
+  canSeeAdministrativeDashboard,
+  canSeeDevelopmentModules,
+  canSeeOperationalDashboard,
+  isPrimaryAdmin,
+} from '../development-module-nav';
 
 describe('development module administrator access', () => {
   it.each(['ADMIN', 'ADMINISTRADOR'])('allows %s to restricted development modules', (role) => {
@@ -12,5 +17,12 @@ describe('development module administrator access', () => {
 
   it('does not redefine the separate primary-admin identity contract', () => {
     expect(isPrimaryAdmin({ email: 'admin@example.test', role: 'ADMINISTRADOR' })).toBe(false);
+  });
+
+  it('keeps operational dashboard access aligned with manager roles', () => {
+    expect(canSeeOperationalDashboard(null)).toBe(false);
+    expect(canSeeOperationalDashboard({ role: 'GESTOR' })).toBe(true);
+    expect(canSeeOperationalDashboard({ role: 'ALUNO' })).toBe(false);
+    expect(canSeeAdministrativeDashboard({ role: 'MANAGER' })).toBe(true);
   });
 });
