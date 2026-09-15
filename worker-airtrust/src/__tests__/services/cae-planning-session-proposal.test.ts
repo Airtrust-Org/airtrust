@@ -63,6 +63,52 @@ describe('session-level simulator proposal', () => {
     expect(blocks.map((block) => block.sessions[0].session_order).sort()).toEqual([1, 2, 3, 4]);
   });
 
+  it('prefers a crew member with the same original periodic requirement over a promoted semiannual candidate', () => {
+    const irene = need(
+      'irene-s1',
+      71,
+      33,
+      'AW139 — Currículo de Voo - Periódico Anual (FFS)',
+      1,
+      '2026-09-23',
+      'Copiloto',
+    );
+    irene.requirement_qualification_type_id = 33;
+
+    const caioPromoted = need(
+      'caio-s1',
+      5,
+      33,
+      'AW139 — Currículo de Voo - Periódico Anual (FFS)',
+      1,
+      '2026-09-30',
+      'Comandante',
+    );
+    caioPromoted.requirement_qualification_type_id = 106;
+    caioPromoted.coverage_reason = 'RECORRENTE_PRIORITARIO_SOBRE_SEMESTRAL';
+
+    const nery = need(
+      'nery-s1',
+      33,
+      33,
+      'AW139 — Currículo de Voo - Periódico Anual (FFS)',
+      1,
+      '2026-09-30',
+      'Comandante',
+    );
+    nery.requirement_qualification_type_id = 33;
+
+    const blocks = pairSimulatorTrainingSessions([caioPromoted, irene, nery], 90);
+    const ireneBlock = blocks.find((block) =>
+      block.sessions.some((session) => session.employee_id === 71),
+    );
+
+    expect(ireneBlock?.sessions.map((session) => session.employee_id).sort()).toEqual([33, 71]);
+    expect(
+      blocks.some((block) => block.pairing === 'SEM_DUPLA' && block.sessions[0].employee_id === 5),
+    ).toBe(true);
+  });
+
   it('keeps the full curriculum denominator when only later sessions remain', () => {
     const late = need(
       'late',
