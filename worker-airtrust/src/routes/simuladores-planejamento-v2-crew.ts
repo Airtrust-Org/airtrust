@@ -14,6 +14,7 @@ import {
 } from '../services/cae-planning-policy';
 import {
   buildSimulatorTrainingClasses,
+  canManuallyShareSimulatorTrainingSessions,
   canShareSimulatorTrainingSessions,
   pairSimulatorTrainingSessions,
   type SimulatorTrainingSessionBlock,
@@ -34,6 +35,7 @@ import {
   curriculumReferenceYear,
   loadResolvedSimulatorCurriculum,
 } from '../services/simulator-curriculum-cycles';
+import { employeeHasCompletedQualification } from '../services/training-programs';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -91,6 +93,24 @@ function parseNeed(value: unknown): SimulatorTrainingSessionNeed | null {
     Number.isInteger(curriculumYearRaw) && curriculumYearRaw >= 1900 ? curriculumYearRaw : null;
   const expiry = String(row.expiry_date || '').slice(0, 10);
   const needId = String(row.need_id || '');
+  const requirementQualificationTypeIdRaw = Number(row.requirement_qualification_type_id);
+  const requirementQualificationTypeId =
+    Number.isInteger(requirementQualificationTypeIdRaw) && requirementQualificationTypeIdRaw > 0
+      ? requirementQualificationTypeIdRaw
+      : qualificationTypeId;
+  const satisfiesQualificationTypeIds = Array.isArray(row.satisfies_qualification_type_ids)
+    ? [
+        ...new Set(
+          row.satisfies_qualification_type_ids
+            .map(Number)
+            .filter((id) => Number.isInteger(id) && id > 0),
+        ),
+      ]
+    : [qualificationTypeId];
+  const coverageReason =
+    row.coverage_reason === 'RECORRENTE_PRIORITARIO_SOBRE_SEMESTRAL'
+      ? 'RECORRENTE_PRIORITARIO_SOBRE_SEMESTRAL'
+      : null;
   const allowedNeedIds = new Set([
     `${employeeId}:${qualificationTypeId}:${modelId}`,
     `${employeeId}:${qualificationTypeId}:legacy:${modelId}`,
@@ -136,6 +156,24 @@ function parseNeed(value: unknown): SimulatorTrainingSessionNeed | null {
     training_program_id: programId,
     training_program_type:
       row.training_program_type == null ? null : String(row.training_program_type),
+    training_program_name:
+      row.training_program_name == null ? null : String(row.training_program_name),
+    requirement_qualification_type_id: requirementQualificationTypeId,
+    requirement_qualification_code:
+      row.requirement_qualification_code == null
+        ? row.qualification_code == null
+          ? null
+          : String(row.qualification_code)
+        : String(row.requirement_qualification_code),
+    requirement_qualification_name:
+      row.requirement_qualification_name == null
+        ? String(row.qualification_name || '').trim()
+        : String(row.requirement_qualification_name),
+    coverage_reason: coverageReason,
+    satisfies_qualification_type_ids:
+      satisfiesQualificationTypeIds.length > 0
+        ? satisfiesQualificationTypeIds
+        : [qualificationTypeId],
   };
 }
 
@@ -320,6 +358,308 @@ function pairKind(left: SimulatorTrainingSessionNeed, right: SimulatorTrainingSe
     : ('TREINAMENTOS_COMPATIVEIS' as const);
 }
 
+type SessionAlternative =
+  | {
+      kind: 'SESSION_NEED';
+      recommended: false;
+      label: string;
+      reason: string;
+      selected_need: SimulatorTrainingSessionNeed;
+      replacement_needs: null;
+      availability: ReturnType<typeof findSharedWindow>;
+    }
+  | {
+      kind: 'TRAINING_PROGRAM';
+      recommended: true;
+      label: string;
+      reason: string;
+      selected_need: SimulatorTrainingSessionNeed;
+      replacement_needs: SimulatorTrainingSessionNeed[];
+      availability: ReturnType<typeof findSharedWindow>;
+    };
+
+async function buildRecurringProgramAlternative(params: {
+  db: D1Database;
+  empresaId: number;
+  anchor: SimulatorTrainingSessionNeed | null;
+  current: SimulatorTrainingSessionNeed;
+  referenceDate: string;
+  config: Awaited<ReturnType<typeof loadConfig>>;
+}): Promise<SessionAlternative | null> {
+  const requirementQualificationTypeId =
+    params.current.requirement_qualification_type_id || params.current.qualification_type_id;
+  const rows = await params.db
+    .prepare(
+      `SELECT d.qualificacao_origem_id AS qualification_type_id,
+              qt.codigo AS qualification_code,
+              qt.nome AS qualification_name
+         FROM treinamento_dependencias d
+         JOIN qualificacoes_tipos qt
+           ON qt.id=d.qualificacao_origem_id AND qt.empresa_id=d.empresa_id
+          AND qt.deleted_at IS NULL AND COALESCE(qt.ativo,1)=1
+        WHERE d.empresa_id=? AND d.qualificacao_destino_id=?
+          AND d.ativo=1 AND d.deleted_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM treinamento_programas p
+             WHERE p.empresa_id=d.empresa_id AND p.qualificacao_tipo_id=d.qualificacao_origem_id
+               AND p.tipo_treinamento='RECORRENTE' AND p.ativo=1 AND p.deleted_at IS NULL
+          )
+        ORDER BY d.id`,
+    )
+    .bind(params.empresaId, requirementQualificationTypeId)
+    .all<{
+      qualification_type_id: number;
+      qualification_code: string | null;
+      qualification_name: string;
+    }>();
+  const sources = rows.results || [];
+  if (sources.length !== 1) return null;
+  const source = sources[0];
+  const sourceQualificationTypeId = Number(source.qualification_type_id);
+  if (
+    sourceQualificationTypeId === params.current.qualification_type_id &&
+    params.current.training_program_type === 'RECORRENTE'
+  ) {
+    return null;
+  }
+  const eligible = await employeeHasCompletedQualification({
+    db: params.db,
+    empresaId: params.empresaId,
+    employeeId: params.current.employee_id,
+    qualificationTypeId: sourceQualificationTypeId,
+  });
+  if (!eligible) return null;
+  const referenceYear = curriculumReferenceYear(params.current.expiry_date);
+  if (!referenceYear) return null;
+  const resolved = await loadResolvedSimulatorCurriculum({
+    db: params.db,
+    empresaId: params.empresaId,
+    qualificationTypeId: sourceQualificationTypeId,
+    referenceYear,
+    employeeId: params.current.employee_id,
+    requestedType: 'RECORRENTE',
+  });
+  if (!resolved || resolved.unresolved_items > 0 || resolved.models.length === 0) return null;
+  const programModels = [...resolved.models].sort(
+    (a, b) => a.ordem_no_treinamento - b.ordem_no_treinamento || a.id - b.id,
+  );
+  if (
+    programModels.some(
+      (model) =>
+        !Number.isFinite(Number(model.duracao_estimada)) || Number(model.duracao_estimada) <= 0,
+    )
+  ) {
+    return null;
+  }
+  const replacementNeeds: SimulatorTrainingSessionNeed[] = programModels.map((model) => ({
+    need_id: `${params.current.employee_id}:${sourceQualificationTypeId}:${resolved.program_id ?? 'legacy'}:${model.id}`,
+    employee_id: params.current.employee_id,
+    employee_name: params.current.employee_name,
+    employee_role: params.current.employee_role,
+    qualification_type_id: sourceQualificationTypeId,
+    qualification_code: source.qualification_code,
+    qualification_name: source.qualification_name,
+    expiry_date: params.current.expiry_date,
+    equipment: normalizeEquipment(model.modelo_aeronave),
+    session_model_id: Number(model.id),
+    session_code: model.codigo_canonico || model.codigo,
+    session_name: model.nome,
+    session_order: Number(model.ordem_no_treinamento),
+    duration_minutes: Number(model.duracao_estimada),
+    training_session_count: programModels.length,
+    curriculum_cycle: resolved.cycle,
+    curriculum_reference_year: referenceYear,
+    training_program_id: resolved.program_id,
+    training_program_type: resolved.program_type,
+    training_program_name: resolved.program?.nome ?? source.qualification_name,
+    requirement_qualification_type_id: requirementQualificationTypeId,
+    requirement_qualification_code:
+      params.current.requirement_qualification_code || params.current.qualification_code,
+    requirement_qualification_name:
+      params.current.requirement_qualification_name || params.current.qualification_name,
+    coverage_reason: 'RECORRENTE_PRIORITARIO_SOBRE_SEMESTRAL',
+    satisfies_qualification_type_ids: [sourceQualificationTypeId, requirementQualificationTypeId],
+  }));
+  const structural = params.anchor
+    ? replacementNeeds.filter((need) =>
+        canManuallyShareSimulatorTrainingSessions(
+          params.anchor as SimulatorTrainingSessionNeed,
+          need,
+        ),
+      )
+    : replacementNeeds;
+  if (structural.length === 0) return null;
+  const orderedCandidates = [...structural].sort(
+    (left, right) =>
+      Number(left.session_order !== params.current.session_order) -
+        Number(right.session_order !== params.current.session_order) ||
+      left.session_order - right.session_order,
+  );
+  let selectedNeed: SimulatorTrainingSessionNeed | null = null;
+  let availability: ReturnType<typeof findSharedWindow> = null;
+  if (params.anchor) {
+    const targetDates = orderedCandidates.map(
+      (need) =>
+        [params.anchor?.expiry_date || params.current.expiry_date, need.expiry_date].sort()[0],
+    );
+    const earliestTarget = [...targetDates].sort()[0];
+    const latestTarget = [...targetDates].sort().at(-1) as string;
+    const startDate =
+      params.referenceDate > addDaysIso(earliestTarget, -params.config.planning_horizon_days)
+        ? params.referenceDate
+        : addDaysIso(earliestTarget, -params.config.planning_horizon_days);
+    const [assignments, windows] = await Promise.all([
+      loadEmployeeFortnightAssignments({
+        db: params.db,
+        empresaId: params.empresaId,
+        employeeIds: [params.anchor.employee_id, params.current.employee_id],
+      }),
+      loadOperationalFortnightWindows({
+        db: params.db,
+        empresaId: params.empresaId,
+        startDate,
+        endDate: latestTarget,
+      }),
+    ]);
+    for (const need of orderedCandidates) {
+      const shared = findSharedWindow({
+        anchor: params.anchor,
+        candidate: need,
+        referenceDate: params.referenceDate,
+        horizonDays: params.config.planning_horizon_days,
+        rosterPolicy: params.config.roster_policy,
+        assignments,
+        windows,
+      });
+      if (shared) {
+        selectedNeed = need;
+        availability = shared;
+        break;
+      }
+    }
+  } else {
+    selectedNeed = orderedCandidates[0];
+  }
+  if (!selectedNeed) return null;
+  return {
+    kind: 'TRAINING_PROGRAM',
+    recommended: true,
+    label: resolved.program?.nome || `${source.qualification_name} — Periódico`,
+    reason: 'Periódico prioritário: atende e renova a obrigação semestral.',
+    selected_need: selectedNeed,
+    replacement_needs: replacementNeeds,
+    availability,
+  };
+}
+
+app.post(
+  '/alternativas-sessao',
+  requirePermission('simuladores', 'visualizar', 'admin', 'manager'),
+  async (c) => {
+    const empresaId = getTenantContext(c).empresaId;
+    const body = (await c.req.json().catch(() => null)) as {
+      reference_date?: unknown;
+      anchor?: unknown;
+      current?: unknown;
+      candidates?: unknown;
+    } | null;
+    const referenceDate = String(body?.reference_date || new Date().toISOString().slice(0, 10));
+    const anchor = body?.anchor == null ? null : parseNeed(body.anchor);
+    const current = parseNeed(body?.current);
+    const candidateValues = Array.isArray(body?.candidates) ? body.candidates : [];
+    const candidates = candidateValues
+      .map(parseNeed)
+      .filter((item): item is SimulatorTrainingSessionNeed => Boolean(item));
+    if (
+      !isIsoDate(referenceDate) ||
+      !current ||
+      (body?.anchor != null && !anchor) ||
+      candidates.length > MAX_CANDIDATES ||
+      candidates.length !== candidateValues.length ||
+      candidates.some((candidate) => candidate.employee_id !== current.employee_id)
+    ) {
+      return c.json({ success: false, error: 'Consulta de alternativas de sessão inválida' }, 400);
+    }
+    const suppliedNeeds = [current, ...(anchor ? [anchor] : []), ...candidates];
+    try {
+      await assertNeedsInTenantAndScope({ c, db: c.env.DB, empresaId, needs: suppliedNeeds });
+    } catch (error) {
+      return c.json(
+        { success: false, error: error instanceof Error ? error.message : 'Sessões inválidas' },
+        400,
+      );
+    }
+    const config = await loadConfig(c.env.DB, empresaId);
+    const alternatives: SessionAlternative[] = [];
+
+    if (anchor) {
+      const structuralCandidates = candidates.filter(
+        (candidate) =>
+          candidate.need_id !== current.need_id &&
+          canManuallyShareSimulatorTrainingSessions(anchor, candidate) &&
+          daysDistance(anchor.expiry_date, candidate.expiry_date) <= config.planning_horizon_days,
+      );
+      if (structuralCandidates.length > 0) {
+        const targetDates = structuralCandidates.map(
+          (candidate) => [anchor.expiry_date, candidate.expiry_date].sort()[0],
+        );
+        const earliestTarget = [...targetDates].sort()[0];
+        const latestTarget = [...targetDates].sort().at(-1) as string;
+        const startDate =
+          referenceDate > addDaysIso(earliestTarget, -config.planning_horizon_days)
+            ? referenceDate
+            : addDaysIso(earliestTarget, -config.planning_horizon_days);
+        const [assignments, windows] = await Promise.all([
+          loadEmployeeFortnightAssignments({
+            db: c.env.DB,
+            empresaId,
+            employeeIds: [anchor.employee_id, current.employee_id],
+          }),
+          loadOperationalFortnightWindows({
+            db: c.env.DB,
+            empresaId,
+            startDate,
+            endDate: latestTarget,
+          }),
+        ]);
+        for (const candidate of structuralCandidates) {
+          const shared = findSharedWindow({
+            anchor,
+            candidate,
+            referenceDate,
+            horizonDays: config.planning_horizon_days,
+            rosterPolicy: config.roster_policy,
+            assignments,
+            windows,
+          });
+          if (!shared) continue;
+          alternatives.push({
+            kind: 'SESSION_NEED',
+            recommended: false,
+            label: `S${candidate.session_order}/${candidate.training_session_count} · ${candidate.session_name}`,
+            reason: 'Outra sessão pendente do mesmo tripulante, compatível com este bloco.',
+            selected_need: candidate,
+            replacement_needs: null,
+            availability: shared,
+          });
+        }
+      }
+    }
+
+    const recurringAlternative = await buildRecurringProgramAlternative({
+      db: c.env.DB,
+      empresaId,
+      anchor,
+      current,
+      referenceDate,
+      config,
+    });
+    if (recurringAlternative) alternatives.unshift(recurringAlternative);
+
+    return c.json({ success: true, data: { alternatives } });
+  },
+);
+
 app.post(
   '/candidatos',
   requirePermission('simuladores', 'visualizar', 'admin', 'manager'),
@@ -460,7 +800,7 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
       anchor.need_id === partner.need_id ||
       used.has(anchor.need_id) ||
       used.has(partner.need_id) ||
-      !canShareSimulatorTrainingSessions(anchor, partner) ||
+      !canManuallyShareSimulatorTrainingSessions(anchor, partner) ||
       daysDistance(anchor.expiry_date, partner.expiry_date) > config.planning_horizon_days
     ) {
       return c.json(
@@ -719,7 +1059,7 @@ app.post(
       if (resolved.length === 2) {
         const second = resolved[1];
         if (
-          !canShareSimulatorTrainingSessions(first, second) ||
+          !canManuallyShareSimulatorTrainingSessions(first, second) ||
           daysDistance(first.expiry_date, second.expiry_date) > config.planning_horizon_days
         ) {
           return c.json(
