@@ -32,10 +32,12 @@ test('browser simulation covers organization, enrollment, progress, completion a
     'RECOMENDADA',
     'Matricular gaps (sem e-mail)',
     'EM_ANDAMENTO',
-    'CONCLUIDO',
+    '/api/lms/xapi/statements',
+    'completion: true',
     'MANTER_AVULSA',
     'REABRIR',
     'VINCULAR_SETOR_FUNCAO',
   ]) assert.ok(spec.includes(token), `missing lifecycle token: ${token}`);
   assert.match(spec, /PRODUCTION_TARGET_REJECTED/);
+  assert.match(spec, /describe\.configure\(\{ retries: 0 \}\)/);
 });

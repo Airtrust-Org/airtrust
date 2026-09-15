@@ -17,6 +17,10 @@ const orphanCourseTitle = `${CODE} EAD legado`;
 const employee1Name = `${CODE} Pessoa 1`;
 const employee2Name = `${CODE} Pessoa 2`;
 
+// This lifecycle mutates an isolated staging fixture. A failed attempt must never
+// retry against the partially-mutated state; cleanup is handled by the workflow.
+test.describe.configure({ retries: 0 });
+
 type ApiResult<T = any> = { status: number; ok: boolean; json: T };
 
 function waitResponse(page: Page, path: string, method?: string): Promise<Response> {
@@ -67,6 +71,26 @@ async function employeeSnapshot(page: Page, employeeId: number) {
   const result = await api(page, `/api/compliance-treinamentos/funcionarios/${employeeId}`);
   expect(result.ok, JSON.stringify(result.json)).toBe(true);
   return result.json.data;
+}
+
+async function completeViaXapi(page: Page, matriculaId: number, suffix: string) {
+  return api(page, '/api/lms/xapi/statements', {
+    method: 'POST',
+    body: {
+      matricula_id: matriculaId,
+      actor: { name: `QA lifecycle ${CODE}` },
+      verb: {
+        id: 'http://adlnet.gov/expapi/verbs/completed',
+        display: { 'pt-BR': 'concluiu' },
+      },
+      object: { id: `urn:airtrust:qa:${CODE}:${suffix}`, objectType: 'Activity' },
+      result: {
+        success: true,
+        completion: true,
+        score: { raw: 85, max: 100, min: 0, scaled: 0.85 },
+      },
+    },
+  });
 }
 
 async function filteredSummary(page: Page, sectorId: number, functionId: number) {
@@ -324,19 +348,13 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   s = await filteredSummary(page, sector.id, fn.id);
   expect(s).toMatchObject({ requisitos_obrigatorios: 2, conformes: 0, nao_realizados: 1, em_andamento: 1, compliance_pct: 0 });
 
-  const complete1 = await api(page, `/api/lms/matriculas/${e1EnrollmentId}/status`, {
-    method: 'PATCH',
-    body: { status: 'CONCLUIDO', observacoes: 'QA lifecycle completion 1' },
-  });
+  const complete1 = await completeViaXapi(page, Number(e1EnrollmentId), 'completion-1');
   expect(complete1.ok, JSON.stringify(complete1.json)).toBe(true);
   await expect.poll(async () => requirement(await employeeSnapshot(page, employeeIds[0]), requiredTypeCode)?.status_compliance).toBe('CONFORME');
   s = await filteredSummary(page, sector.id, fn.id);
   expect(s).toMatchObject({ requisitos_obrigatorios: 2, conformes: 1, nao_realizados: 1, em_andamento: 0, compliance_pct: 50 });
 
-  const complete2 = await api(page, `/api/lms/matriculas/${e2EnrollmentId}/status`, {
-    method: 'PATCH',
-    body: { status: 'CONCLUIDO', observacoes: 'QA lifecycle completion 2' },
-  });
+  const complete2 = await completeViaXapi(page, Number(e2EnrollmentId), 'completion-2');
   expect(complete2.ok, JSON.stringify(complete2.json)).toBe(true);
   await expect.poll(async () => (await filteredSummary(page, sector.id, fn.id)).compliance_pct).toBe(100);
 
