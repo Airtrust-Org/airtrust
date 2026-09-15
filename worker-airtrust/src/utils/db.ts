@@ -98,6 +98,7 @@ export interface AuditParams {
   newValues?: Record<string, unknown>;
   ipAddress?: string;
   userAgent?: string;
+  empresaId?: number;
 }
 
 /**
@@ -115,9 +116,10 @@ export async function logAudit(db: D1Database, params: AuditParams): Promise<voi
       new_values, 
       ip_address, 
       user_agent,
+      empresa_id,
       created_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `;
 
   await db
@@ -131,6 +133,7 @@ export async function logAudit(db: D1Database, params: AuditParams): Promise<voi
       params.newValues ? JSON.stringify(params.newValues) : null,
       params.ipAddress || null,
       params.userAgent || null,
+      params.empresaId || null,
     )
     .run();
 }

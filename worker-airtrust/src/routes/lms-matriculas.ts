@@ -103,7 +103,7 @@ async function logLmsMatriculaAudit(
       entityType: 'lms_matriculas',
       entityId: params.matriculaId,
       oldValues: params.oldValues,
-      newValues: params.newValues,
+      newValues: params.newValues, empresaId: getEmpresaIdSafe(c),
       ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined,
       userAgent: c.req.header('user-agent') ?? undefined,
     });
