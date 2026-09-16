@@ -232,10 +232,10 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(isValidWakeTime('6')).toBe(false);
   });
 
-  it('resolve destino correto apos salvar fadiga por perfil, mantendo navegacao dentro do FRMS', () => {
-    expect(resolveFadigaPostSavePath('INSTRUTOR')).toBe('/frms/checkin?tab=historico');
-    expect(resolveFadigaPostSavePath('ALUNO')).toBe('/frms/checkin?tab=historico');
-    expect(resolveFadigaPostSavePath('TRIPULANTE')).toBe('/frms/checkin?tab=historico');
+  it('resolve destino correto apos salvar fadiga por perfil, fechando o formulário do tripulante', () => {
+    expect(resolveFadigaPostSavePath('INSTRUTOR')).toBe('/frms');
+    expect(resolveFadigaPostSavePath('ALUNO')).toBe('/frms');
+    expect(resolveFadigaPostSavePath('TRIPULANTE')).toBe('/frms');
     expect(resolveFadigaPostSavePath('GESTOR')).toBe('/frms/controle-operacional');
     expect(resolveFadigaPostSavePath('ADMINISTRADOR')).toBe('/frms/controle-operacional');
   });
@@ -567,17 +567,17 @@ describe('FrmsCheckinFadiga UI', () => {
     preencherFormularioValido();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
 
-    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/frms/checkin?tab=historico', { replace: true }));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/frms', { replace: true }));
   });
 
-  it('sucesso de aluno/tripulante volta para home correta', async () => {
+  it('sucesso de aluno/tripulante fecha formulário e volta para home correta', async () => {
     usePermissionsMock.mockReturnValue({ isAdmin: false, isGestor: false, role: 'ALUNO' });
     render(<FrmsCheckinFadiga />);
 
     preencherFormularioValido();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
 
-    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/frms/checkin?tab=historico', { replace: true }));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/frms', { replace: true }));
   });
 
   it('erro de envio permanece no formulario sem redirecionar', async () => {
