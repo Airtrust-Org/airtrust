@@ -9,6 +9,8 @@ import {
   getEmployeeSectorAccess,
 } from '../services/employee-sector-access';
 import { validateAndNormalizeCaeAvailability } from '../services/cae-availability';
+import { resolveGlobalSimulatorForEquipment } from '../services/cae-planning-resource-assignment';
+import { materializeSimulatorPlanningV3Draft } from '../services/simulator-planning-v3-materialization';
 import {
   normalizeSimulatorProviderAvailability,
   type SimulatorProviderAvailability,
@@ -708,6 +710,92 @@ app.put('/rascunhos/:draftId', requireRole('admin', 'manager'), async (c) => {
     updated_at: snapshot.saved_at,
   };
   return c.json({ success: true, data: responseFromRow(row, snapshot) });
+});
+
+app.get('/rascunhos/:draftId/recursos', requireRole('admin', 'manager'), async (c) => {
+  const draftId = String(c.req.param('draftId') || '').trim();
+  const row = await findDraftRow(c, draftId);
+  const snapshot = row ? parseSnapshot(row.planejamento_snapshot_json) : null;
+  if (!row || !snapshot)
+    return c.json({ success: false, error: 'Planejamento salvo não encontrado.' }, 404);
+  const empresaId = getTenantContext(c).empresaId;
+  const equipment = new Set<string>();
+  const classes = Array.isArray(snapshot.proposal.classes) ? snapshot.proposal.classes : [];
+  for (const item of classes) {
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const code = String((item as Record<string, unknown>).equipment || '').trim();
+      if (code) equipment.add(code);
+    }
+  }
+  const simulators: Record<
+    string,
+    Awaited<ReturnType<typeof resolveGlobalSimulatorForEquipment>>
+  > = {};
+  for (const code of equipment)
+    simulators[code] = await resolveGlobalSimulatorForEquipment(c.env.DB, code);
+
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const scope = buildFuncionarioScopeWhere(access, 'f');
+  const columns = await c.env.DB.prepare("PRAGMA table_info('funcionarios')").all<{
+    name: string;
+  }>();
+  const hasInstructorFlag = new Set((columns.results || []).map((item) => item.name)).has(
+    'is_instrutor',
+  );
+  const instructors = await c.env.DB.prepare(
+    `SELECT f.id, f.nome FROM funcionarios f
+      WHERE f.empresa_id = ? AND f.deleted_at IS NULL
+        AND (f.ativo IS NULL OR f.ativo = 1)
+        ${hasInstructorFlag ? 'AND f.is_instrutor = 1' : ''}
+        AND (${scope.clause})
+      ORDER BY f.nome`,
+  )
+    .bind(empresaId, ...scope.bindings)
+    .all<{ id: number; nome: string }>();
+  return c.json({ success: true, data: { simulators, instructors: instructors.results || [] } });
+});
+
+app.post('/rascunhos/:draftId/materializar', requireRole('admin', 'manager'), async (c) => {
+  const draftId = String(c.req.param('draftId') || '').trim();
+  const row = await findDraftRow(c, draftId);
+  const snapshot = row ? parseSnapshot(row.planejamento_snapshot_json) : null;
+  if (!row || !snapshot)
+    return c.json({ success: false, error: 'Planejamento salvo não encontrado.' }, 404);
+  const body = (await c.req.json().catch(() => null)) as {
+    instructor_id?: unknown;
+    simulator_by_equipment?: unknown;
+  } | null;
+  const instructorId = Number(body?.instructor_id || 0);
+  if (
+    !Number.isInteger(instructorId) ||
+    instructorId <= 0 ||
+    !body?.simulator_by_equipment ||
+    typeof body.simulator_by_equipment !== 'object' ||
+    Array.isArray(body.simulator_by_equipment)
+  ) {
+    return c.json({ success: false, error: 'Instrutor e simuladores são obrigatórios.' }, 400);
+  }
+  for (const need of snapshot.base_needs) {
+    const scoped = await assertFuncionarioInScope(c, need.employee_id);
+    if (!scoped.ok)
+      return c.json({ success: false, error: 'Participante fora do escopo atual.' }, 403);
+  }
+  const simulatorByEquipment = Object.fromEntries(
+    Object.entries(body.simulator_by_equipment as Record<string, unknown>).map(([key, value]) => [
+      key,
+      Number(value),
+    ]),
+  );
+  const result = await materializeSimulatorPlanningV3Draft({
+    db: c.env.DB,
+    empresaId: getTenantContext(c).empresaId,
+    planningId: row.id,
+    snapshot,
+    instructorId,
+    simulatorByEquipment,
+  });
+  if (!result.success) return c.json({ success: false, error: result.error, data: result }, 400);
+  return c.json({ success: true, data: result });
 });
 
 export default app;
