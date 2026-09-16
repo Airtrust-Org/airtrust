@@ -4,6 +4,7 @@ const PRECACHE_URLS = [
   '/pilot/',
   '/pilot/index.html',
   '/pilot/pilot-app.js',
+  '/pilot/pilot-preflight.js',
   '/pilot/pilot-workspace.js',
   '/pilot/pilot-vault.js',
   '/pilot/pilot-rdv-draft.js',
