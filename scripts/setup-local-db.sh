@@ -250,7 +250,7 @@ for migration_file in "${APP_MIGRATIONS[@]}" "${CONTROLE_VOOS_MIGRATIONS[@]}"; d
   require_migration_recorded "$(basename "$migration_file")"
 done
 
-for table_name in audit_logs lms_cursos lms_matriculas lms_progresso_scorm cv_voos notechs_categorias notechs_itens; do
+for table_name in audit_logs lms_cursos lms_matriculas lms_progresso_scorm cv_voos manobras_categorias manobras; do
   require_sqlite_table "$table_name"
 done
 
@@ -269,6 +269,15 @@ if sqlite3 "$SQLITE_FILE" < "$SEED_FILE" 2>/dev/null; then
   success "Seed aplicado"
 else
   warn "Seed parcialmente aplicado (alguns registros já existiam — normal em re-runs)"
+fi
+
+# 0413 seeds NOTECHS per existing tenant. The synthetic dev tenant is created by
+# dev-seed.sql after migrations, so replay this idempotent migration once to seed it too.
+NOTECHS_MIGRATION="$WORKER_DIR/migrations/0413_notechs_categoria_itens.sql"
+if sqlite3 "$SQLITE_FILE" < "$NOTECHS_MIGRATION" 2>/dev/null; then
+  success "Catálogo NOTECHS do tenant sintético validado"
+else
+  error "Falha ao aplicar catálogo NOTECHS ao tenant sintético"
 fi
 
 info "Aplicando seed mínimo de Controle de Voos..."

@@ -144,3 +144,11 @@ test('duplicate-email races are translated instead of leaking generic errors', (
   assert.match(companyUsers, /SELECT id FROM usuarios WHERE email = \?/);
   assert.match(adminUsers, /EMAIL_ALREADY_EXISTS/);
 });
+
+test('local bootstrap validates the canonical NOTECHS tables and seeds the synthetic tenant', () => {
+  const setup = source('scripts/setup-local-db.sh');
+  assert.match(setup, /cv_voos manobras_categorias manobras/);
+  assert.doesNotMatch(setup, /notechs_categorias notechs_itens/);
+  assert.match(setup, /NOTECHS_MIGRATION=.*0413_notechs_categoria_itens\.sql/);
+  assert.match(setup, /sqlite3 "\$SQLITE_FILE" < "\$NOTECHS_MIGRATION"/);
+});
