@@ -26,6 +26,9 @@ describe('simulator planning V3 priority, aircraft filter and report UX', () => 
     expect(page).toContain('Trocar participante');
     expect(page).toContain('Trocar sessão');
     expect(page).toContain('openSessionSwap');
+    expect(page).toContain('role="dialog"');
+    expect(page).toContain('aria-modal="true"');
+    expect(page).toContain('fixed left-1/2 top-1/2');
     expect(crew).toContain("'/alternativas-sessao'");
     expect(crew).toContain('canManuallyShareSimulatorTrainingSessions');
   });

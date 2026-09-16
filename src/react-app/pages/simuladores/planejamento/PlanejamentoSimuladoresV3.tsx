@@ -1319,7 +1319,12 @@ export default function PlanejamentoSimuladoresV3() {
       )}
 
       {sessionSwap && (
-        <section className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+        <section
+          className="fixed left-1/2 top-1/2 z-[120] max-h-[calc(100vh-2rem)] w-[min(72rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-2xl dark:border-emerald-900/50 dark:bg-slate-950"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Trocar sessão de ${sessionSwap.current.employee_name}`}
+        >
           <div className="flex items-start justify-between gap-4">
             <div>
               <h3 className="font-semibold text-slate-900 dark:text-white">
@@ -1395,7 +1400,16 @@ export default function PlanejamentoSimuladoresV3() {
       )}
 
       {swap && (
-        <section className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
+        <section
+          className="fixed left-1/2 top-1/2 z-[120] max-h-[calc(100vh-2rem)] w-[min(72rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-2xl dark:border-blue-900/50 dark:bg-slate-950"
+          role="dialog"
+          aria-modal="true"
+          aria-label={
+            swap.replaced
+              ? `Trocar ${swap.replaced.employee_name}`
+              : `Escolher dupla para ${swap.anchor.employee_name}`
+          }
+        >
           <div className="flex items-start justify-between gap-4">
             <div>
               <h3 className="font-semibold text-slate-900 dark:text-white">

@@ -199,16 +199,30 @@ async function loadConfig(db: D1Database, empresaId: number) {
   return resolveSimulatorPlanningConfig(row);
 }
 
-async function assertNeedsInTenantAndScope(params: {
+type NeedValidationFailure = {
+  need: SimulatorTrainingSessionNeed;
+  error: string;
+};
+
+type NeedValidationResult = {
+  valid: SimulatorTrainingSessionNeed[];
+  invalid: NeedValidationFailure[];
+};
+
+async function validateNeedsInTenantAndScope(params: {
   c: Parameters<typeof getEmployeeSectorAccess>[0];
   db: D1Database;
   empresaId: number;
   needs: SimulatorTrainingSessionNeed[];
-}): Promise<void> {
+}): Promise<NeedValidationResult> {
   const employeeIds = [...new Set(params.needs.map((item) => item.employee_id))];
   const modelIds = [...new Set(params.needs.map((item) => item.session_model_id))];
-  if (employeeIds.length === 0 || modelIds.length === 0)
-    throw new Error('Nenhuma sessão válida informada');
+  if (employeeIds.length === 0 || modelIds.length === 0) {
+    return {
+      valid: [],
+      invalid: params.needs.map((need) => ({ need, error: 'Nenhuma sessão válida informada' })),
+    };
+  }
 
   const access = await getEmployeeSectorAccess(params.c, params.empresaId);
   const scope = buildFuncionarioScopeWhere(access, 'f');
@@ -226,9 +240,6 @@ async function assertNeedsInTenantAndScope(params: {
     .bind(params.empresaId, ...employeeIds, ...scope.bindings)
     .all<{ id: number }>();
   const allowedEmployees = new Set((employees.results || []).map((row) => Number(row.id)));
-  if (employeeIds.some((id) => !allowedEmployees.has(id))) {
-    throw new Error('Tripulante fora do tenant/escopo permitido');
-  }
 
   const modelPlaceholders = modelIds.map(() => '?').join(', ');
   const models = await params.db
@@ -253,9 +264,29 @@ async function assertNeedsInTenantAndScope(params: {
     string,
     Awaited<ReturnType<typeof loadResolvedSimulatorCurriculum>>
   >();
+  const valid: SimulatorTrainingSessionNeed[] = [];
+  const invalid: NeedValidationFailure[] = [];
+
   for (const need of params.needs) {
+    if (!allowedEmployees.has(need.employee_id)) {
+      invalid.push({ need, error: 'Tripulante fora do tenant/escopo permitido' });
+      continue;
+    }
+
     const model = modelById.get(need.session_model_id);
     const referenceYear = curriculumReferenceYear(need.expiry_date);
+    if (
+      need.curriculum_reference_year != null &&
+      referenceYear != null &&
+      Number(need.curriculum_reference_year) !== referenceYear
+    ) {
+      invalid.push({
+        need,
+        error: 'Sessão informada não corresponde ao ciclo curricular vigente do tenant',
+      });
+      continue;
+    }
+
     const curriculumKey = `${need.qualification_type_id}:${need.training_program_id ?? 'auto'}:${referenceYear ?? 'none'}:${need.employee_id}`;
     let resolvedCurriculum = resolvedCurriculumCache.get(curriculumKey);
     if (!resolvedCurriculumCache.has(curriculumKey)) {
@@ -277,16 +308,42 @@ async function assertNeedsInTenantAndScope(params: {
         (row) => Number(row.id) === need.session_model_id,
       );
       const equipment = normalizeEquipment(curriculumModel?.modelo_aeronave);
+      const programMismatch =
+        need.training_program_id != null &&
+        Number(resolvedCurriculum.program_id) !== Number(need.training_program_id);
+      const cycleMismatch =
+        need.curriculum_cycle != null &&
+        Number(resolvedCurriculum.cycle) !== Number(need.curriculum_cycle);
+
+      // Validate the exact clicked/planned session. A different unresolved row in
+      // the same program/cycle must not make an otherwise canonical session
+      // unusable for crew/session editing. Fresh proposal generation continues to
+      // block globally incomplete curricula; this endpoint only revalidates the
+      // concrete snapshot supplied by an already-generated proposal.
       if (
-        resolvedCurriculum.unresolved_items > 0 ||
         !model ||
         !curriculumModel ||
+        programMismatch ||
+        cycleMismatch ||
         Number(curriculumModel.duracao_estimada) !== need.duration_minutes ||
         Number(curriculumModel.ordem_no_treinamento) !== need.session_order ||
         (equipment !== 'UNIVERSAL' && equipment !== need.equipment)
       ) {
-        throw new Error('Sessão informada não corresponde ao ciclo curricular vigente do tenant');
+        invalid.push({
+          need,
+          error: 'Sessão informada não corresponde ao ciclo curricular vigente do tenant',
+        });
+        continue;
       }
+      valid.push(need);
+      continue;
+    }
+
+    if (need.training_program_id != null) {
+      invalid.push({
+        need,
+        error: 'Sessão informada não corresponde ao ciclo curricular vigente do tenant',
+      });
       continue;
     }
 
@@ -299,9 +356,27 @@ async function assertNeedsInTenantAndScope(params: {
         Number(model.ordem_no_treinamento) !== need.session_order) ||
       (modelEquipment !== 'UNIVERSAL' && modelEquipment !== need.equipment)
     ) {
-      throw new Error('Sessão informada não corresponde ao currículo vigente do tenant');
+      invalid.push({
+        need,
+        error: 'Sessão informada não corresponde ao currículo vigente do tenant',
+      });
+      continue;
     }
+    valid.push(need);
   }
+
+  return { valid, invalid };
+}
+
+async function assertNeedsInTenantAndScope(params: {
+  c: Parameters<typeof getEmployeeSectorAccess>[0];
+  db: D1Database;
+  empresaId: number;
+  needs: SimulatorTrainingSessionNeed[];
+}): Promise<void> {
+  if (params.needs.length === 0) throw new Error('Nenhuma sessão válida informada');
+  const validation = await validateNeedsInTenantAndScope(params);
+  if (validation.invalid.length > 0) throw new Error(validation.invalid[0].error);
 }
 
 function findSharedWindow(params: {
@@ -581,8 +656,20 @@ app.post(
       return c.json({ success: false, error: 'Consulta de alternativas de sessão inválida' }, 400);
     }
     const suppliedNeeds = [current, ...(anchor ? [anchor] : []), ...candidates];
+    let validatedCandidates: SimulatorTrainingSessionNeed[] = [];
     try {
-      await assertNeedsInTenantAndScope({ c, db: c.env.DB, empresaId, needs: suppliedNeeds });
+      const validation = await validateNeedsInTenantAndScope({
+        c,
+        db: c.env.DB,
+        empresaId,
+        needs: suppliedNeeds,
+      });
+      const requiredFailure = validation.invalid.find(
+        (item) => item.need === current || item.need === anchor,
+      );
+      if (requiredFailure) throw new Error(requiredFailure.error);
+      const validNeeds = new Set(validation.valid);
+      validatedCandidates = candidates.filter((candidate) => validNeeds.has(candidate));
     } catch (error) {
       return c.json(
         { success: false, error: error instanceof Error ? error.message : 'Sessões inválidas' },
@@ -593,7 +680,7 @@ app.post(
     const alternatives: SessionAlternative[] = [];
 
     if (anchor) {
-      const structuralCandidates = candidates.filter(
+      const structuralCandidates = validatedCandidates.filter(
         (candidate) =>
           candidate.need_id !== current.need_id &&
           canManuallyShareSimulatorTrainingSessions(anchor, candidate) &&
@@ -686,8 +773,13 @@ app.post(
     }
 
     const needs = [anchor, ...candidates];
+    let validatedCandidates: SimulatorTrainingSessionNeed[] = [];
     try {
-      await assertNeedsInTenantAndScope({ c, db: c.env.DB, empresaId, needs });
+      const validation = await validateNeedsInTenantAndScope({ c, db: c.env.DB, empresaId, needs });
+      const anchorFailure = validation.invalid.find((item) => item.need === anchor);
+      if (anchorFailure) throw new Error(anchorFailure.error);
+      const validNeeds = new Set(validation.valid);
+      validatedCandidates = candidates.filter((candidate) => validNeeds.has(candidate));
     } catch (error) {
       return c.json(
         { success: false, error: error instanceof Error ? error.message : 'Tripulantes inválidos' },
@@ -696,7 +788,7 @@ app.post(
     }
 
     const config = await loadConfig(c.env.DB, empresaId);
-    const structurallyCompatible = candidates.filter(
+    const structurallyCompatible = validatedCandidates.filter(
       (candidate) =>
         canShareSimulatorTrainingSessions(anchor, candidate) &&
         daysDistance(anchor.expiry_date, candidate.expiry_date) <= config.planning_horizon_days,
