@@ -74,3 +74,12 @@ describe('SCORM resume restore helpers', () => {
     expect(source).toContain("console.info('[SCORM_TELEMETRY]'");
   });
 });
+
+describe('completed enrollment review virtual CMI', () => {
+  it('presents terminal SCORM 1.2 state in-memory without rewriting persisted evidence', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/routes/lms-assets.ts'), 'utf8');
+    expect(source).toContain("cmi['cmi.core.lesson_status'] = 'passed'");
+    expect(source).toContain("cmi['cmi.core.lesson_location'] = '55/55'");
+    expect(source).toContain("matricula.status === 'CONCLUIDO'");
+  });
+});
