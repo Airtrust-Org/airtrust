@@ -36,6 +36,11 @@ import {
   loadResolvedSimulatorCurriculum,
 } from '../services/simulator-curriculum-cycles';
 import { employeeHasCompletedQualification } from '../services/training-programs';
+import {
+  normalizeSimulatorProviderAvailability,
+  providerDateAllowed,
+  suggestSimulatorTrainingDates,
+} from '../services/simulator-provider-date-suggestion';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -1074,6 +1079,368 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
     },
   });
 });
+
+function buildPreservedProposalBlocks(params: {
+  rawBlocks: unknown[];
+  needs: SimulatorTrainingSessionNeed[];
+  planningHorizonDays: number;
+}): { blocks: SimulatorTrainingSessionBlock[]; error: null } | { blocks: []; error: string } {
+  const needById = new Map(params.needs.map((need) => [need.need_id, need]));
+  const used = new Set<string>();
+  const blocks: SimulatorTrainingSessionBlock[] = [];
+  for (const raw of params.rawBlocks) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return { blocks: [], error: 'Bloco da proposta inválido' };
+    }
+    const ids = Array.isArray((raw as Record<string, unknown>).need_ids)
+      ? ((raw as Record<string, unknown>).need_ids as unknown[]).map((value) => String(value || ''))
+      : [];
+    if (ids.length < 1 || ids.length > 2 || new Set(ids).size !== ids.length) {
+      return { blocks: [], error: 'Bloco da proposta deve conter uma ou duas sessões' };
+    }
+    const sessions = ids.map((id) => needById.get(id));
+    if (sessions.some((session) => !session) || ids.some((id) => used.has(id))) {
+      return { blocks: [], error: 'Bloco da proposta contém sessão ausente ou duplicada' };
+    }
+    const resolved = sessions as SimulatorTrainingSessionNeed[];
+    const first = resolved[0];
+    if (resolved.length === 2) {
+      const second = resolved[1];
+      if (
+        !canManuallyShareSimulatorTrainingSessions(first, second) ||
+        daysDistance(first.expiry_date, second.expiry_date) > params.planningHorizonDays
+      ) {
+        return {
+          blocks: [],
+          error: 'Dupla preservada incompatível com currículo/equipamento/horizonte',
+        };
+      }
+    }
+    ids.forEach((id) => used.add(id));
+    blocks.push({
+      block_id: ids.slice().sort().join('+'),
+      equipment: first.equipment,
+      duration_minutes: first.duration_minutes,
+      target_date: resolved.map((session) => session.expiry_date).sort()[0],
+      pairing: resolved.length === 2 ? pairKind(resolved[0], resolved[1]) : 'SEM_DUPLA',
+      sessions: resolved,
+    });
+  }
+  if (used.size !== params.needs.length) {
+    return { blocks: [], error: 'A proposta informada não contém todas as sessões' };
+  }
+  return { blocks, error: null };
+}
+
+function timeToMinutes(value: unknown): number | null {
+  const text = String(value || '');
+  if (!/^\d{2}:\d{2}$/.test(text)) return null;
+  const [hour, minute] = text.split(':').map(Number);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return hour * 60 + minute;
+}
+
+app.post(
+  '/sugerir-datas',
+  requirePermission('simuladores', 'editar', 'admin', 'manager'),
+  async (c) => {
+    const empresaId = getTenantContext(c).empresaId;
+    const body = (await c.req.json().catch(() => null)) as {
+      reference_date?: unknown;
+      session_needs?: unknown;
+      pairing_blocks?: unknown;
+      provider_availability?: unknown;
+    } | null;
+    const referenceDate = String(body?.reference_date || new Date().toISOString().slice(0, 10));
+    const rawNeeds = Array.isArray(body?.session_needs) ? body.session_needs : [];
+    const needs = rawNeeds
+      .map(parseNeed)
+      .filter((item): item is SimulatorTrainingSessionNeed => Boolean(item));
+    const rawBlocks = Array.isArray(body?.pairing_blocks) ? body.pairing_blocks : [];
+    if (
+      !isIsoDate(referenceDate) ||
+      rawNeeds.length === 0 ||
+      rawNeeds.length > MAX_NEEDS ||
+      needs.length !== rawNeeds.length ||
+      rawBlocks.length === 0 ||
+      rawBlocks.length > MAX_NEEDS
+    ) {
+      return c.json({ success: false, error: 'Sugestão de datas inválida' }, 400);
+    }
+    try {
+      await assertNeedsInTenantAndScope({ c, db: c.env.DB, empresaId, needs });
+    } catch (error) {
+      return c.json(
+        { success: false, error: error instanceof Error ? error.message : 'Sessões inválidas' },
+        400,
+      );
+    }
+    const config = await loadConfig(c.env.DB, empresaId);
+    const preserved = buildPreservedProposalBlocks({
+      rawBlocks,
+      needs,
+      planningHorizonDays: config.planning_horizon_days,
+    });
+    if (preserved.error) return c.json({ success: false, error: preserved.error }, 400);
+    const availability = normalizeSimulatorProviderAvailability(body?.provider_availability);
+    if (!availability.ok) return c.json({ success: false, error: availability.error }, 400);
+    const rosterCache = new Map<
+      string,
+      Awaited<ReturnType<typeof resolveEmployeeFortnightDayFromD1>>
+    >();
+    const result = await suggestSimulatorTrainingDates({
+      classes: buildSimulatorTrainingClasses(preserved.blocks),
+      availability: availability.data,
+      referenceDate,
+      horizonDays: config.planning_horizon_days,
+      preferredSessionsPerDay: config.preferred_sessions_per_day,
+      checkRoster: async (employeeId, _employeeName, date) => {
+        const key = `${employeeId}:${date}`;
+        let roster = rosterCache.get(key);
+        if (!roster) {
+          roster = await resolveEmployeeFortnightDayFromD1({
+            db: c.env.DB,
+            empresaId,
+            employeeId,
+            date,
+          });
+          rosterCache.set(key, roster);
+        }
+        const eligibility = evaluateRosterEligibility(config.roster_policy, roster.state);
+        return {
+          eligible: eligibility.eligible,
+          state: roster.state,
+          reason: `${eligibility.reason} ${roster.reason}`.trim(),
+        };
+      },
+    });
+    return c.json({ success: true, data: { ...result, provider_availability: availability.data } });
+  },
+);
+
+app.post(
+  '/confirmar-horarios',
+  requirePermission('simuladores', 'editar', 'admin', 'manager'),
+  async (c) => {
+    const empresaId = getTenantContext(c).empresaId;
+    const body = (await c.req.json().catch(() => null)) as {
+      reference_date?: unknown;
+      session_needs?: unknown;
+      pairing_blocks?: unknown;
+      provider_availability?: unknown;
+      confirmed_blocks?: unknown;
+    } | null;
+    const referenceDate = String(body?.reference_date || new Date().toISOString().slice(0, 10));
+    const rawNeeds = Array.isArray(body?.session_needs) ? body.session_needs : [];
+    const needs = rawNeeds
+      .map(parseNeed)
+      .filter((item): item is SimulatorTrainingSessionNeed => Boolean(item));
+    const rawBlocks = Array.isArray(body?.pairing_blocks) ? body.pairing_blocks : [];
+    const rawConfirmed = Array.isArray(body?.confirmed_blocks) ? body.confirmed_blocks : [];
+    if (
+      !isIsoDate(referenceDate) ||
+      rawNeeds.length === 0 ||
+      needs.length !== rawNeeds.length ||
+      rawBlocks.length === 0
+    ) {
+      return c.json({ success: false, error: 'Confirmação de horários inválida' }, 400);
+    }
+    try {
+      await assertNeedsInTenantAndScope({ c, db: c.env.DB, empresaId, needs });
+    } catch (error) {
+      return c.json(
+        { success: false, error: error instanceof Error ? error.message : 'Sessões inválidas' },
+        400,
+      );
+    }
+    const config = await loadConfig(c.env.DB, empresaId);
+    const preserved = buildPreservedProposalBlocks({
+      rawBlocks,
+      needs,
+      planningHorizonDays: config.planning_horizon_days,
+    });
+    if (preserved.error) return c.json({ success: false, error: preserved.error }, 400);
+    const availability = normalizeSimulatorProviderAvailability(body?.provider_availability);
+    if (!availability.ok) return c.json({ success: false, error: availability.error }, 400);
+    const blockById = new Map(preserved.blocks.map((block) => [block.block_id, block]));
+    const confirmations = new Map<string, { date: string; start_time: string; end_time: string }>();
+    const resourceIntervals = new Map<
+      string,
+      Array<{ start: number; end: number; blockId: string }>
+    >();
+    const employeeIntervals = new Map<
+      string,
+      Array<{ start: number; end: number; blockId: string }>
+    >();
+    const rosterByBlock = new Map<
+      string,
+      Array<{ employee_id: number; employee_name: string; state: string; reason: string }>
+    >();
+    for (const raw of rawConfirmed) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+        return c.json({ success: false, error: 'Horário confirmado inválido' }, 400);
+      const row = raw as Record<string, unknown>;
+      const ids = Array.isArray(row.need_ids)
+        ? (row.need_ids as unknown[]).map((id) => String(id || '')).sort()
+        : [];
+      const blockId = ids.join('+');
+      const block = blockById.get(blockId);
+      const date = String(row.date || '').slice(0, 10);
+      const startTime = String(row.start_time || '');
+      const endTime = String(row.end_time || '');
+      const start = timeToMinutes(startTime);
+      const end = timeToMinutes(endTime);
+      if (!block || !isIsoDate(date) || start === null || end === null || end <= start) {
+        return c.json({ success: false, error: 'Data/horário confirmado inválido' }, 400);
+      }
+      if (end - start !== block.duration_minutes) {
+        return c.json(
+          { success: false, error: `A sessão ${blockId} exige ${block.duration_minutes} minutos.` },
+          400,
+        );
+      }
+      if (!providerDateAllowed(availability.data, block.equipment, date)) {
+        return c.json(
+          {
+            success: false,
+            error: `A data ${date} está fora da disponibilidade CAI de ${block.equipment}.`,
+          },
+          400,
+        );
+      }
+      if (confirmations.has(blockId))
+        return c.json({ success: false, error: 'Sessão confirmada em duplicidade.' }, 400);
+      const rosterRows: Array<{
+        employee_id: number;
+        employee_name: string;
+        state: string;
+        reason: string;
+      }> = [];
+      for (const session of block.sessions) {
+        const roster = await resolveEmployeeFortnightDayFromD1({
+          db: c.env.DB,
+          empresaId,
+          employeeId: session.employee_id,
+          date,
+        });
+        const eligibility = evaluateRosterEligibility(config.roster_policy, roster.state);
+        rosterRows.push({
+          employee_id: session.employee_id,
+          employee_name: session.employee_name,
+          state: roster.state,
+          reason: `${eligibility.reason} ${roster.reason}`.trim(),
+        });
+        if (!eligibility.eligible)
+          return c.json(
+            {
+              success: false,
+              error: `${session.employee_name} não está elegível em ${date}: ${eligibility.reason}`,
+            },
+            400,
+          );
+        const key = `${session.employee_id}:${date}`;
+        const intervals = employeeIntervals.get(key) || [];
+        if (intervals.some((item) => start < item.end && end > item.start))
+          return c.json(
+            {
+              success: false,
+              error: `${session.employee_name} possui sessões sobrepostas em ${date}.`,
+            },
+            400,
+          );
+        intervals.push({ start, end, blockId });
+        employeeIntervals.set(key, intervals);
+      }
+      const resourceKey = `${normalizeEquipment(block.equipment)}:${date}`;
+      const resource = resourceIntervals.get(resourceKey) || [];
+      if (resource.some((item) => start < item.end && end > item.start))
+        return c.json(
+          { success: false, error: `Há horários de ${block.equipment} sobrepostos em ${date}.` },
+          400,
+        );
+      resource.push({ start, end, blockId });
+      resourceIntervals.set(resourceKey, resource);
+      confirmations.set(blockId, { date, start_time: startTime, end_time: endTime });
+      rosterByBlock.set(blockId, rosterRows);
+    }
+
+    const baseClasses = buildSimulatorTrainingClasses(preserved.blocks);
+    let scheduledBlocks = 0;
+    let unmatchedCrewBlocks = 0;
+    let noSlotBlocks = 0;
+    const classes = baseClasses.map((trainingClass) => ({
+      ...trainingClass,
+      blocks: trainingClass.blocks.map((block) => {
+        if (block.pairing === 'SEM_DUPLA') {
+          unmatchedCrewBlocks += 1;
+          return { ...block, schedule_status: 'UNMATCHED_CREW' as const, scheduled_slot: null };
+        }
+        const confirmed = confirmations.get(block.block_id);
+        if (!confirmed) {
+          noSlotBlocks += 1;
+          return { ...block, schedule_status: 'NO_CAE_SLOT' as const, scheduled_slot: null };
+        }
+        scheduledBlocks += 1;
+        return {
+          ...block,
+          schedule_status: 'SCHEDULED' as const,
+          scheduled_slot: { slot_key: `manual:${block.block_id}`, ...confirmed },
+          roster: rosterByBlock.get(block.block_id) || [],
+        };
+      }),
+    }));
+    const caeDocument = {
+      schema_version: 'airtrust.cae_availability.v1' as const,
+      provider: 'CAE' as const,
+      source: {
+        kind: 'TEXT' as const,
+        filename: null,
+        received_at: new Date().toISOString(),
+        extracted_at: new Date().toISOString(),
+      },
+      slots: [...confirmations.entries()].map(([blockId, slot]) => {
+        const block = blockById.get(blockId) as SimulatorTrainingSessionBlock;
+        return {
+          external_ref: blockId,
+          equipment:
+            normalizeEquipment(block.equipment) === 'SK76' ? ('SK76' as const) : ('AW139' as const),
+          date: slot.date,
+          start_time: slot.start_time,
+          end_date: slot.date,
+          end_time: slot.end_time,
+          duration_minutes: block.duration_minutes,
+          state: 'CONFIRMED' as const,
+          company: null,
+          participants_mentioned: block.sessions.map((session) => session.employee_name),
+          source_ref: { page: null, section: 'Confirmação manual CAI', raw_text: null },
+          confidence: 1,
+        };
+      }),
+      warnings: [],
+    };
+    return c.json({
+      success: true,
+      data: {
+        classes,
+        cae_document: caeDocument,
+        cae_comparison: {
+          source_slots: confirmations.size,
+          scheduled_blocks: scheduledBlocks,
+          unmatched_crew_blocks: unmatchedCrewBlocks,
+          no_slot_blocks: noSlotBlocks,
+          remaining_slots: [],
+          warnings: [],
+        },
+        summary: {
+          session_requirements: needs.length,
+          paired_blocks: preserved.blocks.length - unmatchedCrewBlocks,
+          unmatched_blocks: unmatchedCrewBlocks,
+          classes: baseClasses.length,
+        },
+      },
+    });
+  },
+);
 
 /**
  * Compara uma proposta já formada com a disponibilidade CAE sem recalcular

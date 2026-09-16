@@ -9,7 +9,16 @@ import {
   getEmployeeSectorAccess,
 } from '../services/employee-sector-access';
 import { validateAndNormalizeCaeAvailability } from '../services/cae-availability';
-import { mapPlanningStatusToLegacy, type SimulatorPlanningStatus } from '../services/simulator-future-planning';
+import { resolveGlobalSimulatorForEquipment } from '../services/cae-planning-resource-assignment';
+import { materializeSimulatorPlanningV3Draft } from '../services/simulator-planning-v3-materialization';
+import {
+  normalizeSimulatorProviderAvailability,
+  type SimulatorProviderAvailability,
+} from '../services/simulator-provider-date-suggestion';
+import {
+  mapPlanningStatusToLegacy,
+  type SimulatorPlanningStatus,
+} from '../services/simulator-future-planning';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -19,7 +28,7 @@ const SNAPSHOT_SCHEMA = 'airtrust.simulator.planning.v3.draft.v1';
 const MAX_SNAPSHOT_BYTES = 900_000;
 
 type AppContext = Context<{ Bindings: Env }>;
-type WorkflowStatus = 'AGUARDANDO_CAE' | 'CAE_RECEBIDA' | 'PLANEJADO' | 'REPLANEJAR';
+type WorkflowStatus = 'AGUARDANDO_CAE' | 'CAE_RECEBIDA' | 'PLANEJADO' | 'REPLANEJAR' | 'AGENDADO';
 
 type SessionNeed = {
   need_id: string;
@@ -45,6 +54,7 @@ type DraftPayload = {
   cae_file_name?: unknown;
   cae_file_key?: unknown;
   cae_document?: unknown;
+  provider_availability?: unknown;
 };
 
 type DraftSnapshot = {
@@ -59,6 +69,8 @@ type DraftSnapshot = {
   cae_file_name: string | null;
   cae_file_key: string | null;
   cae_document: unknown | null;
+  provider_availability?: SimulatorProviderAvailability;
+  materialized_sessions?: Record<string, number>;
   saved_at: string;
 };
 
@@ -82,12 +94,15 @@ function isIsoDate(value: unknown): value is string {
 }
 
 function workflowStatus(value: unknown): WorkflowStatus | null {
-  const normalized = String(value || '').trim().toUpperCase();
+  const normalized = String(value || '')
+    .trim()
+    .toUpperCase();
   if (
     normalized === 'AGUARDANDO_CAE' ||
     normalized === 'CAE_RECEBIDA' ||
     normalized === 'PLANEJADO' ||
-    normalized === 'REPLANEJAR'
+    normalized === 'REPLANEJAR' ||
+    normalized === 'AGENDADO'
   ) {
     return normalized;
   }
@@ -97,6 +112,7 @@ function workflowStatus(value: unknown): WorkflowStatus | null {
 function planningStatusForWorkflow(status: WorkflowStatus): SimulatorPlanningStatus {
   if (status === 'PLANEJADO') return 'PLANEJADO';
   if (status === 'REPLANEJAR') return 'REPLANEJAR';
+  if (status === 'AGENDADO') return 'AGENDADO';
   return 'AGUARDANDO_DISPONIBILIDADE';
 }
 
@@ -104,7 +120,8 @@ function parseSnapshot(value: string | null): DraftSnapshot | null {
   if (!value) return null;
   try {
     const parsed = JSON.parse(value) as Partial<DraftSnapshot>;
-    if (parsed?.schema_version !== SNAPSHOT_SCHEMA || typeof parsed.draft_id !== 'string') return null;
+    if (parsed?.schema_version !== SNAPSHOT_SCHEMA || typeof parsed.draft_id !== 'string')
+      return null;
     return parsed as DraftSnapshot;
   } catch {
     return null;
@@ -136,7 +153,14 @@ function normalizeNeeds(value: unknown): SessionNeed[] | null {
       return null;
     }
     ids.add(needId);
-    needs.push({ ...raw, need_id: needId, employee_id: employeeId, qualification_type_id: qualificationTypeId, expiry_date: expiryDate, equipment });
+    needs.push({
+      ...raw,
+      need_id: needId,
+      employee_id: employeeId,
+      qualification_type_id: qualificationTypeId,
+      expiry_date: expiryDate,
+      equipment,
+    });
   }
   return needs;
 }
@@ -151,7 +175,8 @@ function normalizeLocks(value: unknown, needIds: Set<string>): PairLock[] | null
     const raw = item as Record<string, unknown>;
     const anchor = String(raw.anchor_need_id || '').trim();
     const partner = String(raw.partner_need_id || '').trim();
-    if (!anchor || !partner || anchor === partner || !needIds.has(anchor) || !needIds.has(partner)) return null;
+    if (!anchor || !partner || anchor === partner || !needIds.has(anchor) || !needIds.has(partner))
+      return null;
     if (used.has(anchor) || used.has(partner)) return null;
     used.add(anchor);
     used.add(partner);
@@ -204,16 +229,37 @@ async function schemaReady(db: D1Database): Promise<boolean> {
   );
 }
 
-async function normalizePayload(c: AppContext, raw: DraftPayload): Promise<{ snapshot: DraftSnapshot; participantIds: number[]; qualificationTypeId: number; equipment: string; referenceExpiry: string; plannedStatus: SimulatorPlanningStatus; legacyStatus: string; totalHours: number | null; dataInicio: string | null; dataFim: string | null; dataPrevista: string } | { error: string }> {
+async function normalizePayload(
+  c: AppContext,
+  raw: DraftPayload,
+): Promise<
+  | {
+      snapshot: DraftSnapshot;
+      participantIds: number[];
+      qualificationTypeId: number;
+      equipment: string;
+      referenceExpiry: string;
+      plannedStatus: SimulatorPlanningStatus;
+      legacyStatus: string;
+      totalHours: number | null;
+      dataInicio: string | null;
+      dataFim: string | null;
+      dataPrevista: string;
+    }
+  | { error: string }
+> {
   const inicio = String(raw.vencimento_inicio || '');
   const fim = String(raw.vencimento_fim || '');
   const status = workflowStatus(raw.workflow_status);
-  if (!isIsoDate(inicio) || !isIsoDate(fim) || inicio > fim) return { error: 'Intervalo de vencimentos inválido.' };
+  if (!isIsoDate(inicio) || !isIsoDate(fim) || inicio > fim)
+    return { error: 'Intervalo de vencimentos inválido.' };
   if (!status) return { error: 'Status do fluxo de planejamento inválido.' };
-  if (!raw.proposal || typeof raw.proposal !== 'object' || Array.isArray(raw.proposal)) return { error: 'Proposta de simulador inválida.' };
+  if (!raw.proposal || typeof raw.proposal !== 'object' || Array.isArray(raw.proposal))
+    return { error: 'Proposta de simulador inválida.' };
 
   const proposal = raw.proposal as Record<string, unknown>;
-  if (!Array.isArray(proposal.classes) || proposal.classes.length === 0) return { error: 'A proposta precisa conter ao menos uma turma.' };
+  if (!Array.isArray(proposal.classes) || proposal.classes.length === 0)
+    return { error: 'A proposta precisa conter ao menos uma turma.' };
   const needs = normalizeNeeds(raw.base_needs);
   if (!needs) return { error: 'Necessidades de sessão inválidas.' };
   const needIds = new Set(needs.map((need) => need.need_id));
@@ -232,6 +278,11 @@ async function normalizePayload(c: AppContext, raw: DraftPayload): Promise<{ sna
     return { error: 'Arquivo CAE não pertence ao tenant autenticado.' };
   }
   if (!caeFileKey) caeFileKey = null;
+
+  const providerValidation = normalizeSimulatorProviderAvailability(
+    raw.provider_availability ?? {},
+  );
+  if (!providerValidation.ok) return { error: providerValidation.error };
 
   let caeDocument: unknown | null = null;
   if (raw.cae_document != null) {
@@ -274,6 +325,7 @@ async function normalizePayload(c: AppContext, raw: DraftPayload): Promise<{ sna
     cae_file_name: raw.cae_file_name == null ? null : String(raw.cae_file_name).slice(0, 255),
     cae_file_key: caeFileKey,
     cae_document: caeDocument,
+    provider_availability: providerValidation.data,
     saved_at: new Date().toISOString(),
   };
   const serialized = JSON.stringify(snapshot);
@@ -286,7 +338,10 @@ async function normalizePayload(c: AppContext, raw: DraftPayload): Promise<{ sna
     snapshot,
     participantIds,
     qualificationTypeId: firstNeed.qualification_type_id,
-    equipment: [...new Set(needs.map((need) => need.equipment))].length === 1 ? firstNeed.equipment : 'MULTI',
+    equipment:
+      [...new Set(needs.map((need) => need.equipment))].length === 1
+        ? firstNeed.equipment
+        : 'MULTI',
     referenceExpiry: expiryDates[0],
     plannedStatus,
     legacyStatus: mapPlanningStatusToLegacy(plannedStatus),
@@ -304,7 +359,9 @@ function snapshotWithDraftId(snapshot: DraftSnapshot, draftId: string): DraftSna
 function responseFromRow(row: DraftRow, snapshot: DraftSnapshot) {
   const summary = classSummary(snapshot.proposal);
   const proposalSummary =
-    snapshot.proposal.summary && typeof snapshot.proposal.summary === 'object' && !Array.isArray(snapshot.proposal.summary)
+    snapshot.proposal.summary &&
+    typeof snapshot.proposal.summary === 'object' &&
+    !Array.isArray(snapshot.proposal.summary)
       ? (snapshot.proposal.summary as Record<string, unknown>)
       : {};
   return {
@@ -319,9 +376,15 @@ function responseFromRow(row: DraftRow, snapshot: DraftSnapshot) {
     cae_file_name: snapshot.cae_file_name,
     cae_file_key: snapshot.cae_file_key,
     cae_document: snapshot.cae_document,
+    provider_availability: snapshot.provider_availability || {
+      AW139: { mode: 'ALL_DAYS', windows: [] },
+    },
+    materialized_sessions: snapshot.materialized_sessions || {},
     classes: summary.count,
     class_names: summary.names,
-    session_requirements: Number(proposalSummary.session_requirements || snapshot.base_needs.length),
+    session_requirements: Number(
+      proposalSummary.session_requirements || snapshot.base_needs.length,
+    ),
     updated_at: row.updated_at,
   };
 }
@@ -330,9 +393,8 @@ async function findDraftRow(c: AppContext, draftId: string): Promise<DraftRow | 
   const empresaId = getTenantContext(c).empresaId;
   const access = await getEmployeeSectorAccess(c, empresaId);
   const scope = buildFuncionarioScopeWhere(access, 'f');
-  return c.env.DB
-    .prepare(
-      `SELECT t.id, t.planejamento_chave, t.planejamento_status, t.planejamento_snapshot_json, t.updated_at
+  return c.env.DB.prepare(
+    `SELECT t.id, t.planejamento_chave, t.planejamento_status, t.planejamento_snapshot_json, t.updated_at
          FROM treinamentos_planejados t
         WHERE t.empresa_id = ?
           AND t.deleted_at IS NULL
@@ -349,21 +411,27 @@ async function findDraftRow(c: AppContext, draftId: string): Promise<DraftRow | 
                AND NOT (${scope.clause})
           )
         LIMIT 1`,
-    )
+  )
     .bind(empresaId, ORIGIN, `${ORIGIN}:${draftId}`, ...scope.bindings)
     .first<DraftRow>();
 }
 
 app.get('/rascunhos', requireRole('admin', 'manager'), async (c) => {
   if (!(await schemaReady(c.env.DB))) {
-    return c.json({ success: false, error: 'Estrutura de planejamento persistente indisponível.', code: 'PLANNING_SCHEMA_REQUIRED' }, 503);
+    return c.json(
+      {
+        success: false,
+        error: 'Estrutura de planejamento persistente indisponível.',
+        code: 'PLANNING_SCHEMA_REQUIRED',
+      },
+      503,
+    );
   }
   const empresaId = getTenantContext(c).empresaId;
   const access = await getEmployeeSectorAccess(c, empresaId);
   const scope = buildFuncionarioScopeWhere(access, 'f');
-  const rows = await c.env.DB
-    .prepare(
-      `SELECT t.id, t.planejamento_chave, t.planejamento_status, t.planejamento_snapshot_json, t.updated_at
+  const rows = await c.env.DB.prepare(
+    `SELECT t.id, t.planejamento_chave, t.planejamento_status, t.planejamento_snapshot_json, t.updated_at
          FROM treinamentos_planejados t
         WHERE t.empresa_id = ?
           AND t.deleted_at IS NULL
@@ -380,7 +448,7 @@ app.get('/rascunhos', requireRole('admin', 'manager'), async (c) => {
           )
         ORDER BY datetime(t.updated_at) DESC, t.id DESC
         LIMIT 30`,
-    )
+  )
     .bind(empresaId, ORIGIN, ...scope.bindings)
     .all<DraftRow>();
 
@@ -390,23 +458,46 @@ app.get('/rascunhos', requireRole('admin', 'manager'), async (c) => {
       return snapshot ? responseFromRow(row, snapshot) : null;
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
-    .map(({ proposal: _proposal, base_needs: _needs, locks: _locks, cae_document: _cae, ...summary }) => summary);
+    .map(
+      ({
+        proposal: _proposal,
+        base_needs: _needs,
+        locks: _locks,
+        cae_document: _cae,
+        ...summary
+      }) => summary,
+    );
   return c.json({ success: true, data });
 });
 
 app.get('/rascunhos/:draftId', requireRole('admin', 'manager'), async (c) => {
   if (!(await schemaReady(c.env.DB))) {
-    return c.json({ success: false, error: 'Estrutura de planejamento persistente indisponível.', code: 'PLANNING_SCHEMA_REQUIRED' }, 503);
+    return c.json(
+      {
+        success: false,
+        error: 'Estrutura de planejamento persistente indisponível.',
+        code: 'PLANNING_SCHEMA_REQUIRED',
+      },
+      503,
+    );
   }
   const row = await findDraftRow(c, String(c.req.param('draftId') || ''));
   const snapshot = row ? parseSnapshot(row.planejamento_snapshot_json) : null;
-  if (!row || !snapshot) return c.json({ success: false, error: 'Planejamento salvo não encontrado.' }, 404);
+  if (!row || !snapshot)
+    return c.json({ success: false, error: 'Planejamento salvo não encontrado.' }, 404);
   return c.json({ success: true, data: responseFromRow(row, snapshot) });
 });
 
 app.post('/rascunhos', requireRole('admin', 'manager'), async (c) => {
   if (!(await schemaReady(c.env.DB))) {
-    return c.json({ success: false, error: 'Estrutura de planejamento persistente indisponível.', code: 'PLANNING_SCHEMA_REQUIRED' }, 503);
+    return c.json(
+      {
+        success: false,
+        error: 'Estrutura de planejamento persistente indisponível.',
+        code: 'PLANNING_SCHEMA_REQUIRED',
+      },
+      503,
+    );
   }
   const userId = contextUserId(c);
   if (!userId) return c.json({ success: false, error: 'Usuário não autenticado.' }, 401);
@@ -419,15 +510,18 @@ app.post('/rascunhos', requireRole('admin', 'manager'), async (c) => {
   const snapshot = normalized.snapshot;
   const planningKey = `${ORIGIN}:${snapshot.draft_id}`;
   const policy =
-    String((snapshot.proposal.config as Record<string, unknown> | undefined)?.roster_policy || '') === 'FOLGA'
+    String(
+      (snapshot.proposal.config as Record<string, unknown> | undefined)?.roster_policy || '',
+    ) === 'FOLGA'
       ? 'FOLGA'
-      : String((snapshot.proposal.config as Record<string, unknown> | undefined)?.roster_policy || '') === 'TRABALHO'
+      : String(
+            (snapshot.proposal.config as Record<string, unknown> | undefined)?.roster_policy || '',
+          ) === 'TRABALHO'
         ? 'QUINZENA_ATIVA'
         : 'AMBOS';
   const classNames = classSummary(snapshot.proposal).names;
-  const result = await c.env.DB
-    .prepare(
-      `INSERT INTO treinamentos_planejados (
+  const result = await c.env.DB.prepare(
+    `INSERT INTO treinamentos_planejados (
          empresa_id, qualificacao_tipo_id, data_prevista, status,
          carga_horaria_prevista, titulo, descricao, observacoes,
          data_inicio, data_fim, created_by, created_at, updated_at,
@@ -443,7 +537,7 @@ app.post('/rascunhos', requireRole('admin', 'manager'), async (c) => {
          ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, datetime('now'), datetime('now'),
          ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, NULL, ?, '[]', ?, datetime('now'), ?
        )`,
-    )
+  )
     .bind(
       empresaId,
       normalized.qualificationTypeId,
@@ -467,25 +561,24 @@ app.post('/rascunhos', requireRole('admin', 'manager'), async (c) => {
     )
     .run();
   const id = Number(result.meta.last_row_id || 0);
-  if (!id) return c.json({ success: false, error: 'Não foi possível persistir o planejamento.' }, 500);
+  if (!id)
+    return c.json({ success: false, error: 'Não foi possível persistir o planejamento.' }, 500);
   for (const participantId of normalized.participantIds) {
-    await c.env.DB
-      .prepare(
-        `INSERT INTO treinamentos_participantes (
+    await c.env.DB.prepare(
+      `INSERT INTO treinamentos_participantes (
            treinamento_id, funcionario_id, confirmado, presente, aprovado,
            nota, observacoes, created_at, updated_at
          ) VALUES (?, ?, 0, NULL, NULL, NULL, NULL, datetime('now'), datetime('now'))`,
-      )
+    )
       .bind(id, participantId)
       .run();
   }
-  await c.env.DB
-    .prepare(
-      `INSERT INTO simulador_planejamento_auditoria (
+  await c.env.DB.prepare(
+    `INSERT INTO simulador_planejamento_auditoria (
          empresa_id, treinamento_planejado_id, acao, planejamento_status,
          snapshot_antes_json, snapshot_depois_json, realizado_por, realizado_em
        ) VALUES (?, ?, 'V3_PROPOSTA_PERSISTIDA', ?, NULL, ?, ?, datetime('now'))`,
-    )
+  )
     .bind(empresaId, id, normalized.plannedStatus, JSON.stringify(snapshot), userId)
     .run();
 
@@ -501,14 +594,22 @@ app.post('/rascunhos', requireRole('admin', 'manager'), async (c) => {
 
 app.put('/rascunhos/:draftId', requireRole('admin', 'manager'), async (c) => {
   if (!(await schemaReady(c.env.DB))) {
-    return c.json({ success: false, error: 'Estrutura de planejamento persistente indisponível.', code: 'PLANNING_SCHEMA_REQUIRED' }, 503);
+    return c.json(
+      {
+        success: false,
+        error: 'Estrutura de planejamento persistente indisponível.',
+        code: 'PLANNING_SCHEMA_REQUIRED',
+      },
+      503,
+    );
   }
   const userId = contextUserId(c);
   if (!userId) return c.json({ success: false, error: 'Usuário não autenticado.' }, 401);
   const draftId = String(c.req.param('draftId') || '').trim();
   const current = await findDraftRow(c, draftId);
   const before = current ? parseSnapshot(current.planejamento_snapshot_json) : null;
-  if (!current || !before) return c.json({ success: false, error: 'Planejamento salvo não encontrado.' }, 404);
+  if (!current || !before)
+    return c.json({ success: false, error: 'Planejamento salvo não encontrado.' }, 404);
 
   const raw = (await c.req.json().catch(() => null)) as DraftPayload | null;
   if (!raw) return c.json({ success: false, error: 'Payload inválido.' }, 400);
@@ -517,19 +618,25 @@ app.put('/rascunhos/:draftId', requireRole('admin', 'manager'), async (c) => {
   const snapshot = snapshotWithDraftId(normalized.snapshot, draftId);
   const serialized = JSON.stringify(snapshot);
   if (new TextEncoder().encode(serialized).byteLength > MAX_SNAPSHOT_BYTES) {
-    return c.json({ success: false, error: 'A proposta excede o limite seguro de armazenamento.' }, 400);
+    return c.json(
+      { success: false, error: 'A proposta excede o limite seguro de armazenamento.' },
+      400,
+    );
   }
 
   const empresaId = getTenantContext(c).empresaId;
   const policy =
-    String((snapshot.proposal.config as Record<string, unknown> | undefined)?.roster_policy || '') === 'FOLGA'
+    String(
+      (snapshot.proposal.config as Record<string, unknown> | undefined)?.roster_policy || '',
+    ) === 'FOLGA'
       ? 'FOLGA'
-      : String((snapshot.proposal.config as Record<string, unknown> | undefined)?.roster_policy || '') === 'TRABALHO'
+      : String(
+            (snapshot.proposal.config as Record<string, unknown> | undefined)?.roster_policy || '',
+          ) === 'TRABALHO'
         ? 'QUINZENA_ATIVA'
         : 'AMBOS';
-  await c.env.DB
-    .prepare(
-      `UPDATE treinamentos_planejados
+  await c.env.DB.prepare(
+    `UPDATE treinamentos_planejados
           SET qualificacao_tipo_id = ?,
               data_prevista = ?,
               status = ?,
@@ -546,7 +653,7 @@ app.put('/rascunhos/:draftId', requireRole('admin', 'manager'), async (c) => {
               planejamento_recalculado_por = ?,
               updated_at = datetime('now')
         WHERE id = ? AND empresa_id = ? AND planejamento_origem = ? AND deleted_at IS NULL`,
-    )
+  )
     .bind(
       normalized.qualificationTypeId,
       normalized.dataPrevista,
@@ -566,29 +673,33 @@ app.put('/rascunhos/:draftId', requireRole('admin', 'manager'), async (c) => {
       ORIGIN,
     )
     .run();
-  await c.env.DB
-    .prepare('DELETE FROM treinamentos_participantes WHERE treinamento_id = ?')
+  await c.env.DB.prepare('DELETE FROM treinamentos_participantes WHERE treinamento_id = ?')
     .bind(current.id)
     .run();
   for (const participantId of normalized.participantIds) {
-    await c.env.DB
-      .prepare(
-        `INSERT INTO treinamentos_participantes (
+    await c.env.DB.prepare(
+      `INSERT INTO treinamentos_participantes (
            treinamento_id, funcionario_id, confirmado, presente, aprovado,
            nota, observacoes, created_at, updated_at
          ) VALUES (?, ?, 0, NULL, NULL, NULL, NULL, datetime('now'), datetime('now'))`,
-      )
+    )
       .bind(current.id, participantId)
       .run();
   }
-  await c.env.DB
-    .prepare(
-      `INSERT INTO simulador_planejamento_auditoria (
+  await c.env.DB.prepare(
+    `INSERT INTO simulador_planejamento_auditoria (
          empresa_id, treinamento_planejado_id, acao, planejamento_status,
          snapshot_antes_json, snapshot_depois_json, realizado_por, realizado_em
        ) VALUES (?, ?, 'V3_PROPOSTA_ATUALIZADA', ?, ?, ?, ?, datetime('now'))`,
+  )
+    .bind(
+      empresaId,
+      current.id,
+      normalized.plannedStatus,
+      JSON.stringify(before),
+      serialized,
+      userId,
     )
-    .bind(empresaId, current.id, normalized.plannedStatus, JSON.stringify(before), serialized, userId)
     .run();
 
   const row: DraftRow = {
@@ -599,6 +710,92 @@ app.put('/rascunhos/:draftId', requireRole('admin', 'manager'), async (c) => {
     updated_at: snapshot.saved_at,
   };
   return c.json({ success: true, data: responseFromRow(row, snapshot) });
+});
+
+app.get('/rascunhos/:draftId/recursos', requireRole('admin', 'manager'), async (c) => {
+  const draftId = String(c.req.param('draftId') || '').trim();
+  const row = await findDraftRow(c, draftId);
+  const snapshot = row ? parseSnapshot(row.planejamento_snapshot_json) : null;
+  if (!row || !snapshot)
+    return c.json({ success: false, error: 'Planejamento salvo não encontrado.' }, 404);
+  const empresaId = getTenantContext(c).empresaId;
+  const equipment = new Set<string>();
+  const classes = Array.isArray(snapshot.proposal.classes) ? snapshot.proposal.classes : [];
+  for (const item of classes) {
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const code = String((item as Record<string, unknown>).equipment || '').trim();
+      if (code) equipment.add(code);
+    }
+  }
+  const simulators: Record<
+    string,
+    Awaited<ReturnType<typeof resolveGlobalSimulatorForEquipment>>
+  > = {};
+  for (const code of equipment)
+    simulators[code] = await resolveGlobalSimulatorForEquipment(c.env.DB, code);
+
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const scope = buildFuncionarioScopeWhere(access, 'f');
+  const columns = await c.env.DB.prepare("PRAGMA table_info('funcionarios')").all<{
+    name: string;
+  }>();
+  const hasInstructorFlag = new Set((columns.results || []).map((item) => item.name)).has(
+    'is_instrutor',
+  );
+  const instructors = await c.env.DB.prepare(
+    `SELECT f.id, f.nome FROM funcionarios f
+      WHERE f.empresa_id = ? AND f.deleted_at IS NULL
+        AND (f.ativo IS NULL OR f.ativo = 1)
+        ${hasInstructorFlag ? 'AND f.is_instrutor = 1' : ''}
+        AND (${scope.clause})
+      ORDER BY f.nome`,
+  )
+    .bind(empresaId, ...scope.bindings)
+    .all<{ id: number; nome: string }>();
+  return c.json({ success: true, data: { simulators, instructors: instructors.results || [] } });
+});
+
+app.post('/rascunhos/:draftId/materializar', requireRole('admin', 'manager'), async (c) => {
+  const draftId = String(c.req.param('draftId') || '').trim();
+  const row = await findDraftRow(c, draftId);
+  const snapshot = row ? parseSnapshot(row.planejamento_snapshot_json) : null;
+  if (!row || !snapshot)
+    return c.json({ success: false, error: 'Planejamento salvo não encontrado.' }, 404);
+  const body = (await c.req.json().catch(() => null)) as {
+    instructor_id?: unknown;
+    simulator_by_equipment?: unknown;
+  } | null;
+  const instructorId = Number(body?.instructor_id || 0);
+  if (
+    !Number.isInteger(instructorId) ||
+    instructorId <= 0 ||
+    !body?.simulator_by_equipment ||
+    typeof body.simulator_by_equipment !== 'object' ||
+    Array.isArray(body.simulator_by_equipment)
+  ) {
+    return c.json({ success: false, error: 'Instrutor e simuladores são obrigatórios.' }, 400);
+  }
+  const empresaId = getTenantContext(c).empresaId;
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  for (const need of snapshot.base_needs) {
+    await assertFuncionarioInScope(c.env.DB, empresaId, need.employee_id, access);
+  }
+  const simulatorByEquipment = Object.fromEntries(
+    Object.entries(body.simulator_by_equipment as Record<string, unknown>).map(([key, value]) => [
+      key,
+      Number(value),
+    ]),
+  );
+  const result = await materializeSimulatorPlanningV3Draft({
+    db: c.env.DB,
+    empresaId: getTenantContext(c).empresaId,
+    planningId: row.id,
+    snapshot,
+    instructorId,
+    simulatorByEquipment,
+  });
+  if (!result.success) return c.json({ success: false, error: result.error, data: result }, 400);
+  return c.json({ success: true, data: result });
 });
 
 export default app;

@@ -77,6 +77,9 @@ type PlanningBlock = {
   pairing: 'MESMO_TREINAMENTO' | 'TREINAMENTOS_COMPATIVEIS' | 'SEM_DUPLA';
   sessions: SessionNeed[];
   schedule_status?: 'SCHEDULED' | 'UNMATCHED_CREW' | 'NO_CAE_SLOT';
+  suggested_date?: string | null;
+  suggestion_status?: 'SUGGESTED' | 'WAITING_CREW' | 'NO_PROVIDER_WINDOW' | 'NO_ROSTER_DATE';
+  suggestion_reason?: string | null;
   scheduled_slot?: {
     slot_key: string;
     date: string;
@@ -186,7 +189,13 @@ type RepairResponse = {
   >;
 };
 
-type DraftWorkflowStatus = 'AGUARDANDO_CAE' | 'CAE_RECEBIDA' | 'PLANEJADO' | 'REPLANEJAR';
+type DraftWorkflowStatus =
+  'AGUARDANDO_CAE' | 'CAE_RECEBIDA' | 'PLANEJADO' | 'REPLANEJAR' | 'AGENDADO';
+type ProviderWindow = { start_date: string; end_date: string };
+type ProviderAvailability = Record<
+  string,
+  { mode: 'ALL_DAYS' | 'WINDOWS'; windows: ProviderWindow[] }
+>;
 
 type DraftSummary = {
   id: number;
@@ -207,6 +216,8 @@ type SavedDraft = DraftSummary & {
   locks: PairLock[];
   cae_file_key: string | null;
   cae_document: CaeAvailabilityDocument | null;
+  provider_availability?: ProviderAvailability;
+  materialized_sessions?: Record<string, number>;
 };
 
 const inputClass =
@@ -280,6 +291,7 @@ function draftStatusLabel(value?: DraftWorkflowStatus | null) {
   if (value === 'CAE_RECEBIDA') return 'CAE recebida — falta comparar';
   if (value === 'PLANEJADO') return 'Planejamento definido com CAE';
   if (value === 'REPLANEJAR') return 'Requer ajuste após CAE';
+  if (value === 'AGENDADO') return 'Sessões criadas no calendário';
   return 'Não salvo';
 }
 
@@ -334,6 +346,23 @@ export default function PlanejamentoSimuladoresV3() {
   const [draftStatus, setDraftStatus] = useState<DraftWorkflowStatus | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [loadingDraft, setLoadingDraft] = useState<string | null>(null);
+  const [providerAvailability, setProviderAvailability] = useState<ProviderAvailability>({
+    AW139: { mode: 'ALL_DAYS', windows: [] },
+    SK76: { mode: 'WINDOWS', windows: [] },
+  });
+  const [confirmedTimes, setConfirmedTimes] = useState<
+    Record<string, { date: string; start_time: string; end_time: string }>
+  >({});
+  const [resources, setResources] = useState<{
+    simulators: Record<
+      string,
+      { status: string; simulator_id?: number; candidates?: Array<{ id: number; nome: string }> }
+    >;
+    instructors: Array<{ id: number; nome: string }>;
+  } | null>(null);
+  const [instructorId, setInstructorId] = useState('');
+  const [simulatorByEquipment, setSimulatorByEquipment] = useState<Record<string, number>>({});
+  const [materializing, setMaterializing] = useState(false);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -385,6 +414,12 @@ export default function PlanejamentoSimuladoresV3() {
       setCaeFileName(null);
       setCaeFileKey(null);
       setCaeDocument(null);
+      setProviderAvailability({
+        AW139: { mode: 'ALL_DAYS', windows: [] },
+        SK76: { mode: 'WINDOWS', windows: [] },
+      });
+      setConfirmedTimes({});
+      setResources(null);
       showToast.success(`Proposta criada com ${data.summary.session_requirements} sessão(ões).`);
       return data;
     } catch (error) {
@@ -404,6 +439,7 @@ export default function PlanejamentoSimuladoresV3() {
       caeFileName?: string | null;
       caeFileKey?: string | null;
       caeDocument?: CaeAvailabilityDocument | null;
+      providerAvailability?: ProviderAvailability;
     },
     silent = false,
   ): Promise<SavedDraft | null> => {
@@ -415,6 +451,7 @@ export default function PlanejamentoSimuladoresV3() {
     const nextCaeFileKey = overrides?.caeFileKey !== undefined ? overrides.caeFileKey : caeFileKey;
     const nextCaeDocument =
       overrides?.caeDocument !== undefined ? overrides.caeDocument : caeDocument;
+    const nextProviderAvailability = overrides?.providerAvailability ?? providerAvailability;
     if (!nextProposal || nextBaseNeeds.length === 0) return null;
 
     try {
@@ -429,6 +466,7 @@ export default function PlanejamentoSimuladoresV3() {
         cae_file_name: nextCaeFileName,
         cae_file_key: nextCaeFileKey,
         cae_document: nextCaeDocument,
+        provider_availability: nextProviderAvailability,
       };
       const data = await apiJson<SavedDraft>(
         draftId
@@ -474,6 +512,7 @@ export default function PlanejamentoSimuladoresV3() {
       setCaeFileName(data.cae_file_name);
       setCaeFileKey(data.cae_file_key);
       setCaeDocument(data.cae_document);
+      if (data.provider_availability) setProviderAvailability(data.provider_availability);
       setDraftId(data.draft_id);
       setDraftStatus(data.workflow_status);
       setSwap(null);
@@ -745,6 +784,148 @@ export default function PlanejamentoSimuladoresV3() {
     }
   };
 
+  const pairingBlocks = () =>
+    proposal?.classes.flatMap((trainingClass) =>
+      trainingClass.blocks.map((block) => ({
+        need_ids: block.sessions.map((session) => session.need_id),
+      })),
+    ) || [];
+
+  const suggestDates = async () => {
+    if (!proposal || baseNeeds.length === 0) return;
+    try {
+      setLoading(true);
+      const data = await apiJson<{
+        classes: PlanningClass[];
+        provider_availability: ProviderAvailability;
+      }>('/api/simuladores/planejamento-v2/sugerir-datas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reference_date: todayIso(),
+          session_needs: baseNeeds,
+          pairing_blocks: pairingBlocks(),
+          provider_availability: providerAvailability,
+        }),
+      });
+      const next = { ...proposal, classes: data.classes };
+      setProposal(next);
+      setProviderAvailability(data.provider_availability);
+      if (draftId)
+        await persistDraft(
+          'AGUARDANDO_CAE',
+          { proposal: next, providerAvailability: data.provider_availability },
+          true,
+        );
+      showToast.success('Datas sugeridas conforme disponibilidade CAE e escala.');
+    } catch (error) {
+      showToast.error(frontendErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmTimes = async () => {
+    if (!proposal) return;
+    const confirmed = proposal.classes
+      .flatMap((item) => item.blocks)
+      .filter((block) => block.pairing !== 'SEM_DUPLA')
+      .map((block) => ({
+        need_ids: block.sessions.map((session) => session.need_id),
+        ...(confirmedTimes[block.block_id] || {}),
+      }));
+    if (confirmed.some((item) => !item.date || !item.start_time || !item.end_time)) {
+      showToast.error('Informe data, início e fim de todos os blocos com dupla.');
+      return;
+    }
+    try {
+      setLoading(true);
+      const data = await apiJson<RepairResponse & { cae_document?: CaeAvailabilityDocument }>(
+        '/api/simuladores/planejamento-v2/confirmar-horarios',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            reference_date: todayIso(),
+            session_needs: baseNeeds,
+            pairing_blocks: pairingBlocks(),
+            provider_availability: providerAvailability,
+            confirmed_blocks: confirmed,
+          }),
+        },
+      );
+      const next: Proposal = {
+        ...proposal,
+        classes: data.classes,
+        cae_comparison: data.cae_comparison,
+        summary: { ...proposal.summary, ...data.summary },
+      };
+      setProposal(next);
+      if (data.cae_document) setCaeDocument(data.cae_document);
+      const saved = await persistDraft(
+        'PLANEJADO',
+        { proposal: next, caeDocument: data.cae_document || caeDocument, providerAvailability },
+        true,
+      );
+      if (saved) showToast.success('Horários CAE confirmados e planejamento salvo.');
+    } catch (error) {
+      showToast.error(frontendErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadResources = async () => {
+    let id = draftId;
+    if (!id) {
+      const saved = await persistDraft('PLANEJADO', undefined, true);
+      if (!saved) return;
+      id = saved.draft_id;
+    }
+    if (!id) return;
+    try {
+      const data = await apiJson<NonNullable<typeof resources>>(
+        `/api/simuladores/planejamento-v2/rascunhos/${encodeURIComponent(id)}/recursos`,
+      );
+      setResources(data);
+      const resolved: Record<string, number> = {};
+      Object.entries(data.simulators).forEach(([key, value]) => {
+        if (value.status === 'RESOLVED' && value.simulator_id) resolved[key] = value.simulator_id;
+      });
+      setSimulatorByEquipment(resolved);
+    } catch (error) {
+      showToast.error(frontendErrorMessage(error));
+    }
+  };
+
+  const materializeAll = async () => {
+    if (!draftId || !instructorId) {
+      showToast.error('Selecione o instrutor.');
+      return;
+    }
+    try {
+      setMaterializing(true);
+      await apiJson(
+        `/api/simuladores/planejamento-v2/rascunhos/${encodeURIComponent(draftId)}/materializar`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instructor_id: Number(instructorId),
+            simulator_by_equipment: simulatorByEquipment,
+          }),
+        },
+      );
+      setDraftStatus('AGENDADO');
+      await loadDrafts();
+      showToast.success('Todas as sessões confirmadas foram criadas no calendário.');
+    } catch (error) {
+      showToast.error(frontendErrorMessage(error));
+    } finally {
+      setMaterializing(false);
+    }
+  };
+
   const saveCurrent = async () => {
     if (!proposal) return;
     const status: DraftWorkflowStatus = proposal.cae_comparison
@@ -898,7 +1079,9 @@ export default function PlanejamentoSimuladoresV3() {
           setText(8, false, slate);
           const timing = slot
             ? `${formatDate(slot.date)} · ${slot.start_time}–${slot.end_time}`
-            : `Alvo até ${formatDate(block.target_date)} · data a confirmar`;
+            : block.suggested_date
+              ? `Data sugerida ${formatDate(block.suggested_date)} · horário a confirmar`
+              : `Alvo até ${formatDate(block.target_date)} · data a confirmar`;
           doc.text(
             `${timing} · ${block.duration_minutes} min · ${pairingLabel(block.pairing)}`,
             margin + 6,
@@ -1162,6 +1345,285 @@ export default function PlanejamentoSimuladoresV3() {
       )}
 
       {proposal && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+            2. Disponibilidade CAE e datas sugeridas
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            AW139 fica disponível todos os dias por padrão. Para S76, informe um ou mais períodos em
+            que o equipamento estará disponível na CAE.
+          </p>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            {['AW139', 'SK76'].map((code) => {
+              const rule = providerAvailability[code] || { mode: 'WINDOWS' as const, windows: [] };
+              return (
+                <div
+                  key={code}
+                  className="rounded-lg border border-slate-200 p-3 dark:border-slate-800"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <strong>{equipmentLabel(code)}</strong>
+                    <select
+                      className={inputClass}
+                      value={rule.mode}
+                      onChange={(e) =>
+                        setProviderAvailability((prev) => ({
+                          ...prev,
+                          [code]: { ...rule, mode: e.target.value as 'ALL_DAYS' | 'WINDOWS' },
+                        }))
+                      }
+                    >
+                      <option value="ALL_DAYS">Todos os dias</option>
+                      <option value="WINDOWS">Períodos específicos</option>
+                    </select>
+                  </div>
+                  {rule.mode === 'WINDOWS' && (
+                    <div className="mt-3 space-y-2">
+                      {rule.windows.map((window, index) => (
+                        <div
+                          key={`${code}-${index}`}
+                          className="grid grid-cols-[1fr_1fr_auto] gap-2"
+                        >
+                          <input
+                            aria-label={`${code} início ${index + 1}`}
+                            type="date"
+                            className={inputClass}
+                            value={window.start_date}
+                            onChange={(e) =>
+                              setProviderAvailability((prev) => ({
+                                ...prev,
+                                [code]: {
+                                  ...rule,
+                                  windows: rule.windows.map((w, i) =>
+                                    i === index ? { ...w, start_date: e.target.value } : w,
+                                  ),
+                                },
+                              }))
+                            }
+                          />
+                          <input
+                            aria-label={`${code} fim ${index + 1}`}
+                            type="date"
+                            className={inputClass}
+                            value={window.end_date}
+                            onChange={(e) =>
+                              setProviderAvailability((prev) => ({
+                                ...prev,
+                                [code]: {
+                                  ...rule,
+                                  windows: rule.windows.map((w, i) =>
+                                    i === index ? { ...w, end_date: e.target.value } : w,
+                                  ),
+                                },
+                              }))
+                            }
+                          />
+                          <button
+                            type="button"
+                            className="px-2 text-sm text-red-600"
+                            onClick={() =>
+                              setProviderAvailability((prev) => ({
+                                ...prev,
+                                [code]: {
+                                  ...rule,
+                                  windows: rule.windows.filter((_, i) => i !== index),
+                                },
+                              }))
+                            }
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        className="text-sm font-semibold text-blue-700"
+                        onClick={() =>
+                          setProviderAvailability((prev) => ({
+                            ...prev,
+                            [code]: {
+                              ...rule,
+                              windows: [...rule.windows, { start_date: '', end_date: '' }],
+                            },
+                          }))
+                        }
+                      >
+                        + Adicionar período
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={() => void suggestDates()}
+            disabled={loading}
+            className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            Sugerir datas
+          </button>
+        </section>
+      )}
+
+      {proposal &&
+        proposal.classes.some((item) =>
+          item.blocks.some(
+            (block) => block.suggested_date || block.schedule_status === 'SCHEDULED',
+          ),
+        ) && (
+          <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+              3. Confirmação CAE — datas e horários
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Depois que a CAE confirmar os horários, registre-os aqui. O PDF continua disponível
+              como apoio, mas não é obrigatório.
+            </p>
+            <div className="mt-4 space-y-2">
+              {proposal.classes
+                .flatMap((item) => item.blocks)
+                .filter((block) => block.pairing !== 'SEM_DUPLA')
+                .map((block) => {
+                  const value = confirmedTimes[block.block_id] || {
+                    date: block.scheduled_slot?.date || block.suggested_date || '',
+                    start_time: block.scheduled_slot?.start_time || '',
+                    end_time: block.scheduled_slot?.end_time || '',
+                  };
+                  return (
+                    <div
+                      key={block.block_id}
+                      className="grid gap-2 rounded-lg bg-slate-50 p-3 md:grid-cols-[1fr_160px_130px_130px] dark:bg-slate-900/60"
+                    >
+                      <div className="text-sm">
+                        <strong>
+                          {block.sessions.map((session) => session.employee_name).join(' + ')}
+                        </strong>
+                        <div className="text-xs text-slate-500">
+                          {equipmentLabel(block.equipment)} · {block.duration_minutes} min
+                        </div>
+                      </div>
+                      <input
+                        aria-label={`Data ${block.block_id}`}
+                        type="date"
+                        className={inputClass}
+                        value={value.date}
+                        onChange={(e) =>
+                          setConfirmedTimes((prev) => ({
+                            ...prev,
+                            [block.block_id]: { ...value, date: e.target.value },
+                          }))
+                        }
+                      />
+                      <input
+                        aria-label={`Início ${block.block_id}`}
+                        type="time"
+                        className={inputClass}
+                        value={value.start_time}
+                        onChange={(e) =>
+                          setConfirmedTimes((prev) => ({
+                            ...prev,
+                            [block.block_id]: { ...value, start_time: e.target.value },
+                          }))
+                        }
+                      />
+                      <input
+                        aria-label={`Fim ${block.block_id}`}
+                        type="time"
+                        className={inputClass}
+                        value={value.end_time}
+                        onChange={(e) =>
+                          setConfirmedTimes((prev) => ({
+                            ...prev,
+                            [block.block_id]: { ...value, end_time: e.target.value },
+                          }))
+                        }
+                      />
+                    </div>
+                  );
+                })}
+            </div>
+            <button
+              type="button"
+              onClick={() => void confirmTimes()}
+              disabled={loading}
+              className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              Aplicar horários confirmados
+            </button>
+          </section>
+        )}
+
+      {proposal && draftStatus === 'PLANEJADO' && (
+        <section className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-5 dark:border-emerald-900 dark:bg-emerald-950/20">
+          <h3 className="text-base font-semibold">4. Criar sessões no calendário</h3>
+          {!resources ? (
+            <button
+              type="button"
+              onClick={() => void loadResources()}
+              className="mt-3 min-h-11 rounded-lg border border-emerald-400 px-4 text-sm font-semibold"
+            >
+              Preparar agendamento em lote
+            </button>
+          ) : (
+            <div className="mt-3 space-y-3">
+              <label className="block text-xs font-medium">
+                Instrutor
+                <select
+                  className={`${inputClass} mt-1 w-full`}
+                  value={instructorId}
+                  onChange={(e) => setInstructorId(e.target.value)}
+                >
+                  <option value="">Selecione</option>
+                  {resources.instructors.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {Object.entries(resources.simulators).map(([code, resolution]) => (
+                <label key={code} className="block text-xs font-medium">
+                  Simulador {equipmentLabel(code)}
+                  <select
+                    className={`${inputClass} mt-1 w-full`}
+                    value={simulatorByEquipment[code] || ''}
+                    onChange={(e) =>
+                      setSimulatorByEquipment((prev) => ({
+                        ...prev,
+                        [code]: Number(e.target.value),
+                      }))
+                    }
+                  >
+                    <option value="">Selecione</option>
+                    {resolution.status === 'RESOLVED' && resolution.simulator_id && (
+                      <option value={resolution.simulator_id}>
+                        Simulador compatível #{resolution.simulator_id}
+                      </option>
+                    )}
+                    {(resolution.candidates || []).map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+              <button
+                type="button"
+                disabled={materializing}
+                onClick={() => void materializeAll()}
+                className="min-h-11 rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Criar todas as sessões no calendário
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {proposal && (
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -1240,8 +1702,11 @@ export default function PlanejamentoSimuladoresV3() {
                                     {formatDate(session.expiry_date)}
                                   </div>
                                   <div className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
-                                    {session.training_program_name || session.qualification_name} ·{' '}
-                                    {session.session_code}
+                                    {session.session_name} · {session.session_code}
+                                    <span className="block text-[11px] text-slate-500">
+                                      Obrigação individual:{' '}
+                                      {session.training_program_name || session.qualification_name}
+                                    </span>
                                   </div>
                                   {sessionCoverageLabel(session) && (
                                     <div className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">

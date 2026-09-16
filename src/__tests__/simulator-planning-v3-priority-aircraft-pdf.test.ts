@@ -47,13 +47,35 @@ describe('simulator planning V3 priority, aircraft filter and report UX', () => 
     const route = source(ROUTE);
     expect(route).toContain('AND data_conclusao IS NOT NULL');
     expect(route).toContain("AND date(data_conclusao) <= date('now')");
-    expect(route).toContain("'CONCLUIDA','CONCLUIDO','RENOVADA','VALIDA','VÁLIDA','VENCIDA','PROXIMA_VENCIMENTO','VENCENDO','VENCENDO_30'");
+    expect(route).toContain(
+      "'CONCLUIDA','CONCLUIDO','RENOVADA','VALIDA','VÁLIDA','VENCIDA','PROXIMA_VENCIMENTO','VENCENDO','VENCENDO_30'",
+    );
     expect(route).toContain("OR TRIM(COALESCE(status,'')) = ''");
+  });
+
+  it('supports manual CAE windows, suggested dates, confirmed times and bulk calendar creation', () => {
+    const page = source(PAGE);
+    const crew = source(CREW_ROUTE);
+    expect(page).toContain('Disponibilidade CAE e datas sugeridas');
+    expect(page).toContain('Adicionar período');
+    expect(page).toContain('/sugerir-datas');
+    expect(page).toContain('/confirmar-horarios');
+    expect(page).toContain('Criar todas as sessões no calendário');
+    expect(page).toContain('/materializar');
+    expect(page).toContain('Data sugerida');
+    expect(crew).toContain("'/sugerir-datas'");
+    expect(crew).toContain("'/confirmar-horarios'");
+  });
+
+  it('separates operational session identity from each participant obligation', () => {
+    const page = source(PAGE);
+    expect(page).toContain('Obrigação individual:');
+    expect(page).toContain('{session.session_name} · {session.session_code}');
   });
 
   it('renders the PDF with visual hierarchy, status palettes and summary cards', () => {
     const page = source(PAGE);
-    expect(page).toContain("doc.setFillColor(...navy)");
+    expect(page).toContain('doc.setFillColor(...navy)');
     expect(page).toContain('summaryCards');
     expect(page).toContain('statusPalette');
     expect(page).toContain('roundedRect');
