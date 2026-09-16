@@ -2,8 +2,8 @@
 
 // Staging-only authenticated acceptance for simulator planning persistence (#275).
 // Uses only qa_examiner_training synthetic data. It never targets production,
-// never prints tokens/passwords/employee PII, and never materializes simulator
-// sessions or qualifications from a persisted draft.
+// never prints tokens/passwords/employee PII. Its synthetic runtime draft may be
+// materialized only by the paired Playwright staging QA and is rolled back by the fixture workflow.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
