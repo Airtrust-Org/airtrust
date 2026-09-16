@@ -5,6 +5,7 @@ export const SAFE_METHODS: readonly string[];
 export const MUTATION_METHODS: readonly string[];
 export const SUPPRESSED_EXTERNAL_RESOURCE_HOSTS: readonly string[];
 export const SUPPRESSED_READ_ONLY_POST_PATHS: readonly string[];
+export const READ_ONLY_OPERATIONAL_POST_PATHS: readonly string[];
 export const STAGING_HOST_ALLOWLIST: readonly string[];
 export const STAGING_API_HOST_ALLOWLIST: readonly string[];
 export const PRODUCTION_HOST_PATTERNS: readonly RegExp[];

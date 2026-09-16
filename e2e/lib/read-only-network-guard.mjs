@@ -19,7 +19,8 @@
  *      It is a read-only i18n fallback, but the Worker forwards text to Google,
  *      so it must not become an exfiltration channel during PR QA.
  *   7. Allowlisted host + POST -> ALLOW only when the pathname is in
- *      AUTH_POST_ALLOWLIST; otherwise BLOCK (operational-post).
+ *      AUTH_POST_ALLOWLIST or the explicit side-effect-free planning query list;
+ *      otherwise BLOCK (operational-post).
  *   8. DELETE / PATCH / PUT and every other method -> BLOCK.
  *
  * The browser authenticates against the REAL staging API — no fake JWT, no
@@ -52,6 +53,14 @@ export const SUPPRESSED_EXTERNAL_RESOURCE_HOSTS = Object.freeze([
 ]);
 
 export const SUPPRESSED_READ_ONLY_POST_PATHS = Object.freeze(['/api/public/translate']);
+
+// These planner endpoints use POST for structured query payloads but perform no
+// persistence. They are explicitly allowed so staging browser QA can exercise
+// the exact crew/session chooser interactions without permitting any write API.
+export const READ_ONLY_OPERATIONAL_POST_PATHS = Object.freeze([
+  '/api/simuladores/planejamento-v2/candidatos',
+  '/api/simuladores/planejamento-v2/alternativas-sessao',
+]);
 
 /**
  * The ONLY hosts any request may reach during this QA — for every method.
@@ -161,6 +170,13 @@ export function classifyRequest({ method, url }) {
       );
     if (pathAllowed) {
       return { decision: 'allow', reason: `auth-post:${host}${pathname}` };
+    }
+
+    const readOnlyOperationalPost =
+      STAGING_API_HOST_ALLOWLIST.includes(host) &&
+      READ_ONLY_OPERATIONAL_POST_PATHS.includes(pathname);
+    if (readOnlyOperationalPost) {
+      return { decision: 'allow', reason: `read-only-operational-post:${host}${pathname}` };
     }
     return { decision: 'block', reason: `operational-post:${host}${pathname}` };
   }

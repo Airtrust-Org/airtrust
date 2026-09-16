@@ -119,6 +119,112 @@ function buildDb() {
   };
 }
 
+function buildProgramBackedDb() {
+  return {
+    prepare: vi.fn((query: string) => {
+      let bound: unknown[] = [];
+      const statement = {
+        bind: (...args: unknown[]) => {
+          bound = args;
+          return statement;
+        },
+        first: async () => {
+          if (query.includes("FROM sqlite_master WHERE type='table' AND name=?")) {
+            const table = String(bound[0] || '');
+            if (['treinamento_programas', 'treinamento_programa_modelos'].includes(table)) {
+              return { name: table };
+            }
+            return null;
+          }
+          if (query.includes('COUNT(*) AS total FROM treinamento_programa_modelos')) {
+            // Two configured rows, but only S1 resolves to an active/current model.
+            // This reproduces a globally incomplete cycle while the clicked S1 is valid.
+            return { total: 2 };
+          }
+          if (query.includes('FROM empresas_config')) {
+            return {
+              planejamento_simulador_antecedencia_dias: 90,
+              planejamento_simulador_regra_quinzena: 'FOLGA',
+              planejamento_simulador_preferencia_sessoes_por_dia: 2,
+              planejamento_simulador_preferencia_minutos_por_dia: 240,
+              planejamento_simulador_permitir_quebra_preferencia: 1,
+              planejamento_simulador_permitir_sessao_compartilhada: 1,
+              planejamento_simulador_preferir_mesmo_treinamento: 1,
+              planejamento_simulador_preferir_mesma_sessao: 1,
+              planejamento_simulador_aprovacao_obrigatoria: 0,
+            };
+          }
+          return null;
+        },
+        all: async () => {
+          if (query.includes('FROM funcionarios f')) {
+            return { results: [10, 30].map((id) => ({ id })) };
+          }
+          if (query.includes('FROM modelos_sessao')) {
+            return {
+              results: [
+                {
+                  id: 101,
+                  qualificacao_tipo_id: 1,
+                  duracao_estimada: 120,
+                  ordem_no_treinamento: 1,
+                  modelo_aeronave: 'AW139',
+                },
+              ],
+            };
+          }
+          if (query.includes('FROM treinamento_programas WHERE')) {
+            return {
+              results: [
+                {
+                  id: 501,
+                  empresa_id: 1,
+                  qualificacao_tipo_id: 1,
+                  codigo: 'AW139-PER',
+                  nome: 'AW139 — Currículo de Voo — Periódico',
+                  tipo_treinamento: 'RECORRENTE',
+                  carga_horaria: 8,
+                  validade_meses: 12,
+                  uso_unico: 0,
+                  total_ciclos: 1,
+                  ano_base: 2026,
+                  ciclo_ano_base: 1,
+                  proximo_programa_id: null,
+                  ativo: 1,
+                },
+              ],
+            };
+          }
+          if (
+            query.includes('FROM treinamento_programa_modelos pm') &&
+            query.includes('JOIN modelos_sessao_versionamento')
+          ) {
+            return {
+              results: [
+                {
+                  id: 9001,
+                  programa_id: 501,
+                  ciclo: 1,
+                  modelo_sessao_id: 101,
+                  codigo_canonico: 'A139-P-01/04-C2',
+                  ordem: 1,
+                  nome: 'Sessão 1',
+                  duracao_estimada: 120,
+                  modelo_aeronave: 'AW139',
+                  tipo_sessao_codigo: 'FFS',
+                },
+              ],
+            };
+          }
+          if (query.includes('FROM treinamento_dependencias')) return { results: [] };
+          return { results: [] };
+        },
+      };
+      return statement;
+    }),
+  };
+}
+
 function buildApp() {
   const app = new Hono<{ Bindings: Env }>();
   app.route('/api/simuladores/planejamento-v2', router);
@@ -147,6 +253,94 @@ describe('simulator planning V2 manual crew replacement', () => {
     expect(body.data.candidates.map((candidate: any) => candidate.employee_name)).toEqual([
       'Castro',
     ]);
+  });
+
+  it('filters a stale candidate without blocking valid available crew choices', async () => {
+    const app = buildApp();
+    const stale = {
+      ...need(20, 'Adriana'),
+      need_id: '20:1:999',
+      session_model_id: 999,
+      session_code: 'STALE',
+    };
+    const response = await app.request(
+      '/api/simuladores/planejamento-v2/candidatos',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          reference_date: '2027-06-01',
+          anchor: need(10, 'Filipe'),
+          candidates: [stale, need(30, 'Castro')],
+        }),
+      },
+      { DB: buildDb() } as unknown as Env,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.data.candidates.map((candidate: any) => candidate.employee_name)).toEqual([
+      'Castro',
+    ]);
+  });
+
+  it('keeps the clicked anchor fail-closed when its session snapshot is stale', async () => {
+    const app = buildApp();
+    const staleAnchor = {
+      ...need(10, 'Filipe'),
+      need_id: '10:1:999',
+      session_model_id: 999,
+      session_code: 'STALE',
+    };
+    const response = await app.request(
+      '/api/simuladores/planejamento-v2/candidatos',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          reference_date: '2027-06-01',
+          anchor: staleAnchor,
+          candidates: [need(30, 'Castro')],
+        }),
+      },
+      { DB: buildDb() } as unknown as Env,
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as any;
+    expect(body.error).toContain('currículo vigente');
+  });
+
+  it('accepts a valid clicked session even when another row in the same program cycle is unresolved', async () => {
+    const app = buildApp();
+    const current = {
+      ...need(30, 'Castro'),
+      training_program_id: 501,
+      training_program_type: 'RECORRENTE',
+      training_program_name: 'AW139 — Currículo de Voo — Periódico',
+      curriculum_cycle: 1,
+      curriculum_reference_year: 2027,
+      session_code: 'A139-P-01/04-C2',
+    };
+    const response = await app.request(
+      '/api/simuladores/planejamento-v2/alternativas-sessao',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          reference_date: '2027-06-01',
+          anchor: null,
+          current,
+          candidates: [],
+        }),
+      },
+      { DB: buildProgramBackedDb() } as unknown as Env,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.success).toBe(true);
+    expect(body.data.alternatives).toEqual([]);
   });
 
   it('re-pairs employees with the same fixed work scale and leaves the opposite scale unmatched under FOLGA policy', async () => {
@@ -222,6 +416,12 @@ describe('simulator planning V2 manual crew replacement', () => {
       session_name: 'Sessão 2',
       session_order: 2,
     };
+    const stale = {
+      ...current,
+      need_id: '30:1:999',
+      session_model_id: 999,
+      session_code: 'STALE',
+    };
     const response = await app.request(
       '/api/simuladores/planejamento-v2/alternativas-sessao',
       {
@@ -231,7 +431,7 @@ describe('simulator planning V2 manual crew replacement', () => {
           reference_date: '2027-06-01',
           anchor,
           current,
-          candidates: [sessionTwo],
+          candidates: [stale, sessionTwo],
         }),
       },
       { DB: buildDb() } as unknown as Env,
