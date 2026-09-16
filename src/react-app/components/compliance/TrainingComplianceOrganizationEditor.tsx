@@ -8,14 +8,25 @@ type Catalogs = {
   setores: Array<{ id: number; nome: string }>;
   funcoes: Array<{ id: number; nome: string }>;
   setor_funcoes: Array<{ setor_id: number; funcao_id: number }>;
+  aeronaves_modelos?: Array<{ modelo: string; aeronaves: number }>;
 };
 
 type MatrixRow = {
   qualificacao_tipo_id: number;
   qualificacao_tipo_codigo: string | null;
   qualificacao_tipo_nome: string;
-  efetiva: { id: number; escopo: string; obrigatoriedade: string } | null;
-  direta: { id: number; escopo: string; obrigatoriedade: string } | null;
+  efetiva: {
+    id: number;
+    escopo: string;
+    obrigatoriedade: string;
+    aeronave_modelo?: string | null;
+  } | null;
+  direta: {
+    id: number;
+    escopo: string;
+    obrigatoriedade: string;
+    aeronave_modelo?: string | null;
+  } | null;
   impacto: {
     pessoas: number;
     atingidas_neste_nivel: number;
@@ -53,6 +64,7 @@ export function TrainingComplianceOrganizationEditor() {
   const queryClient = useQueryClient();
   const [setorId, setSetorId] = useState<number | null>(null);
   const [funcaoId, setFuncaoId] = useState<number | null>(null);
+  const [aeronaveModelo, setAeronaveModelo] = useState<string>('');
   const catalogs = useQuery({
     queryKey: ['training-compliance', 'catalogs'],
     queryFn: async () =>
@@ -68,11 +80,12 @@ export function TrainingComplianceOrganizationEditor() {
     return (catalogs.data?.funcoes || []).filter((f) => ids.has(f.id));
   }, [catalogs.data, setorId]);
   const matrix = useQuery({
-    queryKey: ['training-compliance', 'org-matrix', setorId, funcaoId],
+    queryKey: ['training-compliance', 'org-matrix', setorId, funcaoId, aeronaveModelo],
     enabled: Boolean(setorId),
     queryFn: async () => {
       const params = new URLSearchParams({ setor_id: String(setorId) });
       if (funcaoId) params.set('funcao_id', String(funcaoId));
+      if (aeronaveModelo) params.set('aeronave_modelo', aeronaveModelo);
       return readJson<MatrixRow[]>(
         await fetchWithAuth(`/api/compliance-treinamentos/matriz-organizacao?${params}`),
       );
@@ -101,6 +114,7 @@ export function TrainingComplianceOrganizationEditor() {
         escopo: funcaoId ? 'SETOR_FUNCAO' : 'SETOR',
         setor_id: setorId,
         funcao_id: funcaoId,
+        aeronave_modelo: aeronaveModelo || null,
         obrigatoriedade: value,
         origem: 'EMPRESA',
         referencia_normativa: 'Matriz organizacional de treinamentos',
@@ -137,11 +151,13 @@ export function TrainingComplianceOrganizationEditor() {
         <div>
           <h3 className="font-semibold text-slate-900">Matriz por organização</h3>
           <p className="text-sm text-slate-500">
-            Defina primeiro o setor e, opcionalmente, o cargo. A regra mais específica prevalece.
+            Defina o setor, opcionalmente o cargo e, para tripulantes, o equipamento. A regra mais
+            específica prevalece. Tripulantes vinculados a mais de uma aeronave recebem as regras
+            de todos os equipamentos que operam.
           </p>
         </div>
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-3">
         <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           Setor
           <select
@@ -149,6 +165,7 @@ export function TrainingComplianceOrganizationEditor() {
             onChange={(e) => {
               setSetorId(e.target.value ? Number(e.target.value) : null);
               setFuncaoId(null);
+              setAeronaveModelo('');
             }}
             className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
           >
@@ -175,6 +192,25 @@ export function TrainingComplianceOrganizationEditor() {
               </option>
             ))}
           </select>
+        </label>
+        <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Aeronave / equipamento
+          <select
+            value={aeronaveModelo}
+            disabled={!setorId}
+            onChange={(e) => setAeronaveModelo(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100"
+          >
+            <option value="">Todos os equipamentos</option>
+            {(catalogs.data?.aeronaves_modelos || []).map((item) => (
+              <option key={item.modelo} value={item.modelo}>
+                {item.modelo}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block normal-case font-normal tracking-normal text-slate-400">
+            Use para treinamentos específicos de AW139, SK76 ou outro modelo cadastrado.
+          </span>
         </label>
       </div>
       {!setorId ? (
@@ -203,9 +239,18 @@ export function TrainingComplianceOrganizationEditor() {
                     </div>
                   </td>
                   <td className="px-3 py-3 text-slate-600">
-                    {row.efetiva
-                      ? `${labels[row.efetiva.obrigatoriedade] || row.efetiva.obrigatoriedade} · ${row.efetiva.escopo.replace('_', ' + ')}`
-                      : 'Sem regra'}
+                    {row.efetiva ? (
+                      <>
+                        {`${labels[row.efetiva.obrigatoriedade] || row.efetiva.obrigatoriedade} · ${row.efetiva.escopo.replace('_', ' + ')}`}
+                        {row.efetiva.aeronave_modelo ? (
+                          <span className="ml-1 text-xs text-slate-400">
+                            · {row.efetiva.aeronave_modelo}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      'Sem regra'
+                    )}
                   </td>
                   <td className="min-w-[260px] px-3 py-3 text-xs text-slate-600">
                     <div className="font-medium text-slate-800">
