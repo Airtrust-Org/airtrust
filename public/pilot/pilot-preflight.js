@@ -1,6 +1,7 @@
 const ONLINE_FLIGHT_LIST_SELECTOR = '#online-flights';
 const DETAIL_CARD_SELECTOR = '#flight-detail-card';
 const DETAIL_STATUS_SELECTOR = '#detail-status';
+const CLOSE_DETAIL_BUTTON_SELECTOR = '#close-detail';
 const LEASE_BUTTON_SELECTOR = '#prepare-edit-offline';
 const OPEN_DRAFT_BUTTON_SELECTOR = '#open-local-draft';
 const LEASE_STATUS_SELECTOR = '#lease-status';
@@ -203,6 +204,24 @@ function handlePrepareIntent(event) {
     event.preventDefault();
     event.stopPropagation();
     return;
+  }
+
+  const editor = document.querySelector(EDITOR_CARD_SELECTOR);
+  if (isVisible(editor)) {
+    event.preventDefault();
+    event.stopPropagation();
+    setStatus(
+      document.querySelector(SESSION_STATUS_SELECTOR),
+      'Feche o rascunho atual para concluir o salvamento local antes de preparar outro voo.',
+      'error',
+    );
+    return;
+  }
+
+  const detailCard = document.querySelector(DETAIL_CARD_SELECTOR);
+  if (isVisible(detailCard)) {
+    const closeDetail = document.querySelector(CLOSE_DETAIL_BUTTON_SELECTOR);
+    if (closeDetail instanceof HTMLButtonElement) closeDetail.click();
   }
 
   preflightRunning = true;
