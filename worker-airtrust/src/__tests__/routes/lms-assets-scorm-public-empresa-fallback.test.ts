@@ -241,6 +241,28 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
       );
     });
 
+    it('uses the current active package when reviewing a completed enrollment', async () => {
+      verifyJWTMock.mockResolvedValue({ empresa_id: 6, funcionario_id: 42, role: 'admin', sub: '42' });
+      const currentPrefix = 'lms/scorm/6/99/_candidates/current-package/';
+      const db = createMockDb([[
+        'FROM lms_matriculas m',
+        { first: () => ({ id: 77, funcionario_id: 42, empresa_id: 6, status: 'CONCLUIDO', curso_id: 99, data_inicio: '2026-09-14 14:46:16', ativo: 1, publicado: 1, scorm_package_r2_prefix: currentPrefix }) },
+      ]]);
+
+      const response = await createApp().fetch(
+        new Request('https://airtrust-api-staging.airtrust.workers.dev/assets/session', {
+          method: 'POST', headers: { Authorization: 'Bearer test.jwt.token', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matricula_id: 77 }),
+        }), makeEnv(db), {} as ExecutionContext,
+      );
+
+      expect(response.status).toBe(200);
+      expect(generateJWTMock).toHaveBeenCalledWith(
+        expect.objectContaining({ asset_matricula_id: 77, asset_curso_id: 99, asset_scorm_package_prefix: currentPrefix }),
+        'test-secret', expect.any(Number),
+      );
+    });
+
     it('sets the scoped asset-session cookie with SameSite=None; Secure on a non-local request', async () => {
       verifyJWTMock.mockResolvedValue({
         empresa_id: 6,

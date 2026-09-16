@@ -344,7 +344,8 @@ function packagePrefixForAssetToken(payload: JwtPayload, empresaId: number | str
   if (payload.token_type !== 'lms_asset' || !payload.asset_matricula_id) return currentPrefix;
   return validScopedScormPackagePrefix(payload.asset_scorm_package_prefix, empresaId, cursoId) ?? currentPrefix;
 }
-async function resolveEnrollmentPackagePrefix(db: D1Database, params: { empresaId: number; cursoId: number; dataInicio: string | null; currentPrefix: string | null }): Promise<string | null> {
+async function resolveEnrollmentPackagePrefix(db: D1Database, params: { empresaId: number; cursoId: number; status: string; dataInicio: string | null; currentPrefix: string | null }): Promise<string | null> {
+  if (String(params.status || '').trim().toUpperCase() === 'CONCLUIDO') return params.currentPrefix;
   if (!params.dataInicio || !params.currentPrefix) return params.currentPrefix;
   const historical = await db.prepare(`SELECT r2_prefix FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND activated_at IS NOT NULL AND activated_at <= ? ORDER BY activated_at DESC LIMIT 1`).bind(params.empresaId, params.cursoId, params.dataInicio).first<{ r2_prefix: string | null }>();
   return validScopedScormPackagePrefix(historical?.r2_prefix, params.empresaId, params.cursoId) ?? params.currentPrefix;
@@ -574,7 +575,7 @@ app.post('/assets/session', auth(), async (c) => {
 
     cursoId = matricula.curso_id;
     scopedMatriculaId = matricula.id;
-    scopedScormPackagePrefix = (await resolveEnrollmentPackagePrefix(c.env.DB, { empresaId, cursoId, dataInicio: matricula.data_inicio, currentPrefix: matricula.scorm_package_r2_prefix })) ?? undefined;
+    scopedScormPackagePrefix = (await resolveEnrollmentPackagePrefix(c.env.DB, { empresaId, cursoId, status: matricula.status, dataInicio: matricula.data_inicio, currentPrefix: matricula.scorm_package_r2_prefix })) ?? undefined;
   } else if (preview && requestedCursoId > 0) {
     if (!isPreviewAllowedRole(accessPayload.role)) {
       throw new ApiError('Acesso negado', 403);
