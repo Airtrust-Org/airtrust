@@ -14,7 +14,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_treinamento_requisitos_unique_active
     COALESCE(setor_id, 0),
     COALESCE(funcao_id, 0),
     COALESCE(funcionario_id, 0),
-    COALESCE(NULLIF(TRIM(aeronave_modelo), ''), '')
+    COALESCE(UPPER(TRIM(aeronave_modelo)), '')
   )
   WHERE ativo = 1 AND deleted_at IS NULL;
 
