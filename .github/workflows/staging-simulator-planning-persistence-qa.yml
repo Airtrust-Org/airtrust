@@ -212,6 +212,8 @@ jobs:
             echo '- availability source = employee Escala 1/2: PASS'
             echo '- planning without published monthly roster: PASS'
             echo '- common date derived from fixed employee scale: PASS'
+            echo '- AW139 all-days + two persisted S76 provider windows: PASS'
+            echo '- suggested CAI date derived from provider availability + Escala 1/2: PASS'
             echo '- manual crew lock + recalculation: PASS'
             echo '- AGUARDANDO_CAE persistence and reopen: PASS'
             echo '- CAE_RECEBIDA persistence: PASS'
@@ -223,6 +225,10 @@ jobs:
             echo '- final persisted reopen/list: PASS'
             echo '- cross-tenant draft lookup: 404'
             echo '- real browser resume: PASS'
+            echo '- real browser CAI time confirmation: PASS'
+            echo '- real browser bulk calendar materialization: PASS'
+            echo '- synthetic instructor/simulator resource assignment: PASS'
+            echo '- synthetic materialized session rollback: PASS'
             echo '- client PDF generation/download: PASS'
             echo '- production target/data used: no'
             echo '- credentials emitted: no'
@@ -277,7 +283,8 @@ jobs:
 
   result:
     name: Staging Simulator Planning Persistence QA Passed
-    needs: [guard, d1-provision-simulator-planning-fixture, qa, d1-cleanup-simulator-planning-fixture]
+    needs:
+      [guard, d1-provision-simulator-planning-fixture, qa, d1-cleanup-simulator-planning-fixture]
     if: always()
     runs-on: ubuntu-latest
     steps:

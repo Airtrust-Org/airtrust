@@ -102,7 +102,16 @@ function withQaMarker(proposal, className) {
   };
 }
 
-function draftPayload({ inicio, fim, workflowStatus, proposal, baseNeeds, locks, caeDocument = null }) {
+function draftPayload({
+  inicio,
+  fim,
+  workflowStatus,
+  proposal,
+  baseNeeds,
+  locks,
+  caeDocument = null,
+  providerAvailability,
+}) {
   return {
     vencimento_inicio: inicio,
     vencimento_fim: fim,
@@ -113,12 +122,15 @@ function draftPayload({ inicio, fim, workflowStatus, proposal, baseNeeds, locks,
     cae_file_name: caeDocument ? 'qa-cae-disponibilidade.pdf' : null,
     cae_file_key: null,
     cae_document: caeDocument,
+    ...(providerAvailability ? { provider_availability: providerAvailability } : {}),
   };
 }
 
 async function main() {
   const baseUrl = assertAllowedStagingBaseUrl(process.env.STAGING_API_BASE_URL || DEFAULT_BASE_URL);
-  const email = String(process.env.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid');
+  const email = String(
+    process.env.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid',
+  );
   const password = String(process.env.QA_EXAMINER_ADMIN_PASSWORD || '');
   assert(password, 'QA_EXAMINER_ADMIN_PASSWORD ausente.');
 
@@ -127,7 +139,11 @@ async function main() {
 
   const [funcionariosRes, tiposRes, modelosRes] = await Promise.all([
     authFetch(baseUrl, token, '/api/funcionarios'),
-    authFetch(baseUrl, token, `/api/qualificacoes/tipos?search=${encodeURIComponent(QUAL_CODE)}&limit=20`),
+    authFetch(
+      baseUrl,
+      token,
+      `/api/qualificacoes/tipos?search=${encodeURIComponent(QUAL_CODE)}&limit=20`,
+    ),
     authFetch(baseUrl, token, '/api/simuladores/modelos-sessao'),
   ]);
   assert(funcionariosRes.status === 200, 'funcionarios QA indisponíveis');
@@ -138,7 +154,9 @@ async function main() {
   const alfa = funcionarios.find((item) => item?.matricula === 'QA-PARTICIPANTE-ALFA');
   const bravo = funcionarios.find((item) => item?.matricula === 'QA-PARTICIPANTE-BRAVO');
   const charlie = funcionarios.find((item) => item?.matricula === 'QA-PARTICIPANTE-CHARLIE');
-  const qualification = rows(tiposRes.json).find((item) => String(item?.codigo || '').toUpperCase() === QUAL_CODE);
+  const qualification = rows(tiposRes.json).find(
+    (item) => String(item?.codigo || '').toUpperCase() === QUAL_CODE,
+  );
   const model = rows(modelosRes.json).find((item) => item?.codigo === MODEL_CODE);
   assert(
     alfa?.id && bravo?.id && charlie?.id && qualification?.id && model?.id,
@@ -196,26 +214,40 @@ async function main() {
   const charlieNeed = needByEmployee.get(Number(charlie.id));
   assert(alfaNeed && bravoNeed && charlieNeed, 'não foi possível mapear as 3 necessidades QA');
 
-  const candidates = await authFetch(baseUrl, token, '/api/simuladores/planejamento-v2/candidatos', {
-    method: 'POST',
-    body: JSON.stringify({ reference_date: referenceDate, anchor: alfaNeed, candidates: [charlieNeed] }),
-  });
+  const candidates = await authFetch(
+    baseUrl,
+    token,
+    '/api/simuladores/planejamento-v2/candidatos',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        reference_date: referenceDate,
+        anchor: alfaNeed,
+        candidates: [charlieNeed],
+      }),
+    },
+  );
   assert(candidates.status === 200, `candidatos QA retornou ${candidates.status}`);
   const charlieCandidate = (candidates.json?.data?.candidates || []).find(
     (candidate) => String(candidate?.need_id || '') === String(charlieNeed.need_id),
   );
   const fixedScaleCommonDate = String(charlieCandidate?.availability?.common_date || '');
-  assert(/^\d{4}-\d{2}-\d{2}$/.test(fixedScaleCommonDate), 'Escala 1/2 não produziu data comum para Alfa+Charlie');
+  assert(
+    /^\d{4}-\d{2}-\d{2}$/.test(fixedScaleCommonDate),
+    'Escala 1/2 não produziu data comum para Alfa+Charlie',
+  );
   assert(
     ['FOLGA', 'TRABALHO'].includes(String(charlieCandidate?.availability?.anchor_state || '')) &&
       ['FOLGA', 'TRABALHO'].includes(String(charlieCandidate?.availability?.candidate_state || '')),
     'candidatos QA retornou estado DESCONHECIDO apesar da Escala 1/2 sintética',
   );
 
-  const locks = [{
-    anchor_need_id: String(alfaNeed.need_id),
-    partner_need_id: String(charlieNeed.need_id),
-  }];
+  const locks = [
+    {
+      anchor_need_id: String(alfaNeed.need_id),
+      partner_need_id: String(charlieNeed.need_id),
+    },
+  ];
 
   const repaired = await authFetch(baseUrl, token, '/api/simuladores/planejamento-v2/reparear', {
     method: 'POST',
@@ -223,12 +255,21 @@ async function main() {
   });
   assert(repaired.status === 200, `reparear QA retornou ${repaired.status}`);
   assert(Array.isArray(repaired.json?.data?.classes), 'reparear QA sem classes');
-  const repairedPairing = pairingSignature(proposalPairingBlocks({ classes: repaired.json.data.classes }));
-  assert(repairedPairing.length === 2, `reparear QA deveria produzir 2 blocos; recebeu ${repairedPairing.length}`);
-  assert(repairedPairing.some((item) => item === String(bravoNeed.need_id)), 'reparear QA não preservou Bravo como singleton');
+  const repairedPairing = pairingSignature(
+    proposalPairingBlocks({ classes: repaired.json.data.classes }),
+  );
+  assert(
+    repairedPairing.length === 2,
+    `reparear QA deveria produzir 2 blocos; recebeu ${repairedPairing.length}`,
+  );
+  assert(
+    repairedPairing.some((item) => item === String(bravoNeed.need_id)),
+    'reparear QA não preservou Bravo como singleton',
+  );
   assert(
     repairedPairing.some(
-      (item) => item.includes(String(alfaNeed.need_id)) && item.includes(String(charlieNeed.need_id)),
+      (item) =>
+        item.includes(String(alfaNeed.need_id)) && item.includes(String(charlieNeed.need_id)),
     ),
     'reparear QA não preservou lock Alfa+Charlie',
   );
@@ -245,14 +286,16 @@ async function main() {
 
   const created = await authFetch(baseUrl, token, '/api/simuladores/planejamento-v2/rascunhos', {
     method: 'POST',
-    body: JSON.stringify(draftPayload({
-      inicio,
-      fim,
-      workflowStatus: 'AGUARDANDO_CAE',
-      proposal: manualProposal,
-      baseNeeds: needs,
-      locks,
-    })),
+    body: JSON.stringify(
+      draftPayload({
+        inicio,
+        fim,
+        workflowStatus: 'AGUARDANDO_CAE',
+        proposal: manualProposal,
+        baseNeeds: needs,
+        locks,
+      }),
+    ),
   });
   assert(created.status === 201, `persistência inicial retornou ${created.status}`);
   const draftId = String(created.json?.data?.draft_id || '');
@@ -268,7 +311,10 @@ async function main() {
   assert(resumed.status === 200, `retomada retornou ${resumed.status}`);
   assert(resumed.json?.data?.workflow_status === 'AGUARDANDO_CAE', 'retomada perdeu status');
   assert(resumed.json?.data?.locks?.length === 1, 'retomada perdeu ajuste manual de dupla');
-  assert(resumed.json?.data?.proposal?.qa_marker === MARKER, 'retomada perdeu snapshot da proposta');
+  assert(
+    resumed.json?.data?.proposal?.qa_marker === MARKER,
+    'retomada perdeu snapshot da proposta',
+  );
 
   const firstBlock = resumed.json?.data?.proposal?.classes?.[0]?.blocks?.[0];
   assert(firstBlock?.target_date && Number(firstBlock?.duration_minutes) > 0, 'bloco QA inválido');
@@ -285,19 +331,21 @@ async function main() {
       received_at: new Date().toISOString(),
       extracted_at: new Date().toISOString(),
     },
-    slots: [{
-      external_ref: 'QA-CAE-SLOT-1',
-      equipment: 'AW139',
-      date: slotDate,
-      start_time: startTime,
-      end_date: addDays(slotDate, end.dayOffset),
-      end_time: end.time,
-      duration_minutes: duration,
-      state: 'OFFERED',
-      company: 'QA Synthetic',
-      participants_mentioned: [],
-      confidence: 1,
-    }],
+    slots: [
+      {
+        external_ref: 'QA-CAE-SLOT-1',
+        equipment: 'AW139',
+        date: slotDate,
+        start_time: startTime,
+        end_date: addDays(slotDate, end.dayOffset),
+        end_time: end.time,
+        duration_minutes: duration,
+        state: 'OFFERED',
+        company: 'QA Synthetic',
+        participants_mentioned: [],
+        confidence: 1,
+      },
+    ],
     warnings: [],
   };
 
@@ -307,19 +355,24 @@ async function main() {
     `/api/simuladores/planejamento-v2/rascunhos/${encodeURIComponent(draftId)}`,
     {
       method: 'PUT',
-      body: JSON.stringify(draftPayload({
-        inicio,
-        fim,
-        workflowStatus: 'CAE_RECEBIDA',
-        proposal: manualProposal,
-        baseNeeds: needs,
-        locks,
-        caeDocument,
-      })),
+      body: JSON.stringify(
+        draftPayload({
+          inicio,
+          fim,
+          workflowStatus: 'CAE_RECEBIDA',
+          proposal: manualProposal,
+          baseNeeds: needs,
+          locks,
+          caeDocument,
+        }),
+      ),
     },
   );
   assert(caeReceived.status === 200, `CAE_RECEBIDA retornou ${caeReceived.status}`);
-  assert(caeReceived.json?.data?.workflow_status === 'CAE_RECEBIDA', 'status CAE_RECEBIDA não persistiu');
+  assert(
+    caeReceived.json?.data?.workflow_status === 'CAE_RECEBIDA',
+    'status CAE_RECEBIDA não persistiu',
+  );
 
   // Segunda retomada real: a comparação CAE deve partir exclusivamente do snapshot
   // persistido, não de objetos mantidos em memória antes de CAE_RECEBIDA.
@@ -329,40 +382,76 @@ async function main() {
     `/api/simuladores/planejamento-v2/rascunhos/${encodeURIComponent(draftId)}`,
   );
   assert(resumedWithCae.status === 200, `retomada pós-CAE retornou ${resumedWithCae.status}`);
-  assert(resumedWithCae.json?.data?.workflow_status === 'CAE_RECEBIDA', 'retomada pós-CAE perdeu status');
-  assert(resumedWithCae.json?.data?.cae_document?.slots?.length === 1, 'retomada pós-CAE perdeu disponibilidade');
-  assert(resumedWithCae.json?.data?.proposal?.qa_marker === MARKER, 'retomada pós-CAE perdeu proposta persistida');
+  assert(
+    resumedWithCae.json?.data?.workflow_status === 'CAE_RECEBIDA',
+    'retomada pós-CAE perdeu status',
+  );
+  assert(
+    resumedWithCae.json?.data?.cae_document?.slots?.length === 1,
+    'retomada pós-CAE perdeu disponibilidade',
+  );
+  assert(
+    resumedWithCae.json?.data?.proposal?.qa_marker === MARKER,
+    'retomada pós-CAE perdeu proposta persistida',
+  );
 
   const persistedProposal = resumedWithCae.json.data.proposal;
   const persistedNeeds = Array.isArray(resumedWithCae.json?.data?.base_needs)
     ? resumedWithCae.json.data.base_needs
     : [];
-  assert(persistedNeeds.length === needs.length, 'retomada pós-CAE perdeu necessidades-base persistidas');
+  assert(
+    persistedNeeds.length === needs.length,
+    'retomada pós-CAE perdeu necessidades-base persistidas',
+  );
   const pairingBlocks = proposalPairingBlocks(persistedProposal);
   const pairingBeforeCae = pairingSignature(pairingBlocks);
-  const compared = await authFetch(baseUrl, token, '/api/simuladores/planejamento-v2/comparar-cae', {
-    method: 'POST',
-    body: JSON.stringify({
-      reference_date: referenceDate,
-      session_needs: persistedNeeds,
-      pairing_blocks: pairingBlocks,
-      cae_availability: resumedWithCae.json.data.cae_document,
-    }),
-  });
+  const compared = await authFetch(
+    baseUrl,
+    token,
+    '/api/simuladores/planejamento-v2/comparar-cae',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        reference_date: referenceDate,
+        session_needs: persistedNeeds,
+        pairing_blocks: pairingBlocks,
+        cae_availability: resumedWithCae.json.data.cae_document,
+      }),
+    },
+  );
   assert(compared.status === 200, `comparação CAE retornou ${compared.status}`);
   const comparison = compared.json?.data?.cae_comparison;
   assert(comparison && typeof comparison === 'object', 'comparação CAE ausente');
-  const comparedNeedIds = new Set(uniqueNeeds({ classes: compared.json?.data?.classes || [] }).map((need) => String(need.need_id)));
+  const comparedNeedIds = new Set(
+    uniqueNeeds({ classes: compared.json?.data?.classes || [] }).map((need) =>
+      String(need.need_id),
+    ),
+  );
   assert(comparedNeedIds.size === needs.length, 'comparação CAE alterou a composição da proposta');
-  for (const need of needs) assert(comparedNeedIds.has(String(need.need_id)), 'comparação CAE substituiu uma necessidade existente');
-  const pairingAfterCae = pairingSignature(proposalPairingBlocks({ classes: compared.json?.data?.classes || [] }));
+  for (const need of needs)
+    assert(
+      comparedNeedIds.has(String(need.need_id)),
+      'comparação CAE substituiu uma necessidade existente',
+    );
+  const pairingAfterCae = pairingSignature(
+    proposalPairingBlocks({ classes: compared.json?.data?.classes || [] }),
+  );
   assert(
     JSON.stringify(pairingAfterCae) === JSON.stringify(pairingBeforeCae),
     `comparação CAE alterou as duplas/singles da proposta: antes=${JSON.stringify(pairingBeforeCae)} depois=${JSON.stringify(pairingAfterCae)}`,
   );
-  assert(Number(comparison.unmatched_crew_blocks || 0) === 1, 'comparação CAE deveria manter exatamente 1 singleton sem dupla');
-  assert(Number(comparison.no_slot_blocks || 0) === 0, 'comparação CAE não deveria perder o slot da dupla bloqueada');
-  assert(Number(comparison.scheduled_blocks || 0) === 1, 'comparação CAE deveria agendar exatamente a dupla bloqueada');
+  assert(
+    Number(comparison.unmatched_crew_blocks || 0) === 1,
+    'comparação CAE deveria manter exatamente 1 singleton sem dupla',
+  );
+  assert(
+    Number(comparison.no_slot_blocks || 0) === 0,
+    'comparação CAE não deveria perder o slot da dupla bloqueada',
+  );
+  assert(
+    Number(comparison.scheduled_blocks || 0) === 1,
+    'comparação CAE deveria agendar exatamente a dupla bloqueada',
+  );
   const finalStatus =
     Number(comparison.no_slot_blocks || 0) === 0 &&
     Number(comparison.unmatched_crew_blocks || 0) === 0
@@ -386,15 +475,17 @@ async function main() {
     `/api/simuladores/planejamento-v2/rascunhos/${encodeURIComponent(draftId)}`,
     {
       method: 'PUT',
-      body: JSON.stringify(draftPayload({
-        inicio,
-        fim,
-        workflowStatus: finalStatus,
-        proposal: finalProposal,
-        baseNeeds: needs,
-        locks,
-        caeDocument,
-      })),
+      body: JSON.stringify(
+        draftPayload({
+          inicio,
+          fim,
+          workflowStatus: finalStatus,
+          proposal: finalProposal,
+          baseNeeds: needs,
+          locks,
+          caeDocument,
+        }),
+      ),
     },
   );
   assert(finalized.status === 200, `finalização retornou ${finalized.status}`);
@@ -406,9 +497,15 @@ async function main() {
     `/api/simuladores/planejamento-v2/rascunhos/${encodeURIComponent(draftId)}`,
   );
   assert(reopenedFinal.status === 200, 'reabertura final falhou');
-  assert(reopenedFinal.json?.data?.workflow_status === finalStatus, 'reabertura final perdeu status');
+  assert(
+    reopenedFinal.json?.data?.workflow_status === finalStatus,
+    'reabertura final perdeu status',
+  );
   assert(reopenedFinal.json?.data?.locks?.length === 1, 'reabertura final perdeu lock manual');
-  assert(reopenedFinal.json?.data?.cae_document?.slots?.length === 1, 'reabertura final perdeu CAE');
+  assert(
+    reopenedFinal.json?.data?.cae_document?.slots?.length === 1,
+    'reabertura final perdeu CAE',
+  );
   const persistedFinalPairing = pairingSignature(
     proposalPairingBlocks(reopenedFinal.json?.data?.proposal || {}),
   );
@@ -426,6 +523,132 @@ async function main() {
     list.status === 200 && rows(list.json).some((item) => item?.draft_id === draftId),
     'rascunho final não aparece na listagem',
   );
+
+  const runtimePairNeeds = [alfaNeed, charlieNeed];
+  const runtimePairingBlocks = [
+    {
+      need_ids: runtimePairNeeds.map((need) => String(need.need_id)),
+    },
+  ];
+  const providerAvailability = {
+    AW139: { mode: 'ALL_DAYS', windows: [] },
+    SK76: {
+      mode: 'WINDOWS',
+      windows: [
+        { start_date: addDays(referenceDate, 5), end_date: addDays(referenceDate, 10) },
+        { start_date: addDays(referenceDate, 20), end_date: addDays(referenceDate, 30) },
+      ],
+    },
+  };
+  const suggested = await authFetch(
+    baseUrl,
+    token,
+    '/api/simuladores/planejamento-v2/sugerir-datas',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        reference_date: referenceDate,
+        session_needs: runtimePairNeeds,
+        pairing_blocks: runtimePairingBlocks,
+        provider_availability: providerAvailability,
+      }),
+    },
+  );
+  assert(suggested.status === 200, `sugestão CAI retornou ${suggested.status}`);
+  assert(
+    suggested.json?.data?.provider_availability?.AW139?.mode === 'ALL_DAYS',
+    'sugestão CAI não preservou AW139 todos os dias',
+  );
+  assert(
+    suggested.json?.data?.provider_availability?.SK76?.windows?.length === 2,
+    'sugestão CAI não preservou as duas janelas S76',
+  );
+  const suggestedBlocks = (suggested.json?.data?.classes || []).flatMap(
+    (trainingClass) => trainingClass?.blocks || [],
+  );
+  assert(
+    suggestedBlocks.length === 1,
+    `sugestão CAI esperava 1 bloco; recebeu ${suggestedBlocks.length}`,
+  );
+  const suggestedBlock = suggestedBlocks[0];
+  assert(suggestedBlock?.suggestion_status === 'SUGGESTED', 'bloco QA não recebeu data sugerida');
+  assert(
+    /^\d{4}-\d{2}-\d{2}$/.test(String(suggestedBlock?.suggested_date || '')),
+    'data sugerida QA inválida',
+  );
+
+  const runtimeClassName = `QA Planning CAI Runtime ${Date.now()}`;
+  const runtimeProposal = withQaMarker(
+    {
+      ...generatedProposal,
+      classes: suggested.json.data.classes,
+      summary: { ...(generatedProposal.summary || {}), ...(suggested.json?.data?.summary || {}) },
+      cae_comparison: null,
+    },
+    runtimeClassName,
+  );
+  const runtimeDraft = await authFetch(
+    baseUrl,
+    token,
+    '/api/simuladores/planejamento-v2/rascunhos',
+    {
+      method: 'POST',
+      body: JSON.stringify(
+        draftPayload({
+          inicio,
+          fim,
+          workflowStatus: 'AGUARDANDO_CAE',
+          proposal: runtimeProposal,
+          baseNeeds: runtimePairNeeds,
+          locks: [
+            {
+              anchor_need_id: String(alfaNeed.need_id),
+              partner_need_id: String(charlieNeed.need_id),
+            },
+          ],
+          providerAvailability,
+        }),
+      ),
+    },
+  );
+  assert(runtimeDraft.status === 201, `rascunho CAI runtime retornou ${runtimeDraft.status}`);
+  const runtimeDraftId = String(runtimeDraft.json?.data?.draft_id || '');
+  assert(runtimeDraftId.length > 20, 'rascunho CAI runtime sem draft_id');
+  assert(
+    runtimeDraft.json?.data?.provider_availability?.SK76?.windows?.length === 2,
+    'persistência perdeu janelas S76',
+  );
+
+  const runtimeResources = await authFetch(
+    baseUrl,
+    token,
+    `/api/simuladores/planejamento-v2/rascunhos/${encodeURIComponent(runtimeDraftId)}/recursos`,
+  );
+  assert(
+    runtimeResources.status === 200,
+    `recursos CAI runtime retornou ${runtimeResources.status}`,
+  );
+  const runtimeInstructor = (runtimeResources.json?.data?.instructors || []).find(
+    (item) => item?.nome === 'QA Instrutor Simulador',
+  );
+  assert(runtimeInstructor?.id, 'instrutor sintético CAI não foi resolvido');
+  const runtimeResolution = runtimeResources.json?.data?.simulators?.AW139;
+  assert(runtimeResolution, 'resolução de simulador AW139 ausente');
+  const runtimeSimulatorId =
+    runtimeResolution.status === 'RESOLVED'
+      ? Number(runtimeResolution.simulator_id || 0)
+      : Number(
+          (runtimeResolution.candidates || []).find(
+            (item) => item?.nome === 'QA Simulator Planning AW139',
+          )?.id || 0,
+        );
+  assert(runtimeSimulatorId > 0, 'simulador sintético AW139 não foi resolvido');
+
+  const runtimeDuration = Number(suggestedBlock.duration_minutes || 0);
+  assert(runtimeDuration > 0 && runtimeDuration < 720, 'duração CAI runtime inválida');
+  const runtimeStartTime = '11:00';
+  const runtimeEnd = plusMinutes(runtimeStartTime, runtimeDuration);
+  assert(runtimeEnd.dayOffset === 0, 'sessão QA runtime não pode atravessar meia-noite');
 
   let crossTenantStatus = null;
   if (process.env.STAGING_SMOKE_EMAIL && process.env.STAGING_SMOKE_PASSWORD) {
@@ -445,8 +668,7 @@ async function main() {
   }
 
   const statePath =
-    process.env.QA_SIMULATOR_STATE_PATH ||
-    'qa-state/staging-simulator-planning/state.json';
+    process.env.QA_SIMULATOR_STATE_PATH || 'qa-state/staging-simulator-planning/state.json';
   mkdirSync(dirname(statePath), { recursive: true });
   writeFileSync(
     statePath,
@@ -456,6 +678,13 @@ async function main() {
         class_name: className,
         workflow_status: finalStatus,
         qa_marker: MARKER,
+        runtime_draft_id: runtimeDraftId,
+        runtime_class_name: runtimeClassName,
+        runtime_suggested_date: String(suggestedBlock.suggested_date),
+        runtime_start_time: runtimeStartTime,
+        runtime_end_time: runtimeEnd.time,
+        runtime_instructor_id: Number(runtimeInstructor.id),
+        runtime_simulator_id: runtimeSimulatorId,
       },
       null,
       2,
@@ -478,12 +707,17 @@ async function main() {
     reopened_final: true,
     list_contains_draft: true,
     cross_tenant_status: crossTenantStatus,
+    provider_windows_persisted: true,
+    suggested_date_generated: true,
+    runtime_draft_ready_for_browser_confirmation: true,
     state_path: statePath,
   };
   console.log(JSON.stringify(report, null, 2));
 }
 
 main().catch((error) => {
-  console.error(`STAGING_SIMULATOR_PLANNING_QA_FAILED: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(
+    `STAGING_SIMULATOR_PLANNING_QA_FAILED: ${error instanceof Error ? error.message : String(error)}`,
+  );
   process.exit(1);
 });
