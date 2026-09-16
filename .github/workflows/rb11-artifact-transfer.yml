@@ -1,6 +1,8 @@
 name: RB11 artifact transfer
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - chore/rb11-artifact-transfer
 jobs:
   upload:
     runs-on: ubuntu-latest
