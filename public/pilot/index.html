@@ -364,12 +364,13 @@
       </header>
 
       <section class="card warning">
-        <h2>Pacote real + rascunho offline protegido</h2>
+        <h2>Preparação completa para operação offline</h2>
         <p class="muted">
-          O pacote do voo pode ser consultado sem rede. A edição do rascunho operacional só é
-          liberada após validação de um lease assinado, específico deste usuário, tenant, tablet
-          e voo. A transmissão do rascunho usa outbox cifrada e receipt idempotente quando o
-          ambiente estiver explicitamente habilitado. Este conteúdo não é Diário de Bordo oficial.
+          Antes do voo, use “Preparar para voo”. O AirTrust só confirma “PRONTO PARA USO OFFLINE”
+          depois de verificar o pacote do voo, o lease assinado, o rascunho operacional cifrado e
+          o shell local deste tablet. Depois dessa confirmação, a edição continua sem internet e a
+          transmissão usa outbox cifrada e receipt idempotente quando a conexão retornar. Este
+          conteúdo não é Diário de Bordo oficial.
         </p>
       </section>
 
@@ -417,8 +418,8 @@
         <section id="cached-flights-card" class="card">
           <h2>No tablet</h2>
           <p class="muted">
-            Estes voos podem ser abertos sem internet. A presença local não substitui um lease
-            operacional futuro nem habilita edição.
+            Estes voos podem ser consultados sem internet. Para edição durante a missão, confirme
+            explicitamente o estado “PRONTO PARA USO OFFLINE” antes de perder a conectividade.
           </p>
           <div id="cached-flights" class="list"></div>
         </section>
@@ -426,7 +427,8 @@
         <section id="online-flights-card" class="card">
           <h2>Meus voos autorizados</h2>
           <p class="muted">
-            A lista online usa a sessão AirTrust atual apenas para esta consulta e para o download.
+            “Preparar para voo” baixa e verifica o pacote, prepara a autorização de edição offline
+            e abre o rascunho local. A preparação só termina quando todos esses itens estão prontos.
           </p>
           <div id="online-flights" class="list"></div>
         </section>
@@ -448,12 +450,12 @@
           <div class="lease-box">
             <strong>Edição offline do RDV</strong>
             <p class="muted">
-              Antes do voo, prepare um lease online. Depois de verificado, o lease e os rascunhos
-              ficam cifrados neste tablet e podem ser usados sem conexão até a validade indicada.
+              A preparação normal é automática ao selecionar “Preparar para voo”. Estes controles
+              permanecem disponíveis para revalidar o lease ou reabrir o rascunho local.
             </p>
             <div class="actions">
               <button id="prepare-edit-offline" class="primary" type="button">
-                Preparar edição offline
+                Revalidar edição offline
               </button>
               <button id="open-local-draft" class="secondary" type="button">
                 Abrir rascunho local
@@ -553,5 +555,6 @@
       </div>
     </main>
     <script type="module" src="/pilot/pilot-app.js"></script>
+    <script type="module" src="/pilot/pilot-preflight.js"></script>
   </body>
 </html>

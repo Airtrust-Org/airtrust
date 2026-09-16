@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 const PIN = '654321';
 
-test('Pilot vault survives offline refresh and Service Worker stays isolated', async ({
+test('Pilot vault survives offline refresh, close/reopen and Service Worker stays isolated', async ({
   page,
   context,
 }) => {
@@ -88,6 +88,9 @@ test('Pilot vault survives offline refresh and Service Worker stays isolated', a
   expect(localProof.cachedUrls.some((url) => new URL(url).pathname.startsWith('/api/'))).toBe(
     false,
   );
+  expect(localProof.cachedUrls.some((url) => new URL(url).pathname === '/pilot/pilot-preflight.js')).toBe(
+    true,
+  );
   expect(localProof.registrationScopes.length).toBeGreaterThan(0);
   expect(
     localProof.registrationScopes.every((scope) => new URL(scope).pathname === '/pilot/'),
@@ -108,11 +111,24 @@ test('Pilot vault survives offline refresh and Service Worker stays isolated', a
   await expect(page.locator('#draft')).toHaveValue(marker);
   await expect(page.locator('#save-status')).toContainText('Rascunho recuperado do tablet');
 
-  await context.setOffline(false);
-  await page.goto('/login');
-  await expect(page.locator('input[type="email"]')).toBeVisible();
+  await page.close();
+  const reopened = await context.newPage();
+  reopened.on('pageerror', (error) => pageErrors.push(error.message));
+  await reopened.goto('/pilot/', { waitUntil: 'domcontentloaded' });
+  await expect(reopened.locator('#connectivity')).toContainText('OFFLINE');
+  await expect(reopened.locator('#unlock-title')).toContainText('Desbloquear dados offline');
+  await reopened.locator('#pin').fill(PIN);
+  await reopened.locator('#unlock-button').click();
+  await expect(reopened.locator('#workspace')).toBeVisible();
+  await reopened.locator('#diagnostic-card > summary').click();
+  await expect(reopened.locator('#draft')).toHaveValue(marker);
+  await expect(reopened.locator('#save-status')).toContainText('Rascunho recuperado do tablet');
 
-  const rootController = await page.evaluate(
+  await context.setOffline(false);
+  await reopened.goto('/login');
+  await expect(reopened.locator('input[type="email"]')).toBeVisible();
+
+  const rootController = await reopened.evaluate(
     () => navigator.serviceWorker.controller?.scriptURL || null,
   );
   expect(rootController).toBeNull();
