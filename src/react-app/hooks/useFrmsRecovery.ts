@@ -66,6 +66,16 @@ type RecoveryEnvelope<T> = {
 
 type FrmsRecoveryRequestKind = 'load' | 'submit';
 
+type PendingRecoveryActivity = {
+  required: boolean;
+  input: RecoveryActivityInput | null;
+};
+
+const pendingRecoveryActivities = new Map<string, PendingRecoveryActivity>();
+
+export const RECOVERY_ACTIVITY_REQUIRED_MESSAGE =
+  'Informe como foi sua condição operacional ontem antes de concluir o check-in.';
+
 export function safeFrmsRecoveryError(kind: FrmsRecoveryRequestKind): string {
   return kind === 'submit'
     ? 'Não foi possível registrar a atividade de recuperação. Tente novamente.'
@@ -107,6 +117,40 @@ export function previousOperationalDate(dateYmd?: string): string {
   const base = dateYmd ? new Date(`${dateYmd}T12:00:00Z`) : new Date();
   base.setUTCDate(base.getUTCDate() - 1);
   return base.toISOString().slice(0, 10);
+}
+
+export function stagePendingFrmsRecoveryActivity(
+  referenceDate: string,
+  input: RecoveryActivityInput | null,
+  required = true,
+): void {
+  pendingRecoveryActivities.set(referenceDate, { required, input });
+}
+
+export function clearPendingFrmsRecoveryActivity(referenceDate: string): void {
+  pendingRecoveryActivities.delete(referenceDate);
+}
+
+export function getPendingFrmsRecoveryActivity(
+  referenceDate: string,
+): PendingRecoveryActivity | undefined {
+  return pendingRecoveryActivities.get(referenceDate);
+}
+
+export async function submitPendingFrmsRecoveryActivity(
+  assessmentDate: string,
+): Promise<RecoveryActivityResult | null> {
+  const referenceDate = previousOperationalDate(assessmentDate);
+  const pending = pendingRecoveryActivities.get(referenceDate);
+  if (!pending?.required) return null;
+  if (!pending.input) throw new Error(RECOVERY_ACTIVITY_REQUIRED_MESSAGE);
+
+  const result = await postRecovery<RecoveryActivityResult>(
+    '/frms/readiness/recovery/activity',
+    pending.input,
+  );
+  pendingRecoveryActivities.delete(referenceDate);
+  return result;
 }
 
 export function useFrmsRecoveryContext(referenceDate?: string) {
