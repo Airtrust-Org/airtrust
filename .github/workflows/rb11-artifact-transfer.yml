@@ -1,0 +1,14 @@
+name: RB11 artifact transfer
+on:
+  workflow_dispatch:
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: s76-rb11-scorm
+          path: S76C_SOP_SCORM12_Rev03_AirTrust_V3_2_RB11_COMPLETION_FIX_2026-09-15.zip
+          compression-level: 0
+          retention-days: 1
