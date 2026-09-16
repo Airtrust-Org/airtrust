@@ -775,10 +775,10 @@ app.post('/rascunhos/:draftId/materializar', requireRole('admin', 'manager'), as
   ) {
     return c.json({ success: false, error: 'Instrutor e simuladores são obrigatórios.' }, 400);
   }
+  const empresaId = getTenantContext(c).empresaId;
+  const access = await getEmployeeSectorAccess(c, empresaId);
   for (const need of snapshot.base_needs) {
-    const scoped = await assertFuncionarioInScope(c, need.employee_id);
-    if (!scoped.ok)
-      return c.json({ success: false, error: 'Participante fora do escopo atual.' }, 403);
+    await assertFuncionarioInScope(c.env.DB, empresaId, need.employee_id, access);
   }
   const simulatorByEquipment = Object.fromEntries(
     Object.entries(body.simulator_by_equipment as Record<string, unknown>).map(([key, value]) => [
