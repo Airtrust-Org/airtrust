@@ -88,6 +88,20 @@ function leaseLooksReady() {
   return /Lease (?:verificado e salvo|válido neste tablet)/i.test(text);
 }
 
+async function waitForSelectedPackagePrepared() {
+  await waitFor(
+    () => {
+      const sessionStatus = document.querySelector(SESSION_STATUS_SELECTOR);
+      const text = sessionStatus?.textContent?.trim() || '';
+      if (sessionStatus?.classList.contains('error')) {
+        throw new Error(text || 'Falha ao preparar o pacote do voo.');
+      }
+      return text.includes('Pacote verificado e armazenado no tablet. Consulta offline disponível.');
+    },
+    'O pacote selecionado não foi confirmado no armazenamento local.',
+  );
+}
+
 async function ensureOperationalDraftOpen(runId) {
   const detailCard = await waitFor(
     () => {
@@ -144,6 +158,8 @@ async function runCompleteOfflinePreflight(runId) {
       'attention',
     );
 
+    await waitForSelectedPackagePrepared();
+    if (runId !== preflightRun) return;
     await ensureOperationalDraftOpen(runId);
     if (runId !== preflightRun) return;
     await assertPilotShellReady();
