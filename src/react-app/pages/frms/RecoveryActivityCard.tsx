@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Button from '@/react-app/components/Button';
 import {
   clearPendingFrmsRecoveryActivity,
@@ -88,67 +88,48 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
   const needsDutyWindow =
     activityType === 'ADMIN_TRAINING' || activityType === 'DUTY_TRAVEL' || activityType === 'OTHER';
 
-  useEffect(() => {
-    if (isLoading || isError || !context?.schema_ready || context.flight.detected) {
-      clearPendingFrmsRecoveryActivity(referenceDate);
-      return;
-    }
-
-    if (context.activity && !editing) {
-      clearPendingFrmsRecoveryActivity(referenceDate);
-      return;
-    }
-
-    if (!activityType) {
+  const stageActivity = (nextType: RecoveryActivityType | null) => {
+    setActivityType(nextType);
+    if (!nextType) {
       stagePendingFrmsRecoveryActivity(referenceDate, null, true);
       return;
     }
-
     const input: RecoveryActivityInput = {
       reference_date: referenceDate,
-      activity_type: activityType,
+      activity_type: nextType,
       standby_location:
-        activityType === 'STANDBY_ONSITE'
+        nextType === 'STANDBY_ONSITE'
           ? 'BASE_AIRPORT'
-          : activityType === 'STANDBY_HOME_HOTEL'
+          : nextType === 'STANDBY_HOME_HOTEL'
             ? standbyLocation
             : undefined,
-      immediate_callout_required: needsStandbyDetail ? immediateCallout : undefined,
-      duty_start_time: needsDutyWindow && dutyStart ? dutyStart : undefined,
-      duty_end_time: needsDutyWindow && dutyEnd ? dutyEnd : undefined,
+      immediate_callout_required:
+        nextType === 'STANDBY_HOME_HOTEL' || nextType === 'STANDBY_ONSITE'
+          ? immediateCallout
+          : undefined,
+      duty_start_time:
+        nextType === 'ADMIN_TRAINING' || nextType === 'DUTY_TRAVEL' || nextType === 'OTHER'
+          ? dutyStart || undefined
+          : undefined,
+      duty_end_time:
+        nextType === 'ADMIN_TRAINING' || nextType === 'DUTY_TRAVEL' || nextType === 'OTHER'
+          ? dutyEnd || undefined
+          : undefined,
       notes: notes.trim() || undefined,
-      segments: activityType === 'MIXED' ? segments : undefined,
+      segments: nextType === 'MIXED' ? segments : undefined,
     };
     stagePendingFrmsRecoveryActivity(referenceDate, input, true);
-  }, [
-    activityType,
-    context,
-    dutyEnd,
-    dutyStart,
-    editing,
-    immediateCallout,
-    isError,
-    isLoading,
-    needsDutyWindow,
-    needsStandbyDetail,
-    notes,
-    referenceDate,
-    segments,
-    standbyLocation,
-  ]);
-
-  useEffect(
-    () => () => {
-      clearPendingFrmsRecoveryActivity(referenceDate);
-    },
-    [referenceDate],
-  );
+  };
 
   if (isLoading || isError || !context?.schema_ready) return null;
-  if (context.flight.detected) return null;
+  if (context.flight.detected) {
+    clearPendingFrmsRecoveryActivity(referenceDate);
+    return null;
+  }
 
   const existingType = String(context.activity?.activity_type || '') as RecoveryActivityType;
   if (context.activity && !editing) {
+    clearPendingFrmsRecoveryActivity(referenceDate);
     return (
       <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -185,7 +166,7 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
             <button
               key={option.value}
               type="button"
-              onClick={() => setActivityType(option.value)}
+              onClick={() => stageActivity(option.value)}
               className={`rounded-xl border p-3 text-left transition-colors ${
                 selected
                   ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-200'
@@ -206,7 +187,17 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
               Onde permaneceu?
               <select
                 value={standbyLocation}
-                onChange={(event) => setStandbyLocation(event.target.value as typeof standbyLocation)}
+                onChange={(event) => {
+                  const value = event.target.value as typeof standbyLocation;
+                  setStandbyLocation(value);
+                  const input: RecoveryActivityInput = {
+                    reference_date: referenceDate,
+                    activity_type: 'STANDBY_HOME_HOTEL',
+                    standby_location: value,
+                    immediate_callout_required: immediateCallout,
+                  };
+                  stagePendingFrmsRecoveryActivity(referenceDate, input, true);
+                }}
                 className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
               >
                 <option value="HOTEL">Hotel / alojamento</option>
@@ -222,13 +213,39 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
             <div className="mt-1 flex gap-2">
               <Button
                 variant={immediateCallout === true ? 'primary' : 'secondary'}
-                onClick={() => setImmediateCallout(true)}
+                onClick={() => {
+                  setImmediateCallout(true);
+                  stagePendingFrmsRecoveryActivity(
+                    referenceDate,
+                    {
+                      reference_date: referenceDate,
+                      activity_type: activityType!,
+                      standby_location:
+                        activityType === 'STANDBY_ONSITE' ? 'BASE_AIRPORT' : standbyLocation,
+                      immediate_callout_required: true,
+                    },
+                    true,
+                  );
+                }}
               >
                 Sim
               </Button>
               <Button
                 variant={immediateCallout === false ? 'primary' : 'secondary'}
-                onClick={() => setImmediateCallout(false)}
+                onClick={() => {
+                  setImmediateCallout(false);
+                  stagePendingFrmsRecoveryActivity(
+                    referenceDate,
+                    {
+                      reference_date: referenceDate,
+                      activity_type: activityType!,
+                      standby_location:
+                        activityType === 'STANDBY_ONSITE' ? 'BASE_AIRPORT' : standbyLocation,
+                      immediate_callout_required: false,
+                    },
+                    true,
+                  );
+                }}
               >
                 Não
               </Button>
@@ -244,7 +261,20 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
             <input
               type="time"
               value={dutyStart}
-              onChange={(event) => setDutyStart(event.target.value)}
+              onChange={(event) => {
+                setDutyStart(event.target.value);
+                stagePendingFrmsRecoveryActivity(
+                  referenceDate,
+                  {
+                    reference_date: referenceDate,
+                    activity_type: activityType!,
+                    duty_start_time: event.target.value || undefined,
+                    duty_end_time: dutyEnd || undefined,
+                    notes: notes.trim() || undefined,
+                  },
+                  true,
+                );
+              }}
               className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2"
             />
           </label>
@@ -253,7 +283,20 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
             <input
               type="time"
               value={dutyEnd}
-              onChange={(event) => setDutyEnd(event.target.value)}
+              onChange={(event) => {
+                setDutyEnd(event.target.value);
+                stagePendingFrmsRecoveryActivity(
+                  referenceDate,
+                  {
+                    reference_date: referenceDate,
+                    activity_type: activityType!,
+                    duty_start_time: dutyStart || undefined,
+                    duty_end_time: event.target.value || undefined,
+                    notes: notes.trim() || undefined,
+                  },
+                  true,
+                );
+              }}
               className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2"
             />
           </label>
@@ -277,6 +320,11 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                     activity_type: event.target.value as RecoveryActivitySegmentInput['activity_type'],
                   };
                   setSegments(next);
+                  stagePendingFrmsRecoveryActivity(
+                    referenceDate,
+                    { reference_date: referenceDate, activity_type: 'MIXED', segments: next },
+                    true,
+                  );
                 }}
                 className="min-h-11 rounded-xl border border-slate-200 px-3 py-2 text-sm"
               >
@@ -293,6 +341,11 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                   const next = [...segments];
                   next[index] = { ...next[index], start_time: event.target.value };
                   setSegments(next);
+                  stagePendingFrmsRecoveryActivity(
+                    referenceDate,
+                    { reference_date: referenceDate, activity_type: 'MIXED', segments: next },
+                    true,
+                  );
                 }}
                 className="min-h-11 rounded-xl border border-slate-200 px-3 py-2"
                 aria-label={`Início do período ${index + 1}`}
@@ -304,6 +357,11 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                   const next = [...segments];
                   next[index] = { ...next[index], end_time: event.target.value };
                   setSegments(next);
+                  stagePendingFrmsRecoveryActivity(
+                    referenceDate,
+                    { reference_date: referenceDate, activity_type: 'MIXED', segments: next },
+                    true,
+                  );
                 }}
                 className="min-h-11 rounded-xl border border-slate-200 px-3 py-2"
                 aria-label={`Fim do período ${index + 1}`}
@@ -313,7 +371,15 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
           {segments.length < 3 && (
             <Button
               variant="secondary"
-              onClick={() => setSegments([...segments, { activity_type: 'OFF_DUTY' }])}
+              onClick={() => {
+                const next = [...segments, { activity_type: 'OFF_DUTY' as const }];
+                setSegments(next);
+                stagePendingFrmsRecoveryActivity(
+                  referenceDate,
+                  { reference_date: referenceDate, activity_type: 'MIXED', segments: next },
+                  true,
+                );
+              }}
             >
               Adicionar período
             </Button>
@@ -326,7 +392,20 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
           Observação
           <textarea
             value={notes}
-            onChange={(event) => setNotes(event.target.value)}
+            onChange={(event) => {
+              setNotes(event.target.value);
+              stagePendingFrmsRecoveryActivity(
+                referenceDate,
+                {
+                  reference_date: referenceDate,
+                  activity_type: activityType,
+                  duty_start_time: needsDutyWindow && dutyStart ? dutyStart : undefined,
+                  duty_end_time: needsDutyWindow && dutyEnd ? dutyEnd : undefined,
+                  notes: event.target.value.trim() || undefined,
+                },
+                true,
+              );
+            }}
             rows={2}
             maxLength={1000}
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
@@ -344,7 +423,13 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
           Esta resposta será salva junto com as demais informações quando você concluir o check-in.
         </p>
         {editing && (
-          <Button variant="secondary" onClick={() => setEditing(false)}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setEditing(false);
+              clearPendingFrmsRecoveryActivity(referenceDate);
+            }}
+          >
             Cancelar correção
           </Button>
         )}
