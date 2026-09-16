@@ -112,7 +112,7 @@ function createMultiCandidateBucket(
   } as unknown as R2Bucket;
 }
 
-function createMockDb(scormPackageR2Prefix: string | null) {
+function createMockDb(scormPackageR2Prefix: string | null, enrollmentStatus = 'EM_ANDAMENTO') {
   return {
     prepare: vi.fn((query: string) => ({
       bind: () => ({
@@ -126,7 +126,7 @@ function createMockDb(scormPackageR2Prefix: string | null) {
             };
           }
           if (query.includes('FROM lms_matriculas')) {
-            return { id: 1 };
+            return { id: 1, status: enrollmentStatus };
           }
           return null;
         },
@@ -140,9 +140,9 @@ function createMockDb(scormPackageR2Prefix: string | null) {
   } as unknown as D1Database;
 }
 
-function makeEnv(bucket: R2Bucket, scormPackageR2Prefix: string | null): Env {
+function makeEnv(bucket: R2Bucket, scormPackageR2Prefix: string | null, enrollmentStatus = 'EM_ANDAMENTO'): Env {
   return {
-    DB: createMockDb(scormPackageR2Prefix),
+    DB: createMockDb(scormPackageR2Prefix, enrollmentStatus),
     BUCKET: bucket,
     JWT_SECRET: 'test-secret',
     CORS_ORIGINS: '',
@@ -196,6 +196,28 @@ describe('SCORM asset resolution — active/pinned candidate prefix (BUG 1 regre
     expect(res.status).toBe(200);
     expect(res.headers.get('X-LMS-Asset-Key')).toBe(`${SUPERSEDED_PREFIX}index.html`);
     expect(res.headers.get('X-LMS-Asset-Key')).not.toContain('7503f97e-active');
+  });
+
+  it('ignores a stale matrícula package pin after the enrollment is completed', async () => {
+    verifyJWTMock.mockResolvedValue({
+      empresa_id: EMPRESA_ID,
+      funcionario_id: 42,
+      role: 'admin',
+      sub: '42',
+      token_type: 'lms_asset',
+      asset_scope: 'course_assets',
+      asset_curso_id: CURSO_ID,
+      asset_matricula_id: 346,
+      asset_scorm_package_prefix: SUPERSEDED_PREFIX,
+    });
+    const bucket = createMultiCandidateBucket();
+    const env = makeEnv(bucket, ACTIVE_PREFIX, 'CONCLUIDO');
+
+    const res = await getAsset(`/api/lms/scorm/assets/${EMPRESA_ID}/${CURSO_ID}/index.html`, env);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-LMS-Asset-Key')).toBe(`${ACTIVE_PREFIX}index.html`);
+    expect(res.headers.get('X-LMS-Asset-Key')).not.toContain('12f7d6fd-old');
   });
 
   it('serves the file from the ACTIVE candidate prefix, not the lexicographically-first superseded one', async () => {
