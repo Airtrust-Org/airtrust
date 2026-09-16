@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RecoveryActivityCard from '../RecoveryActivityCard';
 import type { RecoveryContextData } from '@/react-app/hooks/useFrmsRecovery';
 
-const submitMutateAsync = vi.fn();
+const stagePendingMock = vi.fn();
+const clearPendingMock = vi.fn();
 let contextValue: {
   data: RecoveryContextData | undefined;
   isLoading: boolean;
@@ -17,13 +18,10 @@ vi.mock('@/react-app/hooks/useFrmsRecovery', async () => {
   return {
     ...actual,
     useFrmsRecoveryContext: () => contextValue,
-    useSubmitFrmsRecoveryActivity: () => ({ mutateAsync: submitMutateAsync, isPending: false }),
+    stagePendingFrmsRecoveryActivity: (...args: unknown[]) => stagePendingMock(...args),
+    clearPendingFrmsRecoveryActivity: (...args: unknown[]) => clearPendingMock(...args),
   };
 });
-
-vi.mock('sonner', () => ({
-  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
-}));
 
 function baseContext(overrides: Partial<RecoveryContextData> = {}): RecoveryContextData {
   return {
@@ -46,8 +44,8 @@ function baseContext(overrides: Partial<RecoveryContextData> = {}): RecoveryCont
 
 describe('RecoveryActivityCard', () => {
   beforeEach(() => {
-    submitMutateAsync.mockReset();
-    submitMutateAsync.mockResolvedValue({ source_discrepancy: false });
+    stagePendingMock.mockReset();
+    clearPendingMock.mockReset();
     contextValue = { data: baseContext(), isLoading: false, isError: false };
   });
 
@@ -69,6 +67,7 @@ describe('RecoveryActivityCard', () => {
     };
     const { container } = render(<RecoveryActivityCard today="2026-06-05" />);
     expect(container).toBeEmptyDOMElement();
+    expect(clearPendingMock).toHaveBeenCalledWith('2026-06-04');
   });
 
   it('asks for the previous-day activity when SIGVOOS has no flight, including the source-gap option', () => {
@@ -80,32 +79,39 @@ describe('RecoveryActivityCard', () => {
     expect(screen.getByText('Administrativo / treinamento')).toBeInTheDocument();
     expect(screen.getByText('Mais de uma situação')).toBeInTheDocument();
     expect(screen.getByText('Houve voo, mas não aparece no sistema')).toBeInTheDocument();
+    expect(screen.getByText(/será salva junto com as demais informações/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /salvar condição de ontem/i })).not.toBeInTheDocument();
   });
 
-  it('saves an off-duty classification with the previous operational date', async () => {
+  it('keeps an off-duty classification pending for the final check-in submit', async () => {
     render(<RecoveryActivityCard today="2026-06-05" />);
     fireEvent.click(screen.getByText('Folga / descanso'));
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar condição de ontem' }));
-    await vi.waitFor(() => expect(submitMutateAsync).toHaveBeenCalledTimes(1));
-    expect(submitMutateAsync.mock.calls[0][0]).toMatchObject({
-      reference_date: '2026-06-04',
-      activity_type: 'OFF_DUTY',
-    });
+
+    await vi.waitFor(() =>
+      expect(stagePendingMock).toHaveBeenCalledWith(
+        '2026-06-04',
+        expect.objectContaining({
+          reference_date: '2026-06-04',
+          activity_type: 'OFF_DUTY',
+        }),
+        true,
+      ),
+    );
+    expect(screen.queryByRole('button', { name: /salvar condição de ontem/i })).not.toBeInTheDocument();
   });
 
-  it('records "flight not in source" without granting recovery and surfaces a discrepancy warning', async () => {
-    const { toast } = await import('sonner');
-    submitMutateAsync.mockResolvedValue({ source_discrepancy: true });
+  it('keeps a source discrepancy pending without persisting it before the final submit', async () => {
     render(<RecoveryActivityCard today="2026-06-05" />);
     fireEvent.click(screen.getByText('Houve voo, mas não aparece no sistema'));
-    // The observation field appears for the source-gap answer.
     expect(screen.getByText('Observação')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar condição de ontem' }));
-    await vi.waitFor(() => expect(submitMutateAsync).toHaveBeenCalledTimes(1));
-    expect(submitMutateAsync.mock.calls[0][0]).toMatchObject({
-      activity_type: 'FLIGHT_NOT_IN_SOURCE',
-    });
-    await vi.waitFor(() => expect(toast.warning).toHaveBeenCalled());
+
+    await vi.waitFor(() =>
+      expect(stagePendingMock).toHaveBeenCalledWith(
+        '2026-06-04',
+        expect.objectContaining({ activity_type: 'FLIGHT_NOT_IN_SOURCE' }),
+        true,
+      ),
+    );
   });
 
   it('shows the recorded classification without implying an automatic effectiveness bonus', () => {
@@ -117,5 +123,6 @@ describe('RecoveryActivityCard', () => {
     render(<RecoveryActivityCard today="2026-06-05" />);
     expect(screen.getByText('Atividade de ontem registrada')).toBeInTheDocument();
     expect(screen.getByText(/não cria bônus automático de efetividade/i)).toBeInTheDocument();
+    expect(clearPendingMock).toHaveBeenCalledWith('2026-06-04');
   });
 });
