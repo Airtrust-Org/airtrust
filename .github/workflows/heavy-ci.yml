@@ -195,7 +195,7 @@ jobs:
       - run: npm --prefix worker-airtrust ci
       - run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources 2>/dev/null || true
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
       - name: Run public auth-boundary E2E with dev bypass disabled
         shell: bash
         run: |
@@ -225,7 +225,13 @@ jobs:
           CI=true VITE_API_URL=http://127.0.0.1:8787 \
             npx playwright test \
               --config=playwright.ci.config.ts \
+              --project=chromium \
               e2e/ci/login-public-smoke.spec.ts \
+              e2e/ci/pilot-offline-persistence.spec.ts
+          CI=true VITE_API_URL=http://127.0.0.1:8787 \
+            npx playwright test \
+              --config=playwright.ci.config.ts \
+              --project=webkit-ipad \
               e2e/ci/pilot-offline-persistence.spec.ts
 
   airtrust-gcb:
