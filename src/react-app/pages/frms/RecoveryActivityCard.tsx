@@ -1,14 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Button from '@/react-app/components/Button';
 import {
+  clearPendingFrmsRecoveryActivity,
   previousOperationalDate,
+  stagePendingFrmsRecoveryActivity,
   useFrmsRecoveryContext,
-  useSubmitFrmsRecoveryActivity,
+  type RecoveryActivityInput,
   type RecoveryActivitySegmentInput,
   type RecoveryActivityType,
 } from '@/react-app/hooks/useFrmsRecovery';
-import { toast } from 'sonner';
-import { safeRecoveryActivityErrorMessage } from './recoveryActivityUi';
 
 const OPTIONS: Array<{ value: RecoveryActivityType; label: string; description: string }> = [
   {
@@ -74,7 +74,6 @@ function defaultSegments(): RecoveryActivitySegmentInput[] {
 export default function RecoveryActivityCard({ today }: { today: string }) {
   const referenceDate = useMemo(() => previousOperationalDate(today), [today]);
   const { data: context, isLoading, isError } = useFrmsRecoveryContext(referenceDate);
-  const submit = useSubmitFrmsRecoveryActivity();
   const [editing, setEditing] = useState(false);
   const [activityType, setActivityType] = useState<RecoveryActivityType | null>(null);
   const [standbyLocation, setStandbyLocation] = useState<'HOME' | 'HOTEL' | 'BASE_AIRPORT' | 'OTHER'>('HOTEL');
@@ -83,6 +82,67 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
   const [dutyEnd, setDutyEnd] = useState('');
   const [notes, setNotes] = useState('');
   const [segments, setSegments] = useState<RecoveryActivitySegmentInput[]>(defaultSegments());
+
+  const needsStandbyDetail =
+    activityType === 'STANDBY_HOME_HOTEL' || activityType === 'STANDBY_ONSITE';
+  const needsDutyWindow =
+    activityType === 'ADMIN_TRAINING' || activityType === 'DUTY_TRAVEL' || activityType === 'OTHER';
+
+  useEffect(() => {
+    if (isLoading || isError || !context?.schema_ready || context.flight.detected) {
+      clearPendingFrmsRecoveryActivity(referenceDate);
+      return;
+    }
+
+    if (context.activity && !editing) {
+      clearPendingFrmsRecoveryActivity(referenceDate);
+      return;
+    }
+
+    if (!activityType) {
+      stagePendingFrmsRecoveryActivity(referenceDate, null, true);
+      return;
+    }
+
+    const input: RecoveryActivityInput = {
+      reference_date: referenceDate,
+      activity_type: activityType,
+      standby_location:
+        activityType === 'STANDBY_ONSITE'
+          ? 'BASE_AIRPORT'
+          : activityType === 'STANDBY_HOME_HOTEL'
+            ? standbyLocation
+            : undefined,
+      immediate_callout_required: needsStandbyDetail ? immediateCallout : undefined,
+      duty_start_time: needsDutyWindow && dutyStart ? dutyStart : undefined,
+      duty_end_time: needsDutyWindow && dutyEnd ? dutyEnd : undefined,
+      notes: notes.trim() || undefined,
+      segments: activityType === 'MIXED' ? segments : undefined,
+    };
+    stagePendingFrmsRecoveryActivity(referenceDate, input, true);
+  }, [
+    activityType,
+    context,
+    dutyEnd,
+    dutyStart,
+    editing,
+    immediateCallout,
+    isError,
+    isLoading,
+    needsDutyWindow,
+    needsStandbyDetail,
+    notes,
+    referenceDate,
+    segments,
+    standbyLocation,
+  ]);
+
+  useEffect(
+    () => () => {
+      clearPendingFrmsRecoveryActivity(referenceDate);
+    },
+    [referenceDate],
+  );
 
   if (isLoading || isError || !context?.schema_ready) return null;
   if (context.flight.detected) return null;
@@ -108,43 +168,6 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
       </section>
     );
   }
-
-  const needsStandbyDetail = activityType === 'STANDBY_HOME_HOTEL' || activityType === 'STANDBY_ONSITE';
-  const needsDutyWindow =
-    activityType === 'ADMIN_TRAINING' || activityType === 'DUTY_TRAVEL' || activityType === 'OTHER';
-
-  const save = async () => {
-    if (!activityType) {
-      toast.error('Informe como foi sua condição operacional ontem.');
-      return;
-    }
-    try {
-      const result = await submit.mutateAsync({
-        reference_date: referenceDate,
-        activity_type: activityType,
-        standby_location:
-          activityType === 'STANDBY_ONSITE'
-            ? 'BASE_AIRPORT'
-            : activityType === 'STANDBY_HOME_HOTEL'
-              ? standbyLocation
-              : undefined,
-        immediate_callout_required: needsStandbyDetail ? immediateCallout : undefined,
-        duty_start_time: needsDutyWindow && dutyStart ? dutyStart : undefined,
-        duty_end_time: needsDutyWindow && dutyEnd ? dutyEnd : undefined,
-        notes: notes.trim() || undefined,
-        segments: activityType === 'MIXED' ? segments : undefined,
-      });
-      if (result.source_discrepancy) {
-        toast.warning('Possível falha de origem SIGVOOS registrada para revisão.');
-      } else {
-        toast.success('Condição operacional de ontem registrada.');
-      }
-      setEditing(false);
-    } catch (error) {
-      console.error('[RecoveryActivityCard] Falha ao registrar condição operacional', error);
-      toast.error(safeRecoveryActivityErrorMessage(error));
-    }
-  };
 
   return (
     <section className="rounded-2xl border border-sky-200 bg-white p-4 shadow-sm">
@@ -193,12 +216,20 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
             </label>
           )}
           <fieldset>
-            <legend className="text-sm font-medium text-slate-700">Precisava ficar disponível para acionamento imediato?</legend>
+            <legend className="text-sm font-medium text-slate-700">
+              Precisava ficar disponível para acionamento imediato?
+            </legend>
             <div className="mt-1 flex gap-2">
-              <Button variant={immediateCallout === true ? 'primary' : 'secondary'} onClick={() => setImmediateCallout(true)}>
+              <Button
+                variant={immediateCallout === true ? 'primary' : 'secondary'}
+                onClick={() => setImmediateCallout(true)}
+              >
                 Sim
               </Button>
-              <Button variant={immediateCallout === false ? 'primary' : 'secondary'} onClick={() => setImmediateCallout(false)}>
+              <Button
+                variant={immediateCallout === false ? 'primary' : 'secondary'}
+                onClick={() => setImmediateCallout(false)}
+              >
                 Não
               </Button>
             </div>
@@ -233,7 +264,10 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
         <div className="mt-4 space-y-2">
           <p className="text-sm font-medium text-slate-700">Períodos aproximados</p>
           {segments.map((segment, index) => (
-            <div key={index} className="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-3">
+            <div
+              key={index}
+              className="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-3"
+            >
               <select
                 value={segment.activity_type}
                 onChange={(event) => {
@@ -247,7 +281,9 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                 className="min-h-11 rounded-xl border border-slate-200 px-3 py-2 text-sm"
               >
                 {SEGMENT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
                 ))}
               </select>
               <input
@@ -303,13 +339,13 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
         </label>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button onClick={() => void save()} disabled={!activityType || submit.isPending}>
-          {submit.isPending ? 'Salvando...' : 'Salvar condição de ontem'}
-        </Button>
+      <div className="mt-4 flex flex-col gap-2 rounded-xl bg-slate-50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-slate-600">
+          Esta resposta será salva junto com as demais informações quando você concluir o check-in.
+        </p>
         {editing && (
-          <Button variant="secondary" onClick={() => setEditing(false)} disabled={submit.isPending}>
-            Cancelar
+          <Button variant="secondary" onClick={() => setEditing(false)}>
+            Cancelar correção
           </Button>
         )}
       </div>
