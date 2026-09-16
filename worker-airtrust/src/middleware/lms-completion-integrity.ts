@@ -246,12 +246,12 @@ function contentEvidenceValidated(row: EnrollmentEvidenceRow, source: LmsComplet
   if (source === 'scorm') return type === 'scorm';
   if (source === 'xapi') return type === 'h5p';
   if (source === 'administrative') {
-    return (
-      type === 'scorm' &&
-      (['completed', 'complete'].includes(normalizeStatus(row.completion_status)) ||
-        ['passed', 'completed', 'complete'].includes(normalizeStatus(row.lesson_status)) ||
-        normalizeStatus(row.success_status) === 'passed')
-    );
+    // Administrative completion is the governed exception for incidents where
+    // persisted runtime evidence is real (progress/score) but the terminal
+    // SCORM status was lost. Authorization + reason are validated separately
+    // by evaluateLmsCompletionEvidence; returning true here does not bypass
+    // progress, mastery, score, failure-precedence or enrollment/course gates.
+    return type === 'scorm';
   }
   return false;
 }

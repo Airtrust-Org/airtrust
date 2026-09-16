@@ -335,6 +335,22 @@ async function resolveScormLaunchFile(
   return resolvedKey.startsWith(prefix) ? resolvedKey.slice(prefix.length) : launchFile;
 }
 
+function validScopedScormPackagePrefix(raw: unknown, empresaId: number | string, cursoId: number | string): string | null {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  const base = `lms/scorm/${empresaId}/${cursoId}/_candidates/`;
+  return value.startsWith(base) && value.endsWith('/') && !value.includes('..') ? value : null;
+}
+function packagePrefixForAssetToken(payload: JwtPayload, empresaId: number | string, cursoId: number | string, currentPrefix: string | null): string | null {
+  if (payload.token_type !== 'lms_asset' || !payload.asset_matricula_id) return currentPrefix;
+  return validScopedScormPackagePrefix(payload.asset_scorm_package_prefix, empresaId, cursoId) ?? currentPrefix;
+}
+async function resolveEnrollmentPackagePrefix(db: D1Database, params: { empresaId: number; cursoId: number; status: string; dataInicio: string | null; currentPrefix: string | null }): Promise<string | null> {
+  if (String(params.status || '').trim().toUpperCase() === 'CONCLUIDO') return params.currentPrefix;
+  if (!params.dataInicio || !params.currentPrefix) return params.currentPrefix;
+  const historical = await db.prepare(`SELECT r2_prefix FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND activated_at IS NOT NULL AND activated_at <= ? ORDER BY activated_at DESC LIMIT 1`).bind(params.empresaId, params.cursoId, params.dataInicio).first<{ r2_prefix: string | null }>();
+  return validScopedScormPackagePrefix(historical?.r2_prefix, params.empresaId, params.cursoId) ?? params.currentPrefix;
+}
+
 function isPreviewAllowedRole(rawRole: unknown): boolean {
   const role = String(rawRole ?? '')
     .trim()
@@ -518,10 +534,11 @@ app.post('/assets/session', auth(), async (c) => {
 
   let cursoId = 0;
   let scopedMatriculaId: number | undefined;
+  let scopedScormPackagePrefix: string | undefined;
 
   if (matriculaId > 0) {
     const matricula = await c.env.DB.prepare(
-      `SELECT m.id, m.curso_id, m.funcionario_id, m.status, c.ativo, c.publicado
+      `SELECT m.id, m.curso_id, m.funcionario_id, m.status, m.data_inicio, c.ativo, c.publicado, c.scorm_package_r2_prefix
            FROM lms_matriculas m
            JOIN lms_cursos c
              ON c.id = m.curso_id
@@ -537,8 +554,10 @@ app.post('/assets/session', auth(), async (c) => {
         curso_id: number;
         funcionario_id: number;
         status: string;
+        data_inicio: string | null;
         ativo: number;
         publicado: number;
+        scorm_package_r2_prefix: string | null;
       }>();
 
     if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
@@ -556,6 +575,7 @@ app.post('/assets/session', auth(), async (c) => {
 
     cursoId = matricula.curso_id;
     scopedMatriculaId = matricula.id;
+    scopedScormPackagePrefix = (await resolveEnrollmentPackagePrefix(c.env.DB, { empresaId, cursoId, status: matricula.status, dataInicio: matricula.data_inicio, currentPrefix: matricula.scorm_package_r2_prefix })) ?? undefined;
   } else if (preview && requestedCursoId > 0) {
     if (!isPreviewAllowedRole(accessPayload.role)) {
       throw new ApiError('Acesso negado', 403);
@@ -575,6 +595,7 @@ app.post('/assets/session', auth(), async (c) => {
       asset_scope: 'course_assets',
       asset_curso_id: cursoId,
       asset_matricula_id: scopedMatriculaId,
+      asset_scorm_package_prefix: scopedScormPackagePrefix,
       asset_preview: preview || undefined,
       empresa_id: empresaId,
       empresas: accessPayload.empresas,
@@ -829,7 +850,7 @@ app.get('/scorm/assets/:empresa_id/:curso_id/*', async (c) => {
     empresaId,
     cursoId,
     wildcard,
-    { activePrefix: cursoAccess.scorm_package_r2_prefix },
+    { activePrefix: packagePrefixForAssetToken(payload, empresaId, cursoId, cursoAccess.scorm_package_r2_prefix) },
   );
   if (!object) {
     return c.text('Not found', 404);
@@ -895,7 +916,7 @@ app.get('/scorm/assets-by-curso/:cursoId/*', async (c) => {
     curso.empresa_id,
     curso.id,
     wildcard,
-    { activePrefix: curso.scorm_package_r2_prefix },
+    { activePrefix: packagePrefixForAssetToken(payload, curso.empresa_id, curso.id, curso.scorm_package_r2_prefix) },
   );
   const rangeHeader = c.req.header('range');
 
@@ -1065,7 +1086,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     matricula.empresa_id,
     matricula.curso_id,
     matricula.scorm_launch_file,
-    { activePrefix: matricula.scorm_package_r2_prefix },
+    { activePrefix: packagePrefixForAssetToken(payload, matricula.empresa_id, matricula.curso_id, matricula.scorm_package_r2_prefix) },
   );
   if (!resolvedLaunchFile) {
     throw new ApiError('Arquivo inicial do pacote SCORM não foi encontrado no storage', 404);

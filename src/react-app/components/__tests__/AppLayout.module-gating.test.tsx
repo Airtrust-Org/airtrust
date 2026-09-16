@@ -105,7 +105,8 @@ describe('AppLayout module gating', () => {
 
     expect(screen.getByRole('link', { name: 'LMS / Cursos EAD' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Painel' })).toBeNull();
-    expect(screen.getByRole('link', { name: 'SGSO PRÉVIA' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'SGSO' })).toBeInTheDocument();
+    expect(screen.queryByText('PRÉVIA')).toBeNull();
   });
 
   it('mantém a entrada LMS para aluno quando o módulo está ativo', () => {
@@ -135,7 +136,7 @@ describe('AppLayout module gating', () => {
     expect(screen.getByRole('link', { name: 'LMS' })).toHaveAttribute('href', '/lms/cursos');
   });
 
-  it('oculta Manutencao e Controle de Voos para admin comum', () => {
+  it('exibe Controle de Voos para admin comum sem liberar Manutencao', () => {
     authMock.mockReturnValue({
       user: {
         nome: 'Admin Comum',
@@ -171,7 +172,7 @@ describe('AppLayout module gating', () => {
 
     expect(screen.getAllByRole('link', { name: 'layout.nav.dashboard' }).length).toBeGreaterThan(0);
     expect(screen.queryByRole('link', { name: /Manutenção/i })).toBeNull();
-    expect(screen.queryByRole('link', { name: /Controle de Voos/i })).toBeNull();
+    expect(screen.getByRole('link', { name: /Controle de Voos/i })).toBeInTheDocument();
   });
 
   it('exibe Manutencao e Controle de Voos para admin principal allowlisted', () => {

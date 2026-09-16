@@ -134,6 +134,30 @@ test('auth POST on a production host is blocked with PRODUCTION_HOST_BLOCKED', (
   assert.match(r.reason, /^PRODUCTION_HOST_BLOCKED:POST/);
 });
 
+test('side-effect-free simulator chooser POSTs are allowed only on staging', () => {
+  for (const path of [
+    '/api/simuladores/planejamento-v2/candidatos',
+    '/api/simuladores/planejamento-v2/alternativas-sessao',
+  ]) {
+    const staging = classifyRequest({ method: 'POST', url: `${STG}${path}` });
+    assert.equal(staging.decision, 'allow');
+    assert.match(staging.reason, /read-only-operational-post/);
+
+    const production = classifyRequest({ method: 'POST', url: `${PROD_API}${path}` });
+    assert.equal(production.decision, 'block');
+    assert.match(production.reason, /^PRODUCTION_HOST_BLOCKED/);
+  }
+});
+
+test('planner mutation POST remains blocked by the read-only staging guard', () => {
+  const r = classifyRequest({
+    method: 'POST',
+    url: `${STG}/api/simuladores/planejamento-v2/reparear`,
+  });
+  assert.equal(r.decision, 'block');
+  assert.match(r.reason, /operational-post/);
+});
+
 test('a non-allowlisted operational POST to staging is blocked', () => {
   const r = classifyRequest({ method: 'POST', url: `${STG}/api/documentos/1` });
   assert.equal(r.decision, 'block');

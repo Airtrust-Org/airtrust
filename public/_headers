@@ -163,3 +163,16 @@
   Pragma: no-cache
   Expires: 0
   Vary: Authorization, Cookie
+# Legacy branding compatibility paths: keep them current and force revalidation.
+/airtrust-logo.svg
+  Cache-Control: no-cache, must-revalidate
+/airtrust-icon.svg
+  Cache-Control: no-cache, must-revalidate
+/favicon.svg
+  Cache-Control: no-cache, must-revalidate
+/airtrust-site-logo-20260830-192.png
+  Cache-Control: no-cache, must-revalidate
+/airtrust-site-logo-20260830-512.png
+  Cache-Control: no-cache, must-revalidate
+/airtrust-site-logo-apple-20260830.png
+  Cache-Control: no-cache, must-revalidate

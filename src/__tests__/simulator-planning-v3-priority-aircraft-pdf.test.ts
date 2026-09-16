@@ -26,6 +26,9 @@ describe('simulator planning V3 priority, aircraft filter and report UX', () => 
     expect(page).toContain('Trocar participante');
     expect(page).toContain('Trocar sessão');
     expect(page).toContain('openSessionSwap');
+    expect(page).toContain('role="dialog"');
+    expect(page).toContain('aria-modal="true"');
+    expect(page).toContain('fixed left-1/2 top-1/2');
     expect(crew).toContain("'/alternativas-sessao'");
     expect(crew).toContain('canManuallyShareSimulatorTrainingSessions');
   });
@@ -33,10 +36,19 @@ describe('simulator planning V3 priority, aircraft filter and report UX', () => 
   it('surfaces recurring-over-semiannual coverage instead of presenting mixed curricula as neutral', () => {
     const page = source(PAGE);
     const route = source(ROUTE);
-    expect(page).toContain('Periódico prioritário');
-    expect(page).toContain('renova');
+    expect(page).toContain('Periódico selecionado · atende também');
+    expect(page).toContain('Periódico · também atende a obrigação Semestral');
+    expect(page).not.toContain('Periódico prioritário · renova');
     expect(route).toContain('RECORRENTE_PRIORITARIO_SOBRE_SEMESTRAL');
     expect(route).toContain('satisfies_qualification_type_ids');
+  });
+
+  it('uses the canonical legacy-completion rule before promoting Semestral to Periódico', () => {
+    const route = source(ROUTE);
+    expect(route).toContain('AND data_conclusao IS NOT NULL');
+    expect(route).toContain("AND date(data_conclusao) <= date('now')");
+    expect(route).toContain("'CONCLUIDA','CONCLUIDO','RENOVADA','VALIDA','VÁLIDA','VENCIDA','PROXIMA_VENCIMENTO','VENCENDO','VENCENDO_30'");
+    expect(route).toContain("OR TRIM(COALESCE(status,'')) = ''");
   });
 
   it('renders the PDF with visual hierarchy, status palettes and summary cards', () => {
