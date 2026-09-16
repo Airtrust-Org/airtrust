@@ -12,10 +12,10 @@ export function resolveFadigaPostSavePath(role?: string | null): string {
     normalized === 'TRIPULANTE' ||
     normalized === 'PILOTO'
   ) {
-    return '/frms/checkin?tab=historico';
+    // Sai da rota do formulário para garantir que o check-in concluído não permaneça aberto.
+    // O toast de sucesso é emitido antes desta navegação e permanece visível no shell da aplicação.
+    return '/frms';
   }
 
-  // Perfis de coordenação permanecem no contexto FRMS após registrar o check-in.
-  // A operação diária é o próximo passo natural para revisão humana do caso.
   return '/frms/controle-operacional';
 }
