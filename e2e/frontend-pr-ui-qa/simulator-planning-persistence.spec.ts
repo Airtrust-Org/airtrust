@@ -19,8 +19,7 @@ function statusLabel(value: QaState['workflow_status']) {
 
 test('simulator planning: resume persisted CAE workflow and export PDF', async ({ page }) => {
   const statePath =
-    process.env.QA_SIMULATOR_STATE_PATH ||
-    'qa-state/staging-simulator-planning/state.json';
+    process.env.QA_SIMULATOR_STATE_PATH || 'qa-state/staging-simulator-planning/state.json';
   const state = JSON.parse(readFileSync(statePath, 'utf8')) as QaState;
 
   expect(state.draft_id.length).toBeGreaterThan(20);
@@ -41,10 +40,33 @@ test('simulator planning: resume persisted CAE workflow and export PDF', async (
   await expect(draftCard).toBeVisible();
   await draftCard.click();
 
-  await expect(page.getByText(statusLabel(state.workflow_status), { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByText(statusLabel(state.workflow_status), { exact: true }).first(),
+  ).toBeVisible();
   await expect(page.getByText('1 ajuste(s) manual(is)', { exact: true })).toBeVisible();
-  await expect(page.getByText('Arquivo: qa-cae-disponibilidade.pdf', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('Arquivo: qa-cae-disponibilidade.pdf', { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText(state.class_name, { exact: true }).last()).toBeVisible();
+
+  // Exercise the exact live interactions that previously failed in production.
+  const choosePairButton = page.getByRole('button', { name: 'Escolher dupla disponível' }).first();
+  await expect(choosePairButton).toBeVisible();
+  await choosePairButton.click();
+  const crewDialog = page.getByRole('dialog', { name: /Escolher dupla para/ });
+  await expect(crewDialog).toBeVisible();
+  await expect(crewDialog).not.toContainText('Sessão informada não corresponde');
+  await crewDialog.getByRole('button', { name: 'Fechar troca' }).click();
+  await expect(crewDialog).toBeHidden();
+
+  const swapSessionButton = page.getByRole('button', { name: 'Trocar sessão' }).first();
+  await expect(swapSessionButton).toBeVisible();
+  await swapSessionButton.click();
+  const sessionDialog = page.getByRole('dialog', { name: /Trocar sessão de/ });
+  await expect(sessionDialog).toBeVisible();
+  await expect(sessionDialog).not.toContainText('Sessão informada não corresponde');
+  await sessionDialog.getByRole('button', { name: 'Fechar troca de sessão' }).click();
+  await expect(sessionDialog).toBeHidden();
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Gerar PDF' }).click();
