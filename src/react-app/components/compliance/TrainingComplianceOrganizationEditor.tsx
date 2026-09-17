@@ -5,7 +5,7 @@ import { fetchWithAuth } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
 
 type Catalogs = {
-  setores: Array<{ id: number; nome: string }>;
+  setores: Array<{ id: number; codigo?: string | null; nome: string }>;
   funcoes: Array<{ id: number; nome: string }>;
   setor_funcoes: Array<{ setor_id: number; funcao_id: number }>;
   aeronaves_modelos?: Array<{ modelo: string; aeronaves: number }>;
@@ -60,6 +60,15 @@ const labels: Record<string, string> = {
   NAO_APLICA: 'Não se aplica',
 };
 
+function isTripulacaoSector(setor?: { codigo?: string | null; nome: string } | null) {
+  if (!setor) return false;
+  const canonical = `${setor.codigo || ''} ${setor.nome}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+  return canonical.includes('TRIPUL');
+}
+
 export function TrainingComplianceOrganizationEditor() {
   const queryClient = useQueryClient();
   const [setorId, setSetorId] = useState<number | null>(null);
@@ -79,13 +88,15 @@ export function TrainingComplianceOrganizationEditor() {
     );
     return (catalogs.data?.funcoes || []).filter((f) => ids.has(f.id));
   }, [catalogs.data, setorId]);
+  const selectedSector = (catalogs.data?.setores || []).find((setor) => setor.id === setorId) || null;
+  const tripulacaoSelected = isTripulacaoSector(selectedSector);
   const matrix = useQuery({
     queryKey: ['training-compliance', 'org-matrix', setorId, funcaoId, aeronaveModelo],
     enabled: Boolean(setorId),
     queryFn: async () => {
       const params = new URLSearchParams({ setor_id: String(setorId) });
       if (funcaoId) params.set('funcao_id', String(funcaoId));
-      if (aeronaveModelo) params.set('aeronave_modelo', aeronaveModelo);
+      if (tripulacaoSelected && aeronaveModelo) params.set('aeronave_modelo', aeronaveModelo);
       return readJson<MatrixRow[]>(
         await fetchWithAuth(`/api/compliance-treinamentos/matriz-organizacao?${params}`),
       );
@@ -114,7 +125,7 @@ export function TrainingComplianceOrganizationEditor() {
         escopo: funcaoId ? 'SETOR_FUNCAO' : 'SETOR',
         setor_id: setorId,
         funcao_id: funcaoId,
-        aeronave_modelo: aeronaveModelo || null,
+        aeronave_modelo: tripulacaoSelected ? aeronaveModelo || null : null,
         obrigatoriedade: value,
         origem: 'EMPRESA',
         referencia_normativa: 'Matriz organizacional de treinamentos',
@@ -193,30 +204,31 @@ export function TrainingComplianceOrganizationEditor() {
             ))}
           </select>
         </label>
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          <label htmlFor="training-compliance-aircraft-model">Aeronave / equipamento</label>
-          <select
-            id="training-compliance-aircraft-model"
-            aria-describedby="training-compliance-aircraft-model-help"
-            value={aeronaveModelo}
-            disabled={!setorId}
-            onChange={(e) => setAeronaveModelo(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100"
-          >
-            <option value="">Todos os equipamentos</option>
-            {(catalogs.data?.aeronaves_modelos || []).map((item) => (
-              <option key={item.modelo} value={item.modelo}>
-                {item.modelo}
-              </option>
-            ))}
-          </select>
-          <span
-            id="training-compliance-aircraft-model-help"
-            className="mt-1 block normal-case font-normal tracking-normal text-slate-400"
-          >
-            Use para treinamentos específicos de AW139, SK76 ou outro modelo cadastrado.
-          </span>
-        </div>
+        {tripulacaoSelected ? (
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <label htmlFor="training-compliance-aircraft-model">Aeronave / equipamento</label>
+            <select
+              id="training-compliance-aircraft-model"
+              aria-describedby="training-compliance-aircraft-model-help"
+              value={aeronaveModelo}
+              onChange={(e) => setAeronaveModelo(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Todos os equipamentos</option>
+              {(catalogs.data?.aeronaves_modelos || []).map((item) => (
+                <option key={item.modelo} value={item.modelo}>
+                  {item.modelo}
+                </option>
+              ))}
+            </select>
+            <span
+              id="training-compliance-aircraft-model-help"
+              className="mt-1 block normal-case font-normal tracking-normal text-slate-400"
+            >
+              Use para treinamentos específicos do equipamento operado pelo tripulante.
+            </span>
+          </div>
+        ) : null}
       </div>
       {!setorId ? (
         <div className="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">
