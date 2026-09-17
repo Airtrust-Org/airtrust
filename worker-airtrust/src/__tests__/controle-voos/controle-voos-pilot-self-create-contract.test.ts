@@ -19,6 +19,20 @@ describe('Pilot self-service flight creation contract', () => {
     expect(text).toContain('empresa_id = ?');
   });
 
+  it('accepts temporary manual operational fields without requiring pilot catalog selection', () => {
+    const text = source('src/routes/controle-voos-pilot-self-create.ts');
+
+    expect(text).toContain("'origem_texto'");
+    expect(text).toContain("'destino_texto'");
+    expect(text).toContain("'tipo_voo_texto'");
+    expect(text).toContain("'natureza_voo_codigo'");
+    expect(text).toContain("MANUTENCAO: 'Manutenção'");
+    expect(text).toContain("PETROBRAS: 'Petrobras'");
+    expect(text).toContain('ensureTemporaryAirport');
+    expect(text).toContain('ensureTemporaryFlightType');
+    expect(text).toContain('entrada_livre_temporaria: manualMode');
+  });
+
   it('does not grant the generic editor middleware to a student', () => {
     const text = source('src/routes/controle-voos-pilot-self-create.ts');
 

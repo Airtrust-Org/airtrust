@@ -28,6 +28,10 @@ const tipos = [{ id: 10, nome: 'Táxi aéreo' }];
 const naturezas = [{ id: 20, nome: 'Transporte' }];
 const aeronaves = [{ id: 30, codigo: 'PR-ABC', prefixo: 'PR-ABC', modelo: 'AW139', status: 'ATIVA' }];
 
+function mockPilotData() {
+  getMock.mockResolvedValueOnce({ success: true, data: aeronaves });
+}
+
 function mockCatalogos() {
   getMock
     .mockResolvedValueOnce({ success: true, data: aeroportos })
@@ -53,8 +57,8 @@ function renderDialog(mode: 'coordenacao' | 'pilot' = 'pilot', open = true) {
 }
 
 const aeronaveSelect = () => screen.getByLabelText(/Aeronave \/ Prefixo/);
-const origemSelect = () => screen.getByLabelText(/^Origem/);
-const destinoSelect = () => screen.getByLabelText(/^Destino/);
+const origemSelect = () => screen.getByLabelText('Origem');
+const destinoSelect = () => screen.getByLabelText('Destino');
 const tipoSelect = () => screen.getByLabelText(/^Tipo de voo/);
 const naturezaSelect = () => screen.getByLabelText(/^Natureza/);
 
@@ -66,13 +70,22 @@ async function waitForAirportCatalog() {
   );
 }
 
-async function fillRequiredFields() {
+async function fillCoordinationRequiredFields() {
   await waitForAirportCatalog();
   fireEvent.change(aeronaveSelect(), { target: { value: '30' } });
   fireEvent.change(origemSelect(), { target: { value: '1' } });
   fireEvent.change(destinoSelect(), { target: { value: '2' } });
   fireEvent.change(tipoSelect(), { target: { value: '10' } });
   fireEvent.change(naturezaSelect(), { target: { value: '20' } });
+}
+
+async function fillPilotRequiredFields() {
+  await waitFor(() => expect(within(aeronaveSelect()).getByRole('option', { name: /PR-ABC/ })).toBeInTheDocument());
+  fireEvent.change(aeronaveSelect(), { target: { value: '30' } });
+  fireEvent.change(screen.getByLabelText('Aeródromo de origem'), { target: { value: 'SBME' } });
+  fireEvent.change(screen.getByLabelText('Aeródromo de destino'), { target: { value: 'P-51' } });
+  fireEvent.change(screen.getByLabelText('Tipo de voo'), { target: { value: 'Transporte offshore' } });
+  fireEvent.change(screen.getByLabelText('Natureza'), { target: { value: 'PETROBRAS' } });
 }
 
 describe('ControleVoosNovoVooDialog', () => {
@@ -90,13 +103,13 @@ describe('ControleVoosNovoVooDialog', () => {
   });
 
   it('carrega catálogos e frota canônica e fecha pelo botão de fechar', async () => {
-    mockCatalogos();
+    mockPilotData();
     const { onClose } = renderDialog('pilot');
 
     expect(screen.getByText('Carregando cadastros operacionais…')).toBeInTheDocument();
-    await waitForAirportCatalog();
-    expect(getMock).toHaveBeenCalledTimes(4);
-    expect(getMock).toHaveBeenNthCalledWith(4, '/aeronaves?somente_ativas=1');
+    await waitFor(() => expect(within(aeronaveSelect()).getByRole('option', { name: /PR-ABC/ })).toBeInTheDocument());
+    expect(getMock).toHaveBeenCalledTimes(1);
+    expect(getMock).toHaveBeenCalledWith('/aeronaves?somente_ativas=1');
 
     fireEvent.click(screen.getByRole('button', { name: 'Fechar' }));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -111,26 +124,25 @@ describe('ControleVoosNovoVooDialog', () => {
   });
 
   it('valida campos obrigatórios antes de chamar a API', async () => {
-    mockCatalogos();
+    mockPilotData();
     renderDialog('pilot');
-    await waitForAirportCatalog();
+    await waitFor(() => expect(within(aeronaveSelect()).getByRole('option', { name: /PR-ABC/ })).toBeInTheDocument());
 
     fireEvent.submit(aeronaveSelect().closest('form')!);
 
-    expect(await screen.findByText('Selecione aeronave, origem, destino, tipo e natureza do voo.')).toBeInTheDocument();
+    expect(await screen.findByText('Informe aeronave, origem, destino, tipo e natureza do voo.')).toBeInTheDocument();
     expect(postMock).not.toHaveBeenCalled();
   });
 
   it('impede origem e destino iguais', async () => {
-    mockCatalogos();
+    mockPilotData();
     renderDialog('pilot');
-    await waitForAirportCatalog();
+    await waitFor(() => expect(within(aeronaveSelect()).getByRole('option', { name: /PR-ABC/ })).toBeInTheDocument());
 
     fireEvent.change(aeronaveSelect(), { target: { value: '30' } });
-    fireEvent.change(origemSelect(), { target: { value: '1' } });
-    fireEvent.change(destinoSelect(), { target: { value: '1' } });
-    fireEvent.change(tipoSelect(), { target: { value: '10' } });
-    fireEvent.change(naturezaSelect(), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText('Aeródromo de origem'), { target: { value: 'SBME' } });
+    fireEvent.change(screen.getByLabelText('Aeródromo de destino'), { target: { value: 'sbme' } });
+    fireEvent.change(screen.getByLabelText('Tipo de voo'), { target: { value: 'Transporte' } });
     fireEvent.submit(aeronaveSelect().closest('form')!);
 
     expect(await screen.findByText('Origem e destino devem ser diferentes.')).toBeInTheDocument();
@@ -138,12 +150,12 @@ describe('ControleVoosNovoVooDialog', () => {
   });
 
   it('cria voo self-service com aeronave canônica, função do piloto e fecha', async () => {
-    mockCatalogos();
+    mockPilotData();
     const created = { id: 77, prefixo: 'PR-ABC', data_programacao: '2026-09-10' };
     postMock.mockResolvedValue({ success: true, data: created });
     const { onClose, onCreated } = renderDialog('pilot');
 
-    await fillRequiredFields();
+    await fillPilotRequiredFields();
     fireEvent.change(screen.getByLabelText('Minha função'), { target: { value: 'SIC' } });
     fireEvent.change(screen.getByLabelText('Observações'), { target: { value: '  teste pilot  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Criar meu voo' }));
@@ -154,13 +166,15 @@ describe('ControleVoosNovoVooDialog', () => {
     expect(body).toMatchObject({
       aeronave_id: 30,
       prefixo: 'PR-ABC',
-      origem_id: 1,
-      destino_id: 2,
-      tipo_voo_id: 10,
-      natureza_voo_id: 20,
+      origem_texto: 'SBME',
+      destino_texto: 'P-51',
+      tipo_voo_texto: 'Transporte offshore',
+      natureza_voo_codigo: 'PETROBRAS',
       observacoes: 'teste pilot',
       funcao: 'SIC',
     });
+    expect(screen.getByLabelText('Saída prevista')).toHaveAttribute('type', 'time');
+    expect(screen.getByLabelText('Chegada prevista')).toHaveAttribute('type', 'time');
     expect(typeof body.horario_previsto_partida).toBe('string');
     expect(typeof body.horario_previsto_chegada).toBe('string');
     expect(onCreated).toHaveBeenCalledWith(created);
@@ -173,7 +187,7 @@ describe('ControleVoosNovoVooDialog', () => {
     postMock.mockResolvedValue({ success: true, data: { data: created } });
     const { onCreated } = renderDialog('coordenacao');
 
-    await fillRequiredFields();
+    await fillCoordinationRequiredFields();
     expect(screen.queryByLabelText('Minha função')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Criar voo' }));
 
@@ -186,11 +200,11 @@ describe('ControleVoosNovoVooDialog', () => {
   });
 
   it('mostra erro retornado pela API e não fecha o diálogo', async () => {
-    mockCatalogos();
+    mockPilotData();
     postMock.mockResolvedValue({ success: false, error: 'voo rejeitado' });
     const { onClose, onCreated } = renderDialog('pilot');
 
-    await fillRequiredFields();
+    await fillPilotRequiredFields();
     fireEvent.click(screen.getByRole('button', { name: 'Criar meu voo' }));
 
     expect(await screen.findByText('voo rejeitado')).toBeInTheDocument();

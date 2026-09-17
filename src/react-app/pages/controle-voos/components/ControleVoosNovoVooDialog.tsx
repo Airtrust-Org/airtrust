@@ -35,6 +35,20 @@ function toLocalInput(date: Date) {
   return shifted.toISOString().slice(0, 16);
 }
 
+function toLocalTime(date: Date) {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function combineFlightDateAndTime(dateText: string, timeText: string) {
+  const [year, month, day] = dateText.split('-').map(Number);
+  const [hour, minute] = timeText.split(':').map(Number);
+  const value = new Date(year, month - 1, day, hour, minute, 0, 0);
+  if ([year, month, day, hour, minute].some((part) => !Number.isFinite(part)) || Number.isNaN(value.getTime())) {
+    throw new Error('Data ou horário inválido.');
+  }
+  return value;
+}
+
 export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreated }: Props) {
   const now = useMemo(() => new Date(), []);
   const { isAdmin, isGestor } = usePermissions();
@@ -55,8 +69,12 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     destino_id: '',
     tipo_voo_id: '',
     natureza_voo_id: '',
-    horario_previsto_partida: toLocalInput(new Date(now.getTime() + 60 * 60_000)),
-    horario_previsto_chegada: toLocalInput(new Date(now.getTime() + 2 * 60 * 60_000)),
+    origem_texto: '',
+    destino_texto: '',
+    tipo_voo_texto: '',
+    natureza_voo_codigo: 'PETROBRAS',
+    horario_previsto_partida: mode === 'pilot' ? toLocalTime(new Date(now.getTime() + 60 * 60_000)) : toLocalInput(new Date(now.getTime() + 60 * 60_000)),
+    horario_previsto_chegada: mode === 'pilot' ? toLocalTime(new Date(now.getTime() + 2 * 60 * 60_000)) : toLocalInput(new Date(now.getTime() + 2 * 60 * 60_000)),
     observacoes: '',
     funcao: 'PIC' as 'PIC' | 'SIC',
   });
@@ -66,21 +84,31 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     let cancelled = false;
     setLoadingCatalogos(true);
     setError(null);
-    Promise.all([
-      apiClient.get<unknown>('/controle-voos/catalogos/aeroportos'),
-      apiClient.get<unknown>('/controle-voos/catalogos/tipos'),
-      apiClient.get<unknown>('/controle-voos/catalogos/naturezas'),
-      apiClient.get<unknown>('/aeronaves?somente_ativas=1'),
-    ])
-      .then(([a, t, n, ac]) => {
-        if (cancelled) return;
-        setAeroportos(extract<CvAeroporto[]>(a) || []);
-        setTipos(extract<CvTipoVoo[]>(t) || []);
-        setNaturezas(extract<CvNaturezaVoo[]>(n) || []);
-        setAeronaves(extract<Aeronave[]>(ac) || []);
-      })
-      .catch((err: Error) => !cancelled && setError(err.message))
-      .finally(() => !cancelled && setLoadingCatalogos(false));
+    const load = async () => {
+      try {
+        if (mode === 'coordenacao') {
+          const [a, t, n, ac] = await Promise.all([
+            apiClient.get<unknown>('/controle-voos/catalogos/aeroportos'),
+            apiClient.get<unknown>('/controle-voos/catalogos/tipos'),
+            apiClient.get<unknown>('/controle-voos/catalogos/naturezas'),
+            apiClient.get<unknown>('/aeronaves?somente_ativas=1'),
+          ]);
+          if (cancelled) return;
+          setAeroportos(extract<CvAeroporto[]>(a) || []);
+          setTipos(extract<CvTipoVoo[]>(t) || []);
+          setNaturezas(extract<CvNaturezaVoo[]>(n) || []);
+          setAeronaves(extract<Aeronave[]>(ac) || []);
+        } else {
+          const ac = await apiClient.get<unknown>('/aeronaves?somente_ativas=1');
+          if (!cancelled) setAeronaves(extract<Aeronave[]>(ac) || []);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Falha ao carregar dados do voo.');
+      } finally {
+        if (!cancelled) setLoadingCatalogos(false);
+      }
+    };
+    void load();
     return () => {
       cancelled = true;
     };
@@ -102,29 +130,34 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
-    if (!form.aeronave_id || !form.prefixo.trim() || !form.origem_id || !form.destino_id || !form.tipo_voo_id || !form.natureza_voo_id) {
-      setError('Selecione aeronave, origem, destino, tipo e natureza do voo.');
+    const pilotManualFieldsReady = form.origem_texto.trim() && form.destino_texto.trim() && form.tipo_voo_texto.trim() && form.natureza_voo_codigo;
+    const coordinationCatalogFieldsReady = form.origem_id && form.destino_id && form.tipo_voo_id && form.natureza_voo_id;
+    if (!form.aeronave_id || !form.prefixo.trim() || (mode === 'pilot' ? !pilotManualFieldsReady : !coordinationCatalogFieldsReady)) {
+      setError(mode === 'pilot' ? 'Informe aeronave, origem, destino, tipo e natureza do voo.' : 'Selecione aeronave, origem, destino, tipo e natureza do voo.');
       return;
     }
-    if (form.origem_id === form.destino_id) {
+    const origemComparavel = mode === 'pilot' ? form.origem_texto.trim().toUpperCase() : form.origem_id;
+    const destinoComparavel = mode === 'pilot' ? form.destino_texto.trim().toUpperCase() : form.destino_id;
+    if (origemComparavel === destinoComparavel) {
       setError('Origem e destino devem ser diferentes.');
       return;
     }
     setSaving(true);
     try {
-      const body = {
+      const partida = mode === 'pilot' ? combineFlightDateAndTime(form.data_programacao, form.horario_previsto_partida) : new Date(form.horario_previsto_partida);
+      let chegada = mode === 'pilot' ? combineFlightDateAndTime(form.data_programacao, form.horario_previsto_chegada) : new Date(form.horario_previsto_chegada);
+      if (mode === 'pilot' && chegada.getTime() < partida.getTime()) chegada = new Date(chegada.getTime() + 24 * 60 * 60_000);
+      const common = {
         aeronave_id: Number(form.aeronave_id),
         prefixo: form.prefixo.trim().toUpperCase(),
         data_programacao: form.data_programacao,
-        origem_id: Number(form.origem_id),
-        destino_id: Number(form.destino_id),
-        tipo_voo_id: Number(form.tipo_voo_id),
-        natureza_voo_id: Number(form.natureza_voo_id),
-        horario_previsto_partida: new Date(form.horario_previsto_partida).toISOString(),
-        horario_previsto_chegada: new Date(form.horario_previsto_chegada).toISOString(),
+        horario_previsto_partida: partida.toISOString(),
+        horario_previsto_chegada: chegada.toISOString(),
         observacoes: form.observacoes.trim() || null,
-        ...(mode === 'pilot' ? { funcao: form.funcao } : {}),
       };
+      const body = mode === 'pilot'
+        ? { ...common, origem_texto: form.origem_texto.trim(), destino_texto: form.destino_texto.trim(), tipo_voo_texto: form.tipo_voo_texto.trim(), natureza_voo_codigo: form.natureza_voo_codigo, funcao: form.funcao }
+        : { ...common, origem_id: Number(form.origem_id), destino_id: Number(form.destino_id), tipo_voo_id: Number(form.tipo_voo_id), natureza_voo_id: Number(form.natureza_voo_id) };
       const endpoint = mode === 'pilot' ? '/controle-voos/voos/meus/criar' : '/controle-voos/voos';
       const response = await apiClient.post<unknown>(endpoint, body);
       onCreated(extract<CvVoo>(response));
@@ -168,36 +201,50 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
           </div>
           <label className="text-sm">Data<input type="date" className={fieldClass} value={form.data_programacao} onChange={(e) => set('data_programacao', e.target.value)} required /></label>
 
+          {mode === 'pilot' ? (
+            <>
+              <label className="text-sm">Aeródromo de origem<input id="controle-voos-origem" className={fieldClass} value={form.origem_texto} onChange={(e) => set('origem_texto', e.target.value)} placeholder="Digite o aeródromo ou plataforma" required /></label>
+              <label className="text-sm">Aeródromo de destino<input id="controle-voos-destino" className={fieldClass} value={form.destino_texto} onChange={(e) => set('destino_texto', e.target.value)} placeholder="Digite o aeródromo ou plataforma" required /></label>
+              <label className="text-sm">Tipo de voo<input id="controle-voos-tipo" className={fieldClass} value={form.tipo_voo_texto} onChange={(e) => set('tipo_voo_texto', e.target.value)} placeholder="Digite o tipo de voo" required /></label>
+              <label className="text-sm">Natureza<select id="controle-voos-natureza" className={fieldClass} value={form.natureza_voo_codigo} onChange={(e) => set('natureza_voo_codigo', e.target.value)} required><option value="PETROBRAS">Petrobras</option><option value="MANUTENCAO">Manutenção</option></select></label>
+              <label className="text-sm">Saída prevista<input type="time" className={fieldClass} value={form.horario_previsto_partida} onChange={(e) => set('horario_previsto_partida', e.target.value)} required /></label>
+              <label className="text-sm">Chegada prevista<input type="time" className={fieldClass} value={form.horario_previsto_chegada} onChange={(e) => set('horario_previsto_chegada', e.target.value)} required /></label>
+            </>
+          ) : (
+            <>
           <div className="text-sm">
-            <div className={labelRowClass}>
-              <label htmlFor="controle-voos-origem">Origem</label>
-              {canManageCatalogs && <button type="button" onClick={() => openQuick('aeroportos', 'origem_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}
-            </div>
-            <select id="controle-voos-origem" className={fieldClass} value={form.origem_id} onChange={(e) => set('origem_id', e.target.value)} required><option value="">Selecione</option>{aeroportos.map((a) => <option key={a.id} value={a.id}>{a.codigo_icao || a.codigo} — {a.nome}</option>)}</select>
-          </div>
-          <div className="text-sm">
-            <div className={labelRowClass}>
-              <label htmlFor="controle-voos-destino">Destino</label>
-              {canManageCatalogs && <button type="button" onClick={() => openQuick('aeroportos', 'destino_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}
-            </div>
-            <select id="controle-voos-destino" className={fieldClass} value={form.destino_id} onChange={(e) => set('destino_id', e.target.value)} required><option value="">Selecione</option>{aeroportos.map((a) => <option key={a.id} value={a.id}>{a.codigo_icao || a.codigo} — {a.nome}</option>)}</select>
-          </div>
-          <div className="text-sm">
-            <div className={labelRowClass}>
-              <label htmlFor="controle-voos-tipo">Tipo de voo</label>
-              {canManageCatalogs && <button type="button" onClick={() => openQuick('tipos', 'tipo_voo_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}
-            </div>
-            <select id="controle-voos-tipo" className={fieldClass} value={form.tipo_voo_id} onChange={(e) => set('tipo_voo_id', e.target.value)} required><option value="">Selecione</option>{tipos.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}</select>
-          </div>
-          <div className="text-sm">
-            <div className={labelRowClass}>
-              <label htmlFor="controle-voos-natureza">Natureza</label>
-              {canManageCatalogs && <button type="button" onClick={() => openQuick('naturezas', 'natureza_voo_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}
-            </div>
-            <select id="controle-voos-natureza" className={fieldClass} value={form.natureza_voo_id} onChange={(e) => set('natureza_voo_id', e.target.value)} required><option value="">Selecione</option>{naturezas.map((n) => <option key={n.id} value={n.id}>{n.nome}</option>)}</select>
-          </div>
-          <label className="text-sm">Saída prevista<input type="datetime-local" className={fieldClass} value={form.horario_previsto_partida} onChange={(e) => set('horario_previsto_partida', e.target.value)} required /></label>
-          <label className="text-sm">Chegada prevista<input type="datetime-local" className={fieldClass} value={form.horario_previsto_chegada} onChange={(e) => set('horario_previsto_chegada', e.target.value)} required /></label>
+                <div className={labelRowClass}>
+                  <label htmlFor="controle-voos-origem">Origem</label>
+                  {canManageCatalogs && <button type="button" onClick={() => openQuick('aeroportos', 'origem_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}
+                </div>
+                <select id="controle-voos-origem" className={fieldClass} value={form.origem_id} onChange={(e) => set('origem_id', e.target.value)} required><option value="">Selecione</option>{aeroportos.map((a) => <option key={a.id} value={a.id}>{a.codigo_icao || a.codigo} — {a.nome}</option>)}</select>
+              </div>
+              <div className="text-sm">
+                <div className={labelRowClass}>
+                  <label htmlFor="controle-voos-destino">Destino</label>
+                  {canManageCatalogs && <button type="button" onClick={() => openQuick('aeroportos', 'destino_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}
+                </div>
+                <select id="controle-voos-destino" className={fieldClass} value={form.destino_id} onChange={(e) => set('destino_id', e.target.value)} required><option value="">Selecione</option>{aeroportos.map((a) => <option key={a.id} value={a.id}>{a.codigo_icao || a.codigo} — {a.nome}</option>)}</select>
+              </div>
+              <div className="text-sm">
+                <div className={labelRowClass}>
+                  <label htmlFor="controle-voos-tipo">Tipo de voo</label>
+                  {canManageCatalogs && <button type="button" onClick={() => openQuick('tipos', 'tipo_voo_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}
+                </div>
+                <select id="controle-voos-tipo" className={fieldClass} value={form.tipo_voo_id} onChange={(e) => set('tipo_voo_id', e.target.value)} required><option value="">Selecione</option>{tipos.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}</select>
+              </div>
+              <div className="text-sm">
+                <div className={labelRowClass}>
+                  <label htmlFor="controle-voos-natureza">Natureza</label>
+                  {canManageCatalogs && <button type="button" onClick={() => openQuick('naturezas', 'natureza_voo_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}
+                </div>
+                <select id="controle-voos-natureza" className={fieldClass} value={form.natureza_voo_id} onChange={(e) => set('natureza_voo_id', e.target.value)} required><option value="">Selecione</option>{naturezas.map((n) => <option key={n.id} value={n.id}>{n.nome}</option>)}</select>
+              </div>
+              <label className="text-sm">Saída prevista<input type="datetime-local" className={fieldClass} value={form.horario_previsto_partida} onChange={(e) => set('horario_previsto_partida', e.target.value)} required /></label>
+              <label className="text-sm">Chegada prevista<input type="datetime-local" className={fieldClass} value={form.horario_previsto_chegada} onChange={(e) => set('horario_previsto_chegada', e.target.value)} required /></label>
+
+            </>
+          )}
           {mode === 'pilot' && <label className="text-sm">Minha função<select className={fieldClass} value={form.funcao} onChange={(e) => set('funcao', e.target.value)}><option value="PIC">PIC</option><option value="SIC">SIC</option></select></label>}
           <label className={`text-sm ${mode === 'pilot' ? '' : 'md:col-span-2'}`}>Observações<textarea className={fieldClass} rows={3} value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} /></label>
 
