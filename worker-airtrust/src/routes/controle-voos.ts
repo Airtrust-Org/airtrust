@@ -47,6 +47,10 @@ import {
   normalizeRdvInput,
 } from '../services/controle-voos/rdv-validation';
 import { finalizeRdvPreenchimentoHandler } from './controle-voos-rdv-finalization';
+import {
+  assertFlightCrewAssignment,
+  listEligibleFlightCrew,
+} from '../services/controle-voos/crew-eligibility';
 
 type OperationalReadFilters = {
   dataInicio: string;
@@ -107,6 +111,11 @@ const allowedFields = new Set([
   'alternado_destino_id',
 ]);
 
+const allowedCreateFields = new Set([
+  ...allowedFields,
+  'pic_funcionario_id',
+  'sic_funcionario_id',
+]);
 const allowedFieldsWithVersion = new Set([...allowedFields, 'versao'].filter((field) => field !== 'status'));
 
 const blockedFields = new Set([
@@ -1110,16 +1119,36 @@ controleVoos.get('/voos', auth(), async (c) => {
   });
 });
 
+controleVoos.get('/voos/tripulantes-elegiveis', auth(), requireControleVoosWrite(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const aeronaveId = parsePositiveInteger(c.req.query('aeronave_id'), 'aeronave_id');
+  const crew = await listEligibleFlightCrew(c.env.DB, empresaId, aeronaveId);
+  return c.json({ success: true, data: crew });
+});
+
 controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const userId = getActorId(c);
   const payload = await parseJsonPayload(c);
-  assertPayloadFields(payload, allowedFields);
+  assertPayloadFields(payload, allowedCreateFields);
   const input = normalizeFlightInput(payload, true);
+  const hasPic = payload.pic_funcionario_id !== undefined && payload.pic_funcionario_id !== null && payload.pic_funcionario_id !== '';
+  const hasSic = payload.sic_funcionario_id !== undefined && payload.sic_funcionario_id !== null && payload.sic_funcionario_id !== '';
+  if (hasPic !== hasSic) {
+    throw new ApiError('Informe PIC e SIC em conjunto', 400, 'CONTROLE_VOOS_CREW_PAIR_REQUIRED');
+  }
+  const picFuncionarioId = hasPic ? parsePositiveInteger(payload.pic_funcionario_id, 'pic_funcionario_id') : null;
+  const sicFuncionarioId = hasSic ? parsePositiveInteger(payload.sic_funcionario_id, 'sic_funcionario_id') : null;
 
   assertFlightTimes(input);
   assertCancellationReason(input);
   await assertCatalogsForInput(c.env.DB, input, empresaId);
+  if (picFuncionarioId && sicFuncionarioId) {
+    if (!input.aeronave_id) {
+      throw new ApiError('Aeronave obrigatoria para definir tripulacao', 400, 'CONTROLE_VOOS_CREW_AIRCRAFT_REQUIRED');
+    }
+    await assertFlightCrewAssignment(c.env.DB, empresaId, input.aeronave_id, picFuncionarioId, sicFuncionarioId);
+  }
 
   const result = await c.env.DB.prepare(
     `
@@ -1156,6 +1185,21 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
     .run();
 
   const newId = Number(result.meta.last_row_id);
+  if (picFuncionarioId && sicFuncionarioId) {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO cv_voo_tripulantes (
+           empresa_id, voo_id, funcionario_id, funcao, created_by, updated_by, created_at, updated_at
+         ) VALUES (?, ?, ?, 'PIC', ?, ?, datetime('now'), datetime('now'))`,
+      ).bind(empresaId, newId, picFuncionarioId, userId, userId),
+      c.env.DB.prepare(
+        `INSERT INTO cv_voo_tripulantes (
+           empresa_id, voo_id, funcionario_id, funcao, created_by, updated_by, created_at, updated_at
+         ) VALUES (?, ?, ?, 'SIC', ?, ?, datetime('now'), datetime('now'))`,
+      ).bind(empresaId, newId, sicFuncionarioId, userId, userId),
+    ]);
+  }
+
   await recordFlightEvent({
     db: c.env.DB,
     empresaId,
@@ -1166,6 +1210,19 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
     metadata: { fields: Object.keys(payload).sort() },
     usuarioId: userId,
   });
+
+  if (picFuncionarioId && sicFuncionarioId) {
+    await recordFlightEvent({
+      db: c.env.DB,
+      empresaId,
+      vooId: newId,
+      tipoEvento: 'tripulacao',
+      statusNovo: input.status || 'planejado',
+      descricao: 'PIC e SIC definidos na criacao do voo',
+      metadata: { pic_funcionario_id: picFuncionarioId, sic_funcionario_id: sicFuncionarioId },
+      usuarioId: userId,
+    });
+  }
 
   await maybeRecordSystemAudit(c, 'cv_voos', 'INSERT', newId, null, input);
   const created = await getFlightOrThrow(c.env.DB, String(newId), empresaId);

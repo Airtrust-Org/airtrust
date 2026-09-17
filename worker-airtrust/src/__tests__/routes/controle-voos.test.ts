@@ -187,6 +187,24 @@ function createSqliteD1(): SqliteD1 {
         status TEXT DEFAULT 'ATIVO',
         deleted_at TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS funcoes (
+        id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, codigo TEXT, nome TEXT,
+        ativo INTEGER DEFAULT 1, deleted_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS modelos_aeronave (
+        id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, codigo TEXT, modelo TEXT, nome TEXT,
+        deleted_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS funcionarios (
+        id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, nome TEXT, matricula TEXT,
+        funcao_id INTEGER, funcao TEXT, cargo TEXT, ativo INTEGER DEFAULT 1,
+        modelo_aeronave_id TEXT, aeronave TEXT, deleted_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS funcionarios_aeronaves (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, funcionario_id INTEGER NOT NULL, aeronave_id INTEGER NOT NULL,
+        data_inicio TEXT NOT NULL, data_fim TEXT, ativo INTEGER DEFAULT 1, deleted_at TEXT
+      );
     `,
   );
   seed(databasePath);
@@ -315,6 +333,27 @@ function seed(databasePath: string) {
         (901, 1, 'AW139', 'PT-AAA', 'ATIVO'),
         (902, 2, 'AW139', 'PT-BBB', 'ATIVO'),
         (903, 1, 'AW139', 'PT-INA', 'INATIVO');
+
+    `,
+  );
+}
+
+function seedCrewEligibilityState(databasePath: string) {
+  runSql(
+    databasePath,
+    `
+      INSERT INTO funcoes (id, empresa_id, codigo, nome, ativo) VALUES
+        (11, 1, 'PIC', 'Comandante', 1), (12, 1, 'SIC', 'Copiloto', 1),
+        (21, 2, 'PIC', 'Comandante', 1);
+      INSERT INTO modelos_aeronave (id, empresa_id, codigo, modelo, nome) VALUES
+        (51, 1, 'AW139', 'AW139', 'AW139'), (52, 1, 'SK76', 'SK76', 'SK76'),
+        (61, 2, 'AW139', 'AW139', 'AW139');
+      INSERT INTO funcionarios (id, empresa_id, nome, matricula, funcao_id, funcao, cargo, modelo_aeronave_id) VALUES
+        (1001, 1, 'Comandante AW', 'CMD-1001', 11, 'Comandante', 'Comandante', '51'),
+        (1002, 1, 'Copiloto AW', 'COP-1002', 12, 'Copiloto', 'Copiloto', '51'),
+        (1003, 1, 'Comandante SK', 'CMD-1003', 11, 'Comandante', 'Comandante', '52'),
+        (1004, 1, 'Comandante Multi', 'CMD-1004', 11, 'Comandante', 'Comandante', '51,52'),
+        (2001, 2, 'Comandante Tenant B', 'CMD-2001', 21, 'Comandante', 'Comandante', '61');
     `,
   );
 }
@@ -795,6 +834,83 @@ describe('controle voos routes', () => {
     });
 
     expect(response.status).toBe(201);
+  });
+
+  it('lista PIC e SIC elegiveis somente para o modelo e tenant da aeronave', async () => {
+    const db = createSqliteD1();
+    seedCrewEligibilityState(db.databasePath);
+    const response = await request(
+      db,
+      '/api/controle-voos/voos/tripulantes-elegiveis?aeronave_id=901',
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      data: Array<{ id: number; funcao_codigo: string }>;
+    };
+    expect(body.data.map((item) => item.id)).toEqual([1001, 1004, 1002]);
+    expect(body.data.find((item) => item.id === 1001)?.funcao_codigo).toBe('PIC');
+    expect(body.data.find((item) => item.id === 1002)?.funcao_codigo).toBe('SIC');
+    expect(body.data.map((item) => item.id)).not.toContain(1003);
+    expect(body.data.map((item) => item.id)).not.toContain(2001);
+  });
+
+  it('cria voo com PIC e SIC e persiste os vinculos que alimentam Meus voos', async () => {
+    const db = createSqliteD1();
+    seedCrewEligibilityState(db.databasePath);
+    const response = await request(db, '/api/controle-voos/voos', {
+      method: 'POST',
+      body: JSON.stringify(
+        validFlightPayload({
+          aeronave_id: 901,
+          pic_funcionario_id: 1001,
+          sic_funcionario_id: 1002,
+        }),
+      ),
+    });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { data: { id: number } };
+    const crew = db.queryJson<{ funcionario_id: number; funcao: string }>(
+      `SELECT funcionario_id, funcao FROM cv_voo_tripulantes WHERE voo_id=${body.data.id} ORDER BY funcao`,
+    );
+    expect(crew).toEqual([
+      { funcionario_id: 1001, funcao: 'PIC' },
+      { funcionario_id: 1002, funcao: 'SIC' },
+    ]);
+  });
+
+  it('aceita comandante habilitado como SIC', async () => {
+    const db = createSqliteD1();
+    seedCrewEligibilityState(db.databasePath);
+    const response = await request(db, '/api/controle-voos/voos', {
+      method: 'POST',
+      body: JSON.stringify(
+        validFlightPayload({
+          aeronave_id: 901,
+          pic_funcionario_id: 1001,
+          sic_funcionario_id: 1004,
+        }),
+      ),
+    });
+    expect(response.status).toBe(201);
+  });
+
+  it('rejeita copiloto como PIC mesmo estando habilitado no modelo', async () => {
+    const db = createSqliteD1();
+    seedCrewEligibilityState(db.databasePath);
+    const response = await request(db, '/api/controle-voos/voos', {
+      method: 'POST',
+      body: JSON.stringify(
+        validFlightPayload({
+          aeronave_id: 901,
+          pic_funcionario_id: 1002,
+          sic_funcionario_id: 1001,
+        }),
+      ),
+    });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_CREW_PIC_INELIGIBLE',
+    });
   });
 
   it('rejeita criacao de voo com aeronave inativa', async () => {
