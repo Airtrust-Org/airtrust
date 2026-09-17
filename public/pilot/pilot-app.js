@@ -12,6 +12,7 @@ import {
   assertVerifiedLeaseAllowsDraft,
   buildDraftSnapshot,
   calcConsumoCombustivel,
+  calcClockDurationHhMm,
   calcHorasVoadas,
   parseNumber,
   toInputTime,
@@ -88,6 +89,7 @@ const rdvEditorSubtitle = document.querySelector('#rdv-editor-subtitle');
 const rdvEditorSaveStatus = document.querySelector('#rdv-editor-save-status');
 const rdvLocalSequenceLabel = document.querySelector('#rdv-local-sequence');
 const rdvLeaseUntilLabel = document.querySelector('#rdv-lease-until');
+const rdvCoreFields = document.querySelector('#rdv-core-fields');
 const rdvFormFields = document.querySelector('#rdv-form-fields');
 const rdvStageFields = document.querySelector('#rdv-stage-fields');
 const rdvFuelingFields = document.querySelector('#rdv-fueling-fields');
@@ -986,11 +988,29 @@ async function refreshOutboxStatusForActiveFlight() {
   const pending = unresolved.filter((record) => record.value?.status === 'pending');
 
   if (blocked.length > 0) {
-    setServerSyncStatus('Ação necessária');
-    setRdvSyncMessage(
-      'Existe uma transmissão bloqueada. Os dados locais foram preservados para revisão.',
-      'error',
-    );
+    const latestBlocked = blocked.at(-1);
+    const blockedSequence = Number(latestBlocked?.value?.command?.local_sequence || 0);
+    const currentSequence = Number(activeRdvDraft?.local_sequence || operationalLocalSequence || 0);
+    const lastError = latestBlocked?.value?.last_error || {};
+    const detail = String(lastError.message || 'O servidor recusou a tentativa anterior.');
+    const code = String(lastError.code || '').trim();
+    if (currentSequence > blockedSequence) {
+      setServerSyncStatus('Correções prontas');
+      setRdvSyncMessage(
+        'A tentativa anterior foi recusada: ' + detail +
+          (code ? ' [' + code + ']' : '') +
+          '. Há alterações posteriores salvas; envie novamente.',
+        'attention',
+      );
+    } else {
+      setServerSyncStatus('Ação necessária');
+      setRdvSyncMessage(
+        'Transmissão bloqueada: ' + detail +
+          (code ? ' [' + code + ']' : '') +
+          '. Corrija o dado indicado antes de enviar novamente.',
+        'error',
+      );
+    }
   } else if (pending.length > 0) {
     setServerSyncStatus('Pendente de transmissão');
     setRdvSyncMessage(
@@ -1321,18 +1341,30 @@ function refreshDraftValidationPresentation() {
     if (!String(fueling.numero_nota || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe o número da nota.');
     if (parseNumber(fueling.litros_abastecidos) === null) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe os litros abastecidos.');
   }
-  const total = Object.keys(rdvErrors).length + stageErrors.length + supplementalErrors.length;
+  const messages = [
+    ...Object.values(rdvErrors),
+    ...stageErrors,
+    ...supplementalErrors,
+  ].map((message) => String(message || '').trim()).filter(Boolean);
 
   const existing = rdvEditorCard.querySelector('#rdv-validation-summary');
   if (existing) existing.remove();
 
-  if (total === 0) return;
+  if (messages.length === 0) return;
   const summary = document.createElement('div');
   summary.id = 'rdv-validation-summary';
   summary.className = 'statusline error';
-  summary.textContent =
-    total + ' validação(ões) pendente(s). Os dados continuam salvos localmente.';
-  rdvEditorCard.insertBefore(summary, rdvFormFields);
+  const title = document.createElement('strong');
+  title.textContent = 'Antes de enviar, corrija:';
+  const list = document.createElement('ul');
+  list.className = 'validation-list';
+  for (const message of messages) {
+    const item = document.createElement('li');
+    item.textContent = message;
+    list.append(item);
+  }
+  summary.append(title, list);
+  rdvSyncStatus.insertAdjacentElement('afterend', summary);
 }
 
 function scheduleOperationalSave() {
@@ -2040,6 +2072,7 @@ async function queueCurrentDraftForSync() {
         Number(record.value?.command?.flight_id) === state.identity.flightId &&
         ['pending', 'blocked'].includes(record.value?.status),
     );
+    let canCreateCommand = unresolved.length === 0;
     if (unresolved.length > 0) {
       const pending = unresolved.find((record) => record.value?.status === 'pending');
       if (pending) {
@@ -2049,11 +2082,33 @@ async function queueCurrentDraftForSync() {
           'attention',
         );
       } else {
-        throw new Error(
-          'Existe uma transmissão bloqueada para este voo. Revise o conflito antes de criar nova operação.',
+        const blocked = unresolved.filter((record) => record.value?.status === 'blocked');
+        const newestBlockedSequence = Math.max(
+          0,
+          ...blocked.map((record) => Number(record.value?.command?.local_sequence || 0)),
         );
+        if (state.revision <= newestBlockedSequence) {
+          const latest = blocked.at(-1);
+          const lastError = latest?.value?.last_error || {};
+          const detail = String(lastError.message || 'O servidor recusou a tentativa anterior.');
+          const code = String(lastError.code || '').trim();
+          throw new Error(
+            'Transmissão bloqueada: ' + detail +
+              (code ? ' [' + code + ']' : '') +
+              '. Corrija o dado indicado; o AirTrust preservou o rascunho.',
+          );
+        }
+        for (const record of blocked) {
+          await storeOutboxAttempt(record, {
+            status: 'superseded',
+            superseded_at: new Date().toISOString(),
+            superseded_by_local_sequence: state.revision,
+          });
+        }
+        canCreateCommand = true;
       }
-    } else {
+    }
+    if (canCreateCommand) {
       const command = await buildOfflineSyncCommand({
         packageData: state.packageData,
         rdvDraft: state.rdvRecord.value,
@@ -2164,21 +2219,30 @@ function createEditorSelect({ label, value, options, onChange }) {
 
 function updateOperationFlow(step) {
   if (!operationFlow) return;
-  const order = ['prepare', 'offline', 'saved', 'pending', 'synced', 'coordination'];
-  const current = order.indexOf(step);
+  const mapped = {
+    prepare: 0,
+    offline: 1,
+    saved: 1,
+    pending: 2,
+    synced: 3,
+    coordination: 3,
+  };
+  const order = ['prepare', 'edit', 'send'];
+  const current = mapped[step] ?? 0;
   for (const node of operationFlow.querySelectorAll('[data-step]')) {
     const index = order.indexOf(node.dataset.step);
     node.classList.remove('active', 'done', 'error');
     if (index < current) node.classList.add('done');
-    else if (index === current) node.classList.add('active');
+    else if (index === current && current < order.length) node.classList.add('active');
   }
 }
 
 function renderRdvFormFields() {
+  rdvCoreFields.replaceChildren();
   rdvFormFields.replaceChildren();
   const form = activeRdvDraft.form;
 
-  rdvFormFields.append(
+  rdvCoreFields.append(
     createEditorSelect({
       label: 'Natureza do voo',
       value: activeRdvDraft.flight_update?.natureza_voo_codigo || '',
@@ -2258,9 +2322,22 @@ function timingEventMeta(action) {
   };
 }
 
+function refreshStageDerivedTimes(stageDraft) {
+  const fields = stageDraft?.fields || stageDraft || {};
+  fields.tempo_decolagem_pouso = calcClockDurationHhMm(
+    fields.horario_decolagem,
+    fields.horario_pouso,
+  );
+  fields.tempo_total = calcClockDurationHhMm(
+    fields.horario_motor_ligado,
+    fields.horario_motor_desligado,
+  );
+}
+
 function applyQuickTiming(stage, field, action) {
   const nowLocal = localTimeNow();
   stage.fields[field] = nowLocal;
+  refreshStageDerivedTimes(stage);
   stage.timing_events = {
     ...(stage.timing_events || {}),
     [field]: timingEventMeta(action),
@@ -2294,7 +2371,7 @@ function renderStageFields() {
     card.append(heading);
 
     const quick = document.createElement('div');
-    quick.className = 'actions';
+    quick.className = 'quick-time-grid';
     const actions = [
       ['PARTIDA', 'horario_motor_ligado'],
       ['DECOLAGEM', 'horario_decolagem'],
@@ -2312,54 +2389,90 @@ function renderStageFields() {
     }
     card.append(quick);
 
+    refreshStageDerivedTimes(stageDraft);
     const grid = document.createElement('div');
     grid.className = 'editor-grid';
     const stageFields = [
-      ['Aeródromo de origem', 'origem_icao', 'text', null],
-      ['Aeródromo de destino', 'destino_icao', 'text', null],
-      ['Hora de partida', 'horario_motor_ligado', 'time', null],
-      ['Hora de decolagem', 'horario_decolagem', 'time', null],
-      ['Hora de pouso', 'horario_pouso', 'time', null],
-      ['Hora de corte', 'horario_motor_desligado', 'time', null],
-      ['IFR', 'tempo_ifr', 'number', 'decimal'],
-      ['Noturno', 'tempo_noturno', 'number', 'decimal'],
-      ['Pousos diurnos', 'pousos_diurnos', 'number', 'numeric'],
-      ['Pousos noturnos', 'pousos_noturnos', 'number', 'numeric'],
-      ['Starts', 'starts', 'number', 'numeric'],
-      ['PAX / POB operacional', 'pax', 'number', 'numeric'],
-      ['Payload / carga', 'payload', 'number', 'decimal'],
-      ['Combustível início', 'combustivel_inicio', 'number', 'decimal'],
-      ['Combustível fim', 'combustivel_fim', 'number', 'decimal'],
-      ['Unidade combustível', 'unidade_combustivel', 'text', null],
+      ['Aeródromo de origem', 'origem_icao', 'text', null, false, null],
+      ['Aeródromo de destino', 'destino_icao', 'text', null, false, null],
+      ['Hora de partida', 'horario_motor_ligado', 'time', null, false, 'Acionamento / motor ligado'],
+      ['Hora de decolagem', 'horario_decolagem', 'time', null, false, null],
+      ['Hora de pouso', 'horario_pouso', 'time', null, false, null],
+      ['Hora de corte', 'horario_motor_desligado', 'time', null, false, 'Motor desligado'],
+      ['Tempo de voo', 'tempo_decolagem_pouso', 'text', null, true, 'Calculado: decolagem → pouso'],
+      ['Tempo total', 'tempo_total', 'text', null, true, 'Calculado: partida → corte'],
+      ['IFR (HH:MM)', 'tempo_ifr', 'time', null, false, 'Informe a duração IFR'],
+      ['Noturno (HH:MM)', 'tempo_noturno', 'time', null, false, 'Informe a duração noturna'],
+      ['Pousos diurnos', 'pousos_diurnos', 'number', 'numeric', false, null],
+      ['Pousos noturnos', 'pousos_noturnos', 'number', 'numeric', false, null],
+      ['Starts', 'starts', 'number', 'numeric', false, null],
+      ['PAX / POB', 'pax', 'number', 'numeric', false, null],
+      ['Payload / carga', 'payload', 'number', 'decimal', false, null],
+      ['Combustível início', 'combustivel_inicio', 'number', 'decimal', false, null],
+      ['Combustível fim', 'combustivel_fim', 'number', 'decimal', false, null],
     ];
 
-    for (const [label, key, type, inputMode] of stageFields) {
-      grid.append(
-        createEditorField({
-          label,
-          value: fields[key],
-          type,
-          inputMode,
-          onInput: (value) => {
-            fields[key] = value;
-            activeRdvDraft.form = applySafeStageAggregates(
-              activeRdvDraft.form,
-              activeStageDrafts,
-            );
-            scheduleOperationalSave();
-          },
-          onBlur: () => {
-            activeRdvDraft.form = applySafeStageAggregates(
-              activeRdvDraft.form,
-              activeStageDrafts,
-            );
-            void flushOperationalSave();
-            renderRdvFormFields();
-            refreshDraftValidationPresentation();
-          },
-        }),
-      );
+    for (const [label, key, type, inputMode, readOnly, note] of stageFields) {
+      const fieldNode = createEditorField({
+        label,
+        value: fields[key],
+        type,
+        inputMode,
+        readOnly,
+        note,
+        onInput: readOnly ? null : (value) => {
+          fields[key] = value;
+          refreshStageDerivedTimes(stageDraft);
+          activeRdvDraft.form = applySafeStageAggregates(
+            activeRdvDraft.form,
+            activeStageDrafts,
+          );
+          scheduleOperationalSave();
+        },
+        onBlur: readOnly ? null : () => {
+          refreshStageDerivedTimes(stageDraft);
+          activeRdvDraft.form = applySafeStageAggregates(
+            activeRdvDraft.form,
+            activeStageDrafts,
+          );
+          void flushOperationalSave();
+          renderStageFields();
+          renderRdvFormFields();
+          refreshDraftValidationPresentation();
+        },
+      });
+      if (readOnly) fieldNode.classList.add('derived-time');
+      grid.append(fieldNode);
     }
+
+    grid.append(
+      createEditorSelect({
+        label: 'Unidade da carga',
+        value: fields.unidade_payload || 'KG',
+        options: [
+          { code: 'KG', label: 'kg' },
+          { code: 'LB', label: 'lb' },
+        ],
+        onChange: (value) => {
+          fields.unidade_payload = value || 'KG';
+          activeRdvDraft.form = applySafeStageAggregates(activeRdvDraft.form, activeStageDrafts);
+          scheduleOperationalSave();
+          renderRdvFormFields();
+        },
+      }),
+      createEditorSelect({
+        label: 'Unidade do combustível',
+        value: fields.unidade_combustivel || '',
+        options: [
+          { code: 'LB', label: 'lb' },
+          { code: 'KG', label: 'kg' },
+        ],
+        onChange: (value) => {
+          fields.unidade_combustivel = value;
+          scheduleOperationalSave();
+        },
+      }),
+    );
 
     card.append(grid);
     rdvStageFields.append(card);
@@ -2389,8 +2502,9 @@ function addOperationalStage() {
       source_stage_id: null, local_id: localId, numero_etapa: number,
       origem_icao: previous.destino_icao || '', destino_icao: '',
       horario_motor_ligado: '', horario_decolagem: '', horario_pouso: '', horario_motor_desligado: '',
-      tempo_ifr: '', tempo_noturno: '', pousos_diurnos: '', pousos_noturnos: '', starts: '', pax: '', payload: '',
-      combustivel_inicio: previous.combustivel_fim || '', combustivel_fim: '', unidade_combustivel: previous.unidade_combustivel || 'L', observacao_local: '',
+      tempo_decolagem_pouso: '', tempo_total: '', tempo_ifr: '', tempo_noturno: '',
+      pousos_diurnos: '', pousos_noturnos: '', starts: '', pax: '', payload: '', unidade_payload: previous.unidade_payload || 'KG',
+      combustivel_inicio: previous.combustivel_fim || '', combustivel_fim: '', unidade_combustivel: previous.unidade_combustivel || '', observacao_local: '',
     },
   });
   scheduleOperationalSave();
@@ -2445,10 +2559,10 @@ function renderOperationalEditor(options = {}) {
   const packageData = activePackageData();
   const voo = packageData.voo;
 
-  rdvEditorTitle.textContent = 'Etapas / RDV — ' + displayText(voo.prefixo);
+  rdvEditorTitle.textContent = 'Registrar voo — ' + displayText(voo.prefixo);
   rdvEditorSubtitle.textContent =
     formatDate(voo.data_programacao) +
-    ' · rascunho cifrado local · sem transmissão ao servidor';
+    ' · preenchimento salvo automaticamente neste tablet';
   rdvLeaseUntilLabel.textContent = formatTimestamp(
     activeVerifiedLease.claims.valid_until,
   );
@@ -2468,6 +2582,7 @@ function renderOperationalEditor(options = {}) {
 
 function closeOperationalEditor() {
   rdvEditorCard.classList.add('hidden');
+  rdvCoreFields.replaceChildren();
   rdvFormFields.replaceChildren();
   rdvStageFields.replaceChildren();
   rdvFuelingFields.replaceChildren();
@@ -2646,10 +2761,11 @@ function renderProvisioningState() {
   unlockTitle.textContent = provisioned ? 'Desbloquear dados offline' : 'Preparar armazenamento offline';
   unlockHelp.textContent = provisioned
     ? 'Informe o PIN offline configurado neste tablet.'
-    : 'Crie um PIN local para proteger os dados armazenados neste tablet.';
+    : 'Crie um PIN local para proteger os dados armazenados neste tablet. Ele não é a sua senha do AirTrust.';
   confirmWrap.classList.toggle('hidden', provisioned);
   unlockButton.textContent = provisioned ? 'Desbloquear' : 'Preparar tablet';
 }
+
 
 async function openWorkspace() {
   await requestPersistentStorage();
@@ -2707,6 +2823,7 @@ async function handleUnlock() {
     unlockButton.disabled = false;
   }
 }
+
 
 function markPending() {
   saveStatus.className = 'statusline attention';

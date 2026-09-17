@@ -125,14 +125,26 @@
       }
       .small-list { margin: 8px 0 0; padding-left: 20px; line-height: 1.6; }
       .signin-link { color: #12356a; font-weight: 800; }
-      .editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+      .editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; align-items: start; }
+      .editor-grid > * { min-width: 0; }
+      .editor-grid input, .editor-grid textarea, .editor-grid select { width: 100%; max-width: 100%; box-sizing: border-box; }
       .editor-grid .wide { grid-column: 1 / -1; }
+      .quick-time-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin: 12px 0 16px; }
+      .quick-time-grid button { min-width: 0; min-height: 58px; line-height: 1.2; white-space: normal; }
+      .derived-time { background: #f0f6fb; }
+      .simple-step-copy { color: #52637a; font-size: .86rem; margin: 6px 0 0; line-height: 1.45; }
+      .validation-list { margin: 8px 0 0; padding-left: 22px; line-height: 1.45; }
       .operation-flow { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; margin-top: 12px; }
       .operation-step { border: 1px solid #d6e0eb; border-radius: 12px; padding: 10px 12px; background: #f7f9fc; font-weight: 800; font-size: .82rem; }
       .operation-step.active { border-color: #12356a; background: #eaf1fb; color: #12356a; }
       .operation-step.done { border-color: #b9dfce; background: #f4fbf8; color: #176b49; }
       .operation-step.error { border-color: #efb4b4; background: #fff5f5; color: #a52727; }
       select { width: 100%; min-height: 48px; border: 1px solid #b8c6d8; border-radius: 12px; background: #fff; padding: 12px 14px; color: #10213d; }
+      @media (max-width: 900px) {
+        .editor-grid { grid-template-columns: 1fr; }
+        .editor-grid .wide { grid-column: auto; }
+        .quick-time-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      }
       @media (max-width: 720px) { .operation-flow { grid-template-columns: 1fr; } }
       .editor-stage {
         border: 1px solid #d9e2ec;
@@ -371,20 +383,17 @@
       </header>
 
       <section class="card warning">
-        <h2>Preparação completa para operação offline</h2>
+        <h2>Antes do voo</h2>
         <p class="muted">
-          Antes do voo, use “Preparar para voo”. O AirTrust só confirma “PRONTO PARA USO OFFLINE”
-          depois de verificar o pacote do voo, o lease assinado, o rascunho operacional cifrado e
-          o shell local deste tablet. Depois dessa confirmação, a edição continua sem internet e a
-          transmissão usa outbox cifrada e receipt idempotente quando a conexão retornar. Este
-          conteúdo não é Diário de Bordo oficial.
+          Enquanto estiver conectado, use “Preparar para voo”. Depois disso, registre os dados normalmente:
+          o AirTrust salva neste tablet e envia quando houver conexão. Este módulo não substitui o Diário de Bordo oficial.
         </p>
       </section>
 
       <section id="unlock-card" class="card">
         <h2 id="unlock-title">Preparar armazenamento offline</h2>
         <p id="unlock-help" class="muted">
-          Crie um PIN local para proteger os dados armazenados neste tablet.
+          Crie um PIN local para proteger os dados deste tablet. Ele não é a sua senha do AirTrust.
         </p>
         <div class="row">
           <div>
@@ -434,8 +443,7 @@
         <section id="online-flights-card" class="card">
           <h2>Meus voos autorizados</h2>
           <p class="muted">
-            “Preparar para voo” baixa e verifica o pacote, prepara a autorização de edição offline
-            e abre o rascunho local. A preparação só termina quando todos esses itens estão prontos.
+            Toque em “Preparar para voo”. O AirTrust cuida da preparação offline automaticamente e abre o lançamento do voo.
           </p>
           <div id="online-flights" class="list"></div>
         </section>
@@ -455,42 +463,37 @@
             <div id="flight-detail"></div>
           </details>
           <div class="lease-box">
-            <strong>Edição offline do RDV</strong>
+            <strong>Lançamento do voo</strong>
             <p class="muted">
-              A preparação normal é automática ao selecionar “Preparar para voo”. Estes controles
-              permanecem disponíveis para revalidar o lease ou reabrir o rascunho local.
+              Depois de preparado, o voo pode ser preenchido mesmo sem internet. O AirTrust salva no tablet automaticamente.
             </p>
           <div class="operation-flow" id="operation-flow" aria-live="polite">
-            <div class="operation-step" data-step="prepare">1. Não preparado</div>
-            <div class="operation-step" data-step="offline">2. Pronto para uso offline</div>
-            <div class="operation-step" data-step="saved">3. Alterações salvas neste iPad</div>
-            <div class="operation-step" data-step="pending">4. Aguardando sincronização</div>
-            <div class="operation-step" data-step="synced">5. Transmitido ao AirTrust</div>
-            <div class="operation-step" data-step="coordination">6. Recebido pela Coordenação</div>
+            <div class="operation-step" data-step="prepare">1. Preparar voo</div>
+            <div class="operation-step" data-step="edit">2. Registrar voo</div>
+            <div class="operation-step" data-step="send">3. Enviar</div>
           </div>
             <div class="actions">
               <button id="prepare-edit-offline" class="primary" type="button">
-                Revalidar edição offline
+                Atualizar preparação offline
               </button>
               <button id="open-local-draft" class="secondary" type="button">
-                Abrir rascunho local
+                Abrir lançamento salvo
               </button>
             </div>
             <div id="lease-status" class="statusline attention" aria-live="polite"></div>
           </div>
 
           <div class="lease-box" id="coordination-box">
-            <strong>Fechamento e Coordenação</strong>
+            <strong>Concluir e enviar</strong>
             <p class="muted">
-              Estas ações usam somente o estado canônico do servidor. Transmitir o rascunho
-              offline não envia automaticamente o RDV à Coordenação.
+              Depois de enviar os dados do voo, atualize o status, finalize o preenchimento e encaminhe à Coordenação.
             </p>
             <div class="actions">
               <button id="refresh-canonical-package" class="secondary" type="button">
-                Atualizar do servidor
+                Atualizar status
               </button>
               <button id="finalize-rdv-server" class="secondary" type="button" disabled>
-                Finalizar preenchimento
+                Finalizar voo
               </button>
               <button id="send-rdv-coordination" class="primary" type="button" disabled>
                 Enviar à Coordenação
@@ -517,22 +520,31 @@
             </div>
             <button id="close-rdv-editor" class="secondary" type="button">Fechar rascunho</button>
           </div>
-          <div class="meta">
-            <div><span class="muted">Sequência local</span><strong id="rdv-local-sequence">0</strong></div>
-            <div><span class="muted">Lease válido até</span><strong id="rdv-lease-until">—</strong></div>
-            <div><span class="muted">Servidor</span><strong id="rdv-server-sync-status">Não sincronizado</strong></div>
-          </div>
           <div class="actions">
             <button id="sync-rdv-now" class="primary" type="button" disabled>
-              Transmitir ao AirTrust
+              Enviar dados do voo
             </button>
           </div>
           <div id="rdv-sync-status" class="statusline attention" aria-live="polite">
-            Salve o rascunho local e reconecte para transmitir.
+            O AirTrust salva automaticamente. Quando terminar, envie os dados do voo.
           </div>
 
-          <h3 style="margin-top:20px">RDV</h3>
-          <div id="rdv-form-fields" class="editor-grid"></div>
+          <div class="section-head" style="margin-top:20px">
+            <div>
+              <h3>Dados essenciais</h3>
+              <p class="muted">Informe apenas o que não pode ser obtido automaticamente do voo.</p>
+            </div>
+          </div>
+          <div id="rdv-core-fields" class="editor-grid"></div>
+
+          <details class="technical-package">
+            <summary>Detalhes de sincronização</summary>
+            <div class="meta">
+              <div><span class="muted">Sequência local</span><strong id="rdv-local-sequence">0</strong></div>
+              <div><span class="muted">Autorização offline válida até</span><strong id="rdv-lease-until">—</strong></div>
+              <div><span class="muted">Servidor</span><strong id="rdv-server-sync-status">Não sincronizado</strong></div>
+            </div>
+          </details>
 
           <div class="section-head" style="margin-top:24px">
             <div>
@@ -542,6 +554,12 @@
             <button id="add-stage" class="secondary" type="button">+ Nova perna</button>
           </div>
           <div id="rdv-stage-fields"></div>
+
+          <details class="technical-package" style="margin-top:18px">
+            <summary>Resumo automático do RDV</summary>
+            <p class="muted">Horas voadas, pousos, POB, carga e combustível são consolidados a partir das pernas abaixo.</p>
+            <div id="rdv-form-fields" class="editor-grid"></div>
+          </details>
 
           <div class="section-head" style="margin-top:24px">
             <div>
@@ -561,7 +579,7 @@
         </section>
 
         <details id="diagnostic-card" class="card">
-          <summary>Diagnóstico de durabilidade local</summary>
+          <summary>Diagnóstico técnico do armazenamento</summary>
           <p class="muted">
             Campo sintético mantido apenas para validar persistência contínua: após “Salvo no
             tablet”, refresh ou modo avião deve preservar exatamente o texto.

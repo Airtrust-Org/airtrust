@@ -3,6 +3,7 @@ import {
   fromInputDateTime,
   parseInteger,
   parseNumber,
+  payloadToKg,
 } from '/pilot/pilot-rdv-draft.js';
 
 export const PILOT_SYNC_COMMAND_TYPE = 'rdv_snapshot_upsert_v1';
@@ -121,7 +122,9 @@ function stagePayload(stageDraft) {
       pousos_noturnos: parseInteger(fields.pousos_noturnos),
       starts: parseInteger(fields.starts),
       pax: parseInteger(fields.pax),
-      payload: parseNumber(fields.payload),
+      // cv_voo_etapas.payload remains canonical kilograms. The entry unit is
+      // intentionally a local UX aid until the governed schema owns a unit column.
+      payload: payloadToKg(fields.payload, fields.unidade_payload),
       combustivel_inicio: parseNumber(fields.combustivel_inicio),
       combustivel_fim: parseNumber(fields.combustivel_fim),
       unidade_combustivel: optionalText(fields.unidade_combustivel),

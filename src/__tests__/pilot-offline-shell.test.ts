@@ -90,7 +90,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v11'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v12'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
     expect(pilotSw).toContain("'/pilot/pilot-rdv-draft.js'");
@@ -145,8 +145,9 @@ describe('Pilot Offline shell', () => {
   });
 
   it('mantem o pacote-base read-only e separa rascunho local de sincronizacao', () => {
-    expect(pilotIndex).toContain('não é Diário de Bordo oficial');
-    expect(pilotIndex).toContain('outbox cifrada e receipt idempotente');
+    expect(pilotIndex).toContain('não substitui o Diário de Bordo oficial');
+    expect(pilotIndex).toContain('outbox cifrada');
+    expect(pilotIndex).toContain('receipt do servidor');
     expect(pilotApp).toContain("contract?.read_only !== true");
     expect(pilotApp).toContain("typeof contract?.sync_supported !== 'boolean'");
     expect(pilotApp).toContain("contract?.regulated_edb !== false");
@@ -251,7 +252,9 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('id="refresh-canonical-package"');
     expect(pilotIndex).toContain('id="finalize-rdv-server"');
     expect(pilotIndex).toContain('id="send-rdv-coordination"');
-    expect(pilotIndex).toMatch(/Transmitir o rascunho\s+offline não envia automaticamente o RDV à Coordenação/);
+    expect(pilotIndex).toContain('Concluir e enviar');
+    expect(pilotIndex).toContain('Enviar à Coordenação');
+    expect(pilotApp).toContain("'/controle-voos/pilot/offline-sync'");
     expect(pilotApp).toContain("'/rdv/finalizar-preenchimento'");
     expect(pilotApp).toContain("'/rdv/enviar'");
     expect(pilotApp).toContain("'/rdv/alertas'");
@@ -290,4 +293,31 @@ describe('Pilot Offline shell', () => {
     expect(pilotRdvDraft).toContain('Ciclos não são derivados de pousos');
     expect(pilotRdvDraft).not.toContain('next.ciclos =');
   });
+
+  it('simplifica o fluxo operacional sem enfraquecer o PIN do vault offline', () => {
+    expect(pilotIndex).toContain('1. Preparar voo');
+    expect(pilotIndex).toContain('2. Registrar voo');
+    expect(pilotIndex).toContain('3. Enviar');
+    expect(pilotIndex).toContain('id="rdv-core-fields"');
+    expect(pilotIndex).toContain('PIN offline');
+    expect(pilotApp).toContain('provisioned = await vault.isProvisioned()');
+    expect(pilotApp).toContain('await vault.provision(pin)');
+    expect(pilotApp).toContain('await vault.unlock(pin)');
+    expect(pilotVault).toContain("name: 'PBKDF2'");
+    expect(pilotVault).toContain('wrapped_key');
+    expect(pilotVault).not.toContain('master_key: masterKey');
+  });
+
+  it('expõe tempos derivados, unidades e erro real da transmissão bloqueada', () => {
+    expect(pilotApp).toContain("['Tempo de voo', 'tempo_decolagem_pouso'");
+    expect(pilotApp).toContain("['Tempo total', 'tempo_total'");
+    expect(pilotApp).toContain("['IFR (HH:MM)', 'tempo_ifr', 'time'");
+    expect(pilotApp).toContain("['Noturno (HH:MM)', 'tempo_noturno', 'time'");
+    expect(pilotApp).toContain("label: 'Unidade da carga'");
+    expect(pilotApp).toContain("label: 'Unidade do combustível'");
+    expect(pilotApp).toContain("'Transmissão bloqueada: ' + detail");
+    expect(pilotApp).toContain("status: 'superseded'");
+    expect(pilotRdvDraft).toContain('selecione a unidade do combustível');
+  });
+
 });

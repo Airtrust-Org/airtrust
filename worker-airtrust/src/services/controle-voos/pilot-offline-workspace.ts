@@ -17,6 +17,14 @@ type LocationCatalogRow = {
   updated_at: string | null;
 };
 
+type AirportCatalogFallbackRow = {
+  codigo: string | null;
+  codigo_icao: string | null;
+  nome: string | null;
+  tipo: string | null;
+  updated_at: string | null;
+};
+
 type StageLike = {
   id: number;
   numero_etapa: number;
@@ -169,6 +177,7 @@ async function loadLocationCatalog(db: D1Database, empresaId: number): Promise<{
   rows: LocationCatalogRow[];
   reason: string | null;
 }> {
+  let governedRows: LocationCatalogRow[] = [];
   try {
     const result = await db
       .prepare(
@@ -184,8 +193,60 @@ async function loadLocationCatalog(db: D1Database, empresaId: number): Promise<{
       )
       .bind(empresaId)
       .all<LocationCatalogRow>();
-    return { available: true, rows: result.results || [], reason: null };
+    governedRows = result.results || [];
   } catch {
+    // Some selectively migrated environments can still lack the FRMS catalogue.
+    // The operational aerodrome registry below remains tenant-scoped and is a
+    // safe fallback for identity/REDEMET station resolution only.
+  }
+
+  try {
+    const airports = await db
+      .prepare(
+        `SELECT codigo, codigo_icao, nome, tipo, updated_at
+         FROM cv_aeroportos
+         WHERE empresa_id = ?
+           AND ativo = 1
+           AND deleted_at IS NULL
+         ORDER BY codigo ASC`,
+      )
+      .bind(empresaId)
+      .all<AirportCatalogFallbackRow>();
+
+    const merged = new Map<string, LocationCatalogRow>();
+    for (const row of governedRows) {
+      const code = normalizeCode(row.location_code);
+      if (code) merged.set(code, row);
+    }
+    for (const airport of airports.results || []) {
+      const code = normalizeCode(airport.codigo_icao || airport.codigo);
+      if (!code || merged.has(code)) continue;
+      const normalizedType = String(airport.tipo || '').trim().toLowerCase();
+      const isAerodrome = normalizedType === 'aeroporto';
+      const isIcao = /^[A-Z]{4}$/.test(code);
+      merged.set(code, {
+        location_code: code,
+        operational_class:
+          normalizedType === 'plataforma'
+            ? 'PLATFORM'
+            : normalizedType === 'heliponto'
+              ? 'HELIPORT'
+              : 'AERODROME',
+        name: airport.nome,
+        timezone_iana: null,
+        weather_source_kind: isAerodrome && isIcao ? 'REDEMET' : 'NONE',
+        redemet_station_icao: isAerodrome && isIcao ? code : null,
+        latitude: null,
+        longitude: null,
+        source_reference: 'CV_AEROPORTOS_FALLBACK',
+        updated_at: airport.updated_at,
+      });
+    }
+    return { available: true, rows: [...merged.values()], reason: null };
+  } catch {
+    if (governedRows.length > 0) {
+      return { available: true, rows: governedRows, reason: null };
+    }
     return {
       available: false,
       rows: [],
