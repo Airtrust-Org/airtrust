@@ -1,85 +1,85 @@
-# AirTrust — Agent Development Workflow
+# AirTrust — Fluxo de execução rápida com ChatGPT
 
-**Goal:** reduce task latency, repeated discovery and cross-front conflicts while preserving the production safety contract in `AGENTS.md` and `docs/PRODUCTION_DEPLOY_RUNBOOK.md`.
+**Objetivo:** reduzir latência, redescoberta de contexto, repetição de testes e conflitos entre frentes sem alterar o contrato de segurança de `AGENTS.md` e dos workflows governados.
 
-## 1. Canonical working model
+## 1. Modelo canônico
 
-- **Code/state authority:** GitHub `Airtrust-Org/airtrust`, with `main` as the canonical integration branch.
-- **Primary interactive development environment:** ChatGPT Desktop in **Codex** mode with a local clone of this repository.
-- **UI validation:** ChatGPT Desktop built-in browser for localhost, staging and targeted production validation when authorized.
-- **Cloud/browser agents:** use only when a task materially benefits from delegated web navigation. They are not the default coding environment.
-- **Conversation history is not project state.** Durable state belongs in GitHub: branch, PR, issue/work-front note, CI evidence and release evidence.
+- **Executor principal:** ChatGPT em conversa normal. No macOS, o app Desktop é preferível quando o acesso a Terminal/IDE pelo recurso de trabalho com apps estiver disponível.
+- **Não depender de Codex ou Work:** Codex/Work só entram por escolha explícita ou limitação técnica objetiva; não são requisito do fluxo normal.
+- **Autoridade técnica:** GitHub `Airtrust-Org/airtrust`, com `main` como integração canônica.
+- **Estado mestre das frentes:** issue GitHub #776, sempre apontando para PR/branch/SHA e evidência real.
+- **UI manual:** Brave/Chrome quando necessária. Regressões repetíveis devem virar teste automatizado/Playwright.
+- **Conversas não são estado técnico.** Branch, PR, SHA, CI, staging e release são a evidência durável.
 
-## 2. Start every coding task from repository state
+## 2. Bootstrap de uma sessão
 
-Before editing:
+Antes de editar código local:
 
 ```bash
 git fetch origin main --prune
-bash scripts/agent-context.sh
+npm run agent:context
+npm run agent:test-plan
 ```
 
-Then inspect:
+Em trabalho feito diretamente pela integração GitHub, obter o equivalente pela API: `main` atual, branch/PR/HEAD, arquivos alterados, checks e issue #776.
 
-1. current `main` and recent commits;
-2. open/active PRs touching the same module when relevant;
-3. `AGENTS.md`, `CLAUDE.md` and the applicable runbook;
-4. the exact module files and existing tests;
-5. staging/production provenance only when the task requires runtime validation.
+Depois consultar somente o necessário:
 
-Do not reconstruct the current pipeline, schema or release status from an old conversation.
+1. issue #776 para localizar a frente;
+2. PR/branch/HEAD da frente;
+3. `AGENTS.md`, `CLAUDE.md` e o runbook aplicável;
+4. arquivos que possuem o comportamento e testes próximos;
+5. ambiente remoto apenas se o caso exigir staging/produção.
 
-## 3. One front, one branch
+Não reconstruir estado atual reproduzindo conversas antigas.
 
-Use a dedicated branch for each independent front:
+## 3. Separar diagnóstico de execução
+
+### Diagnóstico
+
+Objetivo: chegar à **causa suficiente**, não auditar o sistema inteiro.
 
 ```text
-fix/<module>-<problem>
-feat/<module>-<change>
-chore/<topic>
+caso real/erro
+→ localizar owner frontend/backend
+→ reproduzir ou encontrar evidência equivalente
+→ identificar causa suficiente
+→ congelar escopo
 ```
 
-Parallel fronts must not share an ad-hoc worktree. Never reset, clean, stash or overwrite unrelated changes. Coordinate through GitHub commits/PRs rather than terminal state held only on one machine.
+Ao encontrar a causa, registrar no PR/handoff e parar de ampliar a investigação salvo blocker inseparável.
 
-## 4. Fast diagnostic loop
-
-Use the narrowest loop that proves the change:
+### Execução
 
 ```text
-reproduce
-→ identify owning frontend/backend files
-→ focused change
-→ focused test
-→ affected suite
-→ official CI
-→ staging only when runtime/integration evidence is required
-→ production only after exact-SHA authorization
+correção mínima
+→ mesmo teste que prova a falha
+→ suíte afetada
+→ CI oficial
+→ staging quando necessário
+→ validação real
+→ produção somente com autorização SHA/escopo específica
 ```
 
-Rules:
+Depois de duas falhas substancialmente iguais, mudar o método.
 
-- Do not rerun evidence that is already PASS for the same SHA unless a later change invalidated it.
-- After two substantially identical failures, change method.
-- Prefer code/search/test evidence over repeated manual clicking.
-- Convert repeated browser regressions into Playwright or another automated test when practical.
-- Keep browser testing focused on behavior that cannot be proven reliably by unit/integration tests.
+## 4. Uma frente, uma branch/PR
 
-## 5. Desktop browser usage
+Use branch independente:
 
-Use the built-in browser when testing:
+```text
+fix/<modulo>-<problema>
+feat/<modulo>-<mudanca>
+chore/<tema>
+```
 
-- `http://localhost:3000` frontend;
-- local Worker/API;
-- staging UI;
-- authorized production smoke/real-case validation.
+Frentes paralelas coordenam por GitHub. Não compartilhar estado implícito de terminal, não resetar/limpar/stash de trabalho desconhecido e não sobrescrever mudança nova de outra frente.
 
-For debugging JavaScript/network/state, enable the Desktop browser developer/CDP access when needed. Do not expose secrets in chat. Staging identities remain governed by the GitHub Environment contract in `AGENTS.md`.
+## 5. Estado mestre e handoff
 
-Use the regular browser (Brave/Chrome) for ordinary human browsing, unrelated tabs and sessions that do not need agent interaction.
+O índice vivo é o issue **#776 — AirTrust — Estado operacional mestre das frentes**.
 
-## 6. Durable work-front handoff
-
-Each substantial front should keep, in its PR body or linked issue, at minimum:
+Cada frente deve apontar para evidência canônica e manter:
 
 ```text
 FRONT:
@@ -100,35 +100,47 @@ BLOCKERS:
 NEXT_ACTION:
 ```
 
-Use `docs/ops/WORK_FRONT_TEMPLATE.md` when a standalone handoff note is useful.
+Use `docs/ops/WORK_FRONT_TEMPLATE.md` no PR/issue quando necessário. O issue mestre não substitui SHA/checks; apenas indexa as frentes.
 
-This lets another session continue from repository evidence instead of replaying a long chat.
+## 6. Seleção automática de testes
 
-## 7. Release path
+`npm run agent:test-plan` lê o delta contra `origin/main` e sugere o menor conjunto seguro de testes existentes.
 
-Production remains governed by `docs/PRODUCTION_DEPLOY_RUNBOOK.md`.
+```bash
+npm run agent:test-plan
+npm run agent:test-plan -- --run
+```
 
-The optimized workflow does **not** change these boundaries:
+`--run` executa o plano local recomendado. CI oficial continua obrigatória antes de integração; o script não substitui nenhum gate.
 
-- no direct push to `main`;
-- no bypass of required gates;
-- no production migration/data write without scoped authorization;
-- authorization remains exact-SHA and scope-specific;
-- Cloudflare workflow is the production path;
-- validate the deployed version and the real case after release.
+Regras:
 
-## 8. Where each tool fits
+- primeiro teste focado;
+- depois suíte afetada;
+- não repetir evidência PASS para o mesmo SHA sem delta invalidante;
+- browser manual somente quando o comportamento não for comprovável por teste automatizado;
+- quando o mesmo bug exigir cliques repetidos em mais de uma correção, criar/estender Playwright.
 
-| Need | Preferred surface |
+Ver `docs/ops/TEST_FAST_PATH.md`.
+
+## 7. Runbooks
+
+Comece por `docs/ops/RUNBOOK_INDEX.md`. Ele aponta para as fontes canônicas e evita usar documento histórico por engano.
+
+Produção continua governada por `docs/PRODUCTION_DEPLOY_RUNBOOK.md`; staging e schema usam os workflows/runbooks atuais. Esta otimização não reduz gates, branch protection, tenant/RBAC, backup/recovery ou autorização.
+
+## 8. Papel de cada superfície
+
+| Necessidade | Superfície preferida |
 |---|---|
-| Understand/change code | Desktop Codex + local repository |
-| Search current canonical source | GitHub |
-| CI/PR coordination | GitHub |
-| Local UI inspection | Desktop built-in browser |
-| Repeatable regression | automated test / Playwright |
-| Staging release | governed GitHub workflow |
-| Production release | governed GitHub workflow |
-| Long web-only delegated task | Work, selectively |
-| Ordinary browsing | Brave/Chrome |
+| Conversar, investigar e coordenar | ChatGPT normal |
+| Código/PR/SHA/CI | GitHub |
+| Arquivos/terminal local quando necessário | ChatGPT Desktop + app/Terminal/IDE conectado |
+| Validação visual manual | Brave/Chrome |
+| Regressão repetível | Vitest/Node tests/Playwright |
+| Staging | workflow GitHub governado |
+| Produção | workflow GitHub governado |
+| Navegação web longa/delegada | Work somente quando justificar |
+| Codex | opcional, não requisito |
 
-The target is to minimize tool switching, not maximize the number of tools in use.
+A meta é reduzir troca de ferramentas e reconstrução de contexto.
