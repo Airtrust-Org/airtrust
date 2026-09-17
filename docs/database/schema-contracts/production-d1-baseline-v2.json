@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-09-16",
-    "last_reconciled_against": "0497 training-compliance aircraft scope reviewed; remote apply pending",
-    "schema_v2_digest": "cca1c59420f1193c735beb228e6272510c8c94d34f83cad8f2d667763ba8d508",
+    "last_reconciled_at": "2026-09-17",
+    "last_reconciled_against": "0498 FRMS parametric V2 reviewed; remote apply pending",
+    "schema_v2_digest": "66d3a84dc23f6c9abdcc155ae59ae07a7d51c5adac839699a8c680339775257f",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -865,6 +865,23 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "training-compliance-aircraft-scope-0497.json",
       "note": "0497 is reviewed and prepared only. It adds an optional aircraft-model qualifier to treinamento_requisitos; existing generic rules remain valid. Production apply requires the governed Schema V2 workflow and recovery point."
+    },
+    {
+      "change_file": "0498_frms_parametric_v2.sql",
+      "change_id": "frms-parametric-v2-0498",
+      "sha256": "3156038f3584f534e11b657b8c88e859e93596c8433f8d8dea5b0c648fffbd59",
+      "targets": [
+        "frms_acumulo_rolling",
+        "frms_fatorizacao_jornada",
+        "frms_recovery_activity_day",
+        "frms_recovery_activity_segment",
+        "frms_recovery_assessment"
+      ],
+      "domain": "governed offshore FRMS V2 coefficients, recovery evidence, calendar-year accumulation, IMC traceability, and component-scoped credits",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "frms-parametric-v2-0498.json",
+      "note": "0498 is reviewed and prepared only. It adds V2 audit/schema fields and an immutable governed HELICOPTER_OFFSHORE revision; production apply requires code-first compatibility, the governed Schema V2 workflow, recovery point, atomic ledger apply and FRMS smoke validation."
     }
   ]
 }
