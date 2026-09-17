@@ -26,6 +26,18 @@ unrelated worktree changes intact; never reset, clean, stash or `git add .`.
 - Do not bypass branch protection, required gates, tenant isolation, RBAC,
   migration governance or production authorization.
 
+### Start-of-task bootstrap
+
+For substantial coding work, prefer ChatGPT Desktop Codex against a local clone
+of this repository. At the start of a fresh session or resumed front, run
+`bash scripts/agent-context.sh` and use repository/PR evidence as the current
+state instead of replaying an old conversation.
+
+The optimized cross-session workflow is documented in
+`docs/ops/AGENT_WORKFLOW.md`. For fronts that need a durable handoff, use
+`docs/ops/WORK_FRONT_TEMPLATE.md` in the PR body, linked issue or a temporary
+tracked handoff note.
+
 ### Staging credentials and QA identities
 
 - GitHub Environment `staging` is the persistent source of truth for staging
