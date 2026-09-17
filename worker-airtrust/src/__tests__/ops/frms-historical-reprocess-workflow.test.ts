@@ -79,6 +79,8 @@ describe('FRMS historical reprocessing governance', () => {
     expect(executor).toContain('before,');
     expect(executor).toContain('after, delta');
     expect(executor).toContain("stage = 'ROLLED_BACK'");
+    expect(executor).toContain('if (current.id === row.id) continue;');
+    expect(executor).toContain("UPDATE frms_acumulo_rolling SET deleted_at = datetime('now')");
     expect(executor).toContain('COMPLETED_REVIEW_REQUIRED');
     expect(executor).toContain('FRMS_TENANT_PREFLIGHT_FAILED');
   });
@@ -89,4 +91,24 @@ describe('FRMS historical reprocessing governance', () => {
     expect(executor).toContain('const PAGE_SIZE = 250');
     expect(executor).toContain('ORDER BY CAST(j.tripulante_id AS INTEGER), j.data, j.id');
   });
+  it('pins the V2 historical backfill to Costa do Sol, the approved date range and revision', () => {
+    expect(workflow).toContain("APPROVED_EMPRESA_ID: '6'");
+    expect(workflow).toContain("APPROVED_DATA_INICIO: '2026-01-01'");
+    expect(workflow).toContain("APPROVED_DATA_FIM: '2026-09-16'");
+    expect(workflow).toContain('frms-empresa6-helicopter-offshore-v2-history-0499');
+    expect(workflow).toContain('frms-recalc-empresa6-v2-history-2026-0499');
+    expect(executor).toContain('APPROVED_DRY_RUN_SCOPE_MISMATCH');
+    expect(executor).toContain('FRMS_TARGET_REVISION_NOT_EFFECTIVE');
+    expect(executor).toContain('f.empresa_id = ?');
+  });
+
+  it('recalculates only persisted recovery evidence before journey factorization and supports rollback', () => {
+    expect(executor).toContain('loadRecoveryEvidenceRows');
+    expect(executor).toContain('processRecoveryAssessment');
+    expect(executor).toContain('computeRecoveryCredit');
+    expect(executor).toContain("payload.kind === 'recovery'");
+    expect(executor).toContain('FRMS_RECOVERY_TARGET_REVISION_MISMATCH');
+    expect(executor).toContain('recovery_credit_total');
+  });
+
 });

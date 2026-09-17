@@ -164,6 +164,7 @@ interface SnapshotApiResponse {
   summary: FrmsOperationalSnapshotSummary;
   meta?: FrmsOperationalSnapshotMeta;
   error?: string;
+  code?: string;
 }
 
 interface UseFrmsOperationalSnapshotResult {

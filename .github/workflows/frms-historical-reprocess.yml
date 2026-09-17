@@ -22,11 +22,36 @@ on:
         description: Reviewed FRMS formula version
         required: true
         type: string
-        default: frms-regulatory-integrity-20260804-v2
+        default: frms-parametric-v2-history-20260917
       rollback_scope_key:
         description: Required only for rollback; use the scope_key from the execution report
         required: false
         type: string
+      empresa_id:
+        description: Exact tenant ID approved for the historical backfill
+        required: true
+        type: string
+        default: '6'
+      data_inicio:
+        description: First operational date included in the approved backfill
+        required: true
+        type: string
+        default: '2026-01-01'
+      data_fim:
+        description: Last operational date included in the approved backfill
+        required: true
+        type: string
+        default: '2026-09-16'
+      target_revision_id:
+        description: Exact governed V2 revision used for every recalculation
+        required: true
+        type: string
+        default: frms-empresa6-helicopter-offshore-v2-history-0499
+      recalc_run_id:
+        description: Exact governed recalculation ledger row created by 0499
+        required: true
+        type: string
+        default: frms-recalc-empresa6-v2-history-2026-0499
       confirm_production:
         description: Type FRMS_REPROCESS_ALL_HISTORICAL
         required: true
@@ -47,7 +72,12 @@ env:
   NODE_VERSION: '24'
   PRODUCTION_CONFIRMATION: FRMS_REPROCESS_ALL_HISTORICAL
   PRODUCTION_DATABASE_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
-  FORMULA_DEFAULT: frms-regulatory-integrity-20260804-v2
+  FORMULA_DEFAULT: frms-parametric-v2-history-20260917
+  APPROVED_EMPRESA_ID: '6'
+  APPROVED_DATA_INICIO: '2026-01-01'
+  APPROVED_DATA_FIM: '2026-09-16'
+  APPROVED_TARGET_REVISION_ID: frms-empresa6-helicopter-offshore-v2-history-0499
+  APPROVED_RECALC_RUN_ID: frms-recalc-empresa6-v2-history-2026-0499
   APPROVED_FORMULA_SHA: 2578ee339be7788bf3cc5a1da8a23bd50b06b524
   AUTHORIZATION_ISSUE: '827'
 
@@ -79,6 +109,11 @@ jobs:
           INPUT_EXPECTED_SHA: ${{ inputs.expected_sha }}
           INPUT_FORMULA_VERSION: ${{ inputs.formula_version }}
           INPUT_ROLLBACK_SCOPE_KEY: ${{ inputs.rollback_scope_key }}
+          INPUT_EMPRESA_ID: ${{ inputs.empresa_id }}
+          INPUT_DATA_INICIO: ${{ inputs.data_inicio }}
+          INPUT_DATA_FIM: ${{ inputs.data_fim }}
+          INPUT_TARGET_REVISION_ID: ${{ inputs.target_revision_id }}
+          INPUT_RECALC_RUN_ID: ${{ inputs.recalc_run_id }}
           INPUT_CONFIRM_PRODUCTION: ${{ inputs.confirm_production }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           COMMENT_BODY: ${{ github.event.comment.body }}
@@ -111,6 +146,11 @@ jobs:
             formula_version="$FORMULA_DEFAULT"
             rollback_scope_key=''
             confirmation="$PRODUCTION_CONFIRMATION"
+            empresa_id="$APPROVED_EMPRESA_ID"
+            data_inicio="$APPROVED_DATA_INICIO"
+            data_fim="$APPROVED_DATA_FIM"
+            target_revision_id="$APPROVED_TARGET_REVISION_ID"
+            recalc_run_id="$APPROVED_RECALC_RUN_ID"
           elif [[ "$EVENT_NAME" == 'push' ]]; then
             [[ "$EVENT_REF" == 'refs/heads/ops/frms-historical-reprocess-approved-20260805' ]] || {
               echo 'Unexpected push ref.' >&2
@@ -121,6 +161,11 @@ jobs:
             formula_version="$FORMULA_DEFAULT"
             rollback_scope_key=''
             confirmation="$PRODUCTION_CONFIRMATION"
+            empresa_id="$APPROVED_EMPRESA_ID"
+            data_inicio="$APPROVED_DATA_INICIO"
+            data_fim="$APPROVED_DATA_FIM"
+            target_revision_id="$APPROVED_TARGET_REVISION_ID"
+            recalc_run_id="$APPROVED_RECALC_RUN_ID"
           else
             [[ "$EVENT_REF" == 'refs/heads/main' ]] || {
               echo 'Manual execution is allowed only from main.' >&2
@@ -131,6 +176,11 @@ jobs:
             formula_version="$INPUT_FORMULA_VERSION"
             rollback_scope_key="$INPUT_ROLLBACK_SCOPE_KEY"
             confirmation="$INPUT_CONFIRM_PRODUCTION"
+            empresa_id="$INPUT_EMPRESA_ID"
+            data_inicio="$INPUT_DATA_INICIO"
+            data_fim="$INPUT_DATA_FIM"
+            target_revision_id="$INPUT_TARGET_REVISION_ID"
+            recalc_run_id="$INPUT_RECALC_RUN_ID"
           fi
 
           [[ "$confirmation" == "$PRODUCTION_CONFIRMATION" ]] || {
@@ -171,6 +221,11 @@ jobs:
             }
           fi
 
+          [[ "$empresa_id" == "$APPROVED_EMPRESA_ID" ]] || { echo 'empresa_id outside approved scope.' >&2; exit 1; }
+          [[ "$data_inicio" == "$APPROVED_DATA_INICIO" && "$data_fim" == "$APPROVED_DATA_FIM" ]] || { echo 'date range outside approved scope.' >&2; exit 1; }
+          [[ "$target_revision_id" == "$APPROVED_TARGET_REVISION_ID" ]] || { echo 'target_revision_id outside approved scope.' >&2; exit 1; }
+          [[ "$recalc_run_id" == "$APPROVED_RECALC_RUN_ID" ]] || { echo 'recalc_run_id outside approved scope.' >&2; exit 1; }
+
           [[ "$operation" == 'execute' || "$operation" == 'rollback' ]] || {
             echo 'Unsupported operation.' >&2
             exit 1
@@ -192,6 +247,11 @@ jobs:
             echo "expected_sha=$expected_sha"
             echo "formula_version=$formula_version"
             echo "rollback_scope_key=$rollback_scope_key"
+            echo "empresa_id=$empresa_id"
+            echo "data_inicio=$data_inicio"
+            echo "data_fim=$data_fim"
+            echo "target_revision_id=$target_revision_id"
+            echo "recalc_run_id=$recalc_run_id"
           } >> "$GITHUB_OUTPUT"
 
       - name: Record authorized production start
@@ -304,6 +364,11 @@ jobs:
             --sqlite-file "$DRY_RUN_DB"
             --source-sha "$EXPECTED_SHA"
             --formula-version "$FORMULA_VERSION"
+            --empresa-id "${{ steps.auth.outputs.empresa_id }}"
+            --data-inicio "${{ steps.auth.outputs.data_inicio }}"
+            --data-fim "${{ steps.auth.outputs.data_fim }}"
+            --target-revision-id "${{ steps.auth.outputs.target_revision_id }}"
+            --recalc-run-id "${{ steps.auth.outputs.recalc_run_id }}"
             --report "$report"
           )
           if [[ "$OPERATION" == 'rollback' ]]; then
@@ -354,6 +419,11 @@ jobs:
             --database-id "$PRODUCTION_DATABASE_ID"
             --source-sha "$EXPECTED_SHA"
             --formula-version "$FORMULA_VERSION"
+            --empresa-id "${{ steps.auth.outputs.empresa_id }}"
+            --data-inicio "${{ steps.auth.outputs.data_inicio }}"
+            --data-fim "${{ steps.auth.outputs.data_fim }}"
+            --target-revision-id "${{ steps.auth.outputs.target_revision_id }}"
+            --recalc-run-id "${{ steps.auth.outputs.recalc_run_id }}"
             --report "$report"
           )
           if [[ "$OPERATION" == 'execute' ]]; then
@@ -377,6 +447,11 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           OPERATION: ${{ steps.auth.outputs.operation }}
           SCOPE_KEY: ${{ steps.production.outputs.scope_key }}
+          EMPRESA_ID: ${{ steps.auth.outputs.empresa_id }}
+          DATA_INICIO: ${{ steps.auth.outputs.data_inicio }}
+          DATA_FIM: ${{ steps.auth.outputs.data_fim }}
+          TARGET_REVISION_ID: ${{ steps.auth.outputs.target_revision_id }}
+          RECALC_RUN_ID: ${{ steps.auth.outputs.recalc_run_id }}
         run: |
           set -euo pipefail
           rows="$(npx wrangler d1 execute airtrust-db --env production --remote --json --command \
@@ -385,9 +460,21 @@ jobs:
           [[ "$failed" == '0' ]] || { echo "FRMS ledger has $failed unfinished items." >&2; exit 1; }
           if [[ "$OPERATION" == 'execute' ]]; then
             duplicates="$(npx wrangler d1 execute airtrust-db --env production --remote --json --command \
-              "SELECT COUNT(*) AS total FROM (SELECT jornada_id FROM frms_fatorizacao_jornada WHERE deleted_at IS NULL GROUP BY jornada_id HAVING COUNT(*) > 1);" \
+              "SELECT COUNT(*) AS total FROM (SELECT fj.jornada_id FROM frms_fatorizacao_jornada fj JOIN frms_jornada j ON j.id=fj.jornada_id JOIN funcionarios f ON f.id=CAST(j.tripulante_id AS INTEGER) WHERE fj.deleted_at IS NULL AND j.deleted_at IS NULL AND f.deleted_at IS NULL AND f.empresa_id=${EMPRESA_ID} AND j.data>='${DATA_INICIO}' AND j.data<='${DATA_FIM}' GROUP BY fj.jornada_id HAVING COUNT(*) > 1);" \
               | jq -r '.[0].results[0].total')"
-            [[ "$duplicates" == '0' ]] || { echo "Active factorization duplicates: $duplicates" >&2; exit 1; }
+            [[ "$duplicates" == '0' ]] || { echo "Scoped active factorization duplicates: $duplicates" >&2; exit 1; }
+            provenance_drift="$(npx wrangler d1 execute airtrust-db --env production --remote --json --command \
+              "SELECT COUNT(*) AS total FROM frms_fatorizacao_jornada fj JOIN frms_jornada j ON j.id=fj.jornada_id JOIN funcionarios f ON f.id=CAST(j.tripulante_id AS INTEGER) WHERE fj.deleted_at IS NULL AND j.deleted_at IS NULL AND f.deleted_at IS NULL AND f.empresa_id=${EMPRESA_ID} AND j.data>='${DATA_INICIO}' AND j.data<='${DATA_FIM}' AND (COALESCE(fj.config_revision_id,'')<>'${TARGET_REVISION_ID}' OR COALESCE(fj.model_version,'')<>'FRMS_OPERATIONAL_POLICY_V2');" \
+              | jq -r '.[0].results[0].total')"
+            [[ "$provenance_drift" == '0' ]] || { echo "Historical factorization provenance drift: $provenance_drift" >&2; exit 1; }
+            recalc_complete="$(npx wrangler d1 execute airtrust-db --env production --remote --json --command \
+              "SELECT COUNT(*) AS total FROM frms_recalc_runs WHERE id='${RECALC_RUN_ID}' AND empresa_id=${EMPRESA_ID} AND target_revision_id='${TARGET_REVISION_ID}' AND status='COMPLETE' AND failed_count=0;" \
+              | jq -r '.[0].results[0].total')"
+            [[ "$recalc_complete" == '1' ]] || { echo "Governed recalculation ledger not complete." >&2; exit 1; }
+            recovery_drift="$(npx wrangler d1 execute airtrust-db --env production --remote --json --command \
+              "SELECT COUNT(*) AS total FROM frms_recovery_assessment WHERE empresa_id=${EMPRESA_ID} AND reference_date>='${DATA_INICIO}' AND reference_date<='${DATA_FIM}' AND deleted_at IS NULL AND (COALESCE(config_revision_id,'')<>'${TARGET_REVISION_ID}' OR COALESCE(policy_version,'')<>'FRMS_OPERATIONAL_POLICY_V2');" \
+              | jq -r '.[0].results[0].total')"
+            [[ "$recovery_drift" == '0' ]] || { echo "Recovery assessment provenance drift: $recovery_drift" >&2; exit 1; }
           fi
 
       - name: Publish sanitized production result to authorization issue

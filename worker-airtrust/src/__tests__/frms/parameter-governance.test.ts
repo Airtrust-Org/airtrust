@@ -63,7 +63,7 @@ describe('FRMS parameter governance V2', () => {
 
   it('keeps the previous revision available for historical operational dates', () => {
     const historical = resolveEffectiveRevision([
-      revision({ id: 'before', effective_from: '2026-01-01', effective_to: '2026-06-30', revision_number: 1 }),
+      revision({ id: 'before', status: 'SUPERSEDED', effective_from: '2026-01-01', effective_to: '2026-06-30', revision_number: 1 }),
       revision({ id: 'after', effective_from: '2026-07-01', revision_number: 2 }),
     ], 1, FRMS_OFFSHORE_PROFILE, '2026-06-15');
     expect(historical.id).toBe('before');

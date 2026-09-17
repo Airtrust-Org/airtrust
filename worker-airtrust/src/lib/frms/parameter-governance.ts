@@ -134,7 +134,7 @@ export async function resolveFrmsOperationalContext(
 
 function isEffective(revision: FrmsConfigRevision, operationalDate: string): boolean {
   return (
-    revision.status === 'ACTIVE' &&
+    (revision.status === 'ACTIVE' || revision.status === 'SUPERSEDED') &&
     revision.effective_from <= operationalDate &&
     (revision.effective_to == null || revision.effective_to >= operationalDate)
   );
@@ -342,7 +342,7 @@ export async function loadResolvedFrmsParameters(
   const revisions = await db
     .prepare(
       `SELECT * FROM frms_config_revisions
-       WHERE profile_code = ? AND status = 'ACTIVE'
+       WHERE profile_code = ? AND status IN ('ACTIVE', 'SUPERSEDED')
          AND (empresa_id = ? OR empresa_id IS NULL)
          AND effective_from <= ?
          AND (effective_to IS NULL OR effective_to >= ?)`,

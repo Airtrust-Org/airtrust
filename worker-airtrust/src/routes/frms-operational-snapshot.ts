@@ -173,27 +173,19 @@ router.get('/operational-snapshot', async (c) => {
     });
   } catch (error) {
     if (error instanceof FrmsParameterResolutionError) {
-      return c.json({
-        success: true,
-        data: [],
-        summary: {
-          total_tripulantes: 0,
-          total_escalados: 0,
-          checkins_recebidos: 0,
-          checkins_pendentes: 0,
-          alertas_criticos: 0,
-          alertas_atencao: 0,
-          dados_estimados: 0,
-          inconsistencias: 0,
-          sem_fatorizacao: 0,
+      return c.json(
+        {
+          success: false,
+          error: 'Configuração FRMS indisponível para a data selecionada.',
+          code: error.code,
+          meta: {
+            scope: hasTeamScope ? 'team' : 'self',
+            forced_funcionario_id: forcedFuncionarioId,
+            notice: 'FRMS_CONTEXT_UNAVAILABLE',
+          },
         },
-        meta: {
-          scope: hasTeamScope ? 'team' : 'self',
-          forced_funcionario_id: forcedFuncionarioId,
-          notice: 'FRMS_CONTEXT_UNAVAILABLE',
-          message: error.message,
-        },
-      });
+        503,
+      );
     }
 
     const logger = createLogger(c as SnapshotContext, 'FrmsOperationalSnapshot');
