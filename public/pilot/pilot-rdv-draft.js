@@ -1,4 +1,9 @@
-export const PILOT_DRAFT_SCHEMA_VERSION = 1;
+export const PILOT_DRAFT_SCHEMA_VERSION = 2;
+
+export const PILOT_NATUREZA_OPTIONS = Object.freeze([
+  { code: 'MANUTENCAO', label: 'Manutenção' },
+  { code: 'PETROBRAS', label: 'Petrobras' },
+]);
 
 export function toInputDateTime(value) {
   if (!value) return '';
@@ -9,12 +14,28 @@ export function toInputDateTime(value) {
     .slice(0, 16);
 }
 
-export function fromInputDateTime(value) {
-  if (!String(value || '').trim()) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
+export function fromInputDateTime(value, flightDate = '') {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  if (/^\d{2}:\d{2}(?::\d{2})?$/.test(text)) {
+    const date = String(flightDate || '').trim();
+    return date ? date + 'T' + text + (text.length === 5 ? ':00' : '') : text;
+  }
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return text;
   return parsed.toISOString();
 }
+
+export function toInputTime(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const direct = text.match(/(?:T|^)(\d{2}:\d{2})(?::\d{2})?/);
+  if (direct) return direct[1];
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return String(parsed.getHours()).padStart(2, '0') + ':' + String(parsed.getMinutes()).padStart(2, '0');
+}
+
 
 export function toInputNumber(value) {
   return value === null || value === undefined ? '' : String(value);
@@ -35,9 +56,25 @@ export function parseInteger(value) {
 }
 
 export function calcHorasVoadas(decolagemLocal, pousoLocal) {
-  if (!String(decolagemLocal || '').trim() || !String(pousoLocal || '').trim()) return null;
-  const start = new Date(decolagemLocal);
-  const end = new Date(pousoLocal);
+  const startText = String(decolagemLocal || '').trim();
+  const endText = String(pousoLocal || '').trim();
+  if (!startText || !endText) return null;
+  const clock = (value) => {
+    const match = value.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (!match) return null;
+    const seconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
+    return seconds >= 0 && seconds < 86400 ? seconds : null;
+  };
+  const startClock = clock(startText);
+  const endClock = clock(endText);
+  if (startClock !== null && endClock !== null) {
+    let elapsed = endClock - startClock;
+    if (elapsed < 0) elapsed += 86400;
+    if (elapsed <= 0) return null;
+    return Number((elapsed / 3600).toFixed(2));
+  }
+  const start = new Date(startText);
+  const end = new Date(endText);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return null;
   return Number(((end.getTime() - start.getTime()) / 3_600_000).toFixed(2));
 }
@@ -113,10 +150,10 @@ function defaultStageFromPackage(packageData) {
     numero_etapa: 1,
     origem_icao: origem,
     destino_icao: destino,
-    horario_motor_ligado: '',
-    horario_decolagem: toInputDateTime(voo.horario_real_partida || voo.horario_previsto_partida),
-    horario_pouso: toInputDateTime(voo.horario_real_chegada || voo.horario_previsto_chegada),
-    horario_motor_desligado: '',
+    horario_motor_ligado: toInputTime(voo.horario_real_partida),
+    horario_decolagem: toInputTime(voo.horario_real_partida || voo.horario_previsto_partida),
+    horario_pouso: toInputTime(voo.horario_real_chegada || voo.horario_previsto_chegada),
+    horario_motor_desligado: toInputTime(voo.horario_real_chegada),
     tempo_ifr: '',
     tempo_noturno: '',
     pousos_diurnos: '',
@@ -141,10 +178,10 @@ export function buildStageDraftsFromPackage(packageData) {
     numero_etapa: Number(stage.numero_etapa || index + 1),
     origem_icao: stage.origem_icao || '',
     destino_icao: stage.destino_icao || '',
-    horario_motor_ligado: toInputDateTime(stage.horario_motor_ligado),
-    horario_decolagem: toInputDateTime(stage.horario_decolagem),
-    horario_pouso: toInputDateTime(stage.horario_pouso),
-    horario_motor_desligado: toInputDateTime(stage.horario_motor_desligado),
+    horario_motor_ligado: toInputTime(stage.horario_motor_ligado),
+    horario_decolagem: toInputTime(stage.horario_decolagem),
+    horario_pouso: toInputTime(stage.horario_pouso),
+    horario_motor_desligado: toInputTime(stage.horario_motor_desligado),
     tempo_ifr: toInputNumber(stage.tempo_ifr),
     tempo_noturno: toInputNumber(stage.tempo_noturno),
     pousos_diurnos: toInputNumber(stage.pousos_diurnos),
@@ -180,6 +217,10 @@ export function buildDraftSnapshot(packageData, previousSequence = 0) {
       local_sequence: nextSequence,
       updated_at_claimed: now,
       form: buildRdvFormFromPackage(packageData),
+      flight_update: {
+        natureza_voo_codigo: packageData?.natureza?.codigo || '',
+      },
+      fuelings: [],
     },
     stages: buildStageDraftsFromPackage(packageData).map((stage) => ({
       schema_version: PILOT_DRAFT_SCHEMA_VERSION,
@@ -212,7 +253,10 @@ export function validateRdvForm(form, packageData) {
   }
 
   if (form.horario_decolagem_real && form.horario_pouso_real) {
-    if (form.horario_pouso_real < form.horario_decolagem_real) {
+    const start = String(form.horario_decolagem_real);
+    const end = String(form.horario_pouso_real);
+    const timeOnly = /^\d{2}:\d{2}(?::\d{2})?$/;
+    if (!timeOnly.test(start) && !timeOnly.test(end) && end < start) {
       errors.horario_pouso_real = 'Pouso não pode ser anterior à decolagem.';
     }
   }
@@ -245,21 +289,12 @@ export function validateStageDrafts(stageDrafts) {
     if (!String(stage.origem_icao || '').trim() || !String(stage.destino_icao || '').trim()) {
       errors.push('Etapa ' + (index + 1) + ': informe origem e destino.');
     }
-    if (
-      stage.horario_decolagem &&
-      stage.horario_pouso &&
-      stage.horario_pouso < stage.horario_decolagem
-    ) {
-      errors.push('Etapa ' + (index + 1) + ': pouso anterior à decolagem.');
-    }
-    if (index > 0) {
-      const previous = stages[index - 1]?.fields || stages[index - 1];
-      if (
-        previous.horario_pouso &&
-        stage.horario_decolagem &&
-        stage.horario_decolagem < previous.horario_pouso
-      ) {
-        errors.push('Etapa ' + (index + 1) + ' inicia antes do pouso da etapa ' + index + '.');
+    if (stage.horario_decolagem && stage.horario_pouso) {
+      const start = String(stage.horario_decolagem);
+      const end = String(stage.horario_pouso);
+      const timeOnly = /^\d{2}:\d{2}(?::\d{2})?$/;
+      if (!timeOnly.test(start) && !timeOnly.test(end) && end < start) {
+        errors.push('Etapa ' + (index + 1) + ': pouso anterior à decolagem.');
       }
     }
 

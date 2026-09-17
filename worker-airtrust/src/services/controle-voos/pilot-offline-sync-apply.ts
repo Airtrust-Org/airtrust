@@ -34,10 +34,20 @@ type SnapshotStagePayload = {
   fields: Record<string, unknown>;
 };
 
+type SnapshotFuelingPayload = {
+  client_local_id: string;
+  data_hora: string;
+  nota: string | null;
+  numero_nota: string | null;
+  litros_abastecidos: number;
+};
+
 type SnapshotPayload = {
   source_package_id: string;
   source_rdv_id: number | null;
   rdv: Record<string, unknown>;
+  flight_update: { natureza_voo_codigo: string | null };
+  fuelings: SnapshotFuelingPayload[];
   stages: SnapshotStagePayload[];
 };
 
@@ -117,6 +127,46 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     );
   }
 
+  const rawFlightUpdate = isPlainObject(raw.flight_update) ? raw.flight_update : {};
+  const naturezaCode = rawFlightUpdate.natureza_voo_codigo == null
+    ? null
+    : String(rawFlightUpdate.natureza_voo_codigo).trim().toUpperCase();
+  if (naturezaCode && !['MANUTENCAO', 'PETROBRAS'].includes(naturezaCode)) {
+    throw new ApiError('Natureza de voo offline invalida', 400, 'CONTROLE_VOOS_PILOT_SYNC_NATUREZA_INVALID');
+  }
+
+  const fuelingsRaw = raw.fuelings == null ? [] : raw.fuelings;
+  if (!Array.isArray(fuelingsRaw) || fuelingsRaw.length > 16) {
+    throw new ApiError('Abastecimentos offline invalidos', 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELINGS_INVALID');
+  }
+  const fuelings = fuelingsRaw.map((entry, index): SnapshotFuelingPayload => {
+    if (!isPlainObject(entry)) {
+      throw new ApiError(`Abastecimento offline invalido no indice ${index}`, 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELING_INVALID');
+    }
+    const localId = String(entry.client_local_id || '').trim();
+    const dataHora = String(entry.data_hora || '').trim();
+    const rawLitros = entry.litros_abastecidos;
+    const litros = Number(rawLitros);
+    if (
+      !localId ||
+      !dataHora ||
+      rawLitros === null ||
+      rawLitros === undefined ||
+      rawLitros === '' ||
+      !Number.isFinite(litros) ||
+      litros < 0
+    ) {
+      throw new ApiError(`Abastecimento offline incompleto no indice ${index}`, 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELING_INVALID');
+    }
+    return {
+      client_local_id: localId,
+      data_hora: dataHora,
+      nota: entry.nota == null ? null : String(entry.nota).trim() || null,
+      numero_nota: entry.numero_nota == null ? null : String(entry.numero_nota).trim() || null,
+      litros_abastecidos: litros,
+    };
+  });
+
   const allowedStageFields = new Set<string>(ETAPA_MUTABLE_FIELDS);
   const stages = raw.stages.map((entry, index): SnapshotStagePayload => {
     if (!isPlainObject(entry) || !isPlainObject(entry.fields)) {
@@ -159,6 +209,8 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     source_package_id: sourcePackageId,
     source_rdv_id: parseNullablePositiveInteger(raw.source_rdv_id, 'source_rdv_id'),
     rdv: raw.rdv,
+    flight_update: { natureza_voo_codigo: naturezaCode },
+    fuelings,
     stages,
   };
 }
@@ -548,6 +600,45 @@ function buildNewRdvInsert(input: {
     );
 }
 
+function buildFuelingStatements(input: {
+  db: D1Database;
+  empresaId: number;
+  userId: number;
+  flight: FlightRow;
+  newVersion: number;
+  fuelings: SnapshotFuelingPayload[];
+}): D1PreparedStatement[] {
+  return input.fuelings.map((fueling) =>
+    input.db.prepare(`
+      INSERT INTO cv_voo_abastecimentos (
+        empresa_id, voo_id, etapa_id, fornecedor, localidade, combustivel_solicitado, unidade,
+        combustivel_abastecido, numero_ce, anexo_r2_key, responsavel_id, data_hora, observacoes,
+        created_by, updated_by, created_at, updated_at
+      )
+      SELECT ?, ?, NULL, NULL, NULL, NULL, 'L', ?, ?, NULL, NULL, ?, ?, ?, ?, datetime('now'), datetime('now')
+      WHERE EXISTS (
+        SELECT 1 FROM cv_rdv_operacional
+        WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
+          AND status <> 'cancelado' AND versao = ?
+      )
+    `).bind(
+      input.empresaId, input.flight.id, fueling.litros_abastecidos, fueling.numero_nota,
+      fueling.data_hora, fueling.nota, input.userId, input.userId,
+      input.flight.id, input.empresaId, input.newVersion,
+    ),
+  );
+}
+
+function buildFlightNatureStatement(input: {
+  db: D1Database; empresaId: number; userId: number; flight: FlightRow; naturezaId: number; baseFlightVersion: number;
+}): D1PreparedStatement {
+  return input.db.prepare(`
+    UPDATE cv_voos
+    SET natureza_voo_id = ?, versao = versao + 1, updated_by = ?, updated_at = datetime('now')
+    WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND versao = ?
+  `).bind(input.naturezaId, input.userId, input.flight.id, input.empresaId, input.baseFlightVersion);
+}
+
 function buildOfflineSyncEvent(input: {
   db: D1Database;
   empresaId: number;
@@ -718,22 +809,6 @@ async function currentStateConflict(input: {
     });
   }
 
-  const localStages = input.stages.filter((stage) => stage.sourceStageId === null);
-  if (serverStages.length > 0 && localStages.length > 0) {
-    throw new ApiError(
-      'Criacao adicional de etapa offline ainda nao e suportada quando o voo ja possui etapas',
-      400,
-      'CONTROLE_VOOS_PILOT_SYNC_STAGE_CREATE_UNSUPPORTED',
-    );
-  }
-  if (serverStages.length === 0 && (input.stages.length !== 1 || localStages.length !== 1)) {
-    throw new ApiError(
-      'Primeira sincronizacao de etapas suporta exatamente uma etapa manual',
-      400,
-      'CONTROLE_VOOS_PILOT_SYNC_INITIAL_STAGE_SHAPE_INVALID',
-    );
-  }
-
   const serverById = new Map<number, EtapaRow>(serverStages.map((stage) => [stage.id, stage]));
   for (const stage of sourceStages) {
     const current = serverById.get(stage.sourceStageId as number);
@@ -785,6 +860,21 @@ export async function applyPilotOfflineSnapshotCommand(input: {
 
   const snapshot = normalizeSnapshotPayload(input.command);
   assertSourcePackageMatches(input.command, snapshot);
+  let selectedNaturezaId: number | null = null;
+  if (snapshot.flight_update.natureza_voo_codigo) {
+    const natureza = await input.db
+      .prepare('SELECT id FROM cv_naturezas_voo WHERE empresa_id = ? AND codigo = ? AND ativo = 1 AND deleted_at IS NULL LIMIT 1')
+      .bind(input.empresaId, snapshot.flight_update.natureza_voo_codigo)
+      .first<{ id: number }>();
+    if (!natureza) {
+      throw new ApiError(
+        `Natureza ${snapshot.flight_update.natureza_voo_codigo} ainda nao cadastrada neste tenant`,
+        409,
+        'CONTROLE_VOOS_PILOT_SYNC_NATUREZA_NOT_CONFIGURED',
+      );
+    }
+    selectedNaturezaId = Number(natureza.id);
+  }
   const existingRdv = await getActiveRdvByFlight(input.db, input.flight.id, input.empresaId);
   const rdvInput = normalizeRdvInput(snapshot.rdv, !existingRdv);
   assertRdvRules(existingRdv ? { ...existingRdv, ...rdvInput } : rdvInput);
@@ -816,6 +906,19 @@ export async function applyPilotOfflineSnapshotCommand(input: {
     newVersion,
     stages,
   });
+  const fuelingStatements = buildFuelingStatements({
+    ...input,
+    newVersion,
+    fuelings: snapshot.fuelings,
+  });
+  const natureStatement =
+    selectedNaturezaId !== null && selectedNaturezaId !== Number(input.flight.natureza_voo_id)
+      ? buildFlightNatureStatement({
+          ...input,
+          naturezaId: selectedNaturezaId,
+          baseFlightVersion: input.command.base_flight_version,
+        })
+      : null;
   const eventStatement = buildOfflineSyncEvent({
     ...input,
     newVersion,
@@ -842,6 +945,8 @@ export async function applyPilotOfflineSnapshotCommand(input: {
     results = await input.db.batch([
       rdvStatement,
       ...stageStatements,
+      ...fuelingStatements,
+      ...(natureStatement ? [natureStatement] : []),
       eventStatement,
       receiptStatement,
     ]);

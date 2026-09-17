@@ -140,6 +140,7 @@ function db() {
   return {
     prepare: vi.fn(() => ({
       bind: vi.fn().mockReturnThis(),
+      first: vi.fn().mockResolvedValue({ id: 1 }),
       run: vi.fn(),
     })),
     batch: vi.fn(),
@@ -269,7 +270,53 @@ describe('Pilot offline snapshot apply orchestration', () => {
     );
   });
 
-  it('orders the atomic D1 batch as RDV CAS, stages, event, receipt', () => {
+
+  it('accepts an appended local leg while CAS-protecting the existing server leg', async () => {
+    const database = db();
+    getOfflineSyncReceipt
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        result_status: 'accepted',
+        canonical_entity_id: '90',
+        received_at: '2026-09-09T19:31:00.000Z',
+      });
+    normalizeEtapaInput.mockImplementation((fields: any) => ({ ...fields }));
+    database.batch.mockResolvedValue([
+      { meta: { changes: 1 } },
+      { meta: { changes: 1 } },
+      { meta: { changes: 1 } },
+      { meta: { changes: 1 } },
+      { meta: { changes: 1 } },
+    ]);
+    getRdvOrThrow.mockResolvedValue({ ...rdv, versao: 4 });
+
+    const withExtraLeg = command();
+    withExtraLeg.payload.stages.push({
+      source_stage_id: null,
+      source_stage_updated_at: null,
+      fields: { numero_etapa: 2, origem_icao: '9PCP', destino_icao: '9XYZ' },
+    });
+
+    const result = await applyPilotOfflineSnapshotCommand({
+      db: database,
+      empresaId: 7,
+      userId: 70,
+      funcionarioId: 77,
+      flight,
+      command: withExtraLeg,
+    });
+
+    expect(result).toMatchObject({ status: 'accepted', server_entity_version: 4 });
+    expect(database.batch).toHaveBeenCalledTimes(1);
+    const source = readFileSync(
+      join(__dirname, '../../services/controle-voos/pilot-offline-sync-apply.ts'),
+      'utf8',
+    );
+    expect(source).not.toContain('CONTROLE_VOOS_PILOT_SYNC_STAGE_CREATE_UNSUPPORTED');
+    expect(source).toContain("'MANUAL'");
+  });
+
+  it('orders the atomic D1 batch as RDV CAS, stages, fuelings, optional nature, event, receipt', () => {
     const source = readFileSync(
       join(
         __dirname,
@@ -278,7 +325,7 @@ describe('Pilot offline snapshot apply orchestration', () => {
       'utf8',
     );
     expect(source).toContain(
-      'input.db.batch([\n      rdvStatement,\n      ...stageStatements,\n      eventStatement,\n      receiptStatement,\n    ])',
+      'input.db.batch([\n      rdvStatement,\n      ...stageStatements,\n      ...fuelingStatements,\n      ...(natureStatement ? [natureStatement] : []),\n      eventStatement,\n      receiptStatement,\n    ])',
     );
     expect(source).toContain('AND ${stageCas.sql}');
     expect(source).not.toContain('last-write-wins');
