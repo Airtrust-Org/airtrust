@@ -26,10 +26,12 @@ describe('Pilot self-service flight creation contract', () => {
     expect(text).toContain("'destino_texto'");
     expect(text).toContain("'tipo_voo_texto'");
     expect(text).toContain("'natureza_voo_codigo'");
-    expect(text).toContain("MANUTENCAO: 'Manutenção'");
-    expect(text).toContain("PETROBRAS: 'Petrobras'");
+    expect(text).toContain("new Set(['MANUTENCAO', 'PETROBRAS'])");
     expect(text).toContain('ensureTemporaryAirport');
     expect(text).toContain('ensureTemporaryFlightType');
+    expect(text).toContain('resolvePilotNature');
+    expect(text).toContain('CONTROLE_VOOS_PILOT_CREATE_NATURE_NOT_CONFIGURED');
+    expect(text).not.toContain('INSERT INTO cv_naturezas_voo');
     expect(text).toContain('entrada_livre_temporaria: manualMode');
   });
 
