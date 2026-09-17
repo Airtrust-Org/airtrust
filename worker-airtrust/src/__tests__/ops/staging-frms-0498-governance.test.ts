@@ -8,14 +8,14 @@ const post = readFileSync(join(ROOT, 'scripts/staging/validate-0498-postconditio
 
 describe('FRMS 0498 staging governed apply', () => {
   it('uses the bounded query transport instead of the D1 bulk-import reset path', () => {
-    expect(runner).toContain('--command "$sql_payload" --json');
+    expect(runner).toContain('--command="$sql_payload" --json');
     expect(runner).not.toContain('--file="$combined"');
     expect(runner).toContain('0498 SQL bundle exceeds bounded --command transport');
   });
 
   it('captures Time Travel before the remote write and keeps exact manifest/hash guards', () => {
     const recovery = runner.indexOf('d1 time-travel info');
-    const write = runner.indexOf('--command "$sql_payload" --json');
+    const write = runner.indexOf('--command="$sql_payload" --json');
     expect(recovery).toBeGreaterThan(-1);
     expect(write).toBeGreaterThan(recovery);
     expect(runner).toContain('REVIEWED_MANIFEST_MISMATCH');
