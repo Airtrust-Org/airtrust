@@ -228,9 +228,9 @@ describe('FrmsDashboard simplificado', () => {
     renderDashboard();
 
     const summary = within(screen.getByLabelText('Resumo operacional'));
-    expect(summary.getByText('Bloqueia')).toBeInTheDocument();
-    expect(summary.getByText('Decidir')).toBeInTheDocument();
-    expect(summary.getByText('Confirmar')).toBeInTheDocument();
+    expect(summary.getByText('Atenção')).toBeInTheDocument();
+    expect(summary.getByText('Avaliar')).toBeInTheDocument();
+    expect(summary.getByText('Verificar')).toBeInTheDocument();
     expect(summary.queryByText('Sem pendência')).not.toBeInTheDocument();
     expect(screen.getByText(/pessoa\(s\) sem pendência no recorte atual/i)).toBeInTheDocument();
   });
@@ -263,7 +263,7 @@ describe('FrmsDashboard simplificado', () => {
 
     renderDashboard();
 
-    expect(screen.getAllByText('Confirmar').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Verificar').length).toBeGreaterThan(0);
     expect(screen.getByText('Jornada ainda não consolidada.')).toBeInTheDocument();
     expect(screen.getByLabelText('Efetividade: Não calculada — sem dado')).toBeInTheDocument();
     expect(screen.queryByText('0%')).not.toBeInTheDocument();

@@ -82,7 +82,7 @@ describe('FrmsAlertasPainel', () => {
   it('usa a mesma linguagem operacional da fila sem alterar os níveis persistidos', () => {
     renderPage();
 
-    expect(screen.getAllByText('Decidir').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Avaliar').length).toBeGreaterThan(0);
     expect(screen.getByText(/backlog acumulado/i)).toBeInTheDocument();
     expect(screen.queryByText('CRÍTICO')).not.toBeInTheDocument();
   });

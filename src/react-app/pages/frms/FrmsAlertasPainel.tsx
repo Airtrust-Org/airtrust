@@ -21,9 +21,9 @@ const NIVEL_STYLE: Record<string, string> = {
 
 const NIVEL_LABEL: Record<string, string> = {
   AVISO: 'Acompanhar',
-  ATENCAO: 'Confirmar',
-  CRITICO: 'Decidir',
-  VIOLACAO: 'Bloqueio',
+  ATENCAO: 'Verificar',
+  CRITICO: 'Avaliar',
+  VIOLACAO: 'Atenção',
 };
 
 function nivelLabel(nivel: string): string {
@@ -164,15 +164,15 @@ export default function FrmsAlertasPainel() {
             <p className="mt-2 text-3xl font-bold tabular-nums text-slate-950 dark:text-white">{loading && !data ? '—' : counts.total}</p>
           </div>
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/60 dark:bg-red-950/30">
-            <p className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">Bloqueio</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">Atenção</p>
             <p className="mt-2 text-3xl font-bold tabular-nums text-red-800 dark:text-red-200">{loading && !data ? '—' : counts.bloqueio}</p>
           </div>
           <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 dark:border-orange-900/60 dark:bg-orange-950/30">
-            <p className="text-xs font-semibold uppercase tracking-wide text-orange-700 dark:text-orange-300">Decidir</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-orange-700 dark:text-orange-300">Avaliar</p>
             <p className="mt-2 text-3xl font-bold tabular-nums text-orange-800 dark:text-orange-200">{loading && !data ? '—' : counts.decidir}</p>
           </div>
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Confirmar</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Verificar</p>
             <p className="mt-2 text-3xl font-bold tabular-nums text-amber-800 dark:text-amber-200">{loading && !data ? '—' : counts.confirmar}</p>
           </div>
         </section>
