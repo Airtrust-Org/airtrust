@@ -64,7 +64,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
   const [form, setForm] = useState({
     aeronave_id: '',
     prefixo: '',
-    data_programacao: now.toISOString().slice(0, 10),
+    data_programacao: toLocalInput(now).slice(0, 10),
     origem_id: '',
     destino_id: '',
     tipo_voo_id: '',

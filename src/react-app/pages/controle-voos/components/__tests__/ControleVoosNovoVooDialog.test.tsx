@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ControleVoosNovoVooDialog from '../ControleVoosNovoVooDialog';
 
 const { getMock, postMock, permissionsMock } = vi.hoisted(() => ({
@@ -96,10 +96,26 @@ describe('ControleVoosNovoVooDialog', () => {
     permissionsMock.mockReturnValue({ isAdmin: true, isGestor: false });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it('não renderiza nem carrega catálogos quando fechado', () => {
     renderDialog('pilot', false);
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(getMock).not.toHaveBeenCalled();
+  });
+
+  it('usa a data local do piloto perto da virada UTC', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-17T02:30:00Z'));
+    vi.spyOn(Date.prototype, 'getTimezoneOffset').mockReturnValue(180);
+    getMock.mockReturnValue(new Promise(() => {}));
+
+    renderDialog('pilot');
+
+    expect(screen.getByLabelText('Data')).toHaveValue('2026-09-16');
   });
 
   it('carrega catálogos e frota canônica e fecha pelo botão de fechar', async () => {
