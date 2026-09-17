@@ -31,21 +31,21 @@ const BUCKET_STYLE: Record<
   { label: string; short: string; className: string; dot: string }
 > = {
   BLOQUEIO: {
-    label: 'Bloqueia operação',
-    short: 'Bloqueio',
+    label: 'Atenção operacional',
+    short: 'Atenção',
     className: 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200',
     dot: 'bg-red-500',
   },
   DECISAO: {
-    label: 'Decisão necessária',
-    short: 'Decidir',
+    label: 'Avaliar condição',
+    short: 'Avaliar',
     className:
       'border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-200',
     dot: 'bg-orange-500',
   },
   CONFIRMAR: {
-    label: 'Confirmar dados',
-    short: 'Confirmar',
+    label: 'Verificar dados',
+    short: 'Verificar',
     className:
       'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200',
     dot: 'bg-amber-400',
@@ -389,9 +389,9 @@ export default function FrmsFlightDashboard() {
         </div>
 
         <section className="grid gap-3 sm:grid-cols-3" aria-label="Resumo operacional">
-          <MetricCard label="Bloqueia" value={counts.BLOQUEIO} helper="impede decisão operacional sem tratamento" loading={firstLoad} />
-          <MetricCard label="Decidir" value={counts.DECISAO} helper="casos que precisam de ação operacional" loading={firstLoad} />
-          <MetricCard label="Confirmar" value={counts.CONFIRMAR} helper="dados ausentes, estimados ou pendentes" loading={firstLoad} />
+          <MetricCard label="Atenção" value={counts.BLOQUEIO} helper="situações que requerem atenção antes da decisão operacional" loading={firstLoad} />
+          <MetricCard label="Avaliar" value={counts.DECISAO} helper="situações que merecem análise ou ação da coordenação" loading={firstLoad} />
+          <MetricCard label="Verificar" value={counts.CONFIRMAR} helper="informações pendentes, estimadas ou que precisam ser confirmadas" loading={firstLoad} />
         </section>
         <p className="text-sm text-slate-500">
           <span className="font-semibold text-slate-700 dark:text-slate-200">{firstLoad ? '—' : counts.NORMAL}</span>{' '}
@@ -447,7 +447,7 @@ export default function FrmsFlightDashboard() {
                     <FrmsSignalChips item={item} />
                     <div className="min-w-0">
                       <p className="line-clamp-2 text-sm font-medium text-slate-700 dark:text-slate-200">{reason}</p>
-                      <p className="mt-1 text-xs text-slate-500">{item.acao_recomendada_texto || 'Abrir o caso para decidir.'}</p>
+                      <p className="mt-1 text-xs text-slate-500">{item.acao_recomendada_texto || 'Abrir o caso para avaliar.'}</p>
                     </div>
                     <div className="text-xs text-slate-500">
                       <div>{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'}</div>
@@ -464,15 +464,15 @@ export default function FrmsFlightDashboard() {
         <div className="grid gap-3 md:grid-cols-3">
           <div className="flex gap-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
             <ShieldAlert className="h-5 w-5 flex-none text-red-500" />
-            <div><p className="text-sm font-bold text-slate-900 dark:text-white">Bloqueio</p><p className="text-xs text-slate-500">Não despachar sem tratamento do motivo apresentado.</p></div>
+            <div><p className="text-sm font-bold text-slate-900 dark:text-white">Atenção</p><p className="text-xs text-slate-500">Situações que requerem atenção antes da decisão operacional.</p></div>
           </div>
           <div className="flex gap-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
             <AlertTriangle className="h-5 w-5 flex-none text-orange-500" />
-            <div><p className="text-sm font-bold text-slate-900 dark:text-white">Decidir</p><p className="text-xs text-slate-500">Há risco ou mitigação que exige decisão da operação.</p></div>
+            <div><p className="text-sm font-bold text-slate-900 dark:text-white">Avaliar</p><p className="text-xs text-slate-500">Situações que merecem análise ou ação da coordenação.</p></div>
           </div>
           <div className="flex gap-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
             <CircleHelp className="h-5 w-5 flex-none text-amber-500" />
-            <div><p className="text-sm font-bold text-slate-900 dark:text-white">Confirmar</p><p className="text-xs text-slate-500">Nunca tratamos dado ausente ou incompleto como normal.</p></div>
+            <div><p className="text-sm font-bold text-slate-900 dark:text-white">Verificar</p><p className="text-xs text-slate-500">Informações pendentes, estimadas ou que precisam ser confirmadas.</p></div>
           </div>
         </div>
       </div>
