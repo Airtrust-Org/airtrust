@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-aircraft-scope-0497",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0497_training_compliance_aircraft_scope.sql",
+  "fileHash": "0695fc28c56a07bb3dfaac856c8a40b3b0fd871828a02dd0fc5a9ecc9e08079c",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-aircraft-scope-0497.md",
+  "planHash": "b58a88affc253908df2dfb1582d5645b48b2f3a957c12fab2cfe6c9a7be4cd78"
+}

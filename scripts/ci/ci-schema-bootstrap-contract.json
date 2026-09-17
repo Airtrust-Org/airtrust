@@ -4,7 +4,7 @@
   "base_schema": "scripts/schema-local.sql",
   "canonical_bootstrap_command": "npm run setup:lms:local:reset",
   "bootstrap_script": "scripts/setup-local-lms-smoke-db.sh",
-  "reviewed_through_schema_v2_change": "0496_training_program_session_durations.sql",
+  "reviewed_through_schema_v2_change": "0497_training_compliance_aircraft_scope.sql",
   "critical_tables": [
     "token_blocklist",
     "audit_logs",
@@ -32,5 +32,5 @@
     "A Schema V2 change newer than reviewed_through_schema_v2_change that targets a critical table fails closed until this contract/bootstrap is reviewed.",
     "No remote D1 target is permitted by this guard or bootstrap."
   ],
-  "review_note": "Reviewed 2026-09-14: 0496 only corrects duracao_estimada on tenant-6 simulator session models already introduced by the operational training-program rollout. It does not alter any LMS bootstrap-critical schema, so the canonical LMS CI bootstrap remains unchanged; 0496 is covered by dedicated migration fixtures and governed remote apply."
+  "review_note": "Reviewed 2026-09-16: 0497 adds the optional aircraft-model qualifier to treinamento_requisitos only. That table is outside the LMS bootstrap-critical table set, so the canonical LMS CI bootstrap remains unchanged; 0497 is covered by dedicated migration fixtures and the governed Schema V2 apply path."
 }
