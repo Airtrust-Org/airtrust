@@ -1244,7 +1244,7 @@ interface LaunchPageConfig {
   reviewMode?: boolean;
 }
 
-function buildScormLaunchState(
+export function buildScormLaunchState(
   rawCmiJson: string | null,
   suspendData: string | null,
   isScorm2004: boolean,
@@ -1267,17 +1267,23 @@ function buildScormLaunchState(
     cmi['cmi.suspend_data'] = suspendData;
   }
 
-  // Completed review is read-only. Present a virtual terminal CMI state to the SCO
-  // without mutating the persisted SCORM evidence, which may legitimately retain
-  // the pre-incident incomplete checkpoint for audit purposes.
+  // Completed review is read-only. Preserve terminal completion in memory, but
+  // deliberately strip resume/bookmark state for this launch so "Rever treinamento"
+  // starts from the beginning. Persisted SCORM evidence remains untouched in D1.
   if (completedReview) {
+    delete cmi['cmi.suspend_data'];
+    delete cmi['cmi.location'];
+    delete cmi['cmi.core.lesson_location'];
+    delete cmi['cmi.entry'];
+    delete cmi['cmi.core.entry'];
+    delete cmi['cmi.exit'];
+    delete cmi['cmi.core.exit'];
+
     if (isScorm2004) {
       cmi['cmi.completion_status'] = 'completed';
       cmi['cmi.success_status'] = 'passed';
-      cmi['cmi.location'] = '55/55';
     } else {
       cmi['cmi.core.lesson_status'] = 'passed';
-      cmi['cmi.core.lesson_location'] = '55/55';
     }
   }
 
