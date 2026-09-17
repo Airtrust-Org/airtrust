@@ -5,6 +5,7 @@ import {
   parseScormLocationMarker,
   parseScormLocationPair,
   resolveScormResumeTargetSlide,
+  buildScormLaunchState,
 } from '../../routes/lms-assets';
 
 describe('SCORM resume restore helpers', () => {
@@ -72,5 +73,59 @@ describe('SCORM resume restore helpers', () => {
     expect(source).toContain('SCORM_BEFORE_UNLOAD_COMMIT');
     expect(source).toContain('SCORM_VISIBILITY_COMMIT');
     expect(source).toContain("console.info('[SCORM_TELEMETRY]'");
+  });
+});
+
+describe('completed enrollment review virtual CMI', () => {
+  it('starts SCORM 1.2 review from the beginning while preserving terminal status in memory', () => {
+    const persisted = JSON.stringify({
+      'cmi.core.lesson_status': 'incomplete',
+      'cmi.core.lesson_location': '17/55',
+      'cmi.core.entry': 'resume',
+      'cmi.core.exit': 'suspend',
+      'cmi.suspend_data': 'stale-checkpoint',
+    });
+    const result = buildScormLaunchState(persisted, 'stale-checkpoint', false, true);
+    const cmi = JSON.parse(result.initialCmiJson);
+    expect(result.hasResumeState).toBe(false);
+    expect(cmi['cmi.core.lesson_status']).toBe('passed');
+    expect(cmi['cmi.core.lesson_location']).toBeUndefined();
+    expect(cmi['cmi.suspend_data']).toBeUndefined();
+    expect(cmi['cmi.core.entry']).toBeUndefined();
+    expect(cmi['cmi.core.exit']).toBeUndefined();
+  });
+
+  it('starts SCORM 2004 review from the beginning while preserving terminal completion in memory', () => {
+    const persisted = JSON.stringify({
+      'cmi.completion_status': 'incomplete',
+      'cmi.success_status': 'unknown',
+      'cmi.location': '17/55',
+      'cmi.entry': 'resume',
+      'cmi.exit': 'suspend',
+      'cmi.suspend_data': 'stale-checkpoint',
+    });
+    const result = buildScormLaunchState(persisted, 'stale-checkpoint', true, true);
+    const cmi = JSON.parse(result.initialCmiJson);
+    expect(result.hasResumeState).toBe(false);
+    expect(cmi['cmi.completion_status']).toBe('completed');
+    expect(cmi['cmi.success_status']).toBe('passed');
+    expect(cmi['cmi.location']).toBeUndefined();
+    expect(cmi['cmi.suspend_data']).toBeUndefined();
+    expect(cmi['cmi.entry']).toBeUndefined();
+    expect(cmi['cmi.exit']).toBeUndefined();
+  });
+
+  it('preserves normal resume behavior for active journeys', () => {
+    const result = buildScormLaunchState(
+      JSON.stringify({ 'cmi.core.lesson_location': '17/55' }),
+      'active-checkpoint',
+      false,
+      false,
+    );
+    const cmi = JSON.parse(result.initialCmiJson);
+    expect(result.hasResumeState).toBe(true);
+    expect(cmi['cmi.core.lesson_location']).toBe('17/55');
+    expect(cmi['cmi.suspend_data']).toBe('active-checkpoint');
+    expect(cmi['cmi.core.entry']).toBe('resume');
   });
 });

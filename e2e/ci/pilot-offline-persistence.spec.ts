@@ -2,9 +2,10 @@ import { expect, test } from '@playwright/test';
 
 const PIN = '654321';
 
-test('Pilot vault survives offline refresh and Service Worker stays isolated', async ({
+test('Pilot vault survives offline refresh, close/reopen and Service Worker stays isolated', async ({
   page,
   context,
+  browserName,
 }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -88,31 +89,99 @@ test('Pilot vault survives offline refresh and Service Worker stays isolated', a
   expect(localProof.cachedUrls.some((url) => new URL(url).pathname.startsWith('/api/'))).toBe(
     false,
   );
+  expect(localProof.cachedUrls.some((url) => new URL(url).pathname === '/pilot/pilot-preflight.js')).toBe(
+    true,
+  );
   expect(localProof.registrationScopes.length).toBeGreaterThan(0);
   expect(
     localProof.registrationScopes.every((scope) => new URL(scope).pathname === '/pilot/'),
   ).toBe(true);
   expect(localProof.controllerUrl).toContain('/pilot/pilot-sw.js');
 
-  await context.setOffline(true);
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  let finalPage = page;
 
-  await expect(page.locator('#connectivity')).toContainText('OFFLINE');
-  await expect(page.locator('#unlock-title')).toContainText('Desbloquear dados offline');
+  if (browserName === 'webkit') {
+    // Playwright WebKit currently aborts reload/goto internally after
+    // BrowserContext.setOffline(true). Validate the two Safari-critical pieces
+    // separately without weakening them: persistent IndexedDB across a real
+    // page close/reopen, then Service Worker cache delivery while all network
+    // requests that escape the worker are blocked.
+    await page.close();
+    const reopened = await context.newPage();
+    reopened.on('pageerror', (error) => pageErrors.push(error.message));
+    await reopened.goto('/pilot/', { waitUntil: 'domcontentloaded' });
+    await expect(reopened.locator('#unlock-title')).toContainText('Desbloquear dados offline');
+    await reopened.locator('#pin').fill(PIN);
+    await reopened.locator('#unlock-button').click();
+    await expect(reopened.locator('#workspace')).toBeVisible();
+    await reopened.locator('#diagnostic-card > summary').click();
+    await expect(reopened.locator('#draft')).toHaveValue(marker);
+    await expect(reopened.locator('#save-status')).toContainText('Rascunho recuperado do tablet');
 
-  await page.locator('#pin').fill(PIN);
-  await page.locator('#unlock-button').click();
-  await expect(page.locator('#workspace')).toBeVisible();
+    await reopened.evaluate(() => {
+      Object.defineProperty(Navigator.prototype, 'onLine', {
+        configurable: true,
+        get: () => false,
+      });
+      window.dispatchEvent(new Event('offline'));
+    });
+    await expect(reopened.locator('#connectivity')).toContainText('OFFLINE');
 
-  await page.locator('#diagnostic-card > summary').click();
-  await expect(page.locator('#draft')).toHaveValue(marker);
-  await expect(page.locator('#save-status')).toContainText('Rascunho recuperado do tablet');
+    await context.route('**/*', async (route) => {
+      await route.abort('internetdisconnected');
+    });
+    const cachedShellProof = await reopened.evaluate(async () => {
+      const paths = ['/pilot/index.html', '/pilot/pilot-preflight.js'];
+      return Promise.all(
+        paths.map(async (path) => {
+          const response = await fetch(path, { cache: 'no-store' });
+          const body = await response.text();
+          return { path, ok: response.ok, status: response.status, bodyLength: body.length };
+        }),
+      );
+    });
+    expect(cachedShellProof).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: '/pilot/index.html', ok: true, status: 200 }),
+        expect.objectContaining({ path: '/pilot/pilot-preflight.js', ok: true, status: 200 }),
+      ]),
+    );
+    expect(cachedShellProof.every((entry) => entry.bodyLength > 100)).toBe(true);
+    await context.unroute('**/*');
+    finalPage = reopened;
+  } else {
+    await context.setOffline(true);
+    await page.reload({ waitUntil: 'domcontentloaded' });
 
-  await context.setOffline(false);
-  await page.goto('/login');
-  await expect(page.locator('input[type="email"]')).toBeVisible();
+    await expect(page.locator('#connectivity')).toContainText('OFFLINE');
+    await expect(page.locator('#unlock-title')).toContainText('Desbloquear dados offline');
+    await page.locator('#pin').fill(PIN);
+    await page.locator('#unlock-button').click();
+    await expect(page.locator('#workspace')).toBeVisible();
+    await page.locator('#diagnostic-card > summary').click();
+    await expect(page.locator('#draft')).toHaveValue(marker);
+    await expect(page.locator('#save-status')).toContainText('Rascunho recuperado do tablet');
 
-  const rootController = await page.evaluate(
+    await page.close();
+    const reopened = await context.newPage();
+    reopened.on('pageerror', (error) => pageErrors.push(error.message));
+    await reopened.goto('/pilot/', { waitUntil: 'domcontentloaded' });
+    await expect(reopened.locator('#connectivity')).toContainText('OFFLINE');
+    await expect(reopened.locator('#unlock-title')).toContainText('Desbloquear dados offline');
+    await reopened.locator('#pin').fill(PIN);
+    await reopened.locator('#unlock-button').click();
+    await expect(reopened.locator('#workspace')).toBeVisible();
+    await reopened.locator('#diagnostic-card > summary').click();
+    await expect(reopened.locator('#draft')).toHaveValue(marker);
+    await expect(reopened.locator('#save-status')).toContainText('Rascunho recuperado do tablet');
+    await context.setOffline(false);
+    finalPage = reopened;
+  }
+
+  await finalPage.goto('/login');
+  await expect(finalPage.locator('input[type="email"]')).toBeVisible();
+
+  const rootController = await finalPage.evaluate(
     () => navigator.serviceWorker.controller?.scriptURL || null,
   );
   expect(rootController).toBeNull();

@@ -1,0 +1,18 @@
+import { login, extractAccessToken, assert } from '../smoke-auth-common.mjs';
+const base=String(process.env.PROD_API_BASE_URL||'https://api.airtrust.online').replace(/\/$/,'');
+const email=String(process.env.E2E_EMAIL||'').trim(); const password=String(process.env.E2E_PASSWORD||'');
+const matricula=Number(process.env.MATRICULA_ID||0); const expectedCandidate=String(process.env.EXPECTED_CANDIDATE_ID||'').trim();
+assert(email&&password,'production credential missing'); assert(matricula>0,'MATRICULA_ID invalid'); assert(expectedCandidate,'EXPECTED_CANDIDATE_ID missing');
+const token=extractAccessToken(await login(base,email,password)); assert(token,'access token missing');
+const session=await fetch(`${base}/api/lms/assets/session`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({matricula_id:matricula})});
+assert(session.ok,`asset session HTTP ${session.status}`); const setCookie=session.headers.get('set-cookie')||''; const cookie=setCookie.split(';')[0]; assert(cookie.includes('='),'asset cookie missing');
+const launch=await fetch(`${base}/api/lms/scorm/launch/${matricula}?review=1`,{headers:{Cookie:cookie}}); assert(launch.ok,`launch HTTP ${launch.status}`); const html=await launch.text();
+const match=html.match(/<iframe[^>]+id="scorm-frame"[^>]+src="([^"]+)"/i); assert(match?.[1],'SCORM iframe src missing');
+const indexUrl=new URL(match[1].replaceAll('&amp;','&'),base); const index=await fetch(indexUrl,{headers:{Cookie:cookie}}); assert(index.ok,`index HTTP ${index.status}`);
+const indexKey=index.headers.get('x-lms-asset-key')||''; assert(indexKey.includes(`/_candidates/${expectedCandidate}/`),`wrong package served: ${indexKey}`);
+const modelUrl=new URL(indexUrl); modelUrl.pathname=modelUrl.pathname.replace(/[^/]+$/,'course-model.js'); const model=await fetch(modelUrl,{headers:{Cookie:cookie}}); assert(model.ok,`course-model HTTP ${model.status}`);
+const modelKey=model.headers.get('x-lms-asset-key')||''; assert(modelKey.includes(`/_candidates/${expectedCandidate}/`),`wrong model package served: ${modelKey}`); const text=await model.text();
+assert(/\"mastery\"\s*:\s*70\b/.test(text),'RB11 mastery 70 marker missing'); assert(!/\"mastery\"\s*:\s*80\b/.test(text),'stale mastery 80 package served');
+assert(html.includes('cmi.core.lesson_status') && html.includes('passed'),'completed review virtual passed state missing');
+assert(!html.includes("'cmi.core.lesson_location'] = '55/55'"),'completed review must not hardcode a terminal bookmark');
+console.log(`PRODUCTION_SCORM_REVIEW_PASS matricula=${matricula} candidate=${expectedCandidate}`);

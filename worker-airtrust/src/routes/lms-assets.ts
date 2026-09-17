@@ -344,6 +344,12 @@ function packagePrefixForAssetToken(payload: JwtPayload, empresaId: number | str
   if (payload.token_type !== 'lms_asset' || !payload.asset_matricula_id) return currentPrefix;
   return validScopedScormPackagePrefix(payload.asset_scorm_package_prefix, empresaId, cursoId) ?? currentPrefix;
 }
+async function packagePrefixForAssetRequest(db: D1Database, payload: JwtPayload, empresaId: number, cursoId: number, currentPrefix: string | null): Promise<string | null> {
+  if (payload.token_type !== 'lms_asset' || !payload.asset_matricula_id) return currentPrefix;
+  const enrollment = await db.prepare(`SELECT status FROM lms_matriculas WHERE id = ? AND empresa_id = ? AND curso_id = ? AND deleted_at IS NULL`).bind(Number(payload.asset_matricula_id), empresaId, cursoId).first<{ status: string }>();
+  if (String(enrollment?.status || '').trim().toUpperCase() === 'CONCLUIDO') return currentPrefix;
+  return packagePrefixForAssetToken(payload, empresaId, cursoId, currentPrefix);
+}
 async function resolveEnrollmentPackagePrefix(db: D1Database, params: { empresaId: number; cursoId: number; status: string; dataInicio: string | null; currentPrefix: string | null }): Promise<string | null> {
   if (String(params.status || '').trim().toUpperCase() === 'CONCLUIDO') return params.currentPrefix;
   if (!params.dataInicio || !params.currentPrefix) return params.currentPrefix;
@@ -850,7 +856,7 @@ app.get('/scorm/assets/:empresa_id/:curso_id/*', async (c) => {
     empresaId,
     cursoId,
     wildcard,
-    { activePrefix: packagePrefixForAssetToken(payload, empresaId, cursoId, cursoAccess.scorm_package_r2_prefix) },
+    { activePrefix: await packagePrefixForAssetRequest(c.env.DB, payload, Number(empresaId), Number(cursoId), cursoAccess.scorm_package_r2_prefix) },
   );
   if (!object) {
     return c.text('Not found', 404);
@@ -916,7 +922,7 @@ app.get('/scorm/assets-by-curso/:cursoId/*', async (c) => {
     curso.empresa_id,
     curso.id,
     wildcard,
-    { activePrefix: packagePrefixForAssetToken(payload, curso.empresa_id, curso.id, curso.scorm_package_r2_prefix) },
+    { activePrefix: await packagePrefixForAssetRequest(c.env.DB, payload, curso.empresa_id, curso.id, curso.scorm_package_r2_prefix) },
   );
   const rangeHeader = c.req.header('range');
 
@@ -1086,7 +1092,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     matricula.empresa_id,
     matricula.curso_id,
     matricula.scorm_launch_file,
-    { activePrefix: packagePrefixForAssetToken(payload, matricula.empresa_id, matricula.curso_id, matricula.scorm_package_r2_prefix) },
+    { activePrefix: String(matricula.status || '').trim().toUpperCase() === 'CONCLUIDO' ? matricula.scorm_package_r2_prefix : packagePrefixForAssetToken(payload, matricula.empresa_id, matricula.curso_id, matricula.scorm_package_r2_prefix) },
   );
   if (!resolvedLaunchFile) {
     throw new ApiError('Arquivo inicial do pacote SCORM não foi encontrado no storage', 404);
@@ -1111,6 +1117,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     progressoScorm?.cmi_json ?? null,
     progressoScorm?.suspend_data ?? null,
     isScorm2004,
+    matricula.status === 'CONCLUIDO',
   );
 
   const ciclo = await db
@@ -1237,10 +1244,11 @@ interface LaunchPageConfig {
   reviewMode?: boolean;
 }
 
-function buildScormLaunchState(
+export function buildScormLaunchState(
   rawCmiJson: string | null,
   suspendData: string | null,
   isScorm2004: boolean,
+  completedReview = false,
 ): { initialCmiJson: string; hasResumeState: boolean } {
   let cmi: Record<string, unknown> = {};
 
@@ -1257,6 +1265,26 @@ function buildScormLaunchState(
 
   if (suspendData && !cmi['cmi.suspend_data']) {
     cmi['cmi.suspend_data'] = suspendData;
+  }
+
+  // Completed review is read-only. Preserve terminal completion in memory, but
+  // deliberately strip resume/bookmark state for this launch so "Rever treinamento"
+  // starts from the beginning. Persisted SCORM evidence remains untouched in D1.
+  if (completedReview) {
+    delete cmi['cmi.suspend_data'];
+    delete cmi['cmi.location'];
+    delete cmi['cmi.core.lesson_location'];
+    delete cmi['cmi.entry'];
+    delete cmi['cmi.core.entry'];
+    delete cmi['cmi.exit'];
+    delete cmi['cmi.core.exit'];
+
+    if (isScorm2004) {
+      cmi['cmi.completion_status'] = 'completed';
+      cmi['cmi.success_status'] = 'passed';
+    } else {
+      cmi['cmi.core.lesson_status'] = 'passed';
+    }
   }
 
   const hasResumeState = Boolean(

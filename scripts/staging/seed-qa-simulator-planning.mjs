@@ -22,13 +22,19 @@ const EMPRESA_CODIGO = 'qa_examiner_training';
 const PARTICIPANTE1_CODIGO = 'QA-PARTICIPANTE-ALFA';
 const PARTICIPANTE2_CODIGO = 'QA-PARTICIPANTE-BRAVO';
 const PARTICIPANTE3_CODIGO = 'QA-PARTICIPANTE-CHARLIE';
+const QA_INSTRUCTOR_CODE = 'QA-SIM-PLN-INSTRUTOR';
+const QA_SIMULATOR_NAME = 'QA Simulator Planning AW139';
 const PLANNING_CATEGORY_CODE = 'QA-SIM-PLN-CAT';
 const PLANNING_QUAL_CODE = 'QA-SIM-PLN-AW139';
 const PLANNING_MODEL_CODE = 'QA-SIM-PLN-S01';
 const PLANNING_MARKER = 'QA_ONLY_SIMULATOR_PLANNING';
 const DRAFT_MARKER = 'QA_SIMULATOR_PLANNING_SMOKE';
 const QA_ROSTER_ID = 'QA-SIM-PLN-ROSTER';
-const QA_ALLOCATION_IDS = ['QA-SIM-PLN-ALFA-FOLGA', 'QA-SIM-PLN-BRAVO-FOLGA', 'QA-SIM-PLN-CHARLIE-FOLGA'];
+const QA_ALLOCATION_IDS = [
+  'QA-SIM-PLN-ALFA-FOLGA',
+  'QA-SIM-PLN-BRAVO-FOLGA',
+  'QA-SIM-PLN-CHARLIE-FOLGA',
+];
 
 function sqlString(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
@@ -205,6 +211,39 @@ SELECT CASE WHEN
   )
   AND NOT EXISTS (
     SELECT 1
+    FROM funcionarios f
+    LEFT JOIN funcionarios alfa
+      ON alfa.empresa_id = f.empresa_id
+     AND alfa.matricula = ${e(PARTICIPANTE1_CODIGO)}
+     AND alfa.deleted_at IS NULL
+    WHERE f.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+      AND f.matricula = ${e(QA_INSTRUCTOR_CODE)}
+      AND NOT (
+        COALESCE(f.nome, '') = 'QA Instrutor Simulador'
+        AND COALESCE(f.cargo, '') = 'Instrutor QA'
+        AND COALESCE(f.status, '') = 'ATIVO'
+        AND COALESCE(f.ativo, 1) = 1
+        AND COALESCE(f.is_instrutor, 0) = 1
+        AND COALESCE(f.is_checador, 0) = 0
+        AND COALESCE(f.is_examinador, 0) = 0
+        AND f.setor IS alfa.setor
+        AND f.setor_id IS alfa.setor_id
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM simuladores s
+    WHERE s.nome = ${e(QA_SIMULATOR_NAME)}
+      AND NOT (
+        COALESCE(s.modelo, '') = 'AW139'
+        AND COALESCE(s.tipo, '') = 'FFS'
+        AND COALESCE(s.fabricante, '') = 'QA Synthetic'
+        AND COALESCE(s.status, '') = 'ATIVO'
+        AND COALESCE(s.aeronave_codigo, '') = 'AW139'
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1
     FROM qualificacoes_historico qh
     LEFT JOIN funcionarios f
       ON f.id = qh.funcionario_id AND f.empresa_id = qh.empresa_id
@@ -267,12 +306,69 @@ SELECT CASE WHEN (
 DROP TABLE _qa_sim_planning_requires_fixed_scale;
 
 -- Limpa apenas drafts anteriores deste smoke no tenant sintético.
+CREATE TABLE IF NOT EXISTS _qa_sim_planning_session_cleanup (
+  session_id INTEGER PRIMARY KEY
+);
+DELETE FROM _qa_sim_planning_session_cleanup;
+INSERT INTO _qa_sim_planning_session_cleanup(session_id)
+SELECT sa.id
+FROM simulador_agendamentos sa
+WHERE sa.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND sa.deleted_at IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM treinamentos_planejados tp
+    WHERE tp.empresa_id = sa.empresa_id
+      AND tp.planejamento_origem = 'SIMULADOR_V3_PERSISTED'
+      AND tp.planejamento_snapshot_json LIKE '%${DRAFT_MARKER}%'
+      AND sa.observacoes LIKE '%[sim-v3:' || substr(tp.planejamento_chave, length('SIMULADOR_V3_PERSISTED:') + 1) || ':%'
+  );
+
+UPDATE qualificacoes_historico
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE sessao_id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+  AND deleted_at IS NULL;
+
+UPDATE sessoes_participantes
+SET deleted_at = datetime('now')
+WHERE sessao_id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+  AND deleted_at IS NULL;
+
+UPDATE simulador_segmento_participantes
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE segmento_id IN (
+  SELECT id FROM simulador_agendamento_segmentos
+  WHERE agendamento_id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+)
+  AND deleted_at IS NULL;
+
+UPDATE simulador_agendamento_segmentos
+SET deleted_at = datetime('now'), updated_at = datetime('now'), status = 'CANCELADO'
+WHERE agendamento_id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+  AND deleted_at IS NULL;
+
+UPDATE simulador_atribuicoes_curriculares
+SET deleted_at = datetime('now'), updated_at = datetime('now'), status = 'CANCELADA'
+WHERE agendamento_id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+  AND deleted_at IS NULL;
+
+UPDATE fichas_sessao
+SET deleted_at = datetime('now')
+WHERE agendamento_slot_id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+  AND deleted_at IS NULL;
+
+UPDATE simulador_agendamentos
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+  AND deleted_at IS NULL;
+
 UPDATE treinamentos_planejados
 SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND planejamento_origem = 'SIMULADOR_V3_PERSISTED'
   AND planejamento_snapshot_json LIKE '%${DRAFT_MARKER}%'
   AND deleted_at IS NULL;
+DROP TABLE _qa_sim_planning_session_cleanup;
 
 -- Categoria canônica QA exigida pelo contrato 0457.
 -- A identidade é tenant-scoped, ativa e separada de qualquer catálogo real.
@@ -502,6 +598,67 @@ WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
 -- Alfa e Bravo permanecem intocados. Charlie herda a Escala 1/2 de Alfa,
 -- garantindo uma dupla com folga/trabalho derivável sem escala mensal publicada.
 
+-- Recursos sintéticos exclusivos para provar materialização em lote no staging.
+INSERT INTO funcionarios (
+  nome, matricula, cargo, setor, setor_id, status, is_instrutor, is_checador, is_examinador, ativo, empresa_id,
+  quinzena, created_at, updated_at, deleted_at
+)
+SELECT
+  'QA Instrutor Simulador', ${e(QA_INSTRUCTOR_CODE)}, 'Instrutor QA', alfa.setor, alfa.setor_id,
+  'ATIVO', 1, 0, 0, 1, emp.id, alfa.quinzena, datetime('now'), datetime('now'), NULL
+FROM empresas emp
+JOIN funcionarios alfa
+  ON alfa.empresa_id = emp.id
+ AND alfa.matricula = ${e(PARTICIPANTE1_CODIGO)}
+ AND alfa.deleted_at IS NULL
+WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+  AND emp.deleted_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM funcionarios f
+    WHERE f.empresa_id = emp.id AND f.matricula = ${e(QA_INSTRUCTOR_CODE)}
+  );
+
+UPDATE funcionarios
+SET quinzena = (
+      SELECT alfa.quinzena FROM funcionarios alfa
+      WHERE alfa.empresa_id = funcionarios.empresa_id
+        AND alfa.matricula = ${e(PARTICIPANTE1_CODIGO)}
+        AND alfa.deleted_at IS NULL
+      LIMIT 1
+    ),
+    deleted_at = NULL,
+    updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND matricula = ${e(QA_INSTRUCTOR_CODE)}
+  AND nome = 'QA Instrutor Simulador'
+  AND cargo = 'Instrutor QA'
+  AND status = 'ATIVO'
+  AND COALESCE(ativo, 1) = 1
+  AND COALESCE(is_instrutor, 0) = 1
+  AND COALESCE(is_checador, 0) = 0
+  AND COALESCE(is_examinador, 0) = 0;
+
+INSERT INTO simuladores (
+  nome, modelo, tipo, fabricante, status, aeronave_codigo,
+  created_at, updated_at, deleted_at
+)
+SELECT
+  ${e(QA_SIMULATOR_NAME)}, 'AW139', 'FFS', 'QA Synthetic', 'ATIVO', 'AW139',
+  datetime('now'), datetime('now'), NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM simuladores WHERE nome = ${e(QA_SIMULATOR_NAME)}
+);
+
+UPDATE simuladores
+SET deleted_at = NULL,
+    updated_at = datetime('now'),
+    status = 'ATIVO',
+    aeronave_codigo = 'AW139'
+WHERE nome = ${e(QA_SIMULATOR_NAME)}
+  AND modelo = 'AW139'
+  AND tipo = 'FFS'
+  AND fabricante = 'QA Synthetic';
+
 -- Três históricos QA com o mesmo vencimento: dois formam uma dupla bloqueada e o terceiro permanece singleton.
 INSERT INTO qualificacoes_historico (
   funcionario_id, qualificacao_id, qualificacao_codigo,
@@ -573,6 +730,8 @@ CREATE TABLE IF NOT EXISTS _qa_sim_planning_post_guard (
   model_version_count INTEGER NOT NULL CHECK (model_version_count = 1),
   participant_count INTEGER NOT NULL CHECK (participant_count = 3),
   fixed_scale_count INTEGER NOT NULL CHECK (fixed_scale_count = 3),
+  instructor_count INTEGER NOT NULL CHECK (instructor_count = 1),
+  simulator_count INTEGER NOT NULL CHECK (simulator_count = 1),
   history_count INTEGER NOT NULL CHECK (history_count = 3),
   roster_count INTEGER NOT NULL CHECK (roster_count = 0),
   allocation_count INTEGER NOT NULL CHECK (allocation_count = 0),
@@ -581,7 +740,8 @@ CREATE TABLE IF NOT EXISTS _qa_sim_planning_post_guard (
 DELETE FROM _qa_sim_planning_post_guard;
 INSERT INTO _qa_sim_planning_post_guard (
   tenant_count, category_count, qualification_count, model_count,
-  model_version_count, participant_count, fixed_scale_count, history_count, roster_count, allocation_count, config_count
+  model_version_count, participant_count, fixed_scale_count, instructor_count, simulator_count,
+  history_count, roster_count, allocation_count, config_count
 )
 SELECT
   (SELECT COUNT(*) FROM empresas
@@ -626,6 +786,20 @@ SELECT
     WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
       AND matricula IN (${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}, ${e(PARTICIPANTE3_CODIGO)})
       AND quinzena IN ('primeira', 'segunda')
+      AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM funcionarios
+    WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+      AND matricula = ${e(QA_INSTRUCTOR_CODE)}
+      AND nome = 'QA Instrutor Simulador'
+      AND COALESCE(is_instrutor, 0) = 1
+      AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM simuladores
+    WHERE nome = ${e(QA_SIMULATOR_NAME)}
+      AND modelo = 'AW139'
+      AND tipo = 'FFS'
+      AND fabricante = 'QA Synthetic'
+      AND status = 'ATIVO'
+      AND aeronave_codigo = 'AW139'
       AND deleted_at IS NULL),
   (SELECT COUNT(*) FROM qualificacoes_historico
     WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
@@ -677,6 +851,62 @@ SELECT CASE WHEN NOT EXISTS (
 ) THEN 1 ELSE 0 END;
 DROP TABLE _qa_sim_planning_requires_history_signatures;
 
+CREATE TABLE IF NOT EXISTS _qa_sim_planning_session_cleanup (
+  session_id INTEGER PRIMARY KEY
+);
+DELETE FROM _qa_sim_planning_session_cleanup;
+INSERT INTO _qa_sim_planning_session_cleanup(session_id)
+SELECT sa.id
+FROM simulador_agendamentos sa
+WHERE sa.empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND sa.deleted_at IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM treinamentos_planejados tp
+    WHERE tp.empresa_id = sa.empresa_id
+      AND tp.planejamento_origem = 'SIMULADOR_V3_PERSISTED'
+      AND tp.planejamento_snapshot_json LIKE '%${DRAFT_MARKER}%'
+      AND sa.observacoes LIKE '%[sim-v3:' || substr(tp.planejamento_chave, length('SIMULADOR_V3_PERSISTED:') + 1) || ':%'
+  );
+
+UPDATE qualificacoes_historico
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE sessao_id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+  AND deleted_at IS NULL;
+
+UPDATE sessoes_participantes
+SET deleted_at = datetime('now')
+WHERE sessao_id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+  AND deleted_at IS NULL;
+
+UPDATE simulador_segmento_participantes
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE segmento_id IN (
+  SELECT id FROM simulador_agendamento_segmentos
+  WHERE agendamento_id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+)
+  AND deleted_at IS NULL;
+
+UPDATE simulador_agendamento_segmentos
+SET deleted_at = datetime('now'), updated_at = datetime('now'), status = 'CANCELADO'
+WHERE agendamento_id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+  AND deleted_at IS NULL;
+
+UPDATE simulador_atribuicoes_curriculares
+SET deleted_at = datetime('now'), updated_at = datetime('now'), status = 'CANCELADA'
+WHERE agendamento_id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+  AND deleted_at IS NULL;
+
+UPDATE fichas_sessao
+SET deleted_at = datetime('now')
+WHERE agendamento_slot_id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+  AND deleted_at IS NULL;
+
+UPDATE simulador_agendamentos
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+  AND deleted_at IS NULL;
+
 UPDATE treinamentos_planejados
 SET deleted_at = datetime('now'), updated_at = datetime('now')
 WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
@@ -719,6 +949,24 @@ WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
   AND deleted_at IS NULL;
 
 -- Alfa e Bravo são baseline canônico do tenant QA e nunca são alterados pelo fixture.
+
+UPDATE funcionarios
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND matricula = ${e(QA_INSTRUCTOR_CODE)}
+  AND nome = 'QA Instrutor Simulador'
+  AND cargo = 'Instrutor QA'
+  AND COALESCE(is_instrutor, 0) = 1
+  AND deleted_at IS NULL;
+
+UPDATE simuladores
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE nome = ${e(QA_SIMULATOR_NAME)}
+  AND modelo = 'AW139'
+  AND tipo = 'FFS'
+  AND fabricante = 'QA Synthetic'
+  AND aeronave_codigo = 'AW139'
+  AND deleted_at IS NULL;
 
 UPDATE funcionarios
 SET deleted_at = datetime('now'), updated_at = datetime('now')
@@ -798,6 +1046,9 @@ CREATE TABLE IF NOT EXISTS _qa_sim_planning_rollback_guard (
   allocation_count INTEGER NOT NULL CHECK (allocation_count = 0),
   roster_count INTEGER NOT NULL CHECK (roster_count = 0),
   history_count INTEGER NOT NULL CHECK (history_count = 0),
+  session_count INTEGER NOT NULL CHECK (session_count = 0),
+  instructor_count INTEGER NOT NULL CHECK (instructor_count = 0),
+  simulator_count INTEGER NOT NULL CHECK (simulator_count = 0),
   charlie_count INTEGER NOT NULL CHECK (charlie_count = 0),
   model_version_count INTEGER NOT NULL CHECK (model_version_count = 0),
   model_count INTEGER NOT NULL CHECK (model_count = 0),
@@ -806,7 +1057,8 @@ CREATE TABLE IF NOT EXISTS _qa_sim_planning_rollback_guard (
 );
 DELETE FROM _qa_sim_planning_rollback_guard;
 INSERT INTO _qa_sim_planning_rollback_guard (
-  draft_count, allocation_count, roster_count, history_count, charlie_count,
+  draft_count, allocation_count, roster_count, history_count, session_count,
+  instructor_count, simulator_count, charlie_count,
   model_version_count, model_count, qualification_count, category_count
 )
 SELECT
@@ -822,6 +1074,14 @@ SELECT
   (SELECT COUNT(*) FROM qualificacoes_historico
     WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
       AND observacoes=${e(PLANNING_MARKER)} AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM simulador_agendamentos
+    WHERE id IN (SELECT session_id FROM _qa_sim_planning_session_cleanup)
+      AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM funcionarios
+    WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
+      AND matricula=${e(QA_INSTRUCTOR_CODE)} AND deleted_at IS NULL),
+  (SELECT COUNT(*) FROM simuladores
+    WHERE nome=${e(QA_SIMULATOR_NAME)} AND deleted_at IS NULL),
   (SELECT COUNT(*) FROM funcionarios
     WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
       AND matricula=${e(PARTICIPANTE3_CODIGO)} AND deleted_at IS NULL),
@@ -838,6 +1098,7 @@ SELECT
     WHERE empresa_id=(SELECT id FROM empresas WHERE codigo=${e(EMPRESA_CODIGO)})
       AND UPPER(codigo)=UPPER(${e(PLANNING_CATEGORY_CODE)}) AND deleted_at IS NULL);
 DROP TABLE _qa_sim_planning_rollback_guard;
+DROP TABLE _qa_sim_planning_session_cleanup;
 `;
 }
 
@@ -879,7 +1140,9 @@ function main() {
   if (result.status !== 0) {
     throw new Error(result.stderr || result.stdout || 'wrangler d1 execute falhou');
   }
-  console.log(rollback ? 'SIMULATOR_PLANNING_QA_ROLLBACK_APPLIED' : 'SIMULATOR_PLANNING_QA_SEED_APPLIED');
+  console.log(
+    rollback ? 'SIMULATOR_PLANNING_QA_ROLLBACK_APPLIED' : 'SIMULATOR_PLANNING_QA_SEED_APPLIED',
+  );
 }
 
 try {
