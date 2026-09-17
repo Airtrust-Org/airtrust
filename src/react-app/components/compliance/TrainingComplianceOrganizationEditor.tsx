@@ -206,7 +206,7 @@ export function TrainingComplianceOrganizationEditor() {
         </label>
         {tripulacaoSelected ? (
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <label htmlFor="training-compliance-aircraft-model">Aeronave / equipamento</label>
+            <label htmlFor="training-compliance-aircraft-model">Modelo de aeronave</label>
             <select
               id="training-compliance-aircraft-model"
               aria-describedby="training-compliance-aircraft-model-help"
@@ -214,7 +214,7 @@ export function TrainingComplianceOrganizationEditor() {
               onChange={(e) => setAeronaveModelo(e.target.value)}
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
             >
-              <option value="">Todos os equipamentos</option>
+              <option value="">Todos os modelos</option>
               {(catalogs.data?.aeronaves_modelos || []).map((item) => (
                 <option key={item.modelo} value={item.modelo}>
                   {item.modelo}

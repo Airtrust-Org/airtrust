@@ -80,7 +80,7 @@ describe('Training Compliance aircraft filter', () => {
     renderEditor();
 
     await screen.findByRole('option', { name: 'Tripulação' });
-    expect(screen.queryByLabelText('Aeronave / equipamento')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Modelo de aeronave')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
     await screen.findByText('AW139 Recorrente');
@@ -89,7 +89,7 @@ describe('Training Compliance aircraft filter', () => {
     expect(screen.getByRole('option', { name: 'SK76' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Cargo / função'), { target: { value: '10' } });
-    fireEvent.change(screen.getByLabelText('Aeronave / equipamento'), {
+    fireEvent.change(screen.getByLabelText('Modelo de aeronave'), {
       target: { value: 'AW139' },
     });
 
@@ -107,7 +107,7 @@ describe('Training Compliance aircraft filter', () => {
     fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
     await screen.findByText('AW139 Recorrente');
     fireEvent.change(screen.getByLabelText('Cargo / função'), { target: { value: '10' } });
-    fireEvent.change(screen.getByLabelText('Aeronave / equipamento'), {
+    fireEvent.change(screen.getByLabelText('Modelo de aeronave'), {
       target: { value: 'AW139' },
     });
 
@@ -141,6 +141,6 @@ describe('Training Compliance aircraft filter', () => {
     await screen.findByRole('option', { name: 'Administrativo' });
     fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '2' } });
 
-    expect(screen.queryByLabelText('Aeronave / equipamento')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Modelo de aeronave')).not.toBeInTheDocument();
   });
 });

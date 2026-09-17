@@ -65,12 +65,12 @@ describe('TrainingComplianceApplicabilityEditor aircraft scope', () => {
     renderEditor();
 
     await screen.findByRole('option', { name: 'Tripulação' });
-    expect(screen.queryByLabelText('Aeronave / equipamento')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Modelo de aeronave')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText('Cargo / função'), { target: { value: '10' } });
 
-    const aircraft = await screen.findByLabelText('Aeronave / equipamento');
+    const aircraft = await screen.findByLabelText('Modelo de aeronave');
     expect(screen.getByRole('option', { name: 'AW139' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'SK76' })).toBeInTheDocument();
     fireEvent.change(aircraft, { target: { value: 'SK76' } });
@@ -101,6 +101,6 @@ describe('TrainingComplianceApplicabilityEditor aircraft scope', () => {
     await screen.findByRole('option', { name: 'Administrativo' });
     fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '2' } });
 
-    expect(screen.queryByLabelText('Aeronave / equipamento')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Modelo de aeronave')).not.toBeInTheDocument();
   });
 });

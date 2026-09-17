@@ -325,13 +325,13 @@ export function TrainingComplianceApplicabilityEditor({
         )}
         {tripulacaoSelected && aircraftScopeReady ? (
           <label className="text-xs font-medium text-slate-600">
-            Aeronave / equipamento
+            Modelo de aeronave
             <select
               value={aeronaveModelo}
               onChange={(event) => setAeronaveModelo(event.target.value)}
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
             >
-              <option value="">Todos os equipamentos</option>
+              <option value="">Todos os modelos</option>
               {(catalogs.data?.aeronaves_modelos || []).map((item) => (
                 <option key={item.modelo} value={item.modelo}>
                   {item.modelo}
