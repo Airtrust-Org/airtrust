@@ -151,6 +151,47 @@ const GRUPOS_FATORIZACAO: ConfigGroup[] = [
 ];
 
 const GRUPOS_OPERACIONAIS: ConfigGroup[] = [
+
+  {
+    label: 'FRMS V2 — Recuperação',
+    icon: <Brain className="h-4 w-4" />,
+    description: 'Créditos por standby e repouso absoluto; valores versionados por perfil.',
+    keys: [
+      'RECOVERY_HOTEL_MAX_POINTS','RECOVERY_ONSITE_MAX_POINTS','RECOVERY_IMMEDIATE_CALLOUT_MULTIPLIER',
+      'RECOVERY_NO_WORK_MIN_HOURS','RECOVERY_ABSOLUTE_REST_MIN_HOURS','RECOVERY_ABSOLUTE_REST_MID_HOURS',
+      'RECOVERY_ABSOLUTE_REST_FULL_HOURS','RECOVERY_ABSOLUTE_REST_LOW_FACTOR','RECOVERY_ABSOLUTE_REST_MID_FACTOR',
+    ],
+  },
+  {
+    label: 'FRMS V2 — Horas de voo',
+    icon: <Brain className="h-4 w-4" />,
+    description: 'Crédito D+1 abaixo do limiar, faixa neutra e penalização acima da referência diária.',
+    keys: ['HV_CREDIT_THRESHOLD_MINUTES','HV_CREDIT_MAX_POINTS','HV_NEUTRAL_MAX_MINUTES','HV_PENALTY_PER_EXCESS_HOUR_POINTS','HV_PENALTY_CAP_POINTS'],
+  },
+  {
+    label: 'FRMS V2 — Pousos',
+    icon: <Brain className="h-4 w-4" />,
+    description: 'Carga de pousos independente da meteorologia.',
+    keys: ['LANDINGS_NEUTRAL_MAX','LANDINGS_PENALTY_PER_EXCESS','LANDINGS_PENALTY_CAP_POINTS'],
+  },
+  {
+    label: 'FRMS V2 — Temperatura',
+    icon: <Brain className="h-4 w-4" />,
+    description: 'Bandas de temperatura observada em METAR/SPECI. Não compartilha cap com pousos.',
+    keys: ['TEMP_BAND1_MIN_C','TEMP_BAND1_DELTA_POINTS','TEMP_BAND2_MIN_C','TEMP_BAND2_DELTA_POINTS','TEMP_BAND3_MIN_C','TEMP_BAND3_DELTA_POINTS','TEMP_BAND4_MIN_C','TEMP_BAND4_DELTA_POINTS','TEMP_PENALTY_CAP_POINTS'],
+  },
+  {
+    label: 'FRMS V2 — IMC / METAR',
+    icon: <Brain className="h-4 w-4" />,
+    description: 'Critérios VMC/IMC meteorológicos e penalizações por saída/chegada.',
+    keys: ['IMC_VISIBILITY_THRESHOLD_M','IMC_CEILING_THRESHOLD_FT','IMC_DEPARTURE_DELTA_POINTS','IMC_ARRIVAL_DELTA_POINTS','IMC_LEG_CAP_POINTS','IMC_DAY_CAP_POINTS'],
+  },
+  {
+    label: 'FRMS V2 — Noite e janelas acumuladas',
+    icon: <Brain className="h-4 w-4" />,
+    description: 'Janela de apresentação noturna e seleção calendário/móvel por operador.',
+    keys: ['PRESENTATION_NIGHT_START_HOUR','PRESENTATION_NIGHT_END_HOUR','PRESENTATION_NIGHT_DELTA_POINTS','ACCUMULATION_WINDOW_MODE','ACCUMULATION_USE_MONTH_CALENDAR','ACCUMULATION_USE_YEAR_CALENDAR','ACCUMULATION_USE_28D_ROLLING','ACCUMULATION_USE_365D_ROLLING'],
+  },
   {
     label: 'Parâmetros Operacionais',
     icon: <Brain className="h-4 w-4" />,
@@ -186,6 +227,46 @@ const GRUPOS_OPERACIONAIS: ConfigGroup[] = [
 ];
 
 const LABELS: Record<string, string> = {
+  RECOVERY_HOTEL_MAX_POINTS: 'Crédito máximo — standby hotel/residência (pts)',
+  RECOVERY_ONSITE_MAX_POINTS: 'Crédito máximo — standby na base (pts)',
+  RECOVERY_IMMEDIATE_CALLOUT_MULTIPLIER: 'Multiplicador com acionamento imediato',
+  RECOVERY_NO_WORK_MIN_HOURS: 'Repouso sem trabalho mínimo (h)',
+  RECOVERY_ABSOLUTE_REST_MIN_HOURS: 'Repouso absoluto — início de crédito (h)',
+  RECOVERY_ABSOLUTE_REST_MID_HOURS: 'Repouso absoluto — faixa intermediária (h)',
+  RECOVERY_ABSOLUTE_REST_FULL_HOURS: 'Repouso absoluto — crédito integral (h)',
+  RECOVERY_ABSOLUTE_REST_LOW_FACTOR: 'Fator de crédito 4–6 h',
+  RECOVERY_ABSOLUTE_REST_MID_FACTOR: 'Fator de crédito 6–8 h',
+  HV_CREDIT_THRESHOLD_MINUTES: 'HV abaixo de — gera crédito D+1 (min)',
+  HV_CREDIT_MAX_POINTS: 'Crédito máximo HV D+1 (pts)',
+  HV_NEUTRAL_MAX_MINUTES: 'HV neutra até (min)',
+  HV_PENALTY_PER_EXCESS_HOUR_POINTS: 'Penalização por hora acima da faixa neutra (pts)',
+  HV_PENALTY_CAP_POINTS: 'Cap diário de penalização HV (pts)',
+  LANDINGS_NEUTRAL_MAX: 'Pousos neutros até',
+  LANDINGS_PENALTY_PER_EXCESS: 'Penalização por pouso excedente (pts)',
+  LANDINGS_PENALTY_CAP_POINTS: 'Cap diário de pousos (pts)',
+  TEMP_BAND1_MIN_C: 'Temperatura faixa 1 — início (°C)',
+  TEMP_BAND2_MIN_C: 'Temperatura faixa 2 — início (°C)',
+  TEMP_BAND3_MIN_C: 'Temperatura faixa 3 — início (°C)',
+  TEMP_BAND4_MIN_C: 'Temperatura faixa 4 — início (°C)',
+  TEMP_BAND1_DELTA_POINTS: 'Temperatura faixa 1 — delta (pts)',
+  TEMP_BAND2_DELTA_POINTS: 'Temperatura faixa 2 — delta (pts)',
+  TEMP_BAND3_DELTA_POINTS: 'Temperatura faixa 3 — delta (pts)',
+  TEMP_BAND4_DELTA_POINTS: 'Temperatura faixa 4 — delta (pts)',
+  TEMP_PENALTY_CAP_POINTS: 'Cap diário de temperatura (pts)',
+  IMC_VISIBILITY_THRESHOLD_M: 'IMC — visibilidade abaixo de (m)',
+  IMC_CEILING_THRESHOLD_FT: 'IMC — teto abaixo de (ft)',
+  IMC_DEPARTURE_DELTA_POINTS: 'IMC na saída — delta (pts)',
+  IMC_ARRIVAL_DELTA_POINTS: 'IMC na chegada — delta (pts)',
+  IMC_LEG_CAP_POINTS: 'IMC — cap por etapa (pts)',
+  IMC_DAY_CAP_POINTS: 'IMC — cap diário (pts)',
+  PRESENTATION_NIGHT_START_HOUR: 'Apresentação noturna — início (h)',
+  PRESENTATION_NIGHT_END_HOUR: 'Apresentação noturna — fim (h)',
+  PRESENTATION_NIGHT_DELTA_POINTS: 'Apresentação noturna — delta (pts)',
+  ACCUMULATION_WINDOW_MODE: 'Janela acumulada (0=calendário, 1=móvel, 2=personalizado)',
+  ACCUMULATION_USE_MONTH_CALENDAR: 'Usar mês calendário (0/1)',
+  ACCUMULATION_USE_YEAR_CALENDAR: 'Usar ano calendário (0/1)',
+  ACCUMULATION_USE_28D_ROLLING: 'Usar 28 dias corridos (0/1)',
+  ACCUMULATION_USE_365D_ROLLING: 'Usar 365 dias corridos (0/1)',
   FDP_MAXIMO_HORAS: 'FDP baseline (11 h, profile-dependent)',
   FDP_ALERTA_RESTANTE_HORAS: 'Alerta FDP restante (horas)',
   HV_DIARIA_HORAS: 'HV diária helicóptero (8 h) — Lei 13.475 / RBAC 117',
@@ -252,6 +333,10 @@ const LABELS: Record<string, string> = {
 };
 
 const FIELD_HELPERS: Record<string, string> = {
+  ACCUMULATION_WINDOW_MODE: '0 usa mês/ano calendário; 1 usa janelas móveis; 2 permite combinação personalizada pelos flags abaixo.',
+  IMC_VISIBILITY_THRESHOLD_M: 'Critério interno configurável para classificar a condição meteorológica observada; não define se o voo foi IFR ou VFR.',
+  IMC_CEILING_THRESHOLD_FT: 'Critério interno configurável de teto para VMC/IMC. METAR ausente permanece indeterminado.',
+  RECOVERY_ABSOLUTE_REST_FULL_HOURS: 'Repouso absoluto não pressupõe sono contínuo; é a oportunidade efetiva de descanso informada no check-in.',
   MINUTOS_ANTES_APRESENTACAO:
     'Tempo entre o tripulante acordar e se apresentar para o voo (padrão ICAO: 90 min).',
   HORAS_SONO_PADRAO:
@@ -274,6 +359,11 @@ const FIELD_HELPERS: Record<string, string> = {
 };
 
 const FIELD_BOUNDS: Record<string, { min?: number; max?: number; step?: number }> = {
+  ACCUMULATION_WINDOW_MODE: { min: 0, max: 2, step: 1 },
+  ACCUMULATION_USE_MONTH_CALENDAR: { min: 0, max: 1, step: 1 },
+  ACCUMULATION_USE_YEAR_CALENDAR: { min: 0, max: 1, step: 1 },
+  ACCUMULATION_USE_28D_ROLLING: { min: 0, max: 1, step: 1 },
+  ACCUMULATION_USE_365D_ROLLING: { min: 0, max: 1, step: 1 },
   MINUTOS_ANTES_APRESENTACAO: { min: 30, max: 180, step: 1 },
   HORAS_SONO_PADRAO: { min: 4, max: 12, step: 0.1 },
 };

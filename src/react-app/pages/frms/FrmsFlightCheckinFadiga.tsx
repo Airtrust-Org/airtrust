@@ -531,12 +531,12 @@ export default function FrmsFlightCheckinFadiga() {
     (wakeTimeTouched || submitAttempted) && wakeTimeHasValue && !wakeTimeValid;
 
   const missingItems: string[] = [];
-  if (sonoOpcao === null) missingItems.push('Horas de sono nas últimas 24h');
+  if (sonoOpcao === null) missingItems.push('Repouso absoluto nas últimas 24h');
   if (!wakeTimeValid) {
     if (!wakeTimeHasValue) missingItems.push('Hora em que acordou');
     else missingItems.push('Horário inválido - corrija a hora em que acordou');
   }
-  if (qualidadeSono === null) missingItems.push('Qualidade do sono');
+  if (qualidadeSono === null) missingItems.push('Qualidade do repouso absoluto');
   if (kssScore === null) missingItems.push('Nível de sonolência (KSS)');
   if (vigilanceResult === null) missingItems.push('Teste breve de atenção e tempo de reação');
   if (fitForDutyChoice === null) missingItems.push('Condição para iniciar a jornada');
@@ -726,7 +726,7 @@ export default function FrmsFlightCheckinFadiga() {
                 <div className="space-y-4">
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-slate-700">
-                      Horas de sono nas últimas 24h
+                      Repouso absoluto nas últimas 24h
                     </legend>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
                       {SONO_OPCOES.map((op) => {
@@ -792,7 +792,7 @@ export default function FrmsFlightCheckinFadiga() {
 
                     <fieldset>
                       <legend className="mb-2 text-sm font-medium text-slate-700">
-                        Qualidade do sono
+                        Qualidade do repouso absoluto
                       </legend>
                       <div className="space-y-2">
                         {QUALIDADE_SONO_OPCOES.map((op) => {
@@ -883,7 +883,7 @@ export default function FrmsFlightCheckinFadiga() {
 
               <FormCard
                 label="Bloco 3 - Atenção e tempo de reação"
-                hint="Teste breve objetivo para complementar sono, KSS e sua autoavaliação. O resultado não determina aptidão isoladamente."
+                hint="Teste breve objetivo para complementar repouso absoluto, KSS e sua autoavaliação. O resultado não determina aptidão isoladamente."
               >
                 <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                   {readinessBaseline?.ready

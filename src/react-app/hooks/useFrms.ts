@@ -92,12 +92,14 @@ export interface FrmsAcumuloRolling {
   hv_7_dias_min: number;
   hv_28_dias_min: number;
   hv_365_dias_min: number;
+  hv_ano_calendario_min: number;
   hv_mes_calendario_min: number;
   hv_dia_min: number;
   pct_limite_7d: number;
   pct_limite_28d: number;
   pct_limite_mes_calendario: number;
   pct_limite_365d: number;
+  pct_limite_ano_calendario: number;
   pct_limite_dia: number;
   repouso_anterior_min: number;
   repouso_suficiente: number;

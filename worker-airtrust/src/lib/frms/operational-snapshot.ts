@@ -741,6 +741,37 @@ function buildPlaceholders(length: number): string {
   return Array.from({ length }, () => '?').join(', ');
 }
 
+
+interface RecoveryCreditSnapshotRow {
+  data_operacional: string;
+  funcionario_id: number;
+  recovery_credit_points: number;
+}
+
+async function loadRecoveryCreditRows(
+  db: D1Database,
+  empresaId: number,
+  start: string,
+  end: string,
+): Promise<RecoveryCreditSnapshotRow[]> {
+  try {
+    const rows = await db.prepare(
+      `SELECT reference_date AS data_operacional,
+              CAST(funcionario_id AS INTEGER) AS funcionario_id,
+              MAX(COALESCE(recovery_credit_points, 0)) AS recovery_credit_points
+         FROM frms_recovery_assessment
+        WHERE empresa_id = ? AND reference_date >= ? AND reference_date <= ?
+          AND deleted_at IS NULL
+        GROUP BY reference_date, funcionario_id`,
+    ).bind(empresaId, start, end).all<RecoveryCreditSnapshotRow>();
+    return rows.results ?? [];
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    if (message.includes('no such column') || message.includes('no such table')) return [];
+    throw error;
+  }
+}
+
 interface OperationalSnapshotRows {
   escalas: ScaleSnapshotRow[];
   jornadas: JornadaSnapshotRow[];
@@ -1072,6 +1103,11 @@ export async function listFrmsOperationalSnapshot(
       ? requestedRows
       : await loadOperationalSnapshotRows(db, params.empresaId, contextStart, contextEnd);
 
+  const recoveryCredits = await loadRecoveryCreditRows(db, params.empresaId, contextStart, contextEnd);
+  const recoveryCreditByKey = new Map(
+    recoveryCredits.map((row) => [`${row.data_operacional}::${Number(row.funcionario_id)}`, Number(row.recovery_credit_points || 0)]),
+  );
+
   const ids = collectCandidateIds(contextRows).filter(
     (id) => scopedFuncionarioId == null || id === scopedFuncionarioId,
   );
@@ -1202,6 +1238,7 @@ export async function listFrmsOperationalSnapshot(
         horas_sono: item.horas_sono,
         kss_score: item.kss_score,
         effectiveness_pct: item.effectiveness_pct,
+        recovery_credit_points: recoveryCreditByKey.get(itemKey) ?? 0,
         dia_periodo_embarcado:
           derivedFortnight?.dia_periodo_embarcado ??
           (effectivenessRow?.dia_periodo_embarcado != null

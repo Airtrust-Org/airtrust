@@ -100,6 +100,7 @@ export interface FrmsFortnightIndicatorItemSeed {
   horas_sono?: number | null;
   kss_score?: number | null;
   effectiveness_pct?: number | null;
+  recovery_credit_points?: number | null;
   dia_periodo_embarcado: number | null;
   total_dias_periodo: number | null;
 }
@@ -373,6 +374,7 @@ function buildModifiers(input: {
   rolling168h: { dutyMin: number; vooMin: number };
   periodHasCritical: boolean;
   periodHasAttention: boolean;
+  totalRecoveryCreditPoints: number;
   policy: FrmsFortnightPolicy;
 }): { atenuadores: FrmsFortnightModifier[]; agravantes: FrmsFortnightModifier[] } {
   const atenuadores: FrmsFortnightModifier[] = [];
@@ -390,11 +392,20 @@ function buildModifiers(input: {
     (entry) => entry.effectiveness_pct != null && entry.effectiveness_pct < input.policy.lowEffectivenessPct,
   ).length;
 
-  if (diasSemJornada >= input.policy.daysWithoutDuty) {
+  // Legacy-only fixed no-duty attenuator. V2 sets its impact to zero and uses
+  // actual governed recovery credits instead of inferring recovery from no duty.
+  if (input.policy.impactDaysWithoutDuty !== 0 && diasSemJornada >= input.policy.daysWithoutDuty) {
     atenuadores.push({
       codigo: 'DIAS_SEM_JORNADA_NO_PERIODO',
       descricao: `${diasSemJornada} dia(s) sem jornada registrada na quinzena.`,
       impacto_score: input.policy.impactDaysWithoutDuty,
+    });
+  }
+  if (input.totalRecoveryCreditPoints > 0) {
+    atenuadores.push({
+      codigo: 'CREDITO_RECUPERACAO_REAL',
+      descricao: `${round1(input.totalRecoveryCreditPoints)} ponto(s) de recuperação real no período, derivados de standby/repouso absoluto.`,
+      impacto_score: -round1(input.totalRecoveryCreditPoints),
     });
   }
   if (input.menorDescansoEntreJornadasMin != null && input.menorDescansoEntreJornadasMin >= input.policy.longRestMinutes) {
@@ -752,6 +763,11 @@ export function buildFrmsFortnightIndicatorMap(
     if (diasComDadoEstimado > 0) alertasQuinzena.push('DADOS_ESTIMADOS_NO_PERIODO');
     if (periodHasCritical) alertasQuinzena.push('RISCO_DIARIO_CRITICO_NO_PERIODO');
 
+    const totalRecoveryCreditPoints = round1(scoped.reduce(
+      (sum, entry) => sum + Math.max(0, Number(entry.recovery_credit_points ?? 0)),
+      0,
+    ));
+
     const limitReference = buildLimitReference({
       dutyTimePeriodoMin,
       totalDiasPeriodo: anchor.total_dias_periodo,
@@ -772,6 +788,7 @@ export function buildFrmsFortnightIndicatorMap(
       rolling168h,
       periodHasCritical,
       periodHasAttention,
+      totalRecoveryCreditPoints,
       policy,
     });
     const modifierImpact =

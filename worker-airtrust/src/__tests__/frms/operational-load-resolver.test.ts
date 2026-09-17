@@ -4,6 +4,7 @@ import {
   resolveJornadaLandings,
   resolveOperationalLoadForJornada,
 } from '../../lib/frms/operational-load-resolver';
+import { V2_POLICY, V2_POLICY_VERSION } from './policy-v2-fixture';
 
 function makeDb(handler: (sql: string, binds: unknown[]) => unknown) {
   return {
@@ -126,14 +127,17 @@ describe('resolveOperationalLoadForJornada', () => {
       funcionarioId: 42,
       dataYmd: '2026-08-20',
       jornadaId: 'jornada-1',
+      policy: V2_POLICY, policyVersion: V2_POLICY_VERSION,
     });
 
     expect(result.landings_count).toBe(4);
     expect(result.landings_evidence_quality).toBe('OBSERVED');
     expect(result.temperature_max_c).toBe(32);
-    expect(result.operational_load_total_delta).toBe(-3);
+    expect(result.operational_load_landings_delta).toBe(0);
+    expect(result.operational_load_temperature_delta).toBe(-1);
+    expect(result.operational_load_total_delta).toBe(-1);
     expect(result.landings_source).toBe('SIGVOOS_OBSERVED');
-    expect(result.data_quality).toBe('COMPLETE');
+    expect(result.data_quality).toBe('INCOMPLETE');
   });
 
   it('stays INCOMPLETE (temp = 0 contribution) when flight exists but no observed weather exists', async () => {
@@ -147,11 +151,12 @@ describe('resolveOperationalLoadForJornada', () => {
       funcionarioId: 42,
       dataYmd: '2026-08-20',
       jornadaId: 'jornada-1',
+      policy: V2_POLICY, policyVersion: V2_POLICY_VERSION,
     });
 
-    expect(result.operational_load_landings_delta).toBe(-4);
+    expect(result.operational_load_landings_delta).toBe(0);
     expect(result.operational_load_temperature_delta).toBe(0);
-    expect(result.operational_load_total_delta).toBe(-4);
+    expect(result.operational_load_total_delta).toBe(0);
     expect(result.weather_evidence_quality).toBe('INCOMPLETE');
     expect(result.data_quality).toBe('INCOMPLETE');
   });
@@ -172,6 +177,7 @@ describe('resolveOperationalLoadForJornada', () => {
       funcionarioId: 42,
       dataYmd: '2026-08-20',
       jornadaId: 'jornada-1',
+      policy: V2_POLICY, policyVersion: V2_POLICY_VERSION,
     });
 
     expect(result.landings_source).toBe('SIGVOOS_UNAVAILABLE');
@@ -194,6 +200,7 @@ describe('resolveOperationalLoadForJornada', () => {
       funcionarioId: 42,
       dataYmd: '2026-08-20',
       jornadaId: 'jornada-1',
+      policy: V2_POLICY, policyVersion: V2_POLICY_VERSION,
     });
 
     expect(result.landings_source).toBe('SIGVOOS_UNAVAILABLE');

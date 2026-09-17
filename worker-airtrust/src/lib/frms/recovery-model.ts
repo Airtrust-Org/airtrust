@@ -43,10 +43,10 @@ export interface RecoveryEvidenceResult {
 const RECOVERY_FRIENDLY = new Set<RecoveryActivityType>([
   'OFF_DUTY',
   'STANDBY_HOME_HOTEL',
+  'STANDBY_ONSITE',
 ]);
 
 const RECOVERY_RESTRICTIVE = new Set<RecoveryActivityType>([
-  'STANDBY_ONSITE',
   'ADMIN_TRAINING',
   'DUTY_TRAVEL',
 ]);
@@ -113,15 +113,10 @@ export function deriveRecoveryEvidence(input: RecoveryEvidenceInput): RecoveryEv
     };
   }
 
-  if (input.activityType === 'STANDBY_HOME_HOTEL' && input.immediateCalloutRequired === true) {
+  if ((input.activityType === 'STANDBY_HOME_HOTEL' || input.activityType === 'STANDBY_ONSITE') && input.immediateCalloutRequired === true) {
+    // V2 does not erase recovery opportunity; the numeric policy applies a
+    // configurable multiplier while evidence confidence remains explicit.
     reasons.push('STANDBY_COM_ACIONAMENTO_IMEDIATO');
-    return {
-      state: sleepHours >= target ? 'PARTIAL' : 'LIMITED',
-      confidence: 'MEDIUM',
-      qualifyingRecoveryNight: false,
-      reasons,
-      effectivenessDeltaPct: null,
-    };
   }
 
   if (!RECOVERY_FRIENDLY.has(input.activityType)) {
@@ -151,7 +146,7 @@ export function deriveRecoveryEvidence(input: RecoveryEvidenceInput): RecoveryEv
   if (nights < 2) {
     return {
       state: 'PARTIAL',
-      confidence: 'HIGH',
+      confidence: input.immediateCalloutRequired ? 'MEDIUM' : 'HIGH',
       qualifyingRecoveryNight: true,
       reasons: [...reasons, 'PRIMEIRA_NOITE_QUALIFICANTE'],
       effectivenessDeltaPct: null,

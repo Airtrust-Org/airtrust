@@ -50,6 +50,7 @@ function buildInputFingerprint(snapshot: FrmsIogpEvaluationSnapshot): string {
     snapshot.compliance.map((c) => c.status).join(','),
     snapshot.evidence.sigvoosLegKeys.join('|'),
     snapshot.evidence.weatherSource,
+    (snapshot.evidence.weatherEvents ?? []).map((e) => `${e.legId}:${e.phase}:${e.observedAtUtc ?? 'none'}`).join('|'),
   ];
   return parts.join('::');
 }
