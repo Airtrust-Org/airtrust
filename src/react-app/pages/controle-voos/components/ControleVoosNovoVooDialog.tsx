@@ -14,6 +14,7 @@ type Props = {
 
 type ApiEnvelope<T> = { success: boolean; data?: { data?: T } | T; error?: string };
 type Aeronave = { id: number; codigo?: string | null; prefixo?: string | null; modelo?: string | null; status?: string | null };
+type EligibleCrewMember = { id: number; nome: string; matricula: string | null; funcao_codigo: 'PIC' | 'SIC'; funcao_nome: string };
 type QuickCatalog = 'aeroportos' | 'tipos' | 'naturezas';
 type QuickTarget = 'origem_id' | 'destino_id' | 'tipo_voo_id' | 'natureza_voo_id';
 type QuickCreateState = { catalog: QuickCatalog; target: QuickTarget };
@@ -57,7 +58,9 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
   const [tipos, setTipos] = useState<CvTipoVoo[]>([]);
   const [naturezas, setNaturezas] = useState<CvNaturezaVoo[]>([]);
   const [aeronaves, setAeronaves] = useState<Aeronave[]>([]);
+  const [eligibleCrew, setEligibleCrew] = useState<EligibleCrewMember[]>([]);
   const [loadingCatalogos, setLoadingCatalogos] = useState(false);
+  const [loadingCrew, setLoadingCrew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [quickCreate, setQuickCreate] = useState<QuickCreateState | null>(null);
@@ -77,6 +80,8 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     horario_previsto_chegada: mode === 'pilot' ? toLocalTime(new Date(now.getTime() + 2 * 60 * 60_000)) : toLocalInput(new Date(now.getTime() + 2 * 60 * 60_000)),
     observacoes: '',
     funcao: 'PIC' as 'PIC' | 'SIC',
+    pic_funcionario_id: '',
+    sic_funcionario_id: '',
   });
 
   useEffect(() => {
@@ -114,6 +119,30 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open || mode !== 'coordenacao' || !form.aeronave_id) {
+      setEligibleCrew([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingCrew(true);
+    setError(null);
+    void apiClient
+      .get<unknown>(`/controle-voos/voos/tripulantes-elegiveis?aeronave_id=${form.aeronave_id}`)
+      .then((response) => {
+        if (!cancelled) setEligibleCrew(extract<EligibleCrewMember[]>(response) || []);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Falha ao carregar tripulação elegível.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCrew(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, mode, form.aeronave_id]);
+
   if (!open) return null;
 
   const set = (key: keyof typeof form, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
@@ -124,6 +153,8 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
       ...prev,
       aeronave_id: id,
       prefixo: aircraft?.prefixo?.trim().toUpperCase() || aircraft?.codigo?.trim().toUpperCase() || '',
+      pic_funcionario_id: '',
+      sic_funcionario_id: '',
     }));
   };
 
@@ -132,8 +163,13 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     setError(null);
     const pilotManualFieldsReady = form.origem_texto.trim() && form.destino_texto.trim() && form.tipo_voo_texto.trim() && form.natureza_voo_codigo;
     const coordinationCatalogFieldsReady = form.origem_id && form.destino_id && form.tipo_voo_id && form.natureza_voo_id;
-    if (!form.aeronave_id || !form.prefixo.trim() || (mode === 'pilot' ? !pilotManualFieldsReady : !coordinationCatalogFieldsReady)) {
-      setError(mode === 'pilot' ? 'Informe aeronave, origem, destino, tipo e natureza do voo.' : 'Selecione aeronave, origem, destino, tipo e natureza do voo.');
+    const coordinationCrewReady = form.pic_funcionario_id && form.sic_funcionario_id;
+    if (!form.aeronave_id || !form.prefixo.trim() || (mode === 'pilot' ? !pilotManualFieldsReady : !coordinationCatalogFieldsReady || !coordinationCrewReady)) {
+      setError(mode === 'pilot' ? 'Informe aeronave, origem, destino, tipo e natureza do voo.' : 'Selecione aeronave, PIC, SIC, origem, destino, tipo e natureza do voo.');
+      return;
+    }
+    if (mode === 'coordenacao' && form.pic_funcionario_id === form.sic_funcionario_id) {
+      setError('PIC e SIC devem ser tripulantes diferentes.');
       return;
     }
     const origemComparavel = mode === 'pilot' ? form.origem_texto.trim().toUpperCase() : form.origem_id;
@@ -157,7 +193,15 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
       };
       const body = mode === 'pilot'
         ? { ...common, origem_texto: form.origem_texto.trim(), destino_texto: form.destino_texto.trim(), tipo_voo_texto: form.tipo_voo_texto.trim(), natureza_voo_codigo: form.natureza_voo_codigo, funcao: form.funcao }
-        : { ...common, origem_id: Number(form.origem_id), destino_id: Number(form.destino_id), tipo_voo_id: Number(form.tipo_voo_id), natureza_voo_id: Number(form.natureza_voo_id) };
+        : {
+            ...common,
+            origem_id: Number(form.origem_id),
+            destino_id: Number(form.destino_id),
+            tipo_voo_id: Number(form.tipo_voo_id),
+            natureza_voo_id: Number(form.natureza_voo_id),
+            pic_funcionario_id: Number(form.pic_funcionario_id),
+            sic_funcionario_id: Number(form.sic_funcionario_id),
+          };
       const endpoint = mode === 'pilot' ? '/controle-voos/voos/meus/criar' : '/controle-voos/voos';
       const response = await apiClient.post<unknown>(endpoint, body);
       onCreated(extract<CvVoo>(response));
@@ -171,6 +215,10 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
 
   const fieldClass = 'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-cyan-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100';
   const labelRowClass = 'flex items-center justify-between gap-2';
+  const picOptions = eligibleCrew.filter(
+    (member) => member.funcao_codigo === 'PIC' && String(member.id) !== form.sic_funcionario_id,
+  );
+  const sicOptions = eligibleCrew.filter((member) => String(member.id) !== form.pic_funcionario_id);
   const openQuick = (catalog: QuickCatalog, target: QuickTarget) => setQuickCreate({ catalog, target });
 
   return (
@@ -200,6 +248,23 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
             </select>
           </div>
           <label className="text-sm">Data<input type="date" className={fieldClass} value={form.data_programacao} onChange={(e) => set('data_programacao', e.target.value)} required /></label>
+
+          {mode === 'coordenacao' && (
+            <>
+              <label className="text-sm">PIC (Comandante)
+                <select className={fieldClass} value={form.pic_funcionario_id} onChange={(e) => set('pic_funcionario_id', e.target.value)} disabled={!form.aeronave_id || loadingCrew} required>
+                  <option value="">{loadingCrew ? 'Carregando…' : 'Selecione o comandante'}</option>
+                  {picOptions.map((member) => <option key={member.id} value={member.id}>{member.nome}{member.matricula ? ` · ${member.matricula}` : ''}</option>)}
+                </select>
+              </label>
+              <label className="text-sm">SIC (Comandante ou Copiloto)
+                <select className={fieldClass} value={form.sic_funcionario_id} onChange={(e) => set('sic_funcionario_id', e.target.value)} disabled={!form.aeronave_id || loadingCrew} required>
+                  <option value="">{loadingCrew ? 'Carregando…' : 'Selecione o SIC'}</option>
+                  {sicOptions.map((member) => <option key={member.id} value={member.id}>{member.nome} · {member.funcao_nome}{member.matricula ? ` · ${member.matricula}` : ''}</option>)}
+                </select>
+              </label>
+            </>
+          )}
 
           {mode === 'pilot' ? (
             <>
