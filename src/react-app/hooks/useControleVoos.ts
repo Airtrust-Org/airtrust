@@ -813,6 +813,37 @@ export function useCriarTripulante() {
   });
 }
 
+export function useAtualizarTripulante() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      vooId,
+      tripulanteId,
+      funcionario_id,
+      funcao,
+      versao,
+    }: {
+      vooId: string | number;
+      tripulanteId: number;
+      funcionario_id?: number;
+      funcao?: CvTripulante['funcao'];
+      versao?: number;
+    }) => {
+      const response = await apiClient.put<unknown>(`${API}/voos/${vooId}/tripulantes/${tripulanteId}`, {
+        funcionario_id,
+        funcao,
+        ...(versao !== undefined ? { versao } : {}),
+      });
+      return extractPayload<{ id: number }>(response, { id: 0 });
+    },
+    onSuccess: (_, vars) => {
+      void qc.invalidateQueries({ queryKey: ['cv-tripulantes', vars.vooId] });
+      void qc.invalidateQueries({ queryKey: ['cv-rdv', vars.vooId] });
+      void qc.invalidateQueries({ queryKey: ['cv-rdv-alertas', vars.vooId] });
+    },
+  });
+}
+
 export function useRemoverTripulante() {
   const qc = useQueryClient();
   return useMutation({
