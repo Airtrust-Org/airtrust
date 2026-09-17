@@ -56,7 +56,10 @@ describe('Training Compliance aircraft filter', () => {
     fetchWithAuthMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url.endsWith('/catalogos')) {
         return ok({
-          setores: [{ id: 1, nome: 'Operações' }],
+          setores: [
+            { id: 1, codigo: 'TRIP', nome: 'Tripulação' },
+            { id: 2, codigo: 'ADM', nome: 'Administrativo' },
+          ],
           funcoes: [{ id: 10, nome: 'Piloto' }],
           setor_funcoes: [{ setor_id: 1, funcao_id: 10 }],
           aeronaves_modelos: [
@@ -73,10 +76,12 @@ describe('Training Compliance aircraft filter', () => {
     });
   });
 
-  it('loads AW139 and SK76 from the tenant catalog and scopes the matrix request by aircraft', async () => {
+  it('loads AW139 and SK76 for Tripulação and scopes the matrix request by aircraft', async () => {
     renderEditor();
 
-    await screen.findByRole('option', { name: 'Operações' });
+    await screen.findByRole('option', { name: 'Tripulação' });
+    expect(screen.queryByLabelText('Aeronave / equipamento')).not.toBeInTheDocument();
+
     fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
     await screen.findByText('AW139 Recorrente');
 
@@ -98,7 +103,7 @@ describe('Training Compliance aircraft filter', () => {
   it('persists the selected aircraft model with the organization rule', async () => {
     renderEditor();
 
-    await screen.findByRole('option', { name: 'Operações' });
+    await screen.findByRole('option', { name: 'Tripulação' });
     fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
     await screen.findByText('AW139 Recorrente');
     fireEvent.change(screen.getByLabelText('Cargo / função'), { target: { value: '10' } });
@@ -128,5 +133,14 @@ describe('Training Compliance aircraft filter', () => {
       aeronave_modelo: 'AW139',
       obrigatoriedade: 'OBRIGATORIA',
     });
+  });
+
+  it('keeps the aircraft selector hidden outside Tripulação', async () => {
+    renderEditor();
+
+    await screen.findByRole('option', { name: 'Administrativo' });
+    fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '2' } });
+
+    expect(screen.queryByLabelText('Aeronave / equipamento')).not.toBeInTheDocument();
   });
 });
