@@ -1363,9 +1363,15 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
     loadActiveLmsCourses(db, empresaId),
   ]);
   const enrollments = allEnrollments.filter((row) => allowedIds.has(Number(row.funcionario_id)));
-  const enrollmentKeys = new Set(
+  // A matrícula concluída é evidência histórica e não pode bloquear uma nova
+  // matrícula de renovação quando o requisito estiver vencido/vencendo.
+  const blockingEnrollmentKeys = new Set(
     enrollments
-      .filter((row) => row.qualificacao_tipo_id !== null)
+      .filter(
+        (row) =>
+          row.qualificacao_tipo_id !== null &&
+          !['CONCLUIDO', 'CONCLUIDA'].includes(String(row.status || '').trim().toUpperCase()),
+      )
       .map((row) => `${row.funcionario_id}:${row.qualificacao_tipo_id}`),
   );
   const courseByType = new Map<number, Array<{ id: number; titulo: string }>>();
@@ -1386,9 +1392,9 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
   >();
   let requisitosSemMatricula = 0;
   for (const person of people) {
-    for (const req of person.requisitos.filter((item) => item.obrigatoriedade === 'OBRIGATORIA')) {
+    for (const req of person.requisitos) {
       const key = `${person.id}:${req.qualificacao_tipo_id}`;
-      if (enrollmentKeys.has(key)) continue;
+      if (blockingEnrollmentKeys.has(key)) continue;
       requisitosSemMatricula += 1;
       if (!['NAO_REALIZADO', 'VENCIDO', 'VENCENDO'].includes(req.status_compliance)) continue;
       const current = gaps.get(req.qualificacao_tipo_id) || {

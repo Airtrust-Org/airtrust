@@ -229,9 +229,9 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
       </div>
 
       <section>
-        <h3 className="font-semibold text-slate-900">Necessidade obrigatória sem matrícula</h3>
+        <h3 className="font-semibold text-slate-900">Necessidades sem matrícula</h3>
         <p className="mt-1 text-sm text-slate-500">
-          A matrícula em lote só acontece quando você clicar em “Matricular gaps”. Nenhum e-mail é enviado nessa etapa.
+          Inclui requisitos obrigatórios e recomendados que precisam de matrícula. A matrícula em lote só acontece quando você clicar em “Matricular gaps”. Nenhum e-mail é enviado nessa etapa.
         </p>
         <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
           <table className="min-w-full text-sm">
