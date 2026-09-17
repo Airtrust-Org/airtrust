@@ -17,6 +17,7 @@ type Rule = {
   funcao_id: number | null;
   funcao_nome?: string | null;
   funcionario_id: number | null;
+  aeronave_modelo?: string | null;
   obrigatoriedade: Obrigatoriedade;
   critico_operacional: number;
   origem: string;
@@ -27,6 +28,7 @@ type Catalogs = {
   setores: Array<{ id: number; codigo?: string | null; nome: string }>;
   funcoes: Array<{ id: number; codigo?: string | null; nome: string }>;
   setor_funcoes: Array<{ setor_id: number; funcao_id: number }>;
+  aeronaves_modelos?: Array<{ modelo: string; aeronaves: number }>;
   access_mode: 'all' | 'restricted' | 'self';
 };
 
@@ -48,14 +50,24 @@ const scopeOptions: Array<{ value: Scope; label: string }> = [
   { value: 'SETOR_FUNCAO', label: 'Setor + cargo / função' },
 ];
 
+function isTripulacaoSector(setor?: { codigo?: string | null; nome: string } | null) {
+  if (!setor) return false;
+  const canonical = `${setor.codigo || ''} ${setor.nome}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+  return canonical.includes('TRIPUL');
+}
+
 function scopeLabel(rule: Rule) {
-  if (rule.escopo === 'EMPRESA') return 'Toda a empresa';
-  if (rule.escopo === 'SETOR') return rule.setor_nome || 'Setor';
-  if (rule.escopo === 'FUNCAO') return rule.funcao_nome || 'Cargo / função';
+  const aircraft = rule.aeronave_modelo ? ` · ${rule.aeronave_modelo}` : '';
+  if (rule.escopo === 'EMPRESA') return `Toda a empresa${aircraft}`;
+  if (rule.escopo === 'SETOR') return `${rule.setor_nome || 'Setor'}${aircraft}`;
+  if (rule.escopo === 'FUNCAO') return `${rule.funcao_nome || 'Cargo / função'}${aircraft}`;
   if (rule.escopo === 'SETOR_FUNCAO') {
-    return `${rule.setor_nome || 'Setor'} · ${rule.funcao_nome || 'Cargo'}`;
+    return `${rule.setor_nome || 'Setor'} · ${rule.funcao_nome || 'Cargo'}${aircraft}`;
   }
-  return 'Funcionário específico';
+  return `Funcionário específico${aircraft}`;
 }
 
 export function TrainingComplianceApplicabilityEditor({
@@ -75,6 +87,7 @@ export function TrainingComplianceApplicabilityEditor({
   const [scope, setScope] = useState<Scope>('SETOR_FUNCAO');
   const [setorId, setSetorId] = useState<number | null>(null);
   const [funcaoId, setFuncaoId] = useState<number | null>(null);
+  const [aeronaveModelo, setAeronaveModelo] = useState('');
   const [obrigatoriedade, setObrigatoriedade] = useState<Obrigatoriedade>('OBRIGATORIA');
   const [origem, setOrigem] = useState('REGULATORIO');
   const [critico, setCritico] = useState(false);
@@ -83,11 +96,12 @@ export function TrainingComplianceApplicabilityEditor({
   const capabilities = useQuery({
     queryKey: ['training-compliance', 'capabilities'],
     queryFn: async () =>
-      readJson<{ schema_ready: boolean }>(
+      readJson<{ schema_ready: boolean; aircraft_scope_ready?: boolean }>(
         await fetchWithAuth('/api/compliance-treinamentos/capabilities'),
       ),
   });
   const schemaReady = capabilities.data?.schema_ready === true;
+  const aircraftScopeReady = capabilities.data?.aircraft_scope_ready === true;
 
   const catalogs = useQuery({
     queryKey: ['training-compliance', 'catalogs'],
@@ -106,6 +120,8 @@ export function TrainingComplianceApplicabilityEditor({
 
   const sectors = catalogs.data?.setores || [];
   const functions = catalogs.data?.funcoes || [];
+  const selectedSector = sectors.find((item) => item.id === setorId) || null;
+  const tripulacaoSelected = isTripulacaoSector(selectedSector);
   const allowedFunctionIds = useMemo(() => {
     if (!setorId || scope !== 'SETOR_FUNCAO') return null;
     return new Set(
@@ -126,6 +142,9 @@ export function TrainingComplianceApplicabilityEditor({
   useEffect(() => {
     if (funcaoId && allowedFunctionIds && !allowedFunctionIds.has(funcaoId)) setFuncaoId(null);
   }, [allowedFunctionIds, funcaoId]);
+  useEffect(() => {
+    if (!tripulacaoSelected) setAeronaveModelo('');
+  }, [tripulacaoSelected]);
 
   const invalidate = async () => {
     await Promise.all([
@@ -154,6 +173,8 @@ export function TrainingComplianceApplicabilityEditor({
           escopo: scope,
           setor_id: setorId,
           funcao_id: funcaoId,
+          aeronave_modelo:
+            tripulacaoSelected && aircraftScopeReady ? aeronaveModelo || null : null,
           obrigatoriedade,
           critico_operacional: critico,
           origem,
@@ -302,6 +323,23 @@ export function TrainingComplianceApplicabilityEditor({
             </select>
           </label>
         )}
+        {tripulacaoSelected && aircraftScopeReady ? (
+          <label className="text-xs font-medium text-slate-600">
+            Modelo de aeronave
+            <select
+              value={aeronaveModelo}
+              onChange={(event) => setAeronaveModelo(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Todos os modelos</option>
+              {(catalogs.data?.aeronaves_modelos || []).map((item) => (
+                <option key={item.modelo} value={item.modelo}>
+                  {item.modelo}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <label className="text-xs font-medium text-slate-600">
           Obrigatoriedade
           <select
