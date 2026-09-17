@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { TrainingComplianceOrganizationEditor } from '../TrainingComplianceOrganizationEditor';
+import { TrainingComplianceApplicabilityEditor } from '../TrainingComplianceApplicabilityEditor';
 
 const { fetchWithAuthMock, toastMock } = vi.hoisted(() => ({
   fetchWithAuthMock: vi.fn(),
@@ -12,6 +12,9 @@ vi.mock('@/react-app/config/api', () => ({
   fetchWithAuth: (...args: unknown[]) => fetchWithAuthMock(...args),
 }));
 vi.mock('@/react-app/utils/toast', () => ({ showToast: toastMock }));
+vi.mock('@/react-app/hooks/usePermissions', () => ({
+  usePermissions: () => ({ isAdmin: true, isGestor: false }),
+}));
 
 function ok(data: unknown) {
   return { ok: true, json: async () => ({ success: true, data }) } as Response;
@@ -23,52 +26,34 @@ function renderEditor() {
   });
   return render(
     <QueryClientProvider client={client}>
-      <TrainingComplianceOrganizationEditor />
+      <TrainingComplianceApplicabilityEditor qualificacaoTipoId={300} />
     </QueryClientProvider>,
   );
 }
 
-const row = {
-  qualificacao_tipo_id: 300,
-  qualificacao_tipo_codigo: 'AW139-REC',
-  qualificacao_tipo_nome: 'AW139 Recorrente',
-  efetiva: null,
-  direta: null,
-  impacto: {
-    pessoas: 4,
-    atingidas_neste_nivel: 4,
-    override_mais_especifico: 0,
-    com_requisito: 0,
-    sem_requisito: 4,
-    conformes: 0,
-    vencendo: 0,
-    vencidos: 0,
-    nunca_realizados: 0,
-    em_andamento: 0,
-    matriculados: 0,
-    sem_matricula: 4,
-  },
-};
-
-describe('Training Compliance aircraft filter', () => {
+describe('TrainingComplianceApplicabilityEditor aircraft scope', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchWithAuthMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/capabilities')) {
+        return ok({ schema_ready: true, aircraft_scope_ready: true });
+      }
       if (url.endsWith('/catalogos')) {
         return ok({
           setores: [
             { id: 1, codigo: 'TRIP', nome: 'Tripulação' },
             { id: 2, codigo: 'ADM', nome: 'Administrativo' },
           ],
-          funcoes: [{ id: 10, nome: 'Piloto' }],
+          funcoes: [{ id: 10, codigo: 'CMD', nome: 'Comandante' }],
           setor_funcoes: [{ setor_id: 1, funcao_id: 10 }],
           aeronaves_modelos: [
             { modelo: 'AW139', aeronaves: 3 },
             { modelo: 'SK76', aeronaves: 2 },
           ],
+          access_mode: 'all',
         });
       }
-      if (url.includes('/matriz-organizacao')) return ok([row]);
+      if (url.includes('/regras?qualificacao_tipo_id=300')) return ok([]);
       if (url === '/api/compliance-treinamentos/regras' && init?.method === 'POST') {
         return ok({ id: 999 });
       }
@@ -76,45 +61,20 @@ describe('Training Compliance aircraft filter', () => {
     });
   });
 
-  it('loads AW139 and SK76 for Tripulação and scopes the matrix request by aircraft', async () => {
+  it('shows aircraft only for Tripulação and persists the selected model', async () => {
     renderEditor();
 
     await screen.findByRole('option', { name: 'Tripulação' });
     expect(screen.queryByLabelText('Modelo de aeronave')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
-    await screen.findByText('AW139 Recorrente');
+    fireEvent.change(screen.getByLabelText('Cargo / função'), { target: { value: '10' } });
 
+    const aircraft = await screen.findByLabelText('Modelo de aeronave');
     expect(screen.getByRole('option', { name: 'AW139' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'SK76' })).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText('Cargo / função'), { target: { value: '10' } });
-    fireEvent.change(screen.getByLabelText('Modelo de aeronave'), {
-      target: { value: 'AW139' },
-    });
-
-    await waitFor(() =>
-      expect(fetchWithAuthMock).toHaveBeenCalledWith(
-        expect.stringContaining('setor_id=1&funcao_id=10&aeronave_modelo=AW139'),
-      ),
-    );
-  });
-
-  it('persists the selected aircraft model with the organization rule', async () => {
-    renderEditor();
-
-    await screen.findByRole('option', { name: 'Tripulação' });
-    fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
-    await screen.findByText('AW139 Recorrente');
-    fireEvent.change(screen.getByLabelText('Cargo / função'), { target: { value: '10' } });
-    fireEvent.change(screen.getByLabelText('Modelo de aeronave'), {
-      target: { value: 'AW139' },
-    });
-
-    const trainingRow = (await screen.findByText('AW139 Recorrente')).closest('tr')!;
-    fireEvent.change(within(trainingRow).getByRole('combobox'), {
-      target: { value: 'OBRIGATORIA' },
-    });
+    fireEvent.change(aircraft, { target: { value: 'SK76' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar requisito' }));
 
     await waitFor(() =>
       expect(fetchWithAuthMock).toHaveBeenCalledWith(
@@ -130,12 +90,12 @@ describe('Training Compliance aircraft filter', () => {
       escopo: 'SETOR_FUNCAO',
       setor_id: 1,
       funcao_id: 10,
-      aeronave_modelo: 'AW139',
+      aeronave_modelo: 'SK76',
       obrigatoriedade: 'OBRIGATORIA',
     });
   });
 
-  it('keeps the aircraft selector hidden outside Tripulação', async () => {
+  it('keeps aircraft hidden for non-crew sectors', async () => {
     renderEditor();
 
     await screen.findByRole('option', { name: 'Administrativo' });
