@@ -31,6 +31,7 @@ import {
   RDV_CAPABILITIES,
   requireRdvCapability,
   requireAnyRdvAccess,
+  hasRdvCapability,
   assertRdvSelfScope,
   assertNotSelfApproval,
   assertFuncionarioBelongsToEmpresa,
@@ -1067,15 +1068,36 @@ rdvWorkflow.put('/voos/:id/tripulantes/:tripulanteId', auth(), requireAnyRdvAcce
   if (!existing)
     throw new ApiError('Tripulante nao encontrado', 404, 'CONTROLE_VOOS_TRIPULANTE_NOT_FOUND');
 
+  const payload = await parseJsonPayload(c);
   const rdv = await getActiveRdvByFlight(c.env.DB, voo.id, empresaId);
-  if (!rdv) throw new ApiError('RDV nao encontrado', 404, 'CONTROLE_VOOS_RDV_NOT_FOUND');
+  const isCoordination = await hasRdvCapability(c, RDV_CAPABILITIES.visualizarTodos);
+  if (!rdv && !isCoordination) {
+    throw new ApiError('RDV nao encontrado', 404, 'CONTROLE_VOOS_RDV_NOT_FOUND');
+  }
 
-  const payload = await parseVersionedMutationPayload(c);
-  const expectedVersion = requireExpectedRdvVersion(payload);
-  assertRdvVersion(rdv, expectedVersion);
+  if (rdv) {
+    const expectedVersion = requireExpectedRdvVersion(payload);
+    assertRdvVersion(rdv, expectedVersion);
+  }
 
   const sets: string[] = [];
   const values: unknown[] = [];
+
+  if (payload.funcionario_id !== undefined) {
+    if (!isCoordination) {
+      throw new ApiError('Somente a Coordenacao pode substituir tripulantes', 403, 'CONTROLE_VOOS_TRIPULANTE_REPLACE_FORBIDDEN');
+    }
+    const funcionarioId = parsePositiveInteger(payload.funcionario_id, 'funcionario_id');
+    await assertFuncionarioBelongsToEmpresa(c.env.DB, funcionarioId, empresaId);
+    const duplicate = await c.env.DB.prepare(
+      'SELECT id FROM cv_voo_tripulantes WHERE voo_id = ? AND empresa_id = ? AND funcionario_id = ? AND id <> ? AND deleted_at IS NULL LIMIT 1',
+    ).bind(voo.id, empresaId, funcionarioId, tripulanteId).first();
+    if (duplicate) {
+      throw new ApiError('Funcionario ja integra a tripulacao deste voo', 409, 'CONTROLE_VOOS_TRIPULANTE_DUPLICATE');
+    }
+    sets.push('funcionario_id = ?');
+    values.push(funcionarioId);
+  }
 
   if (payload.funcao !== undefined) {
     const funcao = String(payload.funcao || '').trim();
@@ -1098,7 +1120,30 @@ rdvWorkflow.put('/voos/:id/tripulantes/:tripulanteId', auth(), requireAnyRdvAcce
     values.push(payload.observacoes ? String(payload.observacoes) : null);
   }
 
-  if (sets.length > 0) {
+  if (sets.length > 0 && !rdv) {
+    const directSets = [...sets, 'updated_by = ?', 'updated_at = datetime("now")'];
+    const directValues = [...values, userId, tripulanteId, voo.id, empresaId];
+    const result = await c.env.DB.prepare(
+      `UPDATE cv_voo_tripulantes SET ${directSets.join(', ')} WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    ).bind(...directValues).run();
+    if (Number(result.meta.changes || 0) !== 1) {
+      throw new ApiError('Tripulante nao encontrado', 404, 'CONTROLE_VOOS_TRIPULANTE_NOT_FOUND');
+    }
+    await recordFlightEvent({
+      db: c.env.DB,
+      empresaId,
+      vooId: voo.id,
+      tipoEvento: 'tripulacao',
+      statusAnterior: voo.status,
+      statusNovo: voo.status,
+      descricao: 'Tripulante substituido pela Coordenacao',
+      metadata: { action: 'replace', tripulante_id: tripulanteId },
+      usuarioId: userId,
+    });
+    return c.json({ success: true, data: { id: tripulanteId } });
+  }
+
+  if (sets.length > 0 && rdv) {
     sets.push('updated_by = ?', 'updated_at = datetime("now")');
     values.push(userId, tripulanteId, voo.id, empresaId);
 

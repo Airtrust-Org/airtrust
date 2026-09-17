@@ -6,6 +6,7 @@ import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosBreadcrumb from './components/ControleVoosBreadcrumb';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
 import EdbShadowReadinessCard from './components/EdbShadowReadinessCard';
+import ControleVoosTripulacaoCard from './components/ControleVoosTripulacaoCard';
 import {
   useControleVoosVoo,
   useControleVoosRdv,
@@ -199,12 +200,11 @@ export default function ControleVoosVooDetalhe() {
                 <StatusTimeline status={voo.status} />
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
-                <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Tripulação</h2>
-                <p className="text-sm text-slate-400 dark:text-slate-500">
-                  Dados de tripulação não disponíveis nesta versão N1 — endpoint em desenvolvimento.
-                </p>
-              </div>
+              <ControleVoosTripulacaoCard
+                vooId={voo.id}
+                aeronaveId={voo.aeronave_id}
+                rdvVersion={rdv?.versao}
+              />
             </div>
 
             <div className="space-y-6">
@@ -266,7 +266,8 @@ export default function ControleVoosVooDetalhe() {
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Ações</h2>
                 <div className="space-y-2">
-                  {(['Liberar Voo', 'Cancelar Voo', 'Alterar Tripulação', 'Atualizar Status'] as const).map((label) => (
+                  <a href="#tripulacao" className="block w-full rounded-lg bg-cyan-700 px-4 py-2 text-center text-sm font-medium text-white">Alterar Tripulação</a>
+                  {(['Liberar Voo', 'Cancelar Voo', 'Atualizar Status'] as const).map((label) => (
                     <button
                       key={label}
                       disabled
