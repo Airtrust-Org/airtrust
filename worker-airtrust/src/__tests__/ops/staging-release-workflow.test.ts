@@ -607,6 +607,20 @@ describe('scripts/staging/apply-approved-migrations.sh — guards', () => {
     expect(source).not.toContain('APPROVED_MIGRATIONS=("*")');
   });
 
+  it('0499 fails closed on missing tenant context and emits only sanitized remote diagnostics', () => {
+    const source = readFileSync(
+      join(ROOT, 'scripts/staging/apply-0499-frms-v2-historical-backfill.sh'),
+      'utf8',
+    );
+    expect(source).toContain('PREFLIGHT_0499_TENANT_CONTEXT=PASS');
+    expect(source).toContain('active HELICOPTER_OFFSHORE assignment for empresa_id=6 missing');
+    expect(source).toContain('global active FRMS_OPERATIONAL_POLICY_V2 revision missing');
+    expect(source).toContain('sanitized Wrangler diagnostic follows');
+    expect(source).toContain("['text','message','name','code','kind']");
+    expect(source).toContain('[url-redacted]');
+    expect(source).toContain('[hash-redacted]');
+  });
+
   it('never invokes `wrangler d1 migrations apply` (would replay the whole chain)', () => {
     const source = readFileSync(join(ROOT, 'scripts/staging/apply-approved-migrations.sh'), 'utf8');
     const executable = stripComments(source);
