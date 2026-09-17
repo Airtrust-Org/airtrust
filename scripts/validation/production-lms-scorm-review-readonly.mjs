@@ -14,5 +14,5 @@ const modelUrl=new URL(indexUrl); modelUrl.pathname=modelUrl.pathname.replace(/[
 const modelKey=model.headers.get('x-lms-asset-key')||''; assert(modelKey.includes(`/_candidates/${expectedCandidate}/`),`wrong model package served: ${modelKey}`); const text=await model.text();
 assert(/\"mastery\"\s*:\s*70\b/.test(text),'RB11 mastery 70 marker missing'); assert(!/\"mastery\"\s*:\s*80\b/.test(text),'stale mastery 80 package served');
 assert(html.includes('cmi.core.lesson_status') && html.includes('passed'),'completed review virtual passed state missing');
-assert(html.includes('cmi.core.lesson_location') && html.includes('55/55'),'completed review virtual final location missing');
+assert(!html.includes("'cmi.core.lesson_location'] = '55/55'"),'completed review must not hardcode a terminal bookmark');
 console.log(`PRODUCTION_SCORM_REVIEW_PASS matricula=${matricula} candidate=${expectedCandidate}`);
