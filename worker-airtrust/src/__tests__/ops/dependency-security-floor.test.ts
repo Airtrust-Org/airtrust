@@ -18,10 +18,10 @@ describe('dependency security floors', () => {
     expect(lock.packages?.['node_modules/react-router']?.version).toBe('7.18.3');
   });
 
-  it('locks the Worker Hono runtime on 4.13.5', () => {
+  it('locks the Worker Hono runtime on 4.13.7', () => {
     const pkg = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as { dependencies?: Record<string, string> };
     const lock = JSON.parse(readFileSync(resolve(process.cwd(), 'package-lock.json'), 'utf8')) as { packages?: Record<string, Record<string, unknown>> };
-    expect(pkg.dependencies?.hono).toBe('^4.13.5');
-    expect(lock.packages?.['node_modules/hono']?.version).toBe('4.13.5');
+    expect(pkg.dependencies?.hono).toBe('^4.13.7');
+    expect(lock.packages?.['node_modules/hono']?.version).toBe('4.13.7');
   });
 });
