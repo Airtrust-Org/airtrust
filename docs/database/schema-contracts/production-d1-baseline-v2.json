@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-17",
     "last_reconciled_against": "0498 FRMS parametric V2 reviewed; remote apply pending",
-    "schema_v2_digest": "66d3a84dc23f6c9abdcc155ae59ae07a7d51c5adac839699a8c680339775257f",
+    "schema_v2_digest": "2578f05a16e0098a1207cd17b9dbe89b79c380a633dcd709fa38b1d8c0c09594",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -869,7 +869,7 @@
     {
       "change_file": "0498_frms_parametric_v2.sql",
       "change_id": "frms-parametric-v2-0498",
-      "sha256": "3156038f3584f534e11b657b8c88e859e93596c8433f8d8dea5b0c648fffbd59",
+      "sha256": "9dbe00c3377b1e35cd350094146d743ace40dfa7c26a4d64f70ce2a8e967744b",
       "targets": [
         "frms_acumulo_rolling",
         "frms_fatorizacao_jornada",
