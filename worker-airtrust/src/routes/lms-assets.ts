@@ -1117,6 +1117,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     progressoScorm?.cmi_json ?? null,
     progressoScorm?.suspend_data ?? null,
     isScorm2004,
+    matricula.status === 'CONCLUIDO',
   );
 
   const ciclo = await db
@@ -1247,6 +1248,7 @@ function buildScormLaunchState(
   rawCmiJson: string | null,
   suspendData: string | null,
   isScorm2004: boolean,
+  completedReview = false,
 ): { initialCmiJson: string; hasResumeState: boolean } {
   let cmi: Record<string, unknown> = {};
 
@@ -1263,6 +1265,20 @@ function buildScormLaunchState(
 
   if (suspendData && !cmi['cmi.suspend_data']) {
     cmi['cmi.suspend_data'] = suspendData;
+  }
+
+  // Completed review is read-only. Present a virtual terminal CMI state to the SCO
+  // without mutating the persisted SCORM evidence, which may legitimately retain
+  // the pre-incident incomplete checkpoint for audit purposes.
+  if (completedReview) {
+    if (isScorm2004) {
+      cmi['cmi.completion_status'] = 'completed';
+      cmi['cmi.success_status'] = 'passed';
+      cmi['cmi.location'] = '55/55';
+    } else {
+      cmi['cmi.core.lesson_status'] = 'passed';
+      cmi['cmi.core.lesson_location'] = '55/55';
+    }
   }
 
   const hasResumeState = Boolean(
