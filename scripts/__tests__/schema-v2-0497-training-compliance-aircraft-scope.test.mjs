@@ -1,4 +1,7 @@
-// source_reference: training compliance aircraft scope 0497 Schema V2 governance
+// source_reference: worker-airtrust/schema-v2/training-compliance-aircraft-scope-0497.json
+// operational_decision: static governance test only; never writes to local or remote D1
+// dry_run_required: true
+// rollback_plan_required: not_applicable_test_only
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -62,6 +65,7 @@ test('staging allowlists 0497 and routes it through its guarded runner', () => {
   assert.match(runner, /SCHEMA_CHANGE_ID="training-compliance-aircraft-scope-0497"/);
   assert.match(runner, /AIRTRUST_STAGING_SCHEMA_CHANGE/);
   assert.match(runner, /time-travel info/);
+  assert.match(runner, /validate-0497-postconditions\.sh/);
   execFileSync('bash', ['-n', 'scripts/staging/apply-0497-training-compliance-aircraft-scope.sh']);
   execFileSync('bash', ['-n', 'scripts/staging/validate-0497-postconditions.sh']);
 });
