@@ -207,7 +207,7 @@ describe('GET /frms/operational-snapshot', () => {
     });
   });
 
-  it('9) retorna 200 com snapshot vazio e aviso quando o perfil regulatório não está configurado', async () => {
+  it('9) falha explicitamente em vez de fingir fila vazia quando o perfil regulatório não está configurado', async () => {
     const { FrmsParameterResolutionError } = await import('../../lib/frms/parameter-governance');
     listSnapshotMock.mockRejectedValueOnce(
       new FrmsParameterResolutionError(
@@ -233,10 +233,11 @@ describe('GET /frms/operational-snapshot', () => {
       {} as ExecutionContext,
     );
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(503);
     const body = (await response.json()) as any;
-    expect(body.success).toBe(true);
-    expect(body.data).toEqual([]);
+    expect(body.success).toBe(false);
+    expect(body.code).toBe('FRMS_CONTEXT_UNAVAILABLE');
     expect(body.meta.notice).toBe('FRMS_CONTEXT_UNAVAILABLE');
+    expect(body.data).toBeUndefined();
   });
 });

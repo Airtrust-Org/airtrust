@@ -6,10 +6,12 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import process from 'node:process';
 import { recalcularPipeline } from '../../worker-airtrust/src/lib/frms/db-service-jornadas.ts';
 import { carregarLimites } from '../../worker-airtrust/src/lib/frms/db-service-config.ts';
+import { resolveFrmsOperationalContext } from '../../worker-airtrust/src/lib/frms/parameter-governance.ts';
+import { computeRecoveryCredit, resolveOperationalPolicyV2 } from '../../worker-airtrust/src/lib/frms/operational-policy-v2.ts';
 
 const JOB_NAME = 'frms_historical_reprocess_v2';
 const PAGE_SIZE = 250;
-const FORMULA_DEFAULT = 'frms-regulatory-integrity-20260804-v2';
+const FORMULA_DEFAULT = 'frms-parametric-v2-history-20260917';
 const CALCULATED_JOURNEY_COLUMNS = [
   'duracao_jornada_minutos',
   'hora_acordou',
@@ -43,6 +45,11 @@ function parseArgs(argv) {
     approvedDryRun: null,
     report: null,
     scopeKey: null,
+    empresaId: null,
+    dataInicio: null,
+    dataFim: null,
+    targetRevisionId: null,
+    recalcRunId: null,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -56,6 +63,11 @@ function parseArgs(argv) {
     else if (arg === '--approved-dry-run') args.approvedDryRun = argv[++index] ?? null;
     else if (arg === '--report') args.report = argv[++index] ?? null;
     else if (arg === '--scope-key') args.scopeKey = argv[++index] ?? null;
+    else if (arg === '--empresa-id') args.empresaId = Number(argv[++index] ?? NaN);
+    else if (arg === '--data-inicio') args.dataInicio = argv[++index] ?? null;
+    else if (arg === '--data-fim') args.dataFim = argv[++index] ?? null;
+    else if (arg === '--target-revision-id') args.targetRevisionId = argv[++index] ?? null;
+    else if (arg === '--recalc-run-id') args.recalcRunId = argv[++index] ?? null;
     else if (arg === '--help' || arg === '-h') {
       process.stdout.write(`${usage()}\n`);
       process.exit(0);
@@ -75,6 +87,18 @@ function parseArgs(argv) {
   }
   if (!args.formulaVersion || !/^[a-z0-9][a-z0-9._-]{2,127}$/.test(args.formulaVersion)) {
     throw new Error('--formula-version is invalid.');
+  }
+  if (!Number.isInteger(args.empresaId) || args.empresaId <= 0) {
+    throw new Error('--empresa-id must be a positive integer.');
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(args.dataInicio || '') || !/^\d{4}-\d{2}-\d{2}$/.test(args.dataFim || '') || args.dataFim < args.dataInicio) {
+    throw new Error('--data-inicio/--data-fim must be a valid ordered ISO date range.');
+  }
+  if (!args.targetRevisionId || !/^[a-zA-Z0-9._:-]{3,255}$/.test(args.targetRevisionId)) {
+    throw new Error('--target-revision-id is required and invalid.');
+  }
+  if (!args.recalcRunId || !/^[a-zA-Z0-9._:-]{3,255}$/.test(args.recalcRunId)) {
+    throw new Error('--recalc-run-id is required and invalid.');
   }
   if (!args.report) throw new Error('--report is required.');
   if (args.target === 'sqlite' && !args.sqliteFile) {
@@ -294,16 +318,21 @@ async function assertLedgerSchema(db) {
   }
 }
 
-async function loadInventory(db) {
+async function loadInventory(db, scope) {
   const overview = await queryOne(
     db,
     `SELECT COUNT(*) AS jornadas,
-            COUNT(DISTINCT COALESCE(j.empresa_id, f.empresa_id)) AS empresas,
+            COUNT(DISTINCT f.empresa_id) AS empresas,
             MIN(j.data) AS primeira_data,
             MAX(j.data) AS ultima_data
        FROM frms_jornada j
        JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER) AND f.deleted_at IS NULL
-      WHERE j.deleted_at IS NULL`,
+      WHERE j.deleted_at IS NULL
+        AND f.empresa_id = ?
+        AND j.data >= ? AND j.data <= ?`,
+    scope.empresaId,
+    scope.dataInicio,
+    scope.dataFim,
   );
   const mismatch = await queryOne(
     db,
@@ -311,7 +340,13 @@ async function loadInventory(db) {
        FROM frms_jornada j
        LEFT JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER) AND f.deleted_at IS NULL
       WHERE j.deleted_at IS NULL
+        AND j.data >= ? AND j.data <= ?
+        AND (COALESCE(j.empresa_id, f.empresa_id) = ? OR f.empresa_id = ?)
         AND (f.id IS NULL OR (j.empresa_id IS NOT NULL AND j.empresa_id <> f.empresa_id))`,
+    scope.dataInicio,
+    scope.dataFim,
+    scope.empresaId,
+    scope.empresaId,
   );
   const candidates = await queryOne(
     db,
@@ -329,18 +364,28 @@ async function loadInventory(db) {
      LEFT JOIN frms_fatorizacao_jornada ff ON ff.jornada_id = j.id AND ff.deleted_at IS NULL
      LEFT JOIN frms_acumulo_rolling a
        ON a.tripulante_id = j.tripulante_id AND a.data_referencia = j.data AND a.deleted_at IS NULL
-    WHERE j.deleted_at IS NULL`,
+    WHERE j.deleted_at IS NULL
+      AND f.empresa_id = ?
+      AND j.data >= ? AND j.data <= ?`,
+    scope.empresaId,
+    scope.dataInicio,
+    scope.dataFim,
   );
   const byMonth = await queryRows(
     db,
-    `SELECT COALESCE(j.empresa_id, f.empresa_id) AS empresa_id,
+    `SELECT f.empresa_id AS empresa_id,
             substr(j.data, 1, 7) AS periodo,
             COUNT(*) AS jornadas
        FROM frms_jornada j
        JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER) AND f.deleted_at IS NULL
       WHERE j.deleted_at IS NULL
-      GROUP BY COALESCE(j.empresa_id, f.empresa_id), substr(j.data, 1, 7)
+        AND f.empresa_id = ?
+        AND j.data >= ? AND j.data <= ?
+      GROUP BY f.empresa_id, substr(j.data, 1, 7)
       ORDER BY empresa_id, periodo`,
+    scope.empresaId,
+    scope.dataInicio,
+    scope.dataFim,
   );
   return {
     overview: {
@@ -361,19 +406,42 @@ async function loadInventory(db) {
   };
 }
 
-async function loadConfigFingerprint(db) {
+async function loadConfigFingerprint(db, scope) {
+  const revision = await queryOne(
+    db,
+    `SELECT id, empresa_id, profile_code, revision_number, status, source_type,
+            regulatory_profile_id, policy_version, effective_from, effective_to
+       FROM frms_config_revisions
+      WHERE id = ? AND empresa_id = ? AND profile_code = 'HELICOPTER_OFFSHORE'
+        AND status = 'ACTIVE' AND policy_version = 'FRMS_OPERATIONAL_POLICY_V2'
+        AND effective_from <= ? AND (effective_to IS NULL OR effective_to >= ?)
+      LIMIT 1`,
+    scope.targetRevisionId,
+    scope.empresaId,
+    scope.dataInicio,
+    scope.dataFim,
+  );
+  if (!revision) throw new Error('FRMS_TARGET_REVISION_NOT_EFFECTIVE');
   const rows = await queryRows(
     db,
-    `SELECT nome, valor_numerico, unidade, ativo, updated_at
-       FROM frms_configuracao_limites
-      WHERE deleted_at IS NULL
-      ORDER BY nome, id`,
+    `SELECT parameter_key, numeric_value, json_value, unit, metric, window_kind, direction, required
+       FROM frms_config_parameters
+      WHERE revision_id = ?
+      ORDER BY parameter_key, id`,
+    scope.targetRevisionId,
   );
-  return { rows, hash: sha256(stableJson(rows)) };
+  if (rows.length === 0) throw new Error('FRMS_TARGET_REVISION_HAS_NO_PARAMETERS');
+  const critical = new Map(rows.map((row) => [row.parameter_key, Number(row.numeric_value)]));
+  if (critical.get('FRMS_V2_ENABLED') !== 1 || critical.get('LANDINGS_NEUTRAL_MAX') !== 8) {
+    throw new Error('FRMS_TARGET_REVISION_CRITICAL_PARAMETER_DRIFT');
+  }
+  return { revision, rows, hash: sha256(stableJson({ revision, rows })) };
 }
 
-function scopeFor({ target, formulaVersion, sourceSha, runId }) {
-  return target === 'remote' ? `formula:${formulaVersion}:sha:${sourceSha}` : `dry-run:${runId}`;
+function scopeFor({ target, formulaVersion, sourceSha, runId, scope }) {
+  if (target !== 'remote') return `dry-run:${runId}`;
+  const revHash = sha256(scope.targetRevisionId).slice(0, 12);
+  return `tenant:${scope.empresaId}:${scope.dataInicio}:${scope.dataFim}:revision:${revHash}:formula:${formulaVersion}:sha:${sourceSha}`;
 }
 
 async function initializeRun(db, context) {
@@ -497,7 +565,7 @@ async function finishRun(db, context, summary, errorCode = null) {
   return outcome;
 }
 
-async function fetchJourneyPage(db, cursor) {
+async function fetchJourneyPage(db, cursor, scope) {
   const where = cursor
     ? `AND (
          CAST(j.tripulante_id AS INTEGER) > ?
@@ -505,7 +573,7 @@ async function fetchJourneyPage(db, cursor) {
          OR (CAST(j.tripulante_id AS INTEGER) = ? AND j.data = ? AND j.id > ?)
        )`
     : '';
-  const params = cursor
+  const cursorParams = cursor
     ? [
         cursor.tripulante_id,
         cursor.tripulante_id,
@@ -521,10 +589,15 @@ async function fetchJourneyPage(db, cursor) {
        FROM frms_jornada j
        JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER) AND f.deleted_at IS NULL
       WHERE j.deleted_at IS NULL
+        AND f.empresa_id = ?
+        AND j.data >= ? AND j.data <= ?
         ${where}
       ORDER BY CAST(j.tripulante_id AS INTEGER), j.data, j.id
       LIMIT ${PAGE_SIZE}`,
-    ...params,
+    scope.empresaId,
+    scope.dataInicio,
+    scope.dataFim,
+    ...cursorParams,
   );
 }
 
@@ -735,12 +808,209 @@ async function countPending(db, scopeKey) {
   };
 }
 
+const RECOVERY_SNAPSHOT_COLUMNS = [
+  'model_version',
+  'absolute_rest_hours',
+  'no_work_hours',
+  'recovery_credit_points',
+  'recovery_credit_base_points',
+  'recovery_rest_factor',
+  'recovery_callout_multiplier',
+  'config_revision_id',
+  'policy_version',
+  'updated_at',
+];
+
+function pickRecoverySnapshot(row) {
+  return Object.fromEntries(RECOVERY_SNAPSHOT_COLUMNS.map((column) => [column, row?.[column] ?? null]));
+}
+
+async function loadRecoveryEvidenceRows(db, scope) {
+  return queryRows(
+    db,
+    `SELECT a.*,
+            d.activity_type,
+            d.immediate_callout_required,
+            d.total_duty_minutes,
+            COALESCE(
+              a.sleep_hours_24h,
+              (SELECT ch.horas_sono
+                 FROM frms_fadiga_checkin ch
+                WHERE ch.empresa_id = a.empresa_id
+                  AND ch.funcionario_id = a.funcionario_id
+                  AND ch.data_checkin = a.reference_date
+                  AND ch.deleted_at IS NULL
+                ORDER BY ch.created_at DESC LIMIT 1)
+            ) AS rest_hours_input
+       FROM frms_recovery_assessment a
+       JOIN frms_recovery_activity_day d
+         ON d.id = a.recovery_day_id
+        AND d.empresa_id = a.empresa_id
+        AND d.funcionario_id = a.funcionario_id
+        AND d.deleted_at IS NULL
+      WHERE a.empresa_id = ?
+        AND a.reference_date >= ? AND a.reference_date <= ?
+        AND a.deleted_at IS NULL
+      ORDER BY a.reference_date ASC, a.funcionario_id ASC, a.id ASC`,
+    scope.empresaId,
+    scope.dataInicio,
+    scope.dataFim,
+  );
+}
+
+async function processRecoveryAssessment(db, context, assessment) {
+  const itemKey = `recovery:${assessment.id}`;
+  const existing = await queryOne(
+    db,
+    `SELECT status FROM cron_job_items WHERE job_name = ? AND scope_key = ? AND item_key = ?`,
+    JOB_NAME,
+    context.scopeKey,
+    itemKey,
+  );
+  if (existing?.status === 'SUCCEEDED') return { status: 'skipped_completed' };
+
+  const before = pickRecoverySnapshot(assessment);
+  const payloadBase = {
+    kind: 'recovery',
+    version: 1,
+    run_id: context.runId,
+    formula_version: context.formulaVersion,
+    source_sha: context.sourceSha,
+    config_hash: context.configHash,
+    assessment_hash: sha256(String(assessment.id)).slice(0, 16),
+    empresa_id: context.scope.empresaId,
+    tripulante_hash: sha256(String(assessment.funcionario_id)).slice(0, 16),
+    data: assessment.reference_date,
+    before,
+  };
+  await db.prepare(
+    `INSERT INTO cron_job_items (
+       job_name, scope_key, item_key, stage, status, attempts, payload_json,
+       available_at, created_at, updated_at
+     ) VALUES (?, ?, ?, 'RECOVERY_QUEUED', 'PENDING', 0, ?, datetime('now'), datetime('now'), datetime('now'))
+     ON CONFLICT(job_name, scope_key, item_key) DO NOTHING`,
+  ).bind(JOB_NAME, context.scopeKey, itemKey, JSON.stringify(payloadBase)).run();
+  await db.prepare(
+    `UPDATE cron_job_items
+        SET status='PROCESSING', stage='RECOVERY_RECALCULATING', attempts=attempts+1,
+            last_error_code=NULL, last_error_message=NULL, updated_at=datetime('now')
+      WHERE job_name=? AND scope_key=? AND item_key=? AND status IN ('PENDING','FAILED')`,
+  ).bind(JOB_NAME, context.scopeKey, itemKey).run();
+
+  try {
+    const operationalContext = await resolveFrmsOperationalContext(db, {
+      empresaId: context.scope.empresaId,
+      referenceAt: assessment.reference_date,
+      funcionarioId: Number(assessment.funcionario_id),
+    });
+    if (operationalContext.configRevisionId !== context.scope.targetRevisionId) {
+      throw new Error('FRMS_RECOVERY_TARGET_REVISION_MISMATCH');
+    }
+    if (operationalContext.parameters.FRMS_V2_ENABLED !== 1) {
+      throw new Error('FRMS_RECOVERY_V2_NOT_ENABLED');
+    }
+    const policy = resolveOperationalPolicyV2(operationalContext.parameters);
+    const restHours = assessment.rest_hours_input == null ? null : Number(assessment.rest_hours_input);
+    const totalDutyMinutes = assessment.total_duty_minutes == null ? null : Number(assessment.total_duty_minutes);
+    const noWorkHours = totalDutyMinutes == null
+      ? (assessment.activity_type === 'STANDBY_HOME_HOTEL' || assessment.activity_type === 'STANDBY_ONSITE' ? 24 : null)
+      : Math.max(0, (1440 - totalDutyMinutes) / 60);
+    const activityType = ['OFF_DUTY', 'STANDBY_HOME_HOTEL', 'STANDBY_ONSITE'].includes(String(assessment.activity_type))
+      ? assessment.activity_type
+      : 'OTHER';
+    const credit = computeRecoveryCredit({
+      activityType,
+      absoluteRestHours: Number.isFinite(restHours) ? restHours : null,
+      noWorkHours,
+      immediateCalloutRequired: assessment.immediate_callout_required == null
+        ? null
+        : Number(assessment.immediate_callout_required) === 1,
+    }, policy);
+    const updatedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    await db.prepare(
+      `UPDATE frms_recovery_assessment
+          SET model_version='recovery-v2-parametric',
+              absolute_rest_hours=?, no_work_hours=?, recovery_credit_points=?,
+              recovery_credit_base_points=?, recovery_rest_factor=?, recovery_callout_multiplier=?,
+              config_revision_id=?, policy_version=?, updated_at=?
+        WHERE id=? AND empresa_id=? AND deleted_at IS NULL`,
+    ).bind(
+      Number.isFinite(restHours) ? restHours : null,
+      noWorkHours,
+      credit.creditPoints,
+      credit.basePoints,
+      credit.restFactor,
+      credit.calloutMultiplier,
+      operationalContext.configRevisionId,
+      operationalContext.modelVersion,
+      updatedAt,
+      assessment.id,
+      context.scope.empresaId,
+    ).run();
+    const afterRow = await queryOne(db, `SELECT * FROM frms_recovery_assessment WHERE id=? AND empresa_id=? AND deleted_at IS NULL`, assessment.id, context.scope.empresaId);
+    const after = pickRecoverySnapshot(afterRow);
+    await db.prepare(
+      `UPDATE cron_job_items SET status='SUCCEEDED', stage='RECOVERY_COMPLETED', completed_at=datetime('now'),
+              payload_json=?, updated_at=datetime('now')
+        WHERE job_name=? AND scope_key=? AND item_key=?`,
+    ).bind(JSON.stringify({ ...payloadBase, after }), JOB_NAME, context.scopeKey, itemKey).run();
+    return { status: 'processed', creditPoints: credit.creditPoints };
+  } catch (error) {
+    const message = sanitizeError(error);
+    await db.prepare(
+      `UPDATE cron_job_items SET status='FAILED', stage='RECOVERY_RECALCULATION_FAILED',
+              last_error_code='FRMS_RECOVERY_REPROCESS_FAILED', last_error_message=?,
+              payload_json=?, updated_at=datetime('now')
+        WHERE job_name=? AND scope_key=? AND item_key=?`,
+    ).bind(message, JSON.stringify({ ...payloadBase, failure: { message } }), JOB_NAME, context.scopeKey, itemKey).run();
+    throw error;
+  }
+}
+
+async function startGovernedRecalcLedger(db, context) {
+  const row = await queryOne(db, `SELECT id,target_revision_id,effective_from,effective_to,status FROM frms_recalc_runs WHERE id=? AND empresa_id=?`, context.scope.recalcRunId, context.scope.empresaId);
+  if (!row || row.target_revision_id !== context.scope.targetRevisionId || row.effective_from !== context.scope.dataInicio || row.effective_to !== context.scope.dataFim) {
+    throw new Error('FRMS_GOVERNED_RECALC_SCOPE_MISMATCH');
+  }
+  await db.prepare(
+    `UPDATE frms_recalc_runs
+        SET status='RUNNING', started_at=COALESCE(started_at,datetime('now')),
+            processed_count=0, failed_count=0, error_summary=NULL, updated_at=datetime('now')
+      WHERE id=? AND empresa_id=?`,
+  ).bind(context.scope.recalcRunId, context.scope.empresaId).run();
+}
+
+async function finishGovernedRecalcLedger(db, context, summary, outcome) {
+  const processed = Number(summary.processed || 0) + Number(summary.skipped_completed || 0) + Number(summary.skipped_non_operational || 0);
+  const failed = Number(summary.failed || 0);
+  await db.prepare(
+    `UPDATE frms_recalc_runs
+        SET status=?, processed_count=?, failed_count=?, cursor_json=?, error_summary=?,
+            completed_at=CASE WHEN ? IN ('COMPLETE','FAILED') THEN datetime('now') ELSE completed_at END,
+            updated_at=datetime('now')
+      WHERE id=? AND empresa_id=? AND target_revision_id=?`,
+  ).bind(
+    outcome === 'SUCCEEDED' ? 'COMPLETE' : 'FAILED',
+    processed,
+    failed,
+    summary.cursor ? JSON.stringify({ cursor: summary.cursor }) : null,
+    outcome === 'SUCCEEDED' ? null : JSON.stringify(summary.errors || []).slice(0, 2000),
+    outcome === 'SUCCEEDED' ? 'COMPLETE' : 'FAILED',
+    context.scope.recalcRunId,
+    context.scope.empresaId,
+    context.scope.targetRevisionId,
+  ).run();
+}
+
 async function executeReprocessing(db, context) {
   const limites = await carregarLimites(db);
   const summary = {
     processed: 0,
     skipped_completed: 0,
     skipped_non_operational: 0,
+    recovery_processed: 0,
+    recovery_skipped_completed: 0,
+    recovery_credit_total: 0,
     failed: 0,
     pending: 0,
     review_required: 0,
@@ -750,11 +1020,32 @@ async function executeReprocessing(db, context) {
     cursor: null,
     errors: [],
   };
+
+  const recoveryRows = await loadRecoveryEvidenceRows(db, context.scope);
+  for (const assessment of recoveryRows) {
+    try {
+      const result = await processRecoveryAssessment(db, context, assessment);
+      if (result.status === 'processed') {
+        summary.recovery_processed += 1;
+        summary.recovery_credit_total += Number(result.creditPoints || 0);
+      } else {
+        summary.recovery_skipped_completed += 1;
+      }
+    } catch (error) {
+      summary.failed += 1;
+      summary.errors.push({
+        assessment_hash: sha256(String(assessment.id)).slice(0, 16),
+        error: sanitizeError(error),
+      });
+      return summary;
+    }
+  }
+
   let cursor = null;
   let blockedTripulante = null;
 
   while (true) {
-    const page = await fetchJourneyPage(db, cursor);
+    const page = await fetchJourneyPage(db, cursor, context.scope);
     if (page.length === 0) break;
     for (const journey of page) {
       cursor = {
@@ -816,10 +1107,12 @@ const ROLLING_COLUMNS = [
   'hv_28_dias_min',
   'hv_365_dias_min',
   'hv_mes_calendario_min',
+  'hv_ano_calendario_min',
   'hv_dia_min',
   'pct_limite_7d',
   'pct_limite_28d',
   'pct_limite_mes_calendario',
+  'pct_limite_ano_calendario',
   'pct_limite_365d',
   'pct_limite_dia',
   'repouso_anterior_min',
@@ -833,6 +1126,25 @@ async function rollbackItem(db, scopeKey, item) {
   if (!payload.before || !payload.after || payload.rollback?.completed_at) return false;
   const before = payload.before;
   const after = payload.after;
+
+  if (payload.kind === 'recovery') {
+    const assessmentId = String(item.item_key).replace(/^recovery:/, '');
+    const assignments = RECOVERY_SNAPSHOT_COLUMNS.map((column) => `${column} = ?`).join(', ');
+    await db
+      .prepare(`UPDATE frms_recovery_assessment SET ${assignments} WHERE id = ? AND deleted_at IS NULL`)
+      .bind(...RECOVERY_SNAPSHOT_COLUMNS.map((column) => before[column] ?? null), assessmentId)
+      .run();
+    const rollback = { completed_at: new Date().toISOString(), source_sha: payload.source_sha };
+    await db
+      .prepare(
+        `UPDATE cron_job_items SET stage = 'ROLLED_BACK', payload_json = ?, updated_at = datetime('now')
+         WHERE job_name = ? AND scope_key = ? AND item_key = ?`,
+      )
+      .bind(JSON.stringify({ ...payload, rollback }), JOB_NAME, scopeKey, item.item_key)
+      .run();
+    return true;
+  }
+
   const journeyId = item.item_key;
 
   await db
@@ -887,6 +1199,18 @@ async function rollbackItem(db, scopeKey, item) {
     }
   } else {
     const row = before.rolling[0];
+    // The recalculation may have created a replacement active row for the same
+    // (tripulante_id, data_referencia) unique key. Retire that replacement first,
+    // then restore the historical row exactly as snapshotted.
+    for (const current of currentRolling) {
+      if (current.id === row.id) continue;
+      await db
+        .prepare(
+          `UPDATE frms_acumulo_rolling SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
+        )
+        .bind(current.id)
+        .run();
+    }
     const assignments = ROLLING_COLUMNS.map((column) => `${column} = ?`).join(', ');
     await db
       .prepare(`UPDATE frms_acumulo_rolling SET ${assignments} WHERE id = ?`)
@@ -950,7 +1274,7 @@ async function rollbackReprocessing(db, context) {
   return { processed: rolledBack, failed: 0, pending: 0, cursor: null, errors: [] };
 }
 
-function verifyApprovedDryRun(args, inventory, configHash) {
+function verifyApprovedDryRun(args, inventory, configHash, scope) {
   if (args.target !== 'remote' || args.operation !== 'execute') return null;
   const approved = JSON.parse(readFileSync(args.approvedDryRun, 'utf8'));
   if (approved.ok !== true || approved.target !== 'sqlite' || approved.operation !== 'execute') {
@@ -963,6 +1287,16 @@ function verifyApprovedDryRun(args, inventory, configHash) {
   if (Number(approved.inventory?.overview?.jornadas ?? -1) !== inventory.overview.jornadas) {
     throw new Error('APPROVED_DRY_RUN_POPULATION_CHANGED');
   }
+  const approvedScope = approved.scope ?? {};
+  if (
+    Number(approvedScope.empresa_id) !== scope.empresaId ||
+    approvedScope.data_inicio !== scope.dataInicio ||
+    approvedScope.data_fim !== scope.dataFim ||
+    approvedScope.target_revision_id !== scope.targetRevisionId ||
+    approvedScope.recalc_run_id !== scope.recalcRunId
+  ) {
+    throw new Error('APPROVED_DRY_RUN_SCOPE_MISMATCH');
+  }
   if (approved.outcome !== 'SUCCEEDED') throw new Error('APPROVED_DRY_RUN_NOT_SUCCESSFUL');
   return sha256(readFileSync(args.approvedDryRun));
 }
@@ -971,6 +1305,13 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const startedAt = Date.now();
   const runId = randomUUID();
+  const scope = {
+    empresaId: args.empresaId,
+    dataInicio: args.dataInicio,
+    dataFim: args.dataFim,
+    targetRevisionId: args.targetRevisionId,
+    recalcRunId: args.recalcRunId,
+  };
   const db =
     args.target === 'sqlite'
       ? new SqliteD1Adapter(args.sqliteFile)
@@ -981,14 +1322,18 @@ async function main() {
         });
 
   let report;
+  let context = null;
   try {
     await assertLedgerSchema(db);
-    const inventory = await loadInventory(db);
+    const inventory = await loadInventory(db, scope);
     if (inventory.tenant_mismatch !== 0) {
       throw new Error(`FRMS_TENANT_PREFLIGHT_FAILED:${inventory.tenant_mismatch}`);
     }
-    const config = await loadConfigFingerprint(db);
-    const approvedDryRunHash = verifyApprovedDryRun(args, inventory, config.hash);
+    if (inventory.overview.jornadas <= 0 || inventory.overview.empresas !== 1) {
+      throw new Error('FRMS_SCOPED_INVENTORY_INVALID');
+    }
+    const config = await loadConfigFingerprint(db, scope);
+    const approvedDryRunHash = verifyApprovedDryRun(args, inventory, config.hash, scope);
     const scopeKey =
       args.scopeKey ??
       scopeFor({
@@ -996,8 +1341,9 @@ async function main() {
         formulaVersion: args.formulaVersion,
         sourceSha: args.sourceSha,
         runId,
+        scope,
       });
-    const context = {
+    context = {
       target: args.target,
       runId,
       scopeKey,
@@ -1005,21 +1351,31 @@ async function main() {
       sourceSha: args.sourceSha,
       configHash: config.hash,
       inventory,
+      scope,
       startedAt,
     };
     await initializeRun(db, context);
+    if (args.operation === 'execute') await startGovernedRecalcLedger(db, context);
     const summary =
       args.operation === 'rollback'
         ? await rollbackReprocessing(db, context)
         : await executeReprocessing(db, context);
     const outcome = await finishRun(db, context, summary);
-    const postInventory = await loadInventory(db);
+    if (args.operation === 'execute') await finishGovernedRecalcLedger(db, context, summary, outcome);
+    const postInventory = await loadInventory(db, scope);
     report = {
       ok: outcome === 'SUCCEEDED',
       operation: args.operation,
       target: args.target,
       run_id: runId,
       scope_key: scopeKey,
+      scope: {
+        empresa_id: scope.empresaId,
+        data_inicio: scope.dataInicio,
+        data_fim: scope.dataFim,
+        target_revision_id: scope.targetRevisionId,
+        recalc_run_id: scope.recalcRunId,
+      },
       formula_version: args.formulaVersion,
       source_sha: args.sourceSha,
       config_hash: config.hash,
@@ -1039,10 +1395,32 @@ async function main() {
     };
     if (!report.ok) process.exitCode = 2;
   } catch (error) {
+    if (context && args.operation === 'execute') {
+      try {
+        await db.prepare(
+          `UPDATE frms_recalc_runs
+              SET status='FAILED', failed_count=CASE WHEN failed_count < 1 THEN 1 ELSE failed_count END,
+                  error_summary=?, completed_at=datetime('now'), updated_at=datetime('now')
+            WHERE id=? AND empresa_id=? AND target_revision_id=?`,
+        ).bind(
+          sanitizeError(error),
+          scope.recalcRunId,
+          scope.empresaId,
+          scope.targetRevisionId,
+        ).run();
+      } catch {}
+    }
     report = {
       ok: false,
       operation: args.operation,
       target: args.target,
+      scope: {
+        empresa_id: scope.empresaId,
+        data_inicio: scope.dataInicio,
+        data_fim: scope.dataFim,
+        target_revision_id: scope.targetRevisionId,
+        recalc_run_id: scope.recalcRunId,
+      },
       formula_version: args.formulaVersion,
       source_sha: args.sourceSha,
       started_at: new Date(startedAt).toISOString(),

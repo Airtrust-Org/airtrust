@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-17",
-    "last_reconciled_against": "0498 FRMS parametric V2 reviewed; remote apply pending",
-    "schema_v2_digest": "2578f05a16e0098a1207cd17b9dbe89b79c380a633dcd709fa38b1d8c0c09594",
+    "last_reconciled_against": "0499 FRMS V2 historical backfill reviewed; remote apply pending",
+    "schema_v2_digest": "cd2f3a32e758410039ed31a62a4b989ffc4e83ab8bc0ff4177f8d43839846ccb",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -882,6 +882,17 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "frms-parametric-v2-0498.json",
       "note": "0498 is reviewed and prepared only. It adds V2 audit/schema fields and an immutable governed HELICOPTER_OFFSHORE revision; production apply requires code-first compatibility, the governed Schema V2 workflow, recovery point, atomic ledger apply and FRMS smoke validation."
+    },
+    {
+      "change_file": "0499_frms_v2_historical_backfill.sql",
+      "change_id": "frms-v2-historical-backfill-0499",
+      "sha256": "982dd155cbe85452eae6ca8dbe46dc9513b530cdac3d0d1affe1847857fa3215",
+      "targets": [],
+      "domain": "Costa do Sol tenant-scoped FRMS V2 historical policy activation and governed 2026 recalculation ledger",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "frms-v2-historical-backfill-0499.json",
+      "note": "0499 is reviewed and prepared only. It creates no physical schema: it copies the already-approved generic FRMS_OPERATIONAL_POLICY_V2 parameter set into an immutable Costa do Sol tenant revision effective 2026-01-01 and creates the governed recalculation ledger for 2026-01-01..2026-09-16."
     }
   ]
 }

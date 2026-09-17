@@ -385,7 +385,13 @@ export default function FrmsFlightDashboard() {
           <span>Fonte: snapshot operacional único</span>
           <span>Atualizado às {formatUpdated(snapshot.lastUpdatedAt)}</span>
           {snapshot.meta?.scope === 'self' ? <span>Escopo: meus dados</span> : <span>Escopo: equipe autorizada</span>}
-          {snapshot.error ? <span className="font-semibold text-amber-700 dark:text-amber-300">Falha na última atualização — mantendo o último estado válido</span> : null}
+          {snapshot.error ? (
+            <span className="font-semibold text-amber-700 dark:text-amber-300">
+              {snapshot.data.length > 0
+                ? 'Falha na última atualização — mantendo o último estado válido'
+                : `Falha ao carregar a situação FRMS: ${snapshot.error}`}
+            </span>
+          ) : null}
         </div>
 
         <section className="grid gap-3 sm:grid-cols-3" aria-label="Resumo operacional">
@@ -418,6 +424,12 @@ export default function FrmsFlightDashboard() {
               {[0, 1, 2].map((index) => (
                 <div key={index} className="h-20 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-900" />
               ))}
+            </div>
+          ) : snapshot.error && snapshot.data.length === 0 ? (
+            <div className="p-10 text-center">
+              <AlertTriangle className="mx-auto h-8 w-8 text-amber-500" />
+              <h3 className="mt-3 font-bold text-slate-900 dark:text-white">Situação FRMS indisponível</h3>
+              <p className="mt-1 text-sm text-slate-500">{snapshot.error}</p>
             </div>
           ) : queue.length === 0 ? (
             <div className="p-10 text-center">
