@@ -51,12 +51,31 @@ function optionalText(value) {
   return text || null;
 }
 
+function flightClockRange(form) {
+  const departure = fromInputDateTime(form.horario_decolagem_real, form.data_voo);
+  let landing = fromInputDateTime(form.horario_pouso_real, form.data_voo);
+  const clockOnly = /^\d{2}:\d{2}(?::\d{2})?$/;
+  if (
+    departure &&
+    landing &&
+    clockOnly.test(String(form.horario_decolagem_real || '')) &&
+    clockOnly.test(String(form.horario_pouso_real || '')) &&
+    Date.parse(landing) < Date.parse(departure)
+  ) {
+    const nextDay = new Date(landing);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    landing = nextDay.toISOString();
+  }
+  return { departure, landing };
+}
+
 function rdvPayload(form) {
+  const clocks = flightClockRange(form);
   return {
     numero: optionalText(form.numero),
     data_voo: optionalText(form.data_voo),
-    horario_decolagem_real: fromInputDateTime(form.horario_decolagem_real),
-    horario_pouso_real: fromInputDateTime(form.horario_pouso_real),
+    horario_decolagem_real: clocks.departure,
+    horario_pouso_real: clocks.landing,
     horas_voadas: parseNumber(form.horas_voadas),
     numero_pousos: parseInteger(form.numero_pousos),
     ciclos: parseInteger(form.ciclos),
@@ -67,6 +86,18 @@ function rdvPayload(form) {
     carga_kg: parseNumber(form.carga_kg),
     ocorrencias: optionalText(form.ocorrencias),
     divergencias: optionalText(form.divergencias),
+  };
+}
+
+
+function fuelingPayload(fueling, flightDate) {
+  const time = optionalText(fueling?.hora);
+  return {
+    client_local_id: optionalText(fueling?.local_id),
+    data_hora: time ? fromInputDateTime(time, flightDate) : null,
+    nota: optionalText(fueling?.nota),
+    numero_nota: optionalText(fueling?.numero_nota),
+    litros_abastecidos: parseNumber(fueling?.litros_abastecidos),
   };
 }
 
@@ -162,6 +193,12 @@ export async function buildOfflineSyncCommand({
       source_package_id: String(rdvDraft.source_package_id),
       source_rdv_id: rdvDraft.source_rdv_id == null ? null : Number(rdvDraft.source_rdv_id),
       rdv: rdvPayload(rdvDraft.form || {}),
+      flight_update: {
+        natureza_voo_codigo: optionalText(rdvDraft.flight_update?.natureza_voo_codigo),
+      },
+      fuelings: (Array.isArray(rdvDraft.fuelings) ? rdvDraft.fuelings : []).map((item) =>
+        fuelingPayload(item, rdvDraft.form?.data_voo),
+      ),
       stages: stageDrafts
         .slice()
         .sort(

@@ -90,7 +90,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v10'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v11'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
     expect(pilotSw).toContain("'/pilot/pilot-rdv-draft.js'");
@@ -276,6 +276,16 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("['DECOLAGEM', 'horario_decolagem']");
     expect(pilotApp).toContain("['POUSO', 'horario_pouso']");
     expect(pilotApp).toContain("['CORTE', 'horario_motor_desligado']");
+    expect(pilotIndex).toContain('id="add-stage"');
+    expect(pilotIndex).toContain('id="add-fueling"');
+    expect(pilotApp).toContain("['Hora de partida', 'horario_motor_ligado', 'time'");
+    expect(pilotApp).toContain("['Aeródromo de origem', 'origem_icao', 'text'");
+    expect(pilotRdvDraft).toContain("{ code: 'MANUTENCAO', label: 'Manutenção' }");
+    expect(pilotRdvDraft).toContain("{ code: 'PETROBRAS', label: 'Petrobras' }");
+    expect(pilotSync).toContain('fuelings:');
+    expect(pilotSync).toContain('natureza_voo_codigo');
+    expect(pilotApp).toContain("supplementalErrors.push('Informe a natureza do voo.')");
+    expect(pilotApp).toContain('Litros abastecidos');
     expect(pilotApp).toContain('monotonic_sequence: timingSequence');
     expect(pilotRdvDraft).toContain('Ciclos não são derivados de pousos');
     expect(pilotRdvDraft).not.toContain('next.ciclos =');

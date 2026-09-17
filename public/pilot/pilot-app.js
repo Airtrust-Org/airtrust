@@ -7,12 +7,14 @@ import {
 import { PILOT_OFFLINE_APP_VERSION } from '/pilot/pilot-lease-trust.js';
 import {
   applySafeStageAggregates,
+  PILOT_NATUREZA_OPTIONS,
   assertPackageIdentity,
   assertVerifiedLeaseAllowsDraft,
   buildDraftSnapshot,
   calcConsumoCombustivel,
   calcHorasVoadas,
   parseNumber,
+  toInputTime,
   validateRdvForm,
   validateStageDrafts,
 } from '/pilot/pilot-rdv-draft.js';
@@ -88,6 +90,10 @@ const rdvLocalSequenceLabel = document.querySelector('#rdv-local-sequence');
 const rdvLeaseUntilLabel = document.querySelector('#rdv-lease-until');
 const rdvFormFields = document.querySelector('#rdv-form-fields');
 const rdvStageFields = document.querySelector('#rdv-stage-fields');
+const rdvFuelingFields = document.querySelector('#rdv-fueling-fields');
+const addStageButton = document.querySelector('#add-stage');
+const addFuelingButton = document.querySelector('#add-fueling');
+const operationFlow = document.querySelector('#operation-flow');
 const closeRdvEditorButton = document.querySelector('#close-rdv-editor');
 const syncRdvButton = document.querySelector('#sync-rdv-now');
 const rdvSyncStatus = document.querySelector('#rdv-sync-status');
@@ -875,6 +881,7 @@ async function refreshCoordinationControls() {
       localReceipt?.value?.updated_at_local ||
       null;
     setCoordinationMessage('RDV recebido pela Coordenação.', 'ok');
+    updateOperationFlow('coordination');
     setCoordinationReceipt(
       'Recebimento confirmado pelo servidor' +
         (confirmedAt ? ' em ' + formatTimestamp(confirmedAt) : '') +
@@ -1042,6 +1049,7 @@ async function refreshLeaseControls(record) {
   if (!record) {
     prepareEditOfflineButton.disabled = true;
     openLocalDraftButton.disabled = true;
+    updateOperationFlow('prepare');
     setLeaseMessage('Abra um pacote de voo para avaliar o lease offline.', 'attention');
     return;
   }
@@ -1062,6 +1070,7 @@ async function refreshLeaseControls(record) {
     const existing = await verifyStoredLeaseForPackage(record.value.package);
     if (existing?.verified) {
       activeVerifiedLease = existing.verified;
+      updateOperationFlow('offline');
       openLocalDraftButton.disabled = false;
       setLeaseMessage(
         'Lease válido neste tablet até ' + formatTimestamp(existing.verified.claims.valid_until) + '.',
@@ -1140,6 +1149,7 @@ async function prepareOfflineEditing() {
     });
 
     activeVerifiedLease = readBack;
+    updateOperationFlow('offline');
     openLocalDraftButton.disabled = false;
     setLeaseMessage(
       'Lease verificado e salvo no tablet até ' + formatTimestamp(readBack.claims.valid_until) + '.',
@@ -1216,8 +1226,25 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
       throw new Error('Rascunho local incompleto: etapas não encontradas.');
     }
 
-    activeRdvDraft = value;
-    activeStageDrafts = matchingStages.map((record) => record.value);
+    activeRdvDraft = {
+      ...value,
+      schema_version: Math.max(Number(value.schema_version || 1), 2),
+      flight_update: value.flight_update || {
+        natureza_voo_codigo: packageData?.natureza?.codigo || '',
+      },
+      fuelings: Array.isArray(value.fuelings) ? value.fuelings : [],
+    };
+    activeStageDrafts = matchingStages.map((record) => ({
+      ...record.value,
+      schema_version: Math.max(Number(record.value?.schema_version || 1), 2),
+      fields: {
+        ...(record.value?.fields || {}),
+        horario_motor_ligado: toInputTime(record.value?.fields?.horario_motor_ligado),
+        horario_decolagem: toInputTime(record.value?.fields?.horario_decolagem),
+        horario_pouso: toInputTime(record.value?.fields?.horario_pouso),
+        horario_motor_desligado: toInputTime(record.value?.fields?.horario_motor_desligado),
+      },
+    }));
     operationalLocalSequence = Math.max(
       Number(existingRdv.localRevision || value.local_sequence || 0),
       ...matchingStages.map((record) =>
@@ -1265,11 +1292,9 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
   void refreshOutboxStatusForActiveFlight();
 }
 
-function localDateTimeNow() {
+function localTimeNow() {
   const now = new Date();
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
-    .toISOString()
-    .slice(0, 16);
+  return String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
 }
 
 function nextOperationalSequence() {
@@ -1287,7 +1312,16 @@ function refreshDraftValidationPresentation() {
   if (!activeRdvDraft || !packageData) return;
   const rdvErrors = validateRdvForm(activeRdvDraft.form, packageData);
   const stageErrors = validateStageDrafts(activeStageDrafts);
-  const total = Object.keys(rdvErrors).length + stageErrors.length;
+  const supplementalErrors = [];
+  if (!String(activeRdvDraft.flight_update?.natureza_voo_codigo || '').trim()) {
+    supplementalErrors.push('Informe a natureza do voo.');
+  }
+  for (const [index, fueling] of (activeRdvDraft.fuelings || []).entries()) {
+    if (!String(fueling.nota || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe a nota.');
+    if (!String(fueling.numero_nota || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe o número da nota.');
+    if (parseNumber(fueling.litros_abastecidos) === null) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe os litros abastecidos.');
+  }
+  const total = Object.keys(rdvErrors).length + stageErrors.length + supplementalErrors.length;
 
   const existing = rdvEditorCard.querySelector('#rdv-validation-summary');
   if (existing) existing.remove();
@@ -1375,6 +1409,7 @@ function enqueueOperationalSave() {
       if (operationalNextSequence === requestedSequence) {
         rdvEditorSaveStatus.className = 'statusline ok';
         rdvEditorSaveStatus.textContent = 'Salvo no tablet.';
+        updateOperationFlow(navigator.onLine ? 'pending' : 'saved');
       } else {
         markOperationalPending();
       }
@@ -1688,6 +1723,7 @@ async function drainPilotOutbox(options = {}) {
         }
 
         setServerSyncStatus('Transmitido');
+        updateOperationFlow('synced');
         setRdvSyncMessage(
           'Receipt confirmado pelo servidor. Atualize o pacote do voo antes de nova edição.',
           'ok',
@@ -2104,15 +2140,58 @@ function createEditorField({
   return wrapper;
 }
 
+function createEditorSelect({ label, value, options, onChange }) {
+  const wrapper = document.createElement('label');
+  const title = document.createElement('span');
+  title.textContent = label;
+  const select = document.createElement('select');
+  select.disabled = operationalSyncInFlight;
+  const blank = document.createElement('option');
+  blank.value = '';
+  blank.textContent = 'Selecione';
+  select.append(blank);
+  for (const option of options) {
+    const node = document.createElement('option');
+    node.value = option.code;
+    node.textContent = option.label;
+    select.append(node);
+  }
+  select.value = value || '';
+  select.addEventListener('change', () => onChange(select.value));
+  wrapper.append(title, select);
+  return wrapper;
+}
+
+function updateOperationFlow(step) {
+  if (!operationFlow) return;
+  const order = ['prepare', 'offline', 'saved', 'pending', 'synced', 'coordination'];
+  const current = order.indexOf(step);
+  for (const node of operationFlow.querySelectorAll('[data-step]')) {
+    const index = order.indexOf(node.dataset.step);
+    node.classList.remove('active', 'done', 'error');
+    if (index < current) node.classList.add('done');
+    else if (index === current) node.classList.add('active');
+  }
+}
+
 function renderRdvFormFields() {
   rdvFormFields.replaceChildren();
   const form = activeRdvDraft.form;
 
+  rdvFormFields.append(
+    createEditorSelect({
+      label: 'Natureza do voo',
+      value: activeRdvDraft.flight_update?.natureza_voo_codigo || '',
+      options: PILOT_NATUREZA_OPTIONS,
+      onChange: (value) => {
+        activeRdvDraft.flight_update = { ...(activeRdvDraft.flight_update || {}), natureza_voo_codigo: value };
+        scheduleOperationalSave();
+      },
+    }),
+  );
+
   const fields = [
     ['Número do RDV', 'numero', 'text', null, false, false],
-    ['Data do voo', 'data_voo', 'date', null, false, false],
-    ['Decolagem real', 'horario_decolagem_real', 'datetime-local', null, false, false],
-    ['Pouso real', 'horario_pouso_real', 'datetime-local', null, false, false],
     ['Horas voadas', 'horas_voadas', 'number', 'decimal', false, true],
     ['Pousos', 'numero_pousos', 'number', 'numeric', false, true],
     ['Ciclos', 'ciclos', 'number', 'numeric', false, false],
@@ -2180,7 +2259,7 @@ function timingEventMeta(action) {
 }
 
 function applyQuickTiming(stage, field, action) {
-  const nowLocal = localDateTimeNow();
+  const nowLocal = localTimeNow();
   stage.fields[field] = nowLocal;
   stage.timing_events = {
     ...(stage.timing_events || {}),
@@ -2236,12 +2315,12 @@ function renderStageFields() {
     const grid = document.createElement('div');
     grid.className = 'editor-grid';
     const stageFields = [
-      ['Origem', 'origem_icao', 'text', null],
-      ['Destino', 'destino_icao', 'text', null],
-      ['Partida motores', 'horario_motor_ligado', 'datetime-local', null],
-      ['Decolagem', 'horario_decolagem', 'datetime-local', null],
-      ['Pouso', 'horario_pouso', 'datetime-local', null],
-      ['Corte motores', 'horario_motor_desligado', 'datetime-local', null],
+      ['Aeródromo de origem', 'origem_icao', 'text', null],
+      ['Aeródromo de destino', 'destino_icao', 'text', null],
+      ['Hora de partida', 'horario_motor_ligado', 'time', null],
+      ['Hora de decolagem', 'horario_decolagem', 'time', null],
+      ['Hora de pouso', 'horario_pouso', 'time', null],
+      ['Hora de corte', 'horario_motor_desligado', 'time', null],
       ['IFR', 'tempo_ifr', 'number', 'decimal'],
       ['Noturno', 'tempo_noturno', 'number', 'decimal'],
       ['Pousos diurnos', 'pousos_diurnos', 'number', 'numeric'],
@@ -2287,6 +2366,79 @@ function renderStageFields() {
   }
 }
 
+function addOperationalStage() {
+  if (!activeRdvDraft || operationalSyncInFlight) return;
+  const previous = activeStageDrafts.at(-1)?.fields || {};
+  const number = activeStageDrafts.length + 1;
+  const packageData = activePackageData();
+  const identity = assertPackageIdentity(packageData);
+  const localId = 'local-stage-' + crypto.randomUUID();
+  activeStageDrafts.push({
+    schema_version: 2,
+    entity_type: 'stage_draft',
+    entity_local_id: 'flight:' + identity.flightId + ':stage:' + localId,
+    flight_id: identity.flightId,
+    tenant_id: identity.tenantId,
+    user_id: identity.userId,
+    source_package_id: identity.packageId,
+    source_stage_id: null,
+    source_stage_updated_at: null,
+    local_sequence: operationalNextSequence,
+    updated_at_claimed: new Date().toISOString(),
+    fields: {
+      source_stage_id: null, local_id: localId, numero_etapa: number,
+      origem_icao: previous.destino_icao || '', destino_icao: '',
+      horario_motor_ligado: '', horario_decolagem: '', horario_pouso: '', horario_motor_desligado: '',
+      tempo_ifr: '', tempo_noturno: '', pousos_diurnos: '', pousos_noturnos: '', starts: '', pax: '', payload: '',
+      combustivel_inicio: previous.combustivel_fim || '', combustivel_fim: '', unidade_combustivel: previous.unidade_combustivel || 'L', observacao_local: '',
+    },
+  });
+  scheduleOperationalSave();
+  renderOperationalEditor({ preserveScroll: true });
+}
+
+function addOperationalFueling() {
+  if (!activeRdvDraft || operationalSyncInFlight) return;
+  activeRdvDraft.fuelings = Array.isArray(activeRdvDraft.fuelings) ? activeRdvDraft.fuelings : [];
+  activeRdvDraft.fuelings.push({
+    local_id: crypto.randomUUID(),
+    hora: localTimeNow(),
+    nota: '',
+    numero_nota: '',
+    litros_abastecidos: '',
+  });
+  scheduleOperationalSave();
+  renderOperationalEditor({ preserveScroll: true });
+}
+
+function renderFuelingFields() {
+  rdvFuelingFields.replaceChildren();
+  const fuelings = Array.isArray(activeRdvDraft.fuelings) ? activeRdvDraft.fuelings : [];
+  fuelings.forEach((fueling, index) => {
+    const card = document.createElement('section');
+    card.className = 'editor-stage';
+    const heading = document.createElement('h3');
+    heading.textContent = 'Abastecimento ' + String(index + 1);
+    card.append(heading);
+    const grid = document.createElement('div');
+    grid.className = 'editor-grid';
+    for (const [label, key, type, inputMode] of [
+      ['Hora', 'hora', 'time', null],
+      ['Nota do combustível', 'nota', 'text', null],
+      ['Número da nota', 'numero_nota', 'text', null],
+      ['Litros abastecidos', 'litros_abastecidos', 'number', 'decimal'],
+    ]) {
+      grid.append(createEditorField({
+        label, value: fueling[key], type, inputMode,
+        onInput: (value) => { fueling[key] = value; scheduleOperationalSave(); },
+        onBlur: () => void flushOperationalSave(),
+      }));
+    }
+    card.append(grid);
+    rdvFuelingFields.append(card);
+  });
+}
+
 function renderOperationalEditor(options = {}) {
   if (!activeRdvDraft || !activeVerifiedLease || !activePackageRecord) return;
   const scrollY = window.scrollY;
@@ -2304,6 +2456,8 @@ function renderOperationalEditor(options = {}) {
 
   renderRdvFormFields();
   renderStageFields();
+  renderFuelingFields();
+  updateOperationFlow(operationalLocalSequence > 0 ? (navigator.onLine ? 'pending' : 'saved') : 'offline');
   refreshDraftValidationPresentation();
   rdvEditorCard.classList.remove('hidden');
   updateSyncButtonState();
@@ -2316,6 +2470,7 @@ function closeOperationalEditor() {
   rdvEditorCard.classList.add('hidden');
   rdvFormFields.replaceChildren();
   rdvStageFields.replaceChildren();
+  rdvFuelingFields.replaceChildren();
 }
 
 function appendInfoGrid(parent, entries) {
@@ -2669,6 +2824,8 @@ refreshOnlineButton.addEventListener('click', () => void loadOnlineFlights());
 prepareEditOfflineButton.addEventListener('click', () => void prepareOfflineEditing());
 openLocalDraftButton.addEventListener('click', () => void openExistingOperationalDraft());
 syncRdvButton.addEventListener('click', () => void queueCurrentDraftForSync());
+addStageButton.addEventListener('click', addOperationalStage);
+addFuelingButton.addEventListener('click', addOperationalFueling);
 refreshCanonicalPackageButton.addEventListener('click', () =>
   void refreshCanonicalPackageForActiveFlight(),
 );
