@@ -138,66 +138,74 @@ test('simulator planning: resume persisted CAE workflow and export PDF', async (
   guard.assertClean();
 });
 
-test('simulator planning: confirm CAI and materialize synthetic plan in real UI', async ({
-  page,
-}) => {
-  const statePath =
-    process.env.QA_SIMULATOR_STATE_PATH || 'qa-state/staging-simulator-planning/state.json';
-  const state = JSON.parse(readFileSync(statePath, 'utf8')) as QaState;
-  expect(state.runtime_draft_id.length).toBeGreaterThan(20);
-  expect(state.runtime_class_name).toMatch(/^QA Planning CAI Runtime /);
+test.describe('stateful simulator materialization', () => {
+  // This test creates a real synthetic calendar session. Never retry the same fixture
+  // inside one workflow attempt; cleanup/reseed provides the safe retry boundary.
+  test.describe.configure({ retries: 0 });
 
-  const guard = installSyntheticPlanningWriteGuard(page, state.runtime_draft_id);
-  await page.goto('/simuladores?tab=planejamento', { waitUntil: 'domcontentloaded' });
-  const releaseShortSha = String(process.env.RELEASE_SHA || '').slice(0, 7);
-  if (releaseShortSha) {
-    await assertLiveFrontendShaFromPage(page, releaseShortSha, 'simulator-planning-runtime');
-  }
+  test('simulator planning: confirm CAI and materialize synthetic plan in real UI', async ({
+    page,
+  }) => {
+    const statePath =
+      process.env.QA_SIMULATOR_STATE_PATH || 'qa-state/staging-simulator-planning/state.json';
+    const state = JSON.parse(readFileSync(statePath, 'utf8')) as QaState;
+    expect(state.runtime_draft_id.length).toBeGreaterThan(20);
+    expect(state.runtime_class_name).toMatch(/^QA Planning CAI Runtime /);
 
-  const runtimeCard = page
-    .getByRole('button')
-    .filter({ hasText: state.runtime_class_name })
-    .first();
-  await expect(runtimeCard).toBeVisible();
-  await runtimeCard.click();
+    const guard = installSyntheticPlanningWriteGuard(page, state.runtime_draft_id);
+    await page.goto('/simuladores?tab=planejamento', { waitUntil: 'domcontentloaded' });
+    const releaseShortSha = String(process.env.RELEASE_SHA || '').slice(0, 7);
+    if (releaseShortSha) {
+      await assertLiveFrontendShaFromPage(page, releaseShortSha, 'simulator-planning-runtime');
+    }
 
-  await expect(
-    page.getByText('2. Disponibilidade CAE e datas sugeridas', { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByLabel('SK76 início 1')).toBeVisible();
-  await expect(page.getByLabel('SK76 início 2')).toBeVisible();
-  const addPeriod = page.getByRole('button', { name: '+ Adicionar período' }).last();
-  await addPeriod.click();
-  await expect(page.getByLabel('SK76 início 3')).toBeVisible();
-  const thirdRow = page.getByLabel('SK76 início 3').locator('..');
-  await thirdRow.getByRole('button', { name: 'Remover' }).click();
-  await expect(page.getByLabel('SK76 início 3')).toHaveCount(0);
+    const runtimeCard = page
+      .getByRole('button')
+      .filter({ hasText: state.runtime_class_name })
+      .first();
+    await expect(runtimeCard).toBeVisible();
+    await runtimeCard.click();
 
-  await expect(
-    page.getByText('3. Confirmação CAE — datas e horários', { exact: true }),
-  ).toBeVisible();
-  const dateInput = page.locator('input[aria-label^="Data "]').first();
-  const startInput = page.locator('input[aria-label^="Início "]').first();
-  const endInput = page.locator('input[aria-label^="Fim "]').first();
-  await expect(dateInput).toHaveValue(state.runtime_suggested_date);
-  await startInput.fill(state.runtime_start_time);
-  await endInput.fill(state.runtime_end_time);
-  await page.getByRole('button', { name: 'Aplicar horários confirmados' }).click();
-  await expect(
-    page.getByText('Planejamento definido com CAE', { exact: true }).first(),
-  ).toBeVisible();
+    await expect(
+      page.getByText('2. Disponibilidade CAE e datas sugeridas', { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByLabel('SK76 início 1')).toBeVisible();
+    await expect(page.getByLabel('SK76 início 2')).toBeVisible();
+    const addPeriod = page.getByRole('button', { name: '+ Adicionar período' }).last();
+    await addPeriod.click();
+    await expect(page.getByLabel('SK76 início 3')).toBeVisible();
+    const thirdRow = page.getByLabel('SK76 início 3').locator('..');
+    await thirdRow.getByRole('button', { name: 'Remover' }).click();
+    await expect(page.getByLabel('SK76 início 3')).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Preparar agendamento em lote' }).click();
-  const instructor = page.getByLabel('Instrutor');
-  await expect(instructor).toBeVisible();
-  await instructor.selectOption(String(state.runtime_instructor_id));
-  const simulator = page.getByLabel('Simulador AW139');
-  await expect(simulator).toBeVisible();
-  await simulator.selectOption(String(state.runtime_simulator_id));
+    await expect(
+      page.getByText('3. Confirmação CAE — datas e horários', { exact: true }),
+    ).toBeVisible();
+    const dateInput = page.locator('input[aria-label^="Data "]').first();
+    const startInput = page.locator('input[aria-label^="Início "]').first();
+    const endInput = page.locator('input[aria-label^="Fim "]').first();
+    await expect(dateInput).toHaveValue(state.runtime_suggested_date);
+    await startInput.fill(state.runtime_start_time);
+    await endInput.fill(state.runtime_end_time);
+    await page.getByRole('button', { name: 'Aplicar horários confirmados' }).click();
+    await expect(
+      page.getByText('Planejamento definido com CAE', { exact: true }).first(),
+    ).toBeVisible();
 
-  await page.getByRole('button', { name: 'Criar todas as sessões no calendário' }).click();
-  await expect(
-    page.getByText('Sessões criadas no calendário', { exact: true }).first(),
-  ).toBeVisible();
-  guard.assertClean();
+    await page.getByRole('button', { name: 'Preparar agendamento em lote' }).click();
+    const instructor = page.getByLabel('Instrutor');
+    await expect(instructor).toBeVisible();
+    await instructor.selectOption(String(state.runtime_instructor_id));
+    const simulator = page.getByLabel('Simulador AW139');
+    await expect(simulator).toBeVisible();
+    await simulator.selectOption(String(state.runtime_simulator_id));
+
+    await page.getByRole('button', { name: 'Criar todas as sessões no calendário' }).click();
+    await expect(
+      page
+        .getByText('Todas as sessões confirmadas foram criadas no calendário.', { exact: true })
+        .first(),
+    ).toBeVisible({ timeout: 10_000 });
+    guard.assertClean();
+  });
 });
