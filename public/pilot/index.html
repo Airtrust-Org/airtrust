@@ -390,25 +390,23 @@
         </p>
       </section>
 
-      <section id="unlock-card" class="card">
-        <h2 id="unlock-title">Preparar armazenamento offline</h2>
-        <p id="unlock-help" class="muted">
-          Crie um PIN local para proteger os dados deste tablet. Ele não é a sua senha do AirTrust.
+      <section id="legacy-vault-card" class="card hidden">
+        <h2>Atualizar armazenamento deste tablet</h2>
+        <p class="muted">
+          Este tablet ainda possui dados cifrados pelo modelo antigo. Informe o código local antigo
+          uma única vez para migrar os dados sem apagá-los. Depois disso, o acesso será automático
+          neste dispositivo.
         </p>
         <div class="row">
           <div>
-            <label for="pin">PIN offline</label>
-            <input id="pin" type="password" inputmode="numeric" autocomplete="off" minlength="6" />
-          </div>
-          <div id="confirm-wrap">
-            <label for="pin-confirm">Confirmar PIN</label>
-            <input id="pin-confirm" type="password" inputmode="numeric" autocomplete="off" minlength="6" />
+            <label for="legacy-vault-pin">Código local antigo</label>
+            <input id="legacy-vault-pin" type="password" inputmode="numeric" autocomplete="off" minlength="6" />
           </div>
         </div>
         <div class="actions">
-          <button id="unlock-button" class="primary" type="button">Preparar tablet</button>
+          <button id="legacy-vault-migrate" class="primary" type="button">Migrar dados deste tablet</button>
         </div>
-        <div id="unlock-status" class="statusline" aria-live="polite"></div>
+        <div id="legacy-vault-status" class="statusline" aria-live="polite"></div>
       </section>
 
       <div id="workspace" class="hidden">
@@ -420,7 +418,6 @@
             </div>
             <div class="actions">
               <button id="refresh-online" class="secondary" type="button">Atualizar voos online</button>
-              <button id="lock" class="ghost" type="button">Bloquear</button>
             </div>
           </div>
           <div id="session-status" class="statusline" aria-live="polite"></div>
@@ -564,7 +561,7 @@
           <div class="section-head" style="margin-top:24px">
             <div>
               <h3>Abastecimentos</h3>
-              <p class="muted">Registre a nota de combustível, número da nota e litros abastecidos; fica salvo cifrado no iPad até a transmissão.</p>
+              <p class="muted">Registre o número da nota e os litros abastecidos; fica salvo cifrado no iPad até a transmissão.</p>
             </div>
             <button id="add-fueling" class="secondary" type="button">+ Abastecimento</button>
           </div>

@@ -36,21 +36,11 @@ import {
   buildRdvVersionGuardedUpdate,
   mapRdvOperacionalUniqueConstraintError,
 } from '../repositories/controle-voos/rdv-repository';
-import { 
-  RDV_CAPABILITIES, 
-  assertRdvSelfScope, 
-  requireExpectedRdvVersion, 
-  assertCasApplied 
-} from '../services/controle-voos/rdv-workflow';
-import {
-  assertRdvRules,
-  normalizeRdvInput,
-} from '../services/controle-voos/rdv-validation';
+import { RDV_CAPABILITIES, assertRdvSelfScope, requireExpectedRdvVersion, assertCasApplied } from '../services/controle-voos/rdv-workflow';
+import { assertRdvRules, normalizeRdvInput } from '../services/controle-voos/rdv-validation';
 import { finalizeRdvPreenchimentoHandler } from './controle-voos-rdv-finalization';
-import {
-  assertFlightCrewAssignment,
-  listEligibleFlightCrew,
-} from '../services/controle-voos/crew-eligibility';
+import { assertFlightCrewAssignment, listEligibleFlightCrew } from '../services/controle-voos/crew-eligibility';
+import { buildFlightRelatedStatements, normalizeFlightRouteIds, parseFlightCrewIds, resolveFlightRoutePoints } from '../services/controle-voos/flight-creation';
 
 type OperationalReadFilters = {
   dataInicio: string;
@@ -115,6 +105,7 @@ const allowedCreateFields = new Set([
   ...allowedFields,
   'pic_funcionario_id',
   'sic_funcionario_id',
+  'rota_ids',
 ]);
 const allowedFieldsWithVersion = new Set([...allowedFields, 'versao'].filter((field) => field !== 'status'));
 
@@ -1137,23 +1128,37 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
   const userId = getActorId(c);
   const payload = await parseJsonPayload(c);
   assertPayloadFields(payload, allowedCreateFields);
-  const input = normalizeFlightInput(payload, true);
-  const hasPic = payload.pic_funcionario_id !== undefined && payload.pic_funcionario_id !== null && payload.pic_funcionario_id !== '';
-  const hasSic = payload.sic_funcionario_id !== undefined && payload.sic_funcionario_id !== null && payload.sic_funcionario_id !== '';
-  if (hasPic !== hasSic) {
-    throw new ApiError('Informe PIC e SIC em conjunto', 400, 'CONTROLE_VOOS_CREW_PAIR_REQUIRED');
-  }
-  const picFuncionarioId = hasPic ? parsePositiveInteger(payload.pic_funcionario_id, 'pic_funcionario_id') : null;
-  const sicFuncionarioId = hasSic ? parsePositiveInteger(payload.sic_funcionario_id, 'sic_funcionario_id') : null;
+  const requestedRouteIds = normalizeFlightRouteIds(payload.rota_ids);
+  const normalizedPayload = requestedRouteIds
+    ? {
+        ...payload,
+        origem_id: requestedRouteIds[0],
+        destino_id: requestedRouteIds[requestedRouteIds.length - 1],
+      }
+    : payload;
+  const input = normalizeFlightInput(normalizedPayload, true);
+  const { picFuncionarioId, sicFuncionarioId } = parseFlightCrewIds(payload);
 
   assertFlightTimes(input);
   assertCancellationReason(input);
   await assertCatalogsForInput(c.env.DB, input, empresaId);
+  const routeIds = requestedRouteIds ?? [input.origem_id as number, input.destino_id as number];
+  const routePoints = await resolveFlightRoutePoints(c.env.DB, empresaId, routeIds);
   if (picFuncionarioId && sicFuncionarioId) {
     if (!input.aeronave_id) {
-      throw new ApiError('Aeronave obrigatoria para definir tripulacao', 400, 'CONTROLE_VOOS_CREW_AIRCRAFT_REQUIRED');
+      throw new ApiError(
+        'Aeronave obrigatoria para definir tripulacao',
+        400,
+        'CONTROLE_VOOS_CREW_AIRCRAFT_REQUIRED',
+      );
     }
-    await assertFlightCrewAssignment(c.env.DB, empresaId, input.aeronave_id, picFuncionarioId, sicFuncionarioId);
+    await assertFlightCrewAssignment(
+      c.env.DB,
+      empresaId,
+      input.aeronave_id,
+      picFuncionarioId,
+      sicFuncionarioId,
+    );
   }
 
   const result = await c.env.DB.prepare(
@@ -1191,20 +1196,15 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
     .run();
 
   const newId = Number(result.meta.last_row_id);
-  if (picFuncionarioId && sicFuncionarioId) {
-    await c.env.DB.batch([
-      c.env.DB.prepare(
-        `INSERT INTO cv_voo_tripulantes (
-           empresa_id, voo_id, funcionario_id, funcao, created_by, updated_by, created_at, updated_at
-         ) VALUES (?, ?, ?, 'PIC', ?, ?, datetime('now'), datetime('now'))`,
-      ).bind(empresaId, newId, picFuncionarioId, userId, userId),
-      c.env.DB.prepare(
-        `INSERT INTO cv_voo_tripulantes (
-           empresa_id, voo_id, funcionario_id, funcao, created_by, updated_by, created_at, updated_at
-         ) VALUES (?, ?, ?, 'SIC', ?, ?, datetime('now'), datetime('now'))`,
-      ).bind(empresaId, newId, sicFuncionarioId, userId, userId),
-    ]);
-  }
+  const relatedStatements = buildFlightRelatedStatements(c.env.DB, {
+    empresaId,
+    vooId: newId,
+    userId,
+    routePoints,
+    picFuncionarioId,
+    sicFuncionarioId,
+  });
+  if (relatedStatements.length > 0) await c.env.DB.batch(relatedStatements);
 
   await recordFlightEvent({
     db: c.env.DB,
@@ -1213,7 +1213,7 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
     tipoEvento: 'sistema',
     statusNovo: input.status || 'planejado',
     descricao: 'Voo criado',
-    metadata: { fields: Object.keys(payload).sort() },
+    metadata: { fields: Object.keys(payload).sort(), route_point_ids: routeIds },
     usuarioId: userId,
   });
 
@@ -1498,7 +1498,11 @@ controleVoos.put('/voos/:id/rdv', auth(), async (c) => {
         )
         .run();
 
-      const created = await getRdvOrThrow(c.env.DB, Number(createResult.meta.last_row_id), empresaId);
+      const created = await getRdvOrThrow(
+        c.env.DB,
+        Number(createResult.meta.last_row_id),
+        empresaId,
+      );
 
       await recordFlightEvent({
         db: c.env.DB,
@@ -1508,11 +1512,19 @@ controleVoos.put('/voos/:id/rdv', auth(), async (c) => {
         statusAnterior: flight.status,
         statusNovo: flight.status,
         descricao: 'RDV operacional criado',
-        metadata: { action: 'create', rdv_id: created.id, fields: Object.keys(payload).sort(), versaoNova: 1 },
+        metadata: {
+          action: 'create',
+          rdv_id: created.id,
+          fields: Object.keys(payload).sort(),
+          versaoNova: 1,
+        },
         usuarioId: userId,
       });
 
-      await maybeRecordSystemAudit(c, 'cv_rdv_operacional', 'INSERT', created.id, null, { ...input, versaoNova: 1 });
+      await maybeRecordSystemAudit(c, 'cv_rdv_operacional', 'INSERT', created.id, null, {
+        ...input,
+        versaoNova: 1,
+      });
       return c.json({ success: true, data: created }, 201);
     } catch (err: unknown) {
       const mapped = mapRdvOperacionalUniqueConstraintError(err);
@@ -1522,7 +1534,7 @@ controleVoos.put('/voos/:id/rdv', auth(), async (c) => {
   }
 
   const expectedVersion = requireExpectedRdvVersion(payload);
-  
+
   const fields: string[] = [];
   const values: unknown[] = [];
 
@@ -1598,18 +1610,14 @@ controleVoos.put('/voos/:id/rdv', auth(), async (c) => {
     'UPDATE',
     existing.id,
     { ...existing, versaoAnterior: existing.versao },
-    { ...input, expectedVersion, versaoNova: expectedVersion + 1 }
+    { ...input, expectedVersion, versaoNova: expectedVersion + 1 },
   );
 
   const updated = await getRdvOrThrow(c.env.DB, existing.id, empresaId);
   return c.json({ success: true, data: updated });
 });
 
-controleVoos.post(
-  '/voos/:id/rdv/finalizar-preenchimento',
-  auth(),
-  finalizeRdvPreenchimentoHandler,
-);
+controleVoos.post('/voos/:id/rdv/finalizar-preenchimento', auth(), finalizeRdvPreenchimentoHandler);
 
 controleVoos.get('/dashboard', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);

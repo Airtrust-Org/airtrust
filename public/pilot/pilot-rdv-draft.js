@@ -33,9 +33,10 @@ export function toInputTime(value) {
   if (direct) return direct[1];
   const parsed = new Date(text);
   if (Number.isNaN(parsed.getTime())) return '';
-  return String(parsed.getHours()).padStart(2, '0') + ':' + String(parsed.getMinutes()).padStart(2, '0');
+  return (
+    String(parsed.getHours()).padStart(2, '0') + ':' + String(parsed.getMinutes()).padStart(2, '0')
+  );
 }
-
 
 export function toInputNumber(value) {
   return value === null || value === undefined ? '' : String(value);
@@ -106,7 +107,9 @@ export function calcClockDurationHhMm(startValue, endValue) {
 export function payloadToKg(value, unit) {
   const numeric = parseNumber(value);
   if (numeric === null) return null;
-  const normalizedUnit = String(unit || 'KG').trim().toUpperCase();
+  const normalizedUnit = String(unit || 'KG')
+    .trim()
+    .toUpperCase();
   return Number((normalizedUnit === 'LB' ? numeric / 2.2046226218 : numeric).toFixed(3));
 }
 
@@ -123,7 +126,9 @@ export function calcConsumoCombustivel(decolagem, pouso) {
 }
 
 export function formatRdvNumero(dataVoo, prefixo) {
-  const compactDate = String(dataVoo || '').split('-').join('');
+  const compactDate = String(dataVoo || '')
+    .split('-')
+    .join('');
   const compactPrefix = String(prefixo || '')
     .replace(/[^A-Za-z0-9]/g, '')
     .toUpperCase();
@@ -228,7 +233,10 @@ export function buildStageDraftsFromPackage(packageData) {
       calcClockDurationHhMm(toInputTime(stage.horario_decolagem), toInputTime(stage.horario_pouso)),
     tempo_total:
       stage.tempo_total ||
-      calcClockDurationHhMm(toInputTime(stage.horario_motor_ligado), toInputTime(stage.horario_motor_desligado)),
+      calcClockDurationHhMm(
+        toInputTime(stage.horario_motor_ligado),
+        toInputTime(stage.horario_motor_desligado),
+      ),
     tempo_ifr: toDurationInput(stage.tempo_ifr),
     tempo_noturno: toDurationInput(stage.tempo_noturno),
     pousos_diurnos: toInputNumber(stage.pousos_diurnos),
@@ -296,7 +304,12 @@ export function validateRdvForm(form, packageData) {
   const voo = packageData?.voo || {};
   const expectedPrefix = formatRdvNumero(form.data_voo || voo.data_programacao, voo.prefixo);
 
-  if (!String(form.numero || '').trim().toUpperCase().startsWith(expectedPrefix)) {
+  if (
+    !String(form.numero || '')
+      .trim()
+      .toUpperCase()
+      .startsWith(expectedPrefix)
+  ) {
     errors.numero = 'Número do RDV deve começar com ' + expectedPrefix + '.';
   }
 
@@ -374,7 +387,10 @@ export function validateStageDrafts(stageDrafts) {
 
     const startFuel = parseNumber(stage.combustivel_inicio);
     const endFuel = parseNumber(stage.combustivel_fim);
-    if ((startFuel !== null || endFuel !== null) && !String(stage.unidade_combustivel || '').trim()) {
+    if (
+      (startFuel !== null || endFuel !== null) &&
+      !String(stage.unidade_combustivel || '').trim()
+    ) {
       errors.push('Etapa ' + (index + 1) + ': selecione a unidade do combustível.');
     }
     if (startFuel !== null && endFuel !== null && endFuel > startFuel) {
@@ -383,6 +399,34 @@ export function validateStageDrafts(stageDrafts) {
   }
 
   return errors;
+}
+
+export function applyStageContinuity(stageDrafts) {
+  const drafts = Array.isArray(stageDrafts) ? stageDrafts : [];
+  for (let index = 1; index < drafts.length; index += 1) {
+    const previous = drafts[index - 1]?.fields || drafts[index - 1] || {};
+    const currentDraft = drafts[index];
+    const current = currentDraft?.fields || currentDraft || {};
+    const canTrackDerived = Boolean(currentDraft?.fields);
+    const wasDerived = canTrackDerived && currentDraft.continuity_start_derived === true;
+    const previousLanding = String(previous.horario_pouso || '').trim();
+    const previousCut = String(previous.horario_motor_desligado || '').trim();
+
+    if (previous.destino_icao && !String(current.origem_icao || '').trim()) {
+      current.origem_icao = previous.destino_icao;
+    }
+
+    if (previousLanding && !previousCut) {
+      if (!String(current.horario_motor_ligado || '').trim() || wasDerived) {
+        current.horario_motor_ligado = previousLanding;
+        if (canTrackDerived) currentDraft.continuity_start_derived = true;
+      }
+    } else if (wasDerived) {
+      current.horario_motor_ligado = '';
+      currentDraft.continuity_start_derived = false;
+    }
+  }
+  return drafts;
 }
 
 export function applySafeStageAggregates(form, stageDrafts) {
@@ -450,7 +494,10 @@ export function assertVerifiedLeaseAllowsDraft(packageData, verifiedLease) {
   if (Number(claims.user_id) !== identity.userId) {
     throw new Error('Lease offline pertence a outro usuário.');
   }
-  if (!Array.isArray(claims.flight_ids) || !claims.flight_ids.map(Number).includes(identity.flightId)) {
+  if (
+    !Array.isArray(claims.flight_ids) ||
+    !claims.flight_ids.map(Number).includes(identity.flightId)
+  ) {
     throw new Error('Lease offline não autoriza este voo.');
   }
   if (
