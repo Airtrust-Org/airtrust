@@ -200,12 +200,40 @@ test.describe('stateful simulator materialization', () => {
     await expect(simulator).toBeVisible();
     await simulator.selectOption(String(state.runtime_simulator_id));
 
-    await page.getByRole('button', { name: 'Criar todas as sessões no calendário' }).click();
-    await expect(
-      page
-        .getByText('Todas as sessões confirmadas foram criadas no calendário.', { exact: true })
-        .first(),
-    ).toBeVisible({ timeout: 10_000 });
+    const materializeButton = page.getByRole('button', {
+      name: 'Criar todas as sessões no calendário',
+    });
+    const materializePath = `/api/simuladores/planejamento-v2/rascunhos/${state.runtime_draft_id}/materializar`;
+    const materializeResponsePromise = page.waitForResponse((response) => {
+      if (response.request().method().toUpperCase() !== 'POST') return false;
+      try {
+        return new URL(response.url()).pathname === materializePath;
+      } catch {
+        return false;
+      }
+    });
+    await materializeButton.click();
+    const materializeResponse = await materializeResponsePromise;
+    const materializePayload = (await materializeResponse.json().catch(() => null)) as {
+      success?: boolean;
+      error?: string;
+      data?: {
+        success?: boolean;
+        created?: number;
+        reused?: number;
+        materialized_sessions?: Record<string, number>;
+        error?: string;
+      };
+    } | null;
+    const materializeEvidence = JSON.stringify(materializePayload);
+    expect(materializeResponse.status(), materializeEvidence).toBe(200);
+    expect(materializePayload?.success, materializeEvidence).toBe(true);
+    expect(materializePayload?.data?.success, materializeEvidence).toBe(true);
+    expect(
+      Object.keys(materializePayload?.data?.materialized_sessions || {}).length,
+      materializeEvidence,
+    ).toBeGreaterThan(0);
+    await expect(materializeButton).toBeHidden({ timeout: 10_000 });
     guard.assertClean();
   });
 });
