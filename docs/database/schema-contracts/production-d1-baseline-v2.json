@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-17",
-    "last_reconciled_against": "0499 FRMS V2 historical backfill reviewed; remote apply pending",
-    "schema_v2_digest": "cd2f3a32e758410039ed31a62a4b989ffc4e83ab8bc0ff4177f8d43839846ccb",
+    "last_reconciled_against": "0500 Controle de Voos navigation points reviewed after 0499; remote apply pending",
+    "schema_v2_digest": "7071f1c696e47df73a9a5caf089d77cd09809670cc4255b0725cec9961f42d37",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -893,6 +893,20 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "frms-v2-historical-backfill-0499.json",
       "note": "0499 is reviewed and prepared only. It creates no physical schema: it copies the already-approved generic FRMS_OPERATIONAL_POLICY_V2 parameter set into an immutable Costa do Sol tenant revision effective 2026-01-01 and creates the governed recalculation ledger for 2026-01-01..2026-09-16."
+    },
+    {
+      "change_file": "0500_controle_voos_navigation_points.sql",
+      "change_id": "controle-voos-navigation-points-0500",
+      "sha256": "29564f1770eeac4f5afe479f7859ba8ce1589b1511f64826cbeb44d2dfdab83a",
+      "targets": [
+        "cv_aeroportos",
+        "cv_pontos_navegacao"
+      ],
+      "domain": "canonical tenant-scoped Controle de Voos aerodrome/navigation-point catalog with separate ICAO lookup and reviewed Flight Preview import",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-navigation-points-0500.json",
+      "note": "0500 is reviewed and prepared only. It preserves the source aerodrome identifier, separates ICAO codes (including 9P platform codes), enriches cv_aeroportos without changing existing IDs, and requires the governed Schema V2 workflow plus recovery point before any remote apply."
     }
   ]
 }
