@@ -1,4 +1,4 @@
-const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v12';
+const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v13';
 const PILOT_SCOPE_PATH = '/pilot/';
 const PRECACHE_URLS = [
   '/pilot/',
@@ -34,9 +34,7 @@ async function deleteOldPilotCaches() {
   const names = await caches.keys();
   await Promise.all(
     names
-      .filter(
-        (name) => name.startsWith('airtrust-pilot-shell-') && name !== PILOT_CACHE_VERSION,
-      )
+      .filter((name) => name.startsWith('airtrust-pilot-shell-') && name !== PILOT_CACHE_VERSION)
       .map((name) => caches.delete(name)),
   );
 }

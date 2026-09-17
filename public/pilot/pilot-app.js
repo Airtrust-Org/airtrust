@@ -7,6 +7,7 @@ import {
 import { PILOT_OFFLINE_APP_VERSION } from '/pilot/pilot-lease-trust.js';
 import {
   applySafeStageAggregates,
+  applyStageContinuity,
   PILOT_NATUREZA_OPTIONS,
   assertPackageIdentity,
   assertVerifiedLeaseAllowsDraft,
@@ -52,14 +53,10 @@ function resolvePilotApiBase() {
 const API_BASE_URL = resolvePilotApiBase();
 
 const connectivity = document.querySelector('#connectivity');
-const unlockCard = document.querySelector('#unlock-card');
-const unlockTitle = document.querySelector('#unlock-title');
-const unlockHelp = document.querySelector('#unlock-help');
-const pinInput = document.querySelector('#pin');
-const pinConfirmInput = document.querySelector('#pin-confirm');
-const confirmWrap = document.querySelector('#confirm-wrap');
-const unlockButton = document.querySelector('#unlock-button');
-const unlockStatus = document.querySelector('#unlock-status');
+const legacyVaultCard = document.querySelector('#legacy-vault-card');
+const legacyVaultPinInput = document.querySelector('#legacy-vault-pin');
+const legacyVaultMigrateButton = document.querySelector('#legacy-vault-migrate');
+const legacyVaultStatus = document.querySelector('#legacy-vault-status');
 const workspace = document.querySelector('#workspace');
 const refreshOnlineButton = document.querySelector('#refresh-online');
 const sessionStatus = document.querySelector('#session-status');
@@ -79,7 +76,6 @@ const saveStatus = document.querySelector('#save-status');
 const revisionLabel = document.querySelector('#revision');
 const lastSavedLabel = document.querySelector('#last-saved');
 const saveNowButton = document.querySelector('#save-now');
-const lockButton = document.querySelector('#lock');
 const prepareEditOfflineButton = document.querySelector('#prepare-edit-offline');
 const openLocalDraftButton = document.querySelector('#open-local-draft');
 const leaseStatus = document.querySelector('#lease-status');
@@ -107,7 +103,6 @@ const coordinationStatus = document.querySelector('#coordination-status');
 const coordinationReceipt = document.querySelector('#coordination-receipt');
 
 let vault;
-let provisioned = false;
 let localRevision = 0;
 let saveTimer = null;
 let saveChain = Promise.resolve();
@@ -1265,6 +1260,7 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
         horario_motor_desligado: toInputTime(record.value?.fields?.horario_motor_desligado),
       },
     }));
+    applyStageContinuity(activeStageDrafts);
     operationalLocalSequence = Math.max(
       Number(existingRdv.localRevision || value.local_sequence || 0),
       ...matchingStages.map((record) =>
@@ -1304,6 +1300,7 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
           Number(right.value?.fields?.numero_etapa || 0),
       );
     activeStageDrafts = persistedStages.map((record) => record.value);
+    applyStageContinuity(activeStageDrafts);
     operationalLocalSequence = 0;
     operationalNextSequence = 0;
   }
@@ -1337,7 +1334,6 @@ function refreshDraftValidationPresentation() {
     supplementalErrors.push('Informe a natureza do voo.');
   }
   for (const [index, fueling] of (activeRdvDraft.fuelings || []).entries()) {
-    if (!String(fueling.nota || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe a nota.');
     if (!String(fueling.numero_nota || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe o número da nota.');
     if (parseNumber(fueling.litros_abastecidos) === null) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe os litros abastecidos.');
   }
@@ -2334,10 +2330,16 @@ function refreshStageDerivedTimes(stageDraft) {
   );
 }
 
+function refreshAllStageDerivedTimes() {
+  applyStageContinuity(activeStageDrafts);
+  for (const stageDraft of activeStageDrafts) refreshStageDerivedTimes(stageDraft);
+}
+
 function applyQuickTiming(stage, field, action) {
   const nowLocal = localTimeNow();
   stage.fields[field] = nowLocal;
-  refreshStageDerivedTimes(stage);
+  if (field === 'horario_motor_ligado') stage.continuity_start_derived = false;
+  refreshAllStageDerivedTimes();
   stage.timing_events = {
     ...(stage.timing_events || {}),
     [field]: timingEventMeta(action),
@@ -2392,6 +2394,9 @@ function renderStageFields() {
     refreshStageDerivedTimes(stageDraft);
     const grid = document.createElement('div');
     grid.className = 'editor-grid';
+    const groundTime = index > 0
+      ? calcClockDurationHhMm(fields.horario_motor_ligado, fields.horario_decolagem)
+      : '';
     const stageFields = [
       ['Aeródromo de origem', 'origem_icao', 'text', null, false, null],
       ['Aeródromo de destino', 'destino_icao', 'text', null, false, null],
@@ -2422,7 +2427,8 @@ function renderStageFields() {
         note,
         onInput: readOnly ? null : (value) => {
           fields[key] = value;
-          refreshStageDerivedTimes(stageDraft);
+          if (key === 'horario_motor_ligado') stageDraft.continuity_start_derived = false;
+          refreshAllStageDerivedTimes();
           activeRdvDraft.form = applySafeStageAggregates(
             activeRdvDraft.form,
             activeStageDrafts,
@@ -2430,7 +2436,7 @@ function renderStageFields() {
           scheduleOperationalSave();
         },
         onBlur: readOnly ? null : () => {
-          refreshStageDerivedTimes(stageDraft);
+          refreshAllStageDerivedTimes();
           activeRdvDraft.form = applySafeStageAggregates(
             activeRdvDraft.form,
             activeStageDrafts,
@@ -2443,6 +2449,18 @@ function renderStageFields() {
       });
       if (readOnly) fieldNode.classList.add('derived-time');
       grid.append(fieldNode);
+    }
+
+    if (index > 0) {
+      const groundField = createEditorField({
+        label: 'Tempo no solo',
+        value: groundTime,
+        type: 'text',
+        readOnly: true,
+        note: 'Calculado: pouso anterior sem corte → próxima decolagem',
+      });
+      groundField.classList.add('derived-time');
+      grid.append(groundField);
     }
 
     grid.append(
@@ -2498,10 +2516,11 @@ function addOperationalStage() {
     source_stage_updated_at: null,
     local_sequence: operationalNextSequence,
     updated_at_claimed: new Date().toISOString(),
+    continuity_start_derived: Boolean(previous.horario_pouso && !previous.horario_motor_desligado),
     fields: {
       source_stage_id: null, local_id: localId, numero_etapa: number,
       origem_icao: previous.destino_icao || '', destino_icao: '',
-      horario_motor_ligado: '', horario_decolagem: '', horario_pouso: '', horario_motor_desligado: '',
+      horario_motor_ligado: previous.horario_pouso && !previous.horario_motor_desligado ? previous.horario_pouso : '', horario_decolagem: '', horario_pouso: '', horario_motor_desligado: '',
       tempo_decolagem_pouso: '', tempo_total: '', tempo_ifr: '', tempo_noturno: '',
       pousos_diurnos: '', pousos_noturnos: '', starts: '', pax: '', payload: '', unidade_payload: previous.unidade_payload || 'KG',
       combustivel_inicio: previous.combustivel_fim || '', combustivel_fim: '', unidade_combustivel: previous.unidade_combustivel || '', observacao_local: '',
@@ -2517,7 +2536,6 @@ function addOperationalFueling() {
   activeRdvDraft.fuelings.push({
     local_id: crypto.randomUUID(),
     hora: localTimeNow(),
-    nota: '',
     numero_nota: '',
     litros_abastecidos: '',
   });
@@ -2538,7 +2556,6 @@ function renderFuelingFields() {
     grid.className = 'editor-grid';
     for (const [label, key, type, inputMode] of [
       ['Hora', 'hora', 'time', null],
-      ['Nota do combustível', 'nota', 'text', null],
       ['Número da nota', 'numero_nota', 'text', null],
       ['Litros abastecidos', 'litros_abastecidos', 'number', 'decimal'],
     ]) {
@@ -2757,13 +2774,12 @@ function closePackageDetail() {
   setCoordinationReceipt('');
 }
 
-function renderProvisioningState() {
-  unlockTitle.textContent = provisioned ? 'Desbloquear dados offline' : 'Preparar armazenamento offline';
-  unlockHelp.textContent = provisioned
-    ? 'Informe o PIN offline configurado neste tablet.'
-    : 'Crie um PIN local para proteger os dados armazenados neste tablet. Ele não é a sua senha do AirTrust.';
-  confirmWrap.classList.toggle('hidden', provisioned);
-  unlockButton.textContent = provisioned ? 'Desbloquear' : 'Preparar tablet';
+function showLegacyVaultMigration() {
+  workspace.classList.add('hidden');
+  legacyVaultCard.classList.remove('hidden');
+  legacyVaultStatus.className = 'statusline attention';
+  legacyVaultStatus.textContent = 'Migração única necessária para preservar os dados locais existentes.';
+  legacyVaultPinInput.focus();
 }
 
 
@@ -2787,42 +2803,33 @@ async function openWorkspace() {
     saveStatus.textContent = 'Nenhuma alteração local.';
   }
 
-  unlockCard.classList.add('hidden');
+  legacyVaultCard.classList.add('hidden');
   workspace.classList.remove('hidden');
-  pinInput.value = '';
-  pinConfirmInput.value = '';
+  legacyVaultPinInput.value = '';
   await loadCachedPackages();
   await updateStorageEstimate();
   await loadOnlineFlights();
 }
 
-async function handleUnlock() {
-  unlockStatus.className = 'statusline attention';
-  unlockStatus.textContent = provisioned ? 'Desbloqueando…' : 'Preparando armazenamento cifrado…';
-  unlockButton.disabled = true;
+async function handleLegacyVaultMigration() {
+  legacyVaultStatus.className = 'statusline attention';
+  legacyVaultStatus.textContent = 'Migrando armazenamento antigo sem apagar os dados…';
+  legacyVaultMigrateButton.disabled = true;
 
   try {
-    const pin = pinInput.value;
-    if (!provisioned) {
-      if (pin !== pinConfirmInput.value) {
-        throw new Error('Os PINs não coincidem.');
-      }
-      await vault.provision(pin);
-      provisioned = true;
-    } else {
-      await vault.unlock(pin);
-    }
-    unlockStatus.className = 'statusline ok';
-    unlockStatus.textContent = 'Armazenamento offline desbloqueado.';
+    await vault.migrateLegacyPin(legacyVaultPinInput.value);
+    legacyVaultStatus.className = 'statusline ok';
+    legacyVaultStatus.textContent = 'Migração concluída. Este código não será solicitado novamente.';
     await openWorkspace();
   } catch (error) {
-    unlockStatus.className = 'statusline error';
-    unlockStatus.textContent =
-      error instanceof Error ? error.message : 'Falha ao abrir armazenamento offline.';
+    legacyVaultStatus.className = 'statusline error';
+    legacyVaultStatus.textContent =
+      error instanceof Error ? error.message : 'Falha ao migrar o armazenamento antigo.';
   } finally {
-    unlockButton.disabled = false;
+    legacyVaultMigrateButton.disabled = false;
   }
 }
+
 
 
 function markPending() {
@@ -2884,35 +2891,6 @@ function flushDiagnosticSave() {
   return enqueueDiagnosticSave(draftInput.value);
 }
 
-async function lockVault() {
-  if (saveTimer !== null) {
-    window.clearTimeout(saveTimer);
-    saveTimer = null;
-  }
-  if (operationalSaveTimer !== null) {
-    window.clearTimeout(operationalSaveTimer);
-    operationalSaveTimer = null;
-  }
-  await Promise.allSettled([flushDiagnosticSave(), flushOperationalSave()]);
-  vault.lock();
-  cachedPackageRecords = [];
-  onlineFlightRecords = [];
-  activePackageRecord = null;
-  activeVerifiedLease = null;
-  activeRdvDraft = null;
-  activeStageDrafts = [];
-  operationalLocalSequence = 0;
-  operationalNextSequence = 0;
-  operationalSyncInFlight = false;
-  coordinationInFlight = false;
-  workspace.classList.add('hidden');
-  closePackageDetail();
-  unlockCard.classList.remove('hidden');
-  unlockStatus.textContent = '';
-  sessionStatus.textContent = '';
-  renderProvisioningState();
-  pinInput.focus();
-}
 
 window.addEventListener('online', () => {
   setConnectivity();
@@ -2955,10 +2933,9 @@ closeDetailButton.addEventListener('click', closePackageDetail);
 draftInput.addEventListener('input', scheduleDiagnosticSave);
 draftInput.addEventListener('blur', () => void flushDiagnosticSave());
 saveNowButton.addEventListener('click', () => void flushDiagnosticSave());
-lockButton.addEventListener('click', () => void lockVault());
-unlockButton.addEventListener('click', () => void handleUnlock());
-pinInput.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' && provisioned) void handleUnlock();
+legacyVaultMigrateButton.addEventListener('click', () => void handleLegacyVaultMigration());
+legacyVaultPinInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') void handleLegacyVaultMigration();
 });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && vault?.isUnlocked()) {
@@ -2988,6 +2965,10 @@ window.addEventListener('pagehide', () => {
 setConnectivity();
 await registerPilotServiceWorker();
 vault = await PilotVault.open();
-provisioned = await vault.isProvisioned();
-renderProvisioningState();
-await updateStorageEstimate();
+const vaultOpenState = await vault.openAutomatically();
+if (vaultOpenState.status === 'ready') {
+  await openWorkspace();
+} else {
+  showLegacyVaultMigration();
+  await updateStorageEstimate();
+}
