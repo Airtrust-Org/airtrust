@@ -249,6 +249,14 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0497-production-preflight.sh --target=airtrust-db
 
+      - name: Preflight FRMS parametric V2 0498
+        if: ${{ inputs.change_id == 'frms-parametric-v2-0498' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0498-production-preflight.sh --target=airtrust-db
+
       - name: Backup governance ledger
         shell: bash
         working-directory: worker-airtrust
@@ -288,10 +296,24 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           COMBINED_SQL: ${{ steps.bundle.outputs.combined_sql }}
+          CHANGE_ID: ${{ steps.bundle.outputs.change_id }}
         run: |
           set -euo pipefail
           test -f "$COMBINED_SQL"
-          npx wrangler d1 execute airtrust-db --env production --remote --file "$COMBINED_SQL"
+          if [[ "$CHANGE_ID" == "frms-parametric-v2-0498" ]]; then
+            # Remote D1 --file uses the bulk-import/reset path, which returned
+            # D1_RESET_DO for this bounded, non-trigger-heavy bundle in staging.
+            # Submit the exact reviewed bundle through D1's query API instead.
+            sql_payload="$(cat "$COMBINED_SQL")"
+            [[ -n "$sql_payload" ]] || { echo '0498 combined SQL is empty.' >&2; exit 1; }
+            [[ ${#sql_payload} -le 100000 ]] || { echo '0498 combined SQL exceeds bounded --command transport.' >&2; exit 1; }
+            apply_output="$RUNNER_TEMP/schema-v2-0498-apply.json"
+            npx wrangler d1 execute airtrust-db --env production --remote --command "$sql_payload" --json > "$apply_output"
+            test -s "$apply_output"
+            rm -f "$apply_output"
+          else
+            npx wrangler d1 execute airtrust-db --env production --remote --file "$COMBINED_SQL"
+          fi
 
       - name: Verify ledger postcondition
         shell: bash
@@ -409,6 +431,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0497-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate FRMS parametric V2 0498
+        if: ${{ inputs.change_id == 'frms-parametric-v2-0498' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0498-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate EAD reconciliation ledger 0453
         if: ${{ inputs.change_id == 'ead-category-reconciliation-executor-0453' }}

@@ -60,6 +60,14 @@ describe('apply-schema-change-v2.yml — controlled single-file apply', () => {
     expect(workflow).toContain('validate-0488-production-preflight.sh');
     expect(workflow).toContain('validate-0488-production-postconditions.sh');
   });
+
+  it('uses bounded query transport and exact validators for FRMS 0498', () => {
+    expect(workflow).toContain("inputs.change_id == 'frms-parametric-v2-0498'");
+    expect(workflow).toContain('validate-0498-production-preflight.sh');
+    expect(workflow).toContain('validate-0498-production-postconditions.sh');
+    expect(workflow).toContain('if [[ "$CHANGE_ID" == "frms-parametric-v2-0498" ]]');
+    expect(workflow).toContain('--command "$sql_payload" --json');
+  });
 });
 
 describe('EAD reconciliation ledger Schema V2 change 0453', () => {

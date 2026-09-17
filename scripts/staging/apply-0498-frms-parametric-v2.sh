@@ -39,6 +39,13 @@ recovery_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"; (cd worker-airtrust && np
 node - "$recovery" <<'NODE'
 const fs=require('node:fs');if(!/bookmark/i.test(JSON.stringify(JSON.parse(fs.readFileSync(process.argv[2],'utf8')))))throw new Error('TIME_TRAVEL_BOOKMARK_NOT_CONFIRMED');
 NODE
-echo "RECOVERY_TIMESTAMP_UTC=$recovery_timestamp"; (cd worker-airtrust && npx wrangler d1 execute "$db_name" --remote --file="$combined")
+echo "RECOVERY_TIMESTAMP_UTC=$recovery_timestamp"
+sql_payload="$(cat "$combined")"
+[[ -n "$sql_payload" ]] || { echo "ERROR: empty 0498 SQL bundle" >&2; exit 1; }
+[[ ${#sql_payload} -le 100000 ]] || { echo "ERROR: 0498 SQL bundle exceeds bounded --command transport" >&2; exit 1; }
+apply_output="$(mktemp -t airtrust-staging-0498-apply.XXXXXXXX)"
+trap 'rm -f "$preflight" "$recovery" "$combined" "$apply_output"' EXIT
+(cd worker-airtrust && npx wrangler d1 execute "$db_name" --remote --command "$sql_payload" --json > "$apply_output")
+test -s "$apply_output"
 [[ "$(query_count "SELECT COUNT(*) count FROM d1_migrations WHERE name='$MIGRATION_BASENAME';")" == 1 ]] || { echo "ERROR: 0498 applied without exact ledger row" >&2; exit 1; }
 bash scripts/staging/validate-0498-postconditions.sh --target="$db_name"; echo "MIGRATION_APPLIED_AND_VALIDATED=$MIGRATION_BASENAME"
