@@ -602,6 +602,42 @@ describe('training compliance engine', () => {
     expect(mntGap.cursos_ead).toEqual([{ id: 501, titulo: 'MNT EAD' }]);
   });
 
+  it('inclui requisito recomendado e permite renovação quando só existe matrícula concluída', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 101, 'SETOR_FUNCAO', 11, 2, 'RECOMENDADA', 'EMPRESA');
+      INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id)
+      VALUES (500, 1, 'SOP S76 EAD', 101);
+      INSERT INTO lms_matriculas
+        (id, empresa_id, curso_id, funcionario_id, status, data_conclusao, created_at, updated_at)
+      VALUES (700, 1, 500, 1002, 'CONCLUIDO', '2024-01-01', '2024-01-01', '2024-01-01');
+    `);
+
+    const app = createApp(sqlite.asD1());
+    const response = await app.request('/reconciliacao');
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    const renewalGap = body.data.gaps_matricula.find(
+      (item: any) => item.qualificacao_tipo_id === 101,
+    );
+    expect(renewalGap).toMatchObject({ pessoas: 1, vencidos: 1, nunca_realizados: 0 });
+    expect(renewalGap.cursos_ead).toEqual([{ id: 500, titulo: 'SOP S76 EAD' }]);
+
+    sqlite.database.exec(`
+      INSERT INTO lms_matriculas
+        (id, empresa_id, curso_id, funcionario_id, status, data_conclusao, created_at, updated_at)
+      VALUES (701, 1, 500, 1002, 'NAO_INICIADO', NULL, '2026-09-16', '2026-09-16');
+    `);
+    const withOpenEnrollment = (await (await app.request('/reconciliacao')).json()) as any;
+    expect(
+      withOpenEnrollment.data.gaps_matricula.find(
+        (item: any) => item.qualificacao_tipo_id === 101,
+      ),
+    ).toBeUndefined();
+  });
+
   it('persiste decisão de manter matrícula avulsa e permite reabrir a reconciliação', async () => {
     sqlite.database.exec(`
       INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id)
