@@ -64,8 +64,8 @@ function renderDialog(mode: 'coordenacao' | 'pilot' = 'pilot', open = true) {
 }
 
 const aeronaveSelect = () => screen.getByLabelText(/Aeronave \/ Prefixo/);
-const origemSelect = () => screen.getByLabelText('Origem');
-const destinoSelect = () => screen.getByLabelText('Destino');
+const origemSelect = () => screen.getByLabelText('Saída');
+const destinoSelect = () => screen.getByLabelText('Destino final');
 const tipoSelect = () => screen.getByLabelText(/^Tipo de voo/);
 const naturezaSelect = () => screen.getByLabelText(/^Natureza/);
 
@@ -244,11 +244,44 @@ describe('ControleVoosNovoVooDialog', () => {
     expect(body).toMatchObject({
       aeronave_id: 30,
       prefixo: 'PR-ABC',
+      origem_id: 1,
+      destino_id: 2,
+      rota_ids: [1, 2],
       pic_funcionario_id: 101,
       sic_funcionario_id: 102,
     });
     expect(body).not.toHaveProperty('funcao');
     expect(onCreated).toHaveBeenCalledWith(created);
+  });
+
+  it('cria múltiplas pernas e permite retornar ao mesmo aeródromo de saída', async () => {
+    mockCatalogos();
+    postMock.mockResolvedValue({ success: true, data: { data: { id: 89 } } });
+    renderDialog('coordenacao');
+
+    await waitForAirportCatalog();
+    fireEvent.change(aeronaveSelect(), { target: { value: '30' } });
+    await waitFor(() => expect(screen.getByLabelText('PIC (Comandante)')).not.toBeDisabled());
+    fireEvent.change(screen.getByLabelText('PIC (Comandante)'), { target: { value: '101' } });
+    fireEvent.change(screen.getByLabelText('SIC (Comandante ou Copiloto)'), { target: { value: '102' } });
+    fireEvent.change(tipoSelect(), { target: { value: '10' } });
+    fireEvent.change(naturezaSelect(), { target: { value: '20' } });
+
+    fireEvent.change(origemSelect(), { target: { value: 'SBSP' } });
+    fireEvent.change(destinoSelect(), { target: { value: 'SBSP' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar parada' }));
+    fireEvent.change(screen.getByLabelText('Parada 1'), { target: { value: '9PLG' } });
+
+    expect(screen.getByText(/Perna 1: SBSP → 9PLG/)).toBeInTheDocument();
+    expect(screen.getByText(/Perna 2: 9PLG → SBSP/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Criar voo' }));
+
+    await waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
+    expect(postMock.mock.calls[0][1]).toMatchObject({
+      origem_id: 1,
+      destino_id: 1,
+      rota_ids: [1, 3, 1],
+    });
   });
 
   it('mostra erro retornado pela API e não fecha o diálogo', async () => {
