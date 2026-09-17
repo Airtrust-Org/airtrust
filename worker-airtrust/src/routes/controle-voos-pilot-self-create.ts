@@ -101,19 +101,15 @@ async function ensureTemporaryFlightType(db: D1Database, empresaId: number, user
   return Number(row.id);
 }
 
-async function ensurePilotNature(db: D1Database, empresaId: number, userId: number, code: string): Promise<number> {
-  const allowed: Record<string, string> = { MANUTENCAO: 'Manutenção', PETROBRAS: 'Petrobras' };
-  const name = allowed[code];
-  if (!name) throw new ApiError('Natureza do voo invalida', 400, 'CONTROLE_VOOS_PILOT_CREATE_INVALID_NATURE');
+async function resolvePilotNature(db: D1Database, empresaId: number, code: string): Promise<number> {
+  const allowed = new Set(['MANUTENCAO', 'PETROBRAS']);
+  if (!allowed.has(code)) throw new ApiError('Natureza do voo invalida', 400, 'CONTROLE_VOOS_PILOT_CREATE_INVALID_NATURE');
   const existing = await db.prepare('SELECT id, ativo FROM cv_naturezas_voo WHERE empresa_id = ? AND codigo = ? AND deleted_at IS NULL LIMIT 1').bind(empresaId, code).first<{ id: number; ativo: number }>();
-  if (existing) {
-    if (Number(existing.ativo) !== 1) throw new ApiError('Natureza do voo esta inativa', 409, 'CONTROLE_VOOS_PILOT_CREATE_NATURE_INACTIVE');
-    return Number(existing.id);
+  if (!existing) {
+    throw new ApiError('Natureza do voo nao esta configurada para a empresa', 409, 'CONTROLE_VOOS_PILOT_CREATE_NATURE_NOT_CONFIGURED');
   }
-  await db.prepare(`INSERT INTO cv_naturezas_voo (empresa_id, codigo, nome, descricao, ativo, created_by, updated_by, created_at, updated_at) VALUES (?, ?, ?, 'Natureza inicial habilitada para o fluxo Criar meu voo', 1, ?, ?, datetime('now'), datetime('now'))`).bind(empresaId, code, name, userId, userId).run();
-  const created = await db.prepare('SELECT id FROM cv_naturezas_voo WHERE empresa_id = ? AND codigo = ? AND ativo = 1 AND deleted_at IS NULL LIMIT 1').bind(empresaId, code).first<{ id: number }>();
-  if (!created) throw new ApiError('Natureza do voo indisponivel', 409, 'CONTROLE_VOOS_PILOT_CREATE_NATURE_UNAVAILABLE');
-  return Number(created.id);
+  if (Number(existing.ativo) !== 1) throw new ApiError('Natureza do voo esta inativa', 409, 'CONTROLE_VOOS_PILOT_CREATE_NATURE_INACTIVE');
+  return Number(existing.id);
 }
 
 pilotSelfCreate.post('/voos/meus/criar', auth(), requireAnyRdvAccess(), async (c) => {
@@ -158,7 +154,7 @@ pilotSelfCreate.post('/voos/meus/criar', auth(), requireAnyRdvAccess(), async (c
     origemId = await ensureTemporaryAirport(c.env.DB, empresaId, userId, origemTexto);
     destinoId = await ensureTemporaryAirport(c.env.DB, empresaId, userId, destinoTexto);
     tipoVooId = await ensureTemporaryFlightType(c.env.DB, empresaId, userId, tipoVooTexto);
-    naturezaVooId = await ensurePilotNature(c.env.DB, empresaId, userId, naturezaCodigo);
+    naturezaVooId = await resolvePilotNature(c.env.DB, empresaId, naturezaCodigo);
   } else {
     origemId = positiveInt(payload.origem_id, 'origem_id');
     destinoId = positiveInt(payload.destino_id, 'destino_id');
