@@ -74,8 +74,10 @@ describe('Pilot Offline shell', () => {
     expect(pilotVault).toContain('async putJsonBatch(entries)');
     expect(pilotVault).toContain('async getOrCreateDeviceId()');
     expect(pilotVault).toContain('async deleteJson(storeName, id)');
-    expect(pilotVault).toContain("name: 'PBKDF2'");
+    expect(pilotVault).toContain("key_protection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY'");
+    expect(pilotVault).toContain('async openAutomatically()');
     expect(pilotVault).toContain("name: 'AES-GCM'");
+    expect(pilotVault).toContain('false,');
     expect(pilotVault).toContain('crypto.subtle.encrypt');
     expect(pilotVault).toContain('crypto.subtle.decrypt');
     expect(pilotVault).not.toContain('localStorage');
@@ -83,21 +85,21 @@ describe('Pilot Offline shell', () => {
   });
 
   it('so declara Salvo no tablet depois da persistencia local concluir', () => {
-    const putIndex = pilotApp.indexOf("await vault.putJson(");
+    const putIndex = pilotApp.indexOf('await vault.putJson(');
     const savedIndex = pilotApp.indexOf("saveStatus.textContent = 'Salvo no tablet.'");
     expect(putIndex).toBeGreaterThan(-1);
     expect(savedIndex).toBeGreaterThan(putIndex);
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v12'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v13'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
     expect(pilotSw).toContain("'/pilot/pilot-rdv-draft.js'");
     expect(pilotSw).toContain("'/pilot/pilot-sync.js'");
     expect(pilotSw).toContain("'/pilot/pilot-lease.js'");
     expect(pilotSw).toContain("'/pilot/pilot-lease-trust.js'");
-    expect(pilotSw).toContain("url.pathname.startsWith(PILOT_SCOPE_PATH)");
+    expect(pilotSw).toContain('url.pathname.startsWith(PILOT_SCOPE_PATH)');
     expect(pilotSw).toContain("caches.match('/pilot/index.html')");
     expect(pilotSw).toContain('return cached || response;');
     expect(pilotSw).toContain("if (url.pathname.startsWith('/api/')) return;");
@@ -123,7 +125,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain('const API_BASE_URL = resolvePilotApiBase()');
     expect(pilotApp).toContain("'airtrust_token'");
     expect(pilotApp).toContain("Authorization: 'Bearer ' + token");
-    expect(pilotApp).toContain("containsForbiddenPackageKey(packageData)");
+    expect(pilotApp).toContain('containsForbiddenPackageKey(packageData)');
     expect(pilotApp).toContain("await vault.putJson(\n      'flight_packages'");
     expect(pilotVault).toContain('async listJson(storeName)');
   });
@@ -148,16 +150,16 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('não substitui o Diário de Bordo oficial');
     expect(pilotIndex).toContain('outbox cifrada');
     expect(pilotIndex).toContain('receipt do servidor');
-    expect(pilotApp).toContain("contract?.read_only !== true");
+    expect(pilotApp).toContain('contract?.read_only !== true');
     expect(pilotApp).toContain("typeof contract?.sync_supported !== 'boolean'");
-    expect(pilotApp).toContain("contract?.regulated_edb !== false");
+    expect(pilotApp).toContain('contract?.regulated_edb !== false');
     expect(pilotIndex).toContain('Rascunho operacional local');
     expect(pilotIndex).toContain('Não sincronizado');
   });
 
   it('expõe o voo como workspace integrado sem promover mapa ou performance a funções certificadas', () => {
     expect(pilotIndex).toContain('id="pilot-workspace-view"');
-    expect(pilotApp).toContain("renderPilotWorkspace");
+    expect(pilotApp).toContain('renderPilotWorkspace');
     expect(pilotWorkspace).toContain("['summary', 'Resumo']");
     expect(pilotWorkspace).toContain("['planning', 'Planejamento']");
     expect(pilotWorkspace).toContain("['met', 'MET']");
@@ -184,9 +186,9 @@ describe('Pilot Offline shell', () => {
     expect(pilotLease).toContain('globalThis.location?.origin');
     expect(pilotLease).not.toContain('options?.origin');
     expect(pilotLease).toContain("envelope.alg !== 'ES256'");
-    expect(pilotLease).toContain("crypto.subtle.verify");
+    expect(pilotLease).toContain('crypto.subtle.verify');
     expect(pilotLease).toContain("claims.purpose !== 'offline_flight_lease'");
-    expect(pilotLease).toContain("claims.device_id");
+    expect(pilotLease).toContain('claims.device_id');
     expect(pilotRdvDraft).toContain('assertVerifiedLeaseAllowsDraft');
     expect(pilotApp).toContain('hasTrustedPilotLeaseKeys()');
     expect(pilotApp).toContain('verifyPilotOfflineLease');
@@ -197,7 +199,10 @@ describe('Pilot Offline shell', () => {
     expect(pilotVault).toContain("this.database.transaction(storeNames, 'readwrite')");
     const batchIndex = pilotApp.indexOf('await vault.putJsonBatch(buildOperationalSaveEntries');
     const readRdvIndex = pilotApp.indexOf("await vault.getJson(\n        'rdv_drafts'", batchIndex);
-    const readyIndex = pilotApp.indexOf("rdvEditorSaveStatus.textContent = 'Salvo no tablet.'", readRdvIndex);
+    const readyIndex = pilotApp.indexOf(
+      "rdvEditorSaveStatus.textContent = 'Salvo no tablet.'",
+      readRdvIndex,
+    );
     expect(batchIndex).toBeGreaterThan(-1);
     expect(readRdvIndex).toBeGreaterThan(batchIndex);
     expect(readyIndex).toBeGreaterThan(readRdvIndex);
@@ -205,15 +210,15 @@ describe('Pilot Offline shell', () => {
 
   it('aceita capability de sync booleana sem promover o pacote a eDB regulatorio', () => {
     expect(pilotApp).toContain("typeof contract?.sync_supported !== 'boolean'");
-    expect(pilotApp).toContain("contract?.regulated_edb !== false");
-    expect(pilotApp).toContain("contract?.sync_supported !== true");
+    expect(pilotApp).toContain('contract?.regulated_edb !== false');
+    expect(pilotApp).toContain('contract?.sync_supported !== true');
   });
 
   it('bloqueia refresh silencioso com gravacao operacional pendente e mantem sync fail-closed', () => {
     expect(pilotApp).toContain("window.addEventListener('beforeunload'");
     expect(pilotApp).toContain('operationalNextSequence !== operationalLocalSequence');
     expect(pilotApp).toContain("event.returnValue = ''");
-    expect(pilotApp).toContain("contract?.sync_supported !== true");
+    expect(pilotApp).toContain('contract?.sync_supported !== true');
     expect(pilotApp).toContain('Sincronização ainda não foi habilitada para este pacote de voo.');
   });
 
@@ -230,9 +235,9 @@ describe('Pilot Offline shell', () => {
   });
 
   it('gera comando de sync deterministico sem incluir bearer e sem derivar ciclos', () => {
-    expect(pilotSync).toContain("command_type: PILOT_SYNC_COMMAND_TYPE");
-    expect(pilotSync).toContain("entity_type: PILOT_SYNC_ENTITY_TYPE");
-    expect(pilotSync).toContain("operation_type: PILOT_SYNC_OPERATION_TYPE");
+    expect(pilotSync).toContain('command_type: PILOT_SYNC_COMMAND_TYPE');
+    expect(pilotSync).toContain('entity_type: PILOT_SYNC_ENTITY_TYPE');
+    expect(pilotSync).toContain('operation_type: PILOT_SYNC_OPERATION_TYPE');
     expect(pilotSync).toContain('payload_hash');
     expect(pilotSync).toContain('canonicalJson(getSyncHashMaterial(command))');
     expect(pilotSync).toContain('ciclos: parseInteger(form.ciclos)');
@@ -242,7 +247,7 @@ describe('Pilot Offline shell', () => {
 
   it('reenvia outbox pendente ao recuperar conectividade sem last-write-wins', () => {
     expect(pilotApp).toContain("record.value?.status === 'pending'");
-    expect(pilotApp).toContain("void drainPilotOutbox()");
+    expect(pilotApp).toContain('void drainPilotOutbox()');
     expect(pilotApp).toContain("result.status === 'conflict'");
     expect(pilotApp).toContain('O rascunho local foi preservado');
     expect(pilotApp).not.toContain('last-write-wins');
@@ -270,7 +275,9 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("await vault.putJson(\n    'workflow_receipts'");
     expect(pilotApp).toContain('packageMatchesAcceptedSync');
     expect(pilotApp).toContain('server_entity_version');
-    expect(pilotApp).toContain('Atualize o pacote após o último receipt de transmissão antes de finalizar.');
+    expect(pilotApp).toContain(
+      'Atualize o pacote após o último receipt de transmissão antes de finalizar.',
+    );
     expect(pilotApp).toContain('Recebimento confirmado pelo servidor');
   });
 
@@ -289,23 +296,32 @@ describe('Pilot Offline shell', () => {
     expect(pilotSync).toContain('natureza_voo_codigo');
     expect(pilotApp).toContain("supplementalErrors.push('Informe a natureza do voo.')");
     expect(pilotApp).toContain('Litros abastecidos');
+    expect(pilotApp).toContain('Número da nota');
+    expect(pilotApp).not.toContain("['Nota do combustível', 'nota'");
+    expect(pilotSync).not.toContain('nota: optionalText(fueling?.nota)');
+    expect(pilotApp).toContain('Tempo no solo');
+    expect(pilotApp).toContain('refreshAllStageDerivedTimes()');
+    expect(pilotRdvDraft).toContain('applyStageContinuity');
     expect(pilotApp).toContain('monotonic_sequence: timingSequence');
     expect(pilotRdvDraft).toContain('Ciclos não são derivados de pousos');
     expect(pilotRdvDraft).not.toContain('next.ciclos =');
   });
 
-  it('simplifica o fluxo operacional sem enfraquecer o PIN do vault offline', () => {
+  it('simplifica o fluxo operacional e abre o vault v2 automaticamente sem PIN', () => {
     expect(pilotIndex).toContain('1. Preparar voo');
     expect(pilotIndex).toContain('2. Registrar voo');
     expect(pilotIndex).toContain('3. Enviar');
     expect(pilotIndex).toContain('id="rdv-core-fields"');
-    expect(pilotIndex).toContain('PIN offline');
-    expect(pilotApp).toContain('provisioned = await vault.isProvisioned()');
-    expect(pilotApp).toContain('await vault.provision(pin)');
-    expect(pilotApp).toContain('await vault.unlock(pin)');
+    expect(pilotIndex).not.toContain('PIN offline');
+    expect(pilotApp).toContain('await vault.openAutomatically()');
+    expect(pilotApp).toContain("vaultOpenState.status === 'ready'");
+    expect(pilotVault).toContain("key_protection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY'");
+    expect(pilotVault).toContain('async provisionDeviceKey()');
+    expect(pilotVault).toContain('async migrateLegacyPin(pin)');
+    expect(pilotIndex).toContain('Código local antigo');
+    expect(pilotIndex).toContain('uma única vez');
     expect(pilotVault).toContain("name: 'PBKDF2'");
     expect(pilotVault).toContain('wrapped_key');
-    expect(pilotVault).not.toContain('master_key: masterKey');
   });
 
   it('expõe tempos derivados, unidades e erro real da transmissão bloqueada', () => {
@@ -319,5 +335,4 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("status: 'superseded'");
     expect(pilotRdvDraft).toContain('selecione a unidade do combustível');
   });
-
 });

@@ -1,7 +1,5 @@
 import { expect, test } from '@playwright/test';
 
-const PIN = '654321';
-
 test('Pilot vault survives offline refresh, close/reopen and Service Worker stays isolated', async ({
   page,
   context,
@@ -21,14 +19,9 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
   });
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
 
-  await page.locator('#pin').fill(PIN);
-  await page.locator('#pin-confirm').fill(PIN);
-  await page.locator('#unlock-button').click();
-
   await expect(page.locator('#workspace')).toBeVisible();
-  await expect(page.locator('#unlock-status')).toContainText(
-    'Armazenamento offline desbloqueado',
-  );
+  await expect(page.locator('#legacy-vault-card')).toBeHidden();
+  await expect(page.getByText('PIN offline')).toHaveCount(0);
 
   await page.locator('#diagnostic-card > summary').click();
   const marker = `pilot-offline-ci-${Date.now()}`;
@@ -40,18 +33,26 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open('airtrust-pilot-v1', 2);
       request.onsuccess = () => resolve(request.result);
-      request.onerror = () =>
-        reject(request.error || new Error('IndexedDB open failed'));
+      request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
     });
 
     const encryptedRecords = await new Promise<unknown[]>((resolve, reject) => {
       const transaction = database.transaction('rdv_drafts', 'readonly');
       const request = transaction.objectStore('rdv_drafts').getAll();
       request.onsuccess = () => resolve(request.result);
-      request.onerror = () =>
-        reject(request.error || new Error('IndexedDB read failed'));
+      request.onerror = () => reject(request.error || new Error('IndexedDB read failed'));
     });
 
+    const vaultConfig = await new Promise<Record<string, unknown> | undefined>(
+      (resolve, reject) => {
+        const transaction = database.transaction('meta', 'readonly');
+        const request = transaction.objectStore('meta').get('vault-config');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('IndexedDB meta read failed'));
+      },
+    );
+
+    const deviceKey = vaultConfig?.device_key as CryptoKey | undefined;
     const cacheNames = await caches.keys();
     const cachedUrls: string[] = [];
     for (const cacheName of cacheNames) {
@@ -64,6 +65,14 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
 
     return {
       encryptedRecords,
+      vaultConfig: vaultConfig
+        ? {
+            version: vaultConfig.version,
+            keyProtection: vaultConfig.key_protection,
+            keyExtractable: deviceKey?.extractable ?? null,
+            keyAlgorithm: deviceKey?.algorithm?.name ?? null,
+          }
+        : null,
       cacheNames,
       cachedUrls,
       registrationScopes: registrations.map((registration) => registration.scope),
@@ -71,6 +80,12 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
     };
   });
 
+  expect(localProof.vaultConfig).toEqual({
+    version: 2,
+    keyProtection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY',
+    keyExtractable: false,
+    keyAlgorithm: 'AES-GCM',
+  });
   expect(localProof.encryptedRecords.length).toBeGreaterThan(0);
   expect(JSON.stringify(localProof.encryptedRecords)).not.toContain(marker);
   expect(localProof.encryptedRecords).toEqual(
@@ -83,15 +98,15 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
     ]),
   );
   expect(localProof.cacheNames.length).toBeGreaterThan(0);
-  expect(
-    localProof.cacheNames.every((name) => name.startsWith('airtrust-pilot-shell-')),
-  ).toBe(true);
+  expect(localProof.cacheNames.every((name) => name.startsWith('airtrust-pilot-shell-'))).toBe(
+    true,
+  );
   expect(localProof.cachedUrls.some((url) => new URL(url).pathname.startsWith('/api/'))).toBe(
     false,
   );
-  expect(localProof.cachedUrls.some((url) => new URL(url).pathname === '/pilot/pilot-preflight.js')).toBe(
-    true,
-  );
+  expect(
+    localProof.cachedUrls.some((url) => new URL(url).pathname === '/pilot/pilot-preflight.js'),
+  ).toBe(true);
   expect(localProof.registrationScopes.length).toBeGreaterThan(0);
   expect(
     localProof.registrationScopes.every((scope) => new URL(scope).pathname === '/pilot/'),
@@ -110,10 +125,8 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
     const reopened = await context.newPage();
     reopened.on('pageerror', (error) => pageErrors.push(error.message));
     await reopened.goto('/pilot/', { waitUntil: 'domcontentloaded' });
-    await expect(reopened.locator('#unlock-title')).toContainText('Desbloquear dados offline');
-    await reopened.locator('#pin').fill(PIN);
-    await reopened.locator('#unlock-button').click();
     await expect(reopened.locator('#workspace')).toBeVisible();
+    await expect(reopened.locator('#legacy-vault-card')).toBeHidden();
     await reopened.locator('#diagnostic-card > summary').click();
     await expect(reopened.locator('#draft')).toHaveValue(marker);
     await expect(reopened.locator('#save-status')).toContainText('Rascunho recuperado do tablet');
@@ -154,10 +167,8 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
     await page.reload({ waitUntil: 'domcontentloaded' });
 
     await expect(page.locator('#connectivity')).toContainText('OFFLINE');
-    await expect(page.locator('#unlock-title')).toContainText('Desbloquear dados offline');
-    await page.locator('#pin').fill(PIN);
-    await page.locator('#unlock-button').click();
     await expect(page.locator('#workspace')).toBeVisible();
+    await expect(page.locator('#legacy-vault-card')).toBeHidden();
     await page.locator('#diagnostic-card > summary').click();
     await expect(page.locator('#draft')).toHaveValue(marker);
     await expect(page.locator('#save-status')).toContainText('Rascunho recuperado do tablet');
@@ -167,10 +178,8 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
     reopened.on('pageerror', (error) => pageErrors.push(error.message));
     await reopened.goto('/pilot/', { waitUntil: 'domcontentloaded' });
     await expect(reopened.locator('#connectivity')).toContainText('OFFLINE');
-    await expect(reopened.locator('#unlock-title')).toContainText('Desbloquear dados offline');
-    await reopened.locator('#pin').fill(PIN);
-    await reopened.locator('#unlock-button').click();
     await expect(reopened.locator('#workspace')).toBeVisible();
+    await expect(reopened.locator('#legacy-vault-card')).toBeHidden();
     await reopened.locator('#diagnostic-card > summary').click();
     await expect(reopened.locator('#draft')).toHaveValue(marker);
     await expect(reopened.locator('#save-status')).toContainText('Rascunho recuperado do tablet');
@@ -178,12 +187,82 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
     finalPage = reopened;
   }
 
-  await finalPage.goto('/login');
-  await expect(finalPage.locator('input[type="email"]')).toBeVisible();
+  await finalPage.goto('/');
 
   const rootController = await finalPage.evaluate(
     () => navigator.serviceWorker.controller?.scriptURL || null,
   );
   expect(rootController).toBeNull();
   expect(pageErrors).toEqual([]);
+});
+
+
+test('migrates a legacy PIN vault once without losing encrypted draft data', async ({ page }) => {
+  const legacyPin = '654321';
+  const marker = `pilot-legacy-migration-${Date.now()}`;
+
+  await page.goto('/');
+  await page.evaluate(
+    async ({ pin, value }) => {
+      const { PilotVault } = await import('/pilot/pilot-vault.js');
+      const vault = await PilotVault.open();
+      await vault.provision(pin);
+      await vault.putJson(
+        'rdv_drafts',
+        'phase1-synthetic-rdv-draft',
+        { observacoes: value },
+        1,
+      );
+    },
+    { pin: legacyPin, value: marker },
+  );
+
+  await page.goto('/pilot/');
+  await expect(page.locator('#legacy-vault-card')).toBeVisible();
+  await expect(page.locator('#workspace')).toBeHidden();
+  await page.locator('#legacy-vault-pin').fill(legacyPin);
+  await page.locator('#legacy-vault-migrate').click();
+
+  await expect(page.locator('#workspace')).toBeVisible();
+  await expect(page.locator('#legacy-vault-card')).toBeHidden();
+  await page.locator('#diagnostic-card > summary').click();
+  await expect(page.locator('#draft')).toHaveValue(marker);
+
+  const proof = await page.evaluate(async (plainMarker) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('airtrust-pilot-v1', 2);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
+    });
+    const config = await new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
+      const transaction = database.transaction('meta', 'readonly');
+      const request = transaction.objectStore('meta').get('vault-config');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('IndexedDB meta read failed'));
+    });
+    const drafts = await new Promise<unknown[]>((resolve, reject) => {
+      const transaction = database.transaction('rdv_drafts', 'readonly');
+      const request = transaction.objectStore('rdv_drafts').getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('IndexedDB draft read failed'));
+    });
+    const key = config?.device_key as CryptoKey | undefined;
+    return {
+      config: {
+        version: config?.version,
+        migratedFrom: config?.migrated_from,
+        keyProtection: config?.key_protection,
+        keyExtractable: key?.extractable ?? null,
+      },
+      containsPlaintext: JSON.stringify(drafts).includes(plainMarker),
+    };
+  }, marker);
+
+  expect(proof.config).toEqual({
+    version: 2,
+    migratedFrom: 'PBKDF2_PIN_V1',
+    keyProtection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY',
+    keyExtractable: false,
+  });
+  expect(proof.containsPlaintext).toBe(false);
 });
