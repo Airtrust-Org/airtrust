@@ -111,8 +111,8 @@ describe('migration governance', () => {
     // 0495 separates qualification identity from Initial/Periodic/Semiannual training programs.
     // 0496 completes the 120-minute durations required by Initial/Semiannual simulator curricula.
     // 0497 adds the optional aircraft-model qualifier used by training compliance rules.
-    // 0498 adds the governed FRMS Parametric V2 schema and revision activation.
-    const expectedLatest = 499;
+    // 0498 adds FRMS V2; 0499 its historical backfill; 0500 adds the governed Controle de Voos navigation-point catalog.
+    const expectedLatest = 500;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

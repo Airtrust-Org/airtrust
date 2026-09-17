@@ -264,7 +264,11 @@ function createSqliteD1(): SqliteD1 {
 }
 
 async function currentVersao(db: any) {
-  const r = await db.prepare('SELECT versao FROM cv_rdv_operacional WHERE voo_id = 601 AND deleted_at IS NULL ORDER BY id DESC LIMIT 1').first() as any;
+  const r = (await db
+    .prepare(
+      'SELECT versao FROM cv_rdv_operacional WHERE voo_id = 601 AND deleted_at IS NULL ORDER BY id DESC LIMIT 1',
+    )
+    .first()) as any;
   return r?.versao ?? 1;
 }
 
@@ -825,6 +829,52 @@ describe('controle voos routes', () => {
     expect(events).toEqual([{ tipo_evento: 'sistema', status_novo: 'planejado' }]);
   });
 
+  it('cria as pernas programadas a partir da rota, inclusive retorno ao aeródromo de origem', async () => {
+    const db = createSqliteD1();
+    const response = await request(db, '/api/controle-voos/voos', {
+      method: 'POST',
+      body: JSON.stringify(validFlightPayload({ rota_ids: [101, 103, 101] })),
+    });
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      data: { id: number; origem_id: number; destino_id: number };
+    };
+    expect(body.data).toMatchObject({ origem_id: 101, destino_id: 101 });
+    const stages = db.queryJson<{
+      numero_etapa: number;
+      origem_icao: string;
+      destino_icao: string;
+    }>(
+      `SELECT numero_etapa, origem_icao, destino_icao FROM cv_voo_etapas WHERE voo_id=${body.data.id} ORDER BY numero_etapa`,
+    );
+    expect(stages).toEqual([
+      { numero_etapa: 1, origem_icao: 'SBRJ', destino_icao: 'SBPL01' },
+      { numero_etapa: 2, origem_icao: 'SBPL01', destino_icao: 'SBRJ' },
+    ]);
+  });
+
+  it('rejeita rota com ponto de outro tenant ou pontos consecutivos iguais', async () => {
+    const db = createSqliteD1();
+    const otherTenant = await request(db, '/api/controle-voos/voos', {
+      method: 'POST',
+      body: JSON.stringify(validFlightPayload({ rota_ids: [101, 201, 102] })),
+    });
+    expect(otherTenant.status).toBe(400);
+    await expect(otherTenant.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_INVALID_CATALOG',
+    });
+
+    const duplicate = await request(db, '/api/controle-voos/voos', {
+      method: 'POST',
+      body: JSON.stringify(validFlightPayload({ rota_ids: [101, 101, 102] })),
+    });
+    expect(duplicate.status).toBe(400);
+    await expect(duplicate.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_ROUTE_CONSECUTIVE_DUPLICATE',
+    });
+  });
+
   it('cria voo com aeronave do proprio tenant', async () => {
     const db = createSqliteD1();
 
@@ -1040,9 +1090,7 @@ describe('controle voos routes', () => {
     const statuses = [primeira.status, segunda.status].sort();
     expect(statuses).toEqual([200, 409]);
 
-    const flight = db.queryJson<{ versao: number }>(
-      'SELECT versao FROM cv_voos WHERE id = 601',
-    )[0];
+    const flight = db.queryJson<{ versao: number }>('SELECT versao FROM cv_voos WHERE id = 601')[0];
     expect(flight.versao).toBe(2);
   });
 
@@ -1088,7 +1136,6 @@ describe('controle voos routes', () => {
     });
   });
 
-
   it('aceita cancelamento com motivo operacional pelo endpoint dedicado de status', async () => {
     const db = createSqliteD1();
 
@@ -1125,9 +1172,7 @@ describe('controle voos routes', () => {
     const statuses = [primeira.status, segunda.status].sort();
     expect(statuses).toEqual([200, 409]);
 
-    const flight = db.queryJson<{ versao: number }>(
-      'SELECT versao FROM cv_voos WHERE id = 601',
-    )[0];
+    const flight = db.queryJson<{ versao: number }>('SELECT versao FROM cv_voos WHERE id = 601')[0];
     expect(flight.versao).toBe(2);
   });
 
@@ -1621,22 +1666,29 @@ describe('controle voos routes', () => {
     expect(finalizeResponse.status).toBe(403);
   });
 
-
   it('garante que duas criacoes simultaneas de RDV para o mesmo voo geram apenas 1 RDV e a segunda retorna 409', async () => {
     const db = createSqliteD1();
 
     const payload = validRdvPayload();
 
     const responses = await Promise.all([
-      request(db, '/api/controle-voos/voos/601/rdv', { method: 'PUT', body: JSON.stringify(payload) }),
-      request(db, '/api/controle-voos/voos/601/rdv', { method: 'PUT', body: JSON.stringify(payload) })
+      request(db, '/api/controle-voos/voos/601/rdv', {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      }),
+      request(db, '/api/controle-voos/voos/601/rdv', {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      }),
     ]);
 
     const statuses = responses.map((r) => r.status);
     expect(statuses.sort()).toEqual([201, 409]);
 
     const eventos = await db
-      .prepare(`SELECT * FROM cv_voo_eventos WHERE voo_id = 601 AND tipo_evento = 'rdv' AND json_extract(metadata_json, '$.action') = 'create'`)
+      .prepare(
+        `SELECT * FROM cv_voo_eventos WHERE voo_id = 601 AND tipo_evento = 'rdv' AND json_extract(metadata_json, '$.action') = 'create'`,
+      )
       .all();
     expect(eventos.results).toHaveLength(1);
   });
@@ -1779,24 +1831,38 @@ describe('controle voos routes', () => {
 
   it('garante atomicidade no update do RDV: se a transacao falhar, nao gera evento nem atualiza rdv', async () => {
     const db = createSqliteD1();
-    
-    await request(db, '/api/controle-voos/voos/601/rdv', { method: 'PUT', body: JSON.stringify(validRdvPayload()) });
-    const rdv = await db.prepare('SELECT versao FROM cv_rdv_operacional WHERE voo_id = 601').first() as any;
-    
+
+    await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify(validRdvPayload()),
+    });
+    const rdv = (await db
+      .prepare('SELECT versao FROM cv_rdv_operacional WHERE voo_id = 601')
+      .first()) as any;
+
     const originalBatch = db.batch;
-    db.batch = async () => { throw new Error('Mock batch error'); };
-    
-    const response = await request(db, '/api/controle-voos/voos/601/rdv', { method: 'PUT', body: JSON.stringify({ ocorrencias: 'teste atomicidade', versao: rdv?.versao }) });
+    db.batch = async () => {
+      throw new Error('Mock batch error');
+    };
+
+    const response = await request(db, '/api/controle-voos/voos/601/rdv', {
+      method: 'PUT',
+      body: JSON.stringify({ ocorrencias: 'teste atomicidade', versao: rdv?.versao }),
+    });
     expect(response.status).toBe(500);
-    
+
     db.batch = originalBatch;
-    
-    const rdvPos = await db.prepare('SELECT versao, ocorrencias FROM cv_rdv_operacional WHERE voo_id = 601').first<{ versao: number, ocorrencias: string | null }>();
+
+    const rdvPos = await db
+      .prepare('SELECT versao, ocorrencias FROM cv_rdv_operacional WHERE voo_id = 601')
+      .first<{ versao: number; ocorrencias: string | null }>();
     expect(rdvPos?.versao).toBe(rdv?.versao);
     expect(rdvPos?.ocorrencias).toBe('Sem intercorrencias');
-    
+
     const eventos = await db
-      .prepare(`SELECT * FROM cv_voo_eventos WHERE voo_id = 601 AND tipo_evento = 'rdv' AND json_extract(metadata_json, '$.action') = 'update'`)
+      .prepare(
+        `SELECT * FROM cv_voo_eventos WHERE voo_id = 601 AND tipo_evento = 'rdv' AND json_extract(metadata_json, '$.action') = 'update'`,
+      )
       .all();
     expect(eventos.results).toHaveLength(0);
   });

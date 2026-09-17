@@ -90,13 +90,11 @@ function rdvPayload(form) {
   };
 }
 
-
 function fuelingPayload(fueling, flightDate) {
   const time = optionalText(fueling?.hora);
   return {
     client_local_id: optionalText(fueling?.local_id),
     data_hora: time ? fromInputDateTime(time, flightDate) : null,
-    nota: optionalText(fueling?.nota),
     numero_nota: optionalText(fueling?.numero_nota),
     litros_abastecidos: parseNumber(fueling?.litros_abastecidos),
   };
@@ -105,8 +103,7 @@ function fuelingPayload(fueling, flightDate) {
 function stagePayload(stageDraft) {
   const fields = stageDraft.fields || {};
   return {
-    source_stage_id:
-      stageDraft.source_stage_id == null ? null : Number(stageDraft.source_stage_id),
+    source_stage_id: stageDraft.source_stage_id == null ? null : Number(stageDraft.source_stage_id),
     source_stage_updated_at: stageDraft.source_stage_updated_at || null,
     fields: {
       numero_etapa: parseInteger(fields.numero_etapa),
@@ -206,8 +203,7 @@ export async function buildOfflineSyncCommand({
         .slice()
         .sort(
           (left, right) =>
-            Number(left?.fields?.numero_etapa || 0) -
-            Number(right?.fields?.numero_etapa || 0),
+            Number(left?.fields?.numero_etapa || 0) - Number(right?.fields?.numero_etapa || 0),
         )
         .map(stagePayload),
     },

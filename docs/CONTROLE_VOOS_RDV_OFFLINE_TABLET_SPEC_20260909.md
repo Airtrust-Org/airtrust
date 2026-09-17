@@ -1,4 +1,5 @@
 # AirTrust — Especificação de Produto e Arquitetura
+
 ## Controle de Voos / RDV Offline-First para Tablet
 
 Data: 2026-09-09
@@ -362,17 +363,16 @@ Esses eventos são redundância. A segurança principal continua sendo a persist
 
 A recomendação para o Pilot App é cifrar o payload persistido localmente com Web Crypto.
 
-Abordagem inicial:
+Abordagem operacional vigente (vault v2):
 
-- gerar chave aleatória do vault no dispositivo;
-- cifrar registros com AES-GCM;
-- nunca armazenar a chave do vault em texto claro;
-- envolver a chave do vault com uma chave derivada de PIN offline do usuário;
-- PBKDF2 ou mecanismo Web Crypto equivalente com parâmetros versionados;
-- armazenar somente salt, parâmetros e chave envolvida;
-- bloquear o vault após período de inatividade configurável.
+- gerar uma chave AES-GCM aleatória por dispositivo;
+- criar a chave Web Crypto como não extraível (`extractable=false`);
+- persistir a `CryptoKey` não extraível no IndexedDB por structured clone, sem exportar bytes da chave para JavaScript;
+- cifrar os registros operacionais com AES-GCM antes da persistência local;
+- não exigir PIN adicional no fluxo normal do piloto;
+- manter a autorização offline separada por lease assinado, vinculada ao dispositivo e ao voo.
 
-O PIN offline não é a senha do AirTrust.
+Compatibilidade: tablets que já possuam o vault v1 protegido por PIN exigem o código local antigo uma única vez para desembrulhar a chave existente e migrá-la para o formato v2 sem apagar rascunhos ou outbox pendentes. Depois dessa migração, o código local deixa de ser solicitado. PBKDF2 permanece somente no leitor de compatibilidade do vault v1.
 
 ### 8.2 Sessão offline
 
@@ -1276,7 +1276,8 @@ Entregas:
 - pilot SW restrito;
 - IndexedDB versionado;
 - vault cifrado;
-- PIN offline;
+- chave Web Crypto não extraível por dispositivo;
+- migração única para vault v1 quando necessário;
 - lease local;
 - readiness local sintético;
 - página Meus Voos offline com fixtures controladas.
@@ -1473,7 +1474,7 @@ Se o risco operacional continuar alto nos tablets alvo, avaliar shell híbrido/n
 ### R3 — Tablet perdido
 
 Mitigação:
-vault cifrado, PIN offline, TTL, device registry, revogação na próxima conexão, minimização de dados.
+vault cifrado, chave Web Crypto não extraível por dispositivo, TTL do lease, device registry, revogação na próxima conexão e minimização de dados.
 
 ### R4 — Dois dispositivos
 
