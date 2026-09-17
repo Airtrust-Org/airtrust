@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { getAccessToken } from '@/react-app/config/api';
+import { submitPendingFrmsRecoveryActivity } from '@/react-app/hooks/useFrmsRecovery';
 
 export interface FadigaCheckinItem {
   id: string;
@@ -234,6 +235,13 @@ export function useSubmitCheckin() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: CheckinFormData) => {
+      const assessmentDate = String(data.reference_date || data.data_checkin || '').slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(assessmentDate)) {
+        // A classificação do dia anterior faz parte do mesmo fluxo de check-in.
+        // Ela só é persistida quando o usuário aciona o envio final do formulário.
+        await submitPendingFrmsRecoveryActivity(assessmentDate);
+      }
+
       try {
         return await fetchJson('/frms/fadiga-checkin', {
           method: 'POST',
@@ -250,6 +258,7 @@ export function useSubmitCheckin() {
       queryClient.invalidateQueries({ queryKey: ['fadiga-painel'] });
       queryClient.invalidateQueries({ queryKey: ['frms-ficha'] });
       queryClient.invalidateQueries({ queryKey: ['frms-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['frms-recovery-context'] });
     },
   });
 }

@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-09-14",
-    "last_reconciled_against": "0496 training-program session duration correction reviewed; production apply pending",
-    "schema_v2_digest": "45d0c727a8c8346f15e691b146be7e3a2f641ddd57180585cfc014f4763dc75d",
+    "last_reconciled_at": "2026-09-16",
+    "last_reconciled_against": "0497 training-compliance aircraft scope reviewed; remote apply pending",
+    "schema_v2_digest": "cca1c59420f1193c735beb228e6272510c8c94d34f83cad8f2d667763ba8d508",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -852,6 +852,19 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "training-program-session-durations-0496.json",
       "note": "0496 is reviewed and prepared only. It changes operational duration data, not schema shape. Production apply requires the governed Schema V2 workflow, recovery point and migration post-guards."
+    },
+    {
+      "change_file": "0497_training_compliance_aircraft_scope.sql",
+      "change_id": "training-compliance-aircraft-scope-0497",
+      "sha256": "0695fc28c56a07bb3dfaac856c8a40b3b0fd871828a02dd0fc5a9ecc9e08079c",
+      "targets": [
+        "treinamento_requisitos"
+      ],
+      "domain": "optional aircraft-model qualifier for training compliance applicability using existing crew-aircraft assignments",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-aircraft-scope-0497.json",
+      "note": "0497 is reviewed and prepared only. It adds an optional aircraft-model qualifier to treinamento_requisitos; existing generic rules remain valid. Production apply requires the governed Schema V2 workflow and recovery point."
     }
   ]
 }
