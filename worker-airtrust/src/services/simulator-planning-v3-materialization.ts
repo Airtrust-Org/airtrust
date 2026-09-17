@@ -135,10 +135,12 @@ async function findExistingSession(
   const row = await db
     .prepare(
       `SELECT id FROM simulador_agendamentos
-        WHERE empresa_id = ? AND deleted_at IS NULL AND observacoes LIKE ?
+        WHERE empresa_id = ?
+          AND deleted_at IS NULL
+          AND instr(COALESCE(observacoes, ''), ?) > 0
         ORDER BY id LIMIT 1`,
     )
-    .bind(empresaId, `%${marker(draftId, blockId)}%`)
+    .bind(empresaId, marker(draftId, blockId))
     .first<{ id: number }>();
   return row?.id ? Number(row.id) : null;
 }
