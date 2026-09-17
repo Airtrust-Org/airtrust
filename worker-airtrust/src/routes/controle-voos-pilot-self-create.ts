@@ -86,6 +86,24 @@ function stableTemporaryCode(prefix: string, value: string): string {
 }
 
 async function ensureTemporaryAirport(db: D1Database, empresaId: number, userId: number, name: string): Promise<number> {
+  const normalized = name.trim().toUpperCase();
+  const configured = await db.prepare(`
+    SELECT id, codigo, codigo_icao, nome
+    FROM cv_aeroportos
+    WHERE empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
+      AND (UPPER(codigo) = ? OR UPPER(COALESCE(codigo_icao, '')) = ? OR UPPER(nome) = ?)
+    ORDER BY CASE WHEN UPPER(codigo) = ? THEN 0 WHEN UPPER(COALESCE(codigo_icao, '')) = ? THEN 1 ELSE 2 END, id
+    LIMIT 10
+  `).bind(empresaId, normalized, normalized, normalized, normalized, normalized).all<{ id: number; codigo: string; codigo_icao: string | null; nome: string }>();
+
+  const rows = configured.results || [];
+  const primaryCode = rows.find((row) => row.codigo.trim().toUpperCase() === normalized);
+  if (primaryCode) return Number(primaryCode.id);
+  if (rows.length === 1) return Number(rows[0].id);
+  if (rows.length > 1) {
+    throw new ApiError('Codigo ICAO ou nome corresponde a mais de um aerodromo. Informe o aerodromo principal para desambiguar.', 409, 'CONTROLE_VOOS_PILOT_CREATE_AMBIGUOUS_AIRPORT');
+  }
+
   const code = stableTemporaryCode('PILOT_AER', name);
   await db.prepare(`INSERT OR IGNORE INTO cv_aeroportos (empresa_id, codigo, nome, tipo, descricao, ativo, created_by, updated_by, created_at, updated_at) VALUES (?, ?, ?, 'heliponto', 'Entrada livre temporaria pelo fluxo Criar meu voo', 0, ?, ?, datetime('now'), datetime('now'))`).bind(empresaId, code, name, userId, userId).run();
   const row = await db.prepare('SELECT id FROM cv_aeroportos WHERE empresa_id = ? AND codigo = ? AND deleted_at IS NULL LIMIT 1').bind(empresaId, code).first<{ id: number }>();

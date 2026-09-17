@@ -55,6 +55,8 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
   const { isAdmin, isGestor } = usePermissions();
   const canManageCatalogs = mode === 'coordenacao' && (isAdmin || isGestor);
   const [aeroportos, setAeroportos] = useState<CvAeroporto[]>([]);
+  const [origemBusca, setOrigemBusca] = useState('');
+  const [destinoBusca, setDestinoBusca] = useState('');
   const [tipos, setTipos] = useState<CvTipoVoo[]>([]);
   const [naturezas, setNaturezas] = useState<CvNaturezaVoo[]>([]);
   const [aeronaves, setAeronaves] = useState<Aeronave[]>([]);
@@ -89,6 +91,8 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     let cancelled = false;
     setLoadingCatalogos(true);
     setError(null);
+    setOrigemBusca('');
+    setDestinoBusca('');
     const load = async () => {
       try {
         if (mode === 'coordenacao') {
@@ -146,6 +150,26 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
   if (!open) return null;
 
   const set = (key: keyof typeof form, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
+  const aeroportoLabel = (item: CvAeroporto) => {
+    const icao = item.codigo_icao?.trim();
+    const primary = item.codigo?.trim();
+    const codes = icao && icao.toUpperCase() !== primary.toUpperCase() ? `${primary} · ICAO ${icao}` : primary;
+    return `${codes} — ${item.nome}`;
+  };
+  const aeroportoMatches = (query: string) => {
+    const normalized = query.trim().toLocaleUpperCase('pt-BR');
+    if (!normalized) return aeroportos.slice(0, 80);
+    return aeroportos.filter((item) => aeroportoLabel(item).toLocaleUpperCase('pt-BR').includes(normalized)).slice(0, 80);
+  };
+  const selectAeroportoText = (target: 'origem_id' | 'destino_id', value: string) => {
+    if (target === 'origem_id') setOrigemBusca(value); else setDestinoBusca(value);
+    const normalized = value.trim().toLocaleUpperCase('pt-BR');
+    const exactLabel = aeroportos.find((item) => aeroportoLabel(item).toLocaleUpperCase('pt-BR') === normalized);
+    const exactPrimary = aeroportos.find((item) => item.codigo?.trim().toLocaleUpperCase('pt-BR') === normalized);
+    const exactIcao = aeroportos.filter((item) => item.codigo_icao?.trim().toLocaleUpperCase('pt-BR') === normalized);
+    const selected = exactLabel || exactPrimary || (exactIcao.length === 1 ? exactIcao[0] : undefined);
+    set(target, selected ? String(selected.id) : '');
+  };
 
   const selectAircraft = (id: string) => {
     const aircraft = aeronaves.find((item) => String(item.id) === id);
@@ -268,8 +292,8 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
 
           {mode === 'pilot' ? (
             <>
-              <label className="text-sm">Aeródromo de origem<input id="controle-voos-origem" className={fieldClass} value={form.origem_texto} onChange={(e) => set('origem_texto', e.target.value)} placeholder="Digite o aeródromo ou plataforma" required /></label>
-              <label className="text-sm">Aeródromo de destino<input id="controle-voos-destino" className={fieldClass} value={form.destino_texto} onChange={(e) => set('destino_texto', e.target.value)} placeholder="Digite o aeródromo ou plataforma" required /></label>
+              <label className="text-sm">Aeródromo de origem<input id="controle-voos-origem" className={fieldClass} value={form.origem_texto} onChange={(e) => set('origem_texto', e.target.value)} placeholder="Digite o aeródromo ou código ICAO" required /></label>
+              <label className="text-sm">Aeródromo de destino<input id="controle-voos-destino" className={fieldClass} value={form.destino_texto} onChange={(e) => set('destino_texto', e.target.value)} placeholder="Digite o aeródromo ou código ICAO" required /></label>
               <label className="text-sm">Tipo de voo<input id="controle-voos-tipo" className={fieldClass} value={form.tipo_voo_texto} onChange={(e) => set('tipo_voo_texto', e.target.value)} placeholder="Digite o tipo de voo" required /></label>
               <label className="text-sm">Natureza<select id="controle-voos-natureza" className={fieldClass} value={form.natureza_voo_codigo} onChange={(e) => set('natureza_voo_codigo', e.target.value)} required><option value="PETROBRAS">Petrobras</option><option value="MANUTENCAO">Manutenção</option></select></label>
               <label className="text-sm">Saída prevista<input type="time" className={fieldClass} value={form.horario_previsto_partida} onChange={(e) => set('horario_previsto_partida', e.target.value)} required /></label>
@@ -282,14 +306,16 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
                   <label htmlFor="controle-voos-origem">Origem</label>
                   {canManageCatalogs && <button type="button" onClick={() => openQuick('aeroportos', 'origem_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}
                 </div>
-                <select id="controle-voos-origem" className={fieldClass} value={form.origem_id} onChange={(e) => set('origem_id', e.target.value)} required><option value="">Selecione</option>{aeroportos.map((a) => <option key={a.id} value={a.id}>{a.codigo_icao || a.codigo} — {a.nome}</option>)}</select>
+                <input id="controle-voos-origem" list="controle-voos-origem-opcoes" className={fieldClass} value={origemBusca} onChange={(e) => selectAeroportoText('origem_id', e.target.value)} placeholder="Busque pelo aeródromo, código ICAO ou nome" autoComplete="off" required />
+                <datalist id="controle-voos-origem-opcoes">{aeroportoMatches(origemBusca).map((a) => <option key={a.id} value={aeroportoLabel(a)} />)}</datalist>
               </div>
               <div className="text-sm">
                 <div className={labelRowClass}>
                   <label htmlFor="controle-voos-destino">Destino</label>
                   {canManageCatalogs && <button type="button" onClick={() => openQuick('aeroportos', 'destino_id')} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300"><Plus className="h-3 w-3" /> Cadastrar</button>}
                 </div>
-                <select id="controle-voos-destino" className={fieldClass} value={form.destino_id} onChange={(e) => set('destino_id', e.target.value)} required><option value="">Selecione</option>{aeroportos.map((a) => <option key={a.id} value={a.id}>{a.codigo_icao || a.codigo} — {a.nome}</option>)}</select>
+                <input id="controle-voos-destino" list="controle-voos-destino-opcoes" className={fieldClass} value={destinoBusca} onChange={(e) => selectAeroportoText('destino_id', e.target.value)} placeholder="Busque pelo aeródromo, código ICAO ou nome" autoComplete="off" required />
+                <datalist id="controle-voos-destino-opcoes">{aeroportoMatches(destinoBusca).map((a) => <option key={a.id} value={aeroportoLabel(a)} />)}</datalist>
               </div>
               <div className="text-sm">
                 <div className={labelRowClass}>
@@ -333,7 +359,12 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
           state={quickCreate}
           onClose={() => setQuickCreate(null)}
           onCreated={(created) => {
-            if (created.catalog === 'aeroportos') setAeroportos((items) => [...items, created.item]);
+            if (created.catalog === 'aeroportos') {
+              setAeroportos((items) => [...items, created.item]);
+              const label = aeroportoLabel(created.item);
+              if (quickCreate.target === 'origem_id') setOrigemBusca(label);
+              if (quickCreate.target === 'destino_id') setDestinoBusca(label);
+            }
             if (created.catalog === 'tipos') setTipos((items) => [...items, created.item]);
             if (created.catalog === 'naturezas') setNaturezas((items) => [...items, created.item]);
             set(quickCreate.target, String(created.item.id));
