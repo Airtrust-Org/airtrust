@@ -8,6 +8,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const baseSql = readFileSync(join(root, 'migrations/0410_controle_voos_n1_schema.sql'), 'utf8');
 const changeSql = readFileSync(join(root, 'schema-v2/changes/0500_controle_voos_navigation_points.sql'), 'utf8');
+const migrationSql = readFileSync(join(root, 'migrations/0500_controle_voos_navigation_points.sql'), 'utf8');
 const csv = readFileSync(join(root, 'data/controle-voos/waypoints-flight-preview-2026-09-17.csv'), 'utf8');
 const tempDirs: string[] = [];
 
@@ -40,6 +41,10 @@ afterAll(() => {
 });
 
 describe('schema-v2 0500 Controle de Voos navigation points', () => {
+  it('keeps the staging migration mirror byte-identical to the reviewed Schema V2 SQL', () => {
+    expect(migrationSql).toBe(changeSql);
+  });
+
   it('keeps the extracted source cardinality and quality flags', () => {
     const db = createDb();
     const summary = query<{ total:number; unique_codes:number; invalid:number; missing_elevation:number }>(db, `

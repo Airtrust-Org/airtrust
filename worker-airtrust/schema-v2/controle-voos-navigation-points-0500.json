@@ -2,7 +2,7 @@
   "changeId": "controle-voos-navigation-points-0500",
   "baselineId": "production-d1-baseline-v2-20260714",
   "filePath": "worker-airtrust/schema-v2/changes/0500_controle_voos_navigation_points.sql",
-  "fileHash": "29564f1770eeac4f5afe479f7859ba8ce1589b1511f64826cbeb44d2dfdab83a",
+  "fileHash": "4224bd34f053b09b52554a1c98c0f04ed828f05bad15276bf63d4ef2c3fd14cb",
   "planPath": "worker-airtrust/schema-v2/plans/controle-voos-navigation-points-0500.md",
   "planHash": "eb231927f53dd577bc27cca6c16e13c2b1afe3b073dd39e55c17532fe4355656"
 }
