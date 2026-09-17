@@ -45,7 +45,7 @@ sql_payload="$(cat "$combined")"
 [[ ${#sql_payload} -le 100000 ]] || { echo "ERROR: 0498 SQL bundle exceeds bounded --command transport" >&2; exit 1; }
 apply_output="$(mktemp -t airtrust-staging-0498-apply.XXXXXXXX)"
 trap 'rm -f "$preflight" "$recovery" "$combined" "$apply_output"' EXIT
-(cd worker-airtrust && npx wrangler d1 execute "$db_name" --remote --command "$sql_payload" --json > "$apply_output")
+(cd worker-airtrust && npx wrangler d1 execute "$db_name" --remote --command="$sql_payload" --json > "$apply_output")
 test -s "$apply_output"
 [[ "$(query_count "SELECT COUNT(*) count FROM d1_migrations WHERE name='$MIGRATION_BASENAME';")" == 1 ]] || { echo "ERROR: 0498 applied without exact ledger row" >&2; exit 1; }
 bash scripts/staging/validate-0498-postconditions.sh --target="$db_name"; echo "MIGRATION_APPLIED_AND_VALIDATED=$MIGRATION_BASENAME"

@@ -308,7 +308,7 @@ jobs:
             [[ -n "$sql_payload" ]] || { echo '0498 combined SQL is empty.' >&2; exit 1; }
             [[ ${#sql_payload} -le 100000 ]] || { echo '0498 combined SQL exceeds bounded --command transport.' >&2; exit 1; }
             apply_output="$RUNNER_TEMP/schema-v2-0498-apply.json"
-            npx wrangler d1 execute airtrust-db --env production --remote --command "$sql_payload" --json > "$apply_output"
+            npx wrangler d1 execute airtrust-db --env production --remote --command="$sql_payload" --json > "$apply_output"
             test -s "$apply_output"
             rm -f "$apply_output"
           else

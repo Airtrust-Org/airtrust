@@ -66,7 +66,7 @@ describe('apply-schema-change-v2.yml — controlled single-file apply', () => {
     expect(workflow).toContain('validate-0498-production-preflight.sh');
     expect(workflow).toContain('validate-0498-production-postconditions.sh');
     expect(workflow).toContain('if [[ "$CHANGE_ID" == "frms-parametric-v2-0498" ]]');
-    expect(workflow).toContain('--command "$sql_payload" --json');
+    expect(workflow).toContain('--command="$sql_payload" --json');
   });
 });
 
