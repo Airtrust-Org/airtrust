@@ -200,12 +200,28 @@ test.describe('stateful simulator materialization', () => {
     await expect(simulator).toBeVisible();
     await simulator.selectOption(String(state.runtime_simulator_id));
 
+    const materializeResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response
+          .url()
+          .includes(
+            `/api/simuladores/planejamento-v2/rascunhos/${state.runtime_draft_id}/materializar`,
+          ),
+    );
     await page.getByRole('button', { name: 'Criar todas as sessões no calendário' }).click();
-    await expect(
-      page
-        .getByText('Todas as sessões confirmadas foram criadas no calendário.', { exact: true })
-        .first(),
-    ).toBeVisible({ timeout: 10_000 });
+    const materializeResponse = await materializeResponsePromise;
+    const materializeBody = await materializeResponse.json();
+    expect(materializeResponse.status(), JSON.stringify(materializeBody)).toBe(200);
+    expect(materializeBody?.success, JSON.stringify(materializeBody)).toBe(true);
+    expect(materializeBody?.data?.success, JSON.stringify(materializeBody)).toBe(true);
+    expect(
+      Number(materializeBody?.data?.created || 0) + Number(materializeBody?.data?.reused || 0),
+      JSON.stringify(materializeBody),
+    ).toBeGreaterThan(0);
+    expect(Object.keys(materializeBody?.data?.materialized_sessions || {}).length).toBeGreaterThan(
+      0,
+    );
     guard.assertClean();
   });
 });
