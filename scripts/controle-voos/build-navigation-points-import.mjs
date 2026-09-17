@@ -138,7 +138,11 @@ function writeCsv(records) {
 }
 
 function schemaPreamble() {
-  return `-- 0500 Controle de Voos: canonical navigation points imported from Flight Preview PDF.
+  return `-- source_reference: CORDERNADAS.pdf / Flight Preview Waypoints List reviewed 2026-09-17; deterministic tenant-6 import artifact.
+-- operational_decision: preserve source identifiers; separate ICAO (including 9P platform codes); apply only through governed migration/schema workflows.
+-- dry_run_required: remote application must pass reviewed preflight/recovery-point workflow; never execute this file ad hoc against a live D1.
+-- rollback_plan_required: use the captured D1 recovery point or a reviewed forward compensation; never improvise destructive SQL.
+-- 0500 Controle de Voos: canonical navigation points imported from Flight Preview PDF.
 -- Source-derived fields are preserved; tipo/classification is explicitly inferred from code/description.
 CREATE TABLE IF NOT EXISTS cv_pontos_navegacao (
   id INTEGER PRIMARY KEY AUTOINCREMENT, empresa_id INTEGER NOT NULL, codigo TEXT NOT NULL, codigo_icao TEXT,

@@ -35,6 +35,7 @@ APPROVED_MIGRATIONS=(
   "0479_edb_relational_integrity.sql"
   "0480_edb_diary_lifecycle_integrity.sql"
   "0489_a02_natural_keys_tenant_scoped.sql"
+  "0500_controle_voos_navigation_points.sql"
 )
 
 apply=false
@@ -173,6 +174,9 @@ validate_postconditions() {
       ;;
     0489_a02_natural_keys_tenant_scoped.sql)
       bash scripts/staging/validate-0489-postconditions.sh --target="$db_name"
+      ;;
+    0500_controle_voos_navigation_points.sql)
+      bash scripts/staging/validate-0500-postconditions.sh --target="$db_name"
       ;;
   esac
 }
