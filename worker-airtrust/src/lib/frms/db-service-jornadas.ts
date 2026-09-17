@@ -19,13 +19,14 @@ import { calcularLinhaFadigaAcumulada } from './fadiga-acumulada-legal';
 import { generateId, now, logAuditoria, buscarHistoricoJornadas } from './db-service-shared';
 import { despacharNotificacoes } from './db-service-notificacoes';
 import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
-import { resolveFrmsSourceStatus, shouldUseForOperationalFrms } from './frms-source-policy';
+import { resolveFrmsSourceStatus, shouldUseForOperationalFrms, shouldUseForRolling } from './frms-source-policy';
 import { resolveFuncionarioActiveFortnightForDate } from '../escalas/active-fortnight';
 import {
   runFrmsIogpShadowForJornada,
   type FrmsIogpShadowCallerEnv,
 } from './frms-iogp-shadow-caller';
 import { resolveOperationalLoadForJornada } from './operational-load-resolver';
+import { computeFlightHoursDelta, resolveOperationalPolicyV2, type FrmsOperationalPolicyV2 } from './operational-policy-v2';
 // ────────────────────────────────────────────────────────
 // Período embarcado
 // ────────────────────────────────────────────────────────
@@ -166,6 +167,28 @@ async function resolveTripulanteEmpresaId(
 // Pipeline de recálculo (interna, exported for cross-module use)
 // ────────────────────────────────────────────────────────
 
+function previousIsoDate(dateYmd: string): string {
+  const [y, m, d] = dateYmd.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d - 1));
+  return date.toISOString().slice(0, 10);
+}
+
+async function readPriorRecoveryCreditPoints(db: D1Database, tripulanteId: number, dateYmd: string): Promise<number> {
+  try {
+    const row = await db.prepare(
+      `SELECT recovery_credit_points FROM frms_recovery_assessment
+       WHERE funcionario_id = ? AND reference_date = ? AND deleted_at IS NULL
+       ORDER BY calculated_at DESC LIMIT 1`,
+    ).bind(tripulanteId, dateYmd).first<{ recovery_credit_points: number | null }>();
+    const value = Number(row?.recovery_credit_points ?? 0);
+    return Number.isFinite(value) ? Math.max(0, value) : 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    if (message.includes('no such column') || message.includes('no such table')) return 0;
+    throw error;
+  }
+}
+
 export async function recalcularPipeline(
   db: D1Database,
   jornada: FrmsJornada,
@@ -182,12 +205,14 @@ export async function recalcularPipeline(
       hv_7_dias_min: 0,
       hv_28_dias_min: 0,
       hv_365_dias_min: 0,
+      hv_ano_calendario_min: 0,
       hv_mes_calendario_min: 0,
       hv_dia_min: 0,
       pct_limite_7d: 0,
       pct_limite_28d: 0,
       pct_limite_mes_calendario: 0,
       pct_limite_365d: 0,
+      pct_limite_ano_calendario: 0,
       pct_limite_dia: 0,
       repouso_anterior_min: -1,
       repouso_suficiente: 1,
@@ -230,6 +255,11 @@ export async function recalcularPipeline(
     modelVersion: operationalContext.modelVersion,
   };
 
+  let v2Policy: FrmsOperationalPolicyV2 | null = null;
+  if (operationalContext.parameters.FRMS_V2_ENABLED === 1) {
+    v2Policy = resolveOperationalPolicyV2(operationalContext.parameters);
+  }
+
   // Garantir consistência pós-regra de almoço: duração sempre recalculada pelos horários
   const duracaoRecalculada = calcDuracaoJornada(jornada);
   if (jornada.duracao_jornada_minutos !== duracaoRecalculada) {
@@ -270,7 +300,7 @@ export async function recalcularPipeline(
     diaDoCiclo: periodoEmbarcado?.dia ?? null,
   });
 
-  // 4a2. Carga Operacional V1 (OPERATIONAL_POLICY_V1): pousos SIGVOOS
+  // 4a2. Fatores offshore V2: pousos SIGVOOS, temperatura e IMC observados
   // deduplicados por etapa + temperatura máxima observada (METAR/REDEMET) já
   // derivada pelo pipeline de evidência. Sem evidência meteorológica a
   // temperatura fica INCOMPLETE (nunca inventada). Falha aqui não pode
@@ -280,18 +310,39 @@ export async function recalcularPipeline(
   > | null;
   try {
     const empresaIdParaCarga = await resolveTripulanteEmpresaId(db, jornada.tripulante_id);
-    operationalLoad = await resolveOperationalLoadForJornada(db, {
-      empresaId: empresaIdParaCarga,
-      funcionarioId: Number(jornada.tripulante_id),
-      dataYmd: jornada.data,
-      jornadaId: jornada.id,
-    });
+    if (v2Policy) {
+      operationalLoad = await resolveOperationalLoadForJornada(db, {
+        empresaId: empresaIdParaCarga,
+        funcionarioId: Number(jornada.tripulante_id),
+        dataYmd: jornada.data,
+        jornadaId: jornada.id,
+        policy: v2Policy,
+        policyVersion: operationalContext.modelVersion,
+      });
+    }
   } catch (error) {
     console.warn('[FRMS] operational load resolve failed', {
       jornadaId: jornada.id,
       error: error instanceof Error ? error.message : String(error ?? ''),
     });
     operationalLoad = null;
+  }
+
+  let v2Daily = null;
+  if (v2Policy) {
+    const previousDate = previousIsoDate(jornada.data);
+    const priorHvMinutes = historico
+      .filter((item) => item.data === previousDate && shouldUseForRolling(item))
+      .reduce((sum, item) => sum + Math.max(0, item.horas_voo_minutos ?? 0), 0);
+    const priorDayGenerated = computeFlightHoursDelta(priorHvMinutes, 0, v2Policy).generatedCreditForNextDayPoints;
+    const flightHours = computeFlightHoursDelta(jornada.horas_voo_minutos ?? 0, priorDayGenerated, v2Policy);
+    const recoveryCreditPoints = await readPriorRecoveryCreditPoints(db, jornada.tripulante_id, previousDate);
+    v2Daily = {
+      policy: v2Policy,
+      fadigaPolicy: operationalContext.fadigaPolicy,
+      recoveryCreditPoints,
+      flightHours,
+    };
   }
 
   // 4b. Calcular índice estimado de effectiveness (proxy local)
@@ -309,6 +360,7 @@ export async function recalcularPipeline(
       total_dias_periodo: periodoEmbarcado?.total ?? null,
     },
     operationalLoad,
+    v2Daily,
   );
 
   const timestamp = now();
@@ -401,6 +453,14 @@ export async function recalcularPipeline(
       JSON.stringify({
         ...effectResult.componentes,
         operational_load: effectResult.operational_load,
+        frms_v2: v2Daily ? {
+          policy_version: operationalContext.modelVersion,
+          recovery_credit_requested_points: v2Daily.recoveryCreditPoints,
+          hv_raw_penalty_points: v2Daily.flightHours.rawPenaltyPoints,
+          hv_credit_applied_points: v2Daily.flightHours.priorDayCreditAppliedPoints,
+          hv_delta_points: v2Daily.flightHours.netDeltaPoints,
+          hv_credit_generated_for_next_day_points: v2Daily.flightHours.generatedCreditForNextDayPoints,
+        } : null,
       }),
       effectResult.hora_despertar,
       effectResult.hora_inicio_sono,
@@ -416,7 +476,7 @@ export async function recalcularPipeline(
     )
     .run();
 
-  // Carga Operacional V1: colunas dedicadas (migration 0476). Best-effort para
+  // Carga Operacional V2: colunas dedicadas (0476 + 0498). Best-effort para
   // ambientes que ainda não aplicaram a migration — o JSON de componentes já
   // carrega o mesmo detalhamento acima.
   if (effectResult.operational_load) {
@@ -432,7 +492,10 @@ export async function recalcularPipeline(
                   operational_load_data_quality = ?,
                   operational_load_landings_delta = ?,
                   operational_load_temperature_delta = ?,
-                  operational_load_total_delta = ?
+                  operational_load_total_delta = ?,
+                  operational_load_imc_delta = ?,
+                  operational_load_imc_quality = ?,
+                  operational_load_imc_json = ?
             WHERE id = ? AND deleted_at IS NULL`,
         )
         .bind(
@@ -444,9 +507,39 @@ export async function recalcularPipeline(
           load.landings_delta,
           load.temperature_delta,
           load.total_delta,
+          load.imc_delta ?? 0,
+          load.imc_evidence_quality ?? 'INCOMPLETE',
+          JSON.stringify(load.imc_legs ?? []),
           fatId,
         )
         .run();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (!message.includes('no such column')) throw error;
+    }
+  }
+
+  if (v2Daily) {
+    try {
+      const recoveryAppliedPoints = Math.max(0, Number(effectResult.componentes.recuperacao ?? 0) * 100);
+      await db.prepare(
+        `UPDATE frms_fatorizacao_jornada
+            SET recovery_credit_requested_points = ?,
+                recovery_credit_applied_points = ?,
+                hv_v2_raw_penalty_points = ?,
+                hv_v2_credit_applied_points = ?,
+                hv_v2_delta_points = ?,
+                hv_v2_credit_generated_points = ?
+          WHERE id = ? AND deleted_at IS NULL`,
+      ).bind(
+        v2Daily.recoveryCreditPoints,
+        recoveryAppliedPoints,
+        v2Daily.flightHours.rawPenaltyPoints,
+        v2Daily.flightHours.priorDayCreditAppliedPoints,
+        v2Daily.flightHours.netDeltaPoints,
+        v2Daily.flightHours.generatedCreditForNextDayPoints,
+        fatId,
+      ).run();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error ?? '');
       if (!message.includes('no such column')) throw error;
@@ -603,40 +696,62 @@ export async function persistirAcumuloRolling(
     )
     .bind(timestamp, String(tripulanteId), dataRef);
 
-  const inserirAtual = db
+  const inserirAtualV2 = db
     .prepare(
       `INSERT INTO frms_acumulo_rolling (
         id, tripulante_id, data_referencia,
-        hv_7_dias_min, hv_28_dias_min, hv_365_dias_min,
+        hv_7_dias_min, hv_28_dias_min, hv_365_dias_min, hv_ano_calendario_min,
         hv_mes_calendario_min, hv_dia_min,
-        pct_limite_7d, pct_limite_28d, pct_limite_mes_calendario, pct_limite_365d, pct_limite_dia,
+        pct_limite_7d, pct_limite_28d, pct_limite_mes_calendario, pct_limite_365d, pct_limite_ano_calendario, pct_limite_dia,
         repouso_anterior_min, repouso_suficiente,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
-      generateId(),
-      String(tripulanteId),
-      dataRef,
-      acumulo.hv_7_dias_min,
-      acumulo.hv_28_dias_min,
-      acumulo.hv_365_dias_min,
-      acumulo.hv_mes_calendario_min,
-      acumulo.hv_dia_min,
-      acumulo.pct_limite_7d,
-      acumulo.pct_limite_28d,
-      acumulo.pct_limite_mes_calendario,
-      acumulo.pct_limite_365d,
-      acumulo.pct_limite_dia,
-      acumulo.repouso_anterior_min,
-      acumulo.repouso_suficiente,
-      timestamp,
-      timestamp,
+      generateId(), String(tripulanteId), dataRef,
+      acumulo.hv_7_dias_min, acumulo.hv_28_dias_min, acumulo.hv_365_dias_min,
+      acumulo.hv_ano_calendario_min ?? 0, acumulo.hv_mes_calendario_min, acumulo.hv_dia_min,
+      acumulo.pct_limite_7d, acumulo.pct_limite_28d, acumulo.pct_limite_mes_calendario,
+      acumulo.pct_limite_365d, acumulo.pct_limite_ano_calendario ?? 0, acumulo.pct_limite_dia,
+      acumulo.repouso_anterior_min, acumulo.repouso_suficiente, timestamp, timestamp,
     );
 
-  // D1 batch is transactional: the previous active snapshot is only soft-deleted
-  // if the replacement row is also persisted successfully.
-  await db.batch([softDeleteAnterior, inserirAtual]);
+  // Rollout compatibility: the Worker may be deployed a few minutes before 0498.
+  // D1 batch is transactional, so a schema-mismatch on the V2 insert does not
+  // soft-delete the previous row. Retry with the pre-0498 shape only for that
+  // explicit schema gap; all other failures still fail closed.
+  try {
+    await db.batch([softDeleteAnterior, inserirAtualV2]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    if (!message.includes('no such column') && !message.includes('has no column named')) throw error;
+
+    const softDeleteAnteriorLegacy = db
+      .prepare(
+        'UPDATE frms_acumulo_rolling SET deleted_at = ? WHERE tripulante_id = ? AND data_referencia = ? AND deleted_at IS NULL',
+      )
+      .bind(timestamp, String(tripulanteId), dataRef);
+    const inserirAtualLegacy = db
+      .prepare(
+        `INSERT INTO frms_acumulo_rolling (
+          id, tripulante_id, data_referencia,
+          hv_7_dias_min, hv_28_dias_min, hv_365_dias_min,
+          hv_mes_calendario_min, hv_dia_min,
+          pct_limite_7d, pct_limite_28d, pct_limite_mes_calendario, pct_limite_365d, pct_limite_dia,
+          repouso_anterior_min, repouso_suficiente,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        generateId(), String(tripulanteId), dataRef,
+        acumulo.hv_7_dias_min, acumulo.hv_28_dias_min, acumulo.hv_365_dias_min,
+        acumulo.hv_mes_calendario_min, acumulo.hv_dia_min,
+        acumulo.pct_limite_7d, acumulo.pct_limite_28d, acumulo.pct_limite_mes_calendario,
+        acumulo.pct_limite_365d, acumulo.pct_limite_dia,
+        acumulo.repouso_anterior_min, acumulo.repouso_suficiente, timestamp, timestamp,
+      );
+    await db.batch([softDeleteAnteriorLegacy, inserirAtualLegacy]);
+  }
 }
 
 // ────────────────────────────────────────────────────────

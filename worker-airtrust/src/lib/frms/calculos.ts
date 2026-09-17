@@ -20,7 +20,9 @@ import {
   calcularPenalidadeWOCL,
   calcularSono,
   isWithinWOCL,
+  type FadigaBusinessPolicy,
 } from './fadiga-score';
+import type { FrmsOperationalPolicyV2, FlightHoursDeltaResult } from './operational-policy-v2';
 import { resolverFrmsConfig } from './frms-config';
 import { shouldUseForRolling } from './frms-source-policy';
 
@@ -361,6 +363,18 @@ function zeroFatorizacao(): FatorizacaoResult {
   };
 }
 
+export interface FrmsV2DailyAdjustments {
+  policy: FrmsOperationalPolicyV2;
+  fadigaPolicy: FadigaBusinessPolicy;
+  recoveryCreditPoints: number;
+  flightHours: FlightHoursDeltaResult;
+}
+
+function hourInsideWindow(hour: number, start: number, end: number): boolean {
+  if (start === end) return true;
+  return start < end ? hour >= start && hour < end : hour >= start || hour < end;
+}
+
 export function calcEffectiveness(
   fatorizacao: FatorizacaoResult,
   limites: LimitesMap,
@@ -376,11 +390,12 @@ export function calcEffectiveness(
     total_dias_periodo?: number | null;
   },
   /**
-   * Operational Load V1 (OPERATIONAL_POLICY_V1). When present, its total delta
+   * Operational Load V2 (governed FRMS operational policy). When present, its total delta
    * (points) is added to the effectiveness sum as a signed fraction. When
    * absent, the result is byte-identical to the previous contract.
    */
   operationalLoad?: OperationalLoadV1Result | null,
+  v2?: FrmsV2DailyAdjustments | null,
 ): EffectivenessResult {
   // Mantém o contrato histórico para consumidores que fornecem apenas a fatorização.
   if (!jornada) return calcEffectivenessLegado(fatorizacao, limites, operationalLoad ?? null);
@@ -397,6 +412,12 @@ export function calcEffectiveness(
   let despertarEstimado = true;
   let acordouNaWocl = false;
   let fatorCircadiano = fatorizacao.fator_apresentacao_pct;
+  if (v2) {
+    const presentationHour = apresentacaoMin == null ? -1 : Math.floor(apresentacaoMin / 60);
+    fatorCircadiano = presentationHour >= 0 && hourInsideWindow(
+      presentationHour, v2.policy.presentationNightStartHour, v2.policy.presentationNightEndHour,
+    ) ? Math.min(0, v2.policy.presentationNightDeltaPoints / 100) : 0;
+  }
 
   if (apresentacaoMin != null || acordouMin != null) {
     const sono = calcularSono({
@@ -411,8 +432,10 @@ export function calcEffectiveness(
     horaInicioSono = minutesToHhmm(sono.tDormiuMin);
     fonteSono = sono.fonteSono;
     despertarEstimado = sono.despertarEstimado;
-    acordouNaWocl = isWithinWOCL(sono.tAcordouMin);
-    fatorCircadiano = acordouNaWocl ? calcularPenalidadeWOCL(sono.tAcordouMin) : 0;
+    acordouNaWocl = isWithinWOCL(sono.tAcordouMin, v2?.fadigaPolicy);
+    const woclPenalty = acordouNaWocl ? calcularPenalidadeWOCL(sono.tAcordouMin, v2?.fadigaPolicy) : 0;
+    // V2 keeps the strongest of presentation-night and WOCL; they are never stacked.
+    fatorCircadiano = v2 ? Math.min(fatorCircadiano, woclPenalty) : woclPenalty;
   }
 
   const fatorRepouso =
@@ -434,26 +457,31 @@ export function calcEffectiveness(
     fatorProgressivo = max * ((diaPeriodo - 1) / (totalPeriodo - 1));
   }
 
-  // Carga Operacional V1 (OPERATIONAL_POLICY_V1): pontos → fração assinada.
-  // Recovery é outra dimensão e não entra aqui.
-  const cargaOperacionalFrac = operationalLoad
-    ? round4(operationalLoad.operational_load_total_delta / 100)
-    : 0;
+  // V2 keeps offshore dimensions independent. The legacy aggregate is retained only
+  // as a compatibility field for historical consumers; there is no shared cap.
+  const landingsFrac = operationalLoad ? round4(operationalLoad.operational_load_landings_delta / 100) : 0;
+  const temperatureFrac = operationalLoad ? round4(operationalLoad.operational_load_temperature_delta / 100) : 0;
+  const imcFrac = operationalLoad ? round4((operationalLoad.operational_load_imc_delta ?? 0) / 100) : 0;
+  const cargaOperacionalFrac = round4(landingsFrac + temperatureFrac + imcFrac);
 
-  // Fórmula empresarial v2: soma somente grandezas adimensionais fracionárias
-  // com sinal de penalidade. Razões diagnósticas e percentuais 0–100 ficam fora.
+  const processSRaw = round4(clampPenalty(fatorizacao.fator_ciclo_embarcado_pct) + fatorProgressivo);
+  const recoveryRequestedFrac = v2 ? Math.max(0, v2.recoveryCreditPoints) / 100 : 0;
+  const recoveryAppliedFrac = v2 ? Math.min(Math.abs(Math.min(0, processSRaw)), recoveryRequestedFrac) : 0;
+  const processSNet = round4(processSRaw + recoveryAppliedFrac);
+  const hvFrac = v2 ? round4(v2.flightHours.netDeltaPoints / 100) : clampPenalty(fatorizacao.fator_hv_quantidade_pct);
+
+  // Fórmula empresarial: soma apenas dimensões explicitamente independentes.
   const totalCalibrado = round4(
     clampPenalty(fatorCircadiano) +
       clampPenalty(fatorizacao.fator_duracao_pct) +
       clampPenalty(fatorRepouso) +
       clampPenalty(fatorizacao.fator_noturno_dep_pct) +
       clampPenalty(fatorizacao.fator_noturno_arr_pct) +
-      clampPenalty(fatorizacao.fator_ciclo_embarcado_pct) +
+      processSNet +
       clampPenalty(fatorizacao.fator_base_away_pct) +
       clampPenalty(fatorizacao.fator_aclimatacao_pct) +
-      clampPenalty(fatorizacao.fator_hv_quantidade_pct) +
-      fatorProgressivo +
-      cargaOperacionalFrac,
+      hvFrac +
+      landingsFrac + temperatureFrac + imcFrac,
   );
   const rawEffectiveness = 100 + totalCalibrado * 100;
   const effectiveness = Math.max(0, Math.min(100, rawEffectiveness));
@@ -481,14 +509,20 @@ export function calcEffectiveness(
     dia_periodo_embarcado: diaPeriodo,
     total_dias_periodo: totalPeriodo,
     componentes: {
-      processo_s: round4(fatorizacao.fator_ciclo_embarcado_pct + fatorProgressivo),
+      processo_s: processSNet,
       processo_c: round4(
         fatorCircadiano + fatorizacao.fator_noturno_dep_pct + fatorizacao.fator_noturno_arr_pct,
       ),
       repouso: round4(fatorRepouso),
-      hv: round4(fatorizacao.fator_hv_quantidade_pct),
+      hv: round4(hvFrac),
       duracao: round4(fatorizacao.fator_duracao_pct),
       carga_operacional: cargaOperacionalFrac,
+      recuperacao: round4(recoveryAppliedFrac),
+      pousos: landingsFrac,
+      temperatura: temperatureFrac,
+      imc: imcFrac,
+      noite_circadiano: round4(fatorCircadiano),
+      hv_credito_aplicado: v2 ? round4(v2.flightHours.priorDayCreditAppliedPoints / 100) : 0,
     },
     operational_load: operationalLoad
       ? {
@@ -496,9 +530,12 @@ export function calcEffectiveness(
           landings_count: operationalLoad.landings_count,
           temperature_max_c: operationalLoad.temperature_max_c,
           weather_evidence_quality: operationalLoad.weather_evidence_quality,
+          imc_evidence_quality: operationalLoad.imc_evidence_quality,
           data_quality: operationalLoad.data_quality,
           landings_delta: operationalLoad.operational_load_landings_delta,
           temperature_delta: operationalLoad.operational_load_temperature_delta,
+          imc_delta: operationalLoad.operational_load_imc_delta,
+          imc_legs: operationalLoad.imc_legs,
           total_delta: operationalLoad.operational_load_total_delta,
         }
       : null,
@@ -599,12 +636,14 @@ export interface AcumuloRollingResult {
   hv_7_dias_min: number;
   hv_28_dias_min: number;
   hv_365_dias_min: number;
+  hv_ano_calendario_min?: number;
   hv_mes_calendario_min: number;
   hv_dia_min: number;
   pct_limite_7d: number;
   pct_limite_28d: number;
   pct_limite_mes_calendario: number;
   pct_limite_365d: number;
+  pct_limite_ano_calendario?: number;
   pct_limite_dia: number;
   repouso_anterior_min: number;
   repouso_suficiente: number;
@@ -794,10 +833,12 @@ export function calcAcumuloRolling(input: AcumuloRollingInput): AcumuloRollingRe
   const d28 = dateOffset(dataReferencia, -27);
   const d365 = dateOffset(dataReferencia, -364);
   const mes = dataReferencia.slice(0, 7);
+  const ano = dataReferencia.slice(0, 4);
 
   let hv7 = 0;
   let hv28 = 0;
   let hv365 = 0;
+  let hvAno = 0;
   let hvMes = 0;
   for (const jornada of jornadas) {
     if (!FDP_STATUS.includes(jornada.status as FrmsStatus)) continue;
@@ -805,6 +846,7 @@ export function calcAcumuloRolling(input: AcumuloRollingInput): AcumuloRollingRe
     if (jornada.data >= d7 && jornada.data <= dataReferencia) hv7 += hv;
     if (jornada.data >= d28 && jornada.data <= dataReferencia) hv28 += hv;
     if (jornada.data >= d365 && jornada.data <= dataReferencia) hv365 += hv;
+    if (jornada.data.startsWith(ano) && jornada.data <= dataReferencia) hvAno += hv;
     if (jornada.data.startsWith(mes) && jornada.data <= dataReferencia) hvMes += hv;
   }
 
@@ -827,12 +869,14 @@ export function calcAcumuloRolling(input: AcumuloRollingInput): AcumuloRollingRe
     hv_7_dias_min: hv7,
     hv_28_dias_min: hv28,
     hv_365_dias_min: hv365,
+    hv_ano_calendario_min: hvAno,
     hv_mes_calendario_min: hvMes,
     hv_dia_min: hvDia,
     pct_limite_7d: pct(hv7, limites.HV_7_DIAS_HORAS),
     pct_limite_28d: pct(hv28, limites.HV_28_DIAS_HORAS),
     pct_limite_mes_calendario: pct(hvMes, limites.HV_MES_HORAS),
     pct_limite_365d: pct(hv365, limites.HV_365_DIAS_HORAS),
+    pct_limite_ano_calendario: pct(hvAno, limites.HV_365_DIAS_HORAS),
     pct_limite_dia: pct(hvDia, limites.HV_DIARIA_HORAS),
     repouso_anterior_min: repouso.minutos,
     // Compatibilidade com persistência 0/1: desconhecido falha fechado como 0.

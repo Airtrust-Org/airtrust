@@ -136,12 +136,14 @@ export interface FrmsAcumuloRolling {
   hv_7_dias_min: number;
   hv_28_dias_min: number;
   hv_365_dias_min: number;
+  hv_ano_calendario_min: number;
   hv_mes_calendario_min: number;
   hv_dia_min: number;
   pct_limite_7d: number;
   pct_limite_28d: number;
   pct_limite_mes_calendario: number;
   pct_limite_365d: number;
+  pct_limite_ano_calendario: number;
   pct_limite_dia: number;
   repouso_anterior_min: number;
   repouso_suficiente: number;
@@ -425,11 +427,17 @@ export interface EffectivenessResult {
     repouso: number;
     hv: number;
     duracao: number;
-    /** Operational Load V1 contribution, as a signed fraction (−0.03 = −3 pts). */
+    /** Legacy aggregate retained for historical rows; V2 renders independent components. */
     carga_operacional: number;
+    recuperacao?: number;
+    pousos?: number;
+    temperatura?: number;
+    imc?: number;
+    noite_circadiano?: number;
+    hv_credito_aplicado?: number;
   };
   /**
-   * Operational Load V1 breakdown (points, not fractions). Present only when the
+   * Operational Load V2 breakdown (points, not fractions). Present only when the
    * caller supplied landings/temperature evidence; null keeps the historical
    * contract for callers that only pass the fatorização.
    */
@@ -439,9 +447,17 @@ export interface EffectivenessResult {
     landings_evidence_quality?: 'OBSERVED' | 'CONFIRMED_ZERO' | 'INCOMPLETE';
     temperature_max_c: number | null;
     weather_evidence_quality: 'OBSERVED' | 'NOT_APPLICABLE' | 'INCOMPLETE';
+    imc_evidence_quality?: 'OBSERVED' | 'NOT_APPLICABLE' | 'INCOMPLETE';
     data_quality: 'COMPLETE' | 'INCOMPLETE' | 'SIGVOOS_UNAVAILABLE';
     landings_delta: number;
     temperature_delta: number;
+    imc_delta?: number;
+    imc_legs?: Array<{
+      legId: string;
+      departure: { condition: 'VMC' | 'IMC' | 'INDETERMINATE'; visibilityM: number | null; ceilingFt: number | null; cavok: boolean };
+      arrival: { condition: 'VMC' | 'IMC' | 'INDETERMINATE'; visibilityM: number | null; ceilingFt: number | null; cavok: boolean };
+      departureDelta: number; arrivalDelta: number; totalDelta: number;
+    }>;
     total_delta: number;
   } | null;
 }

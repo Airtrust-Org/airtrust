@@ -320,6 +320,17 @@ export async function runFrmsIogpShadowPipeline(
   const weatherStations = [...allEvidence]
     .map((item) => item.stationIcao)
     .filter((value): value is string => value !== null);
+  const weatherEvents = [...weatherByLegId.entries()].flatMap(([legId, weather]) =>
+    ([['DEPARTURE', weather.departure], ['ARRIVAL', weather.arrival]] as const).map(([phase, item]) => ({
+      legId,
+      phase,
+      stationIcao: item.stationIcao,
+      observedAtUtc: item.quality === 'UNAVAILABLE' ? null : item.observedAtUtc,
+      eventAtUtc: item.eventAtUtc,
+      rawMetar: item.quality === 'UNAVAILABLE' ? null : item.rawMetar,
+      quality: item.quality,
+    })),
+  );
   const weatherSourceValues = new Set(allEvidence.map((item) => item.quality));
   const weatherSource: FrmsIogpEvaluationSnapshot['evidence']['weatherSource'] =
     weatherSourceValues.size === 0 || (weatherSourceValues.size === 1 && weatherSourceValues.has('UNAVAILABLE'))
@@ -353,6 +364,7 @@ export async function runFrmsIogpShadowPipeline(
       sigvoosLegKeys: uniqueLegs.map((leg, index) => stableLegId(leg, index)),
       weatherStations,
       weatherSource,
+      weatherEvents,
       missingData,
     },
   });

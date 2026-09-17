@@ -12,8 +12,14 @@ interface EffectivenessComponentes {
   repouso: number;
   hv: number;
   duracao: number;
-  /** Operational Load V1 (OPERATIONAL_POLICY_V1), signed fraction. Optional for legacy rows. */
+  /** Legacy aggregate retained for historical rows; V2 uses independent dimensions. */
   carga_operacional?: number;
+  recuperacao?: number;
+  pousos?: number;
+  temperatura?: number;
+  imc?: number;
+  noite_circadiano?: number;
+  hv_credito_aplicado?: number;
 }
 
 export interface OperationalLoadDetail {
@@ -22,9 +28,21 @@ export interface OperationalLoadDetail {
   landings_evidence_quality?: 'OBSERVED' | 'CONFIRMED_ZERO' | 'INCOMPLETE';
   temperature_max_c: number | null;
   weather_evidence_quality: 'OBSERVED' | 'NOT_APPLICABLE' | 'INCOMPLETE';
+  imc_evidence_quality?: 'OBSERVED' | 'NOT_APPLICABLE' | 'INCOMPLETE';
   data_quality: 'COMPLETE' | 'INCOMPLETE' | 'SIGVOOS_UNAVAILABLE';
   landings_delta: number;
   temperature_delta: number;
+  imc_delta?: number;
+  imc_legs?: Array<{
+    legId: string;
+    departure: { condition: 'VMC' | 'IMC' | 'INDETERMINATE' };
+    arrival: { condition: 'VMC' | 'IMC' | 'INDETERMINATE' };
+    departureDelta: number; arrivalDelta: number; totalDelta: number;
+    departureRawMetar?: string | null; arrivalRawMetar?: string | null;
+    departureStationIcao?: string | null; arrivalStationIcao?: string | null;
+    departureObservedAtUtc?: string | null; arrivalObservedAtUtc?: string | null;
+    departureEventAtUtc?: string | null; arrivalEventAtUtc?: string | null;
+  }>;
   total_delta: number;
 }
 
@@ -145,10 +163,14 @@ export default function FrmsEffectivenessPanel({
   const componentLabels: Record<string, string> = {
     processo_s: 'Proc. S',
     processo_c: 'Proc. C',
+    recuperacao: 'Recuperação',
     repouso: 'Repouso',
     hv: 'Horas Voo',
+    pousos: 'Pousos',
+    temperatura: 'Temperatura',
+    imc: 'IMC',
+    noite_circadiano: 'Noite/WOCL',
     duracao: 'Duração',
-    carga_operacional: 'Carga Op.',
   };
   const componentKeys = (Object.keys(componentLabels) as (keyof EffectivenessComponentes)[]).filter(
     (key) => componentes != null && typeof componentes[key] === 'number',
@@ -216,11 +238,25 @@ export default function FrmsEffectivenessPanel({
           })}
           {operationalLoad && (
             <div className="mt-1 rounded-md bg-slate-50 px-2 py-1.5 text-[10px] leading-4 text-slate-500">
-              <p className="font-semibold text-slate-600">
-                Carga operacional: {fmtPoints(operationalLoad.total_delta)}
-              </p>
+              <p className="font-semibold text-slate-600">Fatores offshore independentes</p>
               <p>{landingsEvidenceLine(operationalLoad)}</p>
               <p>{weatherEvidenceLine(operationalLoad)}</p>
+              <p>
+                • IMC: {operationalLoad.imc_evidence_quality === 'OBSERVED'
+                  ? fmtPoints(operationalLoad.imc_delta ?? 0)
+                  : operationalLoad.imc_evidence_quality === 'NOT_APPLICABLE'
+                    ? 'não aplicável'
+                    : 'evidência incompleta (sem presumir VMC)'}
+              </p>
+              {(operationalLoad.imc_legs ?? []).map((leg) => (
+                <div key={leg.legId} className="mt-1 rounded border border-slate-200 bg-white px-2 py-1">
+                  <p className="font-medium text-slate-600">Etapa {leg.legId}</p>
+                  <p>Saída: {leg.departure.condition} · {fmtPoints(leg.departureDelta)} · {leg.departureStationIcao ?? 'estação indisponível'} · {leg.departureObservedAtUtc ?? 'horário indisponível'}</p>
+                  {leg.departureRawMetar && <p className="break-all font-mono text-[9px] text-slate-400">METAR: {leg.departureRawMetar}</p>}
+                  <p>Chegada: {leg.arrival.condition} · {fmtPoints(leg.arrivalDelta)} · {leg.arrivalStationIcao ?? 'estação indisponível'} · {leg.arrivalObservedAtUtc ?? 'horário indisponível'}</p>
+                  {leg.arrivalRawMetar && <p className="break-all font-mono text-[9px] text-slate-400">METAR: {leg.arrivalRawMetar}</p>}
+                </div>
+              ))}
               {operationalLoad.data_quality !== 'COMPLETE' && (
                 <p className="mt-0.5 font-medium text-amber-700">
                   {operationalLoad.data_quality === 'SIGVOOS_UNAVAILABLE'
@@ -229,7 +265,7 @@ export default function FrmsEffectivenessPanel({
                 </p>
               )}
               <p className="mt-0.5 text-slate-400">
-                Coeficientes internos OPERATIONAL_POLICY_V1 — conservadores e sujeitos a calibração.
+                Coeficientes da revisão governada {operationalLoad.policy_version}; cada dimensão possui limiar e cap próprios.
               </p>
             </div>
           )}

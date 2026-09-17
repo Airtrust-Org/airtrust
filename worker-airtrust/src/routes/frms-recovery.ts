@@ -8,6 +8,8 @@ import {
   deriveRecoveryEvidence,
   type RecoveryActivityType,
 } from '../lib/frms/recovery-model';
+import { computeRecoveryCredit, resolveOperationalPolicyV2 } from '../lib/frms/operational-policy-v2';
+import { resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
 
 const router = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
 router.use('*', auth());
@@ -218,23 +220,6 @@ async function getFlightSummary(
   };
 }
 
-async function getSleepTargetHours(db: D1Database): Promise<number> {
-  try {
-    const row = await db
-      .prepare(
-        `SELECT valor_numerico
-           FROM frms_configuracao_limites
-          WHERE nome = 'HORAS_SONO_PADRAO' AND ativo = 1 AND deleted_at IS NULL
-          LIMIT 1`,
-      )
-      .first<{ valor_numerico: number }>();
-    const value = Number(row?.valor_numerico);
-    return Number.isFinite(value) && value >= 4 && value <= 12 ? value : 8;
-  } catch {
-    return 8;
-  }
-}
-
 async function countPriorQualifyingNights(
   db: D1Database,
   empresaId: number,
@@ -322,6 +307,7 @@ async function upsertRecoveryAssessment(params: {
   recoveryDayId: string;
   activityType: RecoveryActivityType;
   immediateCalloutRequired: boolean | null;
+  totalDutyMinutes?: number | null;
 }): Promise<Record<string, unknown>> {
   const evidence = await loadRecoveryEvidence(
     params.db,
@@ -329,7 +315,15 @@ async function upsertRecoveryAssessment(params: {
     params.funcionarioId,
     params.referenceDate,
   );
-  const sleepTargetHours = await getSleepTargetHours(params.db);
+  const operationalContext = await resolveFrmsOperationalContext(params.db, {
+    empresaId: params.empresaId,
+    referenceAt: params.referenceDate,
+    funcionarioId: params.funcionarioId,
+  });
+  const v2Policy = operationalContext.parameters.FRMS_V2_ENABLED === 1
+    ? resolveOperationalPolicyV2(operationalContext.parameters)
+    : null;
+  const sleepTargetHours = v2Policy?.recoveryAbsoluteRestFullHours ?? Number(operationalContext.parameters.HORAS_SONO_PADRAO);
   const priorNights = await countPriorQualifyingNights(
     params.db,
     params.empresaId,
@@ -346,6 +340,16 @@ async function upsertRecoveryAssessment(params: {
     activityKnown: params.activityType !== 'UNKNOWN',
   });
   const consecutiveQualifyingNights = result.qualifyingRecoveryNight ? priorNights + 1 : 0;
+  const noWorkHours = params.totalDutyMinutes == null
+    ? (params.activityType === 'STANDBY_HOME_HOTEL' || params.activityType === 'STANDBY_ONSITE' ? 24 : null)
+    : Math.max(0, (1440 - params.totalDutyMinutes) / 60);
+  const credit = v2Policy ? computeRecoveryCredit({
+    activityType: params.activityType === 'OFF_DUTY' || params.activityType === 'STANDBY_HOME_HOTEL' || params.activityType === 'STANDBY_ONSITE'
+      ? params.activityType : 'OTHER',
+    absoluteRestHours: evidence.sleepHours24h,
+    noWorkHours,
+    immediateCalloutRequired: params.immediateCalloutRequired,
+  }, v2Policy) : { creditPoints: 0, basePoints: 0, restFactor: 0, calloutMultiplier: 1, eligible: false };
   const now = nowSql();
 
   const existing = await params.db
@@ -375,8 +379,10 @@ async function upsertRecoveryAssessment(params: {
          recovery_state, recovery_confidence, qualifying_recovery_night,
          consecutive_qualifying_nights, sleep_hours_24h, sleep_target_hours,
          kss_score, readiness_classification, effectiveness_delta_pct,
+         absolute_rest_hours, no_work_hours, recovery_credit_points, recovery_credit_base_points,
+         recovery_rest_factor, recovery_callout_multiplier, config_revision_id, policy_version,
          reasons_json, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'recovery-v1-evidence-only', ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'recovery-v2-parametric', ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       id,
@@ -394,6 +400,14 @@ async function upsertRecoveryAssessment(params: {
       sleepTargetHours,
       evidence.kssScore,
       evidence.readinessClassification,
+      evidence.sleepHours24h,
+      noWorkHours,
+      credit.creditPoints,
+      credit.basePoints,
+      credit.restFactor,
+      credit.calloutMultiplier,
+      operationalContext.configRevisionId,
+      operationalContext.modelVersion,
       JSON.stringify(result.reasons),
       now,
       now,
@@ -410,6 +424,14 @@ async function upsertRecoveryAssessment(params: {
     sleep_target_hours: sleepTargetHours,
     kss_score: evidence.kssScore,
     readiness_classification: evidence.readinessClassification,
+    absolute_rest_hours: evidence.sleepHours24h,
+    no_work_hours: noWorkHours,
+    recovery_credit_points: credit.creditPoints,
+    recovery_credit_base_points: credit.basePoints,
+    recovery_rest_factor: credit.restFactor,
+    recovery_callout_multiplier: credit.calloutMultiplier,
+    config_revision_id: operationalContext.configRevisionId,
+    policy_version: operationalContext.modelVersion,
     reasons: result.reasons,
     effectiveness_delta_pct: null,
   };
@@ -424,13 +446,13 @@ export async function refreshRecoveryAssessmentForActivityDate(params: {
   try {
     const activity = await params.db
       .prepare(
-        `SELECT id, activity_type, immediate_callout_required
+        `SELECT id, activity_type, immediate_callout_required, total_duty_minutes
            FROM frms_recovery_activity_day
           WHERE empresa_id = ? AND funcionario_id = ? AND reference_date = ? AND deleted_at IS NULL
           LIMIT 1`,
       )
       .bind(params.empresaId, params.funcionarioId, params.referenceDate)
-      .first<{ id: string; activity_type: RecoveryActivityType; immediate_callout_required: number | null }>();
+      .first<{ id: string; activity_type: RecoveryActivityType; immediate_callout_required: number | null; total_duty_minutes: number | null }>();
     if (!activity?.id) return null;
     return upsertRecoveryAssessment({
       db: params.db,
@@ -441,6 +463,7 @@ export async function refreshRecoveryAssessmentForActivityDate(params: {
       activityType: activity.activity_type,
       immediateCalloutRequired:
         activity.immediate_callout_required == null ? null : Number(activity.immediate_callout_required) === 1,
+      totalDutyMinutes: activity.total_duty_minutes,
     });
   } catch {
     // Migration may not yet be applied in older environments.
@@ -481,6 +504,8 @@ router.get('/context', async (c) => {
                 readiness_assessment_id, model_version, recovery_state, recovery_confidence,
                 qualifying_recovery_night, consecutive_qualifying_nights, sleep_hours_24h,
                 sleep_target_hours, kss_score, readiness_classification, effectiveness_delta_pct,
+                absolute_rest_hours, no_work_hours, recovery_credit_points, recovery_credit_base_points,
+                recovery_rest_factor, recovery_callout_multiplier, config_revision_id, policy_version,
                 reasons_json, created_at, updated_at, deleted_at
            FROM frms_recovery_assessment
           WHERE empresa_id = ? AND funcionario_id = ? AND reference_date = ? AND deleted_at IS NULL
@@ -640,6 +665,7 @@ router.post('/activity', async (c) => {
     recoveryDayId: activityId,
     activityType: data.activity_type,
     immediateCalloutRequired: data.immediate_callout_required ?? null,
+    totalDutyMinutes,
   });
 
   return c.json(

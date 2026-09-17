@@ -1,0 +1,8 @@
+{
+  "changeId": "frms-parametric-v2-0498",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0498_frms_parametric_v2.sql",
+  "fileHash": "3156038f3584f534e11b657b8c88e859e93596c8433f8d8dea5b0c648fffbd59",
+  "planPath": "worker-airtrust/schema-v2/plans/frms-parametric-v2-0498.md",
+  "planHash": "712ce37a46a58dee7df3d03166aa121042f104ebadb793ade1dc6a79f46c3e7f"
+}

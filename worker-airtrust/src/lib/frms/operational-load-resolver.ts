@@ -1,5 +1,5 @@
 /**
- * Resolves the two inputs of Operational Load V1 for a single FRMS journey:
+ * Resolves the two inputs of Operational Load V2 for a single FRMS journey:
  *
  * - landings: SIGVOOS `pousos_diurnos + pousos_noturnos`, deduplicated by
  *   physical leg (distinct `cv_voo_etapas.id`), so two crew rows for the same
@@ -14,11 +14,8 @@
  * so missing source data can never masquerade as confirmed compliance.
  */
 
-import {
-  computeOperationalLoadV1,
-  type LandingsEvidenceQuality,
-  type OperationalLoadV1Result,
-} from './operational-load';
+import { computeOperationalLoadV2, type LandingsEvidenceQuality, type OperationalLoadV2Result } from './operational-load';
+import type { FrmsOperationalPolicyV2, ImcLegInput } from './operational-policy-v2';
 
 export type JornadaLandingsSource =
   | 'SIGVOOS_OBSERVED'
@@ -122,6 +119,43 @@ export async function readPersistedObservedTemperatureMaxC(
   }
 }
 
+export async function readPersistedImcLegs(
+  db: D1Database,
+  empresaId: number,
+  jornadaId: string,
+): Promise<ImcLegInput[]> {
+  try {
+    const row = await db.prepare(
+      `SELECT evidence_hash FROM frms_jornada_avaliacoes
+       WHERE jornada_id = ? AND empresa_id = ? ORDER BY created_at DESC LIMIT 1`,
+    ).bind(jornadaId, empresaId).first<{ evidence_hash: string | null }>();
+    if (!row?.evidence_hash) return [];
+    const parsed = JSON.parse(row.evidence_hash) as {
+      weatherEvents?: Array<{ legId?: unknown; phase?: unknown; rawMetar?: unknown; stationIcao?: unknown; observedAtUtc?: unknown; eventAtUtc?: unknown }>;
+    };
+    const grouped = new Map<string, ImcLegInput>();
+    for (const event of parsed.weatherEvents ?? []) {
+      const legId = typeof event.legId === 'string' ? event.legId : null;
+      if (!legId) continue;
+      const current = grouped.get(legId) ?? { legId };
+      const raw = typeof event.rawMetar === 'string' ? event.rawMetar : null;
+      const station = typeof event.stationIcao === 'string' ? event.stationIcao : null;
+      const observed = typeof event.observedAtUtc === 'string' ? event.observedAtUtc : null;
+      const eventAt = typeof event.eventAtUtc === 'string' ? event.eventAtUtc : null;
+      if (event.phase === 'DEPARTURE') {
+        current.departureRawMetar = raw; current.departureStationIcao = station;
+        current.departureObservedAtUtc = observed; current.departureEventAtUtc = eventAt;
+      }
+      if (event.phase === 'ARRIVAL') {
+        current.arrivalRawMetar = raw; current.arrivalStationIcao = station;
+        current.arrivalObservedAtUtc = observed; current.arrivalEventAtUtc = eventAt;
+      }
+      grouped.set(legId, current);
+    }
+    return [...grouped.values()];
+  } catch { return []; }
+}
+
 function mapLandingsEvidenceQuality(source: JornadaLandingsSource): LandingsEvidenceQuality {
   if (source === 'SIGVOOS_OBSERVED') return 'OBSERVED';
   if (source === 'SIGVOOS_CONFIRMED_ZERO') return 'CONFIRMED_ZERO';
@@ -135,8 +169,8 @@ function mapLandingsEvidenceQuality(source: JornadaLandingsSource): LandingsEvid
  */
 export async function resolveOperationalLoadForJornada(
   db: D1Database,
-  input: { empresaId: number; funcionarioId: number; dataYmd: string; jornadaId: string },
-): Promise<OperationalLoadV1Result & { landings_source: JornadaLandingsSource }> {
+  input: { empresaId: number; funcionarioId: number; dataYmd: string; jornadaId: string; policy: FrmsOperationalPolicyV2; policyVersion: string },
+): Promise<OperationalLoadV2Result & { landings_source: JornadaLandingsSource }> {
   const landings = await resolveJornadaLandings(
     db,
     input.empresaId,
@@ -147,10 +181,14 @@ export async function resolveOperationalLoadForJornada(
     landings.source === 'SIGVOOS_CONFIRMED_ZERO'
       ? null
       : await readPersistedObservedTemperatureMaxC(db, input.empresaId, input.jornadaId);
-  const result = computeOperationalLoadV1({
+  const imcLegs = landings.source === 'SIGVOOS_CONFIRMED_ZERO' ? [] : await readPersistedImcLegs(db, input.empresaId, input.jornadaId);
+  const result = computeOperationalLoadV2({
     landingsCount: landings.landingsCount,
     landingsEvidenceQuality: mapLandingsEvidenceQuality(landings.source),
     temperatureMaxC,
+    imcLegs,
+    policy: input.policy,
+    policyVersion: input.policyVersion,
   });
   return { ...result, landings_source: landings.source };
 }

@@ -39,6 +39,16 @@ export interface FrmsIogpEvaluationSnapshot {
     sigvoosLegKeys: string[];
     weatherStations: string[];
     weatherSource: 'DECEA_REDEMET' | 'MIXED' | 'UNAVAILABLE';
+    /** Raw observed METAR/SPECI evidence by physical leg/event for auditable VMC/IMC classification. */
+    weatherEvents?: Array<{
+      legId: string;
+      phase: 'DEPARTURE' | 'ARRIVAL';
+      stationIcao: string | null;
+      observedAtUtc: string | null;
+      eventAtUtc: string | null;
+      rawMetar: string | null;
+      quality: 'EXACT_STATION' | 'STALE' | 'UNAVAILABLE';
+    }>;
     missingData: string[];
   };
 }

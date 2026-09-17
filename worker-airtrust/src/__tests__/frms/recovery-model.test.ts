@@ -37,7 +37,7 @@ describe('deriveRecoveryEvidence', () => {
     });
   });
 
-  it('treats onsite standby as restricted even with adequate sleep', () => {
+  it('recognises onsite standby as a recovery opportunity while numeric credit remains separately lower', () => {
     expect(
       deriveRecoveryEvidence({
         activityType: 'STANDBY_ONSITE',
@@ -45,7 +45,7 @@ describe('deriveRecoveryEvidence', () => {
         sleepTargetHours: 8,
         consecutiveQualifyingNights: 0,
       }),
-    ).toMatchObject({ state: 'LIMITED', qualifyingRecoveryNight: false });
+    ).toMatchObject({ state: 'PARTIAL', qualifyingRecoveryNight: true });
   });
 
   it('treats one unrestricted adequate-sleep night as partial recovery', () => {

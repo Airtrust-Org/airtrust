@@ -368,7 +368,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('renderiza as seis faixas de sono alinhadas aos degraus do cálculo', () => {
     render(<FrmsCheckinFadiga />);
 
-    const sonoFieldset = screen.getAllByText('Horas de sono nas últimas 24h')[1]?.closest('fieldset');
+    const sonoFieldset = screen.getAllByText('Repouso absoluto nas últimas 24h')[1]?.closest('fieldset');
     expect(sonoFieldset).toBeTruthy();
     expect(within(sonoFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).value)).toEqual([
       'menos4',
@@ -387,7 +387,7 @@ describe('FrmsCheckinFadiga UI', () => {
       '8 horas ou mais',
     ]);
 
-    const qualidadeFieldset = screen.getAllByText('Qualidade do sono')[1]?.closest('fieldset');
+    const qualidadeFieldset = screen.getAllByText('Qualidade do repouso absoluto')[1]?.closest('fieldset');
     expect(qualidadeFieldset).toBeTruthy();
     expect(within(qualidadeFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).value)).toEqual([
       '5',
@@ -654,8 +654,8 @@ describe('FrmsCheckinFadiga UI', () => {
     const status = screen.getByRole('status');
     expect(status).toBeInTheDocument();
     expect(status).toHaveTextContent(/respostas pendentes/);
-    expect(status).toHaveTextContent(/Horas de sono/);
-    expect(status).toHaveTextContent(/Qualidade do sono/);
+    expect(status).toHaveTextContent(/Repouso absoluto/);
+    expect(status).toHaveTextContent(/Qualidade do repouso absoluto/);
     expect(status).toHaveTextContent(/e mais/);
   });
 

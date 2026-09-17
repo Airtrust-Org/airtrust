@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildFrmsFortnightIndicatorMap,
+  LEGACY_FORTNIGHT_POLICY,
   type FrmsFortnightIndicatorItemSeed,
 } from '../../lib/frms/fortnight-indicator';
 
@@ -243,6 +244,27 @@ describe('frms fortnight indicator', () => {
         'JORNADA_MEDIA_CURTA',
       ]),
     );
+  });
+
+  it('V2 reduz o acumulado desde o primeiro crédito real e não infere recuperação por dias sem jornada', () => {
+    const baseItems = Array.from({ length: 10 }, (_, index) => seed(
+      `2026-05-${String(index + 1).padStart(2, '0')}`,
+      index + 1,
+      { duracao_jornada_minutos: 480, horas_voo_minutos: 180, recovery_credit_points: 0 },
+    ));
+    const v2Policy = { ...LEGACY_FORTNIGHT_POLICY, impactDaysWithoutDuty: 0 };
+    const withoutCredit = buildFrmsFortnightIndicatorMap({
+      windowStart: '2026-05-01', windowEnd: '2026-05-14', items: baseItems, policy: v2Policy,
+    }).get('2026-05-10::10');
+    const withCredit = buildFrmsFortnightIndicatorMap({
+      windowStart: '2026-05-01', windowEnd: '2026-05-14',
+      items: baseItems.map((item, index) => index === 9 ? { ...item, recovery_credit_points: 4 } : item),
+      policy: v2Policy,
+    }).get('2026-05-10::10');
+
+    expect(withCredit?.atenuadores_aplicados.map((item) => item.codigo)).toContain('CREDITO_RECUPERACAO_REAL');
+    expect(withCredit?.atenuadores_aplicados.map((item) => item.codigo)).not.toContain('DIAS_SEM_JORNADA_NO_PERIODO');
+    expect(withCredit?.score_acumulado).toBeCloseTo((withoutCredit?.score_acumulado ?? 0) - 4, 5);
   });
 
   it('rotula apenas data futura como PROJECAO', () => {

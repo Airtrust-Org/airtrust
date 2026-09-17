@@ -375,6 +375,8 @@ export default function FrmsFichaTripulante() {
   const alertasMes: FrmsAlertaRow[] = (alertasMesRaw as FrmsAlertaRow[] | null) ?? [];
   const rolling = acumulo?.rolling;
   const limites = acumulo?.limites ?? null;
+  const accumulationWindowMode = Number(limites?.ACCUMULATION_WINDOW_MODE ?? 0);
+  const useCalendarAccumulation = accumulationWindowMode === 0 || (accumulationWindowMode === 2 && Number(limites?.ACCUMULATION_USE_MONTH_CALENDAR ?? 1) === 1);
   const limiteAvisoPct = Number(limites?.ALERTA_AVISO_PCT ?? 85);
   const limiteCriticoPct = Number(limites?.ALERTA_CRITICO_PCT ?? 95);
   const limiteViolacaoPct = Number(limites?.ALERTA_VIOLACAO_PCT ?? 101);
@@ -623,15 +625,15 @@ export default function FrmsFichaTripulante() {
                   {/* Janela 30 dias — HV */}
                   <div className="rounded-xl border border-gray-200 bg-white p-4">
                     <ProgressBar
-                      pct={rolling?.pct_limite_mes_calendario ?? rolling?.pct_limite_28d ?? 0}
-                      label="HV 30 dias"
+                      pct={useCalendarAccumulation ? (rolling?.pct_limite_mes_calendario ?? 0) : (rolling?.pct_limite_28d ?? 0)}
+                      label={useCalendarAccumulation ? 'HV mês calendário' : 'HV 28 dias corridos'}
                       limiteAvisoPct={limiteAvisoPct}
                       limiteCriticoPct={limiteCriticoPct}
                       limiteViolacaoPct={limiteViolacaoPct}
                     />
                     <p className="mt-2 text-center text-xs text-gray-500">
-                      {formatMin(rolling?.hv_mes_calendario_min ?? 0)} /{' '}
-                      {limites?.HV_MES_HORAS ?? 90}h
+                      {formatMin(useCalendarAccumulation ? (rolling?.hv_mes_calendario_min ?? 0) : (rolling?.hv_28_dias_min ?? 0))} /{' '}
+                      {useCalendarAccumulation ? (limites?.HV_MES_HORAS ?? 90) : (limites?.HV_28_DIAS_HORAS ?? 93)}h
                     </p>
                   </div>
                   {/* HV Diária */}
@@ -650,14 +652,14 @@ export default function FrmsFichaTripulante() {
                   {/* Janela 365 dias — Acúmulo */}
                   <div className="rounded-xl border border-gray-200 bg-white p-4">
                     <ProgressBar
-                      pct={Math.min(100, acumulo?.mensal?.hv_fatorizada_pct ?? 0)}
-                      label="Acúmulo 365 dias"
+                      pct={useCalendarAccumulation ? (rolling?.pct_limite_ano_calendario ?? 0) : (rolling?.pct_limite_365d ?? 0)}
+                      label={useCalendarAccumulation ? 'HV ano calendário' : 'HV 365 dias corridos'}
                       limiteAvisoPct={limiteAvisoPct}
                       limiteCriticoPct={limiteCriticoPct}
                       limiteViolacaoPct={limiteViolacaoPct}
                     />
                     <p className="mt-2 text-center text-xs text-gray-500">
-                      {formatMin(acumulo?.mensal?.hv_realizada_min ?? 0)} HV acumuladas
+                      {formatMin(useCalendarAccumulation ? (rolling?.hv_ano_calendario_min ?? 0) : (rolling?.hv_365_dias_min ?? 0))} / {limites?.HV_365_DIAS_HORAS ?? 930}h
                     </p>
                   </div>
                 </>
