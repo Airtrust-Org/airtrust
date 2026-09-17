@@ -28,8 +28,10 @@ function db(options: { existing?: Record<string, number>; simulatorCode?: string
       return { bind: (...args: unknown[]) => ({
         first: async () => {
           if (sql.includes('FROM simulador_agendamentos')) {
-            const like = String(args[1] || '');
-            const match = Object.entries(options.existing || {}).find(([id]) => like.includes(`:${id}]`));
+            const literalMarker = String(args[1] || '');
+            const match = Object.entries(options.existing || {}).find(([id]) =>
+              literalMarker.includes(`:${id}]`),
+            );
             return match ? { id: match[1] } : null;
           }
           if (sql.includes('FROM simuladores')) return { id: Number(args[0]), aeronave_codigo: options.simulatorCode === undefined ? 'AW139' : options.simulatorCode, codigo_aeronave: null, status: 'ATIVO' };
@@ -64,6 +66,39 @@ describe('V3 simulator planning materialization', () => {
   it('uses shared creation for different curricular models in the same physical block', async () => {
     const result = await materializeSimulatorPlanningV3Draft({ db: db(), empresaId: 7, planningId: 9, snapshot: snapshot([block('b1', [101, 202])]), instructorId: 3, simulatorByEquipment: { AW139: 4 } });
     expect(result).toMatchObject({ success: true, materialized_sessions: { b1: 601 } }); expect(executeSharedSessionCreation).toHaveBeenCalledTimes(1); expect(executeNormalSessionCreation).not.toHaveBeenCalled();
+  });
+
+  it('reuses an existing session with a literal marker query instead of LIKE', async () => {
+    const preparedSql: string[] = [];
+    const boundValues: unknown[][] = [];
+    const database = db({ existing: { '196:999049:112+2:999049:112': 888 } });
+    const originalPrepare = database.prepare.bind(database);
+    database.prepare = (sql: string) => {
+      preparedSql.push(sql);
+      const statement = originalPrepare(sql);
+      return {
+        bind: (...args: unknown[]) => {
+          boundValues.push(args);
+          return statement.bind(...args);
+        },
+      };
+    };
+    const result = await materializeSimulatorPlanningV3Draft({
+      db: database,
+      empresaId: 7,
+      planningId: 9,
+      snapshot: snapshot([block('196:999049:112+2:999049:112')]),
+      instructorId: 3,
+      simulatorByEquipment: { AW139: 4 },
+    });
+    expect(result).toMatchObject({ success: true, created: 0, reused: 1 });
+    const lookupIndex = preparedSql.findIndex((sql) => sql.includes('FROM simulador_agendamentos'));
+    expect(preparedSql[lookupIndex]).toContain("instr(COALESCE(observacoes, ''), ?) > 0");
+    expect(preparedSql[lookupIndex]).not.toContain('LIKE');
+    expect(String(boundValues[lookupIndex]?.[1] || '')).toBe(
+      '[sim-v3:draft-1:196:999049:112+2:999049:112]',
+    );
+    expect(executeNormalSessionCreation).not.toHaveBeenCalled();
   });
 
   it('is idempotent when a block already carries its materialized session id', async () => {
