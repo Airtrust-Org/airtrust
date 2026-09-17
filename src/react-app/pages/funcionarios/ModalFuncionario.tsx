@@ -1,8 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 
 import { API_BASE_URL, getAccessToken, fetchWithAuth } from '@/react-app/config/api';
-import { CARGOS, SETORES } from '@/config/constants';
 import {
   X,
   ShieldCheck,
@@ -295,6 +294,13 @@ export default function ModalFuncionario({
     // Escala
     quinzena: '' as QuinzenaPreferencia,
   });
+  const initialOrgSelectionRef = useRef<{
+    setor_id: string;
+    setor: string;
+    funcao_id: string;
+    funcao: string;
+    cargo: string;
+  } | null>(null);
   const [enderecoExpandido, setEnderecoExpandido] = useState(false);
   const [modelosAeronave, setModelosAeronave] = useState<OptionItem[]>([]);
   const [funcoesList, setFuncoesList] = useState<OptionItem[]>([]);
@@ -302,6 +308,7 @@ export default function ModalFuncionario({
   const [setorFuncoes, setSetorFuncoes] = useState<Array<{ setor_id: number; funcao_id: number }>>(
     [],
   );
+  const [lookupsFailed, setLookupsFailed] = useState(false);
   const [qualificacoes, setQualificacoes] = useState<QualItem[]>([]);
   const [licencas, setLicencas] = useState<Licenca[]>([]);
   const [modalLicencaAberto, setModalLicencaAberto] = useState(false);
@@ -310,6 +317,7 @@ export default function ModalFuncionario({
   useEffect(() => {
     // Carregar dados das APIs de lookup ao invés de usar constantes locais
     const carregarLookups = async () => {
+      setLookupsFailed(false);
       try {
         const token = getAccessToken();
         const timestamp = new Date().getTime();
@@ -324,57 +332,53 @@ export default function ModalFuncionario({
             },
           },
         );
+        let catalogLoaded = false;
         if (complianceCatalogResponse.ok) {
           const catalog = await complianceCatalogResponse.json();
-          setFuncoesList(catalog.data?.funcoes || []);
-          setSetoresList(catalog.data?.setores || []);
-          setSetorFuncoes(catalog.data?.setor_funcoes || []);
+          const catalogData = catalog.data || {};
+          setFuncoesList(catalogData.funcoes || []);
+          setSetoresList(catalogData.setores || []);
+          setSetorFuncoes(catalogData.setor_funcoes || []);
+          catalogLoaded = true;
         }
 
-        // Compatibilidade: os endpoints diretos continuam como fallback de catálogo.
-        const funcResponse = await fetch(`${API_BASE_URL}/funcoes?t=${timestamp}`, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache',
-            Pragma: 'no-cache',
-            Authorization: token ? `Bearer ${token}` : '',
-          },
-        });
-        if (funcResponse.ok && !complianceCatalogResponse.ok) {
-          const funcData = await funcResponse.json();
-          setFuncoesList(funcData.data || []);
-        } else {
-          console.warn('Erro ao carregar funções, usando padrões');
-          const cargosFormatted = CARGOS.map((c: unknown, idx: number) => {
-            const cargo = c as { label?: string; value?: string } | string;
-            const nome =
-              typeof cargo === 'object' ? cargo.label || cargo.value || String(c) : String(cargo);
-            return { id: idx + 1, nome };
-          });
-          setFuncoesList(cargosFormatted);
-        }
+        // Compatibilidade: os endpoints diretos só entram quando o catálogo canônico falhar.
+        if (!catalogLoaded) {
+          setSetorFuncoes([]);
 
-        // Carregar setores do endpoint
-        const setResponse = await fetch(`${API_BASE_URL}/setores?t=${timestamp}`, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache',
-            Pragma: 'no-cache',
-            Authorization: token ? `Bearer ${token}` : '',
-          },
-        });
-        if (setResponse.ok && !complianceCatalogResponse.ok) {
-          const setData = await setResponse.json();
-          setSetoresList(setData.data || []);
-        } else {
-          console.warn('Erro ao carregar setores, usando padrões');
-          const setoresFormatted = SETORES.map((s: unknown, idx: number) => {
-            const setor = s as { label?: string; value?: string } | string;
-            const nome =
-              typeof setor === 'object' ? setor.label || setor.value || String(s) : String(setor);
-            return { id: idx + 1, nome };
+          const funcResponse = await fetch(`${API_BASE_URL}/funcoes?t=${timestamp}`, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache',
+              Pragma: 'no-cache',
+              Authorization: token ? `Bearer ${token}` : '',
+            },
           });
-          setSetoresList(setoresFormatted);
+          if (funcResponse.ok) {
+            const funcData = await funcResponse.json();
+            setFuncoesList(funcData.data || []);
+          } else {
+            console.warn('Erro ao carregar funções do catálogo e do endpoint direto');
+            setFuncoesList([]);
+            setLookupsFailed(true);
+          }
+
+          const setResponse = await fetch(`${API_BASE_URL}/setores?t=${timestamp}`, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache',
+              Pragma: 'no-cache',
+              Authorization: token ? `Bearer ${token}` : '',
+            },
+          });
+          if (setResponse.ok) {
+            const setData = await setResponse.json();
+            setSetoresList(setData.data || []);
+          } else {
+            console.warn('Erro ao carregar setores do catálogo e do endpoint direto');
+            setSetoresList([]);
+            setLookupsFailed(true);
+          }
         }
 
         // Carregar modelos de aeronave do endpoint
@@ -395,22 +399,12 @@ export default function ModalFuncionario({
         }
       } catch (error) {
         console.error('Erro ao carregar dados de lookup:', error);
-        // Fallback: usar constantes locais
-        const cargosFormatted = CARGOS.map((c: unknown, idx: number) => {
-          const cargo = c as { label?: string; value?: string } | string;
-          const nome =
-            typeof cargo === 'object' ? cargo.label || cargo.value || String(c) : String(cargo);
-          return { id: idx + 1, nome };
-        });
-        const setoresFormatted = SETORES.map((s: unknown, idx: number) => {
-          const setor = s as { label?: string; value?: string } | string;
-          const nome =
-            typeof setor === 'object' ? setor.label || setor.value || String(s) : String(setor);
-          return { id: idx + 1, nome };
-        });
-        setFuncoesList(cargosFormatted);
-        setSetoresList(setoresFormatted);
+        // Fail closed: IDs locais fabricados podem apontar para registros errados no D1.
+        setFuncoesList([]);
+        setSetoresList([]);
+        setSetorFuncoes([]);
         setModelosAeronave([]);
+        setLookupsFailed(true);
       }
     };
 
@@ -420,6 +414,7 @@ export default function ModalFuncionario({
   useEffect(() => {
     const carregarDetalhes = async () => {
       if (!funcionario) {
+        initialOrgSelectionRef.current = null;
         setFormData({
           id: null,
           nome: '',
@@ -582,6 +577,14 @@ export default function ModalFuncionario({
         } catch (err) {
           console.warn('Erro ao buscar licenças:', err);
         }
+
+        initialOrgSelectionRef.current = {
+          setor_id: f.setor_id ? String(f.setor_id) : '',
+          setor: f.setor || '',
+          funcao_id: f.funcao_id ? String(f.funcao_id) : '',
+          funcao: f.funcao || '',
+          cargo: f.cargo || f.funcao || '',
+        };
 
         setFormData({
           id: f.id || null,
@@ -748,7 +751,7 @@ export default function ModalFuncionario({
       : '';
 
     // Converter campos para formato do backend
-    const dadosParaBackend = {
+    const dadosParaBackend: Record<string, unknown> = {
       // ID (apenas para edição)
       ...(formData.id ? { id: formData.id } : {}),
 
@@ -806,6 +809,26 @@ export default function ModalFuncionario({
       observacoes: formData.observacoes?.trim() || null,
       quinzena: formData.quinzena || null,
     };
+
+    // Em edição, alterações simples (ex.: nome/telefone) não podem regravar
+    // setor/função por efeito colateral de lookup ou estado intermediário do modal.
+    if (formData.id && initialOrgSelectionRef.current) {
+      const initialOrg = initialOrgSelectionRef.current;
+      const orgChanged =
+        formData.setor_id !== initialOrg.setor_id ||
+        formData.setor !== initialOrg.setor ||
+        formData.funcao_id !== initialOrg.funcao_id ||
+        formData.funcao !== initialOrg.funcao ||
+        formData.cargo !== initialOrg.cargo;
+
+      if (!orgChanged) {
+        delete dadosParaBackend.setor_id;
+        delete dadosParaBackend.setor;
+        delete dadosParaBackend.funcao_id;
+        delete dadosParaBackend.funcao;
+        delete dadosParaBackend.cargo;
+      }
+    }
 
     // Enviando dados para o backend
     onSalvar(dadosParaBackend);
@@ -1110,7 +1133,11 @@ export default function ModalFuncionario({
                       ))}
                   </select>
                   {funcoesList.length === 0 && (
-                    <p className="text-xs text-orange-600 mt-1">⚠️ Carregando funções...</p>
+                    <p className={`text-xs mt-1 ${lookupsFailed ? 'text-red-600' : 'text-orange-600'}`}>
+                      {lookupsFailed
+                        ? 'Não foi possível carregar as funções. O cadastro foi bloqueado para evitar perda de dados.'
+                        : 'Carregando funções...'}
+                    </p>
                   )}
                 </div>
 
@@ -1141,7 +1168,11 @@ export default function ModalFuncionario({
                       ))}
                   </select>
                   {setoresList.length === 0 && (
-                    <p className="text-xs text-orange-600 mt-1">⚠️ Carregando setores...</p>
+                    <p className={`text-xs mt-1 ${lookupsFailed ? 'text-red-600' : 'text-orange-600'}`}>
+                      {lookupsFailed
+                        ? 'Não foi possível carregar os setores. O cadastro foi bloqueado para evitar perda de dados.'
+                        : 'Carregando setores...'}
+                    </p>
                   )}
                 </div>
 
@@ -1939,7 +1970,8 @@ export default function ModalFuncionario({
           <div className="flex gap-3 p-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/70">
             <button
               type="submit"
-              className="flex-1  py-3 bg-primary text-white rounded-lg hover:bg-primary/90 font-medium transition"
+              disabled={lookupsFailed || funcoesList.length === 0 || setoresList.length === 0}
+              className="flex-1 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Salvar
             </button>
