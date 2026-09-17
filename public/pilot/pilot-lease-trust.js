@@ -1,4 +1,4 @@
-export const PILOT_OFFLINE_APP_VERSION = '1.0.0';
+export const PILOT_OFFLINE_APP_VERSION = '1.1.0';
 
 // Fail-closed by design. Only public verification keys are tracked here.
 // The matching private JWK must remain a Worker secret, and every public key

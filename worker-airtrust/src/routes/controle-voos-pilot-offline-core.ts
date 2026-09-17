@@ -374,6 +374,7 @@ pilotOffline.get(
       destino,
       alternado,
       aeronave,
+      natureza,
     ] = await Promise.all([
       getActiveRdvByFlight(c.env.DB, voo.id, empresaId),
       c.env.DB
@@ -471,6 +472,10 @@ pilotOffline.get(
             .bind(voo.aeronave_id, empresaId)
             .first<AircraftRow>()
         : Promise.resolve(null),
+      c.env.DB
+        .prepare('SELECT id, codigo, nome FROM cv_naturezas_voo WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1')
+        .bind(voo.natureza_voo_id, empresaId)
+        .first<{ id: number; codigo: string; nome: string }>(),
     ]);
 
     const tripulantes = crewResult.results || [];
@@ -571,6 +576,7 @@ pilotOffline.get(
         destino,
         alternado,
         aeronave,
+        natureza,
         tripulantes,
         etapas,
         abastecimentos,
