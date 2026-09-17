@@ -55,28 +55,66 @@ export function parseInteger(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-export function calcHorasVoadas(decolagemLocal, pousoLocal) {
-  const startText = String(decolagemLocal || '').trim();
-  const endText = String(pousoLocal || '').trim();
-  if (!startText || !endText) return null;
-  const clock = (value) => {
-    const match = value.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
-    if (!match) return null;
-    const seconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
-    return seconds >= 0 && seconds < 86400 ? seconds : null;
-  };
-  const startClock = clock(startText);
-  const endClock = clock(endText);
-  if (startClock !== null && endClock !== null) {
-    let elapsed = endClock - startClock;
-    if (elapsed < 0) elapsed += 86400;
-    if (elapsed <= 0) return null;
-    return Number((elapsed / 3600).toFixed(2));
+export function toDurationInput(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  const match = text.match(/^(\d{1,2}):(\d{2})$/);
+  if (match && Number(match[2]) <= 59) {
+    return String(Number(match[1])).padStart(2, '0') + ':' + match[2];
   }
-  const start = new Date(startText);
-  const end = new Date(endText);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return null;
-  return Number(((end.getTime() - start.getTime()) / 3_600_000).toFixed(2));
+  // Compatibilidade com rascunhos antigos que guardavam horas decimais.
+  const decimal = Number(text.replace(',', '.'));
+  if (!Number.isFinite(decimal) || decimal < 0 || decimal >= 24) return '';
+  const totalMinutes = Math.round(decimal * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+}
+
+export function calcClockDurationHhMm(startValue, endValue) {
+  const startText = String(startValue || '').trim();
+  const endText = String(endValue || '').trim();
+  if (!startText || !endText) return '';
+  const clockSeconds = (value) => {
+    const match = value.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (!match) return null;
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    const seconds = Number(match[3] || 0);
+    if (hours > 23 || minutes > 59 || seconds > 59) return null;
+    return hours * 3600 + minutes * 60 + seconds;
+  };
+  const startClock = clockSeconds(startText);
+  const endClock = clockSeconds(endText);
+  let elapsedSeconds;
+  if (startClock !== null && endClock !== null) {
+    elapsedSeconds = endClock - startClock;
+    if (elapsedSeconds < 0) elapsedSeconds += 24 * 3600;
+  } else {
+    const start = new Date(startText);
+    const end = new Date(endText);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return '';
+    elapsedSeconds = Math.round((end.getTime() - start.getTime()) / 1000);
+    if (elapsedSeconds < 0) return '';
+  }
+  const totalMinutes = Math.max(0, Math.round(elapsedSeconds / 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+}
+
+export function payloadToKg(value, unit) {
+  const numeric = parseNumber(value);
+  if (numeric === null) return null;
+  const normalizedUnit = String(unit || 'KG').trim().toUpperCase();
+  return Number((normalizedUnit === 'LB' ? numeric / 2.2046226218 : numeric).toFixed(3));
+}
+
+export function calcHorasVoadas(decolagemLocal, pousoLocal) {
+  const duration = calcClockDurationHhMm(decolagemLocal, pousoLocal);
+  if (!duration) return null;
+  const [hours, minutes] = duration.split(':').map(Number);
+  return Number((hours + minutes / 60).toFixed(2));
 }
 
 export function calcConsumoCombustivel(decolagem, pouso) {
@@ -154,6 +192,8 @@ function defaultStageFromPackage(packageData) {
     horario_decolagem: toInputTime(voo.horario_real_partida || voo.horario_previsto_partida),
     horario_pouso: toInputTime(voo.horario_real_chegada || voo.horario_previsto_chegada),
     horario_motor_desligado: toInputTime(voo.horario_real_chegada),
+    tempo_decolagem_pouso: '',
+    tempo_total: '',
     tempo_ifr: '',
     tempo_noturno: '',
     pousos_diurnos: '',
@@ -161,6 +201,7 @@ function defaultStageFromPackage(packageData) {
     starts: '',
     pax: '',
     payload: '',
+    unidade_payload: 'KG',
     combustivel_inicio: '',
     combustivel_fim: '',
     unidade_combustivel: '',
@@ -182,13 +223,20 @@ export function buildStageDraftsFromPackage(packageData) {
     horario_decolagem: toInputTime(stage.horario_decolagem),
     horario_pouso: toInputTime(stage.horario_pouso),
     horario_motor_desligado: toInputTime(stage.horario_motor_desligado),
-    tempo_ifr: toInputNumber(stage.tempo_ifr),
-    tempo_noturno: toInputNumber(stage.tempo_noturno),
+    tempo_decolagem_pouso:
+      stage.tempo_decolagem_pouso ||
+      calcClockDurationHhMm(toInputTime(stage.horario_decolagem), toInputTime(stage.horario_pouso)),
+    tempo_total:
+      stage.tempo_total ||
+      calcClockDurationHhMm(toInputTime(stage.horario_motor_ligado), toInputTime(stage.horario_motor_desligado)),
+    tempo_ifr: toDurationInput(stage.tempo_ifr),
+    tempo_noturno: toDurationInput(stage.tempo_noturno),
     pousos_diurnos: toInputNumber(stage.pousos_diurnos),
     pousos_noturnos: toInputNumber(stage.pousos_noturnos),
     starts: toInputNumber(stage.starts),
     pax: toInputNumber(stage.pax),
     payload: toInputNumber(stage.payload),
+    unidade_payload: 'KG',
     combustivel_inicio: toInputNumber(stage.combustivel_inicio),
     combustivel_fim: toInputNumber(stage.combustivel_fim),
     unidade_combustivel: stage.unidade_combustivel || '',
@@ -255,9 +303,17 @@ export function validateRdvForm(form, packageData) {
   if (form.horario_decolagem_real && form.horario_pouso_real) {
     const start = String(form.horario_decolagem_real);
     const end = String(form.horario_pouso_real);
-    const timeOnly = /^\d{2}:\d{2}(?::\d{2})?$/;
-    if (!timeOnly.test(start) && !timeOnly.test(end) && end < start) {
-      errors.horario_pouso_real = 'Pouso não pode ser anterior à decolagem.';
+    const timeOnly = /^\d{1,2}:\d{2}(?::\d{2})?$/;
+    if (!timeOnly.test(start) && !timeOnly.test(end)) {
+      const startInstant = new Date(start);
+      const endInstant = new Date(end);
+      if (
+        Number.isFinite(startInstant.getTime()) &&
+        Number.isFinite(endInstant.getTime()) &&
+        endInstant < startInstant
+      ) {
+        errors.horario_pouso_real = 'Pouso não pode ser anterior à decolagem.';
+      }
     }
   }
 
@@ -292,14 +348,35 @@ export function validateStageDrafts(stageDrafts) {
     if (stage.horario_decolagem && stage.horario_pouso) {
       const start = String(stage.horario_decolagem);
       const end = String(stage.horario_pouso);
-      const timeOnly = /^\d{2}:\d{2}(?::\d{2})?$/;
-      if (!timeOnly.test(start) && !timeOnly.test(end) && end < start) {
-        errors.push('Etapa ' + (index + 1) + ': pouso anterior à decolagem.');
+      const timeOnly = /^\d{1,2}:\d{2}(?::\d{2})?$/;
+      if (!timeOnly.test(start) && !timeOnly.test(end)) {
+        const startInstant = new Date(start);
+        const endInstant = new Date(end);
+        if (
+          Number.isFinite(startInstant.getTime()) &&
+          Number.isFinite(endInstant.getTime()) &&
+          endInstant < startInstant
+        ) {
+          errors.push('Etapa ' + (index + 1) + ': pouso anterior à decolagem.');
+        }
+      }
+    }
+
+    for (const [field, label] of [
+      ['tempo_ifr', 'IFR'],
+      ['tempo_noturno', 'noturno'],
+    ]) {
+      const value = String(stage[field] || '').trim();
+      if (value && !/^(?:\d{1,2}):[0-5]\d$/.test(value)) {
+        errors.push('Etapa ' + (index + 1) + ': ' + label + ' deve estar em HH:MM.');
       }
     }
 
     const startFuel = parseNumber(stage.combustivel_inicio);
     const endFuel = parseNumber(stage.combustivel_fim);
+    if ((startFuel !== null || endFuel !== null) && !String(stage.unidade_combustivel || '').trim()) {
+      errors.push('Etapa ' + (index + 1) + ': selecione a unidade do combustível.');
+    }
     if (startFuel !== null && endFuel !== null && endFuel > startFuel) {
       errors.push('Etapa ' + (index + 1) + ': combustível final maior que inicial.');
     }
@@ -346,8 +423,10 @@ export function applySafeStageAggregates(form, stageDrafts) {
 
   if (last.pax !== '') next.pob = last.pax;
   else if (first.pax !== '') next.pob = first.pax;
-  if (last.payload !== '') next.carga_kg = last.payload;
-  else if (first.payload !== '') next.carga_kg = first.payload;
+  const lastPayloadKg = payloadToKg(last.payload, last.unidade_payload);
+  const firstPayloadKg = payloadToKg(first.payload, first.unidade_payload);
+  if (lastPayloadKg !== null) next.carga_kg = String(lastPayloadKg);
+  else if (firstPayloadKg !== null) next.carga_kg = String(firstPayloadKg);
 
   // Ciclos não são derivados de pousos nesta camada offline. O valor só
   // muda quando o piloto o informa explicitamente ou quando uma futura

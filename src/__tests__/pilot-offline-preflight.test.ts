@@ -29,8 +29,8 @@ describe('Pilot complete offline preflight', () => {
   });
 
   it('transforma Preparar para voo em gate de pacote + lease + rascunho + shell', () => {
-    expect(index).toContain('Preparação completa para operação offline');
-    expect(index).toContain('PRONTO PARA USO OFFLINE');
+    expect(index).toContain('Antes do voo');
+    expect(index).toContain('Preparar para voo');
     expect(preflight).toContain("'Preparar para voo'");
     expect(preflight).toContain('ensureOperationalDraftOpen(runId)');
     expect(preflight).toContain('assertPilotShellReady()');
