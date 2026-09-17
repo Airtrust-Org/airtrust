@@ -35,6 +35,15 @@ describe('Pilot self-service flight creation contract', () => {
     expect(text).toContain('entrada_livre_temporaria: manualMode');
   });
 
+  it('resolves typed aerodrome or ICAO against the active tenant catalog before creating a temporary entry', () => {
+    const text = source('src/routes/controle-voos-pilot-self-create.ts');
+
+    expect(text).toContain("UPPER(codigo) = ?");
+    expect(text).toContain("UPPER(COALESCE(codigo_icao, '')) = ?");
+    expect(text).toContain('CONTROLE_VOOS_PILOT_CREATE_AMBIGUOUS_AIRPORT');
+    expect(text).toContain('empresa_id = ? AND ativo = 1 AND deleted_at IS NULL');
+  });
+
   it('does not grant the generic editor middleware to a student', () => {
     const text = source('src/routes/controle-voos-pilot-self-create.ts');
 

@@ -23,6 +23,7 @@ vi.mock('@/react-app/hooks/usePermissions', () => ({
 const aeroportos = [
   { id: 1, codigo: 'SBSP', codigo_icao: 'SBSP', nome: 'Congonhas' },
   { id: 2, codigo: 'SBRJ', codigo_icao: 'SBRJ', nome: 'Santos Dumont' },
+  { id: 3, codigo: 'FPAG', codigo_icao: '9PLG', nome: 'ANITA GARIBALDI' },
 ];
 const tipos = [{ id: 10, nome: 'Táxi aéreo' }];
 const naturezas = [{ id: 20, nome: 'Transporte' }];
@@ -69,8 +70,7 @@ const tipoSelect = () => screen.getByLabelText(/^Tipo de voo/);
 const naturezaSelect = () => screen.getByLabelText(/^Natureza/);
 
 async function waitForAirportCatalog() {
-  const origem = origemSelect();
-  await waitFor(() => expect(within(origem).getByRole('option', { name: /SBSP/ })).toBeInTheDocument());
+  await waitFor(() => expect(getMock).toHaveBeenCalledWith('/controle-voos/catalogos/aeroportos'));
   await waitFor(() =>
     expect(within(aeronaveSelect()).getByRole('option', { name: /PR-ABC/ })).toBeInTheDocument(),
   );
@@ -82,8 +82,8 @@ async function fillCoordinationRequiredFields() {
   await waitFor(() => expect(screen.getByLabelText('PIC (Comandante)')).not.toBeDisabled());
   fireEvent.change(screen.getByLabelText('PIC (Comandante)'), { target: { value: '101' } });
   fireEvent.change(screen.getByLabelText('SIC (Comandante ou Copiloto)'), { target: { value: '102' } });
-  fireEvent.change(origemSelect(), { target: { value: '1' } });
-  fireEvent.change(destinoSelect(), { target: { value: '2' } });
+  fireEvent.change(origemSelect(), { target: { value: 'SBSP — Congonhas' } });
+  fireEvent.change(destinoSelect(), { target: { value: 'SBRJ — Santos Dumont' } });
   fireEvent.change(tipoSelect(), { target: { value: '10' } });
   fireEvent.change(naturezaSelect(), { target: { value: '20' } });
 }
@@ -92,7 +92,7 @@ async function fillPilotRequiredFields() {
   await waitFor(() => expect(within(aeronaveSelect()).getByRole('option', { name: /PR-ABC/ })).toBeInTheDocument());
   fireEvent.change(aeronaveSelect(), { target: { value: '30' } });
   fireEvent.change(screen.getByLabelText('Aeródromo de origem'), { target: { value: 'SBME' } });
-  fireEvent.change(screen.getByLabelText('Aeródromo de destino'), { target: { value: 'P-51' } });
+  fireEvent.change(screen.getByLabelText('Aeródromo de destino'), { target: { value: '9PLG' } });
   fireEvent.change(screen.getByLabelText('Tipo de voo'), { target: { value: 'Transporte offshore' } });
   fireEvent.change(screen.getByLabelText('Natureza'), { target: { value: 'PETROBRAS' } });
 }
@@ -192,7 +192,7 @@ describe('ControleVoosNovoVooDialog', () => {
       aeronave_id: 30,
       prefixo: 'PR-ABC',
       origem_texto: 'SBME',
-      destino_texto: 'P-51',
+      destino_texto: '9PLG',
       tipo_voo_texto: 'Transporte offshore',
       natureza_voo_codigo: 'PETROBRAS',
       observacoes: 'teste pilot',
@@ -204,6 +204,26 @@ describe('ControleVoosNovoVooDialog', () => {
     expect(typeof body.horario_previsto_chegada).toBe('string');
     expect(onCreated).toHaveBeenCalledWith(created);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolve ponto da Coordenação pelo código ICAO da plataforma', async () => {
+    mockCatalogos();
+    postMock.mockResolvedValue({ success: true, data: { data: { id: 89 } } });
+    renderDialog('coordenacao');
+
+    await waitForAirportCatalog();
+    fireEvent.change(aeronaveSelect(), { target: { value: '30' } });
+    await waitFor(() => expect(screen.getByLabelText('PIC (Comandante)')).not.toBeDisabled());
+    fireEvent.change(screen.getByLabelText('PIC (Comandante)'), { target: { value: '101' } });
+    fireEvent.change(screen.getByLabelText('SIC (Comandante ou Copiloto)'), { target: { value: '102' } });
+    fireEvent.change(origemSelect(), { target: { value: 'SBSP' } });
+    fireEvent.change(destinoSelect(), { target: { value: '9PLG' } });
+    fireEvent.change(tipoSelect(), { target: { value: '10' } });
+    fireEvent.change(naturezaSelect(), { target: { value: '20' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar voo' }));
+
+    await waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
+    expect(postMock.mock.calls[0][1]).toMatchObject({ origem_id: 1, destino_id: 3 });
   });
 
   it('cria voo da Coordenação com PIC e SIC elegíveis da aeronave', async () => {

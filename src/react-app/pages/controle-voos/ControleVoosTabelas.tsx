@@ -18,7 +18,7 @@ import { apiClient } from '@/react-app/services/apiClient';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 
-type CatalogName = 'aeroportos' | 'tipos' | 'naturezas' | 'motivos';
+type CatalogName = 'pontos' | 'aeroportos' | 'tipos' | 'naturezas' | 'motivos';
 type CatalogItem = {
   id: number;
   codigo?: string | null;
@@ -29,6 +29,13 @@ type CatalogItem = {
   uf?: string | null;
   tipo?: string | null;
   descricao?: string | null;
+  latitude_dms?: string | null;
+  longitude_dms?: string | null;
+  elevacao_ft?: number | null;
+  coordenada_valida?: number | boolean | null;
+  permite_origem_destino?: number | boolean | null;
+  revisao_pendente?: number | boolean | null;
+  fonte_pagina?: number | null;
   ativo?: number | boolean | null;
   ordem?: number | null;
 };
@@ -42,6 +49,7 @@ type EditorState = {
 };
 
 const EMPTY_STATE: CatalogState = {
+  pontos: [],
   aeroportos: [],
   tipos: [],
   naturezas: [],
@@ -52,6 +60,12 @@ const CATALOG_META: Record<
   CatalogName,
   { label: string; singular: string; description: string; icon: React.ReactNode }
 > = {
+  pontos: {
+    label: 'Pontos de navegação',
+    singular: 'ponto de navegação',
+    description: 'Base canônica importada com código, coordenadas, elevação e classificação operacional.',
+    icon: <MapPin className="h-4 w-4" />,
+  },
   aeroportos: {
     label: 'Aeródromos',
     singular: 'aeródromo',
@@ -117,7 +131,8 @@ async function loadCatalog(name: CatalogName) {
 export default function ControleVoosTabelas() {
   const { isAdmin, isGestor } = usePermissions();
   const canManage = isAdmin || isGestor;
-  const [activeCatalog, setActiveCatalog] = useState<CatalogName>('aeroportos');
+  const [activeCatalog, setActiveCatalog] = useState<CatalogName>('pontos');
+  const [pontoSearch, setPontoSearch] = useState('');
   const [data, setData] = useState<CatalogState>(EMPTY_STATE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -127,13 +142,14 @@ export default function ControleVoosTabelas() {
     setLoading(true);
     setError(null);
     try {
-      const [aeroportos, tipos, naturezas, motivos] = await Promise.all([
+      const [pontos, aeroportos, tipos, naturezas, motivos] = await Promise.all([
+        loadCatalog('pontos'),
         loadCatalog('aeroportos'),
         loadCatalog('tipos'),
         loadCatalog('naturezas'),
         loadCatalog('motivos'),
       ]);
-      setData({ aeroportos, tipos, naturezas, motivos });
+      setData({ pontos, aeroportos, tipos, naturezas, motivos });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar cadastros operacionais.');
     } finally {
@@ -156,6 +172,19 @@ export default function ControleVoosTabelas() {
       ),
     [data],
   );
+
+  const filteredItems = useMemo(() => {
+    const items = data[activeCatalog];
+    if (activeCatalog !== 'pontos') return items;
+    const query = pontoSearch.trim().toLocaleUpperCase('pt-BR');
+    if (!query) return items;
+    return items.filter((item) =>
+      [item.codigo, item.codigo_icao, item.nome, item.tipo]
+        .filter(Boolean)
+        .some((value) => String(value).toLocaleUpperCase('pt-BR').includes(query)),
+    );
+  }, [activeCatalog, data, pontoSearch]);
+  const displayedItems = activeCatalog === 'pontos' ? filteredItems.slice(0, 300) : filteredItems;
 
   async function toggleActive(item: CatalogItem) {
     if (!canManage) return;
@@ -203,7 +232,7 @@ export default function ControleVoosTabelas() {
             <strong>Fonte única de dados:</strong> aeronaves, prefixos e modelos não são duplicados aqui. O Controle de Voos referencia a frota cadastrada em Configurações.
           </div>
 
-          <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {(Object.keys(CATALOG_META) as CatalogName[]).map((key) => {
               const meta = CATALOG_META[key];
               const selected = activeCatalog === key;
@@ -244,10 +273,12 @@ export default function ControleVoosTabelas() {
               <div>
                 <h2 className="font-semibold text-slate-900 dark:text-white">{CATALOG_META[activeCatalog].label}</h2>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Itens inativos permanecem no histórico, mas não aparecem em novos voos.
+                  {activeCatalog === 'pontos'
+                    ? 'Cadastro canônico importado da fonte operacional. Classificações inferidas ficam identificadas para revisão.'
+                    : 'Itens inativos permanecem no histórico, mas não aparecem em novos voos.'}
                 </p>
               </div>
-              {canManage && (
+              {canManage && activeCatalog !== 'pontos' && (
                 <button
                   type="button"
                   onClick={() => setEditor({ catalog: activeCatalog, item: null })}
@@ -259,12 +290,26 @@ export default function ControleVoosTabelas() {
               )}
             </div>
 
+            {activeCatalog === 'pontos' && !loading && (
+              <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
+                <input
+                  value={pontoSearch}
+                  onChange={(event) => setPontoSearch(event.target.value)}
+                  placeholder="Buscar por aeródromo, código ICAO, nome ou tipo"
+                  className="w-full max-w-xl rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                />
+                <p className="mt-2 text-xs text-slate-500">
+                  {filteredItems.length > 300 ? `Exibindo 300 de ${filteredItems.length} resultados. Refine a busca para localizar um ponto específico.` : `${filteredItems.length} resultado(s).`}
+                </p>
+              </div>
+            )}
+
             {loading ? (
               <div className="p-10 text-center">
                 <Loader2 className="mx-auto h-7 w-7 animate-spin text-slate-400" />
                 <p className="mt-2 text-sm text-slate-500">Carregando cadastros…</p>
               </div>
-            ) : data[activeCatalog].length === 0 ? (
+            ) : filteredItems.length === 0 ? (
               <div className="p-10 text-center text-sm text-slate-500">
                 Nenhum cadastro encontrado nesta empresa.
               </div>
@@ -273,23 +318,38 @@ export default function ControleVoosTabelas() {
                 <table className="w-full min-w-[760px] text-sm">
                   <thead className="bg-slate-50 dark:bg-slate-800/70">
                     <tr>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Código</th>
+                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' || activeCatalog === 'aeroportos' ? 'Aeródromo' : 'Código'}</th>
                       {activeCatalog === 'aeroportos' && (
                         <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">ICAO / IATA</th>
+                      )}
+                      {activeCatalog === 'pontos' && (
+                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Código ICAO</th>
+                      )}
+                      {activeCatalog === 'pontos' && (
+                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Coordenadas / elevação</th>
                       )}
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Nome</th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Tipo / Localidade</th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status</th>
-                      {canManage && <th className="px-4 py-3 text-right font-medium text-slate-600 dark:text-slate-300">Ações</th>}
+                      {canManage && activeCatalog !== 'pontos' && <th className="px-4 py-3 text-right font-medium text-slate-600 dark:text-slate-300">Ações</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {data[activeCatalog].map((item) => (
+                    {displayedItems.map((item) => (
                       <tr key={item.id} className={!isActive(item) ? 'opacity-60' : ''}>
                         <td className="px-4 py-3 font-mono text-slate-700 dark:text-slate-300">{item.codigo || '—'}</td>
                         {activeCatalog === 'aeroportos' && (
                           <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
                             {[item.codigo_icao, item.codigo_iata].filter(Boolean).join(' / ') || '—'}
+                          </td>
+                        )}
+                        {activeCatalog === 'pontos' && (
+                          <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{item.codigo_icao || '—'}</td>
+                        )}
+                        {activeCatalog === 'pontos' && (
+                          <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">
+                            <div className="font-mono">{[item.latitude_dms, item.longitude_dms].filter(Boolean).join(' / ') || '—'}</div>
+                            <div className="mt-0.5">{item.elevacao_ft == null ? 'Elevação não informada' : `${item.elevacao_ft} ft`}</div>
                           </td>
                         )}
                         <td className="px-4 py-3">

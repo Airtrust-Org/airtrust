@@ -154,6 +154,11 @@ const statusTransitions: Record<FlightStatus, FlightStatus[]> = {
 };
 
 const catalogos: Record<string, CatalogConfig> = {
+  pontos: {
+    table: 'cv_pontos_navegacao',
+    fields: 'id, codigo, codigo_icao, nome, tipo, latitude_dms, longitude_dms, latitude_decimal, longitude_decimal, elevacao_ft, declinacao_magnetica_graus, declinacao_magnetica_direcao, coordenada_valida, permite_origem_destino, revisao_pendente, classificacao_origem, fonte, fonte_referencia, fonte_pagina, ativo',
+    orderBy: 'codigo ASC',
+  },
   aeroportos: {
     table: 'cv_aeroportos',
     fields: 'id, codigo, codigo_icao, codigo_iata, nome, cidade, uf, tipo, descricao, ativo, ordem',
@@ -750,6 +755,7 @@ function buildMergedFlight(existing: FlightRow, input: FlightInput): FlightInput
 
 function catalogKey(rawName: string): keyof typeof catalogos | null {
   const name = rawName.trim().toLowerCase().replace(/_/g, '-');
+  if (name === 'pontos' || name === 'pontos-navegacao' || name === 'waypoints') return 'pontos';
   if (name === 'aeroportos') return 'aeroportos';
   if (name === 'tipos' || name === 'tipos-voo') return 'tipos';
   if (name === 'naturezas' || name === 'naturezas-voo') return 'naturezas';
@@ -1942,6 +1948,15 @@ controleVoos.get('/catalogos/:nome', auth(), async (c) => {
     values.push(['1', 'true', 'sim'].includes(ativo.trim().toLowerCase()) ? 1 : 0);
   } else {
     filters.push('ativo = 1');
+  }
+
+  if (key === 'pontos') {
+    const tipo = c.req.query('tipo')?.trim();
+    if (tipo) { filters.push('tipo = ?'); values.push(tipo); }
+    const usage = c.req.query('permite_origem_destino');
+    if (usage !== undefined) { filters.push('permite_origem_destino = ?'); values.push(['1', 'true', 'sim'].includes(usage.trim().toLowerCase()) ? 1 : 0); }
+    const q = c.req.query('q')?.trim();
+    if (q) { filters.push("(instr(UPPER(codigo), UPPER(?)) > 0 OR instr(UPPER(nome), UPPER(?)) > 0 OR instr(UPPER(COALESCE(codigo_icao, '')), UPPER(?)) > 0)"); values.push(q, q, q); }
   }
 
   if (key === 'motivos') {
