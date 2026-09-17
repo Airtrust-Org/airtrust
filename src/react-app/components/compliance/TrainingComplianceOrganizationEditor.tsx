@@ -193,9 +193,11 @@ export function TrainingComplianceOrganizationEditor() {
             ))}
           </select>
         </label>
-        <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Aeronave / equipamento
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <label htmlFor="training-compliance-aircraft-model">Aeronave / equipamento</label>
           <select
+            id="training-compliance-aircraft-model"
+            aria-describedby="training-compliance-aircraft-model-help"
             value={aeronaveModelo}
             disabled={!setorId}
             onChange={(e) => setAeronaveModelo(e.target.value)}
@@ -208,10 +210,13 @@ export function TrainingComplianceOrganizationEditor() {
               </option>
             ))}
           </select>
-          <span className="mt-1 block normal-case font-normal tracking-normal text-slate-400">
+          <span
+            id="training-compliance-aircraft-model-help"
+            className="mt-1 block normal-case font-normal tracking-normal text-slate-400"
+          >
             Use para treinamentos específicos de AW139, SK76 ou outro modelo cadastrado.
           </span>
-        </label>
+        </div>
       </div>
       {!setorId ? (
         <div className="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">

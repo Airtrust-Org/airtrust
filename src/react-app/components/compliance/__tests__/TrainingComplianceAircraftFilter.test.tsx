@@ -106,7 +106,7 @@ describe('Training Compliance aircraft filter', () => {
       target: { value: 'AW139' },
     });
 
-    const trainingRow = screen.getByText('AW139 Recorrente').closest('tr')!;
+    const trainingRow = (await screen.findByText('AW139 Recorrente')).closest('tr')!;
     fireEvent.change(within(trainingRow).getByRole('combobox'), {
       target: { value: 'OBRIGATORIA' },
     });
