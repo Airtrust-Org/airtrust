@@ -3,6 +3,7 @@ const DB_VERSION = 2;
 const VAULT_CONFIG_ID = 'vault-config';
 const WRAP_AAD = new TextEncoder().encode('airtrust-pilot-vault-key-v1');
 const KDF_ITERATIONS = 210000;
+const DEVICE_CONFIG_VERSION = 2;
 
 export const PILOT_VAULT_STORES = Object.freeze([
   'meta',
@@ -63,7 +64,8 @@ function openPilotDatabase() {
 
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onerror = () => reject(request.error || new Error('Falha ao abrir armazenamento offline'));
+    request.onerror = () =>
+      reject(request.error || new Error('Falha ao abrir armazenamento offline'));
     request.onupgradeneeded = () => {
       const database = request.result;
       for (const storeName of PILOT_VAULT_STORES) {
@@ -120,6 +122,68 @@ export class PilotVault {
     return Boolean(record);
   }
 
+  async getVaultConfig() {
+    const transaction = this.database.transaction('meta', 'readonly');
+    const record = await requestResult(transaction.objectStore('meta').get(VAULT_CONFIG_ID));
+    await transactionDone(transaction);
+    return record || null;
+  }
+
+  async provisionDeviceKey() {
+    if (await this.isProvisioned()) {
+      throw new Error('Este tablet já possui um vault offline configurado.');
+    }
+    const deviceKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, [
+      'encrypt',
+      'decrypt',
+    ]);
+    const transaction = this.database.transaction('meta', 'readwrite');
+    transaction.objectStore('meta').put({
+      id: VAULT_CONFIG_ID,
+      version: DEVICE_CONFIG_VERSION,
+      cipher: 'AES-GCM-256',
+      key_protection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY',
+      device_key: deviceKey,
+      created_at: new Date().toISOString(),
+    });
+    await transactionDone(transaction);
+    this.masterKey = deviceKey;
+  }
+
+  async openAutomatically() {
+    const config = await this.getVaultConfig();
+    if (!config) {
+      await this.provisionDeviceKey();
+      return { status: 'ready', migrated: false };
+    }
+    if (Number(config.version) >= DEVICE_CONFIG_VERSION && config.device_key) {
+      this.masterKey = config.device_key;
+      return { status: 'ready', migrated: false };
+    }
+    return { status: 'legacy-pin-required', migrated: false };
+  }
+
+  async migrateLegacyPin(pin) {
+    const config = await this.getVaultConfig();
+    if (!config || Number(config.version) !== 1) {
+      throw new Error('Armazenamento antigo não encontrado.');
+    }
+    await this.unlock(pin);
+    const transaction = this.database.transaction('meta', 'readwrite');
+    transaction.objectStore('meta').put({
+      id: VAULT_CONFIG_ID,
+      version: DEVICE_CONFIG_VERSION,
+      cipher: 'AES-GCM-256',
+      key_protection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY',
+      device_key: this.masterKey,
+      migrated_from: 'PBKDF2_PIN_V1',
+      migrated_at: new Date().toISOString(),
+      created_at: config.created_at || new Date().toISOString(),
+    });
+    await transactionDone(transaction);
+    return { status: 'ready', migrated: true };
+  }
+
   async getOrCreateDeviceId() {
     const id = 'pilot-device-identity';
     let transaction = this.database.transaction('meta', 'readonly');
@@ -148,7 +212,7 @@ export class PilotVault {
 
   async provision(pin) {
     if (typeof pin !== 'string' || pin.length < 6) {
-      throw new Error('O PIN offline deve ter pelo menos 6 caracteres.');
+      throw new Error('O código local antigo deve ter pelo menos 6 caracteres.');
     }
     if (await this.isProvisioned()) {
       throw new Error('Este tablet já possui um vault offline configurado.');
@@ -223,7 +287,7 @@ export class PilotVault {
       );
     } catch {
       this.masterKey = null;
-      throw new Error('PIN offline incorreto ou vault local inválido.');
+      throw new Error('Código local antigo incorreto ou armazenamento local inválido.');
     }
   }
 

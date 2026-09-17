@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error public Pilot App module is plain JS by design.
 import {
   applySafeStageAggregates,
+  applyStageContinuity,
   calcClockDurationHhMm,
   payloadToKg,
   toDurationInput,
@@ -28,14 +29,26 @@ describe('Pilot RDV operational calculations', () => {
     const form = { ciclos: '3', horas_voadas: '', numero_pousos: '', pob: '', carga_kg: '' };
     const next = applySafeStageAggregates(form, [
       {
-        horario_decolagem: '23:30', horario_pouso: '00:15',
-        pousos_diurnos: '0', pousos_noturnos: '1', pax: '8', payload: '220.46226218', unidade_payload: 'LB',
-        combustivel_inicio: '', combustivel_fim: '',
+        horario_decolagem: '23:30',
+        horario_pouso: '00:15',
+        pousos_diurnos: '0',
+        pousos_noturnos: '1',
+        pax: '8',
+        payload: '220.46226218',
+        unidade_payload: 'LB',
+        combustivel_inicio: '',
+        combustivel_fim: '',
       },
       {
-        horario_decolagem: '01:00', horario_pouso: '01:45',
-        pousos_diurnos: '1', pousos_noturnos: '0', pax: '7', payload: '90', unidade_payload: 'KG',
-        combustivel_inicio: '', combustivel_fim: '',
+        horario_decolagem: '01:00',
+        horario_pouso: '01:45',
+        pousos_diurnos: '1',
+        pousos_noturnos: '0',
+        pax: '7',
+        payload: '90',
+        unidade_payload: 'KG',
+        combustivel_inicio: '',
+        combustivel_fim: '',
       },
     ]);
     expect(next.horas_voadas).toBe('1.5');
@@ -45,12 +58,61 @@ describe('Pilot RDV operational calculations', () => {
     expect(next.ciclos).toBe('3');
   });
 
+  it('encadeia pouso sem corte como partida da próxima perna sem sobrescrever valor manual', () => {
+    const stages = [
+      {
+        fields: { destino_icao: 'P-01', horario_pouso: '09:40', horario_motor_desligado: '' },
+      },
+      {
+        fields: { origem_icao: 'P-01', horario_motor_ligado: '', horario_decolagem: '09:50' },
+      },
+    ];
+
+    applyStageContinuity(stages);
+    expect(stages[1].fields.horario_motor_ligado).toBe('09:40');
+    expect(stages[1].continuity_start_derived).toBe(true);
+    expect(
+      calcClockDurationHhMm(
+        stages[1].fields.horario_motor_ligado,
+        stages[1].fields.horario_decolagem,
+      ),
+    ).toBe('00:10');
+
+    stages[0].fields.horario_pouso = '09:42';
+    applyStageContinuity(stages);
+    expect(stages[1].fields.horario_motor_ligado).toBe('09:42');
+
+    stages[1].continuity_start_derived = false;
+    stages[1].fields.horario_motor_ligado = '09:44';
+    stages[0].fields.horario_pouso = '09:45';
+    applyStageContinuity(stages);
+    expect(stages[1].fields.horario_motor_ligado).toBe('09:44');
+  });
+
+  it('limpa a partida derivada quando passa a existir corte na perna anterior', () => {
+    const stages = [
+      { fields: { destino_icao: 'P-01', horario_pouso: '09:40', horario_motor_desligado: '' } },
+      { fields: { origem_icao: 'P-01', horario_motor_ligado: '' } },
+    ];
+    applyStageContinuity(stages);
+    stages[0].fields.horario_motor_desligado = '09:43';
+    applyStageContinuity(stages);
+    expect(stages[1].fields.horario_motor_ligado).toBe('');
+    expect(stages[1].continuity_start_derived).toBe(false);
+  });
+
   it('mostra validações específicas para duração e unidade de combustível', () => {
-    const errors = validateStageDrafts([{
-      origem_icao: 'SBME', destino_icao: 'SBCB',
-      tempo_ifr: '1.5', tempo_noturno: '00:20',
-      combustivel_inicio: '1200', combustivel_fim: '1100', unidade_combustivel: '',
-    }]);
+    const errors = validateStageDrafts([
+      {
+        origem_icao: 'SBME',
+        destino_icao: 'SBCB',
+        tempo_ifr: '1.5',
+        tempo_noturno: '00:20',
+        combustivel_inicio: '1200',
+        combustivel_fim: '1100',
+        unidade_combustivel: '',
+      },
+    ]);
     expect(errors).toContain('Etapa 1: IFR deve estar em HH:MM.');
     expect(errors).toContain('Etapa 1: selecione a unidade do combustível.');
   });
