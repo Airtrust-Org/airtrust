@@ -18,6 +18,7 @@ assert_count prerequisite-0491 1 "SELECT COUNT(*) count FROM airtrust_schema_cha
 assert_count unapplied-change 0 "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id='$CHANGE_ID';"
 assert_count treinamento-requisitos-table 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name='treinamento_requisitos';"
 assert_count aircraft-column-not-present 0 "SELECT COUNT(*) count FROM pragma_table_info('treinamento_requisitos') WHERE name='aeronave_modelo';"
+assert_count aircraft-lookup-index-not-present 0 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_treinamento_requisitos_empresa_aeronave';"
 assert_count active-unique-index 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_treinamento_requisitos_unique_active';"
 for table in funcionarios_aeronaves aeronaves; do assert_count "prerequisite-$table" 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name='$table';"; done
 echo TRAINING_COMPLIANCE_AIRCRAFT_SCOPE_0497_PRODUCTION_PREFLIGHT=PASS

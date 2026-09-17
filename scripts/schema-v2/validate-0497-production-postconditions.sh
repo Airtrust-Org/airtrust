@@ -14,8 +14,7 @@ NODE
 assert_count(){ local label="$1" expected="$2" sql="$3" count; count="$(query_count "$sql")"; [[ "$count" == "$expected" ]] || { echo "ERROR: $label expected=$expected found=$count" >&2; exit 1; }; echo "POSTCONDITION_OK=$label"; }
 assert_count active-baseline 1 "SELECT COUNT(*) count FROM airtrust_schema_baselines_v2 WHERE baseline_id='$BASELINE_ID' AND status='ACTIVE';"
 assert_count schema-v2-change 1 "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id='$CHANGE_ID';"
-assert_count aircraft-column 1 "SELECT COUNT(*) count FROM pragma_table_info('treinamento_requisitos') WHERE name='aeronave_modelo';"
-assert_count named-indexes 2 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name IN ('idx_treinamento_requisitos_unique_active','idx_treinamento_requisitos_empresa_aeronave');"
-assert_count aircraft-aware-unique-index 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_treinamento_requisitos_unique_active' AND lower(sql) LIKE '%aeronave_modelo%';"
-assert_count aircraft-index-tenant-scope 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_treinamento_requisitos_empresa_aeronave' AND lower(sql) LIKE '%empresa_id%' AND lower(sql) LIKE '%aeronave_modelo%';"
+assert_count aircraft-model-column 1 "SELECT COUNT(*) count FROM pragma_table_info('treinamento_requisitos') WHERE name='aeronave_modelo' AND UPPER(type)='TEXT';"
+assert_count unique-active-index 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_treinamento_requisitos_unique_active' AND sql LIKE '%UPPER(TRIM(aeronave_modelo))%';"
+assert_count aircraft-lookup-index 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_treinamento_requisitos_empresa_aeronave' AND sql LIKE '%empresa_id, aeronave_modelo%';"
 echo TRAINING_COMPLIANCE_AIRCRAFT_SCOPE_0497_PRODUCTION_POSTCONDITIONS=PASS
