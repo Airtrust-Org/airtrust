@@ -10,6 +10,7 @@ const SESSION_STATUS_SELECTOR = '#session-status';
 const PREFLIGHT_TIMEOUT_MS = 30000;
 
 const PREPARE_LABELS = new Set([
+  'Abrir voo',
   'Preparar este voo',
   'Preparar offline',
   'Preparar para voo',
@@ -55,10 +56,14 @@ function normalizePrepareLabels() {
   if (!container) return;
   for (const button of container.querySelectorAll('button')) {
     const label = button.textContent?.trim() || '';
-    if (label === 'Preparar este voo' || label === 'Preparar offline') {
-      button.textContent = 'Preparar para voo';
-    } else if (label === 'Atualizar pacote') {
-      button.textContent = 'Atualizar preparação';
+    if (
+      label === 'Preparar este voo' ||
+      label === 'Preparar offline' ||
+      label === 'Preparar para voo' ||
+      label === 'Atualizar pacote' ||
+      label === 'Atualizar preparação'
+    ) {
+      button.textContent = 'Abrir voo';
     }
   }
 }
@@ -89,63 +94,24 @@ function leaseLooksReady() {
   return /Lease (?:verificado e salvo|válido neste tablet)/i.test(text);
 }
 
-async function waitForSelectedPackagePrepared() {
+async function ensureOperationalDraftOpen(runId) {
   await waitFor(
     () => {
       const sessionStatus = document.querySelector(SESSION_STATUS_SELECTOR);
-      const text = sessionStatus?.textContent?.trim() || '';
-      if (sessionStatus?.classList.contains('error')) {
-        throw new Error(text || 'Falha ao preparar o pacote do voo.');
-      }
-      return text.includes('Pacote verificado e armazenado no tablet. Consulta offline disponível.');
-    },
-    'O pacote selecionado não foi confirmado no armazenamento local.',
-  );
-}
-
-async function ensureOperationalDraftOpen(runId) {
-  const detailCard = await waitFor(
-    () => {
-      const candidate = document.querySelector(DETAIL_CARD_SELECTOR);
-      return isVisible(candidate) ? candidate : null;
-    },
-    'O pacote do voo não ficou disponível no tablet.',
-  );
-  if (runId !== preflightRun) return;
-
-  const leaseButton = document.querySelector(LEASE_BUTTON_SELECTOR);
-  const openDraftButton = document.querySelector(OPEN_DRAFT_BUTTON_SELECTOR);
-  if (!leaseButton || !openDraftButton) {
-    throw new Error('Controles de preparação offline não foram encontrados.');
-  }
-
-  if (leaseLooksReady() && !openDraftButton.disabled) {
-    openDraftButton.click();
-  } else {
-    await waitFor(
-      () => !leaseButton.disabled || leaseLooksReady(),
-      'Não foi possível habilitar a emissão do lease offline.',
-    );
-    if (leaseLooksReady() && !openDraftButton.disabled) openDraftButton.click();
-    else leaseButton.click();
-  }
-
-  await waitFor(
-    () => {
       const leaseStatus = document.querySelector(LEASE_STATUS_SELECTOR);
       const editor = document.querySelector(EDITOR_CARD_SELECTOR);
-      const failed = leaseStatus?.classList.contains('error');
-      if (failed) {
-        throw new Error(leaseStatus.textContent?.trim() || 'Falha ao preparar edição offline.');
+      const sessionText = sessionStatus?.textContent?.trim() || '';
+      if (sessionStatus?.classList.contains('error')) {
+        throw new Error(sessionText || 'Falha ao abrir o voo.');
       }
-      return leaseLooksReady() && isVisible(editor);
+      if (leaseStatus?.classList.contains('error')) {
+        throw new Error(leaseStatus.textContent?.trim() || 'Falha ao preparar uso offline.');
+      }
+      return leaseLooksReady() && isVisible(editor) ? editor : null;
     },
-    'Pacote salvo, mas a edição offline não ficou pronta antes da perda de conectividade.',
+    'O voo não ficou pronto para preenchimento offline neste tablet.',
   );
-
-  if (!detailCard.isConnected) {
-    throw new Error('O voo preparado deixou de estar ativo durante o preflight.');
-  }
+  if (runId !== preflightRun) return;
 }
 
 async function runCompleteOfflinePreflight(runId) {
@@ -155,12 +121,10 @@ async function runCompleteOfflinePreflight(runId) {
   try {
     setStatus(
       sessionStatus,
-      'Preparando voo: pacote, autorização offline, rascunho e shell local…',
+      'Abrindo voo e preparando uso offline…',
       'attention',
     );
 
-    await waitForSelectedPackagePrepared();
-    if (runId !== preflightRun) return;
     await ensureOperationalDraftOpen(runId);
     if (runId !== preflightRun) return;
     await assertPilotShellReady();
@@ -173,7 +137,7 @@ async function runCompleteOfflinePreflight(runId) {
     );
     setStatus(
       sessionStatus,
-      'PRONTO PARA USO OFFLINE. O piloto pode perder a conexão; alterações permanecem cifradas neste tablet até a sincronização.',
+      'Voo pronto para uso offline. O preenchimento continuará disponível se a conexão cair.',
       'ok',
     );
   } catch (error) {
@@ -186,7 +150,7 @@ async function runCompleteOfflinePreflight(runId) {
     );
     setStatus(
       sessionStatus,
-      'Preparação offline incompleta. Mantenha conexão e corrija antes do voo: ' + message,
+      'Não foi possível preparar este voo para uso offline: ' + message,
       'error',
     );
   } finally {
@@ -241,10 +205,16 @@ if (onlineFlights) {
 
 window.addEventListener('offline', () => {
   const detailStatus = document.querySelector(DETAIL_STATUS_SELECTOR);
+  const sessionStatus = document.querySelector(SESSION_STATUS_SELECTOR);
   if (detailStatus?.textContent?.startsWith('PRONTO PARA USO OFFLINE')) {
     setStatus(
       detailStatus,
       'OFFLINE — operação local ativa. Pacote, lease e rascunho permanecem disponíveis neste tablet.',
+      'ok',
+    );
+    setStatus(
+      sessionStatus,
+      'OFFLINE — o voo continua disponível neste tablet.',
       'ok',
     );
   }

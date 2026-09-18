@@ -145,7 +145,28 @@
       .editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px 14px; align-items: start; }
       .editor-grid > * { min-width: 0; }
       .editor-grid input, .editor-grid textarea, .editor-grid select { width: 100%; max-width: 100%; box-sizing: border-box; }
+      .editor-grid input[type="time"] {
+        display: block;
+        width: 100%;
+        min-width: 100%;
+        max-width: 100%;
+        inline-size: 100%;
+        min-inline-size: 100%;
+      }
       .editor-grid .wide { grid-column: 1 / -1; }
+      .flight-date-controls {
+        display: grid;
+        grid-template-columns: auto minmax(190px, 240px) auto auto;
+        gap: 8px;
+        align-items: end;
+        margin-top: 14px;
+      }
+      .flight-date-controls label { margin: 0; }
+      .flight-date-controls input { width: 100%; }
+      .flight-date-controls button { min-height: 48px; }
+      .flight-selection-note { margin: 10px 0 0; }
+      .operational-focus { margin-top: 0; }
+      .technical-only { display: none !important; }
       .quick-time-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin: 12px 0 16px; }
       .quick-time-grid button { min-width: 0; min-height: 58px; line-height: 1.2; white-space: normal; }
       .derived-time { background: #f0f6fb; }
@@ -163,6 +184,8 @@
       @media (max-width: 620px) {
         .editor-grid { grid-template-columns: 1fr; }
         .editor-grid .wide { grid-column: auto; }
+        .flight-date-controls { grid-template-columns: 1fr 1fr; }
+        .flight-date-controls label { grid-column: 1 / -1; }
       }
       @media (max-width: 720px) { .operation-flow { grid-template-columns: 1fr; } }
       .editor-stage {
@@ -430,51 +453,42 @@
         </div>
       </header>
 
-      <section class="card warning">
-        <h2>Antes do voo</h2>
-        <p class="muted">
-          Enquanto estiver conectado, use “Preparar para voo”. Depois disso, registre os dados normalmente:
-          o AirTrust salva neste tablet e envia quando houver conexão. Este módulo não substitui o Diário de Bordo oficial.
-        </p>
-      </section>
-
       <div id="workspace" class="hidden">
-        <section class="card">
+        <section id="flight-selection-card" class="card">
           <div class="section-head">
             <div>
-              <h2>Pacotes de voo</h2>
-              <p class="muted">Pacotes baixados ficam cifrados no IndexedDB deste dispositivo.</p>
+              <h2>Meus voos</h2>
+              <p class="muted flight-selection-note">
+                Escolha o dia e abra o voo. O Pilot App prepara automaticamente o uso offline.
+              </p>
             </div>
-            <div class="actions">
-              <button id="refresh-online" class="secondary" type="button">Atualizar voos online</button>
-            </div>
+            <button id="refresh-online" class="secondary" type="button">Atualizar</button>
           </div>
           <div id="session-status" class="statusline" aria-live="polite"></div>
-          <div class="meta">
-            <div><span class="muted">Pacotes locais</span><strong id="cached-count">0</strong></div>
-            <div><span class="muted">Armazenamento</span><strong id="storage">Verificando…</strong></div>
-            <div><span class="muted">Modo</span><strong>Offline protegido por lease</strong></div>
+          <div class="flight-date-controls" aria-label="Selecionar data dos voos">
+            <button id="flight-date-prev" class="ghost" type="button">← Dia anterior</button>
+            <label>
+              Data
+              <input id="authorized-flight-date" type="date" />
+            </label>
+            <button id="flight-date-today" class="secondary" type="button">Hoje</button>
+            <button id="flight-date-next" class="ghost" type="button">Próximo dia →</button>
+          </div>
+          <div id="online-flights-card">
+            <h3 id="authorized-flight-heading" style="margin-top:20px">Voos do dia</h3>
+            <div id="online-flights" class="list"></div>
           </div>
         </section>
 
-        <section id="cached-flights-card" class="card">
-          <h2>No tablet</h2>
+        <details id="cached-flights-card" class="card hidden">
+          <summary>Voos disponíveis offline</summary>
           <p class="muted">
-            Estes voos podem ser consultados sem internet. Para edição durante a missão, confirme
-            explicitamente o estado “PRONTO PARA USO OFFLINE” antes de perder a conectividade.
+            Estes voos já foram preparados neste tablet e podem ser abertos sem internet.
           </p>
           <div id="cached-flights" class="list"></div>
-        </section>
+        </details>
 
-        <section id="online-flights-card" class="card">
-          <h2>Meus voos autorizados</h2>
-          <p class="muted">
-            Toque em “Preparar para voo”. O AirTrust cuida da preparação offline automaticamente e abre o lançamento do voo.
-          </p>
-          <div id="online-flights" class="list"></div>
-        </section>
-
-        <section id="flight-detail-card" class="card hidden">
+        <section id="flight-detail-card" class="card hidden technical-only" aria-hidden="true">
           <div class="section-head">
             <div>
               <h2 id="detail-title">Voo</h2>
@@ -509,52 +523,22 @@
             <div id="lease-status" class="statusline attention" aria-live="polite"></div>
           </div>
 
-          <div class="lease-box" id="coordination-box">
-            <strong>Concluir e enviar</strong>
-            <p class="muted">
-              Depois de enviar os dados do voo, atualize o status, finalize o preenchimento e encaminhe à Coordenação.
-            </p>
-            <div class="actions">
-              <button id="refresh-canonical-package" class="secondary" type="button">
-                Atualizar status
-              </button>
-              <button id="finalize-rdv-server" class="secondary" type="button" disabled>
-                Finalizar voo
-              </button>
-              <button id="send-rdv-coordination" class="primary" type="button" disabled>
-                Enviar à Coordenação
-              </button>
-            </div>
-            <div id="coordination-status" class="statusline attention" aria-live="polite">
-              Atualize o pacote após transmitir os dados.
-            </div>
-            <div id="coordination-receipt" class="statusline ok hidden" aria-live="polite"></div>
-          </div>
         </section>
 
         <section id="rdv-editor-card" class="card hidden">
           <div class="draft-banner">
-            <strong>Rascunho operacional local</strong>
+            <strong>Salvamento automático</strong>
             <div id="rdv-editor-save-status" class="statusline attention" aria-live="polite">
               Nenhuma alteração pendente.
             </div>
           </div>
           <div class="section-head">
             <div>
-              <h2 id="rdv-editor-title">Lançamento do voo</h2>
+              <h2 id="rdv-editor-title">Preenchimento do voo</h2>
               <p id="rdv-editor-subtitle" class="muted"></p>
             </div>
-            <button id="close-rdv-editor" class="secondary" type="button">Fechar rascunho</button>
+            <button id="close-rdv-editor" class="secondary" type="button">Voltar aos voos</button>
           </div>
-          <div class="actions">
-            <button id="sync-rdv-now" class="primary" type="button" disabled>
-              Enviar dados do voo
-            </button>
-          </div>
-          <div id="rdv-sync-status" class="statusline attention" aria-live="polite">
-            O AirTrust salva automaticamente. Quando terminar, envie os dados do voo.
-          </div>
-
           <div class="section-head" style="margin-top:20px">
             <div>
               <h3>Dados essenciais</h3>
@@ -596,16 +580,52 @@
           </div>
           <div id="rdv-fueling-fields"></div>
 
-          <p class="muted" style="margin-top:18px">
-            “Salvo no tablet” significa somente persistência cifrada local. “Transmitido” só será
-            exibido após receipt do servidor. Se a conexão cair durante o envio, a outbox cifrada
-            permanece no tablet para retry idempotente. O envio do lançamento à Coordenação acontece
-            somente após a transmissão dos dados do voo e a conferência final do piloto.
-          </p>
+          <section class="card" style="margin-top:24px">
+            <h3>Concluir o voo</h3>
+            <p class="muted">
+              O preenchimento é salvo automaticamente no tablet. Quando terminar, envie os dados ao AirTrust.
+            </p>
+            <div class="actions">
+              <button id="sync-rdv-now" class="primary" type="button" disabled>
+                Enviar informações do voo
+              </button>
+            </div>
+            <div id="rdv-sync-status" class="statusline attention" aria-live="polite">
+              O AirTrust salva automaticamente. Quando terminar, envie as informações do voo.
+            </div>
+          </section>
+
+          <div class="lease-box" id="coordination-box">
+            <strong>Finalizar e encaminhar à Coordenação</strong>
+            <p class="muted">
+              Depois que as informações forem transmitidas, finalize o preenchimento e encaminhe o voo à Coordenação.
+            </p>
+            <div class="actions">
+              <button id="refresh-canonical-package" class="secondary" type="button">
+                Atualizar status
+              </button>
+              <button id="finalize-rdv-server" class="secondary" type="button" disabled>
+                Finalizar voo
+              </button>
+              <button id="send-rdv-coordination" class="primary" type="button" disabled>
+                Enviar à Coordenação
+              </button>
+            </div>
+            <div id="coordination-status" class="statusline attention" aria-live="polite">
+              Envie as informações do voo para continuar.
+            </div>
+            <div id="coordination-receipt" class="statusline ok hidden" aria-live="polite"></div>
+          </div>
+
         </section>
 
-        <details id="diagnostic-card" class="card">
+        <details id="diagnostic-card" class="card hidden">
           <summary>Diagnóstico técnico do armazenamento</summary>
+          <div class="meta">
+            <div><span class="muted">Voos offline</span><strong id="cached-count">0</strong></div>
+            <div><span class="muted">Armazenamento</span><strong id="storage">Verificando…</strong></div>
+            <div><span class="muted">Modo</span><strong>Offline protegido</strong></div>
+          </div>
           <p class="muted">
             Campo sintético mantido apenas para validar persistência contínua: após “Salvo no
             tablet”, refresh ou modo avião deve preservar exatamente o texto.
