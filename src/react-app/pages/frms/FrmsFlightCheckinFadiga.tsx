@@ -21,7 +21,7 @@ import {
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { toast } from 'sonner';
-import { resolveFadigaPostSavePath } from './frmsPostSaveNavigation';
+import { FADIGA_EMPLOYEE_HOME_PATH, resolveFadigaPostSavePath } from './frmsPostSaveNavigation';
 import OperationalVigilanceTest, {
   type OperationalVigilanceResult,
 } from './OperationalVigilanceTest';
@@ -641,10 +641,10 @@ export default function FrmsFlightCheckinFadiga() {
             <div className="flex items-center gap-2">
               <Button
                 variant="secondary"
-                onClick={() => navigate(canViewTeam ? '/frms/controle-operacional' : '/frms')}
+                onClick={() => navigate(canViewTeam ? '/frms/controle-operacional' : FADIGA_EMPLOYEE_HOME_PATH)}
                 className="text-xs sm:text-sm"
               >
-                Voltar ao FRMS
+                {canViewTeam ? 'Voltar ao FRMS' : 'Voltar para início'}
               </Button>
               <Button
                 variant="secondary"
