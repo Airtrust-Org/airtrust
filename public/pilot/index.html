@@ -19,8 +19,8 @@
         color: #10213d;
       }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; background: #f3f7fb; }
-      button, input, textarea { font: inherit; }
+      body { margin: 0; min-height: 100vh; background: #f3f7fb; font-size: 17px; }
+      button, input, textarea, select { font: inherit; }
       button, input { min-height: 48px; }
       button { border: 0; border-radius: 12px; padding: 0 18px; font-weight: 800; cursor: pointer; }
       button.primary { background: #12356a; color: #fff; }
@@ -142,7 +142,7 @@
       }
       .small-list { margin: 8px 0 0; padding-left: 20px; line-height: 1.6; }
       .signin-link { color: #12356a; font-weight: 800; }
-      .editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; align-items: start; }
+      .editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px 14px; align-items: start; }
       .editor-grid > * { min-width: 0; }
       .editor-grid input, .editor-grid textarea, .editor-grid select { width: 100%; max-width: 100%; box-sizing: border-box; }
       .editor-grid .wide { grid-column: 1 / -1; }
@@ -158,9 +158,11 @@
       .operation-step.error { border-color: #efb4b4; background: #fff5f5; color: #a52727; }
       select { width: 100%; min-height: 48px; border: 1px solid #b8c6d8; border-radius: 12px; background: #fff; padding: 12px 14px; color: #10213d; }
       @media (max-width: 900px) {
+        .quick-time-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      }
+      @media (max-width: 620px) {
         .editor-grid { grid-template-columns: 1fr; }
         .editor-grid .wide { grid-column: auto; }
-        .quick-time-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
       }
       @media (max-width: 720px) { .operation-flow { grid-template-columns: 1fr; } }
       .editor-stage {
@@ -401,8 +403,7 @@
         .topbar { align-items: flex-start; flex-direction: column; }
         .topbar-actions { width: 100%; justify-content: space-between; }
         .airtrust-return { flex: 1 1 auto; }
-        .row, .meta, .detail-grid, .editor-grid, .pilot-workspace-grid { grid-template-columns: 1fr; }
-        .editor-grid .wide { grid-column: auto; }
+        .row, .meta, .detail-grid, .pilot-workspace-grid { grid-template-columns: 1fr; }
         .pill { align-self: flex-start; }
         .flight-item { grid-template-columns: 1fr; }
         .flight-item button { width: 100%; }

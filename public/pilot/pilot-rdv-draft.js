@@ -52,13 +52,23 @@ export function parseInteger(value) {
 }
 
 export function toDurationInput(value) {
-  const text = String(value ?? '').trim();
+  const text = String(value ?? '').trim().toLowerCase();
   if (!text) return '';
-  const match = text.match(/^(\d{1,2}):(\d{2})$/);
-  if (match && Number(match[2]) <= 59) {
-    return String(Number(match[1])).padStart(2, '0') + ':' + match[2];
+
+  const hhmm = text.match(/^(\d{1,2}):([0-5]\d)$/);
+  if (hhmm) {
+    return String(Number(hhmm[1])).padStart(2, '0') + ':' + hhmm[2];
   }
-  // Compatibilidade com rascunhos antigos que guardavam horas decimais.
+
+  const hoursMinutes = text.match(/^(\d{1,2})\s*h(?:\s*([0-5]?\d)\s*m?)?$/);
+  if (hoursMinutes) {
+    const hours = Number(hoursMinutes[1]);
+    const minutes = Number(hoursMinutes[2] || 0);
+    if (hours >= 24) return '';
+    return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+  }
+
+  // Compatibilidade com rascunhos antigos e entrada simples em horas decimais.
   const decimal = Number(text.replace(',', '.'));
   if (!Number.isFinite(decimal) || decimal < 0 || decimal >= 24) return '';
   const totalMinutes = Math.round(decimal * 60);

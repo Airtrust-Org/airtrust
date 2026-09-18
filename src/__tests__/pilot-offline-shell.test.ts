@@ -66,6 +66,15 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("register('/pilot/pilot-sw.js'");
   });
 
+  it('inicia sem top-level await e mantém duas colunas no tablet', () => {
+    expect(pilotApp).toContain('async function bootstrapPilotApp()');
+    expect(pilotApp).toContain('void bootstrapPilotApp();');
+    expect(pilotApp).not.toContain("\ntry {\n  await registerPilotServiceWorker();");
+    expect(pilotIndex).toContain('font-size: 17px');
+    expect(pilotIndex).toContain('@media (max-width: 620px)');
+    expect(pilotIndex).toContain('grid-template-columns: repeat(2, minmax(0,1fr))');
+  });
+
   it('usa IndexedDB cifrado em vez de sessionStorage/localStorage para dados operacionais', () => {
     expect(pilotVault).toContain("const DB_NAME = 'airtrust-pilot-v1'");
     expect(pilotVault).toContain("'rdv_drafts'");
@@ -97,7 +106,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v17'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v18'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
@@ -355,8 +364,9 @@ describe('Pilot Offline shell', () => {
   it('expõe tempos derivados, unidades e erro real da transmissão bloqueada', () => {
     expect(pilotApp).toContain("['Tempo de voo', 'tempo_decolagem_pouso'");
     expect(pilotApp).toContain("['Tempo total', 'tempo_total'");
-    expect(pilotApp).toContain("['IFR (HH:MM)', 'tempo_ifr', 'time'");
-    expect(pilotApp).toContain("['Noturno (HH:MM)', 'tempo_noturno', 'time'");
+    expect(pilotApp).toContain("['IFR (duração)', 'tempo_ifr', 'text'");
+    expect(pilotApp).toContain("['Noturno (duração)', 'tempo_noturno', 'text'");
+    expect(pilotApp).toContain('toDurationInput(value)');
     expect(pilotApp).toContain("label: 'Unidade da carga'");
     expect(pilotApp).toContain("label: 'Unidade do combustível'");
     expect(pilotApp).toContain("'Transmissão bloqueada: ' + detail");
