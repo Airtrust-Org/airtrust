@@ -22,7 +22,16 @@ query_count(){ local sql="$1"; node - "$db_name" "$sql" <<'NODE'
 const{spawnSync}=require('node:child_process'),path=require('node:path');const[,,db,sql]=process.argv,r=spawnSync('npx',['wrangler','d1','execute',db,'--remote','--json','--command',sql],{cwd:path.join(process.cwd(),'worker-airtrust'),encoding:'utf8',env:process.env});if(r.status!==0){process.stderr.write(r.stderr||r.stdout);process.exit(1)}const s=r.stdout.indexOf('['),e=r.stdout.lastIndexOf(']'),p=JSON.parse(s>=0&&e>s?r.stdout.slice(s,e+1):r.stdout),row=(Array.isArray(p)?p[0]?.results:p?.results)?.[0],n=Number(row?.count??row?.total??row?.['COUNT(*)']??(row?Object.values(row)[0]:NaN));if(!Number.isInteger(n)||n<0)throw new Error('INVALID_COUNT');process.stdout.write(String(n));
 NODE
 }
-for table in frms_config_revisions frms_config_parameters frms_recalc_runs frms_profile_assignments frms_regulatory_profiles; do [[ "$(query_count "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name='$table';")" == 1 ]] || { echo "ERROR: prerequisite $table missing" >&2; exit 1; }; done
+for table in frms_config_revisions frms_config_parameters frms_recalc_runs frms_profile_assignments frms_regulatory_profiles empresas; do [[ "$(query_count "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name='$table';")" == 1 ]] || { echo "ERROR: prerequisite $table missing" >&2; exit 1; }; done
+empresa_count="$(query_count "SELECT COUNT(*) count FROM empresas WHERE id=6;")"
+assignment_count="$(query_count "SELECT COUNT(*) count FROM frms_profile_assignments a JOIN frms_regulatory_profiles p ON p.id=a.regulatory_profile_id WHERE a.empresa_id=6 AND a.profile_code='HELICOPTER_OFFSHORE' AND a.status='ACTIVE' AND a.effective_from<='2026-01-01' AND (a.effective_to IS NULL OR a.effective_to>='2026-01-01') AND p.empresa_id=6 AND p.profile_code=a.profile_code AND p.active=1 AND p.deleted_at IS NULL;")"
+source_revision_count="$(query_count "SELECT COUNT(*) count FROM frms_config_revisions WHERE empresa_id IS NULL AND profile_code='HELICOPTER_OFFSHORE' AND status='ACTIVE' AND policy_version='FRMS_OPERATIONAL_POLICY_V2';")"
+source_parameter_count="$(query_count "SELECT COUNT(*) count FROM frms_config_parameters WHERE revision_id=(SELECT id FROM frms_config_revisions WHERE empresa_id IS NULL AND profile_code='HELICOPTER_OFFSHORE' AND status='ACTIVE' AND policy_version='FRMS_OPERATIONAL_POLICY_V2' ORDER BY revision_number DESC, created_at DESC LIMIT 1);")"
+[[ "$empresa_count" == 1 ]] || { echo "ERROR: staging 0499 prerequisite empresa_id=6 missing" >&2; exit 1; }
+[[ "$assignment_count" -ge 1 ]] || { echo "ERROR: staging 0499 prerequisite active HELICOPTER_OFFSHORE assignment for empresa_id=6 missing" >&2; exit 1; }
+[[ "$source_revision_count" -ge 1 ]] || { echo "ERROR: staging 0499 prerequisite global active FRMS_OPERATIONAL_POLICY_V2 revision missing" >&2; exit 1; }
+[[ "$source_parameter_count" -ge 1 ]] || { echo "ERROR: staging 0499 prerequisite V2 source parameters missing" >&2; exit 1; }
+echo "PREFLIGHT_0499_TENANT_CONTEXT=PASS empresa=$empresa_count assignment=$assignment_count source_revision=$source_revision_count source_parameters=$source_parameter_count"
 ledger_count="$(query_count "SELECT COUNT(*) count FROM d1_migrations WHERE name='$MIGRATION_BASENAME';")"; target_count="$(query_count "SELECT COUNT(*) count FROM frms_config_revisions WHERE id='$TARGET_REV';")"
 if [[ "$ledger_count" == 1 ]]; then [[ "$target_count" == 1 ]] || { echo "ERROR: 0499 ledger exists without tenant revision" >&2; exit 1; }; bash scripts/staging/validate-0499-postconditions.sh --target="$db_name"; echo "MIGRATION_ALREADY_APPLIED_AND_VALIDATED=$MIGRATION_BASENAME"; exit 0; fi
 [[ "$ledger_count" == 0 && "$target_count" == 0 ]] || { echo "ERROR: 0499 revision/ledger drift" >&2; exit 1; }
@@ -35,6 +44,35 @@ if ! $apply; then echo DRY_RUN=true; echo REMOTE_WRITE_EXECUTED=false; exit 0; f
 [[ "${CONFIRM_STAGING_SCHEMA_CHANGE:-}" == "$CONFIRMATION_PHRASE" ]] || { echo "ERROR: staging confirmation missing" >&2; exit 1; }
 recovery_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"; (cd worker-airtrust && npx wrangler d1 time-travel info "$db_name" --timestamp="$recovery_timestamp" --json > "$recovery"); test -s "$recovery"; echo "RECOVERY_TIMESTAMP_UTC=$recovery_timestamp"
 sql_payload="$(cat "$combined")"; [[ -n "$sql_payload" ]] || { echo "ERROR: empty 0499 SQL bundle" >&2; exit 1; }; [[ ${#sql_payload} -le 100000 ]] || { echo "ERROR: 0499 SQL bundle exceeds bounded --command transport" >&2; exit 1; }
-(cd worker-airtrust && npx wrangler d1 execute "$db_name" --remote --command="$sql_payload" --json > "$apply_output"); test -s "$apply_output"
+if ! (cd worker-airtrust && npx wrangler d1 execute "$db_name" --remote --command="$sql_payload" --json > "$apply_output" 2>&1); then
+  echo "ERROR: 0499 remote D1 apply failed; sanitized Wrangler diagnostic follows" >&2
+  node - "$apply_output" <<'NODE'
+const fs=require('node:fs');
+const raw=fs.readFileSync(process.argv[2],'utf8').replace(/\x1b\[[0-9;]*m/g,'');
+const out=[];
+const push=(x)=>{ if(x==null)return; const v=String(x).trim(); if(v&&!out.includes(v)) out.push(v); };
+try {
+  const starts=[raw.indexOf('{'),raw.indexOf('[')].filter((x)=>x>=0).sort((a,b)=>a-b);
+  if(starts.length){
+    const start=starts[0], end=Math.max(raw.lastIndexOf('}'),raw.lastIndexOf(']'));
+    const parsed=JSON.parse(raw.slice(start,end+1));
+    const walk=(v,k='')=>{
+      if(v&&typeof v==='object'){ for(const [key,val] of Object.entries(v)) walk(val,key); return; }
+      if(['text','message','name','code','kind'].includes(k)) push(`${k}: ${v}`);
+    };
+    walk(parsed);
+  }
+} catch {}
+if(!out.length){
+  for(const line of raw.split(/\r?\n/)){
+    if(/error|sqlite|d1_|constraint|foreign key|unique|check failed|no such|incomplete input|too many/i.test(line)) push(line);
+  }
+}
+const safe=out.join('\n').replace(/https?:\/\/\S+/g,'[url-redacted]').replace(/\b[a-f0-9]{40,}\b/gi,'[hash-redacted]').slice(0,4000);
+console.error(safe||'wrangler returned non-zero status without a structured diagnostic');
+NODE
+  exit 1
+fi
+test -s "$apply_output"
 [[ "$(query_count "SELECT COUNT(*) count FROM d1_migrations WHERE name='$MIGRATION_BASENAME';")" == 1 ]] || { echo "ERROR: 0499 applied without exact ledger row" >&2; exit 1; }
 bash scripts/staging/validate-0499-postconditions.sh --target="$db_name"; echo "MIGRATION_APPLIED_AND_VALIDATED=$MIGRATION_BASENAME"
