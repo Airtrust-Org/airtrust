@@ -125,6 +125,13 @@ function stagePayload(stageDraft) {
       combustivel_inicio: parseNumber(fields.combustivel_inicio),
       combustivel_fim: parseNumber(fields.combustivel_fim),
       unidade_combustivel: optionalText(fields.unidade_combustivel),
+      peso_passageiros: parseNumber(fields.peso_passageiros),
+      peso_bagagem: parseNumber(fields.peso_bagagem),
+      peso_tripulacao: parseNumber(fields.peso_tripulacao),
+      peso_vazio: parseNumber(fields.peso_vazio),
+      peso_total: parseNumber(fields.peso_total),
+      unidade_peso: optionalText(fields.unidade_peso),
+      observacoes: optionalText(fields.observacoes),
     },
   };
 }

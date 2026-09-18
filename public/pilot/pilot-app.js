@@ -8,13 +8,14 @@ import { PILOT_OFFLINE_APP_VERSION } from '/pilot/pilot-lease-trust.js';
 import {
   applySafeStageAggregates,
   applyStageContinuity,
-  PILOT_NATUREZA_OPTIONS,
   assertPackageIdentity,
   assertVerifiedLeaseAllowsDraft,
   buildDraftSnapshot,
   calcConsumoCombustivel,
+  calcStageTotalWeight,
   calcClockDurationHhMm,
   calcHorasVoadas,
+  PILOT_DRAFT_SCHEMA_VERSION,
   parseNumber,
   toInputTime,
   validateRdvForm,
@@ -115,6 +116,7 @@ let operationalSaveChain = Promise.resolve();
 let timingSequence = 0;
 let operationalSyncInFlight = false;
 let coordinationInFlight = false;
+let activeStageTabIndex = 0;
 
 function setConnectivity() {
   const online = navigator.onLine;
@@ -151,6 +153,28 @@ function formatDate(value) {
 function displayText(value, fallback = '—') {
   if (value === null || value === undefined || value === '') return fallback;
   return String(value);
+}
+
+function pilotNatureOptions(packageData) {
+  const rows = Array.isArray(packageData?.catalogos?.naturezas_voo)
+    ? packageData.catalogos.naturezas_voo
+    : [];
+  const options = rows
+    .map((row) => ({
+      code: String(row?.codigo || '').trim(),
+      label: String(row?.nome || row?.codigo || '').trim(),
+    }))
+    .filter((option) => option.code);
+
+  const current = packageData?.natureza;
+  const currentCode = String(current?.codigo || '').trim();
+  if (currentCode && !options.some((option) => option.code === currentCode)) {
+    options.unshift({
+      code: currentCode,
+      label: String(current?.nome || currentCode).trim(),
+    });
+  }
+  return options;
 }
 
 function airportLabel(airport, fallbackId) {
@@ -1239,7 +1263,7 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
 
     activeRdvDraft = {
       ...value,
-      schema_version: Math.max(Number(value.schema_version || 1), 2),
+      schema_version: Math.max(Number(value.schema_version || 1), PILOT_DRAFT_SCHEMA_VERSION),
       flight_update: value.flight_update || {
         natureza_voo_codigo: packageData?.natureza?.codigo || '',
       },
@@ -1247,9 +1271,21 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
     };
     activeStageDrafts = matchingStages.map((record) => ({
       ...record.value,
-      schema_version: Math.max(Number(record.value?.schema_version || 1), 2),
+      schema_version: Math.max(
+        Number(record.value?.schema_version || 1),
+        PILOT_DRAFT_SCHEMA_VERSION,
+      ),
       fields: {
         ...(record.value?.fields || {}),
+        peso_passageiros: record.value?.fields?.peso_passageiros ?? '',
+        peso_bagagem: record.value?.fields?.peso_bagagem ?? '',
+        peso_tripulacao: record.value?.fields?.peso_tripulacao ?? '',
+        peso_vazio:
+          record.value?.fields?.peso_vazio ?? packageData?.aeronave?.peso_vazio ?? '',
+        peso_total: record.value?.fields?.peso_total ?? '',
+        unidade_peso:
+          record.value?.fields?.unidade_peso ?? packageData?.aeronave?.unidade_peso ?? '',
+        observacoes: record.value?.fields?.observacoes ?? '',
         horario_motor_ligado: toInputTime(record.value?.fields?.horario_motor_ligado),
         horario_decolagem: toInputTime(record.value?.fields?.horario_decolagem),
         horario_pouso: toInputTime(record.value?.fields?.horario_pouso),
@@ -2187,12 +2223,12 @@ function createEditorField({
   return wrapper;
 }
 
-function createEditorSelect({ label, value, options, onChange }) {
+function createEditorSelect({ label, value, options, onChange, disabled = false }) {
   const wrapper = document.createElement('label');
   const title = document.createElement('span');
   title.textContent = label;
   const select = document.createElement('select');
-  select.disabled = operationalSyncInFlight;
+  select.disabled = operationalSyncInFlight || disabled;
   const blank = document.createElement('option');
   blank.value = '';
   blank.textContent = 'Selecione';
@@ -2238,7 +2274,7 @@ function renderRdvFormFields() {
     createEditorSelect({
       label: 'Natureza do voo',
       value: activeRdvDraft.flight_update?.natureza_voo_codigo || '',
-      options: PILOT_NATUREZA_OPTIONS,
+      options: pilotNatureOptions(activePackageData()),
       onChange: (value) => {
         activeRdvDraft.flight_update = { ...(activeRdvDraft.flight_update || {}), natureza_voo_codigo: value };
         scheduleOperationalSave();
@@ -2324,6 +2360,8 @@ function refreshStageDerivedTimes(stageDraft) {
     fields.horario_motor_ligado,
     fields.horario_motor_desligado,
   );
+  const totalWeight = calcStageTotalWeight(fields);
+  fields.peso_total = totalWeight === null ? '' : String(totalWeight);
 }
 
 function refreshAllStageDerivedTimes() {
@@ -2351,146 +2389,215 @@ function applyQuickTiming(stage, field, action) {
 
 function renderStageFields() {
   rdvStageFields.replaceChildren();
+  if (activeStageDrafts.length === 0) return;
 
-  for (let index = 0; index < activeStageDrafts.length; index += 1) {
-    const stageDraft = activeStageDrafts[index];
-    const fields = stageDraft.fields;
-    const card = document.createElement('section');
-    card.className = 'editor-stage';
+  activeStageTabIndex = Math.max(
+    0,
+    Math.min(activeStageTabIndex, activeStageDrafts.length - 1),
+  );
 
-    const heading = document.createElement('h3');
-    heading.textContent =
-      'Etapa ' +
-      String(fields.numero_etapa || index + 1) +
-      ' · ' +
-      displayText(fields.origem_icao) +
-      ' → ' +
-      displayText(fields.destino_icao);
-    card.append(heading);
+  const tabs = document.createElement('div');
+  tabs.className = 'stage-tabs';
+  tabs.setAttribute('role', 'tablist');
 
-    const quick = document.createElement('div');
-    quick.className = 'quick-time-grid';
-    const actions = [
-      ['PARTIDA', 'horario_motor_ligado'],
-      ['DECOLAGEM', 'horario_decolagem'],
-      ['POUSO', 'horario_pouso'],
-      ['CORTE', 'horario_motor_desligado'],
-    ];
-    for (const [label, field] of actions) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'secondary';
-      button.textContent = label;
-      button.disabled = operationalSyncInFlight;
-      button.addEventListener('click', () => applyQuickTiming(stageDraft, field, label));
-      quick.append(button);
-    }
-    card.append(quick);
+  activeStageDrafts.forEach((draft, index) => {
+    const fields = draft.fields || {};
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'stage-tab' + (index === activeStageTabIndex ? ' active' : '');
+    button.setAttribute('role', 'tab');
+    button.setAttribute('aria-selected', index === activeStageTabIndex ? 'true' : 'false');
+    const routeLabel =
+      String(fields.origem_icao || '').trim() && String(fields.destino_icao || '').trim()
+        ? String(fields.origem_icao).trim() + ' → ' + String(fields.destino_icao).trim()
+        : 'Etapa ' + String(fields.numero_etapa || index + 1);
+    button.textContent = routeLabel;
+    button.disabled = operationalSyncInFlight;
+    button.addEventListener('click', () => {
+      activeStageTabIndex = index;
+      renderStageFields();
+    });
+    tabs.append(button);
+  });
+  rdvStageFields.append(tabs);
 
-    refreshStageDerivedTimes(stageDraft);
-    const grid = document.createElement('div');
-    grid.className = 'editor-grid';
-    const groundTime = index > 0
+  const index = activeStageTabIndex;
+  const stageDraft = activeStageDrafts[index];
+  const fields = stageDraft.fields;
+  const card = document.createElement('section');
+  card.className = 'editor-stage stage-panel';
+
+  const heading = document.createElement('h3');
+  heading.textContent =
+    'Etapa ' +
+    String(fields.numero_etapa || index + 1) +
+    ' · ' +
+    displayText(fields.origem_icao) +
+    ' → ' +
+    displayText(fields.destino_icao);
+  card.append(heading);
+
+  const quick = document.createElement('div');
+  quick.className = 'quick-time-grid';
+  for (const [label, field] of [
+    ['PARTIDA', 'horario_motor_ligado'],
+    ['DECOLAGEM', 'horario_decolagem'],
+    ['POUSO', 'horario_pouso'],
+    ['CORTE', 'horario_motor_desligado'],
+  ]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary';
+    button.textContent = label;
+    button.disabled = operationalSyncInFlight;
+    button.addEventListener('click', () => applyQuickTiming(stageDraft, field, label));
+    quick.append(button);
+  }
+  card.append(quick);
+
+  refreshAllStageDerivedTimes();
+  const grid = document.createElement('div');
+  grid.className = 'editor-grid';
+  const groundTime =
+    index > 0
       ? calcClockDurationHhMm(fields.horario_motor_ligado, fields.horario_decolagem)
       : '';
-    const stageFields = [
-      ['Aeródromo de origem', 'origem_icao', 'text', null, false, null],
-      ['Aeródromo de destino', 'destino_icao', 'text', null, false, null],
-      ['Hora de partida', 'horario_motor_ligado', 'time', null, false, 'Acionamento / motor ligado'],
-      ['Hora de decolagem', 'horario_decolagem', 'time', null, false, null],
-      ['Hora de pouso', 'horario_pouso', 'time', null, false, null],
-      ['Hora de corte', 'horario_motor_desligado', 'time', null, false, 'Motor desligado'],
-      ['Tempo de voo', 'tempo_decolagem_pouso', 'text', null, true, 'Calculado: decolagem → pouso'],
-      ['Tempo total', 'tempo_total', 'text', null, true, 'Calculado: partida → corte'],
-      ['IFR (HH:MM)', 'tempo_ifr', 'time', null, false, 'Informe a duração IFR'],
-      ['Noturno (HH:MM)', 'tempo_noturno', 'time', null, false, 'Informe a duração noturna'],
-      ['Pousos diurnos', 'pousos_diurnos', 'number', 'numeric', false, null],
-      ['Pousos noturnos', 'pousos_noturnos', 'number', 'numeric', false, null],
-      ['Starts', 'starts', 'number', 'numeric', false, null],
-      ['PAX / POB', 'pax', 'number', 'numeric', false, null],
-      ['Payload / carga', 'payload', 'number', 'decimal', false, null],
-      ['Combustível início', 'combustivel_inicio', 'number', 'decimal', false, null],
-      ['Combustível fim', 'combustivel_fim', 'number', 'decimal', false, null],
-    ];
 
-    for (const [label, key, type, inputMode, readOnly, note] of stageFields) {
-      const fieldNode = createEditorField({
-        label,
-        value: fields[key],
-        type,
-        inputMode,
-        readOnly,
-        note,
-        onInput: readOnly ? null : (value) => {
-          fields[key] = value;
-          if (key === 'horario_motor_ligado') stageDraft.continuity_start_derived = false;
-          refreshAllStageDerivedTimes();
-          activeRdvDraft.form = applySafeStageAggregates(
-            activeRdvDraft.form,
-            activeStageDrafts,
-          );
-          scheduleOperationalSave();
-        },
-        onBlur: readOnly ? null : () => {
-          refreshAllStageDerivedTimes();
-          activeRdvDraft.form = applySafeStageAggregates(
-            activeRdvDraft.form,
-            activeStageDrafts,
-          );
-          void flushOperationalSave();
-          renderStageFields();
-          renderRdvFormFields();
-          refreshDraftValidationPresentation();
-        },
-      });
-      if (readOnly) fieldNode.classList.add('derived-time');
-      grid.append(fieldNode);
-    }
+  const stageFields = [
+    ['Aeródromo de origem', 'origem_icao', 'text', null, false, false, null],
+    ['Aeródromo de destino', 'destino_icao', 'text', null, false, false, null],
+    ['Hora de partida', 'horario_motor_ligado', 'time', null, false, false, 'Acionamento / motor ligado'],
+    ['Hora de decolagem', 'horario_decolagem', 'time', null, false, false, null],
+    ['Hora de pouso', 'horario_pouso', 'time', null, false, false, null],
+    ['Hora de corte', 'horario_motor_desligado', 'time', null, false, false, 'Motor desligado'],
+    ['Tempo de voo', 'tempo_decolagem_pouso', 'text', null, true, false, 'Calculado: decolagem → pouso'],
+    ['Tempo total', 'tempo_total', 'text', null, true, false, 'Calculado: partida → corte'],
+    ['IFR (HH:MM)', 'tempo_ifr', 'time', null, false, false, 'Informe a duração IFR'],
+    ['Noturno (HH:MM)', 'tempo_noturno', 'time', null, false, false, 'Informe a duração noturna'],
+    ['Pousos diurnos', 'pousos_diurnos', 'number', 'numeric', false, false, null],
+    ['Pousos noturnos', 'pousos_noturnos', 'number', 'numeric', false, false, null],
+    ['Ciclos / starts', 'starts', 'number', 'numeric', false, false, 'Não é derivado automaticamente dos pousos'],
+    ['Passageiros', 'pax', 'number', 'numeric', false, false, 'Quantidade de passageiros'],
+    ['Peso dos passageiros', 'peso_passageiros', 'number', 'decimal', false, false, null],
+    ['Peso da bagagem', 'peso_bagagem', 'number', 'decimal', false, false, null],
+    ['Peso da tripulação', 'peso_tripulacao', 'number', 'decimal', false, false, null],
+    ['Carga', 'payload', 'number', 'decimal', false, false, null],
+    ['Peso vazio da aeronave', 'peso_vazio', 'number', 'decimal', true, false, 'Vem do cadastro da aeronave'],
+    ['Peso total', 'peso_total', 'number', 'decimal', true, false, 'Calculado automaticamente'],
+    [
+      index === 0 ? 'Combustível inicial' : 'Combustível inicial',
+      'combustivel_inicio',
+      'number',
+      'decimal',
+      index > 0,
+      false,
+      index > 0 ? 'Igual ao combustível final da etapa anterior' : null,
+    ],
+    ['Combustível final', 'combustivel_fim', 'number', 'decimal', false, false, null],
+    ['Observações da etapa', 'observacoes', 'textarea', null, false, true, null],
+  ];
 
-    if (index > 0) {
-      const groundField = createEditorField({
-        label: 'Tempo no solo',
-        value: groundTime,
-        type: 'text',
-        readOnly: true,
-        note: 'Calculado: pouso anterior sem corte → próxima decolagem',
-      });
-      groundField.classList.add('derived-time');
-      grid.append(groundField);
-    }
-
-    grid.append(
-      createEditorSelect({
-        label: 'Unidade da carga',
-        value: fields.unidade_payload || 'KG',
-        options: [
-          { code: 'KG', label: 'kg' },
-          { code: 'LB', label: 'lb' },
-        ],
-        onChange: (value) => {
-          fields.unidade_payload = value || 'KG';
-          activeRdvDraft.form = applySafeStageAggregates(activeRdvDraft.form, activeStageDrafts);
-          scheduleOperationalSave();
-          renderRdvFormFields();
-        },
-      }),
-      createEditorSelect({
-        label: 'Unidade do combustível',
-        value: fields.unidade_combustivel || '',
-        options: [
-          { code: 'LB', label: 'lb' },
-          { code: 'KG', label: 'kg' },
-        ],
-        onChange: (value) => {
-          fields.unidade_combustivel = value;
-          scheduleOperationalSave();
-        },
-      }),
-    );
-
-    card.append(grid);
-    rdvStageFields.append(card);
+  for (const [label, key, type, inputMode, readOnly, wide, note] of stageFields) {
+    const fieldNode = createEditorField({
+      label,
+      value: fields[key],
+      type,
+      inputMode,
+      wide,
+      readOnly,
+      note,
+      onInput: readOnly
+        ? null
+        : (value) => {
+            fields[key] = value;
+            if (key === 'horario_motor_ligado') stageDraft.continuity_start_derived = false;
+            refreshAllStageDerivedTimes();
+            activeRdvDraft.form = applySafeStageAggregates(
+              activeRdvDraft.form,
+              activeStageDrafts,
+            );
+            scheduleOperationalSave();
+          },
+      onBlur: readOnly
+        ? null
+        : () => {
+            refreshAllStageDerivedTimes();
+            activeRdvDraft.form = applySafeStageAggregates(
+              activeRdvDraft.form,
+              activeStageDrafts,
+            );
+            void flushOperationalSave();
+            renderStageFields();
+            renderRdvFormFields();
+            refreshDraftValidationPresentation();
+          },
+    });
+    if (readOnly) fieldNode.classList.add('derived-time');
+    grid.append(fieldNode);
   }
+
+  if (index > 0) {
+    const groundField = createEditorField({
+      label: 'Tempo no solo',
+      value: groundTime,
+      type: 'text',
+      readOnly: true,
+      note: 'Calculado entre o pouso anterior e a próxima decolagem',
+    });
+    groundField.classList.add('derived-time');
+    grid.append(groundField);
+  }
+
+  grid.append(
+    createEditorSelect({
+      label: 'Unidade da carga',
+      value: fields.unidade_payload || 'KG',
+      options: [
+        { code: 'KG', label: 'kg' },
+        { code: 'LB', label: 'lb' },
+      ],
+      onChange: (value) => {
+        fields.unidade_payload = value || 'KG';
+        refreshAllStageDerivedTimes();
+        activeRdvDraft.form = applySafeStageAggregates(activeRdvDraft.form, activeStageDrafts);
+        scheduleOperationalSave();
+        renderStageFields();
+        renderRdvFormFields();
+      },
+    }),
+    createEditorSelect({
+      label: 'Unidade dos pesos',
+      value: fields.unidade_peso || activePackageData()?.aeronave?.unidade_peso || '',
+      options: [
+        { code: 'LB', label: 'lb' },
+        { code: 'KG', label: 'kg' },
+      ],
+      onChange: (value) => {
+        fields.unidade_peso = value;
+        refreshAllStageDerivedTimes();
+        scheduleOperationalSave();
+        renderStageFields();
+      },
+    }),
+    createEditorSelect({
+      label: 'Unidade do combustível',
+      value: fields.unidade_combustivel || '',
+      options: [
+        { code: 'LB', label: 'lb' },
+        { code: 'KG', label: 'kg' },
+      ],
+      disabled: index > 0,
+      onChange: (value) => {
+        fields.unidade_combustivel = value;
+        refreshAllStageDerivedTimes();
+        scheduleOperationalSave();
+        renderStageFields();
+      },
+    }),
+  );
+
+  card.append(grid);
+  rdvStageFields.append(card);
 }
 
 function addOperationalStage() {
@@ -2501,7 +2608,7 @@ function addOperationalStage() {
   const identity = assertPackageIdentity(packageData);
   const localId = 'local-stage-' + crypto.randomUUID();
   activeStageDrafts.push({
-    schema_version: 2,
+    schema_version: PILOT_DRAFT_SCHEMA_VERSION,
     entity_type: 'stage_draft',
     entity_local_id: 'flight:' + identity.flightId + ':stage:' + localId,
     flight_id: identity.flightId,
@@ -2519,9 +2626,15 @@ function addOperationalStage() {
       horario_motor_ligado: previous.horario_pouso && !previous.horario_motor_desligado ? previous.horario_pouso : '', horario_decolagem: '', horario_pouso: '', horario_motor_desligado: '',
       tempo_decolagem_pouso: '', tempo_total: '', tempo_ifr: '', tempo_noturno: '',
       pousos_diurnos: '', pousos_noturnos: '', starts: '', pax: '', payload: '', unidade_payload: previous.unidade_payload || 'KG',
-      combustivel_inicio: previous.combustivel_fim || '', combustivel_fim: '', unidade_combustivel: previous.unidade_combustivel || '', observacao_local: '',
+      combustivel_inicio: previous.combustivel_fim || '', combustivel_fim: '', unidade_combustivel: previous.unidade_combustivel || '',
+      peso_passageiros: '', peso_bagagem: '', peso_tripulacao: '',
+      peso_vazio: previous.peso_vazio || packageData?.aeronave?.peso_vazio || '',
+      peso_total: '', unidade_peso: previous.unidade_peso || packageData?.aeronave?.unidade_peso || '',
+      observacoes: '',
     },
   });
+  activeStageTabIndex = activeStageDrafts.length - 1;
+  refreshAllStageDerivedTimes();
   scheduleOperationalSave();
   renderOperationalEditor({ preserveScroll: true });
 }
@@ -2594,6 +2707,7 @@ function renderOperationalEditor(options = {}) {
 }
 
 function closeOperationalEditor() {
+  activeStageTabIndex = 0;
   rdvEditorCard.classList.add('hidden');
   rdvCoreFields.replaceChildren();
   rdvFormFields.replaceChildren();

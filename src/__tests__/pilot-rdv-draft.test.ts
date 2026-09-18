@@ -4,6 +4,7 @@ import {
   applySafeStageAggregates,
   applyStageContinuity,
   calcClockDurationHhMm,
+  calcStageTotalWeight,
   payloadToKg,
   toDurationInput,
   validateStageDrafts,
@@ -87,6 +88,47 @@ describe('Pilot RDV operational calculations', () => {
     stages[0].fields.horario_pouso = '09:45';
     applyStageContinuity(stages);
     expect(stages[1].fields.horario_motor_ligado).toBe('09:44');
+  });
+
+  it('encadeia combustível final como inicial da perna seguinte', () => {
+    const stages = [
+      {
+        fields: {
+          destino_icao: '9PAA',
+          combustivel_inicio: '2400',
+          combustivel_fim: '1900',
+          unidade_combustivel: 'LB',
+        },
+      },
+      {
+        fields: {
+          origem_icao: '9PAA',
+          combustivel_inicio: '999',
+          combustivel_fim: '1500',
+          unidade_combustivel: 'KG',
+        },
+      },
+    ];
+
+    applyStageContinuity(stages);
+    expect(stages[1].fields.combustivel_inicio).toBe('1900');
+    expect(stages[1].fields.unidade_combustivel).toBe('LB');
+  });
+
+  it('calcula peso total na unidade operacional da perna', () => {
+    expect(
+      calcStageTotalWeight({
+        unidade_peso: 'LB',
+        peso_vazio: '9000',
+        peso_tripulacao: '400',
+        peso_passageiros: '1200',
+        peso_bagagem: '250',
+        payload: '100',
+        unidade_payload: 'KG',
+        combustivel_inicio: '1800',
+        unidade_combustivel: 'LB',
+      }),
+    ).toBeCloseTo(12870.462, 3);
   });
 
   it('limpa a partida derivada quando passa a existir corte na perna anterior', () => {

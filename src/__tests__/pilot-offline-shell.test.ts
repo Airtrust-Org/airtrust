@@ -157,23 +157,23 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('Não sincronizado');
   });
 
-  it('expõe o voo como workspace integrado sem promover mapa ou performance a funções certificadas', () => {
+  it('expõe o voo como workspace integrado sem blocos MET ou performance desnecessários', () => {
     expect(pilotIndex).toContain('id="pilot-workspace-view"');
     expect(pilotApp).toContain('renderPilotWorkspace');
     expect(pilotWorkspace).toContain("['summary', 'Resumo']");
     expect(pilotWorkspace).toContain("['planning', 'Planejamento']");
-    expect(pilotWorkspace).toContain("['met', 'MET']");
     expect(pilotWorkspace).toContain("['fuel', 'Combustível']");
     expect(pilotWorkspace).toContain("['dossier', 'Dossiê']");
     expect(pilotWorkspace).toContain("['map', 'Mapa']");
-    expect(pilotWorkspace).toContain("['performance', 'Performance']");
     expect(pilotWorkspace).toContain("['edb-shadow', 'eDB Shadow']");
+    expect(pilotWorkspace).not.toContain("['met', 'MET']");
+    expect(pilotWorkspace).not.toContain("['performance', 'Performance']");
+    expect(pilotWorkspace).not.toContain('Temperatura');
+    expect(pilotWorkspace).not.toContain('raw_metar');
     expect(pilotWorkspace).toContain('NÃO OFICIAL — eDB SHADOW — SEM VALOR REGULATÓRIO');
     expect(pilotWorkspace).toContain('não contém assinatura');
     expect(pilotWorkspace).toContain("tabId !== 'edb-shadow'");
-    expect(pilotWorkspace).toContain('MET armazenada no tablet é um snapshot');
     expect(pilotWorkspace).toContain('Não substitui navegação ou aviônicos certificados');
-    expect(pilotWorkspace).toContain('Aguardando fonte técnica versionada');
     expect(pilotWorkspace).not.toMatch(/tile\.openstreetmap|mapbox|googleapis.*maps/i);
   });
 
@@ -290,8 +290,15 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('id="add-fueling"');
     expect(pilotApp).toContain("['Hora de partida', 'horario_motor_ligado', 'time'");
     expect(pilotApp).toContain("['Aeródromo de origem', 'origem_icao', 'text'");
-    expect(pilotRdvDraft).toContain("{ code: 'MANUTENCAO', label: 'Manutenção' }");
-    expect(pilotRdvDraft).toContain("{ code: 'PETROBRAS', label: 'Petrobras' }");
+    expect(pilotApp).toContain('pilotNatureOptions(activePackageData())');
+    expect(pilotRdvDraft).not.toContain('PILOT_NATUREZA_OPTIONS');
+    expect(pilotApp).toContain("className = 'stage-tabs'");
+    expect(pilotApp).toContain("['Peso dos passageiros', 'peso_passageiros'");
+    expect(pilotApp).toContain("['Peso da bagagem', 'peso_bagagem'");
+    expect(pilotApp).toContain("['Peso da tripulação', 'peso_tripulacao'");
+    expect(pilotApp).toContain("['Peso vazio da aeronave', 'peso_vazio'");
+    expect(pilotApp).toContain("['Peso total', 'peso_total'");
+    expect(pilotApp).toContain("['Observações da etapa', 'observacoes'");
     expect(pilotSync).toContain('fuelings:');
     expect(pilotSync).toContain('natureza_voo_codigo');
     expect(pilotApp).toContain("supplementalErrors.push('Informe a natureza do voo.')");

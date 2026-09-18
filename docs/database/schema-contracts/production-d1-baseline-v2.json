@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-17",
-    "last_reconciled_against": "0500 Controle de Voos navigation points staging governance mirror; remote apply pending",
-    "schema_v2_digest": "fc18afb869cad4a36c7bacf55fcdae874bbbc365c3e26c435c3bc91392383746",
+    "last_reconciled_against": "0501 Controle de Voos operational leg weights prepared; remote apply pending",
+    "schema_v2_digest": "7acacf27809a5760091bfdcf5f384d8cd895680099e67cc7080f0ef6be71cac0",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -907,6 +907,20 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "controle-voos-navigation-points-0500.json",
       "note": "0500 is reviewed and prepared only. It preserves the source aerodrome identifier, separates ICAO codes (including 9P platform codes), enriches cv_aeroportos without changing existing IDs, and now includes the governed staging migration mirror/recovery-point path. Production still requires the Schema V2 workflow and exact-SHA authorization."
+    },
+    {
+      "change_file": "0501_controle_voos_leg_operational_weights.sql",
+      "change_id": "controle-voos-leg-operational-weights-0501",
+      "sha256": "b1d9be8e4674c9810b2bb21877684598491fe7da405268a0e650854b85638d5b",
+      "targets": [
+        "aeronaves",
+        "cv_voo_etapas"
+      ],
+      "domain": "tenant-scoped Controle de Voos aircraft empty weight, per-leg operational weight breakdown, observations, and Petrobras flight-nature catalog",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-leg-operational-weights-0501.json",
+      "note": "0501 is reviewed and prepared only. It adds nullable aircraft/per-leg weight fields and the tenant-scoped Petrobras nature catalog entry; it never derives empty weight from model averages. Remote apply requires the governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
     }
   ]
 }

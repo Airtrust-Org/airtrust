@@ -76,6 +76,10 @@ const migrations = [
   join(testDir, '../../../migrations/0438_controle_voos_rdv_coordenacao_workflow.sql'),
   join(testDir, '../../../migrations/0444_controle_voos_versao.sql'),
 ].map((p) => readFileSync(p, 'utf8'));
+const operationalWeightsMigration = readFileSync(
+  join(testDir, '../../../migrations/0501_controle_voos_leg_operational_weights.sql'),
+  'utf8',
+);
 
 function sqlString(value: unknown): string {
   if (value === null || value === undefined) return 'NULL';
@@ -204,6 +208,7 @@ function createSqliteD1(): SqliteD1 {
       );
     `,
   );
+  runSql(databasePath, operationalWeightsMigration);
   seed(databasePath);
 
   const db = {
@@ -447,8 +452,16 @@ describe('RDV etapas — CRUD multi-tenant', () => {
           horario_motor_desligado: '2026-06-14T10:50:00Z',
           combustivel_inicio: 1000,
           combustivel_fim: 800,
+          unidade_combustivel: 'LB',
           pousos_diurnos: 1,
           pax: 4,
+          payload: 50,
+          peso_passageiros: 700,
+          peso_bagagem: 100,
+          peso_tripulacao: 400,
+          peso_vazio: 9000,
+          unidade_peso: 'LB',
+          observacoes: 'Perna operacional de teste',
         }),
       },
       PILOTO,
@@ -461,6 +474,8 @@ describe('RDV etapas — CRUD multi-tenant', () => {
         origem_dados: string;
         tempo_decolagem_pouso: string;
         tempo_total: string;
+        peso_total: number;
+        observacoes: string;
       };
       meta: { versao: number };
     };
@@ -468,6 +483,8 @@ describe('RDV etapas — CRUD multi-tenant', () => {
     expect(e1.data.origem_dados).toBe('MANUAL');
     expect(e1.data.tempo_decolagem_pouso).toBe('00:40');
     expect(e1.data.tempo_total).toBe('01:00');
+    expect(e1.data.peso_total).toBeCloseTo(11310.231, 3);
+    expect(e1.data.observacoes).toBe('Perna operacional de teste');
     versao = e1.meta.versao;
 
     const create2 = await request(

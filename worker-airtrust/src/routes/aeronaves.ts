@@ -34,7 +34,7 @@ aeronaves.get('/', auth(), async (c) => {
     const { results } = await db
       .prepare(
         `
-        SELECT id, codigo, modelo, prefixo, ano_fabricacao, status, observacoes, created_at, updated_at
+        SELECT id, codigo, modelo, prefixo, ano_fabricacao, status, observacoes, peso_vazio, unidade_peso, created_at, updated_at
         FROM aeronaves
         WHERE ${filters.join(' AND ')}
         ORDER BY modelo ASC
@@ -63,7 +63,7 @@ aeronaves.get('/:id', auth(), async (c) => {
     const { results } = await db
       .prepare(
         `
-        SELECT id, codigo, modelo, prefixo, ano_fabricacao, status, observacoes, created_at, updated_at
+        SELECT id, codigo, modelo, prefixo, ano_fabricacao, status, observacoes, peso_vazio, unidade_peso, created_at, updated_at
         FROM aeronaves
         WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?
         `,
@@ -95,6 +95,8 @@ aeronaves.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     ano_fabricacao?: number;
     status?: string;
     observacoes?: string;
+    peso_vazio?: number | string | null;
+    unidade_peso?: string | null;
   };
 
   if (!body.modelo || body.modelo.trim().length === 0) {
@@ -104,6 +106,19 @@ aeronaves.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const prefixoNormalizado = body.prefixo?.trim().toUpperCase() || null;
   const codigo = prefixoNormalizado || `${body.modelo.trim().toUpperCase()}_${Date.now()}`;
+  const pesoVazio = body.peso_vazio == null || body.peso_vazio === '' ? null : Number(body.peso_vazio);
+  const unidadePeso = body.unidade_peso == null
+    ? null
+    : String(body.unidade_peso).trim().toUpperCase() || null;
+
+  if (pesoVazio !== null || unidadePeso !== null) {
+    if (pesoVazio == null || !Number.isFinite(pesoVazio) || pesoVazio <= 0) {
+      throw new ApiError('Peso vazio da aeronave deve ser maior que zero', 400);
+    }
+    if (!unidadePeso || !['KG', 'LB'].includes(unidadePeso)) {
+      throw new ApiError('Unidade do peso vazio deve ser KG ou LB', 400);
+    }
+  }
 
   try {
     if (prefixoNormalizado) {
@@ -119,8 +134,11 @@ aeronaves.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
     const result = await db
       .prepare(
         `
-        INSERT INTO aeronaves (codigo, modelo, prefixo, ano_fabricacao, status, observacoes, empresa_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        INSERT INTO aeronaves (
+          codigo, modelo, prefixo, ano_fabricacao, status, observacoes,
+          peso_vazio, unidade_peso, empresa_id, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         `,
       )
       .bind(
@@ -130,6 +148,8 @@ aeronaves.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
         body.ano_fabricacao || null,
         body.status || 'ATIVO',
         body.observacoes || null,
+        pesoVazio,
+        unidadePeso,
         empresaId,
       )
       .run();
@@ -156,6 +176,8 @@ aeronaves.post('/', auth(), requireRole('admin', 'manager'), async (c) => {
           ano_fabricacao: body.ano_fabricacao || null,
           status: body.status || 'ATIVO',
           observacoes: body.observacoes || null,
+          peso_vazio: pesoVazio,
+          unidade_peso: unidadePeso,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -184,6 +206,8 @@ aeronaves.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     ano_fabricacao?: number;
     status?: string;
     observacoes?: string;
+    peso_vazio?: number | string | null;
+    unidade_peso?: string | null;
   };
 
   if (Object.keys(body).length === 0) {
@@ -194,7 +218,7 @@ aeronaves.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     // Verifica se existe E pertence à empresa do usuário autenticado
     const { results: existing } = await db
       .prepare(
-        'SELECT id, codigo, status, prefixo, modelo FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        'SELECT id, codigo, status, prefixo, modelo, peso_vazio, unidade_peso FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
       )
       .bind(id, empresaIdPut)
       .all<{
@@ -203,6 +227,8 @@ aeronaves.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
         status: string | null;
         prefixo: string | null;
         modelo: string | null;
+        peso_vazio: number | null;
+        unidade_peso: string | null;
       }>();
 
     if (!existing || existing.length === 0) {
@@ -256,6 +282,29 @@ aeronaves.put('/:id', auth(), requireRole('admin', 'manager'), async (c) => {
     if (body.observacoes !== undefined) {
       fields.push('observacoes = ?');
       values.push(body.observacoes || null);
+    }
+    if (body.peso_vazio !== undefined) {
+      const pesoVazio =
+        body.peso_vazio == null || body.peso_vazio === '' ? null : Number(body.peso_vazio);
+      if (pesoVazio == null || !Number.isFinite(pesoVazio) || pesoVazio <= 0) {
+        throw new ApiError('Peso vazio da aeronave deve ser maior que zero', 400);
+      }
+      const effectiveUnit = String(body.unidade_peso ?? aeronaveAtual.unidade_peso ?? '')
+        .trim()
+        .toUpperCase();
+      if (!['KG', 'LB'].includes(effectiveUnit)) {
+        throw new ApiError('Unidade do peso vazio deve ser KG ou LB', 400);
+      }
+      fields.push('peso_vazio = ?');
+      values.push(pesoVazio);
+    }
+    if (body.unidade_peso !== undefined) {
+      const unidadePeso = String(body.unidade_peso || '').trim().toUpperCase();
+      if (!['KG', 'LB'].includes(unidadePeso)) {
+        throw new ApiError('Unidade do peso vazio deve ser KG ou LB', 400);
+      }
+      fields.push('unidade_peso = ?');
+      values.push(unidadePeso);
     }
 
     fields.push('updated_at = datetime("now")');

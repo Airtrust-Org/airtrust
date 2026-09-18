@@ -40,6 +40,13 @@ export type EtapaRow = {
   combustivel_inicio: number | null;
   combustivel_fim: number | null;
   unidade_combustivel: string | null;
+  peso_passageiros?: number | null;
+  peso_bagagem?: number | null;
+  peso_tripulacao?: number | null;
+  peso_vazio?: number | null;
+  peso_total?: number | null;
+  unidade_peso?: string | null;
+  observacoes?: string | null;
   origem_dados: EtapaOrigemDados;
   created_by: number | null;
   updated_by: number | null;
@@ -67,6 +74,13 @@ export type EtapaInput = Partial<{
   combustivel_inicio: number | null;
   combustivel_fim: number | null;
   unidade_combustivel: string | null;
+  peso_passageiros: number | null;
+  peso_bagagem: number | null;
+  peso_tripulacao: number | null;
+  peso_vazio: number | null;
+  peso_total: number | null;
+  unidade_peso: string | null;
+  observacoes: string | null;
 }>;
 
 export const ETAPA_SELECT = `
@@ -75,8 +89,9 @@ export const ETAPA_SELECT = `
   horario_motor_ligado, horario_decolagem, horario_pouso, horario_motor_desligado,
   tempo_decolagem_pouso, tempo_total, tempo_navegacao, tempo_ifr, tempo_noturno,
   pousos_diurnos, pousos_noturnos, starts, pax, payload,
-  combustivel_inicio, combustivel_fim, unidade_combustivel, origem_dados,
-  created_by, updated_by, created_at, updated_at, deleted_at
+  combustivel_inicio, combustivel_fim, unidade_combustivel,
+  peso_passageiros, peso_bagagem, peso_tripulacao, peso_vazio, peso_total, unidade_peso, observacoes,
+  origem_dados, created_by, updated_by, created_at, updated_at, deleted_at
 `;
 
 export const ETAPA_MUTABLE_FIELDS = [
@@ -98,6 +113,13 @@ export const ETAPA_MUTABLE_FIELDS = [
   'combustivel_inicio',
   'combustivel_fim',
   'unidade_combustivel',
+  'peso_passageiros',
+  'peso_bagagem',
+  'peso_tripulacao',
+  'peso_vazio',
+  'peso_total',
+  'unidade_peso',
+  'observacoes',
 ] as const;
 
 const ETAPA_DIFF_FIELDS = [
@@ -115,6 +137,11 @@ const NUMERIC_ETAPA_FIELDS = new Set([
   'payload',
   'combustivel_inicio',
   'combustivel_fim',
+  'peso_passageiros',
+  'peso_bagagem',
+  'peso_tripulacao',
+  'peso_vazio',
+  'peso_total',
 ]);
 
 /** Aceita ISO-8601 completo ou HH:MM / HH:MM:SS (legado SIGVOOS). */
@@ -187,6 +214,40 @@ export function computeEtapaTempos(
 
   return { tempo_decolagem_pouso: tempoDecolagemPouso, tempo_total: tempoTotal };
 }
+
+function convertWeightValue(
+  value: number | null | undefined,
+  fromUnit: string | null | undefined,
+  toUnit: string | null | undefined,
+): number | null {
+  if (value == null) return null;
+  const source = String(fromUnit || '').trim().toUpperCase();
+  const target = String(toUnit || '').trim().toUpperCase();
+  if (!source || !target) return null;
+  if (source === target) return value;
+  if (source === 'KG' && target === 'LB') return Number((value * 2.2046226218).toFixed(3));
+  if (source === 'LB' && target === 'KG') return Number((value / 2.2046226218).toFixed(3));
+  return null;
+}
+
+export function computeEtapaPesoTotal(input: EtapaInput): number | null {
+  const unit = String(input.unidade_peso || '').trim().toUpperCase();
+  if (!unit || input.peso_vazio == null) return null;
+
+  let total = input.peso_vazio;
+  total += input.peso_tripulacao ?? 0;
+  total += input.peso_passageiros ?? 0;
+  total += input.peso_bagagem ?? 0;
+
+  const payload = convertWeightValue(input.payload, 'KG', unit);
+  if (payload != null) total += payload;
+
+  const fuel = convertWeightValue(input.combustivel_inicio, input.unidade_combustivel, unit);
+  if (fuel != null) total += fuel;
+
+  return Number(total.toFixed(3));
+}
+
 
 function assertTimeOrder(
   earlier: string | null | undefined,
@@ -268,6 +329,11 @@ export function validateEtapaInput(input: EtapaInput): void {
     'payload',
     'combustivel_inicio',
     'combustivel_fim',
+    'peso_passageiros',
+    'peso_bagagem',
+    'peso_tripulacao',
+    'peso_vazio',
+    'peso_total',
   ] as const) {
     const value = input[field];
     if (value != null && value < 0) {
@@ -313,6 +379,30 @@ export function validateEtapaInput(input: EtapaInput): void {
     'Horario de decolagem anterior ao motor ligado',
     'CONTROLE_VOOS_ETAPA_DECOLAGEM_ANTES_MOTOR',
   );
+
+  if (input.peso_vazio != null && input.peso_vazio <= 0) {
+    throw new ApiError(
+      'peso_vazio deve ser maior que zero',
+      400,
+      'CONTROLE_VOOS_ETAPA_PESO_VAZIO_INVALIDO',
+    );
+  }
+
+  if (input.unidade_combustivel != null && !['KG', 'LB'].includes(input.unidade_combustivel.toUpperCase())) {
+    throw new ApiError(
+      'unidade_combustivel deve ser KG ou LB',
+      400,
+      'CONTROLE_VOOS_ETAPA_UNIDADE_COMBUSTIVEL_INVALIDA',
+    );
+  }
+
+  if (input.unidade_peso != null && !['KG', 'LB'].includes(input.unidade_peso.toUpperCase())) {
+    throw new ApiError(
+      'unidade_peso deve ser KG ou LB',
+      400,
+      'CONTROLE_VOOS_ETAPA_UNIDADE_PESO_INVALIDA',
+    );
+  }
 
   if (
     input.combustivel_inicio != null &&
