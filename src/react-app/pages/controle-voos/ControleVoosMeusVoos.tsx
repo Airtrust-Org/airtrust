@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { FileText, PlaneTakeoff } from 'lucide-react';
+import { FileText, PlaneTakeoff, TabletSmartphone } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
@@ -22,7 +22,7 @@ export default function ControleVoosMeusVoos() {
         <ControleVoosPageShell>
           <ControleVoosPageHeader
             title="Meus voos"
-            description="Voos atribuídos a você pela Coordenação — preencha o lançamento e envie para revisão"
+            description="Voos atribuídos a você pela Coordenação — abra o Pilot App para preencher o voo, inclusive offline"
           >
             <Link
               to="/horas-voo"
@@ -92,12 +92,12 @@ export default function ControleVoosMeusVoos() {
                         </div>
                       </dl>
 
-                      <Link
-                        to={`/controle-voos/rdv/${voo.id}`}
+                      <a
+                        href={`/pilot/?flight=${voo.id}`}
                         className="mt-4 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
                       >
-                        <FileText className="h-4 w-4" /> Preencher voo
-                      </Link>
+                        <TabletSmartphone className="h-4 w-4" /> Abrir Pilot App
+                      </a>
                     </article>
                   );
                 })}
@@ -130,12 +130,12 @@ export default function ControleVoosMeusVoos() {
                             <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{formatTime(voo.horario_previsto_partida)}</td>
                             <td className="px-4 py-3"><ControleVoosStatusBadge status={voo.status} /></td>
                             <td className="px-4 py-3 text-right">
-                              <Link
-                                to={`/controle-voos/rdv/${voo.id}`}
+                              <a
+                                href={`/pilot/?flight=${voo.id}`}
                                 className="inline-flex min-h-[40px] items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
                               >
-                                <FileText className="h-3.5 w-3.5" /> Preencher voo
-                              </Link>
+                                <TabletSmartphone className="h-3.5 w-3.5" /> Abrir Pilot App
+                              </a>
                             </td>
                           </tr>
                         );
