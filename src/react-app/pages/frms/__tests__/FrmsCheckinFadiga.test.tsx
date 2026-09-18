@@ -232,12 +232,13 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(isValidWakeTime('6')).toBe(false);
   });
 
-  it('resolve destino correto apos salvar fadiga por perfil, fechando o formulário do tripulante', () => {
-    expect(resolveFadigaPostSavePath('INSTRUTOR')).toBe('/frms');
-    expect(resolveFadigaPostSavePath('ALUNO')).toBe('/frms');
-    expect(resolveFadigaPostSavePath('TRIPULANTE')).toBe('/frms');
-    expect(resolveFadigaPostSavePath('GESTOR')).toBe('/frms/controle-operacional');
-    expect(resolveFadigaPostSavePath('ADMINISTRADOR')).toBe('/frms/controle-operacional');
+  it('resolve destino correto apos salvar fadiga, fechando o formulário na home do funcionário', () => {
+    expect(resolveFadigaPostSavePath('INSTRUTOR')).toBe('/home');
+    expect(resolveFadigaPostSavePath('ALUNO')).toBe('/home');
+    expect(resolveFadigaPostSavePath('TRIPULANTE')).toBe('/home');
+    expect(resolveFadigaPostSavePath('GESTOR')).toBe('/home');
+    expect(resolveFadigaPostSavePath('ADMINISTRADOR')).toBe('/home');
+    expect(resolveFadigaPostSavePath(null)).toBe('/home');
   });
 });
 
@@ -561,23 +562,33 @@ describe('FrmsCheckinFadiga UI', () => {
     }
   });
 
-  it('sucesso de instrutor fecha formulario e volta para home correta', async () => {
+  it('sucesso de instrutor fecha formulario e volta para home do funcionário', async () => {
     render(<FrmsCheckinFadiga />);
 
     preencherFormularioValido();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
 
-    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/frms', { replace: true }));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/home', { replace: true }));
   });
 
-  it('sucesso de aluno/tripulante fecha formulário e volta para home correta', async () => {
+  it('sucesso de aluno/tripulante fecha formulário e volta para home do funcionário', async () => {
     usePermissionsMock.mockReturnValue({ isAdmin: false, isGestor: false, role: 'ALUNO' });
     render(<FrmsCheckinFadiga />);
 
     preencherFormularioValido();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
 
-    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/frms', { replace: true }));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/home', { replace: true }));
+  });
+
+  it('botao de voltar do funcionario comum fecha check-in para a home, sem abrir FRMS operacional', () => {
+    render(<FrmsCheckinFadiga />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar para início' }));
+
+    expect(navigateMock).toHaveBeenCalledWith('/home');
+    expect(navigateMock).not.toHaveBeenCalledWith('/frms');
+    expect(navigateMock).not.toHaveBeenCalledWith('/frms/controle-operacional');
   });
 
   it('erro de envio permanece no formulario sem redirecionar', async () => {

@@ -1,21 +1,9 @@
+export const FADIGA_EMPLOYEE_HOME_PATH = '/home';
+
 export function resolveFadigaPostSavePath(role?: string | null): string {
-  const normalized = String(role || '')
-    .trim()
-    .toUpperCase();
-
-  if (
-    normalized === 'ALUNO' ||
-    normalized === 'STUDENT' ||
-    normalized === 'INSTRUTOR' ||
-    normalized === 'INSTRUCTOR' ||
-    normalized === 'USUARIO' ||
-    normalized === 'TRIPULANTE' ||
-    normalized === 'PILOTO'
-  ) {
-    // Sai da rota do formulário para garantir que o check-in concluído não permaneça aberto.
-    // O toast de sucesso é emitido antes desta navegação e permanece visível no shell da aplicação.
-    return '/frms';
-  }
-
-  return '/frms/controle-operacional';
+  // O check-in diario pertence a jornada individual do funcionario.
+  // Ao concluir/fechar o formulario, nunca empurrar o usuario para a superficie
+  // operacional do FRMS (/frms, /frms/controle-operacional, Casos ou Administracao).
+  void role;
+  return FADIGA_EMPLOYEE_HOME_PATH;
 }
