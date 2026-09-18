@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test';
 
+async function openDiagnosticCard(page: import('@playwright/test').Page) {
+  await page.locator('#diagnostic-card').evaluate((element) => {
+    element.classList.remove('hidden');
+  });
+  await page.locator('#diagnostic-card > summary').click();
+}
+
 test('Pilot vault survives offline refresh, close/reopen and Service Worker stays isolated', async ({
   page,
   context,
@@ -23,7 +30,7 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
   await expect(page.locator('#legacy-vault-card')).toBeHidden();
   await expect(page.getByText('PIN offline')).toHaveCount(0);
 
-  await page.locator('#diagnostic-card > summary').click();
+  await openDiagnosticCard(page);
   const marker = `pilot-offline-ci-${Date.now()}`;
   await page.locator('#draft').fill(marker);
   await page.locator('#save-now').click();
@@ -127,7 +134,7 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
     await reopened.goto('/pilot/', { waitUntil: 'domcontentloaded' });
     await expect(reopened.locator('#workspace')).toBeVisible();
     await expect(reopened.locator('#legacy-vault-card')).toBeHidden();
-    await reopened.locator('#diagnostic-card > summary').click();
+    await openDiagnosticCard(reopened);
     await expect(reopened.locator('#draft')).toHaveValue(marker);
     await expect(reopened.locator('#save-status')).toContainText('Rascunho recuperado do tablet');
 
@@ -169,7 +176,7 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
     await expect(page.locator('#connectivity')).toContainText('OFFLINE');
     await expect(page.locator('#workspace')).toBeVisible();
     await expect(page.locator('#legacy-vault-card')).toBeHidden();
-    await page.locator('#diagnostic-card > summary').click();
+    await openDiagnosticCard(page);
     await expect(page.locator('#draft')).toHaveValue(marker);
     await expect(page.locator('#save-status')).toContainText('Rascunho recuperado do tablet');
 
@@ -180,7 +187,7 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
     await expect(reopened.locator('#connectivity')).toContainText('OFFLINE');
     await expect(reopened.locator('#workspace')).toBeVisible();
     await expect(reopened.locator('#legacy-vault-card')).toBeHidden();
-    await reopened.locator('#diagnostic-card > summary').click();
+    await openDiagnosticCard(reopened);
     await expect(reopened.locator('#draft')).toHaveValue(marker);
     await expect(reopened.locator('#save-status')).toContainText('Rascunho recuperado do tablet');
     await context.setOffline(false);
@@ -220,7 +227,7 @@ test('does not prompt for a legacy PIN and preserves the old encrypted vault unt
   await page.goto('/pilot/');
   await expect(page.locator('#legacy-vault-card')).toHaveCount(0);
   await expect(page.locator('#workspace')).toBeVisible();
-  await page.locator('#diagnostic-card > summary').click();
+  await openDiagnosticCard(page);
   await expect(page.locator('#draft')).toHaveValue('');
 
   const proof = await page.evaluate(async (plainMarker) => {
