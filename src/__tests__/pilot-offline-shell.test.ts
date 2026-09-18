@@ -106,7 +106,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v18'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v19'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
@@ -163,7 +163,7 @@ describe('Pilot Offline shell', () => {
       "const persisted = await vault.getJson('flight_packages', recordId)",
       writeIndex,
     );
-    const readyIndex = pilotApp.indexOf('Consulta offline disponível.', readBackIndex);
+    const readyIndex = pilotApp.indexOf('Voo preparado neste tablet.', readBackIndex);
 
     expect(writeIndex).toBeGreaterThan(-1);
     expect(readBackIndex).toBeGreaterThan(writeIndex);
@@ -174,14 +174,13 @@ describe('Pilot Offline shell', () => {
   });
 
   it('mantem o pacote-base read-only e separa rascunho local de sincronizacao', () => {
-    expect(pilotIndex).toContain('não substitui o Diário de Bordo oficial');
-    expect(pilotIndex).toContain('outbox cifrada');
-    expect(pilotIndex).toContain('receipt do servidor');
+    expect(pilotIndex).toContain('Salvamento automático');
+    expect(pilotIndex).toContain('Detalhes de sincronização');
     expect(pilotApp).toContain('contract?.read_only !== true');
     expect(pilotApp).toContain("typeof contract?.sync_supported !== 'boolean'");
     expect(pilotApp).toContain('contract?.regulated_edb !== false');
-    expect(pilotIndex).toContain('Rascunho operacional local');
     expect(pilotIndex).toContain('Não sincronizado');
+    expect(pilotIndex).toContain('technical-only');
   });
 
   it('expõe o voo como workspace integrado sem blocos MET ou performance desnecessários', () => {
@@ -251,7 +250,7 @@ describe('Pilot Offline shell', () => {
 
   it('separa persistencia local de transmissao e exige receipt antes de remover a outbox', () => {
     expect(pilotIndex).toContain('id="sync-rdv-now"');
-    expect(pilotIndex).toContain('“Transmitido” só será');
+    expect(pilotIndex).toContain('Enviar informações do voo');
     expect(pilotApp).toContain("await vault.putJson(\n        'outbox'");
     expect(pilotApp).toMatch(/await vault\.getJson\(\s*'sync_receipts'/);
     const persistResultIndex = pilotApp.indexOf('async function persistFinalSyncResult');
@@ -284,7 +283,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('id="refresh-canonical-package"');
     expect(pilotIndex).toContain('id="finalize-rdv-server"');
     expect(pilotIndex).toContain('id="send-rdv-coordination"');
-    expect(pilotIndex).toContain('Concluir e enviar');
+    expect(pilotIndex).toContain('Finalizar e encaminhar à Coordenação');
     expect(pilotIndex).toContain('Enviar à Coordenação');
     expect(pilotApp).toContain("'/controle-voos/pilot/offline-sync'");
     expect(pilotApp).toContain("'/rdv/finalizar-preenchimento'");
@@ -359,6 +358,24 @@ describe('Pilot Offline shell', () => {
     expect(pilotVault).toContain('async migrateLegacyPin(pin)');
     expect(pilotVault).toContain("name: 'PBKDF2'");
     expect(pilotVault).toContain('wrapped_key');
+  });
+
+  it('prioriza o voo do dia e mantém a seleção técnica fora da tela operacional', () => {
+    expect(pilotIndex).toContain('id="authorized-flight-date"');
+    expect(pilotIndex).toContain('id="flight-date-prev"');
+    expect(pilotIndex).toContain('id="flight-date-today"');
+    expect(pilotIndex).toContain('id="flight-date-next"');
+    expect(pilotApp).toContain('flightDateKey(voo.data_programacao) === selectedDate');
+    expect(pilotApp).toContain('authorizedFlightDate.value = localDateKey()');
+    expect(pilotApp).toContain("buttonText: 'Abrir voo'");
+    expect(pilotApp).toContain('await openAuthorizedFlight(targetedFlight.id)');
+    expect(pilotIndex).toContain('technical-only');
+  });
+
+  it('mantém campos de hora com a mesma largura dos demais no tablet', () => {
+    expect(pilotIndex).toContain('.editor-grid input[type="time"]');
+    expect(pilotIndex).toContain('min-inline-size: 100%');
+    expect(pilotIndex).toContain('@media (max-width: 620px)');
   });
 
   it('expõe tempos derivados, unidades e erro real da transmissão bloqueada', () => {

@@ -58,6 +58,14 @@ const connectivity = document.querySelector('#connectivity');
 const workspace = document.querySelector('#workspace');
 const refreshOnlineButton = document.querySelector('#refresh-online');
 const sessionStatus = document.querySelector('#session-status');
+const flightSelectionCard = document.querySelector('#flight-selection-card');
+const onlineFlightsCard = document.querySelector('#online-flights-card');
+const cachedFlightsCard = document.querySelector('#cached-flights-card');
+const authorizedFlightDate = document.querySelector('#authorized-flight-date');
+const authorizedFlightHeading = document.querySelector('#authorized-flight-heading');
+const flightDatePrevButton = document.querySelector('#flight-date-prev');
+const flightDateTodayButton = document.querySelector('#flight-date-today');
+const flightDateNextButton = document.querySelector('#flight-date-next');
 const cachedCount = document.querySelector('#cached-count');
 const storageLabel = document.querySelector('#storage');
 const cachedFlights = document.querySelector('#cached-flights');
@@ -118,6 +126,76 @@ let timingSequence = 0;
 let operationalSyncInFlight = false;
 let coordinationInFlight = false;
 let activeStageTabIndex = 0;
+let targetFlightAutoOpened = false;
+
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
+}
+
+function flightDateKey(value) {
+  const text = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : '';
+}
+
+function selectedFlightDateKey() {
+  return authorizedFlightDate?.value || localDateKey();
+}
+
+function displaySelectedFlightDate() {
+  return formatDate(selectedFlightDateKey());
+}
+
+function setSelectedFlightDate(value) {
+  if (!authorizedFlightDate) return;
+  authorizedFlightDate.value = value || localDateKey();
+  if (authorizedFlightHeading) {
+    authorizedFlightHeading.textContent =
+      selectedFlightDateKey() === localDateKey()
+        ? 'Voos de hoje'
+        : 'Voos de ' + displaySelectedFlightDate();
+  }
+  renderOnlineFlights();
+  renderCachedPackages();
+}
+
+function shiftSelectedFlightDate(days) {
+  const base = new Date(selectedFlightDateKey() + 'T12:00:00');
+  if (Number.isNaN(base.getTime())) return;
+  base.setDate(base.getDate() + days);
+  setSelectedFlightDate(localDateKey(base));
+}
+
+function updateFlightSelectionMode() {
+  if (!onlineFlightsCard || !cachedFlightsCard) return;
+  if (flightSelectionCard?.classList.contains('hidden')) {
+    cachedFlightsCard.classList.add('hidden');
+    return;
+  }
+  if (navigator.onLine) {
+    onlineFlightsCard.classList.remove('hidden');
+    cachedFlightsCard.classList.add('hidden');
+  } else {
+    onlineFlightsCard.classList.add('hidden');
+    cachedFlightsCard.classList.remove('hidden');
+  }
+}
+
+function setFlightSelectionVisible(visible) {
+  if (flightSelectionCard) flightSelectionCard.classList.toggle('hidden', !visible);
+  if (!visible) {
+    if (cachedFlightsCard) cachedFlightsCard.classList.add('hidden');
+    return;
+  }
+  updateFlightSelectionMode();
+}
+
+if (authorizedFlightDate && !authorizedFlightDate.value) {
+  authorizedFlightDate.value = localDateKey();
+}
+if (authorizedFlightHeading) authorizedFlightHeading.textContent = 'Voos de hoje';
 
 function setConnectivity() {
   const online = navigator.onLine;
@@ -129,6 +207,7 @@ function setConnectivity() {
   text.textContent = online ? 'ONLINE' : 'OFFLINE — operação local ativa';
   connectivity.append(dot, text);
   refreshOnlineButton.disabled = !online;
+  updateFlightSelectionMode();
   if (activePackageRecord) void refreshCoordinationControls();
 }
 
@@ -425,13 +504,21 @@ function packageRecordFlightId(record) {
 
 function renderCachedPackages() {
   cachedCount.textContent = String(cachedPackageRecords.length);
-  if (cachedPackageRecords.length === 0) {
-    renderEmpty(cachedFlights, 'Nenhum pacote de voo armazenado neste tablet.');
+  const selectedDate = selectedFlightDateKey();
+  const visibleRecords = cachedPackageRecords.filter(
+    (record) => flightDateKey(record.value?.package?.voo?.data_programacao) === selectedDate,
+  );
+
+  if (visibleRecords.length === 0) {
+    renderEmpty(
+      cachedFlights,
+      'Nenhum voo salvo neste tablet para ' + displaySelectedFlightDate() + '.',
+    );
     return;
   }
 
   cachedFlights.replaceChildren();
-  for (const record of cachedPackageRecords) {
+  for (const record of visibleRecords) {
     const packageData = record.value.package;
     const voo = packageData.voo;
     const route =
@@ -442,47 +529,68 @@ function renderCachedPackages() {
       makeFlightItem({
         title: displayText(voo.prefixo, 'Voo #' + voo.id),
         subtitle: formatDate(voo.data_programacao) + ' · ' + route,
-        badge: 'Consulta offline disponível · salvo ' + formatTimestamp(record.value.prepared_at),
-        buttonText: 'Abrir',
-        onClick: () => openPackageRecord(record),
+        badge: 'Disponível offline',
+        buttonText: 'Abrir voo',
+        onClick: async () => {
+          openPackageRecord(record);
+          await openExistingOperationalDraft();
+        },
       }),
     );
   }
 }
 
 function renderOnlineFlights() {
-  if (!navigator.onLine) {
-    renderEmpty(onlineFlights, 'Sem conexão. A lista online não é atualizada em modo offline.');
-    return;
+  const selectedDate = selectedFlightDateKey();
+  if (authorizedFlightHeading) {
+    authorizedFlightHeading.textContent =
+      selectedDate === localDateKey()
+        ? 'Voos de hoje'
+        : 'Voos de ' + displaySelectedFlightDate();
   }
-  if (onlineFlightRecords.length === 0) {
-    renderEmpty(onlineFlights, 'Nenhum voo autorizado foi retornado para a sessão atual.');
+
+  if (!navigator.onLine) {
+    renderEmpty(onlineFlights, 'Sem conexão. Abra um voo já salvo neste tablet.');
     return;
   }
 
-  const sorted = [...onlineFlightRecords].sort((a, b) => {
+  const filtered = onlineFlightRecords.filter(
+    (voo) => flightDateKey(voo.data_programacao) === selectedDate,
+  );
+  if (filtered.length === 0) {
+    renderEmpty(
+      onlineFlights,
+      'Nenhum voo autorizado para ' + displaySelectedFlightDate() + '.',
+    );
+    return;
+  }
+
+  const sorted = [...filtered].sort((a, b) => {
     if (String(a.id) === String(TARGET_FLIGHT_ID)) return -1;
     if (String(b.id) === String(TARGET_FLIGHT_ID)) return 1;
-    return String(b.data_programacao || '').localeCompare(String(a.data_programacao || ''));
+    return String(a.horario_previsto_partida || '').localeCompare(
+      String(b.horario_previsto_partida || ''),
+    );
   });
 
   onlineFlights.replaceChildren();
   for (const voo of sorted) {
-    const cached = cachedPackageRecords.some((record) => packageRecordFlightId(record) === Number(voo.id));
-    const targeted = String(voo.id) === String(TARGET_FLIGHT_ID);
+    const cached = cachedPackageRecords.some(
+      (record) => packageRecordFlightId(record) === Number(voo.id),
+    );
     onlineFlights.append(
       makeFlightItem({
         title: displayText(voo.prefixo, 'Voo #' + voo.id),
         subtitle:
           formatDate(voo.data_programacao) +
-          ' · status ' +
-          displayText(voo.status, 'não informado') +
-          ' · voo #' +
-          voo.id,
-        badge: cached ? 'Já existe pacote local' : targeted ? 'Voo solicitado' : null,
-        buttonText: targeted ? 'Preparar este voo' : cached ? 'Atualizar pacote' : 'Preparar offline',
+          ' · ' +
+          (toInputTime(voo.horario_previsto_partida)
+            ? 'partida ' + toInputTime(voo.horario_previsto_partida)
+            : 'horário não informado'),
+        badge: cached ? 'Já preparado neste tablet' : null,
+        buttonText: 'Abrir voo',
         disabled: !navigator.onLine,
-        onClick: () => prepareFlightPackage(voo.id),
+        onClick: () => void openAuthorizedFlight(voo.id),
       }),
     );
   }
@@ -502,7 +610,7 @@ async function loadCachedPackages() {
 async function loadOnlineFlights() {
   if (!vault?.isUnlocked()) return;
   if (!navigator.onLine) {
-    setSessionMessage('Offline — mostrando apenas pacotes cifrados já armazenados.', 'attention');
+    setSessionMessage('Offline — mostrando os voos já preparados neste tablet.', 'attention');
     onlineFlightRecords = [];
     renderOnlineFlights();
     return;
@@ -515,10 +623,22 @@ async function loadOnlineFlights() {
     onlineFlightRecords = Array.isArray(body?.data) ? body.data : [];
     setSessionMessage(
       onlineFlightRecords.length > 0
-        ? 'Sessão online válida. Selecione um voo para preparar a consulta offline.'
-        : 'Sessão online válida, mas nenhum voo autorizado foi encontrado.',
+        ? 'Selecione um voo para iniciar o preenchimento.'
+        : 'Nenhum voo autorizado foi encontrado.',
       'ok',
     );
+
+    const targetedFlight = TARGET_FLIGHT_ID
+      ? onlineFlightRecords.find((voo) => String(voo.id) === String(TARGET_FLIGHT_ID))
+      : null;
+    if (targetedFlight && !targetFlightAutoOpened) {
+      targetFlightAutoOpened = true;
+      const targetDate = flightDateKey(targetedFlight.data_programacao);
+      if (targetDate) setSelectedFlightDate(targetDate);
+      await openAuthorizedFlight(targetedFlight.id);
+      return;
+    }
+
     renderOnlineFlights();
   } catch (error) {
     onlineFlightRecords = [];
@@ -536,7 +656,7 @@ async function loadOnlineFlights() {
 
 async function prepareFlightPackage(flightId) {
   if (!vault?.isUnlocked()) return;
-  setSessionMessage('Baixando e verificando pacote do voo #' + flightId + '…', 'attention');
+  setSessionMessage('Preparando o voo para uso offline…', 'attention');
   refreshOnlineButton.disabled = true;
 
   try {
@@ -574,7 +694,7 @@ async function prepareFlightPackage(flightId) {
     }
 
     setSessionMessage(
-      'Pacote verificado e armazenado no tablet. Consulta offline disponível.',
+      'Voo preparado neste tablet. Você pode continuar mesmo se a conexão cair.',
       'ok',
     );
     await loadCachedPackages();
@@ -593,6 +713,54 @@ async function prepareFlightPackage(flightId) {
     refreshOnlineButton.disabled = !navigator.onLine;
   }
 }
+
+async function ensurePilotShellReadyForFlight() {
+  if (!('serviceWorker' in navigator)) {
+    throw new Error('O modo offline não está disponível neste navegador.');
+  }
+
+  const registration = await navigator.serviceWorker.ready;
+  if (new URL(registration.scope).pathname !== '/pilot/') {
+    throw new Error('O modo offline do Pilot App não está ativo.');
+  }
+
+  if (!navigator.serviceWorker.controller) {
+    await new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        navigator.serviceWorker.removeEventListener('controllerchange', finish);
+        resolve();
+      };
+      navigator.serviceWorker.addEventListener('controllerchange', finish, { once: true });
+      window.setTimeout(finish, 5000);
+    });
+  }
+
+  const controller = navigator.serviceWorker.controller;
+  if (!controller || !new URL(controller.scriptURL).pathname.endsWith('/pilot/pilot-sw.js')) {
+    throw new Error('O Pilot App ainda não está pronto para continuar offline. Recarregue e tente novamente.');
+  }
+}
+
+async function openAuthorizedFlight(flightId) {
+  const record = await prepareFlightPackage(flightId);
+  if (!record) return false;
+
+  try {
+    await ensurePilotShellReadyForFlight();
+  } catch (error) {
+    setSessionMessage(
+      error instanceof Error ? error.message : 'O modo offline do Pilot App não ficou pronto.',
+      'error',
+    );
+    return false;
+  }
+
+  return prepareOfflineEditing();
+}
+
 
 function setLeaseMessage(message, kind = 'attention') {
   leaseStatus.className = 'statusline ' + kind;
@@ -1129,14 +1297,13 @@ async function refreshLeaseControls(record) {
 
 async function prepareOfflineEditing() {
   const packageData = activePackageData();
-  if (!packageData) return;
+  if (!packageData) return false;
 
   if (!hasTrustedPilotLeaseKeys()) {
-    setLeaseMessage(
-      'Edição bloqueada: chave pública confiável do lease ainda não foi provisionada.',
-      'error',
-    );
-    return;
+    const message = 'Este voo ainda não pode ser preparado para uso offline neste dispositivo.';
+    setLeaseMessage(message, 'error');
+    setSessionMessage(message, 'error');
+    return false;
   }
 
   prepareEditOfflineButton.disabled = true;
@@ -1194,13 +1361,19 @@ async function prepareOfflineEditing() {
       'ok',
     );
     await openOrSeedOperationalDraft(packageData, readBack);
+    setSessionMessage('Voo aberto e pronto para preenchimento.', 'ok');
+    return true;
   } catch (error) {
     const authFailure = error instanceof PilotOnlineRequestError && error.status === 401;
-    setLeaseMessage(
-      error instanceof Error ? error.message : 'Falha ao preparar edição offline.',
+    const message =
+      error instanceof Error ? error.message : 'Falha ao preparar o voo para preenchimento.';
+    setLeaseMessage(message, 'error');
+    setSessionMessage(
+      authFailure ? 'Sessão online necessária para abrir este voo.' : message,
       'error',
+      authFailure,
     );
-    if (authFailure) setSessionMessage('Sessão online necessária para emitir lease.', 'error', true);
+    return false;
   } finally {
     prepareEditOfflineButton.disabled = !navigator.onLine || !hasTrustedPilotLeaseKeys();
   }
@@ -1208,7 +1381,7 @@ async function prepareOfflineEditing() {
 
 async function openExistingOperationalDraft() {
   const packageData = activePackageData();
-  if (!packageData) return;
+  if (!packageData) return false;
 
   try {
     const existing = await verifyStoredLeaseForPackage(packageData);
@@ -1217,11 +1390,14 @@ async function openExistingOperationalDraft() {
     }
     activeVerifiedLease = existing.verified;
     await openOrSeedOperationalDraft(packageData, existing.verified);
+    setSessionMessage('Voo offline aberto neste tablet.', 'ok');
+    return true;
   } catch (error) {
-    setLeaseMessage(
-      error instanceof Error ? error.message : 'Não foi possível abrir o rascunho local.',
-      'error',
-    );
+    const message =
+      error instanceof Error ? error.message : 'Não foi possível abrir o voo salvo neste tablet.';
+    setLeaseMessage(message, 'error');
+    setSessionMessage(message, 'error');
+    return false;
   }
 }
 
@@ -2695,7 +2871,7 @@ function renderOperationalEditor(options = {}) {
   const packageData = activePackageData();
   const voo = packageData.voo;
 
-  rdvEditorTitle.textContent = 'Registrar voo — ' + displayText(voo.prefixo);
+  rdvEditorTitle.textContent = 'Preenchimento do voo — ' + displayText(voo.prefixo);
   rdvEditorSubtitle.textContent =
     formatDate(voo.data_programacao) +
     ' · preenchimento salvo automaticamente neste tablet';
@@ -2709,6 +2885,8 @@ function renderOperationalEditor(options = {}) {
   renderFuelingFields();
   updateOperationFlow(operationalLocalSequence > 0 ? (navigator.onLine ? 'pending' : 'saved') : 'offline');
   refreshDraftValidationPresentation();
+  setFlightSelectionVisible(false);
+  flightDetailCard.classList.add('hidden');
   rdvEditorCard.classList.remove('hidden');
   updateSyncButtonState();
   void refreshOutboxStatusForActiveFlight();
@@ -2719,6 +2897,7 @@ function renderOperationalEditor(options = {}) {
 function closeOperationalEditor() {
   activeStageTabIndex = 0;
   rdvEditorCard.classList.add('hidden');
+  setFlightSelectionVisible(true);
   rdvCoreFields.replaceChildren();
   rdvFormFields.replaceChildren();
   rdvStageFields.replaceChildren();
@@ -2871,10 +3050,9 @@ function openPackageRecord(record) {
     ['Carga', rdv?.carga_kg],
   ]);
 
-  flightDetailCard.classList.remove('hidden');
+  flightDetailCard.classList.add('hidden');
   void refreshLeaseControls(record);
   void refreshCoordinationControls();
-  flightDetailCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function closePackageDetail() {
@@ -3005,6 +3183,10 @@ window.addEventListener('offline', () => {
     }
   }
 });
+authorizedFlightDate?.addEventListener('change', () => setSelectedFlightDate(authorizedFlightDate.value));
+flightDatePrevButton?.addEventListener('click', () => shiftSelectedFlightDate(-1));
+flightDateTodayButton?.addEventListener('click', () => setSelectedFlightDate(localDateKey()));
+flightDateNextButton?.addEventListener('click', () => shiftSelectedFlightDate(1));
 refreshOnlineButton.addEventListener('click', () => void loadOnlineFlights());
 prepareEditOfflineButton.addEventListener('click', () => void prepareOfflineEditing());
 openLocalDraftButton.addEventListener('click', () => void openExistingOperationalDraft());

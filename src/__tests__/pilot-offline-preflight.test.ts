@@ -28,10 +28,10 @@ describe('Pilot complete offline preflight', () => {
     expect(sw).toContain("'/pilot/pilot-preflight.js'");
   });
 
-  it('transforma Preparar para voo em gate de pacote + lease + rascunho + shell', () => {
-    expect(index).toContain('Antes do voo');
-    expect(index).toContain('Preparar para voo');
-    expect(preflight).toContain("'Preparar para voo'");
+  it('transforma Abrir voo em gate de pacote + lease + rascunho + shell', () => {
+    expect(index).toContain('Meus voos');
+    expect(index).toContain('id="authorized-flight-date"');
+    expect(preflight).toContain("'Abrir voo'");
     expect(preflight).toContain('ensureOperationalDraftOpen(runId)');
     expect(preflight).toContain('assertPilotShellReady()');
     expect(preflight).toContain("navigator.serviceWorker.ready");
@@ -43,10 +43,10 @@ describe('Pilot complete offline preflight', () => {
 
   it('falha fechado e nao anuncia readiness quando uma etapa do preflight nao conclui', () => {
     expect(preflight).toContain('NÃO PRONTO PARA USO OFFLINE');
-    expect(preflight).toContain('Preparação offline incompleta. Mantenha conexão');
+    expect(preflight).toContain('Não foi possível preparar este voo para uso offline');
     expect(preflight).toContain("leaseStatus?.classList.contains('error')");
-    expect(preflight).toContain('O pacote do voo não ficou disponível no tablet.');
-    expect(preflight).toContain('a edição offline não ficou pronta antes da perda de conectividade');
+    expect(preflight).toContain('O voo não ficou pronto para preenchimento offline neste tablet.');
+    expect(preflight).toContain('Falha ao preparar uso offline.');
   });
 
   it('mantem a indicação operacional ao perder conectividade depois do readiness', () => {
