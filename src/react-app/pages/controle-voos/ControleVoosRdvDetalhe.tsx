@@ -118,12 +118,13 @@ export default function ControleVoosRdvDetalhe() {
   const removerTripulante = useRemoverTripulante();
   const enviar = useEnviarRdv();
 
-  const { isAdmin, isGestor } = usePermissions();
+  const { isAdmin, isGestor, isAuthenticated } = usePermissions();
   const isCoordenacao = isAdmin || isGestor;
+  const shouldOpenPilotApp = isAuthenticated && !isCoordenacao && Boolean(id);
 
   const aeroMap = buildAeroMap(aeroportos);
   const isLoading = vooLoading || rdvLoading;
-  const editable = canEditRdv(rdv);
+  const editable = isCoordenacao && canEditRdv(rdv);
   const form = formState;
 
   const origemIcao = voo ? aeroMap.get(voo.origem_id)?.codigo_icao || '' : '';
@@ -192,6 +193,25 @@ export default function ControleVoosRdvDetalhe() {
 
   const progressPercent = form ? computeProgressPercent(form, stepOptions) : 0;
   const fieldErrors = form && voo ? collectFieldErrors(form, voo, trechos) : {};
+
+  useEffect(() => {
+    if (!shouldOpenPilotApp || !id) return;
+    window.location.replace(`/pilot/?flight=${encodeURIComponent(id)}`);
+  }, [id, shouldOpenPilotApp]);
+
+  if (shouldOpenPilotApp) {
+    return (
+      <AppLayout>
+        <div className="w-full">
+          <ControleVoosPageShell>
+            <div className="rounded-xl border border-slate-200 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-900">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Abrindo o Pilot App…</p>
+            </div>
+          </ControleVoosPageShell>
+        </div>
+      </AppLayout>
+    );
+  }
 
   if (isLoading || !hydrated) {
     return (
