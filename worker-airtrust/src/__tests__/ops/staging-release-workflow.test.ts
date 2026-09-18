@@ -607,13 +607,29 @@ describe('scripts/staging/apply-approved-migrations.sh — guards', () => {
     expect(source).not.toContain('APPROVED_MIGRATIONS=("*")');
   });
 
-  it('0499 fails closed on missing tenant context and emits only sanitized remote diagnostics', () => {
+  it('0499 treats an absent Costa do Sol assignment as not applicable to the staging dataset without writing', () => {
+    const applySource = readFileSync(
+      join(ROOT, 'scripts/staging/apply-0499-frms-v2-historical-backfill.sh'),
+      'utf8',
+    );
+    const validatorSource = readFileSync(
+      join(ROOT, 'scripts/staging/validate-0499-postconditions.sh'),
+      'utf8',
+    );
+    expect(applySource).toContain('PREFLIGHT_0499_TENANT_CONTEXT=NOT_APPLICABLE');
+    expect(applySource).toContain('MIGRATION_NOT_APPLICABLE_STAGING_DATASET');
+    expect(applySource).toContain('REMOTE_WRITE_EXECUTED=false');
+    expect(applySource).toContain('partial 0499 state exists');
+    expect(validatorSource).toContain('STAGING_POSTCONDITIONS=NOT_APPLICABLE_STAGING_DATASET');
+    expect(validatorSource).toContain('migration-ledger-absent');
+  });
+
+  it('0499 still fails closed on malformed tenant context and emits only sanitized remote diagnostics', () => {
     const source = readFileSync(
       join(ROOT, 'scripts/staging/apply-0499-frms-v2-historical-backfill.sh'),
       'utf8',
     );
-    expect(source).toContain('PREFLIGHT_0499_TENANT_CONTEXT=PASS');
-    expect(source).toContain('active HELICOPTER_OFFSHORE assignment for empresa_id=6 missing');
+    expect(source).toContain('expected exactly one active HELICOPTER_OFFSHORE assignment for empresa_id=6');
     expect(source).toContain('global active FRMS_OPERATIONAL_POLICY_V2 revision missing');
     expect(source).toContain('sanitized Wrangler diagnostic follows');
     expect(source).toContain("['text','message','name','code','kind']");
