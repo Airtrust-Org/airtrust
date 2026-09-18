@@ -1,0 +1,8 @@
+{
+  "changeId": "controle-voos-fueling-companies-0502",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0502_controle_voos_fueling_companies.sql",
+  "fileHash": "d0f19c51942836e451fb1b836a33ea380bc56aa80a749e7c308f79e6bc9e320f",
+  "planPath": "worker-airtrust/schema-v2/plans/controle-voos-fueling-companies-0502.md",
+  "planHash": "45e009ef37db8cd701eac1a9f59702d028c207f05893af5a23e6ab3dbf1f0b0c"
+}

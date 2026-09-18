@@ -38,6 +38,7 @@ type SnapshotStagePayload = {
 type SnapshotFuelingPayload = {
   client_local_id: string;
   data_hora: string;
+  empresa_abastecimento_codigo: string;
   nota: string | null;
   numero_nota: string | null;
   litros_abastecidos: number;
@@ -150,11 +151,14 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     }
     const localId = String(entry.client_local_id || '').trim();
     const dataHora = String(entry.data_hora || '').trim();
+    const supplierCode = String(entry.empresa_abastecimento_codigo || '').trim().toUpperCase();
     const rawLitros = entry.litros_abastecidos;
     const litros = Number(rawLitros);
     if (
       !localId ||
       !dataHora ||
+      !supplierCode ||
+      !/^[A-Z0-9._-]{1,80}$/.test(supplierCode) ||
       rawLitros === null ||
       rawLitros === undefined ||
       rawLitros === '' ||
@@ -166,6 +170,7 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     return {
       client_local_id: localId,
       data_hora: dataHora,
+      empresa_abastecimento_codigo: supplierCode,
       nota: entry.nota == null ? null : String(entry.nota).trim() || null,
       numero_nota: entry.numero_nota == null ? null : String(entry.numero_nota).trim() || null,
       litros_abastecidos: litros,
@@ -655,6 +660,7 @@ function buildFuelingStatements(input: {
   flight: FlightRow;
   newVersion: number;
   fuelings: SnapshotFuelingPayload[];
+  supplierNamesByCode: Map<string, string>;
 }): D1PreparedStatement[] {
   return input.fuelings.map((fueling) =>
     input.db.prepare(`
@@ -663,15 +669,22 @@ function buildFuelingStatements(input: {
         combustivel_abastecido, numero_ce, anexo_r2_key, responsavel_id, data_hora, observacoes,
         created_by, updated_by, created_at, updated_at
       )
-      SELECT ?, ?, NULL, NULL, NULL, NULL, 'L', ?, ?, NULL, NULL, ?, ?, ?, ?, datetime('now'), datetime('now')
+      SELECT ?, ?, NULL, ?, NULL, NULL, 'L', ?, ?, NULL, NULL, ?, ?, ?, ?, datetime('now'), datetime('now')
       WHERE EXISTS (
         SELECT 1 FROM cv_rdv_operacional
         WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
           AND status <> 'cancelado' AND versao = ?
       )
     `).bind(
-      input.empresaId, input.flight.id, fueling.litros_abastecidos, fueling.numero_nota,
-      fueling.data_hora, fueling.nota, input.userId, input.userId,
+      input.empresaId,
+      input.flight.id,
+      input.supplierNamesByCode.get(fueling.empresa_abastecimento_codigo) || null,
+      fueling.litros_abastecidos,
+      fueling.numero_nota,
+      fueling.data_hora,
+      fueling.nota,
+      input.userId,
+      input.userId,
       input.flight.id, input.empresaId, input.newVersion,
     ),
   );
@@ -923,6 +936,25 @@ export async function applyPilotOfflineSnapshotCommand(input: {
     }
     selectedNaturezaId = Number(natureza.id);
   }
+  const supplierNamesByCode = new Map<string, string>();
+  for (const fueling of snapshot.fuelings) {
+    if (supplierNamesByCode.has(fueling.empresa_abastecimento_codigo)) continue;
+    const supplier = await input.db
+      .prepare(
+        'SELECT nome FROM cv_empresas_abastecimento WHERE empresa_id = ? AND codigo = ? AND ativo = 1 AND deleted_at IS NULL LIMIT 1',
+      )
+      .bind(input.empresaId, fueling.empresa_abastecimento_codigo)
+      .first<{ nome: string }>();
+    if (!supplier) {
+      throw new ApiError(
+        `Empresa de abastecimento ${fueling.empresa_abastecimento_codigo} nao cadastrada ou inativa neste tenant`,
+        409,
+        'CONTROLE_VOOS_PILOT_SYNC_FUEL_SUPPLIER_NOT_CONFIGURED',
+      );
+    }
+    supplierNamesByCode.set(fueling.empresa_abastecimento_codigo, supplier.nome);
+  }
+
   const existingRdv = await getActiveRdvByFlight(input.db, input.flight.id, input.empresaId);
   const rdvInput = normalizeRdvInput(snapshot.rdv, !existingRdv);
   assertRdvRules(existingRdv ? { ...existingRdv, ...rdvInput } : rdvInput);
@@ -958,6 +990,7 @@ export async function applyPilotOfflineSnapshotCommand(input: {
     ...input,
     newVersion,
     fuelings: snapshot.fuelings,
+    supplierNamesByCode,
   });
   const natureStatement =
     selectedNaturezaId !== null && selectedNaturezaId !== Number(input.flight.natureza_voo_id)
