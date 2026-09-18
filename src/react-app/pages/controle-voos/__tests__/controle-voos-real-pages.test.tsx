@@ -158,6 +158,49 @@ describe('controle voos real pages', () => {
     expect(screen.getByText('Meteorologia')).toBeInTheDocument();
   });
 
+  it('unifica o cadastro visual em Pontos aeronáuticos e usa rótulos operacionais claros', async () => {
+    apiGetMock.mockImplementation(async (url: string) => {
+      if (url.includes('/catalogos/pontos?ativo=true')) {
+        return {
+          success: true,
+          data: [
+            {
+              id: 1,
+              codigo: 'FPAG',
+              codigo_icao: '9PLG',
+              nome: 'ANITA GARIBALDI',
+              tipo: 'plataforma',
+              latitude_dms: "22°00'00\"S",
+              longitude_dms: "041°00'00\"W",
+              elevacao_ft: 0,
+              ativo: 1,
+            },
+          ],
+        };
+      }
+      return { success: true, data: [] };
+    });
+
+    render(
+      <MemoryRouter>
+        <ControleVoosTabelas />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(screen.getByText('ANITA GARIBALDI')).toBeInTheDocument());
+
+    expect(screen.getAllByText('Pontos aeronáuticos').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Pontos de navegação')).toBeNull();
+    expect(screen.queryByText('Aeródromos', { selector: 'span' })).toBeNull();
+    expect(screen.getByRole('columnheader', { name: 'Código' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Código ICAO' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Local' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Tipo' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Buscar por código, código ICAO, local ou tipo')).toBeInTheDocument();
+    expect(screen.getByText('FPAG')).toBeInTheDocument();
+    expect(screen.getByText('9PLG')).toBeInTheDocument();
+  });
+
   it('mostra erro quando catálogos reais falham via apiClient', async () => {
     apiGetMock.mockRejectedValue(new Error('Falha no catálogo'));
 

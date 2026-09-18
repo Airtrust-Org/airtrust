@@ -56,14 +56,16 @@ const EMPTY_STATE: CatalogState = {
   motivos: [],
 };
 
+const VISIBLE_CATALOGS: CatalogName[] = ['pontos', 'tipos', 'naturezas', 'motivos'];
+
 const CATALOG_META: Record<
   CatalogName,
   { label: string; singular: string; description: string; icon: React.ReactNode }
 > = {
   pontos: {
-    label: 'Pontos de navegação',
-    singular: 'ponto de navegação',
-    description: 'Base canônica importada com código, coordenadas, elevação e classificação operacional.',
+    label: 'Pontos aeronáuticos',
+    singular: 'ponto aeronáutico',
+    description: 'Aeródromos, helipontos, plataformas e demais pontos usados no planejamento e execução dos voos.',
     icon: <MapPin className="h-4 w-4" />,
   },
   aeroportos: {
@@ -232,8 +234,8 @@ export default function ControleVoosTabelas() {
             <strong>Fonte única de dados:</strong> aeronaves, prefixos e modelos não são duplicados aqui. O Controle de Voos referencia a frota cadastrada em Configurações.
           </div>
 
-          <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            {(Object.keys(CATALOG_META) as CatalogName[]).map((key) => {
+          <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {VISIBLE_CATALOGS.map((key) => {
               const meta = CATALOG_META[key];
               const selected = activeCatalog === key;
               return (
@@ -274,7 +276,7 @@ export default function ControleVoosTabelas() {
                 <h2 className="font-semibold text-slate-900 dark:text-white">{CATALOG_META[activeCatalog].label}</h2>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   {activeCatalog === 'pontos'
-                    ? 'Cadastro canônico importado da fonte operacional. Classificações inferidas ficam identificadas para revisão.'
+                    ? 'Cadastro canônico de aeródromos, helipontos, plataformas e demais pontos aeronáuticos. Classificações inferidas ficam identificadas para revisão.'
                     : 'Itens inativos permanecem no histórico, mas não aparecem em novos voos.'}
                 </p>
               </div>
@@ -295,7 +297,7 @@ export default function ControleVoosTabelas() {
                 <input
                   value={pontoSearch}
                   onChange={(event) => setPontoSearch(event.target.value)}
-                  placeholder="Buscar por aeródromo, código ICAO, nome ou tipo"
+                  placeholder="Buscar por código, código ICAO, local ou tipo"
                   className="w-full max-w-xl rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
                 />
                 <p className="mt-2 text-xs text-slate-500">
@@ -318,7 +320,7 @@ export default function ControleVoosTabelas() {
                 <table className="w-full min-w-[760px] text-sm">
                   <thead className="bg-slate-50 dark:bg-slate-800/70">
                     <tr>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' || activeCatalog === 'aeroportos' ? 'Aeródromo' : 'Código'}</th>
+                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' ? 'Código' : activeCatalog === 'aeroportos' ? 'Aeródromo' : 'Código'}</th>
                       {activeCatalog === 'aeroportos' && (
                         <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">ICAO / IATA</th>
                       )}
@@ -328,8 +330,8 @@ export default function ControleVoosTabelas() {
                       {activeCatalog === 'pontos' && (
                         <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Coordenadas / elevação</th>
                       )}
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Nome</th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Tipo / Localidade</th>
+                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' ? 'Local' : 'Nome'}</th>
+                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' ? 'Tipo' : 'Tipo / Localidade'}</th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status</th>
                       {canManage && activeCatalog !== 'pontos' && <th className="px-4 py-3 text-right font-medium text-slate-600 dark:text-slate-300">Ações</th>}
                     </tr>
