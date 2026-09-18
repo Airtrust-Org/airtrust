@@ -27,6 +27,7 @@ const TOKEN_KEY = 'airtrust_token';
 const REFRESH_TOKEN_KEY = 'airtrust_refresh_token';
 const USER_KEY = 'airtrust_user';
 const AUTH_REQUEST_TIMEOUT_MS = 10000;
+const AUTH_LOGIN_TIMEOUT_MS = 0;
 const AUTH_EMPRESAS_TIMEOUT_MS = 5000;
 
 function readAuthStorage(key: string): string | null {
@@ -102,7 +103,7 @@ async function authFetch(
   init?: RequestInit,
   timeoutMs = AUTH_REQUEST_TIMEOUT_MS,
 ): Promise<Response> {
-  if (init?.signal || typeof AbortController === 'undefined') {
+  if (timeoutMs <= 0 || init?.signal || typeof AbortController === 'undefined') {
     return apiFetch(`/api/auth${path}`, init);
   }
 
@@ -116,10 +117,6 @@ async function authFetch(
   } finally {
     window.clearTimeout(timeoutId);
   }
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'AbortError';
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -509,16 +506,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (credentials: { email: string; password: string }) => {
       setIsLoading(true);
       try {
-        const response = await authFetch('/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        const response = await authFetch(
+          '/login',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: credentials.email,
+              senha: credentials.password, // Backend espera 'senha'
+            }),
           },
-          body: JSON.stringify({
-            email: credentials.email,
-            senha: credentials.password, // Backend espera 'senha'
-          }),
-        });
+          AUTH_LOGIN_TIMEOUT_MS,
+        );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: 'Erro ao fazer login' }));
@@ -556,9 +557,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setEmpresas([]);
         setEmpresaAtualId(null);
         clearPersistedAuth();
-        if (isAbortError(error)) {
-          throw new Error('Tempo limite ao entrar. Verifique a conexão e tente novamente.');
-        }
         throw error;
       } finally {
         setIsLoading(false);
