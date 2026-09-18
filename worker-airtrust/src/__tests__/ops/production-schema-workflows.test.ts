@@ -81,6 +81,14 @@ describe('apply-schema-change-v2.yml — controlled single-file apply', () => {
     expect(workflow).toContain('validate-0500-production-preflight.sh');
     expect(workflow).toContain('validate-0500-production-postconditions.sh');
   });
+
+  it('uses exact production preflight and postconditions for Controle de Voos leg operational weights 0501', () => {
+    expect(workflow).toContain(
+      "inputs.change_id == 'controle-voos-leg-operational-weights-0501'",
+    );
+    expect(workflow).toContain('validate-0501-production-preflight.sh');
+    expect(workflow).toContain('validate-0501-production-postconditions.sh');
+  });
 });
 
 describe('EAD reconciliation ledger Schema V2 change 0453', () => {
