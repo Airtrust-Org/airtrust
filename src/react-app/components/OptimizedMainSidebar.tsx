@@ -57,7 +57,7 @@ const NAVIGATION_ITEMS = [
       },
       {
         id: 'horas-voo',
-        label: 'Horas de Voo',
+        label: 'Histórico de voo',
         path: '/horas-voo',
       },
       {

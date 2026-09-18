@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-17",
-    "last_reconciled_against": "0500 Controle de Voos navigation points reviewed after 0499; remote apply pending",
-    "schema_v2_digest": "7071f1c696e47df73a9a5caf089d77cd09809670cc4255b0725cec9961f42d37",
+    "last_reconciled_against": "0500 Controle de Voos navigation points staging governance mirror; remote apply pending",
+    "schema_v2_digest": "fc18afb869cad4a36c7bacf55fcdae874bbbc365c3e26c435c3bc91392383746",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -897,7 +897,7 @@
     {
       "change_file": "0500_controle_voos_navigation_points.sql",
       "change_id": "controle-voos-navigation-points-0500",
-      "sha256": "29564f1770eeac4f5afe479f7859ba8ce1589b1511f64826cbeb44d2dfdab83a",
+      "sha256": "4224bd34f053b09b52554a1c98c0f04ed828f05bad15276bf63d4ef2c3fd14cb",
       "targets": [
         "cv_aeroportos",
         "cv_pontos_navegacao"
@@ -906,7 +906,7 @@
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "controle-voos-navigation-points-0500.json",
-      "note": "0500 is reviewed and prepared only. It preserves the source aerodrome identifier, separates ICAO codes (including 9P platform codes), enriches cv_aeroportos without changing existing IDs, and requires the governed Schema V2 workflow plus recovery point before any remote apply."
+      "note": "0500 is reviewed and prepared only. It preserves the source aerodrome identifier, separates ICAO codes (including 9P platform codes), enriches cv_aeroportos without changing existing IDs, and now includes the governed staging migration mirror/recovery-point path. Production still requires the Schema V2 workflow and exact-SHA authorization."
     }
   ]
 }

@@ -179,6 +179,8 @@
     "typecheck:ratchet": "node scripts/guard-typescript-baseline-ratchet.mjs",
     "lint": "npm run lint:api-base && npm run guard:tracked-secrets && npm run guard:operational-auth-literals && npm run guard:auth-boundaries && npm run guard:empresa-default1 && npm run guard:duplicate-migrations && npm run guard:no-go-migrations && npm run guard:operational-sql-sources && npm run guard:typescript-delta && npm run guard:frms-no-direct-sigvoos && npm run guard:staging-version-stamp && npm run guard:local-maintenance-runtime && npm run guard:worker-bundle-provenance && npm run guard:cloudflare-secret-contract && npm run guard:sanitization && npm run guard:structured-logging && npm run guard:pii-delta && npm run guard:no-raw-fetch && npm run guard:package-references && npm run guard:route-ownership && npm run guard:schema-contract-staleness",
     "guard:no-raw-fetch": "node scripts/guard-no-raw-fetch.mjs",
-    "guard:operational-auth-literals": "node scripts/guard-operational-auth-literals.mjs"
+    "guard:operational-auth-literals": "node scripts/guard-operational-auth-literals.mjs",
+    "agent:context": "bash scripts/agent-context.sh",
+    "agent:test-plan": "node scripts/agent-test-plan.mjs"
   }
 }
