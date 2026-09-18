@@ -1,4 +1,4 @@
--- 0502_conhecimento_ativo_foundation.sql
+-- 0503_conhecimento_ativo_foundation.sql
 -- Fundação do domínio Conhecimento Ativo.
 -- Não cria cursos, matrículas, qualificações ou certificados.
 -- Todo dado operacional é tenant-scoped e conteúdos técnicos exigem aprovação explícita.

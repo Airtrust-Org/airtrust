@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# source_reference: worker-airtrust/schema-v2/conhecimento-ativo-foundation-0502.json
+# source_reference: worker-airtrust/schema-v2/conhecimento-ativo-foundation-0503.json
 # operational_decision: staging-only governed Schema V2 runner; dry-run unless --apply
 # dry_run_required: true
-# rollback_plan_required: worker-airtrust/schema-v2/plans/conhecimento-ativo-foundation-0502.md
+# rollback_plan_required: worker-airtrust/schema-v2/plans/conhecimento-ativo-foundation-0503.md
 set -euo pipefail
 umask 077
 
@@ -12,8 +12,8 @@ cd "$ROOT"
 ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"
 ALLOWED_DB_ID="bf9963f4-eb12-439b-a830-20bbf577ac22"
 BLOCKED_PRODUCTION_DB_ID="7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae"
-MIGRATION_BASENAME="0502_conhecimento_ativo_foundation.sql"
-SCHEMA_CHANGE_ID="conhecimento-ativo-foundation-0502"
+MIGRATION_BASENAME="0503_conhecimento_ativo_foundation.sql"
+SCHEMA_CHANGE_ID="conhecimento-ativo-foundation-0503"
 
 apply=false
 migration_arg=""
@@ -27,15 +27,15 @@ done
 
 expected_path="release/worker-airtrust/migrations/$MIGRATION_BASENAME"
 [[ "$migration_arg" == "$expected_path" ]] || {
-  echo "ERROR: 0502 requires exact path $expected_path" >&2
+  echo "ERROR: 0503 requires exact path $expected_path" >&2
   exit 1
 }
 [[ ! -L "$migration_arg" && -f "$migration_arg" ]] || {
-  echo "ERROR: migration 0502 missing or symlink refused" >&2
+  echo "ERROR: migration 0503 missing or symlink refused" >&2
   exit 1
 }
 if ! git -C release diff --quiet -- "worker-airtrust/migrations/$MIGRATION_BASENAME" ||    ! git -C release diff --cached --quiet -- "worker-airtrust/migrations/$MIGRATION_BASENAME"; then
-  echo "ERROR: migration 0502 has uncommitted release changes" >&2
+  echo "ERROR: migration 0503 has uncommitted release changes" >&2
   exit 1
 fi
 
@@ -48,7 +48,7 @@ db_id="${STAGING_D1_ID:-$ALLOWED_DB_ID}"
 
 manifest_path="release/worker-airtrust/schema-v2/$SCHEMA_CHANGE_ID.json"
 schema_sql_path="release/worker-airtrust/schema-v2/changes/$MIGRATION_BASENAME"
-plan_path="release/worker-airtrust/schema-v2/plans/conhecimento-ativo-foundation-0502.md"
+plan_path="release/worker-airtrust/schema-v2/plans/conhecimento-ativo-foundation-0503.md"
 for path in "$manifest_path" "$schema_sql_path" "$plan_path"; do
   [[ ! -L "$path" && -f "$path" ]] || {
     echo "ERROR: reviewed Schema V2 artifact missing: $path" >&2
@@ -75,10 +75,10 @@ const fs = require('node:fs');
 const [,, path, sqlHash, planHash] = process.argv;
 const manifest = JSON.parse(fs.readFileSync(path, 'utf8'));
 if (
-  manifest.changeId !== 'conhecimento-ativo-foundation-0502' ||
+  manifest.changeId !== 'conhecimento-ativo-foundation-0503' ||
   manifest.baselineId !== 'production-d1-baseline-v2-20260714' ||
-  manifest.filePath !== 'worker-airtrust/schema-v2/changes/0502_conhecimento_ativo_foundation.sql' ||
-  manifest.planPath !== 'worker-airtrust/schema-v2/plans/conhecimento-ativo-foundation-0502.md' ||
+  manifest.filePath !== 'worker-airtrust/schema-v2/changes/0503_conhecimento_ativo_foundation.sql' ||
+  manifest.planPath !== 'worker-airtrust/schema-v2/plans/conhecimento-ativo-foundation-0503.md' ||
   manifest.fileHash !== sqlHash ||
   manifest.planHash !== planHash
 ) {
@@ -123,13 +123,13 @@ table_count="$(query_count "SELECT COUNT(*) count FROM sqlite_master WHERE type=
 trigger_count="$(query_count "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_ca_%';")"
 
 if [[ "$ledger_count" == 1 ]]; then
-  bash scripts/staging/validate-0502-postconditions.sh --target="$db_name"
+  bash scripts/staging/validate-0503-postconditions.sh --target="$db_name"
   echo "MIGRATION_ALREADY_APPLIED_AND_VALIDATED=$MIGRATION_BASENAME"
   exit 0
 fi
 
 [[ "$ledger_count" == 0 && "$table_count" == 0 && "$trigger_count" == 0 ]] || {
-  echo "ERROR: 0502 schema/ledger drift or partial apply" >&2
+  echo "ERROR: 0503 schema/ledger drift or partial apply" >&2
   exit 1
 }
 

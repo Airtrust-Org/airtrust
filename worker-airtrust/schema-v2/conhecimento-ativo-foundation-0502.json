@@ -1,8 +1,0 @@
-{
-  "changeId": "conhecimento-ativo-foundation-0502",
-  "baselineId": "production-d1-baseline-v2-20260714",
-  "filePath": "worker-airtrust/schema-v2/changes/0502_conhecimento_ativo_foundation.sql",
-  "fileHash": "92b0311410b9a2f8863a91e40e640d604cda0e735b82d67ae2b97e49b1f806b8",
-  "planPath": "worker-airtrust/schema-v2/plans/conhecimento-ativo-foundation-0502.md",
-  "planHash": "9922c652b437223489be4c59e6d7943f13558e6bf7dbedebf0dbb196b9683456"
-}

@@ -78,7 +78,7 @@ Reimportar a mesma definição é idempotente. Se a mesma chave já existir com 
 
 - arquivo `.xlsx`;
 - até 8 MB;
-- até 2.000 linhas por lote;
+- até 500 linhas por lote;
 - mínimo de duas alternativas;
 - exatamente uma alternativa correta;
 - nenhuma alternativa duplicada;
