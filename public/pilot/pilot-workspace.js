@@ -1,13 +1,11 @@
 const TAB_DEFINITIONS = [
   ['summary', 'Resumo'],
   ['planning', 'Planejamento'],
-  ['met', 'MET'],
   ['rdv', 'Etapas / RDV'],
   ['fuel', 'Combustível'],
   ['dossier', 'Dossiê'],
   ['map', 'Mapa'],
   ['edb-shadow', 'eDB Shadow'],
-  ['performance', 'Performance'],
 ];
 
 function text(value, fallback = '—') {
@@ -171,16 +169,6 @@ function renderSummary(panel, packageData, workspace) {
     ['Chegada prevista', formatDateTime(voo.horario_previsto_chegada)],
   ]);
 
-  const met = workspace?.met_snapshot;
-  const metAvailable = met?.status === 'AVAILABLE';
-  appendNotice(
-    panel,
-    metAvailable
-      ? 'MET armazenada no tablet. Consulte a aba MET para horário, idade e fonte de cada observação.'
-      : 'MET não disponível neste pacote. O Pilot App não assume validade meteorológica sem evidência.',
-    metAvailable ? 'ok' : 'attention',
-  );
-
   renderHelideckSafety(panel, workspace?.helideck_safety);
 }
 
@@ -223,81 +211,6 @@ function renderPlanning(panel, packageData, workspace) {
     obs.append(el('p', { className: 'pilot-workspace-copy', text: text(planning.observacoes) }));
     panel.append(obs);
   }
-}
-
-function weatherUnavailableReason(reason) {
-  const reasons = {
-    LOCATION_CATALOG_UNAVAILABLE: 'catálogo operacional indisponível',
-    REDEMET_NOT_CONFIGURED: 'fonte REDEMET não configurada no ambiente',
-    NO_REDEMET_STATIONS: 'nenhuma estação REDEMET controlada para a rota',
-    LOCATION_NOT_CATALOGUED: 'localidade não cadastrada no catálogo controlado',
-    WEATHER_SOURCE_NOT_REDEMET: 'localidade não usa REDEMET como fonte',
-    REDEMET_STATION_UNAVAILABLE: 'estação REDEMET não cadastrada',
-    REDEMET_FETCH_FAILED: 'consulta REDEMET indisponível na preparação do pacote',
-    SEM_OBSERVACAO_COMPATIVEL: 'sem observação compatível na janela consultada',
-  };
-  return reasons[reason] || text(reason, 'evidência indisponível');
-}
-
-function renderMet(panel, workspace) {
-  panel.append(el('h2', { text: 'Meteorologia' }));
-  appendNotice(
-    panel,
-    'MET armazenada no tablet é um snapshot. Disponibilidade offline não significa que a informação continua válida.',
-    'attention',
-  );
-
-  const met = workspace?.met_snapshot;
-  appendKeyValueGrid(panel, [
-    ['Pacote MET gerado em', formatDateTime(met?.generated_at)],
-    ['Estado', met?.status],
-    ['Fonte', 'DECEA / REDEMET quando disponível'],
-  ]);
-
-  const observations = Array.isArray(met?.observations) ? met.observations : [];
-  if (observations.length === 0) {
-    appendNotice(panel, 'Nenhuma evidência meteorológica foi incluída neste pacote.', 'attention');
-    return;
-  }
-
-  const list = el('div', { className: 'pilot-workspace-list' });
-  for (const observation of observations) {
-    const card = el('article', { className: 'pilot-workspace-met-card' });
-    const header = el('div', { className: 'pilot-workspace-card-head' });
-    header.append(
-      el('strong', { text: text(observation.code) }),
-      el('span', {
-        className:
-          'pilot-workspace-state ' +
-          (observation.status === 'AVAILABLE' ? 'ok' : 'attention'),
-        text: text(observation.quality || observation.status),
-      }),
-    );
-    card.append(header);
-    if (observation.status === 'AVAILABLE') {
-      appendKeyValueGrid(card, [
-        ['Estação', observation.station_icao],
-        ['Observado em', formatDateTime(observation.observed_at_utc)],
-        ['Idade no preparo', numberText(observation.age_minutes, ' min')],
-        ['Temperatura', numberText(observation.temperature_c, ' °C')],
-        ['Vento', numberText(observation.wind_speed_kt, ' kt')],
-        ['UR derivada', numberText(observation.relative_humidity_pct, '%')],
-      ]);
-      const raw = el('p', {
-        className: 'pilot-workspace-metar',
-        text: text(observation.raw_metar),
-      });
-      card.append(raw);
-    } else {
-      appendNotice(
-        card,
-        'Indisponível: ' + weatherUnavailableReason(observation.reason),
-        'attention',
-      );
-    }
-    list.append(card);
-  }
-  panel.append(list);
 }
 
 function renderRdv(panel, packageData) {
@@ -754,30 +667,14 @@ function renderEdbShadow(panel, packageData) {
   panel.append(findingSection);
 }
 
-function renderPerformance(panel, packageData) {
-  panel.append(el('h2', { text: 'Performance' }));
-  appendNotice(
-    panel,
-    'Não disponível nesta entrega. Performance, peso/CG e Power Check só serão habilitados por modelo após existir fonte técnica versionada e evidência rastreável.',
-    'attention',
-  );
-  appendKeyValueGrid(panel, [
-    ['Modelo', packageData.aeronave?.modelo],
-    ['Estado', 'Aguardando fonte técnica versionada'],
-    ['Cálculo automático', 'Desabilitado'],
-  ]);
-}
-
 function renderPanel(panel, tabId, packageData, workspace) {
   if (tabId === 'summary') return renderSummary(panel, packageData, workspace);
   if (tabId === 'planning') return renderPlanning(panel, packageData, workspace);
-  if (tabId === 'met') return renderMet(panel, workspace);
   if (tabId === 'rdv') return renderRdv(panel, packageData);
   if (tabId === 'fuel') return renderFuel(panel, packageData);
   if (tabId === 'dossier') return renderDossier(panel, workspace);
   if (tabId === 'map') return renderMap(panel, workspace);
   if (tabId === 'edb-shadow') return renderEdbShadow(panel, packageData);
-  if (tabId === 'performance') return renderPerformance(panel, packageData);
 }
 
 export function renderPilotWorkspace(container, packageData) {

@@ -1,9 +1,4 @@
-export const PILOT_DRAFT_SCHEMA_VERSION = 2;
-
-export const PILOT_NATUREZA_OPTIONS = Object.freeze([
-  { code: 'MANUTENCAO', label: 'Manutenção' },
-  { code: 'PETROBRAS', label: 'Petrobras' },
-]);
+export const PILOT_DRAFT_SCHEMA_VERSION = 3;
 
 export function toInputDateTime(value) {
   if (!value) return '';
@@ -113,6 +108,36 @@ export function payloadToKg(value, unit) {
   return Number((normalizedUnit === 'LB' ? numeric / 2.2046226218 : numeric).toFixed(3));
 }
 
+export function convertWeight(value, fromUnit, toUnit) {
+  const numeric = parseNumber(value);
+  if (numeric === null) return null;
+  const source = String(fromUnit || 'KG').trim().toUpperCase();
+  const target = String(toUnit || source).trim().toUpperCase();
+  if (source === target) return numeric;
+  if (source === 'LB' && target === 'KG') return Number((numeric / 2.2046226218).toFixed(3));
+  if (source === 'KG' && target === 'LB') return Number((numeric * 2.2046226218).toFixed(3));
+  return null;
+}
+
+export function calcStageTotalWeight(fields) {
+  const unit = String(fields?.unidade_peso || '').trim().toUpperCase();
+  const emptyWeight = parseNumber(fields?.peso_vazio);
+  if (!unit || emptyWeight === null) return null;
+
+  let total = emptyWeight;
+  for (const key of ['peso_tripulacao', 'peso_passageiros', 'peso_bagagem']) {
+    total += parseNumber(fields?.[key]) ?? 0;
+  }
+
+  const payload = convertWeight(fields?.payload, fields?.unidade_payload || 'KG', unit);
+  if (payload !== null) total += payload;
+
+  const fuel = convertWeight(fields?.combustivel_inicio, fields?.unidade_combustivel, unit);
+  if (fuel !== null) total += fuel;
+
+  return Number(total.toFixed(3));
+}
+
 export function calcHorasVoadas(decolagemLocal, pousoLocal) {
   const duration = calcClockDurationHhMm(decolagemLocal, pousoLocal);
   if (!duration) return null;
@@ -210,7 +235,13 @@ function defaultStageFromPackage(packageData) {
     combustivel_inicio: '',
     combustivel_fim: '',
     unidade_combustivel: '',
-    observacao_local: '',
+    peso_passageiros: '',
+    peso_bagagem: '',
+    peso_tripulacao: '',
+    peso_vazio: toInputNumber(packageData?.aeronave?.peso_vazio),
+    peso_total: '',
+    unidade_peso: packageData?.aeronave?.unidade_peso || '',
+    observacoes: '',
   };
 }
 
@@ -248,7 +279,13 @@ export function buildStageDraftsFromPackage(packageData) {
     combustivel_inicio: toInputNumber(stage.combustivel_inicio),
     combustivel_fim: toInputNumber(stage.combustivel_fim),
     unidade_combustivel: stage.unidade_combustivel || '',
-    observacao_local: '',
+    peso_passageiros: toInputNumber(stage.peso_passageiros),
+    peso_bagagem: toInputNumber(stage.peso_bagagem),
+    peso_tripulacao: toInputNumber(stage.peso_tripulacao),
+    peso_vazio: toInputNumber(stage.peso_vazio ?? packageData?.aeronave?.peso_vazio),
+    peso_total: toInputNumber(stage.peso_total),
+    unidade_peso: stage.unidade_peso || packageData?.aeronave?.unidade_peso || '',
+    observacoes: stage.observacoes || '',
   }));
 }
 
@@ -396,6 +433,44 @@ export function validateStageDrafts(stageDrafts) {
     if (startFuel !== null && endFuel !== null && endFuel > startFuel) {
       errors.push('Etapa ' + (index + 1) + ': combustível final maior que inicial.');
     }
+
+    for (const [field, label] of [
+      ['peso_passageiros', 'peso dos passageiros'],
+      ['peso_bagagem', 'peso da bagagem'],
+      ['peso_tripulacao', 'peso da tripulação'],
+      ['peso_vazio', 'peso vazio'],
+    ]) {
+      const value = parseNumber(stage[field]);
+      if (value !== null && value < 0) {
+        errors.push('Etapa ' + (index + 1) + ': ' + label + ' não pode ser negativo.');
+      }
+    }
+    if (
+      ['peso_passageiros', 'peso_bagagem', 'peso_tripulacao', 'peso_vazio'].some(
+        (field) => parseNumber(stage[field]) !== null,
+      ) &&
+      !String(stage.unidade_peso || '').trim()
+    ) {
+      errors.push('Etapa ' + (index + 1) + ': selecione a unidade dos pesos.');
+    }
+
+    if (index > 0) {
+      const previous = stages[index - 1]?.fields || stages[index - 1] || {};
+      const previousEnd = parseNumber(previous.combustivel_fim);
+      const currentStart = parseNumber(stage.combustivel_inicio);
+      if (previousEnd !== currentStart) {
+        errors.push(
+          'Etapa ' + (index + 1) + ': combustível inicial deve ser igual ao combustível final da etapa anterior.',
+        );
+      }
+      const previousUnit = String(previous.unidade_combustivel || '').trim().toUpperCase();
+      const currentUnit = String(stage.unidade_combustivel || '').trim().toUpperCase();
+      if ((previousEnd !== null || currentStart !== null) && previousUnit !== currentUnit) {
+        errors.push(
+          'Etapa ' + (index + 1) + ': unidade do combustível deve continuar igual à etapa anterior.',
+        );
+      }
+    }
   }
 
   return errors;
@@ -411,10 +486,17 @@ export function applyStageContinuity(stageDrafts) {
     const wasDerived = canTrackDerived && currentDraft.continuity_start_derived === true;
     const previousLanding = String(previous.horario_pouso || '').trim();
     const previousCut = String(previous.horario_motor_desligado || '').trim();
+    const previousFuelEnd = String(previous.combustivel_fim ?? '').trim();
+    const previousFuelUnit = String(previous.unidade_combustivel || '').trim();
 
     if (previous.destino_icao && !String(current.origem_icao || '').trim()) {
       current.origem_icao = previous.destino_icao;
     }
+
+    // Continuidade operacional obrigatória entre pernas: o combustível final
+    // de uma perna é sempre o combustível inicial da perna seguinte.
+    current.combustivel_inicio = previousFuelEnd;
+    current.unidade_combustivel = previousFuelUnit;
 
     if (previousLanding && !previousCut) {
       if (!String(current.horario_motor_ligado || '').trim() || wasDerived) {

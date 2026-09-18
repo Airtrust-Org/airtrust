@@ -188,6 +188,13 @@ function statementFor(sql: string) {
               combustivel_inicio: 2400,
               combustivel_fim: null,
               unidade_combustivel: 'LB',
+              peso_passageiros: 1200,
+              peso_bagagem: 150,
+              peso_tripulacao: 440,
+              peso_vazio: 9300,
+              peso_total: 13490,
+              unidade_peso: 'LB',
+              observacoes: 'Etapa de teste',
               origem_dados: 'manual',
               updated_at: '2026-09-09T09:02:00Z',
             },
@@ -212,6 +219,14 @@ function statementFor(sql: string) {
               observacoes: null,
               updated_at: '2026-09-09T09:04:00Z',
             },
+          ],
+        };
+      }
+      if (normalized.includes('FROM cv_naturezas_voo')) {
+        return {
+          results: [
+            { id: 5, codigo: 'MANUTENCAO', nome: 'Manutenção' },
+            { id: 6, codigo: 'PETROBRAS', nome: 'Petrobras' },
           ],
         };
       }
@@ -274,7 +289,10 @@ function statementFor(sql: string) {
         };
       }
       if (normalized.includes('FROM aeronaves')) {
-        return { id: 3, modelo: 'AW139' };
+        return { id: 3, modelo: 'AW139', prefixo: 'PR-TST', peso_vazio: 9300, unidade_peso: 'LB' };
+      }
+      if (normalized.includes('FROM cv_naturezas_voo')) {
+        return { id: 5, codigo: 'MANUTENCAO', nome: 'Manutenção' };
       }
       return null;
     },
@@ -427,6 +445,21 @@ describe('Pilot offline package', () => {
     expect(body.data.rdv).toMatchObject({ id: 90, versao: 3, workflow_status: 'rascunho' });
     expect(body.data.tripulantes).toHaveLength(1);
     expect(body.data.etapas).toHaveLength(1);
+    expect(body.data.etapas[0]).toMatchObject({
+      peso_passageiros: 1200,
+      peso_bagagem: 150,
+      peso_tripulacao: 440,
+      peso_vazio: 9300,
+      unidade_peso: 'LB',
+      observacoes: 'Etapa de teste',
+    });
+    expect(body.data.aeronave).toMatchObject({ peso_vazio: 9300, unidade_peso: 'LB' });
+    expect(body.data.catalogos.naturezas_voo).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ codigo: 'MANUTENCAO' }),
+        expect.objectContaining({ codigo: 'PETROBRAS' }),
+      ]),
+    );
     expect(body.data.abastecimentos[0]).toMatchObject({ id: 20, tem_anexo: true });
     expect(body.data.abastecimentos[0].anexo_r2_key).toBeUndefined();
     expect(body.data.workspace.contract).toMatchObject({

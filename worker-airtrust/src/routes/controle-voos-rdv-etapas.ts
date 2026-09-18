@@ -28,6 +28,7 @@ import { syncRdvAlerts } from '../services/controle-voos/rdv-alertas';
 import {
   assertEtapaEditable,
   bumpRdvVersion,
+  computeEtapaPesoTotal,
   computeEtapaTempos,
   getEtapaOrThrow,
   listEtapas,
@@ -89,6 +90,13 @@ function assertAllowedEtapaFields(payload: Record<string, unknown>): void {
     'combustivel_inicio',
     'combustivel_fim',
     'unidade_combustivel',
+    'peso_passageiros',
+    'peso_bagagem',
+    'peso_tripulacao',
+    'peso_vazio',
+    'peso_total',
+    'unidade_peso',
+    'observacoes',
     'ordem',
   ]);
   for (const field of Object.keys(payload)) {
@@ -128,6 +136,7 @@ async function buildProgramadoMeta(db: D1Database, voo: FlightRow, empresaId: nu
 function applyComputedTempos(input: EtapaInput): EtapaInput & {
   tempo_decolagem_pouso: string | null;
   tempo_total: string | null;
+  peso_total: number | null;
 } {
   const tempos = computeEtapaTempos(
     input.horario_decolagem,
@@ -135,7 +144,11 @@ function applyComputedTempos(input: EtapaInput): EtapaInput & {
     input.horario_motor_ligado,
     input.horario_motor_desligado,
   );
-  return { ...input, ...tempos };
+  return {
+    ...input,
+    ...tempos,
+    peso_total: computeEtapaPesoTotal(input),
+  };
 }
 
 async function afterEtapaMutation(params: {
@@ -238,15 +251,17 @@ rdvEtapas.post('/voos/:id/etapas', auth(), requireAnyRdvAccess(), async (c) => {
         horario_motor_ligado, horario_decolagem, horario_pouso, horario_motor_desligado,
         tempo_decolagem_pouso, tempo_total, tempo_navegacao, tempo_ifr, tempo_noturno,
         pousos_diurnos, pousos_noturnos, starts, pax, payload,
-        combustivel_inicio, combustivel_fim, unidade_combustivel, origem_dados,
-        created_by, updated_by, created_at, updated_at
+        combustivel_inicio, combustivel_fim, unidade_combustivel,
+        peso_passageiros, peso_bagagem, peso_tripulacao, peso_vazio, peso_total, unidade_peso, observacoes,
+        origem_dados, created_by, updated_by, created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
-        ?, ?, ?, 'MANUAL',
-        ?, ?, datetime('now'), datetime('now')
+        ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?,
+        'MANUAL', ?, ?, datetime('now'), datetime('now')
       )
     `,
   )
@@ -273,6 +288,13 @@ rdvEtapas.post('/voos/:id/etapas', auth(), requireAnyRdvAccess(), async (c) => {
       withTempos.combustivel_inicio ?? null,
       withTempos.combustivel_fim ?? null,
       withTempos.unidade_combustivel ?? null,
+      withTempos.peso_passageiros ?? null,
+      withTempos.peso_bagagem ?? null,
+      withTempos.peso_tripulacao ?? null,
+      withTempos.peso_vazio ?? null,
+      withTempos.peso_total ?? null,
+      withTempos.unidade_peso ?? null,
+      withTempos.observacoes ?? null,
       userId,
       userId,
     )
@@ -476,6 +498,13 @@ rdvEtapas.patch('/voos/:id/etapas/:etapaId', auth(), requireAnyRdvAccess(), asyn
           combustivel_inicio = ?,
           combustivel_fim = ?,
           unidade_combustivel = ?,
+          peso_passageiros = ?,
+          peso_bagagem = ?,
+          peso_tripulacao = ?,
+          peso_vazio = ?,
+          peso_total = ?,
+          unidade_peso = ?,
+          observacoes = ?,
           updated_by = ?,
           updated_at = datetime('now')
       WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
@@ -502,6 +531,13 @@ rdvEtapas.patch('/voos/:id/etapas/:etapaId', auth(), requireAnyRdvAccess(), asyn
       withTempos.combustivel_inicio ?? null,
       withTempos.combustivel_fim ?? null,
       withTempos.unidade_combustivel ?? null,
+      withTempos.peso_passageiros ?? null,
+      withTempos.peso_bagagem ?? null,
+      withTempos.peso_tripulacao ?? null,
+      withTempos.peso_vazio ?? null,
+      withTempos.peso_total ?? null,
+      withTempos.unidade_peso ?? null,
+      withTempos.observacoes ?? null,
       userId,
       etapaId,
       voo.id,
@@ -656,15 +692,17 @@ rdvEtapas.post('/voos/:id/etapas/:etapaId/duplicar', auth(), requireAnyRdvAccess
         horario_motor_ligado, horario_decolagem, horario_pouso, horario_motor_desligado,
         tempo_decolagem_pouso, tempo_total, tempo_navegacao, tempo_ifr, tempo_noturno,
         pousos_diurnos, pousos_noturnos, starts, pax, payload,
-        combustivel_inicio, combustivel_fim, unidade_combustivel, origem_dados,
-        created_by, updated_by, created_at, updated_at
+        combustivel_inicio, combustivel_fim, unidade_combustivel,
+        peso_passageiros, peso_bagagem, peso_tripulacao, peso_vazio, peso_total, unidade_peso, observacoes,
+        origem_dados, created_by, updated_by, created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
-        ?, ?, ?, 'MANUAL',
-        ?, ?, datetime('now'), datetime('now')
+        ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?,
+        'MANUAL', ?, ?, datetime('now'), datetime('now')
       )
     `,
   )
@@ -691,6 +729,13 @@ rdvEtapas.post('/voos/:id/etapas/:etapaId/duplicar', auth(), requireAnyRdvAccess
       source.combustivel_inicio,
       source.combustivel_fim,
       source.unidade_combustivel,
+      source.peso_passageiros,
+      source.peso_bagagem,
+      source.peso_tripulacao,
+      source.peso_vazio,
+      source.peso_total,
+      source.unidade_peso,
+      source.observacoes,
       userId,
       userId,
     )

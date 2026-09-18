@@ -22,6 +22,8 @@ interface Aeronave {
   ano_fabricacao?: number;
   status?: string;
   observacoes?: string;
+  peso_vazio?: number;
+  unidade_peso?: string;
   created_at: string;
   updated_at: string;
 }
@@ -32,6 +34,8 @@ interface AeronaveFormData {
   ano_fabricacao?: number;
   status?: string;
   observacoes?: string;
+  peso_vazio?: number;
+  unidade_peso?: string;
 }
 
 export default function Aeronaves() {
@@ -48,6 +52,8 @@ export default function Aeronaves() {
     ano_fabricacao: undefined,
     status: 'ATIVO',
     observacoes: '',
+    peso_vazio: undefined,
+    unidade_peso: 'LB',
   });
   const [showConfirmDelete, setShowConfirmDelete] = useState<{ id: number; nome: string } | null>(
     null,
@@ -116,6 +122,8 @@ export default function Aeronaves() {
         ano_fabricacao: undefined,
         status: 'ATIVO',
         observacoes: '',
+        peso_vazio: undefined,
+        unidade_peso: 'LB',
       });
       await syncAeronavesCaches();
       fetchAeronaves();
@@ -132,6 +140,8 @@ export default function Aeronaves() {
       ano_fabricacao: aeronave.ano_fabricacao,
       status: aeronave.status || 'ATIVO',
       observacoes: aeronave.observacoes || '',
+      peso_vazio: aeronave.peso_vazio,
+      unidade_peso: aeronave.unidade_peso || 'LB',
     });
     setIsEditModalOpen(true);
   };
@@ -187,7 +197,15 @@ export default function Aeronaves() {
   };
 
   const openCreateModal = () => {
-    setFormData({ codigo: '', nome: '', fabricante: '' });
+    setFormData({
+      modelo: '',
+      prefixo: '',
+      ano_fabricacao: undefined,
+      status: 'ATIVO',
+      observacoes: '',
+      peso_vazio: undefined,
+      unidade_peso: 'LB',
+    });
     setEditingAeronave(null);
     setIsCreateModalOpen(true);
   };
@@ -264,13 +282,13 @@ export default function Aeronaves() {
               <thead className="bg-neutral-50">
                 <tr>
                   <th className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
-                    Código
+                    Prefixo
                   </th>
                   <th className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
-                    Nome
+                    Modelo
                   </th>
                   <th className=" py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
-                    Fabricante
+                    Peso vazio
                   </th>
                   <th className=" py-3 text-right text-xs font-medium text-neutral-500 uppercase tracking-wider">
                     Ações
@@ -283,15 +301,17 @@ export default function Aeronaves() {
                     <td className=" py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <Badge variant="neutral" size="sm">
-                          {aeronave.codigo}
+                          {aeronave.prefixo || '—'}
                         </Badge>
                       </div>
                     </td>
                     <td className=" py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-neutral-900">{aeronave.nome}</div>
+                      <div className="text-sm font-medium text-neutral-900">{aeronave.modelo}</div>
                     </td>
                     <td className=" py-4 whitespace-nowrap">
-                      <div className="text-sm text-neutral-500">{aeronave.fabricante || '-'}</div>
+                      <div className="text-sm text-neutral-500">
+                        {aeronave.peso_vazio ? `${aeronave.peso_vazio} ${aeronave.unidade_peso || ''}` : '—'}
+                      </div>
                     </td>
                     <td className=" py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
@@ -325,38 +345,60 @@ export default function Aeronaves() {
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Código *</label>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Modelo *</label>
             <input
               type="text"
               required
-              value={formData.codigo}
-              onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
+              value={formData.modelo}
+              onChange={(e) => setFormData({ ...formData, modelo: e.target.value })}
               className="w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
-              placeholder="Ex: A320, B738"
+              placeholder="Ex: AW139"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Nome *</label>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Prefixo</label>
             <input
               type="text"
-              required
-              value={formData.nome}
-              onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+              value={formData.prefixo || ''}
+              onChange={(e) => setFormData({ ...formData, prefixo: e.target.value.toUpperCase() })}
               className="w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
-              placeholder="Ex: Airbus A320"
+              placeholder="Ex: PR-ABC"
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Fabricante</label>
-            <input
-              type="text"
-              value={formData.fabricante}
-              onChange={(e) => setFormData({ ...formData, fabricante: e.target.value })}
-              className="w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
-              placeholder="Ex: Airbus"
-            />
+          <div className="grid grid-cols-[1fr_120px] gap-3">
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">
+                Peso vazio *
+              </label>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                required
+                value={formData.peso_vazio ?? ''}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    peso_vazio: e.target.value === '' ? undefined : Number(e.target.value),
+                  })
+                }
+                className="w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">Unidade *</label>
+              <select
+                required
+                value={formData.unidade_peso || 'LB'}
+                onChange={(e) => setFormData({ ...formData, unidade_peso: e.target.value })}
+                className="w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="LB">lb</option>
+                <option value="KG">kg</option>
+              </select>
+            </div>
           </div>
 
           <div className="flex justify-end space-x-3 mt-6">
@@ -378,35 +420,58 @@ export default function Aeronaves() {
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Código *</label>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Modelo *</label>
             <input
               type="text"
               required
-              value={formData.codigo}
-              onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
+              value={formData.modelo}
+              onChange={(e) => setFormData({ ...formData, modelo: e.target.value })}
               className="w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Nome *</label>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Prefixo</label>
             <input
               type="text"
-              required
-              value={formData.nome}
-              onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+              value={formData.prefixo || ''}
+              onChange={(e) => setFormData({ ...formData, prefixo: e.target.value.toUpperCase() })}
               className="w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Fabricante</label>
-            <input
-              type="text"
-              value={formData.fabricante}
-              onChange={(e) => setFormData({ ...formData, fabricante: e.target.value })}
-              className="w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
+          <div className="grid grid-cols-[1fr_120px] gap-3">
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">
+                Peso vazio *
+              </label>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                required
+                value={formData.peso_vazio ?? ''}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    peso_vazio: e.target.value === '' ? undefined : Number(e.target.value),
+                  })
+                }
+                className="w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">Unidade *</label>
+              <select
+                required
+                value={formData.unidade_peso || 'LB'}
+                onChange={(e) => setFormData({ ...formData, unidade_peso: e.target.value })}
+                className="w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="LB">lb</option>
+                <option value="KG">kg</option>
+              </select>
+            </div>
           </div>
 
           <div className="flex justify-end space-x-3 mt-6">

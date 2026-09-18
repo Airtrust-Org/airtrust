@@ -1,0 +1,8 @@
+{
+  "changeId": "controle-voos-leg-operational-weights-0501",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0501_controle_voos_leg_operational_weights.sql",
+  "fileHash": "b1d9be8e4674c9810b2bb21877684598491fe7da405268a0e650854b85638d5b",
+  "planPath": "worker-airtrust/schema-v2/plans/controle-voos-leg-operational-weights-0501.md",
+  "planHash": "2cb9afe58be2c82a6e03048fd6ff3dc6f13b878912c40081e1fb69aaea0e8726"
+}

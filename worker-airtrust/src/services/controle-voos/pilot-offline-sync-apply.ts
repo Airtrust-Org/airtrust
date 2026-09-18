@@ -9,6 +9,7 @@ import {
 } from '../../repositories/controle-voos/rdv-repository';
 import {
   ETAPA_MUTABLE_FIELDS,
+  computeEtapaPesoTotal,
   computeEtapaTempos,
   listEtapas,
   normalizeEtapaInput,
@@ -131,8 +132,12 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
   const naturezaCode = rawFlightUpdate.natureza_voo_codigo == null
     ? null
     : String(rawFlightUpdate.natureza_voo_codigo).trim().toUpperCase();
-  if (naturezaCode && !['MANUTENCAO', 'PETROBRAS'].includes(naturezaCode)) {
-    throw new ApiError('Natureza de voo offline invalida', 400, 'CONTROLE_VOOS_PILOT_SYNC_NATUREZA_INVALID');
+  if (naturezaCode && (!/^[A-Z0-9._-]{1,80}$/.test(naturezaCode))) {
+    throw new ApiError(
+      'Natureza de voo offline invalida',
+      400,
+      'CONTROLE_VOOS_PILOT_SYNC_NATUREZA_INVALID',
+    );
   }
 
   const fuelingsRaw = raw.fuelings == null ? [] : raw.fuelings;
@@ -238,6 +243,7 @@ function prepareStages(stages: SnapshotStagePayload[]): PreparedStage[] {
       input: {
         ...input,
         ...computed,
+        peso_total: computeEtapaPesoTotal(input),
       },
     };
   });
@@ -260,10 +266,29 @@ function prepareStages(stages: SnapshotStagePayload[]): PreparedStage[] {
       'CONTROLE_VOOS_PILOT_SYNC_STAGE_SOURCE_DUPLICATE',
     );
   }
-  return prepared.sort(
+  const ordered = prepared.sort(
     (left, right) =>
       Number(left.input.numero_etapa ?? 0) - Number(right.input.numero_etapa ?? 0),
   );
+
+  for (let index = 1; index < ordered.length; index += 1) {
+    const previous = ordered[index - 1].input;
+    const current = ordered[index].input;
+    const previousEnd = previous.combustivel_fim ?? null;
+    const currentStart = current.combustivel_inicio ?? null;
+    const previousUnit = String(previous.unidade_combustivel || '').trim().toUpperCase();
+    const currentUnit = String(current.unidade_combustivel || '').trim().toUpperCase();
+
+    if (previousEnd !== currentStart || previousUnit !== currentUnit) {
+      throw new ApiError(
+        'Combustivel inicial da etapa deve corresponder ao combustivel final da etapa anterior',
+        400,
+        'CONTROLE_VOOS_PILOT_SYNC_FUEL_CONTINUITY_INVALID',
+      );
+    }
+  }
+
+  return ordered;
 }
 
 function assertSourcePackageMatches(
@@ -315,6 +340,13 @@ function buildStageStatements(input: {
                 combustivel_inicio = ?,
                 combustivel_fim = ?,
                 unidade_combustivel = ?,
+                peso_passageiros = ?,
+                peso_bagagem = ?,
+                peso_tripulacao = ?,
+                peso_vazio = ?,
+                peso_total = ?,
+                unidade_peso = ?,
+                observacoes = ?,
                 updated_by = ?,
                 updated_at = datetime('now')
             WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
@@ -346,6 +378,13 @@ function buildStageStatements(input: {
           stage.input.combustivel_inicio ?? null,
           stage.input.combustivel_fim ?? null,
           stage.input.unidade_combustivel ?? null,
+          stage.input.peso_passageiros ?? null,
+          stage.input.peso_bagagem ?? null,
+          stage.input.peso_tripulacao ?? null,
+          stage.input.peso_vazio ?? null,
+          stage.input.peso_total ?? null,
+          stage.input.unidade_peso ?? null,
+          stage.input.observacoes ?? null,
           input.userId,
           stage.sourceStageId,
           input.flight.id,
@@ -364,16 +403,18 @@ function buildStageStatements(input: {
             horario_motor_ligado, horario_decolagem, horario_pouso, horario_motor_desligado,
             tempo_decolagem_pouso, tempo_total, tempo_navegacao, tempo_ifr, tempo_noturno,
             pousos_diurnos, pousos_noturnos, starts, pax, payload,
-            combustivel_inicio, combustivel_fim, unidade_combustivel, origem_dados,
-            created_by, updated_by, created_at, updated_at
+            combustivel_inicio, combustivel_fim, unidade_combustivel,
+            peso_passageiros, peso_bagagem, peso_tripulacao, peso_vazio, peso_total, unidade_peso, observacoes,
+            origem_dados, created_by, updated_by, created_at, updated_at
           )
           SELECT
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
-            ?, ?, ?, 'MANUAL',
-            ?, ?, datetime('now'), datetime('now')
+            ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?,
+            'MANUAL', ?, ?, datetime('now'), datetime('now')
           WHERE EXISTS (
             SELECT 1 FROM cv_rdv_operacional
             WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
@@ -404,6 +445,13 @@ function buildStageStatements(input: {
         stage.input.combustivel_inicio ?? null,
         stage.input.combustivel_fim ?? null,
         stage.input.unidade_combustivel ?? null,
+        stage.input.peso_passageiros ?? null,
+        stage.input.peso_bagagem ?? null,
+        stage.input.peso_tripulacao ?? null,
+        stage.input.peso_vazio ?? null,
+        stage.input.peso_total ?? null,
+        stage.input.unidade_peso ?? null,
+        stage.input.observacoes ?? null,
         input.userId,
         input.userId,
         input.flight.id,

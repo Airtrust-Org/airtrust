@@ -271,6 +271,54 @@ describe('Pilot offline snapshot apply orchestration', () => {
   });
 
 
+  it('rejects a snapshot when next-leg initial fuel differs from previous-leg final fuel', async () => {
+    const database = db();
+    getOfflineSyncReceipt.mockResolvedValue(null);
+    normalizeEtapaInput.mockImplementation((fields: any) => ({ ...fields }));
+
+    const discontinuous = command();
+    discontinuous.payload.stages = [
+      {
+        source_stage_id: 10,
+        source_stage_updated_at: '2026-09-09T09:02:00Z',
+        fields: {
+          numero_etapa: 1,
+          origem_icao: 'SBME',
+          destino_icao: '9PCP',
+          combustivel_inicio: 1000,
+          combustivel_fim: 800,
+          unidade_combustivel: 'LB',
+        },
+      },
+      {
+        source_stage_id: null,
+        source_stage_updated_at: null,
+        fields: {
+          numero_etapa: 2,
+          origem_icao: '9PCP',
+          destino_icao: 'SBME',
+          combustivel_inicio: 799,
+          combustivel_fim: 650,
+          unidade_combustivel: 'LB',
+        },
+      },
+    ];
+
+    await expect(
+      applyPilotOfflineSnapshotCommand({
+        db: database,
+        empresaId: 7,
+        userId: 70,
+        funcionarioId: 77,
+        flight,
+        command: discontinuous,
+      }),
+    ).rejects.toThrow(
+      'Combustivel inicial da etapa deve corresponder ao combustivel final da etapa anterior',
+    );
+    expect(database.batch).not.toHaveBeenCalled();
+  });
+
   it('accepts an appended local leg while CAS-protecting the existing server leg', async () => {
     const database = db();
     getOfflineSyncReceipt

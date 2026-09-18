@@ -81,6 +81,13 @@ type StageRow = {
   combustivel_inicio: number | null;
   combustivel_fim: number | null;
   unidade_combustivel: string | null;
+  peso_passageiros: number | null;
+  peso_bagagem: number | null;
+  peso_tripulacao: number | null;
+  peso_vazio: number | null;
+  peso_total: number | null;
+  unidade_peso: string | null;
+  observacoes: string | null;
   origem_dados: string | null;
   updated_at: string | null;
 };
@@ -115,6 +122,9 @@ type AirportRow = {
 type AircraftRow = {
   id: number;
   modelo: string | null;
+  prefixo: string | null;
+  peso_vazio: number | null;
+  unidade_peso: string | null;
 };
 
 pilotOffline.post(
@@ -375,6 +385,7 @@ pilotOffline.get(
       alternado,
       aeronave,
       natureza,
+      naturezasResult,
     ] = await Promise.all([
       getActiveRdvByFlight(c.env.DB, voo.id, empresaId),
       c.env.DB
@@ -407,6 +418,7 @@ pilotOffline.get(
               tempo_navegacao, tempo_ifr, tempo_noturno,
               pousos_diurnos, pousos_noturnos, starts, pax, payload,
               combustivel_inicio, combustivel_fim, unidade_combustivel,
+              peso_passageiros, peso_bagagem, peso_tripulacao, peso_vazio, peso_total, unidade_peso, observacoes,
               origem_dados, updated_at
             FROM cv_voo_etapas
             WHERE voo_id = ?
@@ -468,7 +480,7 @@ pilotOffline.get(
         : Promise.resolve(null),
       voo.aeronave_id
         ? c.env.DB
-            .prepare('SELECT id, modelo FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1')
+            .prepare('SELECT id, modelo, prefixo, peso_vazio, unidade_peso FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1')
             .bind(voo.aeronave_id, empresaId)
             .first<AircraftRow>()
         : Promise.resolve(null),
@@ -476,6 +488,17 @@ pilotOffline.get(
         .prepare('SELECT id, codigo, nome FROM cv_naturezas_voo WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1')
         .bind(voo.natureza_voo_id, empresaId)
         .first<{ id: number; codigo: string; nome: string }>(),
+      c.env.DB
+        .prepare(
+          `SELECT id, codigo, nome
+             FROM cv_naturezas_voo
+            WHERE empresa_id = ?
+              AND ativo = 1
+              AND deleted_at IS NULL
+            ORDER BY ordem ASC, nome ASC, id ASC`,
+        )
+        .bind(empresaId)
+        .all<{ id: number; codigo: string; nome: string }>(),
     ]);
 
     const tripulantes = crewResult.results || [];
@@ -577,6 +600,9 @@ pilotOffline.get(
         alternado,
         aeronave,
         natureza,
+        catalogos: {
+          naturezas_voo: naturezasResult.results || [],
+        },
         tripulantes,
         etapas,
         abastecimentos,
