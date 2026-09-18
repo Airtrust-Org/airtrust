@@ -864,7 +864,7 @@ async function refreshCoordinationControls() {
   const rdv = state.rdv;
   if (!rdv) {
     setCoordinationMessage(
-      'O pacote canônico ainda não contém RDV. Transmita o rascunho e atualize do servidor.',
+      'O servidor ainda não recebeu o lançamento deste voo. Transmita os dados e atualize o status.',
       'attention',
     );
     return;
@@ -877,7 +877,7 @@ async function refreshCoordinationControls() {
       localReceipt?.value?.server_result?.enviado_em ||
       localReceipt?.value?.updated_at_local ||
       null;
-    setCoordinationMessage('RDV recebido pela Coordenação.', 'ok');
+    setCoordinationMessage('Lançamento recebido pela Coordenação.', 'ok');
     updateOperationFlow('coordination');
     setCoordinationReceipt(
       'Recebimento confirmado pelo servidor' +
@@ -1285,7 +1285,7 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
       })),
     ]);
     const persistedRdv = await vault.getJson('rdv_drafts', snapshot.rdv.entity_local_id);
-    if (!persistedRdv) throw new Error('Falha ao criar rascunho RDV no tablet.');
+    if (!persistedRdv) throw new Error('Falha ao criar o rascunho do voo no tablet.');
 
     activeRdvDraft = persistedRdv.value;
     const persistedStages = (await vault.listJson('stage_drafts'))
@@ -1481,7 +1481,7 @@ async function readPersistedOperationalStateForSync() {
   await flushOperationalSave();
   const identity = assertPackageIdentity(packageData);
   const persistedRdv = await vault.getJson('rdv_drafts', rdvDraftRecordId(identity.flightId));
-  if (!persistedRdv) throw new Error('Rascunho RDV não encontrado no tablet.');
+  if (!persistedRdv) throw new Error('Rascunho do voo não encontrado no tablet.');
 
   const persistedStages = (await vault.listJson('stage_drafts'))
     .filter(
@@ -1504,7 +1504,7 @@ async function readPersistedOperationalStateForSync() {
     persistedStages.some((record) => Number(record.localRevision || 0) !== revision)
   ) {
     throw new Error(
-      'As revisões locais do RDV e das etapas não estão alinhadas. Salve novamente antes de transmitir.',
+      'As revisões locais do lançamento e das pernas não estão alinhadas. Salve novamente antes de transmitir.',
     );
   }
 
@@ -1820,7 +1820,7 @@ async function finalizeCanonicalRdv() {
   const expectedVersion = Number(state.rdv.versao);
   if (
     !window.confirm(
-      'Finalizar o preenchimento deste RDV no servidor? Depois disso os campos ficam bloqueados até eventual devolução/reabertura.',
+      'Finalizar o lançamento deste voo? Depois disso os campos ficam bloqueados até eventual devolução pela Coordenação.',
     )
   ) {
     return;
@@ -1952,7 +1952,7 @@ async function sendCanonicalRdvToCoordination() {
   const expectedVersion = Number(state.rdv.versao);
   if (
     !window.confirm(
-      'Enviar este RDV para a fila de revisão da Coordenação? Esta ação é separada da sincronização offline.',
+      'Enviar este lançamento para revisão da Coordenação? Confirme somente depois de revisar todas as pernas e dados do voo.',
     )
   ) {
     return;
@@ -1970,7 +1970,7 @@ async function sendCanonicalRdvToCoordination() {
       state: 'sending',
     });
     await refreshCoordinationControls();
-    setCoordinationMessage('Enviando RDV à Coordenação…', 'attention');
+    setCoordinationMessage('Enviando lançamento à Coordenação…', 'attention');
 
     requestStarted = true;
     const body = await authenticatedPost(
@@ -2251,7 +2251,7 @@ function renderRdvFormFields() {
   );
 
   const fields = [
-    ['Número do RDV', 'numero', 'text', null, false, false],
+    ['Identificador do registro', 'numero', 'text', null, false, false],
     ['Horas voadas', 'horas_voadas', 'number', 'decimal', false, true],
     ['Pousos', 'numero_pousos', 'number', 'numeric', false, true],
     ['Ciclos', 'ciclos', 'number', 'numeric', false, false],
@@ -2740,7 +2740,7 @@ function openPackageRecord(record) {
   }
   flightDetail.append(fuelList);
 
-  appendSectionTitle(flightDetail, 'RDV operacional');
+  appendSectionTitle(flightDetail, 'Registro operacional do voo');
   const rdv = packageData.rdv;
   appendInfoGrid(flightDetail, [
     ['Número', rdv?.numero],

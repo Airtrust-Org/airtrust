@@ -27,8 +27,14 @@ export default function ControleVoosMeusVoos() {
         <ControleVoosPageShell>
           <ControleVoosPageHeader
             title="Meus voos"
-            description="Voos atribuídos a você ou criados por você — preencha o RDV e prepare o voo para uso no tablet"
+            description="Voos atribuídos a você ou criados por você — faça um único lançamento do voo e envie à Coordenação"
           >
+            <Link
+              to="/horas-voo"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            >
+              <FileText className="h-4 w-4" /> Meu histórico de voo
+            </Link>
             <button
               type="button"
               onClick={() => setNovoVooOpen(true)}
@@ -92,7 +98,7 @@ export default function ControleVoosMeusVoos() {
                                 to={`/controle-voos/rdv/${voo.id}`}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline dark:text-purple-400"
                               >
-                                <FileText className="h-3.5 w-3.5" /> Meu RDV
+                                <FileText className="h-3.5 w-3.5" /> Lançamento do voo
                               </Link>
                               <a
                                 href={`/pilot/?flight=${voo.id}`}
@@ -112,7 +118,7 @@ export default function ControleVoosMeusVoos() {
           )}
 
           <p className="mt-4 text-xs text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 rounded-lg px-3 py-2">
-            O voo criado pelo piloto nasce como planejado e vinculado somente ao próprio tripulante. O envio do RDV à Coordenação continua sendo uma ação separada.
+            O voo criado pelo piloto nasce como planejado e vinculado somente ao próprio tripulante. Horários, pernas, combustível e ocorrências são informados uma única vez; o AirTrust usa esse lançamento para o fluxo da Coordenação e, depois da finalização, para o histórico de voo.
           </p>
         </ControleVoosPageShell>
       </div>

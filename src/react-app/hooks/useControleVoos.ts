@@ -126,6 +126,42 @@ export interface CvRdvAprovacao {
   created_at: string;
 }
 
+export interface PilotLogbookEntry {
+  rdv_id: number;
+  voo_id: number;
+  data_voo: string;
+  prefixo: string;
+  modelo_aeronave: string | null;
+  funcao: 'PIC' | 'SIC';
+  rota: string[];
+  tempo_voo_min: number;
+  tempo_noturno_min: number;
+  tempo_ifr_min: number;
+  finalizado_em: string | null;
+}
+
+export interface PilotLogbookData {
+  entries: PilotLogbookEntry[];
+  totals: {
+    total_min: number;
+    pic_min: number;
+    sic_min: number;
+    noturna_min: number;
+    instrumento_min: number;
+    simulador_min: number;
+    saldo_referencia: string | null;
+  };
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    total_pages: number;
+    operational_source: 'RDV_FINALIZADO';
+    historical_source: 'SALDO_INICIAL';
+    landing_credit: 'NAO_ATRIBUIDO';
+  };
+}
+
 export interface CvRdvFilaItem {
   id: number;
   voo_id: number;
@@ -578,6 +614,29 @@ function invalidateRdvQueries(qc: ReturnType<typeof useQueryClient>, vooId: stri
   void qc.invalidateQueries({ queryKey: ['cv-rdv-aprovacoes', String(vooId)] });
   void qc.invalidateQueries({ queryKey: ['cv-rdv-fila'] });
   void qc.invalidateQueries({ queryKey: ['cv-dashboard'] });
+}
+
+export function usePilotLogbook(filters?: {
+  page?: number;
+  limit?: number;
+  data_inicio?: string;
+  data_fim?: string;
+}) {
+  return useQuery({
+    queryKey: ['cv-pilot-logbook', filters],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters?.page) params.set('page', String(filters.page));
+      if (filters?.limit) params.set('limit', String(filters.limit));
+      if (filters?.data_inicio) params.set('data_inicio', filters.data_inicio);
+      if (filters?.data_fim) params.set('data_fim', filters.data_fim);
+      const qs = params.toString();
+      const response = await apiClient.get<unknown>(`${API}/pilot/logbook${qs ? `?${qs}` : ''}`);
+      return extractPayloadRequired<PilotLogbookData>(response);
+    },
+    staleTime: 30_000,
+    retry: 1,
+  });
 }
 
 export function useMeusVoos() {

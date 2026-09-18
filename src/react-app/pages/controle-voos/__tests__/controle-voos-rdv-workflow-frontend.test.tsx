@@ -93,7 +93,7 @@ describe('ControleVoosMeusVoos', () => {
     renderWithClient(<ControleVoosMeusVoos />);
 
     await waitFor(() => expect(screen.getByText('ATX-1001')).toBeInTheDocument());
-    expect(screen.getByText('Meu RDV')).toBeInTheDocument();
+    expect(screen.getByText('Lançamento do voo')).toBeInTheDocument();
   });
 });
 

@@ -512,7 +512,7 @@
           </div>
           <div class="section-head">
             <div>
-              <h2 id="rdv-editor-title">Etapas / RDV</h2>
+              <h2 id="rdv-editor-title">Lançamento do voo</h2>
               <p id="rdv-editor-subtitle" class="muted"></p>
             </div>
             <button id="close-rdv-editor" class="secondary" type="button">Fechar rascunho</button>
@@ -553,7 +553,7 @@
           <div id="rdv-stage-fields"></div>
 
           <details class="technical-package" style="margin-top:18px">
-            <summary>Resumo automático do RDV</summary>
+            <summary>Resumo automático do voo</summary>
             <p class="muted">Horas voadas, pousos, POB, carga e combustível são consolidados a partir das pernas abaixo.</p>
             <div id="rdv-form-fields" class="editor-grid"></div>
           </details>
@@ -570,8 +570,8 @@
           <p class="muted" style="margin-top:18px">
             “Salvo no tablet” significa somente persistência cifrada local. “Transmitido” só será
             exibido após receipt do servidor. Se a conexão cair durante o envio, a outbox cifrada
-            permanece no tablet para retry idempotente. O envio do RDV à Coordenação continua sendo
-            uma etapa separada do workflow operacional.
+            permanece no tablet para retry idempotente. O envio do lançamento à Coordenação acontece
+            somente após a transmissão dos dados do voo e a conferência final do piloto.
           </p>
         </section>
 
