@@ -92,7 +92,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v14'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v15'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
     expect(pilotSw).toContain("'/pilot/pilot-rdv-draft.js'");
@@ -307,19 +307,22 @@ describe('Pilot Offline shell', () => {
     expect(pilotRdvDraft).not.toContain('next.ciclos =');
   });
 
-  it('simplifica o fluxo operacional e abre o vault v2 automaticamente sem PIN', () => {
+  it('simplifica o fluxo operacional, não exibe PIN legado e preserva o vault antigo isolado', () => {
     expect(pilotIndex).toContain('1. Preparar voo');
     expect(pilotIndex).toContain('2. Registrar voo');
     expect(pilotIndex).toContain('3. Enviar');
     expect(pilotIndex).toContain('id="rdv-core-fields"');
     expect(pilotIndex).not.toContain('PIN offline');
+    expect(pilotIndex).not.toContain('Código local antigo');
+    expect(pilotIndex).not.toContain('Atualizar armazenamento deste tablet');
     expect(pilotApp).toContain('await vault.openAutomatically()');
-    expect(pilotApp).toContain("vaultOpenState.status === 'ready'");
+    expect(pilotApp).toContain("vaultOpenState.status !== 'ready'");
+    expect(pilotApp).not.toContain('showLegacyVaultMigration');
+    expect(pilotVault).toContain("const DEVICE_DB_NAME = 'airtrust-pilot-v2'");
+    expect(pilotVault).toContain('primaryDatabase.close()');
     expect(pilotVault).toContain("key_protection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY'");
     expect(pilotVault).toContain('async provisionDeviceKey()');
     expect(pilotVault).toContain('async migrateLegacyPin(pin)');
-    expect(pilotIndex).toContain('Código local antigo');
-    expect(pilotIndex).toContain('uma única vez');
     expect(pilotVault).toContain("name: 'PBKDF2'");
     expect(pilotVault).toContain('wrapped_key');
   });

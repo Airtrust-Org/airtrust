@@ -53,10 +53,6 @@ function resolvePilotApiBase() {
 const API_BASE_URL = resolvePilotApiBase();
 
 const connectivity = document.querySelector('#connectivity');
-const legacyVaultCard = document.querySelector('#legacy-vault-card');
-const legacyVaultPinInput = document.querySelector('#legacy-vault-pin');
-const legacyVaultMigrateButton = document.querySelector('#legacy-vault-migrate');
-const legacyVaultStatus = document.querySelector('#legacy-vault-status');
 const workspace = document.querySelector('#workspace');
 const refreshOnlineButton = document.querySelector('#refresh-online');
 const sessionStatus = document.querySelector('#session-status');
@@ -2774,15 +2770,6 @@ function closePackageDetail() {
   setCoordinationReceipt('');
 }
 
-function showLegacyVaultMigration() {
-  workspace.classList.add('hidden');
-  legacyVaultCard.classList.remove('hidden');
-  legacyVaultStatus.className = 'statusline attention';
-  legacyVaultStatus.textContent = 'Migração única necessária para preservar os dados locais existentes.';
-  legacyVaultPinInput.focus();
-}
-
-
 async function openWorkspace() {
   await requestPersistentStorage();
 
@@ -2803,34 +2790,11 @@ async function openWorkspace() {
     saveStatus.textContent = 'Nenhuma alteração local.';
   }
 
-  legacyVaultCard.classList.add('hidden');
   workspace.classList.remove('hidden');
-  legacyVaultPinInput.value = '';
   await loadCachedPackages();
   await updateStorageEstimate();
   await loadOnlineFlights();
 }
-
-async function handleLegacyVaultMigration() {
-  legacyVaultStatus.className = 'statusline attention';
-  legacyVaultStatus.textContent = 'Migrando armazenamento antigo sem apagar os dados…';
-  legacyVaultMigrateButton.disabled = true;
-
-  try {
-    await vault.migrateLegacyPin(legacyVaultPinInput.value);
-    legacyVaultStatus.className = 'statusline ok';
-    legacyVaultStatus.textContent = 'Migração concluída. Este código não será solicitado novamente.';
-    await openWorkspace();
-  } catch (error) {
-    legacyVaultStatus.className = 'statusline error';
-    legacyVaultStatus.textContent =
-      error instanceof Error ? error.message : 'Falha ao migrar o armazenamento antigo.';
-  } finally {
-    legacyVaultMigrateButton.disabled = false;
-  }
-}
-
-
 
 function markPending() {
   saveStatus.className = 'statusline attention';
@@ -2933,10 +2897,6 @@ closeDetailButton.addEventListener('click', closePackageDetail);
 draftInput.addEventListener('input', scheduleDiagnosticSave);
 draftInput.addEventListener('blur', () => void flushDiagnosticSave());
 saveNowButton.addEventListener('click', () => void flushDiagnosticSave());
-legacyVaultMigrateButton.addEventListener('click', () => void handleLegacyVaultMigration());
-legacyVaultPinInput.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') void handleLegacyVaultMigration();
-});
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && vault?.isUnlocked()) {
     void flushDiagnosticSave();
@@ -2966,9 +2926,7 @@ setConnectivity();
 await registerPilotServiceWorker();
 vault = await PilotVault.open();
 const vaultOpenState = await vault.openAutomatically();
-if (vaultOpenState.status === 'ready') {
-  await openWorkspace();
-} else {
-  showLegacyVaultMigration();
-  await updateStorageEstimate();
+if (vaultOpenState.status !== 'ready') {
+  throw new Error('Falha ao preparar armazenamento offline automático.');
 }
+await openWorkspace();

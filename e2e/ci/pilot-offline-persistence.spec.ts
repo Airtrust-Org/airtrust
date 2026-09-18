@@ -197,9 +197,9 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
 });
 
 
-test('migrates a legacy PIN vault once without losing encrypted draft data', async ({ page }) => {
+test('does not prompt for a legacy PIN and preserves the old encrypted vault untouched', async ({ page }) => {
   const legacyPin = '654321';
-  const marker = `pilot-legacy-migration-${Date.now()}`;
+  const marker = `pilot-legacy-archive-${Date.now()}`;
 
   await page.goto('/');
   await page.evaluate(
@@ -218,51 +218,57 @@ test('migrates a legacy PIN vault once without losing encrypted draft data', asy
   );
 
   await page.goto('/pilot/');
-  await expect(page.locator('#legacy-vault-card')).toBeVisible();
-  await expect(page.locator('#workspace')).toBeHidden();
-  await page.locator('#legacy-vault-pin').fill(legacyPin);
-  await page.locator('#legacy-vault-migrate').click();
-
+  await expect(page.locator('#legacy-vault-card')).toHaveCount(0);
   await expect(page.locator('#workspace')).toBeVisible();
-  await expect(page.locator('#legacy-vault-card')).toBeHidden();
   await page.locator('#diagnostic-card > summary').click();
-  await expect(page.locator('#draft')).toHaveValue(marker);
+  await expect(page.locator('#draft')).toHaveValue('');
 
   const proof = await page.evaluate(async (plainMarker) => {
-    const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('airtrust-pilot-v1', 2);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
-    });
-    const config = await new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
-      const transaction = database.transaction('meta', 'readonly');
-      const request = transaction.objectStore('meta').get('vault-config');
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error || new Error('IndexedDB meta read failed'));
-    });
-    const drafts = await new Promise<unknown[]>((resolve, reject) => {
-      const transaction = database.transaction('rdv_drafts', 'readonly');
+    async function open(name: string): Promise<IDBDatabase> {
+      return await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open(name, 2);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
+      });
+    }
+    async function config(database: IDBDatabase): Promise<Record<string, unknown> | undefined> {
+      return await new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
+        const transaction = database.transaction('meta', 'readonly');
+        const request = transaction.objectStore('meta').get('vault-config');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('IndexedDB meta read failed'));
+      });
+    }
+
+    const legacyDatabase = await open('airtrust-pilot-v1');
+    const currentDatabase = await open('airtrust-pilot-v2');
+    const legacyConfig = await config(legacyDatabase);
+    const currentConfig = await config(currentDatabase);
+    const legacyDrafts = await new Promise<unknown[]>((resolve, reject) => {
+      const transaction = legacyDatabase.transaction('rdv_drafts', 'readonly');
       const request = transaction.objectStore('rdv_drafts').getAll();
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error || new Error('IndexedDB draft read failed'));
     });
-    const key = config?.device_key as CryptoKey | undefined;
+    const currentKey = currentConfig?.device_key as CryptoKey | undefined;
     return {
-      config: {
-        version: config?.version,
-        migratedFrom: config?.migrated_from,
-        keyProtection: config?.key_protection,
-        keyExtractable: key?.extractable ?? null,
+      legacyVersion: legacyConfig?.version,
+      legacyDraftCount: legacyDrafts.length,
+      legacyContainsPlaintext: JSON.stringify(legacyDrafts).includes(plainMarker),
+      currentConfig: {
+        version: currentConfig?.version,
+        keyProtection: currentConfig?.key_protection,
+        keyExtractable: currentKey?.extractable ?? null,
       },
-      containsPlaintext: JSON.stringify(drafts).includes(plainMarker),
     };
   }, marker);
 
-  expect(proof.config).toEqual({
+  expect(proof.legacyVersion).toBe(1);
+  expect(proof.legacyDraftCount).toBeGreaterThan(0);
+  expect(proof.legacyContainsPlaintext).toBe(false);
+  expect(proof.currentConfig).toEqual({
     version: 2,
-    migratedFrom: 'PBKDF2_PIN_V1',
     keyProtection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY',
     keyExtractable: false,
   });
-  expect(proof.containsPlaintext).toBe(false);
 });

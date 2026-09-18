@@ -1,4 +1,5 @@
 const DB_NAME = 'airtrust-pilot-v1';
+const DEVICE_DB_NAME = 'airtrust-pilot-v2';
 const DB_VERSION = 2;
 const VAULT_CONFIG_ID = 'vault-config';
 const WRAP_AAD = new TextEncoder().encode('airtrust-pilot-vault-key-v1');
@@ -57,13 +58,13 @@ function transactionDone(transaction) {
   });
 }
 
-function openPilotDatabase() {
+function openPilotDatabase(databaseName = DB_NAME) {
   if (!('indexedDB' in globalThis)) {
     return Promise.reject(new Error('IndexedDB indisponível neste navegador'));
   }
 
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    const request = indexedDB.open(databaseName, DB_VERSION);
     request.onerror = () =>
       reject(request.error || new Error('Falha ao abrir armazenamento offline'));
     request.onupgradeneeded = () => {
@@ -112,7 +113,18 @@ export class PilotVault {
   }
 
   static async open() {
-    return new PilotVault(await openPilotDatabase());
+    const primaryDatabase = await openPilotDatabase(DB_NAME);
+    const primaryVault = new PilotVault(primaryDatabase);
+    const primaryConfig = await primaryVault.getVaultConfig();
+
+    if (primaryConfig && Number(primaryConfig.version) < DEVICE_CONFIG_VERSION) {
+      // Keep every legacy encrypted record untouched. The current app uses a separate
+      // device-key vault so no legacy PIN prompt blocks the pilot workflow.
+      primaryDatabase.close();
+      return new PilotVault(await openPilotDatabase(DEVICE_DB_NAME));
+    }
+
+    return primaryVault;
   }
 
   async isProvisioned() {
