@@ -93,7 +93,7 @@ describe('ControleVoosMeusVoos', () => {
     renderWithClient(<ControleVoosMeusVoos />);
 
     await waitFor(() => expect(screen.getAllByText('ATX-1001')).toHaveLength(2));
-    expect(screen.getAllByText('Preencher voo')).toHaveLength(2);
+    expect(screen.getAllByText('Abrir Pilot App')).toHaveLength(2);
   });
 });
 
