@@ -93,7 +93,10 @@ describe('ControleVoosMeusVoos', () => {
     renderWithClient(<ControleVoosMeusVoos />);
 
     await waitFor(() => expect(screen.getAllByText('ATX-1001')).toHaveLength(2));
-    expect(screen.getAllByText('Preencher voo')).toHaveLength(2);
+    const pilotLinks = screen.getAllByRole('link', { name: /Abrir Pilot App/i });
+    expect(pilotLinks).toHaveLength(2);
+    expect(pilotLinks[0]).toHaveAttribute('href', '/pilot/?flight=601');
+    expect(screen.queryByText('Preencher voo')).not.toBeInTheDocument();
   });
 });
 

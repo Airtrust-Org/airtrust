@@ -142,13 +142,12 @@ export function buildHomeAccessCards(params: {
   }
 
   // A Coordenação prepara o voo e atribui a tripulação. Para o tripulante,
-  // "Meus Voos" é a porta de entrada operacional; o Pilot App continua como
-  // workspace técnico/offline do voo selecionado.
+  // "Meus Voos" lista as atribuições e o Pilot App é a única tela de lançamento.
   if (isFlightCrewHome) {
     cards.push({
       icon: <PlaneTakeoff className="w-7 h-7" />,
       title: 'Meus Voos',
-      description: 'Consulte os voos atribuídos a você e prepare o voo para operação offline.',
+      description: 'Consulte os voos atribuídos a você e abra o Pilot App para fazer o lançamento.',
       route: '/controle-voos/meus-voos',
       color: 'bg-cyan-50',
       iconColor: 'text-cyan-700',

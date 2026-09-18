@@ -23,25 +23,24 @@ describe('Pilot Logbook x RDV - contrato de lançamento único', () => {
     expect(history).not.toContain('ModalLancamentoHorasVoo');
   });
 
-  it('apresenta ao piloto uma unica entrada de preenchimento do voo', () => {
-    expect(meusVoos).toContain('Preencher voo');
-    expect(meusVoos).not.toContain('Abrir no Pilot App');
+  it('apresenta ao piloto uma unica entrada pelo Pilot App', () => {
+    expect(meusVoos).toContain('Abrir Pilot App');
+    expect(meusVoos).toContain('/pilot/?flight=${voo.id}');
+    expect(meusVoos).not.toContain('Preencher voo');
     expect(meusVoos).not.toContain('Criar meu voo');
     expect(meusVoos).not.toContain('Meu RDV');
+    expect(rdvDetalhe).toContain('window.location.replace(`/pilot/?flight=${encodeURIComponent(id)}`)');
+    expect(pilotIndex).toContain('Voltar ao AirTrust');
+    expect(pilotIndex).toContain('href="/controle-voos/meus-voos"');
     expect(pilotIndex).toContain('Lançamento do voo');
-    expect(pilotIndex).not.toContain('Etapas / RDV');
-    expect(pilotIndex).not.toContain('Resumo automático do RDV');
     expect(pilotApp).toContain('Enviar este lançamento para revisão da Coordenação?');
   });
 
-  it('mantem Meus voos responsivo e mostra os trechos como abas sem id interno', () => {
+  it('mantem Meus voos responsivo e o Pilot App com trechos em abas', () => {
     expect(meusVoos).toContain('data-testid="meus-voos-mobile-list"');
     expect(meusVoos).toContain('sm:hidden');
     expect(meusVoos).toContain('hidden overflow-hidden');
-    expect(rdvDetalhe).toContain('role="tablist"');
-    expect(rdvDetalhe).toContain('aria-label="Trechos do voo"');
-    expect(rdvDetalhe).toContain('trechos[activeTrechoIndex]');
-    expect(rdvDetalhe).toContain('max-w-full overflow-x-auto');
+    expect(pilotApp).toContain("className = 'stage-tabs'");
     expect(trechoCard).not.toContain('#{trecho.id}');
   });
 
