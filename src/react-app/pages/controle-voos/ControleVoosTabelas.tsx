@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Ban,
   Edit3,
+  Fuel,
   Layers,
   Loader2,
   MapPin,
@@ -18,7 +19,7 @@ import { apiClient } from '@/react-app/services/apiClient';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 
-type CatalogName = 'pontos' | 'aeroportos' | 'tipos' | 'naturezas' | 'motivos';
+type CatalogName = 'pontos' | 'aeroportos' | 'tipos' | 'naturezas' | 'motivos' | 'empresas-abastecimento';
 type CatalogItem = {
   id: number;
   codigo?: string | null;
@@ -54,9 +55,10 @@ const EMPTY_STATE: CatalogState = {
   tipos: [],
   naturezas: [],
   motivos: [],
+  'empresas-abastecimento': [],
 };
 
-const VISIBLE_CATALOGS: CatalogName[] = ['pontos', 'tipos', 'naturezas', 'motivos'];
+const VISIBLE_CATALOGS: CatalogName[] = ['pontos', 'tipos', 'naturezas', 'motivos', 'empresas-abastecimento'];
 
 const CATALOG_META: Record<
   CatalogName,
@@ -91,6 +93,12 @@ const CATALOG_META: Record<
     singular: 'motivo operacional',
     description: 'Motivos de atraso, cancelamento, alternado e indisponibilidade.',
     icon: <Ban className="h-4 w-4" />,
+  },
+  'empresas-abastecimento': {
+    label: 'Empresas de abastecimento',
+    singular: 'empresa de abastecimento',
+    description: 'Empresas que podem ser selecionadas pelo piloto ao registrar abastecimento.',
+    icon: <Fuel className="h-4 w-4" />,
   },
 };
 
@@ -144,14 +152,22 @@ export default function ControleVoosTabelas() {
     setLoading(true);
     setError(null);
     try {
-      const [pontos, aeroportos, tipos, naturezas, motivos] = await Promise.all([
+      const [pontos, aeroportos, tipos, naturezas, motivos, empresasAbastecimento] = await Promise.all([
         loadCatalog('pontos'),
         loadCatalog('aeroportos'),
         loadCatalog('tipos'),
         loadCatalog('naturezas'),
         loadCatalog('motivos'),
+        loadCatalog('empresas-abastecimento'),
       ]);
-      setData({ pontos, aeroportos, tipos, naturezas, motivos });
+      setData({
+        pontos,
+        aeroportos,
+        tipos,
+        naturezas,
+        motivos,
+        'empresas-abastecimento': empresasAbastecimento,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar cadastros operacionais.');
     } finally {

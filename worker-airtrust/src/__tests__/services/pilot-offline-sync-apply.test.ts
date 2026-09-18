@@ -364,6 +364,17 @@ describe('Pilot offline snapshot apply orchestration', () => {
     expect(source).toContain("'MANUAL'");
   });
 
+  it('resolves fueling companies inside the authenticated tenant before persisting supplier names', () => {
+    const source = readFileSync(
+      join(__dirname, '../../services/controle-voos/pilot-offline-sync-apply.ts'),
+      'utf8',
+    );
+    expect(source).toContain('empresa_abastecimento_codigo');
+    expect(source).toContain('FROM cv_empresas_abastecimento WHERE empresa_id = ? AND codigo = ? AND ativo = 1');
+    expect(source).toContain('CONTROLE_VOOS_PILOT_SYNC_FUEL_SUPPLIER_NOT_CONFIGURED');
+    expect(source).toContain('supplierNamesByCode.get(fueling.empresa_abastecimento_codigo)');
+  });
+
   it('orders the atomic D1 batch as RDV CAS, stages, fuelings, optional nature, event, receipt', () => {
     const source = readFileSync(
       join(

@@ -281,8 +281,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0501-production-preflight.sh --target=airtrust-db
 
-      - name: Preflight Conhecimento Ativo foundation 0502
-        if: ${{ inputs.change_id == 'conhecimento-ativo-foundation-0502' }}
+      - name: Preflight Controle de Voos fueling companies 0502
+        if: ${{ inputs.change_id == 'controle-voos-fueling-companies-0502' }}
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
@@ -496,8 +496,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0501-production-postconditions.sh --target=airtrust-db
 
-      - name: Post-validate Conhecimento Ativo foundation 0502
-        if: ${{ inputs.change_id == 'conhecimento-ativo-foundation-0502' }}
+      - name: Post-validate Controle de Voos fueling companies 0502
+        if: ${{ inputs.change_id == 'controle-voos-fueling-companies-0502' }}
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}

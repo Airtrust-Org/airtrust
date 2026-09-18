@@ -37,7 +37,7 @@ APPROVED_MIGRATIONS=(
   "0489_a02_natural_keys_tenant_scoped.sql"
   "0500_controle_voos_navigation_points.sql"
   "0501_controle_voos_leg_operational_weights.sql"
-  "0502_conhecimento_ativo_foundation.sql"
+  "0502_controle_voos_fueling_companies.sql"
 )
 
 apply=false
@@ -183,7 +183,7 @@ validate_postconditions() {
     0501_controle_voos_leg_operational_weights.sql)
       bash scripts/staging/validate-0501-postconditions.sh --target="$db_name"
       ;;
-    0502_conhecimento_ativo_foundation.sql)
+    0502_controle_voos_fueling_companies.sql)
       bash scripts/staging/validate-0502-postconditions.sh --target="$db_name"
       ;;
   esac
