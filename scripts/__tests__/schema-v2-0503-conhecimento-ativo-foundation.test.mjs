@@ -44,13 +44,15 @@ test('0503 builds the 13-table Conhecimento Ativo foundation on disposable SQLit
   execFileSync('sqlite3', [
     dbPath,
     'CREATE TABLE usuarios(id INTEGER PRIMARY KEY);' +
-      'CREATE TABLE funcionarios(id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, deleted_at TEXT);',
+      'CREATE TABLE funcionarios(id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, deleted_at TEXT);' +
+      'CREATE TABLE legacy_trigger_target(id INTEGER PRIMARY KEY);' +
+      'CREATE TRIGGER trg_calc_vencimento_insert AFTER INSERT ON legacy_trigger_target BEGIN SELECT 1; END;',
   ]);
   execFileSync('sqlite3', [dbPath], { input: readFileSync(MIGRATION) });
   const tableCount = Number(
     execFileSync('sqlite3', [
       dbPath,
-      "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name LIKE 'conhecimento_ativo_%';",
+      "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name GLOB 'conhecimento_ativo_*';",
     ])
       .toString()
       .trim(),
@@ -58,13 +60,23 @@ test('0503 builds the 13-table Conhecimento Ativo foundation on disposable SQLit
   const triggerCount = Number(
     execFileSync('sqlite3', [
       dbPath,
-      "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_ca_%';",
+      "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name GLOB 'trg_ca_*';",
     ])
       .toString()
       .trim(),
   );
   assert.equal(tableCount, 13);
   assert.equal(triggerCount, 9);
+
+  const legacyTriggerCount = Number(
+    execFileSync('sqlite3', [
+      dbPath,
+      "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name='trg_calc_vencimento_insert';",
+    ])
+      .toString()
+      .trim(),
+  );
+  assert.equal(legacyTriggerCount, 1);
 });
 
 test('production workflow wires dedicated 0503 preflight and postconditions', () => {

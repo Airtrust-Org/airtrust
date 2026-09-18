@@ -49,7 +49,7 @@ for table in usuarios funcionarios aeronaves funcionarios_aeronaves modelos_aero
   assert_count "prerequisite-$table" 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name='$table';"
 done
 
-assert_count conhecimento-ativo-tables-absent 0 "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name LIKE 'conhecimento_ativo_%';"
-assert_count conhecimento-ativo-triggers-absent 0 "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_ca_%';"
+assert_count conhecimento-ativo-tables-absent 0 "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name GLOB 'conhecimento_ativo_*';"
+assert_count conhecimento-ativo-triggers-absent 0 "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name GLOB 'trg_ca_*';"
 
 echo CONHECIMENTO_ATIVO_FOUNDATION_0503_PRODUCTION_PREFLIGHT=PASS
