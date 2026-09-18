@@ -105,7 +105,7 @@ export interface ConhecimentoImportApplyResult {
 type RawRow = { linha: number; values: Record<string, unknown> };
 
 async function loadExcelJS(): Promise<typeof import('exceljs')> {
-  return (await import('exceljs/dist/es5/exceljs.browser.js')) as unknown as typeof import('exceljs');
+  return import('exceljs/dist/es5/exceljs.browser.js');
 }
 
 function rawCell(value: unknown): unknown {

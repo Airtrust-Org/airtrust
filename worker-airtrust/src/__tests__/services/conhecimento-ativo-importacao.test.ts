@@ -15,12 +15,7 @@ async function loadWorkbook(buffer: Uint8Array) {
 }
 
 async function writeBuffer(workbook: Awaited<ReturnType<typeof loadWorkbook>>): Promise<ArrayBuffer> {
-  const out = await workbook.xlsx.writeBuffer();
-  if (out instanceof ArrayBuffer) return out;
-  if (ArrayBuffer.isView(out)) {
-    return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer;
-  }
-  throw new Error('ExcelJS retornou buffer incompatível');
+  return workbook.xlsx.writeBuffer();
 }
 
 function fillValidRow(
