@@ -33,8 +33,25 @@
         padding: max(20px, env(safe-area-inset-top)) 18px max(32px, env(safe-area-inset-bottom));
       }
       .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
-      .brand { display: flex; align-items: center; gap: 12px; }
+      .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
       .brand img { width: 48px; height: 48px; object-fit: contain; }
+      .topbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+      .airtrust-return {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        border: 1px solid #c8d4e2;
+        border-radius: 12px;
+        padding: 9px 13px;
+        background: #fff;
+        color: #12356a;
+        font-size: .86rem;
+        font-weight: 800;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .airtrust-return:hover { background: #e9f0f7; }
       h1 { margin: 0; font-size: clamp(1.35rem, 3vw, 2rem); }
       h2, h3 { color: #10213d; }
       .subtitle { margin: 3px 0 0; color: #52637a; font-size: .9rem; }
@@ -382,6 +399,8 @@
       details summary { cursor: pointer; font-weight: 800; }
       @media (max-width: 700px) {
         .topbar { align-items: flex-start; flex-direction: column; }
+        .topbar-actions { width: 100%; justify-content: space-between; }
+        .airtrust-return { flex: 1 1 auto; }
         .row, .meta, .detail-grid, .editor-grid, .pilot-workspace-grid { grid-template-columns: 1fr; }
         .editor-grid .wide { grid-column: auto; }
         .pill { align-self: flex-start; }
@@ -401,9 +420,12 @@
             <p class="subtitle">Workspace operacional offline para tablet</p>
           </div>
         </div>
-        <div id="connectivity" class="pill" aria-live="polite">
-          <span class="dot"></span>
-          <span>Verificando conexão…</span>
+        <div class="topbar-actions">
+          <a class="airtrust-return" href="/controle-voos/meus-voos">← Voltar ao AirTrust</a>
+          <div id="connectivity" class="pill" aria-live="polite">
+            <span class="dot"></span>
+            <span>Verificando conexão…</span>
+          </div>
         </div>
       </header>
 
