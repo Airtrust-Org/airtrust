@@ -170,11 +170,7 @@ const catalogos: Record<string, CatalogConfig> = {
     fields: 'id, codigo, nome, tipo, descricao, ativo, ordem',
     orderBy: 'tipo ASC, ordem ASC, nome ASC',
   },
-  'empresas-abastecimento': {
-    table: 'cv_empresas_abastecimento',
-    fields: 'id, codigo, nome, descricao, ativo, ordem',
-    orderBy: 'ordem ASC, nome ASC',
-  },
+  'empresas-abastecimento': { table: 'cv_empresas_abastecimento', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' },
 };
 
 function requireControleVoosWrite(): MiddlewareHandler<{ Bindings: Env }> {
