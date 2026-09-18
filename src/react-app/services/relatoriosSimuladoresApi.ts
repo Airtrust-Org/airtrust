@@ -25,8 +25,8 @@ export type RelatorioUsoResponse = {
 
 /**
  * HTTP helper que usa API_BASE_URL e desembrulha { success, data }.
- * Auth comes from the canonical in-memory/session-aware token accessor instead
- * of probing localStorage aliases, because session-only logins are the default.
+ * Auth comes from the canonical in-memory/storage-aware token accessor instead
+ * of probing storage aliases directly, independent of the persistence policy.
  */
 async function http<T>(url: string, init?: RequestInit): Promise<T> {
   const token = await ensureValidAccessToken();

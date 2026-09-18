@@ -131,6 +131,8 @@ function setConnectivity() {
   if (activePackageRecord) void refreshCoordinationControls();
 }
 
+setConnectivity();
+
 function formatTimestamp(value) {
   if (!value) return '—';
   try {
@@ -2905,6 +2907,8 @@ async function openWorkspace() {
   }
 
   workspace.classList.remove('hidden');
+  window.__AIRTRUST_PILOT_APP_READY__ = true;
+  window.dispatchEvent(new Event('airtrust:pilot-app-ready'));
   await loadCachedPackages();
   await updateStorageEstimate();
   await loadOnlineFlights();
@@ -3036,11 +3040,17 @@ window.addEventListener('pagehide', () => {
   }
 });
 
-setConnectivity();
-await registerPilotServiceWorker();
-vault = await PilotVault.open();
-const vaultOpenState = await vault.openAutomatically();
-if (vaultOpenState.status !== 'ready') {
-  throw new Error('Falha ao preparar armazenamento offline automático.');
+try {
+  await registerPilotServiceWorker();
+  vault = await PilotVault.open();
+  const vaultOpenState = await vault.openAutomatically();
+  if (vaultOpenState.status !== 'ready') {
+    throw new Error('Falha ao preparar armazenamento offline automático.');
+  }
+  await openWorkspace();
+} catch (error) {
+  console.error('[Pilot Offline] Falha ao iniciar Pilot App:', error);
+  workspace.classList.remove('hidden');
+  const message = error instanceof Error ? error.message : 'Falha desconhecida ao iniciar o Pilot App.';
+  setSessionMessage('Não foi possível iniciar o Pilot App: ' + message, 'error');
 }
-await openWorkspace();

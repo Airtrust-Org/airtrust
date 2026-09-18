@@ -28,42 +28,61 @@ function toFuncionarioContext(
 
 export default function HomeRouter() {
   const { user, isLoading } = useAuth();
-  const [funcionarioContext, setFuncionarioContext] =
-    useState<HomeProfileFuncionarioContext | null>(null);
+  const [resolvedFuncionarioContext, setResolvedFuncionarioContext] = useState<{
+    funcionarioId: number;
+    context: HomeProfileFuncionarioContext | null;
+  } | null>(null);
+
+  const funcionarioIdToResolve =
+    isStudentLikeHomeRole(user?.role) && typeof user?.funcionario_id === 'number'
+      ? user.funcionario_id
+      : null;
+  const funcionarioContext =
+    funcionarioIdToResolve !== null &&
+    resolvedFuncionarioContext?.funcionarioId === funcionarioIdToResolve
+      ? resolvedFuncionarioContext.context
+      : null;
+  const isResolvingFuncionarioContext =
+    funcionarioIdToResolve !== null &&
+    resolvedFuncionarioContext?.funcionarioId !== funcionarioIdToResolve;
 
   useEffect(() => {
     let active = true;
-    const shouldResolveFuncionarioContext = isStudentLikeHomeRole(user?.role);
-
-    if (!shouldResolveFuncionarioContext || !user?.funcionario_id) {
-      setFuncionarioContext(null);
+    if (funcionarioIdToResolve === null) {
+      setResolvedFuncionarioContext(null);
       return () => {
         active = false;
       };
     }
 
     void funcionariosService
-      .buscarPorId(String(user.funcionario_id))
+      .buscarPorId(String(funcionarioIdToResolve))
       .then((funcionario) => {
         if (!active) return;
-        setFuncionarioContext(toFuncionarioContext(funcionario));
+        setResolvedFuncionarioContext({
+          funcionarioId: funcionarioIdToResolve,
+          context: toFuncionarioContext(funcionario),
+        });
       })
       .catch(() => {
         if (!active) return;
-        setFuncionarioContext(null);
+        setResolvedFuncionarioContext({
+          funcionarioId: funcionarioIdToResolve,
+          context: null,
+        });
       });
 
     return () => {
       active = false;
     };
-  }, [user?.funcionario_id, user?.role]);
+  }, [funcionarioIdToResolve]);
 
   const homeProfile = useMemo(
     () => resolveHomeProfile(user, funcionarioContext),
     [funcionarioContext, user],
   );
 
-  if (isLoading) return null;
+  if (isLoading || isResolvingFuncionarioContext) return null;
 
   if (homeProfile === 'PRIMARY_ADMIN_DASHBOARD') {
     return <DashboardPrincipal />;

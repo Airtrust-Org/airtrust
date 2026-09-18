@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HomeRouter from '../HomeRouter';
@@ -120,5 +120,34 @@ describe('HomeRouter', () => {
       ).toBeInTheDocument();
     });
     expect(buscarPorIdMock).toHaveBeenCalledWith('10');
+  });
+
+  it('nao renderiza a home generica antes de resolver o contexto do tripulante', async () => {
+    let resolveFuncionario!: (value: unknown) => void;
+    buscarPorIdMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveFuncionario = resolve;
+      }),
+    );
+
+    renderHomeRouter('/home');
+
+    expect(screen.queryByText(/home-profile:/)).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveFuncionario({
+        id: 10,
+        funcao: 'Piloto',
+        cargo: 'Comandante',
+        setor: 'Operações Aéreas',
+        setor_id: 2,
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('home-profile:STUDENT_TRIPULACAO:Operações Aéreas'),
+      ).toBeInTheDocument();
+    });
   });
 });

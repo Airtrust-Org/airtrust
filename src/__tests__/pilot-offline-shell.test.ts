@@ -13,6 +13,7 @@ const pilotManifest = JSON.parse(read('public/pilot/pilot.webmanifest')) as {
   display: string;
 };
 const pilotApp = read('public/pilot/pilot-app.js');
+const pilotBootstrap = read('public/pilot/pilot-bootstrap.js');
 const pilotWorkspace = read('public/pilot/pilot-workspace.js');
 const pilotVault = read('public/pilot/pilot-vault.js');
 const pilotRdvDraft = read('public/pilot/pilot-rdv-draft.js');
@@ -42,6 +43,7 @@ describe('Pilot Offline shell', () => {
     };
 
     assertParses(pilotApp);
+    assertParses(pilotBootstrap);
     assertParses(pilotWorkspace);
     assertParses(pilotVault);
     assertParses(pilotRdvDraft);
@@ -59,6 +61,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('href="/pilot/pilot.webmanifest"');
     expect(pilotIndex).toContain('href="/controle-voos/meus-voos"');
     expect(pilotIndex).toContain('Voltar ao AirTrust');
+    expect(pilotIndex).toContain('src="/pilot/pilot-bootstrap.js"');
     expect(pilotApp).toContain("scope: '/pilot/'");
     expect(pilotApp).toContain("register('/pilot/pilot-sw.js'");
   });
@@ -94,8 +97,9 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v16'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v17'");
     expect(pilotSw).toContain("'/pilot/index.html'");
+    expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
     expect(pilotSw).toContain("'/pilot/pilot-rdv-draft.js'");
     expect(pilotSw).toContain("'/pilot/pilot-sync.js'");
@@ -105,6 +109,18 @@ describe('Pilot Offline shell', () => {
     expect(pilotSw).toContain("caches.match('/pilot/index.html')");
     expect(pilotSw).toContain('return cached || response;');
     expect(pilotSw).toContain("if (url.pathname.startsWith('/api/')) return;");
+    expect(pilotSw).toContain("fetch(request, { cache: 'no-store' })");
+  });
+
+  it('recupera shell antigo sem deixar a tela presa em Verificando conexao', () => {
+    expect(pilotBootstrap).toContain("airtrust_pilot_shell_recovery_v17");
+    expect(pilotBootstrap).toContain("registration.update()");
+    expect(pilotBootstrap).toContain("name.startsWith(PILOT_CACHE_PREFIX)");
+    expect(pilotBootstrap).toContain('window.location.reload()');
+    expect(pilotBootstrap).toContain("window.setTimeout(() => void recoverStaleShell(), 8000)");
+    expect(pilotApp).toContain("window.__AIRTRUST_PILOT_APP_READY__ = true");
+    expect(pilotApp).toContain("window.dispatchEvent(new Event('airtrust:pilot-app-ready'))");
+    expect(pilotApp).toContain('Não foi possível iniciar o Pilot App:');
   });
 
   it('o cleanup legado preserva Service Worker e caches do Pilot App', () => {
