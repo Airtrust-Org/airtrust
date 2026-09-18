@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   CheckCircle,
@@ -192,6 +192,12 @@ export default function ControleVoosRdvDetalhe() {
 
   const progressPercent = form ? computeProgressPercent(form, stepOptions) : 0;
   const fieldErrors = form && voo ? collectFieldErrors(form, voo, trechos) : {};
+
+  // Tripulantes preenchem exclusivamente no Pilot App, que suporta operação offline.
+  // Esta tela React permanece como RDV operacional da Coordenação.
+  if (!isCoordenacao && id) {
+    return <Navigate to={`/pilot/?flight=${id}`} replace />;
+  }
 
   if (isLoading || !hydrated) {
     return (
