@@ -28,11 +28,18 @@ assignment_count="$(query_count "SELECT COUNT(*) count FROM frms_profile_assignm
 source_revision_count="$(query_count "SELECT COUNT(*) count FROM frms_config_revisions WHERE empresa_id IS NULL AND profile_code='HELICOPTER_OFFSHORE' AND status='ACTIVE' AND policy_version='FRMS_OPERATIONAL_POLICY_V2';")"
 source_parameter_count="$(query_count "SELECT COUNT(*) count FROM frms_config_parameters WHERE revision_id=(SELECT id FROM frms_config_revisions WHERE empresa_id IS NULL AND profile_code='HELICOPTER_OFFSHORE' AND status='ACTIVE' AND policy_version='FRMS_OPERATIONAL_POLICY_V2' ORDER BY revision_number DESC, created_at DESC LIMIT 1);")"
 [[ "$empresa_count" == 1 ]] || { echo "ERROR: staging 0499 prerequisite empresa_id=6 missing" >&2; exit 1; }
-[[ "$assignment_count" -ge 1 ]] || { echo "ERROR: staging 0499 prerequisite active HELICOPTER_OFFSHORE assignment for empresa_id=6 missing" >&2; exit 1; }
 [[ "$source_revision_count" -ge 1 ]] || { echo "ERROR: staging 0499 prerequisite global active FRMS_OPERATIONAL_POLICY_V2 revision missing" >&2; exit 1; }
 [[ "$source_parameter_count" -ge 1 ]] || { echo "ERROR: staging 0499 prerequisite V2 source parameters missing" >&2; exit 1; }
+ledger_count="$(query_count "SELECT COUNT(*) count FROM d1_migrations WHERE name='$MIGRATION_BASENAME';")"; target_count="$(query_count "SELECT COUNT(*) count FROM frms_config_revisions WHERE id='$TARGET_REV';")"; recalc_count="$(query_count "SELECT COUNT(*) count FROM frms_recalc_runs WHERE id='frms-recalc-empresa6-v2-history-2026-0499';")"
+if [[ "$assignment_count" == 0 ]]; then
+  [[ "$ledger_count" == 0 && "$target_count" == 0 && "$recalc_count" == 0 ]] || { echo "ERROR: staging 0499 is not applicable but partial 0499 state exists" >&2; exit 1; }
+  echo "PREFLIGHT_0499_TENANT_CONTEXT=NOT_APPLICABLE assignment=0 source_revision=$source_revision_count source_parameters=$source_parameter_count"
+  echo "MIGRATION_NOT_APPLICABLE_STAGING_DATASET=$MIGRATION_BASENAME"
+  echo "REMOTE_WRITE_EXECUTED=false"
+  exit 0
+fi
+[[ "$assignment_count" -eq 1 ]] || { echo "ERROR: staging 0499 expected exactly one active HELICOPTER_OFFSHORE assignment for empresa_id=6, found=$assignment_count" >&2; exit 1; }
 echo "PREFLIGHT_0499_TENANT_CONTEXT=PASS empresa=$empresa_count assignment=$assignment_count source_revision=$source_revision_count source_parameters=$source_parameter_count"
-ledger_count="$(query_count "SELECT COUNT(*) count FROM d1_migrations WHERE name='$MIGRATION_BASENAME';")"; target_count="$(query_count "SELECT COUNT(*) count FROM frms_config_revisions WHERE id='$TARGET_REV';")"
 if [[ "$ledger_count" == 1 ]]; then [[ "$target_count" == 1 ]] || { echo "ERROR: 0499 ledger exists without tenant revision" >&2; exit 1; }; bash scripts/staging/validate-0499-postconditions.sh --target="$db_name"; echo "MIGRATION_ALREADY_APPLIED_AND_VALIDATED=$MIGRATION_BASENAME"; exit 0; fi
 [[ "$ledger_count" == 0 && "$target_count" == 0 ]] || { echo "ERROR: 0499 revision/ledger drift" >&2; exit 1; }
 preflight="$(mktemp -t airtrust-staging-0499-preflight.XXXXXXXX)"; recovery="$(mktemp -t airtrust-staging-0499-recovery.XXXXXXXX)"; combined="$(mktemp -t airtrust-staging-0499.XXXXXXXX.sql)"; apply_output="$(mktemp -t airtrust-staging-0499-apply.XXXXXXXX)"; trap 'rm -f "$preflight" "$recovery" "$combined" "$apply_output"' EXIT

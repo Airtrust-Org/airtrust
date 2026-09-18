@@ -9,6 +9,15 @@ for arg in "$@"; do case "$arg" in --target=*) target="${arg#*=}" ;; *) echo "ER
 query_count(){ local sql="$1"; (cd worker-airtrust && npx wrangler d1 execute "$target" --remote --json --command "$sql") | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const p=JSON.parse(d);const r=p[0]?.results?.[0]||{};console.log(Number(r.count??r.total??Object.values(r)[0]??0))})"; }
 assert_count(){ local label="$1" expected="$2" sql="$3" count; count="$(query_count "$sql")"; [[ "$count" == "$expected" ]] || { echo "ERROR: $label expected=$expected found=$count" >&2; exit 1; }; echo "POSTCONDITION_OK=$label"; }
 assert_positive(){ local label="$1" sql="$2" count; count="$(query_count "$sql")"; [[ "$count" -ge 1 ]] || { echo "ERROR: $label expected>=1 found=$count" >&2; exit 1; }; echo "POSTCONDITION_OK=$label:$count"; }
+assignment_count="$(query_count "SELECT COUNT(*) count FROM frms_profile_assignments a JOIN frms_regulatory_profiles p ON p.id=a.regulatory_profile_id WHERE a.empresa_id=6 AND a.profile_code='HELICOPTER_OFFSHORE' AND a.status='ACTIVE' AND a.effective_from<='2026-01-01' AND (a.effective_to IS NULL OR a.effective_to>='2026-01-01') AND p.empresa_id=6 AND p.profile_code=a.profile_code AND p.active=1 AND p.deleted_at IS NULL;")"
+if [[ "$assignment_count" == 0 ]]; then
+  assert_count tenant-v2-revision-absent 0 "SELECT COUNT(*) count FROM frms_config_revisions WHERE id='$TARGET_REV';"
+  assert_count governed-recalc-run-absent 0 "SELECT COUNT(*) count FROM frms_recalc_runs WHERE id='frms-recalc-empresa6-v2-history-2026-0499';"
+  assert_count migration-ledger-absent 0 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0499_frms_v2_historical_backfill.sql';"
+  echo FRMS_V2_HISTORICAL_BACKFILL_0499_STAGING_POSTCONDITIONS=NOT_APPLICABLE_STAGING_DATASET
+  exit 0
+fi
+[[ "$assignment_count" == 1 ]] || { echo "ERROR: staging 0499 expected assignment count 0 or 1, found=$assignment_count" >&2; exit 1; }
 assert_count tenant-v2-revision 1 "SELECT COUNT(*) count FROM frms_config_revisions WHERE id='$TARGET_REV' AND empresa_id=6 AND status='ACTIVE' AND effective_from='2026-01-01';"
 assert_positive tenant-v2-parameters "SELECT COUNT(*) count FROM frms_config_parameters WHERE revision_id='$TARGET_REV';"
 assert_count critical-v2-drift 0 "SELECT COUNT(*) count FROM frms_config_revisions r WHERE r.id='$TARGET_REV' AND (NOT EXISTS (SELECT 1 FROM frms_config_parameters p WHERE p.revision_id=r.id AND p.parameter_key='FRMS_V2_ENABLED' AND p.numeric_value=1) OR NOT EXISTS (SELECT 1 FROM frms_config_parameters p WHERE p.revision_id=r.id AND p.parameter_key='LANDINGS_NEUTRAL_MAX' AND p.numeric_value=8));"
