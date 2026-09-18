@@ -244,7 +244,7 @@ class RemoteD1Adapter {
       sql: statement.sql,
       params: statement.params,
     }));
-    const entries = await this.request(payload);
+    const entries = await this.request({ batch: payload });
     return entries.map((entry) => ({
       success: true,
       results: entry.results ?? [],
