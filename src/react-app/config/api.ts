@@ -24,11 +24,13 @@ export {
 export const API_BASE_URL = resolveApiBase();
 export const AUTH_TOKEN_CHANGED_EVENT = 'airtrust:token-changed';
 export const AUTH_PERSIST_LOGIN_KEY = 'airtrust_persist_login';
-// Session-only by default — a shared/public device left logged in shouldn't
-// silently persist a token to localStorage until the user opts in via the
-// "remember me" checkbox (LoginSimple.tsx). Only the default flips here; once
-// setPersistLogin() has ever been called, the stored preference wins.
-const DEFAULT_PERSIST_LOGIN = false;
+const AUTH_PERSIST_LOGIN_POLICY_KEY = 'airtrust_persist_login_policy';
+const AUTH_PERSIST_LOGIN_POLICY_VERSION = '2';
+// A sessão fica persistente por padrão e o access token curto continua sendo
+// renovado pelo refresh token. Logout/revogação permanecem encerrando a sessão.
+// A versão de política migra o antigo default temporário uma única vez e depois
+// respeita eventual opt-out explícito do usuário.
+const DEFAULT_PERSIST_LOGIN = true;
 
 // ===== TOKEN STORAGE (Memory-based for security) =====
 let cachedToken: string | null = null;
@@ -92,7 +94,15 @@ function safeSessionStorageRemove(key: string): void {
 }
 
 function readPersistLoginPreference(): boolean {
+  const policyVersion = safeLocalStorageGet(AUTH_PERSIST_LOGIN_POLICY_KEY);
   const stored = safeLocalStorageGet(AUTH_PERSIST_LOGIN_KEY);
+
+  if (policyVersion !== AUTH_PERSIST_LOGIN_POLICY_VERSION) {
+    safeLocalStorageSet(AUTH_PERSIST_LOGIN_POLICY_KEY, AUTH_PERSIST_LOGIN_POLICY_VERSION);
+    safeLocalStorageSet(AUTH_PERSIST_LOGIN_KEY, DEFAULT_PERSIST_LOGIN ? '1' : '0');
+    return DEFAULT_PERSIST_LOGIN;
+  }
+
   if (stored === null) {
     return DEFAULT_PERSIST_LOGIN;
   }

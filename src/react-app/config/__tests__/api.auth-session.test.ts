@@ -56,8 +56,18 @@ describe('auth session storage', () => {
     });
   });
 
-  it('usa sessão temporária quando a preferência de lembrar login ainda não existe', async () => {
+  it('mantém a sessão persistente por padrão na política atual', async () => {
     const module = await import('../api');
+
+    expect(module.getPersistLogin()).toBe(true);
+    expect(localStorage.getItem('airtrust_persist_login')).toBe('1');
+    expect(localStorage.getItem('airtrust_persist_login_policy')).toBe('2');
+  });
+
+  it('respeita opt-out explícito depois da migração da política', async () => {
+    const module = await import('../api');
+
+    module.setPersistLogin(false);
 
     expect(module.getPersistLogin()).toBe(false);
   });

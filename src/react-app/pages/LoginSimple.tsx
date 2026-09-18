@@ -282,7 +282,7 @@ export default function LoginPage() {
                     onChange={(e) => setLembrar(e.target.checked)}
                     className="w-4 h-4 rounded border-slate-300 text-primary accent-primary"
                   />
-                  <span className="text-sm text-slate-600">Lembrar de mim</span>
+                  <span className="text-sm text-slate-600">Manter conectado neste dispositivo</span>
                 </label>
 
                 <div className="pt-1">
