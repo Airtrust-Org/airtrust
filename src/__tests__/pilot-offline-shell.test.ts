@@ -57,6 +57,8 @@ describe('Pilot Offline shell', () => {
     expect(pilotManifest.scope).toBe('/pilot/');
     expect(pilotManifest.display).toBe('standalone');
     expect(pilotIndex).toContain('href="/pilot/pilot.webmanifest"');
+    expect(pilotIndex).toContain('href="/controle-voos/meus-voos"');
+    expect(pilotIndex).toContain('Voltar ao AirTrust');
     expect(pilotApp).toContain("scope: '/pilot/'");
     expect(pilotApp).toContain("register('/pilot/pilot-sw.js'");
   });
@@ -92,7 +94,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v15'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v16'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
     expect(pilotSw).toContain("'/pilot/pilot-rdv-draft.js'");
