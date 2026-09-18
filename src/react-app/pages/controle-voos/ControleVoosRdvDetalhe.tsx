@@ -95,6 +95,7 @@ export default function ControleVoosRdvDetalhe() {
   const [touched, setTouched] = useState<Partial<Record<keyof RdvFormState, boolean>>>({});
   const [finalizarConfirm, setFinalizarConfirm] = useState(false);
   const [versionConflict, setVersionConflict] = useState(false);
+  const [activeTrechoIndex, setActiveTrechoIndex] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const hydratedKeyRef = useRef<string | null>(null);
 
@@ -136,6 +137,13 @@ export default function ControleVoosRdvDetalhe() {
     destinoIcao,
   });
   const trechos = etapasState.drafts;
+
+  useEffect(() => {
+    setActiveTrechoIndex((current) => {
+      if (trechos.length === 0) return 0;
+      return Math.min(current, trechos.length - 1);
+    });
+  }, [trechos.length]);
 
   const autosave = useRdvAutosave({
     vooId: id,
@@ -419,8 +427,8 @@ export default function ControleVoosRdvDetalhe() {
             />
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="space-y-6 lg:col-span-2">
+          <div className="grid min-w-0 gap-6 lg:grid-cols-3">
+            <div className="min-w-0 space-y-6 lg:col-span-2">
               {step === 'identificacao' && (
                 <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                   <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">
@@ -562,6 +570,7 @@ export default function ControleVoosRdvDetalhe() {
                               await refetchRdv();
                             }
                             await etapasState.addEtapa();
+                            setActiveTrechoIndex(trechos.length);
                           })();
                         }}
                         className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
@@ -587,20 +596,85 @@ export default function ControleVoosRdvDetalhe() {
                       {fieldErrors.trechos}
                     </p>
                   )}
-                  {trechos.map((trecho, index) => (
-                    <ControleVoosRdvTrechoCard
-                      key={trecho.localId}
-                      index={index}
-                      trecho={trecho}
-                      readOnly={!editable}
-                      saveStatus={etapasState.statusByLocalId[trecho.localId] || 'idle'}
-                      saveError={etapasState.errorByLocalId[trecho.localId]}
-                      canRemove={trechos.length > 1}
-                      onChange={(next) => etapasState.updateDraft(trecho.localId, next)}
-                      onDuplicate={() => void etapasState.duplicateEtapa(trecho.localId)}
-                      onRemove={() => void etapasState.removeEtapa(trecho.localId)}
-                    />
-                  ))}
+                  {trechos.length > 0 && (
+                    <>
+                      <div
+                        className="max-w-full overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900"
+                        role="tablist"
+                        aria-label="Trechos do voo"
+                        data-testid="rdv-trecho-tabs"
+                      >
+                        <div className="flex min-w-max gap-1">
+                          {trechos.map((trecho, index) => {
+                            const active = index === activeTrechoIndex;
+                            const rota = [trecho.origem, trecho.destino].filter(Boolean).join(' → ');
+                            return (
+                              <button
+                                key={trecho.localId}
+                                type="button"
+                                role="tab"
+                                aria-selected={active}
+                                aria-controls={`rdv-trecho-panel-${index}`}
+                                id={`rdv-trecho-tab-${index}`}
+                                onClick={() => setActiveTrechoIndex(index)}
+                                className={`min-h-[44px] max-w-[78vw] rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors sm:max-w-none ${
+                                  active
+                                    ? 'bg-blue-600 text-white shadow-sm'
+                                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                                }`}
+                              >
+                                <span className="block whitespace-nowrap">Trecho {index + 1}</span>
+                                {rota ? (
+                                  <span
+                                    className={`block max-w-[14rem] truncate text-[11px] ${
+                                      active ? 'text-blue-100' : 'text-slate-400'
+                                    }`}
+                                  >
+                                    {rota}
+                                  </span>
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {trechos[activeTrechoIndex] && (
+                        <div
+                          role="tabpanel"
+                          id={`rdv-trecho-panel-${activeTrechoIndex}`}
+                          aria-labelledby={`rdv-trecho-tab-${activeTrechoIndex}`}
+                          className="min-w-0"
+                        >
+                          <ControleVoosRdvTrechoCard
+                            key={trechos[activeTrechoIndex].localId}
+                            index={activeTrechoIndex}
+                            trecho={trechos[activeTrechoIndex]}
+                            readOnly={!editable}
+                            saveStatus={
+                              etapasState.statusByLocalId[trechos[activeTrechoIndex].localId] ||
+                              'idle'
+                            }
+                            saveError={
+                              etapasState.errorByLocalId[trechos[activeTrechoIndex].localId]
+                            }
+                            canRemove={trechos.length > 1}
+                            onChange={(next) =>
+                              etapasState.updateDraft(trechos[activeTrechoIndex].localId, next)
+                            }
+                            onDuplicate={() => {
+                              void etapasState
+                                .duplicateEtapa(trechos[activeTrechoIndex].localId)
+                                .then(() => setActiveTrechoIndex(activeTrechoIndex + 1));
+                            }}
+                            onRemove={() =>
+                              void etapasState.removeEtapa(trechos[activeTrechoIndex].localId)
+                            }
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     Trechos são gravados em `cv_voo_etapas` (fonte canônica). Horas e consumo do
                     cartão são preview; totais oficiais vêm do backend após o save.

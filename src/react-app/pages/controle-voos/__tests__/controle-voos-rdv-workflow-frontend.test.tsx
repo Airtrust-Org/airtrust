@@ -67,8 +67,8 @@ describe('ControleVoosMeusVoos', () => {
 
     renderWithClient(<ControleVoosMeusVoos />);
 
-    await waitFor(() => expect(screen.getByText(/Nenhum voo encontrado/)).toBeInTheDocument());
-    expect(screen.getByText(/Você pode criar seu próprio voo agora/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Nenhum voo atribuído a você/)).toBeInTheDocument());
+    expect(screen.getByText(/Os voos são criados e atribuídos pela Coordenação/)).toBeInTheDocument();
   });
 
   it('lista voos atribuidos ao piloto autenticado', async () => {
@@ -92,8 +92,8 @@ describe('ControleVoosMeusVoos', () => {
 
     renderWithClient(<ControleVoosMeusVoos />);
 
-    await waitFor(() => expect(screen.getByText('ATX-1001')).toBeInTheDocument());
-    expect(screen.getByText('Lançamento do voo')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText('ATX-1001')).toHaveLength(2));
+    expect(screen.getAllByText('Preencher voo')).toHaveLength(2);
   });
 });
 

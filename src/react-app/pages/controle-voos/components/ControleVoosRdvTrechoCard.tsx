@@ -20,7 +20,7 @@ type Props = {
 };
 
 const inputClass =
-  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
+  'min-w-0 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
 
 const statusTone: Record<RdvSaveStatus, string> = {
   idle: 'text-slate-400',
@@ -53,16 +53,13 @@ export default function ControleVoosRdvTrechoCard({
 
   return (
     <article
-      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+      className="min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900"
       data-testid={`rdv-trecho-card-${index}`}
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
             Trecho {index + 1}
-            {trecho.id ? (
-              <span className="ml-2 text-xs font-normal text-slate-400">#{trecho.id}</span>
-            ) : null}
           </h3>
           <span
             className={`text-xs ${statusTone[saveStatus]}`}
@@ -99,7 +96,7 @@ export default function ControleVoosRdvTrechoCard({
         </p>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label className="space-y-1 text-sm">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
             Origem (ICAO)
