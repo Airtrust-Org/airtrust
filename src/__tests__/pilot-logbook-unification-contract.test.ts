@@ -38,8 +38,10 @@ describe('Pilot Logbook x RDV - contrato de lançamento único', () => {
 
   it('mantem Meus voos responsivo e o Pilot App com trechos em abas', () => {
     expect(meusVoos).toContain('data-testid="meus-voos-mobile-list"');
-    expect(meusVoos).toContain('sm:hidden');
+    expect(meusVoos).toContain('lg:hidden');
     expect(meusVoos).toContain('hidden overflow-hidden');
+    expect(meusVoos).toContain('type="date"');
+    expect(meusVoos).toContain('filteredVoos');
     expect(pilotApp).toContain("className = 'stage-tabs'");
     expect(trechoCard).not.toContain('#{trecho.id}');
   });

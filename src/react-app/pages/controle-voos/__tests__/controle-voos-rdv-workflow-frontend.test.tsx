@@ -58,7 +58,7 @@ afterEach(() => {
 });
 
 describe('ControleVoosMeusVoos', () => {
-  it('mostra estado vazio quando o piloto nao tem voos atribuidos ou criados', async () => {
+  it('mostra estado vazio para a data selecionada quando nao ha voos', async () => {
     getMock.mockImplementation(async (url: string) => {
       if (url.includes('/voos/meus')) return apiOk([]);
       if (url.includes('/catalogos/aeroportos')) return apiOk([]);
@@ -67,21 +67,32 @@ describe('ControleVoosMeusVoos', () => {
 
     renderWithClient(<ControleVoosMeusVoos />);
 
-    await waitFor(() => expect(screen.getByText(/Nenhum voo atribuído a você/)).toBeInTheDocument());
-    expect(screen.getByText(/Os voos são criados e atribuídos pela Coordenação/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Nenhum voo atribuído a você para/)).toBeInTheDocument());
+    expect(screen.getByText(/Por padrão são exibidos somente os voos de hoje/)).toBeInTheDocument();
   });
 
-  it('lista voos atribuidos ao piloto autenticado', async () => {
+  it('lista somente os voos do dia por default e permite abrir o Pilot App', async () => {
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     getMock.mockImplementation(async (url: string) => {
       if (url.includes('/voos/meus')) {
         return apiOk([
           {
             id: 601,
             prefixo: 'ATX-1001',
-            data_programacao: '2026-06-14',
+            data_programacao: today,
             origem_id: 101,
             destino_id: 102,
-            horario_previsto_partida: '2026-06-14T10:00:00Z',
+            horario_previsto_partida: `${today}T10:00:00Z`,
+            status: 'concluido_operacionalmente',
+          },
+          {
+            id: 602,
+            prefixo: 'ATX-ANTERIOR',
+            data_programacao: '2020-01-01',
+            origem_id: 101,
+            destino_id: 102,
+            horario_previsto_partida: '2020-01-01T10:00:00Z',
             status: 'concluido_operacionalmente',
           },
         ]);
@@ -93,6 +104,8 @@ describe('ControleVoosMeusVoos', () => {
     renderWithClient(<ControleVoosMeusVoos />);
 
     await waitFor(() => expect(screen.getAllByText('ATX-1001')).toHaveLength(2));
+    expect(screen.queryByText('ATX-ANTERIOR')).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue(today)).toBeInTheDocument();
     const pilotLinks = screen.getAllByRole('link', { name: /Abrir Pilot App/i });
     expect(pilotLinks).toHaveLength(2);
     expect(pilotLinks[0]).toHaveAttribute('href', '/pilot/?flight=601');

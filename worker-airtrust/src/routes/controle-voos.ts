@@ -170,6 +170,11 @@ const catalogos: Record<string, CatalogConfig> = {
     fields: 'id, codigo, nome, tipo, descricao, ativo, ordem',
     orderBy: 'tipo ASC, ordem ASC, nome ASC',
   },
+  'empresas-abastecimento': {
+    table: 'cv_empresas_abastecimento',
+    fields: 'id, codigo, nome, descricao, ativo, ordem',
+    orderBy: 'ordem ASC, nome ASC',
+  },
 };
 
 function requireControleVoosWrite(): MiddlewareHandler<{ Bindings: Env }> {
@@ -751,6 +756,7 @@ function catalogKey(rawName: string): keyof typeof catalogos | null {
   if (name === 'tipos' || name === 'tipos-voo') return 'tipos';
   if (name === 'naturezas' || name === 'naturezas-voo') return 'naturezas';
   if (name === 'motivos' || name === 'motivos-operacionais') return 'motivos';
+  if (name === 'empresas-abastecimento' || name === 'fornecedores-abastecimento') return 'empresas-abastecimento';
   return null;
 }
 

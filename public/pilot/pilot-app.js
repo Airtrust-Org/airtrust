@@ -259,6 +259,18 @@ function pilotNatureOptions(packageData) {
   return options;
 }
 
+function pilotFuelingCompanyOptions(packageData) {
+  const rows = Array.isArray(packageData?.catalogos?.empresas_abastecimento)
+    ? packageData.catalogos.empresas_abastecimento
+    : [];
+  return rows
+    .map((row) => ({
+      code: String(row?.codigo || '').trim(),
+      label: String(row?.nome || row?.codigo || '').trim(),
+    }))
+    .filter((option) => option.code);
+}
+
 function airportLabel(airport, fallbackId) {
   if (!airport) return fallbackId ? 'ID ' + fallbackId : '—';
   return (
@@ -1545,6 +1557,7 @@ function refreshDraftValidationPresentation() {
     supplementalErrors.push('Informe a natureza do voo.');
   }
   for (const [index, fueling] of (activeRdvDraft.fuelings || []).entries()) {
+    if (!String(fueling.empresa_abastecimento_codigo || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': selecione a empresa de abastecimento.');
     if (!String(fueling.numero_nota || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe o número da nota.');
     if (parseNumber(fueling.litros_abastecidos) === null) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe os litros abastecidos.');
   }
@@ -2539,6 +2552,7 @@ function refreshStageDerivedTimes(stageDraft) {
     fields.horario_motor_ligado,
     fields.horario_motor_desligado,
   );
+  fields.starts = String(fields.horario_motor_ligado || '').trim() ? '1' : '';
   const totalWeight = calcStageTotalWeight(fields);
   fields.peso_total = totalWeight === null ? '' : String(totalWeight);
 }
@@ -2655,7 +2669,7 @@ function renderStageFields() {
     ['Noturno (duração)', 'tempo_noturno', 'text', null, false, false, 'Digite a duração, por exemplo 1:30'],
     ['Pousos diurnos', 'pousos_diurnos', 'number', 'numeric', false, false, null],
     ['Pousos noturnos', 'pousos_noturnos', 'number', 'numeric', false, false, null],
-    ['Starts', 'starts', 'number', 'numeric', false, false, 'Não é derivado automaticamente dos pousos'],
+    ['Partidas', 'starts', 'number', 'numeric', true, false, 'Calculado automaticamente pela hora de partida'],
     ['Passageiros', 'pax', 'number', 'numeric', false, false, 'Quantidade de passageiros'],
     ['Peso dos passageiros', 'peso_passageiros', 'number', 'decimal', false, false, null],
     ['Peso da bagagem', 'peso_bagagem', 'number', 'decimal', false, false, null],
@@ -2831,6 +2845,7 @@ function addOperationalFueling() {
   activeRdvDraft.fuelings.push({
     local_id: crypto.randomUUID(),
     hora: localTimeNow(),
+    empresa_abastecimento_codigo: '',
     numero_nota: '',
     litros_abastecidos: '',
   });
@@ -2849,8 +2864,19 @@ function renderFuelingFields() {
     card.append(heading);
     const grid = document.createElement('div');
     grid.className = 'editor-grid';
+    grid.append(
+      createEditorSelect({
+        label: 'Empresa de abastecimento',
+        value: fueling.empresa_abastecimento_codigo || '',
+        options: pilotFuelingCompanyOptions(activePackageData()),
+        onChange: (value) => {
+          fueling.empresa_abastecimento_codigo = value;
+          scheduleOperationalSave();
+          refreshDraftValidationPresentation();
+        },
+      }),
+    );
     for (const [label, key, type, inputMode] of [
-      ['Hora', 'hora', 'time', null],
       ['Número da nota', 'numero_nota', 'text', null],
       ['Litros abastecidos', 'litros_abastecidos', 'number', 'decimal'],
     ]) {

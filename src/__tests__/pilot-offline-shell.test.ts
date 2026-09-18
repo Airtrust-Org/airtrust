@@ -106,7 +106,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v19'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v20'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
@@ -330,12 +330,18 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("supplementalErrors.push('Informe a natureza do voo.')");
     expect(pilotApp).toContain('Litros abastecidos');
     expect(pilotApp).toContain('Número da nota');
+    expect(pilotApp).toContain('Empresa de abastecimento');
+    expect(pilotApp).toContain('pilotFuelingCompanyOptions(activePackageData())');
+    expect(pilotSync).toContain('empresa_abastecimento_codigo');
+    expect(pilotApp).not.toContain("['Hora', 'hora', 'time'");
     expect(pilotApp).not.toContain("['Nota do combustível', 'nota'");
     expect(pilotSync).not.toContain('nota: optionalText(fueling?.nota)');
     expect(pilotApp).toContain('Tempo no solo');
     expect(pilotApp).toContain('refreshAllStageDerivedTimes()');
     expect(pilotRdvDraft).toContain('applyStageContinuity');
     expect(pilotApp).toContain('monotonic_sequence: timingSequence');
+    expect(pilotApp).toContain("['Partidas', 'starts', 'number', 'numeric', true");
+    expect(pilotApp).toContain("fields.starts = String(fields.horario_motor_ligado || '').trim() ? '1' : ''");
     expect(pilotRdvDraft).toContain('Ciclos não são derivados de pousos');
     expect(pilotRdvDraft).not.toContain('next.ciclos =');
   });

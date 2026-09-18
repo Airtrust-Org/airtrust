@@ -1,11 +1,25 @@
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, PlaneTakeoff, TabletSmartphone } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, FileText, PlaneTakeoff, TabletSmartphone } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
 import { useMeusVoos, useControleVoosAeroportos, type CvAeroporto } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatTime } from './data/controleVoosUtils';
+
+
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function flightDateKey(value: string | null | undefined) {
+  const text = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : '';
+}
 
 function buildAeroMap(aeroportos: CvAeroporto[]) {
   return new Map(aeroportos.map((a) => [a.id, a]));
@@ -15,6 +29,19 @@ export default function ControleVoosMeusVoos() {
   const { data: voos = [], isLoading, error } = useMeusVoos();
   const { data: aeroportos = [] } = useControleVoosAeroportos();
   const aeroMap = buildAeroMap(aeroportos);
+  const [selectedDate, setSelectedDate] = useState(() => localDateKey());
+
+  const filteredVoos = useMemo(
+    () => voos.filter((voo) => flightDateKey(voo.data_programacao) === selectedDate),
+    [selectedDate, voos],
+  );
+
+  function shiftDate(days: number) {
+    const date = new Date(`${selectedDate}T12:00:00`);
+    if (Number.isNaN(date.getTime())) return;
+    date.setDate(date.getDate() + days);
+    setSelectedDate(localDateKey(date));
+  }
 
   return (
     <AppLayout>
@@ -23,14 +50,61 @@ export default function ControleVoosMeusVoos() {
           <ControleVoosPageHeader
             title="Meus voos"
             description="Voos atribuídos a você pela Coordenação — abra o Pilot App para fazer o lançamento, inclusive offline"
+            className="sm:flex-col sm:items-stretch lg:flex-row lg:items-center"
           >
             <Link
               to="/horas-voo"
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:w-auto dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
             >
               <FileText className="h-4 w-4" /> Meu histórico de voo
             </Link>
           </ControleVoosPageHeader>
+
+          <section className="mb-5 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="flex items-center gap-2 font-semibold text-slate-900 dark:text-white">
+                  <CalendarDays className="h-4 w-4" />
+                  Voos por data
+                </h2>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Por padrão são exibidos somente os voos de hoje.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end">
+                <button
+                  type="button"
+                  onClick={() => shiftDate(-1)}
+                  className="inline-flex min-h-[44px] items-center justify-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                >
+                  <ChevronLeft className="h-4 w-4" /> Dia anterior
+                </button>
+                <label className="col-span-2 text-sm text-slate-600 sm:col-span-1 dark:text-slate-300">
+                  Data
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(event) => setSelectedDate(event.target.value || localDateKey())}
+                    className="mt-1 min-h-[44px] w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(localDateKey())}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                >
+                  Hoje
+                </button>
+                <button
+                  type="button"
+                  onClick={() => shiftDate(1)}
+                  className="inline-flex min-h-[44px] items-center justify-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                >
+                  Próximo dia <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </section>
 
           {isLoading && (
             <div className="rounded-xl border border-slate-200 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-900">
@@ -44,19 +118,19 @@ export default function ControleVoosMeusVoos() {
             </div>
           )}
 
-          {!isLoading && !error && voos.length === 0 && (
+          {!isLoading && !error && filteredVoos.length === 0 && (
             <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center dark:border-slate-700 dark:bg-slate-900">
               <PlaneTakeoff className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
               <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                Nenhum voo atribuído a você. Os voos são criados e atribuídos pela Coordenação.
+                Nenhum voo atribuído a você para {formatDate(selectedDate)}.
               </p>
             </div>
           )}
 
-          {!isLoading && !error && voos.length > 0 && (
+          {!isLoading && !error && filteredVoos.length > 0 && (
             <>
-              <div className="space-y-3 sm:hidden" data-testid="meus-voos-mobile-list">
-                {voos.map((voo) => {
+              <div className="space-y-3 lg:hidden" data-testid="meus-voos-mobile-list">
+                {filteredVoos.map((voo) => {
                   const origem = aeroMap.get(voo.origem_id);
                   const destino = aeroMap.get(voo.destino_id);
                   return (
@@ -103,7 +177,7 @@ export default function ControleVoosMeusVoos() {
                 })}
               </div>
 
-              <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white sm:block dark:border-slate-700 dark:bg-slate-900">
+              <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white lg:block dark:border-slate-700 dark:bg-slate-900">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
@@ -117,7 +191,7 @@ export default function ControleVoosMeusVoos() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {voos.map((voo) => {
+                      {filteredVoos.map((voo) => {
                         const origem = aeroMap.get(voo.origem_id);
                         const destino = aeroMap.get(voo.destino_id);
                         return (

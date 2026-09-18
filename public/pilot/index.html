@@ -144,7 +144,23 @@
       .signin-link { color: #12356a; font-weight: 800; }
       .editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px 14px; align-items: start; }
       .editor-grid > * { min-width: 0; }
-      .editor-grid input, .editor-grid textarea, .editor-grid select { width: 100%; max-width: 100%; box-sizing: border-box; }
+      .editor-grid label {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .editor-grid label > span:first-child {
+        display: block;
+        margin-bottom: 6px;
+      }
+      .editor-grid input, .editor-grid textarea, .editor-grid select {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+      .editor-grid input, .editor-grid select { min-height: 52px; }
       .editor-grid input[type="time"] {
         display: block;
         width: 100%;

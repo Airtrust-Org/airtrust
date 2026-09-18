@@ -10,7 +10,7 @@ import {
   maybeRecordSystemAudit,
 } from '../repositories/controle-voos/rdv-repository';
 
-type CatalogKey = 'aeroportos' | 'tipos' | 'naturezas' | 'motivos';
+type CatalogKey = 'aeroportos' | 'tipos' | 'naturezas' | 'motivos' | 'empresas-abastecimento';
 
 type CatalogConfig = {
   table: string;
@@ -46,6 +46,12 @@ const CATALOGS: Record<CatalogKey, CatalogConfig> = {
     allowed: ['codigo', 'nome', 'tipo', 'descricao', 'ativo', 'ordem'],
     requiredOnCreate: ['codigo', 'nome', 'tipo'],
   },
+  'empresas-abastecimento': {
+    table: 'cv_empresas_abastecimento',
+    fields: 'id, codigo, nome, descricao, ativo, ordem',
+    allowed: ['codigo', 'nome', 'descricao', 'ativo', 'ordem'],
+    requiredOnCreate: ['codigo', 'nome'],
+  },
 };
 
 const AEROPORTO_TYPES = new Set(['aeroporto', 'heliponto', 'plataforma']);
@@ -76,6 +82,7 @@ function resolveCatalog(raw: string): CatalogKey | null {
   if (name === 'tipos' || name === 'tipos-voo') return 'tipos';
   if (name === 'naturezas' || name === 'naturezas-voo') return 'naturezas';
   if (name === 'motivos' || name === 'motivos-operacionais') return 'motivos';
+  if (name === 'empresas-abastecimento' || name === 'fornecedores-abastecimento') return 'empresas-abastecimento';
   return null;
 }
 

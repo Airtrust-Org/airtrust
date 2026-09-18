@@ -230,6 +230,13 @@ function statementFor(sql: string) {
           ],
         };
       }
+      if (normalized.includes('FROM cv_empresas_abastecimento')) {
+        return {
+          results: [
+            { id: 8, codigo: 'BR-MACAE', nome: 'BR Macaé' },
+          ],
+        };
+      }
       if (normalized.includes('FROM frms_location_catalog')) {
         return {
           results: [
@@ -460,6 +467,9 @@ describe('Pilot offline package', () => {
         expect.objectContaining({ codigo: 'PETROBRAS' }),
       ]),
     );
+    expect(body.data.catalogos.empresas_abastecimento).toEqual([
+      expect.objectContaining({ codigo: 'BR-MACAE', nome: 'BR Macaé' }),
+    ]);
     expect(body.data.abastecimentos[0]).toMatchObject({ id: 20, tem_anexo: true });
     expect(body.data.abastecimentos[0].anexo_r2_key).toBeUndefined();
     expect(body.data.workspace.contract).toMatchObject({
