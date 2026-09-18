@@ -17,6 +17,10 @@ vi.mock('../../components/dashboard/CardMeusEAD', () => ({
   CardMeusEAD: () => <div data-testid="card-meus-ead">Meus cursos EAD</div>,
 }));
 
+vi.mock('../../components/dashboard/CardConhecimentoAtivo', () => ({
+  CardConhecimentoAtivo: () => <div data-testid="card-conhecimento-ativo">Conhecimento Ativo</div>,
+}));
+
 vi.mock('../../hooks/useAuth', () => ({
   useAuth: () => ({
     user: null,
@@ -178,5 +182,22 @@ describe('HomePerfil EAD visibility', () => {
     );
 
     expect(screen.getByTestId('card-meus-ead')).toBeInTheDocument();
+  });
+
+  it('mostra Conhecimento Ativo somente na home de tripulação', () => {
+    const { unmount } = render(
+      <MemoryRouter>
+        <HomePerfil homeProfile="STUDENT_TRIPULACAO" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('card-conhecimento-ativo')).toBeInTheDocument();
+    unmount();
+
+    render(
+      <MemoryRouter>
+        <HomePerfil homeProfile="STUDENT_MANUTENCAO" />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId('card-conhecimento-ativo')).not.toBeInTheDocument();
   });
 });

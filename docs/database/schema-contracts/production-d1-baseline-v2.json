@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-18",
-    "last_reconciled_against": "0502 Controle de Voos fueling-company catalog prepared; remote apply pending",
-    "schema_v2_digest": "d7da63614f6c89ef3c3b512491a984f5f4e05735f921667baa1bae82ebd953f6",
+    "last_reconciled_against": "0503 Conhecimento Ativo foundation and XLSX import contract prepared; remote apply pending",
+    "schema_v2_digest": "4899cc36c60e80004c72eff9abfafd8c3720b5ab08c77d8db555623e7c39d60b",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -934,6 +934,31 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "controle-voos-fueling-companies-0502.json",
       "note": "0502 is reviewed and prepared only. It adds the tenant-scoped fueling-company catalog without rewriting historical fueling rows. Remote apply requires the governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0503_conhecimento_ativo_foundation.sql",
+      "change_id": "conhecimento-ativo-foundation-0503",
+      "sha256": "3d7760332850471b0717f1fc51cfd3c26f0a93b1fbdd9bb636ee9b6256c40d28",
+      "targets": [
+        "conhecimento_ativo_alternativas",
+        "conhecimento_ativo_desafio_questoes",
+        "conhecimento_ativo_desafios",
+        "conhecimento_ativo_dominio",
+        "conhecimento_ativo_fontes",
+        "conhecimento_ativo_importacao_registros",
+        "conhecimento_ativo_importacoes",
+        "conhecimento_ativo_item_fontes",
+        "conhecimento_ativo_itens",
+        "conhecimento_ativo_questoes",
+        "conhecimento_ativo_respostas",
+        "conhecimento_ativo_topicos",
+        "conhecimento_ativo_xp_eventos"
+      ],
+      "domain": "tenant-scoped Conhecimento Ativo spaced-retrieval knowledge bank, governed technical-source approval, adaptive challenges, and standardized XLSX import lineage",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "conhecimento-ativo-foundation-0503.json",
+      "note": "0503 is reviewed and prepared only. It creates a fail-closed knowledge-reinforcement domain separated from LMS qualifications/certificates and adds versioned XLSX import lineage. Imported sources/items/questions remain draft/review until technical approval; tenant exposure remains disabled until explicitly enabled after governed remote apply and validation."
     }
   ]
 }

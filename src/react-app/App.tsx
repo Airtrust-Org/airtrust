@@ -257,6 +257,18 @@ const LmsHistoricoEdApp = lazyWithRetry(
 );
 const LmsDashboard = lazyWithRetry(() => import('./pages/lms/LmsDashboard'), 'LmsDashboard');
 const LmsMatriculas = lazyWithRetry(() => import('./pages/lms/LmsMatriculas'), 'LmsMatriculas');
+const ConhecimentoAtivoHome = lazyWithRetry(
+  () => import('./pages/conhecimento-ativo/ConhecimentoAtivoHome'),
+  'ConhecimentoAtivoHome',
+);
+const DesafioTecnico = lazyWithRetry(
+  () => import('./pages/conhecimento-ativo/DesafioTecnico'),
+  'DesafioTecnico',
+);
+const ConhecimentoAtivoAdmin = lazyWithRetry(
+  () => import('./pages/conhecimento-ativo/admin/ConhecimentoAtivoAdmin'),
+  'ConhecimentoAtivoAdmin',
+);
 
 // SGSO — Sistema de Gerenciamento de Segurança Operacional
 const Sgso = lazyWithRetry(() => import('./pages/Sgso'), 'Sgso');
@@ -1063,6 +1075,32 @@ export default function App() {
                       element={
                         <ProtectedRoute>
                           <SolicitacoesTreinamentoPage />
+                        </ProtectedRoute>
+                      }
+                    />
+
+                    {/* Conhecimento Ativo — reforço técnico não regulamentar */}
+                    <Route
+                      path="/conhecimento-ativo"
+                      element={
+                        <ProtectedRoute>
+                          <ConhecimentoAtivoHome />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/conhecimento-ativo/desafios/:id"
+                      element={
+                        <ProtectedRoute>
+                          <DesafioTecnico />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/conhecimento-ativo/admin"
+                      element={
+                        <ProtectedRoute requiredRole={['ADMIN', 'GESTOR']}>
+                          <ConhecimentoAtivoAdmin />
                         </ProtectedRoute>
                       }
                     />

@@ -22,6 +22,7 @@ import {
   Plane,
   ChevronDown,
   GraduationCap,
+  BrainCircuit,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
@@ -689,6 +690,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/lms') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}
                         >
                           <BookOpen className="h-3.5 w-3.5 shrink-0" /> LMS / Cursos EAD
+                        </Link>
+                      )}
+                      {(isAdmin || isGestor) && (
+                        <Link
+                          to="/conhecimento-ativo/admin"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/conhecimento-ativo/admin') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}
+                        >
+                          <BrainCircuit className="h-3.5 w-3.5 shrink-0" /> Conhecimento Ativo
                         </Link>
                       )}
                       {showSimuladores && (

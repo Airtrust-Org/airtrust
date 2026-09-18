@@ -148,6 +148,8 @@ import lmsAssetsRoutes from './routes/lms-assets';
 import lmsProgressoRoutes from './routes/lms-progresso';
 import lmsRelatoriosRoutes from './routes/lms-relatorios';
 import lmsEdappLegadoRoutes from './routes/lms-edapp-legado';
+import conhecimentoAtivoRoutes from './routes/conhecimento-ativo';
+import conhecimentoAtivoAdminRoutes from './routes/conhecimento-ativo-admin';
 import { registerPublicRoutes } from './routes/public-routes';
 import { registerSystemRoutes } from './routes/system';
 import { getReleaseMetadata } from './services/release-metadata';
@@ -790,6 +792,10 @@ app.route('/api/lms', lmsProgressoRoutes);
 app.route('/api/lms', lmsAssetsRoutes);
 app.route('/api/lms', lmsRelatoriosRoutes);
 app.route('/api/lms', lmsEdappLegadoRoutes);
+
+// Conhecimento Ativo — reforço contínuo, separado de conclusão/qualificação LMS
+app.route('/api/conhecimento-ativo/admin', conhecimentoAtivoAdminRoutes);
+app.route('/api/conhecimento-ativo', conhecimentoAtivoRoutes);
 
 // Hospedagem — Acomodações de tripulantes
 app.route('/api/hospedagem', hospedagemRoutes);

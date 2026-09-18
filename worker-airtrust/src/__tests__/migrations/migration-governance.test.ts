@@ -113,7 +113,9 @@ describe('migration governance', () => {
     // 0497 adds the optional aircraft-model qualifier used by training compliance rules.
     // 0498 adds FRMS V2; 0499 its historical backfill; 0500 adds the governed Controle de Voos navigation-point catalog.
     // 0501 adds the governed per-leg operational weight fields used by the Pilot RDV.
-    const expectedLatest = 502;
+    // 0502 adds the governed Controle de Voos fueling-company catalog.
+    // 0503 adds the governed Conhecimento Ativo foundation and XLSX import lineage.
+    const expectedLatest = 503;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
