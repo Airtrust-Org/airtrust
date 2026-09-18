@@ -44,8 +44,8 @@ assert_count() {
 
 assert_count active-baseline 1 "SELECT COUNT(*) count FROM airtrust_schema_baselines_v2 WHERE baseline_id='$BASELINE_ID' AND status='ACTIVE';"
 assert_count schema-v2-change 1 "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id='$CHANGE_ID';"
-assert_count conhecimento-ativo-tables 13 "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name LIKE 'conhecimento_ativo_%';"
-assert_count conhecimento-ativo-triggers 9 "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_ca_%';"
+assert_count conhecimento-ativo-tables 13 "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name GLOB 'conhecimento_ativo_*';"
+assert_count conhecimento-ativo-triggers 9 "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name GLOB 'trg_ca_*';"
 assert_count importacoes-index 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_ca_importacoes_hash';"
 assert_count desafio-idempotencia-index 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_ca_desafios_periodo_active';"
 assert_count respostas-once-index 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_ca_respostas_once';"

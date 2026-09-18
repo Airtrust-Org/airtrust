@@ -119,8 +119,8 @@ for table in usuarios funcionarios aeronaves funcionarios_aeronaves modelos_aero
 done
 
 ledger_count="$(query_count "SELECT COUNT(*) count FROM d1_migrations WHERE name='$MIGRATION_BASENAME';")"
-table_count="$(query_count "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name LIKE 'conhecimento_ativo_%';")"
-trigger_count="$(query_count "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_ca_%';")"
+table_count="$(query_count "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name GLOB 'conhecimento_ativo_*';")"
+trigger_count="$(query_count "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name GLOB 'trg_ca_*';")"
 
 if [[ "$ledger_count" == 1 ]]; then
   bash scripts/staging/validate-0503-postconditions.sh --target="$db_name"
