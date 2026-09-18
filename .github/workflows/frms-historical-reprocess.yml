@@ -58,7 +58,9 @@ on:
         type: string
   push:
     branches:
-      - ops/frms-historical-reprocess-approved-20260805
+      - main
+    paths:
+      - .github/frms-historical-reprocess-0499.trigger
 
 permissions:
   contents: read
@@ -152,8 +154,34 @@ jobs:
             target_revision_id="$APPROVED_TARGET_REVISION_ID"
             recalc_run_id="$APPROVED_RECALC_RUN_ID"
           elif [[ "$EVENT_NAME" == 'push' ]]; then
-            [[ "$EVENT_REF" == 'refs/heads/ops/frms-historical-reprocess-approved-20260805' ]] || {
-              echo 'Unexpected push ref.' >&2
+            [[ "$EVENT_REF" == 'refs/heads/main' ]] || {
+              echo 'One-shot production trigger must execute from main.' >&2
+              exit 1
+            }
+            trigger_path='.github/frms-historical-reprocess-0499.trigger'
+            [[ -f "$trigger_path" ]] || {
+              echo 'One-shot FRMS trigger file is missing.' >&2
+              exit 1
+            }
+            git cat-file -e "${EVENT_SHA}^1:${trigger_path}" 2>/dev/null && {
+              echo 'One-shot FRMS trigger already existed in the first parent.' >&2
+              exit 1
+            }
+            git diff --name-only "${EVENT_SHA}^1" "$EVENT_SHA" -- "$trigger_path" | grep -Fxq "$trigger_path" || {
+              echo 'One-shot FRMS trigger was not introduced by this main merge.' >&2
+              exit 1
+            }
+            expected_trigger="$(printf '%s\n' \
+              'operation=execute' \
+              'formula_version=frms-parametric-v2-history-20260917' \
+              'empresa_id=6' \
+              'data_inicio=2026-01-01' \
+              'data_fim=2026-09-16' \
+              'target_revision_id=frms-empresa6-helicopter-offshore-v2-history-0499' \
+              'recalc_run_id=frms-recalc-empresa6-v2-history-2026-0499' \
+              'confirmation=FRMS_REPROCESS_ALL_HISTORICAL')"
+            [[ "$(cat "$trigger_path")" == "$expected_trigger" ]] || {
+              echo 'One-shot FRMS trigger content does not match the approved 0499 scope.' >&2
               exit 1
             }
             operation='execute'
