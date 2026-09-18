@@ -62,8 +62,8 @@ assert_count() {
 }
 
 assert_count migration-ledger 1 "SELECT COUNT(*) count FROM d1_migrations WHERE name='$MIGRATION_BASENAME';"
-assert_count conhecimento-ativo-tables 13 "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name LIKE 'conhecimento_ativo_%';"
-assert_count conhecimento-ativo-triggers 9 "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_ca_%';"
+assert_count conhecimento-ativo-tables 13 "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name GLOB 'conhecimento_ativo_*';"
+assert_count conhecimento-ativo-triggers 9 "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name GLOB 'trg_ca_*';"
 assert_count importacoes-index 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_ca_importacoes_hash';"
 assert_count desafio-idempotencia-index 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_ca_desafios_periodo_active';"
 assert_count respostas-once-index 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_ca_respostas_once';"
