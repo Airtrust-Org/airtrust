@@ -70,7 +70,7 @@ describe('HomePerfil quick access cards', () => {
     const meusVoos = cards.find((card) => card.title === 'Meus Voos');
     expect(meusVoos?.route).toBe('/controle-voos/meus-voos');
     expect(meusVoos?.description).toBe(
-      'Consulte os voos atribuídos a você e prepare o voo para operação offline.',
+      'Consulte os voos atribuídos a você e faça o preenchimento do voo.',
     );
   });
 

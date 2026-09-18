@@ -7,6 +7,10 @@ const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8'
 const caderneta = read('src/react-app/pages/funcionarios/CadernetaHorasVoo.tsx');
 const history = read('src/react-app/pages/funcionarios/PilotFlightHistory.tsx');
 const meusVoos = read('src/react-app/pages/controle-voos/ControleVoosMeusVoos.tsx');
+const rdvDetalhe = read('src/react-app/pages/controle-voos/ControleVoosRdvDetalhe.tsx');
+const trechoCard = read(
+  'src/react-app/pages/controle-voos/components/ControleVoosRdvTrechoCard.tsx',
+);
 const pilotIndex = read('public/pilot/index.html');
 const pilotApp = read('public/pilot/pilot-app.js');
 const workflowRoute = read('worker-airtrust/src/routes/controle-voos-rdv-workflow.ts');
@@ -19,13 +23,26 @@ describe('Pilot Logbook x RDV - contrato de lançamento único', () => {
     expect(history).not.toContain('ModalLancamentoHorasVoo');
   });
 
-  it('apresenta ao piloto um unico lançamento do voo em vez de um segundo formulario RDV', () => {
-    expect(meusVoos).toContain('Lançamento do voo');
+  it('apresenta ao piloto uma unica entrada de preenchimento do voo', () => {
+    expect(meusVoos).toContain('Preencher voo');
+    expect(meusVoos).not.toContain('Abrir no Pilot App');
+    expect(meusVoos).not.toContain('Criar meu voo');
     expect(meusVoos).not.toContain('Meu RDV');
     expect(pilotIndex).toContain('Lançamento do voo');
     expect(pilotIndex).not.toContain('Etapas / RDV');
     expect(pilotIndex).not.toContain('Resumo automático do RDV');
     expect(pilotApp).toContain('Enviar este lançamento para revisão da Coordenação?');
+  });
+
+  it('mantem Meus voos responsivo e mostra os trechos como abas sem id interno', () => {
+    expect(meusVoos).toContain('data-testid="meus-voos-mobile-list"');
+    expect(meusVoos).toContain('sm:hidden');
+    expect(meusVoos).toContain('hidden overflow-hidden');
+    expect(rdvDetalhe).toContain('role="tablist"');
+    expect(rdvDetalhe).toContain('aria-label="Trechos do voo"');
+    expect(rdvDetalhe).toContain('trechos[activeTrechoIndex]');
+    expect(rdvDetalhe).toContain('max-w-full overflow-x-auto');
+    expect(trechoCard).not.toContain('#{trecho.id}');
   });
 
   it('gera o historico operacional somente de RDV finalizado e no escopo do tripulante', () => {
