@@ -43,6 +43,7 @@ import {
   buildRdvFieldRevisionStatements,
 } from '../services/controle-voos/rdv-workflow';
 import { syncRdvAlerts } from '../services/controle-voos/rdv-alertas';
+import { getPilotLogbook } from '../services/controle-voos/pilot-logbook';
 import {
   ABASTECIMENTO_ANEXO_MAX_BYTES,
   assertAbastecimentoAnexoKeyScope,
@@ -153,6 +154,50 @@ function assertRdvRulesPartial(input: RdvInput): void {
 // ===========================================================================
 // Fluxo Piloto -> Coordenação
 // ===========================================================================
+
+rdvWorkflow.get('/pilot/logbook', auth(), requireAnyRdvAccess(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const userId = getActorId(c);
+  const funcionarioId = await getFuncionarioIdForUser(c.env.DB, userId);
+  if (!funcionarioId) {
+    return c.json({
+      success: true,
+      data: {
+        entries: [],
+        totals: {
+          total_min: 0,
+          pic_min: 0,
+          sic_min: 0,
+          noturna_min: 0,
+          instrumento_min: 0,
+          simulador_min: 0,
+          saldo_referencia: null,
+        },
+        meta: {
+          page: 1,
+          limit: 20,
+          total: 0,
+          total_pages: 0,
+          operational_source: 'RDV_FINALIZADO',
+          historical_source: 'SALDO_INICIAL',
+          landing_credit: 'NAO_ATRIBUIDO',
+        },
+      },
+    });
+  }
+
+  const page = Number(c.req.query('page') || 1);
+  const limit = Number(c.req.query('limit') || 20);
+  const dataInicio = c.req.query('data_inicio') || undefined;
+  const dataFim = c.req.query('data_fim') || undefined;
+  const result = await getPilotLogbook(c.env.DB, empresaId, funcionarioId, {
+    page,
+    limit,
+    dataInicio,
+    dataFim,
+  });
+  return c.json({ success: true, data: result });
+});
 
 rdvWorkflow.get('/voos/meus', auth(), requireAnyRdvAccess(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);

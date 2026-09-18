@@ -1,4 +1,4 @@
-const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v13';
+const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v14';
 const PILOT_SCOPE_PATH = '/pilot/';
 const PRECACHE_URLS = [
   '/pilot/',

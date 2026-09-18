@@ -191,7 +191,9 @@ export default function ControleVoosRdvDetalhe() {
         <div className="w-full">
           <ControleVoosPageShell>
             <div className="rounded-xl border border-slate-200 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-900">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Carregando RDV…</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {isCoordenacao ? 'Carregando RDV…' : 'Carregando lançamento do voo…'}
+              </p>
             </div>
           </ControleVoosPageShell>
         </div>
@@ -209,10 +211,10 @@ export default function ControleVoosRdvDetalhe() {
               {vooError ? `Erro: ${vooError.message}` : 'O voo solicitado não existe.'}
             </p>
             <Link
-              to="/controle-voos/rdv"
+              to={isCoordenacao ? '/controle-voos/rdv' : '/controle-voos/meus-voos'}
               className="text-sm text-blue-600 hover:underline dark:text-blue-400"
             >
-              ← Voltar para lista de RDVs
+              {isCoordenacao ? '← Voltar para lista de RDVs' : '← Voltar para meus voos'}
             </Link>
           </ControleVoosPageShell>
         </div>
@@ -303,7 +305,7 @@ export default function ControleVoosRdvDetalhe() {
       const refreshed = await refetchRdv();
       const canonicalVersion = refreshed.data?.versao;
       if (typeof canonicalVersion !== 'number' || !Number.isInteger(canonicalVersion)) {
-        throw new Error('Não foi possível confirmar a versão atual do RDV.');
+        throw new Error('Não foi possível confirmar a versão atual do lançamento.');
       }
       await finalizarMutation.mutateAsync({ vooId: id, versao: canonicalVersion });
       toast.success('Preenchimento finalizado');
@@ -319,7 +321,7 @@ export default function ControleVoosRdvDetalhe() {
     if (!id || !rdv) return;
     try {
       await enviar.mutateAsync({ vooId: id, body: { versao: rdv.versao } });
-      toast.success('RDV enviado à Coordenação');
+      toast.success('Lançamento enviado à Coordenação');
     } catch (error) {
       if (isVersionConflictError(error)) setVersionConflict(true);
       toast.error(getSalvarRdvErrorMessage(error));
@@ -358,19 +360,29 @@ export default function ControleVoosRdvDetalhe() {
           <ControleVoosBreadcrumb
             items={[
               { label: 'Controle de Voos', to: '/controle-voos' },
-              { label: 'RDVs', to: '/controle-voos/rdv' },
-              { label: rdv ? rdv.numero : `Voo ${voo.prefixo}` },
+              isCoordenacao
+                ? { label: 'RDVs', to: '/controle-voos/rdv' }
+                : { label: 'Meus voos', to: '/controle-voos/meus-voos' },
+              { label: isCoordenacao && rdv ? rdv.numero : `Voo ${voo.prefixo}` },
             ]}
           />
           <ControleVoosPageHeader
-            title={rdv ? rdv.numero : `RDV — Voo ${voo.prefixo}`}
-            description={`Voo ${voo.prefixo} · ${formatDate(rdv?.data_voo || voo.data_programacao)} · Preenchimento piloto`}
+            title={
+              isCoordenacao
+                ? rdv
+                  ? rdv.numero
+                  : `RDV — Voo ${voo.prefixo}`
+                : `Lançamento do voo — ${voo.prefixo}`
+            }
+            description={`Voo ${voo.prefixo} · ${formatDate(rdv?.data_voo || voo.data_programacao)} · ${
+              isCoordenacao ? 'RDV operacional' : 'registro único do piloto'
+            }`}
           >
             <div className="flex flex-wrap items-center gap-2">
               {rdv && <ControleVoosStatusBadge status={rdv.status} className="text-sm px-3 py-1" />}
               {rdv?.workflow_status && (
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                  Fluxo: {rdv.workflow_status}
+                  {isCoordenacao ? 'Fluxo' : 'Status'}: {rdv.workflow_status}
                 </span>
               )}
             </div>
@@ -386,7 +398,7 @@ export default function ControleVoosRdvDetalhe() {
           {versionConflict && (
             <div className="mb-4 flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-red-900/60 dark:bg-red-950/20">
               <p className="text-sm text-red-800 dark:text-red-200">
-                Conflito de versão: outro usuário atualizou este RDV. Recarregue antes de continuar.
+                Conflito de versão: o lançamento foi atualizado em outro lugar. Recarregue antes de continuar.
               </p>
               <button
                 type="button"
@@ -442,27 +454,29 @@ export default function ControleVoosRdvDetalhe() {
                     </div>
                   </dl>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs font-medium text-slate-500">Número do RDV</span>
-                      <input
-                        value={form.numero}
-                        disabled={!editable}
-                        onChange={(e) => updateField('numero', e.target.value)}
-                        onBlur={() => setTouched((t) => ({ ...t, numero: true }))}
-                        className={inputClass}
-                      />
-                      <FieldError
-                        message={
-                          touched.numero
-                            ? validateField('numero', form, voo) || undefined
-                            : undefined
-                        }
-                      />
-                      <span className="block text-[11px] text-slate-400">
-                        Prefixo esperado:{' '}
-                        {formatRdvNumero(form.data_voo || voo.data_programacao, voo.prefixo)}
-                      </span>
-                    </label>
+                    {isCoordenacao && (
+                      <label className="space-y-1 text-sm">
+                        <span className="text-xs font-medium text-slate-500">Número do RDV</span>
+                        <input
+                          value={form.numero}
+                          disabled={!editable}
+                          onChange={(e) => updateField('numero', e.target.value)}
+                          onBlur={() => setTouched((t) => ({ ...t, numero: true }))}
+                          className={inputClass}
+                        />
+                        <FieldError
+                          message={
+                            touched.numero
+                              ? validateField('numero', form, voo) || undefined
+                              : undefined
+                          }
+                        />
+                        <span className="block text-[11px] text-slate-400">
+                          Prefixo esperado:{' '}
+                          {formatRdvNumero(form.data_voo || voo.data_programacao, voo.prefixo)}
+                        </span>
+                      </label>
+                    )}
                     <label className="space-y-1 text-sm">
                       <span className="text-xs font-medium text-slate-500">Data do voo</span>
                       <input
@@ -698,8 +712,8 @@ export default function ControleVoosRdvDetalhe() {
                     </h2>
                     <dl className="grid gap-3 text-sm sm:grid-cols-2">
                       <div>
-                        <dt className="text-xs text-slate-400">RDV</dt>
-                        <dd className="font-medium">{form.numero}</dd>
+                        <dt className="text-xs text-slate-400">Registro</dt>
+                        <dd className="font-medium">{isCoordenacao ? form.numero : `Voo ${voo.prefixo}`}</dd>
                       </div>
                       <div>
                         <dt className="text-xs text-slate-400">Data</dt>
@@ -842,7 +856,7 @@ export default function ControleVoosRdvDetalhe() {
                       }`}
                     >
                       <CheckCircle className="h-4 w-4" />
-                      {finalizarConfirm ? 'Confirmar finalização' : 'Finalizar preenchimento'}
+                      {finalizarConfirm ? 'Confirmar finalização' : isCoordenacao ? 'Finalizar preenchimento' : 'Finalizar lançamento'}
                     </button>
                   )}
 
@@ -866,7 +880,7 @@ export default function ControleVoosRdvDetalhe() {
                 </div>
               </div>
 
-              {rdv && id && (
+              {isCoordenacao && rdv && id && (
                 <ControleVoosRdvWorkflowPanel vooId={id} rdv={rdv} isCoordenacao={isCoordenacao} />
               )}
 

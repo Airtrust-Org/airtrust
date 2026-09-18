@@ -10,6 +10,7 @@ import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import Button from '@/react-app/components/Button';
 import CadernetaHorasVoo from '@/react-app/pages/funcionarios/CadernetaHorasVoo';
+import PilotFlightHistory from '@/react-app/pages/funcionarios/PilotFlightHistory';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useFuncionariosAtivos } from '@/react-app/hooks/qualificacoes/useFuncionariosAtivos';
@@ -46,8 +47,12 @@ export default function HorasVooPage() {
     <AppLayout>
       <div className="space-y-4">
         <PageHeader
-          title="Caderneta de Horas de Voo"
-          subtitle="Registro e totais de horas de voo por piloto — inclui saldo inicial, lançamentos e exportação"
+          title={canViewAll ? 'Histórico de voo' : 'Meu histórico de voo'}
+          subtitle={
+            canViewAll
+              ? 'Consulta consolidada por piloto. Novos voos operacionais são originados no Controle de Voos.'
+              : 'Consulta automática dos voos finalizados pela Coordenação, sem lançamento manual paralelo.'
+          }
           actions={
             <Button variant="secondary" onClick={() => navigate(-1)}>
               Voltar
@@ -80,7 +85,9 @@ export default function HorasVooPage() {
           </div>
         )}
 
-        {selectedId ? (
+        {!canViewAll && selfId ? (
+          <PilotFlightHistory />
+        ) : selectedId ? (
           <CadernetaHorasVoo
             funcionarioId={selectedId}
             funcionarioNome={nomeAtual}
