@@ -16,8 +16,11 @@ describe('Pilot RDV operational calculations', () => {
     expect(calcClockDurationHhMm('23:50', '00:20')).toBe('00:30');
   });
 
-  it('normaliza durações legadas decimais para HH:MM', () => {
+  it('normaliza durações digitadas como tempo decorrido para HH:MM', () => {
     expect(toDurationInput('1.5')).toBe('01:30');
+    expect(toDurationInput('1,5')).toBe('01:30');
+    expect(toDurationInput('1h30')).toBe('01:30');
+    expect(toDurationInput('1 h 30')).toBe('01:30');
     expect(toDurationInput('00:45')).toBe('00:45');
   });
 

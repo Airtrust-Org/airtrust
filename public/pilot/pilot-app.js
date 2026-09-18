@@ -17,6 +17,7 @@ import {
   calcHorasVoadas,
   PILOT_DRAFT_SCHEMA_VERSION,
   parseNumber,
+  toDurationInput,
   toInputTime,
   validateRdvForm,
   validateStageDrafts,
@@ -2474,11 +2475,11 @@ function renderStageFields() {
     ['Hora de corte', 'horario_motor_desligado', 'time', null, false, false, 'Motor desligado'],
     ['Tempo de voo', 'tempo_decolagem_pouso', 'text', null, true, false, 'Calculado: decolagem → pouso'],
     ['Tempo total', 'tempo_total', 'text', null, true, false, 'Calculado: partida → corte'],
-    ['IFR (HH:MM)', 'tempo_ifr', 'time', null, false, false, 'Informe a duração IFR'],
-    ['Noturno (HH:MM)', 'tempo_noturno', 'time', null, false, false, 'Informe a duração noturna'],
+    ['IFR (duração)', 'tempo_ifr', 'text', null, false, false, 'Digite a duração, por exemplo 1:30'],
+    ['Noturno (duração)', 'tempo_noturno', 'text', null, false, false, 'Digite a duração, por exemplo 1:30'],
     ['Pousos diurnos', 'pousos_diurnos', 'number', 'numeric', false, false, null],
     ['Pousos noturnos', 'pousos_noturnos', 'number', 'numeric', false, false, null],
-    ['Ciclos / starts', 'starts', 'number', 'numeric', false, false, 'Não é derivado automaticamente dos pousos'],
+    ['Starts', 'starts', 'number', 'numeric', false, false, 'Não é derivado automaticamente dos pousos'],
     ['Passageiros', 'pax', 'number', 'numeric', false, false, 'Quantidade de passageiros'],
     ['Peso dos passageiros', 'peso_passageiros', 'number', 'decimal', false, false, null],
     ['Peso da bagagem', 'peso_bagagem', 'number', 'decimal', false, false, null],
@@ -2522,7 +2523,14 @@ function renderStageFields() {
           },
       onBlur: readOnly
         ? null
-        : () => {
+        : (value, input) => {
+            if (key === 'tempo_ifr' || key === 'tempo_noturno') {
+              const normalizedDuration = toDurationInput(value);
+              if (normalizedDuration) {
+                fields[key] = normalizedDuration;
+                input.value = normalizedDuration;
+              }
+            }
             refreshAllStageDerivedTimes();
             activeRdvDraft.form = applySafeStageAggregates(
               activeRdvDraft.form,
@@ -3040,17 +3048,22 @@ window.addEventListener('pagehide', () => {
   }
 });
 
-try {
-  await registerPilotServiceWorker();
-  vault = await PilotVault.open();
-  const vaultOpenState = await vault.openAutomatically();
-  if (vaultOpenState.status !== 'ready') {
-    throw new Error('Falha ao preparar armazenamento offline automático.');
+async function bootstrapPilotApp() {
+  try {
+    await registerPilotServiceWorker();
+    vault = await PilotVault.open();
+    const vaultOpenState = await vault.openAutomatically();
+    if (vaultOpenState.status !== 'ready') {
+      throw new Error('Falha ao preparar armazenamento offline automático.');
+    }
+    await openWorkspace();
+  } catch (error) {
+    console.error('[Pilot Offline] Falha ao iniciar Pilot App:', error);
+    workspace.classList.remove('hidden');
+    const message =
+      error instanceof Error ? error.message : 'Falha desconhecida ao iniciar o Pilot App.';
+    setSessionMessage('Não foi possível iniciar o Pilot App: ' + message, 'error');
   }
-  await openWorkspace();
-} catch (error) {
-  console.error('[Pilot Offline] Falha ao iniciar Pilot App:', error);
-  workspace.classList.remove('hidden');
-  const message = error instanceof Error ? error.message : 'Falha desconhecida ao iniciar o Pilot App.';
-  setSessionMessage('Não foi possível iniciar o Pilot App: ' + message, 'error');
 }
+
+void bootstrapPilotApp();
