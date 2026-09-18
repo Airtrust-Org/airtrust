@@ -23,12 +23,16 @@ describe('Pilot Logbook x RDV - contrato de lançamento único', () => {
     expect(history).not.toContain('ModalLancamentoHorasVoo');
   });
 
-  it('apresenta ao piloto uma unica entrada de preenchimento do voo', () => {
-    expect(meusVoos).toContain('Preencher voo');
-    expect(meusVoos).not.toContain('Abrir no Pilot App');
+  it('apresenta ao piloto uma unica entrada de preenchimento no Pilot App', () => {
+    expect(meusVoos).toContain('Abrir Pilot App');
+    expect(meusVoos).toContain('href={`/pilot/?flight=${voo.id}`}');
+    expect(meusVoos).not.toContain('to={`/controle-voos/rdv/${voo.id}`}');
     expect(meusVoos).not.toContain('Criar meu voo');
     expect(meusVoos).not.toContain('Meu RDV');
+    expect(rdvDetalhe).toContain('return <Navigate to={`/pilot/?flight=${id}`} replace />;');
     expect(pilotIndex).toContain('Lançamento do voo');
+    expect(pilotIndex).toContain('href="/controle-voos/meus-voos"');
+    expect(pilotIndex).toContain('Voltar ao AirTrust');
     expect(pilotIndex).not.toContain('Etapas / RDV');
     expect(pilotIndex).not.toContain('Resumo automático do RDV');
     expect(pilotApp).toContain('Enviar este lançamento para revisão da Coordenação?');
