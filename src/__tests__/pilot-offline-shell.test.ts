@@ -106,7 +106,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v20'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v21'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
@@ -378,9 +378,13 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('technical-only');
   });
 
-  it('mantém campos de hora com a mesma largura dos demais no tablet', () => {
+  it('mantém campos de hora com o mesmo tamanho físico dos demais no tablet', () => {
+    expect(pilotIndex).toContain('.editor-grid input, .editor-grid select {');
+    expect(pilotIndex).toContain('height: 52px;');
     expect(pilotIndex).toContain('.editor-grid input[type="time"]');
-    expect(pilotIndex).toContain('min-inline-size: 100%');
+    expect(pilotIndex).toContain('min-inline-size: 0;');
+    expect(pilotIndex).toContain('block-size: 52px;');
+    expect(pilotIndex).not.toContain('min-inline-size: 100%');
     expect(pilotIndex).toContain('@media (max-width: 620px)');
   });
 

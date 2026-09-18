@@ -160,14 +160,23 @@
         max-width: 100%;
         box-sizing: border-box;
       }
-      .editor-grid input, .editor-grid select { min-height: 52px; }
-      .editor-grid input[type="time"] {
-        display: block;
+      .editor-grid input, .editor-grid select {
         width: 100%;
-        min-width: 100%;
+        min-width: 0;
+        height: 52px;
+        min-height: 52px;
+      }
+      .editor-grid input[type="time"] {
+        width: 100%;
+        min-width: 0;
         max-width: 100%;
         inline-size: 100%;
-        min-inline-size: 100%;
+        min-inline-size: 0;
+        block-size: 52px;
+      }
+      .editor-grid input[type="time"]::-webkit-date-and-time-value {
+        min-height: 0;
+        text-align: left;
       }
       .editor-grid .wide { grid-column: 1 / -1; }
       .flight-date-controls {
