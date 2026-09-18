@@ -37,6 +37,8 @@ export interface Env {
   REDEMET_API_KEY?: string;
   // Staging-only allowlist for the non-official eDB shadow pilot.
   EDB_SHADOW_PILOT_TENANTS?: string;
+  // Conhecimento Ativo: fail-closed. Use 'all' ou CSV de empresa_id após homologação técnica.
+  CONHECIMENTO_ATIVO_ENABLED_TENANTS?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';

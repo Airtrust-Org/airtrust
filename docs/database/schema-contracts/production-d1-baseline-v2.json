@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-09-17",
-    "last_reconciled_against": "0501 Controle de Voos operational leg weights prepared; remote apply pending",
-    "schema_v2_digest": "7acacf27809a5760091bfdcf5f384d8cd895680099e67cc7080f0ef6be71cac0",
+    "last_reconciled_at": "2026-09-18",
+    "last_reconciled_against": "0502 Conhecimento Ativo foundation and XLSX import contract prepared; remote apply pending",
+    "schema_v2_digest": "f18d89b7ba42b7a54bf534aba10074b7f10107c72cd2c4e22701ffc7ac0a9934",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -921,6 +921,31 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "controle-voos-leg-operational-weights-0501.json",
       "note": "0501 is reviewed and prepared only. It adds nullable aircraft/per-leg weight fields and the tenant-scoped Petrobras nature catalog entry; it never derives empty weight from model averages. Remote apply requires the governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0502_conhecimento_ativo_foundation.sql",
+      "change_id": "conhecimento-ativo-foundation-0502",
+      "sha256": "92b0311410b9a2f8863a91e40e640d604cda0e735b82d67ae2b97e49b1f806b8",
+      "targets": [
+        "conhecimento_ativo_alternativas",
+        "conhecimento_ativo_desafio_questoes",
+        "conhecimento_ativo_desafios",
+        "conhecimento_ativo_dominio",
+        "conhecimento_ativo_fontes",
+        "conhecimento_ativo_importacao_registros",
+        "conhecimento_ativo_importacoes",
+        "conhecimento_ativo_item_fontes",
+        "conhecimento_ativo_itens",
+        "conhecimento_ativo_questoes",
+        "conhecimento_ativo_respostas",
+        "conhecimento_ativo_topicos",
+        "conhecimento_ativo_xp_eventos"
+      ],
+      "domain": "tenant-scoped Conhecimento Ativo spaced-retrieval knowledge bank, governed technical-source approval, adaptive challenges, and standardized XLSX import lineage",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "conhecimento-ativo-foundation-0502.json",
+      "note": "0502 is reviewed and prepared only. It creates a fail-closed knowledge-reinforcement domain separated from LMS qualifications/certificates and adds versioned XLSX import lineage. Imported sources/items/questions remain draft/review until technical approval; tenant exposure remains disabled until explicitly enabled after governed remote apply and validation."
     }
   ]
 }

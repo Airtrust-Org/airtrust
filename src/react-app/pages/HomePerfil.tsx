@@ -23,6 +23,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import AppLayout from '../components/AppLayout';
 import api from '../services/api';
 import { CardMeusEAD } from '../components/dashboard/CardMeusEAD';
+import { CardConhecimentoAtivo } from '../components/dashboard/CardConhecimentoAtivo';
 import type { HomeProfile, HomeProfileFuncionarioContext } from '../lib/home-profile';
 import { buildPasta360Url } from '../utils/pasta360';
 
@@ -224,6 +225,7 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
   const [notificacoes, setNotificacoes] = React.useState<NotificacaoRecente[]>([]);
   const [carregandoNotificacoes, setCarregandoNotificacoes] = React.useState(true);
   const isMaintenanceHome = homeProfile === 'STUDENT_MANUTENCAO';
+  const isFlightCrewHome = homeProfile === 'STUDENT_TRIPULACAO';
 
   const nome = user?.nome?.split(' ')[0] ?? 'Usuário';
   const perfilLabel =
@@ -367,6 +369,8 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
               <p className="text-xs mt-1">Entre em contato com o administrador.</p>
             </div>
           )}
+
+          {isFlightCrewHome && <CardConhecimentoAtivo />}
 
           <CardMeusEAD />
 

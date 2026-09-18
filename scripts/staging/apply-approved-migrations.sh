@@ -25,7 +25,7 @@ trap 'rm -f "$PREFLIGHT_OUTPUT"' EXIT
 ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"
 ALLOWED_DB_ID="bf9963f4-eb12-439b-a830-20bbf577ac22"
 CONFIRMATION_PHRASE="AIRTRUST_STAGING_MIGRATION_APPLY"
-APPROVED_MIGRATIONS=("0424_examiner_universal_training_fichas.sql" "0425_examiner_event_models_and_assignment_owned_fichas.sql" "0452_operational_domain_rbac.sql" "0453_ead_category_reconciliation_executor.sql" "0454_qualificacoes_tipos_dominio_override.sql" "0457_qualification_category_lms_contract.sql" "0459_sk76_periodic_code_denominator.sql" "0467_sigvoos_shadow_parallel_v1.sql" "0468_sigvoos_shadow_leg_crew_v1.sql" "0469_lms_completion_pendencias_snapshots.sql" "0470_certificado_validacao_hash_index.sql" "0472_frms_operational_readiness.sql" "0475_usuarios_empresas_perfis_reconciliation.sql" "0476_frms_pvtb_v2_operational_load.sql" "0481_training_dependency_planning.sql" "0482_training_dependency_complete_curriculum.sql" "0488_controle_voos_pilot_offline_sync_receipts.sql" "0491_training_compliance_requirements.sql" "0492_organizational_structure_normalization.sql" "0494_training_enrollment_reconciliation.sql" "0497_training_compliance_aircraft_scope.sql" "0498_frms_parametric_v2.sql" "0499_frms_v2_historical_backfill.sql" "0500_controle_voos_navigation_points.sql" "0501_controle_voos_leg_operational_weights.sql")
+APPROVED_MIGRATIONS=("0424_examiner_universal_training_fichas.sql" "0425_examiner_event_models_and_assignment_owned_fichas.sql" "0452_operational_domain_rbac.sql" "0453_ead_category_reconciliation_executor.sql" "0454_qualificacoes_tipos_dominio_override.sql" "0457_qualification_category_lms_contract.sql" "0459_sk76_periodic_code_denominator.sql" "0467_sigvoos_shadow_parallel_v1.sql" "0468_sigvoos_shadow_leg_crew_v1.sql" "0469_lms_completion_pendencias_snapshots.sql" "0470_certificado_validacao_hash_index.sql" "0472_frms_operational_readiness.sql" "0475_usuarios_empresas_perfis_reconciliation.sql" "0476_frms_pvtb_v2_operational_load.sql" "0481_training_dependency_planning.sql" "0482_training_dependency_complete_curriculum.sql" "0488_controle_voos_pilot_offline_sync_receipts.sql" "0491_training_compliance_requirements.sql" "0492_organizational_structure_normalization.sql" "0494_training_enrollment_reconciliation.sql" "0497_training_compliance_aircraft_scope.sql" "0498_frms_parametric_v2.sql" "0499_frms_v2_historical_backfill.sql" "0500_controle_voos_navigation_points.sql" "0501_controle_voos_leg_operational_weights.sql" "0502_conhecimento_ativo_foundation.sql")
 # Compatibility marker for the previously validated release scope:
 # RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454"
 RELEASE_PREFLIGHT_SCOPE="0421,0422,0423,0424,0425,0452,0453,0454,0457,0459,0467,0468,0469,0470,0472,0475,0476,0481,0482,0488"
@@ -177,6 +177,12 @@ if [[ "$migration_basename" == "0501_controle_voos_leg_operational_weights.sql" 
   args=(--migration="$migration_path")
   $apply && args+=(--apply)
   exec bash "$ROOT/scripts/staging/apply-0501-controle-voos-leg-operational-weights.sh" "${args[@]}"
+fi
+
+if [[ "$migration_basename" == "0502_conhecimento_ativo_foundation.sql" ]]; then
+  args=(--migration="$migration_path")
+  $apply && args+=(--apply)
+  exec bash "$ROOT/scripts/staging/apply-0502-conhecimento-ativo-foundation.sh" "${args[@]}"
 fi
 
 # Every remaining allowlisted migration — including the pre-Schema-V2
