@@ -26,6 +26,22 @@ unrelated worktree changes intact; never reset, clean, stash or `git add .`.
 - Do not bypass branch protection, required gates, tenant isolation, RBAC,
   migration governance or production authorization.
 
+### Start-of-task bootstrap
+
+ChatGPT normal is the primary executor. ChatGPT Desktop may be used with
+connected Terminal/IDE context when local-machine access is useful; Codex/Work
+are optional and never prerequisites for ordinary AirTrust development.
+
+At the start of a fresh session or resumed front, use repository/PR evidence as
+the current state instead of replaying an old conversation. For local work run
+`npm run agent:context` and `npm run agent:test-plan`. The live work-front
+index is GitHub issue #776.
+
+The optimized cross-session workflow is documented in
+`docs/ops/AGENT_WORKFLOW.md`; canonical procedure navigation is in
+`docs/ops/RUNBOOK_INDEX.md`. For fronts that need a durable handoff, use
+`docs/ops/WORK_FRONT_TEMPLATE.md` in the PR body or linked issue.
+
 ### Staging credentials and QA identities
 
 - GitHub Environment `staging` is the persistent source of truth for staging
