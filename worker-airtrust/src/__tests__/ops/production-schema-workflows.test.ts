@@ -75,6 +75,12 @@ describe('apply-schema-change-v2.yml — controlled single-file apply', () => {
     expect(workflow).toContain('validate-0499-production-postconditions.sh');
     expect(workflow).toContain('--command="$sql_payload" --json');
   });
+
+  it('uses exact production preflight and postconditions for Controle de Voos navigation points 0500', () => {
+    expect(workflow).toContain("inputs.change_id == 'controle-voos-navigation-points-0500'");
+    expect(workflow).toContain('validate-0500-production-preflight.sh');
+    expect(workflow).toContain('validate-0500-production-postconditions.sh');
+  });
 });
 
 describe('EAD reconciliation ledger Schema V2 change 0453', () => {
