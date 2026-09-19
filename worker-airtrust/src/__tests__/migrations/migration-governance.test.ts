@@ -115,7 +115,8 @@ describe('migration governance', () => {
     // 0501 adds the governed per-leg operational weight fields used by the Pilot RDV.
     // 0502 adds the governed Controle de Voos fueling-company catalog.
     // 0503 adds the governed Conhecimento Ativo foundation and XLSX import lineage.
-    const expectedLatest = 503;
+    // 0504 adds the governed Controle de Voos operational model catalogs and flight identifiers.
+    const expectedLatest = 504;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

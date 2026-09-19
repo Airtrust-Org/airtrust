@@ -1554,10 +1554,8 @@ function refreshDraftValidationPresentation() {
   const rdvErrors = validateRdvForm(activeRdvDraft.form, packageData);
   const stageErrors = validateStageDrafts(activeStageDrafts);
   const supplementalErrors = [];
-  if (!String(activeRdvDraft.flight_update?.natureza_voo_codigo || '').trim()) {
-    supplementalErrors.push('Informe a natureza do voo.');
-  }
   for (const [index, fueling] of (activeRdvDraft.fuelings || []).entries()) {
+    if (!Number.isInteger(Number(fueling.etapa_numero)) || Number(fueling.etapa_numero) <= 0) supplementalErrors.push('Abastecimento ' + (index + 1) + ': selecione a etapa.');
     if (!String(fueling.empresa_abastecimento_codigo || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': selecione a empresa de abastecimento.');
     if (!String(fueling.numero_nota || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe o número da nota.');
     if (parseNumber(fueling.litros_abastecidos) === null) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe os litros abastecidos.');
@@ -2477,18 +2475,6 @@ function renderRdvFormFields() {
   rdvFormFields.replaceChildren();
   const form = activeRdvDraft.form;
 
-  rdvCoreFields.append(
-    createEditorSelect({
-      label: 'Natureza do voo',
-      value: activeRdvDraft.flight_update?.natureza_voo_codigo || '',
-      options: pilotNatureOptions(activePackageData()),
-      onChange: (value) => {
-        activeRdvDraft.flight_update = { ...(activeRdvDraft.flight_update || {}), natureza_voo_codigo: value };
-        scheduleOperationalSave();
-      },
-    }),
-  );
-
   const fields = [
     ['Identificador do registro', 'numero', 'text', null, false, false],
     ['Horas voadas', 'horas_voadas', 'number', 'decimal', false, true],
@@ -2857,9 +2843,11 @@ function addOperationalStage() {
 function addOperationalFueling() {
   if (!activeRdvDraft || operationalSyncInFlight) return;
   activeRdvDraft.fuelings = Array.isArray(activeRdvDraft.fuelings) ? activeRdvDraft.fuelings : [];
+  const activeStage = activeStageDrafts[activeStageTabIndex]?.fields || {};
   activeRdvDraft.fuelings.push({
     local_id: crypto.randomUUID(),
     hora: localTimeNow(),
+    etapa_numero: Number(activeStage.numero_etapa || activeStageTabIndex + 1),
     empresa_abastecimento_codigo: '',
     numero_nota: '',
     litros_abastecidos: '',
@@ -2875,11 +2863,24 @@ function renderFuelingFields() {
     const card = document.createElement('section');
     card.className = 'editor-stage';
     const heading = document.createElement('h3');
-    heading.textContent = 'Abastecimento ' + String(index + 1);
+    heading.textContent = 'Nota de abastecimento ' + String(index + 1);
     card.append(heading);
     const grid = document.createElement('div');
     grid.className = 'editor-grid';
     grid.append(
+      createEditorSelect({
+        label: 'Etapa',
+        value: String(fueling.etapa_numero || ''),
+        options: activeStageDrafts.map((stage, stageIndex) => ({
+          code: String(stage.fields?.numero_etapa || stageIndex + 1),
+          label: 'Etapa ' + String(stage.fields?.numero_etapa || stageIndex + 1) + ' · ' + displayText(stage.fields?.origem_icao) + ' → ' + displayText(stage.fields?.destino_icao),
+        })),
+        onChange: (value) => {
+          fueling.etapa_numero = Number(value || 0);
+          scheduleOperationalSave();
+          refreshDraftValidationPresentation();
+        },
+      }),
       createEditorSelect({
         label: 'Empresa de abastecimento',
         value: fueling.empresa_abastecimento_codigo || '',

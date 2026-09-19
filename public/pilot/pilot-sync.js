@@ -95,6 +95,7 @@ function fuelingPayload(fueling, flightDate) {
   return {
     client_local_id: optionalText(fueling?.local_id),
     data_hora: time ? fromInputDateTime(time, flightDate) : null,
+    etapa_numero: parseInteger(fueling?.etapa_numero),
     empresa_abastecimento_codigo: optionalText(fueling?.empresa_abastecimento_codigo)?.toUpperCase() || null,
     numero_nota: optionalText(fueling?.numero_nota),
     litros_abastecidos: parseNumber(fueling?.litros_abastecidos),

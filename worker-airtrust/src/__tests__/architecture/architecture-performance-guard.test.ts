@@ -90,6 +90,9 @@ const LARGE_FILE_LINE_CAPS = {
   // as pre-existing drift on this file, which that branch never touches —
   // both branches agree on 2677, this is the same number for two reasons.)
   'routes/lms-assets.ts': 2730,
+  // 2026-09-19: flight creation gained explicit identifiers and tenant-scoped operational catalogs.
+  // Keep this cap tight; further growth should extract catalog/creation logic instead of raising it.
+  'routes/controle-voos.ts': 2040,
   // Reliability remediation added atomic ficha writes and fail-closed PDF generation.
   // Extraction remains a follow-up and is not mixed into this incident closure.
   'routes/simuladores-fichas.ts': 2500,

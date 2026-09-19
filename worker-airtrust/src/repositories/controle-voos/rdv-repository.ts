@@ -27,6 +27,9 @@ export type FlightRow = {
   data_programacao: string;
   origem_id: number;
   destino_id: number;
+  numero_voo: string | null;
+  numero_db: string | null;
+  contrato_id: number | null;
   tipo_voo_id: number;
   natureza_voo_id: number;
   aeronave_id: number | null;
@@ -106,6 +109,9 @@ export type FlightInput = Partial<{
   data_programacao: string;
   origem_id: number;
   destino_id: number;
+  numero_voo: string | null;
+  numero_db: string | null;
+  contrato_id: number | null;
   tipo_voo_id: number;
   natureza_voo_id: number;
   aeronave_id: number | null;
@@ -138,7 +144,7 @@ export type RdvInput = Partial<{
 
 export const FLIGHT_SELECT = `
   id, empresa_id, prefixo, data_programacao, origem_id, destino_id,
-  tipo_voo_id, natureza_voo_id, aeronave_id,
+  numero_voo, numero_db, contrato_id, tipo_voo_id, natureza_voo_id, aeronave_id,
   horario_previsto_partida, horario_previsto_chegada,
   horario_real_partida, horario_real_chegada,
   status, observacoes, cancelado_motivo_id, alternado_destino_id, versao,

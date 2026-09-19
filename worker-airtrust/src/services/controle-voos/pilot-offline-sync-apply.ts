@@ -38,6 +38,7 @@ type SnapshotStagePayload = {
 type SnapshotFuelingPayload = {
   client_local_id: string;
   data_hora: string;
+  etapa_numero: number;
   empresa_abastecimento_codigo: string;
   nota: string | null;
   numero_nota: string | null;
@@ -152,11 +153,13 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     const localId = String(entry.client_local_id || '').trim();
     const dataHora = String(entry.data_hora || '').trim();
     const supplierCode = String(entry.empresa_abastecimento_codigo || '').trim().toUpperCase();
+    const etapaNumero = Number(entry.etapa_numero);
     const rawLitros = entry.litros_abastecidos;
     const litros = Number(rawLitros);
     if (
       !localId ||
       !dataHora ||
+      !Number.isInteger(etapaNumero) || etapaNumero <= 0 || etapaNumero > 32 ||
       !supplierCode ||
       !/^[A-Z0-9._-]{1,80}$/.test(supplierCode) ||
       rawLitros === null ||
@@ -170,6 +173,7 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     return {
       client_local_id: localId,
       data_hora: dataHora,
+      etapa_numero: etapaNumero,
       empresa_abastecimento_codigo: supplierCode,
       nota: entry.nota == null ? null : String(entry.nota).trim() || null,
       numero_nota: entry.numero_nota == null ? null : String(entry.numero_nota).trim() || null,
@@ -214,6 +218,15 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
       fields: entry.fields,
     };
   });
+
+  const stageNumbers = new Set(
+    stages.map((stage) => Number((stage.fields || {}).numero_etapa)).filter((value) => Number.isInteger(value) && value > 0),
+  );
+  for (const fueling of fuelings) {
+    if (!stageNumbers.has(fueling.etapa_numero)) {
+      throw new ApiError('Abastecimento referencia etapa inexistente no snapshot', 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELING_STAGE_INVALID');
+    }
+  }
 
   return {
     source_package_id: sourcePackageId,
@@ -669,7 +682,11 @@ function buildFuelingStatements(input: {
         combustivel_abastecido, numero_ce, anexo_r2_key, responsavel_id, data_hora, observacoes,
         created_by, updated_by, created_at, updated_at
       )
-      SELECT ?, ?, NULL, ?, NULL, NULL, 'L', ?, ?, NULL, NULL, ?, ?, ?, ?, datetime('now'), datetime('now')
+      SELECT ?, ?, (
+        SELECT id FROM cv_voo_etapas
+        WHERE empresa_id = ? AND voo_id = ? AND numero_etapa = ? AND deleted_at IS NULL
+        LIMIT 1
+      ), ?, NULL, NULL, 'L', ?, ?, NULL, NULL, ?, ?, ?, ?, datetime('now'), datetime('now')
       WHERE EXISTS (
         SELECT 1 FROM cv_rdv_operacional
         WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
@@ -678,6 +695,9 @@ function buildFuelingStatements(input: {
     `).bind(
       input.empresaId,
       input.flight.id,
+      input.empresaId,
+      input.flight.id,
+      fueling.etapa_numero,
       input.supplierNamesByCode.get(fueling.empresa_abastecimento_codigo) || null,
       fueling.litros_abastecidos,
       fueling.numero_nota,

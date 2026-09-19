@@ -75,6 +75,7 @@ const migrations = [
   join(testDir, '../../../migrations/0411_controle_voos_sigvoos_integration_schema.sql'),
   join(testDir, '../../../migrations/0438_controle_voos_rdv_coordenacao_workflow.sql'),
   join(testDir, '../../../migrations/0444_controle_voos_versao.sql'),
+  join(testDir, '../../../migrations/0504_controle_voos_operational_model.sql'),
 ].map((p) => readFileSync(p, 'utf8'));
 const operationalWeightsMigration = readFileSync(
   join(testDir, '../../../migrations/0501_controle_voos_leg_operational_weights.sql'),

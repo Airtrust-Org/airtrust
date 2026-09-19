@@ -35,6 +35,9 @@ export interface CvVoo {
   origem_id: number;
   destino_id: number;
   rota_codigos?: string[];
+  numero_voo: string | null;
+  numero_db: string | null;
+  contrato_id: number | null;
   tipo_voo_id: number;
   natureza_voo_id: number;
   aeronave_id: number | null;
@@ -251,6 +254,7 @@ export interface CvTripulante {
   etapa_id: number | null;
   funcionario_id: number;
   funcao: 'PIC' | 'SIC' | 'COM' | 'MEC' | 'OUTRO';
+  funcao_bordo_id?: number | null;
   horario_apresentacao: string | null;
   horario_dispensa: string | null;
   observacoes: string | null;

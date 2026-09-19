@@ -81,6 +81,10 @@ const flightVersionMigrationPath = join(
   dirname(fileURLToPath(import.meta.url)),
   '../../../migrations/0444_controle_voos_versao.sql',
 );
+const operationalModelMigrationPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../migrations/0504_controle_voos_operational_model.sql',
+);
 const routePath = join(dirname(fileURLToPath(import.meta.url)), '../../routes/controle-voos.ts');
 const sigvoosRealPreviewServicePath = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -208,6 +212,8 @@ function createSqliteD1(): SqliteD1 {
     `,
   );
   seed(databasePath);
+  runSql(databasePath, readFileSync(operationalModelMigrationPath, 'utf8'));
+  runSql(databasePath, "INSERT INTO cv_contratos(id, empresa_id, codigo, nome, ativo, ordem) VALUES (601,1,'C-TESTE','Contrato Teste',1,1),(602,2,'C-TESTE-B','Contrato Teste B',1,1);");
 
   const db = {
     databasePath,
@@ -688,6 +694,7 @@ function validFlightPayload(overrides: Record<string, unknown> = {}) {
     data_programacao: '2026-06-16',
     origem_id: 101,
     destino_id: 102,
+    contrato_id: 601,
     tipo_voo_id: 301,
     natureza_voo_id: 401,
     horario_previsto_partida: '2026-06-16T10:00:00Z',

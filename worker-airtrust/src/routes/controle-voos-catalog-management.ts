@@ -10,7 +10,7 @@ import {
   maybeRecordSystemAudit,
 } from '../repositories/controle-voos/rdv-repository';
 
-type CatalogKey = 'aeroportos' | 'tipos' | 'naturezas' | 'motivos' | 'empresas-abastecimento';
+type CatalogKey = 'aeroportos' | 'tipos' | 'naturezas' | 'motivos' | 'empresas-abastecimento' | 'contratos' | 'funcoes-bordo';
 
 type CatalogConfig = {
   table: string;
@@ -52,6 +52,18 @@ const CATALOGS: Record<CatalogKey, CatalogConfig> = {
     allowed: ['codigo', 'nome', 'descricao', 'ativo', 'ordem'],
     requiredOnCreate: ['codigo', 'nome'],
   },
+  contratos: {
+    table: 'cv_contratos',
+    fields: 'id, codigo, nome, descricao, ativo, ordem',
+    allowed: ['codigo', 'nome', 'descricao', 'ativo', 'ordem'],
+    requiredOnCreate: ['codigo', 'nome'],
+  },
+  'funcoes-bordo': {
+    table: 'cv_funcoes_bordo',
+    fields: 'id, codigo, nome, descricao, ativo, ordem',
+    allowed: ['codigo', 'nome', 'descricao', 'ativo', 'ordem'],
+    requiredOnCreate: ['codigo', 'nome'],
+  },
 };
 
 const AEROPORTO_TYPES = new Set(['aeroporto', 'heliponto', 'plataforma']);
@@ -83,6 +95,8 @@ function resolveCatalog(raw: string): CatalogKey | null {
   if (name === 'naturezas' || name === 'naturezas-voo') return 'naturezas';
   if (name === 'motivos' || name === 'motivos-operacionais') return 'motivos';
   if (name === 'empresas-abastecimento' || name === 'fornecedores-abastecimento') return 'empresas-abastecimento';
+  if (name === 'contratos' || name === 'contrato') return 'contratos';
+  if (name === 'funcoes-bordo' || name === 'funcoes-a-bordo' || name === 'funcoes_bordo') return 'funcoes-bordo';
   return null;
 }
 

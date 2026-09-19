@@ -86,22 +86,24 @@ export function buildFlightRelatedStatements(
     routePoints: FlightRoutePoint[];
     picFuncionarioId: number | null;
     sicFuncionarioId: number | null;
+    picFuncaoBordoId?: number | null;
+    sicFuncaoBordoId?: number | null;
   },
 ): D1PreparedStatement[] {
-  const { empresaId, vooId, userId, routePoints, picFuncionarioId, sicFuncionarioId } = input;
+  const { empresaId, vooId, userId, routePoints, picFuncionarioId, sicFuncionarioId, picFuncaoBordoId = null, sicFuncaoBordoId = null } = input;
   const statements: D1PreparedStatement[] = [];
   if (picFuncionarioId && sicFuncionarioId) {
     statements.push(
       db.prepare(
         `INSERT INTO cv_voo_tripulantes (
-           empresa_id, voo_id, funcionario_id, funcao, created_by, updated_by, created_at, updated_at
-         ) VALUES (?, ?, ?, 'PIC', ?, ?, datetime('now'), datetime('now'))`,
-      ).bind(empresaId, vooId, picFuncionarioId, userId, userId),
+           empresa_id, voo_id, funcionario_id, funcao, funcao_bordo_id, created_by, updated_by, created_at, updated_at
+         ) VALUES (?, ?, ?, 'PIC', ?, ?, ?, datetime('now'), datetime('now'))`,
+      ).bind(empresaId, vooId, picFuncionarioId, picFuncaoBordoId, userId, userId),
       db.prepare(
         `INSERT INTO cv_voo_tripulantes (
-           empresa_id, voo_id, funcionario_id, funcao, created_by, updated_by, created_at, updated_at
-         ) VALUES (?, ?, ?, 'SIC', ?, ?, datetime('now'), datetime('now'))`,
-      ).bind(empresaId, vooId, sicFuncionarioId, userId, userId),
+           empresa_id, voo_id, funcionario_id, funcao, funcao_bordo_id, created_by, updated_by, created_at, updated_at
+         ) VALUES (?, ?, ?, 'SIC', ?, ?, ?, datetime('now'), datetime('now'))`,
+      ).bind(empresaId, vooId, sicFuncionarioId, sicFuncaoBordoId, userId, userId),
     );
   }
   for (let index = 0; index < routePoints.length - 1; index += 1) {

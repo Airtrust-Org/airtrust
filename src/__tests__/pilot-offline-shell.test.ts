@@ -316,7 +316,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('id="add-fueling"');
     expect(pilotApp).toContain("['Hora de partida', 'horario_motor_ligado', 'time'");
     expect(pilotApp).toContain("['Aeródromo de origem', 'origem_icao', 'text'");
-    expect(pilotApp).toContain('pilotNatureOptions(activePackageData())');
+    expect(pilotApp).not.toContain("label: 'Natureza do voo'");
     expect(pilotRdvDraft).not.toContain('PILOT_NATUREZA_OPTIONS');
     expect(pilotApp).toContain("className = 'stage-tabs'");
     expect(pilotApp).toContain("['Peso dos passageiros', 'peso_passageiros'");
@@ -327,8 +327,10 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("['Observações da etapa', 'observacoes'");
     expect(pilotSync).toContain('fuelings:');
     expect(pilotSync).toContain('natureza_voo_codigo');
-    expect(pilotApp).toContain("supplementalErrors.push('Informe a natureza do voo.')");
+    expect(pilotApp).not.toContain("supplementalErrors.push('Informe a natureza do voo.')");
     expect(pilotApp).toContain('Litros abastecidos');
+    expect(pilotApp).toContain("label: 'Etapa'");
+    expect(pilotSync).toContain('etapa_numero: parseInteger(fueling?.etapa_numero)');
     expect(pilotApp).toContain('Número da nota');
     expect(pilotApp).toContain('Empresa de abastecimento');
     expect(pilotApp).toContain('pilotFuelingCompanyOptions(activePackageData())');
