@@ -244,6 +244,7 @@ function createSqliteD1(): SqliteD1 {
     `,
   );
   seed(databasePath);
+  runSql(databasePath, readFileSync(join(testDir, '../../../migrations/0504_controle_voos_operational_model.sql'), 'utf8'));
 
   const db = {
     databasePath,

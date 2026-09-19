@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-09-18",
-    "last_reconciled_against": "0503 Conhecimento Ativo foundation and XLSX import contract prepared; remote apply pending",
-    "schema_v2_digest": "4899cc36c60e80004c72eff9abfafd8c3720b5ab08c77d8db555623e7c39d60b",
+    "last_reconciled_at": "2026-09-19",
+    "last_reconciled_against": "0504 Controle de Voos operational model prepared; remote apply pending",
+    "schema_v2_digest": "ddfb33b312738c41b2ad829552f35192163ef88ec1887e737e35af3e8110cf65",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -959,6 +959,23 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "conhecimento-ativo-foundation-0503.json",
       "note": "0503 is reviewed and prepared only. It creates a fail-closed knowledge-reinforcement domain separated from LMS qualifications/certificates and adds versioned XLSX import lineage. Imported sources/items/questions remain draft/review until technical approval; tenant exposure remains disabled until explicitly enabled after governed remote apply and validation."
+    },
+    {
+      "change_file": "0504_controle_voos_operational_model.sql",
+      "change_id": "controle-voos-operational-model-0504",
+      "sha256": "9391e8c1f5f751d64cc1ec7253bd602c4033702b4686a017a124f76fb72911f7",
+      "targets": [
+        "cv_contratos",
+        "cv_funcoes_bordo",
+        "cv_voo_abastecimentos",
+        "cv_voo_tripulantes",
+        "cv_voos"
+      ],
+      "domain": "tenant-scoped Controle de Voos operational flight creation catalogs, identifiers, onboard roles and stage-scoped fueling support",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-operational-model-0504.json",
+      "note": "0504 is reviewed and prepared only. It adds editable tenant-scoped contracts and onboard-role catalogs, additive flight identifiers and contract binding, crew onboard-role binding, neutral internal Natureza compatibility, requested editable flight-type defaults, and a per-stage fueling index. Remote apply requires the governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
     }
   ]
 }
