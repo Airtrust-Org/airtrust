@@ -76,7 +76,7 @@ describe('ControleVoosNovoVooDialog operational model', () => {
     postMock.mockResolvedValue({ success: true, data: { id: 77 } });
     renderDialog('pilot'); await waitReady(); await chooseCommon();
     fireEvent.change(screen.getByLabelText('Número do voo'), { target: { value: 'V123' } });
-    fireEvent.change(screen.getByLabelText('Número do DB'), { target: { value: 'DB456' } });
+    fireEvent.change(screen.getByLabelText('Relatório de voo'), { target: { value: 'DB456' } });
     fireEvent.change(screen.getByLabelText('Minha função a bordo'), { target: { value: '52' } });
     fireEvent.submit(screen.getByRole('button', { name: 'Criar meu voo' }).closest('form')!);
     await waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
@@ -88,6 +88,8 @@ describe('ControleVoosNovoVooDialog operational model', () => {
   it('Coordenação cria etapas e atribui função a bordo independente do posto PIC/SIC', async () => {
     postMock.mockResolvedValue({ success: true, data: { id: 88 } });
     renderDialog('coordenacao'); await waitReady(); await chooseCommon();
+    expect(screen.getByLabelText('Número do voo')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Relatório de voo')).toBeNull();
     await waitFor(() => expect(screen.getByLabelText('Tripulante — posto PIC')).not.toBeDisabled());
     fireEvent.change(screen.getByLabelText('Tripulante — posto PIC'), { target: { value: '101' } });
     fireEvent.change(screen.getByLabelText('Tripulante — posto SIC'), { target: { value: '102' } });
@@ -99,5 +101,6 @@ describe('ControleVoosNovoVooDialog operational model', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Criar voo' }));
     await waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
     expect(postMock.mock.calls[0][1]).toMatchObject({ rota_ids: [1, 2, 1], pic_funcionario_id: 101, sic_funcionario_id: 102, pic_funcao_bordo_id: 52, sic_funcao_bordo_id: 51 });
+    expect(postMock.mock.calls[0][1]).not.toHaveProperty('numero_db');
   });
 });

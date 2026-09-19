@@ -72,6 +72,9 @@ const flight = {
   data_programacao: '2026-09-09',
   origem_id: 1,
   destino_id: 2,
+  numero_voo: null,
+  numero_db: null,
+  contrato_id: 2,
   tipo_voo_id: 1,
   natureza_voo_id: 1,
   aeronave_id: 3,
@@ -375,7 +378,63 @@ describe('Pilot offline snapshot apply orchestration', () => {
     expect(source).toContain('supplierNamesByCode.get(fueling.empresa_abastecimento_codigo)');
   });
 
-  it('orders the atomic D1 batch as RDV CAS, stages, fuelings, optional nature, event, receipt', () => {
+  it('impede o piloto de sobrescrever numero do voo definido pela Coordenacao', async () => {
+    const database = db();
+    getOfflineSyncReceipt.mockResolvedValue(null);
+    const withPilotNumber = command();
+    withPilotNumber.payload.flight_update = { numero_voo: 'PILOT-999', numero_db: 'RV-77' };
+
+    await expect(
+      applyPilotOfflineSnapshotCommand({
+        db: database,
+        empresaId: 7,
+        userId: 70,
+        funcionarioId: 77,
+        flight: { ...flight, numero_voo: 'COORD-123' },
+        command: withPilotNumber,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'CONTROLE_VOOS_PILOT_SYNC_FLIGHT_NUMBER_LOCKED',
+    });
+    expect(database.batch).not.toHaveBeenCalled();
+  });
+
+  it('permite ao piloto completar numero do voo vazio e relatorio de voo no mesmo batch atomico', async () => {
+    const database = db();
+    getOfflineSyncReceipt
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        result_status: 'accepted',
+        canonical_entity_id: '90',
+        received_at: '2026-09-09T19:31:00.000Z',
+      });
+    database.batch.mockResolvedValue([
+      { meta: { changes: 1 } },
+      { meta: { changes: 1 } },
+      { meta: { changes: 1 } },
+      { meta: { changes: 1 } },
+      { meta: { changes: 1 } },
+    ]);
+    getRdvOrThrow.mockResolvedValue({ ...rdv, versao: 4 });
+    const withMetadata = command();
+    withMetadata.payload.flight_update = { numero_voo: 'PILOT-321', numero_db: 'RV-654' };
+
+    const result = await applyPilotOfflineSnapshotCommand({
+      db: database,
+      empresaId: 7,
+      userId: 70,
+      funcionarioId: 77,
+      flight,
+      command: withMetadata,
+    });
+
+    expect(result).toMatchObject({ status: 'accepted', server_entity_version: 4 });
+    const preparedSql = database.prepare.mock.calls.map((call: any[]) => String(call[0]));
+    expect(preparedSql.some((sql: string) => sql.includes('UPDATE cv_voos') && sql.includes('numero_voo') && sql.includes('numero_db'))).toBe(true);
+  });
+
+  it('orders the atomic D1 batch as RDV CAS, stages, fuelings, optional flight metadata, event, receipt', () => {
     const source = readFileSync(
       join(
         __dirname,
@@ -383,9 +442,15 @@ describe('Pilot offline snapshot apply orchestration', () => {
       ),
       'utf8',
     );
-    expect(source).toContain(
-      'input.db.batch([\n      rdvStatement,\n      ...stageStatements,\n      ...fuelingStatements,\n      ...(natureStatement ? [natureStatement] : []),\n      eventStatement,\n      receiptStatement,\n    ])',
-    );
+    const batchStart = source.indexOf('results = await input.db.batch([');
+    const batchEnd = source.indexOf(']);', batchStart);
+    const batchBlock = source.slice(batchStart, batchEnd);
+    expect(batchStart).toBeGreaterThan(-1);
+    expect(batchBlock.indexOf('rdvStatement')).toBeLessThan(batchBlock.indexOf('...stageStatements'));
+    expect(batchBlock.indexOf('...stageStatements')).toBeLessThan(batchBlock.indexOf('...fuelingStatements'));
+    expect(batchBlock.indexOf('...fuelingStatements')).toBeLessThan(batchBlock.indexOf('flightMetadataStatement'));
+    expect(batchBlock.indexOf('flightMetadataStatement')).toBeLessThan(batchBlock.indexOf('eventStatement'));
+    expect(batchBlock.indexOf('eventStatement')).toBeLessThan(batchBlock.indexOf('receiptStatement'));
     expect(source).toContain('AND ${stageCas.sql}');
     expect(source).not.toContain('last-write-wins');
   });

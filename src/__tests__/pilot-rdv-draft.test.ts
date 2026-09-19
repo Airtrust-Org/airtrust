@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   applySafeStageAggregates,
   applyStageContinuity,
+  buildCommonFlightFields,
+  buildStageDraftsFromPackage,
   calcClockDurationHhMm,
+  calcTotalBlockTimeHhMm,
   calcStageTotalWeight,
   formatDurationDigits,
   payloadToKg,
@@ -154,6 +157,30 @@ describe('Pilot RDV operational calculations', () => {
     applyStageContinuity(stages);
     expect(stages[1].fields.horario_motor_ligado).toBe('');
     expect(stages[1].continuity_start_derived).toBe(false);
+  });
+
+  it('usa lb como default de carga, combustível e pesos e concentra pesos comuns no voo', () => {
+    const packageData = {
+      voo: { id: 10, numero_voo: 'V123', numero_db: 'RV456', data_programacao: '2026-09-19' },
+      aeronave: { peso_vazio: 9000, unidade_peso: 'LB' },
+      etapas: [{ id: 1, numero_etapa: 1, origem_icao: 'SBME', destino_icao: '9PAA' }],
+    };
+    const common = buildCommonFlightFields(packageData);
+    expect(common).toMatchObject({ numero_voo: 'V123', numero_db: 'RV456', peso_vazio: '9000', unidade_peso: 'LB' });
+    const stages = buildStageDraftsFromPackage(packageData);
+    expect(stages[0]).toMatchObject({ unidade_payload: 'LB', unidade_combustivel: 'LB', unidade_peso: 'LB' });
+    expect(stages[0].peso_tripulacao).toBe('');
+  });
+
+  it('soma tempo de voo por etapa e tempo total por ciclos de motor contínuos', () => {
+    const stages = [
+      { horario_motor_ligado: '08:00', horario_decolagem: '08:10', horario_pouso: '08:40', horario_motor_desligado: '' },
+      { horario_motor_ligado: '08:40', horario_decolagem: '08:50', horario_pouso: '09:20', horario_motor_desligado: '09:25' },
+    ];
+    expect(calcTotalBlockTimeHhMm(stages)).toBe('01:25');
+    const result = applySafeStageAggregates({}, stages);
+    expect(result.tempo_voo_total_hhmm).toBe('01:00');
+    expect(result.tempo_total_hhmm).toBe('01:25');
   });
 
   it('mostra validações específicas para duração e unidade de combustível', () => {

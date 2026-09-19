@@ -9,10 +9,12 @@ import {
   applySafeStageAggregates,
   applyStageContinuity,
   assertPackageIdentity,
+  buildCommonFlightFields,
   assertVerifiedLeaseAllowsDraft,
   buildDraftSnapshot,
   calcConsumoCombustivel,
   calcStageTotalWeight,
+  convertWeight,
   calcClockDurationHhMm,
   calcHorasVoadas,
   formatDurationDigits,
@@ -30,6 +32,8 @@ import {
 
 const DRAFT_ID = 'phase1-synthetic-rdv-draft';
 const SAVE_DELAY_MS = 180;
+const ACTIVE_FLIGHT_SESSION_ID = 'active-flight';
+const PILOT_OFFLINE_FLIGHT_LOCK_KEY = 'airtrust_pilot_offline_flight_locked_v1';
 const TARGET_FLIGHT_ID = new URLSearchParams(window.location.search).get('flight');
 const PRODUCTION_API_BASE_URL = 'https://api.airtrust.online/api';
 const STAGING_API_BASE_URL = 'https://airtrust-api-staging.airtrust.workers.dev/api';
@@ -128,6 +132,115 @@ let operationalSyncInFlight = false;
 let coordinationInFlight = false;
 let activeStageTabIndex = 0;
 let targetFlightAutoOpened = false;
+let offlineFlightLocked = false;
+let pilotRefreshPromise = null;
+
+function offlineFlightLockMarkerActive() {
+  try { return localStorage.getItem(PILOT_OFFLINE_FLIGHT_LOCK_KEY) === '1'; } catch { return false; }
+}
+
+function writeOfflineFlightLockMarker(locked) {
+  try {
+    if (locked) localStorage.setItem(PILOT_OFFLINE_FLIGHT_LOCK_KEY, '1');
+    else localStorage.removeItem(PILOT_OFFLINE_FLIGHT_LOCK_KEY);
+  } catch {}
+}
+
+async function enterOfflineFlightMode(packageData) {
+  const identity = assertPackageIdentity(packageData);
+  await vault.putJson('active_sessions', ACTIVE_FLIGHT_SESSION_ID, {
+    tenant_id: identity.tenantId,
+    user_id: identity.userId,
+    flight_id: identity.flightId,
+    package_id: identity.packageId,
+    locked_at: new Date().toISOString(),
+  }, 1);
+  offlineFlightLocked = true;
+  writeOfflineFlightLockMarker(true);
+  setConnectivity();
+}
+
+async function exitOfflineFlightMode() {
+  offlineFlightLocked = false;
+  writeOfflineFlightLockMarker(false);
+  if (vault?.isUnlocked()) {
+    await vault.deleteJson('active_sessions', ACTIVE_FLIGHT_SESSION_ID).catch(() => undefined);
+  }
+  setConnectivity();
+}
+
+function readStoredAuthValue(key) {
+  try {
+    const local = window.localStorage?.getItem(key);
+    if (local) return { value: local, persistent: true };
+  } catch {}
+  try {
+    const session = window.sessionStorage?.getItem(key);
+    if (session) return { value: session, persistent: false };
+  } catch {}
+  return { value: null, persistent: false };
+}
+
+function writeStoredAuthValue(key, value, persistent) {
+  try {
+    if (persistent) {
+      window.localStorage?.setItem(key, value);
+      window.sessionStorage?.removeItem(key);
+    } else {
+      window.sessionStorage?.setItem(key, value);
+      window.localStorage?.removeItem(key);
+    }
+  } catch {}
+}
+
+function readCurrentRefreshToken() {
+  return readStoredAuthValue('airtrust_refresh_token');
+}
+
+async function refreshPilotOnlineSession() {
+  if (pilotRefreshPromise) return pilotRefreshPromise;
+  const stored = readCurrentRefreshToken();
+  if (!stored.value) {
+    throw new PilotOnlineRequestError('Sessão online expirada e sem renovação disponível.', 401, 'MISSING_REFRESH_TOKEN');
+  }
+  pilotRefreshPromise = (async () => {
+    const response = await fetch(API_BASE_URL + '/auth/refresh', {
+      method: 'POST',
+      cache: 'no-store',
+      credentials: 'include',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: stored.value }),
+    });
+    const body = await response.json().catch(() => null);
+    const accessToken = body?.data?.accessToken;
+    const refreshToken = body?.data?.refreshToken;
+    if (!response.ok || !accessToken) {
+      throw new PilotOnlineRequestError(
+        body?.error || body?.message || 'Não foi possível renovar a sessão online.',
+        response.status || 401,
+        body?.code || 'REFRESH_FAILED',
+      );
+    }
+    writeStoredAuthValue('airtrust_token', accessToken, stored.persistent);
+    if (refreshToken) writeStoredAuthValue('airtrust_refresh_token', refreshToken, stored.persistent);
+    return accessToken;
+  })();
+  try {
+    return await pilotRefreshPromise;
+  } finally {
+    pilotRefreshPromise = null;
+  }
+}
+
+function assertAutomaticNetworkAllowed(options = {}) {
+  if (offlineFlightLocked && options.allowDuringFlight !== true) {
+    throw new PilotOnlineRequestError(
+      'Modo voo offline ativo. A conexão automática está bloqueada até você enviar ou sair do voo.',
+      0,
+      'OFFLINE_FLIGHT_LOCKED',
+    );
+  }
+}
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -200,15 +313,17 @@ if (authorizedFlightHeading) authorizedFlightHeading.textContent = 'Voos de hoje
 
 function setConnectivity() {
   const online = navigator.onLine;
-  connectivity.className = 'pill ' + (online ? 'ok' : 'attention');
+  connectivity.className = 'pill ' + (offlineFlightLocked || !online ? 'attention' : 'ok');
   connectivity.replaceChildren();
   const dot = document.createElement('span');
   dot.className = 'dot';
   const text = document.createElement('span');
-  text.textContent = online ? 'ONLINE' : 'OFFLINE — operação local ativa';
+  text.textContent = offlineFlightLocked
+    ? (online ? 'MODO VOO OFFLINE — sinal ignorado' : 'MODO VOO OFFLINE — sem sinal')
+    : (online ? 'ONLINE' : 'OFFLINE — operação local ativa');
   connectivity.append(dot, text);
-  refreshOnlineButton.disabled = !online;
-  updateFlightSelectionMode();
+  refreshOnlineButton.disabled = offlineFlightLocked || !online;
+  if (!offlineFlightLocked) updateFlightSelectionMode();
   if (activePackageRecord) void refreshCoordinationControls();
 }
 
@@ -347,67 +462,37 @@ class PilotOnlineRequestError extends Error {
   }
 }
 
-async function authenticatedGet(path) {
-  if (!navigator.onLine) {
-    throw new PilotOnlineRequestError('Sem conexão. Use um pacote já armazenado no tablet.');
-  }
-
-  const token = readCurrentAccessToken();
-  if (!token) {
-    throw new PilotOnlineRequestError(
-      'Sessão online não disponível. Entre no AirTrust e retorne ao Pilot App.',
-      401,
-      'MISSING_LOCAL_SESSION',
-    );
-  }
-
-  const response = await fetch(API_BASE_URL + path, {
-    method: 'GET',
-    cache: 'no-store',
-    credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-      Authorization: 'Bearer ' + token,
-    },
-  });
-
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new PilotOnlineRequestError(
-      body?.error || body?.message || 'Falha ao consultar o AirTrust.',
-      response.status,
-      body?.code || null,
-    );
-  }
-  return body;
-}
-
-async function authenticatedPost(path, payload) {
+async function authenticatedRequest(method, path, payload, options = {}) {
+  assertAutomaticNetworkAllowed(options);
   if (!navigator.onLine) {
     throw new PilotOnlineRequestError('Sem conexão. Esta operação online não pode ser executada.');
   }
 
-  const token = readCurrentAccessToken();
-  if (!token) {
-    throw new PilotOnlineRequestError(
-      'Sessão online não disponível. Entre no AirTrust e retorne ao Pilot App.',
-      401,
-      'MISSING_LOCAL_SESSION',
-    );
+  let token = readCurrentAccessToken();
+  if (!token) token = await refreshPilotOnlineSession();
+
+  const doFetch = async (accessToken) => {
+    const init = {
+      method,
+      cache: 'no-store',
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+        Authorization: 'Bearer ' + accessToken,
+      },
+    };
+    if (payload !== undefined) {
+      init.headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(payload);
+    }
+    return fetch(API_BASE_URL + path, init);
+  };
+
+  let response = await doFetch(token);
+  if (response.status === 401 && readCurrentRefreshToken().value) {
+    token = await refreshPilotOnlineSession();
+    response = await doFetch(token);
   }
-
-  const response = await fetch(API_BASE_URL + path, {
-    method: 'POST',
-    cache: 'no-store',
-    credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      Authorization: 'Bearer ' + token,
-    },
-    body: JSON.stringify(payload),
-  });
-
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     throw new PilotOnlineRequestError(
@@ -417,6 +502,14 @@ async function authenticatedPost(path, payload) {
     );
   }
   return body;
+}
+
+async function authenticatedGet(path, options = {}) {
+  return authenticatedRequest('GET', path, undefined, options);
+}
+
+async function authenticatedPost(path, payload, options = {}) {
+  return authenticatedRequest('POST', path, payload, options);
 }
 
 function containsForbiddenPackageKey(value) {
@@ -620,8 +713,42 @@ async function loadCachedPackages() {
   renderOnlineFlights();
 }
 
+async function restoreActiveOfflineFlight() {
+  const session = await vault.getJson('active_sessions', ACTIVE_FLIGHT_SESSION_ID);
+  if (!session?.value) {
+    writeOfflineFlightLockMarker(false);
+    offlineFlightLocked = false;
+    return false;
+  }
+  const locked = session.value;
+  const record = cachedPackageRecords.find((candidate) => {
+    const packageData = candidate?.value?.package;
+    if (!packageData) return false;
+    const identity = assertPackageIdentity(packageData);
+    return Number(identity.tenantId) === Number(locked.tenant_id) &&
+      Number(identity.userId) === Number(locked.user_id) &&
+      Number(identity.flightId) === Number(locked.flight_id) &&
+      String(identity.packageId) === String(locked.package_id);
+  });
+  if (!record) {
+    await exitOfflineFlightMode();
+    return false;
+  }
+  offlineFlightLocked = true;
+  writeOfflineFlightLockMarker(true);
+  setConnectivity();
+  activePackageRecord = record;
+  const opened = await openExistingOperationalDraft();
+  if (!opened) {
+    await exitOfflineFlightMode();
+    return false;
+  }
+  setSessionMessage('Voo offline restaurado neste tablet. A conexão automática continua bloqueada.', 'ok');
+  return true;
+}
+
 async function loadOnlineFlights() {
-  if (!vault?.isUnlocked()) return;
+  if (!vault?.isUnlocked() || offlineFlightLocked) return;
   if (!navigator.onLine) {
     setSessionMessage('Offline — mostrando os voos já preparados neste tablet.', 'attention');
     onlineFlightRecords = [];
@@ -667,7 +794,7 @@ async function loadOnlineFlights() {
   }
 }
 
-async function prepareFlightPackage(flightId) {
+async function prepareFlightPackage(flightId, options = {}) {
   if (!vault?.isUnlocked()) return;
   setSessionMessage('Preparando o voo para uso offline…', 'attention');
   refreshOnlineButton.disabled = true;
@@ -675,6 +802,7 @@ async function prepareFlightPackage(flightId) {
   try {
     const body = await authenticatedGet(
       '/controle-voos/voos/' + encodeURIComponent(String(flightId)) + '/offline-package',
+      options,
     );
     const packageData = body?.data;
     validateOfflinePackage(packageData, flightId);
@@ -711,7 +839,13 @@ async function prepareFlightPackage(flightId) {
       'ok',
     );
     await loadCachedPackages();
-    openPackageRecord(persisted);
+    if (offlineFlightLocked && options.allowDuringFlight === true) {
+      activePackageRecord = persisted;
+      setFlightSelectionVisible(false);
+      rdvEditorCard.classList.remove('hidden');
+    } else {
+      openPackageRecord(persisted);
+    }
     await updateStorageEstimate();
     return persisted;
   } catch (error) {
@@ -1214,7 +1348,9 @@ async function refreshOutboxStatusForActiveFlight() {
     setServerSyncStatus('Pendente de transmissão');
     setRdvSyncMessage(
       navigator.onLine
-        ? 'Existe uma transmissão pendente. O Pilot App tentará reenviar de forma idempotente.'
+        ? (offlineFlightLocked
+            ? 'Existe uma transmissão pendente. Use “Enviar informações do voo” quando quiser transmitir.'
+            : 'Existe uma transmissão pendente. O Pilot App tentará reenviar de forma idempotente.')
         : 'Transmissão pendente preservada na outbox cifrada até a conexão voltar.',
       'attention',
     );
@@ -1456,9 +1592,8 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
     activeRdvDraft = {
       ...value,
       schema_version: Math.max(Number(value.schema_version || 1), PILOT_DRAFT_SCHEMA_VERSION),
-      flight_update: value.flight_update || {
-        natureza_voo_codigo: packageData?.natureza?.codigo || '',
-      },
+      common: { ...buildCommonFlightFields(packageData), ...(value.common || {}) },
+      flight_update: value.flight_update || {},
       fuelings: Array.isArray(value.fuelings) ? value.fuelings : [],
     };
     activeStageDrafts = matchingStages.map((record) => ({
@@ -1469,14 +1604,17 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
       ),
       fields: {
         ...(record.value?.fields || {}),
+        payload: record.value?.fields?.payload ?? '',
+        unidade_payload: record.value?.fields?.unidade_payload || 'LB',
+        combustivel_inicio: record.value?.fields?.combustivel_inicio ?? '',
+        combustivel_fim: record.value?.fields?.combustivel_fim ?? '',
+        unidade_combustivel: record.value?.fields?.unidade_combustivel || 'LB',
         peso_passageiros: record.value?.fields?.peso_passageiros ?? '',
         peso_bagagem: record.value?.fields?.peso_bagagem ?? '',
-        peso_tripulacao: record.value?.fields?.peso_tripulacao ?? '',
-        peso_vazio:
-          record.value?.fields?.peso_vazio ?? packageData?.aeronave?.peso_vazio ?? '',
+        peso_tripulacao: activeRdvDraft.common?.peso_tripulacao || '',
+        peso_vazio: activeRdvDraft.common?.peso_vazio || '',
         peso_total: record.value?.fields?.peso_total ?? '',
-        unidade_peso:
-          record.value?.fields?.unidade_peso ?? packageData?.aeronave?.unidade_peso ?? '',
+        unidade_peso: activeRdvDraft.common?.unidade_peso || 'LB',
         observacoes: record.value?.fields?.observacoes ?? '',
         horario_motor_ligado: toInputTime(record.value?.fields?.horario_motor_ligado),
         horario_decolagem: toInputTime(record.value?.fields?.horario_decolagem),
@@ -1529,6 +1667,10 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
     operationalNextSequence = 0;
   }
 
+  applyCommonFieldsToStages();
+  refreshAllStageDerivedTimes();
+  activeRdvDraft.form = applySafeStageAggregates(activeRdvDraft.form, activeStageDrafts);
+  await enterOfflineFlightMode(packageData);
   renderOperationalEditor();
   void refreshOutboxStatusForActiveFlight();
 }
@@ -1548,6 +1690,12 @@ function markOperationalPending() {
   rdvEditorSaveStatus.textContent = 'Alterações locais pendentes…';
 }
 
+function fuelingRowIsEmpty(fueling) {
+  return !String(fueling?.empresa_abastecimento_codigo || '').trim() &&
+    !String(fueling?.numero_nota || '').trim() &&
+    parseNumber(fueling?.litros_abastecidos) === null;
+}
+
 function refreshDraftValidationPresentation() {
   const packageData = activePackageData();
   if (!activeRdvDraft || !packageData) return;
@@ -1555,6 +1703,7 @@ function refreshDraftValidationPresentation() {
   const stageErrors = validateStageDrafts(activeStageDrafts);
   const supplementalErrors = [];
   for (const [index, fueling] of (activeRdvDraft.fuelings || []).entries()) {
+    if (fuelingRowIsEmpty(fueling)) continue;
     if (!Number.isInteger(Number(fueling.etapa_numero)) || Number(fueling.etapa_numero) <= 0) supplementalErrors.push('Abastecimento ' + (index + 1) + ': selecione a etapa.');
     if (!String(fueling.empresa_abastecimento_codigo || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': selecione a empresa de abastecimento.');
     if (!String(fueling.numero_nota || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe o número da nota.');
@@ -1660,7 +1809,7 @@ function enqueueOperationalSave() {
       if (operationalNextSequence === requestedSequence) {
         rdvEditorSaveStatus.className = 'statusline ok';
         rdvEditorSaveStatus.textContent = 'Salvo no tablet.';
-        updateOperationFlow(navigator.onLine ? 'pending' : 'saved');
+        updateOperationFlow(offlineFlightLocked ? 'saved' : (navigator.onLine ? 'pending' : 'saved'));
       } else {
         markOperationalPending();
       }
@@ -1923,7 +2072,7 @@ async function drainPilotOutbox(options = {}) {
       try {
         const body = await authenticatedPost('/controle-voos/pilot/offline-sync', {
           commands: [command],
-        });
+        }, { allowDuringFlight: true });
         const result = body?.data?.results?.[0];
         if (
           !result ||
@@ -2026,7 +2175,7 @@ async function refreshCanonicalPackageForActiveFlight() {
   await refreshCoordinationControls();
   setCoordinationMessage('Atualizando estado canônico do servidor…', 'attention');
   try {
-    await prepareFlightPackage(flightId);
+    await prepareFlightPackage(flightId, { allowDuringFlight: true });
   } finally {
     coordinationInFlight = false;
     await refreshCoordinationControls();
@@ -2069,6 +2218,7 @@ async function finalizeCanonicalRdv() {
         encodeURIComponent(String(state.flightId)) +
         '/rdv/finalizar-preenchimento',
       { versao: expectedVersion },
+      { allowDuringFlight: true },
     );
     const updated = body?.data;
     if (
@@ -2119,7 +2269,7 @@ async function finalizeCanonicalRdv() {
       'ok',
     );
     try {
-      const refreshed = await prepareFlightPackage(state.flightId);
+      const refreshed = await prepareFlightPackage(state.flightId, { allowDuringFlight: true });
       if (!refreshed) throw new Error('PACKAGE_REFRESH_FAILED');
     } catch (refreshError) {
       console.error('[Pilot Offline] Falha ao atualizar pacote após finalização confirmada:', refreshError);
@@ -2150,6 +2300,7 @@ async function sendCanonicalRdvToCoordination() {
       '/controle-voos/voos/' +
         encodeURIComponent(String(state.flightId)) +
         '/rdv/alertas',
+      { allowDuringFlight: true },
     );
     const blocking = (Array.isArray(alertsBody?.data) ? alertsBody.data : []).filter(
       (alert) => alert?.severidade === 'IMPEDE_ENVIO',
@@ -2201,6 +2352,7 @@ async function sendCanonicalRdvToCoordination() {
         encodeURIComponent(String(state.flightId)) +
         '/rdv/enviar',
       { versao: expectedVersion },
+      { allowDuringFlight: true },
     );
     const updated = body?.data;
     if (
@@ -2251,7 +2403,7 @@ async function sendCanonicalRdvToCoordination() {
       'ok',
     );
     try {
-      const refreshed = await prepareFlightPackage(state.flightId);
+      const refreshed = await prepareFlightPackage(state.flightId, { allowDuringFlight: true });
       if (!refreshed) throw new Error('PACKAGE_REFRESH_FAILED');
     } catch (refreshError) {
       console.error('[Pilot Offline] Falha ao atualizar pacote após handoff confirmado:', refreshError);
@@ -2470,64 +2622,129 @@ function updateOperationFlow(step) {
   }
 }
 
+function applyCommonFieldsToStages() {
+  if (!activeRdvDraft) return;
+  const common = activeRdvDraft.common || (activeRdvDraft.common = buildCommonFlightFields(activePackageData()));
+  for (const stageDraft of activeStageDrafts) {
+    const fields = stageDraft.fields || {};
+    fields.peso_tripulacao = common.peso_tripulacao ?? '';
+    fields.peso_vazio = common.peso_vazio ?? '';
+    fields.unidade_peso = common.unidade_peso || 'LB';
+  }
+}
+
+function convertWeightFieldValue(value, fromUnit, toUnit) {
+  const converted = convertWeight(value, fromUnit, toUnit);
+  return converted === null ? '' : String(converted);
+}
+
+function changeCommonWeightUnit(nextUnit) {
+  if (!activeRdvDraft) return;
+  const common = activeRdvDraft.common || (activeRdvDraft.common = buildCommonFlightFields(activePackageData()));
+  const previousUnit = String(common.unidade_peso || 'LB').toUpperCase();
+  const targetUnit = String(nextUnit || 'LB').toUpperCase();
+  if (previousUnit === targetUnit) return;
+  common.peso_tripulacao = convertWeightFieldValue(common.peso_tripulacao, previousUnit, targetUnit);
+  common.peso_vazio = convertWeightFieldValue(common.peso_vazio, previousUnit, targetUnit);
+  for (const stageDraft of activeStageDrafts) {
+    const fields = stageDraft.fields || {};
+    fields.peso_passageiros = convertWeightFieldValue(fields.peso_passageiros, previousUnit, targetUnit);
+    fields.peso_bagagem = convertWeightFieldValue(fields.peso_bagagem, previousUnit, targetUnit);
+    fields.unidade_peso = targetUnit;
+  }
+  common.unidade_peso = targetUnit;
+  applyCommonFieldsToStages();
+  refreshAllStageDerivedTimes();
+}
+
 function renderRdvFormFields() {
   rdvCoreFields.replaceChildren();
   rdvFormFields.replaceChildren();
   const form = activeRdvDraft.form;
+  const packageData = activePackageData();
+  const common = activeRdvDraft.common || (activeRdvDraft.common = buildCommonFlightFields(packageData));
+  applyCommonFieldsToStages();
+  refreshAllStageDerivedTimes();
+  activeRdvDraft.form = applySafeStageAggregates(form, activeStageDrafts);
 
-  const fields = [
-    ['Identificador do registro', 'numero', 'text', null, false, false],
-    ['Horas voadas', 'horas_voadas', 'number', 'decimal', false, true],
-    ['Pousos', 'numero_pousos', 'number', 'numeric', false, true],
-    ['Ciclos', 'ciclos', 'number', 'numeric', false, false],
-    ['Combustível decolagem', 'combustivel_decolagem', 'number', 'decimal', false, true],
-    ['Combustível pouso', 'combustivel_pouso', 'number', 'decimal', false, true],
-    ['Consumo', 'combustivel_consumo', 'number', 'decimal', false, true],
-    ['POB', 'pob', 'number', 'numeric', false, true],
-    ['Carga (kg)', 'carga_kg', 'number', 'decimal', false, true],
-    ['Ocorrências', 'ocorrencias', 'textarea', null, true, false],
-    ['Divergências do planejado', 'divergencias', 'textarea', null, true, false],
+  const coordFlightNumber = String(packageData?.voo?.numero_voo || '').trim();
+  rdvCoreFields.append(
+    createEditorField({
+      label: 'Número do voo',
+      value: common.numero_voo || '',
+      type: 'text',
+      readOnly: Boolean(coordFlightNumber),
+      note: coordFlightNumber ? 'Informado pela Coordenação.' : 'Preencha se a Coordenação não informou.',
+      onInput: coordFlightNumber ? null : (value) => { common.numero_voo = value; scheduleOperationalSave(); },
+      onBlur: coordFlightNumber ? null : () => void flushOperationalSave(),
+    }),
+    createEditorField({
+      label: 'Relatório de voo',
+      value: common.numero_db || '',
+      type: 'text',
+      note: 'Número do DB / relatório de voo informado pelo piloto.',
+      onInput: (value) => { common.numero_db = value; scheduleOperationalSave(); },
+      onBlur: () => void flushOperationalSave(),
+    }),
+    createEditorField({
+      label: 'Peso da tripulação',
+      value: common.peso_tripulacao || '',
+      type: 'number',
+      inputMode: 'decimal',
+      note: 'Valor comum a todas as etapas.',
+      onInput: (value) => {
+        common.peso_tripulacao = value;
+        applyCommonFieldsToStages();
+        refreshAllStageDerivedTimes();
+        scheduleOperationalSave();
+        renderStageFields();
+      },
+      onBlur: () => void flushOperationalSave(),
+    }),
+    createEditorField({
+      label: 'Peso vazio da aeronave',
+      value: common.peso_vazio || '',
+      type: 'number',
+      inputMode: 'decimal',
+      readOnly: true,
+      note: 'Vem do cadastro da aeronave.',
+    }),
+    createEditorSelect({
+      label: 'Unidade dos pesos',
+      value: common.unidade_peso || 'LB',
+      options: [{ code: 'LB', label: 'lb' }, { code: 'KG', label: 'kg' }],
+      onChange: (value) => {
+        changeCommonWeightUnit(value || 'LB');
+        scheduleOperationalSave();
+        renderOperationalEditor({ preserveScroll: true });
+      },
+    }),
+    createEditorField({
+      label: 'Ocorrências',
+      value: form.ocorrencias || '',
+      type: 'textarea',
+      wide: true,
+      onInput: (value) => { form.ocorrencias = value; scheduleOperationalSave(); },
+      onBlur: () => void flushOperationalSave(),
+    }),
+    createEditorField({
+      label: 'Divergências do planejado',
+      value: form.divergencias || '',
+      type: 'textarea',
+      wide: true,
+      onInput: (value) => { form.divergencias = value; scheduleOperationalSave(); },
+      onBlur: () => void flushOperationalSave(),
+    }),
+  );
+
+  const summaryFields = [
+    ['Tempo de voo', activeRdvDraft.form.tempo_voo_total_hhmm || '—', 'Soma de decolagem → pouso em todas as etapas.'],
+    ['Tempo total', activeRdvDraft.form.tempo_total_hhmm || '—', 'Soma de partida → corte em todas as etapas.'],
+    ['Pousos diurnos', activeRdvDraft.form.pousos_diurnos_total || '0', null],
+    ['Pousos noturnos', activeRdvDraft.form.pousos_noturnos_total || '0', null],
   ];
-
-  for (const [label, key, type, inputMode, wide, aggregateManaged] of fields) {
-    rdvFormFields.append(
-      createEditorField({
-        label,
-        value: form[key],
-        type,
-        inputMode,
-        wide,
-        readOnly: aggregateManaged,
-        note:
-          key === 'ciclos'
-            ? 'Não é derivado automaticamente de pousos.'
-            : aggregateManaged
-              ? 'Calculado a partir das etapas locais.'
-              : null,
-        onInput: (value) => {
-          form[key] = value;
-          if (
-            key === 'horario_decolagem_real' ||
-            key === 'horario_pouso_real'
-          ) {
-            const hours = calcHorasVoadas(
-              form.horario_decolagem_real,
-              form.horario_pouso_real,
-            );
-            if (hours !== null) form.horas_voadas = String(hours);
-          }
-          if (key === 'combustivel_decolagem' || key === 'combustivel_pouso') {
-            const used = calcConsumoCombustivel(
-              parseNumber(form.combustivel_decolagem),
-              parseNumber(form.combustivel_pouso),
-            );
-            if (used !== null) form.combustivel_consumo = String(used);
-          }
-          scheduleOperationalSave();
-        },
-        onBlur: () => void flushOperationalSave(),
-      }),
-    );
+  for (const [label, value, note] of summaryFields) {
+    rdvFormFields.append(createEditorField({ label, value, type: 'text', readOnly: true, note }));
   }
 }
 
@@ -2674,9 +2891,7 @@ function renderStageFields() {
     ['Passageiros', 'pax', 'number', 'numeric', false, false, 'Quantidade de passageiros'],
     ['Peso dos passageiros', 'peso_passageiros', 'number', 'decimal', false, false, null],
     ['Peso da bagagem', 'peso_bagagem', 'number', 'decimal', false, false, null],
-    ['Peso da tripulação', 'peso_tripulacao', 'number', 'decimal', false, false, null],
     ['Carga', 'payload', 'number', 'decimal', false, false, null],
-    ['Peso vazio da aeronave', 'peso_vazio', 'number', 'decimal', true, false, 'Vem do cadastro da aeronave'],
     ['Peso total', 'peso_total', 'number', 'decimal', true, false, 'Calculado automaticamente'],
     [
       index === 0 ? 'Combustível inicial' : 'Combustível inicial',
@@ -2752,13 +2967,13 @@ function renderStageFields() {
   grid.append(
     createEditorSelect({
       label: 'Unidade da carga',
-      value: fields.unidade_payload || 'KG',
+      value: fields.unidade_payload || 'LB',
       options: [
         { code: 'KG', label: 'kg' },
         { code: 'LB', label: 'lb' },
       ],
       onChange: (value) => {
-        fields.unidade_payload = value || 'KG';
+        fields.unidade_payload = value || 'LB';
         refreshAllStageDerivedTimes();
         activeRdvDraft.form = applySafeStageAggregates(activeRdvDraft.form, activeStageDrafts);
         scheduleOperationalSave();
@@ -2767,29 +2982,15 @@ function renderStageFields() {
       },
     }),
     createEditorSelect({
-      label: 'Unidade dos pesos',
-      value: fields.unidade_peso || activePackageData()?.aeronave?.unidade_peso || '',
-      options: [
-        { code: 'LB', label: 'lb' },
-        { code: 'KG', label: 'kg' },
-      ],
-      onChange: (value) => {
-        fields.unidade_peso = value;
-        refreshAllStageDerivedTimes();
-        scheduleOperationalSave();
-        renderStageFields();
-      },
-    }),
-    createEditorSelect({
       label: 'Unidade do combustível',
-      value: fields.unidade_combustivel || '',
+      value: fields.unidade_combustivel || 'LB',
       options: [
         { code: 'LB', label: 'lb' },
         { code: 'KG', label: 'kg' },
       ],
       disabled: index > 0,
       onChange: (value) => {
-        fields.unidade_combustivel = value;
+        fields.unidade_combustivel = value || 'LB';
         refreshAllStageDerivedTimes();
         scheduleOperationalSave();
         renderStageFields();
@@ -2798,7 +2999,44 @@ function renderStageFields() {
   );
 
   card.append(grid);
+  if (stageDraft.source_stage_id == null && activeStageDrafts.length > 1) {
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'secondary stage-delete';
+    removeButton.textContent = 'Excluir esta etapa';
+    removeButton.disabled = operationalSyncInFlight;
+    removeButton.addEventListener('click', () => void removeOperationalStage(index));
+    card.append(removeButton);
+  }
   rdvStageFields.append(card);
+}
+
+async function removeOperationalStage(index) {
+  if (!activeRdvDraft || operationalSyncInFlight) return;
+  const removed = activeStageDrafts[index];
+  if (!removed || removed.source_stage_id != null || activeStageDrafts.length <= 1) return;
+  await flushOperationalSave();
+  const removedNumber = Number(removed.fields?.numero_etapa || index + 1);
+  activeStageDrafts.splice(index, 1);
+  await vault.deleteJson('stage_drafts', removed.entity_local_id).catch(() => undefined);
+
+  activeRdvDraft.fuelings = (activeRdvDraft.fuelings || [])
+    .filter((fueling) => Number(fueling.etapa_numero) !== removedNumber)
+    .map((fueling) => ({
+      ...fueling,
+      etapa_numero: Number(fueling.etapa_numero) > removedNumber
+        ? Number(fueling.etapa_numero) - 1
+        : Number(fueling.etapa_numero),
+    }));
+  activeStageDrafts.forEach((stage, stageIndex) => {
+    if (stage.source_stage_id == null) stage.fields.numero_etapa = stageIndex + 1;
+  });
+  activeStageTabIndex = Math.max(0, Math.min(index - 1, activeStageDrafts.length - 1));
+  applyCommonFieldsToStages();
+  refreshAllStageDerivedTimes();
+  activeRdvDraft.form = applySafeStageAggregates(activeRdvDraft.form, activeStageDrafts);
+  scheduleOperationalSave();
+  renderOperationalEditor({ preserveScroll: true });
 }
 
 function addOperationalStage() {
@@ -2826,11 +3064,11 @@ function addOperationalStage() {
       origem_icao: previous.destino_icao || '', destino_icao: '',
       horario_motor_ligado: previous.horario_pouso && !previous.horario_motor_desligado ? previous.horario_pouso : '', horario_decolagem: '', horario_pouso: '', horario_motor_desligado: '',
       tempo_decolagem_pouso: '', tempo_total: '', tempo_ifr: '', tempo_noturno: '',
-      pousos_diurnos: '', pousos_noturnos: '', starts: '', pax: '', payload: '', unidade_payload: previous.unidade_payload || 'KG',
-      combustivel_inicio: previous.combustivel_fim || '', combustivel_fim: '', unidade_combustivel: previous.unidade_combustivel || '',
-      peso_passageiros: '', peso_bagagem: '', peso_tripulacao: '',
-      peso_vazio: previous.peso_vazio || packageData?.aeronave?.peso_vazio || '',
-      peso_total: '', unidade_peso: previous.unidade_peso || packageData?.aeronave?.unidade_peso || '',
+      pousos_diurnos: '', pousos_noturnos: '', starts: '', pax: '', payload: '', unidade_payload: previous.unidade_payload || 'LB',
+      combustivel_inicio: previous.combustivel_fim || '', combustivel_fim: '', unidade_combustivel: previous.unidade_combustivel || 'LB',
+      peso_passageiros: '', peso_bagagem: '', peso_tripulacao: activeRdvDraft.common?.peso_tripulacao || '',
+      peso_vazio: activeRdvDraft.common?.peso_vazio || '',
+      peso_total: '', unidade_peso: activeRdvDraft.common?.unidade_peso || 'LB',
       observacoes: '',
     },
   });
@@ -2925,7 +3163,7 @@ function renderOperationalEditor(options = {}) {
   renderRdvFormFields();
   renderStageFields();
   renderFuelingFields();
-  updateOperationFlow(operationalLocalSequence > 0 ? (navigator.onLine ? 'pending' : 'saved') : 'offline');
+  updateOperationFlow(operationalLocalSequence > 0 ? (offlineFlightLocked ? 'saved' : (navigator.onLine ? 'pending' : 'saved')) : 'offline');
   refreshDraftValidationPresentation();
   setFlightSelectionVisible(false);
   flightDetailCard.classList.add('hidden');
@@ -3139,7 +3377,8 @@ async function openWorkspace() {
   window.dispatchEvent(new Event('airtrust:pilot-app-ready'));
   await loadCachedPackages();
   await updateStorageEstimate();
-  await loadOnlineFlights();
+  const restoredOfflineFlight = await restoreActiveOfflineFlight();
+  if (!restoredOfflineFlight) await loadOnlineFlights();
 }
 
 function markPending() {
@@ -3204,6 +3443,11 @@ function flushDiagnosticSave() {
 
 window.addEventListener('online', () => {
   setConnectivity();
+  if (offlineFlightLocked) {
+    updateSyncButtonState();
+    setSessionMessage('Modo voo offline mantido. O sinal voltou, mas nenhuma conexão automática será feita.', 'ok');
+    return;
+  }
   if (vault?.isUnlocked()) {
     void loadOnlineFlights();
     void drainPilotOutbox();
@@ -3215,6 +3459,11 @@ window.addEventListener('online', () => {
 });
 window.addEventListener('offline', () => {
   setConnectivity();
+  if (offlineFlightLocked) {
+    updateSyncButtonState();
+    setSessionMessage('Modo voo offline mantido. Continue preenchendo normalmente.', 'ok');
+    return;
+  }
   if (vault?.isUnlocked()) {
     onlineFlightRecords = [];
     renderOnlineFlights();
@@ -3242,7 +3491,12 @@ finalizeRdvServerButton.addEventListener('click', () => void finalizeCanonicalRd
 sendRdvCoordinationButton.addEventListener('click', () =>
   void sendCanonicalRdvToCoordination(),
 );
-closeRdvEditorButton.addEventListener('click', () => void flushOperationalSave().then(closeOperationalEditor));
+closeRdvEditorButton.addEventListener('click', () => void flushOperationalSave().then(async () => {
+  await exitOfflineFlightMode();
+  closeOperationalEditor();
+  setFlightSelectionVisible(true);
+  if (navigator.onLine) await loadOnlineFlights();
+}));
 closeDetailButton.addEventListener('click', closePackageDetail);
 draftInput.addEventListener('input', scheduleDiagnosticSave);
 draftInput.addEventListener('blur', () => void flushDiagnosticSave());
@@ -3274,7 +3528,7 @@ window.addEventListener('pagehide', () => {
 
 async function bootstrapPilotApp() {
   try {
-    await registerPilotServiceWorker();
+    if (!offlineFlightLockMarkerActive()) await registerPilotServiceWorker();
     vault = await PilotVault.open();
     const vaultOpenState = await vault.openAutomatically();
     if (vaultOpenState.status !== 'ready') {

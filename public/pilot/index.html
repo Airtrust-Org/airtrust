@@ -454,6 +454,16 @@
       }
       .technical-package { margin-top: 14px; border-top: 1px solid #e1e8f0; padding-top: 12px; }
       details summary { cursor: pointer; font-weight: 800; }
+      .expandable-panel { margin-top: 16px; border: 1px solid #cbd5e1; border-radius: 14px; padding: 0 14px 14px; background: #f8fafc; }
+      .expandable-panel > summary { list-style: none; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 0; color:#0f172a; }
+      .expandable-panel > summary::-webkit-details-marker { display:none; }
+      .expandable-panel > summary::after { content:'Abrir'; font-size:12px; font-weight:800; color:#0369a1; border:1px solid #7dd3fc; border-radius:999px; padding:3px 9px; background:#fff; }
+      .expandable-panel[open] > summary::after { content:'Fechar'; }
+      .stage-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:24px; }
+      .stage-toolbar #add-stage { min-height:46px; padding-inline:18px; }
+      .stage-delete { margin-top:10px; border-color:#fecaca !important; color:#b91c1c !important; }
+      @media (prefers-color-scheme: dark) { .expandable-panel { background:#111827; border-color:#334155; } .expandable-panel > summary { color:#e2e8f0; } }
+      @media (max-width: 900px) { .stage-toolbar { align-items:stretch; flex-direction:column; } .stage-toolbar #add-stage { width:100%; font-size:16px; } }
       @media (max-width: 700px) {
         .topbar { align-items: flex-start; flex-direction: column; }
         .topbar-actions { width: 100%; justify-content: space-between; }
@@ -569,17 +579,17 @@
               <h2 id="rdv-editor-title">Preenchimento do voo</h2>
               <p id="rdv-editor-subtitle" class="muted"></p>
             </div>
-            <button id="close-rdv-editor" class="secondary" type="button">Voltar aos voos</button>
+            <button id="close-rdv-editor" class="secondary" type="button">Sair do voo offline</button>
           </div>
           <div class="section-head" style="margin-top:20px">
             <div>
-              <h3>Dados essenciais</h3>
-              <p class="muted">Informe apenas o que não pode ser obtido automaticamente do voo.</p>
+              <h3>Dados comuns do voo</h3>
+              <p class="muted">Estes dados valem para todas as etapas do voo.</p>
             </div>
           </div>
           <div id="rdv-core-fields" class="editor-grid"></div>
 
-          <details class="technical-package">
+          <details class="technical-package expandable-panel">
             <summary>Detalhes de sincronização</summary>
             <div class="meta">
               <div><span class="muted">Sequência local</span><strong id="rdv-local-sequence">0</strong></div>
@@ -588,18 +598,18 @@
             </div>
           </details>
 
-          <div class="section-head" style="margin-top:24px">
+          <div class="stage-toolbar">
             <div>
               <h3>Etapas</h3>
               <p class="muted">Partida, decolagem, pouso e corte usam somente hora; a data do voo já está definida acima.</p>
             </div>
-            <button id="add-stage" class="secondary" type="button">+ Nova perna</button>
+            <button id="add-stage" class="primary" type="button">+ Nova etapa</button>
           </div>
           <div id="rdv-stage-fields"></div>
 
-          <details class="technical-package" style="margin-top:18px">
+          <details class="technical-package expandable-panel" style="margin-top:18px">
             <summary>Resumo automático do voo</summary>
-            <p class="muted">Horas voadas, pousos, POB, carga e combustível são consolidados a partir das pernas abaixo.</p>
+            <p class="muted">Tempo de voo, tempo total e pousos são consolidados automaticamente a partir das etapas.</p>
             <div id="rdv-form-fields" class="editor-grid"></div>
           </details>
 

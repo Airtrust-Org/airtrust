@@ -1,4 +1,4 @@
-const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v22';
+const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v23';
 const PILOT_SCOPE_PATH = '/pilot/';
 const PRECACHE_URLS = [
   '/pilot/',
@@ -70,24 +70,20 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate' && url.pathname.startsWith(PILOT_SCOPE_PATH)) {
     event.respondWith(
       (async () => {
+        const cached = await caches.match('/pilot/index.html');
+        if (cached) return cached;
         try {
           const response = await fetch(request, { cache: 'no-store' });
           if (response.ok) {
             const cache = await caches.open(PILOT_CACHE_VERSION);
             await cache.put('/pilot/index.html', response.clone());
-            return response;
           }
-          const cached = await caches.match('/pilot/index.html');
-          return cached || response;
+          return response;
         } catch {
-          const cached = await caches.match('/pilot/index.html');
-          return (
-            cached ||
-            new Response('Pilot Offline indisponível neste dispositivo.', {
-              status: 503,
-              headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-            })
-          );
+          return new Response('Pilot Offline indisponível neste dispositivo.', {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+          });
         }
       })(),
     );
@@ -98,20 +94,14 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     (async () => {
-      try {
-        const response = await fetch(request, { cache: 'no-store' });
-        if (response.ok) {
-          const cache = await caches.open(PILOT_CACHE_VERSION);
-          await cache.put(url.pathname, response.clone());
-          return response;
-        }
-        const cached = await caches.match(url.pathname);
-        return cached || response;
-      } catch {
-        const cached = await caches.match(url.pathname);
-        if (cached) return cached;
-        throw new Error('Recurso do Pilot App indisponível: ' + url.pathname);
+      const cached = await caches.match(url.pathname);
+      if (cached) return cached;
+      const response = await fetch(request, { cache: 'no-store' });
+      if (response.ok) {
+        const cache = await caches.open(PILOT_CACHE_VERSION);
+        await cache.put(url.pathname, response.clone());
       }
+      return response;
     })(),
   );
 });

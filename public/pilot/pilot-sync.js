@@ -102,7 +102,7 @@ function fuelingPayload(fueling, flightDate) {
   };
 }
 
-function stagePayload(stageDraft) {
+function stagePayload(stageDraft, common = {}) {
   const fields = stageDraft.fields || {};
   return {
     source_stage_id: stageDraft.source_stage_id == null ? null : Number(stageDraft.source_stage_id),
@@ -129,10 +129,10 @@ function stagePayload(stageDraft) {
       unidade_combustivel: optionalText(fields.unidade_combustivel),
       peso_passageiros: parseNumber(fields.peso_passageiros),
       peso_bagagem: parseNumber(fields.peso_bagagem),
-      peso_tripulacao: parseNumber(fields.peso_tripulacao),
-      peso_vazio: parseNumber(fields.peso_vazio),
+      peso_tripulacao: parseNumber(common.peso_tripulacao ?? fields.peso_tripulacao),
+      peso_vazio: parseNumber(common.peso_vazio ?? fields.peso_vazio),
       peso_total: parseNumber(fields.peso_total),
-      unidade_peso: optionalText(fields.unidade_peso),
+      unidade_peso: optionalText(common.unidade_peso ?? fields.unidade_peso),
       observacoes: optionalText(fields.observacoes),
     },
   };
@@ -203,18 +203,23 @@ export async function buildOfflineSyncCommand({
       source_rdv_id: rdvDraft.source_rdv_id == null ? null : Number(rdvDraft.source_rdv_id),
       rdv: rdvPayload(rdvDraft.form || {}),
       flight_update: {
-        natureza_voo_codigo: optionalText(rdvDraft.flight_update?.natureza_voo_codigo),
+        numero_voo: optionalText(rdvDraft.common?.numero_voo),
+        numero_db: optionalText(rdvDraft.common?.numero_db),
       },
-      fuelings: (Array.isArray(rdvDraft.fuelings) ? rdvDraft.fuelings : []).map((item) =>
-        fuelingPayload(item, rdvDraft.form?.data_voo),
-      ),
+      fuelings: (Array.isArray(rdvDraft.fuelings) ? rdvDraft.fuelings : [])
+        .filter((item) =>
+          optionalText(item?.empresa_abastecimento_codigo) ||
+          optionalText(item?.numero_nota) ||
+          parseNumber(item?.litros_abastecidos) !== null
+        )
+        .map((item) => fuelingPayload(item, rdvDraft.form?.data_voo)),
       stages: stageDrafts
         .slice()
         .sort(
           (left, right) =>
             Number(left?.fields?.numero_etapa || 0) - Number(right?.fields?.numero_etapa || 0),
         )
-        .map(stagePayload),
+        .map((stage) => stagePayload(stage, rdvDraft.common || {})),
     },
   };
 

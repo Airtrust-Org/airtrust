@@ -332,6 +332,9 @@ describe('Pilot offline package', () => {
       data_programacao: '2026-09-09',
       origem_id: 1,
       destino_id: 2,
+      numero_voo: 'COORD-321',
+      numero_db: null,
+      contrato_id: 9,
       tipo_voo_id: 4,
       natureza_voo_id: 5,
       aeronave_id: 3,
@@ -448,7 +451,7 @@ describe('Pilot offline package', () => {
       user_id: 70,
       funcionario_id: 77,
     });
-    expect(body.data.voo).toMatchObject({ id: 42, prefixo: 'PR-TST', versao: 6 });
+    expect(body.data.voo).toMatchObject({ id: 42, prefixo: 'PR-TST', versao: 6, numero_voo: 'COORD-321', numero_db: null, contrato_id: 9 });
     expect(body.data.rdv).toMatchObject({ id: 90, versao: 3, workflow_status: 'rascunho' });
     expect(body.data.tripulantes).toHaveLength(1);
     expect(body.data.etapas).toHaveLength(1);
