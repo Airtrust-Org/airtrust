@@ -329,7 +329,14 @@ export function buildDraftSnapshot(packageData, previousSequence = 0) {
       flight_update: {
         natureza_voo_codigo: packageData?.natureza?.codigo || '',
       },
-      fuelings: [],
+      fuelings: [{
+        local_id: crypto.randomUUID(),
+        hora: '',
+        etapa_numero: Number(buildStageDraftsFromPackage(packageData)[0]?.numero_etapa || 1),
+        empresa_abastecimento_codigo: '',
+        numero_nota: '',
+        litros_abastecidos: '',
+      }],
     },
     stages: buildStageDraftsFromPackage(packageData).map((stage) => ({
       schema_version: PILOT_DRAFT_SCHEMA_VERSION,
