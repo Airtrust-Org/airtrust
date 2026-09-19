@@ -48,6 +48,8 @@ const SIMULADOR_CODIGO = 'QA-SIM-01';
 const CRED_EXA_CODIGO = 'CRED-EXA';
 const SETOR_CODIGO = 'QA-SETOR-EXA';
 const SETOR_NOME = 'Setor QA Examinador';
+const CONTRATO_CODIGO = 'QA-CONTRATO-RDV';
+const CONTRATO_NOME = 'Contrato QA RDV';
 
 function sqlString(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
@@ -168,6 +170,22 @@ SELECT ${e(AERONAVE_CODIGO)}, 'QA Modelo Fictício', 'QA Fabricante Fictício', 
 FROM empresas emp WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
   AND NOT EXISTS (SELECT 1 FROM aeronaves WHERE codigo = ${e(AERONAVE_CODIGO)} AND deleted_at IS NULL);
 
+-- CONTRATO QA sintético para o smoke do Controle de Voos/RDV.
+-- Só existe no tenant QA e é idempotente por (empresa_id, codigo).
+INSERT INTO cv_contratos (empresa_id, codigo, nome, descricao, ativo, ordem, created_at, updated_at, deleted_at)
+SELECT emp.id, ${e(CONTRATO_CODIGO)}, ${e(CONTRATO_NOME)}, 'Contrato sintético exclusivo do smoke RDV de staging.', 1, 1, datetime('now'), datetime('now'), NULL
+FROM empresas emp
+WHERE emp.codigo = ${e(EMPRESA_CODIGO)}
+  AND NOT EXISTS (
+    SELECT 1 FROM cv_contratos c
+    WHERE c.empresa_id = emp.id AND c.codigo = ${e(CONTRATO_CODIGO)} AND c.deleted_at IS NULL
+  );
+
+UPDATE cv_contratos
+SET nome = ${e(CONTRATO_NOME)}, descricao = 'Contrato sintético exclusivo do smoke RDV de staging.', ativo = 1, deleted_at = NULL, updated_at = datetime('now')
+WHERE codigo = ${e(CONTRATO_CODIGO)}
+  AND empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)});
+
 -- SIMULADOR QA
 INSERT INTO simuladores (nome, modelo, tipo, fabricante, status, created_at, updated_at, deleted_at)
 SELECT ${e(SIMULADOR_CODIGO)}, 'QA Modelo Fictício', 'FFS', 'QA Fabricante Fictício', 'ATIVO', datetime('now'), datetime('now'), NULL
@@ -189,6 +207,11 @@ UPDATE funcionarios SET deleted_at = datetime('now')
 WHERE matricula IN (${e(INSTRUTOR_CODIGO)}, ${e(PARTICIPANTE1_CODIGO)}, ${e(PARTICIPANTE2_CODIGO)}) AND deleted_at IS NULL;
 
 UPDATE aeronaves SET deleted_at = datetime('now') WHERE codigo = ${e(AERONAVE_CODIGO)} AND deleted_at IS NULL;
+
+UPDATE cv_contratos SET deleted_at = datetime('now'), ativo = 0, updated_at = datetime('now')
+WHERE codigo = ${e(CONTRATO_CODIGO)}
+  AND empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)})
+  AND deleted_at IS NULL;
 
 UPDATE simuladores SET deleted_at = datetime('now') WHERE nome = ${e(SIMULADOR_CODIGO)} AND deleted_at IS NULL;
 
