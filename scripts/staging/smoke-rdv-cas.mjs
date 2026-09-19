@@ -35,8 +35,8 @@ function validateVooPayload(payload) {
   validatePayloadField(payload.aeronave_id, 'aeronave_id');
   validatePayloadField(payload.origem_id, 'origem_id');
   validatePayloadField(payload.destino_id, 'destino_id');
+  validatePayloadField(payload.contrato_id, 'contrato_id');
   validatePayloadField(payload.tipo_voo_id, 'tipo_voo_id');
-  validatePayloadField(payload.natureza_voo_id, 'natureza_voo_id');
   validatePayloadField(payload.horario_previsto_partida, 'horario_previsto_partida');
   validatePayloadField(payload.horario_previsto_chegada, 'horario_previsto_chegada');
   validatePayloadField(payload.status, 'status');
@@ -80,6 +80,31 @@ const CANCELLABLE_STATUSES = new Set(['planejado', 'liberado_operacionalmente'])
 // ordena por tipo ASC, ordem ASC, nome ASC — o primeiro resultado e sempre o
 // mesmo motivo, de forma reproduzivel. Sem motivo valido, aborta sem criar
 // nenhum dado (nenhum voo sintetico chega a ser criado).
+async function ensureQaContractId(baseUrl, token) {
+  const listRes = await authFetch(baseUrl, token, '/api/controle-voos/catalogos/contratos');
+  const rows = listRes.json?.data || [];
+  const existing = rows.find((row) => String(row.codigo || '').trim().toUpperCase() === 'QA-RDV-SMOKE');
+  if (existing?.id) return existing.id;
+
+  const createRes = await authFetch(baseUrl, token, '/api/controle-voos/catalogos/contratos', {
+    method: 'POST',
+    body: JSON.stringify({
+      codigo: 'QA-RDV-SMOKE',
+      nome: 'QA RDV Smoke',
+      descricao: 'Contrato técnico persistente do smoke de staging',
+      ativo: true,
+      ordem: 9999,
+    }),
+  });
+  const createdId = createRes.json?.data?.id;
+  if (!createdId) {
+    throw new Error(
+      `Nao foi possivel resolver/criar contrato QA para smoke (${createRes.status} - ${JSON.stringify(createRes.json)}).`,
+    );
+  }
+  return createdId;
+}
+
 async function fetchCancellationMotivoId(baseUrl, token) {
   const res = await authFetch(baseUrl, token, '/api/controle-voos/catalogos/motivos?tipo=cancelamento');
   const motivos = res.json?.data || [];
@@ -201,10 +226,8 @@ async function run() {
     const tipo = tipos.find(t => (t.nome || '').toLowerCase().includes('smoke') || (t.nome || '').toLowerCase().includes('qa') || (t.nome || '').toLowerCase().includes('teste')) || tipos[0];
     assert(tipo && tipo.id, 'Nenhum tipo de voo válido encontrado no catálogo.');
 
-    const naturezasPayload = await authFetch(EXPECTED_API_URL, token, '/api/controle-voos/catalogos/naturezas');
-    const naturezas = naturezasPayload.json?.data || [];
-    const natureza = naturezas.find(n => (n.nome || '').toLowerCase().includes('smoke') || (n.nome || '').toLowerCase().includes('qa') || (n.nome || '').toLowerCase().includes('teste')) || naturezas[0];
-    assert(natureza && natureza.id, 'Nenhuma natureza de voo válida encontrada no catálogo.');
+    const contratoId = await ensureQaContractId(EXPECTED_API_URL, token);
+    console.log(`[E2E] Contrato QA resolvido via catalogo: ID ${contratoId}`);
 
     const vooPayload = {
       prefixo: `QA-E2E-${runKey}`,
@@ -212,8 +235,8 @@ async function run() {
       aeronave_id: aeronave.id,
       origem_id: aeroporto.id,
       destino_id: aeroporto.id,
+      contrato_id: contratoId,
       tipo_voo_id: tipo.id,
-      natureza_voo_id: natureza.id,
       horario_previsto_partida: new Date().toISOString(),
       horario_previsto_chegada: new Date(Date.now() + 3600000).toISOString(),
       status: 'planejado'
