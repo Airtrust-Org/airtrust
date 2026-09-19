@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarDays, ChevronLeft, ChevronRight, FileText, PlaneTakeoff, TabletSmartphone } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, FileText, PlaneTakeoff, Plus, TabletSmartphone } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
+import ControleVoosNovoVooDialog from './components/ControleVoosNovoVooDialog';
 import { useMeusVoos, useControleVoosAeroportos, type CvAeroporto } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatTime } from './data/controleVoosUtils';
 
@@ -25,7 +27,17 @@ function buildAeroMap(aeroportos: CvAeroporto[]) {
   return new Map(aeroportos.map((a) => [a.id, a]));
 }
 
+function flightRouteLabel(voo: { origem_id: number; destino_id: number; rota_codigos?: string[] }, aeroMap: Map<number, CvAeroporto>) {
+  const fullRoute = (voo.rota_codigos || []).map((code) => String(code || '').trim()).filter(Boolean);
+  if (fullRoute.length >= 2) return fullRoute.join(' → ');
+  const origem = aeroMap.get(voo.origem_id);
+  const destino = aeroMap.get(voo.destino_id);
+  return `${origem?.codigo_icao || origem?.codigo || `ID:${voo.origem_id}`} → ${destino?.codigo_icao || destino?.codigo || `ID:${voo.destino_id}`}`;
+}
+
 export default function ControleVoosMeusVoos() {
+  const qc = useQueryClient();
+  const [novoVooOpen, setNovoVooOpen] = useState(false);
   const { data: voos = [], isLoading, error } = useMeusVoos();
   const { data: aeroportos = [] } = useControleVoosAeroportos();
   const aeroMap = buildAeroMap(aeroportos);
@@ -49,9 +61,16 @@ export default function ControleVoosMeusVoos() {
         <ControleVoosPageShell>
           <ControleVoosPageHeader
             title="Meus voos"
-            description="Voos atribuídos a você pela Coordenação — abra o Pilot App para fazer o lançamento, inclusive offline"
+            description="Voos atribuídos a você ou criados por você — abra o Pilot App para fazer o lançamento, inclusive offline"
             className="sm:flex-col sm:items-stretch lg:flex-row lg:items-center"
           >
+            <button
+              type="button"
+              onClick={() => setNovoVooOpen(true)}
+              className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-cyan-700 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-800 sm:w-auto"
+            >
+              <Plus className="h-4 w-4" /> Criar meu voo
+            </button>
             <Link
               to="/horas-voo"
               className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:w-auto dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
@@ -122,7 +141,7 @@ export default function ControleVoosMeusVoos() {
             <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center dark:border-slate-700 dark:bg-slate-900">
               <PlaneTakeoff className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
               <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                Nenhum voo atribuído a você para {formatDate(selectedDate)}.
+                Nenhum voo encontrado para {formatDate(selectedDate)}. Você pode criar seu próprio voo ou aguardar uma atribuição da Coordenação.
               </p>
             </div>
           )}
@@ -131,8 +150,6 @@ export default function ControleVoosMeusVoos() {
             <>
               <div className="space-y-3 lg:hidden" data-testid="meus-voos-mobile-list">
                 {filteredVoos.map((voo) => {
-                  const origem = aeroMap.get(voo.origem_id);
-                  const destino = aeroMap.get(voo.destino_id);
                   return (
                     <article
                       key={voo.id}
@@ -154,8 +171,7 @@ export default function ControleVoosMeusVoos() {
                         <div className="min-w-0">
                           <dt className="text-xs text-slate-400">Rota</dt>
                           <dd className="mt-1 break-words text-slate-700 dark:text-slate-200">
-                            {origem?.codigo_icao || `ID:${voo.origem_id}`} →{' '}
-                            {destino?.codigo_icao || `ID:${voo.destino_id}`}
+                            {flightRouteLabel(voo, aeroMap)}
                           </dd>
                         </div>
                         <div className="min-w-0">
@@ -192,14 +208,12 @@ export default function ControleVoosMeusVoos() {
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {filteredVoos.map((voo) => {
-                        const origem = aeroMap.get(voo.origem_id);
-                        const destino = aeroMap.get(voo.destino_id);
                         return (
                           <tr key={voo.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{formatDate(voo.data_programacao)}</td>
                             <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{voo.prefixo}</td>
                             <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">
-                              {origem?.codigo_icao || `ID:${voo.origem_id}`} → {destino?.codigo_icao || `ID:${voo.destino_id}`}
+                              {flightRouteLabel(voo, aeroMap)}
                             </td>
                             <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{formatTime(voo.horario_previsto_partida)}</td>
                             <td className="px-4 py-3"><ControleVoosStatusBadge status={voo.status} /></td>
@@ -222,6 +236,17 @@ export default function ControleVoosMeusVoos() {
           )}
         </ControleVoosPageShell>
       </div>
+
+      <ControleVoosNovoVooDialog
+        open={novoVooOpen}
+        mode="pilot"
+        onClose={() => setNovoVooOpen(false)}
+        onCreated={(voo) => {
+          const createdDate = flightDateKey(voo.data_programacao);
+          if (createdDate) setSelectedDate(createdDate);
+          void qc.invalidateQueries({ queryKey: ['cv-meus-voos'] });
+        }}
+      />
     </AppLayout>
   );
 }
