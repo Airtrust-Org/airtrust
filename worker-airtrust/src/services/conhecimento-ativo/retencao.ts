@@ -91,7 +91,7 @@ export function pontuarCandidato(
 
 export function selecionarQuestoesDesafio(
   candidatos: CandidatoDesafio[],
-  quantidade: number = 5,
+  quantidade: number = 10,
 ): CandidatoDesafio[] {
   const byItem = new Map<number, CandidatoDesafio>();
   for (const candidato of candidatos) {

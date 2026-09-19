@@ -7,6 +7,9 @@ import {
   type DominioAtual,
 } from './retencao';
 
+const QUESTOES_POR_DESAFIO = 10;
+const DESAFIOS_RECOMENDADOS_POR_QUINZENA = 2;
+
 type Criticidade = CandidatoDesafio['criticidade'];
 
 interface CandidatoRow {
@@ -54,12 +57,21 @@ interface ChallengeRow {
   aeronave_modelo: string;
   periodo_chave: string;
   numero_desafio: number;
+  numero_sequencial: number | null;
   status: 'DISPONIVEL' | 'EM_ANDAMENTO' | 'CONCLUIDO' | 'EXPIRADO';
   disponivel_em: string;
   expira_em: string | null;
   iniciado_em: string | null;
   concluido_em: string | null;
   xp_concedido: number;
+}
+
+function numeroSequencialDesafio(desafio: ChallengeRow): number {
+  return Number(desafio.numero_sequencial ?? desafio.numero_desafio);
+}
+
+function normalizarDesafio(desafio: ChallengeRow): ChallengeRow {
+  return { ...desafio, numero_desafio: numeroSequencialDesafio(desafio) };
 }
 
 interface ChallengeQuestionRow {
@@ -249,6 +261,79 @@ async function construirSnapshot(
   };
 }
 
+async function garantirQuantidadeQuestoesDesafio(params: {
+  db: D1Database;
+  empresaId: number;
+  funcionarioId: number;
+  desafio: ChallengeRow;
+}) {
+  const { db, empresaId, funcionarioId, desafio } = params;
+  if (desafio.status === 'CONCLUIDO' || desafio.status === 'EXPIRADO') return;
+
+  const existentes = await db
+    .prepare(
+      'SELECT questao_id,item_id,ordem FROM conhecimento_ativo_desafio_questoes ' +
+        'WHERE empresa_id=? AND desafio_id=? AND deleted_at IS NULL ORDER BY ordem',
+    )
+    .bind(empresaId, desafio.id)
+    .all<{ questao_id: number; item_id: number; ordem: number }>();
+  const atuais = existentes.results || [];
+  if (atuais.length >= QUESTOES_POR_DESAFIO) return;
+
+  const itensUsados = new Set(atuais.map((row) => row.item_id));
+  const candidatos = (await buscarCandidatos(
+    db,
+    empresaId,
+    funcionarioId,
+    desafio.aeronave_modelo,
+  )).filter((row) => !itensUsados.has(row.item_id));
+  const faltantes = QUESTOES_POR_DESAFIO - atuais.length;
+  const selecionadas = selecionarQuestoesDesafio(
+    candidatos.map((row) => ({
+      questaoId: row.questao_id,
+      itemId: row.item_id,
+      criticidade: row.criticidade,
+      nivel: row.nivel,
+      proximaRevisaoEm: row.proxima_revisao_em,
+      ultimaExposicaoEm: row.ultima_exposicao_em,
+    })),
+    faltantes,
+  );
+
+  if (selecionadas.length < faltantes) {
+    const error = new Error(
+      `Conteúdo aprovado insuficiente para completar o desafio com ${QUESTOES_POR_DESAFIO} questões`,
+    );
+    error.name = 'CONTEUDO_INSUFICIENTE';
+    throw error;
+  }
+
+  const maxOrdem = atuais.reduce((max, row) => Math.max(max, row.ordem), 0);
+  const statements: D1PreparedStatement[] = [];
+  for (let index = 0; index < selecionadas.length; index += 1) {
+    const selected = selecionadas[index];
+    const snapshot = await construirSnapshot(db, empresaId, selected.questaoId);
+    statements.push(
+      db
+        .prepare(
+          'INSERT INTO conhecimento_ativo_desafio_questoes ' +
+            '(empresa_id,desafio_id,questao_id,item_id,ordem,questao_snapshot_json,fonte_snapshot_json) ' +
+            'VALUES (?,?,?,?,?,?,?)',
+        )
+        .bind(
+          empresaId,
+          desafio.id,
+          selected.questaoId,
+          selected.itemId,
+          maxOrdem + index + 1,
+          JSON.stringify(snapshot.questao),
+          JSON.stringify(snapshot.fontes),
+        ),
+    );
+  }
+  if (statements.length) await db.batch(statements);
+}
+
 export async function gerarOuObterDesafio(params: {
   db: D1Database;
   empresaId: number;
@@ -282,7 +367,10 @@ export async function gerarOuObterDesafio(params: {
     )
     .bind(empresaId, funcionarioId, modelo, periodo.chave)
     .first<ChallengeRow>();
-  if (existing) return { desafio: existing, criado: false };
+  if (existing) {
+    await garantirQuantidadeQuestoesDesafio({ db, empresaId, funcionarioId, desafio: existing });
+    return { desafio: normalizarDesafio(existing), criado: false };
+  }
 
   const count = await db
     .prepare(
@@ -294,18 +382,7 @@ export async function gerarOuObterDesafio(params: {
     .first<{ total: number }>();
 
   const numeroDesafio = Number(count?.total || 0) + 1;
-  if (numeroDesafio > 2) {
-    const latest = await db
-      .prepare(
-        'SELECT * FROM conhecimento_ativo_desafios ' +
-          'WHERE empresa_id=? AND funcionario_id=? AND aeronave_modelo=? ' +
-          'AND periodo_chave=? AND deleted_at IS NULL ORDER BY numero_desafio DESC LIMIT 1',
-      )
-      .bind(empresaId, funcionarioId, modelo, periodo.chave)
-      .first<ChallengeRow>();
-    if (!latest) throw new Error('Estado inconsistente de desafios');
-    return { desafio: latest, criado: false };
-  }
+  const numeroDesafioLegado = Math.min(numeroDesafio, DESAFIOS_RECOMENDADOS_POR_QUINZENA);
 
   const candidatos = await buscarCandidatos(db, empresaId, funcionarioId, modelo);
   const selecionadas = selecionarQuestoesDesafio(
@@ -317,11 +394,13 @@ export async function gerarOuObterDesafio(params: {
       proximaRevisaoEm: row.proxima_revisao_em,
       ultimaExposicaoEm: row.ultima_exposicao_em,
     })),
-    5,
+    QUESTOES_POR_DESAFIO,
   );
 
-  if (selecionadas.length < 5) {
-    const error = new Error('Conteúdo aprovado insuficiente para gerar um desafio com 5 questões');
+  if (selecionadas.length < QUESTOES_POR_DESAFIO) {
+    const error = new Error(
+      `Conteúdo aprovado insuficiente para gerar um desafio com ${QUESTOES_POR_DESAFIO} questões`,
+    );
     error.name = 'CONTEUDO_INSUFICIENTE';
     throw error;
   }
@@ -329,10 +408,18 @@ export async function gerarOuObterDesafio(params: {
   const insert = await db
     .prepare(
       'INSERT INTO conhecimento_ativo_desafios ' +
-        '(empresa_id,funcionario_id,aeronave_modelo,periodo_chave,numero_desafio,expira_em) ' +
-        'VALUES (?,?,?,?,?,?) RETURNING id',
+        '(empresa_id,funcionario_id,aeronave_modelo,periodo_chave,numero_desafio,numero_sequencial,expira_em) ' +
+        'VALUES (?,?,?,?,?,?,?) RETURNING id',
     )
-    .bind(empresaId, funcionarioId, modelo, periodo.chave, numeroDesafio, periodo.fim)
+    .bind(
+      empresaId,
+      funcionarioId,
+      modelo,
+      periodo.chave,
+      numeroDesafioLegado,
+      numeroDesafio,
+      periodo.fim,
+    )
     .first<{ id: number }>();
 
   if (!insert?.id) throw new Error('Falha ao criar desafio técnico');
@@ -377,7 +464,7 @@ export async function gerarOuObterDesafio(params: {
     .bind(insert.id, empresaId)
     .first<ChallengeRow>();
   if (!challenge) throw new Error('Desafio recém-criado não encontrado');
-  return { desafio: challenge, criado: true };
+  return { desafio: normalizarDesafio(challenge), criado: true };
 }
 
 function parseQuestaoSnapshot(raw: string): QuestaoSnapshot {
@@ -409,6 +496,7 @@ export async function buscarDesafioParaFuncionario(params: {
     .bind(desafioId, empresaId, funcionarioId)
     .first<ChallengeRow>();
   if (!desafio) return null;
+  await garantirQuantidadeQuestoesDesafio({ db, empresaId, funcionarioId, desafio });
 
   const result = await db
     .prepare(
@@ -452,7 +540,7 @@ export async function buscarDesafioParaFuncionario(params: {
   });
 
   return {
-    ...desafio,
+    ...normalizarDesafio(desafio),
     total_questoes: questoes.length,
     respondidas: questoes.filter((row) => row.resposta).length,
     questoes,
@@ -582,7 +670,7 @@ async function finalizarSeCompleto(params: {
       .run();
   }
 
-  if (challenge.numero_desafio === 2) {
+  if (numeroSequencialDesafio(challenge) === DESAFIOS_RECOMENDADOS_POR_QUINZENA) {
     const completed = await db
       .prepare(
         'SELECT COUNT(*) AS total FROM conhecimento_ativo_desafios ' +
@@ -766,7 +854,7 @@ export async function resumoConhecimentoAtivo(params: {
 
   const desafios = await db
     .prepare(
-      'SELECT id,aeronave_modelo,numero_desafio,status,disponivel_em,expira_em,concluido_em ' +
+      'SELECT id,aeronave_modelo,COALESCE(numero_sequencial,numero_desafio) AS numero_desafio,status,disponivel_em,expira_em,concluido_em ' +
         'FROM conhecimento_ativo_desafios WHERE empresa_id=? AND funcionario_id=? ' +
         'AND periodo_chave=? AND deleted_at IS NULL ORDER BY aeronave_modelo,numero_desafio',
     )
@@ -803,7 +891,7 @@ export async function resumoConhecimentoAtivo(params: {
     desafios: desafios.results || [],
     xp: Number(xp?.total || 0),
     dominio: states,
-    estimativaMinutos: 4,
+    estimativaMinutos: 8,
   };
 }
 

@@ -121,6 +121,11 @@ export default function ConhecimentoAtivoHome() {
                     <Trophy className="h-4 w-4" />
                     {data?.xp ?? 0} XP de participação
                   </div>
+                  {concluidos >= 2 && (
+                    <p className="mt-2 max-w-[16rem] text-xs leading-relaxed text-sky-100">
+                      Recomendação cumprida. Você pode continuar fazendo desafios extras.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -140,11 +145,11 @@ export default function ConhecimentoAtivoHome() {
                         ? 'Continue de onde parou'
                         : 'Seu desafio está pronto'
                       : concluidos >= 2
-                        ? 'Quinzena cumprida'
+                        ? 'Meta da quinzena cumprida'
                         : 'Prepare seu próximo desafio'}
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    {modelo ? `${modelo} · cerca de ${data?.estimativaMinutos ?? 4} minutos` : 'Aeronave vinculada ao seu perfil'}
+                    {modelo ? `${modelo} · 10 perguntas · cerca de ${data?.estimativaMinutos ?? 8} minutos` : 'Aeronave vinculada ao seu perfil'}
                   </p>
                 </div>
                 <Clock3 className="h-6 w-6 text-sky-600" />
@@ -166,7 +171,7 @@ export default function ConhecimentoAtivoHome() {
                     </>
                   ) : (
                     <>
-                      {pendente?.status === 'EM_ANDAMENTO' ? 'Continuar desafio' : concluidos >= 2 ? 'Rever meu conhecimento' : 'Iniciar desafio'}
+                      {pendente?.status === 'EM_ANDAMENTO' ? 'Continuar desafio' : concluidos >= 2 ? 'Fazer outro desafio' : 'Iniciar desafio'}
                       <ChevronRight className="h-4 w-4" />
                     </>
                   )}
@@ -175,7 +180,7 @@ export default function ConhecimentoAtivoHome() {
 
               {desafios.length > 0 && (
                 <div className="mt-6 grid gap-2 sm:grid-cols-2">
-                  {desafios.slice(0, 2).map((desafio) => (
+                  {desafios.slice(-4).reverse().map((desafio) => (
                     <button
                       type="button"
                       key={desafio.id}
