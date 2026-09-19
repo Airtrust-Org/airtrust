@@ -17,13 +17,13 @@ import {
   HeartPulse,
   BookOpen,
   PlaneTakeoff,
+  BrainCircuit,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
 import AppLayout from '../components/AppLayout';
 import api from '../services/api';
 import { CardMeusEAD } from '../components/dashboard/CardMeusEAD';
-import { CardConhecimentoAtivo } from '../components/dashboard/CardConhecimentoAtivo';
 import type { HomeProfile, HomeProfileFuncionarioContext } from '../lib/home-profile';
 import { buildPasta360Url } from '../utils/pasta360';
 
@@ -70,8 +70,9 @@ export function buildHomeAccessCards(params: {
   can: (permission: string) => boolean;
   homeProfile?: HomeProfile;
   funcionarioId?: number | null;
+  empresaId?: number | null;
 }): AccessCard[] {
-  const { role, can, homeProfile, funcionarioId } = params;
+  const { role, can, homeProfile, funcionarioId, empresaId } = params;
   const cards: AccessCard[] = [];
   const isMaintenanceHome = homeProfile === 'STUDENT_MANUTENCAO';
   const isFlightCrewHome = homeProfile === 'STUDENT_TRIPULACAO';
@@ -153,6 +154,16 @@ export function buildHomeAccessCards(params: {
       color: 'bg-cyan-50',
       iconColor: 'text-cyan-700',
     });
+    if (empresaId === 6) {
+      cards.push({
+        icon: <BrainCircuit className="w-7 h-7" />,
+        title: 'Conhecimento Ativo',
+        description: 'Acesse desafios técnicos curtos e acompanhe seu mapa de conhecimento.',
+        route: '/conhecimento-ativo',
+        color: 'bg-sky-50',
+        iconColor: 'text-sky-700',
+      });
+    }
   }
 
   if (can('simuladores.view')) {
@@ -220,7 +231,7 @@ export function buildHomeAccessCards(params: {
 
 export default function HomePerfil({ homeProfile, funcionarioContext = null }: HomePerfilProps) {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, empresaAtualId } = useAuth();
   const { can, role } = usePermissions();
   const [notificacoes, setNotificacoes] = React.useState<NotificacaoRecente[]>([]);
   const [carregandoNotificacoes, setCarregandoNotificacoes] = React.useState(true);
@@ -237,6 +248,7 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
     can,
     homeProfile,
     funcionarioId: user?.funcionario_id ?? null,
+    empresaId: empresaAtualId,
   });
 
   React.useEffect(() => {
@@ -369,8 +381,6 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
               <p className="text-xs mt-1">Entre em contato com o administrador.</p>
             </div>
           )}
-
-          {isFlightCrewHome && <CardConhecimentoAtivo />}
 
           <CardMeusEAD />
 

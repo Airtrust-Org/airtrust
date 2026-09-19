@@ -105,6 +105,10 @@ EDB_SHADOW_PILOT_TENANTS = "6"
 # FRMS IOGP observacional em staging. Somente Costa do Sol (empresa_id=6).
 # O pipeline persiste evidência separada e nunca altera o effectiveness canônico.
 FRMS_IOGP_SHADOW_MODE_TENANTS = "6"
+# Conhecimento Ativo — piloto controlado por tenant. Costa do Sol (empresa_id=6)
+# está homologada para acessar a experiência, mesmo antes de haver conteúdo aprovado.
+# Outros tenants permanecem fail-closed.
+CONHECIMENTO_ATIVO_ENABLED_TENANTS = "6"
 # Popular cv_voos/cv_voo_etapas/cv_voo_tripulantes a partir do MESMO payload SIGVOOS
 # que o sync FRMS já busca (via runSigvoosImporterBatch, idempotente, falha isolada).
 # É a fonte leg-level do Operational Load V1. Allowlist explícita; `all` só após canário.
@@ -183,6 +187,10 @@ CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED = "true"
 # (pousos/setores SIGVOOS + REDEMET quando configurado), sem modificar score,
 # bloqueio, fatorização ou effectiveness. Allowlist explícita; `all` é inválido.
 FRMS_IOGP_PRODUCTION_EVIDENCE_TENANTS = "6"
+# Conhecimento Ativo — piloto controlado por tenant. Costa do Sol (empresa_id=6)
+# habilitada após implantação governada da fundação 0503. Outros tenants
+# permanecem fail-closed até homologação específica.
+CONHECIMENTO_ATIVO_ENABLED_TENANTS = "6"
 # Ponte SIGVOOS → Controle de Voos em produção: popula cv_voos/cv_voo_etapas/
 # cv_voo_tripulantes a partir do MESMO payload que o sync FRMS já busca. Fonte
 # leg-level do Operational Load V1. Idempotente, falha isolada (não afeta o FRMS).

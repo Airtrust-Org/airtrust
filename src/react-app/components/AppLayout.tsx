@@ -176,12 +176,17 @@ export default function AppLayout({ children }: AppLayoutProps) {
     canSeeControleVoosNav;
   const showTreinamentosPlanejados =
     canAccessModule('treinamentos_planejados', modulosAtivos) && !isAluno && !isInstrutor;
+  const showConhecimentoAtivoAdmin = !isAluno && !isInstrutor && (isAdmin || isGestor);
 
   // Grupo "Treinamentos" — visível se pelo menos um sub-módulo estiver acessível
   const showTreinamentosGroup =
     !isAluno &&
     !isInstrutor &&
-    (showQualificacoes || showSimuladores || showLms || showTreinamentosPlanejados);
+    (showQualificacoes ||
+      showSimuladores ||
+      showLms ||
+      showTreinamentosPlanejados ||
+      showConhecimentoAtivoAdmin);
 
   const isActivePath = (path: string, exact = false) => {
     if (exact) return location.pathname === path;
@@ -192,7 +197,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
     isActivePath('/treinamentos') ||
     isActivePath('/qualificacoes') ||
     isActivePath('/lms') ||
-    isActivePath('/simuladores');
+    isActivePath('/simuladores') ||
+    isActivePath('/conhecimento-ativo/admin');
 
   const handleTreinamentosMouseEnter = () => {
     if (treinamentosTimerRef.current) clearTimeout(treinamentosTimerRef.current);
@@ -392,6 +398,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
                         >
                           <BookOpen className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
                           LMS / Cursos EAD
+                        </Link>
+                      )}
+                      {showConhecimentoAtivoAdmin && (
+                        <Link
+                          to="/conhecimento-ativo/admin"
+                          onClick={() => setTreinamentosOpen(false)}
+                          className={`flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${isActivePath('/conhecimento-ativo/admin') ? 'font-semibold text-primary dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'}`}
+                        >
+                          <BrainCircuit className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+                          Conhecimento Ativo
                         </Link>
                       )}
                       {showSimuladores && (
@@ -692,7 +708,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           <BookOpen className="h-3.5 w-3.5 shrink-0" /> LMS / Cursos EAD
                         </Link>
                       )}
-                      {(isAdmin || isGestor) && (
+                      {showConhecimentoAtivoAdmin && (
                         <Link
                           to="/conhecimento-ativo/admin"
                           onClick={() => setMobileMenuOpen(false)}
