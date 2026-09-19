@@ -27,7 +27,8 @@ describe('Pilot Logbook x RDV - contrato de lançamento único', () => {
     expect(meusVoos).toContain('Abrir Pilot App');
     expect(meusVoos).toContain('/pilot/?flight=${voo.id}');
     expect(meusVoos).not.toContain('Preencher voo');
-    expect(meusVoos).not.toContain('Criar meu voo');
+    expect(meusVoos).toContain('Criar meu voo');
+    expect(meusVoos).toContain('mode="pilot"');
     expect(meusVoos).not.toContain('Meu RDV');
     expect(rdvDetalhe).toContain('window.location.replace(`/pilot/?flight=${encodeURIComponent(id)}`)');
     expect(pilotIndex).toContain('Voltar ao AirTrust');
