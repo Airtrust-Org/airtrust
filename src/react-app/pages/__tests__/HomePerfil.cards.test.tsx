@@ -17,13 +17,10 @@ vi.mock('../../components/dashboard/CardMeusEAD', () => ({
   CardMeusEAD: () => <div data-testid="card-meus-ead">Meus cursos EAD</div>,
 }));
 
-vi.mock('../../components/dashboard/CardConhecimentoAtivo', () => ({
-  CardConhecimentoAtivo: () => <div data-testid="card-conhecimento-ativo">Conhecimento Ativo</div>,
-}));
-
 vi.mock('../../hooks/useAuth', () => ({
   useAuth: () => ({
     user: null,
+    empresaAtualId: 6,
   }),
 }));
 
@@ -64,18 +61,34 @@ describe('HomePerfil quick access cards', () => {
       can: canAll,
       homeProfile: 'STUDENT_TRIPULACAO',
       funcionarioId: 7,
+      empresaId: 6,
     });
 
     expect(cards.map((card) => card.title)).toContain('Fadiga Diária');
     expect(cards.map((card) => card.title)).toContain('Minha Escala');
     expect(cards.map((card) => card.title)).toContain('Meus Voos');
+    expect(cards.map((card) => card.title)).toContain('Conhecimento Ativo');
     expect(cards.map((card) => card.title)).not.toContain('Minha Pasta 360');
 
     const meusVoos = cards.find((card) => card.title === 'Meus Voos');
+    const conhecimentoAtivo = cards.find((card) => card.title === 'Conhecimento Ativo');
     expect(meusVoos?.route).toBe('/controle-voos/meus-voos');
     expect(meusVoos?.description).toBe(
       'Consulte os voos atribuídos a você e abra o Pilot App para fazer o lançamento.',
     );
+    expect(conhecimentoAtivo?.route).toBe('/conhecimento-ativo');
+  });
+
+  it('mantem Conhecimento Ativo oculto em tenant nao habilitado', () => {
+    const cards = buildHomeAccessCards({
+      role: 'ALUNO',
+      can: canAll,
+      homeProfile: 'STUDENT_TRIPULACAO',
+      funcionarioId: 7,
+      empresaId: 8,
+    });
+
+    expect(cards.map((card) => card.title)).not.toContain('Conhecimento Ativo');
   });
 
   it('nao mostra Meus Voos fora do contexto de tripulacao', () => {
@@ -190,7 +203,7 @@ describe('HomePerfil EAD visibility', () => {
         <HomePerfil homeProfile="STUDENT_TRIPULACAO" />
       </MemoryRouter>,
     );
-    expect(screen.getByTestId('card-conhecimento-ativo')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Conhecimento Ativo/i })).toBeInTheDocument();
     unmount();
 
     render(
@@ -198,6 +211,6 @@ describe('HomePerfil EAD visibility', () => {
         <HomePerfil homeProfile="STUDENT_MANUTENCAO" />
       </MemoryRouter>,
     );
-    expect(screen.queryByTestId('card-conhecimento-ativo')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Conhecimento Ativo/i })).not.toBeInTheDocument();
   });
 });

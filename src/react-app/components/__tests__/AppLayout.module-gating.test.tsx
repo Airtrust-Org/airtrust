@@ -109,6 +109,23 @@ describe('AppLayout module gating', () => {
     expect(screen.queryByText('PRÉVIA')).toBeNull();
   });
 
+  it('mantém Conhecimento Ativo dentro de Treinamentos para gestor no desktop', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppLayout>
+          <div>conteudo</div>
+        </AppLayout>
+      </MemoryRouter>,
+    );
+
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Treinamentos' }));
+
+    expect(screen.getByRole('link', { name: 'Conhecimento Ativo' })).toHaveAttribute(
+      'href',
+      '/conhecimento-ativo/admin',
+    );
+  });
+
   it('mantém a entrada LMS para aluno quando o módulo está ativo', () => {
     authMock.mockReturnValue({
       user: { nome: 'Aluno Teste', role: 'ALUNO' },
