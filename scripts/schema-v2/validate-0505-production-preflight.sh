@@ -46,6 +46,7 @@ assert_count prerequisite-0503-applied 1 "SELECT COUNT(*) count FROM airtrust_sc
 assert_count unapplied-change 0 "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id='$CHANGE_ID';"
 assert_count challenge-table-present 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name='conhecimento_ativo_desafios';"
 assert_count canonical-sequence-column-absent 0 "SELECT COUNT(*) count FROM pragma_table_info('conhecimento_ativo_desafios') WHERE name='numero_sequencial';"
+assert_count topic-column-absent 0 "SELECT COUNT(*) count FROM pragma_table_info('conhecimento_ativo_desafios') WHERE name='topico_id';"
 assert_count legacy-active-index-present 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_ca_desafios_periodo_active';"
 
 echo CONHECIMENTO_ATIVO_DESAFIOS_LIVRES_0505_PRODUCTION_PREFLIGHT=PASS

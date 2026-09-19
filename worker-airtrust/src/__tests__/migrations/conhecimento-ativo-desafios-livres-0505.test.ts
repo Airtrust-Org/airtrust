@@ -39,6 +39,15 @@ function createDb() {
     CREATE TABLE funcionarios(id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, deleted_at TEXT);
     INSERT INTO funcionarios(id,empresa_id) VALUES(10,63);
 
+    CREATE TABLE conhecimento_ativo_topicos(
+      id INTEGER PRIMARY KEY,
+      empresa_id INTEGER NOT NULL,
+      nome TEXT NOT NULL,
+      ativo INTEGER NOT NULL DEFAULT 1,
+      deleted_at TEXT
+    );
+    INSERT INTO conhecimento_ativo_topicos(id,empresa_id,nome,ativo) VALUES(7,63,'Limitations',1),(8,64,'Limitations',1);
+
     CREATE TABLE conhecimento_ativo_desafios (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       empresa_id INTEGER NOT NULL,
@@ -105,25 +114,31 @@ describe('Schema V2 0505 — Conhecimento Ativo desafios livres', () => {
     const db = createDb();
     run(db, changeSql);
 
-    const preserved = query<{ id: number; numero_desafio: number; numero_sequencial: number }>(
+    const preserved = query<{
+      id: number;
+      numero_desafio: number;
+      numero_sequencial: number;
+      topico_id: number | null;
+    }>(
       db,
-      'SELECT id,numero_desafio,numero_sequencial FROM conhecimento_ativo_desafios ORDER BY id',
+      'SELECT id,numero_desafio,numero_sequencial,topico_id FROM conhecimento_ativo_desafios ORDER BY id',
     );
     expect(preserved).toEqual([
-      { id: 101, numero_desafio: 1, numero_sequencial: 1 },
-      { id: 102, numero_desafio: 2, numero_sequencial: 2 },
+      { id: 101, numero_desafio: 1, numero_sequencial: 1, topico_id: null },
+      { id: 102, numero_desafio: 2, numero_sequencial: 2, topico_id: null },
     ]);
 
     run(
       db,
-      "INSERT INTO conhecimento_ativo_desafios(empresa_id,funcionario_id,aeronave_modelo,periodo_chave,numero_desafio,numero_sequencial) VALUES(63,10,'AW139','2026-09-Q2',2,3);",
+      "INSERT INTO conhecimento_ativo_desafios(empresa_id,funcionario_id,aeronave_modelo,periodo_chave,numero_desafio,numero_sequencial,topico_id) VALUES(63,10,'AW139','2026-09-Q2',2,3,7);",
     );
     run(
       db,
       "INSERT INTO conhecimento_ativo_desafios(empresa_id,funcionario_id,aeronave_modelo,periodo_chave,numero_desafio,numero_sequencial) VALUES(63,10,'AW139','2026-09-Q2',2,15);",
     );
     expect(
-      query<{ total: number }>(db, 'SELECT COUNT(*) AS total FROM conhecimento_ativo_desafios')[0].total,
+      query<{ total: number }>(db, 'SELECT COUNT(*) AS total FROM conhecimento_ativo_desafios')[0]
+        .total,
     ).toBe(4);
 
     run(
@@ -137,11 +152,29 @@ describe('Schema V2 0505 — Conhecimento Ativo desafios livres', () => {
       )[0].numero_sequencial,
     ).toBe(1);
 
+    const columns = query<{ name: string }>(
+      db,
+      "PRAGMA table_info('conhecimento_ativo_desafios');",
+    );
+    expect(columns.map((row) => row.name)).toEqual(
+      expect.arrayContaining(['numero_sequencial', 'topico_id']),
+    );
+    const topicIndex = query<{ name: string }>(
+      db,
+      "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_ca_desafios_topico_active';",
+    );
+    expect(topicIndex).toHaveLength(1);
+    const topicTriggers = query<{ name: string }>(
+      db,
+      "SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_ca_desafios_topico_tenant_0505_%';",
+    );
+    expect(topicTriggers).toHaveLength(2);
+
     const fkErrors = query<Record<string, unknown>>(db, 'PRAGMA foreign_key_check;');
     expect(fkErrors).toEqual([]);
   });
 
-  it('keeps tenant validation and rejects non-positive challenge numbers', () => {
+  it('keeps tenant/topic validation and rejects non-positive challenge numbers', () => {
     const db = createDb();
     run(db, changeSql);
     run(
@@ -153,6 +186,15 @@ describe('Schema V2 0505 — Conhecimento Ativo desafios livres', () => {
       db,
       "INSERT INTO conhecimento_ativo_desafios(empresa_id,funcionario_id,aeronave_modelo,periodo_chave,numero_desafio,numero_sequencial) VALUES(63,10,'AW139','2026-09-Q2',2,0);",
       false,
+    );
+    run(
+      db,
+      "INSERT INTO conhecimento_ativo_desafios(empresa_id,funcionario_id,aeronave_modelo,periodo_chave,numero_desafio,numero_sequencial,topico_id) VALUES(63,10,'AW139','2026-10-Q1',2,3,8);",
+      false,
+    );
+    run(
+      db,
+      "INSERT INTO conhecimento_ativo_desafios(empresa_id,funcionario_id,aeronave_modelo,periodo_chave,numero_desafio,numero_sequencial,topico_id) VALUES(63,10,'AW139','2026-10-Q1',2,3,7);",
     );
   });
 });

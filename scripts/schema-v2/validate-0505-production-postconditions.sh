@@ -43,10 +43,13 @@ assert_count() {
 assert_count active-baseline 1 "SELECT COUNT(*) count FROM airtrust_schema_baselines_v2 WHERE baseline_id='$BASELINE_ID' AND status='ACTIVE';"
 assert_count applied-change 1 "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id='$CHANGE_ID';"
 assert_count canonical-sequence-column-present 1 "SELECT COUNT(*) count FROM pragma_table_info('conhecimento_ativo_desafios') WHERE name='numero_sequencial';"
+assert_count topic-column-present 1 "SELECT COUNT(*) count FROM pragma_table_info('conhecimento_ativo_desafios') WHERE name='topico_id';"
 assert_count canonical-sequence-null-rows 0 "SELECT COUNT(*) count FROM conhecimento_ativo_desafios WHERE numero_sequencial IS NULL;"
 assert_count canonical-sequence-invalid-rows 0 "SELECT COUNT(*) count FROM conhecimento_ativo_desafios WHERE numero_sequencial < 1;"
 assert_count active-index-uses-sequence 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_ca_desafios_periodo_active' AND sql LIKE '%numero_sequencial%';"
 assert_count compatibility-trigger-present 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name='trg_ca_desafios_numero_sequencial_0505';"
+assert_count topic-index-present 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND name='idx_ca_desafios_topico_active' AND sql LIKE '%topico_id%';"
+assert_count topic-tenant-triggers-present 2 "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name IN ('trg_ca_desafios_topico_tenant_0505_insert','trg_ca_desafios_topico_tenant_0505_update');"
 assert_count duplicate-active-sequences 0 "SELECT COUNT(*) count FROM (SELECT empresa_id,funcionario_id,aeronave_modelo,periodo_chave,numero_sequencial,COUNT(*) n FROM conhecimento_ativo_desafios WHERE deleted_at IS NULL GROUP BY empresa_id,funcionario_id,aeronave_modelo,periodo_chave,numero_sequencial HAVING n>1);"
 
 echo CONHECIMENTO_ATIVO_DESAFIOS_LIVRES_0505_PRODUCTION_POSTCONDITIONS=PASS
