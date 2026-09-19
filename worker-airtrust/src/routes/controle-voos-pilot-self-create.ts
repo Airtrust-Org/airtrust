@@ -10,25 +10,27 @@ import {
   recordFlightEvent,
 } from '../repositories/controle-voos/rdv-repository';
 import { requireAnyRdvAccess } from '../services/controle-voos/rdv-workflow';
+import {
+  buildFlightRelatedStatements,
+  normalizeFlightRouteIds,
+  resolveFlightRoutePoints,
+} from '../services/controle-voos/flight-creation';
 
 const pilotSelfCreate = new Hono<{ Bindings: Env }>();
 
 const ALLOWED_FIELDS = new Set([
   'prefixo',
   'data_programacao',
-  'origem_id',
-  'destino_id',
+  'rota_ids',
+  'numero_voo',
+  'numero_db',
   'tipo_voo_id',
-  'natureza_voo_id',
+  'contrato_id',
+  'funcao_bordo_id',
   'aeronave_id',
   'horario_previsto_partida',
   'horario_previsto_chegada',
   'observacoes',
-  'funcao',
-  'origem_texto',
-  'destino_texto',
-  'tipo_voo_texto',
-  'natureza_voo_codigo',
 ]);
 
 function positiveInt(value: unknown, field: string): number {
@@ -53,21 +55,11 @@ function optionalText(value: unknown): string | null {
 function validDate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(`${value}T00:00:00Z`));
 }
-
 function validDateTime(value: string): boolean {
   return Number.isFinite(Date.parse(value));
 }
 
-async function assertCatalog(db: D1Database, table: string, id: number, empresaId: number, field: string) {
-  const row = await db
-    .prepare(`SELECT id FROM ${table} WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL LIMIT 1`)
-    .bind(id, empresaId)
-    .first();
-  if (!row) throw new ApiError(`${field} nao pertence a empresa`, 400, 'CONTROLE_VOOS_PILOT_CREATE_INVALID_CATALOG');
-}
-
-async function assertAircraft(db: D1Database, id: number | null, empresaId: number) {
-  if (!id) return;
+async function assertAircraft(db: D1Database, id: number, empresaId: number) {
   const row = await db
     .prepare(`SELECT id FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) NOT IN ('I','INATIVO','INDISPONIVEL','INDISPONÍVEL') LIMIT 1`)
     .bind(id, empresaId)
@@ -75,59 +67,35 @@ async function assertAircraft(db: D1Database, id: number | null, empresaId: numb
   if (!row) throw new ApiError('aeronave_id nao pertence a empresa', 400, 'CONTROLE_VOOS_PILOT_CREATE_INVALID_CATALOG');
 }
 
-function stableTemporaryCode(prefix: string, value: string): string {
-  const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
-  let hash = 2166136261;
-  for (const char of normalized) {
-    hash ^= char.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `${prefix}_${(hash >>> 0).toString(36).toUpperCase()}`;
+async function activeCatalogRow<T extends Record<string, unknown>>(
+  db: D1Database,
+  table: string,
+  id: number,
+  empresaId: number,
+  fields: string,
+  fieldName: string,
+): Promise<T> {
+  const row = await db
+    .prepare(`SELECT ${fields} FROM ${table} WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL LIMIT 1`)
+    .bind(id, empresaId)
+    .first<T>();
+  if (!row) throw new ApiError(`${fieldName} nao pertence a empresa`, 400, 'CONTROLE_VOOS_PILOT_CREATE_INVALID_CATALOG');
+  return row;
 }
 
-async function ensureTemporaryAirport(db: D1Database, empresaId: number, userId: number, name: string): Promise<number> {
-  const normalized = name.trim().toUpperCase();
-  const configured = await db.prepare(`
-    SELECT id, codigo, codigo_icao, nome
-    FROM cv_aeroportos
-    WHERE empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
-      AND (UPPER(codigo) = ? OR UPPER(COALESCE(codigo_icao, '')) = ? OR UPPER(nome) = ?)
-    ORDER BY CASE WHEN UPPER(codigo) = ? THEN 0 WHEN UPPER(COALESCE(codigo_icao, '')) = ? THEN 1 ELSE 2 END, id
-    LIMIT 10
-  `).bind(empresaId, normalized, normalized, normalized, normalized, normalized).all<{ id: number; codigo: string; codigo_icao: string | null; nome: string }>();
-
-  const rows = configured.results || [];
-  const primaryCode = rows.find((row) => row.codigo.trim().toUpperCase() === normalized);
-  if (primaryCode) return Number(primaryCode.id);
-  if (rows.length === 1) return Number(rows[0].id);
-  if (rows.length > 1) {
-    throw new ApiError('Codigo ICAO ou nome corresponde a mais de um aerodromo. Informe o aerodromo principal para desambiguar.', 409, 'CONTROLE_VOOS_PILOT_CREATE_AMBIGUOUS_AIRPORT');
-  }
-
-  const code = stableTemporaryCode('PILOT_AER', name);
-  await db.prepare(`INSERT OR IGNORE INTO cv_aeroportos (empresa_id, codigo, nome, tipo, descricao, ativo, created_by, updated_by, created_at, updated_at) VALUES (?, ?, ?, 'heliponto', 'Entrada livre temporaria pelo fluxo Criar meu voo', 0, ?, ?, datetime('now'), datetime('now'))`).bind(empresaId, code, name, userId, userId).run();
-  const row = await db.prepare('SELECT id FROM cv_aeroportos WHERE empresa_id = ? AND codigo = ? AND deleted_at IS NULL LIMIT 1').bind(empresaId, code).first<{ id: number }>();
-  if (!row) throw new ApiError('Aerodromo digitado indisponivel', 409, 'CONTROLE_VOOS_PILOT_CREATE_MANUAL_AIRPORT_UNAVAILABLE');
+async function resolveOperationalNature(db: D1Database, empresaId: number): Promise<number> {
+  const row = await db
+    .prepare("SELECT id FROM cv_naturezas_voo WHERE empresa_id = ? AND codigo = 'OPERACIONAL' AND ativo = 1 AND deleted_at IS NULL LIMIT 1")
+    .bind(empresaId)
+    .first<{ id: number }>();
+  if (!row) throw new ApiError('Natureza operacional interna nao configurada', 409, 'CONTROLE_VOOS_OPERATIONAL_NATURE_MISSING');
   return Number(row.id);
 }
 
-async function ensureTemporaryFlightType(db: D1Database, empresaId: number, userId: number, name: string): Promise<number> {
-  const code = stableTemporaryCode('PILOT_TIPO', name);
-  await db.prepare(`INSERT OR IGNORE INTO cv_tipos_voo (empresa_id, codigo, nome, descricao, ativo, created_by, updated_by, created_at, updated_at) VALUES (?, ?, ?, 'Entrada livre temporaria pelo fluxo Criar meu voo', 0, ?, ?, datetime('now'), datetime('now'))`).bind(empresaId, code, name, userId, userId).run();
-  const row = await db.prepare('SELECT id FROM cv_tipos_voo WHERE empresa_id = ? AND codigo = ? AND deleted_at IS NULL LIMIT 1').bind(empresaId, code).first<{ id: number }>();
-  if (!row) throw new ApiError('Tipo de voo digitado indisponivel', 409, 'CONTROLE_VOOS_PILOT_CREATE_MANUAL_TYPE_UNAVAILABLE');
-  return Number(row.id);
-}
-
-async function resolvePilotNature(db: D1Database, empresaId: number, code: string): Promise<number> {
-  const allowed = new Set(['MANUTENCAO', 'PETROBRAS']);
-  if (!allowed.has(code)) throw new ApiError('Natureza do voo invalida', 400, 'CONTROLE_VOOS_PILOT_CREATE_INVALID_NATURE');
-  const existing = await db.prepare('SELECT id, ativo FROM cv_naturezas_voo WHERE empresa_id = ? AND codigo = ? AND deleted_at IS NULL LIMIT 1').bind(empresaId, code).first<{ id: number; ativo: number }>();
-  if (!existing) {
-    throw new ApiError('Natureza do voo nao esta configurada para a empresa', 409, 'CONTROLE_VOOS_PILOT_CREATE_NATURE_NOT_CONFIGURED');
-  }
-  if (Number(existing.ativo) !== 1) throw new ApiError('Natureza do voo esta inativa', 409, 'CONTROLE_VOOS_PILOT_CREATE_NATURE_INACTIVE');
-  return Number(existing.id);
+function legacyCrewRole(code: string): 'PIC' | 'SIC' | 'OUTRO' {
+  if (code === 'COMANDANTE') return 'PIC';
+  if (code === 'COPILOTO') return 'SIC';
+  return 'OUTRO';
 }
 
 pilotSelfCreate.post('/voos/meus/criar', auth(), requireAnyRdvAccess(), async (c) => {
@@ -156,76 +124,71 @@ pilotSelfCreate.post('/voos/meus/criar', auth(), requireAnyRdvAccess(), async (c
     }
   }
 
-  const prefixo = requiredText(payload.prefixo, 'prefixo');
+  const prefixo = requiredText(payload.prefixo, 'prefixo').toUpperCase();
   const dataProgramacao = requiredText(payload.data_programacao, 'data_programacao');
-  const manualMode = ['origem_texto', 'destino_texto', 'tipo_voo_texto', 'natureza_voo_codigo'].some((field) => String(payload[field] ?? '').trim().length > 0);
-  let origemId: number;
-  let destinoId: number;
-  let tipoVooId: number;
-  let naturezaVooId: number;
-  if (manualMode) {
-    const origemTexto = requiredText(payload.origem_texto, 'origem_texto');
-    const destinoTexto = requiredText(payload.destino_texto, 'destino_texto');
-    const tipoVooTexto = requiredText(payload.tipo_voo_texto, 'tipo_voo_texto');
-    const naturezaCodigo = requiredText(payload.natureza_voo_codigo, 'natureza_voo_codigo').toUpperCase();
-    if (origemTexto.toUpperCase() === destinoTexto.toUpperCase()) throw new ApiError('Origem e destino devem ser diferentes', 400, 'CONTROLE_VOOS_PILOT_CREATE_SAME_AIRPORT');
-    origemId = await ensureTemporaryAirport(c.env.DB, empresaId, userId, origemTexto);
-    destinoId = await ensureTemporaryAirport(c.env.DB, empresaId, userId, destinoTexto);
-    tipoVooId = await ensureTemporaryFlightType(c.env.DB, empresaId, userId, tipoVooTexto);
-    naturezaVooId = await resolvePilotNature(c.env.DB, empresaId, naturezaCodigo);
-  } else {
-    origemId = positiveInt(payload.origem_id, 'origem_id');
-    destinoId = positiveInt(payload.destino_id, 'destino_id');
-    tipoVooId = positiveInt(payload.tipo_voo_id, 'tipo_voo_id');
-    naturezaVooId = positiveInt(payload.natureza_voo_id, 'natureza_voo_id');
-  }
-  const aeronaveId = payload.aeronave_id == null || payload.aeronave_id === '' ? null : positiveInt(payload.aeronave_id, 'aeronave_id');
+  const routeIds = normalizeFlightRouteIds(payload.rota_ids);
+  if (!routeIds) throw new ApiError('rota_ids obrigatoria', 400, 'CONTROLE_VOOS_PILOT_CREATE_ROUTE_REQUIRED');
+  const numeroVoo = optionalText(payload.numero_voo);
+  const numeroDb = optionalText(payload.numero_db);
+  const tipoVooId = positiveInt(payload.tipo_voo_id, 'tipo_voo_id');
+  const contratoId = positiveInt(payload.contrato_id, 'contrato_id');
+  const funcaoBordoId = positiveInt(payload.funcao_bordo_id, 'funcao_bordo_id');
+  const aeronaveId = positiveInt(payload.aeronave_id, 'aeronave_id');
   const partida = requiredText(payload.horario_previsto_partida, 'horario_previsto_partida');
   const chegada = requiredText(payload.horario_previsto_chegada, 'horario_previsto_chegada');
   const observacoes = optionalText(payload.observacoes);
-  const funcao = String(payload.funcao || 'PIC').toUpperCase();
 
-  if (!['PIC', 'SIC'].includes(funcao)) {
-    throw new ApiError('funcao deve ser PIC ou SIC', 400, 'CONTROLE_VOOS_PILOT_CREATE_INVALID_FUNCTION');
-  }
   if (!validDate(dataProgramacao) || !validDateTime(partida) || !validDateTime(chegada) || Date.parse(chegada) < Date.parse(partida)) {
     throw new ApiError('Data ou horarios invalidos', 400, 'CONTROLE_VOOS_PILOT_CREATE_INVALID_TIME');
   }
-  if (origemId === destinoId) {
-    throw new ApiError('Origem e destino devem ser diferentes', 400, 'CONTROLE_VOOS_PILOT_CREATE_SAME_AIRPORT');
-  }
 
-  if (!manualMode) {
-    await Promise.all([
-      assertCatalog(c.env.DB, 'cv_aeroportos', origemId, empresaId, 'origem_id'),
-      assertCatalog(c.env.DB, 'cv_aeroportos', destinoId, empresaId, 'destino_id'),
-      assertCatalog(c.env.DB, 'cv_tipos_voo', tipoVooId, empresaId, 'tipo_voo_id'),
-      assertCatalog(c.env.DB, 'cv_naturezas_voo', naturezaVooId, empresaId, 'natureza_voo_id'),
-    ]);
-  }
   await assertAircraft(c.env.DB, aeronaveId, empresaId);
+  await activeCatalogRow(c.env.DB, 'cv_tipos_voo', tipoVooId, empresaId, 'id', 'tipo_voo_id');
+  await activeCatalogRow(c.env.DB, 'cv_contratos', contratoId, empresaId, 'id', 'contrato_id');
+  const role = await activeCatalogRow<{ id: number; codigo: string; nome: string }>(
+    c.env.DB,
+    'cv_funcoes_bordo',
+    funcaoBordoId,
+    empresaId,
+    'id, codigo, nome',
+    'funcao_bordo_id',
+  );
+  const natureId = await resolveOperationalNature(c.env.DB, empresaId);
+  const routePoints = await resolveFlightRoutePoints(c.env.DB, empresaId, routeIds);
 
   const create = await c.env.DB.prepare(`
     INSERT INTO cv_voos (
       empresa_id, prefixo, data_programacao, origem_id, destino_id,
-      tipo_voo_id, natureza_voo_id, aeronave_id,
+      numero_voo, numero_db, contrato_id, tipo_voo_id, natureza_voo_id, aeronave_id,
       horario_previsto_partida, horario_previsto_chegada,
       status, observacoes, created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'planejado', ?, ?, ?, datetime('now'), datetime('now'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'planejado', ?, ?, ?, datetime('now'), datetime('now'))
   `).bind(
-    empresaId, prefixo, dataProgramacao, origemId, destinoId,
-    tipoVooId, naturezaVooId, aeronaveId, partida, chegada,
+    empresaId, prefixo, dataProgramacao, routeIds[0], routeIds[routeIds.length - 1],
+    numeroVoo, numeroDb, contratoId, tipoVooId, natureId, aeronaveId, partida, chegada,
     observacoes, userId, userId,
   ).run();
 
   const vooId = Number(create.meta.last_row_id);
-  try {
-    await c.env.DB.prepare(`
+  const legacyRole = legacyCrewRole(String(role.codigo || '').trim().toUpperCase());
+  const relatedStatements = buildFlightRelatedStatements(c.env.DB, {
+    empresaId,
+    vooId,
+    userId,
+    routePoints,
+    picFuncionarioId: null,
+    sicFuncionarioId: null,
+  });
+  relatedStatements.push(
+    c.env.DB.prepare(`
       INSERT INTO cv_voo_tripulantes (
-        empresa_id, voo_id, funcionario_id, funcao,
+        empresa_id, voo_id, funcionario_id, funcao, funcao_bordo_id,
         observacoes, created_by, updated_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'Voo criado pelo proprio tripulante', ?, ?, datetime('now'), datetime('now'))
-    `).bind(empresaId, vooId, funcionarioId, funcao, userId, userId).run();
+      ) VALUES (?, ?, ?, ?, ?, 'Voo criado pelo proprio tripulante', ?, ?, datetime('now'), datetime('now'))
+    `).bind(empresaId, vooId, funcionarioId, legacyRole, funcaoBordoId, userId, userId),
+  );
+  try {
+    await c.env.DB.batch(relatedStatements);
   } catch (error) {
     await c.env.DB.prepare("UPDATE cv_voos SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND empresa_id = ?")
       .bind(vooId, empresaId).run();
@@ -239,12 +202,12 @@ pilotSelfCreate.post('/voos/meus/criar', auth(), requireAnyRdvAccess(), async (c
     tipoEvento: 'sistema',
     statusNovo: 'planejado',
     descricao: 'Voo criado pelo proprio tripulante',
-    metadata: { self_service: true, funcionario_id: funcionarioId, funcao, entrada_livre_temporaria: manualMode },
+    metadata: { self_service: true, funcionario_id: funcionarioId, funcao_bordo_id: funcaoBordoId, funcao_bordo: role.nome },
     usuarioId: userId,
   });
 
   const voo = await getFlightOrThrow(c.env.DB, String(vooId), empresaId);
-  return c.json({ success: true, data: voo, meta: { self_service: true, funcionario_id: funcionarioId, funcao } }, 201);
+  return c.json({ success: true, data: voo, meta: { self_service: true, funcionario_id: funcionarioId, funcao_bordo_id: funcaoBordoId } }, 201);
 });
 
 export default pilotSelfCreate;

@@ -1,0 +1,8 @@
+{
+  "changeId": "controle-voos-operational-model-0504",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0504_controle_voos_operational_model.sql",
+  "fileHash": "9391e8c1f5f751d64cc1ec7253bd602c4033702b4686a017a124f76fb72911f7",
+  "planPath": "worker-airtrust/schema-v2/plans/controle-voos-operational-model-0504.md",
+  "planHash": "04ef47e97eff2b56db52988a2e2084c1dc237f0b71aa41bef1bab81042ed3b86"
+}

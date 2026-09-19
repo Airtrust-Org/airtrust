@@ -19,7 +19,7 @@ import { apiClient } from '@/react-app/services/apiClient';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 
-type CatalogName = 'pontos' | 'aeroportos' | 'tipos' | 'naturezas' | 'motivos' | 'empresas-abastecimento';
+type CatalogName = 'pontos' | 'aeroportos' | 'tipos' | 'naturezas' | 'motivos' | 'empresas-abastecimento' | 'contratos' | 'funcoes-bordo';
 type CatalogItem = {
   id: number;
   codigo?: string | null;
@@ -56,9 +56,11 @@ const EMPTY_STATE: CatalogState = {
   naturezas: [],
   motivos: [],
   'empresas-abastecimento': [],
+  contratos: [],
+  'funcoes-bordo': [],
 };
 
-const VISIBLE_CATALOGS: CatalogName[] = ['pontos', 'tipos', 'naturezas', 'motivos', 'empresas-abastecimento'];
+const VISIBLE_CATALOGS: CatalogName[] = ['pontos', 'tipos', 'contratos', 'funcoes-bordo', 'motivos', 'empresas-abastecimento'];
 
 const CATALOG_META: Record<
   CatalogName,
@@ -99,6 +101,18 @@ const CATALOG_META: Record<
     singular: 'empresa de abastecimento',
     description: 'Empresas que podem ser selecionadas pelo piloto ao registrar abastecimento.',
     icon: <Fuel className="h-4 w-4" />,
+  },
+  contratos: {
+    label: 'Contratos',
+    singular: 'contrato',
+    description: 'Número e identificação dos contratos usados na criação dos voos.',
+    icon: <Layers className="h-4 w-4" />,
+  },
+  'funcoes-bordo': {
+    label: 'Funções a bordo',
+    singular: 'função a bordo',
+    description: 'Funções atribuídas à tripulação em cada voo, como examinador, instrutor, comandante e copiloto.',
+    icon: <Plane className="h-4 w-4" />,
   },
 };
 
@@ -152,13 +166,15 @@ export default function ControleVoosTabelas() {
     setLoading(true);
     setError(null);
     try {
-      const [pontos, aeroportos, tipos, naturezas, motivos, empresasAbastecimento] = await Promise.all([
+      const [pontos, aeroportos, tipos, naturezas, motivos, empresasAbastecimento, contratos, funcoesBordo] = await Promise.all([
         loadCatalog('pontos'),
         loadCatalog('aeroportos'),
         loadCatalog('tipos'),
         loadCatalog('naturezas'),
         loadCatalog('motivos'),
         loadCatalog('empresas-abastecimento'),
+        loadCatalog('contratos'),
+        loadCatalog('funcoes-bordo'),
       ]);
       setData({
         pontos,
@@ -167,6 +183,8 @@ export default function ControleVoosTabelas() {
         naturezas,
         motivos,
         'empresas-abastecimento': empresasAbastecimento,
+        contratos,
+        'funcoes-bordo': funcoesBordo,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar cadastros operacionais.');

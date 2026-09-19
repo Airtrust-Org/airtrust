@@ -88,6 +88,9 @@ const allowedFields = new Set([
   'data_programacao',
   'origem_id',
   'destino_id',
+  'numero_voo',
+  'numero_db',
+  'contrato_id',
   'tipo_voo_id',
   'natureza_voo_id',
   'aeronave_id',
@@ -105,6 +108,8 @@ const allowedCreateFields = new Set([
   ...allowedFields,
   'pic_funcionario_id',
   'sic_funcionario_id',
+  'pic_funcao_bordo_id',
+  'sic_funcao_bordo_id',
   'rota_ids',
 ]);
 const allowedFieldsWithVersion = new Set([...allowedFields, 'versao'].filter((field) => field !== 'status'));
@@ -171,6 +176,8 @@ const catalogos: Record<string, CatalogConfig> = {
     orderBy: 'tipo ASC, ordem ASC, nome ASC',
   },
   'empresas-abastecimento': { table: 'cv_empresas_abastecimento', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' },
+  contratos: { table: 'cv_contratos', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' },
+  'funcoes-bordo': { table: 'cv_funcoes_bordo', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' },
 };
 
 function requireControleVoosWrite(): MiddlewareHandler<{ Bindings: Env }> {
@@ -455,10 +462,13 @@ function normalizeFlightInput(
   if (payload.destino_id !== undefined || requireBaseFields) {
     input.destino_id = parsePositiveInteger(payload.destino_id, 'destino_id');
   }
+  if (payload.numero_voo !== undefined) input.numero_voo = normalizeString(payload.numero_voo, 'numero_voo');
+  if (payload.numero_db !== undefined) input.numero_db = normalizeString(payload.numero_db, 'numero_db');
+  if (payload.contrato_id !== undefined || requireBaseFields) input.contrato_id = parsePositiveInteger(payload.contrato_id, 'contrato_id');
   if (payload.tipo_voo_id !== undefined || requireBaseFields) {
     input.tipo_voo_id = parsePositiveInteger(payload.tipo_voo_id, 'tipo_voo_id');
   }
-  if (payload.natureza_voo_id !== undefined || requireBaseFields) {
+  if (payload.natureza_voo_id !== undefined) {
     input.natureza_voo_id = parsePositiveInteger(payload.natureza_voo_id, 'natureza_voo_id');
   }
   if (payload.aeronave_id !== undefined) {
@@ -670,6 +680,20 @@ async function assertAeronaveBelongsToEmpresa(
   }
 }
 
+function parseOptionalCrewRoleId(payload: Record<string, unknown>, field: 'pic_funcao_bordo_id' | 'sic_funcao_bordo_id'): number | null {
+  const value = payload[field];
+  if (value === undefined || value === null || value === '') return null;
+  return parsePositiveInteger(value, field);
+}
+
+async function resolveOperationalNatureId(db: D1Database, empresaId: number): Promise<number> {
+  const row = await db.prepare(
+    "SELECT id FROM cv_naturezas_voo WHERE empresa_id = ? AND codigo = 'OPERACIONAL' AND ativo = 1 AND deleted_at IS NULL LIMIT 1",
+  ).bind(empresaId).first<{ id: number }>();
+  if (!row) throw new ApiError('Natureza operacional interna nao configurada', 409, 'CONTROLE_VOOS_OPERATIONAL_NATURE_MISSING');
+  return Number(row.id);
+}
+
 async function assertCatalogsForInput(
   db: D1Database,
   input: FlightInput,
@@ -685,6 +709,7 @@ async function assertCatalogsForInput(
     empresaId,
     'alternado_destino_id',
   );
+  await assertCatalogItem(db, 'cv_contratos', input.contrato_id, empresaId, 'contrato_id');
   await assertCatalogItem(db, 'cv_tipos_voo', input.tipo_voo_id, empresaId, 'tipo_voo_id');
   await assertCatalogItem(
     db,
@@ -719,6 +744,9 @@ function buildMergedFlight(existing: FlightRow, input: FlightInput): FlightInput
     data_programacao: input.data_programacao ?? existing.data_programacao,
     origem_id: input.origem_id ?? existing.origem_id,
     destino_id: input.destino_id ?? existing.destino_id,
+    numero_voo: input.numero_voo !== undefined ? input.numero_voo : existing.numero_voo,
+    numero_db: input.numero_db !== undefined ? input.numero_db : existing.numero_db,
+    contrato_id: input.contrato_id !== undefined ? input.contrato_id : existing.contrato_id,
     tipo_voo_id: input.tipo_voo_id ?? existing.tipo_voo_id,
     natureza_voo_id: input.natureza_voo_id ?? existing.natureza_voo_id,
     aeronave_id: input.aeronave_id !== undefined ? input.aeronave_id : existing.aeronave_id,
@@ -753,6 +781,8 @@ function catalogKey(rawName: string): keyof typeof catalogos | null {
   if (name === 'naturezas' || name === 'naturezas-voo') return 'naturezas';
   if (name === 'motivos' || name === 'motivos-operacionais') return 'motivos';
   if (name === 'empresas-abastecimento' || name === 'fornecedores-abastecimento') return 'empresas-abastecimento';
+  if (name === 'contratos' || name === 'contrato') return 'contratos';
+  if (name === 'funcoes-bordo' || name === 'funcoes-a-bordo' || name === 'funcoes_bordo') return 'funcoes-bordo';
   return null;
 }
 
@@ -1131,21 +1161,27 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
   const payload = await parseJsonPayload(c);
   assertPayloadFields(payload, allowedCreateFields);
   const requestedRouteIds = normalizeFlightRouteIds(payload.rota_ids);
-  const normalizedPayload = requestedRouteIds
-    ? {
-        ...payload,
-        origem_id: requestedRouteIds[0],
-        destino_id: requestedRouteIds[requestedRouteIds.length - 1],
-      }
-    : payload;
+  const operationalNatureId = await resolveOperationalNatureId(c.env.DB, empresaId);
+  const normalizedPayload = {
+    ...payload,
+    natureza_voo_id: payload.natureza_voo_id ?? operationalNatureId,
+    ...(requestedRouteIds ? { origem_id: requestedRouteIds[0], destino_id: requestedRouteIds[requestedRouteIds.length - 1] } : {}),
+  };
   const input = normalizeFlightInput(normalizedPayload, true);
   const { picFuncionarioId, sicFuncionarioId } = parseFlightCrewIds(payload);
+  const picFuncaoBordoId = parseOptionalCrewRoleId(payload, 'pic_funcao_bordo_id');
+  const sicFuncaoBordoId = parseOptionalCrewRoleId(payload, 'sic_funcao_bordo_id');
 
   assertFlightTimes(input);
   assertCancellationReason(input);
   await assertCatalogsForInput(c.env.DB, input, empresaId);
   const routeIds = requestedRouteIds ?? [input.origem_id as number, input.destino_id as number];
   const routePoints = await resolveFlightRoutePoints(c.env.DB, empresaId, routeIds);
+  if ((picFuncaoBordoId == null) !== (sicFuncaoBordoId == null)) {
+    throw new ApiError('Informe as duas funcoes a bordo em conjunto', 400, 'CONTROLE_VOOS_CREW_ROLE_PAIR_REQUIRED');
+  }
+  if (picFuncaoBordoId) await assertCatalogItem(c.env.DB, 'cv_funcoes_bordo', picFuncaoBordoId, empresaId, 'pic_funcao_bordo_id');
+  if (sicFuncaoBordoId) await assertCatalogItem(c.env.DB, 'cv_funcoes_bordo', sicFuncaoBordoId, empresaId, 'sic_funcao_bordo_id');
   if (picFuncionarioId && sicFuncionarioId) {
     if (!input.aeronave_id) {
       throw new ApiError(
@@ -1167,12 +1203,12 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
     `
     INSERT INTO cv_voos (
       empresa_id, prefixo, data_programacao, origem_id, destino_id,
-      tipo_voo_id, natureza_voo_id, aeronave_id,
+      numero_voo, numero_db, contrato_id, tipo_voo_id, natureza_voo_id, aeronave_id,
       horario_previsto_partida, horario_previsto_chegada,
       horario_real_partida, horario_real_chegada,
       status, observacoes, cancelado_motivo_id, alternado_destino_id,
       created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
   `,
   )
     .bind(
@@ -1181,6 +1217,9 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
       input.data_programacao,
       input.origem_id,
       input.destino_id,
+      input.numero_voo || null,
+      input.numero_db || null,
+      input.contrato_id || null,
       input.tipo_voo_id,
       input.natureza_voo_id,
       input.aeronave_id || null,
@@ -1205,6 +1244,8 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
     routePoints,
     picFuncionarioId,
     sicFuncionarioId,
+    picFuncaoBordoId,
+    sicFuncaoBordoId,
   });
   if (relatedStatements.length > 0) await c.env.DB.batch(relatedStatements);
 
