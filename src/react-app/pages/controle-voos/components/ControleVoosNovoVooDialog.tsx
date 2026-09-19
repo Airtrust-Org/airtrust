@@ -227,7 +227,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
         prefixo: form.prefixo.trim().toUpperCase(),
         data_programacao: form.data_programacao,
         numero_voo: form.numero_voo.trim() || null,
-        numero_db: form.numero_db.trim() || null,
+        ...(mode === 'pilot' ? { numero_db: form.numero_db.trim() || null } : {}),
         contrato_id: Number(form.contrato_id),
         tipo_voo_id: Number(form.tipo_voo_id),
         rota_ids: routeIds.map(Number),
@@ -272,8 +272,10 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
         </div>
 
         <form onSubmit={submit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <label className="text-sm">Número do voo<input className={fieldClass} value={form.numero_voo} onChange={(e) => set('numero_voo', e.target.value)} placeholder="Informado pela Coordenação" /></label>
-          <label className="text-sm">Número do DB<input className={fieldClass} value={form.numero_db} onChange={(e) => set('numero_db', e.target.value)} placeholder="Número do DB" /></label>
+          <label className="text-sm">Número do voo<input className={fieldClass} value={form.numero_voo} onChange={(e) => set('numero_voo', e.target.value)} placeholder={mode === 'pilot' ? 'Preencha se a Coordenação não informou' : 'Número operacional do voo'} /></label>
+          {mode === 'pilot' && (
+            <label className="text-sm">Relatório de voo<input className={fieldClass} value={form.numero_db} onChange={(e) => set('numero_db', e.target.value)} placeholder="Número do relatório de voo" /></label>
+          )}
 
           <div className="text-sm">
             <div className="flex items-center justify-between gap-2"><label htmlFor="controle-voos-contrato">Contrato</label><Link to="/controle-voos/tabelas" className="text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300">Gerenciar</Link></div>

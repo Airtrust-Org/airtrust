@@ -1,6 +1,6 @@
 const DB_NAME = 'airtrust-pilot-v1';
 const DEVICE_DB_NAME = 'airtrust-pilot-v2';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const VAULT_CONFIG_ID = 'vault-config';
 const WRAP_AAD = new TextEncoder().encode('airtrust-pilot-vault-key-v1');
 const KDF_ITERATIONS = 210000;
@@ -18,6 +18,7 @@ export const PILOT_VAULT_STORES = Object.freeze([
   'sync_receipts',
   'workflow_receipts',
   'conflicts',
+  'active_sessions',
 ]);
 
 function bytesToBase64(bytes) {

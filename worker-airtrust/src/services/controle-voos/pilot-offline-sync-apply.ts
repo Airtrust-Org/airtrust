@@ -49,7 +49,7 @@ type SnapshotPayload = {
   source_package_id: string;
   source_rdv_id: number | null;
   rdv: Record<string, unknown>;
-  flight_update: { natureza_voo_codigo: string | null };
+  flight_update: { natureza_voo_codigo: string | null; numero_voo: string | null; numero_db: string | null };
   fuelings: SnapshotFuelingPayload[];
   stages: SnapshotStagePayload[];
 };
@@ -142,6 +142,15 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     );
   }
 
+  const numeroVoo = rawFlightUpdate.numero_voo == null ? null : String(rawFlightUpdate.numero_voo).trim() || null;
+  const numeroDb = rawFlightUpdate.numero_db == null ? null : String(rawFlightUpdate.numero_db).trim() || null;
+  if (numeroVoo && numeroVoo.length > 80) {
+    throw new ApiError('numero_voo invalido', 400, 'CONTROLE_VOOS_PILOT_SYNC_FLIGHT_NUMBER_INVALID');
+  }
+  if (numeroDb && numeroDb.length > 120) {
+    throw new ApiError('numero_db invalido', 400, 'CONTROLE_VOOS_PILOT_SYNC_REPORT_NUMBER_INVALID');
+  }
+
   const fuelingsRaw = raw.fuelings == null ? [] : raw.fuelings;
   if (!Array.isArray(fuelingsRaw) || fuelingsRaw.length > 16) {
     throw new ApiError('Abastecimentos offline invalidos', 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELINGS_INVALID');
@@ -232,7 +241,7 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     source_package_id: sourcePackageId,
     source_rdv_id: parseNullablePositiveInteger(raw.source_rdv_id, 'source_rdv_id'),
     rdv: raw.rdv,
-    flight_update: { natureza_voo_codigo: naturezaCode },
+    flight_update: { natureza_voo_codigo: naturezaCode, numero_voo: numeroVoo, numero_db: numeroDb },
     fuelings,
     stages,
   };
@@ -710,14 +719,34 @@ function buildFuelingStatements(input: {
   );
 }
 
-function buildFlightNatureStatement(input: {
-  db: D1Database; empresaId: number; userId: number; flight: FlightRow; naturezaId: number; baseFlightVersion: number;
+function buildFlightMetadataStatement(input: {
+  db: D1Database;
+  empresaId: number;
+  userId: number;
+  flight: FlightRow;
+  naturezaId: number | null;
+  numeroVoo: string | null;
+  numeroDb: string | null;
+  baseFlightVersion: number;
 }): D1PreparedStatement {
   return input.db.prepare(`
     UPDATE cv_voos
-    SET natureza_voo_id = ?, versao = versao + 1, updated_by = ?, updated_at = datetime('now')
+    SET natureza_voo_id = COALESCE(?, natureza_voo_id),
+        numero_voo = CASE
+          WHEN ? IS NOT NULL AND COALESCE(TRIM(numero_voo), '') = '' THEN ?
+          ELSE numero_voo
+        END,
+        numero_db = CASE WHEN ? IS NOT NULL THEN ? ELSE numero_db END,
+        versao = versao + 1,
+        updated_by = ?,
+        updated_at = datetime('now')
     WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND versao = ?
-  `).bind(input.naturezaId, input.userId, input.flight.id, input.empresaId, input.baseFlightVersion);
+  `).bind(
+    input.naturezaId,
+    input.numeroVoo, input.numeroVoo,
+    input.numeroDb, input.numeroDb,
+    input.userId, input.flight.id, input.empresaId, input.baseFlightVersion,
+  );
 }
 
 function buildOfflineSyncEvent(input: {
@@ -941,6 +970,14 @@ export async function applyPilotOfflineSnapshotCommand(input: {
 
   const snapshot = normalizeSnapshotPayload(input.command);
   assertSourcePackageMatches(input.command, snapshot);
+  const currentNumeroVoo = String(input.flight.numero_voo || '').trim();
+  if (snapshot.flight_update.numero_voo && currentNumeroVoo && snapshot.flight_update.numero_voo !== currentNumeroVoo) {
+    throw new ApiError(
+      'Numero do voo ja foi definido pela Coordenacao e nao pode ser sobrescrito pelo piloto',
+      409,
+      'CONTROLE_VOOS_PILOT_SYNC_FLIGHT_NUMBER_LOCKED',
+    );
+  }
   let selectedNaturezaId: number | null = null;
   if (snapshot.flight_update.natureza_voo_codigo) {
     const natureza = await input.db
@@ -1012,11 +1049,24 @@ export async function applyPilotOfflineSnapshotCommand(input: {
     fuelings: snapshot.fuelings,
     supplierNamesByCode,
   });
-  const natureStatement =
+  const numeroVooUpdate =
+    snapshot.flight_update.numero_voo && !currentNumeroVoo ? snapshot.flight_update.numero_voo : null;
+  const currentNumeroDb = String(input.flight.numero_db || '').trim();
+  const numeroDbUpdate =
+    snapshot.flight_update.numero_db && snapshot.flight_update.numero_db !== currentNumeroDb
+      ? snapshot.flight_update.numero_db
+      : null;
+  const naturezaUpdate =
     selectedNaturezaId !== null && selectedNaturezaId !== Number(input.flight.natureza_voo_id)
-      ? buildFlightNatureStatement({
+      ? selectedNaturezaId
+      : null;
+  const flightMetadataStatement =
+    naturezaUpdate !== null || numeroVooUpdate !== null || numeroDbUpdate !== null
+      ? buildFlightMetadataStatement({
           ...input,
-          naturezaId: selectedNaturezaId,
+          naturezaId: naturezaUpdate,
+          numeroVoo: numeroVooUpdate,
+          numeroDb: numeroDbUpdate,
           baseFlightVersion: input.command.base_flight_version,
         })
       : null;
@@ -1047,7 +1097,7 @@ export async function applyPilotOfflineSnapshotCommand(input: {
       rdvStatement,
       ...stageStatements,
       ...fuelingStatements,
-      ...(natureStatement ? [natureStatement] : []),
+      ...(flightMetadataStatement ? [flightMetadataStatement] : []),
       eventStatement,
       receiptStatement,
     ]);

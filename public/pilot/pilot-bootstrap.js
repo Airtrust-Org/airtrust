@@ -1,10 +1,24 @@
 const PILOT_SHELL_RECOVERY_KEY = 'airtrust_pilot_shell_recovery_v17';
 const PILOT_CACHE_PREFIX = 'airtrust-pilot-shell-';
 const connectivity = document.querySelector('#connectivity');
+const PILOT_OFFLINE_FLIGHT_LOCK_KEY = 'airtrust_pilot_offline_flight_locked_v1';
+
+function flightLockMarkerActive() {
+  try { return localStorage.getItem(PILOT_OFFLINE_FLIGHT_LOCK_KEY) === '1'; } catch { return false; }
+}
 
 function renderConnectivity() {
   if (!connectivity) return;
   const online = navigator.onLine;
+  if (flightLockMarkerActive()) {
+    connectivity.className = 'pill attention';
+    connectivity.replaceChildren();
+    const dot = document.createElement('span'); dot.className = 'dot';
+    const text = document.createElement('span');
+    text.textContent = online ? 'MODO VOO OFFLINE — sinal ignorado' : 'MODO VOO OFFLINE — sem sinal';
+    connectivity.append(dot, text);
+    return;
+  }
   connectivity.className = 'pill ' + (online ? 'ok' : 'attention');
   connectivity.replaceChildren();
 
@@ -49,6 +63,10 @@ async function requestServiceWorkerUpdate() {
 
 async function recoverStaleShell() {
   if (window.__AIRTRUST_PILOT_APP_READY__ === true) return;
+  if (flightLockMarkerActive()) {
+    setBootstrapFailure('MODO VOO OFFLINE — aguardando rascunho local');
+    return;
+  }
   if (!navigator.onLine) {
     setBootstrapFailure('OFFLINE — abra um voo já preparado neste tablet');
     return;
@@ -86,5 +104,5 @@ renderConnectivity();
 window.addEventListener('online', renderConnectivity);
 window.addEventListener('offline', renderConnectivity);
 window.addEventListener('airtrust:pilot-app-ready', clearRecoveryFlag, { once: true });
-void requestServiceWorkerUpdate();
+if (!flightLockMarkerActive()) void requestServiceWorkerUpdate();
 window.setTimeout(() => void recoverStaleShell(), 8000);

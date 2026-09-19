@@ -1,4 +1,4 @@
-export const PILOT_DRAFT_SCHEMA_VERSION = 3;
+export const PILOT_DRAFT_SCHEMA_VERSION = 4;
 
 export function toInputDateTime(value) {
   if (!value) return '';
@@ -113,6 +113,58 @@ export function calcClockDurationHhMm(startValue, endValue) {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+}
+
+export function sumClockDurations(values) {
+  let totalMinutes = 0;
+  let hasValue = false;
+  for (const raw of Array.isArray(values) ? values : []) {
+    const match = String(raw || '').trim().match(/^(\d+):([0-5]\d)$/);
+    if (!match) continue;
+    totalMinutes += Number(match[1]) * 60 + Number(match[2]);
+    hasValue = true;
+  }
+  if (!hasValue) return '';
+  return String(Math.floor(totalMinutes / 60)).padStart(2, '0') + ':' + String(totalMinutes % 60).padStart(2, '0');
+}
+
+export function calcTotalBlockTimeHhMm(stageDrafts) {
+  const stages = Array.isArray(stageDrafts)
+    ? stageDrafts.map((stage) => stage?.fields || stage || {})
+    : [];
+  const completedCycles = [];
+  let cycleStart = '';
+  for (const stage of stages) {
+    const start = String(stage.horario_motor_ligado || '').trim();
+    const cut = String(stage.horario_motor_desligado || '').trim();
+    if (!cycleStart && start) cycleStart = start;
+    if (cycleStart && cut) {
+      const duration = calcClockDurationHhMm(cycleStart, cut);
+      if (duration) completedCycles.push(duration);
+      cycleStart = '';
+    }
+  }
+  return sumClockDurations(completedCycles);
+}
+
+export function buildCommonFlightFields(packageData) {
+  const sourceUnit = String(packageData?.aeronave?.unidade_peso || 'LB').trim().toUpperCase() || 'LB';
+  const emptyRaw = parseNumber(packageData?.aeronave?.peso_vazio);
+  const emptyLb = emptyRaw === null ? '' : String(convertWeight(emptyRaw, sourceUnit, 'LB') ?? emptyRaw);
+  const crewStage = (Array.isArray(packageData?.etapas) ? packageData.etapas : [])
+    .find((stage) => parseNumber(stage?.peso_tripulacao) !== null);
+  const firstCrewWeight = parseNumber(crewStage?.peso_tripulacao);
+  const crewSourceUnit = String(crewStage?.unidade_peso || sourceUnit).trim().toUpperCase() || sourceUnit;
+  const crewLb = firstCrewWeight === null
+    ? ''
+    : String(convertWeight(firstCrewWeight, crewSourceUnit, 'LB') ?? firstCrewWeight);
+  return {
+    numero_voo: String(packageData?.voo?.numero_voo || ''),
+    numero_db: String(packageData?.voo?.numero_db || ''),
+    peso_tripulacao: crewLb,
+    peso_vazio: emptyLb,
+    unidade_peso: 'LB',
+  };
 }
 
 export function payloadToKg(value, unit) {
@@ -247,16 +299,16 @@ function defaultStageFromPackage(packageData) {
     starts: '',
     pax: '',
     payload: '',
-    unidade_payload: 'KG',
+    unidade_payload: 'LB',
     combustivel_inicio: '',
     combustivel_fim: '',
-    unidade_combustivel: '',
+    unidade_combustivel: 'LB',
     peso_passageiros: '',
     peso_bagagem: '',
     peso_tripulacao: '',
-    peso_vazio: toInputNumber(packageData?.aeronave?.peso_vazio),
+    peso_vazio: buildCommonFlightFields(packageData).peso_vazio,
     peso_total: '',
-    unidade_peso: packageData?.aeronave?.unidade_peso || '',
+    unidade_peso: 'LB',
     observacoes: '',
   };
 }
@@ -265,7 +317,9 @@ export function buildStageDraftsFromPackage(packageData) {
   const stages = Array.isArray(packageData?.etapas) ? packageData.etapas : [];
   if (stages.length === 0) return [defaultStageFromPackage(packageData)];
 
-  return stages.map((stage, index) => ({
+  return stages.map((stage, index) => {
+    const stageWeightUnit = String(stage.unidade_peso || packageData?.aeronave?.unidade_peso || 'LB').trim().toUpperCase() || 'LB';
+    return {
     source_stage_id: Number(stage.id),
     local_id: 'stage-' + String(stage.id),
     numero_etapa: Number(stage.numero_etapa || index + 1),
@@ -290,19 +344,20 @@ export function buildStageDraftsFromPackage(packageData) {
     pousos_noturnos: toInputNumber(stage.pousos_noturnos),
     starts: toInputNumber(stage.starts),
     pax: toInputNumber(stage.pax),
-    payload: toInputNumber(stage.payload),
-    unidade_payload: 'KG',
+    payload: stage.payload == null ? '' : toInputNumber(convertWeight(stage.payload, 'KG', 'LB')),
+    unidade_payload: 'LB',
     combustivel_inicio: toInputNumber(stage.combustivel_inicio),
     combustivel_fim: toInputNumber(stage.combustivel_fim),
-    unidade_combustivel: stage.unidade_combustivel || '',
-    peso_passageiros: toInputNumber(stage.peso_passageiros),
-    peso_bagagem: toInputNumber(stage.peso_bagagem),
-    peso_tripulacao: toInputNumber(stage.peso_tripulacao),
-    peso_vazio: toInputNumber(stage.peso_vazio ?? packageData?.aeronave?.peso_vazio),
-    peso_total: toInputNumber(stage.peso_total),
-    unidade_peso: stage.unidade_peso || packageData?.aeronave?.unidade_peso || '',
+    unidade_combustivel: stage.unidade_combustivel || 'LB',
+    peso_passageiros: toInputNumber(convertWeight(stage.peso_passageiros, stageWeightUnit, 'LB')),
+    peso_bagagem: toInputNumber(convertWeight(stage.peso_bagagem, stageWeightUnit, 'LB')),
+    peso_tripulacao: '',
+    peso_vazio: buildCommonFlightFields(packageData).peso_vazio,
+    peso_total: toInputNumber(convertWeight(stage.peso_total, stageWeightUnit, 'LB')),
+    unidade_peso: 'LB',
     observacoes: stage.observacoes || '',
-  }));
+  };
+  });
 }
 
 export function buildDraftSnapshot(packageData, previousSequence = 0) {
@@ -326,9 +381,8 @@ export function buildDraftSnapshot(packageData, previousSequence = 0) {
       local_sequence: nextSequence,
       updated_at_claimed: now,
       form: buildRdvFormFromPackage(packageData),
-      flight_update: {
-        natureza_voo_codigo: packageData?.natureza?.codigo || '',
-      },
+      common: buildCommonFlightFields(packageData),
+      flight_update: {},
       fuelings: [{
         local_id: crypto.randomUUID(),
         hora: '',
@@ -544,12 +598,16 @@ export function applySafeStageAggregates(form, stageDrafts) {
   const first = stages[0];
   const last = stages[stages.length - 1];
   let totalLandings = 0;
+  let totalDayLandings = 0;
+  let totalNightLandings = 0;
   let totalHours = 0;
   let hasHours = false;
 
   for (const stage of stages) {
     const day = parseInteger(stage.pousos_diurnos) ?? 0;
     const night = parseInteger(stage.pousos_noturnos) ?? 0;
+    totalDayLandings += day;
+    totalNightLandings += night;
     totalLandings += day + night;
     const hours = calcHorasVoadas(stage.horario_decolagem, stage.horario_pouso);
     if (hours !== null) {
@@ -561,6 +619,10 @@ export function applySafeStageAggregates(form, stageDrafts) {
   if (first.horario_decolagem) next.horario_decolagem_real = first.horario_decolagem;
   if (last.horario_pouso) next.horario_pouso_real = last.horario_pouso;
   if (hasHours) next.horas_voadas = String(Number(totalHours.toFixed(2)));
+  next.tempo_voo_total_hhmm = sumClockDurations(stages.map((stage) => calcClockDurationHhMm(stage.horario_decolagem, stage.horario_pouso)));
+  next.tempo_total_hhmm = calcTotalBlockTimeHhMm(stages);
+  next.pousos_diurnos_total = String(totalDayLandings);
+  next.pousos_noturnos_total = String(totalNightLandings);
   if (totalLandings > 0) next.numero_pousos = String(totalLandings);
 
   if (first.combustivel_inicio !== '') next.combustivel_decolagem = first.combustivel_inicio;
