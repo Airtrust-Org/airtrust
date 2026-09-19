@@ -36,6 +36,7 @@ function validateVooPayload(payload) {
   validatePayloadField(payload.origem_id, 'origem_id');
   validatePayloadField(payload.destino_id, 'destino_id');
   validatePayloadField(payload.tipo_voo_id, 'tipo_voo_id');
+  validatePayloadField(payload.contrato_id, 'contrato_id');
   validatePayloadField(payload.natureza_voo_id, 'natureza_voo_id');
   validatePayloadField(payload.horario_previsto_partida, 'horario_previsto_partida');
   validatePayloadField(payload.horario_previsto_chegada, 'horario_previsto_chegada');
@@ -196,6 +197,11 @@ async function run() {
     const aeroporto = aeroportos.find(a => (a.nome || '').toLowerCase().includes('smoke') || (a.nome || '').toLowerCase().includes('qa') || (a.nome || '').toLowerCase().includes('teste')) || aeroportos[0];
     assert(aeroporto && aeroporto.id, 'Nenhum aeroporto encontrado para criar o voo.');
 
+    const contratosPayload = await authFetch(EXPECTED_API_URL, token, '/api/controle-voos/catalogos/contratos');
+    const contratos = contratosPayload.json?.data || [];
+    const contrato = contratos.find(c => c.codigo === 'QA-CONTRATO-RDV') || contratos.find(c => (c.nome || '').toLowerCase().includes('qa')) || contratos[0];
+    assert(contrato && contrato.id, 'Nenhum contrato QA válido encontrado no catálogo.');
+
     const tiposPayload = await authFetch(EXPECTED_API_URL, token, '/api/controle-voos/catalogos/tipos');
     const tipos = tiposPayload.json?.data || [];
     const tipo = tipos.find(t => (t.nome || '').toLowerCase().includes('smoke') || (t.nome || '').toLowerCase().includes('qa') || (t.nome || '').toLowerCase().includes('teste')) || tipos[0];
@@ -213,6 +219,7 @@ async function run() {
       origem_id: aeroporto.id,
       destino_id: aeroporto.id,
       tipo_voo_id: tipo.id,
+      contrato_id: contrato.id,
       natureza_voo_id: natureza.id,
       horario_previsto_partida: new Date().toISOString(),
       horario_previsto_chegada: new Date(Date.now() + 3600000).toISOString(),
