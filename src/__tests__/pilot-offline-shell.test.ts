@@ -106,7 +106,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v21'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v22'");
     expect(pilotSw).toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
@@ -384,15 +384,28 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('.editor-grid input[type="time"]');
     expect(pilotIndex).toContain('min-inline-size: 0;');
     expect(pilotIndex).toContain('block-size: 52px;');
+    expect(pilotIndex).toContain('-webkit-appearance: none;');
+    expect(pilotIndex).toContain('appearance: none;');
     expect(pilotIndex).not.toContain('min-inline-size: 100%');
     expect(pilotIndex).toContain('@media (max-width: 620px)');
+  });
+
+  it('mantém seletor de hora nativo e formata IFR/noturno sem exigir dois-pontos', () => {
+    expect(pilotApp).toContain("['Hora de partida', 'horario_motor_ligado', 'time'");
+    expect(pilotApp).toContain("['Hora de decolagem', 'horario_decolagem', 'time'");
+    expect(pilotApp).toContain("['Hora de pouso', 'horario_pouso', 'time'");
+    expect(pilotApp).toContain("['Hora de corte', 'horario_motor_desligado', 'time'");
+    expect(pilotApp).toContain('formatDurationDigits,');
+    expect(pilotApp).toContain("input.inputMode = 'numeric'");
+    expect(pilotApp).toContain("['IFR (duração)', 'tempo_ifr', 'duration'");
+    expect(pilotApp).toContain("['Noturno (duração)', 'tempo_noturno', 'duration'");
   });
 
   it('expõe tempos derivados, unidades e erro real da transmissão bloqueada', () => {
     expect(pilotApp).toContain("['Tempo de voo', 'tempo_decolagem_pouso'");
     expect(pilotApp).toContain("['Tempo total', 'tempo_total'");
-    expect(pilotApp).toContain("['IFR (duração)', 'tempo_ifr', 'text'");
-    expect(pilotApp).toContain("['Noturno (duração)', 'tempo_noturno', 'text'");
+    expect(pilotApp).toContain("['IFR (duração)', 'tempo_ifr', 'duration'");
+    expect(pilotApp).toContain("['Noturno (duração)', 'tempo_noturno', 'duration'");
     expect(pilotApp).toContain('toDurationInput(value)');
     expect(pilotApp).toContain("label: 'Unidade da carga'");
     expect(pilotApp).toContain("label: 'Unidade do combustível'");

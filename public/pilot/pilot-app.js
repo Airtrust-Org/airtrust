@@ -15,6 +15,7 @@ import {
   calcStageTotalWeight,
   calcClockDurationHhMm,
   calcHorasVoadas,
+  formatDurationDigits,
   PILOT_DRAFT_SCHEMA_VERSION,
   parseNumber,
   toDurationInput,
@@ -2399,11 +2400,25 @@ function createEditorField({
   const title = document.createElement('span');
   title.textContent = label;
   const input = type === 'textarea' ? document.createElement('textarea') : document.createElement('input');
-  if (type !== 'textarea') input.type = type;
-  if (inputMode) input.inputMode = inputMode;
+  const isDurationField = type === 'duration';
+  if (type !== 'textarea') input.type = isDurationField ? 'text' : type;
+  if (isDurationField) {
+    input.inputMode = 'numeric';
+    input.maxLength = 5;
+    input.placeholder = 'HH:MM';
+    input.autocomplete = 'off';
+  } else if (inputMode) {
+    input.inputMode = inputMode;
+  }
   input.value = value ?? '';
   input.readOnly = readOnly || operationalSyncInFlight;
-  if (onInput) input.addEventListener('input', () => onInput(input.value, input));
+  input.addEventListener('input', () => {
+    if (isDurationField) {
+      const formatted = formatDurationDigits(input.value);
+      if (formatted !== input.value) input.value = formatted;
+    }
+    if (onInput) onInput(input.value, input);
+  });
   if (onBlur) input.addEventListener('blur', () => onBlur(input.value, input));
   wrapper.append(title, input);
   if (note) {
@@ -2665,8 +2680,8 @@ function renderStageFields() {
     ['Hora de corte', 'horario_motor_desligado', 'time', null, false, false, 'Motor desligado'],
     ['Tempo de voo', 'tempo_decolagem_pouso', 'text', null, true, false, 'Calculado: decolagem → pouso'],
     ['Tempo total', 'tempo_total', 'text', null, true, false, 'Calculado: partida → corte'],
-    ['IFR (duração)', 'tempo_ifr', 'text', null, false, false, 'Digite a duração, por exemplo 1:30'],
-    ['Noturno (duração)', 'tempo_noturno', 'text', null, false, false, 'Digite a duração, por exemplo 1:30'],
+    ['IFR (duração)', 'tempo_ifr', 'duration', 'numeric', false, false, 'Digite apenas os números, por exemplo 0130'],
+    ['Noturno (duração)', 'tempo_noturno', 'duration', 'numeric', false, false, 'Digite apenas os números, por exemplo 0130'],
     ['Pousos diurnos', 'pousos_diurnos', 'number', 'numeric', false, false, null],
     ['Pousos noturnos', 'pousos_noturnos', 'number', 'numeric', false, false, null],
     ['Partidas', 'starts', 'number', 'numeric', true, false, 'Calculado automaticamente pela hora de partida'],
