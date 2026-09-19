@@ -184,6 +184,9 @@ export function useConhecimentoAtivoDesafio(id: number) {
     enabled: id > 0,
     staleTime: 5_000,
     retry: false,
+    // Feedback must remain visible until the pilot explicitly advances.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 }
 
@@ -240,7 +243,8 @@ export function useResponderConhecimento(id: number) {
         }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: conhecimentoAtivoKeys.desafio(id) });
+      // Keep the current challenge snapshot stable while feedback is being read.
+      // DesafioTecnico explicitly refetches only when the pilot chooses to advance.
       queryClient.invalidateQueries({ queryKey: conhecimentoAtivoKeys.resumo() });
       queryClient.invalidateQueries({ queryKey: conhecimentoAtivoKeys.mapa() });
     },
