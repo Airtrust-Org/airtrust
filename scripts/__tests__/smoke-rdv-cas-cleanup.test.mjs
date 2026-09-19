@@ -26,6 +26,17 @@ describe('smoke-rdv-cas governed cleanup contract', () => {
     assert.match(source, /incluindo cleanup governado/);
   });
 
+  it('uses the governed contract catalog and no longer sends legacy natureza for synthetic flight creation', () => {
+    assert.match(source, /ensureQaContractId/);
+    assert.match(source, /\/api\/controle-voos\/catalogos\/contratos/);
+    assert.match(source, /codigo:\s*'QA-RDV-SMOKE'/);
+    assert.match(source, /contrato_id:\s*contratoId/);
+    const payloadStart = source.indexOf('const vooPayload = {');
+    const payloadEnd = source.indexOf('validateVooPayload(vooPayload)', payloadStart);
+    const payloadBlock = source.slice(payloadStart, payloadEnd);
+    assert.doesNotMatch(payloadBlock, /natureza_voo_id/);
+  });
+
   it('keeps historical cleanup tenant/prefix/status/version scoped', () => {
     assert.match(source, /SMOKE_PREFIX_MARKER/);
     assert.match(source, /CANCELLABLE_STATUSES/);
