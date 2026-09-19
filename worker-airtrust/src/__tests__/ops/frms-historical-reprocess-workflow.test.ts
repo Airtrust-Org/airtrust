@@ -54,6 +54,25 @@ describe('FRMS historical reprocessing governance', () => {
     expect(workflow).toContain('Publish sanitized production result to authorization issue');
   });
 
+  it('uses a one-shot main trigger compatible with the production environment branch policy', () => {
+    const trigger = readFileSync(
+      join(root, '.github', 'frms-historical-reprocess-0499.trigger'),
+      'utf8',
+    );
+    expect(workflow).toContain('branches:\n      - main');
+    expect(workflow).toContain('.github/frms-historical-reprocess-0499.trigger');
+    expect(workflow).toContain('One-shot FRMS trigger already existed in the first parent.');
+    expect(workflow).toContain('One-shot FRMS trigger was not introduced by this main merge.');
+    expect(workflow).toContain('One-shot FRMS trigger content does not match the approved 0499 scope.');
+    expect(trigger).toContain('operation=execute');
+    expect(trigger).toContain('empresa_id=6');
+    expect(trigger).toContain('data_inicio=2026-01-01');
+    expect(trigger).toContain('data_fim=2026-09-16');
+    expect(trigger).toContain('target_revision_id=frms-empresa6-helicopter-offshore-v2-history-0499');
+    expect(trigger).toContain('recalc_run_id=frms-recalc-empresa6-v2-history-2026-0499');
+    expect(trigger).toContain('confirmation=FRMS_REPROCESS_ALL_HISTORICAL');
+  });
+
   it('uses a disposable backup dry-run and uploads only sanitized JSON reports', () => {
     expect(workflow).toContain('sqlite3 "$local_db" < "$BACKUP_SQL"');
     expect(workflow).toContain('--target sqlite');
