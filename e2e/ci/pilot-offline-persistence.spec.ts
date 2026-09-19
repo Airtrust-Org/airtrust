@@ -38,7 +38,7 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
 
   const localProof = await page.evaluate(async () => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('airtrust-pilot-v1', 2);
+      const request = indexedDB.open('airtrust-pilot-v1');
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
     });
@@ -233,7 +233,7 @@ test('does not prompt for a legacy PIN and preserves the old encrypted vault unt
   const proof = await page.evaluate(async (plainMarker) => {
     async function open(name: string): Promise<IDBDatabase> {
       return await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open(name, 2);
+        const request = indexedDB.open(name);
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
       });
