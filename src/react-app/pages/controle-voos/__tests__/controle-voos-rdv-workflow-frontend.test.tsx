@@ -67,7 +67,7 @@ describe('ControleVoosMeusVoos', () => {
 
     renderWithClient(<ControleVoosMeusVoos />);
 
-    await waitFor(() => expect(screen.getByText(/Nenhum voo atribuído a você para/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Nenhum voo encontrado para/)).toBeInTheDocument());
     expect(screen.getByText(/Por padrão são exibidos somente os voos de hoje/)).toBeInTheDocument();
   });
 
@@ -83,6 +83,7 @@ describe('ControleVoosMeusVoos', () => {
             data_programacao: today,
             origem_id: 101,
             destino_id: 102,
+            rota_codigos: ['SBME', '9PGS', 'SBME'],
             horario_previsto_partida: `${today}T10:00:00Z`,
             status: 'concluido_operacionalmente',
           },
@@ -109,6 +110,7 @@ describe('ControleVoosMeusVoos', () => {
     const pilotLinks = screen.getAllByRole('link', { name: /Abrir Pilot App/i });
     expect(pilotLinks).toHaveLength(2);
     expect(pilotLinks[0]).toHaveAttribute('href', '/pilot/?flight=601');
+    expect(screen.getAllByText('SBME → 9PGS → SBME')).toHaveLength(2);
     expect(screen.queryByText('Preencher voo')).not.toBeInTheDocument();
   });
 });

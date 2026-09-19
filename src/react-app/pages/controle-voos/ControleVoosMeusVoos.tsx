@@ -27,6 +27,14 @@ function buildAeroMap(aeroportos: CvAeroporto[]) {
   return new Map(aeroportos.map((a) => [a.id, a]));
 }
 
+function flightRouteLabel(voo: { origem_id: number; destino_id: number; rota_codigos?: string[] }, aeroMap: Map<number, CvAeroporto>) {
+  const fullRoute = (voo.rota_codigos || []).map((code) => String(code || '').trim()).filter(Boolean);
+  if (fullRoute.length >= 2) return fullRoute.join(' → ');
+  const origem = aeroMap.get(voo.origem_id);
+  const destino = aeroMap.get(voo.destino_id);
+  return `${origem?.codigo_icao || origem?.codigo || `ID:${voo.origem_id}`} → ${destino?.codigo_icao || destino?.codigo || `ID:${voo.destino_id}`}`;
+}
+
 export default function ControleVoosMeusVoos() {
   const qc = useQueryClient();
   const [novoVooOpen, setNovoVooOpen] = useState(false);
@@ -142,8 +150,6 @@ export default function ControleVoosMeusVoos() {
             <>
               <div className="space-y-3 lg:hidden" data-testid="meus-voos-mobile-list">
                 {filteredVoos.map((voo) => {
-                  const origem = aeroMap.get(voo.origem_id);
-                  const destino = aeroMap.get(voo.destino_id);
                   return (
                     <article
                       key={voo.id}
@@ -165,8 +171,7 @@ export default function ControleVoosMeusVoos() {
                         <div className="min-w-0">
                           <dt className="text-xs text-slate-400">Rota</dt>
                           <dd className="mt-1 break-words text-slate-700 dark:text-slate-200">
-                            {origem?.codigo_icao || `ID:${voo.origem_id}`} →{' '}
-                            {destino?.codigo_icao || `ID:${voo.destino_id}`}
+                            {flightRouteLabel(voo, aeroMap)}
                           </dd>
                         </div>
                         <div className="min-w-0">
@@ -203,14 +208,12 @@ export default function ControleVoosMeusVoos() {
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {filteredVoos.map((voo) => {
-                        const origem = aeroMap.get(voo.origem_id);
-                        const destino = aeroMap.get(voo.destino_id);
                         return (
                           <tr key={voo.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{formatDate(voo.data_programacao)}</td>
                             <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{voo.prefixo}</td>
                             <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">
-                              {origem?.codigo_icao || `ID:${voo.origem_id}`} → {destino?.codigo_icao || `ID:${voo.destino_id}`}
+                              {flightRouteLabel(voo, aeroMap)}
                             </td>
                             <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{formatTime(voo.horario_previsto_partida)}</td>
                             <td className="px-4 py-3"><ControleVoosStatusBadge status={voo.status} /></td>

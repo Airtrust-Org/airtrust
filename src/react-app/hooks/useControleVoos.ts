@@ -34,6 +34,7 @@ export interface CvVoo {
   data_programacao: string;
   origem_id: number;
   destino_id: number;
+  rota_codigos?: string[];
   tipo_voo_id: number;
   natureza_voo_id: number;
   aeronave_id: number | null;
