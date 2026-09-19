@@ -162,10 +162,6 @@ export default function ControleVoosVooDetalhe() {
                     <dd className="text-slate-800 dark:text-slate-200">{voo.tipo_voo_id}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Natureza (ID)</dt>
-                    <dd className="text-slate-800 dark:text-slate-200">{voo.natureza_voo_id}</dd>
-                  </div>
-                  <div>
                     <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Horário previsto (saída)</dt>
                     <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatDateTime(voo.horario_previsto_partida)}</dd>
                   </div>
