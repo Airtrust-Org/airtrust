@@ -5,6 +5,7 @@ import {
   applyStageContinuity,
   calcClockDurationHhMm,
   calcStageTotalWeight,
+  formatDurationDigits,
   payloadToKg,
   toDurationInput,
   validateStageDrafts,
@@ -14,6 +15,15 @@ describe('Pilot RDV operational calculations', () => {
   it('calcula tempo de voo e total em HH:MM inclusive cruzando meia-noite', () => {
     expect(calcClockDurationHhMm('08:10', '09:45')).toBe('01:35');
     expect(calcClockDurationHhMm('23:50', '00:20')).toBe('00:30');
+  });
+
+  it('insere dois-pontos automaticamente ao completar quatro dígitos da duração', () => {
+    expect(formatDurationDigits('0')).toBe('0');
+    expect(formatDurationDigits('01')).toBe('01');
+    expect(formatDurationDigits('013')).toBe('013');
+    expect(formatDurationDigits('0130')).toBe('01:30');
+    expect(formatDurationDigits('01 30')).toBe('01:30');
+    expect(formatDurationDigits('01:30')).toBe('01:30');
   });
 
   it('normaliza durações digitadas como tempo decorrido para HH:MM', () => {
