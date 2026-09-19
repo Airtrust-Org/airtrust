@@ -13,6 +13,7 @@ import 'material-symbols/outlined.css';
 import { registerServiceWorker } from '@/lib/sw-manager';
 import { installGlobalApiFetch } from '@/react-app/lib/apiFetch';
 import { installTableWheelScrollLock } from '@/react-app/lib/tableWheelScrollLock';
+import { installFrontendVersionMonitor } from '@/react-app/lib/frontendVersionMonitor';
 import { installChunkErrorListeners } from '@/react-app/utils/lazyWithRetry';
 import GlobalConfirmDialogHost from '@/react-app/components/modals/GlobalConfirmDialogHost';
 import GlobalAlertDialogHost from '@/react-app/components/modals/GlobalAlertDialogHost';
@@ -52,6 +53,7 @@ function safeSessionRemove(key: string): void {
 
 installChunkErrorListeners();
 installGlobalApiFetch();
+installFrontendVersionMonitor();
 
 // ✅ Em produção, o app apenas remove service workers antigos e caches legados.
 if (import.meta.env.PROD) {
