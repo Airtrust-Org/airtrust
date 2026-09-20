@@ -139,6 +139,18 @@ describe('Pilot Offline shell', () => {
     expect(syncSuccessBlock).not.toContain('closeOperationalEditor();');
   });
 
+  it('reconcilia automaticamente um rascunho ja transmitido quando o pacote servidor avanca', () => {
+    expect(pilotApp).toContain('async function reconcileAcceptedDraftWithFreshPackage');
+    expect(pilotApp).toContain("value.sync_state !== 'accepted_requires_refresh'");
+    expect(pilotApp).toContain("String(value.source_package_id || '') === String(identity.packageId)");
+    expect(pilotApp).toContain('const snapshot = buildDraftSnapshot(packageData, previousSequence)');
+    expect(pilotApp).toContain("vault.deleteJson('stage_drafts', record.id)");
+    expect(pilotApp).toContain('existingRdv = reconciled.rdvRecord');
+    expect(pilotApp).not.toContain(
+      'Este rascunho já foi transmitido. Atualize o pacote do voo antes de iniciar nova edição.',
+    );
+  });
+
   it('separa sincronizacao de dados do envio e oferece um fluxo unico para a Coordenacao', () => {
     expect(pilotIndex).toContain('Sincronizar dados com o AirTrust');
     expect(pilotIndex).toContain('Concluir e enviar à Coordenação');
@@ -163,7 +175,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v29'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v30'");
     expect(pilotSw).not.toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
