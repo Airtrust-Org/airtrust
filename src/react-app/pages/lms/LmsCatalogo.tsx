@@ -598,8 +598,8 @@ function ThumbnailDropzone({
         disabled={disabled}
         onChange={(e) => pick(e.target.files?.[0] ?? null)}
       />
-      <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center">
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 aspect-[16/9]">
+      <div className="space-y-4">
+        <div className="aspect-[16/9] w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm">
           {previewUrl ? (
             <img
               src={previewUrl}
@@ -609,18 +609,27 @@ function ThumbnailDropzone({
               className="h-full w-full object-cover"
             />
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.4),_transparent_35%),linear-gradient(135deg,_#0f172a_0%,_#111827_100%)] text-white/80">
-              <ImagePlus className="h-8 w-8" />
-              <p className="px-6 text-center text-sm font-medium">Adicione uma capa</p>
+            <div className="flex h-full flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.4),_transparent_35%),linear-gradient(135deg,_#0f172a_0%,_#111827_100%)] px-6 text-center text-white/80">
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
+                <ImagePlus className="h-7 w-7" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">Adicione uma capa</p>
+                <p className="mt-1 text-xs text-white/60">Pré-visualização em formato 16:9</p>
+              </div>
             </div>
           )}
         </div>
+
         <div className="space-y-3">
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-900">Capa do curso</p>
-            <p className="mt-1 text-sm leading-6 text-slate-500">PNG, JPG, WEBP ou GIF até 5 MB.</p>
+            <p className="mt-1 text-sm leading-5 text-slate-500">
+              PNG, JPG, WEBP ou GIF até 5 MB. Recomendado: proporção 16:9.
+            </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
               type="button"
@@ -636,8 +645,18 @@ function ThumbnailDropzone({
               </Button>
             ) : null}
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-            {file ? `${file.name} · ${formatFileSize(file.size)}` : 'Nenhum arquivo selecionado.'}
+
+          <div className="min-w-0 rounded-xl border border-slate-200 bg-white px-3.5 py-3">
+            {file ? (
+              <>
+                <p className="truncate text-sm font-medium text-slate-700" title={file.name}>
+                  {file.name}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">{formatFileSize(file.size)}</p>
+              </>
+            ) : (
+              <p className="text-sm text-slate-500">Nenhum arquivo selecionado.</p>
+            )}
           </div>
         </div>
       </div>
