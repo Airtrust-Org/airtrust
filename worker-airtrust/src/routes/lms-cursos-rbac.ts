@@ -19,6 +19,7 @@ import {
   isValidOperationalDomain,
   resolveOperationalReadScope,
   assertOperationalAccess,
+  isTenantRbacEnabled,
   normalizeTenantRole,
   type OperationalReadScope,
 } from '../services/operational-domain-access';
@@ -91,6 +92,18 @@ export const requireOperacoesCurso = (
   return async (c, next) => {
     const cursoId = Number(c.req.param('id')) || 0;
     const empresaId = Number(getContextValue(c, 'empresaId') || 0);
+    const normalizedRole = normalizeTenantRole(getContextValue(c, 'userRole'));
+
+    // LMS catalog deletion is a tenant-administration action, not a
+    // manager-sector operation. The route still requires the explicit LMS
+    // "deletar" permission and the handler remains empresa_id-scoped.
+    // Preserve fail-closed validation of the tenant RBAC rollout state
+    // before bypassing only this operational-domain layer.
+    if (action === 'delete' && normalizedRole === 'admin') {
+      await isTenantRbacEnabled(c.env.DB, empresaId);
+      await next();
+      return;
+    }
 
     if (cursoId > 0 && (await isDomainAgnosticLmsCurso({ db: c.env.DB, empresaId, c, cursoId }))) {
       await next();

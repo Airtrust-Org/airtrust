@@ -119,6 +119,88 @@ describe('LMS cursos domínio-agnósticos', () => {
     ).resolves.toBeNull();
   });
 
+  it('permite ao administrador do tenant excluir curso classificado sem vínculo de gestor setorial', async () => {
+    const db = makeDb();
+    const app = new Hono<{ Bindings: Env }>();
+    app.onError(errorHandler);
+    app.use('*', async (c, next) => {
+      c.set('empresaId' as never, 2 as never);
+      c.set('userId' as never, 999 as never);
+      c.set('userRole' as never, 'admin' as never);
+      await next();
+    });
+    app.delete('/cursos/:id', requireOperacoesCurso('delete'), (c) => c.json({ ok: true }));
+
+    const response = await app.request('http://localhost/cursos/500', { method: 'DELETE' }, {
+      DB: db as unknown as D1Database,
+    } as unknown as Env);
+
+    expect(response.status).toBe(200);
+  });
+
+  it('mantém gestor sem escopo operacional impedido de excluir curso classificado', async () => {
+    const db = makeDb();
+    const app = new Hono<{ Bindings: Env }>();
+    app.onError(errorHandler);
+    app.use('*', async (c, next) => {
+      c.set('empresaId' as never, 2 as never);
+      c.set('userId' as never, 999 as never);
+      c.set('userRole' as never, 'gestor' as never);
+      await next();
+    });
+    app.delete('/cursos/:id', requireOperacoesCurso('delete'), (c) => c.json({ ok: true }));
+
+    const response = await app.request('http://localhost/cursos/500', { method: 'DELETE' }, {
+      DB: db as unknown as D1Database,
+    } as unknown as Env);
+
+    expect(response.status).toBe(403);
+  });
+
+  it('mantém o delete de admin fail-closed quando o estado do RBAC do tenant é inválido', async () => {
+    const db = {
+      prepare: () => ({
+        bind: () => ({
+          first: async () => ({ operational_domain_rbac_enabled: 'invalid' }),
+        }),
+      }),
+    } as unknown as D1Database;
+    const app = new Hono<{ Bindings: Env }>();
+    app.onError(errorHandler);
+    app.use('*', async (c, next) => {
+      c.set('empresaId' as never, 2 as never);
+      c.set('userId' as never, 999 as never);
+      c.set('userRole' as never, 'admin' as never);
+      await next();
+    });
+    app.delete('/cursos/:id', requireOperacoesCurso('delete'), (c) => c.json({ ok: true }));
+
+    const response = await app.request('http://localhost/cursos/500', { method: 'DELETE' }, {
+      DB: db,
+    } as unknown as Env);
+
+    expect(response.status).toBe(500);
+  });
+
+  it('não transforma o carve-out de exclusão em bypass genérico de escrita para admin', async () => {
+    const db = makeDb();
+    const app = new Hono<{ Bindings: Env }>();
+    app.onError(errorHandler);
+    app.use('*', async (c, next) => {
+      c.set('empresaId' as never, 2 as never);
+      c.set('userId' as never, 999 as never);
+      c.set('userRole' as never, 'admin' as never);
+      await next();
+    });
+    app.put('/cursos/:id', requireOperacoesCurso('update'), (c) => c.json({ ok: true }));
+
+    const response = await app.request('http://localhost/cursos/500', { method: 'PUT' }, {
+      DB: db as unknown as D1Database,
+    } as unknown as Env);
+
+    expect(response.status).toBe(403);
+  });
+
   it('preserva fail-closed para históricos e certificados sem classificação', async () => {
     const db = makeDb();
 
