@@ -284,7 +284,7 @@ async function buscarCandidatos(
             AND a.deleted_at IS NULL
         )=1
       ORDER BY q.id
-      LIMIT 500
+      LIMIT 2000
     `,
     )
     .bind(
