@@ -219,96 +219,109 @@ async function buscarCandidatos(
   modelo: string,
   topicoId: number | null,
 ): Promise<CandidatoRow[]> {
-  const result = await db
-    .prepare(
-      `
-      SELECT
-        q.id AS questao_id,
-        q.item_id,
-        i.topico_id,
-        i.criticidade,
-        d.nivel,
-        d.estado,
-        d.proxima_revisao_em,
-        d.ultima_exposicao_em,
-        (
-          SELECT COUNT(*)
-          FROM conhecimento_ativo_respostas r
-          JOIN conhecimento_ativo_desafio_questoes dq
-            ON dq.id=r.desafio_questao_id
-          WHERE r.empresa_id=q.empresa_id
-            AND r.funcionario_id=?
-            AND dq.questao_id=q.id
-        ) AS respondida_vezes,
-        (
-          SELECT MAX(r.respondido_em)
-          FROM conhecimento_ativo_respostas r
-          JOIN conhecimento_ativo_desafio_questoes dq
-            ON dq.id=r.desafio_questao_id
-          WHERE r.empresa_id=q.empresa_id
-            AND r.funcionario_id=?
-            AND dq.questao_id=q.id
-        ) AS ultima_resposta_em
-      FROM conhecimento_ativo_questoes q
-      JOIN conhecimento_ativo_itens i
-        ON i.id=q.item_id AND i.empresa_id=q.empresa_id
-      LEFT JOIN conhecimento_ativo_dominio d
-        ON d.empresa_id=q.empresa_id
-       AND d.funcionario_id=?
-       AND d.item_id=i.id
-       AND d.deleted_at IS NULL
-      WHERE q.empresa_id=?
-        AND q.status='APROVADA'
-        AND q.ativo=1
-        AND q.deleted_at IS NULL
-        AND LENGTH(TRIM(q.explicacao))>0
-        AND i.status='APROVADO'
-        AND i.ativo=1
-        AND i.deleted_at IS NULL
-        AND (i.aeronave_modelo IS NULL OR UPPER(REPLACE(i.aeronave_modelo,'-',''))=?)
-        AND (? IS NULL OR i.topico_id=?)
-        AND EXISTS (
-          SELECT 1
-          FROM conhecimento_ativo_item_fontes jf
-          JOIN conhecimento_ativo_fontes f
-            ON f.id=jf.fonte_id AND f.empresa_id=jf.empresa_id
-          WHERE jf.empresa_id=q.empresa_id
-            AND jf.item_id=i.id
-            AND jf.deleted_at IS NULL
-            AND f.status='VIGENTE'
-            AND f.deleted_at IS NULL
-        )
-        AND (
-          SELECT COUNT(*)
-          FROM conhecimento_ativo_alternativas a
-          WHERE a.empresa_id=q.empresa_id
-            AND a.questao_id=q.id
-            AND a.deleted_at IS NULL
-        )>=2
-        AND (
-          SELECT COUNT(*)
-          FROM conhecimento_ativo_alternativas a
-          WHERE a.empresa_id=q.empresa_id
-            AND a.questao_id=q.id
-            AND a.correta=1
-            AND a.deleted_at IS NULL
-        )=1
-      ORDER BY q.id
-      LIMIT 2000
-    `,
-    )
-    .bind(
-      funcionarioId,
-      funcionarioId,
-      funcionarioId,
-      empresaId,
-      modelo.replace(/-/g, ''),
-      topicoId,
-      topicoId,
-    )
-    .all<CandidatoRow>();
+  const candidatos: CandidatoRow[] = [];
+  const tamanhoPagina = 500;
+  let ultimoQuestaoId = 0;
 
-  return result.results || [];
+  while (true) {
+    const result = await db
+      .prepare(
+        `
+        SELECT
+          q.id AS questao_id,
+          q.item_id,
+          i.topico_id,
+          i.criticidade,
+          d.nivel,
+          d.estado,
+          d.proxima_revisao_em,
+          d.ultima_exposicao_em,
+          (
+            SELECT COUNT(*)
+            FROM conhecimento_ativo_respostas r
+            JOIN conhecimento_ativo_desafio_questoes dq
+              ON dq.id=r.desafio_questao_id
+            WHERE r.empresa_id=q.empresa_id
+              AND r.funcionario_id=?
+              AND dq.questao_id=q.id
+          ) AS respondida_vezes,
+          (
+            SELECT MAX(r.respondido_em)
+            FROM conhecimento_ativo_respostas r
+            JOIN conhecimento_ativo_desafio_questoes dq
+              ON dq.id=r.desafio_questao_id
+            WHERE r.empresa_id=q.empresa_id
+              AND r.funcionario_id=?
+              AND dq.questao_id=q.id
+          ) AS ultima_resposta_em
+        FROM conhecimento_ativo_questoes q
+        JOIN conhecimento_ativo_itens i
+          ON i.id=q.item_id AND i.empresa_id=q.empresa_id
+        LEFT JOIN conhecimento_ativo_dominio d
+          ON d.empresa_id=q.empresa_id
+         AND d.funcionario_id=?
+         AND d.item_id=i.id
+         AND d.deleted_at IS NULL
+        WHERE q.empresa_id=?
+          AND q.id>?
+          AND q.status='APROVADA'
+          AND q.ativo=1
+          AND q.deleted_at IS NULL
+          AND LENGTH(TRIM(q.explicacao))>0
+          AND i.status='APROVADO'
+          AND i.ativo=1
+          AND i.deleted_at IS NULL
+          AND (i.aeronave_modelo IS NULL OR UPPER(REPLACE(i.aeronave_modelo,'-',''))=?)
+          AND (? IS NULL OR i.topico_id=?)
+          AND EXISTS (
+            SELECT 1
+            FROM conhecimento_ativo_item_fontes jf
+            JOIN conhecimento_ativo_fontes f
+              ON f.id=jf.fonte_id AND f.empresa_id=jf.empresa_id
+            WHERE jf.empresa_id=q.empresa_id
+              AND jf.item_id=i.id
+              AND jf.deleted_at IS NULL
+              AND f.status='VIGENTE'
+              AND f.deleted_at IS NULL
+          )
+          AND (
+            SELECT COUNT(*)
+            FROM conhecimento_ativo_alternativas a
+            WHERE a.empresa_id=q.empresa_id
+              AND a.questao_id=q.id
+              AND a.deleted_at IS NULL
+          )>=2
+          AND (
+            SELECT COUNT(*)
+            FROM conhecimento_ativo_alternativas a
+            WHERE a.empresa_id=q.empresa_id
+              AND a.questao_id=q.id
+              AND a.correta=1
+              AND a.deleted_at IS NULL
+          )=1
+        ORDER BY q.id
+        LIMIT 500
+      `,
+      )
+      .bind(
+        funcionarioId,
+        funcionarioId,
+        funcionarioId,
+        empresaId,
+        ultimoQuestaoId,
+        modelo.replace(/-/g, ''),
+        topicoId,
+        topicoId,
+      )
+      .all<CandidatoRow>();
+
+    const pagina = result.results || [];
+    candidatos.push(...pagina);
+    if (pagina.length < tamanhoPagina) break;
+    ultimoQuestaoId = pagina[pagina.length - 1].questao_id;
+  }
+
+  return candidatos;
 }
 
 async function buscarItensDiagnostico(
