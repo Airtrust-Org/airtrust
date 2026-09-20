@@ -93,7 +93,7 @@ test('training compliance canonical staging flow is live and read-only', async (
   await row.locator('td').nth(7).getByRole('button').click();
   const people = await peopleP.then(payload);
   expect(people.data.length).toBe(qaTraining.pessoas);
-  await expect(page.getByText(/Pessoas.*NUNCA FEZ/i)).toBeVisible();
+  await expect(page.getByText(/^Pessoas de .* · NUNCA FEZ$/i)).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Setor / cargo' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Requisitos' })).toBeVisible();
