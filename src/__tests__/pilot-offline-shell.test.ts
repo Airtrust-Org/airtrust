@@ -133,9 +133,9 @@ describe('Pilot Offline shell', () => {
     expect(pilotSw).toContain("'/pilot/pilot-lease.js'");
     expect(pilotSw).toContain("'/pilot/pilot-lease-trust.js'");
     expect(pilotSw).toContain('url.pathname.startsWith(PILOT_SCOPE_PATH)');
-    expect(pilotSw).toContain('caches.match(PILOT_SCOPE_PATH)');
     expect(pilotSw).toContain("fetch(PILOT_SCOPE_PATH, { cache: 'no-store', redirect: 'error' })");
-    expect(pilotSw).toContain("if (cached) return cached;");
+    expect(pilotSw).toContain('const cached = await caches.match(PILOT_SCOPE_PATH)');
+    expect(pilotSw).toContain('if (cached) return cached');
     expect(pilotSw).toContain("if (url.pathname.startsWith('/api/')) return;");
     expect(pilotSw).toContain("fetch(request, { cache: 'no-store' })");
   });
@@ -146,9 +146,10 @@ describe('Pilot Offline shell', () => {
     expect(pilotBootstrap).toContain("name.startsWith(PILOT_CACHE_PREFIX)");
     expect(pilotBootstrap).toContain('window.location.reload()');
     expect(pilotBootstrap).toContain("window.setTimeout(() => void recoverStaleShell(), 8000)");
-    expect(pilotBootstrap).toContain("airtrust_pilot_controller_reload_v27");
-    expect(pilotBootstrap).toContain("navigator.serviceWorker.addEventListener('controllerchange', reloadForUpdatedController)");
-    expect(pilotBootstrap).toContain('flightLockMarkerActive()');
+    expect(pilotBootstrap).not.toContain('controllerchange');
+    expect(pilotSw).toContain('Online navigation is network-first');
+    expect(pilotBootstrap).toContain('const hadPilotControllerAtBoot = Boolean(navigator.serviceWorker?.controller)');
+    expect(pilotBootstrap).toContain('if (!hadPilotControllerAtBoot || !navigator.onLine || flightLockMarkerActive()) return;');
     expect(pilotApp).toContain("window.__AIRTRUST_PILOT_APP_READY__ = true");
     expect(pilotApp).toContain("window.dispatchEvent(new Event('airtrust:pilot-app-ready'))");
     expect(pilotApp).toContain('Não foi possível iniciar o Pilot App:');

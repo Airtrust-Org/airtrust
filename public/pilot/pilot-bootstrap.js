@@ -1,5 +1,4 @@
 const PILOT_SHELL_RECOVERY_KEY = 'airtrust_pilot_shell_recovery_v17';
-const PILOT_CONTROLLER_RELOAD_KEY = 'airtrust_pilot_controller_reload_v27';
 const PILOT_CACHE_PREFIX = 'airtrust-pilot-shell-';
 const connectivity = document.querySelector('#connectivity');
 const PILOT_OFFLINE_FLIGHT_LOCK_KEY = 'airtrust_pilot_offline_flight_locked_v1';
@@ -45,19 +44,6 @@ function clearRecoveryFlag() {
   try {
     sessionStorage.removeItem(PILOT_SHELL_RECOVERY_KEY);
   } catch {}
-}
-
-function reloadForUpdatedController() {
-  if (!navigator.onLine || flightLockMarkerActive()) return;
-  try {
-    if (sessionStorage.getItem(PILOT_CONTROLLER_RELOAD_KEY) === '1') return;
-    sessionStorage.setItem(PILOT_CONTROLLER_RELOAD_KEY, '1');
-  } catch {}
-  window.location.reload();
-}
-
-function clearControllerReloadFlag() {
-  try { sessionStorage.removeItem(PILOT_CONTROLLER_RELOAD_KEY); } catch {}
 }
 
 async function requestServiceWorkerUpdate() {
@@ -118,7 +104,5 @@ renderConnectivity();
 window.addEventListener('online', renderConnectivity);
 window.addEventListener('offline', renderConnectivity);
 window.addEventListener('airtrust:pilot-app-ready', clearRecoveryFlag, { once: true });
-window.addEventListener('airtrust:pilot-app-ready', () => window.setTimeout(clearControllerReloadFlag, 3000), { once: true });
-if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('controllerchange', reloadForUpdatedController);
 if (!flightLockMarkerActive()) void requestServiceWorkerUpdate();
 window.setTimeout(() => void recoverStaleShell(), 8000);
