@@ -516,10 +516,10 @@
       .expandable-panel > summary::after { content:'Abrir'; font-size:12px; font-weight:800; color:#0369a1; border:1px solid #7dd3fc; border-radius:999px; padding:3px 9px; background:#fff; }
       .expandable-panel[open] > summary::after { content:'Fechar'; }
       .stage-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:24px; }
-      .stage-toolbar #add-stage { min-height:46px; padding-inline:18px; }
+      .stage-toolbar #add-stage { min-height:36px; padding:7px 11px; font-size:13px; border-radius:9px; flex:0 0 auto; }
       .stage-delete { margin-top:10px; border-color:#fecaca !important; color:#b91c1c !important; }
       @media (prefers-color-scheme: dark) { .expandable-panel { background:#111827; border-color:#334155; } .expandable-panel > summary { color:#e2e8f0; } }
-      @media (max-width: 900px) { .stage-toolbar { align-items:stretch; flex-direction:column; } .stage-toolbar #add-stage { width:100%; font-size:16px; } }
+      @media (max-width: 900px) { .stage-toolbar { align-items:flex-end; flex-direction:row; } .stage-toolbar > div { flex:1 1 auto; min-width:0; } .stage-toolbar #add-stage { width:auto; font-size:13px; white-space:nowrap; } }
       @media (max-width: 700px) {
         .topbar { align-items: flex-start; flex-direction: column; }
         .topbar-actions { width: 100%; justify-content: space-between; }
@@ -659,11 +659,11 @@
               <h3>Etapas</h3>
               <p class="muted">Partida, decolagem, pouso e corte usam somente hora; a data do voo já está definida acima.</p>
             </div>
-            <button id="add-stage" class="primary" type="button">+ Nova etapa</button>
+            <button id="add-stage" class="secondary" type="button">+ Nova etapa</button>
           </div>
           <div id="rdv-stage-fields"></div>
 
-          <details class="technical-package expandable-panel" style="margin-top:18px">
+          <details class="technical-package expandable-panel" style="margin-top:18px" open>
             <summary>Resumo automático do voo</summary>
             <p class="muted">Tempo de voo, tempo total e pousos são consolidados automaticamente a partir das etapas.</p>
             <div id="rdv-form-fields" class="editor-grid"></div>

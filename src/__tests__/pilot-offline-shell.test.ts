@@ -105,6 +105,13 @@ describe('Pilot Offline shell', () => {
     expect(savedIndex).toBeGreaterThan(putIndex);
   });
 
+  it('mantem Nova etapa compacta ao lado do titulo e abre o resumo automatico por padrao', () => {
+    expect(pilotIndex).toContain('.stage-toolbar #add-stage { min-height:36px; padding:7px 11px; font-size:13px;');
+    expect(pilotIndex).toContain('id="add-stage" class="secondary"');
+    expect(pilotIndex).toContain('<details class="technical-package expandable-panel" style="margin-top:18px" open>');
+    expect(pilotIndex).toContain('<summary>Resumo automático do voo</summary>');
+  });
+
   it('oferece busca de justificativas por causa raiz, codigo, categoria e descricao', () => {
     expect(pilotApp).toContain('function createJustificationPicker');
     expect(pilotApp).toContain('Busque sempre a causa raiz do motivo do atraso.');
