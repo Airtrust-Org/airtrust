@@ -69,12 +69,9 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate' && url.pathname.startsWith(PILOT_SCOPE_PATH)) {
     event.respondWith(
       (async () => {
-        const cached = await caches.match(PILOT_SCOPE_PATH);
-        if (cached) return cached;
         try {
-          // Always fetch the canonical /pilot/ shell. Cloudflare redirects
-          // /pilot/index.html -> /pilot/; Safari refuses a redirected Response
-          // when that Response is returned by a service worker navigation.
+          // Online navigation is network-first so a reopened Pilot App receives
+          // the current shell immediately. Offline fallback remains canonical /pilot/.
           const response = await fetch(PILOT_SCOPE_PATH, { cache: 'no-store', redirect: 'error' });
           if (response.ok) {
             const cache = await caches.open(PILOT_CACHE_VERSION);
@@ -82,6 +79,8 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         } catch {
+          const cached = await caches.match(PILOT_SCOPE_PATH);
+          if (cached) return cached;
           return new Response('Pilot Offline indisponível neste dispositivo.', {
             status: 503,
             headers: { 'Content-Type': 'text/plain; charset=utf-8' },
@@ -96,14 +95,18 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     (async () => {
-      const cached = await caches.match(url.pathname);
-      if (cached) return cached;
-      const response = await fetch(request, { cache: 'no-store' });
-      if (response.ok) {
-        const cache = await caches.open(PILOT_CACHE_VERSION);
-        await cache.put(url.pathname, response.clone());
+      try {
+        const response = await fetch(request, { cache: 'no-store' });
+        if (response.ok) {
+          const cache = await caches.open(PILOT_CACHE_VERSION);
+          await cache.put(url.pathname, response.clone());
+        }
+        return response;
+      } catch {
+        const cached = await caches.match(url.pathname);
+        if (cached) return cached;
+        return new Response('Recurso do Pilot App indisponível offline.', { status: 503 });
       }
-      return response;
     })(),
   );
 });

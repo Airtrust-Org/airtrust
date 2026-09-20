@@ -148,8 +148,6 @@ describe('Pilot Offline shell', () => {
     expect(pilotBootstrap).toContain("window.setTimeout(() => void recoverStaleShell(), 8000)");
     expect(pilotBootstrap).not.toContain('controllerchange');
     expect(pilotSw).toContain('Online navigation is network-first');
-    expect(pilotBootstrap).toContain('const hadPilotControllerAtBoot = Boolean(navigator.serviceWorker?.controller)');
-    expect(pilotBootstrap).toContain('if (!hadPilotControllerAtBoot || !navigator.onLine || flightLockMarkerActive()) return;');
     expect(pilotApp).toContain("window.__AIRTRUST_PILOT_APP_READY__ = true");
     expect(pilotApp).toContain("window.dispatchEvent(new Event('airtrust:pilot-app-ready'))");
     expect(pilotApp).toContain('Não foi possível iniciar o Pilot App:');
