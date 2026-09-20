@@ -43,6 +43,8 @@ test('training compliance canonical staging flow is live and read-only', async (
   await expect(page.getByRole('heading', { name: 'Compliance de Treinamentos' })).toBeVisible();
   await expect(page.getByRole('combobox').first()).toContainText('Todos os setores');
   await expect(page.getByRole('combobox').nth(1)).toContainText('Todos os cargos');
+  await expect(page.getByRole('heading', { name: 'Situação dos requisitos' })).toBeVisible();
+  await expect(page.getByText('Realizados', { exact: true }).first()).toBeVisible();
 
   const [capabilities, catalogs, summary, trainings] = await Promise.all([
     capabilitiesP.then(payload),
@@ -88,12 +90,13 @@ test('training compliance canonical staging flow is live and read-only', async (
       url.searchParams.get('qualificacao_tipo_id') === String(qaTraining.qualificacao_tipo_id) &&
       url.searchParams.get('status') === 'NAO_REALIZADO',
   );
-  await row.locator('td').nth(5).getByRole('button').click();
+  await row.locator('td').nth(7).getByRole('button').click();
   const people = await peopleP.then(payload);
   expect(people.data.length).toBe(qaTraining.pessoas);
-  await expect(page.getByText(/Pessoas.*NAO REALIZADO/i)).toBeVisible();
+  await expect(page.getByText(/Pessoas.*NUNCA FEZ/i)).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
-  await expect(page.getByRole('columnheader', { name: 'Cargo' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Setor / cargo' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Treinamentos' })).toBeVisible();
 
   const sectorsP = waitApi(page, '/api/compliance-treinamentos/setores');
   await page.getByRole('button', { name: 'Setores', exact: true }).click();
