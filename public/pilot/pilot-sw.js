@@ -1,8 +1,7 @@
-const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v24';
+const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v25';
 const PILOT_SCOPE_PATH = '/pilot/';
 const PRECACHE_URLS = [
   '/pilot/',
-  '/pilot/index.html',
   '/pilot/pilot-bootstrap.js',
   '/pilot/pilot-app.js',
   '/pilot/pilot-preflight.js',
@@ -70,13 +69,16 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate' && url.pathname.startsWith(PILOT_SCOPE_PATH)) {
     event.respondWith(
       (async () => {
-        const cached = await caches.match('/pilot/index.html');
+        const cached = await caches.match(PILOT_SCOPE_PATH);
         if (cached) return cached;
         try {
-          const response = await fetch(request, { cache: 'no-store' });
+          // Always fetch the canonical /pilot/ shell. Cloudflare redirects
+          // /pilot/index.html -> /pilot/; Safari refuses a redirected Response
+          // when that Response is returned by a service worker navigation.
+          const response = await fetch(PILOT_SCOPE_PATH, { cache: 'no-store', redirect: 'error' });
           if (response.ok) {
             const cache = await caches.open(PILOT_CACHE_VERSION);
-            await cache.put('/pilot/index.html', response.clone());
+            await cache.put(PILOT_SCOPE_PATH, response.clone());
           }
           return response;
         } catch {
