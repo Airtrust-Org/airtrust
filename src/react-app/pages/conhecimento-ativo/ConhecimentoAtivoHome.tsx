@@ -7,6 +7,7 @@ import {
   Circle,
   Clock3,
   RefreshCw,
+  Shuffle,
   Sparkles,
   Target,
   Trophy,
@@ -46,6 +47,7 @@ export default function ConhecimentoAtivoHome() {
   const mapa = useConhecimentoAtivoMapa();
   const gerar = useGerarDesafioConhecimento();
   const [modeloSelecionado, setModeloSelecionado] = useState<string | null>(null);
+  const [modoSelecionado, setModoSelecionado] = useState<'TOPICO' | 'MISTO' | null>(null);
   const [topicoSelecionadoId, setTopicoSelecionadoId] = useState<number | null>(null);
 
   const data = resumo.data;
@@ -54,18 +56,25 @@ export default function ConhecimentoAtivoHome() {
   const modelos = data?.modelos?.length ? data.modelos : ['AW139', 'SK76'];
 
   const topicosDoModelo = useMemo(
-    () => (mapa.data ?? []).filter((topico) => topico.aeronave_modelo === modeloSelecionado),
+    () =>
+      (mapa.data ?? [])
+        .filter((topico) => topico.aeronave_modelo === modeloSelecionado)
+        .sort((a, b) => b.prioridade_revisao - a.prioridade_revisao || a.nome.localeCompare(b.nome)),
     [mapa.data, modeloSelecionado],
   );
 
   const topicoSelecionado = topicosDoModelo.find(
     (topico) => topico.topico_id === topicoSelecionadoId,
   );
+  const itensDoModelo = topicosDoModelo.reduce((sum, topico) => sum + Number(topico.itens || 0), 0);
+  const mistoDisponivel = itensDoModelo >= 10;
 
   const pendenteSelecionado = desafios.find(
     (item) =>
       item.aeronave_modelo === modeloSelecionado &&
-      item.topico_id === topicoSelecionadoId &&
+      (modoSelecionado === 'MISTO'
+        ? item.topico_id == null
+        : item.topico_id === topicoSelecionadoId) &&
       (item.status === 'DISPONIVEL' || item.status === 'EM_ANDAMENTO'),
   );
 
@@ -83,6 +92,7 @@ export default function ConhecimentoAtivoHome() {
 
   const selecionarModelo = (modelo: string) => {
     setModeloSelecionado(modelo);
+    setModoSelecionado(null);
     setTopicoSelecionadoId(null);
   };
 
@@ -91,14 +101,22 @@ export default function ConhecimentoAtivoHome() {
       toast.info('Escolha primeiro o modelo de aeronave.');
       return;
     }
-    if (!topicoSelecionado) {
+    if (!modoSelecionado) {
+      toast.info('Escolha Revisão inteligente ou uma área específica.');
+      return;
+    }
+    if (modoSelecionado === 'TOPICO' && !topicoSelecionado) {
       toast.info('Escolha a área de conhecimento para este desafio.');
       return;
     }
-    if (!topicoSelecionado.disponivel_para_desafio) {
+    if (modoSelecionado === 'TOPICO' && !topicoSelecionado?.disponivel_para_desafio) {
       toast.info(
         'Esta área ainda não possui itens suficientes para formar um desafio de 10 questões.',
       );
+      return;
+    }
+    if (modoSelecionado === 'MISTO' && !mistoDisponivel) {
+      toast.info('Ainda não há 10 itens distintos no modelo para formar uma revisão inteligente.');
       return;
     }
     if (pendenteSelecionado) {
@@ -109,7 +127,8 @@ export default function ConhecimentoAtivoHome() {
     try {
       const result = await gerar.mutateAsync({
         aeronaveModelo: modeloSelecionado,
-        topicoId: topicoSelecionado.topico_id,
+        topicoId: modoSelecionado === 'TOPICO' ? topicoSelecionado?.topico_id ?? null : null,
+        modo: modoSelecionado,
       });
       navigate(`/conhecimento-ativo/desafios/${result.desafio.id}`);
     } catch (error) {
@@ -117,7 +136,7 @@ export default function ConhecimentoAtivoHome() {
         error instanceof ConhecimentoAtivoApiError &&
         error.code === 'CONHECIMENTO_ATIVO_CONTEUDO_INSUFICIENTE'
       ) {
-        toast.info('Ainda não há conteúdo suficiente para montar 10 questões nesta área.');
+        toast.info('Ainda não há conteúdo suficiente para montar 10 questões neste recorte.');
         return;
       }
       toast.error(
@@ -151,8 +170,8 @@ export default function ConhecimentoAtivoHome() {
                     Escolha o que você quer reforçar.
                   </h1>
                   <p className="mt-2 max-w-xl text-sm leading-relaxed text-sky-100 sm:text-base">
-                    Selecione a aeronave e a área. Cada desafio tem 10 questões e, após cada
-                    resposta, a explicação permanece na tela até você avançar.
+                    Selecione a aeronave e escolha uma área específica ou a Revisão inteligente,
+                    que mistura sistemas e prioriza o que você mais precisa reforçar.
                   </p>
                 </div>
 
@@ -242,15 +261,15 @@ export default function ConhecimentoAtivoHome() {
               </div>
 
               <div className="mt-6 border-t border-slate-100 pt-5">
-                <h3 className="text-base font-semibold text-slate-900">2. Escolha a área</h3>
+                <h3 className="text-base font-semibold text-slate-900">2. Escolha como revisar</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Você decide onde quer reforçar conhecimento. O progresso mostra quantas questões
-                  diferentes já foram trabalhadas.
+                  Você pode focar um sistema ou deixar o AirTrust montar uma revisão personalizada
+                  entre diferentes sistemas.
                 </p>
 
                 {!modeloSelecionado ? (
                   <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-7 text-center text-sm text-slate-500">
-                    Selecione AW139 ou S-76 para ver as áreas disponíveis.
+                    Selecione AW139 ou S-76 para ver as opções de revisão.
                   </div>
                 ) : mapa.isLoading ? (
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -258,65 +277,137 @@ export default function ConhecimentoAtivoHome() {
                       <div key={item} className="h-28 animate-pulse rounded-xl bg-slate-100" />
                     ))}
                   </div>
-                ) : topicosDoModelo.length ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {topicosDoModelo.map((topico) => {
-                      const selecionado = topico.topico_id === topicoSelecionadoId;
-                      const cobertura = progressoCobertura(topico);
-                      return (
-                        <button
-                          type="button"
-                          key={topico.topico_id}
-                          onClick={() => setTopicoSelecionadoId(topico.topico_id)}
-                          className={`rounded-xl border p-4 text-left transition ${
-                            selecionado
-                              ? 'border-sky-500 bg-sky-50 ring-2 ring-sky-100'
-                              : 'border-slate-200 hover:border-sky-300 hover:bg-sky-50/40'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <h4 className="text-sm font-semibold text-slate-900">
-                                {topico.nome}
-                              </h4>
-                              <p className="mt-1 text-xs text-slate-500">
-                                {topico.respondidas}/{topico.questoes} questões trabalhadas
-                              </p>
-                            </div>
-                            <span className="shrink-0 text-xs font-semibold text-slate-500">
-                              {cobertura}%
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModoSelecionado('MISTO');
+                        setTopicoSelecionadoId(null);
+                      }}
+                      disabled={!mistoDisponivel}
+                      className={`mt-4 w-full rounded-2xl border p-4 text-left transition ${
+                        modoSelecionado === 'MISTO'
+                          ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-100'
+                          : 'border-indigo-200 bg-gradient-to-r from-indigo-50 to-sky-50 hover:border-indigo-400'
+                      } disabled:cursor-not-allowed disabled:opacity-50`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="rounded-xl bg-white p-2 text-indigo-600 shadow-sm">
+                          <Shuffle className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-sm font-semibold text-slate-900">
+                              Revisão inteligente
+                            </h4>
+                            <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
+                              diversos sistemas
                             </span>
                           </div>
-                          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-                            <div
-                              className="h-full rounded-full bg-sky-600 transition-all"
-                              style={{ width: `${cobertura}%` }}
-                            />
-                          </div>
-                          <p className="mt-2 text-xs text-slate-500">
-                            {topico.questoes} questões · {topico.desafios_estimados} desafio
-                            {topico.desafios_estimados === 1 ? '' : 's'} para percorrer o banco uma
-                            vez
+                          <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                            Mistura 10 itens entre sistemas e prioriza revisão vencida, baixa
+                            retenção, criticidade e conteúdo ainda não trabalhado.
                           </p>
-                          {!topico.disponivel_para_desafio && (
-                            <p className="mt-2 text-xs font-medium text-amber-700">
-                              Ainda não há 10 itens distintos para formar um desafio completo.
-                            </p>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-7 text-center">
-                    <p className="text-sm font-medium text-slate-700">
-                      Ainda não há áreas publicadas para {modeloLabel(modeloSelecionado)}.
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      O modelo permanece disponível e as áreas aparecerão assim que o banco técnico
-                      for publicado.
-                    </p>
-                  </div>
+                          <p className="mt-2 text-xs font-medium text-indigo-700">
+                            {topicosDoModelo.length} áreas disponíveis · seleção personalizada para
+                            você
+                          </p>
+                        </div>
+                        {modoSelecionado === 'MISTO' ? (
+                          <CheckCircle2 className="h-5 w-5 text-indigo-600" />
+                        ) : null}
+                      </div>
+                    </button>
+
+                    {topicosDoModelo.length ? (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        {topicosDoModelo.map((topico, index) => {
+                          const selecionado =
+                            modoSelecionado === 'TOPICO' &&
+                            topico.topico_id === topicoSelecionadoId;
+                          const cobertura = progressoCobertura(topico);
+                          return (
+                            <button
+                              type="button"
+                              key={topico.topico_id}
+                              onClick={() => {
+                                setModoSelecionado('TOPICO');
+                                setTopicoSelecionadoId(topico.topico_id);
+                              }}
+                              className={`rounded-xl border p-4 text-left transition ${
+                                selecionado
+                                  ? 'border-sky-500 bg-sky-50 ring-2 ring-sky-100'
+                                  : 'border-slate-200 hover:border-sky-300 hover:bg-sky-50/40'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h4 className="text-sm font-semibold text-slate-900">
+                                      {topico.nome}
+                                    </h4>
+                                    {index === 0 && topico.prioridade_revisao > 0 ? (
+                                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                        maior prioridade
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {topico.respondidas}/{topico.questoes} questões trabalhadas
+                                  </p>
+                                </div>
+                                <span className="shrink-0 text-xs font-semibold text-slate-500">
+                                  {cobertura}% percorrido
+                                </span>
+                              </div>
+                              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                                <div
+                                  className="h-full rounded-full bg-sky-600 transition-all"
+                                  style={{ width: `${cobertura}%` }}
+                                />
+                              </div>
+                              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                                <div className="rounded-lg bg-slate-50 px-2.5 py-2">
+                                  <p className="font-semibold text-slate-800">
+                                    {topico.retencao_media == null
+                                      ? 'Sem histórico'
+                                      : `${topico.retencao_media}%`}
+                                  </p>
+                                  <p className="mt-0.5 text-[10px] text-slate-500">
+                                    retenção observada
+                                  </p>
+                                </div>
+                                <div className="rounded-lg bg-slate-50 px-2.5 py-2">
+                                  <p className="font-semibold text-slate-800">
+                                    {topico.prioridade_revisao}/100
+                                  </p>
+                                  <p className="mt-0.5 text-[10px] text-slate-500">
+                                    prioridade de revisão
+                                  </p>
+                                </div>
+                              </div>
+                              <p className="mt-2 text-xs text-slate-500">
+                                {topico.itens_vencidos} vencidos · {topico.itens_frageis} frágeis ·{' '}
+                                {topico.itens_novos} novos
+                              </p>
+                              {!topico.disponivel_para_desafio && (
+                                <p className="mt-2 text-xs font-medium text-amber-700">
+                                  Ainda não há 10 itens distintos para formar um desafio completo.
+                                </p>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-7 text-center">
+                        <p className="text-sm font-medium text-slate-700">
+                          Ainda não há áreas publicadas para {modeloLabel(modeloSelecionado)}.
+                        </p>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -325,9 +416,11 @@ export default function ConhecimentoAtivoHome() {
                   Desafio selecionado
                 </p>
                 <p className="mt-2 text-sm font-semibold text-slate-900">
-                  {modeloSelecionado && topicoSelecionado
-                    ? `${modeloLabel(modeloSelecionado)} · ${topicoSelecionado.nome}`
-                    : 'Escolha aeronave e área'}
+                  {modeloSelecionado && modoSelecionado === 'MISTO'
+                    ? `${modeloLabel(modeloSelecionado)} · Revisão inteligente`
+                    : modeloSelecionado && topicoSelecionado
+                      ? `${modeloLabel(modeloSelecionado)} · ${topicoSelecionado.nome}`
+                      : 'Escolha aeronave e forma de revisão'}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
                   10 questões · cerca de {data?.estimativaMinutos ?? 8} minutos · explicação após
@@ -339,8 +432,9 @@ export default function ConhecimentoAtivoHome() {
                   disabled={
                     gerar.isPending ||
                     !modeloSelecionado ||
-                    !topicoSelecionado ||
-                    !topicoSelecionado.disponivel_para_desafio
+                    !modoSelecionado ||
+                    (modoSelecionado === 'TOPICO' && !topicoSelecionado?.disponivel_para_desafio) ||
+                    (modoSelecionado === 'MISTO' && !mistoDisponivel)
                   }
                   className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                 >
@@ -390,7 +484,7 @@ export default function ConhecimentoAtivoHome() {
                                 {desafio.numero_desafio}
                               </p>
                               <p className="mt-0.5 text-xs text-slate-500">
-                                {nomeTopico || 'Desafio anterior'} · {statusDesafio(desafio.status)}
+                                {nomeTopico || 'Revisão inteligente'} · {statusDesafio(desafio.status)}
                               </p>
                             </div>
                             {desafio.status === 'CONCLUIDO' ? (
