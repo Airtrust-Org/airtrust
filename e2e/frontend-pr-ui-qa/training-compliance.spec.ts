@@ -96,7 +96,7 @@ test('training compliance canonical staging flow is live and read-only', async (
   await expect(page.getByText(/Pessoas.*NUNCA FEZ/i)).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Setor / cargo' })).toBeVisible();
-  await expect(page.getByRole('columnheader', { name: 'Treinamentos' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Requisitos' })).toBeVisible();
 
   const sectorsP = waitApi(page, '/api/compliance-treinamentos/setores');
   await page.getByRole('button', { name: 'Setores', exact: true }).click();
@@ -108,13 +108,13 @@ test('training compliance canonical staging flow is live and read-only', async (
   }
 
   const reconciliationP = waitApi(page, '/api/compliance-treinamentos/reconciliacao');
-  await page.getByRole('button', { name: 'Matrículas × Matriz', exact: true }).click();
+  await page.getByRole('button', { name: 'Matrículas', exact: true }).click();
   const reconciliation = await reconciliationP.then(payload);
   expect(Number.isInteger(reconciliation.data.resumo.matriculas_ativas)).toBe(true);
   expect(Array.isArray(reconciliation.data.gaps_matricula)).toBe(true);
   expect(Array.isArray(reconciliation.data.matriculas_revisao)).toBe(true);
 
-  await page.getByRole('button', { name: 'Configuração da matriz', exact: true }).click();
+  await page.getByRole('button', { name: 'Matriz', exact: true }).click();
   await expect(page.getByText('Matriz por organização', { exact: true })).toBeVisible();
   const orgSector = page.getByLabel('Setor', { exact: true });
   const sectorOptions = await orgSector
@@ -138,7 +138,7 @@ test('training compliance canonical staging flow is live and read-only', async (
         orgMatrix.data[0].impacto.pessoas,
       );
       await expect(
-        page.getByRole('columnheader', { name: 'Impacto antes de salvar' }),
+        page.getByRole('columnheader', { name: 'Impacto' }),
       ).toBeVisible();
     }
   }

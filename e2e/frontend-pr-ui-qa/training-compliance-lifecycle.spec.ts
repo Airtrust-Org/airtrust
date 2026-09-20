@@ -214,7 +214,7 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   );
   const employeeIds = people.json.data.map((p: any) => Number(p.id));
 
-  await page.getByRole('button', { name: 'Configuração da matriz', exact: true }).click();
+  await page.getByRole('button', { name: 'Matriz', exact: true }).click();
   await expect(page.getByText('Matriz por organização', { exact: true })).toBeVisible();
   await chooseOrgScope(page, sector.id);
 
@@ -279,7 +279,7 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   expect(invalidPair.status).toBe(400);
 
   // 3) Reconciliation finds both mandatory gaps and bulk-enrolls them only on explicit click.
-  await page.getByRole('button', { name: 'Matrículas × Matriz', exact: true }).click();
+  await page.getByRole('button', { name: 'Matrículas', exact: true }).click();
   let recon = await reconciliation(page, sector.id, fn.id);
   let gap = recon.gaps_matricula.find((item: any) => item.qualificacao_tipo_codigo === requiredTypeCode);
   expect(gap).toBeTruthy();
@@ -307,9 +307,10 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   }).toBe(false);
 
   // Invitation is a separate explicit step. Synthetic employees have no e-mail, so no external mail is emitted.
+  await page.getByRole('button', { name: /Convites/ }).click();
   const requiredInviteText = page.getByText(requiredCourseTitle, { exact: true }).last();
   const requiredInviteGroup = requiredInviteText.locator(
-    'xpath=ancestor::div[button[contains(normalize-space(.), "Enviar/re-enviar convite por e-mail")]][1]',
+    'xpath=ancestor::div[button[@aria-label="Enviar/re-enviar convite por e-mail"]][1]',
   );
   await expect(requiredInviteGroup).toBeVisible();
   const inviteResponseP = waitResponse(page, '/api/lms/matriculas/convites/lote', 'POST');
@@ -389,7 +390,7 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   expect(cargoAggregate).toMatchObject({ pessoas: 2, requisitos_obrigatorios: 2, conformes: 2, compliance_pct: 100 });
 
   // 5) Recommended keeps applicability but leaves the mandatory denominator; restore afterwards.
-  await page.getByRole('button', { name: 'Configuração da matriz', exact: true }).click();
+  await page.getByRole('button', { name: 'Matriz', exact: true }).click();
   await chooseOrgScope(page, sector.id);
   await changeMatrixRule(page, requiredTypeCode, 'RECOMENDADA', 'PUT');
   await expect.poll(async () => (await filteredSummary(page, sector.id, fn.id)).requisitos_obrigatorios).toBe(0);
@@ -415,12 +416,13 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   await expect.poll(async () => (await filteredSummary(page, sector.id, fn.id)).compliance_pct).toBe(100);
 
   // 7) Historical orphan enrollment: mark avulsa, reopen, then convert to Setor+Cargo obligation.
-  await page.getByRole('button', { name: 'Matrículas × Matriz', exact: true }).click();
+  await page.getByRole('button', { name: 'Matrículas', exact: true }).click();
   recon = await reconciliation(page, sector.id, fn.id);
   let orphanReview = recon.matriculas_revisao.find(
     (row: any) => row.qualificacao_tipo_codigo === orphanTypeCode,
   );
   expect(orphanReview).toMatchObject({ situacao: 'MATRICULADO_SEM_REQUISITO' });
+  await page.getByRole('button', { name: /Revisar/ }).click();
   const orphanRow = page.locator('tbody tr').filter({ hasText: orphanCourseTitle }).first();
   await expect(orphanRow).toBeVisible();
   await orphanRow.locator('select').selectOption('MANTER_AVULSA');
@@ -473,6 +475,7 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   expect(gap.cursos_ead).toHaveLength(1);
 
   // Enroll the newly exposed peer gap. Historical enrollment is preserved and not duplicated.
+  await page.getByRole('button', { name: /A matricular/ }).click();
   const orphanGapRow = page.locator('tbody tr').filter({ hasText: orphanTypeCode }).first();
   const enrollPeerP = waitResponse(page, '/api/lms/matriculas/lote', 'POST');
   await orphanGapRow.getByRole('button', { name: 'Matricular gaps (sem e-mail)' }).click();

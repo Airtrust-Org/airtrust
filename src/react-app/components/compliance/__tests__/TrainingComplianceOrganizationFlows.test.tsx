@@ -265,10 +265,7 @@ describe('Training enrollment reconciliation', () => {
 
     renderWithClient(<TrainingEnrollmentReconciliation setorId={3} funcaoId={9} />);
     await screen.findAllByText('CRM EAD');
-    expect(screen.getByText('6')).toBeInTheDocument();
-    expect(screen.getByText(/1 matrícula\(s\) usam curso sem modelo/)).toBeInTheDocument();
-    expect(screen.getByText('Sem setor')).toBeInTheDocument();
-    expect(screen.getByText(/Sem modelo/)).toBeInTheDocument();
+    expect(screen.getByText(/6 matrícula\(s\) alinhada\(s\)/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Matricular gaps \(sem e-mail\)/ }));
     await waitFor(() =>
@@ -286,6 +283,7 @@ describe('Training enrollment reconciliation', () => {
       enviar_convite_email: false,
     });
 
+    fireEvent.click(screen.getByRole('button', { name: /Convites/ }));
     fireEvent.click(screen.getByRole('button', { name: /Enviar\/re-enviar convite por e-mail/ }));
     await waitFor(() =>
       expect(fetchWithAuthMock).toHaveBeenCalledWith(
@@ -300,6 +298,10 @@ describe('Training enrollment reconciliation', () => {
       matricula_ids: [701, 702],
     });
 
+    fireEvent.click(screen.getByRole('button', { name: /Revisar/ }));
+    expect(screen.getByText(/1 matrícula\(s\) usam curso sem modelo/)).toBeInTheDocument();
+    expect(screen.getByText('Sem setor')).toBeInTheDocument();
+    expect(screen.getByText(/Sem modelo/)).toBeInTheDocument();
     const rowA = screen.getByText('Pessoa A').closest('tr')!;
     fireEvent.change(within(rowA).getByRole('combobox'), {
       target: { value: 'VINCULAR_SETOR_FUNCAO' },

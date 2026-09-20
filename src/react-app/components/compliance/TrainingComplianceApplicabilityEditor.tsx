@@ -92,6 +92,7 @@ export function TrainingComplianceApplicabilityEditor({
   const [origem, setOrigem] = useState('REGULATORIO');
   const [critico, setCritico] = useState(false);
   const [referencia, setReferencia] = useState('');
+  const [showDetails, setShowDetails] = useState(false);
 
   const capabilities = useQuery({
     queryKey: ['training-compliance', 'capabilities'],
@@ -263,7 +264,7 @@ export function TrainingComplianceApplicabilityEditor({
         <div>
           <h4 className="text-sm font-semibold text-slate-900">{title}</h4>
           <p className="text-xs text-slate-500">
-            A mesma regra alimenta a matriz, o EAD e o cálculo de compliance por pessoa.
+            Defina para quem este treinamento se aplica e com qual obrigatoriedade.
           </p>
         </div>
       </div>
@@ -352,49 +353,63 @@ export function TrainingComplianceApplicabilityEditor({
             <option value="NAO_APLICA">Não se aplica (exceção)</option>
           </select>
         </label>
-        <label className="text-xs font-medium text-slate-600">
-          Origem
-          <select
-            value={origem}
-            onChange={(event) => setOrigem(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+        <div className="md:col-span-2">
+          <button
+            type="button"
+            onClick={() => setShowDetails((value) => !value)}
+            className="text-xs font-semibold text-slate-500 hover:text-primary"
           >
-            {['REGULATORIO', 'PTO', 'MANUAL', 'SGSO', 'RH', 'CLIENTE', 'EMPRESA', 'OUTRO'].map(
-              (value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ),
-            )}
-          </select>
-        </label>
-        <label className="text-xs font-medium text-slate-600 md:col-span-2">
-          Base / referência
-          <input
-            value={referencia}
-            onChange={(event) => setReferencia(event.target.value)}
-            placeholder="Ex.: PTO Parte A, RBAC 135, requisito cliente"
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-        </label>
+            {showDetails ? 'Ocultar detalhes da regra' : 'Adicionar origem, referência e criticidade'}
+          </button>
+        </div>
+        {showDetails ? (
+          <>
+            <label className="text-xs font-medium text-slate-600">
+              Origem
+              <select
+                value={origem}
+                onChange={(event) => setOrigem(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                {['REGULATORIO', 'PTO', 'MANUAL', 'SGSO', 'RH', 'CLIENTE', 'EMPRESA', 'OUTRO'].map(
+                  (value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+            <label className="text-xs font-medium text-slate-600">
+              Base / referência
+              <input
+                value={referencia}
+                onChange={(event) => setReferencia(event.target.value)}
+                placeholder="Ex.: PTO Parte A, RBAC 135, requisito cliente"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="inline-flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
+              <input
+                type="checkbox"
+                checked={critico}
+                onChange={(event) => setCritico(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              Crítico operacional
+            </label>
+          </>
+        ) : null}
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={critico}
-            onChange={(event) => setCritico(event.target.checked)}
-            className="h-4 w-4 rounded border-slate-300"
-          />
-          Crítico operacional
-        </label>
+      <div className="mt-3 flex justify-end">
         <button
           type="button"
+          aria-label="Adicionar requisito"
           onClick={() => createRule.mutate()}
           disabled={createRule.isPending}
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          <Plus className="h-4 w-4" /> Adicionar requisito
+          <Plus className="h-4 w-4" /> Adicionar regra
         </button>
       </div>
 

@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -121,12 +121,24 @@ function buildFilter(setorId: number | null, funcaoId: number | null) {
   return query ? `?${query}` : '';
 }
 
+type ComplianceTab = 'treinamentos' | 'pessoas' | 'setores' | 'reconciliacao' | 'configuracao';
+
 type ComplianceDrilldownStatus =
   | 'CONFORME'
   | 'VENCENDO'
   | 'VENCIDO'
   | 'NAO_REALIZADO'
   | 'EM_ANDAMENTO';
+
+function isComplianceTab(value: string | null): value is ComplianceTab {
+  return (
+    value === 'treinamentos' ||
+    value === 'pessoas' ||
+    value === 'setores' ||
+    value === 'reconciliacao' ||
+    value === 'configuracao'
+  );
+}
 
 function realizedCount(conformes: number, vencendo: number) {
   return Math.max(0, conformes - vencendo);
@@ -200,13 +212,66 @@ function StatusMetric({
   );
 }
 
+function StatusBreakdown({
+  emAndamento,
+  vencendo,
+  vencidos,
+  naoRealizados,
+  semConfiguracao = 0,
+}: {
+  emAndamento: number;
+  vencendo: number;
+  vencidos: number;
+  naoRealizados: number;
+  semConfiguracao?: number;
+}) {
+  const hasAttention =
+    emAndamento + vencendo + vencidos + naoRealizados + semConfiguracao > 0;
+
+  if (!hasAttention) {
+    return <span className="text-xs font-medium text-emerald-700">Sem pendências</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap justify-end gap-1.5">
+      {emAndamento > 0 ? (
+        <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
+          Em andamento {emAndamento}
+        </span>
+      ) : null}
+      {vencendo > 0 ? (
+        <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+          Vencendo {vencendo}
+        </span>
+      ) : null}
+      {vencidos > 0 ? (
+        <span className="rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700">
+          Vencidos {vencidos}
+        </span>
+      ) : null}
+      {naoRealizados > 0 ? (
+        <span className="rounded-full bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700">
+          Nunca fez {naoRealizados}
+        </span>
+      ) : null}
+      {semConfiguracao > 0 ? (
+        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+          Sem configuração {semConfiguracao}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 
 export default function ComplianceTreinamentosPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [setorId, setSetorId] = useState<number | null>(null);
   const [funcaoId, setFuncaoId] = useState<number | null>(null);
-  const [tab, setTab] = useState<
-    'treinamentos' | 'pessoas' | 'setores' | 'reconciliacao' | 'configuracao'
-  >('treinamentos');
+  const [tab, setTab] = useState<ComplianceTab>(() => {
+    const requested = searchParams.get('tab');
+    return isComplianceTab(requested) ? requested : 'treinamentos';
+  });
   const [configurationMode, setConfigurationMode] = useState<'organizacao' | 'treinamento'>(
     'organizacao',
   );
@@ -218,6 +283,13 @@ export default function ComplianceTreinamentosPage() {
     status?: ComplianceDrilldownStatus;
   } | null>(null);
   const { tipos } = useQualificacaoTipos(true, 500);
+
+  useEffect(() => {
+    const requested = searchParams.get('tab');
+    const nextTab = isComplianceTab(requested) ? requested : 'treinamentos';
+    setTab(nextTab);
+    if (nextTab !== 'pessoas') setDrilldown(null);
+  }, [searchParams]);
 
   const capabilities = useQuery({
     queryKey: ['training-compliance', 'capabilities'],
@@ -285,6 +357,16 @@ export default function ComplianceTreinamentosPage() {
     return all.filter((item) => allowed.has(item.id));
   }, [catalogs.data, setorId]);
 
+  const selectTab = (nextTab: ComplianceTab, clearDrilldown = true) => {
+    if (clearDrilldown) setDrilldown(null);
+    if (nextTab === 'setores') setFuncaoId(null);
+    setTab(nextTab);
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextTab === 'treinamentos') nextParams.delete('tab');
+    else nextParams.set('tab', nextTab);
+    setSearchParams(nextParams, { replace: true });
+  };
+
   const openPeopleDrilldown = (
     item: Training,
     status?: ComplianceDrilldownStatus,
@@ -294,12 +376,12 @@ export default function ComplianceTreinamentosPage() {
       qualificacao_nome: item.qualificacao_tipo_nome,
       status,
     });
-    setTab('pessoas');
+    selectTab('pessoas', false);
   };
 
   const openStatusDrilldown = (status: ComplianceDrilldownStatus) => {
     setDrilldown({ status });
-    setTab('pessoas');
+    selectTab('pessoas', false);
   };
 
   const summaryRealized = realizedCount(
@@ -328,38 +410,57 @@ export default function ComplianceTreinamentosPage() {
               <h1 className="text-xl font-semibold text-slate-900">Compliance de Treinamentos</h1>
             </div>
             <p className="mt-1 max-w-3xl text-sm text-slate-500">
-              Quem precisa de qual treinamento, por qual regra e qual é a situação atual. Requisitos
-              nunca realizados aparecem como gap mesmo sem existir vencimento anterior.
+              Visão geral dos requisitos, vencimentos e pendências de treinamento.
             </p>
           </div>
-          <div className="grid min-w-[300px] gap-2 sm:grid-cols-2">
-            <select
-              value={setorId ?? ''}
-              onChange={(event) => handleSetor(event.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-            >
-              <option value="">Todos os setores</option>
-              {(catalogs.data?.setores || []).map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.nome}
-                </option>
-              ))}
-            </select>
-            <select
-              value={funcaoId ?? ''}
-              onChange={(event) =>
-                setFuncaoId(event.target.value ? Number(event.target.value) : null)
-              }
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-            >
-              <option value="">Todos os cargos</option>
-              {functions.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.nome}
-                </option>
-              ))}
-            </select>
-          </div>
+          {tab !== 'configuracao' ? (
+            <div className="flex min-w-[300px] flex-col gap-2">
+              <div className={`grid gap-2 ${tab === 'setores' ? '' : 'sm:grid-cols-2'}`}>
+                <select
+                  aria-label="Filtrar por setor"
+                  value={setorId ?? ''}
+                  onChange={(event) => handleSetor(event.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">Todos os setores</option>
+                  {(catalogs.data?.setores || []).map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.nome}
+                    </option>
+                  ))}
+                </select>
+                {tab !== 'setores' ? (
+                  <select
+                    aria-label="Filtrar por cargo"
+                    value={funcaoId ?? ''}
+                    onChange={(event) =>
+                      setFuncaoId(event.target.value ? Number(event.target.value) : null)
+                    }
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  >
+                    <option value="">Todos os cargos</option>
+                    {functions.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.nome}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+              </div>
+              {setorId || funcaoId ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSetorId(null);
+                    setFuncaoId(null);
+                  }}
+                  className="self-end text-xs font-medium text-slate-500 hover:text-primary"
+                >
+                  Limpar filtros
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         {capabilities.isLoading ? (
@@ -381,7 +482,8 @@ export default function ComplianceTreinamentosPage() {
 
         {schemaReady ? (
           <>
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)_minmax(260px,0.95fr)]">
+            {tab === 'treinamentos' ? (
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)_minmax(260px,0.95fr)]">
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -477,8 +579,8 @@ export default function ComplianceTreinamentosPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setDrilldown(null);
-                  setTab('configuracao');
+                  setConfigurationMode('organizacao');
+                  selectTab('configuracao');
                 }}
                 className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 text-left shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
               >
@@ -502,16 +604,12 @@ export default function ComplianceTreinamentosPage() {
                   {summary.data?.cargos_sem_matriz ?? 0} cargo(s) sem matriz ·{' '}
                   {summary.data?.setores_sem_matriz ?? 0} setor(es) sem matriz
                 </p>
-                {(summary.data?.matriculas_sem_requisito ?? 0) > 0 ? (
-                  <p className="mt-1 text-xs font-medium text-amber-800">
-                    {summary.data?.matriculas_sem_requisito ?? 0} matrícula(s) sem requisito
-                  </p>
-                ) : null}
                 <span className="mt-4 inline-flex text-xs font-semibold text-amber-900">
                   Revisar configuração →
                 </span>
               </button>
-            </div>
+              </div>
+            ) : null}
 
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-wrap gap-2 border-b border-slate-100 p-3">
@@ -520,14 +618,14 @@ export default function ComplianceTreinamentosPage() {
                     ['treinamentos', 'Treinamentos'],
                     ['pessoas', 'Pessoas'],
                     ['setores', 'Setores'],
-                    ['reconciliacao', 'Matrículas × Matriz'],
-                    ['configuracao', 'Configuração da matriz'],
+                    ['reconciliacao', 'Matrículas'],
+                    ['configuracao', 'Matriz'],
                   ] as const
                 ).map(([value, label]) => (
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setTab(value)}
+                    onClick={() => selectTab(value)}
                     className={`rounded-lg px-3 py-2 text-sm font-medium ${tab === value ? 'bg-primary/10 text-primary' : 'text-slate-600 hover:bg-slate-100'}`}
                   >
                     {label}
@@ -662,13 +760,10 @@ export default function ComplianceTreinamentosPage() {
                         <tr>
                           <th className="px-4 py-3 text-left">Pessoa</th>
                           <th className="px-3 py-3 text-left">Setor / cargo</th>
-                          <th className="px-3 py-3 text-right">Treinamentos</th>
+                          <th className="px-3 py-3 text-right">Requisitos</th>
                           <th className="px-3 py-3 text-right">Compliance</th>
                           <th className="px-3 py-3 text-right">Realizados</th>
-                          <th className="px-3 py-3 text-right">Em andamento</th>
-                          <th className="px-3 py-3 text-right">Vencendo</th>
-                          <th className="px-3 py-3 text-right">Vencidos</th>
-                          <th className="px-3 py-3 text-right">Nunca fez</th>
+                          <th className="px-4 py-3 text-right">Situação</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -703,17 +798,14 @@ export default function ComplianceTreinamentosPage() {
                                 ? '—'
                                 : realizedCount(item.conformes, item.vencendo)}
                             </td>
-                            <td className="px-3 py-3 text-right tabular-nums text-blue-700">
-                              {!item.configurado ? '—' : item.em_andamento}
-                            </td>
-                            <td className="px-3 py-3 text-right tabular-nums text-amber-700">
-                              {!item.configurado ? '—' : item.vencendo}
-                            </td>
-                            <td className="px-3 py-3 text-right font-medium tabular-nums text-red-700">
-                              {!item.configurado ? '—' : item.vencidos}
-                            </td>
-                            <td className="px-3 py-3 text-right font-medium tabular-nums text-orange-700">
-                              {!item.configurado ? '—' : item.nao_realizados}
+                            <td className="px-4 py-3 text-right">
+                              <StatusBreakdown
+                                emAndamento={item.em_andamento}
+                                vencendo={item.vencendo}
+                                vencidos={item.vencidos}
+                                naoRealizados={item.nao_realizados}
+                                semConfiguracao={item.configurado ? 0 : 1}
+                              />
                             </td>
                           </tr>
                         ))}
@@ -733,11 +825,7 @@ export default function ComplianceTreinamentosPage() {
                         <th className="px-3 py-3 text-right">Requisitos</th>
                         <th className="px-3 py-3 text-right">Compliance</th>
                         <th className="px-3 py-3 text-right">Realizados</th>
-                        <th className="px-3 py-3 text-right">Em andamento</th>
-                        <th className="px-3 py-3 text-right">Vencendo</th>
-                        <th className="px-3 py-3 text-right">Vencidos</th>
-                        <th className="px-3 py-3 text-right">Nunca fez</th>
-                        <th className="px-3 py-3 text-right">Sem configuração</th>
+                        <th className="px-4 py-3 text-right">Situação</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -774,18 +862,14 @@ export default function ComplianceTreinamentosPage() {
                             <td className="px-3 py-3 text-right font-medium text-emerald-700">
                               {realizedCount(sector.conformes, sector.vencendo)}
                             </td>
-                            <td className="px-3 py-3 text-right text-blue-700">
-                              {sector.em_andamento}
-                            </td>
-                            <td className="px-3 py-3 text-right text-amber-700">
-                              {sector.vencendo}
-                            </td>
-                            <td className="px-3 py-3 text-right text-red-700">{sector.vencidos}</td>
-                            <td className="px-3 py-3 text-right text-orange-700">
-                              {sector.nao_realizados}
-                            </td>
-                            <td className="px-3 py-3 text-right">
-                              {sector.pessoas_sem_configuracao}
+                            <td className="px-4 py-3 text-right">
+                              <StatusBreakdown
+                                emAndamento={sector.em_andamento}
+                                vencendo={sector.vencendo}
+                                vencidos={sector.vencidos}
+                                naoRealizados={sector.nao_realizados}
+                                semConfiguracao={sector.pessoas_sem_configuracao}
+                              />
                             </td>
                           </tr>,
                         ];
@@ -809,20 +893,14 @@ export default function ComplianceTreinamentosPage() {
                                 <td className="px-3 py-2 text-right font-medium text-emerald-700">
                                   {realizedCount(cargo.conformes, cargo.vencendo)}
                                 </td>
-                                <td className="px-3 py-2 text-right text-blue-700">
-                                  {cargo.em_andamento}
-                                </td>
-                                <td className="px-3 py-2 text-right text-amber-700">
-                                  {cargo.vencendo}
-                                </td>
-                                <td className="px-3 py-2 text-right text-red-700">
-                                  {cargo.vencidos}
-                                </td>
-                                <td className="px-3 py-2 text-right text-orange-700">
-                                  {cargo.nao_realizados}
-                                </td>
-                                <td className="px-3 py-2 text-right">
-                                  {cargo.pessoas_sem_configuracao}
+                                <td className="px-4 py-2 text-right">
+                                  <StatusBreakdown
+                                    emAndamento={cargo.em_andamento}
+                                    vencendo={cargo.vencendo}
+                                    vencidos={cargo.vencidos}
+                                    naoRealizados={cargo.nao_realizados}
+                                    semConfiguracao={cargo.pessoas_sem_configuracao}
+                                  />
                                 </td>
                               </tr>
                             )),
@@ -886,13 +964,11 @@ export default function ComplianceTreinamentosPage() {
                       {selectedTipoId ? (
                         <TrainingComplianceApplicabilityEditor
                           qualificacaoTipoId={selectedTipoId}
-                          title="Aplicabilidade canônica"
+                          title="Regras deste treinamento"
                         />
                       ) : (
                         <div className="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">
-                          Selecione um treinamento para definir empresa, setor e cargo. Alterações
-                          feitas aqui aparecem também nos modelos de qualificação e nos cursos EAD
-                          vinculados.
+                          Selecione um treinamento para consultar e editar suas regras de aplicação.
                         </div>
                       )}
                     </>
@@ -901,31 +977,6 @@ export default function ComplianceTreinamentosPage() {
               ) : null}
             </div>
 
-            {(summary.data?.setores?.length || 0) > 1 ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="text-sm font-semibold text-slate-900">Compliance por setor</h2>
-                <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  {(summary.data?.setores || []).map((item) => (
-                    <div key={item.setor_id ?? 'none'} className="rounded-xl bg-slate-50 px-3 py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-sm font-medium text-slate-700">
-                          {item.setor_nome}
-                        </span>
-                        <span className="text-sm font-bold text-slate-900">
-                          {item.compliance_pct == null ? '—' : `${item.compliance_pct}%`}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {item.pessoas} pessoa(s)
-                        {item.pessoas_sem_configuracao > 0
-                          ? ` · ${item.pessoas_sem_configuracao} sem configuração`
-                          : ''}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </>
         ) : null}
       </div>

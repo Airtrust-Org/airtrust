@@ -4,13 +4,19 @@ import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(__dirname, '../MatrizTreinamento.tsx'), 'utf8');
 const appSource = readFileSync(resolve(__dirname, '../../../App.tsx'), 'utf8');
+const funcoesSource = readFileSync(resolve(__dirname, '../../Funcoes.tsx'), 'utf8');
 
 describe('MatrizTreinamento canonical compliance boundary', () => {
-  it('edita a matriz canônica e navega pela rota operacional canônica', () => {
-    expect(source).toContain('TrainingComplianceApplicabilityEditor');
-    expect(source).toContain('/treinamentos/compliance');
+  it('mantém uma única superfície canônica para editar a matriz', () => {
+    expect(source).toContain('/treinamentos/compliance?tab=configuracao');
+    expect(source).not.toContain('TrainingComplianceApplicabilityEditor');
     expect(source).not.toContain('to="/compliance-treinamentos"');
     expect(source).not.toContain('/api/matriz-treinamento/registros');
+  });
+
+  it('remove a matriz legada da gestão de funções', () => {
+    expect(funcoesSource).not.toContain('ComplianceMatrix');
+    expect(funcoesSource).not.toContain('Matriz de Compliance');
   });
 
   it('mantém redirect compatível para a URL antiga já publicada', () => {

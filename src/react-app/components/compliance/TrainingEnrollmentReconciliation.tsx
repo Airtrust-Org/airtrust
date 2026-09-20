@@ -80,6 +80,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
   const queryClient = useQueryClient();
   const [courses, setCourses] = useState<Record<number, number>>({});
   const [actions, setActions] = useState<Record<number, string>>({});
+  const [section, setSection] = useState<'gaps' | 'convites' | 'revisao'>('gaps');
   const params = useMemo(() => {
     const p = new URLSearchParams();
     if (setorId) p.set('setor_id', String(setorId));
@@ -216,22 +217,52 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
     return <div className="p-6 text-sm text-slate-500">Analisando matrículas e matriz...</div>;
   if (!data) return null;
   return (
-    <div className="space-y-5 p-4">
-      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-        <strong>Matrícula não define obrigação.</strong> Esta tela identifica divergências; nenhuma
-        matrícula histórica vira requisito automaticamente.
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Mini label="Matrículas alinhadas" value={data.resumo.matriculas_alinhadas} good />
-        <Mini label="Gaps sem matrícula" value={data.resumo.gaps_matricula_acionaveis} />
-        <Mini label="Matriculados sem requisito" value={data.resumo.matriculados_sem_requisito} />
-        <Mini label="N/A matriculados" value={data.resumo.nao_aplica_matriculados} />
+    <div className="space-y-4 p-4">
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4 lg:flex-row lg:items-center lg:justify-between">
+        <p className="text-sm text-slate-600">
+          <strong className="text-slate-800">Matrícula não define obrigação.</strong>{' '}
+          Use esta área apenas para corrigir divergências entre a matriz e o LMS.
+        </p>
+        <span className="whitespace-nowrap text-xs font-medium text-emerald-700">
+          {data.resumo.matriculas_alinhadas} matrícula(s) alinhada(s)
+        </span>
       </div>
 
+      <div className="flex flex-wrap gap-2 border-b border-slate-100 pb-3">
+        {(
+          [
+            ['gaps', 'A matricular', data.resumo.gaps_matricula_acionaveis],
+            ['convites', 'Convites', data.convites_matricula.length],
+            ['revisao', 'Revisar', data.matriculas_revisao.length],
+          ] as const
+        ).map(([value, label, count]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setSection(value)}
+            className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${
+              section === value
+                ? 'bg-primary/10 text-primary'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            {label}
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs ${
+                section === value ? 'bg-white/80 text-primary' : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {count}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {section === 'gaps' ? (
       <section>
-        <h3 className="font-semibold text-slate-900">Necessidades sem matrícula</h3>
+        <h3 className="font-semibold text-slate-900">A matricular</h3>
         <p className="mt-1 text-sm text-slate-500">
-          Inclui requisitos obrigatórios e recomendados que precisam de matrícula. A matrícula em lote só acontece quando você clicar em “Matricular gaps”. Nenhum e-mail é enviado nessa etapa.
+          Requisitos sem matrícula correspondente. A matrícula é criada sem envio de e-mail.
         </p>
         <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
           <table className="min-w-full text-sm">
@@ -287,11 +318,12 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                   <td className="px-3 py-3 text-right">
                     <button
                       type="button"
+                      aria-label="Matricular gaps (sem e-mail)"
                       disabled={!gap.cursos_ead.length || enroll.isPending}
                       onClick={() => enroll.mutate(gap)}
                       className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
                     >
-                      <UserPlus className="h-4 w-4" /> Matricular gaps (sem e-mail)
+                      <UserPlus className="h-4 w-4" /> Matricular
                     </button>
                   </td>
                 </tr>
@@ -307,11 +339,13 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
           </table>
         </div>
       </section>
+      ) : null}
 
+      {section === 'convites' ? (
       <section>
-        <h3 className="font-semibold text-slate-900">Convites de matrícula por e-mail</h3>
+        <h3 className="font-semibold text-slate-900">Convites de matrícula</h3>
         <p className="mt-1 text-sm text-slate-500">
-          A matrícula e o convite são etapas separadas. Envie o e-mail somente quando a matriz já estiver revisada.
+          Matrículas já criadas que ainda não foram iniciadas.
         </p>
         <div className="mt-3 space-y-2">
           {Array.from(
@@ -329,11 +363,12 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
               </div>
               <button
                 type="button"
+                aria-label="Enviar/re-enviar convite por e-mail"
                 disabled={invite.isPending}
                 onClick={() => invite.mutate(group.ids)}
                 className="rounded-lg border border-primary px-3 py-2 text-xs font-semibold text-primary disabled:opacity-40"
               >
-                Enviar/re-enviar convite por e-mail
+                Enviar convite
               </button>
             </div>
           ))}
@@ -344,9 +379,11 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
           ) : null}
         </div>
       </section>
+      ) : null}
 
+      {section === 'revisao' ? (
       <section>
-        <h3 className="font-semibold text-slate-900">Matrículas para revisar</h3>
+        <h3 className="font-semibold text-slate-900">Revisar matrículas</h3>
         <p className="mt-1 text-sm text-slate-500">
           Vincule a matrícula à necessidade correta ou confirme que ela deve permanecer avulsa.
         </p>
@@ -449,17 +486,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
           </div>
         ) : null}
       </section>
-    </div>
-  );
-}
-
-function Mini({ label, value, good = false }: { label: string; value: number; good?: boolean }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={`mt-1 text-xl font-bold ${good ? 'text-emerald-700' : 'text-slate-900'}`}>
-        {value}
-      </div>
+      ) : null}
     </div>
   );
 }
