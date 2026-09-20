@@ -105,8 +105,26 @@ describe('Pilot Offline shell', () => {
     expect(savedIndex).toBeGreaterThan(putIndex);
   });
 
+  it('mantem Nova etapa compacta ao lado e o resumo automatico aberto', () => {
+    expect(pilotIndex).toContain('.stage-toolbar #add-stage { min-height:32px; padding:5px 9px; font-size:12px;');
+    expect(pilotIndex).toContain('id="flight-auto-summary"');
+    expect(pilotIndex).toContain('id="flight-auto-summary" class="technical-package expandable-panel" style="margin-top:18px" open');
+    expect(pilotApp).toContain("document.getElementById('flight-auto-summary')");
+    expect(pilotApp).toContain('automaticSummary.open = true');
+  });
+
+  it('oferece busca de justificativas por causa raiz, codigo, categoria e descricao', () => {
+    expect(pilotApp).toContain('function createJustificationPicker');
+    expect(pilotApp).toContain('Busque sempre a causa raiz do motivo do atraso.');
+    expect(pilotApp).toContain('Busque por AA62, meteorologia, manutenção, pax...');
+    expect(pilotApp).toContain('option.category');
+    expect(pilotApp).toContain('option.description');
+    expect(pilotIndex).toContain('.justification-picker-results');
+    expect(pilotIndex).toContain('.justification-picker-group');
+  });
+
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v26'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v27'");
     expect(pilotSw).not.toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
@@ -115,9 +133,9 @@ describe('Pilot Offline shell', () => {
     expect(pilotSw).toContain("'/pilot/pilot-lease.js'");
     expect(pilotSw).toContain("'/pilot/pilot-lease-trust.js'");
     expect(pilotSw).toContain('url.pathname.startsWith(PILOT_SCOPE_PATH)');
-    expect(pilotSw).toContain('caches.match(PILOT_SCOPE_PATH)');
     expect(pilotSw).toContain("fetch(PILOT_SCOPE_PATH, { cache: 'no-store', redirect: 'error' })");
-    expect(pilotSw).toContain("if (cached) return cached;");
+    expect(pilotSw).toContain('const cached = await caches.match(PILOT_SCOPE_PATH)');
+    expect(pilotSw).toContain('if (cached) return cached');
     expect(pilotSw).toContain("if (url.pathname.startsWith('/api/')) return;");
     expect(pilotSw).toContain("fetch(request, { cache: 'no-store' })");
   });
@@ -128,6 +146,8 @@ describe('Pilot Offline shell', () => {
     expect(pilotBootstrap).toContain("name.startsWith(PILOT_CACHE_PREFIX)");
     expect(pilotBootstrap).toContain('window.location.reload()');
     expect(pilotBootstrap).toContain("window.setTimeout(() => void recoverStaleShell(), 8000)");
+    expect(pilotBootstrap).not.toContain('controllerchange');
+    expect(pilotSw).toContain('Online navigation is network-first');
     expect(pilotApp).toContain("window.__AIRTRUST_PILOT_APP_READY__ = true");
     expect(pilotApp).toContain("window.dispatchEvent(new Event('airtrust:pilot-app-ready'))");
     expect(pilotApp).toContain('Não foi possível iniciar o Pilot App:');

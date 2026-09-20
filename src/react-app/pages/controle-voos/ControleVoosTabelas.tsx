@@ -31,6 +31,7 @@ type CatalogItem = {
   uf?: string | null;
   tipo?: string | null;
   descricao?: string | null;
+  categoria?: string | null;
   latitude_dms?: string | null;
   longitude_dms?: string | null;
   elevacao_ft?: number | null;
@@ -165,6 +166,7 @@ export default function ControleVoosTabelas() {
   const canManage = isAdmin || isGestor;
   const [activeCatalog, setActiveCatalog] = useState<CatalogName>('pontos');
   const [pontoSearch, setPontoSearch] = useState('');
+  const [justificationSearch, setJustificationSearch] = useState('');
   const [data, setData] = useState<CatalogState>(EMPTY_STATE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -221,6 +223,15 @@ export default function ControleVoosTabelas() {
 
   const filteredItems = useMemo(() => {
     const items = data[activeCatalog];
+    if (activeCatalog === 'justificativas') {
+      const query = justificationSearch.trim().toLocaleLowerCase('pt-BR');
+      if (!query) return items;
+      return items.filter((item) =>
+        [item.codigo, item.nome, item.categoria, item.descricao]
+          .filter(Boolean)
+          .some((value) => String(value).toLocaleLowerCase('pt-BR').includes(query)),
+      );
+    }
     if (activeCatalog !== 'pontos') return items;
     const query = pontoSearch.trim().toLocaleUpperCase('pt-BR');
     if (!query) return items;
@@ -229,7 +240,7 @@ export default function ControleVoosTabelas() {
         .filter(Boolean)
         .some((value) => String(value).toLocaleUpperCase('pt-BR').includes(query)),
     );
-  }, [activeCatalog, data, pontoSearch]);
+  }, [activeCatalog, data, justificationSearch, pontoSearch]);
   const displayedItems = activeCatalog === 'pontos' ? filteredItems.slice(0, 300) : filteredItems;
 
   async function toggleActive(item: CatalogItem) {
@@ -349,6 +360,18 @@ export default function ControleVoosTabelas() {
                 </p>
               </div>
             )}
+            {activeCatalog === 'justificativas' && !loading && (
+              <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
+                <input
+                  type="search"
+                  value={justificationSearch}
+                  onChange={(event) => setJustificationSearch(event.target.value)}
+                  placeholder="Buscar por código, motivo, categoria ou palavra da descrição"
+                  className="w-full max-w-2xl rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                />
+                <p className="mt-2 text-xs text-slate-500">{filteredItems.length} justificativa(s) encontrada(s).</p>
+              </div>
+            )}
 
             {loading ? (
               <div className="p-10 text-center">
@@ -375,7 +398,7 @@ export default function ControleVoosTabelas() {
                         <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Coordenadas / elevação</th>
                       )}
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' ? 'Local' : 'Nome'}</th>
-                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'pontos' ? 'Tipo' : 'Tipo / Localidade'}</th>
+                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">{activeCatalog === 'justificativas' ? 'Categoria' : activeCatalog === 'pontos' ? 'Tipo' : 'Tipo / Localidade'}</th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status</th>
                       {canManage && activeCatalog !== 'pontos' && <th className="px-4 py-3 text-right font-medium text-slate-600 dark:text-slate-300">Ações</th>}
                     </tr>
@@ -478,6 +501,7 @@ function CatalogEditor({
     tipo:
       item?.tipo ||
       (state.catalog === 'aeroportos' ? 'aeroporto' : state.catalog === 'motivos' ? 'geral' : ''),
+    categoria: item?.categoria || '',
     descricao: item?.descricao || '',
     ordem: String(item?.ordem ?? 0),
   });
@@ -504,6 +528,7 @@ function CatalogEditor({
         payload.tipo = form.tipo;
       }
       if (state.catalog === 'motivos') payload.tipo = form.tipo;
+      if (state.catalog === 'justificativas') payload.categoria = form.categoria.trim() || null;
 
       if (item) {
         await apiClient.patch(`/controle-voos/catalogos/${state.catalog}/${item.id}`, payload);
@@ -551,6 +576,10 @@ function CatalogEditor({
 
           {state.catalog === 'motivos' && (
             <label className="text-sm">Tipo<select className={fieldClass} value={form.tipo} onChange={(e) => set('tipo', e.target.value)}><option value="geral">Geral</option><option value="atraso">Atraso</option><option value="cancelamento">Cancelamento</option><option value="alternado_divergido">Alternado / divergido</option><option value="indisponibilidade">Indisponibilidade</option></select></label>
+          )}
+
+          {state.catalog === 'justificativas' && (
+            <label className="text-sm">Categoria<input className={fieldClass} value={form.categoria} onChange={(e) => set('categoria', e.target.value)} placeholder="Ex: Necessidade Operacional" /></label>
           )}
 
           <label className="text-sm">Ordem<input type="number" min={0} className={fieldClass} value={form.ordem} onChange={(e) => set('ordem', e.target.value)} /></label>

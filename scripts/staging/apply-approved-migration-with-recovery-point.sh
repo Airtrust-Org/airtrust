@@ -41,6 +41,7 @@ APPROVED_MIGRATIONS=(
   "0503_conhecimento_ativo_foundation.sql"
   "0504_controle_voos_operational_model.sql"
   "0506_controle_voos_flight_justifications.sql"
+  "0507_controle_voos_delay_justification_catalog.sql"
 )
 
 apply=false
@@ -197,6 +198,9 @@ validate_postconditions() {
       ;;
     0506_controle_voos_flight_justifications.sql)
       bash scripts/staging/validate-0506-postconditions.sh --target="$db_name"
+      ;;
+    0507_controle_voos_delay_justification_catalog.sql)
+      bash scripts/staging/validate-0507-postconditions.sh --target="$db_name"
       ;;
   esac
 }

@@ -259,10 +259,57 @@
       .field-note { display: block; margin-top: 5px; color: #66758a; font-size: .78rem; font-weight: 500; }
       .justification-panel { border: 1px solid #d7e0ea; border-radius: 14px; padding: 14px; background: #fff; }
       .justification-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:10px; }
+      .justification-guidance { margin-top: 4px; font-weight: 800; color: #29425f; }
       .justification-rows { display:grid; gap:10px; margin-top:10px; }
-      .justification-row { display:grid; grid-template-columns:minmax(220px,2fr) minmax(110px,.7fr) auto; align-items:end; gap:10px; }
+      .justification-row { display:grid; grid-template-columns:minmax(260px,2fr) minmax(110px,.7fr) auto; align-items:end; gap:10px; }
       .justification-remove { min-height:44px; }
-      @media (max-width: 720px) { .justification-row { grid-template-columns:1fr; } }
+      .justification-picker { position: relative; min-width: 0; }
+      .justification-picker > span:first-child { display:block; margin-bottom:6px; }
+      .justification-picker-results {
+        position:absolute;
+        z-index:30;
+        top:100%;
+        left:0;
+        right:0;
+        max-height:320px;
+        overflow:auto;
+        margin-top:4px;
+        border:1px solid #cbd7e5;
+        border-radius:12px;
+        background:#fff;
+        box-shadow:0 12px 30px rgba(15, 35, 60, .16);
+      }
+      .justification-picker-group {
+        position:sticky;
+        top:0;
+        padding:8px 10px;
+        background:#edf4fb;
+        color:#29425f;
+        font-size:.72rem;
+        font-weight:900;
+        letter-spacing:.03em;
+        text-transform:uppercase;
+      }
+      .justification-picker-option {
+        width:100%;
+        border:0;
+        border-bottom:1px solid #e7edf4;
+        border-radius:0;
+        background:#fff;
+        color:#1f334a;
+        padding:10px 12px;
+        text-align:left;
+      }
+      .justification-picker-option:hover,
+      .justification-picker-option:focus { background:#f4f8fc; }
+      .justification-picker-option strong,
+      .justification-picker-option span { display:block; }
+      .justification-picker-option span { margin-top:3px; color:#64748b; font-size:.78rem; line-height:1.35; }
+      .justification-picker-empty { padding:12px; color:#64748b; font-size:.82rem; }
+      @media (max-width: 720px) {
+        .justification-row { grid-template-columns:1fr; }
+        .justification-picker-results { position:fixed; left:12px; right:12px; top:auto; bottom:12px; max-height:58vh; }
+      }
       .field-error { display: block; margin-top: 5px; color: #a52727; font-size: .78rem; font-weight: 700; }
       .lease-box {
         margin-top: 16px;
@@ -469,10 +516,10 @@
       .expandable-panel > summary::after { content:'Abrir'; font-size:12px; font-weight:800; color:#0369a1; border:1px solid #7dd3fc; border-radius:999px; padding:3px 9px; background:#fff; }
       .expandable-panel[open] > summary::after { content:'Fechar'; }
       .stage-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:24px; }
-      .stage-toolbar #add-stage { min-height:46px; padding-inline:18px; }
+      .stage-toolbar #add-stage { min-height:32px; padding:5px 9px; font-size:12px; border-radius:8px; flex:0 0 auto; align-self:flex-start; }
       .stage-delete { margin-top:10px; border-color:#fecaca !important; color:#b91c1c !important; }
       @media (prefers-color-scheme: dark) { .expandable-panel { background:#111827; border-color:#334155; } .expandable-panel > summary { color:#e2e8f0; } }
-      @media (max-width: 900px) { .stage-toolbar { align-items:stretch; flex-direction:column; } .stage-toolbar #add-stage { width:100%; font-size:16px; } }
+      @media (max-width: 900px) { .stage-toolbar { align-items:flex-end; flex-direction:row; } .stage-toolbar > div { flex:1 1 auto; min-width:0; } .stage-toolbar #add-stage { width:auto; font-size:13px; white-space:nowrap; } }
       @media (max-width: 700px) {
         .topbar { align-items: flex-start; flex-direction: column; }
         .topbar-actions { width: 100%; justify-content: space-between; }
@@ -612,11 +659,11 @@
               <h3>Etapas</h3>
               <p class="muted">Partida, decolagem, pouso e corte usam somente hora; a data do voo já está definida acima.</p>
             </div>
-            <button id="add-stage" class="primary" type="button">+ Nova etapa</button>
+            <button id="add-stage" class="secondary" type="button">+ Nova etapa</button>
           </div>
           <div id="rdv-stage-fields"></div>
 
-          <details class="technical-package expandable-panel" style="margin-top:18px">
+          <details id="flight-auto-summary" class="technical-package expandable-panel" style="margin-top:18px" open>
             <summary>Resumo automático do voo</summary>
             <p class="muted">Tempo de voo, tempo total e pousos são consolidados automaticamente a partir das etapas.</p>
             <div id="rdv-form-fields" class="editor-grid"></div>

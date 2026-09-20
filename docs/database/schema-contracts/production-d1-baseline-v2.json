@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-20",
-    "last_reconciled_against": "0506 Controle de Voos planning-deviation justification schema prepared; remote apply pending",
-    "schema_v2_digest": "68adf594c2b54dc2525be4e824ba7e70fd5011c95fd2fd9a3999980f041475ca",
+    "last_reconciled_against": "0507 Controle de Voos Petrobras AA delay-justification catalog prepared; remote apply pending",
+    "schema_v2_digest": "910d43ffe8db07dfec51bfb5e70458469f636f62575f18437a25a8f63c342a4b",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -991,6 +991,19 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "controle-voos-flight-justifications-0506.json",
       "note": "0506 is reviewed and prepared only. It adds tenant-scoped justification codes and per-flight minute allocations; pilot finalization requires the positive realized-versus-planned deviation to be explained exactly. Remote apply requires the governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0507_controle_voos_delay_justification_catalog.sql",
+      "change_id": "controle-voos-delay-justification-catalog-0507",
+      "sha256": "b88d560d149ecfbacf322b97ecfb40bea797d95a0fef102c862825c30244792c",
+      "targets": [
+        "cv_justificativas_voo"
+      ],
+      "domain": "tenant-scoped Controle de Voos Petrobras AA41-AA94 delay justification catalog with source categories",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-delay-justification-catalog-0507.json",
+      "note": "0507 is reviewed and prepared only. It adds the source category field and seeds exactly 54 Petrobras AA41-AA94 codes for empresa_id 6, preserving source titles/descriptions. Remote apply requires governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",
