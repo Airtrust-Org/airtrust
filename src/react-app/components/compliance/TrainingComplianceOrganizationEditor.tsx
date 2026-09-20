@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, Save } from 'lucide-react';
+import { Building2 } from 'lucide-react';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
 
@@ -162,9 +162,7 @@ export function TrainingComplianceOrganizationEditor() {
         <div>
           <h3 className="font-semibold text-slate-900">Matriz por organização</h3>
           <p className="text-sm text-slate-500">
-            Defina o setor, opcionalmente o cargo e, para tripulantes, o equipamento. A regra mais
-            específica prevalece. Tripulantes vinculados a mais de uma aeronave recebem as regras
-            de todos os equipamentos que operam.
+            Escolha o grupo e defina, em uma única lista, quais treinamentos se aplicam.
           </p>
         </div>
       </div>
@@ -241,9 +239,9 @@ export function TrainingComplianceOrganizationEditor() {
             <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th className="px-4 py-3 text-left">Treinamento</th>
-                <th className="px-3 py-3 text-left">Regra efetiva</th>
-                <th className="px-3 py-3 text-left">Impacto antes de salvar</th>
-                <th className="px-3 py-3 text-left">Regra desta seleção</th>
+                <th className="px-3 py-3 text-left">Regra vigente</th>
+                <th className="px-3 py-3 text-left">Impacto</th>
+                <th className="px-3 py-3 text-left">Nesta seleção</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -271,22 +269,22 @@ export function TrainingComplianceOrganizationEditor() {
                   </td>
                   <td className="min-w-[260px] px-3 py-3 text-xs text-slate-600">
                     <div className="font-medium text-slate-800">
-                      {row.impacto.atingidas_neste_nivel}/{row.impacto.pessoas} pessoa(s) seriam
-                      afetadas neste nível
+                      Afeta {row.impacto.atingidas_neste_nivel} de {row.impacto.pessoas} pessoa(s)
                     </div>
-                    {row.impacto.override_mais_especifico > 0 ? (
-                      <div className="mt-0.5 text-amber-700">
-                        {row.impacto.override_mais_especifico} preservada(s) por regra mais
-                        específica
-                      </div>
-                    ) : null}
-                    <div className="mt-1 text-slate-500">
-                      {row.impacto.matriculados} matriculada(s) · {row.impacto.sem_matricula} sem
-                      matrícula
-                    </div>
-                    <div className="mt-0.5 text-slate-500">
-                      Atual: {row.impacto.com_requisito} com requisito · {row.impacto.sem_requisito}{' '}
-                      sem requisito/N/A
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                        {row.impacto.matriculados} matriculada(s)
+                      </span>
+                      {row.impacto.sem_matricula > 0 ? (
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
+                          {row.impacto.sem_matricula} sem matrícula
+                        </span>
+                      ) : null}
+                      {row.impacto.override_mais_especifico > 0 ? (
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
+                          {row.impacto.override_mais_especifico} preservada(s) por regra específica
+                        </span>
+                      ) : null}
                     </div>
                   </td>
                   <td className="px-3 py-3">
@@ -297,12 +295,12 @@ export function TrainingComplianceOrganizationEditor() {
                         onChange={(e) => save.mutate({ row, value: e.target.value })}
                         className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
                       >
-                        <option value="HERDAR">Herdar / sem override</option>
+                        <option value="HERDAR">Herdar regra vigente</option>
                         <option value="OBRIGATORIA">Obrigatório</option>
                         <option value="RECOMENDADA">Recomendado</option>
                         <option value="NAO_APLICA">Não se aplica</option>
                       </select>
-                      <Save className="h-4 w-4 text-slate-400" />
+                      <span className="text-[11px] text-slate-400">salva ao alterar</span>
                     </div>
                   </td>
                 </tr>

@@ -164,7 +164,7 @@ test('production training compliance UI and APIs are coherent and read-only', as
   }
 
   const statusCandidates = [
-    ['Nunca realizados', 'NAO_REALIZADO', summary.data.nao_realizados],
+    ['Nunca fez', 'NAO_REALIZADO', summary.data.nao_realizados],
     ['Vencidos', 'VENCIDO', summary.data.vencidos],
     ['Em andamento', 'EM_ANDAMENTO', summary.data.em_andamento],
     ['Vencendo', 'VENCENDO', summary.data.vencendo],
@@ -181,7 +181,7 @@ test('production training compliance UI and APIs are coherent and read-only', as
     expect(Array.isArray(people.data)).toBe(true);
     expect(people.data.length).toBeGreaterThan(0);
     await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: 'Cargo' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Setor / cargo' })).toBeVisible();
   } else {
     await page.getByRole('button', { name: 'Pessoas', exact: true }).click();
     await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
@@ -198,7 +198,7 @@ test('production training compliance UI and APIs are coherent and read-only', as
   }
 
   const reconciliationP = waitApi(page, '/api/compliance-treinamentos/reconciliacao');
-  await page.getByRole('button', { name: 'Matrículas × Matriz', exact: true }).click();
+  await page.getByRole('button', { name: 'Matrículas', exact: true }).click();
   const reconciliation = await reconciliationP.then(payload);
   for (const key of [
     'matriculas_ativas',
@@ -211,7 +211,7 @@ test('production training compliance UI and APIs are coherent and read-only', as
   expect(Array.isArray(reconciliation.data.gaps_matricula)).toBe(true);
   expect(Array.isArray(reconciliation.data.matriculas_revisao)).toBe(true);
 
-  await page.getByRole('button', { name: 'Configuração da matriz', exact: true }).click();
+  await page.getByRole('button', { name: 'Matriz', exact: true }).click();
   await expect(page.getByText('Matriz por organização', { exact: true })).toBeVisible();
   const orgSector = page.getByLabel('Setor', { exact: true });
   const orgSectorIds = await orgSector
@@ -235,7 +235,7 @@ test('production training compliance UI and APIs are coherent and read-only', as
         orgMatrix.data[0].impacto.pessoas,
       );
       await expect(
-        page.getByRole('columnheader', { name: 'Impacto antes de salvar' }),
+        page.getByRole('columnheader', { name: 'Impacto' }),
       ).toBeVisible();
     }
   }

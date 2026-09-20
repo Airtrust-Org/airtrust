@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
-import { Plus, Edit, Trash2, Users, Settings, Upload } from 'lucide-react';
+import { Plus, Edit, Trash2, Users, Upload } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import ImportarCSVModal from '../ImportarCSVModal';
 import Button from '@/react-app/components/Button';
@@ -26,11 +26,7 @@ interface FuncaoFormData {
   categoria: string;
 }
 
-interface FuncoesManagementProps {
-  onMatrizCompliance?: () => void;
-}
-
-export default function FuncoesManagement({ onMatrizCompliance }: FuncoesManagementProps) {
+export default function FuncoesManagement() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingFuncao, setEditingFuncao] = useState<Funcao | null>(null);
@@ -246,12 +242,6 @@ export default function FuncoesManagement({ onMatrizCompliance }: FuncoesManagem
               </p>
             </div>
             <div className="flex gap-3">
-              {onMatrizCompliance && (
-                <Button variant="secondary" onClick={onMatrizCompliance} className="text-sm">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Matriz de Compliance
-                </Button>
-              )}
               <button
                 onClick={() => setShowImportModal(true)}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
