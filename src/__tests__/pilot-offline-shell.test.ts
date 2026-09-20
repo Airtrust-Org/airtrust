@@ -106,8 +106,8 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v24'");
-    expect(pilotSw).toContain("'/pilot/index.html'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v25'");
+    expect(pilotSw).not.toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
     expect(pilotSw).toContain("'/pilot/pilot-rdv-draft.js'");
@@ -115,7 +115,8 @@ describe('Pilot Offline shell', () => {
     expect(pilotSw).toContain("'/pilot/pilot-lease.js'");
     expect(pilotSw).toContain("'/pilot/pilot-lease-trust.js'");
     expect(pilotSw).toContain('url.pathname.startsWith(PILOT_SCOPE_PATH)');
-    expect(pilotSw).toContain("caches.match('/pilot/index.html')");
+    expect(pilotSw).toContain('caches.match(PILOT_SCOPE_PATH)');
+    expect(pilotSw).toContain("fetch(PILOT_SCOPE_PATH, { cache: 'no-store', redirect: 'error' })");
     expect(pilotSw).toContain("if (cached) return cached;");
     expect(pilotSw).toContain("if (url.pathname.startsWith('/api/')) return;");
     expect(pilotSw).toContain("fetch(request, { cache: 'no-store' })");
