@@ -79,6 +79,18 @@ describe('Conhecimento Ativo — motor de retenção', () => {
     expect(new Set(selected.map((row) => row.itemId)).size).toBe(2);
   });
 
+  it('seleciona 10 questões por padrão quando há conteúdo elegível suficiente', () => {
+    const candidatos = Array.from({ length: 12 }, (_, index) => ({
+      questaoId: index + 1,
+      itemId: index + 1,
+      criticidade: 'ALTA' as const,
+      nivel: 50,
+      proximaRevisaoEm: null,
+      ultimaExposicaoEm: null,
+    }));
+    expect(selecionarQuestoesDesafio(candidatos)).toHaveLength(10);
+  });
+
   it('produz janelas quinzenais determinísticas', () => {
     expect(periodoQuinzena(new Date('2026-09-08T10:00:00Z')).chave).toBe('2026-09-Q1');
     expect(periodoQuinzena(new Date('2026-09-18T10:00:00Z')).chave).toBe('2026-09-Q2');

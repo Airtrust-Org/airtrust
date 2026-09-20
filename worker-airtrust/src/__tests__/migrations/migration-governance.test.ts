@@ -116,7 +116,8 @@ describe('migration governance', () => {
     // 0502 adds the governed Controle de Voos fueling-company catalog.
     // 0503 adds the governed Conhecimento Ativo foundation and XLSX import lineage.
     // 0504 adds the governed Controle de Voos operational model catalogs and flight identifiers.
-    const expectedLatest = 504;
+    // 0505 adds the governed Conhecimento Ativo challenge cadence schema.
+    const expectedLatest = 505;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

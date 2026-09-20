@@ -276,7 +276,7 @@ export default function ComplianceTreinamentosPage() {
 
   return (
     <AppLayout>
-      <div className="mx-auto max-w-[1440px] space-y-5 p-4 sm:p-6">
+      <div className="w-full space-y-5">
         <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-2">

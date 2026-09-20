@@ -7,6 +7,10 @@ import {
   type DominioAtual,
 } from './retencao';
 
+const QUESTOES_POR_DESAFIO = 10;
+const DESAFIOS_RECOMENDADOS_POR_QUINZENA = 2;
+const MODELOS_CONHECIMENTO_ATIVO = ['AW139', 'SK76'] as const;
+
 type Criticidade = CandidatoDesafio['criticidade'];
 
 interface CandidatoRow {
@@ -16,6 +20,8 @@ interface CandidatoRow {
   nivel: number | null;
   proxima_revisao_em: string | null;
   ultima_exposicao_em: string | null;
+  respondida_vezes: number;
+  ultima_resposta_em: string | null;
 }
 
 interface SnapshotAlternativa {
@@ -54,12 +60,22 @@ interface ChallengeRow {
   aeronave_modelo: string;
   periodo_chave: string;
   numero_desafio: number;
+  numero_sequencial: number | null;
+  topico_id: number | null;
   status: 'DISPONIVEL' | 'EM_ANDAMENTO' | 'CONCLUIDO' | 'EXPIRADO';
   disponivel_em: string;
   expira_em: string | null;
   iniciado_em: string | null;
   concluido_em: string | null;
   xp_concedido: number;
+}
+
+function numeroSequencialDesafio(desafio: ChallengeRow): number {
+  return Number(desafio.numero_sequencial ?? desafio.numero_desafio);
+}
+
+function normalizarDesafio(desafio: ChallengeRow): ChallengeRow {
+  return { ...desafio, numero_desafio: numeroSequencialDesafio(desafio) };
 }
 
 interface ChallengeQuestionRow {
@@ -83,40 +99,102 @@ export function normalizarModeloConhecimento(value: string): string {
   return normalized;
 }
 
-export async function resolverModelosFuncionario(
+export function modelosConhecimentoAtivoDisponiveis(): string[] {
+  return [...MODELOS_CONHECIMENTO_ATIVO];
+}
+
+async function validarTopicoModelo(params: {
+  db: D1Database;
+  empresaId: number;
+  modelo: string;
+  topicoId: number;
+}) {
+  const { db, empresaId, modelo, topicoId } = params;
+  const topico = await db
+    .prepare(
+      'SELECT id,nome,aeronave_modelo FROM conhecimento_ativo_topicos ' +
+        'WHERE id=? AND empresa_id=? AND ativo=1 AND deleted_at IS NULL LIMIT 1',
+    )
+    .bind(topicoId, empresaId)
+    .first<{ id: number; nome: string; aeronave_modelo: string | null }>();
+  if (!topico) {
+    const error = new Error('Área de conhecimento inválida ou indisponível');
+    error.name = 'TOPICO_INVALIDO';
+    throw error;
+  }
+  const modeloTopico = topico.aeronave_modelo
+    ? normalizarModeloConhecimento(topico.aeronave_modelo)
+    : null;
+  if (modeloTopico !== modelo) {
+    const error = new Error('Área de conhecimento não pertence ao modelo selecionado');
+    error.name = 'TOPICO_FORA_ESCOPO';
+    throw error;
+  }
+  return topico;
+}
+
+async function primeiroTopicoElegivel(
   db: D1Database,
   empresaId: number,
-  funcionarioId: number,
-): Promise<string[]> {
-  const result = await db
+  modelo: string,
+): Promise<number | null> {
+  const row = await db
     .prepare(
-      'SELECT DISTINCT a.modelo AS modelo ' +
-        'FROM funcionarios_aeronaves fa ' +
-        'JOIN aeronaves a ON a.id=fa.aeronave_id AND a.empresa_id=? AND a.deleted_at IS NULL ' +
-        'WHERE fa.funcionario_id=? AND fa.ativo=1 AND fa.deleted_at IS NULL ' +
-        'ORDER BY a.modelo',
+      `
+      SELECT t.id
+      FROM conhecimento_ativo_topicos t
+      WHERE t.empresa_id=?
+        AND t.ativo=1
+        AND t.deleted_at IS NULL
+        AND UPPER(REPLACE(t.aeronave_modelo,'-',''))=?
+        AND (
+          SELECT COUNT(DISTINCT i.id)
+          FROM conhecimento_ativo_itens i
+          JOIN conhecimento_ativo_questoes q
+            ON q.item_id=i.id AND q.empresa_id=i.empresa_id
+          WHERE i.empresa_id=t.empresa_id
+            AND i.topico_id=t.id
+            AND i.status='APROVADO'
+            AND i.ativo=1
+            AND i.deleted_at IS NULL
+            AND q.status='APROVADA'
+            AND q.ativo=1
+            AND q.deleted_at IS NULL
+            AND LENGTH(TRIM(q.explicacao))>0
+            AND EXISTS (
+              SELECT 1
+              FROM conhecimento_ativo_item_fontes jf
+              JOIN conhecimento_ativo_fontes f
+                ON f.id=jf.fonte_id AND f.empresa_id=jf.empresa_id
+              WHERE jf.empresa_id=i.empresa_id
+                AND jf.item_id=i.id
+                AND jf.deleted_at IS NULL
+                AND f.status='VIGENTE'
+                AND f.deleted_at IS NULL
+            )
+            AND (
+              SELECT COUNT(*)
+              FROM conhecimento_ativo_alternativas a
+              WHERE a.empresa_id=q.empresa_id
+                AND a.questao_id=q.id
+                AND a.deleted_at IS NULL
+            )>=2
+            AND (
+              SELECT COUNT(*)
+              FROM conhecimento_ativo_alternativas a
+              WHERE a.empresa_id=q.empresa_id
+                AND a.questao_id=q.id
+                AND a.correta=1
+                AND a.deleted_at IS NULL
+            )=1
+        )>=10
+      ORDER BY t.ordem,t.nome
+      LIMIT 1
+    `,
     )
-    .bind(empresaId, funcionarioId)
-    .all<{ modelo: string | null }>();
-
-  const modelos = (result.results || [])
-    .map((row) => (row.modelo ? normalizarModeloConhecimento(row.modelo) : ''))
-    .filter(Boolean);
-
-  if (modelos.length > 0) return [...new Set(modelos)];
-
-  const fallback = await db
-    .prepare(
-      'SELECT COALESCE(ma.modelo, ma.codigo, ma.nome) AS modelo ' +
-        'FROM funcionarios f ' +
-        'LEFT JOIN modelos_aeronave ma ON ma.id=f.modelo_aeronave_id ' +
-        'AND ma.empresa_id=f.empresa_id AND ma.deleted_at IS NULL ' +
-        'WHERE f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL LIMIT 1',
-    )
-    .bind(funcionarioId, empresaId)
-    .first<{ modelo: string | null }>();
-
-  return fallback?.modelo ? [normalizarModeloConhecimento(fallback.modelo)] : [];
+    .bind(empresaId, modelo.replace(/-/g, ''))
+    .first<{ id: number }>();
+  return row?.id ?? null;
 }
 
 async function buscarCandidatos(
@@ -124,36 +202,126 @@ async function buscarCandidatos(
   empresaId: number,
   funcionarioId: number,
   modelo: string,
+  topicoId: number | null,
 ): Promise<CandidatoRow[]> {
   const result = await db
     .prepare(
-      'SELECT q.id AS questao_id, q.item_id, i.criticidade, d.nivel, ' +
-        'd.proxima_revisao_em, d.ultima_exposicao_em ' +
-        'FROM conhecimento_ativo_questoes q ' +
-        'JOIN conhecimento_ativo_itens i ON i.id=q.item_id AND i.empresa_id=q.empresa_id ' +
-        'LEFT JOIN conhecimento_ativo_dominio d ON d.empresa_id=q.empresa_id ' +
-        'AND d.funcionario_id=? AND d.item_id=i.id AND d.deleted_at IS NULL ' +
-        'WHERE q.empresa_id=? AND q.status=\'APROVADA\' AND q.ativo=1 AND q.deleted_at IS NULL ' +
-        'AND i.status=\'APROVADO\' AND i.ativo=1 AND i.deleted_at IS NULL ' +
-        'AND (i.aeronave_modelo IS NULL OR UPPER(REPLACE(i.aeronave_modelo,\'-\',\'\'))=?) ' +
-        'AND EXISTS (SELECT 1 FROM conhecimento_ativo_item_fontes jf ' +
-        'JOIN conhecimento_ativo_fontes f ON f.id=jf.fonte_id AND f.empresa_id=jf.empresa_id ' +
-        'WHERE jf.empresa_id=q.empresa_id AND jf.item_id=i.id AND jf.deleted_at IS NULL ' +
-        'AND f.status=\'VIGENTE\' AND f.deleted_at IS NULL) ' +
-        'AND (SELECT COUNT(*) FROM conhecimento_ativo_alternativas a ' +
-        'WHERE a.empresa_id=q.empresa_id AND a.questao_id=q.id AND a.deleted_at IS NULL)>=2 ' +
-        'AND (SELECT COUNT(*) FROM conhecimento_ativo_alternativas a ' +
-        'WHERE a.empresa_id=q.empresa_id AND a.questao_id=q.id AND a.correta=1 AND a.deleted_at IS NULL)=1 ' +
-        'AND NOT EXISTS (SELECT 1 FROM conhecimento_ativo_respostas r ' +
-        'JOIN conhecimento_ativo_desafio_questoes dq ON dq.id=r.desafio_questao_id ' +
-        'WHERE r.empresa_id=q.empresa_id AND r.funcionario_id=? AND dq.questao_id=q.id ' +
-        'AND r.respondido_em>=datetime(\'now\',\'-45 days\')) ' +
-        'ORDER BY q.id LIMIT 250',
+      `
+      SELECT
+        q.id AS questao_id,
+        q.item_id,
+        i.criticidade,
+        d.nivel,
+        d.proxima_revisao_em,
+        d.ultima_exposicao_em,
+        (
+          SELECT COUNT(*)
+          FROM conhecimento_ativo_respostas r
+          JOIN conhecimento_ativo_desafio_questoes dq
+            ON dq.id=r.desafio_questao_id
+          WHERE r.empresa_id=q.empresa_id
+            AND r.funcionario_id=?
+            AND dq.questao_id=q.id
+        ) AS respondida_vezes,
+        (
+          SELECT MAX(r.respondido_em)
+          FROM conhecimento_ativo_respostas r
+          JOIN conhecimento_ativo_desafio_questoes dq
+            ON dq.id=r.desafio_questao_id
+          WHERE r.empresa_id=q.empresa_id
+            AND r.funcionario_id=?
+            AND dq.questao_id=q.id
+        ) AS ultima_resposta_em
+      FROM conhecimento_ativo_questoes q
+      JOIN conhecimento_ativo_itens i
+        ON i.id=q.item_id AND i.empresa_id=q.empresa_id
+      LEFT JOIN conhecimento_ativo_dominio d
+        ON d.empresa_id=q.empresa_id
+       AND d.funcionario_id=?
+       AND d.item_id=i.id
+       AND d.deleted_at IS NULL
+      WHERE q.empresa_id=?
+        AND q.status='APROVADA'
+        AND q.ativo=1
+        AND q.deleted_at IS NULL
+        AND LENGTH(TRIM(q.explicacao))>0
+        AND i.status='APROVADO'
+        AND i.ativo=1
+        AND i.deleted_at IS NULL
+        AND (i.aeronave_modelo IS NULL OR UPPER(REPLACE(i.aeronave_modelo,'-',''))=?)
+        AND (? IS NULL OR i.topico_id=?)
+        AND EXISTS (
+          SELECT 1
+          FROM conhecimento_ativo_item_fontes jf
+          JOIN conhecimento_ativo_fontes f
+            ON f.id=jf.fonte_id AND f.empresa_id=jf.empresa_id
+          WHERE jf.empresa_id=q.empresa_id
+            AND jf.item_id=i.id
+            AND jf.deleted_at IS NULL
+            AND f.status='VIGENTE'
+            AND f.deleted_at IS NULL
+        )
+        AND (
+          SELECT COUNT(*)
+          FROM conhecimento_ativo_alternativas a
+          WHERE a.empresa_id=q.empresa_id
+            AND a.questao_id=q.id
+            AND a.deleted_at IS NULL
+        )>=2
+        AND (
+          SELECT COUNT(*)
+          FROM conhecimento_ativo_alternativas a
+          WHERE a.empresa_id=q.empresa_id
+            AND a.questao_id=q.id
+            AND a.correta=1
+            AND a.deleted_at IS NULL
+        )=1
+      ORDER BY q.id
+      LIMIT 500
+    `,
     )
-    .bind(funcionarioId, empresaId, modelo.replace(/-/g, ''), funcionarioId)
+    .bind(
+      funcionarioId,
+      funcionarioId,
+      funcionarioId,
+      empresaId,
+      modelo.replace(/-/g, ''),
+      topicoId,
+      topicoId,
+    )
     .all<CandidatoRow>();
 
   return result.results || [];
+}
+
+function selecionarComCobertura(
+  candidatos: CandidatoRow[],
+  quantidade: number,
+): CandidatoDesafio[] {
+  const toCandidate = (row: CandidatoRow): CandidatoDesafio => ({
+    questaoId: row.questao_id,
+    itemId: row.item_id,
+    criticidade: row.criticidade,
+    nivel: row.nivel,
+    proximaRevisaoEm: row.proxima_revisao_em,
+    ultimaExposicaoEm: row.ultima_exposicao_em,
+  });
+
+  const novos = candidatos.filter((row) => Number(row.respondida_vezes || 0) === 0);
+  const selecionados = selecionarQuestoesDesafio(novos.map(toCandidate), quantidade);
+  if (selecionados.length >= quantidade) return selecionados;
+
+  const itensUsados = new Set(selecionados.map((row) => row.itemId));
+  const revisao = candidatos
+    .filter((row) => Number(row.respondida_vezes || 0) > 0 && !itensUsados.has(row.item_id))
+    .sort((a, b) =>
+      String(a.ultima_resposta_em || '').localeCompare(String(b.ultima_resposta_em || '')),
+    );
+  const complemento = selecionarQuestoesDesafio(
+    revisao.map(toCandidate),
+    quantidade - selecionados.length,
+  );
+  return [...selecionados, ...complemento];
 }
 
 async function construirSnapshot(
@@ -168,8 +336,8 @@ async function construirSnapshot(
         'FROM conhecimento_ativo_questoes q ' +
         'JOIN conhecimento_ativo_itens i ON i.id=q.item_id AND i.empresa_id=q.empresa_id ' +
         'JOIN conhecimento_ativo_topicos t ON t.id=i.topico_id AND t.empresa_id=i.empresa_id ' +
-        'WHERE q.id=? AND q.empresa_id=? AND q.status=\'APROVADA\' ' +
-        'AND q.ativo=1 AND q.deleted_at IS NULL AND i.status=\'APROVADO\' ' +
+        "WHERE q.id=? AND q.empresa_id=? AND q.status='APROVADA' " +
+        "AND q.ativo=1 AND q.deleted_at IS NULL AND i.status='APROVADO' " +
         'AND i.ativo=1 AND i.deleted_at IS NULL LIMIT 1',
     )
     .bind(questaoId, empresaId)
@@ -186,6 +354,7 @@ async function construirSnapshot(
     }>();
 
   if (!row) throw new Error('Questão aprovada não encontrada durante geração do desafio');
+  if (!row.explicacao?.trim()) throw new Error('Questão aprovada sem explicação didática');
 
   const alternatives = await db
     .prepare(
@@ -207,7 +376,7 @@ async function construirSnapshot(
         'FROM conhecimento_ativo_item_fontes jf ' +
         'JOIN conhecimento_ativo_fontes f ON f.id=jf.fonte_id AND f.empresa_id=jf.empresa_id ' +
         'WHERE jf.empresa_id=? AND jf.item_id=? AND jf.deleted_at IS NULL ' +
-        'AND f.status=\'VIGENTE\' AND f.deleted_at IS NULL ' +
+        "AND f.status='VIGENTE' AND f.deleted_at IS NULL " +
         'ORDER BY jf.principal DESC, f.id',
     )
     .bind(empresaId, row.item_id)
@@ -249,40 +418,106 @@ async function construirSnapshot(
   };
 }
 
+async function garantirQuantidadeQuestoesDesafio(params: {
+  db: D1Database;
+  empresaId: number;
+  funcionarioId: number;
+  desafio: ChallengeRow;
+}) {
+  const { db, empresaId, funcionarioId, desafio } = params;
+  if (desafio.status === 'CONCLUIDO' || desafio.status === 'EXPIRADO') return;
+
+  const existentes = await db
+    .prepare(
+      'SELECT questao_id,item_id,ordem FROM conhecimento_ativo_desafio_questoes ' +
+        'WHERE empresa_id=? AND desafio_id=? AND deleted_at IS NULL ORDER BY ordem',
+    )
+    .bind(empresaId, desafio.id)
+    .all<{ questao_id: number; item_id: number; ordem: number }>();
+  const atuais = existentes.results || [];
+  if (atuais.length >= QUESTOES_POR_DESAFIO) return;
+
+  const itensUsados = new Set(atuais.map((row) => row.item_id));
+  const candidatos = (
+    await buscarCandidatos(db, empresaId, funcionarioId, desafio.aeronave_modelo, desafio.topico_id)
+  ).filter((row) => !itensUsados.has(row.item_id));
+  const faltantes = QUESTOES_POR_DESAFIO - atuais.length;
+  const selecionadas = selecionarComCobertura(candidatos, faltantes);
+
+  if (selecionadas.length < faltantes) {
+    const error = new Error(
+      `Conteúdo aprovado insuficiente para completar o desafio com ${QUESTOES_POR_DESAFIO} questões`,
+    );
+    error.name = 'CONTEUDO_INSUFICIENTE';
+    throw error;
+  }
+
+  const maxOrdem = atuais.reduce((max, row) => Math.max(max, row.ordem), 0);
+  const statements: D1PreparedStatement[] = [];
+  for (let index = 0; index < selecionadas.length; index += 1) {
+    const selected = selecionadas[index];
+    const snapshot = await construirSnapshot(db, empresaId, selected.questaoId);
+    statements.push(
+      db
+        .prepare(
+          'INSERT INTO conhecimento_ativo_desafio_questoes ' +
+            '(empresa_id,desafio_id,questao_id,item_id,ordem,questao_snapshot_json,fonte_snapshot_json) ' +
+            'VALUES (?,?,?,?,?,?,?)',
+        )
+        .bind(
+          empresaId,
+          desafio.id,
+          selected.questaoId,
+          selected.itemId,
+          maxOrdem + index + 1,
+          JSON.stringify(snapshot.questao),
+          JSON.stringify(snapshot.fontes),
+        ),
+    );
+  }
+  if (statements.length) await db.batch(statements);
+}
+
 export async function gerarOuObterDesafio(params: {
   db: D1Database;
   empresaId: number;
   funcionarioId: number;
   modeloSolicitado?: string | null;
+  topicoSolicitado?: number | null;
 }): Promise<{ desafio: ChallengeRow; criado: boolean }> {
   const { db, empresaId, funcionarioId } = params;
-  const modelos = await resolverModelosFuncionario(db, empresaId, funcionarioId);
-  if (!modelos.length) {
-    const error = new Error('Funcionário sem aeronave ativa vinculada');
-    error.name = 'SEM_AERONAVE';
-    throw error;
-  }
-
+  const modelos = modelosConhecimentoAtivoDisponiveis();
   const modelo = params.modeloSolicitado
     ? normalizarModeloConhecimento(params.modeloSolicitado)
     : modelos[0];
   if (!modelos.includes(modelo)) {
-    const error = new Error('Aeronave fora do escopo do funcionário');
+    const error = new Error('Modelo de aeronave não disponível no Conhecimento Ativo');
     error.name = 'AERONAVE_FORA_ESCOPO';
     throw error;
   }
+
+  const topicoId = params.topicoSolicitado ?? (await primeiroTopicoElegivel(db, empresaId, modelo));
+  if (!topicoId) {
+    const error = new Error('Não há área com conteúdo suficiente para este modelo');
+    error.name = 'CONTEUDO_INSUFICIENTE';
+    throw error;
+  }
+  await validarTopicoModelo({ db, empresaId, modelo, topicoId });
 
   const periodo = periodoQuinzena();
   const existing = await db
     .prepare(
       'SELECT * FROM conhecimento_ativo_desafios ' +
         'WHERE empresa_id=? AND funcionario_id=? AND aeronave_modelo=? ' +
-        'AND periodo_chave=? AND status IN (\'DISPONIVEL\',\'EM_ANDAMENTO\') ' +
-        'AND deleted_at IS NULL ORDER BY numero_desafio LIMIT 1',
+        "AND periodo_chave=? AND topico_id=? AND status IN ('DISPONIVEL','EM_ANDAMENTO') " +
+        'AND deleted_at IS NULL ORDER BY COALESCE(numero_sequencial,numero_desafio) LIMIT 1',
     )
-    .bind(empresaId, funcionarioId, modelo, periodo.chave)
+    .bind(empresaId, funcionarioId, modelo, periodo.chave, topicoId)
     .first<ChallengeRow>();
-  if (existing) return { desafio: existing, criado: false };
+  if (existing) {
+    await garantirQuantidadeQuestoesDesafio({ db, empresaId, funcionarioId, desafio: existing });
+    return { desafio: normalizarDesafio(existing), criado: false };
+  }
 
   const count = await db
     .prepare(
@@ -294,34 +529,15 @@ export async function gerarOuObterDesafio(params: {
     .first<{ total: number }>();
 
   const numeroDesafio = Number(count?.total || 0) + 1;
-  if (numeroDesafio > 2) {
-    const latest = await db
-      .prepare(
-        'SELECT * FROM conhecimento_ativo_desafios ' +
-          'WHERE empresa_id=? AND funcionario_id=? AND aeronave_modelo=? ' +
-          'AND periodo_chave=? AND deleted_at IS NULL ORDER BY numero_desafio DESC LIMIT 1',
-      )
-      .bind(empresaId, funcionarioId, modelo, periodo.chave)
-      .first<ChallengeRow>();
-    if (!latest) throw new Error('Estado inconsistente de desafios');
-    return { desafio: latest, criado: false };
-  }
+  const numeroDesafioLegado = Math.min(numeroDesafio, DESAFIOS_RECOMENDADOS_POR_QUINZENA);
 
-  const candidatos = await buscarCandidatos(db, empresaId, funcionarioId, modelo);
-  const selecionadas = selecionarQuestoesDesafio(
-    candidatos.map((row) => ({
-      questaoId: row.questao_id,
-      itemId: row.item_id,
-      criticidade: row.criticidade,
-      nivel: row.nivel,
-      proximaRevisaoEm: row.proxima_revisao_em,
-      ultimaExposicaoEm: row.ultima_exposicao_em,
-    })),
-    5,
-  );
+  const candidatos = await buscarCandidatos(db, empresaId, funcionarioId, modelo, topicoId);
+  const selecionadas = selecionarComCobertura(candidatos, QUESTOES_POR_DESAFIO);
 
-  if (selecionadas.length < 5) {
-    const error = new Error('Conteúdo aprovado insuficiente para gerar um desafio com 5 questões');
+  if (selecionadas.length < QUESTOES_POR_DESAFIO) {
+    const error = new Error(
+      `Conteúdo aprovado insuficiente para gerar um desafio com ${QUESTOES_POR_DESAFIO} questões`,
+    );
     error.name = 'CONTEUDO_INSUFICIENTE';
     throw error;
   }
@@ -329,10 +545,19 @@ export async function gerarOuObterDesafio(params: {
   const insert = await db
     .prepare(
       'INSERT INTO conhecimento_ativo_desafios ' +
-        '(empresa_id,funcionario_id,aeronave_modelo,periodo_chave,numero_desafio,expira_em) ' +
-        'VALUES (?,?,?,?,?,?) RETURNING id',
+        '(empresa_id,funcionario_id,aeronave_modelo,periodo_chave,numero_desafio,numero_sequencial,topico_id,expira_em) ' +
+        'VALUES (?,?,?,?,?,?,?,?) RETURNING id',
     )
-    .bind(empresaId, funcionarioId, modelo, periodo.chave, numeroDesafio, periodo.fim)
+    .bind(
+      empresaId,
+      funcionarioId,
+      modelo,
+      periodo.chave,
+      numeroDesafioLegado,
+      numeroDesafio,
+      topicoId,
+      periodo.fim,
+    )
     .first<{ id: number }>();
 
   if (!insert?.id) throw new Error('Falha ao criar desafio técnico');
@@ -364,7 +589,7 @@ export async function gerarOuObterDesafio(params: {
   } catch (error) {
     await db
       .prepare(
-        'UPDATE conhecimento_ativo_desafios SET deleted_at=datetime(\'now\'), updated_at=datetime(\'now\') ' +
+        "UPDATE conhecimento_ativo_desafios SET deleted_at=datetime('now'), updated_at=datetime('now') " +
           'WHERE id=? AND empresa_id=?',
       )
       .bind(insert.id, empresaId)
@@ -377,7 +602,7 @@ export async function gerarOuObterDesafio(params: {
     .bind(insert.id, empresaId)
     .first<ChallengeRow>();
   if (!challenge) throw new Error('Desafio recém-criado não encontrado');
-  return { desafio: challenge, criado: true };
+  return { desafio: normalizarDesafio(challenge), criado: true };
 }
 
 function parseQuestaoSnapshot(raw: string): QuestaoSnapshot {
@@ -409,6 +634,7 @@ export async function buscarDesafioParaFuncionario(params: {
     .bind(desafioId, empresaId, funcionarioId)
     .first<ChallengeRow>();
   if (!desafio) return null;
+  await garantirQuantidadeQuestoesDesafio({ db, empresaId, funcionarioId, desafio });
 
   const result = await db
     .prepare(
@@ -452,7 +678,7 @@ export async function buscarDesafioParaFuncionario(params: {
   });
 
   return {
-    ...desafio,
+    ...normalizarDesafio(desafio),
     total_questoes: questoes.length,
     respondidas: questoes.filter((row) => row.resposta).length,
     questoes,
@@ -487,8 +713,8 @@ async function atualizarDominio(params: {
     await db
       .prepare(
         'UPDATE conhecimento_ativo_dominio SET nivel=?,exposicoes=?,acertos=?,erros=?, ' +
-          'ultimo_resultado=?,ultima_confianca=?,ultima_exposicao_em=datetime(\'now\'), ' +
-          'proxima_revisao_em=?,estado=?,updated_at=datetime(\'now\') ' +
+          "ultimo_resultado=?,ultima_confianca=?,ultima_exposicao_em=datetime('now'), " +
+          "proxima_revisao_em=?,estado=?,updated_at=datetime('now') " +
           'WHERE empresa_id=? AND funcionario_id=? AND item_id=? AND deleted_at IS NULL',
       )
       .bind(
@@ -511,7 +737,7 @@ async function atualizarDominio(params: {
         'INSERT INTO conhecimento_ativo_dominio ' +
           '(empresa_id,funcionario_id,item_id,nivel,exposicoes,acertos,erros,ultimo_resultado, ' +
           'ultima_confianca,ultima_exposicao_em,proxima_revisao_em,estado) ' +
-          'VALUES (?,?,?,?,?,?,?,?,?,datetime(\'now\'),?,?)',
+          "VALUES (?,?,?,?,?,?,?,?,?,datetime('now'),?,?)",
       )
       .bind(
         empresaId,
@@ -567,8 +793,8 @@ async function finalizarSeCompleto(params: {
   if (challenge.status !== 'CONCLUIDO') {
     await db
       .prepare(
-        'UPDATE conhecimento_ativo_desafios SET status=\'CONCLUIDO\',concluido_em=datetime(\'now\'), ' +
-          'xp_concedido=100,updated_at=datetime(\'now\') WHERE id=? AND empresa_id=? AND funcionario_id=?',
+        "UPDATE conhecimento_ativo_desafios SET status='CONCLUIDO',concluido_em=datetime('now'), " +
+          "xp_concedido=100,updated_at=datetime('now') WHERE id=? AND empresa_id=? AND funcionario_id=?",
       )
       .bind(desafioId, empresaId, funcionarioId)
       .run();
@@ -576,36 +802,29 @@ async function finalizarSeCompleto(params: {
       .prepare(
         'INSERT OR IGNORE INTO conhecimento_ativo_xp_eventos ' +
           '(empresa_id,funcionario_id,desafio_id,tipo,pontos,referencia_chave) ' +
-          'VALUES (?,?,?,\'DESAFIO_CONCLUIDO\',100,?)',
+          "VALUES (?,?,?,'DESAFIO_CONCLUIDO',100,?)",
       )
       .bind(empresaId, funcionarioId, desafioId, 'desafio:' + desafioId)
       .run();
   }
 
-  if (challenge.numero_desafio === 2) {
-    const completed = await db
+  const completed = await db
+    .prepare(
+      'SELECT COUNT(*) AS total FROM conhecimento_ativo_desafios ' +
+        'WHERE empresa_id=? AND funcionario_id=? AND periodo_chave=? ' +
+        "AND status='CONCLUIDO' AND deleted_at IS NULL",
+    )
+    .bind(empresaId, funcionarioId, challenge.periodo_chave)
+    .first<{ total: number }>();
+  if (Number(completed?.total || 0) >= DESAFIOS_RECOMENDADOS_POR_QUINZENA) {
+    await db
       .prepare(
-        'SELECT COUNT(*) AS total FROM conhecimento_ativo_desafios ' +
-          'WHERE empresa_id=? AND funcionario_id=? AND aeronave_modelo=? ' +
-          'AND periodo_chave=? AND status=\'CONCLUIDO\' AND deleted_at IS NULL',
+        'INSERT OR IGNORE INTO conhecimento_ativo_xp_eventos ' +
+          '(empresa_id,funcionario_id,desafio_id,tipo,pontos,referencia_chave) ' +
+          "VALUES (?,?,?,'QUINZENA_CONCLUIDA',150,?)",
       )
-      .bind(empresaId, funcionarioId, challenge.aeronave_modelo, challenge.periodo_chave)
-      .first<{ total: number }>();
-    if (Number(completed?.total || 0) >= 2) {
-      await db
-        .prepare(
-          'INSERT OR IGNORE INTO conhecimento_ativo_xp_eventos ' +
-            '(empresa_id,funcionario_id,desafio_id,tipo,pontos,referencia_chave) ' +
-            'VALUES (?,?,?,\'QUINZENA_CONCLUIDA\',150,?)',
-        )
-        .bind(
-          empresaId,
-          funcionarioId,
-          desafioId,
-          'quinzena:' + challenge.aeronave_modelo + ':' + challenge.periodo_chave,
-        )
-        .run();
-    }
+      .bind(empresaId, funcionarioId, desafioId, 'quinzena:' + challenge.periodo_chave)
+      .run();
   }
 
   return { concluido: true, xpConcedido: challenge.status === 'CONCLUIDO' ? 0 : 100 };
@@ -620,9 +839,9 @@ export async function iniciarDesafio(params: {
   const { db, empresaId, funcionarioId, desafioId } = params;
   const result = await db
     .prepare(
-      'UPDATE conhecimento_ativo_desafios SET status=\'EM_ANDAMENTO\', ' +
-        'iniciado_em=COALESCE(iniciado_em,datetime(\'now\')),updated_at=datetime(\'now\') ' +
-        'WHERE id=? AND empresa_id=? AND funcionario_id=? AND status=\'DISPONIVEL\' AND deleted_at IS NULL',
+      "UPDATE conhecimento_ativo_desafios SET status='EM_ANDAMENTO', " +
+        "iniciado_em=COALESCE(iniciado_em,datetime('now')),updated_at=datetime('now') " +
+        "WHERE id=? AND empresa_id=? AND funcionario_id=? AND status='DISPONIVEL' AND deleted_at IS NULL",
     )
     .bind(desafioId, empresaId, funcionarioId)
     .run();
@@ -656,7 +875,7 @@ export async function responderQuestao(params: {
         'FROM conhecimento_ativo_desafio_questoes dq ' +
         'JOIN conhecimento_ativo_desafios d ON d.id=dq.desafio_id AND d.empresa_id=dq.empresa_id ' +
         'WHERE dq.id=? AND dq.desafio_id=? AND dq.empresa_id=? AND dq.deleted_at IS NULL ' +
-        'AND d.funcionario_id=? AND d.status IN (\'DISPONIVEL\',\'EM_ANDAMENTO\') AND d.deleted_at IS NULL LIMIT 1',
+        "AND d.funcionario_id=? AND d.status IN ('DISPONIVEL','EM_ANDAMENTO') AND d.deleted_at IS NULL LIMIT 1",
     )
     .bind(desafioQuestaoId, desafioId, empresaId, funcionarioId)
     .first<{
@@ -724,9 +943,9 @@ export async function responderQuestao(params: {
 
   await db
     .prepare(
-      'UPDATE conhecimento_ativo_desafios SET status=\'EM_ANDAMENTO\', ' +
-        'iniciado_em=COALESCE(iniciado_em,datetime(\'now\')),updated_at=datetime(\'now\') ' +
-        'WHERE id=? AND empresa_id=? AND funcionario_id=? AND status=\'DISPONIVEL\'',
+      "UPDATE conhecimento_ativo_desafios SET status='EM_ANDAMENTO', " +
+        "iniciado_em=COALESCE(iniciado_em,datetime('now')),updated_at=datetime('now') " +
+        "WHERE id=? AND empresa_id=? AND funcionario_id=? AND status='DISPONIVEL'",
     )
     .bind(desafioId, empresaId, funcionarioId)
     .run();
@@ -761,12 +980,12 @@ export async function resumoConhecimentoAtivo(params: {
   funcionarioId: number;
 }) {
   const { db, empresaId, funcionarioId } = params;
-  const modelos = await resolverModelosFuncionario(db, empresaId, funcionarioId);
+  const modelos = modelosConhecimentoAtivoDisponiveis();
   const periodo = periodoQuinzena();
 
   const desafios = await db
     .prepare(
-      'SELECT id,aeronave_modelo,numero_desafio,status,disponivel_em,expira_em,concluido_em ' +
+      'SELECT id,aeronave_modelo,topico_id,COALESCE(numero_sequencial,numero_desafio) AS numero_desafio,status,disponivel_em,expira_em,concluido_em ' +
         'FROM conhecimento_ativo_desafios WHERE empresa_id=? AND funcionario_id=? ' +
         'AND periodo_chave=? AND deleted_at IS NULL ORDER BY aeronave_modelo,numero_desafio',
     )
@@ -803,7 +1022,7 @@ export async function resumoConhecimentoAtivo(params: {
     desafios: desafios.results || [],
     xp: Number(xp?.total || 0),
     dominio: states,
-    estimativaMinutos: 4,
+    estimativaMinutos: 8,
   };
 }
 
@@ -813,29 +1032,113 @@ export async function mapaConhecimento(params: {
   funcionarioId: number;
 }) {
   const { db, empresaId, funcionarioId } = params;
-  const modelos = await resolverModelosFuncionario(db, empresaId, funcionarioId);
-  if (!modelos.length) return [];
-
+  const modelos = modelosConhecimentoAtivoDisponiveis();
   const placeholders = modelos.map(() => '?').join(',');
   const result = await db
     .prepare(
-      'SELECT t.id AS topico_id,t.nome,t.aeronave_modelo, ' +
-        'COUNT(DISTINCT i.id) AS itens, ' +
-        'SUM(CASE WHEN d.estado=\'CONSOLIDADO\' THEN 1 ELSE 0 END) AS consolidados, ' +
-        'SUM(CASE WHEN d.estado=\'EM_REFORCO\' THEN 1 ELSE 0 END) AS em_reforco, ' +
-        'SUM(CASE WHEN d.estado=\'APRENDENDO\' THEN 1 ELSE 0 END) AS aprendendo ' +
-        'FROM conhecimento_ativo_topicos t ' +
-        'JOIN conhecimento_ativo_itens i ON i.topico_id=t.id AND i.empresa_id=t.empresa_id ' +
-        'AND i.status=\'APROVADO\' AND i.ativo=1 AND i.deleted_at IS NULL ' +
-        'LEFT JOIN conhecimento_ativo_dominio d ON d.item_id=i.id AND d.empresa_id=i.empresa_id ' +
-        'AND d.funcionario_id=? AND d.deleted_at IS NULL ' +
-        'WHERE t.empresa_id=? AND t.ativo=1 AND t.deleted_at IS NULL ' +
-        'AND (t.aeronave_modelo IS NULL OR UPPER(REPLACE(t.aeronave_modelo,\'-\',\'\')) IN (' +
-        placeholders +
-        ')) GROUP BY t.id,t.nome,t.aeronave_modelo ORDER BY t.ordem,t.nome',
+      `
+      SELECT
+        t.id AS topico_id,
+        t.nome,
+        t.aeronave_modelo,
+        COUNT(DISTINCT i.id) AS itens,
+        COUNT(DISTINCT q.id) AS questoes,
+        COUNT(DISTINCT CASE WHEN EXISTS (
+          SELECT 1
+          FROM conhecimento_ativo_respostas r
+          JOIN conhecimento_ativo_desafio_questoes dq
+            ON dq.id=r.desafio_questao_id
+          WHERE r.empresa_id=q.empresa_id
+            AND r.funcionario_id=?
+            AND dq.questao_id=q.id
+        ) THEN q.id END) AS respondidas,
+        COUNT(DISTINCT CASE WHEN d.estado='CONSOLIDADO' THEN i.id END) AS consolidados,
+        COUNT(DISTINCT CASE WHEN d.estado='EM_REFORCO' THEN i.id END) AS em_reforco,
+        COUNT(DISTINCT CASE WHEN d.estado='APRENDENDO' THEN i.id END) AS aprendendo
+      FROM conhecimento_ativo_topicos t
+      JOIN conhecimento_ativo_itens i
+        ON i.topico_id=t.id
+       AND i.empresa_id=t.empresa_id
+       AND i.status='APROVADO'
+       AND i.ativo=1
+       AND i.deleted_at IS NULL
+      JOIN conhecimento_ativo_questoes q
+        ON q.item_id=i.id
+       AND q.empresa_id=i.empresa_id
+       AND q.status='APROVADA'
+       AND q.ativo=1
+       AND q.deleted_at IS NULL
+       AND LENGTH(TRIM(q.explicacao))>0
+      LEFT JOIN conhecimento_ativo_dominio d
+        ON d.item_id=i.id
+       AND d.empresa_id=i.empresa_id
+       AND d.funcionario_id=?
+       AND d.deleted_at IS NULL
+      WHERE t.empresa_id=?
+        AND t.ativo=1
+        AND t.deleted_at IS NULL
+        AND UPPER(REPLACE(t.aeronave_modelo,'-','')) IN (${placeholders})
+        AND EXISTS (
+          SELECT 1
+          FROM conhecimento_ativo_item_fontes jf
+          JOIN conhecimento_ativo_fontes f
+            ON f.id=jf.fonte_id AND f.empresa_id=jf.empresa_id
+          WHERE jf.empresa_id=i.empresa_id
+            AND jf.item_id=i.id
+            AND jf.deleted_at IS NULL
+            AND f.status='VIGENTE'
+            AND f.deleted_at IS NULL
+        )
+        AND (
+          SELECT COUNT(*)
+          FROM conhecimento_ativo_alternativas a
+          WHERE a.empresa_id=q.empresa_id
+            AND a.questao_id=q.id
+            AND a.deleted_at IS NULL
+        )>=2
+        AND (
+          SELECT COUNT(*)
+          FROM conhecimento_ativo_alternativas a
+          WHERE a.empresa_id=q.empresa_id
+            AND a.questao_id=q.id
+            AND a.correta=1
+            AND a.deleted_at IS NULL
+        )=1
+      GROUP BY t.id,t.nome,t.aeronave_modelo
+      ORDER BY t.ordem,t.nome
+    `,
     )
-    .bind(funcionarioId, empresaId, ...modelos.map((value) => value.replace(/-/g, '')))
-    .all();
+    .bind(
+      funcionarioId,
+      funcionarioId,
+      empresaId,
+      ...modelos.map((value) => value.replace(/-/g, '')),
+    )
+    .all<{
+      topico_id: number;
+      nome: string;
+      aeronave_modelo: string | null;
+      itens: number;
+      questoes: number;
+      respondidas: number;
+      consolidados: number;
+      em_reforco: number;
+      aprendendo: number;
+    }>();
 
-  return result.results || [];
+  return (result.results || []).map((row) => {
+    const questoes = Number(row.questoes || 0);
+    const respondidas = Number(row.respondidas || 0);
+    return {
+      ...row,
+      aeronave_modelo: row.aeronave_modelo
+        ? normalizarModeloConhecimento(row.aeronave_modelo)
+        : null,
+      questoes,
+      respondidas,
+      questoes_restantes: Math.max(0, questoes - respondidas),
+      desafios_estimados: Math.ceil(questoes / QUESTOES_POR_DESAFIO),
+      disponivel_para_desafio: Number(row.itens || 0) >= QUESTOES_POR_DESAFIO,
+    };
+  });
 }

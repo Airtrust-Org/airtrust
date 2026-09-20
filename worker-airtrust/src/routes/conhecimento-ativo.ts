@@ -60,6 +60,12 @@ function mapServiceError(error: unknown): never {
     if (error.name === 'CONTEUDO_INSUFICIENTE') {
       throw new ApiError(error.message, 400, 'CONHECIMENTO_ATIVO_CONTEUDO_INSUFICIENTE');
     }
+    if (error.name === 'TOPICO_INVALIDO') {
+      throw new ApiError(error.message, 400, 'CONHECIMENTO_ATIVO_TOPICO_INVALIDO');
+    }
+    if (error.name === 'TOPICO_FORA_ESCOPO') {
+      throw new ApiError(error.message, 400, 'CONHECIMENTO_ATIVO_TOPICO_FORA_ESCOPO');
+    }
     if (error.name === 'ALTERNATIVA_INVALIDA') {
       throw new ApiError(error.message, 400, 'CONHECIMENTO_ATIVO_ALTERNATIVA_INVALIDA');
     }
@@ -89,19 +95,23 @@ conhecimentoAtivoRoutes.get('/me/mapa', async (c) => {
 
 conhecimentoAtivoRoutes.post('/me/desafios/gerar', async (c) => {
   const { empresaId, funcionarioId } = contextoFuncionario(c);
-  let body: { aeronave_modelo?: string | null } = {};
+  let body: { aeronave_modelo?: string | null; topico_id?: number | null } = {};
   try {
-    body = await c.req.json<{ aeronave_modelo?: string | null }>();
+    body = await c.req.json<{ aeronave_modelo?: string | null; topico_id?: number | null }>();
   } catch {
     body = {};
+  }
+  const topicoSolicitado = body.topico_id == null ? null : Number(body.topico_id);
+  if (topicoSolicitado !== null && (!Number.isInteger(topicoSolicitado) || topicoSolicitado <= 0)) {
+    throw new ApiError('Área de conhecimento inválida', 400, 'CONHECIMENTO_ATIVO_TOPICO_INVALIDO');
   }
   try {
     const result = await gerarOuObterDesafio({
       db: c.env.DB,
       empresaId,
       funcionarioId,
-      modeloSolicitado:
-        typeof body.aeronave_modelo === 'string' ? body.aeronave_modelo : null,
+      modeloSolicitado: typeof body.aeronave_modelo === 'string' ? body.aeronave_modelo : null,
+      topicoSolicitado,
     });
     return c.json({ success: true, data: result }, result.criado ? 201 : 200);
   } catch (error) {
@@ -158,18 +168,10 @@ conhecimentoAtivoRoutes.post('/me/desafios/:id/respostas', async (c) => {
   const desafioQuestaoId = Number(body.desafio_questao_id);
   const alternativaId = Number(body.alternativa_id);
   if (!Number.isInteger(desafioQuestaoId) || desafioQuestaoId <= 0) {
-    throw new ApiError(
-      'Questão do desafio inválida',
-      400,
-      'CONHECIMENTO_ATIVO_QUESTAO_INVALIDA',
-    );
+    throw new ApiError('Questão do desafio inválida', 400, 'CONHECIMENTO_ATIVO_QUESTAO_INVALIDA');
   }
   if (!Number.isInteger(alternativaId) || alternativaId <= 0) {
-    throw new ApiError(
-      'Alternativa inválida',
-      400,
-      'CONHECIMENTO_ATIVO_ALTERNATIVA_INVALIDA',
-    );
+    throw new ApiError('Alternativa inválida', 400, 'CONHECIMENTO_ATIVO_ALTERNATIVA_INVALIDA');
   }
   if (!['SABIA', 'DUVIDA', 'CHUTEI'].includes(String(body.confianca))) {
     throw new ApiError(
@@ -182,11 +184,7 @@ conhecimentoAtivoRoutes.post('/me/desafios/:id/respostas', async (c) => {
   const tempoRespostaMs =
     body.tempo_resposta_ms == null ? null : Math.max(0, Math.round(Number(body.tempo_resposta_ms)));
   if (tempoRespostaMs !== null && !Number.isFinite(tempoRespostaMs)) {
-    throw new ApiError(
-      'Tempo de resposta inválido',
-      400,
-      'CONHECIMENTO_ATIVO_TEMPO_INVALIDO',
-    );
+    throw new ApiError('Tempo de resposta inválido', 400, 'CONHECIMENTO_ATIVO_TEMPO_INVALIDO');
   }
 
   try {

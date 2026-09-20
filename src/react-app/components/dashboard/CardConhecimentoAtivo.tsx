@@ -56,13 +56,13 @@ export function CardConhecimentoAtivo() {
                   {disponivel.status === 'EM_ANDAMENTO' ? 'Continue seu desafio' : 'Desafio disponível'}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  {disponivel.aeronave_modelo} · cerca de {data?.estimativaMinutos ?? 4} min
+                  {disponivel.aeronave_modelo} · 10 perguntas · cerca de {data?.estimativaMinutos ?? 8} min
                 </p>
               </>
             ) : concluidos >= 2 ? (
               <>
                 <p className="text-sm font-semibold text-emerald-700">Quinzena concluída</p>
-                <p className="mt-0.5 text-xs text-slate-500">Você cumpriu os dois desafios.</p>
+                <p className="mt-0.5 text-xs text-slate-500">Meta recomendada cumprida. Desafios extras continuam disponíveis.</p>
               </>
             ) : (
               <>

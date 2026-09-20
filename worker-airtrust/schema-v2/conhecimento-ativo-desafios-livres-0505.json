@@ -1,0 +1,8 @@
+{
+  "changeId": "conhecimento-ativo-desafios-livres-0505",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0505_conhecimento_ativo_desafios_livres.sql",
+  "fileHash": "30b84d25764eff8acd9b70abb92e688d0715add56ac0827f3165a78144f8915d",
+  "planPath": "worker-airtrust/schema-v2/plans/conhecimento-ativo-desafios-livres-0505.md",
+  "planHash": "f43768aa308d379ed1512e9d132149645c187d36287b02f8132234b493427f0e"
+}

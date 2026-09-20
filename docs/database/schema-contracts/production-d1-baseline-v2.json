@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-09-19",
-    "last_reconciled_against": "0504 Controle de Voos operational model prepared; remote apply pending",
-    "schema_v2_digest": "ddfb33b312738c41b2ad829552f35192163ef88ec1887e737e35af3e8110cf65",
+    "last_reconciled_at": "2026-09-20",
+    "last_reconciled_against": "0505 Conhecimento Ativo model/topic selection and free challenge cadence prepared; remote apply pending",
+    "schema_v2_digest": "4617c1bb257c6f5fbcc9760cb9a831af0ae41e78292f510c77668ee703b42947",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -754,18 +754,6 @@
       "note": "0490 is reviewed and prepared only. Production apply requires the dedicated read-only preflight, exact-SHA Schema V2 workflow, recovery point and postconditions; merge does not imply remote application."
     },
     {
-      "change_file": "ead-category-reconciliation-executor-0453.sql",
-      "change_id": null,
-      "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
-      "targets": [
-        "ead_category_reconciliation_runs"
-      ],
-      "domain": "EAD category reconciliation executor ledger",
-      "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REPO_EXPECTED",
-      "reviewed_manifest": null
-    },
-    {
       "change_file": "0491_training_compliance_requirements.sql",
       "change_id": "training-compliance-requirements-0491",
       "sha256": "a4ce45a5d8da1896f6d52cb800fb19d29ea8c4ed35201b7aed66f1d25a5480fc",
@@ -976,6 +964,31 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "controle-voos-operational-model-0504.json",
       "note": "0504 is reviewed and prepared only. It adds editable tenant-scoped contracts and onboard-role catalogs, additive flight identifiers and contract binding, crew onboard-role binding, neutral internal Natureza compatibility, requested editable flight-type defaults, and a per-stage fueling index. Remote apply requires the governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0505_conhecimento_ativo_desafios_livres.sql",
+      "change_id": "conhecimento-ativo-desafios-livres-0505",
+      "sha256": "30b84d25764eff8acd9b70abb92e688d0715add56ac0827f3165a78144f8915d",
+      "targets": [
+        "conhecimento_ativo_desafios"
+      ],
+      "domain": "tenant-scoped Conhecimento Ativo challenge selection by aircraft/topic, 10-question challenges, two-per-fortnight recommendation, and voluntary additional challenges",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "conhecimento-ativo-desafios-livres-0505.json",
+      "note": "0505 is reviewed and prepared only. It adds a canonical sequential challenge number and nullable topic binding without table rebuild, preserves the legacy 1/2 challenge slot for rollout compatibility, changes challenges to 10 explained questions, lets employees choose AW139/S-76 and a knowledge area, and removes the hard two-challenge cap while retaining two per fortnight as the recommended cadence. Remote apply requires the governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
+    },
+    {
+      "change_file": "ead-category-reconciliation-executor-0453.sql",
+      "change_id": null,
+      "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
+      "targets": [
+        "ead_category_reconciliation_runs"
+      ],
+      "domain": "EAD category reconciliation executor ledger",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
     }
   ]
 }

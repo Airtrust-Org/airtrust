@@ -48,7 +48,7 @@ export default function ConhecimentoAtivoAdmin() {
   return (
     <AppLayout>
       <div className="min-h-screen bg-slate-50">
-        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8">
+        <div className="w-full">
           <button
             type="button"
             onClick={() => navigate(-1)}
