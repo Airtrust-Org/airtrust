@@ -257,6 +257,8 @@ async function buscarCandidatos(
         FROM conhecimento_ativo_questoes q
         JOIN conhecimento_ativo_itens i
           ON i.id=q.item_id AND i.empresa_id=q.empresa_id
+        JOIN conhecimento_ativo_topicos t
+          ON t.id=i.topico_id AND t.empresa_id=i.empresa_id
         LEFT JOIN conhecimento_ativo_dominio d
           ON d.empresa_id=q.empresa_id
          AND d.funcionario_id=?
@@ -271,6 +273,9 @@ async function buscarCandidatos(
           AND i.status='APROVADO'
           AND i.ativo=1
           AND i.deleted_at IS NULL
+          AND t.ativo=1
+          AND t.deleted_at IS NULL
+          AND UPPER(REPLACE(t.aeronave_modelo,'-',''))=?
           AND (i.aeronave_modelo IS NULL OR UPPER(REPLACE(i.aeronave_modelo,'-',''))=?)
           AND (? IS NULL OR i.topico_id=?)
           AND EXISTS (
@@ -309,6 +314,7 @@ async function buscarCandidatos(
         funcionarioId,
         empresaId,
         ultimoQuestaoId,
+        modelo.replace(/-/g, ''),
         modelo.replace(/-/g, ''),
         topicoId,
         topicoId,
