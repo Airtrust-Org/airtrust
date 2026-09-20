@@ -6,6 +6,7 @@ import {
   selecionarQuestoesDesafio,
   type CandidatoDesafio,
   type ConhecimentoConfianca,
+  type ConhecimentoEstado,
   type DominioAtual,
 } from './retencao';
 
@@ -21,6 +22,7 @@ interface CandidatoRow {
   topico_id: number;
   criticidade: Criticidade;
   nivel: number | null;
+  estado: ConhecimentoEstado | null;
   proxima_revisao_em: string | null;
   ultima_exposicao_em: string | null;
   respondida_vezes: number;
@@ -216,6 +218,7 @@ async function buscarCandidatos(
         i.topico_id,
         i.criticidade,
         d.nivel,
+        d.estado,
         d.proxima_revisao_em,
         d.ultima_exposicao_em,
         (
@@ -1073,21 +1076,26 @@ export async function resumoConhecimentoAtivo(params: {
     .bind(empresaId, funcionarioId)
     .first<{ total: number }>();
 
-  const dominio = await db
-    .prepare(
-      'SELECT estado,COUNT(*) AS total FROM conhecimento_ativo_dominio ' +
-        'WHERE empresa_id=? AND funcionario_id=? AND deleted_at IS NULL GROUP BY estado',
+  const candidatos = (
+    await Promise.all(
+      modelos.map((modelo) => buscarCandidatos(db, empresaId, funcionarioId, modelo, null)),
     )
-    .bind(empresaId, funcionarioId)
-    .all<{ estado: string; total: number }>();
+  ).flat();
+  const itens = new Map<number, CandidatoRow>();
+  for (const candidato of candidatos) {
+    if (!itens.has(candidato.item_id)) itens.set(candidato.item_id, candidato);
+  }
 
-  const states: Record<string, number> = {
+  const states: Record<ConhecimentoEstado, number> = {
     NOVO: 0,
     APRENDENDO: 0,
     EM_REFORCO: 0,
     CONSOLIDADO: 0,
   };
-  for (const row of dominio.results || []) states[row.estado] = Number(row.total || 0);
+  for (const item of itens.values()) {
+    const estado = item.estado ?? 'NOVO';
+    states[estado] += 1;
+  }
 
   return {
     periodo,
