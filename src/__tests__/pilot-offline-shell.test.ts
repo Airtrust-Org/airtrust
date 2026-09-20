@@ -105,11 +105,12 @@ describe('Pilot Offline shell', () => {
     expect(savedIndex).toBeGreaterThan(putIndex);
   });
 
-  it('mantem Nova etapa compacta ao lado do titulo e abre o resumo automatico por padrao', () => {
-    expect(pilotIndex).toContain('.stage-toolbar #add-stage { min-height:36px; padding:7px 11px; font-size:13px;');
-    expect(pilotIndex).toContain('id="add-stage" class="secondary"');
-    expect(pilotIndex).toContain('<details class="technical-package expandable-panel" style="margin-top:18px" open>');
-    expect(pilotIndex).toContain('<summary>Resumo automático do voo</summary>');
+  it('mantem Nova etapa compacta ao lado e o resumo automatico aberto', () => {
+    expect(pilotIndex).toContain('.stage-toolbar #add-stage { min-height:32px; padding:5px 9px; font-size:12px;');
+    expect(pilotIndex).toContain('id="flight-auto-summary"');
+    expect(pilotIndex).toContain('id="flight-auto-summary" class="technical-package expandable-panel" style="margin-top:18px" open');
+    expect(pilotApp).toContain("document.getElementById('flight-auto-summary')");
+    expect(pilotApp).toContain('automaticSummary.open = true');
   });
 
   it('oferece busca de justificativas por causa raiz, codigo, categoria e descricao', () => {

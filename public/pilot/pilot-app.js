@@ -2835,6 +2835,8 @@ function changeCommonWeightUnit(nextUnit) {
 }
 
 function renderRdvFormFields() {
+  const automaticSummary = document.getElementById('flight-auto-summary');
+  if (automaticSummary instanceof HTMLDetailsElement) automaticSummary.open = true;
   rdvCoreFields.replaceChildren();
   rdvFormFields.replaceChildren();
   const form = activeRdvDraft.form;
