@@ -353,34 +353,34 @@ export function TrainingComplianceApplicabilityEditor({
             <option value="NAO_APLICA">Não se aplica (exceção)</option>
           </select>
         </label>
-        <div className="md:col-span-2">
+        <label className="text-xs font-medium text-slate-600">
+          Origem
+          <select
+            value={origem}
+            onChange={(event) => setOrigem(event.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            {['REGULATORIO', 'PTO', 'MANUAL', 'SGSO', 'RH', 'CLIENTE', 'EMPRESA', 'OUTRO'].map(
+              (value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ),
+            )}
+          </select>
+        </label>
+        <div className="flex items-end">
           <button
             type="button"
             onClick={() => setShowDetails((value) => !value)}
-            className="text-xs font-semibold text-slate-500 hover:text-primary"
+            className="pb-2 text-xs font-semibold text-slate-500 hover:text-primary"
           >
-            {showDetails ? 'Ocultar detalhes da regra' : 'Adicionar origem, referência e criticidade'}
+            {showDetails ? 'Ocultar referência e criticidade' : 'Adicionar referência e criticidade'}
           </button>
         </div>
         {showDetails ? (
           <>
-            <label className="text-xs font-medium text-slate-600">
-              Origem
-              <select
-                value={origem}
-                onChange={(event) => setOrigem(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-              >
-                {['REGULATORIO', 'PTO', 'MANUAL', 'SGSO', 'RH', 'CLIENTE', 'EMPRESA', 'OUTRO'].map(
-                  (value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ),
-                )}
-              </select>
-            </label>
-            <label className="text-xs font-medium text-slate-600">
+            <label className="text-xs font-medium text-slate-600 md:col-span-2">
               Base / referência
               <input
                 value={referencia}
