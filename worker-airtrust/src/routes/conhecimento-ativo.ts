@@ -95,9 +95,17 @@ conhecimentoAtivoRoutes.get('/me/mapa', async (c) => {
 
 conhecimentoAtivoRoutes.post('/me/desafios/gerar', async (c) => {
   const { empresaId, funcionarioId } = contextoFuncionario(c);
-  let body: { aeronave_modelo?: string | null; topico_id?: number | null } = {};
+  let body: {
+    aeronave_modelo?: string | null;
+    topico_id?: number | null;
+    modo?: 'TOPICO' | 'MISTO' | null;
+  } = {};
   try {
-    body = await c.req.json<{ aeronave_modelo?: string | null; topico_id?: number | null }>();
+    body = await c.req.json<{
+      aeronave_modelo?: string | null;
+      topico_id?: number | null;
+      modo?: 'TOPICO' | 'MISTO' | null;
+    }>();
   } catch {
     body = {};
   }
@@ -112,6 +120,7 @@ conhecimentoAtivoRoutes.post('/me/desafios/gerar', async (c) => {
       funcionarioId,
       modeloSolicitado: typeof body.aeronave_modelo === 'string' ? body.aeronave_modelo : null,
       topicoSolicitado,
+      modoMisto: body.modo === 'MISTO',
     });
     return c.json({ success: true, data: result }, result.criado ? 201 : 200);
   } catch (error) {
