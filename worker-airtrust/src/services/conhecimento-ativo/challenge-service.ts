@@ -1,6 +1,8 @@
 import {
   calcularAtualizacaoDominio,
+  normalizarPrioridadeRevisao,
   periodoQuinzena,
+  pontuarCandidato,
   selecionarQuestoesDesafio,
   type CandidatoDesafio,
   type ConhecimentoConfianca,
@@ -16,6 +18,7 @@ type Criticidade = CandidatoDesafio['criticidade'];
 interface CandidatoRow {
   questao_id: number;
   item_id: number;
+  topico_id: number;
   criticidade: Criticidade;
   nivel: number | null;
   proxima_revisao_em: string | null;
@@ -210,6 +213,7 @@ async function buscarCandidatos(
       SELECT
         q.id AS questao_id,
         q.item_id,
+        i.topico_id,
         i.criticidade,
         d.nivel,
         d.proxima_revisao_em,
@@ -294,34 +298,28 @@ async function buscarCandidatos(
   return result.results || [];
 }
 
-function selecionarComCobertura(
-  candidatos: CandidatoRow[],
-  quantidade: number,
-): CandidatoDesafio[] {
-  const toCandidate = (row: CandidatoRow): CandidatoDesafio => ({
+function toCandidate(row: CandidatoRow): CandidatoDesafio {
+  return {
     questaoId: row.questao_id,
     itemId: row.item_id,
+    topicoId: row.topico_id,
     criticidade: row.criticidade,
     nivel: row.nivel,
     proximaRevisaoEm: row.proxima_revisao_em,
     ultimaExposicaoEm: row.ultima_exposicao_em,
+    respondidaVezes: Number(row.respondida_vezes || 0),
+    ultimaRespostaEm: row.ultima_resposta_em,
+  };
+}
+
+function selecionarPersonalizado(
+  candidatos: CandidatoRow[],
+  quantidade: number,
+  diversificarTopicos: boolean,
+): CandidatoDesafio[] {
+  return selecionarQuestoesDesafio(candidatos.map(toCandidate), quantidade, {
+    diversificarTopicos,
   });
-
-  const novos = candidatos.filter((row) => Number(row.respondida_vezes || 0) === 0);
-  const selecionados = selecionarQuestoesDesafio(novos.map(toCandidate), quantidade);
-  if (selecionados.length >= quantidade) return selecionados;
-
-  const itensUsados = new Set(selecionados.map((row) => row.itemId));
-  const revisao = candidatos
-    .filter((row) => Number(row.respondida_vezes || 0) > 0 && !itensUsados.has(row.item_id))
-    .sort((a, b) =>
-      String(a.ultima_resposta_em || '').localeCompare(String(b.ultima_resposta_em || '')),
-    );
-  const complemento = selecionarQuestoesDesafio(
-    revisao.map(toCandidate),
-    quantidade - selecionados.length,
-  );
-  return [...selecionados, ...complemento];
 }
 
 async function construirSnapshot(
@@ -442,7 +440,7 @@ async function garantirQuantidadeQuestoesDesafio(params: {
     await buscarCandidatos(db, empresaId, funcionarioId, desafio.aeronave_modelo, desafio.topico_id)
   ).filter((row) => !itensUsados.has(row.item_id));
   const faltantes = QUESTOES_POR_DESAFIO - atuais.length;
-  const selecionadas = selecionarComCobertura(candidatos, faltantes);
+  const selecionadas = selecionarPersonalizado(candidatos, faltantes, desafio.topico_id == null);
 
   if (selecionadas.length < faltantes) {
     const error = new Error(
@@ -484,6 +482,7 @@ export async function gerarOuObterDesafio(params: {
   funcionarioId: number;
   modeloSolicitado?: string | null;
   topicoSolicitado?: number | null;
+  modoMisto?: boolean;
 }): Promise<{ desafio: ChallengeRow; criado: boolean }> {
   const { db, empresaId, funcionarioId } = params;
   const modelos = modelosConhecimentoAtivoDisponiveis();
@@ -496,24 +495,37 @@ export async function gerarOuObterDesafio(params: {
     throw error;
   }
 
-  const topicoId = params.topicoSolicitado ?? (await primeiroTopicoElegivel(db, empresaId, modelo));
-  if (!topicoId) {
+  const modoMisto = params.modoMisto === true;
+  const topicoId = modoMisto
+    ? null
+    : params.topicoSolicitado ?? (await primeiroTopicoElegivel(db, empresaId, modelo));
+  if (!modoMisto && !topicoId) {
     const error = new Error('Não há área com conteúdo suficiente para este modelo');
     error.name = 'CONTEUDO_INSUFICIENTE';
     throw error;
   }
-  await validarTopicoModelo({ db, empresaId, modelo, topicoId });
+  if (topicoId) await validarTopicoModelo({ db, empresaId, modelo, topicoId });
 
   const periodo = periodoQuinzena();
-  const existing = await db
-    .prepare(
-      'SELECT * FROM conhecimento_ativo_desafios ' +
-        'WHERE empresa_id=? AND funcionario_id=? AND aeronave_modelo=? ' +
-        "AND periodo_chave=? AND topico_id=? AND status IN ('DISPONIVEL','EM_ANDAMENTO') " +
-        'AND deleted_at IS NULL ORDER BY COALESCE(numero_sequencial,numero_desafio) LIMIT 1',
-    )
-    .bind(empresaId, funcionarioId, modelo, periodo.chave, topicoId)
-    .first<ChallengeRow>();
+  const existing = modoMisto
+    ? await db
+        .prepare(
+          'SELECT * FROM conhecimento_ativo_desafios ' +
+            'WHERE empresa_id=? AND funcionario_id=? AND aeronave_modelo=? ' +
+            "AND periodo_chave=? AND topico_id IS NULL AND status IN ('DISPONIVEL','EM_ANDAMENTO') " +
+            'AND deleted_at IS NULL ORDER BY COALESCE(numero_sequencial,numero_desafio) LIMIT 1',
+        )
+        .bind(empresaId, funcionarioId, modelo, periodo.chave)
+        .first<ChallengeRow>()
+    : await db
+        .prepare(
+          'SELECT * FROM conhecimento_ativo_desafios ' +
+            'WHERE empresa_id=? AND funcionario_id=? AND aeronave_modelo=? ' +
+            "AND periodo_chave=? AND topico_id=? AND status IN ('DISPONIVEL','EM_ANDAMENTO') " +
+            'AND deleted_at IS NULL ORDER BY COALESCE(numero_sequencial,numero_desafio) LIMIT 1',
+        )
+        .bind(empresaId, funcionarioId, modelo, periodo.chave, topicoId)
+        .first<ChallengeRow>();
   if (existing) {
     await garantirQuantidadeQuestoesDesafio({ db, empresaId, funcionarioId, desafio: existing });
     return { desafio: normalizarDesafio(existing), criado: false };
@@ -532,7 +544,7 @@ export async function gerarOuObterDesafio(params: {
   const numeroDesafioLegado = Math.min(numeroDesafio, DESAFIOS_RECOMENDADOS_POR_QUINZENA);
 
   const candidatos = await buscarCandidatos(db, empresaId, funcionarioId, modelo, topicoId);
-  const selecionadas = selecionarComCobertura(candidatos, QUESTOES_POR_DESAFIO);
+  const selecionadas = selecionarPersonalizado(candidatos, QUESTOES_POR_DESAFIO, topicoId == null);
 
   if (selecionadas.length < QUESTOES_POR_DESAFIO) {
     const error = new Error(
@@ -974,6 +986,67 @@ export async function responderQuestao(params: {
   };
 }
 
+function diagnosticoPorTopico(candidatos: CandidatoRow[], nowMs: number = Date.now()) {
+  const itens = new Map<number, CandidatoDesafio>();
+  for (const row of candidatos) {
+    if (itens.has(row.item_id)) continue;
+    itens.set(row.item_id, toCandidate(row));
+  }
+
+  const porTopico = new Map<
+    number,
+    {
+      itensAvaliados: number;
+      itensNovos: number;
+      itensVencidos: number;
+      itensFrageis: number;
+      retencaoMedia: number | null;
+      prioridadeRevisao: number;
+    }
+  >();
+
+  const grupos = new Map<number, CandidatoDesafio[]>();
+  for (const item of itens.values()) {
+    if (item.topicoId == null) continue;
+    const group = grupos.get(item.topicoId) || [];
+    group.push(item);
+    grupos.set(item.topicoId, group);
+  }
+
+  for (const [topicoId, group] of grupos) {
+    const avaliados = group.filter((item) => item.nivel != null);
+    const itensNovos = group.length - avaliados.length;
+    const itensVencidos = avaliados.filter((item) => {
+      if (!item.proximaRevisaoEm) return false;
+      const reviewMs = Date.parse(item.proximaRevisaoEm);
+      return Number.isFinite(reviewMs) && reviewMs <= nowMs;
+    }).length;
+    const itensFrageis = avaliados.filter((item) => Number(item.nivel) < 60).length;
+    const retencaoMedia = avaliados.length
+      ? Math.round(
+          avaliados.reduce((sum, item) => sum + Number(item.nivel || 0), 0) / avaliados.length,
+        )
+      : null;
+    const scores = group.map((item) => pontuarCandidato(item, nowMs));
+    const mediaScore = scores.length
+      ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+      : 0;
+    const maxScore = scores.length ? Math.max(...scores) : 0;
+    const prioridadeRevisao = normalizarPrioridadeRevisao(mediaScore * 0.7 + maxScore * 0.3);
+
+    porTopico.set(topicoId, {
+      itensAvaliados: avaliados.length,
+      itensNovos,
+      itensVencidos,
+      itensFrageis,
+      retencaoMedia,
+      prioridadeRevisao,
+    });
+  }
+
+  return porTopico;
+}
+
 export async function resumoConhecimentoAtivo(params: {
   db: D1Database;
   empresaId: number;
@@ -1034,6 +1107,12 @@ export async function mapaConhecimento(params: {
   const { db, empresaId, funcionarioId } = params;
   const modelos = modelosConhecimentoAtivoDisponiveis();
   const placeholders = modelos.map(() => '?').join(',');
+  const candidatosDiagnostico = (
+    await Promise.all(
+      modelos.map((modelo) => buscarCandidatos(db, empresaId, funcionarioId, modelo, null)),
+    )
+  ).flat();
+  const diagnostico = diagnosticoPorTopico(candidatosDiagnostico);
   const result = await db
     .prepare(
       `
@@ -1129,6 +1208,7 @@ export async function mapaConhecimento(params: {
   return (result.results || []).map((row) => {
     const questoes = Number(row.questoes || 0);
     const respondidas = Number(row.respondidas || 0);
+    const stats = diagnostico.get(Number(row.topico_id));
     return {
       ...row,
       aeronave_modelo: row.aeronave_modelo
@@ -1139,6 +1219,12 @@ export async function mapaConhecimento(params: {
       questoes_restantes: Math.max(0, questoes - respondidas),
       desafios_estimados: Math.ceil(questoes / QUESTOES_POR_DESAFIO),
       disponivel_para_desafio: Number(row.itens || 0) >= QUESTOES_POR_DESAFIO,
+      retencao_media: stats?.retencaoMedia ?? null,
+      prioridade_revisao: stats?.prioridadeRevisao ?? 0,
+      itens_avaliados: stats?.itensAvaliados ?? 0,
+      itens_novos: stats?.itensNovos ?? Number(row.itens || 0),
+      itens_vencidos: stats?.itensVencidos ?? 0,
+      itens_frageis: stats?.itensFrageis ?? 0,
     };
   });
 }
