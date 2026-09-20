@@ -43,6 +43,12 @@ export interface ConhecimentoMapaTopico {
   consolidados: number | null;
   em_reforco: number | null;
   aprendendo: number | null;
+  retencao_media: number | null;
+  prioridade_revisao: number;
+  itens_avaliados: number;
+  itens_novos: number;
+  itens_vencidos: number;
+  itens_frageis: number;
 }
 
 export interface ConhecimentoAlternativa {
@@ -200,7 +206,11 @@ export function useConhecimentoAtivoDesafio(id: number) {
 export function useGerarDesafioConhecimento() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (params: { aeronaveModelo: string; topicoId: number }) =>
+    mutationFn: (params: {
+      aeronaveModelo: string;
+      topicoId: number | null;
+      modo: 'TOPICO' | 'MISTO';
+    }) =>
       conhecimentoRequest<{ desafio: ConhecimentoDesafioResumo; criado: boolean }>(
         '/me/desafios/gerar',
         {
@@ -208,6 +218,7 @@ export function useGerarDesafioConhecimento() {
           body: JSON.stringify({
             aeronave_modelo: params.aeronaveModelo,
             topico_id: params.topicoId,
+            modo: params.modo,
           }),
         },
       ),

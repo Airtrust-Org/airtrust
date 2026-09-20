@@ -1,9 +1,12 @@
 import {
   calcularAtualizacaoDominio,
+  normalizarPrioridadeRevisao,
   periodoQuinzena,
+  pontuarCandidato,
   selecionarQuestoesDesafio,
   type CandidatoDesafio,
   type ConhecimentoConfianca,
+  type ConhecimentoEstado,
   type DominioAtual,
 } from './retencao';
 
@@ -16,12 +19,24 @@ type Criticidade = CandidatoDesafio['criticidade'];
 interface CandidatoRow {
   questao_id: number;
   item_id: number;
+  topico_id: number;
   criticidade: Criticidade;
   nivel: number | null;
+  estado: ConhecimentoEstado | null;
   proxima_revisao_em: string | null;
   ultima_exposicao_em: string | null;
   respondida_vezes: number;
   ultima_resposta_em: string | null;
+}
+
+interface ItemDiagnosticoRow {
+  item_id: number;
+  topico_id: number;
+  criticidade: Criticidade;
+  nivel: number | null;
+  estado: ConhecimentoEstado | null;
+  proxima_revisao_em: string | null;
+  ultima_exposicao_em: string | null;
 }
 
 interface SnapshotAlternativa {
@@ -204,124 +219,217 @@ async function buscarCandidatos(
   modelo: string,
   topicoId: number | null,
 ): Promise<CandidatoRow[]> {
+  const candidatos: CandidatoRow[] = [];
+  const tamanhoPagina = 500;
+  let ultimoQuestaoId = 0;
+
+  while (true) {
+    const result = await db
+      .prepare(
+        `
+        SELECT
+          q.id AS questao_id,
+          q.item_id,
+          i.topico_id,
+          i.criticidade,
+          d.nivel,
+          d.estado,
+          d.proxima_revisao_em,
+          d.ultima_exposicao_em,
+          (
+            SELECT COUNT(*)
+            FROM conhecimento_ativo_respostas r
+            JOIN conhecimento_ativo_desafio_questoes dq
+              ON dq.id=r.desafio_questao_id
+            WHERE r.empresa_id=q.empresa_id
+              AND r.funcionario_id=?
+              AND dq.questao_id=q.id
+          ) AS respondida_vezes,
+          (
+            SELECT MAX(r.respondido_em)
+            FROM conhecimento_ativo_respostas r
+            JOIN conhecimento_ativo_desafio_questoes dq
+              ON dq.id=r.desafio_questao_id
+            WHERE r.empresa_id=q.empresa_id
+              AND r.funcionario_id=?
+              AND dq.questao_id=q.id
+          ) AS ultima_resposta_em
+        FROM conhecimento_ativo_questoes q
+        JOIN conhecimento_ativo_itens i
+          ON i.id=q.item_id AND i.empresa_id=q.empresa_id
+        JOIN conhecimento_ativo_topicos t
+          ON t.id=i.topico_id AND t.empresa_id=i.empresa_id
+        LEFT JOIN conhecimento_ativo_dominio d
+          ON d.empresa_id=q.empresa_id
+         AND d.funcionario_id=?
+         AND d.item_id=i.id
+         AND d.deleted_at IS NULL
+        WHERE q.empresa_id=?
+          AND q.id>?
+          AND q.status='APROVADA'
+          AND q.ativo=1
+          AND q.deleted_at IS NULL
+          AND LENGTH(TRIM(q.explicacao))>0
+          AND i.status='APROVADO'
+          AND i.ativo=1
+          AND i.deleted_at IS NULL
+          AND t.ativo=1
+          AND t.deleted_at IS NULL
+          AND UPPER(REPLACE(t.aeronave_modelo,'-',''))=?
+          AND (i.aeronave_modelo IS NULL OR UPPER(REPLACE(i.aeronave_modelo,'-',''))=?)
+          AND (? IS NULL OR i.topico_id=?)
+          AND EXISTS (
+            SELECT 1
+            FROM conhecimento_ativo_item_fontes jf
+            JOIN conhecimento_ativo_fontes f
+              ON f.id=jf.fonte_id AND f.empresa_id=jf.empresa_id
+            WHERE jf.empresa_id=q.empresa_id
+              AND jf.item_id=i.id
+              AND jf.deleted_at IS NULL
+              AND f.status='VIGENTE'
+              AND f.deleted_at IS NULL
+          )
+          AND (
+            SELECT COUNT(*)
+            FROM conhecimento_ativo_alternativas a
+            WHERE a.empresa_id=q.empresa_id
+              AND a.questao_id=q.id
+              AND a.deleted_at IS NULL
+          )>=2
+          AND (
+            SELECT COUNT(*)
+            FROM conhecimento_ativo_alternativas a
+            WHERE a.empresa_id=q.empresa_id
+              AND a.questao_id=q.id
+              AND a.correta=1
+              AND a.deleted_at IS NULL
+          )=1
+        ORDER BY q.id
+        LIMIT 500
+      `,
+      )
+      .bind(
+        funcionarioId,
+        funcionarioId,
+        funcionarioId,
+        empresaId,
+        ultimoQuestaoId,
+        modelo.replace(/-/g, ''),
+        modelo.replace(/-/g, ''),
+        topicoId,
+        topicoId,
+      )
+      .all<CandidatoRow>();
+
+    const pagina = result.results || [];
+    candidatos.push(...pagina);
+    if (pagina.length < tamanhoPagina) break;
+    ultimoQuestaoId = pagina[pagina.length - 1].questao_id;
+  }
+
+  return candidatos;
+}
+
+async function buscarItensDiagnostico(
+  db: D1Database,
+  empresaId: number,
+  funcionarioId: number,
+  modelos: string[],
+): Promise<ItemDiagnosticoRow[]> {
+  const placeholders = modelos.map(() => '?').join(',');
   const result = await db
     .prepare(
       `
       SELECT
-        q.id AS questao_id,
-        q.item_id,
+        i.id AS item_id,
+        i.topico_id,
         i.criticidade,
         d.nivel,
+        d.estado,
         d.proxima_revisao_em,
-        d.ultima_exposicao_em,
-        (
-          SELECT COUNT(*)
-          FROM conhecimento_ativo_respostas r
-          JOIN conhecimento_ativo_desafio_questoes dq
-            ON dq.id=r.desafio_questao_id
-          WHERE r.empresa_id=q.empresa_id
-            AND r.funcionario_id=?
-            AND dq.questao_id=q.id
-        ) AS respondida_vezes,
-        (
-          SELECT MAX(r.respondido_em)
-          FROM conhecimento_ativo_respostas r
-          JOIN conhecimento_ativo_desafio_questoes dq
-            ON dq.id=r.desafio_questao_id
-          WHERE r.empresa_id=q.empresa_id
-            AND r.funcionario_id=?
-            AND dq.questao_id=q.id
-        ) AS ultima_resposta_em
-      FROM conhecimento_ativo_questoes q
-      JOIN conhecimento_ativo_itens i
-        ON i.id=q.item_id AND i.empresa_id=q.empresa_id
+        d.ultima_exposicao_em
+      FROM conhecimento_ativo_itens i
       LEFT JOIN conhecimento_ativo_dominio d
-        ON d.empresa_id=q.empresa_id
+        ON d.empresa_id=i.empresa_id
        AND d.funcionario_id=?
        AND d.item_id=i.id
        AND d.deleted_at IS NULL
-      WHERE q.empresa_id=?
-        AND q.status='APROVADA'
-        AND q.ativo=1
-        AND q.deleted_at IS NULL
-        AND LENGTH(TRIM(q.explicacao))>0
+      WHERE i.empresa_id=?
         AND i.status='APROVADO'
         AND i.ativo=1
         AND i.deleted_at IS NULL
-        AND (i.aeronave_modelo IS NULL OR UPPER(REPLACE(i.aeronave_modelo,'-',''))=?)
-        AND (? IS NULL OR i.topico_id=?)
+        AND (i.aeronave_modelo IS NULL OR UPPER(REPLACE(i.aeronave_modelo,'-','')) IN (${placeholders}))
         AND EXISTS (
           SELECT 1
           FROM conhecimento_ativo_item_fontes jf
           JOIN conhecimento_ativo_fontes f
             ON f.id=jf.fonte_id AND f.empresa_id=jf.empresa_id
-          WHERE jf.empresa_id=q.empresa_id
+          WHERE jf.empresa_id=i.empresa_id
             AND jf.item_id=i.id
             AND jf.deleted_at IS NULL
             AND f.status='VIGENTE'
             AND f.deleted_at IS NULL
         )
-        AND (
-          SELECT COUNT(*)
-          FROM conhecimento_ativo_alternativas a
-          WHERE a.empresa_id=q.empresa_id
-            AND a.questao_id=q.id
-            AND a.deleted_at IS NULL
-        )>=2
-        AND (
-          SELECT COUNT(*)
-          FROM conhecimento_ativo_alternativas a
-          WHERE a.empresa_id=q.empresa_id
-            AND a.questao_id=q.id
-            AND a.correta=1
-            AND a.deleted_at IS NULL
-        )=1
-      ORDER BY q.id
-      LIMIT 500
-    `,
+        AND EXISTS (
+          SELECT 1
+          FROM conhecimento_ativo_questoes q
+          WHERE q.empresa_id=i.empresa_id
+            AND q.item_id=i.id
+            AND q.status='APROVADA'
+            AND q.ativo=1
+            AND q.deleted_at IS NULL
+            AND LENGTH(TRIM(q.explicacao))>0
+            AND (
+              SELECT COUNT(*)
+              FROM conhecimento_ativo_alternativas a
+              WHERE a.empresa_id=q.empresa_id
+                AND a.questao_id=q.id
+                AND a.deleted_at IS NULL
+            )>=2
+            AND (
+              SELECT COUNT(*)
+              FROM conhecimento_ativo_alternativas a
+              WHERE a.empresa_id=q.empresa_id
+                AND a.questao_id=q.id
+                AND a.correta=1
+                AND a.deleted_at IS NULL
+            )=1
+        )
+      ORDER BY i.id
+      `,
     )
     .bind(
       funcionarioId,
-      funcionarioId,
-      funcionarioId,
       empresaId,
-      modelo.replace(/-/g, ''),
-      topicoId,
-      topicoId,
+      ...modelos.map((value) => value.replace(/-/g, '')),
     )
-    .all<CandidatoRow>();
+    .all<ItemDiagnosticoRow>();
 
   return result.results || [];
 }
 
-function selecionarComCobertura(
-  candidatos: CandidatoRow[],
-  quantidade: number,
-): CandidatoDesafio[] {
-  const toCandidate = (row: CandidatoRow): CandidatoDesafio => ({
+function toCandidate(row: CandidatoRow): CandidatoDesafio {
+  return {
     questaoId: row.questao_id,
     itemId: row.item_id,
+    topicoId: row.topico_id,
     criticidade: row.criticidade,
     nivel: row.nivel,
     proximaRevisaoEm: row.proxima_revisao_em,
     ultimaExposicaoEm: row.ultima_exposicao_em,
+    respondidaVezes: Number(row.respondida_vezes || 0),
+    ultimaRespostaEm: row.ultima_resposta_em,
+  };
+}
+
+function selecionarPersonalizado(
+  candidatos: CandidatoRow[],
+  quantidade: number,
+  diversificarTopicos: boolean,
+): CandidatoDesafio[] {
+  return selecionarQuestoesDesafio(candidatos.map(toCandidate), quantidade, {
+    diversificarTopicos,
   });
-
-  const novos = candidatos.filter((row) => Number(row.respondida_vezes || 0) === 0);
-  const selecionados = selecionarQuestoesDesafio(novos.map(toCandidate), quantidade);
-  if (selecionados.length >= quantidade) return selecionados;
-
-  const itensUsados = new Set(selecionados.map((row) => row.itemId));
-  const revisao = candidatos
-    .filter((row) => Number(row.respondida_vezes || 0) > 0 && !itensUsados.has(row.item_id))
-    .sort((a, b) =>
-      String(a.ultima_resposta_em || '').localeCompare(String(b.ultima_resposta_em || '')),
-    );
-  const complemento = selecionarQuestoesDesafio(
-    revisao.map(toCandidate),
-    quantidade - selecionados.length,
-  );
-  return [...selecionados, ...complemento];
 }
 
 async function construirSnapshot(
@@ -442,7 +550,7 @@ async function garantirQuantidadeQuestoesDesafio(params: {
     await buscarCandidatos(db, empresaId, funcionarioId, desafio.aeronave_modelo, desafio.topico_id)
   ).filter((row) => !itensUsados.has(row.item_id));
   const faltantes = QUESTOES_POR_DESAFIO - atuais.length;
-  const selecionadas = selecionarComCobertura(candidatos, faltantes);
+  const selecionadas = selecionarPersonalizado(candidatos, faltantes, desafio.topico_id == null);
 
   if (selecionadas.length < faltantes) {
     const error = new Error(
@@ -484,6 +592,7 @@ export async function gerarOuObterDesafio(params: {
   funcionarioId: number;
   modeloSolicitado?: string | null;
   topicoSolicitado?: number | null;
+  modoMisto?: boolean;
 }): Promise<{ desafio: ChallengeRow; criado: boolean }> {
   const { db, empresaId, funcionarioId } = params;
   const modelos = modelosConhecimentoAtivoDisponiveis();
@@ -496,24 +605,37 @@ export async function gerarOuObterDesafio(params: {
     throw error;
   }
 
-  const topicoId = params.topicoSolicitado ?? (await primeiroTopicoElegivel(db, empresaId, modelo));
-  if (!topicoId) {
+  const modoMisto = params.modoMisto === true;
+  const topicoId = modoMisto
+    ? null
+    : params.topicoSolicitado ?? (await primeiroTopicoElegivel(db, empresaId, modelo));
+  if (!modoMisto && !topicoId) {
     const error = new Error('Não há área com conteúdo suficiente para este modelo');
     error.name = 'CONTEUDO_INSUFICIENTE';
     throw error;
   }
-  await validarTopicoModelo({ db, empresaId, modelo, topicoId });
+  if (topicoId) await validarTopicoModelo({ db, empresaId, modelo, topicoId });
 
   const periodo = periodoQuinzena();
-  const existing = await db
-    .prepare(
-      'SELECT * FROM conhecimento_ativo_desafios ' +
-        'WHERE empresa_id=? AND funcionario_id=? AND aeronave_modelo=? ' +
-        "AND periodo_chave=? AND topico_id=? AND status IN ('DISPONIVEL','EM_ANDAMENTO') " +
-        'AND deleted_at IS NULL ORDER BY COALESCE(numero_sequencial,numero_desafio) LIMIT 1',
-    )
-    .bind(empresaId, funcionarioId, modelo, periodo.chave, topicoId)
-    .first<ChallengeRow>();
+  const existing = modoMisto
+    ? await db
+        .prepare(
+          'SELECT * FROM conhecimento_ativo_desafios ' +
+            'WHERE empresa_id=? AND funcionario_id=? AND aeronave_modelo=? ' +
+            "AND periodo_chave=? AND topico_id IS NULL AND status IN ('DISPONIVEL','EM_ANDAMENTO') " +
+            'AND deleted_at IS NULL ORDER BY COALESCE(numero_sequencial,numero_desafio) LIMIT 1',
+        )
+        .bind(empresaId, funcionarioId, modelo, periodo.chave)
+        .first<ChallengeRow>()
+    : await db
+        .prepare(
+          'SELECT * FROM conhecimento_ativo_desafios ' +
+            'WHERE empresa_id=? AND funcionario_id=? AND aeronave_modelo=? ' +
+            "AND periodo_chave=? AND topico_id=? AND status IN ('DISPONIVEL','EM_ANDAMENTO') " +
+            'AND deleted_at IS NULL ORDER BY COALESCE(numero_sequencial,numero_desafio) LIMIT 1',
+        )
+        .bind(empresaId, funcionarioId, modelo, periodo.chave, topicoId)
+        .first<ChallengeRow>();
   if (existing) {
     await garantirQuantidadeQuestoesDesafio({ db, empresaId, funcionarioId, desafio: existing });
     return { desafio: normalizarDesafio(existing), criado: false };
@@ -532,7 +654,7 @@ export async function gerarOuObterDesafio(params: {
   const numeroDesafioLegado = Math.min(numeroDesafio, DESAFIOS_RECOMENDADOS_POR_QUINZENA);
 
   const candidatos = await buscarCandidatos(db, empresaId, funcionarioId, modelo, topicoId);
-  const selecionadas = selecionarComCobertura(candidatos, QUESTOES_POR_DESAFIO);
+  const selecionadas = selecionarPersonalizado(candidatos, QUESTOES_POR_DESAFIO, topicoId == null);
 
   if (selecionadas.length < QUESTOES_POR_DESAFIO) {
     const error = new Error(
@@ -974,6 +1096,73 @@ export async function responderQuestao(params: {
   };
 }
 
+function diagnosticoPorTopico(itens: ItemDiagnosticoRow[], nowMs: number = Date.now()) {
+  const porTopico = new Map<
+    number,
+    {
+      itensAvaliados: number;
+      itensNovos: number;
+      itensVencidos: number;
+      itensFrageis: number;
+      retencaoMedia: number | null;
+      prioridadeRevisao: number;
+    }
+  >();
+
+  const grupos = new Map<number, ItemDiagnosticoRow[]>();
+  for (const item of itens) {
+    const group = grupos.get(item.topico_id) || [];
+    group.push(item);
+    grupos.set(item.topico_id, group);
+  }
+
+  for (const [topicoId, group] of grupos) {
+    const avaliados = group.filter((item) => item.nivel != null);
+    const itensNovos = group.length - avaliados.length;
+    const itensVencidos = avaliados.filter((item) => {
+      if (!item.proxima_revisao_em) return false;
+      const reviewMs = Date.parse(item.proxima_revisao_em);
+      return Number.isFinite(reviewMs) && reviewMs <= nowMs;
+    }).length;
+    const itensFrageis = avaliados.filter((item) => Number(item.nivel) < 60).length;
+    const retencaoMedia = avaliados.length
+      ? Math.round(
+          avaliados.reduce((sum, item) => sum + Number(item.nivel || 0), 0) / avaliados.length,
+        )
+      : null;
+    const scores = group.map((item) =>
+      pontuarCandidato(
+        {
+          questaoId: item.item_id,
+          itemId: item.item_id,
+          topicoId: item.topico_id,
+          criticidade: item.criticidade,
+          nivel: item.nivel,
+          proximaRevisaoEm: item.proxima_revisao_em,
+          ultimaExposicaoEm: item.ultima_exposicao_em,
+        },
+        nowMs,
+      ),
+    );
+    const mediaScore = scores.length
+      ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+      : 0;
+    const maxScore = scores.length ? Math.max(...scores) : 0;
+    const prioridadeRevisao = normalizarPrioridadeRevisao(mediaScore * 0.7 + maxScore * 0.3);
+
+    porTopico.set(topicoId, {
+      itensAvaliados: avaliados.length,
+      itensNovos,
+      itensVencidos,
+      itensFrageis,
+      retencaoMedia,
+      prioridadeRevisao,
+    });
+  }
+
+  return porTopico;
+}
+
 export async function resumoConhecimentoAtivo(params: {
   db: D1Database;
   empresaId: number;
@@ -1000,21 +1189,17 @@ export async function resumoConhecimentoAtivo(params: {
     .bind(empresaId, funcionarioId)
     .first<{ total: number }>();
 
-  const dominio = await db
-    .prepare(
-      'SELECT estado,COUNT(*) AS total FROM conhecimento_ativo_dominio ' +
-        'WHERE empresa_id=? AND funcionario_id=? AND deleted_at IS NULL GROUP BY estado',
-    )
-    .bind(empresaId, funcionarioId)
-    .all<{ estado: string; total: number }>();
-
-  const states: Record<string, number> = {
+  const itens = await buscarItensDiagnostico(db, empresaId, funcionarioId, modelos);
+  const states: Record<ConhecimentoEstado, number> = {
     NOVO: 0,
     APRENDENDO: 0,
     EM_REFORCO: 0,
     CONSOLIDADO: 0,
   };
-  for (const row of dominio.results || []) states[row.estado] = Number(row.total || 0);
+  for (const item of itens) {
+    const estado = item.estado ?? 'NOVO';
+    states[estado] += 1;
+  }
 
   return {
     periodo,
@@ -1034,6 +1219,8 @@ export async function mapaConhecimento(params: {
   const { db, empresaId, funcionarioId } = params;
   const modelos = modelosConhecimentoAtivoDisponiveis();
   const placeholders = modelos.map(() => '?').join(',');
+  const itensDiagnostico = await buscarItensDiagnostico(db, empresaId, funcionarioId, modelos);
+  const diagnostico = diagnosticoPorTopico(itensDiagnostico);
   const result = await db
     .prepare(
       `
@@ -1129,6 +1316,7 @@ export async function mapaConhecimento(params: {
   return (result.results || []).map((row) => {
     const questoes = Number(row.questoes || 0);
     const respondidas = Number(row.respondidas || 0);
+    const stats = diagnostico.get(Number(row.topico_id));
     return {
       ...row,
       aeronave_modelo: row.aeronave_modelo
@@ -1139,6 +1327,12 @@ export async function mapaConhecimento(params: {
       questoes_restantes: Math.max(0, questoes - respondidas),
       desafios_estimados: Math.ceil(questoes / QUESTOES_POR_DESAFIO),
       disponivel_para_desafio: Number(row.itens || 0) >= QUESTOES_POR_DESAFIO,
+      retencao_media: stats?.retencaoMedia ?? null,
+      prioridade_revisao: stats?.prioridadeRevisao ?? 0,
+      itens_avaliados: stats?.itensAvaliados ?? 0,
+      itens_novos: stats?.itensNovos ?? Number(row.itens || 0),
+      itens_vencidos: stats?.itensVencidos ?? 0,
+      itens_frageis: stats?.itensFrageis ?? 0,
     };
   });
 }

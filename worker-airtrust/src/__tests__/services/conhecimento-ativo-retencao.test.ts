@@ -69,6 +69,56 @@ describe('Conhecimento Ativo — motor de retenção', () => {
     expect(due).toBeGreaterThan(stable);
   });
 
+
+  it('faz revisão vencida superar item novo quando o risco demonstrado é maior', () => {
+    const now = Date.parse('2026-09-20T12:00:00Z');
+    const novo = pontuarCandidato(
+      {
+        questaoId: 10,
+        itemId: 10,
+        criticidade: 'MEDIA',
+        nivel: null,
+        proximaRevisaoEm: null,
+        ultimaExposicaoEm: null,
+      },
+      now,
+    );
+    const vencido = pontuarCandidato(
+      {
+        questaoId: 11,
+        itemId: 11,
+        criticidade: 'ALTA',
+        nivel: 35,
+        proximaRevisaoEm: '2026-09-15T12:00:00Z',
+        ultimaExposicaoEm: '2026-09-01T12:00:00Z',
+      },
+      now,
+    );
+    expect(vencido).toBeGreaterThan(novo);
+  });
+
+  it('diversifica sistemas antes de repetir o mesmo tópico no desafio misto', () => {
+    const candidatos = [
+      { questaoId: 1, itemId: 1, topicoId: 101, criticidade: 'CRITICA' as const, nivel: 20, proximaRevisaoEm: null, ultimaExposicaoEm: null },
+      { questaoId: 2, itemId: 2, topicoId: 101, criticidade: 'CRITICA' as const, nivel: 25, proximaRevisaoEm: null, ultimaExposicaoEm: null },
+      { questaoId: 3, itemId: 3, topicoId: 102, criticidade: 'ALTA' as const, nivel: 40, proximaRevisaoEm: null, ultimaExposicaoEm: null },
+      { questaoId: 4, itemId: 4, topicoId: 103, criticidade: 'MEDIA' as const, nivel: 50, proximaRevisaoEm: null, ultimaExposicaoEm: null },
+    ];
+    const selected = selecionarQuestoesDesafio(candidatos, 3, { diversificarTopicos: true });
+    expect(new Set(selected.map((item) => item.topicoId))).toEqual(new Set([101, 102, 103]));
+  });
+
+  it('rota perguntas do mesmo item preferindo a menos exposta', () => {
+    const selected = selecionarQuestoesDesafio(
+      [
+        { questaoId: 1, itemId: 1, criticidade: 'ALTA', nivel: 50, proximaRevisaoEm: null, ultimaExposicaoEm: null, respondidaVezes: 4, ultimaRespostaEm: '2026-09-19T12:00:00Z' },
+        { questaoId: 2, itemId: 1, criticidade: 'ALTA', nivel: 50, proximaRevisaoEm: null, ultimaExposicaoEm: null, respondidaVezes: 0, ultimaRespostaEm: null },
+      ],
+      1,
+    );
+    expect(selected[0]?.questaoId).toBe(2);
+  });
+
   it('seleciona no máximo uma questão por item de conhecimento', () => {
     const selected = selecionarQuestoesDesafio([
       { questaoId: 2, itemId: 1, criticidade: 'ALTA', nivel: 40, proximaRevisaoEm: null, ultimaExposicaoEm: null },
