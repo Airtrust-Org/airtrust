@@ -84,6 +84,12 @@ describe('ControleVoosMeusVoos', () => {
             origem_id: 101,
             destino_id: 102,
             rota_codigos: ['SBME', '9PGS', 'SBME'],
+            rota_pontos: [
+              { id: 101, codigo: 'SBME', codigo_icao: 'SBME', nome: 'MACAÉ / Macaé, RJ', tipo: 'aeroporto' },
+              { id: 500, codigo: 'PAGS', codigo_icao: '9PGS', nome: 'PLATAFORMA / Unidade Teste', tipo: 'plataforma' },
+              { id: 101, codigo: 'SBME', codigo_icao: 'SBME', nome: 'MACAÉ / Macaé, RJ', tipo: 'aeroporto' },
+            ],
+            rdv_workflow_status: 'enviado',
             horario_previsto_partida: `${today}T10:00:00Z`,
             status: 'concluido_operacionalmente',
           },
@@ -110,7 +116,8 @@ describe('ControleVoosMeusVoos', () => {
     const pilotLinks = screen.getAllByRole('link', { name: /Abrir Pilot App/i });
     expect(pilotLinks).toHaveLength(2);
     expect(pilotLinks[0]).toHaveAttribute('href', '/pilot/?flight=601');
-    expect(screen.getAllByText('SBME → 9PGS → SBME')).toHaveLength(2);
+    expect(screen.getAllByText('Macaé, RJ (SBME) → Unidade Teste (PAGS · 9PGS)')).toHaveLength(2);
+    expect(screen.getAllByText('Enviado à Coordenação')).toHaveLength(2);
     expect(screen.queryByText('Preencher voo')).not.toBeInTheDocument();
   });
 });
@@ -136,6 +143,13 @@ describe('ControleVoosCoordenacaoFila', () => {
             prefixo: 'ATX-1001',
             aeronave_id: 5,
             data_programacao: '2026-06-14',
+            origem_id: 101,
+            destino_id: 101,
+            rota_pontos: [
+              { id: 101, codigo: 'SBME', codigo_icao: 'SBME', nome: 'MACAÉ / Macaé, RJ', tipo: 'aeroporto' },
+              { id: 500, codigo: 'PAGS', codigo_icao: '9PGS', nome: 'PLATAFORMA / Unidade Teste', tipo: 'plataforma' },
+              { id: 101, codigo: 'SBME', codigo_icao: 'SBME', nome: 'MACAÉ / Macaé, RJ', tipo: 'aeroporto' },
+            ],
           },
         ]);
       }
@@ -146,6 +160,7 @@ describe('ControleVoosCoordenacaoFila', () => {
 
     await waitFor(() => expect(screen.getByText('RDV-0001')).toBeInTheDocument());
     expect(screen.getByText('Enviado', { selector: 'span' })).toBeInTheDocument();
+    expect(screen.getByText('Macaé, RJ (SBME) → Unidade Teste (PAGS · 9PGS)')).toBeInTheDocument();
     expect(screen.getByText('Revisar')).toBeInTheDocument();
   });
 

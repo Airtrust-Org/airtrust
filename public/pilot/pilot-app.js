@@ -114,6 +114,7 @@ const rdvServerSyncStatus = document.querySelector('#rdv-server-sync-status');
 const refreshCanonicalPackageButton = document.querySelector('#refresh-canonical-package');
 const finalizeRdvServerButton = document.querySelector('#finalize-rdv-server');
 const sendRdvCoordinationButton = document.querySelector('#send-rdv-coordination');
+const completeSendRdvButton = document.querySelector('#complete-send-rdv');
 const coordinationStatus = document.querySelector('#coordination-status');
 const coordinationReceipt = document.querySelector('#coordination-receipt');
 const rdvSyncConfirmation = document.querySelector('#rdv-sync-confirmation');
@@ -141,6 +142,7 @@ let operationalSaveChain = Promise.resolve();
 let timingSequence = 0;
 let operationalSyncInFlight = false;
 let coordinationInFlight = false;
+let completeSendInFlight = false;
 let activeStageTabIndex = 0;
 let targetFlightAutoOpened = false;
 let offlineFlightLocked = false;
@@ -362,6 +364,67 @@ function formatDate(value) {
 function displayText(value, fallback = '—') {
   if (value === null || value === undefined || value === '') return fallback;
   return String(value);
+}
+
+function cleanOperationalPointName(value) {
+  let text = String(value || '').trim();
+  for (const prefix of ['PLATAFORMA /', 'NAVIO /', 'AERÓDROMO /', 'AERODROMO /', 'HELIPONTO /', 'AEROPORTO /']) {
+    if (text.toLocaleUpperCase('pt-BR').startsWith(prefix)) {
+      text = text.slice(prefix.length).trim();
+      break;
+    }
+  }
+  if (text.includes(' / ')) {
+    const parts = text.split(' / ').map((item) => item.trim()).filter(Boolean);
+    if (parts.length > 1) text = parts[parts.length - 1];
+  }
+  return text;
+}
+
+function operationalPointLabel(point) {
+  if (!point) return '—';
+  const primary = String(point.codigo || point.codigo_icao || '').trim().toUpperCase();
+  const icao = String(point.codigo_icao || '').trim().toUpperCase();
+  const codes = [primary, icao].filter((code, index, items) => code && items.indexOf(code) === index);
+  const name = cleanOperationalPointName(point.nome);
+  if (!name) return codes.join(' · ') || '—';
+  return codes.length > 0 ? name + ' (' + codes.join(' · ') + ')' : name;
+}
+
+function operationalPointKey(point) {
+  if (!point) return '';
+  if (Number(point.id) > 0) return 'id:' + String(Number(point.id));
+  return 'code:' + String(point.codigo_icao || point.codigo || '').trim().toUpperCase();
+}
+
+function operationalRouteLabelForFlight(voo, fallbackOrigin = null, fallbackDestination = null) {
+  const points = Array.isArray(voo?.rota_pontos) ? voo.rota_pontos.filter(Boolean) : [];
+  if (points.length >= 2) {
+    const origin = points[0];
+    const finalPoint = points[points.length - 1];
+    const returnsToOrigin = operationalPointKey(origin) && operationalPointKey(origin) === operationalPointKey(finalPoint);
+    const destinations = returnsToOrigin ? points.slice(1, -1) : points.slice(1);
+    const unique = [];
+    for (const point of destinations) {
+      const key = operationalPointKey(point);
+      if (!key || unique.some((item) => operationalPointKey(item) === key)) continue;
+      unique.push(point);
+    }
+    return operationalPointLabel(origin) + ' → ' + (unique.length > 0 ? unique.map(operationalPointLabel).join(' → ') : operationalPointLabel(finalPoint));
+  }
+  const codes = Array.isArray(voo?.rota_codigos) ? voo.rota_codigos.filter(Boolean) : [];
+  if (codes.length >= 2) {
+    const returnsToOrigin = String(codes[0]) === String(codes[codes.length - 1]);
+    const visible = returnsToOrigin ? codes.slice(0, -1) : codes;
+    return visible.join(' → ');
+  }
+  return airportLabel(fallbackOrigin, voo?.origem_id) + ' → ' + airportLabel(fallbackDestination, voo?.destino_id);
+}
+
+function flightListTitle(voo) {
+  const aircraft = displayText(voo?.prefixo, 'Voo #' + displayText(voo?.id));
+  const number = String(voo?.numero_voo || '').trim();
+  return number ? aircraft + ' · Voo ' + number : aircraft;
 }
 
 const JUSTIFICATION_ACRONYMS = [
@@ -757,13 +820,14 @@ function renderCachedPackages() {
   for (const record of visibleRecords) {
     const packageData = record.value.package;
     const voo = packageData.voo;
-    const route =
-      airportLabel(packageData.origem, voo.origem_id) +
-      ' → ' +
-      airportLabel(packageData.destino, voo.destino_id);
+    const route = operationalRouteLabelForFlight(
+      voo,
+      packageData.origem,
+      packageData.destino,
+    );
     cachedFlights.append(
       makeFlightItem({
-        title: displayText(voo.prefixo, 'Voo #' + voo.id),
+        title: flightListTitle(voo),
         subtitle: formatDate(voo.data_programacao) + ' · ' + route,
         badge: 'Disponível offline',
         buttonText: 'Abrir voo',
@@ -816,9 +880,10 @@ function renderOnlineFlights() {
     );
     onlineFlights.append(
       makeFlightItem({
-        title: displayText(voo.prefixo, 'Voo #' + voo.id),
+        title: flightListTitle(voo),
         subtitle:
           formatDate(voo.data_programacao) +
+          ' · ' + operationalRouteLabelForFlight(voo) +
           ' · ' +
           (toInputTime(voo.horario_previsto_partida)
             ? 'partida ' + toInputTime(voo.horario_previsto_partida)
@@ -1331,9 +1396,17 @@ async function getCoordinationState() {
 }
 async function refreshCoordinationControls() {
   refreshCanonicalPackageButton.disabled =
-    !navigator.onLine || !vault?.isUnlocked() || !activePackageRecord || coordinationInFlight;
+    !navigator.onLine || !vault?.isUnlocked() || !activePackageRecord || coordinationInFlight || completeSendInFlight;
   finalizeRdvServerButton.disabled = true;
   sendRdvCoordinationButton.disabled = true;
+  completeSendRdvButton.disabled =
+    !navigator.onLine ||
+    !vault?.isUnlocked() ||
+    !activePackageRecord ||
+    !activeRdvDraft ||
+    activePackageData()?.contract?.sync_supported !== true ||
+    coordinationInFlight ||
+    completeSendInFlight;
   setCoordinationReceipt('');
 
   if (!activePackageRecord || !vault?.isUnlocked()) {
@@ -1352,6 +1425,7 @@ async function refreshCoordinationControls() {
   }
 
   if (rdv.workflow_status === 'enviado') {
+    completeSendRdvButton.disabled = true;
     const localReceipt = await latestWorkflowReceiptForFlight(state.flightId, 'send_coordination');
     const confirmedAt =
       rdv.enviado_em ||
@@ -1504,7 +1578,7 @@ async function refreshOutboxStatusForActiveFlight() {
     setServerSyncStatus('Transmitido');
     setRdvSyncMessage(
       reconciled
-        ? 'Dados transmitidos com sucesso. Continue para finalizar e encaminhar à Coordenação.'
+        ? 'Dados sincronizados com o AirTrust. O voo ainda precisa ser concluído e enviado à Coordenação.'
         : 'Receipt confirmado. Atualizando o pacote do voo para continuar com segurança.',
       'ok',
     );
@@ -2325,7 +2399,7 @@ async function drainPilotOutbox(options = {}) {
         setServerSyncStatus('Transmitido');
         updateOperationFlow('synced');
         setRdvSyncMessage(
-          'Dados recebidos pelo AirTrust. Reconciliando o pacote para você continuar sem sair desta tela…',
+          'Dados sincronizados com o AirTrust. Reconciliando o pacote antes do envio à Coordenação…',
           'ok',
         );
         if (
@@ -2334,7 +2408,7 @@ async function drainPilotOutbox(options = {}) {
         ) {
           const refreshed = await prepareFlightPackage(command.flight_id, { allowDuringFlight: true });
           if (refreshed) {
-            setLeaseMessage('Dados transmitidos e pacote reconciliado com o servidor.', 'ok');
+            setLeaseMessage('Dados sincronizados e pacote reconciliado com o servidor.', 'ok');
             if (rdvSyncConfirmation) rdvSyncConfirmation.classList.remove('hidden');
             await refreshCoordinationControls();
             coordinationStatus?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -2389,20 +2463,21 @@ async function refreshCanonicalPackageForActiveFlight() {
   }
 }
 
-async function finalizeCanonicalRdv() {
-  if (coordinationInFlight) return;
+async function finalizeCanonicalRdv(options = {}) {
+  if (coordinationInFlight) return false;
   const state = await getCoordinationState();
   if (!state.canFinalize || !state.rdv) {
     await refreshCoordinationControls();
-    return;
+    return false;
   }
   const expectedVersion = Number(state.rdv.versao);
   if (
+    options.skipConfirm !== true &&
     !window.confirm(
       'Finalizar o lançamento deste voo? Depois disso os campos ficam bloqueados até eventual devolução pela Coordenação.',
     )
   ) {
-    return;
+    return false;
   }
 
   coordinationInFlight = true;
@@ -2493,13 +2568,14 @@ async function finalizeCanonicalRdv() {
   } catch (refreshError) {
     console.error('[Pilot Offline] Falha ao reconciliar controles de finalização:', refreshError);
   }
+  return Boolean(confirmedResult);
 }
-async function sendCanonicalRdvToCoordination() {
-  if (coordinationInFlight) return;
+async function sendCanonicalRdvToCoordination(options = {}) {
+  if (coordinationInFlight) return false;
   const state = await getCoordinationState();
   if (!state.canSend || !state.rdv) {
     await refreshCoordinationControls();
-    return;
+    return false;
   }
 
   try {
@@ -2518,7 +2594,7 @@ async function sendCanonicalRdvToCoordination() {
           blocking.map((alert) => displayText(alert?.mensagem, 'Alerta operacional')).join('; '),
         'error',
       );
-      return;
+      return false;
     }
   } catch (error) {
     setCoordinationMessage(
@@ -2527,16 +2603,17 @@ async function sendCanonicalRdvToCoordination() {
         : 'Não foi possível validar os alertas antes do envio.',
       'error',
     );
-    return;
+    return false;
   }
 
   const expectedVersion = Number(state.rdv.versao);
   if (
+    options.skipConfirm !== true &&
     !window.confirm(
       'Enviar este lançamento para revisão da Coordenação? Confirme somente depois de revisar todas as pernas e dados do voo.',
     )
   ) {
-    return;
+    return false;
   }
 
   coordinationInFlight = true;
@@ -2623,14 +2700,87 @@ async function sendCanonicalRdvToCoordination() {
   coordinationInFlight = false;
   if (handoffSnapshot) {
     showHandoffSuccess(handoffSnapshot);
-    return;
+    return true;
   }
   try {
     await refreshCoordinationControls();
   } catch (refreshError) {
     console.error('[Pilot Offline] Falha ao reconciliar controles de Coordenação:', refreshError);
   }
+  return false;
 }
+
+async function completeAndSendCanonicalRdv() {
+  if (completeSendInFlight || coordinationInFlight || operationalSyncInFlight) return;
+  const packageData = activePackageData();
+  const flightId = Number(packageData?.voo?.id || 0);
+  if (!flightId || !navigator.onLine) {
+    setCoordinationMessage('Conecte o tablet à internet antes de concluir e enviar o voo.', 'error');
+    return;
+  }
+  if (
+    !window.confirm(
+      'Concluir e enviar este voo à Coordenação? O AirTrust vai sincronizar os dados, finalizar o RDV e confirmar o recebimento.',
+    )
+  ) {
+    return;
+  }
+
+  completeSendInFlight = true;
+  await refreshCoordinationControls();
+  try {
+    setCoordinationMessage('1/3 — Sincronizando os dados do voo…', 'attention');
+    await flushOperationalSave();
+    await queueCurrentDraftForSync();
+    await prepareFlightPackage(flightId, { allowDuringFlight: true });
+
+    let state = await getCoordinationState();
+    if (state.rdv?.workflow_status === 'enviado') {
+      const snapshot = buildHandoffSuccessSnapshot(state.rdv);
+      await exitOfflineFlightMode();
+      showHandoffSuccess(snapshot);
+      return;
+    }
+
+    if (state.canFinalize) {
+      setCoordinationMessage('2/3 — Finalizando o RDV…', 'attention');
+      const finalized = await finalizeCanonicalRdv({ skipConfirm: true });
+      if (!finalized) throw new Error('O servidor não confirmou a finalização do RDV.');
+      await prepareFlightPackage(flightId, { allowDuringFlight: true });
+      state = await getCoordinationState();
+    }
+
+    if (state.rdv?.status !== 'preenchimento_finalizado') {
+      throw new Error(
+        state.reason ||
+          'Os dados foram sincronizados, mas o RDV ainda não pode ser finalizado. Revise os campos indicados.',
+      );
+    }
+
+    if (!state.canSend) {
+      await prepareFlightPackage(flightId, { allowDuringFlight: true });
+      state = await getCoordinationState();
+    }
+    if (!state.canSend) {
+      throw new Error(state.reason || 'O RDV foi finalizado, mas ainda não pode ser enviado à Coordenação.');
+    }
+
+    setCoordinationMessage('3/3 — Enviando à Coordenação…', 'attention');
+    const sent = await sendCanonicalRdvToCoordination({ skipConfirm: true });
+    if (!sent) throw new Error('O servidor não confirmou o recebimento pela Coordenação.');
+  } catch (error) {
+    setCoordinationMessage(
+      error instanceof Error ? error.message : 'Não foi possível concluir o envio do voo.',
+      'error',
+    );
+  } finally {
+    completeSendInFlight = false;
+    if (!handoffSuccessCard || handoffSuccessCard.classList.contains('hidden')) {
+      await refreshCoordinationControls().catch(() => undefined);
+    }
+  }
+}
+
 async function queueCurrentDraftForSync() {
   if (operationalSyncInFlight) return;
   if (activePackageData()?.contract?.sync_supported !== true) {
@@ -3830,6 +3980,7 @@ function closePackageDetail() {
   refreshCanonicalPackageButton.disabled = true;
   finalizeRdvServerButton.disabled = true;
   sendRdvCoordinationButton.disabled = true;
+  completeSendRdvButton.disabled = true;
   setCoordinationMessage('Abra um pacote de voo para avaliar o fechamento.', 'attention');
   setCoordinationReceipt('');
 }
@@ -3973,6 +4124,7 @@ finalizeRdvServerButton.addEventListener('click', () => void finalizeCanonicalRd
 sendRdvCoordinationButton.addEventListener('click', () =>
   void sendCanonicalRdvToCoordination(),
 );
+completeSendRdvButton.addEventListener('click', () => void completeAndSendCanonicalRdv());
 closeRdvEditorButton.addEventListener('click', () => void flushOperationalSave().then(async () => {
   await exitOfflineFlightMode();
   closeOperationalEditor();

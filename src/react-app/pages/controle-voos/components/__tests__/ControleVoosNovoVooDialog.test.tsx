@@ -51,7 +51,8 @@ async function chooseCommon() {
   fireEvent.change(screen.getByLabelText('Contrato'), { target: { value: '40' } });
   fireEvent.change(screen.getByLabelText('Tipo de voo'), { target: { value: '10' } });
   fireEvent.change(screen.getByLabelText('Aeródromo de origem'), { target: { value: 'SBME — Macaé' } });
-  fireEvent.change(screen.getByLabelText('Destino final'), { target: { value: 'FPAG · ICAO 9PLG — ANITA GARIBALDI' } });
+  fireEvent.change(screen.getByLabelText('Parada 1'), { target: { value: 'FPAG · ICAO 9PLG — ANITA GARIBALDI' } });
+  await waitFor(() => expect(screen.getByLabelText('Destino final')).toHaveValue('SBME — Macaé'));
   await waitFor(() => expect(screen.getByText(/Etapa 1: SBME → 9PLG/)).toBeInTheDocument());
 }
 
@@ -61,7 +62,8 @@ describe('ControleVoosNovoVooDialog operational model', () => {
   it('piloto carrega pontos aeronáuticos e resolve busca por ICAO', async () => {
     renderDialog('pilot'); await waitReady(); await chooseCommon();
     expect(getMock).toHaveBeenCalledWith('/controle-voos/catalogos/aeroportos');
-    expect(screen.getByLabelText('Destino final')).toHaveValue('FPAG · ICAO 9PLG — ANITA GARIBALDI');
+    expect(screen.getByLabelText('Destino final')).toHaveValue('SBME — Macaé');
+    expect(screen.getByLabelText('Parada 1')).toHaveValue('FPAG · ICAO 9PLG — ANITA GARIBALDI');
   });
 
   it('não expõe Natureza nem Petrobras e usa catálogos de contrato, tipo e função', async () => {
@@ -81,8 +83,26 @@ describe('ControleVoosNovoVooDialog operational model', () => {
     fireEvent.submit(screen.getByRole('button', { name: 'Criar meu voo' }).closest('form')!);
     await waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
     expect(postMock.mock.calls[0][0]).toBe('/controle-voos/voos/meus/criar');
-    expect(postMock.mock.calls[0][1]).toMatchObject({ numero_voo: 'V123', numero_db: 'DB456', contrato_id: 40, tipo_voo_id: 10, rota_ids: [1, 3], funcao_bordo_id: 52 });
+    expect(postMock.mock.calls[0][1]).toMatchObject({ numero_voo: 'V123', numero_db: 'DB456', contrato_id: 40, tipo_voo_id: 10, rota_ids: [1, 3, 1], funcao_bordo_id: 52 });
     expect(postMock.mock.calls[0][1]).not.toHaveProperty('natureza_voo_codigo');
+  });
+
+  it('parte com primeira parada visível e retorno ao mesmo aeródromo marcado', async () => {
+    renderDialog('coordenacao'); await waitReady();
+    expect(screen.getByLabelText('Retorna ao mesmo aeródromo')).toBeChecked();
+    expect(screen.getByLabelText('Parada 1')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Aeródromo de origem'), { target: { value: 'SBME — Macaé' } });
+    expect(screen.getByLabelText('Destino final')).toHaveValue('SBME — Macaé');
+    expect(screen.getByLabelText('Destino final')).toBeDisabled();
+  });
+
+  it('permite desmarcar o retorno padrão para um destino final excepcional', async () => {
+    renderDialog('coordenacao'); await waitReady();
+    fireEvent.change(screen.getByLabelText('Aeródromo de origem'), { target: { value: 'SBME — Macaé' } });
+    fireEvent.click(screen.getByLabelText('Retorna ao mesmo aeródromo'));
+    expect(screen.getByLabelText('Destino final')).not.toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Destino final'), { target: { value: 'SBRJ — Santos Dumont' } });
+    expect(screen.getByLabelText('Destino final')).toHaveValue('SBRJ — Santos Dumont');
   });
 
   it('Coordenação mantém chegada prevista e tempo total de voo sincronizados', async () => {
@@ -111,11 +131,10 @@ describe('ControleVoosNovoVooDialog operational model', () => {
     fireEvent.change(screen.getByLabelText('Função a bordo — posto PIC'), { target: { value: '52' } });
     fireEvent.change(screen.getByLabelText('Função a bordo — posto SIC'), { target: { value: '51' } });
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar parada' }));
-    fireEvent.change(screen.getByLabelText('Parada 1'), { target: { value: 'SBRJ — Santos Dumont' } });
-    fireEvent.change(screen.getByLabelText('Destino final'), { target: { value: 'SBME — Macaé' } });
+    fireEvent.change(screen.getByLabelText('Parada 2'), { target: { value: 'SBRJ — Santos Dumont' } });
     fireEvent.click(screen.getByRole('button', { name: 'Criar voo' }));
     await waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
-    expect(postMock.mock.calls[0][1]).toMatchObject({ rota_ids: [1, 2, 1], pic_funcionario_id: 101, sic_funcionario_id: 102, pic_funcao_bordo_id: 52, sic_funcao_bordo_id: 51 });
+    expect(postMock.mock.calls[0][1]).toMatchObject({ rota_ids: [1, 3, 2, 1], pic_funcionario_id: 101, sic_funcionario_id: 102, pic_funcao_bordo_id: 52, sic_funcao_bordo_id: 51 });
     expect(postMock.mock.calls[0][1]).not.toHaveProperty('numero_db');
   });
 });

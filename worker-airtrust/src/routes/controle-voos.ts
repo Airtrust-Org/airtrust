@@ -41,7 +41,7 @@ import { assertRdvRules, normalizeRdvInput } from '../services/controle-voos/rdv
 import { finalizeRdvPreenchimentoHandler } from './controle-voos-rdv-finalization';
 import { assertFlightCrewAssignment, listEligibleFlightCrew } from '../services/controle-voos/crew-eligibility';
 import { buildFlightRelatedStatements, normalizeFlightRouteIds, parseFlightCrewIds, resolveFlightRoutePoints } from '../services/controle-voos/flight-creation';
-
+import { enrichFlightsWithPresentation } from '../services/controle-voos/flight-presentation';
 type OperationalReadFilters = {
   dataInicio: string;
   dataFim: string;
@@ -1138,7 +1138,7 @@ controleVoos.get('/voos', auth(), async (c) => {
   const total = totalRow?.total || 0;
   return c.json({
     success: true,
-    data: results || [],
+    data: await enrichFlightsWithPresentation(c.env.DB, empresaId, results || []),
     pagination: {
       page,
       limit,
@@ -1282,7 +1282,7 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
 controleVoos.get('/voos/:id', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const flight = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
-  return c.json({ success: true, data: flight });
+  return c.json({ success: true, data: (await enrichFlightsWithPresentation(c.env.DB, empresaId, [flight]))[0] });
 });
 
 controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) => {
@@ -1763,7 +1763,7 @@ controleVoos.get('/dashboard', auth(), async (c) => {
         cancelado: totals.voos_cancelados,
         alternado_divergido: totals.voos_alternados_divergidos,
       },
-      proximos_voos: nextFlights || [],
+      proximos_voos: await enrichFlightsWithPresentation(c.env.DB, empresaId, nextFlights || []),
       alertas_operacionais: {
         voos_sem_tripulacao: Number(totalsRow?.voos_sem_tripulacao || 0),
         voos_sem_aeronave: Number(totalsRow?.voos_sem_aeronave || 0),

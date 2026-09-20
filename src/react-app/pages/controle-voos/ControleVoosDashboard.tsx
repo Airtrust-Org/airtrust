@@ -5,8 +5,9 @@ import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
-import { useControleVoosDashboard } from '@/react-app/hooks/useControleVoos';
+import { useControleVoosAeroportos, useControleVoosDashboard } from '@/react-app/hooks/useControleVoos';
 import { formatTime, formatDate } from './data/controleVoosUtils';
+import { flightOperationalRouteLabel } from './data/controleVoosFlightIdentity';
 import ControleVoosDateControls from './components/ControleVoosDateControls';
 import { useControleVoosDate } from './hooks/useControleVoosDate';
 import EdbShadowPrototypeWithAssessment from './EdbShadowPrototypeWithAssessment';
@@ -24,6 +25,7 @@ function AttentionDot({ critical }: { critical?: boolean }) {
 function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: boolean }) {
   const { selectedDate, setSelectedDate, setToday } = useControleVoosDate();
   const { data: dashboard, isLoading, error } = useControleVoosDashboard(selectedDate);
+  const { data: aeroportos = [] } = useControleVoosAeroportos();
 
   const totais = dashboard?.totais;
   const alertas = dashboard?.alertas_operacionais;
@@ -233,7 +235,8 @@ function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: 
                         <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
                           <tr>
                             <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Data</th>
-                            <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Voo</th>
+                            <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Aeronave</th>
+                            <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Rota operacional</th>
                             <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Previsto</th>
                             <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status</th>
                             <th className="w-16 px-4 py-3 text-left"><span className="sr-only">Ação</span></th>
@@ -246,7 +249,11 @@ function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: 
                                 {formatDate(voo.data_programacao)}
                               </td>
                               <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
-                                {voo.prefixo}
+                                <div>{voo.prefixo}</div>
+                                {voo.numero_voo ? <div className="mt-0.5 text-xs font-normal text-slate-500">Voo {voo.numero_voo}</div> : null}
+                              </td>
+                              <td className="px-4 py-3 text-xs font-medium text-slate-700 dark:text-slate-300">
+                                {flightOperationalRouteLabel(voo, aeroportos)}
                               </td>
                               <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">
                                 {formatTime(voo.horario_previsto_partida)}

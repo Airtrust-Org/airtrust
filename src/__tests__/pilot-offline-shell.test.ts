@@ -130,13 +130,24 @@ describe('Pilot Offline shell', () => {
 
   it('mantem o piloto na tela depois da transmissao e mostra confirmacao antes do handoff', () => {
     expect(pilotIndex).toContain('id="rdv-sync-confirmation"');
-    expect(pilotIndex).toContain('Dados recebidos pelo AirTrust');
-    const syncSuccessStart = pilotApp.indexOf('Dados recebidos pelo AirTrust. Reconciliando o pacote');
+    expect(pilotIndex).toContain('Dados sincronizados com o AirTrust');
+    const syncSuccessStart = pilotApp.indexOf('Dados sincronizados com o AirTrust. Reconciliando o pacote');
     const syncSuccessEnd = pilotApp.indexOf('} catch (error) {', syncSuccessStart);
     const syncSuccessBlock = pilotApp.slice(syncSuccessStart, syncSuccessEnd);
     expect(syncSuccessBlock).toContain('prepareFlightPackage(command.flight_id, { allowDuringFlight: true })');
     expect(syncSuccessBlock).toContain("rdvSyncConfirmation.classList.remove('hidden')");
     expect(syncSuccessBlock).not.toContain('closeOperationalEditor();');
+  });
+
+  it('separa sincronizacao de dados do envio e oferece um fluxo unico para a Coordenacao', () => {
+    expect(pilotIndex).toContain('Sincronizar dados com o AirTrust');
+    expect(pilotIndex).toContain('Concluir e enviar à Coordenação');
+    expect(pilotIndex).toContain('id="complete-send-rdv"');
+    expect(pilotApp).toContain('async function completeAndSendCanonicalRdv');
+    expect(pilotApp).toContain("finalizeCanonicalRdv({ skipConfirm: true })");
+    expect(pilotApp).toContain("sendCanonicalRdvToCoordination({ skipConfirm: true })");
+    expect(pilotApp).toContain('1/3 — Sincronizando os dados do voo');
+    expect(pilotApp).toContain('3/3 — Enviando à Coordenação');
   });
 
   it('mostra uma tela dedicada depois que a Coordenacao confirma o recebimento', () => {
@@ -152,7 +163,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v28'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v29'");
     expect(pilotSw).not.toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
@@ -301,7 +312,7 @@ describe('Pilot Offline shell', () => {
 
   it('separa persistencia local de transmissao e exige receipt antes de remover a outbox', () => {
     expect(pilotIndex).toContain('id="sync-rdv-now"');
-    expect(pilotIndex).toContain('Enviar informações do voo');
+    expect(pilotIndex).toContain('Sincronizar dados com o AirTrust');
     expect(pilotApp).toContain("await vault.putJson(\n        'outbox'");
     expect(pilotApp).toMatch(/await vault\.getJson\(\s*'sync_receipts'/);
     const persistResultIndex = pilotApp.indexOf('async function persistFinalSyncResult');
@@ -342,11 +353,11 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).not.toContain('last-write-wins');
   });
 
-  it('mantem sync, finalizacao e envio a Coordenacao como acoes explicitamente separadas', () => {
+  it('mantem sync separado, mas conclui finalizacao e envio a Coordenacao em uma acao operacional', () => {
     expect(pilotIndex).toContain('id="refresh-canonical-package"');
     expect(pilotIndex).toContain('id="finalize-rdv-server"');
     expect(pilotIndex).toContain('id="send-rdv-coordination"');
-    expect(pilotIndex).toContain('Finalizar e encaminhar à Coordenação');
+    expect(pilotIndex).toContain('Concluir e enviar à Coordenação');
     expect(pilotIndex).toContain('Enviar à Coordenação');
     expect(pilotApp).toContain("'/controle-voos/pilot/offline-sync'");
     expect(pilotApp).toContain("'/rdv/finalizar-preenchimento'");

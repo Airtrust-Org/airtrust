@@ -7,6 +7,7 @@ import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleOperacionalFrmsPanel from './components/ControleOperacionalFrmsPanel';
 import { useRdvFila, type CvRdvWorkflowStatus } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatDateTime } from './data/controleVoosUtils';
+import { flightOperationalRouteLabel } from './data/controleVoosFlightIdentity';
 
 const STATUS_OPTIONS: { value: CvRdvWorkflowStatus | ''; label: string }[] = [
   { value: '', label: 'Todos os status' },
@@ -143,6 +144,9 @@ export default function ControleVoosCoordenacaoFila() {
                         Prefixo
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                        Rota operacional
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Status
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
@@ -168,6 +172,9 @@ export default function ControleVoosCoordenacaoFila() {
                         </td>
                         <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
                           {item.prefixo}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-medium text-slate-700 dark:text-slate-300">
+                          {flightOperationalRouteLabel(item, [])}
                         </td>
                         <td className="px-4 py-3">
                           <span

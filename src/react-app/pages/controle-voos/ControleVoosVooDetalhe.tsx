@@ -15,6 +15,7 @@ import {
   type CvFlightStatus,
 } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatDateTime } from './data/controleVoosUtils';
+import { flightOperationalRouteLabel, flightOperationalDestinationLabel } from './data/controleVoosFlightIdentity';
 
 function buildAeroMap(aeroportos: CvAeroporto[]) {
   return new Map(aeroportos.map((a) => [a.id, a]));
@@ -114,7 +115,6 @@ export default function ControleVoosVooDetalhe() {
   }
 
   const origem = aeroMap.get(voo.origem_id);
-  const destino = aeroMap.get(voo.destino_id);
 
   return (
     <AppLayout>
@@ -127,7 +127,7 @@ export default function ControleVoosVooDetalhe() {
           ]} />
           <ControleVoosPageHeader
             title={`Voo ${voo.prefixo}`}
-            description={`${origem?.codigo_icao || `ID:${voo.origem_id}`} → ${destino?.codigo_icao || `ID:${voo.destino_id}`} | ${formatDate(voo.data_programacao)}`}
+            description={`${flightOperationalRouteLabel(voo, aeroportos)} | ${formatDate(voo.data_programacao)}`}
           >
             <ControleVoosStatusBadge status={voo.status} className="text-sm px-3 py-1" />
           </ControleVoosPageHeader>
@@ -152,9 +152,9 @@ export default function ControleVoosVooDetalhe() {
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Destino</dt>
+                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Destino operacional</dt>
                     <dd className="text-slate-800 dark:text-slate-200">
-                      {destino ? `${destino.codigo_icao} — ${destino.nome}` : `ID:${voo.destino_id}`}
+                      {flightOperationalDestinationLabel(voo, aeroportos)}
                     </dd>
                   </div>
                   <div>

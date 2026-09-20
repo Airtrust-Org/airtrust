@@ -43,6 +43,7 @@ import {
 import { applyPilotOfflineSnapshotCommand } from '../services/controle-voos/pilot-offline-sync-apply';
 import { buildPilotOfflineWorkspace } from '../services/controle-voos/pilot-offline-workspace';
 import { loadPilotOfflineEdbShadow } from '../services/controle-voos/pilot-offline-edb-shadow';
+import { getFlightPresentationMap } from '../services/controle-voos/flight-presentation';
 
 const pilotOffline = new Hono<{ Bindings: Env }>();
 
@@ -548,7 +549,7 @@ pilotOffline.get(
       tem_anexo: Boolean(anexo_r2_key),
     }));
     const generatedAt = new Date().toISOString();
-    const [workspace, edbShadow] = await Promise.all([
+    const [workspace, edbShadow, routePresentationMap] = await Promise.all([
       buildPilotOfflineWorkspace({
         db: c.env.DB,
         empresaId,
@@ -570,6 +571,7 @@ pilotOffline.get(
         flightId: voo.id,
         generatedAt,
       }),
+      getFlightPresentationMap(c.env.DB, empresaId, [voo.id]),
     ]);
 
     const sourceRevision = {
@@ -637,6 +639,8 @@ pilotOffline.get(
           alternado_destino_id: voo.alternado_destino_id,
           versao: voo.versao,
           updated_at: voo.updated_at,
+          rota_codigos: routePresentationMap.get(voo.id)?.rota_codigos || [],
+          rota_pontos: routePresentationMap.get(voo.id)?.rota_pontos || [],
         },
         origem,
         destino,

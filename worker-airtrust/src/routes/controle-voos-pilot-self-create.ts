@@ -202,7 +202,13 @@ pilotSelfCreate.post('/voos/meus/criar', auth(), requireAnyRdvAccess(), async (c
     tipoEvento: 'sistema',
     statusNovo: 'planejado',
     descricao: 'Voo criado pelo proprio tripulante',
-    metadata: { self_service: true, funcionario_id: funcionarioId, funcao_bordo_id: funcaoBordoId, funcao_bordo: role.nome },
+    metadata: {
+      self_service: true,
+      funcionario_id: funcionarioId,
+      funcao_bordo_id: funcaoBordoId,
+      funcao_bordo: role.nome,
+      route_point_ids: routeIds,
+    },
     usuarioId: userId,
   });
 
