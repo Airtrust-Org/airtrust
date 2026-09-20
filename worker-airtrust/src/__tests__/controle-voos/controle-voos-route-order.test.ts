@@ -28,10 +28,13 @@ describe('Controle de Voos route precedence', () => {
     expect(source).toContain('v.empresa_id = ?');
     expect(source).toContain('t.empresa_id = v.empresa_id');
     expect(source).toContain('t.funcionario_id = ?');
-    expect(source).toContain('FROM cv_voo_etapas');
-    expect(source).toContain('WHERE empresa_id = ?');
-    expect(source).toContain('ORDER BY voo_id ASC, numero_etapa ASC, id ASC');
-    expect(source).toContain('rota_codigos: routeByFlight.get');
+    expect(source).toContain('enrichFlightsWithPresentation');
     expect(source).toContain("return c.json({ success: true, data: [], meta: { count: 0 } });");
+
+    const presentationSource = readRepoFile('worker-airtrust/src/services/controle-voos/flight-presentation.ts');
+    expect(presentationSource).toContain('FROM cv_voo_etapas');
+    expect(presentationSource).toContain('WHERE empresa_id = ?');
+    expect(presentationSource).toContain('ORDER BY voo_id ASC, numero_etapa ASC, id ASC');
+    expect(presentationSource).toContain('rota_codigos');
   });
 });

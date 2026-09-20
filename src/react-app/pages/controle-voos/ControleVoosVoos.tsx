@@ -6,15 +6,13 @@ import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
+import ControleVoosRdvWorkflowBadge from './components/ControleVoosRdvWorkflowBadge';
 import ControleVoosNovoVooDialog from './components/ControleVoosNovoVooDialog';
 import { useControleVoosVoos, useControleVoosAeroportos, type CvAeroporto } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatTime } from './data/controleVoosUtils';
+import { flightOperationalRouteLabel } from './data/controleVoosFlightIdentity';
 import ControleVoosDateControls from './components/ControleVoosDateControls';
 import { useControleVoosDate } from './hooks/useControleVoosDate';
-
-function buildAeroMap(aeroportos: CvAeroporto[]) {
-  return new Map(aeroportos.map((a) => [a.id, a]));
-}
 
 export default function ControleVoosVoos() {
   const qc = useQueryClient();
@@ -27,7 +25,6 @@ export default function ControleVoosVoos() {
   });
   const { data: aeroportos = [] } = useControleVoosAeroportos();
 
-  const aeroMap = buildAeroMap(aeroportos);
   const voos = data?.voos || [];
 
   return (
@@ -81,32 +78,31 @@ export default function ControleVoosVoos() {
                     <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
                       <tr>
                         <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Data</th>
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Voo</th>
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Origem</th>
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Destino</th>
+                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Aeronave</th>
+                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Rota operacional</th>
                         <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Prev. saída</th>
                         <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Real saída</th>
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status</th>
+                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status voo</th>
+                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status RDV</th>
                         <th className="px-4 py-3 w-10" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {voos.map((voo) => {
-                        const origem = aeroMap.get(voo.origem_id);
-                        const destino = aeroMap.get(voo.destino_id);
                         return (
                           <tr key={voo.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{formatDate(voo.data_programacao)}</td>
-                            <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{voo.prefixo}</td>
-                            <td className="px-4 py-3 text-slate-600 dark:text-slate-400" title={origem?.nome}>
-                              {origem?.codigo_icao || `ID:${voo.origem_id}`}
+                            <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
+                              <div>{voo.prefixo}</div>
+                              {voo.numero_voo ? <div className="mt-0.5 text-xs font-normal text-slate-500">Voo {voo.numero_voo}</div> : null}
                             </td>
-                            <td className="px-4 py-3 text-slate-600 dark:text-slate-400" title={destino?.nome}>
-                              {destino?.codigo_icao || `ID:${voo.destino_id}`}
+                            <td className="px-4 py-3 text-xs font-medium text-slate-700 dark:text-slate-300">
+                              {flightOperationalRouteLabel(voo, aeroportos)}
                             </td>
                             <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{formatTime(voo.horario_previsto_partida)}</td>
                             <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{formatTime(voo.horario_real_partida)}</td>
                             <td className="px-4 py-3"><ControleVoosStatusBadge status={voo.status} /></td>
+                            <td className="px-4 py-3"><ControleVoosRdvWorkflowBadge status={voo.rdv_workflow_status} /></td>
                             <td className="px-4 py-3">
                               <Link
                                 to={`/controle-voos/voos/${voo.id}`}

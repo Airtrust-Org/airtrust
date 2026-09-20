@@ -6,9 +6,11 @@ import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
+import ControleVoosRdvWorkflowBadge from './components/ControleVoosRdvWorkflowBadge';
 import ControleVoosNovoVooDialog from './components/ControleVoosNovoVooDialog';
 import { useMeusVoos, useControleVoosAeroportos, type CvAeroporto } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatTime } from './data/controleVoosUtils';
+import { flightOperationalRouteLabel } from './data/controleVoosFlightIdentity';
 
 
 function localDateKey(date = new Date()) {
@@ -23,24 +25,11 @@ function flightDateKey(value: string | null | undefined) {
   return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : '';
 }
 
-function buildAeroMap(aeroportos: CvAeroporto[]) {
-  return new Map(aeroportos.map((a) => [a.id, a]));
-}
-
-function flightRouteLabel(voo: { origem_id: number; destino_id: number; rota_codigos?: string[] }, aeroMap: Map<number, CvAeroporto>) {
-  const fullRoute = (voo.rota_codigos || []).map((code) => String(code || '').trim()).filter(Boolean);
-  if (fullRoute.length >= 2) return fullRoute.join(' → ');
-  const origem = aeroMap.get(voo.origem_id);
-  const destino = aeroMap.get(voo.destino_id);
-  return `${origem?.codigo_icao || origem?.codigo || `ID:${voo.origem_id}`} → ${destino?.codigo_icao || destino?.codigo || `ID:${voo.destino_id}`}`;
-}
-
 export default function ControleVoosMeusVoos() {
   const qc = useQueryClient();
   const [novoVooOpen, setNovoVooOpen] = useState(false);
   const { data: voos = [], isLoading, error } = useMeusVoos();
   const { data: aeroportos = [] } = useControleVoosAeroportos();
-  const aeroMap = buildAeroMap(aeroportos);
   const [selectedDate, setSelectedDate] = useState(() => localDateKey());
 
   const filteredVoos = useMemo(
@@ -164,14 +153,17 @@ export default function ControleVoosMeusVoos() {
                             {voo.prefixo}
                           </h2>
                         </div>
-                        <ControleVoosStatusBadge status={voo.status} />
+                        <div className="flex flex-col items-end gap-1">
+                          <ControleVoosStatusBadge status={voo.status} />
+                          <ControleVoosRdvWorkflowBadge status={voo.rdv_workflow_status} />
+                        </div>
                       </div>
 
                       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                         <div className="min-w-0">
-                          <dt className="text-xs text-slate-400">Rota</dt>
+                          <dt className="text-xs text-slate-400">Rota operacional</dt>
                           <dd className="mt-1 break-words text-slate-700 dark:text-slate-200">
-                            {flightRouteLabel(voo, aeroMap)}
+                            {flightOperationalRouteLabel(voo, aeroportos)}
                           </dd>
                         </div>
                         <div className="min-w-0">
@@ -199,10 +191,11 @@ export default function ControleVoosMeusVoos() {
                     <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
                       <tr>
                         <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Data</th>
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Voo</th>
-                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Origem → Destino</th>
+                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Aeronave</th>
+                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Rota operacional</th>
                         <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Prev. saída</th>
                         <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status voo</th>
+                        <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">Status RDV</th>
                         <th className="px-4 py-3" />
                       </tr>
                     </thead>
@@ -211,12 +204,16 @@ export default function ControleVoosMeusVoos() {
                         return (
                           <tr key={voo.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{formatDate(voo.data_programacao)}</td>
-                            <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{voo.prefixo}</td>
+                            <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
+                              <div>{voo.prefixo}</div>
+                              {voo.numero_voo ? <div className="mt-0.5 text-xs font-normal text-slate-500">Voo {voo.numero_voo}</div> : null}
+                            </td>
                             <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">
-                              {flightRouteLabel(voo, aeroMap)}
+                              {flightOperationalRouteLabel(voo, aeroportos)}
                             </td>
                             <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{formatTime(voo.horario_previsto_partida)}</td>
                             <td className="px-4 py-3"><ControleVoosStatusBadge status={voo.status} /></td>
+                            <td className="px-4 py-3"><ControleVoosRdvWorkflowBadge status={voo.rdv_workflow_status} /></td>
                             <td className="px-4 py-3 text-right">
                               <a
                                 href={`/pilot/?flight=${voo.id}`}

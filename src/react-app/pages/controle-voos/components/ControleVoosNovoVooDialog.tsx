@@ -76,8 +76,9 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
   const [funcoesBordo, setFuncoesBordo] = useState<CatalogItem[]>([]);
   const [aeronaves, setAeronaves] = useState<Aeronave[]>([]);
   const [eligibleCrew, setEligibleCrew] = useState<EligibleCrewMember[]>([]);
-  const [routeIds, setRouteIds] = useState<string[]>(['', '']);
-  const [routeQueries, setRouteQueries] = useState<string[]>(['', '']);
+  const [routeIds, setRouteIds] = useState<string[]>(['', '', '']);
+  const [routeQueries, setRouteQueries] = useState<string[]>(['', '', '']);
+  const [returnToOrigin, setReturnToOrigin] = useState(true);
   const [loadingCatalogos, setLoadingCatalogos] = useState(false);
   const [loadingCrew, setLoadingCrew] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -108,8 +109,9 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     let cancelled = false;
     setLoadingCatalogos(true);
     setError(null);
-    setRouteIds(['', '']);
-    setRouteQueries(['', '']);
+    setRouteIds(['', '', '']);
+    setRouteQueries(['', '', '']);
+    setReturnToOrigin(true);
     void Promise.all([
       apiClient.get<unknown>('/controle-voos/catalogos/aeroportos'),
       apiClient.get<unknown>('/controle-voos/catalogos/tipos'),
@@ -220,8 +222,36 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     const exactPrimary = aeroportos.find((item) => item.codigo?.trim().toLocaleUpperCase('pt-BR') === normalized);
     const exactIcao = aeroportos.filter((item) => item.codigo_icao?.trim().toLocaleUpperCase('pt-BR') === normalized);
     const selected = exactLabel || exactPrimary || (exactIcao.length === 1 ? exactIcao[0] : undefined);
-    setRouteQueries((items) => items.map((item, itemIndex) => (itemIndex === index ? value : item)));
-    setRouteIds((items) => items.map((item, itemIndex) => (itemIndex === index ? (selected ? String(selected.id) : '') : item)));
+    const selectedId = selected ? String(selected.id) : '';
+    const selectedLabel = selected ? aeroportoLabel(selected) : value;
+
+    setRouteQueries((items) => items.map((item, itemIndex) => {
+      if (itemIndex === index) return value;
+      if (index === 0 && returnToOrigin && itemIndex === items.length - 1) {
+        return selected ? selectedLabel : '';
+      }
+      return item;
+    }));
+    setRouteIds((items) => items.map((item, itemIndex) => {
+      if (itemIndex === index) return selectedId;
+      if (index === 0 && returnToOrigin && itemIndex === items.length - 1) return selectedId;
+      return item;
+    }));
+  };
+  const setReturnToSameAerodrome = (checked: boolean) => {
+    setReturnToOrigin(checked);
+    setRouteIds((items) => {
+      const next = [...items];
+      if (checked) next[next.length - 1] = next[0] || '';
+      else if (next[next.length - 1] === next[0]) next[next.length - 1] = '';
+      return next;
+    });
+    setRouteQueries((items) => {
+      const next = [...items];
+      if (checked) next[next.length - 1] = next[0] || '';
+      else if (next[next.length - 1] === next[0]) next[next.length - 1] = '';
+      return next;
+    });
   };
   const addRouteStop = () => {
     setRouteIds((items) => [...items.slice(0, -1), '', items[items.length - 1] || '']);
@@ -254,6 +284,10 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
       setError(mode === 'pilot'
         ? 'Selecione aeronave, rota, contrato, tipo de voo e sua função a bordo.'
         : 'Selecione aeronave, rota, contrato, tipo de voo, tripulação e funções a bordo.');
+      return;
+    }
+    if (returnToOrigin && routeIds.length < 3) {
+      setError('Informe pelo menos uma parada operacional antes do retorno à origem.');
       return;
     }
     if (routeIds.some((point, index) => index > 0 && point === routeIds[index - 1])) {
@@ -353,9 +387,22 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
 
           <div className="md:col-span-2 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div><h3 className="text-sm font-semibold text-slate-900 dark:text-white">Rota e etapas</h3><p className="mt-1 text-xs text-slate-500">Busque no cadastro de pontos aeronáuticos por aeródromo, ICAO ou nome.</p></div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Rota e etapas</h3>
+                <p className="mt-1 text-xs text-slate-500">A primeira parada já está pronta para a plataforma/unidade atendida.</p>
+              </div>
               <button type="button" onClick={addRouteStop} className="inline-flex items-center gap-1 rounded-lg bg-cyan-700 px-2.5 py-1.5 text-xs font-medium text-white"><Plus className="h-3 w-3" /> Adicionar parada</button>
             </div>
+            <label className="mb-3 flex min-h-[44px] items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+              <input
+                type="checkbox"
+                aria-label="Retorna ao mesmo aeródromo"
+                checked={returnToOrigin}
+                onChange={(event) => setReturnToSameAerodrome(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              <span><strong>Retorna ao mesmo aeródromo</strong><span className="ml-1 text-xs text-slate-500">— destino final acompanha a origem</span></span>
+            </label>
             <div className="space-y-3">
               {routeIds.map((routeId, index) => {
                 const isFirst = index === 0;
@@ -364,10 +411,19 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
                 const listId = `controle-voos-rota-opcoes-${index}`;
                 return <div key={`route-${index}`} className="flex items-end gap-2">
                   <label className="min-w-0 flex-1 text-sm">{label}
-                    <input list={listId} className={fieldClass} value={routeQueries[index] || ''} onChange={(e) => selectRoutePointText(index, e.target.value)} placeholder="Digite código ICAO, aeródromo ou local" autoComplete="off" required />
+                    <input
+                      list={listId}
+                      className={fieldClass}
+                      value={routeQueries[index] || ''}
+                      onChange={(e) => selectRoutePointText(index, e.target.value)}
+                      placeholder={isLast && returnToOrigin ? 'Igual à origem' : 'Digite código ICAO, aeródromo ou local'}
+                      autoComplete="off"
+                      disabled={isLast && returnToOrigin}
+                      required
+                    />
                     <datalist id={listId}>{aeroportoMatches(routeQueries[index] || '').map((a) => <option key={a.id} value={aeroportoLabel(a)} />)}</datalist>
                   </label>
-                  {!isFirst && !isLast && <button type="button" onClick={() => removeRouteStop(index)} className="mb-0.5 rounded-lg border border-slate-300 p-2.5 text-slate-600 dark:border-slate-700 dark:text-slate-300" aria-label={`Remover ${label}`}><X className="h-4 w-4" /></button>}
+                  {!isFirst && !isLast && (!returnToOrigin || routeIds.length > 3) && <button type="button" onClick={() => removeRouteStop(index)} className="mb-0.5 rounded-lg border border-slate-300 p-2.5 text-slate-600 dark:border-slate-700 dark:text-slate-300" aria-label={`Remover ${label}`}><X className="h-4 w-4" /></button>}
                 </div>;
               })}
             </div>

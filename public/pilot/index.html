@@ -734,7 +734,7 @@
           <div class="operation-flow" id="operation-flow" aria-live="polite">
             <div class="operation-step" data-step="prepare">1. Preparar voo</div>
             <div class="operation-step" data-step="edit">2. Registrar voo</div>
-            <div class="operation-step" data-step="send">3. Enviar</div>
+            <div class="operation-step" data-step="send">3. Enviar à Coordenação</div>
           </div>
             <div class="actions">
               <button id="prepare-edit-offline" class="primary" type="button">
@@ -810,32 +810,35 @@
               O preenchimento é salvo automaticamente no tablet. Quando terminar, envie os dados ao AirTrust.
             </p>
             <div class="actions">
-              <button id="sync-rdv-now" class="primary" type="button" disabled>
-                Enviar informações do voo
+              <button id="sync-rdv-now" class="secondary" type="button" disabled>
+                Sincronizar dados com o AirTrust
               </button>
             </div>
             <div id="rdv-sync-status" class="statusline attention" aria-live="polite">
               O AirTrust salva automaticamente. Quando terminar, envie as informações do voo.
             </div>
             <div id="rdv-sync-confirmation" class="sync-success-panel hidden" aria-live="polite">
-              <strong>Dados recebidos pelo AirTrust</strong>
-              <p>O servidor confirmou a transmissão. Agora finalize o voo e encaminhe-o à Coordenação.</p>
+              <strong>Dados sincronizados com o AirTrust</strong>
+              <p>O servidor recebeu os dados. O voo ainda não foi enviado à Coordenação; use “Concluir e enviar à Coordenação”.</p>
             </div>
           </section>
 
           <div class="lease-box" id="coordination-box">
-            <strong>Finalizar e encaminhar à Coordenação</strong>
+            <strong>Concluir e enviar à Coordenação</strong>
             <p class="muted">
-              Depois que as informações forem transmitidas, finalize o preenchimento e encaminhe o voo à Coordenação.
+              Esta ação sincroniza os dados pendentes, finaliza o RDV e confirma o recebimento pela Coordenação em um único fluxo.
             </p>
             <div class="actions">
               <button id="refresh-canonical-package" class="secondary" type="button">
                 Atualizar status
               </button>
-              <button id="finalize-rdv-server" class="secondary" type="button" disabled>
+              <button id="complete-send-rdv" class="primary" type="button" disabled>
+                Concluir e enviar à Coordenação
+              </button>
+              <button id="finalize-rdv-server" class="secondary hidden" type="button" disabled aria-hidden="true" tabindex="-1">
                 Finalizar voo
               </button>
-              <button id="send-rdv-coordination" class="primary" type="button" disabled>
+              <button id="send-rdv-coordination" class="primary hidden" type="button" disabled aria-hidden="true" tabindex="-1">
                 Enviar à Coordenação
               </button>
             </div>

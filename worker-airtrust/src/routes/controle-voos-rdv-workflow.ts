@@ -44,6 +44,7 @@ import {
 } from '../services/controle-voos/rdv-workflow';
 import { syncRdvAlerts } from '../services/controle-voos/rdv-alertas';
 import { getPilotLogbook } from '../services/controle-voos/pilot-logbook';
+import { enrichFlightsWithPresentation, getFlightPresentationMap } from '../services/controle-voos/flight-presentation';
 import {
   ABASTECIMENTO_ANEXO_MAX_BYTES,
   assertAbastecimentoAnexoKeyScope,
@@ -236,35 +237,11 @@ rdvWorkflow.get('/voos/meus', auth(), requireAnyRdvAccess(), async (c) => {
     return c.json({ success: true, data: [], meta: { count: 0 } });
   }
 
-  const flightIds = flights.map((flight) => Number((flight as { id: number }).id));
-  const placeholders = flightIds.map(() => '?').join(', ');
-  const stagesResult = await c.env.DB.prepare(
-    `
-      SELECT voo_id, numero_etapa, origem_icao, destino_icao
-      FROM cv_voo_etapas
-      WHERE empresa_id = ?
-        AND deleted_at IS NULL
-        AND voo_id IN (${placeholders})
-      ORDER BY voo_id ASC, numero_etapa ASC, id ASC
-    `,
-  )
-    .bind(empresaId, ...flightIds)
-    .all<{ voo_id: number; numero_etapa: number; origem_icao: string | null; destino_icao: string | null }>();
-
-  const routeByFlight = new Map<number, string[]>();
-  for (const stage of stagesResult.results || []) {
-    const route = routeByFlight.get(Number(stage.voo_id)) || [];
-    const origin = String(stage.origem_icao || '').trim().toUpperCase();
-    const destination = String(stage.destino_icao || '').trim().toUpperCase();
-    if (origin && route[route.length - 1] !== origin) route.push(origin);
-    if (destination && route[route.length - 1] !== destination) route.push(destination);
-    routeByFlight.set(Number(stage.voo_id), route);
-  }
-
-  const data = flights.map((flight) => ({
-    ...flight,
-    rota_codigos: routeByFlight.get(Number((flight as { id: number }).id)) || [],
-  }));
+  const data = await enrichFlightsWithPresentation(
+    c.env.DB,
+    empresaId,
+    flights as Array<{ id: number } & Record<string, unknown>>,
+  );
 
   return c.json({ success: true, data, meta: { count: data.length } });
 });
@@ -520,7 +497,7 @@ rdvWorkflow.get(
         r.id, r.voo_id, r.numero, r.data_voo, r.status, r.workflow_status, r.versao,
         r.responsavel_preenchimento_id, r.enviado_em, r.devolvido_em, r.aprovado_coordenacao_em,
         r.finalizado_workflow_em, r.reaberto_em, r.motivo_devolucao,
-        v.prefixo, v.aeronave_id, v.data_programacao
+        v.prefixo, v.aeronave_id, v.data_programacao, v.origem_id, v.destino_id
       FROM cv_rdv_operacional r
       INNER JOIN cv_voos v ON v.id = r.voo_id AND v.empresa_id = r.empresa_id
       WHERE ${filters.join(' AND ')}
@@ -531,7 +508,21 @@ rdvWorkflow.get(
       .bind(...values)
       .all();
 
-    return c.json({ success: true, data: results || [], meta: { count: (results || []).length } });
+    const rows = results || [];
+    const routeMap = await getFlightPresentationMap(
+      c.env.DB,
+      empresaId,
+      rows.map((row) => Number((row as { voo_id: number }).voo_id)),
+    );
+    const data = rows.map((row) => ({
+      ...row,
+      ...(routeMap.get(Number((row as { voo_id: number }).voo_id)) || {
+        rota_codigos: [],
+        rota_pontos: [],
+      }),
+    }));
+
+    return c.json({ success: true, data, meta: { count: data.length } });
   },
 );
 

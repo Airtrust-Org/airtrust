@@ -35,6 +35,16 @@ export interface CvVoo {
   origem_id: number;
   destino_id: number;
   rota_codigos?: string[];
+  rota_pontos?: Array<{
+    id: number | null;
+    codigo: string;
+    codigo_icao: string | null;
+    nome: string | null;
+    tipo: string | null;
+  }>;
+  rdv_status?: CvRdvStatus | null;
+  rdv_workflow_status?: CvRdvWorkflowStatus | null;
+  rdv_enviado_em?: string | null;
   numero_voo: string | null;
   numero_db: string | null;
   contrato_id: number | null;
@@ -182,6 +192,10 @@ export interface CvRdvFilaItem {
   prefixo: string;
   aeronave_id: number | null;
   data_programacao: string;
+  origem_id: number;
+  destino_id: number;
+  rota_codigos?: string[];
+  rota_pontos?: CvVoo['rota_pontos'];
 }
 
 // ---- Controle Operacional FRMS / Gate de Despacho ----
