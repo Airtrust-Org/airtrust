@@ -385,7 +385,7 @@ export function buildDraftSnapshot(packageData, previousSequence = 0) {
       flight_update: {},
       fuelings: [{
         local_id: crypto.randomUUID(),
-        hora: '',
+        hora: toInputTime(now),
         etapa_numero: Number(buildStageDraftsFromPackage(packageData)[0]?.numero_etapa || 1),
         empresa_abastecimento_codigo: '',
         numero_nota: '',
