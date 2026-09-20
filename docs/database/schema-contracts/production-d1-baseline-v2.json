@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-20",
-    "last_reconciled_against": "0505 Conhecimento Ativo model/topic selection and free challenge cadence prepared; remote apply pending",
-    "schema_v2_digest": "4617c1bb257c6f5fbcc9760cb9a831af0ae41e78292f510c77668ee703b42947",
+    "last_reconciled_against": "0506 Controle de Voos planning-deviation justification schema prepared; remote apply pending",
+    "schema_v2_digest": "68adf594c2b54dc2525be4e824ba7e70fd5011c95fd2fd9a3999980f041475ca",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -977,6 +977,20 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "conhecimento-ativo-desafios-livres-0505.json",
       "note": "0505 is reviewed and prepared only. It adds a canonical sequential challenge number and nullable topic binding without table rebuild, preserves the legacy 1/2 challenge slot for rollout compatibility, changes challenges to 10 explained questions, lets employees choose AW139/S-76 and a knowledge area, and removes the hard two-challenge cap while retaining two per fortnight as the recommended cadence. Remote apply requires the governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0506_controle_voos_flight_justifications.sql",
+      "change_id": "controle-voos-flight-justifications-0506",
+      "sha256": "a52b14f5d07731bdcc81362f5c9fb02fcbc51bd53b59d8d38d8aceebec63d798",
+      "targets": [
+        "cv_justificativas_voo",
+        "cv_voo_justificativas"
+      ],
+      "domain": "tenant-scoped Controle de Voos planning-versus-realized flight-time justification catalog and minute allocation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-flight-justifications-0506.json",
+      "note": "0506 is reviewed and prepared only. It adds tenant-scoped justification codes and per-flight minute allocations; pilot finalization requires the positive realized-versus-planned deviation to be explained exactly. Remote apply requires the governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",

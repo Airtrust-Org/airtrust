@@ -43,6 +43,31 @@ function combineFlightDateAndTime(dateText: string, timeText: string) {
   return value;
 }
 
+function parseDurationMinutes(value: string): number | null {
+  const match = value.trim().match(/^(\d{1,2}):([0-5]\d)$/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function formatDurationMinutes(value: number): string {
+  const minutes = Math.max(0, Math.round(value));
+  return String(Math.floor(minutes / 60)) + ':' + String(minutes % 60).padStart(2, '0');
+}
+
+function plannedDurationFromInputs(startValue: string, endValue: string): string {
+  const start = new Date(startValue);
+  const end = new Date(endValue);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return '';
+  return formatDurationMinutes((end.getTime() - start.getTime()) / 60_000);
+}
+
+function plannedEndFromDuration(startValue: string, durationValue: string): string {
+  const start = new Date(startValue);
+  const minutes = parseDurationMinutes(durationValue);
+  if (Number.isNaN(start.getTime()) || minutes === null) return '';
+  return toLocalInput(new Date(start.getTime() + minutes * 60_000));
+}
+
 export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreated }: Props) {
   const now = useMemo(() => new Date(), []);
   const [aeroportos, setAeroportos] = useState<CvAeroporto[]>([]);
@@ -74,6 +99,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
       mode === 'pilot' ? toLocalTime(new Date(now.getTime() + 60 * 60_000)) : toLocalInput(new Date(now.getTime() + 60 * 60_000)),
     horario_previsto_chegada:
       mode === 'pilot' ? toLocalTime(new Date(now.getTime() + 2 * 60 * 60_000)) : toLocalInput(new Date(now.getTime() + 2 * 60 * 60_000)),
+    tempo_total_voo: '1:00',
     observacoes: '',
   });
 
@@ -146,6 +172,33 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
   if (!open) return null;
 
   const set = (key: keyof typeof form, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
+  const setPlannedDeparture = (value: string) => {
+    setForm((prev) => {
+      const next = { ...prev, horario_previsto_partida: value };
+      if (mode === 'coordenacao' && prev.tempo_total_voo) {
+        const computed = plannedEndFromDuration(value, prev.tempo_total_voo);
+        if (computed) next.horario_previsto_chegada = computed;
+      }
+      return next;
+    });
+  };
+  const setPlannedArrival = (value: string) => {
+    setForm((prev) => ({
+      ...prev,
+      horario_previsto_chegada: value,
+      ...(mode === 'coordenacao'
+        ? { tempo_total_voo: plannedDurationFromInputs(prev.horario_previsto_partida, value) }
+        : {}),
+    }));
+  };
+  const setPlannedDuration = (value: string) => {
+    setForm((prev) => {
+      const next = { ...prev, tempo_total_voo: value };
+      const computed = plannedEndFromDuration(prev.horario_previsto_partida, value);
+      if (computed) next.horario_previsto_chegada = computed;
+      return next;
+    });
+  };
   const fieldClass = 'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-cyan-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100';
 
   const aeroportoLabel = (item: CvAeroporto) => {
@@ -353,8 +406,27 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
             </div>
           )}
 
-          <label className="text-sm">Saída prevista<input type={mode === 'pilot' ? 'time' : 'datetime-local'} className={fieldClass} value={form.horario_previsto_partida} onChange={(e) => set('horario_previsto_partida', e.target.value)} required /></label>
-          <label className="text-sm">Chegada prevista<input type={mode === 'pilot' ? 'time' : 'datetime-local'} className={fieldClass} value={form.horario_previsto_chegada} onChange={(e) => set('horario_previsto_chegada', e.target.value)} required /></label>
+          <label className="text-sm">{mode === 'coordenacao' ? 'Decolagem estimada' : 'Saída prevista'}<input type={mode === 'pilot' ? 'time' : 'datetime-local'} className={fieldClass} value={form.horario_previsto_partida} onChange={(e) => setPlannedDeparture(e.target.value)} required /></label>
+          <label className="text-sm">{mode === 'coordenacao' ? 'Retorno estimado' : 'Chegada prevista'}<input type={mode === 'pilot' ? 'time' : 'datetime-local'} className={fieldClass} value={form.horario_previsto_chegada} onChange={(e) => setPlannedArrival(e.target.value)} required /></label>
+          {mode === 'coordenacao' && (
+            <label className="text-sm">Tempo total de voo
+              <input
+                type="text"
+                inputMode="numeric"
+                className={fieldClass}
+                value={form.tempo_total_voo}
+                onChange={(e) => setPlannedDuration(e.target.value)}
+                onBlur={(e) => {
+                  const minutes = parseDurationMinutes(e.target.value);
+                  if (minutes !== null) setPlannedDuration(formatDurationMinutes(minutes));
+                }}
+                placeholder="HH:MM"
+                pattern="\d{1,2}:[0-5]\d"
+                required
+              />
+              <span className="mt-1 block text-xs text-slate-500">Preencha a chegada ou a duração; o outro campo é recalculado automaticamente.</span>
+            </label>
+          )}
           <label className="text-sm md:col-span-2">Observações<textarea className={fieldClass} rows={3} value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} /></label>
 
           {error && <div className="md:col-span-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">{error}</div>}

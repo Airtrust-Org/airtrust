@@ -20,6 +20,10 @@ import {
   formatDurationDigits,
   PILOT_DRAFT_SCHEMA_VERSION,
   parseNumber,
+  plannedFlightMinutes,
+  realizedFlightMinutes,
+  requiredJustificationMinutes,
+  totalJustificationMinutes,
   toDurationInput,
   toInputTime,
   validateRdvForm,
@@ -1151,6 +1155,18 @@ async function getCoordinationState() {
 
   const finalizeBlocker = workflowBlocker(finalizeReceipt, 'finalize');
   const sendBlocker = workflowBlocker(sendReceipt, 'send_coordination');
+  const packageRequiredJustificationMinutes = requiredJustificationMinutes(
+    packageData,
+    packageData.etapas || [],
+  );
+  const packageAssignedJustificationMinutes = totalJustificationMinutes(
+    packageData.justificativas || [],
+  );
+  const justificationBlocker =
+    packageRequiredJustificationMinutes > 0 &&
+    packageAssignedJustificationMinutes !== packageRequiredJustificationMinutes
+      ? 'A diferença entre o voo planejado e o realizado precisa ser justificada exatamente antes de finalizar.'
+      : null;
 
   const editableWorkflow = ['rascunho', 'devolvido'].includes(
     String(rdv?.workflow_status || ''),
@@ -1171,6 +1187,7 @@ async function getCoordinationState() {
       navigator.onLine &&
       !coordinationInFlight &&
       !finalizeBlocker &&
+      !justificationBlocker &&
       Boolean(rdv) &&
       rdv.status === 'rascunho' &&
       editableWorkflow &&
@@ -1183,7 +1200,7 @@ async function getCoordinationState() {
       Boolean(rdv) &&
       rdv.status === 'preenchimento_finalizado' &&
       sendableWorkflow,
-    reason: sendBlocker || finalizeBlocker || null,
+    reason: sendBlocker || finalizeBlocker || justificationBlocker || null,
   };
 }
 async function refreshCoordinationControls() {
@@ -1595,6 +1612,14 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
       common: { ...buildCommonFlightFields(packageData), ...(value.common || {}) },
       flight_update: value.flight_update || {},
       fuelings: Array.isArray(value.fuelings) ? value.fuelings : [],
+      justifications: Array.isArray(value.justifications)
+        ? value.justifications
+        : (Array.isArray(packageData?.justificativas) ? packageData.justificativas : []).map((item) => ({
+            local_id: crypto.randomUUID(),
+            justificativa_codigo: String(item?.codigo || ''),
+            minutos: item?.minutos == null ? '' : String(item.minutos),
+            observacao: String(item?.observacao || ''),
+          })),
     };
     activeStageDrafts = matchingStages.map((record) => ({
       ...record.value,
@@ -1696,6 +1721,37 @@ function fuelingRowIsEmpty(fueling) {
     parseNumber(fueling?.litros_abastecidos) === null;
 }
 
+function validatePlanningJustifications(packageData, stageDrafts, justifications) {
+  const errors = [];
+  const requiredMinutes = requiredJustificationMinutes(packageData, stageDrafts);
+  const rows = Array.isArray(justifications) ? justifications : [];
+  if (requiredMinutes <= 0) return errors;
+
+  const usedCodes = new Set();
+  rows.forEach((item, index) => {
+    const code = String(item?.justificativa_codigo || '').trim().toUpperCase();
+    const minutes = Number(item?.minutos);
+    if (!code) errors.push('Justificativa ' + (index + 1) + ': selecione o código.');
+    else if (usedCodes.has(code)) errors.push('Justificativa ' + (index + 1) + ': código repetido.');
+    else usedCodes.add(code);
+    if (!Number.isInteger(minutes) || minutes <= 0) {
+      errors.push('Justificativa ' + (index + 1) + ': informe um tempo válido em minutos.');
+    }
+  });
+
+  const assignedMinutes = totalJustificationMinutes(rows);
+  if (assignedMinutes !== requiredMinutes) {
+    errors.push(
+      'As justificativas devem somar exatamente ' +
+        String(requiredMinutes) +
+        ' minuto(s) de diferença; informado: ' +
+        String(assignedMinutes) +
+        '.',
+    );
+  }
+  return errors;
+}
+
 function refreshDraftValidationPresentation() {
   const packageData = activePackageData();
   if (!activeRdvDraft || !packageData) return;
@@ -1709,6 +1765,13 @@ function refreshDraftValidationPresentation() {
     if (!String(fueling.numero_nota || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe o número da nota.');
     if (parseNumber(fueling.litros_abastecidos) === null) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe os litros abastecidos.');
   }
+  supplementalErrors.push(
+    ...validatePlanningJustifications(
+      packageData,
+      activeStageDrafts,
+      activeRdvDraft.justifications,
+    ),
+  );
   const messages = [
     ...Object.values(rdvErrors),
     ...stageErrors,
@@ -1882,7 +1945,12 @@ async function readPersistedOperationalStateForSync() {
 
   const rdvErrors = validateRdvForm(persistedRdv.value.form, packageData);
   const stageErrors = validateStageDrafts(persistedStages.map((record) => record.value));
-  if (Object.keys(rdvErrors).length > 0 || stageErrors.length > 0) {
+  const justificationErrors = validatePlanningJustifications(
+    packageData,
+    persistedStages.map((record) => record.value),
+    persistedRdv.value.justifications,
+  );
+  if (Object.keys(rdvErrors).length > 0 || stageErrors.length > 0 || justificationErrors.length > 0) {
     throw new Error(
       'Existem validações pendentes. Corrija os campos indicados antes de transmitir.',
     );
@@ -2740,12 +2808,125 @@ function renderRdvFormFields() {
   const summaryFields = [
     ['Tempo de voo', activeRdvDraft.form.tempo_voo_total_hhmm || '—', 'Soma de decolagem → pouso em todas as etapas.'],
     ['Tempo total', activeRdvDraft.form.tempo_total_hhmm || '—', 'Soma de partida → corte em todas as etapas.'],
-    ['Pousos diurnos', activeRdvDraft.form.pousos_diurnos_total || '0', null],
-    ['Pousos noturnos', activeRdvDraft.form.pousos_noturnos_total || '0', null],
+    ['Pousos', activeRdvDraft.form.numero_pousos || '0', 'Contado automaticamente pelas etapas com hora de pouso registrada.'],
   ];
   for (const [label, value, note] of summaryFields) {
     rdvFormFields.append(createEditorField({ label, value, type: 'text', readOnly: true, note }));
   }
+
+  const plannedMinutes = plannedFlightMinutes(packageData);
+  const realizedMinutes = realizedFlightMinutes(activeStageDrafts);
+  const requiredMinutes = requiredJustificationMinutes(packageData, activeStageDrafts);
+  const assignedMinutes = totalJustificationMinutes(activeRdvDraft.justifications);
+  const justificationPanel = document.createElement('section');
+  justificationPanel.className = 'justification-panel wide';
+  const justificationHeading = document.createElement('div');
+  justificationHeading.className = 'justification-heading';
+  const justificationTitle = document.createElement('div');
+  const headingStrong = document.createElement('strong');
+  headingStrong.textContent = 'Justificativas do desvio';
+  const headingNote = document.createElement('span');
+  headingNote.className = 'field-note';
+  headingNote.textContent =
+    'Planejado ' + minutesToHhMm(plannedMinutes) +
+    ' · Realizado ' + minutesToHhMm(realizedMinutes) +
+    ' · Diferença a justificar ' + String(requiredMinutes) + ' min.';
+  justificationTitle.append(headingStrong, headingNote);
+  const addJustification = document.createElement('button');
+  addJustification.type = 'button';
+  addJustification.className = 'secondary';
+  addJustification.textContent = '+ Justificativa';
+  addJustification.disabled = operationalSyncInFlight || requiredMinutes <= 0;
+  addJustification.addEventListener('click', () => {
+    activeRdvDraft.justifications = Array.isArray(activeRdvDraft.justifications)
+      ? activeRdvDraft.justifications
+      : [];
+    activeRdvDraft.justifications.push({
+      local_id: crypto.randomUUID(),
+      justificativa_codigo: '',
+      minutos: '',
+      observacao: '',
+    });
+    scheduleOperationalSave();
+    renderRdvFormFields();
+  });
+  justificationHeading.append(justificationTitle, addJustification);
+  justificationPanel.append(justificationHeading);
+
+  const status = document.createElement('div');
+  const remaining = requiredMinutes - assignedMinutes;
+  status.className = 'statusline ' + (requiredMinutes === assignedMinutes ? 'ok' : 'attention');
+  status.textContent = requiredMinutes <= 0
+    ? 'O tempo realizado não excede o planejado. Nenhuma justificativa é necessária.'
+    : remaining === 0
+      ? 'Justificativas fecham exatamente os ' + String(requiredMinutes) + ' minutos de diferença.'
+      : remaining > 0
+        ? 'Ainda faltam justificar ' + String(remaining) + ' minuto(s).'
+        : 'As justificativas excedem a diferença em ' + String(Math.abs(remaining)) + ' minuto(s).';
+  justificationPanel.append(status);
+
+  const options = (Array.isArray(packageData?.catalogos?.justificativas_voo)
+    ? packageData.catalogos.justificativas_voo
+    : []).map((item) => ({
+      code: String(item.codigo || ''),
+      label: String(item.codigo || '') + ' · ' + String(item.nome || item.codigo || ''),
+    }));
+
+  const rows = document.createElement('div');
+  rows.className = 'justification-rows';
+  const justifications = Array.isArray(activeRdvDraft.justifications)
+    ? activeRdvDraft.justifications
+    : (activeRdvDraft.justifications = []);
+  justifications.forEach((item, itemIndex) => {
+    const row = document.createElement('div');
+    row.className = 'justification-row';
+    row.append(
+      createEditorSelect({
+        label: 'Justificativa',
+        value: item.justificativa_codigo || '',
+        options,
+        onChange: (value) => {
+          item.justificativa_codigo = value;
+          scheduleOperationalSave();
+        },
+        disabled: requiredMinutes <= 0,
+      }),
+      createEditorField({
+        label: 'Tempo (min)',
+        value: item.minutos || '',
+        type: 'number',
+        inputMode: 'numeric',
+        onInput: (value) => {
+          item.minutos = value;
+          scheduleOperationalSave();
+        },
+        onBlur: () => {
+          void flushOperationalSave();
+          renderRdvFormFields();
+          refreshDraftValidationPresentation();
+        },
+      }),
+    );
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'secondary justification-remove';
+    remove.textContent = 'Remover';
+    remove.disabled = operationalSyncInFlight;
+    remove.addEventListener('click', () => {
+      justifications.splice(itemIndex, 1);
+      scheduleOperationalSave();
+      renderRdvFormFields();
+    });
+    row.append(remove);
+    rows.append(row);
+  });
+  justificationPanel.append(rows);
+  rdvFormFields.append(justificationPanel);
+}
+
+function minutesToHhMm(value) {
+  const total = Math.max(0, Math.round(Number(value || 0)));
+  return String(Math.floor(total / 60)) + ':' + String(total % 60).padStart(2, '0');
 }
 
 function timingEventMeta(action) {
@@ -2798,6 +2979,19 @@ function applyQuickTiming(stage, field, action) {
   renderOperationalEditor({ preserveScroll: true });
 }
 
+const STAGE_PALETTE = [
+  { tab: '#1d4ed8', soft: '#eff6ff', border: '#93c5fd' },
+  { tab: '#0f766e', soft: '#f0fdfa', border: '#99f6e4' },
+  { tab: '#7c3aed', soft: '#f5f3ff', border: '#c4b5fd' },
+  { tab: '#b45309', soft: '#fffbeb', border: '#fcd34d' },
+  { tab: '#be123c', soft: '#fff1f2', border: '#fda4af' },
+  { tab: '#0369a1', soft: '#f0f9ff', border: '#7dd3fc' },
+];
+
+function stagePalette(index) {
+  return STAGE_PALETTE[index % STAGE_PALETTE.length];
+}
+
 function renderStageFields() {
   rdvStageFields.replaceChildren();
   if (activeStageDrafts.length === 0) return;
@@ -2816,6 +3010,10 @@ function renderStageFields() {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'stage-tab' + (index === activeStageTabIndex ? ' active' : '');
+    const palette = stagePalette(index);
+    button.style.setProperty('--stage-tab-color', palette.tab);
+    button.style.setProperty('--stage-soft-color', palette.soft);
+    button.style.setProperty('--stage-border-color', palette.border);
     button.setAttribute('role', 'tab');
     button.setAttribute('aria-selected', index === activeStageTabIndex ? 'true' : 'false');
     const routeLabel =
@@ -2837,6 +3035,10 @@ function renderStageFields() {
   const fields = stageDraft.fields;
   const card = document.createElement('section');
   card.className = 'editor-stage stage-panel';
+  const activePalette = stagePalette(index);
+  card.style.setProperty('--stage-tab-color', activePalette.tab);
+  card.style.setProperty('--stage-soft-color', activePalette.soft);
+  card.style.setProperty('--stage-border-color', activePalette.border);
 
   const heading = document.createElement('h3');
   heading.textContent =
@@ -2885,8 +3087,6 @@ function renderStageFields() {
     ['Tempo total', 'tempo_total', 'text', null, true, false, 'Calculado: partida → corte'],
     ['IFR (duração)', 'tempo_ifr', 'duration', 'numeric', false, false, 'Digite apenas os números, por exemplo 0130'],
     ['Noturno (duração)', 'tempo_noturno', 'duration', 'numeric', false, false, 'Digite apenas os números, por exemplo 0130'],
-    ['Pousos diurnos', 'pousos_diurnos', 'number', 'numeric', false, false, null],
-    ['Pousos noturnos', 'pousos_noturnos', 'number', 'numeric', false, false, null],
     ['Partidas', 'starts', 'number', 'numeric', true, false, 'Calculado automaticamente pela hora de partida'],
     ['Passageiros', 'pax', 'number', 'numeric', false, false, 'Quantidade de passageiros'],
     ['Peso dos passageiros', 'peso_passageiros', 'number', 'decimal', false, false, null],
@@ -2898,9 +3098,9 @@ function renderStageFields() {
       'combustivel_inicio',
       'number',
       'decimal',
-      index > 0,
       false,
-      index > 0 ? 'Igual ao combustível final da etapa anterior' : null,
+      false,
+      index > 0 ? 'Integrado ao combustível final da etapa anterior' : null,
     ],
     ['Combustível final', 'combustivel_fim', 'number', 'decimal', false, false, null],
     ['Observações da etapa', 'observacoes', 'textarea', null, false, true, null],
@@ -2920,6 +3120,11 @@ function renderStageFields() {
         : (value) => {
             fields[key] = value;
             if (key === 'horario_motor_ligado') stageDraft.continuity_start_derived = false;
+            if (key === 'combustivel_inicio' && index > 0) {
+              const previousFields = activeStageDrafts[index - 1]?.fields || {};
+              previousFields.combustivel_fim = value;
+              previousFields.unidade_combustivel = fields.unidade_combustivel || previousFields.unidade_combustivel;
+            }
             refreshAllStageDerivedTimes();
             activeRdvDraft.form = applySafeStageAggregates(
               activeRdvDraft.form,

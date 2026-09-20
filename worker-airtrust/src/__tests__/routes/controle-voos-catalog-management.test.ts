@@ -54,9 +54,10 @@ const tempDirs: string[] = [];
 const migrationPaths = [
   join(dirname(fileURLToPath(import.meta.url)), '../../../migrations/0410_controle_voos_n1_schema.sql'),
   join(dirname(fileURLToPath(import.meta.url)), '../../../migrations/0502_controle_voos_fueling_companies.sql'),
+  join(dirname(fileURLToPath(import.meta.url)), '../../../migrations/0506_controle_voos_flight_justifications.sql'),
 ];
 const INSERTABLE_CATALOG_TABLE =
-  /INSERT\s+INTO\s+(cv_aeroportos|cv_tipos_voo|cv_naturezas_voo|cv_motivos_operacionais|cv_empresas_abastecimento)\b/i;
+  /INSERT\s+INTO\s+(cv_aeroportos|cv_tipos_voo|cv_naturezas_voo|cv_motivos_operacionais|cv_empresas_abastecimento|cv_justificativas_voo)\b/i;
 
 function sqlString(value: unknown): string {
   if (value === null || value === undefined) return 'NULL';
@@ -164,6 +165,28 @@ describe('Controle de Voos operational catalog management', () => {
       'SELECT empresa_id, codigo, nome FROM cv_empresas_abastecimento',
     );
     expect(rows).toEqual([{ empresa_id: 1, codigo: 'BR-MACAE', nome: 'BR Macaé' }]);
+  });
+
+  it('allows manager to create a tenant-scoped flight justification code', async () => {
+    const db = createDb();
+    const { app, env } = createApp(db);
+    const response = await request(app, env, '/api/controle-voos/catalogos/justificativas', {
+      method: 'POST',
+      body: JSON.stringify({
+        codigo: 'vento',
+        nome: 'Vento desfavorável em rota',
+        descricao: 'Acréscimo de tempo por vento desfavorável.',
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const rows = query<{ empresa_id: number; codigo: string; nome: string }>(
+      db.path,
+      'SELECT empresa_id, codigo, nome FROM cv_justificativas_voo',
+    );
+    expect(rows).toEqual([
+      { empresa_id: 1, codigo: 'VENTO', nome: 'Vento desfavorável em rota' },
+    ]);
   });
 
   it('allows manager to create a tenant-scoped airport and normalizes codes', async () => {

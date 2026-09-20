@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Tag,
   X,
+  Clock3,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
@@ -19,7 +20,7 @@ import { apiClient } from '@/react-app/services/apiClient';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 
-type CatalogName = 'pontos' | 'aeroportos' | 'tipos' | 'naturezas' | 'motivos' | 'empresas-abastecimento' | 'contratos' | 'funcoes-bordo';
+type CatalogName = 'pontos' | 'aeroportos' | 'tipos' | 'naturezas' | 'motivos' | 'empresas-abastecimento' | 'contratos' | 'funcoes-bordo' | 'justificativas';
 type CatalogItem = {
   id: number;
   codigo?: string | null;
@@ -58,9 +59,10 @@ const EMPTY_STATE: CatalogState = {
   'empresas-abastecimento': [],
   contratos: [],
   'funcoes-bordo': [],
+  justificativas: [],
 };
 
-const VISIBLE_CATALOGS: CatalogName[] = ['pontos', 'tipos', 'contratos', 'funcoes-bordo', 'motivos', 'empresas-abastecimento'];
+const VISIBLE_CATALOGS: CatalogName[] = ['pontos', 'tipos', 'contratos', 'funcoes-bordo', 'justificativas', 'motivos', 'empresas-abastecimento'];
 
 const CATALOG_META: Record<
   CatalogName,
@@ -114,6 +116,12 @@ const CATALOG_META: Record<
     description: 'Funções atribuídas à tripulação em cada voo, como examinador, instrutor, comandante e copiloto.',
     icon: <Plane className="h-4 w-4" />,
   },
+  justificativas: {
+    label: 'Justificativas de voo',
+    singular: 'justificativa de voo',
+    description: 'Códigos usados pelo piloto para explicar minutos acima do tempo planejado.',
+    icon: <Clock3 className="h-4 w-4" />,
+  },
 };
 
 function extract<T>(response: unknown): T {
@@ -166,7 +174,7 @@ export default function ControleVoosTabelas() {
     setLoading(true);
     setError(null);
     try {
-      const [pontos, aeroportos, tipos, naturezas, motivos, empresasAbastecimento, contratos, funcoesBordo] = await Promise.all([
+      const [pontos, aeroportos, tipos, naturezas, motivos, empresasAbastecimento, contratos, funcoesBordo, justificativas] = await Promise.all([
         loadCatalog('pontos'),
         loadCatalog('aeroportos'),
         loadCatalog('tipos'),
@@ -175,6 +183,7 @@ export default function ControleVoosTabelas() {
         loadCatalog('empresas-abastecimento'),
         loadCatalog('contratos'),
         loadCatalog('funcoes-bordo'),
+        loadCatalog('justificativas'),
       ]);
       setData({
         pontos,
@@ -185,6 +194,7 @@ export default function ControleVoosTabelas() {
         'empresas-abastecimento': empresasAbastecimento,
         contratos,
         'funcoes-bordo': funcoesBordo,
+        justificativas,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar cadastros operacionais.');

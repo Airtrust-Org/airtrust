@@ -178,6 +178,7 @@ const catalogos: Record<string, CatalogConfig> = {
   'empresas-abastecimento': { table: 'cv_empresas_abastecimento', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' },
   contratos: { table: 'cv_contratos', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' },
   'funcoes-bordo': { table: 'cv_funcoes_bordo', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' },
+  justificativas: { table: 'cv_justificativas_voo', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' },
 };
 
 function requireControleVoosWrite(): MiddlewareHandler<{ Bindings: Env }> {
@@ -783,6 +784,7 @@ function catalogKey(rawName: string): keyof typeof catalogos | null {
   if (name === 'empresas-abastecimento' || name === 'fornecedores-abastecimento') return 'empresas-abastecimento';
   if (name === 'contratos' || name === 'contrato') return 'contratos';
   if (name === 'funcoes-bordo' || name === 'funcoes-a-bordo' || name === 'funcoes_bordo') return 'funcoes-bordo';
+  if (name === 'justificativas' || name === 'justificativas-voo' || name === 'justificativa') return 'justificativas';
   return null;
 }
 

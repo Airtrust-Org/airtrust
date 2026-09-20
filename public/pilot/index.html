@@ -221,11 +221,12 @@
       }
       @media (max-width: 720px) { .operation-flow { grid-template-columns: 1fr; } }
       .editor-stage {
-        border: 1px solid #d9e2ec;
+        border: 1px solid var(--stage-border-color, #d9e2ec);
         border-radius: 16px;
         padding: 16px;
         margin-top: 14px;
-        background: #f9fbfd;
+        background: var(--stage-soft-color, #f9fbfd);
+        box-shadow: inset 5px 0 0 var(--stage-tab-color, #12356a);
       }
       .editor-stage h3 { margin-bottom: 8px; }
       .stage-tabs {
@@ -240,20 +241,28 @@
       .stage-tab {
         flex: 0 0 auto;
         min-height: 44px;
-        border: 1px solid #c8d4e2;
+        border: 1px solid var(--stage-border-color, #c8d4e2);
         border-radius: 12px 12px 4px 4px;
-        background: #eef3f8;
-        color: #24405f;
+        background: var(--stage-soft-color, #eef3f8);
+        color: var(--stage-tab-color, #24405f);
         padding: 10px 14px;
         font-weight: 800;
+        box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--stage-tab-color, #24405f) 35%, transparent);
       }
       .stage-tab.active {
-        border-color: #12356a;
-        background: #12356a;
+        border-color: var(--stage-tab-color, #12356a);
+        background: var(--stage-tab-color, #12356a);
         color: #fff;
+        box-shadow: 0 5px 14px color-mix(in srgb, var(--stage-tab-color, #12356a) 28%, transparent);
       }
       .stage-panel { margin-top: 0; border-top-left-radius: 4px; }
       .field-note { display: block; margin-top: 5px; color: #66758a; font-size: .78rem; font-weight: 500; }
+      .justification-panel { border: 1px solid #d7e0ea; border-radius: 14px; padding: 14px; background: #fff; }
+      .justification-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:10px; }
+      .justification-rows { display:grid; gap:10px; margin-top:10px; }
+      .justification-row { display:grid; grid-template-columns:minmax(220px,2fr) minmax(110px,.7fr) auto; align-items:end; gap:10px; }
+      .justification-remove { min-height:44px; }
+      @media (max-width: 720px) { .justification-row { grid-template-columns:1fr; } }
       .field-error { display: block; margin-top: 5px; color: #a52727; font-size: .78rem; font-weight: 700; }
       .lease-box {
         margin-top: 16px;

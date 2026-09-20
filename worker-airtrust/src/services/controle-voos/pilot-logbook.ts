@@ -281,8 +281,18 @@ export async function getPilotLogbook(
     };
   });
 
-  const balanceReference = initialBalance?.data_referencia || null;
-  const summaryWhere = balanceReference ? ' AND r.data_voo > ?' : '';
+  const periodFiltered = Boolean(options.dataInicio || options.dataFim);
+  const balanceReference = periodFiltered ? null : (initialBalance?.data_referencia || null);
+  const summaryWhere = periodFiltered
+    ? filtered.sql
+    : balanceReference
+      ? ' AND r.data_voo > ?'
+      : '';
+  const summaryBindArgs = periodFiltered
+    ? filtered.args
+    : balanceReference
+      ? [balanceReference]
+      : [];
   const summaryFlights = await db
     .prepare(
       `SELECT r.id AS rdv_id, r.voo_id, r.data_voo, r.horas_voadas,
@@ -309,7 +319,7 @@ export async function getPilotLogbook(
          ${summaryWhere}
        ORDER BY r.data_voo ASC, r.id ASC`,
     )
-    .bind(funcionarioId, empresaId, ...(balanceReference ? [balanceReference] : []))
+    .bind(funcionarioId, empresaId, ...summaryBindArgs)
     .all<FlightRow>();
 
   const summaryRows = summaryFlights.results || [];
@@ -321,12 +331,12 @@ export async function getPilotLogbook(
   const summaryStageMap = stagesByFlight(summaryStages);
 
   const totals: PilotLogbookTotals = {
-    total_min: toSafeInt(initialBalance?.horas_total_min),
-    pic_min: toSafeInt(initialBalance?.horas_pic_min),
-    sic_min: toSafeInt(initialBalance?.horas_sic_min),
-    noturna_min: toSafeInt(initialBalance?.horas_noturna_min),
-    instrumento_min: toSafeInt(initialBalance?.horas_instrumento_min),
-    simulador_min: toSafeInt(initialBalance?.horas_simulador_min),
+    total_min: periodFiltered ? 0 : toSafeInt(initialBalance?.horas_total_min),
+    pic_min: periodFiltered ? 0 : toSafeInt(initialBalance?.horas_pic_min),
+    sic_min: periodFiltered ? 0 : toSafeInt(initialBalance?.horas_sic_min),
+    noturna_min: periodFiltered ? 0 : toSafeInt(initialBalance?.horas_noturna_min),
+    instrumento_min: periodFiltered ? 0 : toSafeInt(initialBalance?.horas_instrumento_min),
+    simulador_min: periodFiltered ? 0 : toSafeInt(initialBalance?.horas_simulador_min),
     saldo_referencia: balanceReference,
   };
 

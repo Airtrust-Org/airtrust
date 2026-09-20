@@ -1,0 +1,8 @@
+{
+  "changeId": "controle-voos-flight-justifications-0506",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0506_controle_voos_flight_justifications.sql",
+  "fileHash": "a52b14f5d07731bdcc81362f5c9fb02fcbc51bd53b59d8d38d8aceebec63d798",
+  "planPath": "worker-airtrust/schema-v2/plans/controle-voos-flight-justifications-0506.md",
+  "planHash": "7bf080ad11d06c97906ac38284617fa3928e10ed92e4e622c10c3fdf9d99a948"
+}

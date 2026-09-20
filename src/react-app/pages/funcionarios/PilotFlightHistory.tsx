@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Clock3, Plane, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock3, Plane, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Card, { CardContent, CardHeader } from '@/react-app/components/Card';
 import Button from '@/react-app/components/Button';
@@ -17,10 +17,25 @@ function formatDate(value: string): string {
   return year && month && day ? `${day}/${month}/${year}` : value;
 }
 
+function todayLocal(): string {
+  const now = new Date();
+  const shifted = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+function shiftIsoDate(value: string, deltaDays: number): string {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + deltaDays);
+  const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return shifted.toISOString().slice(0, 10);
+}
+
 export default function PilotFlightHistory() {
+  const today = todayLocal();
   const [page, setPage] = useState(1);
-  const [dataInicio, setDataInicio] = useState('');
-  const [dataFim, setDataFim] = useState('');
+  const [dataInicio, setDataInicio] = useState(today);
+  const [dataFim, setDataFim] = useState(today);
   const query = usePilotLogbook({
     page,
     limit: 20,
@@ -66,6 +81,10 @@ export default function PilotFlightHistory() {
         ))}
       </div>
 
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Totais do período {formatDate(dataInicio)} até {formatDate(dataFim)}.
+      </p>
+
       {totals?.saldo_referencia && (
         <p className="text-xs text-slate-500 dark:text-slate-400">
           Os totais incluem o saldo histórico registrado até {formatDate(totals.saldo_referencia)};
@@ -85,7 +104,22 @@ export default function PilotFlightHistory() {
                 Coordenação.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-end gap-2">
+              <button
+                type="button"
+                aria-label="Dia anterior"
+                title="Dia anterior"
+                onClick={() => {
+                  const base = dataInicio === dataFim ? dataInicio : dataInicio || today;
+                  const next = shiftIsoDate(base, -1);
+                  setDataInicio(next);
+                  setDataFim(next);
+                  setPage(1);
+                }}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
               <label className="text-xs text-slate-500">
                 De
                 <input
@@ -93,9 +127,10 @@ export default function PilotFlightHistory() {
                   value={dataInicio}
                   onChange={(event) => {
                     setDataInicio(event.target.value);
+                    if (dataFim && event.target.value > dataFim) setDataFim(event.target.value);
                     setPage(1);
                   }}
-                  className="ml-2 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  className="ml-2 min-w-[154px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
               </label>
               <label className="text-xs text-slate-500">
@@ -105,11 +140,38 @@ export default function PilotFlightHistory() {
                   value={dataFim}
                   onChange={(event) => {
                     setDataFim(event.target.value);
+                    if (dataInicio && event.target.value < dataInicio) setDataInicio(event.target.value);
                     setPage(1);
                   }}
-                  className="ml-2 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  className="ml-2 min-w-[154px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
               </label>
+              <button
+                type="button"
+                aria-label="Próximo dia"
+                title="Próximo dia"
+                onClick={() => {
+                  const base = dataInicio === dataFim ? dataFim : dataFim || today;
+                  const next = shiftIsoDate(base, 1);
+                  setDataInicio(next);
+                  setDataFim(next);
+                  setPage(1);
+                }}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDataInicio(today);
+                  setDataFim(today);
+                  setPage(1);
+                }}
+                className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              >
+                Hoje
+              </button>
             </div>
           </div>
         </CardHeader>

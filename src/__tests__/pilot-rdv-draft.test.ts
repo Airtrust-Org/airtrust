@@ -10,6 +10,10 @@ import {
   calcStageTotalWeight,
   formatDurationDigits,
   payloadToKg,
+  plannedFlightMinutes,
+  realizedFlightMinutes,
+  requiredJustificationMinutes,
+  totalJustificationMinutes,
   toDurationInput,
   validateStageDrafts,
 } from '../../public/pilot/pilot-rdv-draft.js';
@@ -104,6 +108,32 @@ describe('Pilot RDV operational calculations', () => {
     stages[0].fields.horario_pouso = '09:45';
     applyStageContinuity(stages);
     expect(stages[1].fields.horario_motor_ligado).toBe('09:44');
+  });
+
+  it('conta pousos automaticamente pela existência da hora de pouso', () => {
+    const next = applySafeStageAggregates({}, [
+      { horario_decolagem: '08:00', horario_pouso: '08:30', pousos_diurnos: '9', pousos_noturnos: '9' },
+      { horario_decolagem: '09:00', horario_pouso: '', pousos_diurnos: '7', pousos_noturnos: '7' },
+      { horario_decolagem: '10:00', horario_pouso: '10:20', pousos_diurnos: '', pousos_noturnos: '' },
+    ]);
+    expect(next.numero_pousos).toBe('2');
+  });
+
+  it('calcula exatamente o desvio planejado e a soma de justificativas', () => {
+    const packageData = {
+      voo: {
+        horario_previsto_partida: '2026-09-20T10:00:00.000Z',
+        horario_previsto_chegada: '2026-09-20T11:30:00.000Z',
+      },
+    };
+    const stages = [
+      { horario_decolagem: '10:05', horario_pouso: '11:00' },
+      { horario_decolagem: '11:10', horario_pouso: '12:00' },
+    ];
+    expect(plannedFlightMinutes(packageData)).toBe(90);
+    expect(realizedFlightMinutes(stages)).toBe(105);
+    expect(requiredJustificationMinutes(packageData, stages)).toBe(15);
+    expect(totalJustificationMinutes([{ minutos: '3' }, { minutos: 5 }, { minutos: '7' }])).toBe(15);
   });
 
   it('encadeia combustível final como inicial da perna seguinte', () => {
