@@ -1773,12 +1773,81 @@ async function openExistingOperationalDraft() {
   }
 }
 
+async function reconcileAcceptedDraftWithFreshPackage(
+  packageData,
+  existingRdv,
+  stageRecords,
+) {
+  const identity = assertPackageIdentity(packageData);
+  const value = existingRdv?.value || {};
+  if (value.sync_state !== 'accepted_requires_refresh') {
+    return { rdvRecord: existingRdv, stageRecords };
+  }
+
+  if (String(value.source_package_id || '') === String(identity.packageId)) {
+    throw new Error(
+      'A transmissão foi confirmada, mas o pacote atualizado do voo ainda não está disponível. Toque em “Atualizar” e tente novamente.',
+    );
+  }
+
+  const previousSequence = Math.max(
+    Number(existingRdv?.localRevision || value.local_sequence || 0),
+    ...stageRecords.map((record) =>
+      Number(record.localRevision || record.value?.local_sequence || 0),
+    ),
+  );
+  const snapshot = buildDraftSnapshot(packageData, previousSequence);
+
+  // A transmissão aceita garante que não há edição local posterior (esse caso
+  // é tratado como conflito em markDraftAcceptedByServer). O novo pacote é,
+  // portanto, a fonte canônica para RDV/etapas. Mantemos a lista local de
+  // abastecimentos para não degradar a experiência até que o builder passe a
+  // hidratá-la diretamente do pacote.
+  if (Array.isArray(value.fuelings)) {
+    snapshot.rdv.fuelings = structuredClone(value.fuelings);
+  }
+
+  await vault.putJsonBatch([
+    {
+      storeName: 'rdv_drafts',
+      id: snapshot.rdv.entity_local_id,
+      value: snapshot.rdv,
+      localRevision: previousSequence,
+    },
+    ...snapshot.stages.map((stage) => ({
+      storeName: 'stage_drafts',
+      id: stage.entity_local_id,
+      value: stage,
+      localRevision: previousSequence,
+    })),
+  ]);
+
+  const canonicalStageIds = new Set(snapshot.stages.map((stage) => stage.entity_local_id));
+  await Promise.all(
+    stageRecords
+      .filter((record) => !canonicalStageIds.has(record.id))
+      .map((record) => vault.deleteJson('stage_drafts', record.id).catch(() => undefined)),
+  );
+
+  const rdvRecord = await vault.getJson('rdv_drafts', snapshot.rdv.entity_local_id);
+  const refreshedStages = (await vault.listJson('stage_drafts')).filter(
+    (record) =>
+      Number(record.value?.flight_id) === identity.flightId &&
+      String(record.value?.source_package_id) === identity.packageId,
+  );
+  if (!rdvRecord || refreshedStages.length === 0) {
+    throw new Error('Falha ao reconciliar o rascunho transmitido com o pacote atualizado.');
+  }
+
+  return { rdvRecord, stageRecords: refreshedStages };
+}
+
 async function openOrSeedOperationalDraft(packageData, verifiedLease) {
   assertVerifiedLeaseAllowsDraft(packageData, verifiedLease);
   const identity = assertPackageIdentity(packageData);
   const rdvId = rdvDraftRecordId(identity.flightId);
-  const existingRdv = await vault.getJson('rdv_drafts', rdvId);
-  const stageRecords = (await vault.listJson('stage_drafts')).filter(
+  let existingRdv = await vault.getJson('rdv_drafts', rdvId);
+  let stageRecords = (await vault.listJson('stage_drafts')).filter(
     (record) => Number(record.value?.flight_id) === identity.flightId,
   );
 
@@ -1792,11 +1861,16 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
       throw new Error('Rascunho local pertence a outra identidade operacional.');
     }
     if (value.sync_state === 'accepted_requires_refresh') {
-      throw new Error(
-        'Este rascunho já foi transmitido. Atualize o pacote do voo antes de iniciar nova edição.',
+      const reconciled = await reconcileAcceptedDraftWithFreshPackage(
+        packageData,
+        existingRdv,
+        stageRecords,
       );
+      existingRdv = reconciled.rdvRecord;
+      stageRecords = reconciled.stageRecords;
     }
-    if (String(value.source_package_id) !== identity.packageId) {
+    const reconciledValue = existingRdv.value;
+    if (String(reconciledValue.source_package_id) !== identity.packageId) {
       throw new Error(
         'O pacote do voo mudou desde o início deste rascunho. Resolução de conflito ainda não está habilitada.',
       );
@@ -1813,13 +1887,13 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
     }
 
     activeRdvDraft = {
-      ...value,
-      schema_version: Math.max(Number(value.schema_version || 1), PILOT_DRAFT_SCHEMA_VERSION),
-      common: { ...buildCommonFlightFields(packageData), ...(value.common || {}) },
-      flight_update: value.flight_update || {},
-      fuelings: Array.isArray(value.fuelings) ? value.fuelings : [],
-      justifications: Array.isArray(value.justifications)
-        ? value.justifications
+      ...reconciledValue,
+      schema_version: Math.max(Number(reconciledValue.schema_version || 1), PILOT_DRAFT_SCHEMA_VERSION),
+      common: { ...buildCommonFlightFields(packageData), ...(reconciledValue.common || {}) },
+      flight_update: reconciledValue.flight_update || {},
+      fuelings: Array.isArray(reconciledValue.fuelings) ? reconciledValue.fuelings : [],
+      justifications: Array.isArray(reconciledValue.justifications)
+        ? reconciledValue.justifications
         : (Array.isArray(packageData?.justificativas) ? packageData.justificativas : []).map((item) => ({
             local_id: crypto.randomUUID(),
             justificativa_codigo: String(item?.codigo || ''),
@@ -1855,7 +1929,7 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
     }));
     applyStageContinuity(activeStageDrafts);
     operationalLocalSequence = Math.max(
-      Number(existingRdv.localRevision || value.local_sequence || 0),
+      Number(existingRdv.localRevision || reconciledValue.local_sequence || 0),
       ...matchingStages.map((record) =>
         Number(record.localRevision || record.value?.local_sequence || 0),
       ),
