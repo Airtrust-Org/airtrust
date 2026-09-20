@@ -29,6 +29,16 @@ interface CandidatoRow {
   ultima_resposta_em: string | null;
 }
 
+interface ItemDiagnosticoRow {
+  item_id: number;
+  topico_id: number;
+  criticidade: Criticidade;
+  nivel: number | null;
+  estado: ConhecimentoEstado | null;
+  proxima_revisao_em: string | null;
+  ultima_exposicao_em: string | null;
+}
+
 interface SnapshotAlternativa {
   id: number;
   texto: string;
@@ -297,6 +307,84 @@ async function buscarCandidatos(
       topicoId,
     )
     .all<CandidatoRow>();
+
+  return result.results || [];
+}
+
+async function buscarItensDiagnostico(
+  db: D1Database,
+  empresaId: number,
+  funcionarioId: number,
+  modelos: string[],
+): Promise<ItemDiagnosticoRow[]> {
+  const placeholders = modelos.map(() => '?').join(',');
+  const result = await db
+    .prepare(
+      `
+      SELECT
+        i.id AS item_id,
+        i.topico_id,
+        i.criticidade,
+        d.nivel,
+        d.estado,
+        d.proxima_revisao_em,
+        d.ultima_exposicao_em
+      FROM conhecimento_ativo_itens i
+      LEFT JOIN conhecimento_ativo_dominio d
+        ON d.empresa_id=i.empresa_id
+       AND d.funcionario_id=?
+       AND d.item_id=i.id
+       AND d.deleted_at IS NULL
+      WHERE i.empresa_id=?
+        AND i.status='APROVADO'
+        AND i.ativo=1
+        AND i.deleted_at IS NULL
+        AND (i.aeronave_modelo IS NULL OR UPPER(REPLACE(i.aeronave_modelo,'-','')) IN (${placeholders}))
+        AND EXISTS (
+          SELECT 1
+          FROM conhecimento_ativo_item_fontes jf
+          JOIN conhecimento_ativo_fontes f
+            ON f.id=jf.fonte_id AND f.empresa_id=jf.empresa_id
+          WHERE jf.empresa_id=i.empresa_id
+            AND jf.item_id=i.id
+            AND jf.deleted_at IS NULL
+            AND f.status='VIGENTE'
+            AND f.deleted_at IS NULL
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM conhecimento_ativo_questoes q
+          WHERE q.empresa_id=i.empresa_id
+            AND q.item_id=i.id
+            AND q.status='APROVADA'
+            AND q.ativo=1
+            AND q.deleted_at IS NULL
+            AND LENGTH(TRIM(q.explicacao))>0
+            AND (
+              SELECT COUNT(*)
+              FROM conhecimento_ativo_alternativas a
+              WHERE a.empresa_id=q.empresa_id
+                AND a.questao_id=q.id
+                AND a.deleted_at IS NULL
+            )>=2
+            AND (
+              SELECT COUNT(*)
+              FROM conhecimento_ativo_alternativas a
+              WHERE a.empresa_id=q.empresa_id
+                AND a.questao_id=q.id
+                AND a.correta=1
+                AND a.deleted_at IS NULL
+            )=1
+        )
+      ORDER BY i.id
+      `,
+    )
+    .bind(
+      funcionarioId,
+      empresaId,
+      ...modelos.map((value) => value.replace(/-/g, '')),
+    )
+    .all<ItemDiagnosticoRow>();
 
   return result.results || [];
 }
@@ -989,13 +1077,7 @@ export async function responderQuestao(params: {
   };
 }
 
-function diagnosticoPorTopico(candidatos: CandidatoRow[], nowMs: number = Date.now()) {
-  const itens = new Map<number, CandidatoDesafio>();
-  for (const row of candidatos) {
-    if (itens.has(row.item_id)) continue;
-    itens.set(row.item_id, toCandidate(row));
-  }
-
+function diagnosticoPorTopico(itens: ItemDiagnosticoRow[], nowMs: number = Date.now()) {
   const porTopico = new Map<
     number,
     {
@@ -1008,20 +1090,19 @@ function diagnosticoPorTopico(candidatos: CandidatoRow[], nowMs: number = Date.n
     }
   >();
 
-  const grupos = new Map<number, CandidatoDesafio[]>();
-  for (const item of itens.values()) {
-    if (item.topicoId == null) continue;
-    const group = grupos.get(item.topicoId) || [];
+  const grupos = new Map<number, ItemDiagnosticoRow[]>();
+  for (const item of itens) {
+    const group = grupos.get(item.topico_id) || [];
     group.push(item);
-    grupos.set(item.topicoId, group);
+    grupos.set(item.topico_id, group);
   }
 
   for (const [topicoId, group] of grupos) {
     const avaliados = group.filter((item) => item.nivel != null);
     const itensNovos = group.length - avaliados.length;
     const itensVencidos = avaliados.filter((item) => {
-      if (!item.proximaRevisaoEm) return false;
-      const reviewMs = Date.parse(item.proximaRevisaoEm);
+      if (!item.proxima_revisao_em) return false;
+      const reviewMs = Date.parse(item.proxima_revisao_em);
       return Number.isFinite(reviewMs) && reviewMs <= nowMs;
     }).length;
     const itensFrageis = avaliados.filter((item) => Number(item.nivel) < 60).length;
@@ -1030,7 +1111,20 @@ function diagnosticoPorTopico(candidatos: CandidatoRow[], nowMs: number = Date.n
           avaliados.reduce((sum, item) => sum + Number(item.nivel || 0), 0) / avaliados.length,
         )
       : null;
-    const scores = group.map((item) => pontuarCandidato(item, nowMs));
+    const scores = group.map((item) =>
+      pontuarCandidato(
+        {
+          questaoId: item.item_id,
+          itemId: item.item_id,
+          topicoId: item.topico_id,
+          criticidade: item.criticidade,
+          nivel: item.nivel,
+          proximaRevisaoEm: item.proxima_revisao_em,
+          ultimaExposicaoEm: item.ultima_exposicao_em,
+        },
+        nowMs,
+      ),
+    );
     const mediaScore = scores.length
       ? scores.reduce((sum, score) => sum + score, 0) / scores.length
       : 0;
@@ -1076,23 +1170,14 @@ export async function resumoConhecimentoAtivo(params: {
     .bind(empresaId, funcionarioId)
     .first<{ total: number }>();
 
-  const candidatos = (
-    await Promise.all(
-      modelos.map((modelo) => buscarCandidatos(db, empresaId, funcionarioId, modelo, null)),
-    )
-  ).flat();
-  const itens = new Map<number, CandidatoRow>();
-  for (const candidato of candidatos) {
-    if (!itens.has(candidato.item_id)) itens.set(candidato.item_id, candidato);
-  }
-
+  const itens = await buscarItensDiagnostico(db, empresaId, funcionarioId, modelos);
   const states: Record<ConhecimentoEstado, number> = {
     NOVO: 0,
     APRENDENDO: 0,
     EM_REFORCO: 0,
     CONSOLIDADO: 0,
   };
-  for (const item of itens.values()) {
+  for (const item of itens) {
     const estado = item.estado ?? 'NOVO';
     states[estado] += 1;
   }
@@ -1115,12 +1200,8 @@ export async function mapaConhecimento(params: {
   const { db, empresaId, funcionarioId } = params;
   const modelos = modelosConhecimentoAtivoDisponiveis();
   const placeholders = modelos.map(() => '?').join(',');
-  const candidatosDiagnostico = (
-    await Promise.all(
-      modelos.map((modelo) => buscarCandidatos(db, empresaId, funcionarioId, modelo, null)),
-    )
-  ).flat();
-  const diagnostico = diagnosticoPorTopico(candidatosDiagnostico);
+  const itensDiagnostico = await buscarItensDiagnostico(db, empresaId, funcionarioId, modelos);
+  const diagnostico = diagnosticoPorTopico(itensDiagnostico);
   const result = await db
     .prepare(
       `
