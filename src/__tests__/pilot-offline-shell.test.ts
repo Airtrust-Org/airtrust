@@ -113,18 +113,46 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain('automaticSummary.open = true');
   });
 
-  it('oferece busca de justificativas por causa raiz, codigo, categoria e descricao', () => {
+  it('oferece busca de justificativas legivel por causa raiz, codigo, categoria e descricao', () => {
     expect(pilotApp).toContain('function createJustificationPicker');
+    expect(pilotApp).toContain('function formatJustificationName');
     expect(pilotApp).toContain('Busque sempre a causa raiz do motivo do atraso.');
     expect(pilotApp).toContain('Busque por AA62, meteorologia, manutenção, pax...');
     expect(pilotApp).toContain('option.category');
     expect(pilotApp).toContain('option.description');
+    expect(pilotApp).toContain("code.className = 'justification-picker-code'");
+    expect(pilotApp).toContain("name.className = 'justification-picker-name'");
+    expect(pilotApp).toContain("categoryEl.className = 'justification-picker-category'");
     expect(pilotIndex).toContain('.justification-picker-results');
     expect(pilotIndex).toContain('.justification-picker-group');
+    expect(pilotIndex).toContain('.justification-picker-code');
+  });
+
+  it('mantem o piloto na tela depois da transmissao e mostra confirmacao antes do handoff', () => {
+    expect(pilotIndex).toContain('id="rdv-sync-confirmation"');
+    expect(pilotIndex).toContain('Dados recebidos pelo AirTrust');
+    const syncSuccessStart = pilotApp.indexOf('Dados recebidos pelo AirTrust. Reconciliando o pacote');
+    const syncSuccessEnd = pilotApp.indexOf('} catch (error) {', syncSuccessStart);
+    const syncSuccessBlock = pilotApp.slice(syncSuccessStart, syncSuccessEnd);
+    expect(syncSuccessBlock).toContain('prepareFlightPackage(command.flight_id, { allowDuringFlight: true })');
+    expect(syncSuccessBlock).toContain("rdvSyncConfirmation.classList.remove('hidden')");
+    expect(syncSuccessBlock).not.toContain('closeOperationalEditor();');
+  });
+
+  it('mostra uma tela dedicada depois que a Coordenacao confirma o recebimento', () => {
+    expect(pilotIndex).toContain('id="handoff-success-card"');
+    expect(pilotIndex).toContain('Voo enviado à Coordenação');
+    expect(pilotIndex).toContain('Aguardando processamento da Coordenação');
+    expect(pilotIndex).toContain('Ver resumo enviado');
+    expect(pilotIndex).toContain('Voltar para meus voos');
+    expect(pilotApp).toContain('function buildHandoffSuccessSnapshot');
+    expect(pilotApp).toContain('function showHandoffSuccess');
+    expect(pilotApp).toContain('showHandoffSuccess(handoffSnapshot)');
+    expect(pilotApp).toContain("'Voo enviado com sucesso à Coordenação. O recebimento foi confirmado pelo servidor.'");
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v27'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v28'");
     expect(pilotSw).not.toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
