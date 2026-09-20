@@ -1,0 +1,8 @@
+{
+  "changeId": "controle-voos-delay-justification-catalog-0507",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0507_controle_voos_delay_justification_catalog.sql",
+  "fileHash": "b88d560d149ecfbacf322b97ecfb40bea797d95a0fef102c862825c30244792c",
+  "planPath": "worker-airtrust/schema-v2/plans/controle-voos-delay-justification-catalog-0507.md",
+  "planHash": "041802132a4c8e69ad343da99d006b87a3d514bfef065640f3d65d6d0b859456"
+}

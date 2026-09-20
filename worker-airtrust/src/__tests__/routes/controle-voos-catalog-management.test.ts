@@ -55,6 +55,7 @@ const migrationPaths = [
   join(dirname(fileURLToPath(import.meta.url)), '../../../migrations/0410_controle_voos_n1_schema.sql'),
   join(dirname(fileURLToPath(import.meta.url)), '../../../migrations/0502_controle_voos_fueling_companies.sql'),
   join(dirname(fileURLToPath(import.meta.url)), '../../../migrations/0506_controle_voos_flight_justifications.sql'),
+  join(dirname(fileURLToPath(import.meta.url)), '../../../migrations/0507_controle_voos_delay_justification_catalog.sql'),
 ];
 const INSERTABLE_CATALOG_TABLE =
   /INSERT\s+INTO\s+(cv_aeroportos|cv_tipos_voo|cv_naturezas_voo|cv_motivos_operacionais|cv_empresas_abastecimento|cv_justificativas_voo)\b/i;
@@ -175,17 +176,23 @@ describe('Controle de Voos operational catalog management', () => {
       body: JSON.stringify({
         codigo: 'vento',
         nome: 'Vento desfavorável em rota',
+        categoria: 'Condições Meteorológicas',
         descricao: 'Acréscimo de tempo por vento desfavorável.',
       }),
     });
 
     expect(response.status).toBe(201);
-    const rows = query<{ empresa_id: number; codigo: string; nome: string }>(
+    const rows = query<{ empresa_id: number; codigo: string; nome: string; categoria: string | null }>(
       db.path,
-      'SELECT empresa_id, codigo, nome FROM cv_justificativas_voo',
+      "SELECT empresa_id, codigo, nome, categoria FROM cv_justificativas_voo WHERE empresa_id = 1",
     );
     expect(rows).toEqual([
-      { empresa_id: 1, codigo: 'VENTO', nome: 'Vento desfavorável em rota' },
+      {
+        empresa_id: 1,
+        codigo: 'VENTO',
+        nome: 'Vento desfavorável em rota',
+        categoria: 'Condições Meteorológicas',
+      },
     ]);
   });
 

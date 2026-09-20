@@ -259,10 +259,57 @@
       .field-note { display: block; margin-top: 5px; color: #66758a; font-size: .78rem; font-weight: 500; }
       .justification-panel { border: 1px solid #d7e0ea; border-radius: 14px; padding: 14px; background: #fff; }
       .justification-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:10px; }
+      .justification-guidance { margin-top: 4px; font-weight: 800; color: #29425f; }
       .justification-rows { display:grid; gap:10px; margin-top:10px; }
-      .justification-row { display:grid; grid-template-columns:minmax(220px,2fr) minmax(110px,.7fr) auto; align-items:end; gap:10px; }
+      .justification-row { display:grid; grid-template-columns:minmax(260px,2fr) minmax(110px,.7fr) auto; align-items:end; gap:10px; }
       .justification-remove { min-height:44px; }
-      @media (max-width: 720px) { .justification-row { grid-template-columns:1fr; } }
+      .justification-picker { position: relative; min-width: 0; }
+      .justification-picker > span:first-child { display:block; margin-bottom:6px; }
+      .justification-picker-results {
+        position:absolute;
+        z-index:30;
+        top:100%;
+        left:0;
+        right:0;
+        max-height:320px;
+        overflow:auto;
+        margin-top:4px;
+        border:1px solid #cbd7e5;
+        border-radius:12px;
+        background:#fff;
+        box-shadow:0 12px 30px rgba(15, 35, 60, .16);
+      }
+      .justification-picker-group {
+        position:sticky;
+        top:0;
+        padding:8px 10px;
+        background:#edf4fb;
+        color:#29425f;
+        font-size:.72rem;
+        font-weight:900;
+        letter-spacing:.03em;
+        text-transform:uppercase;
+      }
+      .justification-picker-option {
+        width:100%;
+        border:0;
+        border-bottom:1px solid #e7edf4;
+        border-radius:0;
+        background:#fff;
+        color:#1f334a;
+        padding:10px 12px;
+        text-align:left;
+      }
+      .justification-picker-option:hover,
+      .justification-picker-option:focus { background:#f4f8fc; }
+      .justification-picker-option strong,
+      .justification-picker-option span { display:block; }
+      .justification-picker-option span { margin-top:3px; color:#64748b; font-size:.78rem; line-height:1.35; }
+      .justification-picker-empty { padding:12px; color:#64748b; font-size:.82rem; }
+      @media (max-width: 720px) {
+        .justification-row { grid-template-columns:1fr; }
+        .justification-picker-results { position:fixed; left:12px; right:12px; top:auto; bottom:12px; max-height:58vh; }
+      }
       .field-error { display: block; margin-top: 5px; color: #a52727; font-size: .78rem; font-weight: 700; }
       .lease-box {
         margin-top: 16px;

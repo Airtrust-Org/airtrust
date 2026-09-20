@@ -105,8 +105,18 @@ describe('Pilot Offline shell', () => {
     expect(savedIndex).toBeGreaterThan(putIndex);
   });
 
+  it('oferece busca de justificativas por causa raiz, codigo, categoria e descricao', () => {
+    expect(pilotApp).toContain('function createJustificationPicker');
+    expect(pilotApp).toContain('Busque sempre a causa raiz do motivo do atraso.');
+    expect(pilotApp).toContain('Busque por AA62, meteorologia, manutenção, pax...');
+    expect(pilotApp).toContain('option.category');
+    expect(pilotApp).toContain('option.description');
+    expect(pilotIndex).toContain('.justification-picker-results');
+    expect(pilotIndex).toContain('.justification-picker-group');
+  });
+
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v26'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v27'");
     expect(pilotSw).not.toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
@@ -128,6 +138,9 @@ describe('Pilot Offline shell', () => {
     expect(pilotBootstrap).toContain("name.startsWith(PILOT_CACHE_PREFIX)");
     expect(pilotBootstrap).toContain('window.location.reload()');
     expect(pilotBootstrap).toContain("window.setTimeout(() => void recoverStaleShell(), 8000)");
+    expect(pilotBootstrap).toContain("airtrust_pilot_controller_reload_v27");
+    expect(pilotBootstrap).toContain("navigator.serviceWorker.addEventListener('controllerchange', reloadForUpdatedController)");
+    expect(pilotBootstrap).toContain('flightLockMarkerActive()');
     expect(pilotApp).toContain("window.__AIRTRUST_PILOT_APP_READY__ = true");
     expect(pilotApp).toContain("window.dispatchEvent(new Event('airtrust:pilot-app-ready'))");
     expect(pilotApp).toContain('Não foi possível iniciar o Pilot App:');

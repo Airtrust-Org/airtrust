@@ -2670,6 +2670,115 @@ function createEditorSelect({ label, value, options, onChange, disabled = false 
   return wrapper;
 }
 
+function normalizeJustificationSearch(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .trim();
+}
+
+function createJustificationPicker({ value, options, onChange, disabled = false }) {
+  const wrapper = document.createElement('label');
+  wrapper.className = 'justification-picker';
+  const title = document.createElement('span');
+  title.textContent = 'Justificativa';
+  const input = document.createElement('input');
+  input.type = 'search';
+  input.autocomplete = 'off';
+  input.placeholder = 'Busque por AA62, meteorologia, manutenção, pax...';
+  input.disabled = operationalSyncInFlight || disabled;
+
+  const selected = options.find((option) => option.code === value);
+  input.value = selected ? selected.label : '';
+
+  const results = document.createElement('div');
+  results.className = 'justification-picker-results';
+  results.hidden = true;
+
+  const closeResults = () => {
+    results.hidden = true;
+    wrapper.classList.remove('open');
+  };
+
+  const choose = (option) => {
+    input.value = option.label;
+    onChange(option.code);
+    closeResults();
+  };
+
+  const renderResults = () => {
+    const query = normalizeJustificationSearch(input.value);
+    const matches = options.filter((option) => {
+      if (!query) return true;
+      const haystack = normalizeJustificationSearch(
+        [option.code, option.name, option.category, option.description].filter(Boolean).join(' '),
+      );
+      return haystack.includes(query);
+    });
+
+    results.replaceChildren();
+    if (!matches.length) {
+      const empty = document.createElement('div');
+      empty.className = 'justification-picker-empty';
+      empty.textContent = 'Nenhuma justificativa encontrada.';
+      results.append(empty);
+    } else {
+      let lastCategory = null;
+      for (const option of matches) {
+        const category = option.category || 'Outros';
+        if (category !== lastCategory) {
+          const group = document.createElement('div');
+          group.className = 'justification-picker-group';
+          group.textContent = category;
+          results.append(group);
+          lastCategory = category;
+        }
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'justification-picker-option';
+        const code = document.createElement('strong');
+        code.textContent = option.code + ' — ' + option.name;
+        const desc = document.createElement('span');
+        desc.textContent = option.description || category;
+        button.append(code, desc);
+        button.addEventListener('mousedown', (event) => {
+          event.preventDefault();
+          choose(option);
+        });
+        results.append(button);
+      }
+    }
+    results.hidden = false;
+    wrapper.classList.add('open');
+  };
+
+  input.addEventListener('focus', () => {
+    input.select();
+    renderResults();
+  });
+  input.addEventListener('input', renderResults);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeResults();
+  });
+  input.addEventListener('blur', () => {
+    window.setTimeout(() => {
+      const exact = options.find((option) =>
+        option.code === String(input.value || '').trim().toUpperCase(),
+      );
+      const current = options.find((option) => option.code === value);
+      if (exact) choose(exact);
+      else if (!results.matches(':hover')) {
+        input.value = current ? current.label : '';
+        closeResults();
+      }
+    }, 100);
+  });
+
+  wrapper.append(title, input, results);
+  return wrapper;
+}
+
 function updateOperationFlow(step) {
   if (!operationFlow) return;
   const mapped = {
@@ -2831,7 +2940,10 @@ function renderRdvFormFields() {
     'Planejado ' + minutesToHhMm(plannedMinutes) +
     ' · Realizado ' + minutesToHhMm(realizedMinutes) +
     ' · Diferença a justificar ' + String(requiredMinutes) + ' min.';
-  justificationTitle.append(headingStrong, headingNote);
+  const sourceGuidance = document.createElement('span');
+  sourceGuidance.className = 'field-note justification-guidance';
+  sourceGuidance.textContent = 'Busque sempre a causa raiz do motivo do atraso.';
+  justificationTitle.append(headingStrong, headingNote, sourceGuidance);
   const addJustification = document.createElement('button');
   addJustification.type = 'button';
   addJustification.className = 'secondary';
@@ -2869,6 +2981,9 @@ function renderRdvFormFields() {
     ? packageData.catalogos.justificativas_voo
     : []).map((item) => ({
       code: String(item.codigo || ''),
+      name: String(item.nome || item.codigo || ''),
+      category: String(item.categoria || ''),
+      description: String(item.descricao || ''),
       label: String(item.codigo || '') + ' · ' + String(item.nome || item.codigo || ''),
     }));
 
@@ -2881,13 +2996,13 @@ function renderRdvFormFields() {
     const row = document.createElement('div');
     row.className = 'justification-row';
     row.append(
-      createEditorSelect({
-        label: 'Justificativa',
+      createJustificationPicker({
         value: item.justificativa_codigo || '',
         options,
         onChange: (value) => {
           item.justificativa_codigo = value;
           scheduleOperationalSave();
+          void flushOperationalSave();
         },
         disabled: requiredMinutes <= 0,
       }),

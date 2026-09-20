@@ -66,8 +66,8 @@ const CATALOGS: Record<CatalogKey, CatalogConfig> = {
   },
   justificativas: {
     table: 'cv_justificativas_voo',
-    fields: 'id, codigo, nome, descricao, ativo, ordem',
-    allowed: ['codigo', 'nome', 'descricao', 'ativo', 'ordem'],
+    fields: 'id, codigo, nome, categoria, descricao, ativo, ordem',
+    allowed: ['codigo', 'nome', 'categoria', 'descricao', 'ativo', 'ordem'],
     requiredOnCreate: ['codigo', 'nome'],
   },
 };

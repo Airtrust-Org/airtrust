@@ -515,15 +515,15 @@ pilotOffline.get(
         .all<{ id: number; codigo: string; nome: string }>(),
       c.env.DB
         .prepare(
-          `SELECT id, codigo, nome, descricao
+          `SELECT id, codigo, nome, categoria, descricao
              FROM cv_justificativas_voo
             WHERE empresa_id = ?
               AND ativo = 1
               AND deleted_at IS NULL
-            ORDER BY ordem ASC, nome ASC, id ASC`,
+            ORDER BY categoria ASC, ordem ASC, nome ASC, id ASC`,
         )
         .bind(empresaId)
-        .all<{ id: number; codigo: string; nome: string; descricao: string | null }>(),
+        .all<{ id: number; codigo: string; nome: string; categoria: string | null; descricao: string | null }>(),
       c.env.DB
         .prepare(
           `SELECT vj.id, j.codigo, j.nome, vj.minutos, vj.observacao

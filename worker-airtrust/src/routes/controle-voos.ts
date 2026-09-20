@@ -177,7 +177,7 @@ const catalogos: Record<string, CatalogConfig> = {
   },
   'empresas-abastecimento': { table: 'cv_empresas_abastecimento', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' },
   contratos: { table: 'cv_contratos', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' },
-  'funcoes-bordo': { table: 'cv_funcoes_bordo', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' }, justificativas: { table: 'cv_justificativas_voo', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' },
+  'funcoes-bordo': { table: 'cv_funcoes_bordo', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' }, justificativas: { table: 'cv_justificativas_voo', fields: 'id, codigo, nome, categoria, descricao, ativo, ordem', orderBy: 'categoria ASC, ordem ASC, nome ASC' },
 };
 
 function requireControleVoosWrite(): MiddlewareHandler<{ Bindings: Env }> {
