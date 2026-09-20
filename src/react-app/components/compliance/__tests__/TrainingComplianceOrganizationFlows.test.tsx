@@ -266,6 +266,9 @@ describe('Training enrollment reconciliation', () => {
     renderWithClient(<TrainingEnrollmentReconciliation setorId={3} funcaoId={9} />);
     await screen.findAllByText('CRM EAD');
     expect(screen.getByText(/6 matrícula\(s\) alinhada\(s\)/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', { name: 'Curso EAD para CRM Periódico' }),
+    ).toHaveClass('text-xs', 'leading-5', 'text-slate-700');
 
     fireEvent.click(screen.getByRole('button', { name: /Matricular gaps \(sem e-mail\)/ }));
     await waitFor(() =>

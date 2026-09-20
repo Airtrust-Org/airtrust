@@ -290,6 +290,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                   <td className="px-3 py-3 text-right text-orange-700">{gap.nunca_realizados}</td>
                   <td className="px-3 py-3">
                     <select
+                      aria-label={`Curso EAD para ${gap.qualificacao_tipo_nome}`}
                       value={
                         courses[gap.qualificacao_tipo_id] ??
                         (gap.cursos_ead.length === 1 ? gap.cursos_ead[0].id : '')
@@ -300,7 +301,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                           [gap.qualificacao_tipo_id]: Number(e.target.value),
                         }))
                       }
-                      className="max-w-[280px] rounded-md border border-slate-300 px-2 py-1.5"
+                      className="max-w-[280px] rounded-md border border-slate-300 px-2 py-1.5 text-xs leading-5 text-slate-700"
                       disabled={!gap.cursos_ead.length}
                     >
                       {!gap.cursos_ead.length ? (
