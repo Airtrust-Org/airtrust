@@ -116,6 +116,13 @@ const finalizeRdvServerButton = document.querySelector('#finalize-rdv-server');
 const sendRdvCoordinationButton = document.querySelector('#send-rdv-coordination');
 const coordinationStatus = document.querySelector('#coordination-status');
 const coordinationReceipt = document.querySelector('#coordination-receipt');
+const rdvSyncConfirmation = document.querySelector('#rdv-sync-confirmation');
+const handoffSuccessCard = document.querySelector('#handoff-success-card');
+const handoffSuccessMessage = document.querySelector('#handoff-success-message');
+const handoffSuccessDetails = document.querySelector('#handoff-success-details');
+const handoffSuccessSummary = document.querySelector('#handoff-success-summary');
+const handoffSuccessJustifications = document.querySelector('#handoff-success-justifications');
+const handoffSuccessBackButton = document.querySelector('#handoff-success-back');
 
 let vault;
 let localRevision = 0;
@@ -355,6 +362,125 @@ function formatDate(value) {
 function displayText(value, fallback = '—') {
   if (value === null || value === undefined || value === '') return fallback;
   return String(value);
+}
+
+const JUSTIFICATION_ACRONYMS = [
+  'PAX', 'UM', 'HMS', 'IFR', 'SITAER', 'SAP', 'SEGPRO', 'ANAC', 'DECEA', 'ADSB',
+  'EPTA', 'INFRAERO', 'ACC', 'GPU', 'SLO', 'SCA', 'CHC',
+];
+
+function formatJustificationName(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  let text = raw.toLocaleLowerCase('pt-BR');
+  text = text.charAt(0).toLocaleUpperCase('pt-BR') + text.slice(1);
+  for (const acronym of JUSTIFICATION_ACRONYMS) {
+    text = text.replace(new RegExp('\b' + acronym.toLocaleLowerCase('pt-BR') + '\b', 'giu'), acronym);
+  }
+  const properNames = [
+    ['petrobras', 'Petrobras'],
+    ['costa do sol', 'Costa do Sol'],
+    ['bristow', 'Bristow'],
+    ['líder', 'Líder'],
+    ['lider', 'Líder'],
+    ['omni', 'Omni'],
+  ];
+  for (const [needle, replacement] of properNames) {
+    text = text.replace(new RegExp(needle, 'giu'), replacement);
+  }
+  return text;
+}
+
+function appendHandoffSummaryCell(label, value) {
+  const cell = document.createElement('div');
+  const labelEl = document.createElement('span');
+  labelEl.textContent = label;
+  const valueEl = document.createElement('strong');
+  valueEl.textContent = displayText(value);
+  cell.append(labelEl, valueEl);
+  handoffSuccessSummary.append(cell);
+}
+
+function buildHandoffSuccessSnapshot(serverResult) {
+  const packageData = activePackageData() || {};
+  const voo = packageData.voo || {};
+  const common = activeRdvDraft?.common || {};
+  const form = activeRdvDraft?.form || {};
+  const route = activeStageDrafts
+    .map((stage) => {
+      const fields = stage?.fields || {};
+      const origin = String(fields.origem_icao || '').trim();
+      const destination = String(fields.destino_icao || '').trim();
+      return origin && destination ? origin + ' → ' + destination : '';
+    })
+    .filter(Boolean)
+    .join(' · ');
+  const catalog = Array.isArray(packageData?.catalogos?.justificativas_voo)
+    ? packageData.catalogos.justificativas_voo
+    : [];
+  const justifications = (Array.isArray(activeRdvDraft?.justifications)
+    ? activeRdvDraft.justifications
+    : [])
+    .map((item) => {
+      const code = String(item?.justificativa_codigo || '').trim().toUpperCase();
+      const match = catalog.find((option) => String(option?.codigo || '').trim().toUpperCase() === code);
+      return {
+        code,
+        name: formatJustificationName(match?.nome || code),
+        minutes: Number(item?.minutos || 0),
+      };
+    })
+    .filter((item) => item.code && item.minutes > 0);
+
+  return {
+    flightNumber: voo.numero_voo || common.numero_voo || ('Voo #' + displayText(voo.id, '—')),
+    aircraft: voo.prefixo || packageData?.aeronave?.prefixo || '—',
+    date: formatDate(voo.data_programacao),
+    route: route || [packageData?.origem?.codigo_icao, packageData?.destino?.codigo_icao].filter(Boolean).join(' → ') || '—',
+    flightTime: form.tempo_voo_total_hhmm || '—',
+    landings: form.numero_pousos || '0',
+    sentAt: serverResult?.enviado_em || new Date().toISOString(),
+    justifications,
+  };
+}
+
+function showHandoffSuccess(snapshot) {
+  handoffSuccessSummary.replaceChildren();
+  handoffSuccessJustifications.replaceChildren();
+  appendHandoffSummaryCell('Voo', snapshot.flightNumber);
+  appendHandoffSummaryCell('Aeronave', snapshot.aircraft);
+  appendHandoffSummaryCell('Data', snapshot.date);
+  appendHandoffSummaryCell('Etapas', snapshot.route);
+  appendHandoffSummaryCell('Tempo realizado', snapshot.flightTime);
+  appendHandoffSummaryCell('Pousos', snapshot.landings);
+  appendHandoffSummaryCell('Enviado em', formatTimestamp(snapshot.sentAt));
+  appendHandoffSummaryCell('Status', 'Aguardando processamento da Coordenação');
+
+  for (const item of snapshot.justifications) {
+    const row = document.createElement('li');
+    const code = document.createElement('span');
+    code.className = 'justification-picker-code';
+    code.textContent = item.code;
+    const text = document.createElement('span');
+    text.textContent = item.name + ' · ' + String(item.minutes) + ' min';
+    row.append(code, text);
+    handoffSuccessJustifications.append(row);
+  }
+  if (snapshot.justifications.length === 0) {
+    const row = document.createElement('li');
+    row.textContent = 'Nenhuma justificativa de desvio foi necessária.';
+    handoffSuccessJustifications.append(row);
+  }
+
+  handoffSuccessMessage.textContent =
+    'As informações do voo foram transmitidas e o recebimento foi confirmado pelo servidor em ' +
+    formatTimestamp(snapshot.sentAt) + '.';
+  handoffSuccessDetails.open = false;
+  setFlightSelectionVisible(false);
+  flightDetailCard.classList.add('hidden');
+  rdvEditorCard.classList.add('hidden');
+  handoffSuccessCard.classList.remove('hidden');
+  handoffSuccessCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function pilotNatureOptions(packageData) {
@@ -1372,11 +1498,17 @@ async function refreshOutboxStatusForActiveFlight() {
       'attention',
     );
   } else if (activeRdvDraft?.sync_state === 'accepted_requires_refresh') {
+    const syncedAt = String(activeRdvDraft?.synced_at || '');
+    const preparedAt = String(activePackageRecord?.value?.prepared_at || '');
+    const reconciled = Boolean(syncedAt && preparedAt && preparedAt > syncedAt);
     setServerSyncStatus('Transmitido');
     setRdvSyncMessage(
-      'Receipt confirmado. Atualize o pacote do voo antes de iniciar nova edição.',
+      reconciled
+        ? 'Dados transmitidos com sucesso. Continue para finalizar e encaminhar à Coordenação.'
+        : 'Receipt confirmado. Atualizando o pacote do voo para continuar com segurança.',
       'ok',
     );
+    if (rdvSyncConfirmation) rdvSyncConfirmation.classList.toggle('hidden', !reconciled);
   } else if (await hasStoredConflictForFlight(flightId)) {
     setServerSyncStatus('Conflito');
     setRdvSyncMessage(
@@ -2193,18 +2325,25 @@ async function drainPilotOutbox(options = {}) {
         setServerSyncStatus('Transmitido');
         updateOperationFlow('synced');
         setRdvSyncMessage(
-          'Receipt confirmado pelo servidor. Atualize o pacote do voo antes de nova edição.',
+          'Dados recebidos pelo AirTrust. Reconciliando o pacote para você continuar sem sair desta tela…',
           'ok',
         );
         if (
           activeRdvDraft &&
           Number(activeRdvDraft.flight_id) === Number(command.flight_id)
         ) {
-          closeOperationalEditor();
-          setLeaseMessage(
-            'Rascunho transmitido. Atualize o pacote deste voo antes de continuar editando.',
-            'ok',
-          );
+          const refreshed = await prepareFlightPackage(command.flight_id, { allowDuringFlight: true });
+          if (refreshed) {
+            setLeaseMessage('Dados transmitidos e pacote reconciliado com o servidor.', 'ok');
+            if (rdvSyncConfirmation) rdvSyncConfirmation.classList.remove('hidden');
+            await refreshCoordinationControls();
+            coordinationStatus?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else {
+            setRdvSyncMessage(
+              'Dados recebidos pelo servidor, mas não foi possível atualizar o pacote. Use “Atualizar status” antes de finalizar.',
+              'attention',
+            );
+          }
         }
       } catch (error) {
         const retriable = isRetriableSyncError(error);
@@ -2465,9 +2604,11 @@ async function sendCanonicalRdvToCoordination() {
     }
   }
 
+  let handoffSnapshot = null;
   if (confirmedResult) {
+    handoffSnapshot = buildHandoffSuccessSnapshot(confirmedResult);
     setCoordinationMessage(
-      'Recebimento pela Coordenação confirmado pelo servidor. Atualizando pacote…',
+      'Recebimento pela Coordenação confirmado pelo servidor. Preparando confirmação…',
       'ok',
     );
     try {
@@ -2475,14 +2616,15 @@ async function sendCanonicalRdvToCoordination() {
       if (!refreshed) throw new Error('PACKAGE_REFRESH_FAILED');
     } catch (refreshError) {
       console.error('[Pilot Offline] Falha ao atualizar pacote após handoff confirmado:', refreshError);
-      setCoordinationMessage(
-        'Recebimento confirmado pelo servidor. A atualização do pacote falhou; use “Atualizar do servidor” para reconciliar a tela.',
-        'attention',
-      );
     }
+    await exitOfflineFlightMode();
   }
 
   coordinationInFlight = false;
+  if (handoffSnapshot) {
+    showHandoffSuccess(handoffSnapshot);
+    return;
+  }
   try {
     await refreshCoordinationControls();
   } catch (refreshError) {
@@ -2692,6 +2834,12 @@ function createJustificationPicker({ value, options, onChange, disabled = false 
   const selected = options.find((option) => option.code === value);
   input.value = selected ? selected.label : '';
 
+  const selectedDetail = document.createElement('span');
+  selectedDetail.className = 'justification-picker-selected-detail';
+  selectedDetail.textContent = selected
+    ? (selected.category || '') + (selected.description ? ' · ' + selected.description : '')
+    : '';
+
   const results = document.createElement('div');
   results.className = 'justification-picker-results';
   results.hidden = true;
@@ -2703,6 +2851,8 @@ function createJustificationPicker({ value, options, onChange, disabled = false 
 
   const choose = (option) => {
     input.value = option.label;
+    selectedDetail.textContent =
+      (option.category || '') + (option.description ? ' · ' + option.description : '');
     onChange(option.code);
     closeResults();
   };
@@ -2737,11 +2887,19 @@ function createJustificationPicker({ value, options, onChange, disabled = false 
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'justification-picker-option';
-        const code = document.createElement('strong');
-        code.textContent = option.code + ' — ' + option.name;
-        const desc = document.createElement('span');
-        desc.textContent = option.description || category;
-        button.append(code, desc);
+        const code = document.createElement('span');
+        code.className = 'justification-picker-code';
+        code.textContent = option.code;
+        const copy = document.createElement('span');
+        copy.className = 'justification-picker-copy';
+        const name = document.createElement('span');
+        name.className = 'justification-picker-name';
+        name.textContent = option.name;
+        const categoryEl = document.createElement('span');
+        categoryEl.className = 'justification-picker-category';
+        categoryEl.textContent = category;
+        copy.append(name, categoryEl);
+        button.append(code, copy);
         button.addEventListener('mousedown', (event) => {
           event.preventDefault();
           choose(option);
@@ -2775,7 +2933,7 @@ function createJustificationPicker({ value, options, onChange, disabled = false 
     }, 100);
   });
 
-  wrapper.append(title, input, results);
+  wrapper.append(title, input, selectedDetail, results);
   return wrapper;
 }
 
@@ -2983,10 +3141,10 @@ function renderRdvFormFields() {
     ? packageData.catalogos.justificativas_voo
     : []).map((item) => ({
       code: String(item.codigo || ''),
-      name: String(item.nome || item.codigo || ''),
+      name: formatJustificationName(item.nome || item.codigo || ''),
       category: String(item.categoria || ''),
       description: String(item.descricao || ''),
-      label: String(item.codigo || '') + ' · ' + String(item.nome || item.codigo || ''),
+      label: String(item.codigo || '') + ' — ' + formatJustificationName(item.nome || item.codigo || ''),
     }));
 
   const rows = document.createElement('div');
@@ -3469,6 +3627,7 @@ function renderFuelingFields() {
 
 function renderOperationalEditor(options = {}) {
   if (!activeRdvDraft || !activeVerifiedLease || !activePackageRecord) return;
+  handoffSuccessCard?.classList.add('hidden');
   const scrollY = window.scrollY;
   const packageData = activePackageData();
   const voo = packageData.voo;
@@ -3658,6 +3817,7 @@ function openPackageRecord(record) {
 }
 
 function closePackageDetail() {
+  handoffSuccessCard?.classList.add('hidden');
   closeOperationalEditor();
   activePackageRecord = null;
   activeVerifiedLease = null;
@@ -3819,6 +3979,15 @@ closeRdvEditorButton.addEventListener('click', () => void flushOperationalSave()
   setFlightSelectionVisible(true);
   if (navigator.onLine) await loadOnlineFlights();
 }));
+handoffSuccessBackButton?.addEventListener('click', async () => {
+  handoffSuccessCard.classList.add('hidden');
+  closePackageDetail();
+  if (navigator.onLine) await loadOnlineFlights();
+  setSessionMessage(
+    'Voo enviado com sucesso à Coordenação. O recebimento foi confirmado pelo servidor.',
+    'ok',
+  );
+});
 closeDetailButton.addEventListener('click', closePackageDetail);
 draftInput.addEventListener('input', scheduleDiagnosticSave);
 draftInput.addEventListener('blur', () => void flushDiagnosticSave());

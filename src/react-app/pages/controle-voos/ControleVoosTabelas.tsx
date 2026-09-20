@@ -150,6 +150,24 @@ function isActive(item: CatalogItem) {
   return item.ativo === true || item.ativo === 1 || item.ativo == null;
 }
 
+function formatJustificationName(value?: string | null) {
+  const raw = String(value || '').trim();
+  if (!raw) return '—';
+  let text = raw.toLocaleLowerCase('pt-BR');
+  text = text.charAt(0).toLocaleUpperCase('pt-BR') + text.slice(1);
+  const acronyms = ['PAX', 'UM', 'HMS', 'IFR', 'SITAER', 'SAP', 'SEGPRO', 'ANAC', 'DECEA', 'ADSB', 'EPTA', 'INFRAERO', 'ACC', 'GPU', 'SLO', 'SCA', 'CHC'];
+  for (const acronym of acronyms) {
+    text = text.replace(new RegExp('\b' + acronym.toLocaleLowerCase('pt-BR') + '\b', 'giu'), acronym);
+  }
+  return text
+    .replace(/petrobras/giu, 'Petrobras')
+    .replace(/costa do sol/giu, 'Costa do Sol')
+    .replace(/bristow/giu, 'Bristow')
+    .replace(/líder/giu, 'Líder')
+    .replace(/lider/giu, 'Líder')
+    .replace(/omni/giu, 'Omni');
+}
+
 async function loadCatalog(name: CatalogName) {
   const [activeResponse, inactiveResponse] = await Promise.all([
     apiClient.get<unknown>(`/controle-voos/catalogos/${name}?ativo=true`),
@@ -422,13 +440,15 @@ export default function ControleVoosTabelas() {
                           </td>
                         )}
                         <td className="px-4 py-3">
-                          <div className="font-medium text-slate-900 dark:text-white">{item.nome || '—'}</div>
+                          <div className="font-medium text-slate-900 dark:text-white">{activeCatalog === 'justificativas' ? formatJustificationName(item.nome) : item.nome || '—'}</div>
                           {item.descricao && <div className="mt-0.5 text-xs text-slate-500">{item.descricao}</div>}
                         </td>
                         <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
                           {activeCatalog === 'aeroportos'
                             ? [item.tipo, item.cidade, item.uf].filter(Boolean).join(' · ') || '—'
-                            : item.tipo || '—'}
+                            : activeCatalog === 'justificativas'
+                              ? item.categoria || '—'
+                              : item.tipo || '—'}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`rounded-full px-2 py-1 text-xs font-medium ${isActive(item) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>

@@ -292,20 +292,146 @@
       }
       .justification-picker-option {
         width:100%;
+        display:grid;
+        grid-template-columns:auto minmax(0,1fr);
+        align-items:start;
+        gap:10px;
         border:0;
         border-bottom:1px solid #e7edf4;
         border-radius:0;
         background:#fff;
         color:#1f334a;
-        padding:10px 12px;
+        padding:11px 12px;
         text-align:left;
       }
       .justification-picker-option:hover,
       .justification-picker-option:focus { background:#f4f8fc; }
-      .justification-picker-option strong,
-      .justification-picker-option span { display:block; }
-      .justification-picker-option span { margin-top:3px; color:#64748b; font-size:.78rem; line-height:1.35; }
+      .justification-picker-code {
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        min-width:52px;
+        border:1px solid #b9ccec;
+        border-radius:999px;
+        background:#edf4ff;
+        color:#174a8b;
+        padding:4px 8px;
+        font-size:.74rem;
+        font-weight:900;
+        letter-spacing:.02em;
+        line-height:1.15;
+        white-space:nowrap;
+      }
+      .justification-picker-copy { min-width:0; }
+      .justification-picker-name {
+        display:block;
+        color:#1f334a;
+        font-size:.88rem;
+        font-weight:800;
+        line-height:1.28;
+      }
+      .justification-picker-category {
+        display:block;
+        margin-top:3px;
+        color:#64748b;
+        font-size:.74rem;
+        font-weight:650;
+        line-height:1.25;
+      }
+      .justification-picker-selected-detail {
+        display:block;
+        margin-top:5px;
+        color:#64748b;
+        font-size:.76rem;
+        font-weight:500;
+        line-height:1.35;
+      }
       .justification-picker-empty { padding:12px; color:#64748b; font-size:.82rem; }
+      .sync-success-panel {
+        margin-top:12px;
+        border:1px solid #9fd5ba;
+        border-radius:14px;
+        background:#f1fbf6;
+        padding:12px 14px;
+        color:#145c3f;
+      }
+      .sync-success-panel strong { display:block; margin-bottom:4px; }
+      .sync-success-panel p { margin:0; color:#315f50; line-height:1.45; }
+      .handoff-success-hero {
+        display:flex;
+        align-items:flex-start;
+        gap:14px;
+      }
+      .handoff-success-icon {
+        display:inline-flex;
+        width:46px;
+        height:46px;
+        flex:0 0 46px;
+        align-items:center;
+        justify-content:center;
+        border-radius:50%;
+        background:#176b49;
+        color:#fff;
+        font-size:1.5rem;
+        font-weight:900;
+      }
+      .handoff-success-hero h2 { margin:0 0 4px; font-size:1.25rem; }
+      .handoff-success-hero p { margin:0; color:#456456; line-height:1.45; }
+      .handoff-success-status {
+        display:inline-flex;
+        align-items:center;
+        margin-top:10px;
+        border-radius:999px;
+        background:#dff4e8;
+        color:#145c3f;
+        padding:6px 10px;
+        font-size:.78rem;
+        font-weight:850;
+      }
+      .handoff-success-details {
+        margin-top:16px;
+        border:1px solid #cfe3d8;
+        border-radius:14px;
+        background:#fff;
+        padding:0 14px;
+      }
+      .handoff-success-details summary {
+        cursor:pointer;
+        padding:13px 0;
+        color:#234c3b;
+        font-weight:850;
+      }
+      .handoff-success-summary {
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:10px;
+        padding-bottom:14px;
+      }
+      .handoff-success-summary > div {
+        border-radius:12px;
+        background:#f7faf8;
+        padding:10px 12px;
+      }
+      .handoff-success-summary span { display:block; color:#66758a; font-size:.74rem; }
+      .handoff-success-summary strong { display:block; margin-top:3px; color:#15392b; word-break:break-word; }
+      .handoff-success-justifications {
+        margin:0 0 14px;
+        padding:0;
+        list-style:none;
+        display:grid;
+        gap:8px;
+      }
+      .handoff-success-justifications li {
+        display:flex;
+        align-items:flex-start;
+        gap:8px;
+        border-top:1px solid #e5eee9;
+        padding-top:8px;
+      }
+      .handoff-success-justifications .justification-picker-code { flex:0 0 auto; }
+      @media (max-width: 620px) {
+        .handoff-success-summary { grid-template-columns:1fr; }
+      }
       @media (max-width: 720px) {
         .justification-row { grid-template-columns:1fr; }
         .justification-picker-results { position:fixed; left:12px; right:12px; top:auto; bottom:12px; max-height:58vh; }
@@ -691,6 +817,10 @@
             <div id="rdv-sync-status" class="statusline attention" aria-live="polite">
               O AirTrust salva automaticamente. Quando terminar, envie as informações do voo.
             </div>
+            <div id="rdv-sync-confirmation" class="sync-success-panel hidden" aria-live="polite">
+              <strong>Dados recebidos pelo AirTrust</strong>
+              <p>O servidor confirmou a transmissão. Agora finalize o voo e encaminhe-o à Coordenação.</p>
+            </div>
           </section>
 
           <div class="lease-box" id="coordination-box">
@@ -715,6 +845,25 @@
             <div id="coordination-receipt" class="statusline ok hidden" aria-live="polite"></div>
           </div>
 
+        </section>
+
+        <section id="handoff-success-card" class="card success-card hidden" aria-live="polite" aria-labelledby="handoff-success-title">
+          <div class="handoff-success-hero">
+            <span class="handoff-success-icon" aria-hidden="true">✓</span>
+            <div>
+              <h2 id="handoff-success-title">Voo enviado à Coordenação</h2>
+              <p id="handoff-success-message">As informações do voo foram transmitidas e o recebimento foi confirmado pelo servidor.</p>
+              <span class="handoff-success-status">Aguardando processamento da Coordenação</span>
+            </div>
+          </div>
+          <details id="handoff-success-details" class="handoff-success-details">
+            <summary>Ver resumo enviado</summary>
+            <div id="handoff-success-summary" class="handoff-success-summary"></div>
+            <ul id="handoff-success-justifications" class="handoff-success-justifications"></ul>
+          </details>
+          <div class="actions">
+            <button id="handoff-success-back" class="primary" type="button">Voltar para meus voos</button>
+          </div>
         </section>
 
         <details id="diagnostic-card" class="card hidden">
