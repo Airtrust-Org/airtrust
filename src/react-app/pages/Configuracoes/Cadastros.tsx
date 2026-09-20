@@ -193,6 +193,8 @@ export function Cadastros() {
       modelo: data.modelo,
       prefixo: data.prefixo || null,
       status: data.status || 'ATIVO',
+      peso_vazio: data.peso_vazio === '' || data.peso_vazio == null ? null : Number(data.peso_vazio),
+      unidade_peso: data.peso_vazio === '' || data.peso_vazio == null ? null : (data.unidade_peso || 'LB'),
       observacoes: data.observacoes || null,
     };
 
@@ -676,6 +678,9 @@ export function Cadastros() {
                       Prefixo
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                      Peso básico
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                       Ano
                     </th>
                     <th className="px-6 py-3 text-center text-xs font-semibold text-slate-700 uppercase">
@@ -715,6 +720,9 @@ export function Cadastros() {
                       </td>
                       <td className="px-6 py-3 font-mono text-sm text-slate-900 dark:text-slate-100">
                         {aeronave.prefixo}
+                      </td>
+                      <td className="px-6 py-3 text-slate-600 dark:text-slate-400 text-sm">
+                        {aeronave.peso_vazio ? String(aeronave.peso_vazio) + ' ' + (aeronave.unidade_peso || '') : '—'}
                       </td>
                       <td className="px-6 py-3 text-slate-600 dark:text-slate-400 text-sm">
                         {aeronave.ano_fabricacao}
@@ -797,6 +805,16 @@ export function Cadastros() {
                   })),
                 },
                 { name: 'prefixo', label: 'Prefixo', type: 'text', placeholder: 'Ex: PP-HMR' },
+                { name: 'peso_vazio', label: 'Peso básico da aeronave', type: 'number', placeholder: 'Ex: 9300' },
+                {
+                  name: 'unidade_peso',
+                  label: 'Unidade do peso básico',
+                  type: 'select',
+                  options: [
+                    { value: 'LB', label: 'lb' },
+                    { value: 'KG', label: 'kg' },
+                  ],
+                },
                 {
                   name: 'status',
                   label: 'Status',

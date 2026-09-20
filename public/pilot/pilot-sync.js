@@ -213,6 +213,13 @@ export async function buildOfflineSyncCommand({
           parseNumber(item?.litros_abastecidos) !== null
         )
         .map((item) => fuelingPayload(item, rdvDraft.form?.data_voo)),
+      justifications: (Array.isArray(rdvDraft.justifications) ? rdvDraft.justifications : [])
+        .filter((item) => optionalText(item?.justificativa_codigo) || parseInteger(item?.minutos) !== null)
+        .map((item) => ({
+          justificativa_codigo: optionalText(item?.justificativa_codigo)?.toUpperCase() || null,
+          minutos: parseInteger(item?.minutos),
+          observacao: optionalText(item?.observacao),
+        })),
       stages: stageDrafts
         .slice()
         .sort(

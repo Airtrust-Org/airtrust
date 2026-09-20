@@ -391,6 +391,12 @@ export function buildDraftSnapshot(packageData, previousSequence = 0) {
         numero_nota: '',
         litros_abastecidos: '',
       }],
+      justifications: (Array.isArray(packageData?.justificativas) ? packageData.justificativas : []).map((item) => ({
+        local_id: crypto.randomUUID(),
+        justificativa_codigo: String(item?.codigo || ''),
+        minutos: item?.minutos == null ? '' : String(item.minutos),
+        observacao: String(item?.observacao || ''),
+      })),
     },
     stages: buildStageDraftsFromPackage(packageData).map((stage) => ({
       schema_version: PILOT_DRAFT_SCHEMA_VERSION,
@@ -588,6 +594,38 @@ export function applyStageContinuity(stageDrafts) {
   return drafts;
 }
 
+export function plannedFlightMinutes(packageData) {
+  const start = Date.parse(String(packageData?.voo?.horario_previsto_partida || ''));
+  const end = Date.parse(String(packageData?.voo?.horario_previsto_chegada || ''));
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 0;
+  return Math.round((end - start) / 60_000);
+}
+
+export function realizedFlightMinutes(stageDrafts) {
+  const stages = Array.isArray(stageDrafts)
+    ? stageDrafts.map((stage) => stage?.fields || stage)
+    : [];
+  let total = 0;
+  for (const stage of stages) {
+    const duration = calcClockDurationHhMm(stage?.horario_decolagem, stage?.horario_pouso);
+    if (!duration) continue;
+    const [hours, minutes] = duration.split(':').map(Number);
+    if (Number.isFinite(hours) && Number.isFinite(minutes)) total += hours * 60 + minutes;
+  }
+  return total;
+}
+
+export function requiredJustificationMinutes(packageData, stageDrafts) {
+  return Math.max(0, realizedFlightMinutes(stageDrafts) - plannedFlightMinutes(packageData));
+}
+
+export function totalJustificationMinutes(items) {
+  return (Array.isArray(items) ? items : []).reduce((sum, item) => {
+    const value = parseInteger(item?.minutos);
+    return sum + (value && value > 0 ? value : 0);
+  }, 0);
+}
+
 export function applySafeStageAggregates(form, stageDrafts) {
   const stages = Array.isArray(stageDrafts)
     ? stageDrafts.map((stage) => stage?.fields || stage)
@@ -598,17 +636,11 @@ export function applySafeStageAggregates(form, stageDrafts) {
   const first = stages[0];
   const last = stages[stages.length - 1];
   let totalLandings = 0;
-  let totalDayLandings = 0;
-  let totalNightLandings = 0;
   let totalHours = 0;
   let hasHours = false;
 
   for (const stage of stages) {
-    const day = parseInteger(stage.pousos_diurnos) ?? 0;
-    const night = parseInteger(stage.pousos_noturnos) ?? 0;
-    totalDayLandings += day;
-    totalNightLandings += night;
-    totalLandings += day + night;
+    if (String(stage.horario_pouso || '').trim()) totalLandings += 1;
     const hours = calcHorasVoadas(stage.horario_decolagem, stage.horario_pouso);
     if (hours !== null) {
       totalHours += hours;
@@ -621,9 +653,7 @@ export function applySafeStageAggregates(form, stageDrafts) {
   if (hasHours) next.horas_voadas = String(Number(totalHours.toFixed(2)));
   next.tempo_voo_total_hhmm = sumClockDurations(stages.map((stage) => calcClockDurationHhMm(stage.horario_decolagem, stage.horario_pouso)));
   next.tempo_total_hhmm = calcTotalBlockTimeHhMm(stages);
-  next.pousos_diurnos_total = String(totalDayLandings);
-  next.pousos_noturnos_total = String(totalNightLandings);
-  if (totalLandings > 0) next.numero_pousos = String(totalLandings);
+  next.numero_pousos = String(totalLandings);
 
   if (first.combustivel_inicio !== '') next.combustivel_decolagem = first.combustivel_inicio;
   if (last.combustivel_fim !== '') next.combustivel_pouso = last.combustivel_fim;

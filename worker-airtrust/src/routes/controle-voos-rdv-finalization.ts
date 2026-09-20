@@ -14,12 +14,76 @@ import {
   maybeRecordSystemAudit,
 } from '../repositories/controle-voos/rdv-repository';
 import { computeRdvAlertRules } from '../services/controle-voos/rdv-alertas';
+import { computeEtapaTempos } from '../services/controle-voos/rdv-etapas';
 import {
   assertCasApplied,
   assertRdvSelfScope,
   RDV_CAPABILITIES,
   requireExpectedRdvVersion,
 } from '../services/controle-voos/rdv-workflow';
+
+
+function parseHhMmMinutes(value: string | null | undefined): number {
+  if (!value) return 0;
+  const match = String(value).trim().match(/^(\d+):([0-5]\d)$/);
+  if (!match) return 0;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function plannedFlightMinutes(flight: { horario_previsto_partida?: string | null; horario_previsto_chegada?: string | null }): number {
+  const start = Date.parse(String(flight.horario_previsto_partida || ''));
+  const end = Date.parse(String(flight.horario_previsto_chegada || ''));
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 0;
+  return Math.round((end - start) / 60_000);
+}
+
+export async function assertPlanningDeviationJustified(
+  db: D1Database,
+  empresaId: number,
+  flight: { id: number; horario_previsto_partida?: string | null; horario_previsto_chegada?: string | null },
+): Promise<void> {
+  const stages = await db
+    .prepare(
+      `SELECT horario_decolagem, horario_pouso
+         FROM cv_voo_etapas
+        WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+        ORDER BY numero_etapa ASC, id ASC`,
+    )
+    .bind(empresaId, flight.id)
+    .all<{ horario_decolagem: string | null; horario_pouso: string | null }>();
+
+  let realizedMinutes = 0;
+  for (const stage of stages.results || []) {
+    const computed = computeEtapaTempos(
+      stage.horario_decolagem,
+      stage.horario_pouso,
+      null,
+      null,
+    );
+    realizedMinutes += parseHhMmMinutes(computed.tempo_decolagem_pouso);
+  }
+
+  const requiredMinutes = Math.max(0, realizedMinutes - plannedFlightMinutes(flight));
+  if (requiredMinutes <= 0) return;
+
+  const sumRow = await db
+    .prepare(
+      `SELECT COALESCE(SUM(minutos), 0) AS total
+         FROM cv_voo_justificativas
+        WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(empresaId, flight.id)
+    .first<{ total: number }>();
+  const assignedMinutes = Number(sumRow?.total || 0);
+
+  if (assignedMinutes !== requiredMinutes) {
+    throw new ApiError(
+      `Justificativas do desvio devem somar exatamente ${requiredMinutes} minuto(s); informado: ${assignedMinutes}.`,
+      409,
+      'CONTROLE_VOOS_RDV_PLANNING_DEVIATION_JUSTIFICATION_MISMATCH',
+    );
+  }
+}
 
 async function parseFinalizePayload(
   c: Context<{ Bindings: Env }>,
@@ -93,6 +157,8 @@ export async function finalizeRdvPreenchimentoHandler(
       'CONTROLE_VOOS_RDV_VERSION_CONFLICT',
     );
   }
+
+  await assertPlanningDeviationJustified(c.env.DB, empresaId, flight);
 
   const alerts = await computeRdvAlertRules(c.env.DB, empresaId, flight, existing);
   const blocking = alerts.filter((alert) => alert.severidade === 'IMPEDE_ENVIO');

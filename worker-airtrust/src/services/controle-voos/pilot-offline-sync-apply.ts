@@ -45,12 +45,19 @@ type SnapshotFuelingPayload = {
   litros_abastecidos: number;
 };
 
+type SnapshotJustificationPayload = {
+  justificativa_codigo: string;
+  minutos: number;
+  observacao: string | null;
+};
+
 type SnapshotPayload = {
   source_package_id: string;
   source_rdv_id: number | null;
   rdv: Record<string, unknown>;
   flight_update: { natureza_voo_codigo: string | null; numero_voo: string | null; numero_db: string | null };
   fuelings: SnapshotFuelingPayload[];
+  justifications: SnapshotJustificationPayload[];
   stages: SnapshotStagePayload[];
 };
 
@@ -190,6 +197,38 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     };
   });
 
+  const justificationsRaw = raw.justifications == null ? [] : raw.justifications;
+  if (!Array.isArray(justificationsRaw) || justificationsRaw.length > 16) {
+    throw new ApiError('Justificativas offline invalidas', 400, 'CONTROLE_VOOS_PILOT_SYNC_JUSTIFICATIONS_INVALID');
+  }
+  const justificationCodes = new Set<string>();
+  const justifications = justificationsRaw.map((entry, index): SnapshotJustificationPayload => {
+    if (!isPlainObject(entry)) {
+      throw new ApiError(`Justificativa offline invalida no indice ${index}`, 400, 'CONTROLE_VOOS_PILOT_SYNC_JUSTIFICATION_INVALID');
+    }
+    const code = String(entry.justificativa_codigo || '').trim().toUpperCase();
+    const minutes = Number(entry.minutos);
+    const observation = entry.observacao == null ? null : String(entry.observacao).trim() || null;
+    if (
+      !/^[A-Z0-9._-]{1,80}$/.test(code) ||
+      !Number.isInteger(minutes) ||
+      minutes <= 0 ||
+      minutes > 1440 ||
+      (observation && observation.length > 500)
+    ) {
+      throw new ApiError(`Justificativa offline incompleta no indice ${index}`, 400, 'CONTROLE_VOOS_PILOT_SYNC_JUSTIFICATION_INVALID');
+    }
+    if (justificationCodes.has(code)) {
+      throw new ApiError('Justificativa repetida no snapshot offline', 400, 'CONTROLE_VOOS_PILOT_SYNC_JUSTIFICATION_DUPLICATE');
+    }
+    justificationCodes.add(code);
+    return {
+      justificativa_codigo: code,
+      minutos: minutes,
+      observacao: observation,
+    };
+  });
+
   const allowedStageFields = new Set<string>(ETAPA_MUTABLE_FIELDS);
   const stages = raw.stages.map((entry, index): SnapshotStagePayload => {
     if (!isPlainObject(entry) || !isPlainObject(entry.fields)) {
@@ -243,6 +282,7 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     rdv: raw.rdv,
     flight_update: { natureza_voo_codigo: naturezaCode, numero_voo: numeroVoo, numero_db: numeroDb },
     fuelings,
+    justifications,
     stages,
   };
 }
@@ -719,6 +759,73 @@ function buildFuelingStatements(input: {
   );
 }
 
+function buildJustificationStatements(input: {
+  db: D1Database;
+  empresaId: number;
+  userId: number;
+  flight: FlightRow;
+  newVersion: number;
+  justifications: SnapshotJustificationPayload[];
+  justificationIdsByCode: Map<string, number>;
+}): D1PreparedStatement[] {
+  const statements: D1PreparedStatement[] = [
+    input.db.prepare(`
+      UPDATE cv_voo_justificativas
+      SET deleted_at = datetime('now'), updated_by = ?, updated_at = datetime('now')
+      WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+        AND EXISTS (
+          SELECT 1 FROM cv_rdv_operacional
+          WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
+            AND status <> 'cancelado' AND versao = ?
+        )
+    `).bind(
+      input.userId,
+      input.empresaId,
+      input.flight.id,
+      input.flight.id,
+      input.empresaId,
+      input.newVersion,
+    ),
+  ];
+
+  for (const item of input.justifications) {
+    const justificationId = input.justificationIdsByCode.get(item.justificativa_codigo);
+    if (!justificationId) continue;
+    statements.push(
+      input.db.prepare(`
+        INSERT INTO cv_voo_justificativas (
+          empresa_id, voo_id, justificativa_id, minutos, observacao,
+          created_by, updated_by, created_at, updated_at, deleted_at
+        )
+        SELECT ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), NULL
+        WHERE EXISTS (
+          SELECT 1 FROM cv_rdv_operacional
+          WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
+            AND status <> 'cancelado' AND versao = ?
+        )
+        ON CONFLICT(empresa_id, voo_id, justificativa_id) DO UPDATE SET
+          minutos = excluded.minutos,
+          observacao = excluded.observacao,
+          updated_by = excluded.updated_by,
+          updated_at = datetime('now'),
+          deleted_at = NULL
+      `).bind(
+        input.empresaId,
+        input.flight.id,
+        justificationId,
+        item.minutos,
+        item.observacao,
+        input.userId,
+        input.userId,
+        input.flight.id,
+        input.empresaId,
+        input.newVersion,
+      ),
+    );
+  }
+  return statements;
+}
+
 function buildFlightMetadataStatement(input: {
   db: D1Database;
   empresaId: number;
@@ -1012,6 +1119,24 @@ export async function applyPilotOfflineSnapshotCommand(input: {
     supplierNamesByCode.set(fueling.empresa_abastecimento_codigo, supplier.nome);
   }
 
+  const justificationIdsByCode = new Map<string, number>();
+  for (const item of snapshot.justifications) {
+    const row = await input.db
+      .prepare(
+        'SELECT id FROM cv_justificativas_voo WHERE empresa_id = ? AND codigo = ? AND ativo = 1 AND deleted_at IS NULL LIMIT 1',
+      )
+      .bind(input.empresaId, item.justificativa_codigo)
+      .first<{ id: number }>();
+    if (!row) {
+      throw new ApiError(
+        `Justificativa ${item.justificativa_codigo} nao cadastrada ou inativa neste tenant`,
+        409,
+        'CONTROLE_VOOS_PILOT_SYNC_JUSTIFICATION_NOT_CONFIGURED',
+      );
+    }
+    justificationIdsByCode.set(item.justificativa_codigo, Number(row.id));
+  }
+
   const existingRdv = await getActiveRdvByFlight(input.db, input.flight.id, input.empresaId);
   const rdvInput = normalizeRdvInput(snapshot.rdv, !existingRdv);
   assertRdvRules(existingRdv ? { ...existingRdv, ...rdvInput } : rdvInput);
@@ -1048,6 +1173,12 @@ export async function applyPilotOfflineSnapshotCommand(input: {
     newVersion,
     fuelings: snapshot.fuelings,
     supplierNamesByCode,
+  });
+  const justificationStatements = buildJustificationStatements({
+    ...input,
+    newVersion,
+    justifications: snapshot.justifications,
+    justificationIdsByCode,
   });
   const numeroVooUpdate =
     snapshot.flight_update.numero_voo && !currentNumeroVoo ? snapshot.flight_update.numero_voo : null;
@@ -1097,6 +1228,7 @@ export async function applyPilotOfflineSnapshotCommand(input: {
       rdvStatement,
       ...stageStatements,
       ...fuelingStatements,
+      ...justificationStatements,
       ...(flightMetadataStatement ? [flightMetadataStatement] : []),
       eventStatement,
       receiptStatement,

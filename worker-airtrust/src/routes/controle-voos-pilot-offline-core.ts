@@ -387,6 +387,8 @@ pilotOffline.get(
       natureza,
       naturezasResult,
       fuelingCompaniesResult,
+      justificationCatalogResult,
+      flightJustificationsResult,
     ] = await Promise.all([
       getActiveRdvByFlight(c.env.DB, voo.id, empresaId),
       c.env.DB
@@ -511,6 +513,32 @@ pilotOffline.get(
         )
         .bind(empresaId)
         .all<{ id: number; codigo: string; nome: string }>(),
+      c.env.DB
+        .prepare(
+          `SELECT id, codigo, nome, descricao
+             FROM cv_justificativas_voo
+            WHERE empresa_id = ?
+              AND ativo = 1
+              AND deleted_at IS NULL
+            ORDER BY ordem ASC, nome ASC, id ASC`,
+        )
+        .bind(empresaId)
+        .all<{ id: number; codigo: string; nome: string; descricao: string | null }>(),
+      c.env.DB
+        .prepare(
+          `SELECT vj.id, j.codigo, j.nome, vj.minutos, vj.observacao
+             FROM cv_voo_justificativas vj
+             INNER JOIN cv_justificativas_voo j
+               ON j.id = vj.justificativa_id
+              AND j.empresa_id = vj.empresa_id
+              AND j.deleted_at IS NULL
+            WHERE vj.empresa_id = ?
+              AND vj.voo_id = ?
+              AND vj.deleted_at IS NULL
+            ORDER BY j.ordem ASC, j.nome ASC, vj.id ASC`,
+        )
+        .bind(empresaId, voo.id)
+        .all<{ id: number; codigo: string; nome: string; minutos: number; observacao: string | null }>(),
     ]);
 
     const tripulantes = crewResult.results || [];
@@ -618,7 +646,9 @@ pilotOffline.get(
         catalogos: {
           naturezas_voo: naturezasResult.results || [],
           empresas_abastecimento: fuelingCompaniesResult.results || [],
+          justificativas_voo: justificationCatalogResult.results || [],
         },
+        justificativas: flightJustificationsResult.results || [],
         tripulantes,
         etapas,
         abastecimentos,

@@ -85,6 +85,21 @@ describe('ControleVoosNovoVooDialog operational model', () => {
     expect(postMock.mock.calls[0][1]).not.toHaveProperty('natureza_voo_codigo');
   });
 
+  it('Coordenação mantém chegada prevista e tempo total de voo sincronizados', async () => {
+    renderDialog('coordenacao');
+    await waitReady();
+    const departure = screen.getByLabelText('Decolagem estimada') as HTMLInputElement;
+    const arrival = screen.getByLabelText('Retorno estimado') as HTMLInputElement;
+    const duration = screen.getByLabelText(/^Tempo total de voo/) as HTMLInputElement;
+
+    fireEvent.change(departure, { target: { value: '2026-09-20T10:00' } });
+    fireEvent.change(duration, { target: { value: '01:30' } });
+    expect(arrival.value).toBe('2026-09-20T11:30');
+
+    fireEvent.change(arrival, { target: { value: '2026-09-20T12:15' } });
+    expect(duration.value).toBe('2:15');
+  });
+
   it('Coordenação cria etapas e atribui função a bordo independente do posto PIC/SIC', async () => {
     postMock.mockResolvedValue({ success: true, data: { id: 88 } });
     renderDialog('coordenacao'); await waitReady(); await chooseCommon();
