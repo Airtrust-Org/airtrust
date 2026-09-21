@@ -1,10 +1,9 @@
 import { Hono } from 'hono';
-import type { Context, MiddlewareHandler } from 'hono';
+import type { Context } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
-import { getUserPermissionOverride } from '../middleware/rbac';
-import { checkPermission } from '../middleware/tenant';
 import type { Env } from '../types';
+import { requireControleVoosSigvoosPreview, requireControleVoosWrite } from '../middleware/controle-voos-access';
 import {
   parseSigvoosRealPreviewRequest,
   runSigvoosRealApiPreview,
@@ -180,43 +179,6 @@ const catalogos: Record<string, CatalogConfig> = {
   contratos: { table: 'cv_contratos', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' },
   'funcoes-bordo': { table: 'cv_funcoes_bordo', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' }, justificativas: { table: 'cv_justificativas_voo', fields: 'id, codigo, nome, categoria, descricao, ativo, ordem', orderBy: 'categoria ASC, ordem ASC, nome ASC' },
 };
-
-async function hasControleVoosConfiguredAccess(
-  c: Context<{ Bindings: Env }>,
-  permission: 'controle_voos.edit' | 'controle_voos.sigvoos_preview',
-  fallbackRole: 'editor' | 'manager',
-): Promise<boolean> {
-  const override = await getUserPermissionOverride(c, permission);
-  if (override === 'DENY') return false;
-  if (override === 'GRANT') return true;
-  return checkPermission(c, fallbackRole);
-}
-
-function requireControleVoosWrite(): MiddlewareHandler<{ Bindings: Env }> {
-  return async (c, next) => {
-    if (!(await hasControleVoosConfiguredAccess(c, 'controle_voos.edit', 'editor'))) {
-      throw new ApiError('Permissao insuficiente', 403, 'CONTROLE_VOOS_RBAC_FORBIDDEN');
-    }
-
-    await next();
-  };
-}
-
-function requireControleVoosSigvoosPreview(): MiddlewareHandler<{ Bindings: Env }> {
-  return async (c, next) => {
-    if (
-      !(await hasControleVoosConfiguredAccess(
-        c,
-        'controle_voos.sigvoos_preview',
-        'manager',
-      ))
-    ) {
-      throw new ApiError('Permissao insuficiente', 403, 'CONTROLE_VOOS_SIGVOOS_RBAC_FORBIDDEN');
-    }
-
-    await next();
-  };
-}
 
 function parsePositiveInteger(value: unknown, field: string): number {
   const parsed = typeof value === 'number' ? value : Number(value);

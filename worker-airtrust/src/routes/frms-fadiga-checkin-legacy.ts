@@ -1,9 +1,10 @@
-import { Hono, type MiddlewareHandler } from 'hono';
+import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { AppEnv, Env } from '../types';
 import { auth } from '../middleware/auth';
-import { getUserPermissionOverride, requirePermission } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
+import { requireFatigueCheckinAccess } from '../middleware/frms-fatigue-checkin-access';
 import { registrarAuditoria } from '../utils/auditoria';
 import {
   calcularHorasSono,
@@ -107,17 +108,6 @@ function minutesToTime(minutes: number): string {
 async function isManagerPlus(c: FrmsContext): Promise<boolean> {
   return canSeeFrmsTeamScopeForContext(c);
 }
-
-const requireFatigueCheckinAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
-  const override = await getUserPermissionOverride(c, 'frms.checkin');
-  if (override === 'DENY') {
-    return c.json(
-      { success: false, error: 'FRMS_CHECKIN_FORBIDDEN', message: 'Check-in de fadiga não habilitado para este usuário.' },
-      403,
-    );
-  }
-  await next();
-};
 
 async function getConfig(db: D1Database, empresaId: number): Promise<FadigaConfigRow> {
   const row = await db
