@@ -3,6 +3,7 @@ import {
   COMPLETE_QUALIFICATION_HISTORY_STATUSES,
   createDefaultQualificationHistoryStatusSet,
   normalizeQualificationHistoryStatuses,
+  normalizeQualificationHistorySectorFilter,
   shouldSendQualificationHistoryStatusFilter,
 } from '@/react-app/lib/qualificationHistoryFilters';
 
@@ -24,6 +25,11 @@ describe('qualification history filters', () => {
         'valida',
       ]),
     ).toBe(false);
+  });
+
+  it('trata todos os setores selecionados como histórico sem filtro de setor', () => {
+    expect(normalizeQualificationHistorySectorFilter(['14', '12'], ['12', '14'])).toEqual([]);
+    expect(normalizeQualificationHistorySectorFilter(['12'], ['12', '14'])).toEqual(['12']);
   });
 
   it('mantem filtro server-side quando o usuario escolhe um subconjunto', () => {
