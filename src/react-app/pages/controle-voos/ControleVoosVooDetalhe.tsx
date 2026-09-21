@@ -21,7 +21,7 @@ import {
   type CvFlightStatus,
 } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatDateTime } from './data/controleVoosUtils';
-import { flightOperationalRouteLabel, flightOperationalDestinationLabel } from './data/controleVoosFlightIdentity';
+import { flightOperationalRouteLabel, flightOperationalDestinationLabel , flightPresentationStatus } from './data/controleVoosFlightIdentity';
 
 
 type FlightDocument = {
@@ -224,7 +224,7 @@ export default function ControleVoosVooDetalhe() {
             description={`${flightOperationalRouteLabel(voo, aeroportos)} | ${formatDate(voo.data_programacao)}`}
           >
             <div className="flex flex-wrap items-center gap-2">
-              <ControleVoosStatusBadge status={voo.status} className="text-sm px-3 py-1" />
+              <ControleVoosStatusBadge status={flightPresentationStatus(voo)} className="text-sm px-3 py-1" />
               {canCoordinate ? (
                 <button
                   type="button"
