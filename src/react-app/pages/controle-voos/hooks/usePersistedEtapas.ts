@@ -26,6 +26,8 @@ type Options = {
   vooId: string | number | undefined;
   rdv: CvRdv | null | undefined;
   editable: boolean;
+  editMode?: 'pilot' | 'coordenacao';
+  justificativa?: string;
   origemIcao?: string;
   destinoIcao?: string;
 };
@@ -48,6 +50,8 @@ export function usePersistedEtapas({
   vooId,
   rdv,
   editable,
+  editMode = 'pilot',
+  justificativa,
   origemIcao = '',
   destinoIcao = '',
 }: Options) {
@@ -57,6 +61,11 @@ export function usePersistedEtapas({
   const remover = useRemoverEtapa();
   const duplicar = useDuplicarEtapa();
   const reordenar = useReordenarEtapas();
+
+  const editContext =
+    editMode === 'coordenacao'
+      ? { mode: 'coordenacao' as const, justificativa: justificativa?.trim() || undefined }
+      : {};
 
   const [drafts, setDrafts] = useState<RdvTrechoDraft[]>([]);
   const [statusByLocalId, setStatusByLocalId] = useState<Record<string, RdvSaveStatus>>({});
@@ -177,6 +186,7 @@ export function usePersistedEtapas({
           vooId,
           etapaId: item.id,
           versao: knownVersao,
+          ...editContext,
           ...item.patch,
         } as { vooId: string | number; etapaId: number } & EtapaInput)
         .then((result) => {
@@ -218,6 +228,7 @@ export function usePersistedEtapas({
       const result = await criar.mutateAsync({
         vooId,
         versao: knownVersao,
+        ...editContext,
         origem_icao: temp.origem || null,
         destino_icao: temp.destino || null,
         horario_decolagem: null,
@@ -248,6 +259,7 @@ export function usePersistedEtapas({
         vooId,
         etapaId: source.id,
         versao: knownVersao,
+        ...editContext,
       });
       if (result.meta.versao != null) setKnownVersao(result.meta.versao);
       setDrafts((prev) => {
@@ -278,6 +290,7 @@ export function usePersistedEtapas({
         vooId,
         etapaId: source.id,
         versao: knownVersao,
+        ...editContext,
       });
       if (result.meta.versao != null) setKnownVersao(result.meta.versao);
       setDrafts((prev) => prev.filter((d) => d.localId !== localId));
@@ -297,7 +310,12 @@ export function usePersistedEtapas({
       .map((lid) => drafts.find((d) => d.localId === lid)?.id)
       .filter((id): id is number => typeof id === 'number');
     if (ordem.length !== drafts.length) return;
-    const result = await reordenar.mutateAsync({ vooId, versao: knownVersao, ordem });
+    const result = await reordenar.mutateAsync({
+      vooId,
+      versao: knownVersao,
+      ordem,
+      ...editContext,
+    });
     if (result.meta.versao != null) setKnownVersao(result.meta.versao);
     setDrafts(result.data.map((e) => draftFromEtapa(e)));
   };
