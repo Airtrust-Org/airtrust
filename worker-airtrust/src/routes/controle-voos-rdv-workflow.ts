@@ -826,6 +826,7 @@ rdvWorkflow.post('/voos/:id/rdv/enviar', auth(), requireAnyRdvAccess(), async (c
                 updated_by = ?,
                 updated_at = datetime('now')
             WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
+              AND (SELECT changes()) > 0
               AND EXISTS (
                 SELECT 1
                 FROM cv_rdv_operacional
