@@ -186,11 +186,15 @@ function isTipoCodigoUniqueConstraintError(error: unknown): boolean {
   );
 }
 
-let qualificacoesTiposColumnsSupportPromise: Promise<TiposColumnsSupport> | null = null;
+const qualificacoesTiposColumnsSupportCache = new WeakMap<
+  D1Database,
+  Promise<TiposColumnsSupport>
+>();
 
 async function loadQualificacoesTiposColumnsSupport(db: D1Database): Promise<TiposColumnsSupport> {
-  if (!qualificacoesTiposColumnsSupportPromise) {
-    qualificacoesTiposColumnsSupportPromise = db
+  let cached = qualificacoesTiposColumnsSupportCache.get(db);
+  if (!cached) {
+    cached = db
       .prepare("PRAGMA table_info('qualificacoes_tipos')")
       .all()
       .then((info) => {
@@ -319,9 +323,10 @@ async function hasQualificacoesTiposSetoresTable(db: D1Database): Promise<boolea
       )
       .first<{ name: string }>()
       .then((table) => Boolean(table?.name));
+    qualificacoesTiposSetoresTableCache.set(db, cached);
   }
 
-  return qualificacoesTiposSetoresTablePromise;
+  return cached;
 }
 
 function normalizeSetorIds(values: Array<string | number>): number[] {
