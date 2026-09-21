@@ -213,27 +213,33 @@ export function toBase64Safe(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+let certificadosStorageColumnsPromise: Promise<CertificadosStorageColumns> | null = null;
+
 export async function getCertificadosStorageColumns(
   db: D1Database,
 ): Promise<CertificadosStorageColumns> {
-  const [
-    pastaVirtualHasDocumentoId,
-    pastaVirtualHasCertificacaoId,
-    pastaVirtualHasEmpresaId,
-    documentosHasEmpresaId,
-  ] = await Promise.all([
-    tableHasColumn(db, 'pasta_virtual', 'documento_id'),
-    tableHasColumn(db, 'pasta_virtual', 'certificacao_id'),
-    tableHasColumn(db, 'pasta_virtual', 'empresa_id'),
-    tableHasColumn(db, 'documentos', 'empresa_id'),
-  ]);
+  if (!certificadosStorageColumnsPromise) {
+    certificadosStorageColumnsPromise = Promise.all([
+      tableHasColumn(db, 'pasta_virtual', 'documento_id'),
+      tableHasColumn(db, 'pasta_virtual', 'certificacao_id'),
+      tableHasColumn(db, 'pasta_virtual', 'empresa_id'),
+      tableHasColumn(db, 'documentos', 'empresa_id'),
+    ]).then(
+      ([
+        pastaVirtualHasDocumentoId,
+        pastaVirtualHasCertificacaoId,
+        pastaVirtualHasEmpresaId,
+        documentosHasEmpresaId,
+      ]) => ({
+        pastaVirtualHasDocumentoId,
+        pastaVirtualHasCertificacaoId,
+        pastaVirtualHasEmpresaId,
+        documentosHasEmpresaId,
+      }),
+    );
+  }
 
-  return {
-    pastaVirtualHasDocumentoId,
-    pastaVirtualHasCertificacaoId,
-    pastaVirtualHasEmpresaId,
-    documentosHasEmpresaId,
-  };
+  return certificadosStorageColumnsPromise;
 }
 
 export async function listHistoricoCertificados(
