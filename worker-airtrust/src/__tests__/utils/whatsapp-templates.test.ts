@@ -13,7 +13,7 @@ describe('whatsapp-templates', () => {
     expect(resolveQualificacaoAlertTemplateKey({ isCma: true, expired: true })).toBe('cma_expired');
   });
 
-  it('renderiza aviso EAD a vencer como Setor de Treinamentos da Costa do Sol', () => {
+  it('renderiza aviso EAD a vencer como Gerência de Treinamento da Costa do Sol sem emojis', () => {
     const template = getAlertWhatsAppTemplateDefinition('ead_expiring');
     const variables = buildQualificacaoTemplateVariables({
       funcionarioNome: 'Filipe Daumas',
@@ -28,16 +28,18 @@ describe('whatsapp-templates', () => {
     expect(template).toBeDefined();
     const message = renderTemplateBody(template!.bodyText, variables);
 
-    expect(message).toContain('🚁 *Setor de Treinamentos | Costa do Sol*');
+    expect(message).toContain('*GERÊNCIA DE TREINAMENTO | COSTA DO SOL*');
     expect(message).toContain('Olá, Filipe Daumas!');
-    expect(message).toContain('📚 *Treinamento:* CRM');
-    expect(message).toContain('📅 *Vencimento:* 28/09/2026');
-    expect(message).toContain('🟠 *Status:* Vence em 7 dias');
+    expect(message).toContain('*Treinamento:* CRM');
+    expect(message).toContain('*Vencimento:* 28/09/2026');
+    expect(message).toContain('*Status:* Vence em 7 dias');
     expect(message).toContain(
-      '🔗 *Acesse diretamente o treinamento:*' + '\n' + 'https://app.airtrust.online/treinamentos/123',
+      '*Acesse diretamente o treinamento:*' + '\n' + 'https://app.airtrust.online/treinamentos/123',
     );
+    expect(message).toContain('requisitos obrigatórios de treinamento e conformidade da operação');
+    expect(message).toContain('sujeito à verificação em auditorias');
     expect(message).toContain('Após o login, você será direcionado diretamente ao treinamento.');
-    expect(message).not.toContain('✈️');
+    expect(message).not.toMatch(/[🚁📚📅🟠🔴🔗✈️]/u);
   });
 
   it('renderiza aviso EAD vencido com status vermelho e concordancia de treinamento', () => {
@@ -55,16 +57,16 @@ describe('whatsapp-templates', () => {
     expect(template).toBeDefined();
     const message = renderTemplateBody(template!.bodyText, variables);
 
-    expect(message).toContain('🔴 *Status:* Vencido há 3 dias');
+    expect(message).toContain('*Status:* Vencido há 3 dias');
     expect(message).toContain('https://app.airtrust.online/treinamentos/456');
   });
 
-  it('mantem os templates de CMA fora da identidade do Setor de Treinamentos', () => {
+  it('mantem os templates de CMA fora da identidade da Gerência de Treinamento', () => {
     const template = getAlertWhatsAppTemplateDefinition('cma_expiring');
 
     expect(template).toBeDefined();
     expect(template!.bodyText).toContain('CMA');
-    expect(template!.bodyText).not.toContain('Setor de Treinamentos | Costa do Sol');
-    expect(template!.bodyText).not.toContain('🚁');
+    expect(template!.bodyText).not.toContain('GERÊNCIA DE TREINAMENTO | COSTA DO SOL');
+    expect(template!.bodyText).not.toContain('Gerência de Treinamento');
   });
 });
