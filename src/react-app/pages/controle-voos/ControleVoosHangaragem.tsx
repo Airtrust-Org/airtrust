@@ -12,13 +12,9 @@ export default function ControleVoosHangaragem() {
       <div className="w-full">
         <ControleVoosPageShell>
           <ControleVoosPageHeader title="Hangaragem" description="Ainda não existe tabela operacional real para hangaragem nem integração confiável com MRO nesta macroetapa.">
-            <button
-              disabled
-              className="inline-flex items-center gap-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-500 cursor-not-allowed dark:bg-slate-700 dark:text-slate-400"
-              title="Preview - hangaragem ainda sem backend/schema operacional"
-            >
-              <Warehouse className="h-4 w-4" />+ Nova Hangaragem
-            </button>
+            <span className="inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400" aria-label="Cadastro de hangaragem indisponível neste preview">
+              Preview sem cadastro operacional
+            </span>
           </ControleVoosPageHeader>
 
           <div className="space-y-4">
