@@ -192,6 +192,8 @@ async function main() {
         VALUES (${empresaId}, ${sqlString('OR' + suffix)}, ${sqlString('OR' + suffix)}, ${sqlString('E2E Origem ' + tenant)}, 'aeroporto', 1, 1);
         INSERT INTO cv_aeroportos (empresa_id, codigo, codigo_icao, nome, tipo, ativo, ordem)
         VALUES (${empresaId}, ${sqlString('DE' + suffix)}, ${sqlString('DE' + suffix)}, ${sqlString('E2E Destino ' + tenant)}, 'aeroporto', 1, 2);
+        INSERT INTO cv_contratos (empresa_id, codigo, nome, ativo, ordem)
+        VALUES (${empresaId}, ${sqlString('CT' + suffix)}, ${sqlString('E2E Contrato ' + tenant)}, 1, 1);
         INSERT INTO cv_tipos_voo (empresa_id, codigo, nome, ativo, ordem)
         VALUES (${empresaId}, ${sqlString('TV' + suffix)}, ${sqlString('E2E Tipo Voo ' + tenant)}, 1, 1);
         INSERT INTO cv_naturezas_voo (empresa_id, codigo, nome, ativo, ordem)
@@ -210,6 +212,7 @@ async function main() {
   const catalogRows = {};
   for (const [table, key] of [
     ['cv_aeroportos', 'codigo'],
+    ['cv_contratos', 'codigo'],
     ['cv_tipos_voo', 'codigo'],
     ['cv_naturezas_voo', 'codigo'],
     ['cv_motivos_operacionais', 'codigo'],
@@ -234,6 +237,7 @@ async function main() {
     catalogA: {
       origemId: findCatalog('cv_aeroportos', 'OR', 'A'),
       destinoId: findCatalog('cv_aeroportos', 'DE', 'A'),
+      contratoId: findCatalog('cv_contratos', 'CT', 'A'),
       tipoVooId: findCatalog('cv_tipos_voo', 'TV', 'A'),
       naturezaVooId: findCatalog('cv_naturezas_voo', 'NV', 'A'),
       motivoCancelamentoId: findCatalog('cv_motivos_operacionais', 'MO', 'A'),
@@ -241,6 +245,7 @@ async function main() {
     catalogB: {
       origemId: findCatalog('cv_aeroportos', 'OR', 'B'),
       destinoId: findCatalog('cv_aeroportos', 'DE', 'B'),
+      contratoId: findCatalog('cv_contratos', 'CT', 'B'),
       tipoVooId: findCatalog('cv_tipos_voo', 'TV', 'B'),
       naturezaVooId: findCatalog('cv_naturezas_voo', 'NV', 'B'),
       motivoCancelamentoId: findCatalog('cv_motivos_operacionais', 'MO', 'B'),

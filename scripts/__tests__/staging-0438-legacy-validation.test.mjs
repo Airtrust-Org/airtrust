@@ -1,3 +1,8 @@
+// source_reference: static contract test for staging 0438 legacy validation and synthetic Controle de Voos fixtures.
+// operational_decision: DML strings are inspected only to prove required synthetic contract setup and fail-closed cleanup; this test never executes remote DML.
+// dry_run_required: not applicable; this test performs no remote execution and writes no database state.
+// rollback_plan_required: not applicable; this test is read-only and has no external side effects.
+
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -73,6 +78,23 @@ test('E2E CAS contract enforces version on corrigir_apos_devolucao and bumps rdv
   // Verify no stale comments claiming PUT RDV does not accept versao or does not bump version
   assert.doesNotMatch(e2eScript, /PUT \/voos\/:id\/rdv nao aceita `versao`/);
   assert.doesNotMatch(e2eScript, /rdvVersao NAO muda aqui/);
+});
+
+test('E2E fixture provisions required flight contract and cleans it fail closed', () => {
+  const provisionScript = readFileSync(resolve(root, 'scripts/staging/provision-controle-voos-e2e-fixtures.mjs'), 'utf8');
+  const e2eScript = readFileSync(resolve(root, 'scripts/staging/run-controle-voos-e2e.mjs'), 'utf8');
+  const cleanupScript = readFileSync(resolve(root, 'scripts/staging/cleanup-controle-voos-e2e-fixtures-v2.mjs'), 'utf8');
+
+  assert.match(provisionScript, /INSERT INTO cv_contratos/);
+  assert.match(provisionScript, /contratoId: findCatalog\('cv_contratos', 'CT', 'A'\)/);
+  assert.match(provisionScript, /contratoId: findCatalog\('cv_contratos', 'CT', 'B'\)/);
+
+  const createFlightStart = e2eScript.indexOf("operation: 'criar_voo'");
+  const createFlightEnd = e2eScript.indexOf('if (!vooPassed)', createFlightStart);
+  assert.ok(createFlightStart > 0 && createFlightEnd > createFlightStart, 'criar_voo block must exist');
+  assert.match(e2eScript.slice(createFlightStart, createFlightEnd), /contrato_id: catA\.contratoId/);
+
+  assert.match(cleanupScript, /DELETE FROM cv_contratos WHERE empresa_id IN/);
 });
 
 test('E2E fixture honors the Schema V2 0504 operational nature compatibility contract', () => {

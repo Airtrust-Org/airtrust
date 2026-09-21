@@ -206,6 +206,7 @@ async function main() {
       data_programacao: dataProg,
       origem_id: catA.origemId,
       destino_id: catA.destinoId,
+      contrato_id: catA.contratoId,
       tipo_voo_id: catA.tipoVooId,
       aeronave_id: aeronaveId,
       horario_previsto_partida: `${dataProg}T10:00:00Z`,

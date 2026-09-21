@@ -81,6 +81,7 @@ async function main() {
     ['cv_rdv_operacional', `DELETE FROM cv_rdv_operacional WHERE empresa_id IN (${empresaIdList});`],
     ['cv_voos', `DELETE FROM cv_voos WHERE empresa_id IN (${empresaIdList});`],
     ['cv_aeroportos', `DELETE FROM cv_aeroportos WHERE empresa_id IN (${empresaIdList});`],
+    ['cv_contratos', `DELETE FROM cv_contratos WHERE empresa_id IN (${empresaIdList});`],
     ['cv_tipos_voo', `DELETE FROM cv_tipos_voo WHERE empresa_id IN (${empresaIdList});`],
     ['cv_naturezas_voo', `DELETE FROM cv_naturezas_voo WHERE empresa_id IN (${empresaIdList});`],
     ['cv_motivos_operacionais', `DELETE FROM cv_motivos_operacionais WHERE empresa_id IN (${empresaIdList});`],
