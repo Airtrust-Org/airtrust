@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardList, FileSearch } from 'lucide-react';
+import { ClipboardList, FileSearch, RefreshCw } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
@@ -51,7 +51,10 @@ export default function ControleVoosCoordenacaoFila() {
   const {
     data: fila = [],
     isLoading,
+    isFetching,
     error,
+    refetch,
+    dataUpdatedAt,
   } = useRdvFila({
     status: status || undefined,
     data_inicio: dataInicio || undefined,
@@ -103,6 +106,19 @@ export default function ControleVoosCoordenacaoFila() {
                 className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               />
             </label>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+              className="inline-flex min-h-[36px] items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+              {isFetching ? 'Atualizando…' : 'Atualizar fila'}
+            </button>
+            <span className="ml-auto text-xs text-slate-400 dark:text-slate-500" aria-live="polite">
+              Atualização automática a cada 15 s
+              {dataUpdatedAt ? ` · última: ${new Date(dataUpdatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}
+            </span>
           </div>
 
           {isLoading && (
