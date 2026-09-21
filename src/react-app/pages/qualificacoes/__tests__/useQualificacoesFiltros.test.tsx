@@ -32,9 +32,12 @@ describe('useQualificacoesFiltros', () => {
       'VALIDA',
       'VENCIDA',
       'VENCENDO_30',
+      'RENOVADA',
       'PLANEJADA',
+      'CANCELADA',
     ]);
     expect(result.current.isDefaultStatusFilter).toBe(true);
+    expect(result.current.effectiveHistoricoStatusFiltro).toEqual([]);
     expect(writeUserPreference).toHaveBeenCalled();
   });
 
@@ -45,5 +48,6 @@ describe('useQualificacoesFiltros', () => {
 
     await waitFor(() => expect([...result.current.statusFiltro]).toEqual(['VENCIDA']));
     expect(result.current.isDefaultStatusFilter).toBe(false);
+    expect(result.current.effectiveHistoricoStatusFiltro).toEqual(['VENCIDA']);
   });
 });

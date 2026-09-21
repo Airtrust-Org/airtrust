@@ -8,6 +8,10 @@ import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { hasActiveCertificateFlag } from '@/react-app/utils/certificadoStatus';
+import {
+  normalizeQualificationHistoryStatuses,
+  shouldSendQualificationHistoryStatusFilter,
+} from '@/react-app/lib/qualificationHistoryFilters';
 
 export interface HistoricoQualificacao {
   id: number;
@@ -151,8 +155,9 @@ export function useQualificacoesHistorico(
   if (orderBy) endpoint += `&orderBy=${encodeURIComponent(orderBy)}&order=${order}`;
   if (aeronaveId) endpoint += `&aeronave_id=${aeronaveId}`;
   if (categoria) endpoint += `&categoria=${encodeURIComponent(categoria)}`;
-  if (statusFilter && statusFilter.length > 0) {
-    endpoint += `&statuses=${encodeURIComponent(statusFilter.join(','))}`;
+  if (shouldSendQualificationHistoryStatusFilter(statusFilter)) {
+    const normalizedStatuses = normalizeQualificationHistoryStatuses(statusFilter);
+    endpoint += `&statuses=${encodeURIComponent(normalizedStatuses.join(','))}`;
   }
   if (setorIds && setorIds.length > 0) {
     endpoint += `&setor_ids=${encodeURIComponent(setorIds.join(','))}`;
