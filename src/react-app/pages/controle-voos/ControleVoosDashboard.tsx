@@ -7,7 +7,7 @@ import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
 import { useControleVoosAeroportos, useControleVoosDashboard } from '@/react-app/hooks/useControleVoos';
 import { formatTime, formatDate } from './data/controleVoosUtils';
-import { flightOperationalRouteLabel } from './data/controleVoosFlightIdentity';
+import { flightOperationalRouteLabel , flightPresentationStatus } from './data/controleVoosFlightIdentity';
 import ControleVoosDateControls from './components/ControleVoosDateControls';
 import { useControleVoosDate } from './hooks/useControleVoosDate';
 import EdbShadowPrototypeWithAssessment from './EdbShadowPrototypeWithAssessment';
@@ -268,7 +268,7 @@ function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: 
                                 {formatTime(voo.horario_previsto_partida)}
                               </td>
                               <td className="px-4 py-3">
-                                <ControleVoosStatusBadge status={voo.status} />
+                                <ControleVoosStatusBadge status={flightPresentationStatus(voo)} />
                               </td>
                               <td className="px-4 py-3">
                                 <Link
