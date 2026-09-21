@@ -10,7 +10,7 @@ import ControleVoosRdvWorkflowBadge from './components/ControleVoosRdvWorkflowBa
 import ControleVoosNovoVooDialog from './components/ControleVoosNovoVooDialog';
 import { useMeusVoos, useControleVoosAeroportos, type CvAeroporto } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatTime } from './data/controleVoosUtils';
-import { flightOperationalRouteLabel } from './data/controleVoosFlightIdentity';
+import { flightOperationalRouteLabel , flightPresentationStatus } from './data/controleVoosFlightIdentity';
 
 
 function localDateKey(date = new Date()) {
@@ -154,7 +154,7 @@ export default function ControleVoosMeusVoos() {
                           </h2>
                         </div>
                         <div className="flex flex-col items-end gap-1">
-                          <ControleVoosStatusBadge status={voo.status} />
+                          <ControleVoosStatusBadge status={flightPresentationStatus(voo)} />
                           <ControleVoosRdvWorkflowBadge status={voo.rdv_workflow_status} />
                         </div>
                       </div>
@@ -212,7 +212,7 @@ export default function ControleVoosMeusVoos() {
                               {flightOperationalRouteLabel(voo, aeroportos)}
                             </td>
                             <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{formatTime(voo.horario_previsto_partida)}</td>
-                            <td className="px-4 py-3"><ControleVoosStatusBadge status={voo.status} /></td>
+                            <td className="px-4 py-3"><ControleVoosStatusBadge status={flightPresentationStatus(voo)} /></td>
                             <td className="px-4 py-3"><ControleVoosRdvWorkflowBadge status={voo.rdv_workflow_status} /></td>
                             <td className="px-4 py-3 text-right">
                               <a

@@ -1654,6 +1654,7 @@ controleVoos.get('/dashboard', auth(), async (c) => {
         SUM(CASE WHEN v.status = 'alternado_divergido' THEN 1 ELSE 0 END) AS voos_alternados_divergidos,
         SUM(CASE WHEN r.status = 'rascunho' THEN 1 ELSE 0 END) AS rdvs_rascunho,
         SUM(CASE WHEN r.status = 'preenchimento_finalizado' THEN 1 ELSE 0 END) AS rdvs_preenchimento_finalizado,
+        SUM(CASE WHEN r.workflow_status = 'enviado' THEN 1 ELSE 0 END) AS rdvs_enviados,
         SUM(CASE WHEN r.id IS NULL THEN 1 ELSE 0 END) AS voos_sem_rdv,
         SUM(
           CASE
@@ -1709,6 +1710,7 @@ controleVoos.get('/dashboard', auth(), async (c) => {
     voos_alternados_divergidos: Number(totalsRow?.voos_alternados_divergidos || 0),
     rdvs_rascunho: Number(totalsRow?.rdvs_rascunho || 0),
     rdvs_preenchimento_finalizado: Number(totalsRow?.rdvs_preenchimento_finalizado || 0),
+    rdvs_enviados: Number(totalsRow?.rdvs_enviados || 0),
     voos_sem_rdv: Number(totalsRow?.voos_sem_rdv || 0),
   };
 
@@ -1742,6 +1744,7 @@ controleVoos.get('/dashboard', auth(), async (c) => {
         voos_sem_tripulacao: Number(totalsRow?.voos_sem_tripulacao || 0),
         voos_sem_aeronave: Number(totalsRow?.voos_sem_aeronave || 0),
         voos_concluidos_sem_rdv: Number(totalsRow?.voos_concluidos_sem_rdv || 0),
+        rdvs_recebidos_aguardando_revisao: Number(totalsRow?.rdvs_enviados || 0),
       },
     },
   });

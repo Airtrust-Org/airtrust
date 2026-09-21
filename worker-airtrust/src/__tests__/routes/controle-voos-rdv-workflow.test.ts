@@ -554,6 +554,13 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     );
     expect(finalize.status).toBe(200);
 
+    runSql(
+      db.databasePath,
+      `UPDATE cv_voo_etapas
+          SET horario_motor_ligado = '08:55', horario_motor_desligado = '11:05'
+        WHERE empresa_id = 1 AND voo_id = 601 AND numero_etapa = 1;`,
+    );
+
     const enviar = await request(
       db,
       '/api/controle-voos/voos/601/rdv/enviar',
@@ -566,6 +573,15 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     };
     expect(enviarBody.data.workflow_status).toBe('enviado');
     expect(enviarBody.data.versao).toBe(3);
+
+    const realizedFlight = await db
+      .prepare(
+        'SELECT horario_real_partida, horario_real_chegada FROM cv_voos WHERE empresa_id = ? AND id = ?',
+      )
+      .bind(1, 601)
+      .first<{ horario_real_partida: string | null; horario_real_chegada: string | null }>();
+    expect(realizedFlight?.horario_real_partida).toBe('2026-06-14T08:55:00');
+    expect(realizedFlight?.horario_real_chegada).toBe('2026-06-14T11:05:00');
 
     const revisao = await request(
       db,
@@ -1025,6 +1041,12 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
   it('fila da Coordenacao filtra por status de fluxo', async () => {
     const db = createSqliteD1();
     await preencherRdvCompleto(db);
+    runSql(
+      db.databasePath,
+      `UPDATE cv_voo_etapas
+          SET horario_motor_ligado = '09:55', horario_motor_desligado = '11:00'
+        WHERE empresa_id = 1 AND voo_id = 601 AND numero_etapa = 1;`,
+    );
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
@@ -1039,9 +1061,17 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     );
 
     const fila = await request(db, '/api/controle-voos/rdv/fila?status=enviado', {}, COORDENACAO);
-    const filaBody = (await fila.json()) as { data: Array<{ workflow_status: string }> };
+    const filaBody = (await fila.json()) as {
+      data: Array<{
+        workflow_status: string;
+        flight_status: string;
+        horario_real_partida: string | null;
+      }>;
+    };
     expect(filaBody.data.length).toBe(1);
     expect(filaBody.data[0].workflow_status).toBe('enviado');
+    expect(filaBody.data[0].flight_status).toBe('concluido_operacionalmente');
+    expect(filaBody.data[0].horario_real_partida).not.toBeNull();
 
     const filaVazia = await request(
       db,
@@ -2152,6 +2182,14 @@ describe('RDV — A2: versao obrigatoria e CAS nas 8 transicoes de fluxo', () =>
     it(`${caso.nome}: concorrencia com a mesma versao — exatamente uma chamada vence, a outra recebe 409, versao avanca uma unica vez`, async () => {
       const db = createSqliteD1();
       await prepararEstado(db, caso.estado);
+      if (caso.nome === 'enviar') {
+        runSql(
+          db.databasePath,
+          `UPDATE cv_voo_etapas
+              SET horario_motor_ligado = '09:55', horario_motor_desligado = '11:00'
+            WHERE empresa_id = 1 AND voo_id = 601 AND numero_etapa = 1;`,
+        );
+      }
       const versaoConhecida = await currentVersao(db);
 
       const [primeira, segunda] = await Promise.all([

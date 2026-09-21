@@ -25,10 +25,24 @@ function alertKey(rule: Pick<RdvAlertRule, 'regra' | 'etapaId'>): string {
 }
 
 function durationMs(start: Date, end: Date): number {
-  let diff = end.getTime() - start.getTime();
-  if (diff < 0 && start.getUTCFullYear() === 1970 && end.getUTCFullYear() === 1970) {
-    diff += 24 * 60 * 60 * 1000;
+  const dayMs = 24 * 60 * 60 * 1000;
+  const startClockOnly = start.getUTCFullYear() === 1970;
+  const endClockOnly = end.getUTCFullYear() === 1970;
+
+  // Etapas podem misturar ISO completo (origem SIGVOOS/API) com HH:MM
+  // (Pilot App). Quando apenas um lado não tem data, comparar os relógios
+  // evita tratar o HH:MM sintético de 1970 como décadas anterior ao ISO.
+  if (startClockOnly !== endClockOnly) {
+    const clockMs = (value: Date) =>
+      (((value.getUTCHours() * 60 + value.getUTCMinutes()) * 60 + value.getUTCSeconds()) * 1000)
+      + value.getUTCMilliseconds();
+    let diff = clockMs(end) - clockMs(start);
+    if (diff < 0) diff += dayMs;
+    return diff;
   }
+
+  let diff = end.getTime() - start.getTime();
+  if (diff < 0 && startClockOnly && endClockOnly) diff += dayMs;
   return diff;
 }
 

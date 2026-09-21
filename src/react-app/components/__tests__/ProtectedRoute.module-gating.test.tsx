@@ -124,19 +124,51 @@ describe('ProtectedRoute module gating', () => {
     expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
   });
 
-  it.each([
-    ['/mro', ['dashboard', 'funcionarios', 'mro']],
-    ['/controle-voos', ['dashboard', 'funcionarios', 'controle_voos']],
-  ])('bloqueia %s para gestor mesmo com modulo ativo', (pathname, modulosAtivos) => {
+  it('mantem MRO bloqueado para gestor mesmo com modulo ativo', () => {
     authMock.mockReturnValue({
       isAuthenticated: true,
       isLoading: false,
       user: { name: 'Gestor', email: 'gestor@empresa.com', role: 'GESTOR' },
-      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: modulosAtivos }],
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['dashboard', 'funcionarios', 'mro'] }],
       empresaAtualId: 1,
     });
 
-    renderAt(pathname as string);
+    renderAt('/mro');
+
+    expect(screen.getByText('protected.denied.title')).toBeInTheDocument();
+    expect(screen.queryByText('conteudo liberado')).toBeNull();
+  });
+
+  it.each(['GESTOR', 'MANAGER'])('permite Controle de Voos completo para %s da Coordenação quando o modulo esta ativo', (role) => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { name: 'Coordenação', email: 'coordenacao@empresa.com', role },
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['dashboard', 'funcionarios', 'controle_voos'] }],
+      empresaAtualId: 1,
+    });
+
+    renderAt('/controle-voos');
+
+    expect(screen.queryByText('protected.denied.title')).toBeNull();
+    expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
+  });
+
+  it('mantem DENY explicito acima do papel Gestor no Controle de Voos', () => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: {
+        name: 'Gestor sem Controle de Voos',
+        email: 'gestor@empresa.com',
+        role: 'GESTOR',
+        permissions: ['DENY:controle_voos.view'],
+      },
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['controle_voos'] }],
+      empresaAtualId: 1,
+    });
+
+    renderAt('/controle-voos');
 
     expect(screen.getByText('protected.denied.title')).toBeInTheDocument();
     expect(screen.queryByText('conteudo liberado')).toBeNull();

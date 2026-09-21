@@ -1,7 +1,7 @@
 import { cn } from '@/react-app/lib/utils';
 
 type StatusType =
-  | 'planejado' | 'liberado' | 'em_voo' | 'pousado' | 'concluido' | 'cancelado'
+  | 'planejado' | 'liberado' | 'em_voo' | 'pousado' | 'concluido' | 'realizado' | 'cancelado'
   | 'liberado_operacionalmente' | 'em_andamento' | 'concluido_operacionalmente' | 'alternado_divergido'
   | 'rascunho' | 'finalizado' | 'preenchimento_finalizado'
   | 'disponivel' | 'indisponivel' | 'hangarada' | 'folga'
@@ -20,6 +20,7 @@ const STATUS_STYLES: Record<string, string> = {
   'pousado': 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
   'concluido': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
   'concluido_operacionalmente': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+  'realizado': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200',
   'alternado_divergido': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
   'cancelado': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
   'rascunho': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
@@ -49,6 +50,7 @@ const STATUS_LABELS: Record<string, string> = {
   'pousado': 'Pousado',
   'concluido': 'Concluído',
   'concluido_operacionalmente': 'Concluído',
+  'realizado': 'Voo realizado',
   'alternado_divergido': 'Alternado/Divergido',
   'cancelado': 'Cancelado',
   'rascunho': 'Rascunho',

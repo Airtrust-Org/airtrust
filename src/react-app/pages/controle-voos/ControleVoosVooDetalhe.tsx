@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Clock, FileText, Shield, CheckCircle, XCircle, Upload, MessageCircle } from 'lucide-react';
+import { Clock, FileText, Shield, CheckCircle, XCircle, Upload, MessageCircle, Pencil } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import { apiClient } from '@/react-app/services/apiClient';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
@@ -11,6 +11,8 @@ import ControleVoosBreadcrumb from './components/ControleVoosBreadcrumb';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
 import EdbShadowReadinessCard from './components/EdbShadowReadinessCard';
 import ControleVoosTripulacaoCard from './components/ControleVoosTripulacaoCard';
+import ControleVoosEditarVooDialog from './components/ControleVoosEditarVooDialog';
+import ControleVoosStatusActions from './components/ControleVoosStatusActions';
 import {
   useControleVoosVoo,
   useControleVoosRdv,
@@ -19,7 +21,7 @@ import {
   type CvFlightStatus,
 } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatDateTime } from './data/controleVoosUtils';
-import { flightOperationalRouteLabel, flightOperationalDestinationLabel } from './data/controleVoosFlightIdentity';
+import { flightOperationalRouteLabel, flightOperationalDestinationLabel , flightPresentationStatus } from './data/controleVoosFlightIdentity';
 
 
 type FlightDocument = {
@@ -107,6 +109,7 @@ export default function ControleVoosVooDetalhe() {
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [uploadingType, setUploadingType] = useState<FlightDocument['type'] | null>(null);
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const loadDocuments = async () => {
     if (!id) return;
@@ -220,7 +223,19 @@ export default function ControleVoosVooDetalhe() {
             title={`Voo ${voo.prefixo}`}
             description={`${flightOperationalRouteLabel(voo, aeroportos)} | ${formatDate(voo.data_programacao)}`}
           >
-            <ControleVoosStatusBadge status={voo.status} className="text-sm px-3 py-1" />
+            <div className="flex flex-wrap items-center gap-2">
+              <ControleVoosStatusBadge status={flightPresentationStatus(voo)} className="text-sm px-3 py-1" />
+              {canCoordinate ? (
+                <button
+                  type="button"
+                  onClick={() => setEditOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <Pencil className="h-4 w-4" />
+                  Editar programação
+                </button>
+              ) : null}
+            </div>
           </ControleVoosPageHeader>
 
           <div className="grid gap-6 lg:grid-cols-3">
@@ -410,21 +425,25 @@ export default function ControleVoosVooDetalhe() {
                     </button>
                   )}
                   <a href="#tripulacao" className="block w-full rounded-lg bg-cyan-700 px-4 py-2 text-center text-sm font-medium text-white">Alterar Tripulação</a>
-                  {(['Liberar Voo', 'Cancelar Voo', 'Atualizar Status'] as const).map((label) => (
-                    <button
-                      key={label}
-                      disabled
-                      className="w-full rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500"
-                      title="N1 — ação em desenvolvimento"
-                    >
-                      {label}
-                    </button>
-                  ))}
+                  {canCoordinate ? (
+                    <ControleVoosStatusActions voo={voo} onChanged={() => void refetchVoo()} />
+                  ) : null}
                 </div>
               </div>
             </div>
           </div>
         </ControleVoosPageShell>
+        {canCoordinate ? (
+          <ControleVoosEditarVooDialog
+            open={editOpen}
+            voo={voo}
+            onClose={() => setEditOpen(false)}
+            onSaved={() => {
+              toast.success('Voo atualizado. O Pilot App receberá a nova versão.');
+              void refetchVoo();
+            }}
+          />
+        ) : null}
       </div>
     </AppLayout>
   );
