@@ -841,7 +841,12 @@ export function useCorrigirRdv() {
       });
       return extractPayloadRequired<CvRdv>(response);
     },
-    onSuccess: (_, vars) => invalidateRdvQueries(qc, vars.vooId),
+    onSuccess: (data, vars) => {
+      qc.setQueryData(['cv-rdv', vars.vooId], data);
+      qc.setQueryData(['cv-rdv', String(vars.vooId)], data);
+      qc.setQueryData(['cv-rdv', Number(vars.vooId)], data);
+      invalidateRdvQueries(qc, vars.vooId);
+    },
   });
 }
 
