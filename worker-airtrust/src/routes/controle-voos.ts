@@ -41,9 +41,9 @@ import { assertRdvRules, normalizeRdvInput } from '../services/controle-voos/rdv
 import { finalizeRdvPreenchimentoHandler } from './controle-voos-rdv-finalization';
 import { assertFlightCrewAssignment, listEligibleFlightCrew } from '../services/controle-voos/crew-eligibility';
 import { buildFlightRelatedStatements, normalizeFlightRouteIds, parseFlightCrewIds, resolveFlightRoutePoints } from '../services/controle-voos/flight-creation';
-import { parseFlightPlanningInput, updateFlightStageWeightUnitIfSupported } from '../services/controle-voos/flight-planning';
+import { parseFlightPlanningInput, updateFlightStagePlanningIfSupported } from '../services/controle-voos/flight-planning';
 import { enrichFlightsWithPresentation } from '../services/controle-voos/flight-presentation';
-import { sendFlightWhatsAppHandler } from './controle-voos-dispatch';
+import { getFlightWhatsAppShareHandler, sendFlightEmailHandler, sendFlightWhatsAppHandler } from './controle-voos-dispatch';
 type OperationalReadFilters = {
   dataInicio: string;
   dataFim: string;
@@ -115,6 +115,8 @@ const allowedCreateFields = new Set([
   'rota_ids',
   'pax_planejado',
   'peso_planejado',
+  'peso_passageiros',
+  'peso_bagagem',
   'unidade_peso_planejado',
   'combustivel_solicitado',
   'unidade_combustivel_solicitado',
@@ -1215,7 +1217,7 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
     ...planning,
   });
   if (relatedStatements.length > 0) await c.env.DB.batch(relatedStatements);
-  await updateFlightStageWeightUnitIfSupported(c.env.DB, empresaId, newId, planning);
+  await updateFlightStagePlanningIfSupported(c.env.DB, empresaId, newId, planning);
 
   await recordFlightEvent({
     db: c.env.DB,
@@ -1254,6 +1256,8 @@ controleVoos.get('/voos/:id', auth(), async (c) => {
 });
 
 controleVoos.post('/voos/:id/whatsapp', auth(), requireControleVoosWrite(), sendFlightWhatsAppHandler);
+controleVoos.post('/voos/:id/email', auth(), requireControleVoosWrite(), sendFlightEmailHandler);
+controleVoos.get('/voos/:id/whatsapp-share', auth(), requireControleVoosWrite(), getFlightWhatsAppShareHandler);
 
 controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
