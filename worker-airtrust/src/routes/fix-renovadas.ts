@@ -37,6 +37,7 @@ function isEligibleForRenovada(status: unknown): boolean {
 interface GrupoRow {
   funcionario_id: number;
   qualification_key: string;
+  qualificacao_codigo: string;
   total: number;
 }
 
@@ -83,6 +84,7 @@ async function findRenovadaCandidates(
             NULLIF(qh.qualificacao_codigo, ''),
             NULLIF(qh.tipo, '')
           ))) AS qualification_key,
+          MAX(COALESCE(NULLIF(qh.qualificacao_codigo, ''), NULLIF(qh.tipo, ''), '')) AS qualificacao_codigo,
           COUNT(*) as total
         FROM qualificacoes_historico qh
         INNER JOIN funcionarios f
@@ -158,7 +160,7 @@ async function findRenovadaCandidates(
         funcionario_id: grupo.funcionario_id,
         funcionario_nome: antigo.funcionario_nome,
         setor: antigo.setor_nome,
-        qualificacao_codigo: grupo.qualification_key,
+        qualificacao_codigo: grupo.qualificacao_codigo || grupo.qualification_key,
         id_antigo: antigo.id,
         status_atual: antigo.status,
         data_conclusao_antiga: antigo.data_conclusao,
