@@ -71,7 +71,7 @@ describe('whatsapp-templates', () => {
     expect(message).not.toMatch(/[🚁📚📅🟠🔴🔗✈️]/u);
   });
 
-  it('mantem os templates de CMA fora da identidade do Setor de Treinamentos', () => {
+  it('mantem os templates de CMA fora da identidade da Gerência de Treinamentos', () => {
     const template = getAlertWhatsAppTemplateDefinition('cma_expiring');
 
     expect(template).toBeDefined();
