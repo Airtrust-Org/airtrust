@@ -1,12 +1,25 @@
 import type { Env } from '../types';
 import type { AlertWhatsAppTemplateDefinition } from './whatsapp-templates';
 
-type TwilioContentRecord = {
+export type TwilioContentRecord = {
   sid: string;
   friendly_name?: string;
   language?: string;
   types?: Record<string, unknown>;
 };
+
+export function isTwilioContentTemplateCurrent(
+  content: TwilioContentRecord,
+  template: AlertWhatsAppTemplateDefinition,
+): boolean {
+  const textType = content.types?.['twilio/text'];
+  const remoteBody =
+    textType && typeof textType === 'object' && 'body' in textType
+      ? String((textType as { body?: unknown }).body || '')
+      : '';
+
+  return content.language === template.language && remoteBody === template.bodyText;
+}
 
 type TwilioApprovalResponse = {
   status?: string;
