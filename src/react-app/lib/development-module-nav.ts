@@ -44,7 +44,9 @@ export function canSeeControleVoosDevelopmentModule(
   user: DevelopmentModuleVisibilityUser | null | undefined,
 ): boolean {
   if (!user) return false;
-  return PRIMARY_ADMIN_ROLES.has(normalizeRole(user.role));
+  // Controle de Voos é superfície operacional de Admin e Gestor/Manager.
+  // O backend continua sendo a autoridade de RBAC por rota/capability.
+  return OPERATIONAL_DASHBOARD_ROLES.has(normalizeRole(user.role));
 }
 
 export function canSeeOperationalDashboard(
