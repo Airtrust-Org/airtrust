@@ -18,6 +18,24 @@ describe('development module administrator access', () => {
     expect(canSeeControleVoosDevelopmentModule({ email: 'coordenacao@example.test', role })).toBe(true);
   });
 
+  it('allows explicit Controle de Voos grant for a common role', () => {
+    expect(
+      canSeeControleVoosDevelopmentModule({
+        role: 'USUARIO',
+        permissions: ['GRANT:controle_voos.view'],
+      }),
+    ).toBe(true);
+  });
+
+  it('keeps explicit DENY above manager role and GRANT', () => {
+    expect(
+      canSeeControleVoosDevelopmentModule({
+        role: 'GESTOR',
+        permissions: ['GRANT:controle_voos.view', 'DENY:controle_voos.view'],
+      }),
+    ).toBe(false);
+  });
+
   it.each(['INSTRUTOR', 'ALUNO'])('keeps %s outside the full Controle de Voos operational surface', (role) => {
     expect(canSeeControleVoosDevelopmentModule({ email: 'user@example.test', role })).toBe(false);
   });
