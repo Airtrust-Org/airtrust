@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { listarTiposQualificacao } from '@/react-app/services/qualificacoesService';
 
-export function useTiposQualificacao(categoriaId?: number | null) {
+export function useTiposQualificacao(categoriaId?: number | null, enabled = true) {
   const normalizedCategoriaId =
     categoriaId && Number.isFinite(categoriaId) && categoriaId > 0 ? categoriaId : undefined;
 
@@ -12,6 +12,7 @@ export function useTiposQualificacao(categoriaId?: number | null) {
       if (!res.success) throw new Error(res.error || 'Falha ao carregar tipos');
       return res.data || [];
     },
+    enabled,
     staleTime: 1000 * 60 * 10, // 10min — static reference data
   });
 }

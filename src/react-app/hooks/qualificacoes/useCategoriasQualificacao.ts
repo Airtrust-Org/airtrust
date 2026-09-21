@@ -51,7 +51,7 @@ export function normalizeCategoriasQualificacaoResponse(
 }
 
 /** Canonical category catalogue. Never derive form options from qualification types. */
-export function useCategoriasQualificacao() {
+export function useCategoriasQualificacao(enabled = true) {
   const { empresaAtualId } = useAuth();
 
   return useQuery({
@@ -61,7 +61,7 @@ export function useCategoriasQualificacao() {
       if (!response.success) throw new Error(response.error || 'Falha ao carregar categorias');
       return normalizeCategoriasQualificacaoResponse(response.data);
     },
-    enabled: Boolean(empresaAtualId),
+    enabled: Boolean(empresaAtualId) && enabled,
     staleTime: 1000 * 60 * 10,
   });
 }

@@ -412,11 +412,15 @@ function invalidateTreinamentosPlanejados(queryClient: ReturnType<typeof useQuer
   ]);
 }
 
-export function useTreinamentosPlanejados(filters: TreinamentoPlanejadoFiltros = {}) {
+export function useTreinamentosPlanejados(
+  filters: TreinamentoPlanejadoFiltros = {},
+  enabled = true,
+) {
   return useQuery({
     queryKey: KEYS.list(filters),
     queryFn: () =>
       request<TreinamentosPlanejadosListResponse>(`/planejados${buildQueryString(filters)}`),
+    enabled,
     staleTime: 60 * 1000,
   });
 }
