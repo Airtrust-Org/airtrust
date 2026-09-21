@@ -820,8 +820,8 @@ rdvWorkflow.post('/voos/:id/rdv/enviar', auth(), requireAnyRdvAccess(), async (c
       ? c.env.DB.prepare(
           `
             UPDATE cv_voos
-            SET horario_real_partida = COALESCE(?, horario_real_partida),
-                horario_real_chegada = COALESCE(?, horario_real_chegada),
+            SET horario_real_partida = CASE WHEN ? IS NOT NULL THEN ? ELSE horario_real_partida END,
+                horario_real_chegada = CASE WHEN ? IS NOT NULL THEN ? ELSE horario_real_chegada END,
                 versao = versao + 1,
                 updated_by = ?,
                 updated_at = datetime('now')
@@ -835,6 +835,8 @@ rdvWorkflow.post('/voos/:id/rdv/enviar', auth(), requireAnyRdvAccess(), async (c
           `,
         ).bind(
           realizedTimes.departure,
+          realizedTimes.departure,
+          realizedTimes.arrival,
           realizedTimes.arrival,
           userId,
           voo.id,
