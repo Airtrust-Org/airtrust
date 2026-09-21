@@ -10,6 +10,7 @@ import { processarEventosParaModulo } from '../shared/handlers';
 import { CANCELLED_STATUS_VALUES, sqlStatusNotEqualsAny } from '../lib/status/status-codes';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 import { sendEmail } from '../lib/email';
+import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
 import { ensureMatriculaCycle } from '../services/lms-matricula-cycle';
 import {
   getSigvoosConfig,
@@ -444,11 +445,13 @@ export async function runScheduledJobs(
               .first<{ nome: string; email: string | null }>();
 
             if (func?.email) {
-              const frontendUrl = String(env.FRONTEND_URL || 'https://airtrust.online').replace(
-                /\/$/,
-                '',
-              );
-              const cursoUrl = `${frontendUrl}/lms/cursos/${row.curso_id}`;
+              const cursoUrl =
+                (await resolveTrainingAccessUrl(env, env.DB, {
+                  empresaId: row.empresa_id,
+                  funcionarioId: row.funcionario_id,
+                  cursoId: row.curso_id,
+                })) ||
+                `${String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '')}/lms/cursos/${row.curso_id}`;
               const nomeAluno = func.nome || `Funcionário ${row.funcionario_id}`;
 
               await sendEmail(env, {

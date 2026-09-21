@@ -33,7 +33,8 @@ describe('LMS MEL Manutenção — contrato de matrícula automática', () => {
     expect(source).toContain('AND qualificacao_tipo_id = ?');
     expect(source).toContain('WHERE empresa_id = ? AND ativo = 1 AND deleted_at IS NULL');
     expect(source).toContain('async function sendMelMatriculaEmail(');
-    expect(source).toContain('`${frontendUrl}/lms/cursos/${params.cursoId}`');
+    expect(source).toContain('await resolveTrainingAccessUrl(env, db, {');
+    expect(source).toContain('/lms/cursos/${params.cursoId}');
     expect(source).toContain('await sendEmail(env, {');
     expect(source).toContain("console.warn('[mel-manutencao] Falha ao enviar email:', err);");
   });

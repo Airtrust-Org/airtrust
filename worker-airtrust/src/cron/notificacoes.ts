@@ -14,6 +14,7 @@ import {
   resolveQualificacaoAlertTemplateKey,
 } from '../utils/whatsapp-templates';
 import { createStructuredConsole } from '../utils/logger';
+import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
 import {
   CANCELLED_STATUS_VALUES,
   QUALIFICACAO_STATUS,
@@ -395,14 +396,25 @@ async function enviarNotificacao(
     const tipoCanal = normalizeTipoCanal(config.tipo);
     let destinatarios = parseDestinatarios(config.destinatarios);
 
+    const trainingUrl = !isCmaQualificacao(qualificacao)
+      ? await resolveTrainingAccessUrl(env, env.DB, {
+          empresaId,
+          funcionarioId: qualificacao.funcionario_id,
+          qualificacaoHistoricoId: qualificacao.id,
+        })
+      : null;
+
     // Interpolar template
-    const corpo = interpolarTemplate(config.template, {
+    const corpoBase = interpolarTemplate(config.template, {
       qualificacao: qualificacao.qualificacao_nome,
       funcionario: qualificacao.funcionario_nome,
       dias: diasAteVencimento.toString(),
       categoria: qualificacao.categoria,
       data_vencimento: new Date(qualificacao.data_vencimento).toLocaleDateString('pt-BR'),
     });
+    const corpo = trainingUrl
+      ? `${corpoBase}\n\nAcesse o treinamento: ${trainingUrl}`
+      : corpoBase;
 
     const urgenciaIcon = diasAteVencimento <= 7 ? '🚨' : diasAteVencimento <= 15 ? '⚠️' : '📅';
     const assunto = `${urgenciaIcon} Alerta: Qualificação ${qualificacao.qualificacao_nome} expirando em ${diasAteVencimento} dias`;
@@ -465,7 +477,9 @@ async function enviarNotificacao(
         dataVencimento: new Date(`${qualificacao.data_vencimento}T00:00:00`).toLocaleDateString(
           'pt-BR',
         ),
-        statusVencimento: buildStatusVencimento(diasAteVencimento),
+        statusVencimento: trainingUrl
+          ? `${buildStatusVencimento(diasAteVencimento)}. Acesse o treinamento: ${trainingUrl}`
+          : buildStatusVencimento(diasAteVencimento),
       });
       const mensagemTemplate = renderTemplateBody(templateDefinition.bodyText, templateVariables);
       const normalizedDestinations: string[] = [];

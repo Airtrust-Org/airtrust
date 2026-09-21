@@ -17,6 +17,7 @@ import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { logAudit } from '../utils/db';
 import { sendEmail } from '../lib/email';
+import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
 import type { Env } from '../types';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
@@ -76,8 +77,13 @@ async function sendMelMatriculaEmail(
 
     if (!funcionario?.email) return;
 
-    const frontendUrl = String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '');
-    const cursoUrl = `${frontendUrl}/lms/cursos/${params.cursoId}`;
+    const cursoUrl =
+      (await resolveTrainingAccessUrl(env, db, {
+        empresaId: params.empresaId,
+        funcionarioId: params.funcionarioId,
+        cursoId: params.cursoId,
+      })) ||
+      `${String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '')}/lms/cursos/${params.cursoId}`;
     const nomeAluno = funcionario.nome || `Funcionário ${params.funcionarioId}`;
     const vencimentoFormatado = params.dataVencimento.split('-').reverse().join('/');
 

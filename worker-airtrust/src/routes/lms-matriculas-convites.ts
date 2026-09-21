@@ -9,6 +9,7 @@ import { logAudit } from '../utils/db';
 import { sendEmail } from '../lib/email';
 import type { Env } from '../types';
 import { createLogger, toError } from '../utils/logger';
+import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -77,8 +78,13 @@ export async function sendMatriculaEmail(
       return 'SEM_EMAIL';
     }
 
-    const frontendUrl = String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '');
-    const cursoUrl = `${frontendUrl}/lms/cursos/${params.cursoId}`;
+    const cursoUrl =
+      (await resolveTrainingAccessUrl(env, db, {
+        empresaId: params.empresaId,
+        funcionarioId: params.funcionarioId,
+        cursoId: params.cursoId,
+      })) ||
+      `${String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '')}/lms/cursos/${params.cursoId}`;
     const nomeAluno = funcionario.nome || `Funcionário ${params.funcionarioId}`;
     const actionLabel = params.isNovoCiclo ? 'Novo ciclo de treinamento' : 'Novo treinamento';
     const validadeLinha = params.dataExpiracao
