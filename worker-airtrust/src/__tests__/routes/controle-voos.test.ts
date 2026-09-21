@@ -1301,6 +1301,79 @@ describe('controle voos routes', () => {
     expect(patchResponse.status).toBe(200);
   });
 
+  it('restringe compartilhamentos de Coordenacao no backend sem bloquear a programacao do editor', async () => {
+    const db = createSqliteD1();
+    runSql(
+      db.databasePath,
+      'ALTER TABLE funcionarios ADD COLUMN telefone TEXT; ALTER TABLE funcionarios ADD COLUMN email TEXT;',
+    );
+    // A programacao individual continua no nivel editor. A fixture nao tem
+    // tripulacao compativel com o dispatch novo, entao 409 prova que o RBAC
+    // deixou a requisicao chegar a regra de negocio (e nao a bloqueou em 403).
+    const programacaoEditor = await request(
+      db,
+      '/api/controle-voos/voos/601/whatsapp-share',
+      {},
+      1,
+      'editor',
+    );
+    expect(programacaoEditor.status).toBe(409);
+
+    const planejamentoEditor = await request(
+      db,
+      '/api/controle-voos/whatsapp-share/planejamento-dia-seguinte?data=2026-06-14',
+      {},
+      1,
+      'editor',
+    );
+    expect(planejamentoEditor.status).toBe(403);
+
+    const flightLogEditor = await request(
+      db,
+      '/api/controle-voos/voos/601/whatsapp-share?tipo=flight_log',
+      {},
+      1,
+      'editor',
+    );
+    expect(flightLogEditor.status).toBe(403);
+
+    const planejamentoManager = await request(
+      db,
+      '/api/controle-voos/whatsapp-share/planejamento-dia-seguinte?data=2026-06-14',
+      {},
+      1,
+      'manager',
+    );
+    expect(planejamentoManager.status).toBe(200);
+
+    const planejamentoAdmin = await request(
+      db,
+      '/api/controle-voos/whatsapp-share/planejamento-dia-seguinte?data=2026-06-14',
+      {},
+      1,
+      'admin',
+    );
+    expect(planejamentoAdmin.status).toBe(200);
+
+    const flightLogManager = await request(
+      db,
+      '/api/controle-voos/voos/601/whatsapp-share?tipo=flight_log',
+      {},
+      1,
+      'manager',
+    );
+    expect(flightLogManager.status).toBe(409);
+
+    const crossTenantManager = await request(
+      db,
+      '/api/controle-voos/voos/701/whatsapp-share?tipo=flight_log',
+      {},
+      1,
+      'manager',
+    );
+    expect(crossTenantManager.status).toBe(404);
+  });
+
   it('cria RDV para voo existente', async () => {
     const db = createSqliteD1();
 
