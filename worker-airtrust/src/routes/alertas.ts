@@ -39,6 +39,7 @@ import {
 } from '../utils/alert-whatsapp-templates-store';
 import {
   buildQualificacaoTemplateVariables,
+  buildTrainingTemplateStatusVariable,
   getAlertWhatsAppTemplateCatalog,
   getAlertWhatsAppTemplateDefinition,
   renderTemplateBody,
@@ -859,18 +860,17 @@ Por favor, providencie a renovação o quanto antes.
           funcionarioNome: String(r.funcionario_nome || '').trim(),
           qualificacaoNome: String(r.tipo_nome || r.tipo_codigo || '').trim(),
           dataVencimento: formatDatePtBr(String(r.data_vencimento || '')),
-          statusVencimento: trainingUrl && isEAD
-            ? `${statusVencimento}. Acesse o treinamento: ${trainingUrl}`
+          statusVencimento: isEAD
+            ? buildTrainingTemplateStatusVariable(diasDiferenca, trainingUrl)
             : statusVencimento,
         });
-        const templateMessage =
-          templateDefinition && localTemplate?.twilio_content_sid
-            ? renderTemplateBody(templateDefinition.bodyText, templateVariables)
-            : null;
+        const templateMessage = templateDefinition
+          ? renderTemplateBody(templateDefinition.bodyText, templateVariables)
+          : null;
         const whatsappResult = await sendWhatsAppMessage(
           c.env,
           r.funcionario_telefone as string,
-          mensagem,
+          templateMessage || mensagem,
           statusCallbackUrl,
           localTemplate?.twilio_content_sid && templateDefinition
             ? {

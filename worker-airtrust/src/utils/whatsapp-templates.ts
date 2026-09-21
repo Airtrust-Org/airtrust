@@ -28,12 +28,17 @@ const ALERT_WHATSAPP_TEMPLATE_DEFINITIONS: AlertWhatsAppTemplateDefinition[] = [
     category: 'UTILITY',
     language: 'pt_BR',
     bodyText:
-      'Ola {{1}}, o AirTrust informa que o treinamento EAD "{{2}}" vence em {{3}}. Status atual: {{4}}. Regularize o quanto antes.',
+      '🚁 *Setor de Treinamentos | Costa do Sol*\n\nOlá, {{1}}!\n\nEste é um aviso do *Setor de Treinamentos da Costa do Sol* sobre um treinamento que requer sua atenção.\n\n📚 *Treinamento:* {{2}}\n📅 *Vencimento:* {{3}}\n🟠 *Status:* {{4}}\n\nSe for necessário, faça login no *AirTrust*.\nApós o login, você será direcionado diretamente ao treinamento.\n\n*Mensagem automática do Setor de Treinamentos da Costa do Sol.*',
     variables: [
       { id: '1', name: 'funcionario_nome', sample: 'Filipe Daumas' },
       { id: '2', name: 'qualificacao_nome', sample: 'Treinamento EAD' },
       { id: '3', name: 'data_vencimento', sample: '15/04/2026' },
-      { id: '4', name: 'status_vencimento', sample: 'Vence em 7 dias' },
+      {
+        id: '4',
+        name: 'status_vencimento',
+        sample:
+          'Vence em 7 dias\n\n🔗 *Acesse diretamente o treinamento:*\nhttps://app.airtrust.online/treinamentos/123',
+      },
     ],
   },
   {
@@ -43,12 +48,17 @@ const ALERT_WHATSAPP_TEMPLATE_DEFINITIONS: AlertWhatsAppTemplateDefinition[] = [
     category: 'UTILITY',
     language: 'pt_BR',
     bodyText:
-      'Ola {{1}}, o AirTrust informa que o treinamento EAD "{{2}}" venceu em {{3}}. Status atual: {{4}}. Regularize o quanto antes.',
+      '🚁 *Setor de Treinamentos | Costa do Sol*\n\nOlá, {{1}}!\n\nEste é um aviso do *Setor de Treinamentos da Costa do Sol* sobre um treinamento que requer sua atenção.\n\n📚 *Treinamento:* {{2}}\n📅 *Vencimento:* {{3}}\n🔴 *Status:* {{4}}\n\nSe for necessário, faça login no *AirTrust*.\nApós o login, você será direcionado diretamente ao treinamento.\n\n*Mensagem automática do Setor de Treinamentos da Costa do Sol.*',
     variables: [
       { id: '1', name: 'funcionario_nome', sample: 'Filipe Daumas' },
       { id: '2', name: 'qualificacao_nome', sample: 'Treinamento EAD' },
       { id: '3', name: 'data_vencimento', sample: '15/04/2026' },
-      { id: '4', name: 'status_vencimento', sample: 'Vencida ha 3 dias' },
+      {
+        id: '4',
+        name: 'status_vencimento',
+        sample:
+          'Vencido há 3 dias\n\n🔗 *Acesse diretamente o treinamento:*\nhttps://app.airtrust.online/treinamentos/123',
+      },
     ],
   },
   {
@@ -164,6 +174,34 @@ export function buildLicencaTemplateVariables(params: {
     '3': params.dataVencimento,
     '4': params.statusVencimento,
   };
+}
+
+export function buildTrainingStatusVencimento(diasAteVencimento: number): string {
+  if (diasAteVencimento < 0) {
+    const diasVencido = Math.abs(diasAteVencimento);
+    return `Vencido há ${diasVencido} ${diasVencido === 1 ? 'dia' : 'dias'}`;
+  }
+
+  if (diasAteVencimento === 0) {
+    return 'Vence hoje';
+  }
+
+  if (diasAteVencimento === 1) {
+    return 'Vence em 1 dia';
+  }
+
+  return `Vence em ${diasAteVencimento} dias`;
+}
+
+export function buildTrainingTemplateStatusVariable(
+  diasAteVencimento: number,
+  trainingUrl?: string | null,
+): string {
+  const status = buildTrainingStatusVencimento(diasAteVencimento);
+
+  return trainingUrl
+    ? `${status}\n\n🔗 *Acesse diretamente o treinamento:*\n${trainingUrl}`
+    : status;
 }
 
 export function renderTemplateBody(bodyText: string, variables: Record<string, string>): string {

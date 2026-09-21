@@ -9,6 +9,7 @@ import { normalizeWhatsAppPhone } from '../utils/whatsapp';
 import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import {
   buildQualificacaoTemplateVariables,
+  buildTrainingTemplateStatusVariable,
   getAlertWhatsAppTemplateDefinition,
   renderTemplateBody,
   resolveQualificacaoAlertTemplateKey,
@@ -477,9 +478,9 @@ async function enviarNotificacao(
         dataVencimento: new Date(`${qualificacao.data_vencimento}T00:00:00`).toLocaleDateString(
           'pt-BR',
         ),
-        statusVencimento: trainingUrl
-          ? `${buildStatusVencimento(diasAteVencimento)}. Acesse o treinamento: ${trainingUrl}`
-          : buildStatusVencimento(diasAteVencimento),
+        statusVencimento: isCmaQualificacao(qualificacao)
+          ? buildStatusVencimento(diasAteVencimento)
+          : buildTrainingTemplateStatusVariable(diasAteVencimento, trainingUrl),
       });
       const mensagemTemplate = renderTemplateBody(templateDefinition.bodyText, templateVariables);
       const normalizedDestinations: string[] = [];

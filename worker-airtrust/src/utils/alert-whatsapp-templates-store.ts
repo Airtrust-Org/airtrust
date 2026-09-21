@@ -2,6 +2,7 @@ import type { Env } from '../types';
 import {
   createTwilioContentTemplate,
   getTwilioContentTemplate,
+  isTwilioContentTemplateCurrent,
   submitTwilioWhatsAppApproval,
 } from './twilio-content';
 import {
@@ -152,9 +153,18 @@ export async function syncWhatsAppTemplatesToTwilio(
 
     if (twilioContentSid) {
       try {
-        await getTwilioContentTemplate(env, twilioContentSid);
+        const remoteTemplate = await getTwilioContentTemplate(env, twilioContentSid);
+        if (!isTwilioContentTemplateCurrent(remoteTemplate, template)) {
+          twilioContentSid = null;
+          approvalStatus = null;
+          approvalError = null;
+          approvalPayloadJson = null;
+        }
       } catch {
         twilioContentSid = null;
+        approvalStatus = null;
+        approvalError = null;
+        approvalPayloadJson = null;
       }
     }
 
