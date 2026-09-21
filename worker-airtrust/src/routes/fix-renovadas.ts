@@ -37,7 +37,7 @@ function isEligibleForRenovada(status: unknown): boolean {
 interface GrupoRow {
   funcionario_id: number;
   qualification_key: string;
-  qualificacao_codigo: string;
+  qualificacao_codigo?: string | null;
   total: number;
 }
 
