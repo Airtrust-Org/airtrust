@@ -14,7 +14,11 @@ describe('development module administrator access', () => {
     expect(canSeeDevelopmentModules(user)).toBe(false);
   });
 
-  it.each(['GESTOR', 'MANAGER', 'INSTRUTOR', 'ALUNO'])('keeps %s outside Controle de Voos administrator access', (role) => {
+  it.each(['GESTOR', 'MANAGER'])('allows %s to the full Controle de Voos operational surface', (role) => {
+    expect(canSeeControleVoosDevelopmentModule({ email: 'coordenacao@example.test', role })).toBe(true);
+  });
+
+  it.each(['INSTRUTOR', 'ALUNO'])('keeps %s outside the full Controle de Voos operational surface', (role) => {
     expect(canSeeControleVoosDevelopmentModule({ email: 'user@example.test', role })).toBe(false);
   });
 
