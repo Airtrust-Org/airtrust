@@ -43,6 +43,7 @@ function renderHomeRouter(initialEntry: string) {
         <Route path="/" element={<HomeRouter />} />
         <Route path="/home" element={<HomeRouter />} />
         <Route path="/funcionarios" element={<div>funcionarios-page</div>} />
+        <Route path="/controle-voos" element={<div>controle-voos-page</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -62,6 +63,26 @@ describe('HomeRouter', () => {
       setor: 'Administrativo',
       setor_id: 1,
     });
+  });
+
+
+  it('abre direto no Controle de Voos quando há GRANT explícito do módulo', async () => {
+    authMock.mockReturnValue({
+      user: {
+        nome: 'Coordenação',
+        role: 'USUARIO',
+        funcionario_id: null,
+        permissions: ['GRANT:controle_voos.view', 'DENY:treinamentos.view'],
+      },
+      isLoading: false,
+    });
+
+    renderHomeRouter('/');
+
+    await waitFor(() => {
+      expect(screen.getByText('controle-voos-page')).toBeInTheDocument();
+    });
+    expect(buscarPorIdMock).not.toHaveBeenCalled();
   });
 
   it('renderiza o dashboard apenas para o admin principal allowlisted', () => {

@@ -84,6 +84,15 @@ export default function HomeRouter() {
 
   if (isLoading || isResolvingFuncionarioContext) return null;
 
+  const explicitPermissions = Array.isArray(user?.permissions) ? user.permissions : [];
+  const hasControleVoosGrant =
+    explicitPermissions.includes('GRANT:controle_voos.view') &&
+    !explicitPermissions.includes('DENY:controle_voos.view');
+
+  if (hasControleVoosGrant) {
+    return <Navigate to="/controle-voos" replace />;
+  }
+
   if (homeProfile === 'PRIMARY_ADMIN_DASHBOARD') {
     return <DashboardPrincipal />;
   }
