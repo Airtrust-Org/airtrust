@@ -59,7 +59,7 @@ describe('ControleVoosStatusActions', () => {
   it('exige motivo operacional antes de cancelar', async () => {
     getMock.mockResolvedValue({
       success: true,
-      data: [{ id: 9, nome: 'Meteorologia', ativo: 1 }],
+      data: [{ id: 9, nome: 'Meteorologia', tipo: 'cancelamento', ativo: 1 }],
     });
     const onChanged = vi.fn();
     render(<ControleVoosStatusActions voo={flight()} onChanged={onChanged} />);
