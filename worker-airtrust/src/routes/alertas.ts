@@ -39,7 +39,7 @@ import {
 } from '../utils/alert-whatsapp-templates-store';
 import {
   buildQualificacaoTemplateVariables,
-  buildTrainingTemplateStatusVariable,
+  buildTrainingStatusVencimento,
   getAlertWhatsAppTemplateCatalog,
   getAlertWhatsAppTemplateDefinition,
   renderTemplateBody,
@@ -879,8 +879,12 @@ Por favor, providencie a renovação o quanto antes.
             : 'Não se aplica',
           statusVencimento:
             isEAD && diasDiferenca !== null
-              ? buildTrainingTemplateStatusVariable(diasDiferenca, trainingUrl)
+              ? buildTrainingStatusVencimento(diasDiferenca)
               : statusVencimento,
+          trainingUrl: isEAD
+            ? trainingUrl ||
+              `${String(c.env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '')}/lms/cursos`
+            : null,
         });
         const templateMessage = templateDefinition
           ? renderTemplateBody(templateDefinition.bodyText, templateVariables)
