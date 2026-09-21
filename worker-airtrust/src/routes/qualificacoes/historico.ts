@@ -231,20 +231,31 @@ function buildStatsExtendedCacheScope(params: {
   };
 }
 
+const historicoColumnSupportCache = new Map<string, Promise<boolean>>();
+
 async function hasTableColumn(
   db: D1Database,
   tableName: string,
   columnName: string,
 ): Promise<boolean> {
-  try {
-    const columns = await db.prepare(`PRAGMA table_info('${tableName}')`).all<{ name: string }>();
-    if (!columns.results || columns.results.length === 0) {
+  const cacheKey = `${tableName}:${columnName}`;
+  const cached = historicoColumnSupportCache.get(cacheKey);
+  if (cached) return cached;
+
+  const lookup = (async () => {
+    try {
+      const columns = await db.prepare(`PRAGMA table_info('${tableName}')`).all<{ name: string }>();
+      if (!columns.results || columns.results.length === 0) {
+        return true;
+      }
+      return (columns.results || []).some((column) => column.name === columnName);
+    } catch {
       return true;
     }
-    return (columns.results || []).some((column) => column.name === columnName);
-  } catch {
-    return true;
-  }
+  })();
+
+  historicoColumnSupportCache.set(cacheKey, lookup);
+  return lookup;
 }
 
 async function buildHistoricoEmployeeScopeCompat(
