@@ -682,6 +682,10 @@ router.post('/:id/renovar', auth(), requirePermission('qualificacoes', 'editar',
       userRole: (c.get as (key: string) => unknown)('userRole'),
       qualificacaoTipoId: type.id,
       funcionarioId: source.funcionario_id,
+      // Renovações de registros históricos podem envolver tipos legados sem
+      // domínio próprio. Nesse caso, autorize somente pelo domínio classificado
+      // do setor do funcionário, sem ampliar o escopo para atribuições novas.
+      allowFuncionarioDomainFallback: true,
     });
 
     const completionDate =
