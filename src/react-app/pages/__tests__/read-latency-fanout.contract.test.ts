@@ -7,6 +7,12 @@ const modal = readFileSync(
   'utf8',
 );
 const lmsUi = readFileSync('src/react-app/pages/lms/lmsUi.tsx', 'utf8');
+const historicoWorker = readFileSync('worker-airtrust/src/routes/qualificacoes/historico.ts', 'utf8');
+const tiposWorker = readFileSync('worker-airtrust/src/routes/qualificacoes/tipos.ts', 'utf8');
+const certificadosWorker = readFileSync(
+  'worker-airtrust/src/routes/qualificacoes-certificados-helpers.ts',
+  'utf8',
+);
 
 describe('read latency fan-out contracts', () => {
   it('não carrega datasets de abas/modais fechados', () => {
@@ -30,6 +36,13 @@ describe('read latency fan-out contracts', () => {
       /Carregar categorias ao abrir a aba histórico[\s\S]*?refetchCategorias\(\)/,
     );
     expect(qualificacoes).not.toContain('/dashboard/qualificacoes');
+  });
+
+  it('memoiza introspecção de schema nas rotas quentes de qualificações', () => {
+    expect(historicoWorker).toContain('historicoColumnSupportCache');
+    expect(tiposWorker).toContain('qualificacoesTiposColumnsSupportPromise');
+    expect(tiposWorker).toContain('qualificacoesTiposSetoresTablePromise');
+    expect(certificadosWorker).toContain('certificadosStorageColumnsPromise');
   });
 
   it('thumbnails do LMS são buscadas sob demanda e respeitam cache', () => {
