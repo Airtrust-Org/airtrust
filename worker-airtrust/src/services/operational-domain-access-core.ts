@@ -452,9 +452,18 @@ export async function resolveResourceDomain(
         }>();
 
       const isMultiSetor = Number(row?.tipo_setor_link_count ?? 0) > 1;
-      const domain = isMultiSetor
+      const canonicalDomain = isMultiSetor
         ? ((row?.setor_dominio_codigo as OperationalDomain | null) ?? null)
         : ((row?.dominio_codigo as OperationalDomain) ?? null);
+      // Certificados são documentos individuais vinculados a um funcionário.
+      // Históricos legados podem não ter categoria/tipo classificados; nesse
+      // caso, para emissão/upload de certificado apenas, o setor classificado
+      // do próprio funcionário é uma fronteira segura e tenant-scoped. O
+      // histórico genérico continua fail-closed quando não classificado.
+      const domain =
+        resourceType === 'qualificacao_certificado' && !canonicalDomain
+          ? ((row?.setor_dominio_codigo as OperationalDomain | null) ?? null)
+          : canonicalDomain;
       return {
         domain,
         setorId: row?.setor_id ?? null,
