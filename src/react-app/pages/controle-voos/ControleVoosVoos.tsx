@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plane } from 'lucide-react';
+import { MessageCircle, Plane } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import AppLayout from '@/react-app/components/AppLayout';
+import { apiClient } from '@/react-app/services/apiClient';
+import { toast } from 'sonner';
+import { usePermissions } from '@/react-app/hooks/usePermissions';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
@@ -16,7 +19,10 @@ import { useControleVoosDate } from './hooks/useControleVoosDate';
 
 export default function ControleVoosVoos() {
   const qc = useQueryClient();
+  const { isAdmin, isGestor } = usePermissions();
+  const canCoordinate = isAdmin || isGestor;
   const [novoVooOpen, setNovoVooOpen] = useState(false);
+  const [sharingTomorrow, setSharingTomorrow] = useState(false);
   const { selectedDate, setSelectedDate, setToday } = useControleVoosDate();
   const { data, isLoading, error } = useControleVoosVoos({
     limit: 100,
@@ -26,6 +32,28 @@ export default function ControleVoosVoos() {
   const { data: aeroportos = [] } = useControleVoosAeroportos();
 
   const voos = data?.voos || [];
+
+  const shareTomorrowPlanning = async () => {
+    if (sharingTomorrow) return;
+    const shareWindow = window.open('', '_blank');
+    setSharingTomorrow(true);
+    try {
+      const response = await apiClient.get<{ message: string; date: string; total: number }>(
+        '/controle-voos/whatsapp-share/planejamento-dia-seguinte',
+      );
+      if (!response.success || !response.data?.message) {
+        throw new Error(response.error || 'Não foi possível preparar o planejamento de amanhã');
+      }
+      const shareUrl = `https://wa.me/?text=${encodeURIComponent(response.data.message)}`;
+      if (shareWindow) shareWindow.location.href = shareUrl;
+      else window.open(shareUrl, '_blank', 'noopener,noreferrer');
+    } catch (shareError) {
+      shareWindow?.close();
+      toast.error(shareError instanceof Error ? shareError.message : 'Falha ao preparar o planejamento de amanhã');
+    } finally {
+      setSharingTomorrow(false);
+    }
+  };
 
   return (
     <AppLayout>
@@ -41,6 +69,17 @@ export default function ControleVoosVoos() {
                 onChange={setSelectedDate}
                 onToday={setToday}
               />
+              {canCoordinate && (
+                <button
+                  type="button"
+                  onClick={() => void shareTomorrowPlanning()}
+                  disabled={sharingTomorrow}
+                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-700 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 dark:bg-emerald-950/20 dark:text-emerald-300"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  {sharingTomorrow ? 'Preparando…' : 'Compartilhar planejamento de amanhã'}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setNovoVooOpen(true)}

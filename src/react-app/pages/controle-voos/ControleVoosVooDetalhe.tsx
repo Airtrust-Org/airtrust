@@ -109,6 +109,7 @@ export default function ControleVoosVooDetalhe() {
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [uploadingType, setUploadingType] = useState<FlightDocument['type'] | null>(null);
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+  const [sharingFlightLog, setSharingFlightLog] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
   const loadDocuments = async () => {
@@ -171,6 +172,28 @@ export default function ControleVoosVooDetalhe() {
       toast.error(sendError instanceof Error ? sendError.message : 'Falha ao enviar WhatsApp');
     } finally {
       setSendingWhatsapp(false);
+    }
+  };
+
+  const shareFlightLog = async () => {
+    if (!id || sharingFlightLog) return;
+    const shareWindow = window.open('', '_blank');
+    setSharingFlightLog(true);
+    try {
+      const response = await apiClient.get<{ message: string }>(
+        `/controle-voos/voos/${id}/whatsapp-share?tipo=flight_log`,
+      );
+      if (!response.success || !response.data?.message) {
+        throw new Error(response.error || 'Não foi possível preparar o Flight Log');
+      }
+      const shareUrl = `https://wa.me/?text=${encodeURIComponent(response.data.message)}`;
+      if (shareWindow) shareWindow.location.href = shareUrl;
+      else window.open(shareUrl, '_blank', 'noopener,noreferrer');
+    } catch (shareError) {
+      shareWindow?.close();
+      toast.error(shareError instanceof Error ? shareError.message : 'Falha ao preparar o Flight Log');
+    } finally {
+      setSharingFlightLog(false);
     }
   };
 
@@ -421,7 +444,17 @@ export default function ControleVoosVooDetalhe() {
                       disabled={sendingWhatsapp}
                       className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
                     >
-                      <MessageCircle className="h-4 w-4" /> {sendingWhatsapp ? 'Enviando…' : 'Enviar programação por WhatsApp'}
+                      <MessageCircle className="h-4 w-4" /> {sendingWhatsapp ? 'Enviando…' : 'Enviar programação aos tripulantes'}
+                    </button>
+                  )}
+                  {canCoordinate && voo.status === 'concluido_operacionalmente' && (
+                    <button
+                      type="button"
+                      onClick={() => void shareFlightLog()}
+                      disabled={sharingFlightLog}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-700 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 disabled:opacity-50 dark:bg-emerald-950/20 dark:text-emerald-300"
+                    >
+                      <MessageCircle className="h-4 w-4" /> {sharingFlightLog ? 'Preparando…' : 'Compartilhar Flight Log no WhatsApp'}
                     </button>
                   )}
                   <a href="#tripulacao" className="block w-full rounded-lg bg-cyan-700 px-4 py-2 text-center text-sm font-medium text-white">Alterar Tripulação</a>
