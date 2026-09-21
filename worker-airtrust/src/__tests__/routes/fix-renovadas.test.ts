@@ -267,8 +267,8 @@ describe('Cenário 4 — Qualificações diferentes não se renovam', () => {
   it('mesmo funcionário com dois grupos distintos → cada grupo tratado independentemente', async () => {
     const { db } = createDb({
       grupos: [
-        { funcionario_id: 3, qualificacao_codigo: 'MNT_PROD_AS350', total: 2 },
-        { funcionario_id: 3, qualificacao_codigo: 'MNT_PROD_SK76', total: 2 },
+        { funcionario_id: 3, qualification_key: 'MNT_PROD_AS350', total: 2 },
+        { funcionario_id: 3, qualification_key: 'MNT_PROD_SK76', total: 2 },
       ],
       registrosPorGrupo: {
         MNT_PROD_AS350: [
@@ -441,10 +441,10 @@ describe('Cenário 6 — Manutenção MNT_* multi-ciclo', () => {
     const antigos = body.data.items.map((item) => item.id_antigo).sort((a, b) => a - b);
     expect(antigos).toEqual([100, 101]);
 
-    // Both point to the latest record as the "mais recente"
-    for (const item of body.data.items) {
-      expect(item.id_mais_recente).toBe(102);
-    }
+    // A cadeia preserva cada renovação imediata: 100 -> 101 -> 102.
+    const sucessores = new Map(body.data.items.map((item) => [item.id_antigo, item.id_mais_recente]));
+    expect(sucessores.get(100)).toBe(101);
+    expect(sucessores.get(101)).toBe(102);
   });
 
   it('já-renovadas não são reprocessadas', async () => {
