@@ -400,6 +400,7 @@ export interface CvDashboardTotais {
   voos_alternados_divergidos: number;
   rdvs_rascunho: number;
   rdvs_preenchimento_finalizado: number;
+  rdvs_enviados: number;
   voos_sem_rdv: number;
 }
 
@@ -414,6 +415,7 @@ export interface CvDashboard {
     voos_sem_tripulacao: number;
     voos_sem_aeronave: number;
     voos_concluidos_sem_rdv: number;
+    rdvs_recebidos_aguardando_revisao: number;
   };
 }
 
