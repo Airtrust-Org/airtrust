@@ -40,9 +40,9 @@ describe('read latency fan-out contracts', () => {
 
   it('memoiza introspecção de schema nas rotas quentes de qualificações', () => {
     expect(historicoWorker).toContain('historicoColumnSupportCache');
-    expect(tiposWorker).toContain('qualificacoesTiposColumnsSupportPromise');
-    expect(tiposWorker).toContain('qualificacoesTiposSetoresTablePromise');
-    expect(certificadosWorker).toContain('certificadosStorageColumnsPromise');
+    expect(tiposWorker).toContain('qualificacoesTiposColumnsSupportCache');
+    expect(tiposWorker).toContain('qualificacoesTiposSetoresTableCache');
+    expect(certificadosWorker).toContain('certificadosStorageColumnsCache');
   });
 
   it('thumbnails do LMS são buscadas sob demanda e respeitam cache', () => {
