@@ -74,7 +74,6 @@ export function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
     FROM qualificacoes_historico qh_newer
     LEFT JOIN qualificacoes_tipos qt_newer ON qt_newer.id = qh_newer.qualificacao_id
     WHERE qh_newer.funcionario_id = qh.funcionario_id
-      AND qh_newer.empresa_id = qh.empresa_id
       AND qh_newer.deleted_at IS NULL
       AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_newer.status, ''))", CANCELLED_STATUS_VALUES)})
       AND COALESCE(qh_newer.data_vencimento, qh_newer.data_conclusao) IS NOT NULL
@@ -98,8 +97,7 @@ export function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
     ? `EXISTS (
       SELECT 1
       FROM qualificacoes_historico qh_renovadora
-      WHERE qh_renovadora.empresa_id = qh.empresa_id
-        AND qh_renovadora.deleted_at IS NULL
+      WHERE qh_renovadora.deleted_at IS NULL
         AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_renovadora.status, ''))", CANCELLED_STATUS_VALUES)})
         AND qh_renovadora.renovacao_de = qh.id
     )`
