@@ -38,3 +38,10 @@ test('executor never hardcodes the real target identity or secret', () => {
   assert.match(script, /TARGET_EMAIL_DOMAIN_REJECTED/);
   assert.match(script, /TARGET_FRMS_CHECKIN_BACKEND_NOT_DENIED/);
 });
+
+
+test('FRMS production probe supplies the required date range and requires team scope', () => {
+  assert.match(script, /operational-snapshot\?data_inicio=/);
+  assert.match(script, /data_fim=/);
+  assert.match(script, /TARGET_FRMS_TEAM_SCOPE_NOT_GRANTED/);
+});

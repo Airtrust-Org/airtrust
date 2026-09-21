@@ -185,11 +185,18 @@ async function validateTarget(targetEmail, password) {
     200,
     'TARGET_ESCALAS_READ_FAILED',
   );
-  expectStatus(
-    await requestJson('/api/frms/operational-snapshot', { headers }),
+  const today = new Date().toISOString().slice(0, 10);
+  const frmsSnapshot = expectStatus(
+    await requestJson(
+      `/api/frms/operational-snapshot?data_inicio=${encodeURIComponent(today)}&data_fim=${encodeURIComponent(today)}`,
+      { headers },
+    ),
     200,
     'TARGET_FRMS_OPERATIONAL_READ_FAILED',
   );
+  if (frmsSnapshot?.meta?.scope !== 'team') {
+    throw new Error(`TARGET_FRMS_TEAM_SCOPE_NOT_GRANTED:${String(frmsSnapshot?.meta?.scope || 'missing')}`);
+  }
 
   const access = expectStatus(
     await requestJson('/api/me/operational-access', { headers }),
