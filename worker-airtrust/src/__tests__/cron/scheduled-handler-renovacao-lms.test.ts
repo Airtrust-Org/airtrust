@@ -57,6 +57,8 @@ describe('renovacao automatica LMS por qualificacao EAD', () => {
     expect(source).toContain(
       "console.warn('[ead-renewal] Falha ao enviar email de renovação:', err);",
     );
-    expect(source).toContain('`${frontendUrl}/lms/cursos/${payload.curso_id}`');
+    expect(source).toContain('resolveTrainingAccessUrl(env, db, {');
+    expect(source).toContain('cursoId: payload.curso_id');
+    expect(source).toContain("`${String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\\\/$/, '')}/lms/cursos/${payload.curso_id}`");
   });
 });
