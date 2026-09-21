@@ -207,7 +207,6 @@ async function main() {
       origem_id: catA.origemId,
       destino_id: catA.destinoId,
       tipo_voo_id: catA.tipoVooId,
-      natureza_voo_id: catA.naturezaVooId,
       aeronave_id: aeronaveId,
       horario_previsto_partida: `${dataProg}T10:00:00Z`,
       horario_previsto_chegada: `${dataProg}T11:00:00Z`,
