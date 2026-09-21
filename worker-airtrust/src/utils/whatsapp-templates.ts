@@ -28,7 +28,7 @@ const ALERT_WHATSAPP_TEMPLATE_DEFINITIONS: AlertWhatsAppTemplateDefinition[] = [
     category: 'UTILITY',
     language: 'pt_BR',
     bodyText:
-      '🚁 *Setor de Treinamentos | Costa do Sol*\n\nOlá, {{1}}!\n\nEste é um aviso do *Setor de Treinamentos da Costa do Sol* sobre um treinamento que requer sua atenção.\n\n📚 *Treinamento:* {{2}}\n📅 *Vencimento:* {{3}}\n🟠 *Status:* {{4}}\n\nSe for necessário, faça login no *AirTrust*.\nApós o login, você será direcionado diretamente ao treinamento.\n\n*Mensagem automática do Setor de Treinamentos da Costa do Sol.*',
+      '*GERÊNCIA DE TREINAMENTO | COSTA DO SOL*\n\nOlá, {{1}}!\n\nVocê possui um treinamento que requer sua atenção:\n\n*Treinamento:* {{2}}\n*Vencimento:* {{3}}\n*Status:* {{4}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação, sendo acompanhado pela *Gerência de Treinamento* e sujeito à verificação em auditorias.\n\nPor favor, acesse o treinamento e realize-o o quanto antes para manter sua situação de treinamento regularizada.\n\nCaso seja solicitado, faça login no *AirTrust*. Após o login, você será direcionado diretamente ao treinamento.\n\n*Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.*',
     variables: [
       { id: '1', name: 'funcionario_nome', sample: 'Filipe Daumas' },
       { id: '2', name: 'qualificacao_nome', sample: 'Treinamento EAD' },
@@ -37,7 +37,7 @@ const ALERT_WHATSAPP_TEMPLATE_DEFINITIONS: AlertWhatsAppTemplateDefinition[] = [
         id: '4',
         name: 'status_vencimento',
         sample:
-          'Vence em 7 dias\n\n🔗 *Acesse diretamente o treinamento:*\nhttps://app.airtrust.online/treinamentos/123',
+          'Vence em 7 dias\n\n*Acesse diretamente o treinamento:*\nhttps://app.airtrust.online/treinamentos/123',
       },
     ],
   },
@@ -48,7 +48,7 @@ const ALERT_WHATSAPP_TEMPLATE_DEFINITIONS: AlertWhatsAppTemplateDefinition[] = [
     category: 'UTILITY',
     language: 'pt_BR',
     bodyText:
-      '🚁 *Setor de Treinamentos | Costa do Sol*\n\nOlá, {{1}}!\n\nEste é um aviso do *Setor de Treinamentos da Costa do Sol* sobre um treinamento que requer sua atenção.\n\n📚 *Treinamento:* {{2}}\n📅 *Vencimento:* {{3}}\n🔴 *Status:* {{4}}\n\nSe for necessário, faça login no *AirTrust*.\nApós o login, você será direcionado diretamente ao treinamento.\n\n*Mensagem automática do Setor de Treinamentos da Costa do Sol.*',
+      '*GERÊNCIA DE TREINAMENTO | COSTA DO SOL*\n\nOlá, {{1}}!\n\nVocê possui um treinamento que requer sua atenção:\n\n*Treinamento:* {{2}}\n*Vencimento:* {{3}}\n*Status:* {{4}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação, sendo acompanhado pela *Gerência de Treinamento* e sujeito à verificação em auditorias.\n\nPor favor, acesse o treinamento e realize-o o quanto antes para manter sua situação de treinamento regularizada.\n\nCaso seja solicitado, faça login no *AirTrust*. Após o login, você será direcionado diretamente ao treinamento.\n\n*Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.*',
     variables: [
       { id: '1', name: 'funcionario_nome', sample: 'Filipe Daumas' },
       { id: '2', name: 'qualificacao_nome', sample: 'Treinamento EAD' },
@@ -57,7 +57,7 @@ const ALERT_WHATSAPP_TEMPLATE_DEFINITIONS: AlertWhatsAppTemplateDefinition[] = [
         id: '4',
         name: 'status_vencimento',
         sample:
-          'Vencido há 3 dias\n\n🔗 *Acesse diretamente o treinamento:*\nhttps://app.airtrust.online/treinamentos/123',
+          'Vencido há 3 dias\n\n*Acesse diretamente o treinamento:*\nhttps://app.airtrust.online/treinamentos/123',
       },
     ],
   },
@@ -200,7 +200,7 @@ export function buildTrainingTemplateStatusVariable(
   const status = buildTrainingStatusVencimento(diasAteVencimento);
 
   return trainingUrl
-    ? `${status}\n\n🔗 *Acesse diretamente o treinamento:*\n${trainingUrl}`
+    ? `${status}\n\n*Acesse diretamente o treinamento:*\n${trainingUrl}`
     : status;
 }
 
