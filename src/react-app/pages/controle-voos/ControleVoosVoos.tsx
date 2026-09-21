@@ -75,7 +75,7 @@ export default function ControleVoosVoos() {
                 <MessageCircle className="h-4 w-4" />
                 {sharingTomorrow ? 'Preparando…' : 'Compartilhar planejamento de amanhã'}
               </button>
-                            <button
+              <button
                 type="button"
                 onClick={() => setNovoVooOpen(true)}
                 className="inline-flex items-center gap-2 rounded-lg bg-cyan-700 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-800"
