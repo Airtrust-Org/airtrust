@@ -59,6 +59,18 @@ describe('ControleVoosSubnav navigation contract (N-03)', () => {
     expect(links.map((link) => link.to)).toEqual(['/controle-voos/meus-voos']);
   });
 
+  it('shows the full operational module to Gestor/Manager used by Coordenação', () => {
+    for (const role of ['GESTOR', 'MANAGER']) {
+      const links = getVisibleControleVoosNavLinks({
+        email: 'coordenacao@empresa.com',
+        role,
+      });
+      expect(links.map((link) => link.to)).toEqual(
+        CONTROLE_VOOS_NAV_LINKS.map((link) => link.to),
+      );
+    }
+  });
+
   it('correctly resolves active link on exact and nested routes', () => {
     expect(
       isControleVoosLinkActive('/controle-voos', {
