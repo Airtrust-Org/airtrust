@@ -231,7 +231,10 @@ function buildStatsExtendedCacheScope(params: {
   };
 }
 
-const historicoColumnSupportCache = new Map<string, Promise<boolean>>();
+const historicoColumnSupportCache = new WeakMap<
+  D1Database,
+  Map<string, Promise<boolean>>
+>();
 
 async function hasTableColumn(
   db: D1Database,
@@ -239,7 +242,12 @@ async function hasTableColumn(
   columnName: string,
 ): Promise<boolean> {
   const cacheKey = `${tableName}:${columnName}`;
-  const cached = historicoColumnSupportCache.get(cacheKey);
+  let dbCache = historicoColumnSupportCache.get(db);
+  if (!dbCache) {
+    dbCache = new Map<string, Promise<boolean>>();
+    historicoColumnSupportCache.set(db, dbCache);
+  }
+  const cached = dbCache.get(cacheKey);
   if (cached) return cached;
 
   const lookup = (async () => {
@@ -254,7 +262,7 @@ async function hasTableColumn(
     }
   })();
 
-  historicoColumnSupportCache.set(cacheKey, lookup);
+  dbCache.set(cacheKey, lookup);
   return lookup;
 }
 
