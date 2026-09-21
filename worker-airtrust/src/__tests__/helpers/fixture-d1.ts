@@ -289,6 +289,28 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       const funcionario = hist?.funcionario_id
         ? f.funcionarios!.find((fn) => fn.id === hist.funcionario_id)
         : null;
+      const setor = funcionario?.setor_id
+        ? f.setores.find(
+            (s) =>
+              s.id === funcionario.setor_id &&
+              s.empresa_id === empresaId &&
+              s.ativo === 1 &&
+              !s.deleted_at,
+          )
+        : null;
+      const tipoSetorLinkCount = tipo
+        ? new Set(
+            (f.qualificacoesTiposSetores || [])
+              .filter(
+                (qts) =>
+                  qts.tipo_id === tipo.id &&
+                  qts.empresa_id === empresaId &&
+                  !qts.deleted_at &&
+                  qts.setor_id != null,
+              )
+              .map((qts) => qts.setor_id),
+          ).size
+        : 0;
       return {
         first: hist
           ? {
@@ -298,6 +320,8 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
                 categoriaTipo?.dominio_codigo ??
                 null,
               setor_id: funcionario?.setor_id ?? null,
+              setor_dominio_codigo: setor?.dominio_codigo ?? null,
+              tipo_setor_link_count: tipoSetorLinkCount,
             }
           : null,
       };
