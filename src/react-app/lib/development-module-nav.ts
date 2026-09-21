@@ -1,6 +1,7 @@
 export interface DevelopmentModuleVisibilityUser {
   email?: string | null;
   role?: string | null;
+  permissions?: string[] | null;
 }
 
 export const PRIMARY_ADMIN_EMAILS = ['filipe.daumas@icloud.com'] as const;
@@ -44,8 +45,13 @@ export function canSeeControleVoosDevelopmentModule(
   user: DevelopmentModuleVisibilityUser | null | undefined,
 ): boolean {
   if (!user) return false;
+
+  const permissions = Array.isArray(user.permissions) ? user.permissions : [];
+  if (permissions.includes('DENY:controle_voos.view')) return false;
+  if (permissions.includes('GRANT:controle_voos.view')) return true;
+
   // Controle de Voos é superfície operacional de Admin e Gestor/Manager.
-  // O backend continua sendo a autoridade de RBAC por rota/capability.
+  // O backend continua sendo a autoridade final de RBAC por rota/capability.
   return OPERATIONAL_DASHBOARD_ROLES.has(normalizeRole(user.role));
 }
 
