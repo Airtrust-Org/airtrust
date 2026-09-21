@@ -24,6 +24,23 @@ export function requireControleVoosWrite(): MiddlewareHandler<{ Bindings: Env }>
   };
 }
 
+export function assertControleVoosCoordination(c: Context<{ Bindings: Env }>): void {
+  if (!checkPermission(c, 'manager')) {
+    throw new ApiError(
+      'Permissao insuficiente para Coordenacao',
+      403,
+      'CONTROLE_VOOS_COORDINATION_RBAC_FORBIDDEN',
+    );
+  }
+}
+
+export function requireControleVoosCoordination(): MiddlewareHandler<{ Bindings: Env }> {
+  return async (c, next) => {
+    assertControleVoosCoordination(c);
+    await next();
+  };
+}
+
 export function requireControleVoosSigvoosPreview(): MiddlewareHandler<{ Bindings: Env }> {
   return async (c, next) => {
     if (!(await hasConfiguredAccess(c, 'controle_voos.sigvoos_preview', 'manager'))) {

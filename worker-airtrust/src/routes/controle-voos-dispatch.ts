@@ -1,4 +1,5 @@
 import type { Context } from 'hono';
+import { assertControleVoosCoordination } from '../middleware/controle-voos-access';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
 import {
@@ -201,8 +202,10 @@ async function loadFlightDispatchContext(c: Context<{ Bindings: Env }>) {
 }
 
 export async function getFlightWhatsAppShareHandler(c: Context<{ Bindings: Env }>) {
-  const { flight, context } = await loadFlightDispatchContext(c);
   const type = String(c.req.query('tipo') || 'programacao').trim().toLowerCase();
+  if (type === 'flight_log') assertControleVoosCoordination(c);
+
+  const { flight, context } = await loadFlightDispatchContext(c);
 
   if (type === 'flight_log') {
     if (flight.status !== 'concluido_operacionalmente') {

@@ -3,7 +3,7 @@ import type { Context } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import { requireControleVoosSigvoosPreview, requireControleVoosWrite } from '../middleware/controle-voos-access';
+import { requireControleVoosCoordination, requireControleVoosSigvoosPreview, requireControleVoosWrite } from '../middleware/controle-voos-access';
 import {
   parseSigvoosRealPreviewRequest,
   runSigvoosRealApiPreview,
@@ -1255,7 +1255,13 @@ controleVoos.get('/voos/:id', auth(), async (c) => {
   return c.json({ success: true, data: (await enrichFlightsWithPresentation(c.env.DB, empresaId, [flight]))[0] });
 });
 
-controleVoos.get('/whatsapp-share/planejamento-dia-seguinte', auth(), requireControleVoosWrite(), getDailyPlanningWhatsAppShareHandler);
+controleVoos.get(
+  '/whatsapp-share/planejamento-dia-seguinte',
+  auth(),
+  requireControleVoosWrite(),
+  requireControleVoosCoordination(),
+  getDailyPlanningWhatsAppShareHandler,
+);
 controleVoos.post('/voos/:id/whatsapp', auth(), requireControleVoosWrite(), sendFlightWhatsAppHandler);
 controleVoos.post('/voos/:id/email', auth(), requireControleVoosWrite(), sendFlightEmailHandler);
 controleVoos.get('/voos/:id/whatsapp-share', auth(), requireControleVoosWrite(), getFlightWhatsAppShareHandler);
