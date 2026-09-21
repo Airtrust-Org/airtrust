@@ -157,7 +157,7 @@ describe('AppLayout module gating', () => {
 
   it('exibe Controle de Voos para usuário comum com GRANT explícito configurado', () => {
     authMock.mockReturnValue({
-      user: { nome: 'Coordenação', role: 'USUARIO' },
+      user: { nome: 'Coordenação', role: 'USUARIO', permissions: ['GRANT:controle_voos.view'] },
       logout: vi.fn(),
       empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['controle_voos'] }],
       empresaAtualId: 1,

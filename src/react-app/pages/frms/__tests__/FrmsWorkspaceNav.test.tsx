@@ -96,13 +96,11 @@ describe('FrmsWorkspaceNav', () => {
   });
 
   it('oculta o check-in quando há DENY explícito para frms.checkin', () => {
-    mockAccess(access({ administrative_role: 'GESTOR', domains: ['OPERACOES'], can_manage_maintenance: false }));
-    isDeniedMock.mockImplementation((permission: string) => permission === 'frms.checkin');
+    mockAccess(access({ administrative_role: 'GESTOR', domains: ['OPERACOES'], can_manage_maintenance: false, can_checkin: false }));
     renderNav('/frms');
 
     const nav = screen.getByRole('navigation', { name: 'Áreas FRMS' });
     expect(within(nav).queryByRole('link', { name: /check-in de fadiga/i })).not.toBeInTheDocument();
-    isDeniedMock.mockImplementation(() => false);
   });
 
   it('marca o check-in como ação ativa sem transformar a tela em Administração', () => {

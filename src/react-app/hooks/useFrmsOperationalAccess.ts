@@ -18,6 +18,7 @@ export type FrmsOperationalAccess = {
     setor_id: number | null;
   } | null;
   can_manage_maintenance: boolean;
+  can_checkin: boolean;
   maintenance_setor_ids: number[];
 };
 

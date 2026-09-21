@@ -132,17 +132,6 @@ describe('usePermissions', () => {
   });
 
 
-  it('isGranted distingue GRANT explícito de permissão herdada pelo perfil', () => {
-    mockAuth({
-      user: { id: 41, role: 'GESTOR', permissions: ['GRANT:controle_voos.view'] },
-      empresaAtualId: 9,
-    });
-    const { result } = renderHook(() => usePermissions());
-
-    expect(result.current.isGranted('controle_voos.view')).toBe(true);
-    expect(result.current.isGranted('frms.view')).toBe(false);
-  });
-
   it('canAll exige todas as permissões da lista, não apenas uma', () => {
     mockAuth({
       user: { id: 5, role: 'INSTRUTOR', permissions: [] },
