@@ -2760,6 +2760,7 @@ export default function Qualificacoes() {
                 <DataTable
                   tableId="qualificacoes-tipos"
                   data={filteredTipos}
+                  virtualizeRows={false}
                   columns={[
                     {
                       id: 'acoes',
