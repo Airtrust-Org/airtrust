@@ -199,6 +199,16 @@ export async function getFlightWhatsAppShareHandler(c: Context<{ Bindings: Env }
         'CONTROLE_VOOS_FLIGHT_LOG_NOT_COMPLETED',
       );
     }
+    const hasActualTiming = context.stages.some(
+      (stage) => stage.horario_decolagem || stage.horario_pouso,
+    ) || Boolean(flight.horario_real_partida || flight.horario_real_chegada);
+    if (!hasActualTiming) {
+      throw new ApiError(
+        'Flight Log sem horarios realizados suficientes para compartilhamento',
+        409,
+        'CONTROLE_VOOS_FLIGHT_LOG_INCOMPLETE',
+      );
+    }
     return c.json({
       success: true,
       data: { type: 'flight_log', message: buildCompletedFlightLogMessage(context) },
