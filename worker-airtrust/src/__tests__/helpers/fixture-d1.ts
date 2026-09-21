@@ -322,6 +322,20 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
               setor_id: funcionario?.setor_id ?? null,
               setor_dominio_codigo: setor?.dominio_codigo ?? null,
               tipo_setor_link_count: tipoSetorLinkCount,
+              tipo_single_setor_id:
+                tipoSetorLinkCount === 1
+                  ? (f.qualificacoesTiposSetores || []).find(
+                      (qts) =>
+                        qts.tipo_id === tipo?.id &&
+                        qts.empresa_id === empresaId &&
+                        !qts.deleted_at &&
+                        qts.setor_id != null,
+                    )?.setor_id ?? null
+                  : null,
+              tipo_single_setor_dominio_codigo:
+                tipoSetorLinkCount === 1
+                  ? setor?.dominio_codigo ?? null
+                  : null,
             }
           : null,
       };
