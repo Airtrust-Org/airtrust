@@ -66,6 +66,32 @@ describe('ControleVoosEditarVooDialog', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('ao mudar a data preserva os horários na nova data antes de salvar', async () => {
+    patchMock.mockResolvedValue({
+      success: true,
+      data: { ...voo, data_programacao: '2026-09-22', versao: 5 },
+    });
+
+    render(
+      <ControleVoosEditarVooDialog open voo={voo} onClose={vi.fn()} onSaved={vi.fn()} />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Data da programação'), {
+      target: { value: '2026-09-22' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+
+    await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1));
+    expect(patchMock).toHaveBeenCalledWith(
+      '/controle-voos/voos/77',
+      expect.objectContaining({
+        data_programacao: '2026-09-22',
+        horario_previsto_partida: expect.stringContaining('2026-09-22T13:00:00'),
+        horario_previsto_chegada: expect.stringContaining('2026-09-22T15:00:00'),
+      }),
+    );
+  });
+
   it('bloqueia horários invertidos antes de chamar a API', async () => {
     render(
       <ControleVoosEditarVooDialog open voo={voo} onClose={vi.fn()} onSaved={vi.fn()} />,
