@@ -12,6 +12,7 @@ import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
 import EdbShadowReadinessCard from './components/EdbShadowReadinessCard';
 import ControleVoosTripulacaoCard from './components/ControleVoosTripulacaoCard';
 import ControleVoosEditarVooDialog from './components/ControleVoosEditarVooDialog';
+import ControleVoosStatusActions from './components/ControleVoosStatusActions';
 import {
   useControleVoosVoo,
   useControleVoosRdv,
@@ -424,16 +425,9 @@ export default function ControleVoosVooDetalhe() {
                     </button>
                   )}
                   <a href="#tripulacao" className="block w-full rounded-lg bg-cyan-700 px-4 py-2 text-center text-sm font-medium text-white">Alterar Tripulação</a>
-                  {(['Liberar Voo', 'Cancelar Voo', 'Atualizar Status'] as const).map((label) => (
-                    <button
-                      key={label}
-                      disabled
-                      className="w-full rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500"
-                      title="N1 — ação em desenvolvimento"
-                    >
-                      {label}
-                    </button>
-                  ))}
+                  {canCoordinate ? (
+                    <ControleVoosStatusActions voo={voo} onChanged={() => void refetchVoo()} />
+                  ) : null}
                 </div>
               </div>
             </div>
