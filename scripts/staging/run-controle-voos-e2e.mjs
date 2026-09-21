@@ -311,8 +311,10 @@ async function main() {
       numero_etapa: 1,
       origem_icao: 'OR' + 'A' + manifest.runId,
       destino_icao: 'DE' + 'A' + manifest.runId,
+      horario_motor_ligado: `${dataProg}T09:58:00Z`,
       horario_decolagem: `${dataProg}T10:05:00Z`,
       horario_pouso: `${dataProg}T10:55:00Z`,
+      horario_motor_desligado: `${dataProg}T11:02:00Z`,
       combustivel_inicio: 500,
       combustivel_fim: 400,
     },
@@ -463,6 +465,45 @@ async function main() {
     body: { versao: rdvVersao },
   });
   rdvVersao += 1;
+
+  // ── 14.5 Provar recebimento na fila da Coordenação ──────────────────
+  // Este é o caso operacional real: o piloto só pode considerar o handoff
+  // concluído se a consulta da Coordenação enxergar o mesmo RDV como enviado.
+  const filaRecebidos = await call({
+    operation: 'consultar_fila_coordenacao_apos_envio',
+    method: 'GET',
+    path: `/api/controle-voos/rdv/fila?status=enviado&data_inicio=${dataProg}&data_fim=${dataProg}`,
+    actor: coordA,
+    tenant: 'A',
+    expectedStatus: 200,
+  });
+  const filaItems = Array.isArray(filaRecebidos.json?.data) ? filaRecebidos.json.data : [];
+  const filaItemRealizado = filaItems.find(
+    (item) =>
+      Number(item?.voo_id) === Number(vooId) &&
+      String(item?.workflow_status || '') === 'enviado',
+  );
+  const filaContemRdvEnviadoEVooRealizado =
+    filaRecebidos.passed &&
+    Boolean(filaItemRealizado?.horario_real_partida) &&
+    String(filaItemRealizado?.flight_status || '') !== 'cancelado';
+  report.push({
+    operation: 'fila_coordenacao_contem_rdv_enviado_e_voo_realizado',
+    method: 'GET',
+    route: '/api/controle-voos/rdv/fila?status=enviado',
+    expected_status:
+      'RDV presente com workflow_status=enviado e horario_real_partida consolidado do piloto',
+    observed_status: filaContemRdvEnviadoEVooRealizado
+      ? String(filaItemRealizado?.horario_real_partida)
+      : 'ausente/incompleto',
+    operation_id: vooId,
+    tenant: 'A',
+    result: filaContemRdvEnviadoEVooRealizado ? 'PASS' : 'FAIL',
+    duration_ms: 0,
+  });
+  if (!filaContemRdvEnviadoEVooRealizado) {
+    log(`FAIL fila_coordenacao_contem_rdv_enviado_e_voo_realizado — vooId=${vooId}`);
+  }
 
   // ── 15. Iniciar revisao (coordenacao) ────────────────────────────────
   await call({

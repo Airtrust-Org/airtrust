@@ -376,6 +376,11 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("'/rdv/enviar'");
     expect(pilotApp).toContain("'/rdv/alertas'");
     expect(pilotApp).toContain("alert?.severidade === 'IMPEDE_ENVIO'");
+    expect(pilotIndex).toContain('id="enable-flight-notifications"');
+    expect(pilotApp).toContain('Notification.requestPermission()');
+    expect(pilotApp).toContain('showNotification');
+    expect(pilotApp).toContain('Alteração da Coordenação — atualize o voo');
+    expect(pilotApp).toContain('}, 60_000);');
     expect(pilotApp).toContain("rdv.status === 'preenchimento_finalizado'");
     expect(pilotApp).toContain("rdv.workflow_status === 'enviado'");
     expect(pilotApp).toContain("const editableWorkflow = ['rascunho', 'devolvido'].includes");

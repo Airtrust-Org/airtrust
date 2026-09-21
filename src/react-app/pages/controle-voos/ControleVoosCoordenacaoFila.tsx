@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardList, FileSearch } from 'lucide-react';
+import { ClipboardList, FileSearch, RefreshCw } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
+import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
+import ControleVoosRdvWorkflowBadge from './components/ControleVoosRdvWorkflowBadge';
 import ControleOperacionalFrmsPanel from './components/ControleOperacionalFrmsPanel';
 import { useRdvFila, type CvRdvWorkflowStatus } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatDateTime } from './data/controleVoosUtils';
-import { flightOperationalRouteLabel } from './data/controleVoosFlightIdentity';
+import { flightOperationalRouteLabel, flightPresentationStatus } from './data/controleVoosFlightIdentity';
 
 const STATUS_OPTIONS: { value: CvRdvWorkflowStatus | ''; label: string }[] = [
   { value: '', label: 'Todos os status' },
@@ -21,28 +23,6 @@ const STATUS_OPTIONS: { value: CvRdvWorkflowStatus | ''; label: string }[] = [
   { value: 'cancelado', label: 'Cancelado' },
 ];
 
-const WORKFLOW_LABELS: Record<CvRdvWorkflowStatus, string> = {
-  rascunho: 'Rascunho',
-  enviado: 'Enviado',
-  em_revisao: 'Em revisão',
-  devolvido: 'Devolvido',
-  aprovado_coordenacao: 'Aprovado',
-  finalizado: 'Finalizado',
-  reaberto: 'Reaberto',
-  cancelado: 'Cancelado',
-};
-
-const WORKFLOW_COLORS: Record<CvRdvWorkflowStatus, string> = {
-  rascunho: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-  enviado: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-  em_revisao: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-  devolvido: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-  aprovado_coordenacao: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300',
-  finalizado: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
-  reaberto: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
-  cancelado: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-};
-
 export default function ControleVoosCoordenacaoFila() {
   const [status, setStatus] = useState<CvRdvWorkflowStatus | ''>('enviado');
   const [dataInicio, setDataInicio] = useState('');
@@ -51,7 +31,10 @@ export default function ControleVoosCoordenacaoFila() {
   const {
     data: fila = [],
     isLoading,
+    isFetching,
     error,
+    refetch,
+    dataUpdatedAt,
   } = useRdvFila({
     status: status || undefined,
     data_inicio: dataInicio || undefined,
@@ -103,6 +86,19 @@ export default function ControleVoosCoordenacaoFila() {
                 className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               />
             </label>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+              className="inline-flex min-h-[36px] items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+              {isFetching ? 'Atualizando…' : 'Atualizar fila'}
+            </button>
+            <span className="ml-auto text-xs text-slate-400 dark:text-slate-500" aria-live="polite">
+              Atualização automática a cada 15 s
+              {dataUpdatedAt ? ` · última: ${new Date(dataUpdatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}
+            </span>
           </div>
 
           {isLoading && (
@@ -147,7 +143,10 @@ export default function ControleVoosCoordenacaoFila() {
                         Rota operacional
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
-                        Status
+                        Status RDV
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                        Status do voo
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Enviado em
@@ -177,11 +176,17 @@ export default function ControleVoosCoordenacaoFila() {
                           {flightOperationalRouteLabel(item, [])}
                         </td>
                         <td className="px-4 py-3">
-                          <span
-                            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${WORKFLOW_COLORS[item.workflow_status]}`}
-                          >
-                            {WORKFLOW_LABELS[item.workflow_status]}
-                          </span>
+                          <ControleVoosRdvWorkflowBadge status={item.workflow_status} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <ControleVoosStatusBadge
+                            status={flightPresentationStatus({
+                              status: item.flight_status,
+                              horario_real_partida: item.horario_real_partida,
+                              rdv_workflow_status: item.workflow_status,
+                              rdv_enviado_em: item.enviado_em,
+                            })}
+                          />
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
                           {item.enviado_em ? formatDateTime(item.enviado_em) : '—'}

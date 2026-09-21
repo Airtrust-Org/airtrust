@@ -66,6 +66,7 @@ const API_BASE_URL = resolvePilotApiBase();
 const connectivity = document.querySelector('#connectivity');
 const workspace = document.querySelector('#workspace');
 const refreshOnlineButton = document.querySelector('#refresh-online');
+const enableFlightNotificationsButton = document.querySelector('#enable-flight-notifications');
 const sessionStatus = document.querySelector('#session-status');
 const flightSelectionCard = document.querySelector('#flight-selection-card');
 const onlineFlightsCard = document.querySelector('#online-flights-card');
@@ -913,6 +914,50 @@ function flightPackageNeedsUpdate(voo) {
   const cached = cachedPackageForFlight(voo?.id);
   if (!cached) return false;
   return Number(voo?.versao || 0) > Number(cached.value?.package?.voo?.versao || 0);
+}
+
+function updateFlightNotificationControl() {
+  if (!enableFlightNotificationsButton) return;
+  if (!('Notification' in window)) {
+    enableFlightNotificationsButton.hidden = true;
+    return;
+  }
+  enableFlightNotificationsButton.hidden = false;
+  if (Notification.permission === 'granted') {
+    enableFlightNotificationsButton.textContent = 'Alertas ativos';
+    enableFlightNotificationsButton.disabled = true;
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    enableFlightNotificationsButton.textContent = 'Alertas bloqueados';
+    enableFlightNotificationsButton.disabled = true;
+    enableFlightNotificationsButton.title =
+      'Os alertas foram bloqueados neste navegador. Altere a permissão do site para reativar.';
+    return;
+  }
+  enableFlightNotificationsButton.textContent = 'Ativar alertas';
+  enableFlightNotificationsButton.disabled = false;
+}
+
+async function requestFlightNotificationPermission() {
+  if (!('Notification' in window)) return;
+  try {
+    const permission = await Notification.requestPermission();
+    updateFlightNotificationControl();
+    setSessionMessage(
+      permission === 'granted'
+        ? 'Alertas de alteração de voo ativados neste dispositivo.'
+        : permission === 'denied'
+          ? 'Alertas bloqueados pelo navegador. Você ainda verá alterações dentro do Pilot App.'
+          : 'Permissão de alertas não foi concedida.',
+      permission === 'granted' ? 'ok' : 'attention',
+    );
+  } catch (error) {
+    setSessionMessage(
+      error instanceof Error ? error.message : 'Não foi possível ativar os alertas.',
+      'error',
+    );
+  }
 }
 
 async function notifyFlightUpdate(voo) {
@@ -4334,6 +4379,9 @@ refreshOnlineButton.addEventListener('click', () => {
   flightDateManuallySelected = false;
   void loadOnlineFlights();
 });
+enableFlightNotificationsButton?.addEventListener('click', () => {
+  void requestFlightNotificationPermission();
+});
 prepareEditOfflineButton.addEventListener('click', () => void prepareOfflineEditing());
 openLocalDraftButton.addEventListener('click', () => void openExistingOperationalDraft());
 syncRdvButton.addEventListener('click', () => void queueCurrentDraftForSync());
@@ -4393,6 +4441,7 @@ window.addEventListener('pagehide', () => {
 
 async function bootstrapPilotApp() {
   try {
+    updateFlightNotificationControl();
     if (!offlineFlightLockMarkerActive()) await registerPilotServiceWorker();
     vault = await PilotVault.open();
     const vaultOpenState = await vault.openAutomatically();
@@ -4408,5 +4457,16 @@ async function bootstrapPilotApp() {
     setSessionMessage('Não foi possível iniciar o Pilot App: ' + message, 'error');
   }
 }
+
+window.setInterval(() => {
+  if (
+    document.visibilityState === 'visible' &&
+    navigator.onLine &&
+    vault?.isUnlocked() &&
+    !offlineFlightLocked
+  ) {
+    void loadOnlineFlights();
+  }
+}, 60_000);
 
 void bootstrapPilotApp();
