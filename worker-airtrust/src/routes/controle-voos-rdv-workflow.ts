@@ -89,6 +89,69 @@ function flightDocumentLabel(type: 'WEATHER_REPORT' | 'PLANO_VOO'): string {
   return type === 'WEATHER_REPORT' ? 'Weather report' : 'Planejamento de voo';
 }
 
+function addDaysToDateOnly(dateText: string, days: number): string {
+  const parsed = new Date(`${dateText}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return dateText;
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function combineOperationalDateAndClock(
+  flightDate: string,
+  value: string | null,
+  notBefore?: string | null,
+): string | null {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(text)) return text;
+
+  const clock = text.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!clock) return text;
+
+  const normalizedClock = `${clock[1]}:${clock[2]}:${clock[3] || '00'}`;
+  let candidate = `${flightDate}T${normalizedClock}`;
+  if (notBefore && Date.parse(candidate) < Date.parse(notBefore)) {
+    candidate = `${addDaysToDateOnly(flightDate, 1)}T${normalizedClock}`;
+  }
+  return candidate;
+}
+
+async function resolveRealizedFlightTimes(
+  db: D1Database,
+  empresaId: number,
+  flight: { id: number; data_programacao: string },
+): Promise<{ departure: string | null; arrival: string | null }> {
+  const [first, last] = await Promise.all([
+    db.prepare(
+      `SELECT horario_motor_ligado
+         FROM cv_voo_etapas
+        WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+          AND horario_motor_ligado IS NOT NULL AND TRIM(horario_motor_ligado) <> ''
+        ORDER BY numero_etapa ASC, id ASC
+        LIMIT 1`,
+    ).bind(empresaId, flight.id).first<{ horario_motor_ligado: string | null }>(),
+    db.prepare(
+      `SELECT horario_motor_desligado
+         FROM cv_voo_etapas
+        WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+          AND horario_motor_desligado IS NOT NULL AND TRIM(horario_motor_desligado) <> ''
+        ORDER BY numero_etapa DESC, id DESC
+        LIMIT 1`,
+    ).bind(empresaId, flight.id).first<{ horario_motor_desligado: string | null }>(),
+  ]);
+
+  const departure = combineOperationalDateAndClock(
+    flight.data_programacao,
+    first?.horario_motor_ligado ?? null,
+  );
+  const arrival = combineOperationalDateAndClock(
+    flight.data_programacao,
+    last?.horario_motor_desligado ?? null,
+    departure,
+  );
+  return { departure, arrival };
+}
+
 // Reaproveita as mesmas regras de validação de RDV (horários/combustível)
 // do CRUD original — mantidas ali por já existirem antes desta entrega.
 async function parseJsonPayload(
@@ -687,7 +750,8 @@ rdvWorkflow.get(
         r.id, r.voo_id, r.numero, r.data_voo, r.status, r.workflow_status, r.versao,
         r.responsavel_preenchimento_id, r.enviado_em, r.devolvido_em, r.aprovado_coordenacao_em,
         r.finalizado_workflow_em, r.reaberto_em, r.motivo_devolucao,
-        v.prefixo, v.aeronave_id, v.data_programacao, v.origem_id, v.destino_id
+        v.prefixo, v.aeronave_id, v.data_programacao, v.origem_id, v.destino_id,
+        v.status AS flight_status, v.horario_real_partida, v.horario_real_chegada
       FROM cv_rdv_operacional r
       INNER JOIN cv_voos v ON v.id = r.voo_id AND v.empresa_id = r.empresa_id
       WHERE ${filters.join(' AND ')}
@@ -748,8 +812,38 @@ rdvWorkflow.post('/voos/:id/rdv/enviar', auth(), requireAnyRdvAccess(), async (c
     );
   }
 
+  const realizedTimes = await resolveRealizedFlightTimes(c.env.DB, empresaId, voo);
   const novaVersao = rdv.versao + 1;
   const guard = { rdvId: rdv.id, empresaId, expectedVersion: novaVersao };
+  const flightRealizedStatement =
+    realizedTimes.departure || realizedTimes.arrival
+      ? c.env.DB.prepare(
+          `
+            UPDATE cv_voos
+            SET horario_real_partida = COALESCE(?, horario_real_partida),
+                horario_real_chegada = COALESCE(?, horario_real_chegada),
+                versao = versao + 1,
+                updated_by = ?,
+                updated_at = datetime('now')
+            WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
+              AND EXISTS (
+                SELECT 1
+                FROM cv_rdv_operacional
+                WHERE id = ? AND empresa_id = ? AND versao = ?
+                  AND workflow_status = 'enviado' AND deleted_at IS NULL
+              )
+          `,
+        ).bind(
+          realizedTimes.departure,
+          realizedTimes.arrival,
+          userId,
+          voo.id,
+          empresaId,
+          rdv.id,
+          empresaId,
+          novaVersao,
+        )
+      : null;
   const [updateResult] = await c.env.DB.batch([
     c.env.DB.prepare(
       `
@@ -766,6 +860,7 @@ rdvWorkflow.post('/voos/:id/rdv/enviar', auth(), requireAnyRdvAccess(), async (c
       bindValues: [empresaId, rdv.id, novaVersao, userId],
       guard,
     }),
+    ...(flightRealizedStatement ? [flightRealizedStatement] : []),
     buildFlightEventStatement(
       c.env.DB,
       {
