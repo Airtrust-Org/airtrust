@@ -1,6 +1,10 @@
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Clock, FileText, Shield, CheckCircle, XCircle } from 'lucide-react';
+import { Clock, FileText, Shield, CheckCircle, XCircle, Upload, MessageCircle } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
+import { apiClient } from '@/react-app/services/apiClient';
+import { usePermissions } from '@/react-app/hooks/usePermissions';
+import { toast } from 'sonner';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosBreadcrumb from './components/ControleVoosBreadcrumb';
@@ -16,6 +20,24 @@ import {
 } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatDateTime } from './data/controleVoosUtils';
 import { flightOperationalRouteLabel, flightOperationalDestinationLabel } from './data/controleVoosFlightIdentity';
+
+
+type FlightDocument = {
+  id: number;
+  type: 'WEATHER_REPORT' | 'PLANO_VOO';
+  label: string;
+  file_name: string;
+  content_type: string;
+  size: number;
+  created_at: string;
+  download_url: string;
+};
+
+function formatFileSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '—';
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function buildAeroMap(aeroportos: CvAeroporto[]) {
   return new Map(aeroportos.map((a) => [a.id, a]));
@@ -76,9 +98,78 @@ function StatusTimeline({ status }: { status: CvFlightStatus }) {
 
 export default function ControleVoosVooDetalhe() {
   const { id } = useParams<{ id: string }>();
-  const { data: voo, isLoading, error } = useControleVoosVoo(id);
+  const { isAdmin, isGestor } = usePermissions();
+  const canCoordinate = isAdmin || isGestor;
+  const { data: voo, isLoading, error, refetch: refetchVoo } = useControleVoosVoo(id);
   const { data: rdv } = useControleVoosRdv(id);
   const { data: aeroportos = [] } = useControleVoosAeroportos();
+  const [documents, setDocuments] = useState<FlightDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [uploadingType, setUploadingType] = useState<FlightDocument['type'] | null>(null);
+  const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+
+  const loadDocuments = async () => {
+    if (!id) return;
+    setDocumentsLoading(true);
+    try {
+      const response = await apiClient.get<FlightDocument[]>(`/controle-voos/voos/${id}/documentos`);
+      if (!response.success) throw new Error(response.error || 'Falha ao carregar anexos');
+      setDocuments(Array.isArray(response.data) ? response.data : []);
+    } catch (loadError) {
+      console.error('[Controle de Voos] Falha ao carregar documentos do voo', loadError);
+    } finally {
+      setDocumentsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadDocuments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const uploadDocument = async (type: FlightDocument['type'], file: File | null) => {
+    if (!id || !file) return;
+    setUploadingType(type);
+    try {
+      const form = new FormData();
+      form.set('tipo', type);
+      form.set('file', file);
+      const response = await apiClient(`/controle-voos/voos/${id}/documentos`, { method: 'POST', body: form });
+      if (!response.success) throw new Error(response.error || 'Falha ao anexar documento');
+      toast.success(`${type === 'WEATHER_REPORT' ? 'Weather report' : 'Planejamento de voo'} anexado. Pilotos verão a atualização do voo.`);
+      await Promise.all([loadDocuments(), refetchVoo()]);
+    } catch (uploadError) {
+      toast.error(uploadError instanceof Error ? uploadError.message : 'Falha ao anexar documento');
+    } finally {
+      setUploadingType(null);
+    }
+  };
+
+  const openDocument = async (document: FlightDocument) => {
+    if (!id) return;
+    try {
+      const blob = await apiClient.getBlob(`/controle-voos/voos/${id}/documentos/${document.id}`);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (openError) {
+      toast.error(openError instanceof Error ? openError.message : 'Falha ao abrir documento');
+    }
+  };
+
+  const sendWhatsapp = async () => {
+    if (!id || sendingWhatsapp) return;
+    setSendingWhatsapp(true);
+    try {
+      const response = await apiClient.post<{ sent: number; failed: number }>(`/controle-voos/voos/${id}/whatsapp`, {});
+      if (!response.success) throw new Error(response.error || 'Falha ao enviar WhatsApp');
+      toast.success(`Programação enviada por WhatsApp para ${response.data?.sent ?? 0} tripulante(s).`);
+    } catch (sendError) {
+      toast.error(sendError instanceof Error ? sendError.message : 'Falha ao enviar WhatsApp');
+    } finally {
+      setSendingWhatsapp(false);
+    }
+  };
 
   const aeroMap = buildAeroMap(aeroportos);
 
@@ -257,11 +348,67 @@ export default function ControleVoosVooDetalhe() {
                 )}
               </div>
 
+              <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
+                <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-slate-800 dark:text-slate-100">
+                  <FileText className="h-4 w-4 text-cyan-600" /> Documentos do voo
+                </h2>
+                {canCoordinate && (
+                  <div className="mb-4 grid gap-2">
+                    {(['WEATHER_REPORT', 'PLANO_VOO'] as const).map((type) => (
+                      <label key={type} className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-800 hover:bg-cyan-100 dark:border-cyan-800 dark:bg-cyan-950/20 dark:text-cyan-300">
+                        <Upload className="h-3.5 w-3.5" />
+                        {uploadingType === type ? 'Enviando…' : type === 'WEATHER_REPORT' ? 'Anexar Weather Report' : 'Anexar Planejamento de Voo'}
+                        <input
+                          type="file"
+                          className="sr-only"
+                          accept="application/pdf,image/png,image/jpeg,image/webp,image/heic,image/heif"
+                          disabled={uploadingType !== null}
+                          onChange={(event) => {
+                            const file = event.currentTarget.files?.[0] || null;
+                            event.currentTarget.value = '';
+                            void uploadDocument(type, file);
+                          }}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {documentsLoading ? (
+                  <p className="text-xs text-slate-500">Carregando documentos…</p>
+                ) : documents.length === 0 ? (
+                  <p className="text-xs text-slate-500">Nenhum Weather Report ou planejamento anexado.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {documents.map((document) => (
+                      <button
+                        type="button"
+                        key={document.id}
+                        onClick={() => void openDocument(document)}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-left text-xs hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                      >
+                        <span className="block font-semibold text-slate-800 dark:text-slate-100">{document.label}</span>
+                        <span className="mt-0.5 block text-slate-500">{document.file_name} · {formatFileSize(document.size)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <EdbShadowReadinessCard flightId={voo.id} />
 
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Ações</h2>
                 <div className="space-y-2">
+                  {canCoordinate && (
+                    <button
+                      type="button"
+                      onClick={() => void sendWhatsapp()}
+                      disabled={sendingWhatsapp}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                    >
+                      <MessageCircle className="h-4 w-4" /> {sendingWhatsapp ? 'Enviando…' : 'Enviar programação por WhatsApp'}
+                    </button>
+                  )}
                   <a href="#tripulacao" className="block w-full rounded-lg bg-cyan-700 px-4 py-2 text-center text-sm font-medium text-white">Alterar Tripulação</a>
                   {(['Liberar Voo', 'Cancelar Voo', 'Atualizar Status'] as const).map((label) => (
                     <button

@@ -36,6 +36,10 @@ export const CheckinCreateSchema = z
       .string()
       .regex(/^\d{2}:\d{2}$/)
       .optional(),
+    hora_apresentacao: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .optional(),
     horas_sono_24h: z.number().min(0).max(24).optional(),
     horas_sono_48h: z.number().min(0).max(48).optional(),
     qualidade_sono: z.number().int().min(1).max(5).optional(),

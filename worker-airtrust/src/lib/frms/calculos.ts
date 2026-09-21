@@ -255,7 +255,7 @@ export function calcFatorizacao(input: FatorizacaoInput): FatorizacaoResult {
   };
 }
 
-function calcFatorApresentacao(hora: string | null, limites: LimitesMap): number {
+export function calcFatorApresentacao(hora: string | null, limites: LimitesMap): number {
   const escala = resolverEscalaFatores(limites);
   const h = getHora(hora);
   if (h < 0) return toPenalty(limites.APRESENTACAO_NOITE_FATOR, escala);
@@ -277,7 +277,7 @@ function calcFatorApresentacao(hora: string | null, limites: LimitesMap): number
  * compatibilidade de schema mas **não são lidos** — jornada curta não atenua
  * fadiga. Ver D-05 em frms-scientific-audit.md.
  */
-function calcFatorDuracao(duracaoMin: number, limites: LimitesMap): number {
+export function calcFatorDuracao(duracaoMin: number, limites: LimitesMap): number {
   const escala = resolverEscalaFatores(limites);
   if (duracaoMin > limites.DURACAO_LONGA_MINUTOS)
     return toPenalty(limites.DURACAO_LONGA_FATOR, escala);

@@ -13,7 +13,7 @@ type Props = {
 
 type ApiEnvelope<T> = { success: boolean; data?: { data?: T } | T; error?: string };
 type Aeronave = { id: number; codigo?: string | null; prefixo?: string | null; modelo?: string | null; status?: string | null };
-type EligibleCrewMember = { id: number; nome: string; matricula: string | null; funcao_codigo: 'PIC' | 'SIC'; funcao_nome: string };
+type EligibleCrewMember = { id: number; nome: string; nome_guerra?: string; matricula: string | null; funcao_codigo: 'PIC' | 'SIC'; funcao_nome: string };
 type CatalogItem = { id: number; codigo: string; nome: string; descricao?: string | null };
 
 function extract<T>(response: unknown): T {
@@ -43,8 +43,19 @@ function combineFlightDateAndTime(dateText: string, timeText: string) {
   return value;
 }
 
+function normalizeDurationInput(value: string): string {
+  const raw = value.trim();
+  if (/^\d{1,2}:[0-5]\d$/.test(raw)) return raw;
+  const digits = raw.replace(/\D/g, '').slice(0, 4);
+  if (digits.length < 3) return digits;
+  const hours = digits.slice(0, -2);
+  const minutes = digits.slice(-2);
+  return Number(minutes) < 60 ? `${Number(hours)}:${minutes}` : digits;
+}
+
 function parseDurationMinutes(value: string): number | null {
-  const match = value.trim().match(/^(\d{1,2}):([0-5]\d)$/);
+  const normalized = normalizeDurationInput(value);
+  const match = normalized.match(/^(\d{1,2}):([0-5]\d)$/);
   if (!match) return null;
   return Number(match[1]) * 60 + Number(match[2]);
 }
@@ -101,6 +112,11 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     horario_previsto_chegada:
       mode === 'pilot' ? toLocalTime(new Date(now.getTime() + 2 * 60 * 60_000)) : toLocalInput(new Date(now.getTime() + 2 * 60 * 60_000)),
     tempo_total_voo: '1:00',
+    pax_planejado: '',
+    peso_planejado: '',
+    unidade_peso_planejado: 'KG',
+    combustivel_solicitado: '',
+    unidade_combustivel_solicitado: 'KG',
     observacoes: '',
   });
 
@@ -194,9 +210,10 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     }));
   };
   const setPlannedDuration = (value: string) => {
+    const normalized = normalizeDurationInput(value);
     setForm((prev) => {
-      const next = { ...prev, tempo_total_voo: value };
-      const computed = plannedEndFromDuration(prev.horario_previsto_partida, value);
+      const next = { ...prev, tempo_total_voo: normalized };
+      const computed = plannedEndFromDuration(prev.horario_previsto_partida, normalized);
       if (computed) next.horario_previsto_chegada = computed;
       return next;
     });
@@ -275,6 +292,8 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const sendWhatsappAfterCreate = mode === 'coordenacao' && submitter?.value === 'whatsapp';
     const routeReady = routeIds.length >= 2 && routeIds.every(Boolean);
     const commonReady = form.aeronave_id && form.prefixo && form.contrato_id && form.tipo_voo_id && routeReady;
     const crewReady = mode === 'pilot'
@@ -332,10 +351,24 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
             sic_funcionario_id: Number(form.sic_funcionario_id),
             pic_funcao_bordo_id: Number(form.pic_funcao_bordo_id),
             sic_funcao_bordo_id: Number(form.sic_funcao_bordo_id),
+            pax_planejado: form.pax_planejado === '' ? null : Number(form.pax_planejado),
+            peso_planejado: form.peso_planejado === '' ? null : Number(form.peso_planejado),
+            unidade_peso_planejado: form.unidade_peso_planejado,
+            combustivel_solicitado: form.combustivel_solicitado === '' ? null : Number(form.combustivel_solicitado),
+            unidade_combustivel_solicitado: form.unidade_combustivel_solicitado,
           };
       const endpoint = mode === 'pilot' ? '/controle-voos/voos/meus/criar' : '/controle-voos/voos';
       const response = await apiClient.post<unknown>(endpoint, body);
-      onCreated(extract<CvVoo>(response));
+      const created = extract<CvVoo>(response);
+      onCreated(created);
+      if (sendWhatsappAfterCreate) {
+        try {
+          await apiClient.post(`/controle-voos/voos/${created.id}/whatsapp`, {});
+        } catch (sendError) {
+          setError(`Voo criado, mas o WhatsApp não foi enviado: ${sendError instanceof Error ? sendError.message : 'falha no envio'}`);
+          return;
+        }
+      }
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível criar o voo.');
@@ -440,7 +473,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
             <>
               <label className="text-sm">Tripulante — posto PIC
                 <select className={fieldClass} value={form.pic_funcionario_id} onChange={(e) => set('pic_funcionario_id', e.target.value)} disabled={!form.aeronave_id || loadingCrew} required>
-                  <option value="">{loadingCrew ? 'Carregando…' : 'Selecione'}</option>{picOptions.map((member) => <option key={member.id} value={member.id}>{member.nome}{member.matricula ? ` · ${member.matricula}` : ''}</option>)}
+                  <option value="">{loadingCrew ? 'Carregando…' : 'Selecione'}</option>{picOptions.map((member) => <option key={member.id} value={member.id}>{member.nome_guerra || member.nome}</option>)}
                 </select>
               </label>
               <label className="text-sm">Função a bordo — posto PIC
@@ -448,7 +481,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
               </label>
               <label className="text-sm">Tripulante — posto SIC
                 <select className={fieldClass} value={form.sic_funcionario_id} onChange={(e) => set('sic_funcionario_id', e.target.value)} disabled={!form.aeronave_id || loadingCrew} required>
-                  <option value="">{loadingCrew ? 'Carregando…' : 'Selecione'}</option>{sicOptions.map((member) => <option key={member.id} value={member.id}>{member.nome} · {member.funcao_nome}{member.matricula ? ` · ${member.matricula}` : ''}</option>)}
+                  <option value="">{loadingCrew ? 'Carregando…' : 'Selecione'}</option>{sicOptions.map((member) => <option key={member.id} value={member.id}>{member.nome_guerra || member.nome}</option>)}
                 </select>
               </label>
               <label className="text-sm">Função a bordo — posto SIC
@@ -476,20 +509,48 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
                   const minutes = parseDurationMinutes(e.target.value);
                   if (minutes !== null) setPlannedDuration(formatDurationMinutes(minutes));
                 }}
-                placeholder="HH:MM"
+                placeholder="Ex.: 130 → 1:30"
                 pattern="\d{1,2}:[0-5]\d"
                 required
               />
-              <span className="mt-1 block text-xs text-slate-500">Preencha a chegada ou a duração; o outro campo é recalculado automaticamente.</span>
+              <span className="mt-1 block text-xs text-slate-500">Digite apenas os números (ex.: 130 = 1:30). A chegada é recalculada automaticamente.</span>
             </label>
+          )}
+          {mode === 'coordenacao' && (
+            <>
+              <label className="text-sm">Passageiros previstos
+                <input type="number" min="0" step="1" className={fieldClass} value={form.pax_planejado} onChange={(e) => set('pax_planejado', e.target.value)} placeholder="Quantidade" />
+              </label>
+              <label className="text-sm">Peso previsto
+                <div className="flex gap-2">
+                  <input type="number" min="0" step="0.1" className={fieldClass} value={form.peso_planejado} onChange={(e) => set('peso_planejado', e.target.value)} placeholder="Peso" />
+                  <select aria-label="Unidade do peso previsto" className={`${fieldClass} max-w-24`} value={form.unidade_peso_planejado} onChange={(e) => set('unidade_peso_planejado', e.target.value)}>
+                    <option value="KG">kg</option><option value="LB">lb</option>
+                  </select>
+                </div>
+              </label>
+              <label className="text-sm md:col-span-2">Combustível solicitado
+                <div className="flex gap-2">
+                  <input type="number" min="0" step="0.1" className={fieldClass} value={form.combustivel_solicitado} onChange={(e) => set('combustivel_solicitado', e.target.value)} placeholder="Quantidade solicitada" />
+                  <select aria-label="Unidade do combustível solicitado" className={`${fieldClass} max-w-24`} value={form.unidade_combustivel_solicitado} onChange={(e) => set('unidade_combustivel_solicitado', e.target.value)}>
+                    <option value="KG">kg</option><option value="LB">lb</option><option value="L">L</option>
+                  </select>
+                </div>
+              </label>
+            </>
           )}
           <label className="text-sm md:col-span-2">Observações<textarea className={fieldClass} rows={3} value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} /></label>
 
           {error && <div className="md:col-span-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">{error}</div>}
           {loadingCatalogos && <p className="md:col-span-2 text-sm text-slate-500">Carregando cadastros operacionais…</p>}
-          <div className="md:col-span-2 flex justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+          <div className="md:col-span-2 flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
             <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm dark:border-slate-700">Cancelar</button>
-            <button type="submit" disabled={saving || loadingCatalogos || aeronaves.length === 0} className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{saving ? 'Criando…' : mode === 'pilot' ? 'Criar meu voo' : 'Criar voo'}</button>
+            {mode === 'coordenacao' && (
+              <button type="submit" name="submit_intent" value="whatsapp" disabled={saving || loadingCatalogos || aeronaves.length === 0} className="rounded-lg border border-emerald-600 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 disabled:opacity-50 dark:bg-emerald-950/20 dark:text-emerald-300">
+                {saving ? 'Enviando…' : 'Criar e enviar WhatsApp'}
+              </button>
+            )}
+            <button type="submit" name="submit_intent" value="save" disabled={saving || loadingCatalogos || aeronaves.length === 0} className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{saving ? 'Criando…' : mode === 'pilot' ? 'Criar meu voo' : 'Criar voo'}</button>
           </div>
         </form>
       </div>

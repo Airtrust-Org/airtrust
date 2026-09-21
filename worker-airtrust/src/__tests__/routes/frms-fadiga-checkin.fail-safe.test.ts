@@ -69,6 +69,7 @@ describe('frms fadiga check-in fail-safe', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           data_checkin: '2026-06-01',
+          hora_apresentacao: '06:30',
           horas_sono_24h: 7,
           fit_for_duty: true,
         }),

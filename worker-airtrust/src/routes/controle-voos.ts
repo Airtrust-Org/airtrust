@@ -41,7 +41,9 @@ import { assertRdvRules, normalizeRdvInput } from '../services/controle-voos/rdv
 import { finalizeRdvPreenchimentoHandler } from './controle-voos-rdv-finalization';
 import { assertFlightCrewAssignment, listEligibleFlightCrew } from '../services/controle-voos/crew-eligibility';
 import { buildFlightRelatedStatements, normalizeFlightRouteIds, parseFlightCrewIds, resolveFlightRoutePoints } from '../services/controle-voos/flight-creation';
+import { parseFlightPlanningInput, updateFlightStageWeightUnitIfSupported } from '../services/controle-voos/flight-planning';
 import { enrichFlightsWithPresentation } from '../services/controle-voos/flight-presentation';
+import { sendFlightWhatsAppHandler } from './controle-voos-dispatch';
 type OperationalReadFilters = {
   dataInicio: string;
   dataFim: string;
@@ -111,6 +113,11 @@ const allowedCreateFields = new Set([
   'pic_funcao_bordo_id',
   'sic_funcao_bordo_id',
   'rota_ids',
+  'pax_planejado',
+  'peso_planejado',
+  'unidade_peso_planejado',
+  'combustivel_solicitado',
+  'unidade_combustivel_solicitado',
 ]);
 const allowedFieldsWithVersion = new Set([...allowedFields, 'versao'].filter((field) => field !== 'status'));
 
@@ -191,28 +198,6 @@ function parsePositiveInteger(value: unknown, field: string): number {
 function parseOptionalPositiveInteger(value: unknown, field: string): number | null {
   if (value === null || value === undefined || value === '') return null;
   return parsePositiveInteger(value, field);
-}
-
-function parseNonNegativeNumber(value: unknown, field: string): number {
-  const parsed = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new ApiError(`${field} invalido`, 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
-  }
-  return parsed;
-}
-
-function parseOptionalNonNegativeNumber(value: unknown, field: string): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  return parseNonNegativeNumber(value, field);
-}
-
-function parseOptionalNonNegativeInteger(value: unknown, field: string): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = typeof value === 'number' ? value : Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new ApiError(`${field} invalido`, 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
-  }
-  return parsed;
 }
 
 function normalizeString(value: unknown, field: string, required = false): string | null {
@@ -1151,6 +1136,7 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
   const { picFuncionarioId, sicFuncionarioId } = parseFlightCrewIds(payload);
   const picFuncaoBordoId = parseOptionalCrewRoleId(payload, 'pic_funcao_bordo_id');
   const sicFuncaoBordoId = parseOptionalCrewRoleId(payload, 'sic_funcao_bordo_id');
+  const planning = parseFlightPlanningInput(payload);
 
   assertFlightTimes(input);
   assertCancellationReason(input);
@@ -1226,8 +1212,10 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
     sicFuncionarioId,
     picFuncaoBordoId,
     sicFuncaoBordoId,
+    ...planning,
   });
   if (relatedStatements.length > 0) await c.env.DB.batch(relatedStatements);
+  await updateFlightStageWeightUnitIfSupported(c.env.DB, empresaId, newId, planning);
 
   await recordFlightEvent({
     db: c.env.DB,
@@ -1264,6 +1252,8 @@ controleVoos.get('/voos/:id', auth(), async (c) => {
   const flight = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
   return c.json({ success: true, data: (await enrichFlightsWithPresentation(c.env.DB, empresaId, [flight]))[0] });
 });
+
+controleVoos.post('/voos/:id/whatsapp', auth(), requireControleVoosWrite(), sendFlightWhatsAppHandler);
 
 controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);

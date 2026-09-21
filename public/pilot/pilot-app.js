@@ -147,6 +147,8 @@ let activeStageTabIndex = 0;
 let targetFlightAutoOpened = false;
 let offlineFlightLocked = false;
 let pilotRefreshPromise = null;
+let flightDateManuallySelected = false;
+const notifiedFlightVersions = new Set();
 
 function offlineFlightLockMarkerActive() {
   try { return localStorage.getItem(PILOT_OFFLINE_FLIGHT_LOCK_KEY) === '1'; } catch { return false; }
@@ -260,6 +262,19 @@ function localDateKey(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return year + '-' + month + '-' + day;
+}
+
+function tomorrowDateKey() {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return localDateKey(tomorrow);
+}
+
+function smartDefaultFlightDate(flights) {
+  const tomorrow = tomorrowDateKey();
+  return Array.isArray(flights) && flights.some((voo) => flightDateKey(voo?.data_programacao) === tomorrow)
+    ? tomorrow
+    : localDateKey();
 }
 
 function flightDateKey(value) {
@@ -701,6 +716,43 @@ async function authenticatedGet(path, options = {}) {
   return authenticatedRequest('GET', path, undefined, options);
 }
 
+async function authenticatedBlob(path, options = {}) {
+  assertAutomaticNetworkAllowed(options);
+  if (!navigator.onLine) throw new PilotOnlineRequestError('Sem conexão. O documento ainda não pode ser aberto.');
+  let token = readCurrentAccessToken();
+  if (!token) token = await refreshPilotOnlineSession();
+  const doFetch = (accessToken) => fetch(API_BASE_URL + path, {
+    method: 'GET', cache: 'no-store', credentials: 'include',
+    headers: { Accept: '*/*', Authorization: 'Bearer ' + accessToken },
+  });
+  let response = await doFetch(token);
+  if (response.status === 401 && readCurrentRefreshToken().value) {
+    token = await refreshPilotOnlineSession();
+    response = await doFetch(token);
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new PilotOnlineRequestError(body?.error || body?.message || 'Falha ao abrir documento do voo.', response.status, body?.code || null);
+  }
+  return response.blob();
+}
+
+async function openFlightDocument(documentEventId) {
+  const flightId = activePackageData()?.voo?.id;
+  if (!flightId || !documentEventId) return;
+  try {
+    const blob = await authenticatedBlob(
+      '/controle-voos/voos/' + encodeURIComponent(String(flightId)) + '/documentos/' + encodeURIComponent(String(documentEventId)),
+      { allowDuringFlight: true },
+    );
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (error) {
+    setSessionMessage(error instanceof Error ? error.message : 'Falha ao abrir documento.', 'error', error instanceof PilotOnlineRequestError && error.status === 401);
+  }
+}
+
 async function authenticatedPost(path, payload, options = {}) {
   return authenticatedRequest('POST', path, payload, options);
 }
@@ -758,7 +810,7 @@ function setSessionMessage(message, kind = 'attention', offerLogin = false) {
   }
 }
 
-function makeFlightItem({ title, subtitle, badge, buttonText, onClick, disabled = false }) {
+function makeFlightItem({ title, subtitle, badge, buttonText, onClick, disabled = false, secondaryButtonText = null, onSecondaryClick = null }) {
   const item = document.createElement('div');
   item.className = 'flight-item';
 
@@ -785,7 +837,20 @@ function makeFlightItem({ title, subtitle, badge, buttonText, onClick, disabled 
   button.disabled = disabled;
   button.addEventListener('click', onClick);
 
-  item.append(copy, button);
+  const actions = document.createElement('div');
+  actions.className = 'flight-item-actions';
+  if (secondaryButtonText && typeof onSecondaryClick === 'function') {
+    const secondary = document.createElement('button');
+    secondary.className = 'secondary';
+    secondary.type = 'button';
+    secondary.textContent = secondaryButtonText;
+    secondary.disabled = disabled;
+    secondary.addEventListener('click', onSecondaryClick);
+    actions.append(secondary);
+  }
+  actions.append(button);
+
+  item.append(copy, actions);
   return item;
 }
 
@@ -840,6 +905,31 @@ function renderCachedPackages() {
   }
 }
 
+function cachedPackageForFlight(flightId) {
+  return cachedPackageRecords.find((record) => packageRecordFlightId(record) === Number(flightId)) || null;
+}
+
+function flightPackageNeedsUpdate(voo) {
+  const cached = cachedPackageForFlight(voo?.id);
+  if (!cached) return false;
+  return Number(voo?.versao || 0) > Number(cached.value?.package?.voo?.versao || 0);
+}
+
+async function notifyFlightUpdate(voo) {
+  const version = Number(voo?.versao || 0);
+  const key = String(voo?.id) + ':' + String(version);
+  if (!version || notifiedFlightVersions.has(key)) return;
+  notifiedFlightVersions.add(key);
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    const registration = await navigator.serviceWorker?.ready;
+    await registration?.showNotification?.('AirTrust — voo atualizado', {
+      body: flightListTitle(voo) + ' recebeu uma alteração da Coordenação. Abra o Pilot App e atualize o voo.',
+      tag: 'airtrust-flight-' + String(voo.id),
+    });
+  } catch {}
+}
+
 function renderOnlineFlights() {
   const selectedDate = selectedFlightDateKey();
   if (authorizedFlightHeading) {
@@ -875,9 +965,9 @@ function renderOnlineFlights() {
 
   onlineFlights.replaceChildren();
   for (const voo of sorted) {
-    const cached = cachedPackageRecords.some(
-      (record) => packageRecordFlightId(record) === Number(voo.id),
-    );
+    const cached = Boolean(cachedPackageForFlight(voo.id));
+    const stale = flightPackageNeedsUpdate(voo);
+    if (stale) void notifyFlightUpdate(voo);
     onlineFlights.append(
       makeFlightItem({
         title: flightListTitle(voo),
@@ -888,10 +978,12 @@ function renderOnlineFlights() {
           (toInputTime(voo.horario_previsto_partida)
             ? 'partida ' + toInputTime(voo.horario_previsto_partida)
             : 'horário não informado'),
-        badge: cached ? 'Já preparado neste tablet' : null,
-        buttonText: 'Abrir voo',
+        badge: stale ? 'Alteração da Coordenação — atualize o voo' : (cached ? 'Já preparado neste tablet' : null),
+        buttonText: stale ? 'Atualizar voo' : 'Abrir voo',
+        secondaryButtonText: 'Fazer plano de voo',
         disabled: !navigator.onLine,
         onClick: () => void openAuthorizedFlight(voo.id),
+        onSecondaryClick: () => void openFlightPlanning(voo.id),
       }),
     );
   }
@@ -956,6 +1048,12 @@ async function loadOnlineFlights() {
   try {
     const body = await authenticatedGet('/controle-voos/voos/meus');
     onlineFlightRecords = Array.isArray(body?.data) ? body.data : [];
+    if (!flightDateManuallySelected && !TARGET_FLIGHT_ID) {
+      setSelectedFlightDate(smartDefaultFlightDate(onlineFlightRecords));
+    }
+    for (const voo of onlineFlightRecords) {
+      if (flightPackageNeedsUpdate(voo)) void notifyFlightUpdate(voo);
+    }
     setSessionMessage(
       onlineFlightRecords.length > 0
         ? 'Selecione um voo para iniciar o preenchimento.'
@@ -1039,7 +1137,7 @@ async function prepareFlightPackage(flightId, options = {}) {
       setFlightSelectionVisible(false);
       rdvEditorCard.classList.remove('hidden');
     } else {
-      openPackageRecord(persisted);
+      openPackageRecord(persisted, options.initialWorkspaceTab || 'summary');
     }
     await updateStorageEstimate();
     return persisted;
@@ -1084,6 +1182,10 @@ async function ensurePilotShellReadyForFlight() {
   if (!controller || !new URL(controller.scriptURL).pathname.endsWith('/pilot/pilot-sw.js')) {
     throw new Error('O Pilot App ainda não está pronto para continuar offline. Recarregue e tente novamente.');
   }
+}
+
+async function openFlightPlanning(flightId) {
+  return Boolean(await prepareFlightPackage(flightId, { initialWorkspaceTab: 'planning' }));
 }
 
 async function openAuthorizedFlight(flightId) {
@@ -2370,8 +2472,18 @@ async function persistFinalSyncResult(outboxRecord, result) {
   }
 }
 
+function isRecoverableAuthenticationSyncError(errorLike) {
+  const status = Number(errorLike?.status || 0);
+  const code = String(errorLike?.code || '').trim().toUpperCase();
+  if (status !== 401) return false;
+  // O comando offline continua válido: a sessão online pode expirar/revogar
+  // durante horas de voo e deve poder ser retomada após um novo login.
+  return !['USER_INACTIVE', 'TENANT_MISMATCH'].includes(code);
+}
+
 function isRetriableSyncError(error) {
   if (!(error instanceof PilotOnlineRequestError)) return true;
+  if (isRecoverableAuthenticationSyncError(error)) return true;
   return error.status === 0 || error.status === 408 || error.status === 429 || error.status >= 500;
 }
 
@@ -2872,7 +2984,28 @@ async function queueCurrentDraftForSync() {
 
   try {
     const state = await readPersistedOperationalStateForSync();
-    const unresolved = (await vault.listJson('outbox')).filter(
+    let unresolved = (await vault.listJson('outbox')).filter(
+      (record) =>
+        Number(record.value?.command?.flight_id) === state.identity.flightId &&
+        ['pending', 'blocked'].includes(record.value?.status),
+    );
+
+    // Versões anteriores marcavam qualquer 401 como bloqueio permanente. Isso
+    // deixava o RDV preso mesmo depois de um novo login. Reabre somente erros
+    // de autenticação recuperáveis; validações permanentes continuam bloqueadas.
+    for (const record of unresolved) {
+      if (
+        record.value?.status === 'blocked' &&
+        isRecoverableAuthenticationSyncError(record.value?.last_error)
+      ) {
+        await storeOutboxAttempt(record, {
+          status: 'pending',
+          recovered_after_auth: true,
+          recovered_at: new Date().toISOString(),
+        });
+      }
+    }
+    unresolved = (await vault.listJson('outbox')).filter(
       (record) =>
         Number(record.value?.command?.flight_id) === state.identity.flightId &&
         ['pending', 'blocked'].includes(record.value?.status),
@@ -3911,7 +4044,7 @@ function appendSectionTitle(parent, title) {
   parent.append(heading);
 }
 
-function openPackageRecord(record) {
+function openPackageRecord(record, initialWorkspaceTab = 'summary') {
   const packageData = record.value.package;
   const voo = packageData.voo;
   detailTitle.textContent = displayText(voo.prefixo, 'Voo #' + voo.id);
@@ -3926,7 +4059,7 @@ function openPackageRecord(record) {
     formatTimestamp(record.value.prepared_at) +
     ' · consulta read-only';
   flightDetail.replaceChildren();
-  renderPilotWorkspace(pilotWorkspaceView, packageData);
+  renderPilotWorkspace(pilotWorkspaceView, packageData, initialWorkspaceTab, { openFlightDocument });
 
   appendInfoGrid(flightDetail, [
     ['Status do voo', voo.status],
@@ -4181,11 +4314,26 @@ window.addEventListener('offline', () => {
     }
   }
 });
-authorizedFlightDate?.addEventListener('change', () => setSelectedFlightDate(authorizedFlightDate.value));
-flightDatePrevButton?.addEventListener('click', () => shiftSelectedFlightDate(-1));
-flightDateTodayButton?.addEventListener('click', () => setSelectedFlightDate(localDateKey()));
-flightDateNextButton?.addEventListener('click', () => shiftSelectedFlightDate(1));
-refreshOnlineButton.addEventListener('click', () => void loadOnlineFlights());
+authorizedFlightDate?.addEventListener('change', () => {
+  flightDateManuallySelected = true;
+  setSelectedFlightDate(authorizedFlightDate.value);
+});
+flightDatePrevButton?.addEventListener('click', () => {
+  flightDateManuallySelected = true;
+  shiftSelectedFlightDate(-1);
+});
+flightDateTodayButton?.addEventListener('click', () => {
+  flightDateManuallySelected = true;
+  setSelectedFlightDate(localDateKey());
+});
+flightDateNextButton?.addEventListener('click', () => {
+  flightDateManuallySelected = true;
+  shiftSelectedFlightDate(1);
+});
+refreshOnlineButton.addEventListener('click', () => {
+  flightDateManuallySelected = false;
+  void loadOnlineFlights();
+});
 prepareEditOfflineButton.addEventListener('click', () => void prepareOfflineEditing());
 openLocalDraftButton.addEventListener('click', () => void openExistingOperationalDraft());
 syncRdvButton.addEventListener('click', () => void queueCurrentDraftForSync());

@@ -172,7 +172,7 @@ function renderSummary(panel, packageData, workspace) {
   renderHelideckSafety(panel, workspace?.helideck_safety);
 }
 
-function renderPlanning(panel, packageData, workspace) {
+function renderPlanning(panel, packageData, workspace, actions = {}) {
   const planning = workspace?.planning || {};
   panel.append(el('h2', { text: 'Planejamento' }));
   appendKeyValueGrid(panel, [
@@ -181,6 +181,9 @@ function renderPlanning(panel, packageData, workspace) {
     ['Destino', airportLabel(packageData.destino, packageData.voo?.destino_id)],
     ['Alternado', airportLabel(packageData.alternado, packageData.voo?.alternado_destino_id)],
     ['Aeronave', packageData.aeronave?.modelo],
+    ['Passageiros previstos', planning.pax_planejado],
+    ['Peso previsto', planning.peso_planejado != null ? planning.peso_planejado + ' ' + text(planning.unidade_peso_planejado, 'KG') : null],
+    ['Combustível solicitado', planning.combustivel_solicitado != null ? planning.combustivel_solicitado + ' ' + text(planning.unidade_combustivel_solicitado, 'KG') : null],
     ['Tripulantes', planning.crew_count],
     ['Etapas', planning.stage_count],
     ['Versão do voo', planning.flight_version || packageData.voo?.versao],
@@ -204,6 +207,29 @@ function renderPlanning(panel, packageData, workspace) {
     section.append(list);
   }
   panel.append(section);
+
+  const documents = Array.isArray(planning.documentos) ? planning.documentos : [];
+  if (documents.length > 0) {
+    const docsSection = el('section', { className: 'pilot-workspace-section' });
+    docsSection.append(el('h3', { text: 'Documentos enviados pela Coordenação' }));
+    const docsList = el('div', { className: 'pilot-workspace-list' });
+    for (const document of documents) {
+      const card = el('div', { className: 'pilot-workspace-row-card' });
+      card.append(
+        el('strong', { text: text(document.label, document.type) }),
+        el('span', { text: text(document.file_name) }),
+      );
+      if (typeof actions.openFlightDocument === 'function') {
+        const button = el('button', { className: 'secondary', text: 'Abrir documento' });
+        button.type = 'button';
+        button.addEventListener('click', () => actions.openFlightDocument(document.id));
+        card.append(button);
+      }
+      docsList.append(card);
+    }
+    docsSection.append(docsList);
+    panel.append(docsSection);
+  }
 
   if (planning.observacoes) {
     const obs = el('section', { className: 'pilot-workspace-section' });
@@ -359,7 +385,7 @@ function renderFuel(panel, packageData) {
   }
 }
 
-function renderDossier(panel, workspace) {
+function renderDossier(panel, workspace, actions = {}) {
   panel.append(el('h2', { text: 'Dossiê Digital do Voo' }));
   appendNotice(
     panel,
@@ -394,6 +420,12 @@ function renderDossier(panel, workspace) {
       ['Integridade', entry.integrity_state],
       ['Versão', entry.version],
     ]);
+    if (entry.document_event_id && typeof actions.openFlightDocument === 'function') {
+      const openButton = el('button', { className: 'secondary', text: 'Abrir documento' });
+      openButton.type = 'button';
+      openButton.addEventListener('click', () => actions.openFlightDocument(entry.document_event_id));
+      card.append(openButton);
+    }
     if (entry.attachment_count > 0 && entry.attachment_payloads_offline === false) {
       appendNotice(
         card,
@@ -667,17 +699,17 @@ function renderEdbShadow(panel, packageData) {
   panel.append(findingSection);
 }
 
-function renderPanel(panel, tabId, packageData, workspace) {
+function renderPanel(panel, tabId, packageData, workspace, actions = {}) {
   if (tabId === 'summary') return renderSummary(panel, packageData, workspace);
-  if (tabId === 'planning') return renderPlanning(panel, packageData, workspace);
+  if (tabId === 'planning') return renderPlanning(panel, packageData, workspace, actions);
   if (tabId === 'rdv') return renderRdv(panel, packageData);
   if (tabId === 'fuel') return renderFuel(panel, packageData);
-  if (tabId === 'dossier') return renderDossier(panel, workspace);
+  if (tabId === 'dossier') return renderDossier(panel, workspace, actions);
   if (tabId === 'map') return renderMap(panel, workspace);
   if (tabId === 'edb-shadow') return renderEdbShadow(panel, packageData);
 }
 
-export function renderPilotWorkspace(container, packageData) {
+export function renderPilotWorkspace(container, packageData, initialTab = 'summary', actions = {}) {
   container.replaceChildren();
   const workspace = packageData?.workspace;
   const header = el('div', { className: 'pilot-workspace-header' });
@@ -739,7 +771,7 @@ export function renderPilotWorkspace(container, packageData) {
     panel.id = 'pilot-panel-' + tabId;
     panel.setAttribute('aria-labelledby', button.id);
     panel.hidden = index !== 0;
-    renderPanel(panel, tabId, packageData, workspace);
+    renderPanel(panel, tabId, packageData, workspace, actions);
     panels.set(tabId, panel);
   });
 
@@ -757,5 +789,5 @@ export function renderPilotWorkspace(container, packageData) {
   });
 
   container.append(tabList, ...panels.values());
-  activate('summary');
+  activate(panels.has(initialTab) ? initialTab : 'summary');
 }
