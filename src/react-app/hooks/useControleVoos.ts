@@ -194,6 +194,9 @@ export interface CvRdvFilaItem {
   aeronave_id: number | null;
   data_programacao: string;
   origem_id: number;
+  flight_status: CvFlightStatus;
+  horario_real_partida: string | null;
+  horario_real_chegada: string | null;
   destino_id: number;
   rota_codigos?: string[];
   rota_pontos?: CvVoo['rota_pontos'];
