@@ -407,7 +407,9 @@ describe('Qualificacoes — Planejadas history restore (PR #206)', () => {
 
   it('query_sem_filtro_status_mantida — query without status filter kept for Planejados tab operational count', () => {
     // The query without status filter is still used by the Planejados tab
-    expect(qualificacoesSource).toContain('useTreinamentosPlanejados({})');
+    expect(qualificacoesSource).toMatch(
+      /useTreinamentosPlanejados\\(\\s*\\{\\},\\s*showConvocacaoPlanejadaModal,\\s*\\)/,
+    );
     expect(qualificacoesSource).not.toContain("status: 'PLANEJADO'");
   });
 
