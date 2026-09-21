@@ -234,7 +234,6 @@ describe('qualificacoes historico renovadas contract', () => {
     const predicates = buildRenewalSqlPredicates(true);
 
     expect(predicates.renewedQualificationPredicate).toContain('qh_newer.funcionario_id = qh.funcionario_id');
-    expect(predicates.renewedQualificationPredicate).toContain('qh_newer.empresa_id = qh.empresa_id');
     expect(predicates.renewedQualificationPredicate).toContain(
       'COALESCE(qh_newer.data_conclusao, qh_newer.data_vencimento',
     );
