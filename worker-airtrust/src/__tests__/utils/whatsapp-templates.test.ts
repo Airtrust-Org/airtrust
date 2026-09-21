@@ -27,13 +27,13 @@ describe('whatsapp-templates', () => {
     expect(template!.templateName).toBe('airtrust_alerta_ead_a_vencer_v2');
     const message = renderTemplateBody(template!.bodyText, variables);
 
-    expect(message).toContain('*SETOR DE TREINAMENTOS | COSTA DO SOL*');
+    expect(message).toContain('*GERÊNCIA DE TREINAMENTOS | COSTA DO SOL*');
     expect(message).toContain('Olá, Filipe Daumas!');
     expect(message).toContain('*Treinamento:* CRM');
     expect(message).toContain('*Vencimento:* 28/09/2026');
     expect(message).toContain('*Status:* Vence em 7 dias');
     expect(message).toContain(
-      'Este treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação, sendo acompanhado pelo Setor de Treinamentos e sujeito à verificação em auditorias.',
+      'Este treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação, sendo acompanhado pela Gerência de Treinamentos e sujeito à verificação em auditorias.',
     );
     expect(message).toContain(
       'Por favor, acesse o treinamento pelo link abaixo e realize-o o quanto antes para manter sua situação de treinamento regularizada.',
@@ -76,7 +76,7 @@ describe('whatsapp-templates', () => {
 
     expect(template).toBeDefined();
     expect(template!.bodyText).toContain('CMA');
-    expect(template!.bodyText).not.toContain('Setor de Treinamentos | Costa do Sol');
+    expect(template!.bodyText).not.toContain('Gerência de Treinamentos | Costa do Sol');
     expect(template!.bodyText).not.toContain('🚁');
   });
 });
