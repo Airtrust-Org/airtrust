@@ -2032,9 +2032,10 @@ describe('controle voos routes', () => {
     });
   });
 
-  it('dashboard calcula voos sem RDV e RDVs por status', async () => {
+  it('dashboard calcula voos sem RDV, RDVs por status e recebidos pela Coordenação', async () => {
     const db = createSqliteD1();
     seedDashboardFixtures(db.databasePath);
+    runSql(db.databasePath, "UPDATE cv_rdv_operacional SET workflow_status = 'enviado' WHERE id = 901");
 
     const response = await request(
       db,
@@ -2048,6 +2049,7 @@ describe('controle voos routes', () => {
           voos_sem_rdv: 4,
           rdvs_rascunho: 1,
           rdvs_preenchimento_finalizado: 1,
+          rdvs_enviados: 1,
         },
       },
     });
@@ -2056,6 +2058,7 @@ describe('controle voos routes', () => {
   it('dashboard cria alertas operacionais simples', async () => {
     const db = createSqliteD1();
     seedDashboardFixtures(db.databasePath);
+    runSql(db.databasePath, "UPDATE cv_rdv_operacional SET workflow_status = 'enviado' WHERE id = 901");
 
     const response = await request(
       db,
@@ -2069,6 +2072,7 @@ describe('controle voos routes', () => {
           voos_sem_tripulacao: 3,
           voos_sem_aeronave: 2,
           voos_concluidos_sem_rdv: 1,
+          rdvs_recebidos_aguardando_revisao: 1,
         },
       },
     });
