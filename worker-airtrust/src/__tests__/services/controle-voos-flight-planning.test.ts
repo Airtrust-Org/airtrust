@@ -26,8 +26,8 @@ describe('controle de voos — planejamento de peso', () => {
 
   it('persiste os pesos separados apenas na primeira etapa e dentro do tenant', async () => {
     const run = vi.fn().mockResolvedValue({ meta: { changes: 1 } });
-    const bind = vi.fn(() => ({ run }));
-    const prepare = vi.fn(() => ({ bind }));
+    const bind = vi.fn((..._args: unknown[]) => ({ run }));
+    const prepare = vi.fn((_sql: string) => ({ bind }));
     const db = { prepare } as unknown as D1Database;
 
     await updateFlightStagePlanningIfSupported(db, 6, 42, {
