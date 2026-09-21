@@ -13,7 +13,7 @@ import ControleVoosRdvWorkflowBadge from './components/ControleVoosRdvWorkflowBa
 import ControleVoosNovoVooDialog from './components/ControleVoosNovoVooDialog';
 import { useControleVoosVoos, useControleVoosAeroportos, type CvAeroporto } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatTime } from './data/controleVoosUtils';
-import { flightOperationalRouteLabel } from './data/controleVoosFlightIdentity';
+import { flightOperationalRouteLabel , flightPresentationStatus } from './data/controleVoosFlightIdentity';
 import ControleVoosDateControls from './components/ControleVoosDateControls';
 import { useControleVoosDate } from './hooks/useControleVoosDate';
 
@@ -140,7 +140,7 @@ export default function ControleVoosVoos() {
                             </td>
                             <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{formatTime(voo.horario_previsto_partida)}</td>
                             <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{formatTime(voo.horario_real_partida)}</td>
-                            <td className="px-4 py-3"><ControleVoosStatusBadge status={voo.status} /></td>
+                            <td className="px-4 py-3"><ControleVoosStatusBadge status={flightPresentationStatus(voo)} /></td>
                             <td className="px-4 py-3"><ControleVoosRdvWorkflowBadge status={voo.rdv_workflow_status} /></td>
                             <td className="px-4 py-3">
                               <Link

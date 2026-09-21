@@ -145,6 +145,9 @@ describe('ControleVoosCoordenacaoFila', () => {
             data_programacao: '2026-06-14',
             origem_id: 101,
             destino_id: 101,
+            flight_status: 'concluido_operacionalmente',
+            horario_real_partida: '2026-06-14T08:55:00',
+            horario_real_chegada: '2026-06-14T11:05:00',
             rota_pontos: [
               { id: 101, codigo: 'SBME', codigo_icao: 'SBME', nome: 'MACAÉ / Macaé, RJ', tipo: 'aeroporto' },
               { id: 500, codigo: 'PAGS', codigo_icao: '9PGS', nome: 'PLATAFORMA / Unidade Teste', tipo: 'plataforma' },
@@ -159,7 +162,8 @@ describe('ControleVoosCoordenacaoFila', () => {
     renderWithClient(<ControleVoosCoordenacaoFila />);
 
     await waitFor(() => expect(screen.getByText('RDV-0001')).toBeInTheDocument());
-    expect(screen.getByText('Enviado', { selector: 'span' })).toBeInTheDocument();
+    expect(screen.getByText('Enviado à Coordenação')).toBeInTheDocument();
+    expect(screen.getByText('Voo realizado')).toBeInTheDocument();
     expect(screen.getByText('Macaé, RJ (SBME) → Unidade Teste (PAGS · 9PGS)')).toBeInTheDocument();
     expect(screen.getByText('Revisar')).toBeInTheDocument();
   });

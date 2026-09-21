@@ -3,6 +3,7 @@ import {
   cleanAeronauticalPointName,
   flightOperationalDestinationLabel,
   flightOperationalRouteLabel,
+  flightPresentationStatus,
 } from '../data/controleVoosFlightIdentity';
 import type { CvAeroporto, CvVoo } from '@/react-app/hooks/useControleVoos';
 
@@ -116,6 +117,33 @@ describe('identidade operacional do voo', () => {
     expect(flightOperationalRouteLabel(flight, aeroportos)).toBe(
       'Macaé, RJ (SBME) → Garoupa, BC (PGP1 · 9PGB) → Unidade Dois (PXX1 · 9PXX)',
     );
+  });
+
+  it('apresenta Voo realizado quando ha saida real e o RDV ja foi enviado', () => {
+    const flight = voo({
+      horario_real_partida: '2026-09-20T10:07:00',
+      rdv_workflow_status: 'enviado',
+      rdv_enviado_em: '2026-09-20T12:20:00Z',
+    });
+    expect(flightPresentationStatus(flight)).toBe('realizado');
+  });
+
+  it('nao chama de realizado antes do envio do RDV e preserva cancelamento', () => {
+    expect(
+      flightPresentationStatus(
+        voo({ horario_real_partida: '2026-09-20T10:07:00', rdv_workflow_status: 'rascunho' }),
+      ),
+    ).toBe('planejado');
+    expect(
+      flightPresentationStatus(
+        voo({
+          status: 'cancelado',
+          horario_real_partida: '2026-09-20T10:07:00',
+          rdv_workflow_status: 'enviado',
+          rdv_enviado_em: '2026-09-20T12:20:00Z',
+        }),
+      ),
+    ).toBe('cancelado');
   });
 
   it('em voo excepcional sem retorno mantém o destino final', () => {

@@ -59,6 +59,7 @@ export interface CvVoo {
   observacoes: string | null;
   cancelado_motivo_id: number | null;
   alternado_destino_id: number | null;
+  versao: number;
   created_at: string;
   updated_at: string;
 }
@@ -193,6 +194,9 @@ export interface CvRdvFilaItem {
   aeronave_id: number | null;
   data_programacao: string;
   origem_id: number;
+  flight_status: CvFlightStatus;
+  horario_real_partida: string | null;
+  horario_real_chegada: string | null;
   destino_id: number;
   rota_codigos?: string[];
   rota_pontos?: CvVoo['rota_pontos'];
@@ -400,6 +404,7 @@ export interface CvDashboardTotais {
   voos_alternados_divergidos: number;
   rdvs_rascunho: number;
   rdvs_preenchimento_finalizado: number;
+  rdvs_enviados: number;
   voos_sem_rdv: number;
 }
 
@@ -414,6 +419,7 @@ export interface CvDashboard {
     voos_sem_tripulacao: number;
     voos_sem_aeronave: number;
     voos_concluidos_sem_rdv: number;
+    rdvs_recebidos_aguardando_revisao: number;
   };
 }
 
@@ -731,6 +737,8 @@ export function useRdvFila(filtros?: {
       return extractPayload<CvRdvFilaItem[]>(response, []);
     },
     staleTime: 15_000,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
     retry: 1,
   });
 }
