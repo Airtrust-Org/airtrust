@@ -194,27 +194,26 @@ const qualificacoesTiposColumnsSupportCache = new WeakMap<
 async function loadQualificacoesTiposColumnsSupport(db: D1Database): Promise<TiposColumnsSupport> {
   let cached = qualificacoesTiposColumnsSupportCache.get(db);
   if (!cached) {
-    cached = db
-      .prepare("PRAGMA table_info('qualificacoes_tipos')")
-      .all()
-      .then((info) => {
-        const cols = (info.results || []) as Array<{ name?: string }>;
-        const hasColumn = (columnName: string) => cols.some((column) => column.name === columnName);
+    cached = (async () => {
+      const info = await db.prepare("PRAGMA table_info('qualificacoes_tipos')").all();
+      const cols = (info.results || []) as Array<{ name?: string }>;
+      const hasColumn = (columnName: string) => cols.some((column) => column.name === columnName);
 
-        return {
-          hasCargaInicial: hasColumn('carga_horaria_inicial'),
-          hasCargaRecorrente: hasColumn('carga_horaria_recorrente'),
-          hasConteudoProgramatico: hasColumn('conteudo_programatico'),
-          hasIsCheck: hasColumn('is_check'),
-          hasFormatoId: hasColumn('formato_id'),
-          hasClasseRequisito: hasColumn('classe_requisito'),
-          hasCategoriaId: hasColumn('categoria_id'),
-          hasDominioOverride: hasColumn('dominio_codigo'),
-        };
-      });
+      return {
+        hasCargaInicial: hasColumn('carga_horaria_inicial'),
+        hasCargaRecorrente: hasColumn('carga_horaria_recorrente'),
+        hasConteudoProgramatico: hasColumn('conteudo_programatico'),
+        hasIsCheck: hasColumn('is_check'),
+        hasFormatoId: hasColumn('formato_id'),
+        hasClasseRequisito: hasColumn('classe_requisito'),
+        hasCategoriaId: hasColumn('categoria_id'),
+        hasDominioOverride: hasColumn('dominio_codigo'),
+      };
+    })();
+    qualificacoesTiposColumnsSupportCache.set(db, cached);
   }
 
-  return qualificacoesTiposColumnsSupportPromise;
+  return cached;
 }
 
 function buildFormatoJoin(hasFormatoId: boolean): string {
@@ -313,16 +312,19 @@ async function logAuditoria(db: D1Database, entidade: string, entidade_id: strin
   }
 }
 
-let qualificacoesTiposSetoresTablePromise: Promise<boolean> | null = null;
+const qualificacoesTiposSetoresTableCache = new WeakMap<D1Database, Promise<boolean>>();
 
 async function hasQualificacoesTiposSetoresTable(db: D1Database): Promise<boolean> {
-  if (!qualificacoesTiposSetoresTablePromise) {
-    qualificacoesTiposSetoresTablePromise = db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores' LIMIT 1",
-      )
-      .first<{ name: string }>()
-      .then((table) => Boolean(table?.name));
+  let cached = qualificacoesTiposSetoresTableCache.get(db);
+  if (!cached) {
+    cached = (async () => {
+      const table = await db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores' LIMIT 1",
+        )
+        .first<{ name: string }>();
+      return Boolean(table?.name);
+    })();
     qualificacoesTiposSetoresTableCache.set(db, cached);
   }
 
