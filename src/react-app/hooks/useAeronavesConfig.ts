@@ -54,10 +54,10 @@ interface UseAeronavesConfigReturn {
 // HOOK
 // =====================
 
-export function useAeronavesConfig(): UseAeronavesConfigReturn {
+export function useAeronavesConfig(enabled = true): UseAeronavesConfigReturn {
   const { empresaAtualId } = useAuth();
   const [aeronaves, setAeronaves] = useState<AeronaveConfig[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
 
   const fetchAeronaves = useCallback(async () => {
@@ -92,8 +92,12 @@ export function useAeronavesConfig(): UseAeronavesConfigReturn {
   }, [empresaAtualId]);
 
   useEffect(() => {
-    fetchAeronaves();
-  }, [fetchAeronaves]);
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
+    void fetchAeronaves();
+  }, [enabled, fetchAeronaves]);
 
   // Mapa de cores por código para lookup rápido
   const coresMap = useMemo(() => {

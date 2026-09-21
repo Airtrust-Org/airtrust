@@ -153,9 +153,10 @@ describe('Qualificacoes.tsx — chip Planejadas no Histórico', () => {
     expect(chipSection).not.toContain('operationalTurmasCount');
   });
 
-  it('dashboard stats sao carregados para uso do chip e Historico', () => {
-    expect(qualificacoesSource).toContain('/dashboard/qualificacoes');
-    expect(qualificacoesSource).toContain('data.planejadas');
+  it('Historico usa stats da propria resposta sem dashboard duplicado', () => {
+    expect(qualificacoesSource).toContain('stats: historicoStats');
+    expect(qualificacoesSource).toContain('const stats = historicoStats');
+    expect(qualificacoesSource).not.toContain('/dashboard/qualificacoes');
   });
 
   it('chip Planejadas filtra Historico — nao navega para Planejados', () => {
@@ -174,9 +175,12 @@ describe('Qualificacoes.tsx — chip Planejadas no Histórico', () => {
   });
 
   it('query_treinamentos_mantida_sem_contagem_errada — query de turmas mantida para getTurmasPlanejadasDisponiveis', () => {
-    // useTreinamentosPlanejados({}) must stay for getTurmasPlanejadasDisponiveis (convocação per funcionário).
-    // The operationalTurmasCount derived from it must NOT exist — it only served the wrong chip.
-    expect(qualificacoesSource).toContain('useTreinamentosPlanejados({})');
+    // A query sem filtro continua para getTurmasPlanejadasDisponiveis,
+    // mas só executa quando o modal de convocação está aberto.
+    expect(qualificacoesSource).toContain(
+      'const treinamentosPlanejadosConvocacaoQuery = useTreinamentosPlanejados(',
+    );
+    expect(qualificacoesSource).toContain('showConvocacaoPlanejadaModal,');
     expect(qualificacoesSource).not.toContain('operationalTurmasCount');
   });
 });

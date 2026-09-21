@@ -109,15 +109,16 @@ export function ModalAtribuirQualificacao({
     data: funcionariosData = [],
     isLoading: loadingFuncionarios,
     error: errorFuncionarios,
-  } = useFuncionariosAtivos();
+  } = useFuncionariosAtivos(isOpen);
   const { data: tiposData = [], isLoading: loadingTipos } = useTiposQualificacao(
     Number(form.categoria) || undefined,
+    isOpen,
   );
   const {
     data: categoriasData = [],
     isLoading: loadingCategorias,
     error: errorCategorias,
-  } = useCategoriasQualificacao();
+  } = useCategoriasQualificacao(isOpen);
   const [validadeMeses, setValidadeMeses] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const loading = loadingTipos || loadingFuncionarios || loadingCategorias;

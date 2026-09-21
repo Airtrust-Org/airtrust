@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   BadgeCheck,
@@ -266,12 +266,13 @@ export function useLmsCourseThumbnailUrl(
       }
     | null
     | undefined,
+  enabled = true,
 ) {
   const assetUrl = curso ? getLmsCourseThumbnailUrl(curso) : null;
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!assetUrl) {
+    if (!assetUrl || !enabled) {
       setThumbnailUrl(null);
       return;
     }
@@ -280,9 +281,7 @@ export function useLmsCourseThumbnailUrl(
     let objectUrl: string | null = null;
     setThumbnailUrl(null);
 
-    void fetchWithAuth(assetUrl, {
-      headers: { 'X-AirTrust-Bypass-Cache': '1' },
-    })
+    void fetchWithAuth(assetUrl)
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -309,7 +308,7 @@ export function useLmsCourseThumbnailUrl(
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [assetUrl]);
+  }, [assetUrl, enabled]);
 
   return thumbnailUrl;
 }
@@ -360,12 +359,41 @@ export function LmsCourseArtwork({
   compact?: boolean;
 }) {
   const meta = getTypeMeta(curso.tipo_conteudo);
-  const thumbnailUrl = useLmsCourseThumbnailUrl(curso);
+  const artworkRef = useRef<HTMLDivElement>(null);
+  const [thumbnailEnabled, setThumbnailEnabled] = useState(false);
+
+  useEffect(() => {
+    if (!curso.thumbnail_r2_key) {
+      setThumbnailEnabled(false);
+      return;
+    }
+
+    const element = artworkRef.current;
+    if (!element || typeof IntersectionObserver === 'undefined') {
+      setThumbnailEnabled(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setThumbnailEnabled(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '400px' },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [curso.id, curso.thumbnail_r2_key, curso.version_tag]);
+
+  const thumbnailUrl = useLmsCourseThumbnailUrl(curso, thumbnailEnabled);
   const titleClass = thumbnailUrl ? 'text-white' : 'text-slate-950';
   const descriptionClass = thumbnailUrl ? 'text-white/78' : 'text-slate-500';
 
   return (
     <div
+      ref={artworkRef}
       className={`relative overflow-hidden border border-slate-200 ${compact ? 'h-14 w-14 rounded-xl' : 'aspect-[16/9] w-full rounded-xl'} bg-slate-950`}
     >
       {thumbnailUrl ? (
