@@ -9,7 +9,7 @@ import { normalizeWhatsAppPhone } from '../utils/whatsapp';
 import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import {
   buildQualificacaoTemplateVariables,
-  buildTrainingTemplateStatusVariable,
+  buildTrainingStatusVencimento,
   getAlertWhatsAppTemplateDefinition,
   renderTemplateBody,
   resolveQualificacaoAlertTemplateKey,
@@ -480,7 +480,11 @@ async function enviarNotificacao(
         ),
         statusVencimento: isCmaQualificacao(qualificacao)
           ? buildStatusVencimento(diasAteVencimento)
-          : buildTrainingTemplateStatusVariable(diasAteVencimento, trainingUrl),
+          : buildTrainingStatusVencimento(diasAteVencimento),
+        trainingUrl: isCmaQualificacao(qualificacao)
+          ? null
+          : trainingUrl ||
+            `${String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '')}/lms/cursos`,
       });
       const mensagemTemplate = renderTemplateBody(templateDefinition.bodyText, templateVariables);
       const normalizedDestinations: string[] = [];
