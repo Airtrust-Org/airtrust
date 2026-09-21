@@ -38,6 +38,12 @@ describe('read latency fan-out contracts', () => {
     expect(qualificacoes).not.toContain('/dashboard/qualificacoes');
   });
 
+  it('mantém a tabela de Modelos fora da virtualização que oculta linhas com pageSize 100', () => {
+    expect(qualificacoes).toMatch(
+      /tableId="qualificacoes-tipos"[\s\S]*?data=\{filteredTipos\}[\s\S]*?virtualizeRows=\{false\}/,
+    );
+  });
+
   it('memoiza introspecção de schema nas rotas quentes de qualificações', () => {
     expect(historicoWorker).toContain('historicoColumnSupportCache');
     expect(tiposWorker).toContain('qualificacoesTiposColumnsSupportCache');
