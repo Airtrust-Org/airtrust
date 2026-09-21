@@ -664,10 +664,6 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
       erros.push('Qualificação não possui nome ou código cadastrado');
     }
 
-    if (!r.data_vencimento) {
-      erros.push('Qualificação não possui data de vencimento');
-    }
-
     if (!r.categoria) {
       erros.push('Qualificação não possui categoria definida');
     }
@@ -720,34 +716,53 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
       );
     }
 
-    // Verificar se está vencida ou vencendo
-    const dataVencimento = new Date(r.data_vencimento as string);
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-    dataVencimento.setHours(0, 0, 0, 0);
+    // Qualificações podem ser permanentes e, portanto, não ter vencimento.
+    // A ausência de data nunca bloqueia o envio; a janela de 30 dias só se
+    // aplica quando existe um vencimento válido.
+    let dataVencimento: Date | null = null;
+    let diasDiferenca: number | null = null;
+    let statusVencimento = 'Sem vencimento definido';
 
-    const diasDiferenca = Math.floor(
-      (dataVencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
-    );
+    if (r.data_vencimento) {
+      const parsedVencimento = new Date(String(r.data_vencimento));
+      if (!Number.isNaN(parsedVencimento.getTime())) {
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        parsedVencimento.setHours(0, 0, 0, 0);
+        dataVencimento = parsedVencimento;
+        diasDiferenca = Math.floor(
+          (parsedVencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
+        );
 
-    let statusVencimento = '';
-    if (diasDiferenca < 0) {
-      statusVencimento = `Vencida há ${Math.abs(diasDiferenca)} dias`;
-    } else if (diasDiferenca <= 30) {
-      statusVencimento = `Vence em ${diasDiferenca} dias`;
-    } else {
-      return alertasErrorResponse(
-        c,
-        400,
-        'Esta qualificação ainda não está próxima do vencimento',
-        'ALERTA_TOO_EARLY',
-        {
-          detalhes: [
-            `Vence em ${diasDiferenca} dias. Alertas são enviados apenas 30 dias antes do vencimento.`,
-          ],
-        },
-      );
+        if (diasDiferenca < 0) {
+          statusVencimento = `Vencida há ${Math.abs(diasDiferenca)} dias`;
+        } else if (diasDiferenca <= 30) {
+          statusVencimento = `Vence em ${diasDiferenca} dias`;
+        } else {
+          return alertasErrorResponse(
+            c,
+            400,
+            'Esta qualificação ainda não está próxima do vencimento',
+            'ALERTA_TOO_EARLY',
+            {
+              detalhes: [
+                `Vence em ${diasDiferenca} dias. Alertas são enviados apenas 30 dias antes do vencimento.`,
+              ],
+            },
+          );
+        }
+      }
     }
+
+    const alertTimingLabel =
+      diasDiferenca === null ? 'Sem vencimento' : diasDiferenca < 0 ? 'Vencido' : 'a Vencer';
+    const vencimentoLabel = dataVencimento
+      ? dataVencimento.toLocaleDateString('pt-BR')
+      : 'Não se aplica';
+    const orientacaoAlerta =
+      diasDiferenca === null
+        ? 'Por favor, verifique se há alguma ação necessária para esta qualificação.'
+        : 'Por favor, providencie a renovação o quanto antes.';
 
     const trainingUrl = isEAD
       ? await resolveTrainingAccessUrl(c.env, db, {
@@ -763,11 +778,11 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
     const mensagem =
       mensagemCustom ||
       `
-🔔 *ALERTA - Treinamento ${tipoAlerta} ${diasDiferenca < 0 ? 'Vencido' : 'a Vencer'}*
+🔔 *ALERTA - Treinamento ${tipoAlerta} ${alertTimingLabel}*
 
 Funcionário: ${r.funcionario_nome}
 Qualificação: ${r.tipo_nome || r.tipo_codigo}
-Vencimento: ${dataVencimento.toLocaleDateString('pt-BR')}
+Vencimento: ${vencimentoLabel}
 ${statusVencimento}
 ${trainingUrl ? `\nAcesse o treinamento: ${trainingUrl}` : ''}
 
@@ -794,15 +809,15 @@ Por favor, providencie a renovação o quanto antes.
     // Enviar email (se tiver e se opção marcada)
     if (enviarEmailCanal && temEmail) {
       try {
-        const assunto = `🔔 ALERTA - ${tipoAlerta} ${diasDiferenca < 0 ? 'Vencido' : 'a Vencer'}`;
+        const assunto = `🔔 ALERTA - ${tipoAlerta} ${alertTimingLabel}`;
         const corpoHtml = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
             <div style="background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-              <h2 style="color: #f59e0b; margin-top: 0;">🔔 ALERTA - ${tipoAlerta} ${diasDiferenca < 0 ? 'Vencido' : 'a Vencer'}</h2>
+              <h2 style="color: #f59e0b; margin-top: 0;">🔔 ALERTA - ${tipoAlerta} ${alertTimingLabel}</h2>
               <div style="background-color: #fef3c7; padding: 15px; border-radius: 6px; margin: 20px 0;">
                 <p style="margin: 5px 0;"><strong>Funcionário:</strong> ${r.funcionario_nome}</p>
                 <p style="margin: 5px 0;"><strong>Qualificação:</strong> ${r.tipo_nome || r.tipo_codigo}</p>
-                <p style="margin: 5px 0;"><strong>Vencimento:</strong> ${dataVencimento.toLocaleDateString('pt-BR')}</p>
+                <p style="margin: 5px 0;"><strong>Vencimento:</strong> ${vencimentoLabel}</p>
                 <p style="margin: 5px 0;"><strong>Status:</strong> ${statusVencimento}</p>
               </div>
               <p style="color: #dc2626; font-weight: bold;">Por favor, providencie a renovação o quanto antes.</p>
@@ -852,17 +867,20 @@ Por favor, providencie a renovação o quanto antes.
         const statusCallbackUrl = new URL(TWILIO_STATUS_CALLBACK_PATH, c.req.url).toString();
         const templateKey = resolveQualificacaoAlertTemplateKey({
           isCma: isCMA,
-          expired: diasDiferenca < 0,
+          expired: diasDiferenca !== null && diasDiferenca < 0,
         });
         const localTemplate = await getLocalWhatsAppTemplateRecord(db, templateKey);
         const templateDefinition = getAlertWhatsAppTemplateDefinition(templateKey);
         const templateVariables = buildQualificacaoTemplateVariables({
           funcionarioNome: String(r.funcionario_nome || '').trim(),
           qualificacaoNome: String(r.tipo_nome || r.tipo_codigo || '').trim(),
-          dataVencimento: formatDatePtBr(String(r.data_vencimento || '')),
-          statusVencimento: isEAD
-            ? buildTrainingTemplateStatusVariable(diasDiferenca, trainingUrl)
-            : statusVencimento,
+          dataVencimento: r.data_vencimento
+            ? formatDatePtBr(String(r.data_vencimento))
+            : 'Não se aplica',
+          statusVencimento:
+            isEAD && diasDiferenca !== null
+              ? buildTrainingTemplateStatusVariable(diasDiferenca, trainingUrl)
+              : statusVencimento,
         });
         const templateMessage = templateDefinition
           ? renderTemplateBody(templateDefinition.bodyText, templateVariables)

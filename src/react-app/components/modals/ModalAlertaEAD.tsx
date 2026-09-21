@@ -103,16 +103,18 @@ export function ModalAlertaEAD({ isOpen, onClose, qualificacao }: ModalAlertaEAD
   const hoje = new Date();
   const diasVencida = dataVencimento
     ? Math.floor((hoje.getTime() - dataVencimento.getTime()) / (1000 * 60 * 60 * 24))
-    : 0;
+    : null;
+  const statusVencimento =
+    diasVencida === null ? 'Sem vencimento definido' : `Vencida há ${diasVencida} dias`;
 
-  const mensagemPadrao = `🔔 *ALERTA - Treinamento EAD Vencido*
+  const mensagemPadrao = `🔔 *ALERTA - Treinamento EAD*
 
 Funcionário: ${qualificacao.funcionario_nome || 'N/A'}
 Qualificação: ${qualificacao.tipo_nome || qualificacao.qualificacao_nome || 'N/A'}
-Vencimento: ${dataVencimento?.toLocaleDateString('pt-BR') || 'N/A'}
-Vencida há: ${diasVencida} dias
+Vencimento: ${dataVencimento?.toLocaleDateString('pt-BR') || 'Não se aplica'}
+Status: ${statusVencimento}
 
-Por favor, providencie a renovação o quanto antes.`;
+Por favor, providencie a renovação quando aplicável.`;
 
   const [mensagem, setMensagem] = useState(mensagemPadrao);
 
@@ -266,7 +268,7 @@ Por favor, providencie a renovação o quanto antes.`;
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Enviar Alerta - Treinamento EAD Vencido"
+      title="Enviar Alerta - Treinamento EAD"
       size="lg"
     >
       <div className="space-y-4">
@@ -319,7 +321,7 @@ Por favor, providencie a renovação o quanto antes.`;
               <p className="mt-1 text-sm text-slate-600">
                 {qualificacao.tipo_nome || qualificacao.qualificacao_nome || 'Qualificação'}
               </p>
-              <p className="mt-1 text-sm font-medium text-red-600">Vencida há {diasVencida} dias</p>
+              <p className="mt-1 text-sm font-medium text-red-600">{statusVencimento}</p>
             </div>
           </div>
         </div>

@@ -1151,8 +1151,17 @@ export async function assertQualificacaoAtribuicaoWithinOperationalScope(params:
   userRole: unknown;
   qualificacaoTipoId: number | null;
   funcionarioId: number | null;
+  allowFuncionarioDomainFallback?: boolean;
 }): Promise<void> {
-  const { db, empresaId, userId, userRole, qualificacaoTipoId, funcionarioId } = params;
+  const {
+    db,
+    empresaId,
+    userId,
+    userRole,
+    qualificacaoTipoId,
+    funcionarioId,
+    allowFuncionarioDomainFallback = false,
+  } = params;
 
   const access = await resolveOperationalAccess({ db, empresaId, userId, userRole });
   if (!access.enabled) return;
@@ -1193,26 +1202,63 @@ export async function assertQualificacaoAtribuicaoWithinOperationalScope(params:
     .bind(qualificacaoTipoId, empresaId)
     .first<{ dominio_codigo: string | null }>();
 
-  if (!tipo || !tipo.dominio_codigo) {
-    forbidden(
-      'Qualificação sem domínio classificado — acesso negado (fail-closed)',
-      'RESOURCE_DOMAIN_UNCLASSIFIED',
-    );
-  }
-
-  if (!access.domains.includes(tipo.dominio_codigo as OperationalDomain)) {
-    forbidden(
-      `Acesso operacional negado ao domínio ${tipo.dominio_codigo}`,
-      'OPERATIONAL_DOMAIN_ACCESS_DENIED',
-    );
-  }
-
   const funcionario = await db
     .prepare(
       `SELECT setor_id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
     )
     .bind(funcionarioId, empresaId)
     .first<{ setor_id: number | null }>();
+
+  // Tipos ligados a múltiplos setores são qualificações compartilhadas.
+  // Nesses casos, o domínio efetivo é o setor do funcionário, em vez de um
+  // domínio único do tipo/categoria.
+  const hasTiposSetores = await tableHasColumn(db, 'qualificacoes_tipos_setores', 'tipo_id');
+  let tipoSetorLinkCount = 0;
+  if (hasTiposSetores) {
+    const linkCount = await db
+      .prepare(
+        `SELECT COUNT(DISTINCT setor_id) AS total
+           FROM qualificacoes_tipos_setores
+          WHERE tipo_id = ? AND empresa_id = ? AND deleted_at IS NULL AND setor_id IS NOT NULL`,
+      )
+      .bind(qualificacaoTipoId, empresaId)
+      .first<{ total: number | null }>();
+    tipoSetorLinkCount = Number(linkCount?.total ?? 0);
+  }
+
+  let funcionarioSetorDomain: string | null = null;
+  const needsFuncionarioDomain =
+    tipoSetorLinkCount > 1 || (allowFuncionarioDomainFallback && !tipo?.dominio_codigo);
+  if (needsFuncionarioDomain && funcionario?.setor_id != null) {
+    const setor = await db
+      .prepare(
+        `SELECT dominio_codigo FROM setores
+          WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
+          LIMIT 1`,
+      )
+      .bind(funcionario.setor_id, empresaId)
+      .first<{ dominio_codigo: string | null }>();
+    funcionarioSetorDomain = setor?.dominio_codigo ?? null;
+  }
+
+  const effectiveDomain =
+    tipoSetorLinkCount > 1 || (allowFuncionarioDomainFallback && !tipo?.dominio_codigo)
+      ? funcionarioSetorDomain
+      : tipo?.dominio_codigo;
+
+  if (!effectiveDomain) {
+    forbidden(
+      'Qualificação sem domínio classificado — acesso negado (fail-closed)',
+      'RESOURCE_DOMAIN_UNCLASSIFIED',
+    );
+  }
+
+  if (!access.domains.includes(effectiveDomain as OperationalDomain)) {
+    forbidden(
+      `Acesso operacional negado ao domínio ${effectiveDomain}`,
+      'OPERATIONAL_DOMAIN_ACCESS_DENIED',
+    );
+  }
 
   if (
     !funcionario ||

@@ -30,6 +30,24 @@ describe('ModalAlertaEAD', () => {
     vi.unstubAllGlobals();
   });
 
+  it('permite alerta de qualificação sem data de vencimento sem exibir vencimento fictício', () => {
+    render(
+      <ModalAlertaEAD
+        isOpen
+        onClose={vi.fn()}
+        qualificacao={{
+          id: 99,
+          funcionario_nome: 'Daniel da Silva Cunha',
+          qualificacao_nome: 'Regras de Ouro — Petrobras',
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText(/Sem vencimento definido/i).length).toBeGreaterThan(0);
+    expect(screen.getByDisplayValue(/Vencimento: Não se aplica/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Vencida há 0 dias/i)).not.toBeInTheDocument();
+  });
+
   it('usa toast de warning com duration customizado no envio parcial', async () => {
     vi.stubGlobal(
       'fetch',

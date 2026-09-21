@@ -1561,6 +1561,57 @@ describe('assertQualificacaoAtribuicaoWithinOperationalScope (Item 3 — atribui
     ).resolves.toBeUndefined();
   });
 
+  it('permite qualificação compartilhada multi-setor sem domínio único usando o setor do funcionário', async () => {
+    const db = makeDb({
+      qualificacoesTiposSetores: [
+        { tipo_id: 3, setor_id: 10, empresa_id: 2, deleted_at: null },
+        { tipo_id: 3, setor_id: 11, empresa_id: 2, deleted_at: null },
+      ],
+    });
+    const { assertQualificacaoAtribuicaoWithinOperationalScope } =
+      await import('../../services/operational-domain-access');
+
+    await expect(
+      assertQualificacaoAtribuicaoWithinOperationalScope({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 101,
+        userRole: 'gestor',
+        qualificacaoTipoId: 3,
+        funcionarioId: 2,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('permite somente em renovação o fallback pelo domínio do setor para tipo legado sem domínio', async () => {
+    const db = makeDb();
+    const { assertQualificacaoAtribuicaoWithinOperationalScope } =
+      await import('../../services/operational-domain-access');
+
+    await expect(
+      assertQualificacaoAtribuicaoWithinOperationalScope({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 101,
+        userRole: 'gestor',
+        qualificacaoTipoId: 3,
+        funcionarioId: 2,
+        allowFuncionarioDomainFallback: true,
+      }),
+    ).resolves.toBeUndefined();
+
+    await expect(
+      assertQualificacaoAtribuicaoWithinOperationalScope({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 101,
+        userRole: 'gestor',
+        qualificacaoTipoId: 3,
+        funcionarioId: 2,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403, code: 'RESOURCE_DOMAIN_UNCLASSIFIED' });
+  });
+
   it('nega quando o funcionário está em outro setor do mesmo domínio', async () => {
     const db = makeDb();
     const { assertQualificacaoAtribuicaoWithinOperationalScope } =

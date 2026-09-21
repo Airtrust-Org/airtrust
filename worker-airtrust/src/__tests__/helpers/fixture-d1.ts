@@ -405,6 +405,26 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       return { all: rows };
     }
 
+    // operational-domain-access.ts: shared qualification type link count
+    if (
+      sql.includes('SELECT COUNT(DISTINCT setor_id) AS total') &&
+      sql.includes('FROM qualificacoes_tipos_setores')
+    ) {
+      const [tipoId, empresaId] = args as [number, number];
+      const setorIds = new Set(
+        (f.qualificacoesTiposSetores || [])
+          .filter(
+            (qts) =>
+              qts.tipo_id === tipoId &&
+              qts.empresa_id === empresaId &&
+              !qts.deleted_at &&
+              qts.setor_id != null,
+          )
+          .map((qts) => qts.setor_id),
+      );
+      return { first: { total: setorIds.size } };
+    }
+
     // operational-domain-access.ts: resolveManagedSectorDomainFallback's
     // qualificacoes_tipos_setores → categoria domain lookup
     if (sql.includes('FROM qualificacoes_tipos_setores qts')) {
