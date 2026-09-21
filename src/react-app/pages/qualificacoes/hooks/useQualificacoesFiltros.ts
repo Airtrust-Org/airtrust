@@ -5,6 +5,7 @@ import {
   ALL_STATUS_VALUES,
   QUALIFICACOES_PREFS_KEY,
 } from '../qualificacoes.constants';
+import { createDefaultQualificationHistoryStatusSet } from '@/react-app/lib/qualificationHistoryFilters';
 import type { SortConfig } from '@/react-app/utils/types';
 
 export const VALID_TABS = ['historico', 'planejados', 'tipos', 'categorias'] as const;
@@ -79,21 +80,12 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
   );
 
   const [statusFiltro, setStatusFiltro] = useState<Set<string>>(
-    new Set(
-      highlightedHistoricoId
-        ? ALL_STATUS_VALUES
-        : ['VALIDA', 'VENCIDA', 'VENCENDO_30', 'PLANEJADA'],
-    ),
+    createDefaultQualificationHistoryStatusSet,
   );
 
   const getDefaultHistoricoStatusSet = useCallback(
-    () =>
-      new Set(
-        highlightedHistoricoId
-          ? ALL_STATUS_VALUES
-          : ['VALIDA', 'VENCIDA', 'VENCENDO_30', 'PLANEJADA'],
-      ),
-    [highlightedHistoricoId],
+    () => createDefaultQualificationHistoryStatusSet(),
+    [],
   );
 
   const applySingleStatusFromChip = useCallback((status: string) => {
@@ -147,7 +139,15 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
     categoriasSetorFilter,
   ]);
 
-  const effectiveHistoricoStatusFiltro = useMemo(() => [...statusFiltro], [statusFiltro]);
+  // A visão padrão é histórico completo. Enviar os seis status como filtro
+  // transforma a consulta em "estado operacional" e pode excluir registros
+  // históricos antigos que não possuem lineage de renovação explícita.
+  const effectiveHistoricoStatusFiltro = useMemo(() => {
+    const isAllStatuses =
+      statusFiltro.size === ALL_STATUS_VALUES.length &&
+      ALL_STATUS_VALUES.every((status) => statusFiltro.has(status));
+    return isAllStatuses ? [] : [...statusFiltro];
+  }, [statusFiltro]);
 
   useEffect(() => {
     const tabParam = searchParams.get('tab');

@@ -1010,8 +1010,12 @@ export default function Qualificacoes() {
 
   const filteredHistorico = useMemo(
     () =>
-      (historico as HistoricoItem[]).filter((item) => statusFiltro.has(getHistoricoStatus(item))),
-    [getHistoricoStatus, historico, statusFiltro],
+      isDefaultStatusFilter
+        ? (historico as HistoricoItem[])
+        : (historico as HistoricoItem[]).filter((item) =>
+            statusFiltro.has(getHistoricoStatus(item)),
+          ),
+    [getHistoricoStatus, historico, isDefaultStatusFilter, statusFiltro],
   );
 
   const prioritizedHistorico = useMemo(() => {

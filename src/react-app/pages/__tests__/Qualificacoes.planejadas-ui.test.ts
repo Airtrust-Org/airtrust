@@ -383,9 +383,9 @@ describe('Qualificacoes — Planejadas history restore (PR #206)', () => {
     expect(qualificacoesSource.replace(/\s/g, '')).not.toContain("newSet(['VALIDA','VENCIDA','VENCENDO_30','RENOVADA','CANCELADA'");
   });
 
-  it('filtro_padrao_com_planejadas — default status filter includes PLANEJADA', () => {
-    expect(qualificacoesSource).toContain("['VALIDA', 'VENCIDA', 'VENCENDO_30', 'PLANEJADA']");
-    expect(qualificacoesSource).not.toContain("['VALIDA', 'VENCIDA', 'VENCENDO_30']");
+  it('filtro_padrao_historico_completo — default status filter represents all statuses', () => {
+    expect(qualificacoesSource).toContain('new Set(ALL_STATUS_VALUES)');
+    expect(qualificacoesSource).toContain('return isAllStatuses ? [] : [...statusFiltro]');
   });
 
   it('url_param_planejada_filtra_historico — URL status=planejada filters Historico, does not redirect', () => {
