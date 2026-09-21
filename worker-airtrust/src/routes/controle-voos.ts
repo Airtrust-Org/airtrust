@@ -43,7 +43,7 @@ import { assertFlightCrewAssignment, listEligibleFlightCrew } from '../services/
 import { buildFlightRelatedStatements, normalizeFlightRouteIds, parseFlightCrewIds, resolveFlightRoutePoints } from '../services/controle-voos/flight-creation';
 import { parseFlightPlanningInput, updateFlightStagePlanningIfSupported } from '../services/controle-voos/flight-planning';
 import { enrichFlightsWithPresentation } from '../services/controle-voos/flight-presentation';
-import { getFlightWhatsAppShareHandler, sendFlightEmailHandler, sendFlightWhatsAppHandler } from './controle-voos-dispatch';
+import { getDailyPlanningWhatsAppShareHandler, getFlightWhatsAppShareHandler, sendFlightEmailHandler, sendFlightWhatsAppHandler } from './controle-voos-dispatch';
 type OperationalReadFilters = {
   dataInicio: string;
   dataFim: string;
@@ -1255,6 +1255,7 @@ controleVoos.get('/voos/:id', auth(), async (c) => {
   return c.json({ success: true, data: (await enrichFlightsWithPresentation(c.env.DB, empresaId, [flight]))[0] });
 });
 
+controleVoos.get('/whatsapp-share/planejamento-dia-seguinte', auth(), requireControleVoosWrite(), getDailyPlanningWhatsAppShareHandler);
 controleVoos.post('/voos/:id/whatsapp', auth(), requireControleVoosWrite(), sendFlightWhatsAppHandler);
 controleVoos.post('/voos/:id/email', auth(), requireControleVoosWrite(), sendFlightEmailHandler);
 controleVoos.get('/voos/:id/whatsapp-share', auth(), requireControleVoosWrite(), getFlightWhatsAppShareHandler);
