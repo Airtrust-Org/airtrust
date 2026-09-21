@@ -154,6 +154,26 @@ describe('ProtectedRoute module gating', () => {
     expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
   });
 
+  it('mantem DENY explicito acima do papel Gestor no Controle de Voos', () => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: {
+        name: 'Gestor sem Controle de Voos',
+        email: 'gestor@empresa.com',
+        role: 'GESTOR',
+        permissions: ['DENY:controle_voos.view'],
+      },
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['controle_voos'] }],
+      empresaAtualId: 1,
+    });
+
+    renderAt('/controle-voos');
+
+    expect(screen.getByText('protected.denied.title')).toBeInTheDocument();
+    expect(screen.queryByText('conteudo liberado')).toBeNull();
+  });
+
   it('permite Controle de Voos completo para usuário comum com GRANT explícito', () => {
     authMock.mockReturnValue({
       isAuthenticated: true,
