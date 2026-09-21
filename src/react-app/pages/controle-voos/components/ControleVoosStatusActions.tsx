@@ -75,7 +75,13 @@ export default function ControleVoosStatusActions({ voo, onChanged }: Props) {
     try {
       const response = await apiClient.get<unknown>('/controle-voos/catalogos/motivos');
       const rows = extract<Motivo[]>(response) || [];
-      setMotivos(rows.filter((row) => row.ativo === undefined || row.ativo === null || Boolean(row.ativo)));
+      setMotivos(
+        rows.filter(
+          (row) =>
+            (row.ativo === undefined || row.ativo === null || Boolean(row.ativo)) &&
+            String(row.tipo || '').trim().toLocaleLowerCase('pt-BR') === 'cancelamento',
+        ),
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível carregar os motivos de cancelamento.');
     } finally {
