@@ -105,6 +105,7 @@ import {
   type TipoUpdateResponseData,
 } from '@/react-app/pages/qualificacoes/tipoSaveFeedback';
 import { readUserPreference, writeUserPreference } from '@/react-app/utils/userPreferences';
+import { normalizeQualificationHistorySectorFilter } from '@/react-app/lib/qualificationHistoryFilters';
 
 import {
   ALL_STATUS_VALUES,
@@ -590,6 +591,20 @@ export default function Qualificacoes() {
 
   // Sector options for historico/planejados (same data source, separate const for clarity)
   const setorOptionsHistorico = setorOptionsTipos;
+
+  // Em preferências antigas o administrador pode ter salvo explicitamente
+  // todos os setores. Isso não pode virar um filtro server-side, pois registros
+  // históricos legados podem não ter setor_id. Todos selecionados = sem filtro.
+  useEffect(() => {
+    const normalized = normalizeQualificationHistorySectorFilter(
+      setorFilter,
+      setorOptionsHistorico.map((option) => option.value),
+    );
+    if (setorFilter.length > 0 && normalized.length === 0) {
+      setSetorFilter([]);
+      setPage(1);
+    }
+  }, [setorFilter, setorOptionsHistorico, setSetorFilter, setPage]);
 
   useEffect(() => {
     if (!modelosPrefsReady) return;

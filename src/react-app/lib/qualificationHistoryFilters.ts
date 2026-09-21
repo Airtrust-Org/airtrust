@@ -21,6 +21,29 @@ export function normalizeQualificationHistoryStatuses(values?: readonly string[]
   );
 }
 
+export function normalizeQualificationHistorySectorFilter(
+  selectedValues: readonly string[] | undefined,
+  availableValues: readonly string[] | undefined,
+): string[] {
+  const selected = Array.from(
+    new Set((selectedValues || []).map((value) => String(value).trim()).filter(Boolean)),
+  );
+  const available = Array.from(
+    new Set((availableValues || []).map((value) => String(value).trim()).filter(Boolean)),
+  );
+
+  if (selected.length === 0 || available.length === 0) return selected;
+
+  const availableSet = new Set(available);
+  const selectsEveryAvailableSector =
+    selected.length === available.length && selected.every((value) => availableSet.has(value));
+
+  // Selecionar todos os setores disponíveis é semanticamente igual a não
+  // filtrar por setor. Manter `setor_ids` nesse caso exclui registros legados
+  // sem setor_id, que ainda fazem parte do histórico completo do tenant.
+  return selectsEveryAvailableSector ? [] : selected;
+}
+
 export function shouldSendQualificationHistoryStatusFilter(values?: readonly string[]): boolean {
   const normalized = normalizeQualificationHistoryStatuses(values);
   if (normalized.length === 0) return false;

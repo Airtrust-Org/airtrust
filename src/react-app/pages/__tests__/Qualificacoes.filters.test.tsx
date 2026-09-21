@@ -145,6 +145,7 @@ vi.mock('react-router-dom', async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockApiData.splice(0, mockApiData.length);
   vi.useFakeTimers();
 
   fetchWithAuthMock.mockImplementation(async (url: string) => {
@@ -290,6 +291,24 @@ describe('Qualificacoes - Filters and View State Characterization', () => {
     // Ao restaurar todos os status, a visão volta a ser histórico completo:
     // o hook omite o filtro server-side em vez de serializar os seis status.
     expect(lastCall[9]).toEqual([]);
+  });
+
+  it('11. administrador com todos os setores salvos volta ao histórico completo sem setor_ids', () => {
+    mockApiData.splice(0, mockApiData.length,
+      { id: 10, nome: 'Operações' },
+      { id: 20, nome: 'Manutenção' },
+    );
+    vi.spyOn(userPreferences, 'readUserPreference').mockReturnValue({
+      activeTab: 'historico',
+      setorFilter: ['10', '20'],
+    });
+
+    renderComponent();
+    act(() => { vi.advanceTimersByTime(100); });
+
+    const mainCalls = mockUseQualificacoesHistorico.mock.calls.filter((c: any) => c[1] !== 500);
+    const lastCall = mainCalls[mainCalls.length - 1];
+    expect(lastCall[10]).toBeUndefined();
   });
 
   it('8. garantia de que filtros não disparam mutation', () => {
