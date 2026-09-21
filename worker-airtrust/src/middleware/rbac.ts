@@ -41,8 +41,8 @@ const DYNAMIC_ACTION_PERMISSION_SUFFIX: Record<DynamicPermissionAction, string> 
   deletar: 'delete',
 };
 
-export async function getUserPermissionOverride(
-  c: Context<{ Bindings: Env }>,
+export async function getUserPermissionOverride<E extends { Bindings: Env }>(
+  c: Context<E>,
   permission: string,
 ): Promise<UserPermissionOverride> {
   const rawUserId = (c.get as (key: string) => unknown)('userId');
@@ -190,7 +190,7 @@ export function requirePermission(
 
     const baselineAllowed = defaultRoles.includes(userRole);
     const individualOverride = await getUserPermissionOverride(
-      c as unknown as Context<{ Bindings: Env }>,
+      c,
       dynamicPermissionKey(modulo, acao),
     );
     if (individualOverride === 'DENY') {

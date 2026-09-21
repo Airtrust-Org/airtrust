@@ -140,7 +140,7 @@ router.get('/projection', async (c) => {
     include_inconsistencies: parsed.data.include_inconsistencies,
   };
 
-  const hasTeamScope = await canSeeFrmsTeamScopeForContext(c as unknown as Context<{ Bindings: Env }>);
+  const hasTeamScope = await canSeeFrmsTeamScopeForContext(c);
   let forcedFuncionarioId: number | undefined;
   if (!hasTeamScope) {
     const ownFuncionarioId = await resolveOwnFuncionarioId(c, empresaId);

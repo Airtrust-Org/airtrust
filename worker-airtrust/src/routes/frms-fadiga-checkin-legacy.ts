@@ -105,14 +105,11 @@ function minutesToTime(minutes: number): string {
 }
 
 async function isManagerPlus(c: FrmsContext): Promise<boolean> {
-  return canSeeFrmsTeamScopeForContext(c as unknown as Context<{ Bindings: Env }>);
+  return canSeeFrmsTeamScopeForContext(c);
 }
 
 const requireFatigueCheckinAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
-  const override = await getUserPermissionOverride(
-    c as unknown as Context<{ Bindings: Env }>,
-    'frms.checkin',
-  );
+  const override = await getUserPermissionOverride(c, 'frms.checkin');
   if (override === 'DENY') {
     return c.json(
       { success: false, error: 'FRMS_CHECKIN_FORBIDDEN', message: 'Check-in de fadiga não habilitado para este usuário.' },

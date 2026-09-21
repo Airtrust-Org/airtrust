@@ -47,7 +47,7 @@ const QuerySchema = z
   });
 
 async function canSeeTeam(c: SnapshotContext): Promise<boolean> {
-  return canSeeFrmsTeamScopeForContext(c as unknown as Context<{ Bindings: Env }>);
+  return canSeeFrmsTeamScopeForContext(c);
 }
 
 async function resolveOwnFuncionarioId(

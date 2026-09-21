@@ -171,7 +171,7 @@ router.get('/team', async (c) => {
     return c.json({ success: false, error: 'invalid_reference_date' }, 400);
   }
 
-  const hasTeamScope = await canSeeFrmsTeamScopeForContext(c as unknown as Context<{ Bindings: Env }>);
+  const hasTeamScope = await canSeeFrmsTeamScopeForContext(c);
   let forcedFuncionarioId: number | undefined;
   if (!hasTeamScope) {
     const funcionarioId = await resolveOwnFuncionarioId(c, empresaId);

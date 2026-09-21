@@ -18,8 +18,8 @@ export function canSeeFrmsTeamScope(role: unknown): boolean {
   return FRMS_TEAM_SCOPE_ROLES.has(normalized);
 }
 
-export async function canSeeFrmsTeamScopeForContext(
-  c: Context<{ Bindings: Env }>,
+export async function canSeeFrmsTeamScopeForContext<E extends { Bindings: Env }>(
+  c: Context<E>,
 ): Promise<boolean> {
   const override = await getUserPermissionOverride(c, 'frms.team.view');
   if (override === 'DENY') return false;
