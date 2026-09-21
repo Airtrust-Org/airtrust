@@ -1,5 +1,6 @@
 import type {
   CvAeroporto,
+  CvFlightStatus,
   CvRdvWorkflowStatus,
   CvVoo,
 } from '@/react-app/hooks/useControleVoos';
@@ -151,6 +152,31 @@ export function flightOperationalDestinationLabel(
     return points.length > 1 ? formatAeronauticalPoint(points[points.length - 1]) : '—';
   }
   return destinations.map(formatAeronauticalPoint).join(' · ');
+}
+
+export type CvFlightPresentationStatus = CvFlightStatus | 'realizado';
+
+const REALIZED_RDV_WORKFLOWS = new Set<CvRdvWorkflowStatus>([
+  'enviado',
+  'em_revisao',
+  'devolvido',
+  'aprovado_coordenacao',
+  'finalizado',
+  'reaberto',
+]);
+
+export function flightPresentationStatus(
+  voo: Pick<
+    CvVoo,
+    'status' | 'horario_real_partida' | 'rdv_workflow_status' | 'rdv_enviado_em'
+  >,
+): CvFlightPresentationStatus {
+  if (voo.status === 'cancelado') return 'cancelado';
+  const sent =
+    Boolean(voo.rdv_enviado_em) ||
+    Boolean(voo.rdv_workflow_status && REALIZED_RDV_WORKFLOWS.has(voo.rdv_workflow_status));
+  if (Boolean(voo.horario_real_partida) && sent) return 'realizado';
+  return voo.status;
 }
 
 export function rdvWorkflowLabel(status?: CvRdvWorkflowStatus | null): string | null {
