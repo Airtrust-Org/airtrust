@@ -30,6 +30,50 @@ function toLocalInput(value: string | null | undefined) {
   return shifted.toISOString().slice(0, 16);
 }
 
+function movePlannedDate(
+  dateText: string,
+  departureText: string,
+  arrivalText: string,
+): { departure: string; arrival: string } {
+  const departure = new Date(departureText);
+  const arrival = new Date(arrivalText);
+  const base = new Date(dateText + 'T12:00:00');
+  if (
+    Number.isNaN(departure.getTime()) ||
+    Number.isNaN(arrival.getTime()) ||
+    Number.isNaN(base.getTime())
+  ) {
+    return { departure: departureText, arrival: arrivalText };
+  }
+
+  const dayOffset = Math.max(
+    0,
+    Math.round(
+      (new Date(arrival.getFullYear(), arrival.getMonth(), arrival.getDate()).getTime() -
+        new Date(departure.getFullYear(), departure.getMonth(), departure.getDate()).getTime()) /
+        86_400_000,
+    ),
+  );
+  const nextDeparture = new Date(
+    base.getFullYear(),
+    base.getMonth(),
+    base.getDate(),
+    departure.getHours(),
+    departure.getMinutes(),
+  );
+  const nextArrival = new Date(
+    base.getFullYear(),
+    base.getMonth(),
+    base.getDate() + dayOffset,
+    arrival.getHours(),
+    arrival.getMinutes(),
+  );
+  return {
+    departure: toLocalInput(nextDeparture.toISOString()),
+    arrival: toLocalInput(nextArrival.toISOString()),
+  };
+}
+
 export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,10 +152,10 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h2 id="editar-voo-title" className="text-lg font-semibold text-slate-900 dark:text-white">
-              Editar voo {voo.prefixo}
+              Editar programação — {voo.prefixo}
             </h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Atualize a programação. A alteração incrementa a versão do voo para que o Pilot App sinalize a tripulação.
+              Atualize números, data, horários e observações da programação. Rota, aeronave e tripulação têm fluxos próprios. A alteração incrementa a versão do voo para que o Pilot App sinalize a tripulação.
             </p>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Fechar edição">
@@ -130,7 +174,28 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
           </label>
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
             Data da programação
-            <input type="date" required className={fieldClass} value={form.data_programacao} onChange={(event) => setForm((prev) => ({ ...prev, data_programacao: event.target.value }))} />
+            <input
+              type="date"
+              required
+              className={fieldClass}
+              value={form.data_programacao}
+              onChange={(event) => {
+                const data_programacao = event.target.value;
+                setForm((prev) => {
+                  const moved = movePlannedDate(
+                    data_programacao,
+                    prev.horario_previsto_partida,
+                    prev.horario_previsto_chegada,
+                  );
+                  return {
+                    ...prev,
+                    data_programacao,
+                    horario_previsto_partida: moved.departure,
+                    horario_previsto_chegada: moved.arrival,
+                  };
+                });
+              }}
+            />
           </label>
           <div />
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
