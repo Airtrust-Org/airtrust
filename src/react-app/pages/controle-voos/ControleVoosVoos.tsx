@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import AppLayout from '@/react-app/components/AppLayout';
 import { apiClient } from '@/react-app/services/apiClient';
 import { toast } from 'sonner';
+import { usePermissions } from '@/react-app/hooks/usePermissions';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
@@ -18,6 +19,8 @@ import { useControleVoosDate } from './hooks/useControleVoosDate';
 
 export default function ControleVoosVoos() {
   const qc = useQueryClient();
+  const { isAdmin, isGestor } = usePermissions();
+  const canCoordinate = isAdmin || isGestor;
   const [novoVooOpen, setNovoVooOpen] = useState(false);
   const [sharingTomorrow, setSharingTomorrow] = useState(false);
   const { selectedDate, setSelectedDate, setToday } = useControleVoosDate();
@@ -66,15 +69,17 @@ export default function ControleVoosVoos() {
                 onChange={setSelectedDate}
                 onToday={setToday}
               />
-              <button
-                type="button"
-                onClick={() => void shareTomorrowPlanning()}
-                disabled={sharingTomorrow}
-                className="inline-flex items-center gap-2 rounded-lg border border-emerald-700 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 dark:bg-emerald-950/20 dark:text-emerald-300"
-              >
-                <MessageCircle className="h-4 w-4" />
-                {sharingTomorrow ? 'Preparando…' : 'Compartilhar planejamento de amanhã'}
-              </button>
+              {canCoordinate && (
+                <button
+                  type="button"
+                  onClick={() => void shareTomorrowPlanning()}
+                  disabled={sharingTomorrow}
+                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-700 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 dark:bg-emerald-950/20 dark:text-emerald-300"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  {sharingTomorrow ? 'Preparando…' : 'Compartilhar planejamento de amanhã'}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setNovoVooOpen(true)}
