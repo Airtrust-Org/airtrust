@@ -33,6 +33,15 @@ function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: 
 
   const attentionItems = alertas
     ? [
+        alertas.rdvs_recebidos_aguardando_revisao > 0
+          ? {
+              id: 'rdv-recebido',
+              count: alertas.rdvs_recebidos_aguardando_revisao,
+              label: `${alertas.rdvs_recebidos_aguardando_revisao} RDV(s) recebido(s) aguardando revisão da Coordenação`,
+              to: '/controle-voos/coordenacao/fila',
+              critical: false,
+            }
+          : null,
         alertas.voos_sem_tripulacao > 0
           ? {
               id: 'sem-tripulacao',
@@ -189,7 +198,7 @@ function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: 
                       value: totais.voos_em_andamento + totais.voos_pousados,
                     },
                     { label: 'Planejados', value: totais.voos_planejados },
-                    { label: 'RDVs pendentes', value: totais.rdvs_rascunho },
+                    { label: 'RDVs recebidos', value: totais.rdvs_enviados },
                     { label: 'Cancelados', value: totais.voos_cancelados },
                   ].map((item, index) => (
                     <div
@@ -286,6 +295,9 @@ function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: 
               </section>
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 pt-4 text-sm dark:border-slate-800">
+                <Link to="/controle-voos/coordenacao/fila" className="inline-flex items-center gap-1.5 text-slate-600 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400">
+                  <FileText className="h-4 w-4" /> Fila da Coordenação
+                </Link>
                 <Link to={`/controle-voos/rdv?data=${selectedDate}`} className="inline-flex items-center gap-1.5 text-slate-600 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400">
                   <FileText className="h-4 w-4" /> RDVs
                 </Link>
