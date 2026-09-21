@@ -36,7 +36,7 @@ function isEligibleForRenovada(status: unknown): boolean {
 
 interface GrupoRow {
   funcionario_id: number;
-  qualificacao_codigo: string;
+  qualification_key: string;
   total: number;
 }
 
@@ -78,15 +78,27 @@ async function findRenovadaCandidates(
     .prepare(
       `SELECT
           qh.funcionario_id,
-          qh.qualificacao_codigo,
+          UPPER(TRIM(COALESCE(
+            NULLIF(CAST(qh.qualificacao_id AS TEXT), ''),
+            NULLIF(qh.qualificacao_codigo, ''),
+            NULLIF(qh.tipo, '')
+          ))) AS qualification_key,
           COUNT(*) as total
         FROM qualificacoes_historico qh
-        INNER JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
+        INNER JOIN funcionarios f
+          ON f.id = qh.funcionario_id
+         AND f.empresa_id = qh.empresa_id
+         AND f.deleted_at IS NULL
         WHERE qh.deleted_at IS NULL
           AND qh.empresa_id = ?
           ${setorClause}
           AND UPPER(COALESCE(qh.status, '')) NOT IN ('PLANEJADA','PLANEJADO','CANCELADA','CANCELADO')
-        GROUP BY qh.funcionario_id, qh.qualificacao_codigo
+          AND UPPER(TRIM(COALESCE(
+            NULLIF(CAST(qh.qualificacao_id AS TEXT), ''),
+            NULLIF(qh.qualificacao_codigo, ''),
+            NULLIF(qh.tipo, '')
+          ))) <> ''
+        GROUP BY qh.funcionario_id, qualification_key
         HAVING COUNT(*) > 1`,
     )
     .bind(empresaId, ...setorBinding)
@@ -109,22 +121,31 @@ async function findRenovadaCandidates(
           INNER JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
           LEFT JOIN setores s ON s.id = f.setor_id AND s.deleted_at IS NULL
           WHERE qh.funcionario_id = ?
-            AND qh.qualificacao_codigo = ?
             AND qh.empresa_id = ?
+            AND UPPER(TRIM(COALESCE(
+              NULLIF(CAST(qh.qualificacao_id AS TEXT), ''),
+              NULLIF(qh.qualificacao_codigo, ''),
+              NULLIF(qh.tipo, '')
+            ))) = ?
             AND qh.deleted_at IS NULL
             AND UPPER(COALESCE(qh.status, '')) NOT IN ('PLANEJADA','PLANEJADO','CANCELADA','CANCELADO')
-          ORDER BY date(COALESCE(qh.data_conclusao, '1900-01-01')) ASC, qh.id ASC`,
+          ORDER BY datetime(COALESCE(
+            qh.data_conclusao,
+            qh.data_vencimento,
+            qh.updated_at,
+            qh.created_at,
+            '1900-01-01'
+          )) ASC, qh.id ASC`,
       )
-      .bind(grupo.funcionario_id, grupo.qualificacao_codigo, empresaId)
+      .bind(grupo.funcionario_id, empresaId, grupo.qualification_key)
       .all<HistoricoRow>();
 
     const rows = registros ?? [];
     if (rows.length <= 1) continue;
 
-    const maisRecente = rows[rows.length - 1];
-
     for (let i = 0; i < rows.length - 1; i++) {
       const antigo = rows[i];
+      const sucessor = rows[i + 1];
       if (
         Number(antigo.renovada) === 1 ||
         String(antigo.status || '').toUpperCase() === 'RENOVADA'
@@ -137,15 +158,15 @@ async function findRenovadaCandidates(
         funcionario_id: grupo.funcionario_id,
         funcionario_nome: antigo.funcionario_nome,
         setor: antigo.setor_nome,
-        qualificacao_codigo: grupo.qualificacao_codigo,
+        qualificacao_codigo: grupo.qualification_key,
         id_antigo: antigo.id,
         status_atual: antigo.status,
         data_conclusao_antiga: antigo.data_conclusao,
         data_vencimento_antiga: antigo.data_vencimento,
-        id_mais_recente: maisRecente.id,
-        status_mais_recente: maisRecente.status,
-        data_conclusao_nova: maisRecente.data_conclusao,
-        data_vencimento_nova: maisRecente.data_vencimento,
+        id_mais_recente: sucessor.id,
+        status_mais_recente: sucessor.status,
+        data_conclusao_nova: sucessor.data_conclusao,
+        data_vencimento_nova: sucessor.data_vencimento,
         novo_status_proposto: 'RENOVADA',
       });
     }
@@ -205,12 +226,9 @@ async function applyRenovadaCandidates(
     );
   }
 
-  // The original sequential loop wrote renovacao_de on id_mais_recente only when it
-  // was still NULL ("WHEN renovacao_de IS NULL THEN <id_antigo> ELSE renovacao_de"),
-  // run oldest-candidate-first per group — so only the first candidate targeting a
-  // given id_mais_recente could ever set it; every later one landed on the ELSE
-  // no-op. `candidates` is already ordered oldest-first per group, so dedupe up
-  // front to keep that same "oldest antigo wins the link" outcome before batching.
+  // Each candidate points to its immediate chronological successor, so a sequence
+  // A -> B -> C becomes B.renovacao_de=A and C.renovacao_de=B. This preserves the
+  // whole lineage instead of linking only the latest row to the oldest duplicate.
   const linkTargets = new Map<number, number>();
   for (const candidate of candidates) {
     if (!linkTargets.has(candidate.id_mais_recente)) {
