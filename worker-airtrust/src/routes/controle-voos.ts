@@ -1128,10 +1128,16 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
   const payload = await parseJsonPayload(c);
   assertPayloadFields(payload, allowedCreateFields);
   const requestedRouteIds = normalizeFlightRouteIds(payload.rota_ids);
-  const operationalNatureId = await resolveOperationalNatureId(c.env.DB, empresaId);
+  const hasExplicitNature =
+    payload.natureza_voo_id !== undefined &&
+    payload.natureza_voo_id !== null &&
+    payload.natureza_voo_id !== '';
+  const naturezaVooId = hasExplicitNature
+    ? payload.natureza_voo_id
+    : await resolveOperationalNatureId(c.env.DB, empresaId);
   const normalizedPayload = {
     ...payload,
-    natureza_voo_id: payload.natureza_voo_id ?? operationalNatureId,
+    natureza_voo_id: naturezaVooId,
     ...(requestedRouteIds ? { origem_id: requestedRouteIds[0], destino_id: requestedRouteIds[requestedRouteIds.length - 1] } : {}),
   };
   const input = normalizeFlightInput(normalizedPayload, true);

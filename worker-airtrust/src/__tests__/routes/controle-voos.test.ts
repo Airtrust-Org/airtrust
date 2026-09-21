@@ -848,6 +848,46 @@ describe('controle voos routes', () => {
     expect(events).toEqual([{ tipo_evento: 'sistema', status_novo: 'planejado' }]);
   });
 
+  it('cria voo com natureza explicita mesmo sem fallback OPERACIONAL configurado', async () => {
+    const db = createSqliteD1();
+    runSql(
+      db.databasePath,
+      "DELETE FROM cv_naturezas_voo WHERE empresa_id = 1 AND codigo = 'OPERACIONAL';",
+    );
+
+    const response = await request(db, '/api/controle-voos/voos', {
+      method: 'POST',
+      body: JSON.stringify(validFlightPayload({ prefixo: 'ATX-NATUREZA' })),
+    });
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({
+      data: { empresa_id: 1, prefixo: 'ATX-NATUREZA', natureza_voo_id: 401 },
+    });
+  });
+
+  it('usa fallback OPERACIONAL apenas quando natureza nao e informada', async () => {
+    const db = createSqliteD1();
+    runSql(
+      db.databasePath,
+      "DELETE FROM cv_naturezas_voo WHERE empresa_id = 1 AND codigo = 'OPERACIONAL';",
+    );
+    const payload = validFlightPayload({
+      prefixo: 'ATX-SEM-NATUREZA',
+      natureza_voo_id: undefined,
+    });
+
+    const response = await request(db, '/api/controle-voos/voos', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_OPERATIONAL_NATURE_MISSING',
+    });
+  });
+
   it('cria as pernas programadas a partir da rota, inclusive retorno ao aeródromo de origem', async () => {
     const db = createSqliteD1();
     const response = await request(db, '/api/controle-voos/voos', {
