@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, Lock, Mail } from 'lucide-react';
 import { clearActiveSessionRole, useAuth } from '../hooks/useAuth';
 import { Input } from '../../components/ui/Input';
@@ -117,6 +117,11 @@ export default function LoginPage() {
   const { logoSrc } = useSystemSettings();
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from as { pathname?: string; search?: string; hash?: string } | undefined;
+  const redirectTo = from?.pathname?.startsWith('/')
+    ? `${from.pathname}${from.search || ''}${from.hash || ''}`
+    : '/';
 
   const loadSessionProfiles = async (): Promise<SessionRole[]> => {
     const response = await fetchWithAuth(`${API_BASE_URL}/me/operational-access/session-profiles`, {
@@ -147,7 +152,7 @@ export default function LoginPage() {
         return;
       }
 
-      navigate('/');
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : t('auth.login.error'));
       logger.error('Erro no login:', err);
@@ -175,7 +180,7 @@ export default function LoginPage() {
       // Troca somente o access token. O refresh token da autenticação original
       // permanece preservado e o backend revalida o perfil ativo em cada request.
       setTokens(payload.data.accessToken);
-      navigate('/');
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível ativar o perfil selecionado.');
       logger.error('Erro ao selecionar perfil de sessão:', err);

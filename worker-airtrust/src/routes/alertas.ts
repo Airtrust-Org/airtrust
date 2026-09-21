@@ -46,6 +46,7 @@ import {
   type AlertWhatsAppTemplateKey,
 } from '../utils/whatsapp-templates';
 import { sendWhatsAppMessage } from '../utils/whatsapp-send';
+import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
 
 const app = new Hono<{ Bindings: Env }>();
 const TWILIO_STATUS_CALLBACK_PATH = '/api/alertas/whatsapp/status-callback';
@@ -747,6 +748,15 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
       );
     }
 
+    const trainingUrl = isEAD
+      ? await resolveTrainingAccessUrl(c.env, db, {
+          empresaId,
+          funcionarioId: Number(r.funcionario_id),
+          qualificacaoHistoricoId: Number(r.id),
+          qualificacaoTipoId: Number(r.qualificacao_id) || undefined,
+        })
+      : null;
+
     // Usar mensagem customizada ou padrão
     const tipoAlerta = isCMA ? 'CMA' : 'EAD';
     const mensagem =
@@ -758,6 +768,7 @@ Funcionário: ${r.funcionario_nome}
 Qualificação: ${r.tipo_nome || r.tipo_codigo}
 Vencimento: ${dataVencimento.toLocaleDateString('pt-BR')}
 ${statusVencimento}
+${trainingUrl ? `\nAcesse o treinamento: ${trainingUrl}` : ''}
 
 Por favor, providencie a renovação o quanto antes.
     `.trim();
@@ -794,6 +805,7 @@ Por favor, providencie a renovação o quanto antes.
                 <p style="margin: 5px 0;"><strong>Status:</strong> ${statusVencimento}</p>
               </div>
               <p style="color: #dc2626; font-weight: bold;">Por favor, providencie a renovação o quanto antes.</p>
+              ${trainingUrl ? `<p style="margin:24px 0"><a href="${trainingUrl}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block">Acessar treinamento</a></p>` : ''}
               <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
               <p style="color: #6b7280; font-size: 12px; margin: 0;">
                 Esta é uma notificação automática. Por favor, não responda este email.
@@ -847,7 +859,9 @@ Por favor, providencie a renovação o quanto antes.
           funcionarioNome: String(r.funcionario_nome || '').trim(),
           qualificacaoNome: String(r.tipo_nome || r.tipo_codigo || '').trim(),
           dataVencimento: formatDatePtBr(String(r.data_vencimento || '')),
-          statusVencimento,
+          statusVencimento: trainingUrl && isEAD
+            ? `${statusVencimento}. Acesse o treinamento: ${trainingUrl}`
+            : statusVencimento,
         });
         const templateMessage =
           templateDefinition && localTemplate?.twilio_content_sid

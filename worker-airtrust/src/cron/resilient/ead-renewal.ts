@@ -6,6 +6,7 @@ import {
 } from '../../services/lms-matricula-cycle';
 import { getQualificacoesVencimentoExpr } from '../../utils/qualificacoes-alerta-config';
 import { sendEmail } from '../../lib/email';
+import { resolveTrainingAccessUrl } from '../../utils/lms-training-link';
 import type { Env } from '../../types';
 import {
   enqueueCronJobItem,
@@ -318,8 +319,13 @@ async function ensureRenewalEmail(
 
     if (!func?.email) return;
 
-    const frontendUrl = String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '');
-    const cursoUrl = `${frontendUrl}/lms/cursos/${payload.curso_id}`;
+    const cursoUrl =
+      (await resolveTrainingAccessUrl(env, db, {
+        empresaId: payload.empresa_id,
+        funcionarioId: payload.funcionario_id,
+        cursoId: payload.curso_id,
+      })) ||
+      `${String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '')}/lms/cursos/${payload.curso_id}`;
     const nomeAluno = func.nome || `Funcionário ${payload.funcionario_id}`;
 
     await sendEmail(env, {
