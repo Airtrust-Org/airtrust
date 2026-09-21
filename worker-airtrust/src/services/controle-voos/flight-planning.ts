@@ -3,6 +3,8 @@ import { ApiError } from '../../middleware/error-handler';
 export type FlightPlanningInput = {
   paxPlanejado: number | null;
   pesoPlanejado: number | null;
+  pesoPassageiros: number | null;
+  pesoBagagem: number | null;
   unidadePesoPlanejado: string;
   combustivelSolicitado: number | null;
   unidadeCombustivelSolicitado: string;
@@ -43,6 +45,8 @@ export function parseFlightPlanningInput(payload: Record<string, unknown>): Flig
   return {
     paxPlanejado: parseOptionalNonNegativeInteger(payload.pax_planejado, 'pax_planejado'),
     pesoPlanejado: parseOptionalNonNegativeNumber(payload.peso_planejado, 'peso_planejado'),
+    pesoPassageiros: parseOptionalNonNegativeNumber(payload.peso_passageiros, 'peso_passageiros'),
+    pesoBagagem: parseOptionalNonNegativeNumber(payload.peso_bagagem, 'peso_bagagem'),
     unidadePesoPlanejado: normalizeOperationalUnit(
       payload.unidade_peso_planejado,
       'unidade_peso_planejado',
@@ -62,21 +66,42 @@ export function parseFlightPlanningInput(payload: Record<string, unknown>): Flig
   };
 }
 
-export async function updateFlightStageWeightUnitIfSupported(
+export async function updateFlightStagePlanningIfSupported(
   db: D1Database,
   empresaId: number,
   vooId: number,
   planning: FlightPlanningInput,
 ): Promise<void> {
-  if (planning.pesoPlanejado == null) return;
+  if (
+    planning.pesoPlanejado == null &&
+    planning.pesoPassageiros == null &&
+    planning.pesoBagagem == null
+  ) return;
 
   try {
     await db.prepare(
-      `UPDATE cv_voo_etapas SET unidade_peso = ?, updated_at = datetime('now')
+      `UPDATE cv_voo_etapas
+          SET peso_passageiros = ?, peso_bagagem = ?, unidade_peso = ?, updated_at = datetime('now')
         WHERE empresa_id = ? AND voo_id = ? AND numero_etapa = 1 AND deleted_at IS NULL`,
-    ).bind(planning.unidadePesoPlanejado, empresaId, vooId).run();
+    ).bind(
+      planning.pesoPassageiros,
+      planning.pesoBagagem,
+      planning.unidadePesoPlanejado,
+      empresaId,
+      vooId,
+    ).run();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!message.includes('no such column')) throw error;
+    if (planning.pesoPlanejado == null) return;
+    try {
+      await db.prepare(
+        `UPDATE cv_voo_etapas SET unidade_peso = ?, updated_at = datetime('now')
+          WHERE empresa_id = ? AND voo_id = ? AND numero_etapa = 1 AND deleted_at IS NULL`,
+      ).bind(planning.unidadePesoPlanejado, empresaId, vooId).run();
+    } catch (legacyError) {
+      const legacyMessage = legacyError instanceof Error ? legacyError.message : String(legacyError);
+      if (!legacyMessage.includes('no such column')) throw legacyError;
+    }
   }
 }

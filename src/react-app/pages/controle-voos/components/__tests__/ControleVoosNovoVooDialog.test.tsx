@@ -120,6 +120,65 @@ describe('ControleVoosNovoVooDialog operational model', () => {
     expect(duration.value).toBe('2:15');
   });
 
+  it('Coordenação usa pesos separados e libra como unidade padrão', async () => {
+    renderDialog('coordenacao'); await waitReady();
+    expect(screen.getByLabelText('Peso dos passageiros')).toBeInTheDocument();
+    expect(screen.getByLabelText('Peso da bagagem')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Peso previsto')).toBeNull();
+    expect(screen.getByLabelText('Unidade dos pesos')).toHaveValue('LB');
+    expect(screen.getByLabelText('Unidade do combustível solicitado')).toHaveValue('LB');
+  });
+
+  it('Coordenação pode enviar a programação aos tripulantes por WhatsApp e e-mail juntos', async () => {
+    postMock.mockImplementation((url: string) => {
+      if (url === '/controle-voos/voos') return Promise.resolve({ success: true, data: { id: 88 } });
+      return Promise.resolve({ success: true, data: { sent: 2, failed: 0 } });
+    });
+    renderDialog('coordenacao'); await waitReady(); await chooseCommon();
+    await waitFor(() => expect(screen.getByLabelText('Tripulante — posto PIC')).not.toBeDisabled());
+    fireEvent.change(screen.getByLabelText('Tripulante — posto PIC'), { target: { value: '101' } });
+    fireEvent.change(screen.getByLabelText('Tripulante — posto SIC'), { target: { value: '102' } });
+    fireEvent.click(screen.getByLabelText('WhatsApp'));
+    fireEvent.click(screen.getByLabelText('E-mail'));
+    fireEvent.click(screen.getByRole('button', { name: 'Criar voo' }));
+
+    await waitFor(() => expect(postMock).toHaveBeenCalledTimes(3));
+    expect(postMock.mock.calls.map((call) => call[0])).toEqual([
+      '/controle-voos/voos',
+      '/controle-voos/voos/88/whatsapp',
+      '/controle-voos/voos/88/email',
+    ]);
+  });
+
+  it('compartilha a mensagem de grupo no WhatsApp sem fixar destinatário', async () => {
+    const shareTab = { location: { href: '' }, close: vi.fn() };
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(shareTab as unknown as Window);
+    postMock.mockResolvedValue({ success: true, data: { id: 88 } });
+    getMock.mockImplementation((url: string) => {
+      if (url === '/controle-voos/voos/88/whatsapp-share') {
+        return Promise.resolve({ success: true, data: { message: 'Programação teste' } });
+      }
+      if (url === '/controle-voos/catalogos/aeroportos') return Promise.resolve({ success: true, data: aeroportos });
+      if (url === '/controle-voos/catalogos/tipos') return Promise.resolve({ success: true, data: tipos });
+      if (url === '/controle-voos/catalogos/contratos') return Promise.resolve({ success: true, data: contratos });
+      if (url === '/controle-voos/catalogos/funcoes-bordo') return Promise.resolve({ success: true, data: funcoes });
+      if (url === '/aeronaves?somente_ativas=1') return Promise.resolve({ success: true, data: aeronaves });
+      if (url.startsWith('/controle-voos/voos/tripulantes-elegiveis')) return Promise.resolve({ success: true, data: crew });
+      return Promise.reject(new Error('GET inesperado: ' + url));
+    });
+
+    renderDialog('coordenacao'); await waitReady(); await chooseCommon();
+    await waitFor(() => expect(screen.getByLabelText('Tripulante — posto PIC')).not.toBeDisabled());
+    fireEvent.change(screen.getByLabelText('Tripulante — posto PIC'), { target: { value: '101' } });
+    fireEvent.change(screen.getByLabelText('Tripulante — posto SIC'), { target: { value: '102' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar e compartilhar no WhatsApp' }));
+
+    await waitFor(() => expect(getMock).toHaveBeenCalledWith('/controle-voos/voos/88/whatsapp-share'));
+    expect(shareTab.location.href).toBe('https://wa.me/?text=Programa%C3%A7%C3%A3o%20teste');
+    expect(shareTab.location.href).not.toMatch(/wa\.me\/\d+/);
+    openSpy.mockRestore();
+  });
+
   it('Coordenação cria etapas e atribui função a bordo independente do posto PIC/SIC', async () => {
     postMock.mockResolvedValue({ success: true, data: { id: 88 } });
     renderDialog('coordenacao'); await waitReady(); await chooseCommon();
@@ -130,11 +189,14 @@ describe('ControleVoosNovoVooDialog operational model', () => {
     fireEvent.change(screen.getByLabelText('Tripulante — posto SIC'), { target: { value: '102' } });
     fireEvent.change(screen.getByLabelText('Função a bordo — posto PIC'), { target: { value: '52' } });
     fireEvent.change(screen.getByLabelText('Função a bordo — posto SIC'), { target: { value: '51' } });
+    fireEvent.change(screen.getByLabelText('Peso dos passageiros'), { target: { value: '900' } });
+    fireEvent.change(screen.getByLabelText('Peso da bagagem'), { target: { value: '180' } });
+    fireEvent.change(screen.getByLabelText('Combustível solicitado'), { target: { value: '1200' } });
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar parada' }));
     fireEvent.change(screen.getByLabelText('Parada 2'), { target: { value: 'SBRJ — Santos Dumont' } });
     fireEvent.click(screen.getByRole('button', { name: 'Criar voo' }));
     await waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
-    expect(postMock.mock.calls[0][1]).toMatchObject({ rota_ids: [1, 3, 2, 1], pic_funcionario_id: 101, sic_funcionario_id: 102, pic_funcao_bordo_id: 52, sic_funcao_bordo_id: 51 });
+    expect(postMock.mock.calls[0][1]).toMatchObject({ rota_ids: [1, 3, 2, 1], pic_funcionario_id: 101, sic_funcionario_id: 102, pic_funcao_bordo_id: 52, sic_funcao_bordo_id: 51, peso_passageiros: 900, peso_bagagem: 180, unidade_peso_planejado: 'LB', combustivel_solicitado: 1200, unidade_combustivel_solicitado: 'LB' });
     expect(postMock.mock.calls[0][1]).not.toHaveProperty('numero_db');
   });
 });

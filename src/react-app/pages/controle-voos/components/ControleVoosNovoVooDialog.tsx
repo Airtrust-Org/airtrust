@@ -94,6 +94,8 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
   const [loadingCrew, setLoadingCrew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notifyCrewWhatsapp, setNotifyCrewWhatsapp] = useState(false);
+  const [notifyCrewEmail, setNotifyCrewEmail] = useState(false);
   const [form, setForm] = useState({
     aeronave_id: '',
     prefixo: '',
@@ -113,10 +115,11 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
       mode === 'pilot' ? toLocalTime(new Date(now.getTime() + 2 * 60 * 60_000)) : toLocalInput(new Date(now.getTime() + 2 * 60 * 60_000)),
     tempo_total_voo: '1:00',
     pax_planejado: '',
-    peso_planejado: '',
-    unidade_peso_planejado: 'KG',
+    peso_passageiros: '',
+    peso_bagagem: '',
+    unidade_peso_planejado: 'LB',
     combustivel_solicitado: '',
-    unidade_combustivel_solicitado: 'KG',
+    unidade_combustivel_solicitado: 'LB',
     observacoes: '',
   });
 
@@ -125,6 +128,8 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     let cancelled = false;
     setLoadingCatalogos(true);
     setError(null);
+    setNotifyCrewWhatsapp(false);
+    setNotifyCrewEmail(false);
     setRouteIds(['', '', '']);
     setRouteQueries(['', '', '']);
     setReturnToOrigin(true);
@@ -293,7 +298,8 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     event.preventDefault();
     setError(null);
     const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
-    const sendWhatsappAfterCreate = mode === 'coordenacao' && submitter?.value === 'whatsapp';
+    const shareWhatsappAfterCreate = mode === 'coordenacao' && submitter?.value === 'share_whatsapp';
+    let shareWindow: Window | null = null;
     const routeReady = routeIds.length >= 2 && routeIds.every(Boolean);
     const commonReady = form.aeronave_id && form.prefixo && form.contrato_id && form.tipo_voo_id && routeReady;
     const crewReady = mode === 'pilot'
@@ -318,6 +324,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
       return;
     }
 
+    if (shareWhatsappAfterCreate) shareWindow = window.open('', '_blank');
     setSaving(true);
     try {
       const partida = mode === 'pilot'
@@ -352,7 +359,8 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
             pic_funcao_bordo_id: Number(form.pic_funcao_bordo_id),
             sic_funcao_bordo_id: Number(form.sic_funcao_bordo_id),
             pax_planejado: form.pax_planejado === '' ? null : Number(form.pax_planejado),
-            peso_planejado: form.peso_planejado === '' ? null : Number(form.peso_planejado),
+            peso_passageiros: form.peso_passageiros === '' ? null : Number(form.peso_passageiros),
+            peso_bagagem: form.peso_bagagem === '' ? null : Number(form.peso_bagagem),
             unidade_peso_planejado: form.unidade_peso_planejado,
             combustivel_solicitado: form.combustivel_solicitado === '' ? null : Number(form.combustivel_solicitado),
             unidade_combustivel_solicitado: form.unidade_combustivel_solicitado,
@@ -361,16 +369,48 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
       const response = await apiClient.post<unknown>(endpoint, body);
       const created = extract<CvVoo>(response);
       onCreated(created);
-      if (sendWhatsappAfterCreate) {
+      const notificationErrors: string[] = [];
+      const notificationRequests: Array<Promise<void>> = [];
+      if (mode === 'coordenacao' && notifyCrewWhatsapp) {
+        notificationRequests.push(
+          apiClient.post(`/controle-voos/voos/${created.id}/whatsapp`, {})
+            .then(() => undefined)
+            .catch((sendError) => {
+              notificationErrors.push(`WhatsApp: ${sendError instanceof Error ? sendError.message : 'falha no envio'}`);
+            }),
+        );
+      }
+      if (mode === 'coordenacao' && notifyCrewEmail) {
+        notificationRequests.push(
+          apiClient.post(`/controle-voos/voos/${created.id}/email`, {})
+            .then(() => undefined)
+            .catch((sendError) => {
+              notificationErrors.push(`e-mail: ${sendError instanceof Error ? sendError.message : 'falha no envio'}`);
+            }),
+        );
+      }
+      if (notificationRequests.length > 0) await Promise.all(notificationRequests);
+
+      if (shareWhatsappAfterCreate) {
         try {
-          await apiClient.post(`/controle-voos/voos/${created.id}/whatsapp`, {});
-        } catch (sendError) {
-          setError(`Voo criado, mas o WhatsApp não foi enviado: ${sendError instanceof Error ? sendError.message : 'falha no envio'}`);
-          return;
+          const shareResponse = await apiClient.get<unknown>(`/controle-voos/voos/${created.id}/whatsapp-share`);
+          const shareData = extract<{ message: string }>(shareResponse);
+          const shareUrl = `https://wa.me/?text=${encodeURIComponent(shareData.message)}`;
+          if (shareWindow) shareWindow.location.href = shareUrl;
+          else window.open(shareUrl, '_blank', 'noopener,noreferrer');
+        } catch (shareError) {
+          shareWindow?.close();
+          notificationErrors.push(`WhatsApp do grupo: ${shareError instanceof Error ? shareError.message : 'não foi possível preparar a mensagem'}`);
         }
+      }
+
+      if (notificationErrors.length > 0) {
+        setError(`Voo criado, mas houve falha de envio: ${notificationErrors.join(' | ')}`);
+        return;
       }
       onClose();
     } catch (err) {
+      shareWindow?.close();
       setError(err instanceof Error ? err.message : 'Não foi possível criar o voo.');
     } finally {
       setSaving(false);
@@ -521,19 +561,22 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
               <label className="text-sm">Passageiros previstos
                 <input type="number" min="0" step="1" className={fieldClass} value={form.pax_planejado} onChange={(e) => set('pax_planejado', e.target.value)} placeholder="Quantidade" />
               </label>
-              <label className="text-sm">Peso previsto
-                <div className="flex gap-2">
-                  <input type="number" min="0" step="0.1" className={fieldClass} value={form.peso_planejado} onChange={(e) => set('peso_planejado', e.target.value)} placeholder="Peso" />
-                  <select aria-label="Unidade do peso previsto" className={`${fieldClass} max-w-24`} value={form.unidade_peso_planejado} onChange={(e) => set('unidade_peso_planejado', e.target.value)}>
-                    <option value="KG">kg</option><option value="LB">lb</option>
-                  </select>
-                </div>
+              <label className="text-sm">Peso dos passageiros
+                <input type="number" min="0" step="0.1" className={fieldClass} value={form.peso_passageiros} onChange={(e) => set('peso_passageiros', e.target.value)} placeholder="Peso dos passageiros" />
               </label>
-              <label className="text-sm md:col-span-2">Combustível solicitado
+              <label className="text-sm">Peso da bagagem
+                <input type="number" min="0" step="0.1" className={fieldClass} value={form.peso_bagagem} onChange={(e) => set('peso_bagagem', e.target.value)} placeholder="Peso da bagagem" />
+              </label>
+              <label className="text-sm">Unidade dos pesos
+                <select aria-label="Unidade dos pesos" className={fieldClass} value={form.unidade_peso_planejado} onChange={(e) => set('unidade_peso_planejado', e.target.value)}>
+                  <option value="LB">lb</option><option value="KG">kg</option>
+                </select>
+              </label>
+              <label className="text-sm">Combustível solicitado
                 <div className="flex gap-2">
                   <input type="number" min="0" step="0.1" className={fieldClass} value={form.combustivel_solicitado} onChange={(e) => set('combustivel_solicitado', e.target.value)} placeholder="Quantidade solicitada" />
                   <select aria-label="Unidade do combustível solicitado" className={`${fieldClass} max-w-24`} value={form.unidade_combustivel_solicitado} onChange={(e) => set('unidade_combustivel_solicitado', e.target.value)}>
-                    <option value="KG">kg</option><option value="LB">lb</option><option value="L">L</option>
+                    <option value="LB">lb</option><option value="KG">kg</option><option value="L">L</option>
                   </select>
                 </div>
               </label>
@@ -541,13 +584,29 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
           )}
           <label className="text-sm md:col-span-2">Observações<textarea className={fieldClass} rows={3} value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} /></label>
 
+          {mode === 'coordenacao' && (
+            <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/30">
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Enviar para os tripulantes</p>
+              <div className="mt-2 flex flex-wrap gap-5 text-sm text-slate-700 dark:text-slate-300">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={notifyCrewWhatsapp} onChange={(e) => setNotifyCrewWhatsapp(e.target.checked)} />
+                  WhatsApp
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={notifyCrewEmail} onChange={(e) => setNotifyCrewEmail(e.target.checked)} />
+                  E-mail
+                </label>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">Selecione um ou os dois canais. O envio aos tripulantes ocorre depois da criação do voo.</p>
+            </div>
+          )}
           {error && <div className="md:col-span-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">{error}</div>}
           {loadingCatalogos && <p className="md:col-span-2 text-sm text-slate-500">Carregando cadastros operacionais…</p>}
           <div className="md:col-span-2 flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
             <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm dark:border-slate-700">Cancelar</button>
             {mode === 'coordenacao' && (
-              <button type="submit" name="submit_intent" value="whatsapp" disabled={saving || loadingCatalogos || aeronaves.length === 0} className="rounded-lg border border-emerald-600 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 disabled:opacity-50 dark:bg-emerald-950/20 dark:text-emerald-300">
-                {saving ? 'Enviando…' : 'Criar e enviar WhatsApp'}
+              <button type="submit" name="submit_intent" value="share_whatsapp" disabled={saving || loadingCatalogos || aeronaves.length === 0} className="rounded-lg border border-emerald-600 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 disabled:opacity-50 dark:bg-emerald-950/20 dark:text-emerald-300">
+                {saving ? 'Preparando…' : 'Criar e compartilhar no WhatsApp'}
               </button>
             )}
             <button type="submit" name="submit_intent" value="save" disabled={saving || loadingCatalogos || aeronaves.length === 0} className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{saving ? 'Criando…' : mode === 'pilot' ? 'Criar meu voo' : 'Criar voo'}</button>
