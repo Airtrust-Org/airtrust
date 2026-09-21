@@ -216,6 +216,38 @@ describe('Qualificacoes - Filters and View State Characterization', () => {
     }));
   });
 
+  it('não deixa preferência de categoria dos Modelos vazar para o Histórico', async () => {
+    vi.spyOn(userPreferences, 'readUserPreference').mockImplementation((key, def) => def);
+    fetchWithAuthMock.mockImplementation(async (url: string) => {
+      if (url.includes('/api/preferencias/tabela/table.qualificacoes.modelos')) {
+        return {
+          ok: true,
+          json: async () => ({
+            data: { searchTerm: '', categoriaFilter: '13', setorFilter: [] },
+          }),
+        };
+      }
+      if (url.includes('/dashboard/qualificacoes')) {
+        return {
+          ok: true,
+          json: async () => ({ stats: { total: 100, atencao: 5, vencidas: 2 }, list: [] }),
+        };
+      }
+      return { ok: true, json: async () => [] };
+    });
+
+    renderComponent();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const mainCalls = mockUseQualificacoesHistorico.mock.calls.filter((c: any) => c[1] !== 500);
+    const lastCall = mainCalls[mainCalls.length - 1];
+    expect(lastCall[8]).toBe('');
+  });
+
   it('3. busca textual/debounce, sem depender de tempo real frágil', () => {
     vi.spyOn(userPreferences, 'readUserPreference').mockImplementation((key, def) => def);
     renderComponent();

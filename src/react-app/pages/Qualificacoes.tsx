@@ -469,8 +469,8 @@ export default function Qualificacoes() {
     error: tiposError,
   } = useQualificacaoTipos(activeTab === 'tipos' || showTurmaPlanejadaModal, 500, {
     categoriaId:
-      activeTab === 'tipos' && categoriaFilter
-        ? parseInt(categoriaFilter, 10) || undefined
+      activeTab === 'tipos' && modelosPrefs.categoriaFilter
+        ? parseInt(modelosPrefs.categoriaFilter, 10) || undefined
         : undefined,
     setorIds: activeTab === 'tipos' ? modelosPrefs.setorFilter : undefined,
     search: activeTab === 'tipos' ? searchTipos : undefined,
@@ -493,9 +493,6 @@ export default function Qualificacoes() {
     if (!modelosPrefsReady || modelosPrefsHydratedRef.current) return;
     modelosPrefsHydratedRef.current = true;
     setSearchTipos(modelosPrefs.searchTerm || '');
-    if (modelosPrefs.categoriaFilter) {
-      setCategoriaFilter(modelosPrefs.categoriaFilter);
-    }
   }, [modelosPrefs, modelosPrefsReady]);
 
   useEffect(() => {
@@ -503,9 +500,8 @@ export default function Qualificacoes() {
     setModelosPrefs((prev) => ({
       ...prev,
       searchTerm: searchTipos,
-      categoriaFilter,
     }));
-  }, [categoriaFilter, modelosPrefsReady, searchTipos, setModelosPrefs]);
+  }, [modelosPrefsReady, searchTipos, setModelosPrefs]);
 
   // Estado para categorias
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -2370,8 +2366,10 @@ export default function Qualificacoes() {
             {activeTab === 'tipos' && (
               <>
                 <select
-                  value={categoriaFilter}
-                  onChange={(e) => setCategoriaFilter(e.target.value)}
+                  value={modelosPrefs.categoriaFilter}
+                  onChange={(e) =>
+                    setModelosPrefs((prev) => ({ ...prev, categoriaFilter: e.target.value }))
+                  }
                   className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
                 >
                   <option value="">Categoria</option>
@@ -2403,13 +2401,18 @@ export default function Qualificacoes() {
                     className="min-w-[220px]"
                   />
                 )}
-                {(searchTipos.trim() || modelosPrefs.setorFilter.length > 0 || categoriaFilter) && (
+                {(searchTipos.trim() ||
+                  modelosPrefs.setorFilter.length > 0 ||
+                  modelosPrefs.categoriaFilter) && (
                   <button
                     type="button"
                     onClick={() => {
                       setSearchTipos('');
-                      setCategoriaFilter('');
-                      setModelosPrefs((prev) => ({ ...prev, setorFilter: [] }));
+                      setModelosPrefs((prev) => ({
+                        ...prev,
+                        categoriaFilter: '',
+                        setorFilter: [],
+                      }));
                     }}
                     className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
                   >
