@@ -74,32 +74,38 @@ export function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
     FROM qualificacoes_historico qh_newer
     LEFT JOIN qualificacoes_tipos qt_newer ON qt_newer.id = qh_newer.qualificacao_id
     WHERE qh_newer.funcionario_id = qh.funcionario_id
+      AND qh_newer.empresa_id = qh.empresa_id
       AND qh_newer.deleted_at IS NULL
       AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_newer.status, ''))", CANCELLED_STATUS_VALUES)})
       AND COALESCE(qh_newer.data_vencimento, qh_newer.data_conclusao) IS NOT NULL
       AND ${qualificationIdentityExpr('qh', 'qt')} <> ''
       AND ${qualificationIdentityExpr('qh_newer', 'qt_newer')} = ${qualificationIdentityExpr('qh', 'qt')}
       AND (
-        datetime(COALESCE(qh_newer.data_vencimento, qh_newer.data_conclusao, qh_newer.updated_at, qh_newer.created_at)) >
-          datetime(COALESCE(qh.data_vencimento, qh.data_conclusao, qh.updated_at, qh.created_at))
+        datetime(COALESCE(qh_newer.data_conclusao, qh_newer.data_vencimento, qh_newer.updated_at, qh_newer.created_at)) >
+          datetime(COALESCE(qh.data_conclusao, qh.data_vencimento, qh.updated_at, qh.created_at))
         OR (
-          datetime(COALESCE(qh_newer.data_vencimento, qh_newer.data_conclusao, qh_newer.updated_at, qh_newer.created_at)) =
-            datetime(COALESCE(qh.data_vencimento, qh.data_conclusao, qh.updated_at, qh.created_at))
+          datetime(COALESCE(qh_newer.data_conclusao, qh_newer.data_vencimento, qh_newer.updated_at, qh_newer.created_at)) =
+            datetime(COALESCE(qh.data_conclusao, qh.data_vencimento, qh.updated_at, qh.created_at))
           AND qh_newer.id > qh.id
         )
       )
   )`;
-  // RENOVADA: somente se existe sucessora real via link explícito renovacao_de.
-  // renovada=1 e status='RENOVADA' são legado informativo, nunca critério final.
-  const renewedQualificationPredicate = hasRenovacaoDe
+  // RENOVADA: qualquer registro anterior da mesma qualificação deixa de ser
+  // vigente quando existe uma realização posterior. O link renovacao_de continua
+  // sendo aceito como evidência explícita, mas não é requisito para históricos
+  // legados/importados que não possuem a cadeia preenchida.
+  const explicitRenewalLinkPredicate = hasRenovacaoDe
     ? `EXISTS (
       SELECT 1
       FROM qualificacoes_historico qh_renovadora
-      WHERE qh_renovadora.deleted_at IS NULL
+      WHERE qh_renovadora.empresa_id = qh.empresa_id
+        AND qh_renovadora.deleted_at IS NULL
         AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_renovadora.status, ''))", CANCELLED_STATUS_VALUES)})
         AND qh_renovadora.renovacao_de = qh.id
     )`
     : '0 = 1';
+  const renewedQualificationPredicate =
+    `((${explicitRenewalLinkPredicate}) OR (${newerOperationalQualificationExistsPredicate}))`;
   const operationalCurrentQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${cancelledQualificationPredicate}) AND COALESCE(qh.data_vencimento, qh.data_conclusao) IS NOT NULL AND NOT (${newerOperationalQualificationExistsPredicate}))`;
   const activeRenewedQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${cancelledQualificationPredicate}) AND ${renewedQualificationPredicate} AND NOT (${operationalCurrentQualificationPredicate}))`;
   const activePlannedQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${cancelledQualificationPredicate}) AND NOT (${renewedQualificationPredicate}) AND (qh.data_conclusao IS NULL OR ${sqlStatusEqualsAny(
