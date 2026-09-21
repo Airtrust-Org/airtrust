@@ -287,7 +287,9 @@ describe('Qualificacoes - Filters and View State Characterization', () => {
     
     mainCalls = mockUseQualificacoesHistorico.mock.calls.filter((c: any) => c[1] !== 500);
     lastCall = mainCalls[mainCalls.length - 1];
-    expect(lastCall[9]).toContain('VENCIDA');
+    // Ao restaurar todos os status, a visão volta a ser histórico completo:
+    // o hook omite o filtro server-side em vez de serializar os seis status.
+    expect(lastCall[9]).toEqual([]);
   });
 
   it('8. garantia de que filtros não disparam mutation', () => {
