@@ -88,9 +88,14 @@ export function buildFlightRelatedStatements(
     sicFuncionarioId: number | null;
     picFuncaoBordoId?: number | null;
     sicFuncaoBordoId?: number | null;
+    paxPlanejado?: number | null;
+    pesoPlanejado?: number | null;
+    unidadePesoPlanejado?: string | null;
+    combustivelSolicitado?: number | null;
+    unidadeCombustivelSolicitado?: string | null;
   },
 ): D1PreparedStatement[] {
-  const { empresaId, vooId, userId, routePoints, picFuncionarioId, sicFuncionarioId, picFuncaoBordoId = null, sicFuncaoBordoId = null } = input;
+  const { empresaId, vooId, userId, routePoints, picFuncionarioId, sicFuncionarioId, picFuncaoBordoId = null, sicFuncaoBordoId = null, paxPlanejado = null, pesoPlanejado = null, unidadePesoPlanejado = 'KG', combustivelSolicitado = null, unidadeCombustivelSolicitado = 'KG' } = input;
   const statements: D1PreparedStatement[] = [];
   if (picFuncionarioId && sicFuncionarioId) {
     statements.push(
@@ -110,15 +115,40 @@ export function buildFlightRelatedStatements(
     statements.push(
       db.prepare(
         `INSERT INTO cv_voo_etapas (
-           empresa_id, voo_id, numero_etapa, origem_icao, destino_icao, origem_dados,
+           empresa_id, voo_id, numero_etapa, origem_icao, destino_icao, pax, payload, origem_dados,
            created_by, updated_by, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, 'MANUAL', ?, ?, datetime('now'), datetime('now'))`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, 'MANUAL', ?, ?, datetime('now'), datetime('now'))`,
       ).bind(
         empresaId,
         vooId,
         index + 1,
         routePointCode(routePoints[index]),
         routePointCode(routePoints[index + 1]),
+        index === 0 ? paxPlanejado : null,
+        index === 0 ? pesoPlanejado : null,
+        userId,
+        userId,
+      ),
+    );
+  }
+  if (combustivelSolicitado != null) {
+    statements.push(
+      db.prepare(
+        `INSERT INTO cv_voo_abastecimentos (
+           empresa_id, voo_id, etapa_id, combustivel_solicitado, unidade, data_hora,
+           observacoes, created_by, updated_by, created_at, updated_at
+         ) VALUES (
+           ?, ?,
+           (SELECT id FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND numero_etapa = 1 AND deleted_at IS NULL LIMIT 1),
+           ?, ?, datetime('now'), 'Solicitação registrada no planejamento do voo', ?, ?, datetime('now'), datetime('now')
+         )`,
+      ).bind(
+        empresaId,
+        vooId,
+        empresaId,
+        vooId,
+        combustivelSolicitado,
+        unidadeCombustivelSolicitado || 'KG',
         userId,
         userId,
       ),

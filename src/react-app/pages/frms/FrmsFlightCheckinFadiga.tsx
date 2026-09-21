@@ -195,6 +195,7 @@ function selectedScaleClasses(severidade: EscalaSeveridade): string {
 
 export function isFadigaCheckinSubmitReady(input: {
   sonoOpcao: SonoOpcao | null;
+  presentationTime: string;
   wakeTime: string;
   qualidadeSono: number | null;
   kssScore: number | null;
@@ -204,9 +205,11 @@ export function isFadigaCheckinSubmitReady(input: {
   observacao: string;
 }): boolean {
   const fitForDutyPayload = fitChoiceToPayload(input.fitForDutyChoice);
+  const presentationTimeValid = isValidWakeTime(input.presentationTime);
   const wakeTimeValid = isValidWakeTime(input.wakeTime);
   return (
     input.sonoOpcao !== null &&
+    presentationTimeValid &&
     wakeTimeValid &&
     input.qualidadeSono !== null &&
     input.kssScore !== null &&
@@ -492,6 +495,8 @@ export default function FrmsFlightCheckinFadiga() {
   };
 
   const [sonoOpcao, setSonoOpcao] = useState<SonoOpcao | null>(null);
+  const [presentationTime, setPresentationTime] = useState('');
+  const [presentationTimeTouched, setPresentationTimeTouched] = useState(false);
   const [wakeTime, setWakeTime] = useState('');
   const [wakeTimeTouched, setWakeTimeTouched] = useState(false);
   const [qualidadeSono, setQualidadeSono] = useState<number | null>(null);
@@ -513,6 +518,7 @@ export default function FrmsFlightCheckinFadiga() {
 
   const canSubmit = isFadigaCheckinSubmitReady({
     sonoOpcao,
+    presentationTime,
     wakeTime,
     qualidadeSono,
     kssScore,
@@ -524,6 +530,11 @@ export default function FrmsFlightCheckinFadiga() {
 
   const canSubmitWithReadiness = canSubmit && vigilanceResult !== null;
   const isNeedsCoordinatorReview = fitForDutyChoice === 'nao' || fitForDutyChoice === 'coord';
+  const presentationTimeHasValue = presentationTime.trim().length > 0;
+  const presentationTimeNormalized = normalizeWakeTimeInput(presentationTime);
+  const presentationTimeValid = presentationTimeNormalized !== null;
+  const presentationTimeShowInvalid =
+    (presentationTimeTouched || submitAttempted) && presentationTimeHasValue && !presentationTimeValid;
   const wakeTimeHasValue = wakeTime.trim().length > 0;
   const wakeTimeNormalized = normalizeWakeTimeInput(wakeTime);
   const wakeTimeValid = wakeTimeNormalized !== null;
@@ -532,6 +543,10 @@ export default function FrmsFlightCheckinFadiga() {
 
   const missingItems: string[] = [];
   if (sonoOpcao === null) missingItems.push('Repouso absoluto nas últimas 24h');
+  if (!presentationTimeValid) {
+    if (!presentationTimeHasValue) missingItems.push('Hora de apresentação');
+    else missingItems.push('Horário inválido - corrija a hora de apresentação');
+  }
   if (!wakeTimeValid) {
     if (!wakeTimeHasValue) missingItems.push('Hora em que acordou');
     else missingItems.push('Horário inválido - corrija a hora em que acordou');
@@ -551,7 +566,9 @@ export default function FrmsFlightCheckinFadiga() {
     setSubmitAttempted(true);
     if (!canSubmitWithReadiness) {
       toast.error(
-        !wakeTimeValid && wakeTimeHasValue
+        !presentationTimeValid && presentationTimeHasValue
+          ? 'Informe uma hora de apresentação válida, ex.: 06:30.'
+          : !wakeTimeValid && wakeTimeHasValue
           ? 'Informe um horário válido, ex.: 06:30.'
           : isNeedsCoordinatorReview && !observacao.trim()
             ? 'Informe uma observação para revisão da coordenação'
@@ -560,6 +577,10 @@ export default function FrmsFlightCheckinFadiga() {
       return;
     }
 
+    if (!presentationTimeNormalized) {
+      toast.error('Informe um horário válido para "Hora de apresentação" (HH:mm).');
+      return;
+    }
     if (!wakeTimeNormalized) {
       toast.error('Informe um horário válido para "Hora em que acordou" (HH:mm).');
       return;
@@ -578,6 +599,8 @@ export default function FrmsFlightCheckinFadiga() {
       const result = await submitMutation.mutateAsync({
         reference_date: today,
         data_checkin: today,
+        hora_apresentacao: presentationTimeNormalized!,
+        jornada_inicio_prevista: presentationTimeNormalized!,
         hora_acordou: wakeTimeNormalized!,
         wake_time: wakeTimeNormalized!,
         horas_sono_24h: SONO_OPCOES.find((o) => o.key === sonoOpcao!)!.horas,
@@ -754,6 +777,40 @@ export default function FrmsFlightCheckinFadiga() {
                       })}
                     </div>
                   </fieldset>
+
+                  <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3">
+                    <label
+                      htmlFor="presentation-time"
+                      className="mb-2 block text-sm font-medium text-slate-700"
+                    >
+                      Hora de apresentação
+                    </label>
+                    <TimeInput
+                      id="presentation-time"
+                      aria-invalid={presentationTimeShowInvalid}
+                      aria-describedby="presentation-time-help presentation-time-error"
+                      value={presentationTime}
+                      onChange={(nextValue) => {
+                        setPresentationTime(nextValue);
+                        if (!nextValue.trim()) setPresentationTimeTouched(false);
+                      }}
+                      onBlur={() => setPresentationTimeTouched(true)}
+                      normalizer={normalizeWakeTimeInput}
+                      className={`min-h-11 w-full rounded-xl border bg-white px-3 py-2 text-base font-semibold text-slate-800 focus:outline-none focus:ring-2 ${
+                        presentationTimeShowInvalid
+                          ? 'border-red-400 focus:ring-red-400'
+                          : 'border-slate-200 focus:ring-blue-500'
+                      }`}
+                    />
+                    <p id="presentation-time-help" className="mt-2 text-xs text-slate-600">
+                      Informe a hora real em que você se apresentou para esta jornada. Ex.: 0630 vira 06:30.
+                    </p>
+                    {presentationTimeShowInvalid && (
+                      <p id="presentation-time-error" className="mt-1 text-xs text-red-700">
+                        Informe um horário válido no formato HH:mm.
+                      </p>
+                    )}
+                  </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>

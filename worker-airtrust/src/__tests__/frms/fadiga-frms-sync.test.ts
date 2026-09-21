@@ -189,18 +189,25 @@ function createDb(opts: MockOpts = {}) {
 // 0: duracao_sono_efetiva_min
 // 1: hora_despertar_estimada
 // 2: hora_inicio_sono_estimado
-// 3: fator_repouso_pct
-// 4: effectiveness_pct
-// 5: effectiveness_nivel
-// 6: effectiveness_componentes_json
-// 7: id (WHERE)
+// 3: fator_basica_pct
+// 4: fator_apresentacao_pct
+// 5: fator_duracao_pct
+// 6: fator_repouso_pct
+// 7: total_fatorizado_jornada
+// 8: effectiveness_pct
+// 9: effectiveness_nivel
+// 10: effectiveness_componentes_json
+// 11: config_revision_id
+// 12: model_version
+// 13: id (WHERE)
 
 // Posições do bind em UPDATE frms_jornada:
-// 0: hora_acordou
-// 1: sono_efetivo_min
-// 2: fonte_sono
-// 3: acordou_na_wocl
-// 4: id (WHERE)
+// 0: hora_apresentacao efetiva
+// 1: hora_acordou
+// 2: sono_efetivo_min
+// 3: fonte_sono
+// 4: acordou_na_wocl
+// 5: id (WHERE)
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
@@ -269,7 +276,7 @@ describe('sincronizarCheckinComFrms — C2 patch', () => {
       total_dias_periodo: null,
     });
 
-    const actual = fatorizacaoUpdateArgs[0]?.[4] as number;
+    const actual = fatorizacaoUpdateArgs[0]?.[8] as number;
     expect(typeof actual).toBe('number');
     expect(Math.abs(actual - expected.effectiveness_pct)).toBeLessThanOrEqual(0.1);
   });
@@ -280,7 +287,7 @@ describe('sincronizarCheckinComFrms — C2 patch', () => {
     await sincronizarCheckinComFrms(db, 'ck-4', 1, '2026-05-28', 5, 10);
 
     // standardWake = 05:00 - 90min = 03:30 → 210 min → WOCL (120–359)
-    const acordouNaWocl = jornadaUpdateArgs[0]?.[3];
+    const acordouNaWocl = jornadaUpdateArgs[0]?.[4];
     expect(acordouNaWocl).toBe(1);
   });
 
@@ -325,8 +332,10 @@ describe('sincronizarCheckinComFrms — C2 patch', () => {
     await sincronizarCheckinComFrms(db, 'ck-8', 1, '2026-05-28', 6, 10);
 
     expect(jornadaUpdateArgs).toHaveLength(1);
-    const [horaAcordou, sonoEfetivoMin, fonteSono, acordouNaWocl, jornadaId] =
-      jornadaUpdateArgs[0] as [string, number, string, number, string];
+    const [horaApresentacao, horaAcordou, sonoEfetivoMin, fonteSono, acordouNaWocl, jornadaId] =
+      jornadaUpdateArgs[0] as [string, string | null, number, string, number, string];
+
+    expect(horaApresentacao).toBe('09:00');
 
     // D-02: `hora_acordou` guarda apenas despertar REAL. Aqui não houve
     // wakeTimeReal nem hora_acordou prévia, então permanece nulo; a estimativa
@@ -345,7 +354,7 @@ describe('sincronizarCheckinComFrms — C2 patch', () => {
 
     await sincronizarCheckinComFrms(db, 'ck-8b', 1, '2026-05-28', 6, 10, '06:55');
 
-    const horaAcordou = jornadaUpdateArgs[0]?.[0];
+    const horaAcordou = jornadaUpdateArgs[0]?.[1];
     expect(horaAcordou).toBe('06:55');
   });
 

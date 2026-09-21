@@ -42,6 +42,7 @@ import { finalizeRdvPreenchimentoHandler } from './controle-voos-rdv-finalizatio
 import { assertFlightCrewAssignment, listEligibleFlightCrew } from '../services/controle-voos/crew-eligibility';
 import { buildFlightRelatedStatements, normalizeFlightRouteIds, parseFlightCrewIds, resolveFlightRoutePoints } from '../services/controle-voos/flight-creation';
 import { enrichFlightsWithPresentation } from '../services/controle-voos/flight-presentation';
+import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 type OperationalReadFilters = {
   dataInicio: string;
   dataFim: string;
@@ -111,6 +112,11 @@ const allowedCreateFields = new Set([
   'pic_funcao_bordo_id',
   'sic_funcao_bordo_id',
   'rota_ids',
+  'pax_planejado',
+  'peso_planejado',
+  'unidade_peso_planejado',
+  'combustivel_solicitado',
+  'unidade_combustivel_solicitado',
 ]);
 const allowedFieldsWithVersion = new Set([...allowedFields, 'versao'].filter((field) => field !== 'status'));
 
@@ -213,6 +219,33 @@ function parseOptionalNonNegativeInteger(value: unknown, field: string): number 
     throw new ApiError(`${field} invalido`, 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
   }
   return parsed;
+}
+
+function normalizeOperationalUnit(
+  value: unknown,
+  field: string,
+  allowed: readonly string[],
+  fallback: string,
+): string {
+  const normalized = String(value || fallback).trim().toUpperCase();
+  if (!allowed.includes(normalized)) {
+    throw new ApiError(`${field} invalido`, 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
+  }
+  return normalized;
+}
+
+function formatFlightWhatsAppDateTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(parsed);
 }
 
 function normalizeString(value: unknown, field: string, required = false): string | null {
@@ -1151,6 +1184,24 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
   const { picFuncionarioId, sicFuncionarioId } = parseFlightCrewIds(payload);
   const picFuncaoBordoId = parseOptionalCrewRoleId(payload, 'pic_funcao_bordo_id');
   const sicFuncaoBordoId = parseOptionalCrewRoleId(payload, 'sic_funcao_bordo_id');
+  const paxPlanejado = parseOptionalNonNegativeInteger(payload.pax_planejado, 'pax_planejado');
+  const pesoPlanejado = parseOptionalNonNegativeNumber(payload.peso_planejado, 'peso_planejado');
+  const unidadePesoPlanejado = normalizeOperationalUnit(
+    payload.unidade_peso_planejado,
+    'unidade_peso_planejado',
+    ['KG', 'LB'],
+    'KG',
+  );
+  const combustivelSolicitado = parseOptionalNonNegativeNumber(
+    payload.combustivel_solicitado,
+    'combustivel_solicitado',
+  );
+  const unidadeCombustivelSolicitado = normalizeOperationalUnit(
+    payload.unidade_combustivel_solicitado,
+    'unidade_combustivel_solicitado',
+    ['KG', 'LB', 'L'],
+    'KG',
+  );
 
   assertFlightTimes(input);
   assertCancellationReason(input);
@@ -1226,8 +1277,24 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
     sicFuncionarioId,
     picFuncaoBordoId,
     sicFuncaoBordoId,
+    paxPlanejado,
+    pesoPlanejado,
+    unidadePesoPlanejado,
+    combustivelSolicitado,
+    unidadeCombustivelSolicitado,
   });
   if (relatedStatements.length > 0) await c.env.DB.batch(relatedStatements);
+  if (pesoPlanejado != null) {
+    try {
+      await c.env.DB.prepare(
+        `UPDATE cv_voo_etapas SET unidade_peso = ?, updated_at = datetime('now')
+          WHERE empresa_id = ? AND voo_id = ? AND numero_etapa = 1 AND deleted_at IS NULL`,
+      ).bind(unidadePesoPlanejado, empresaId, newId).run();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes('no such column')) throw error;
+    }
+  }
 
   await recordFlightEvent({
     db: c.env.DB,
@@ -1263,6 +1330,102 @@ controleVoos.get('/voos/:id', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const flight = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
   return c.json({ success: true, data: (await enrichFlightsWithPresentation(c.env.DB, empresaId, [flight]))[0] });
+});
+
+controleVoos.post('/voos/:id/whatsapp', auth(), requireControleVoosWrite(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const userId = getActorId(c);
+  const flight = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
+  const [crewResult, stageResult, fuel] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT t.funcionario_id, t.funcao, f.nome,
+              COALESCE(NULLIF(TRIM(f.guerra), ''), f.nome) AS nome_guerra,
+              f.telefone
+         FROM cv_voo_tripulantes t
+         JOIN funcionarios f ON f.id = t.funcionario_id
+          AND f.empresa_id = t.empresa_id AND f.deleted_at IS NULL
+        WHERE t.empresa_id = ? AND t.voo_id = ? AND t.deleted_at IS NULL
+        ORDER BY CASE t.funcao WHEN 'PIC' THEN 0 WHEN 'SIC' THEN 1 ELSE 2 END, t.id`,
+    ).bind(empresaId, flight.id).all<{ funcionario_id: number; funcao: string; nome: string; nome_guerra: string; telefone: string | null }>(),
+    c.env.DB.prepare(
+      `SELECT numero_etapa, origem_icao, destino_icao, pax, payload, unidade_peso
+         FROM cv_voo_etapas
+        WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+        ORDER BY numero_etapa ASC, id ASC`,
+    ).bind(empresaId, flight.id).all<{ numero_etapa: number; origem_icao: string | null; destino_icao: string | null; pax: number | null; payload: number | null; unidade_peso: string | null }>(),
+    c.env.DB.prepare(
+      `SELECT combustivel_solicitado, unidade
+         FROM cv_voo_abastecimentos
+        WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+          AND combustivel_solicitado IS NOT NULL
+        ORDER BY id ASC LIMIT 1`,
+    ).bind(empresaId, flight.id).first<{ combustivel_solicitado: number | null; unidade: string | null }>(),
+  ]);
+
+  const crew = crewResult.results || [];
+  if (crew.length === 0) {
+    throw new ApiError('Voo sem tripulacao para envio', 409, 'CONTROLE_VOOS_WHATSAPP_NO_CREW');
+  }
+  const stages = stageResult.results || [];
+  const route = stages.length > 0
+    ? [stages[0].origem_icao, ...stages.map((stage) => stage.destino_icao)].filter(Boolean).join(' → ')
+    : `${flight.origem_id} → ${flight.destino_id}`;
+  const firstStage = stages[0] || null;
+  const crewLabel = crew.map((member) => `${member.funcao}: ${member.nome_guerra}`).join(' | ');
+  const baseMessage = [
+    'Programação de voo — AirTrust',
+    `Data/horário: ${formatFlightWhatsAppDateTime(flight.horario_previsto_partida)}`,
+    `Aeronave: ${flight.prefixo}`,
+    flight.numero_voo ? `Voo: ${flight.numero_voo}` : null,
+    `Rota: ${route}`,
+    `Retorno previsto: ${formatFlightWhatsAppDateTime(flight.horario_previsto_chegada)}`,
+    `Tripulação: ${crewLabel}`,
+    firstStage?.pax != null ? `Passageiros: ${firstStage.pax}` : null,
+    firstStage?.payload != null ? `Peso previsto: ${firstStage.payload} ${firstStage.unidade_peso || 'KG'}` : null,
+    fuel?.combustivel_solicitado != null ? `Combustível solicitado: ${fuel.combustivel_solicitado} ${fuel.unidade || 'KG'}` : null,
+    'Abra o AirTrust > Meus voos para preparar o voo e acessar o planejamento.',
+  ].filter(Boolean).join('\n');
+
+  const results: Array<{ funcionario_id: number; nome_guerra: string; status: 'sent' | 'failed' | 'missing_phone'; error?: string }> = [];
+  const seenPhones = new Set<string>();
+  for (const member of crew) {
+    const phone = String(member.telefone || '').trim();
+    if (!phone) {
+      results.push({ funcionario_id: Number(member.funcionario_id), nome_guerra: member.nome_guerra, status: 'missing_phone' });
+      continue;
+    }
+    if (seenPhones.has(phone)) continue;
+    seenPhones.add(phone);
+    try {
+      await sendWhatsAppMessage(c.env, phone, `Olá, ${member.nome_guerra}.\n\n${baseMessage}`);
+      results.push({ funcionario_id: Number(member.funcionario_id), nome_guerra: member.nome_guerra, status: 'sent' });
+    } catch (error) {
+      results.push({
+        funcionario_id: Number(member.funcionario_id),
+        nome_guerra: member.nome_guerra,
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Falha no envio',
+      });
+    }
+  }
+
+  const sent = results.filter((item) => item.status === 'sent').length;
+  const failed = results.length - sent;
+  await recordFlightEvent({
+    db: c.env.DB,
+    empresaId,
+    vooId: flight.id,
+    tipoEvento: 'sistema',
+    statusAnterior: flight.status,
+    statusNovo: flight.status,
+    descricao: 'Programacao enviada por WhatsApp',
+    metadata: { action: 'whatsapp_programacao', sent, failed },
+    usuarioId: userId,
+  });
+  if (sent === 0) {
+    throw new ApiError('Nenhuma mensagem de WhatsApp foi enviada. Verifique telefones e configuracao do provedor.', 502, 'CONTROLE_VOOS_WHATSAPP_SEND_FAILED');
+  }
+  return c.json({ success: true, data: { sent, failed, recipients: results } });
 });
 
 controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) => {

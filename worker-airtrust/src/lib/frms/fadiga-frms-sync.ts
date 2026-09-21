@@ -1,6 +1,6 @@
 import { horasSonoParaMinutos } from './fadiga-score';
 import { resolverFrmsConfig } from './frms-config';
-import { calcEffectiveness, hhmmToMinutes, minutesToHhmm } from './calculos';
+import { calcEffectiveness, calcDuracaoMinutos, calcFatorApresentacao, calcFatorDuracao, hhmmToMinutes, minutesToHhmm } from './calculos';
 import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
 import type { LimitesMap } from './types';
 
@@ -92,6 +92,7 @@ export async function sincronizarCheckinComFrms(
   horasSono: number,
   empresaId: number,
   wakeTimeReal?: string | null,
+  presentationTimeReal?: string | null,
 ): Promise<SyncResult> {
   const jornada = await db
     .prepare(
@@ -116,6 +117,19 @@ export async function sincronizarCheckinComFrms(
       data_checkin: dataCheckin,
     });
     return { sincronizado: false };
+  }
+
+  const presentationTimeEffective = presentationTimeReal ?? jornada.hora_apresentacao ?? null;
+  if (presentationTimeReal) {
+    await db
+      .prepare(
+        `UPDATE frms_jornada
+            SET hora_apresentacao = ?, updated_at = datetime('now')
+          WHERE id = ? AND tripulante_id = ? AND deleted_at IS NULL`,
+      )
+      .bind(presentationTimeReal, jornada.id, funcionarioId)
+      .run();
+    jornada.hora_apresentacao = presentationTimeReal;
   }
 
   const fatorizacao = await db
@@ -145,7 +159,7 @@ export async function sincronizarCheckinComFrms(
   }
 
   const despertarReal = wakeTimeReal ?? jornada.hora_acordou ?? null;
-  if (!jornada.hora_apresentacao && !despertarReal) {
+  if (!presentationTimeEffective && !despertarReal) {
     await registrarEventoUnico(db, empresaId, checkinId, 'FRMS_RECALCULO_NECESSARIO', {
       jornada_id: jornada.id,
       motivo: 'hora_apresentacao_e_hora_acordou_ausentes',
@@ -163,23 +177,45 @@ export async function sincronizarCheckinComFrms(
   const limites = asOperationalLimitesMap(operationalContext.parameters, operationalContext.cyclePolicyApproved);
   const cfgSono = resolverFrmsConfig(limites);
   const duracaoSonoMin = horasSonoParaMinutos(horasSono);
-  const apresentacaoMin = hhmmToMinutes(jornada.hora_apresentacao);
+  const apresentacaoMin = hhmmToMinutes(presentationTimeEffective);
   const despertarAncoraMin = despertarReal
     ? hhmmToMinutes(despertarReal)
     : apresentacaoMin - cfgSono.minutosAntesApresentacao;
   const horaDormiu = minutesToHhmm(despertarAncoraMin - duracaoSonoMin);
 
+  const effectiveDurationMin =
+    presentationTimeEffective && jornada.hora_termino
+      ? calcDuracaoMinutos(presentationTimeEffective, jornada.hora_termino)
+      : null;
+  const fatorApresentacaoEfetivo = presentationTimeEffective
+    ? calcFatorApresentacao(presentationTimeEffective, limites)
+    : fatorizacao.fator_apresentacao_pct;
+  const fatorDuracaoEfetivo = effectiveDurationMin == null
+    ? fatorizacao.fator_duracao_pct
+    : calcFatorDuracao(effectiveDurationMin, limites);
+  const fatorBasicaEfetivo =
+    effectiveDurationMin == null || limites.FDP_MAXIMO_HORAS <= 0
+      ? fatorizacao.fator_basica_pct
+      : Math.round((effectiveDurationMin / (limites.FDP_MAXIMO_HORAS * 60)) * 10000) / 10000;
+  const totalFatorizadoJornadaEfetivo = Math.round((
+    fatorizacao.total_fatorizado_jornada
+    - fatorizacao.fator_apresentacao_pct
+    - fatorizacao.fator_duracao_pct
+    + fatorApresentacaoEfetivo
+    + fatorDuracaoEfetivo
+  ) * 10000) / 10000;
+
   const fatResult = {
-    fator_basica_pct: fatorizacao.fator_basica_pct,
-    fator_apresentacao_pct: fatorizacao.fator_apresentacao_pct,
-    fator_duracao_pct: fatorizacao.fator_duracao_pct,
+    fator_basica_pct: fatorBasicaEfetivo,
+    fator_apresentacao_pct: fatorApresentacaoEfetivo,
+    fator_duracao_pct: fatorDuracaoEfetivo,
     fator_repouso_pct: fatorizacao.fator_repouso_pct,
     fator_noturno_dep_pct: fatorizacao.fator_noturno_dep_pct,
     fator_noturno_arr_pct: fatorizacao.fator_noturno_arr_pct,
     fator_ciclo_embarcado_pct: fatorizacao.fator_ciclo_embarcado_pct,
     fator_base_away_pct: fatorizacao.fator_base_away_pct ?? 0,
     fator_aclimatacao_pct: fatorizacao.fator_aclimatacao_pct ?? 0,
-    total_fatorizado_jornada: fatorizacao.total_fatorizado_jornada,
+    total_fatorizado_jornada: totalFatorizadoJornadaEfetivo,
     fator_hv_basica_pct: fatorizacao.fator_hv_basica_pct ?? 0,
     fator_hv_quantidade_pct: fatorizacao.fator_hv_quantidade_pct ?? 0,
     fator_hv_noturno_dep_pct: fatorizacao.fator_hv_noturno_dep_pct ?? 0,
@@ -188,7 +224,7 @@ export async function sincronizarCheckinComFrms(
   };
 
   const effectResult = calcEffectiveness(fatResult, limites, {
-    hora_apresentacao: jornada.hora_apresentacao,
+    hora_apresentacao: presentationTimeEffective,
     hora_primeira_decolagem: jornada.hora_primeira_decolagem,
     hora_ultimo_pouso: jornada.hora_ultimo_pouso,
     hora_corte_motor: jornada.hora_corte_motor,
@@ -205,7 +241,11 @@ export async function sincronizarCheckinComFrms(
        SET duracao_sono_efetiva_min  = ?,
            hora_despertar_estimada   = ?,
            hora_inicio_sono_estimado = ?,
+           fator_basica_pct          = ?,
+           fator_apresentacao_pct    = ?,
+           fator_duracao_pct         = ?,
            fator_repouso_pct         = ?,
+           total_fatorizado_jornada  = ?,
            effectiveness_pct         = ?,
            effectiveness_nivel       = ?,
            effectiveness_componentes_json = ?,
@@ -220,7 +260,11 @@ export async function sincronizarCheckinComFrms(
       effectResult.duracao_sono_efetiva_min,
       despertarReal ? null : effectResult.hora_despertar,
       effectResult.hora_inicio_sono,
+      fatorBasicaEfetivo,
+      fatorApresentacaoEfetivo,
+      fatorDuracaoEfetivo,
       effectResult.fator_repouso_calibrado_pct,
+      totalFatorizadoJornadaEfetivo,
       effectResult.effectiveness_pct,
       effectResult.nivel,
       JSON.stringify(effectResult.componentes),
@@ -234,7 +278,8 @@ export async function sincronizarCheckinComFrms(
     await db
       .prepare(
         `UPDATE frms_jornada
-         SET hora_acordou     = ?,
+         SET hora_apresentacao = COALESCE(?, hora_apresentacao),
+             hora_acordou     = ?,
              sono_efetivo_min = ?,
              fonte_sono       = ?,
              acordou_na_wocl  = ?,
@@ -242,6 +287,7 @@ export async function sincronizarCheckinComFrms(
          WHERE id = ? AND deleted_at IS NULL`,
       )
       .bind(
+        presentationTimeEffective,
         despertarReal,
         effectResult.duracao_sono_efetiva_min,
         // D-01: `fonte_sono` é a proveniência do DADO DE SONO, não do horário de
@@ -264,6 +310,8 @@ export async function sincronizarCheckinComFrms(
   const syncPayload = {
     formula_version: 'FRMS_EFFECTIVENESS_V2_20260804',
     jornada_id: jornada.id,
+    hora_apresentacao_efetiva: presentationTimeEffective,
+    presentation_time_source: presentationTimeReal ? 'CREW_REPORTED' : 'SCHEDULE_OR_DEFAULT',
     effectiveness_anterior: fatorizacao.effectiveness_pct,
     effectiveness_nova: effectResult.effectiveness_pct,
     delta_effectiveness:

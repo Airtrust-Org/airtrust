@@ -3,6 +3,7 @@ import { ApiError } from '../../middleware/error-handler';
 export type EligibleFlightCrewMember = {
   id: number;
   nome: string;
+  nome_guerra: string;
   matricula: string | null;
   funcao_codigo: 'PIC' | 'SIC';
   funcao_nome: string;
@@ -62,6 +63,14 @@ export async function listEligibleFlightCrew(
     );
   }
 
+  const funcionarioColumns = await db
+    .prepare('PRAGMA table_info(funcionarios)')
+    .all<{ name: string }>();
+  const hasNomeGuerra = (funcionarioColumns.results || []).some((column) => column.name === 'guerra');
+  const nomeGuerraSql = hasNomeGuerra
+    ? `COALESCE(NULLIF(TRIM(f.guerra), ''), f.nome)`
+    : 'f.nome';
+
   const placeholders = aliases.map(() => '?').join(', ');
   const physicalModel = sqlNormalizedModel('af.modelo');
   const catalogModel = sqlNormalizedModel('COALESCE(ma.codigo, ma.modelo, ma.nome)');
@@ -69,7 +78,7 @@ export async function listEligibleFlightCrew(
 
   const rows = await db
     .prepare(
-      `SELECT DISTINCT f.id, f.nome, f.matricula,
+      `SELECT DISTINCT f.id, f.nome, ${nomeGuerraSql} AS nome_guerra, f.matricula,
             ${roleCodeSql} AS funcao_codigo,
             COALESCE(NULLIF(TRIM(fn.nome), ''), NULLIF(TRIM(f.funcao), ''), NULLIF(TRIM(f.cargo), '')) AS funcao_nome
        FROM funcionarios f
@@ -106,6 +115,7 @@ export async function listEligibleFlightCrew(
   return (rows.results || []).map((row) => ({
     id: Number(row.id),
     nome: String(row.nome || '').trim(),
+    nome_guerra: String(row.nome_guerra || row.nome || '').trim(),
     matricula: row.matricula ? String(row.matricula) : null,
     funcao_codigo: row.funcao_codigo,
     funcao_nome: String(

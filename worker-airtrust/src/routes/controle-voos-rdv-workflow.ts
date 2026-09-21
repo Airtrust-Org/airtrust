@@ -61,6 +61,34 @@ import {
 
 const rdvWorkflow = new Hono<{ Bindings: Env }>();
 
+const FLIGHT_DOCUMENT_MAX_BYTES = 15 * 1024 * 1024;
+const FLIGHT_DOCUMENT_TYPES = new Set(['WEATHER_REPORT', 'PLANO_VOO']);
+const FLIGHT_DOCUMENT_CONTENT_TYPES: Record<string, string> = {
+  'application/pdf': 'pdf',
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+};
+
+function normalizeFlightDocumentType(value: unknown): 'WEATHER_REPORT' | 'PLANO_VOO' {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (!FLIGHT_DOCUMENT_TYPES.has(normalized)) {
+    throw new ApiError('Tipo de documento invalido', 400, 'CONTROLE_VOOS_DOCUMENT_TYPE_INVALID');
+  }
+  return normalized as 'WEATHER_REPORT' | 'PLANO_VOO';
+}
+
+function sanitizeFlightDocumentName(value: string): string {
+  const normalized = String(value || 'documento').replace(/[\r\n"\\/]/g, '_').trim();
+  return normalized.slice(0, 180) || 'documento';
+}
+
+function flightDocumentLabel(type: 'WEATHER_REPORT' | 'PLANO_VOO'): string {
+  return type === 'WEATHER_REPORT' ? 'Weather report' : 'Planejamento de voo';
+}
+
 // Reaproveita as mesmas regras de validação de RDV (horários/combustível)
 // do CRUD original — mantidas ali por já existirem antes desta entrega.
 async function parseJsonPayload(
@@ -213,6 +241,7 @@ rdvWorkflow.get('/voos/meus', auth(), requireAnyRdvAccess(), async (c) => {
       SELECT
         v.id, v.empresa_id, v.prefixo, v.data_programacao, v.origem_id, v.destino_id,
         v.tipo_voo_id, v.natureza_voo_id, v.aeronave_id,
+        v.numero_voo, v.numero_db, v.contrato_id, v.versao,
         v.horario_previsto_partida, v.horario_previsto_chegada,
         v.horario_real_partida, v.horario_real_chegada,
         v.status, v.observacoes, v.cancelado_motivo_id, v.alternado_destino_id,
@@ -244,6 +273,167 @@ rdvWorkflow.get('/voos/meus', auth(), requireAnyRdvAccess(), async (c) => {
   );
 
   return c.json({ success: true, data, meta: { count: data.length } });
+});
+
+rdvWorkflow.get('/voos/:id/documentos', auth(), requireAnyRdvAccess(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const voo = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
+  await assertRdvSelfScope(c, c.env.DB, empresaId, voo.id, RDV_CAPABILITIES.visualizarProprio);
+
+  const rows = await c.env.DB.prepare(
+    `SELECT id, metadata_json, created_at
+       FROM cv_voo_eventos
+      WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+        AND tipo_evento = 'observacao'
+        AND json_extract(metadata_json, '$.action') = 'flight_attachment'
+      ORDER BY id DESC`,
+  ).bind(empresaId, voo.id).all<{ id: number; metadata_json: string | null; created_at: string }>();
+
+  const items = (rows.results || []).flatMap((row) => {
+    try {
+      const metadata = JSON.parse(String(row.metadata_json || '{}')) as Record<string, unknown>;
+      const type = normalizeFlightDocumentType(metadata.document_type);
+      return [{
+        id: Number(row.id),
+        type,
+        label: flightDocumentLabel(type),
+        file_name: String(metadata.file_name || 'documento'),
+        content_type: String(metadata.content_type || 'application/octet-stream'),
+        size: Number(metadata.size || 0),
+        content_hash: String(metadata.content_hash || ''),
+        flight_version: Number(metadata.flight_version || 0),
+        created_at: row.created_at,
+        download_url: `/api/controle-voos/voos/${voo.id}/documentos/${row.id}`,
+      }];
+    } catch {
+      return [];
+    }
+  });
+
+  return c.json({ success: true, data: items });
+});
+
+rdvWorkflow.post('/voos/:id/documentos', auth(), requireAnyRdvAccess(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const userId = Number(getActorId(c));
+  const voo = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
+  if (!(await hasRdvCapability(c, RDV_CAPABILITIES.visualizarTodos))) {
+    throw new ApiError('Somente a Coordenacao pode anexar documentos ao voo', 403, 'CONTROLE_VOOS_DOCUMENT_UPLOAD_FORBIDDEN');
+  }
+
+  const form = await c.req.formData().catch(() => null);
+  if (!form) throw new ApiError('multipart/form-data obrigatorio', 400, 'CONTROLE_VOOS_DOCUMENT_MULTIPART_REQUIRED');
+  const type = normalizeFlightDocumentType(form.get('tipo'));
+  const file = form.get('file');
+  if (!(file instanceof File)) {
+    throw new ApiError('Arquivo obrigatorio', 400, 'CONTROLE_VOOS_DOCUMENT_FILE_REQUIRED');
+  }
+  const contentType = String(file.type || '').toLowerCase();
+  const extension = FLIGHT_DOCUMENT_CONTENT_TYPES[contentType];
+  if (!extension) {
+    throw new ApiError('Formato permitido: PDF, PNG, JPG, WEBP ou HEIC', 400, 'CONTROLE_VOOS_DOCUMENT_CONTENT_TYPE_INVALID');
+  }
+  if (file.size <= 0 || file.size > FLIGHT_DOCUMENT_MAX_BYTES) {
+    throw new ApiError('Arquivo invalido ou acima de 15 MB', 400, 'CONTROLE_VOOS_DOCUMENT_SIZE_INVALID');
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const contentHash = await hashBytesSha256(bytes);
+  const fileName = sanitizeFlightDocumentName(file.name || `${type}.${extension}`);
+  const key = `controle-voos/${empresaId}/${voo.id}/documentos/${type.toLowerCase()}/${crypto.randomUUID()}.${extension}`;
+  await c.env.BUCKET.put(key, bytes, {
+    httpMetadata: { contentType, cacheControl: 'private, no-store' },
+    customMetadata: { empresa_id: String(empresaId), voo_id: String(voo.id), document_type: type },
+  });
+
+  const nextVersion = Number(voo.versao) + 1;
+  const metadata = JSON.stringify({
+    action: 'flight_attachment',
+    document_type: type,
+    label: flightDocumentLabel(type),
+    r2_key: key,
+    file_name: fileName,
+    content_type: contentType,
+    size: bytes.length,
+    content_hash: contentHash,
+    flight_version: nextVersion,
+  });
+
+  try {
+    const [updateResult] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE cv_voos
+            SET versao = versao + 1, updated_by = ?, updated_at = datetime('now')
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND versao = ?`,
+      ).bind(userId, voo.id, empresaId, voo.versao),
+      c.env.DB.prepare(
+        `INSERT INTO cv_voo_eventos (
+           empresa_id, voo_id, tipo_evento, status_anterior, status_novo, descricao,
+           metadata_json, usuario_id, created_by, updated_by, created_at, updated_at
+         ) SELECT ?, ?, 'observacao', ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
+           WHERE (SELECT changes()) > 0`,
+      ).bind(
+        empresaId,
+        voo.id,
+        voo.status,
+        voo.status,
+        `${flightDocumentLabel(type)} anexado pela Coordenacao`,
+        metadata,
+        userId,
+        userId,
+        userId,
+      ),
+    ]);
+    assertCasApplied(updateResult);
+  } catch (error) {
+    await c.env.BUCKET.delete(key).catch(() => undefined);
+    throw error;
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      type,
+      label: flightDocumentLabel(type),
+      file_name: fileName,
+      content_type: contentType,
+      size: bytes.length,
+      content_hash: contentHash,
+      flight_version: nextVersion,
+    },
+  }, 201);
+});
+
+rdvWorkflow.get('/voos/:id/documentos/:documentoId', auth(), requireAnyRdvAccess(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const voo = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
+  await assertRdvSelfScope(c, c.env.DB, empresaId, voo.id, RDV_CAPABILITIES.visualizarProprio);
+  const documentoId = parsePositiveInteger(c.req.param('documentoId'), 'documentoId');
+  const row = await c.env.DB.prepare(
+    `SELECT metadata_json
+       FROM cv_voo_eventos
+      WHERE id = ? AND empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+        AND tipo_evento = 'observacao'
+        AND json_extract(metadata_json, '$.action') = 'flight_attachment'
+      LIMIT 1`,
+  ).bind(documentoId, empresaId, voo.id).first<{ metadata_json: string | null }>();
+  if (!row?.metadata_json) {
+    throw new ApiError('Documento nao encontrado', 404, 'CONTROLE_VOOS_DOCUMENT_NOT_FOUND');
+  }
+  const metadata = JSON.parse(row.metadata_json) as Record<string, unknown>;
+  const key = String(metadata.r2_key || '');
+  if (!key.startsWith(`controle-voos/${empresaId}/${voo.id}/documentos/`)) {
+    throw new ApiError('Documento fora do escopo do voo', 403, 'CONTROLE_VOOS_DOCUMENT_SCOPE_INVALID');
+  }
+  const object = await c.env.BUCKET.get(key);
+  if (!object) throw new ApiError('Documento indisponivel no storage', 404, 'CONTROLE_VOOS_DOCUMENT_STORAGE_NOT_FOUND');
+  const fileName = sanitizeFlightDocumentName(String(metadata.file_name || 'documento'));
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set('Content-Type', String(metadata.content_type || object.httpMetadata?.contentType || 'application/octet-stream'));
+  headers.set('Content-Disposition', `inline; filename="${fileName}"`);
+  headers.set('Cache-Control', 'private, no-store');
+  return new Response(object.body, { headers });
 });
 
 rdvWorkflow.get('/voos/:id/rdv/alertas', auth(), requireAnyRdvAccess(), async (c) => {
@@ -1033,6 +1223,22 @@ function parseOptionalPositiveInteger(value: unknown, field: string): number | n
   return parsePositiveInteger(value, field);
 }
 
+async function bumpFlightVersion(
+  db: D1Database,
+  empresaId: number,
+  vooId: number,
+  userId: number,
+): Promise<void> {
+  const result = await db.prepare(
+    `UPDATE cv_voos
+        SET versao = versao + 1, updated_by = ?, updated_at = datetime('now')
+      WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+  ).bind(userId, vooId, empresaId).run();
+  if (Number(result.meta.changes || 0) !== 1) {
+    throw new ApiError('Voo nao encontrado para atualizacao de versao', 404, 'CONTROLE_VOOS_NOT_FOUND');
+  }
+}
+
 rdvWorkflow.get('/voos/:id/tripulantes', auth(), requireAnyRdvAccess(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const vooId = c.req.param('id');
@@ -1108,6 +1314,7 @@ rdvWorkflow.post('/voos/:id/tripulantes', auth(), requireAnyRdvAccess(), async (
     )
     .run();
 
+  await bumpFlightVersion(c.env.DB, empresaId, voo.id, userId);
   await recordFlightEvent({
     db: c.env.DB,
     empresaId,
@@ -1200,6 +1407,7 @@ rdvWorkflow.put('/voos/:id/tripulantes/:tripulanteId', auth(), requireAnyRdvAcce
     if (Number(result.meta.changes || 0) !== 1) {
       throw new ApiError('Tripulante nao encontrado', 404, 'CONTROLE_VOOS_TRIPULANTE_NOT_FOUND');
     }
+    await bumpFlightVersion(c.env.DB, empresaId, voo.id, userId);
     await recordFlightEvent({
       db: c.env.DB,
       empresaId,
@@ -1240,6 +1448,7 @@ rdvWorkflow.put('/voos/:id/tripulantes/:tripulanteId', auth(), requireAnyRdvAcce
 
     assertCasApplied(tripulanteResult);
     assertCasApplied(rdvResult);
+    await bumpFlightVersion(c.env.DB, empresaId, voo.id, userId);
 
     await recordFlightEvent({
       db: c.env.DB,
@@ -1314,6 +1523,7 @@ rdvWorkflow.delete(
       assertCasApplied({ meta: { changes: 0 } });
     }
     assertCasApplied(rdvResult);
+    await bumpFlightVersion(c.env.DB, empresaId, voo.id, userId);
 
     return c.json({ success: true, data: { id: tripulanteId } });
   },

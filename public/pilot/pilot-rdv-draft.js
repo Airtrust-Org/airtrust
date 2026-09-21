@@ -576,6 +576,11 @@ export function applyStageContinuity(stageDrafts) {
       current.origem_icao = previous.destino_icao;
     }
 
+    // Uma nova partida só existe quando houve corte ao fim da etapa anterior.
+    // Se o motor permaneceu ligado entre duas pernas, a etapa seguinte não
+    // acrescenta uma partida ao total do voo.
+    current.starts = previousCut ? 1 : 0;
+
     // Continuidade operacional obrigatória entre pernas: o combustível final
     // de uma perna é sempre o combustível inicial da perna seguinte.
     current.combustivel_inicio = previousFuelEnd;

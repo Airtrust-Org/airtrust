@@ -381,6 +381,7 @@ pilotOffline.get(
       crewResult,
       stagesResult,
       fuelResult,
+      documentsResult,
       origem,
       destino,
       alternado,
@@ -449,6 +450,17 @@ pilotOffline.get(
         )
         .bind(voo.id, empresaId)
         .all<FuelRow>(),
+      c.env.DB
+        .prepare(
+          `SELECT id, metadata_json, created_at
+             FROM cv_voo_eventos
+            WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+              AND tipo_evento = 'observacao'
+              AND json_extract(metadata_json, '$.action') = 'flight_attachment'
+            ORDER BY id DESC`,
+        )
+        .bind(empresaId, voo.id)
+        .all<{ id: number; metadata_json: string | null; created_at: string }>(),
       c.env.DB
         .prepare(
           `
@@ -548,6 +560,25 @@ pilotOffline.get(
       ...entry,
       tem_anexo: Boolean(anexo_r2_key),
     }));
+    const documentos = (documentsResult.results || []).flatMap((row) => {
+      try {
+        const metadata = JSON.parse(String(row.metadata_json || '{}')) as Record<string, unknown>;
+        const type = String(metadata.document_type || '').toUpperCase();
+        if (type !== 'WEATHER_REPORT' && type !== 'PLANO_VOO') return [];
+        return [{
+          id: Number(row.id),
+          type: type as 'WEATHER_REPORT' | 'PLANO_VOO',
+          label: String(metadata.label || (type === 'WEATHER_REPORT' ? 'Weather report' : 'Planejamento de voo')),
+          file_name: String(metadata.file_name || 'documento'),
+          content_type: String(metadata.content_type || 'application/octet-stream'),
+          size: Number(metadata.size || 0),
+          content_hash: String(metadata.content_hash || ''),
+          created_at: row.created_at,
+        }];
+      } catch {
+        return [];
+      }
+    });
     const generatedAt = new Date().toISOString();
     const [workspace, edbShadow, routePresentationMap] = await Promise.all([
       buildPilotOfflineWorkspace({
@@ -563,6 +594,7 @@ pilotOffline.get(
         tripulantes,
         etapas,
         abastecimentos,
+        documentos,
         rdv,
       }),
       loadPilotOfflineEdbShadow({
@@ -588,6 +620,11 @@ pilotOffline.get(
       fuel: abastecimentos.map((entry) => ({
         id: entry.id,
         updated_at: entry.updated_at,
+      })),
+      documents: documentos.map((entry) => ({
+        id: entry.id,
+        created_at: entry.created_at,
+        content_hash: entry.content_hash,
       })),
     };
 

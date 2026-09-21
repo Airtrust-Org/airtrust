@@ -33,6 +33,9 @@ type StageLike = {
   combustivel_inicio: number | null;
   combustivel_fim: number | null;
   unidade_combustivel: string | null;
+  pax?: number | null;
+  payload?: number | null;
+  unidade_peso?: string | null;
   updated_at: string | null;
 };
 
@@ -46,6 +49,17 @@ type FuelLike = {
   unidade: string | null;
   tem_anexo?: boolean;
   updated_at: string | null;
+};
+
+type FlightDocumentLike = {
+  id: number;
+  type: 'WEATHER_REPORT' | 'PLANO_VOO';
+  label: string;
+  file_name: string;
+  content_type: string;
+  size: number;
+  content_hash: string;
+  created_at: string;
 };
 
 type AirportLike = {
@@ -560,6 +574,7 @@ export async function buildPilotOfflineWorkspace(options: {
   tripulantes: unknown[];
   etapas: StageLike[];
   abastecimentos: FuelLike[];
+  documentos?: FlightDocumentLike[];
   rdv: RdvLike;
 }): Promise<PilotOfflineWorkspace> {
   const catalogResult = await loadLocationCatalog(options.db, options.empresaId);
@@ -578,6 +593,9 @@ export async function buildPilotOfflineWorkspace(options: {
   const attachmentCount = options.abastecimentos.filter(
     (entry) => entry.tem_anexo,
   ).length;
+  const firstStage = options.etapas[0] || null;
+  const requestedFuel = options.abastecimentos.find((entry) => entry.combustivel_solicitado != null) || null;
+  const flightDocuments = options.documentos || [];
 
   return {
     contract: {
@@ -599,6 +617,21 @@ export async function buildPilotOfflineWorkspace(options: {
       horario_previsto_partida: options.voo.horario_previsto_partida,
       horario_previsto_chegada: options.voo.horario_previsto_chegada,
       observacoes: options.voo.observacoes,
+      pax_planejado: firstStage?.pax ?? null,
+      peso_planejado: firstStage?.payload ?? null,
+      unidade_peso_planejado: firstStage?.unidade_peso ?? null,
+      combustivel_solicitado: requestedFuel?.combustivel_solicitado ?? null,
+      unidade_combustivel_solicitado: requestedFuel?.unidade ?? null,
+      documentos: flightDocuments.map((doc) => ({
+        id: doc.id,
+        type: doc.type,
+        label: doc.label,
+        file_name: doc.file_name,
+        content_type: doc.content_type,
+        size: doc.size,
+        content_hash: doc.content_hash,
+        created_at: doc.created_at,
+      })),
       crew_count: options.tripulantes.length,
       stage_count: options.etapas.length,
       flight_version: options.voo.versao,
@@ -660,6 +693,20 @@ export async function buildPilotOfflineWorkspace(options: {
           attachment_count: attachmentCount,
           attachment_payloads_offline: false,
         },
+        ...flightDocuments.map((doc) => ({
+          id: `flight-document:${doc.id}`,
+          name: doc.label,
+          category: doc.type === 'WEATHER_REPORT' ? 'MET' : 'planejamento',
+          source: 'COORDENACAO',
+          updated_at: doc.created_at,
+          available_offline: false,
+          integrity_state: 'SERVER_ATTACHMENT',
+          version: doc.content_hash || `event-${doc.id}`,
+          document_event_id: doc.id,
+          file_name: doc.file_name,
+          content_type: doc.content_type,
+          size: doc.size,
+        })),
         ...(options.rdv
           ? [
               {

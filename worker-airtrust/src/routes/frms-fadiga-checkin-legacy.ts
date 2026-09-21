@@ -277,6 +277,16 @@ function normalizeFitForDutyPayload(
 function validateCheckinPayloadCompleteness(
   input: CheckinCreateInput,
 ): { ok: true } | { ok: false; error: string; message: string; field: string } {
+  const presentationTime = input.hora_apresentacao || input.jornada_inicio_prevista;
+  if (!presentationTime) {
+    return {
+      ok: false,
+      error: 'presentation_time_required',
+      field: 'hora_apresentacao',
+      message: 'Informe a hora de apresentação para registrar o check-in de fadiga.',
+    };
+  }
+
   const wakeTime = input.wake_time || input.hora_acordou;
   if (!wakeTime) {
     return {
@@ -347,7 +357,7 @@ function normalizeCheckinInput(
     medsUlt12h: normalizeOptionalBinary(input.meds_ult_12h),
     alcoolUlt12h: normalizeOptionalBinary(input.alcool_ult_12h),
     riscoAutoavaliado,
-    jornadaInicioPrevista: input.jornada_inicio_prevista ?? null,
+    jornadaInicioPrevista: input.hora_apresentacao ?? input.jornada_inicio_prevista ?? null,
     observacoes,
     sintomas: input.sintomas,
     aceiteTermos: input.aceite_termos === true,
@@ -1301,6 +1311,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       input.horasSono24h,
       empresaId,
       input.horaAcordou,
+      input.jornadaInicioPrevista,
     );
 
     const eventType = existing?.id ? 'CHECKIN_ATUALIZADO' : 'CHECKIN_CRIADO';
@@ -1319,6 +1330,8 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           status_operacional: finalStatusOperacional,
           computed_risk_level: dailyRiskLevel,
           requires_operational_review: requiresOperationalReview,
+          hora_apresentacao: input.jornadaInicioPrevista,
+          presentation_time_source: 'CREW_REPORTED',
           componentes: scoreBase.componentes,
         }),
         now,
@@ -1389,6 +1402,8 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         nivel_fadiga: finalNivel,
         computed_risk_level: dailyRiskLevel,
         requires_operational_review: requiresOperationalReview,
+        hora_apresentacao: input.jornadaInicioPrevista,
+        presentation_time_source: 'CREW_REPORTED',
       },
       ip_address: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
       user_agent: c.req.header('user-agent'),
