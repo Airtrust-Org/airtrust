@@ -78,7 +78,9 @@ vi.mock('../../services/employee-sector-access', () => ({
   filterRequestedSetorIdsByAccess: (ids: number[]) => ids,
 }));
 
-import historicoRouter from '../../routes/qualificacoes/historico';
+import historicoRouter, {
+  buildRenewalSqlPredicates,
+} from '../../routes/qualificacoes/historico';
 
 function createApp(db: D1Database) {
   const app = new Hono<{ Bindings: Env }>();
@@ -228,6 +230,19 @@ function createMockDb(options: {
 }
 
 describe('qualificacoes historico renovadas contract', () => {
+  it('considera renovada toda realização anterior quando existe realização posterior da mesma qualificação', () => {
+    const predicates = buildRenewalSqlPredicates(true);
+
+    expect(predicates.renewedQualificationPredicate).toContain('qh_newer.funcionario_id = qh.funcionario_id');
+    expect(predicates.renewedQualificationPredicate).toContain(
+      'COALESCE(qh_newer.data_conclusao, qh_newer.data_vencimento',
+    );
+    expect(predicates.renewedQualificationPredicate).toContain(
+      'COALESCE(qh.data_conclusao, qh.data_vencimento',
+    );
+    expect(predicates.renewedQualificationPredicate).toContain('qh_newer.id > qh.id');
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     histCacheMock.cache = null;

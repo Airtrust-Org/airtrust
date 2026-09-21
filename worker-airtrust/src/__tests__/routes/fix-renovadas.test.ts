@@ -70,7 +70,7 @@ function createDb(scenario: {
             return { results: scenario.grupos };
           }
           // Per-group record fetch
-          const grupoKey = _args[1] as string;
+          const grupoKey = _args[2] as string;
           const rows = scenario.registrosPorGrupo?.[grupoKey] ?? [];
           return { results: rows };
         },
@@ -127,7 +127,7 @@ describe('Cenário 1 — Renovação simples', () => {
     const updates: string[] = [];
 
     const { db } = createDb({
-      grupos: [{ funcionario_id: 1, qualificacao_codigo: 'MNT_MEL', total: 2 }],
+      grupos: [{ funcionario_id: 1, qualification_key: 'MNT_MEL', total: 2 }],
       registrosPorGrupo: {
         MNT_MEL: [
           {
@@ -179,7 +179,7 @@ describe('Cenário 1 — Renovação simples', () => {
 describe('Cenário 2 — Novo registro também vencido', () => {
   it('antigo vira RENOVADA; novo (mais recente) permanece VENCIDA', async () => {
     const { db } = createDb({
-      grupos: [{ funcionario_id: 2, qualificacao_codigo: 'MNT_MGM', total: 2 }],
+      grupos: [{ funcionario_id: 2, qualification_key: 'MNT_MGM', total: 2 }],
       registrosPorGrupo: {
         MNT_MGM: [
           {
@@ -267,8 +267,8 @@ describe('Cenário 4 — Qualificações diferentes não se renovam', () => {
   it('mesmo funcionário com dois grupos distintos → cada grupo tratado independentemente', async () => {
     const { db } = createDb({
       grupos: [
-        { funcionario_id: 3, qualificacao_codigo: 'MNT_PROD_AS350', total: 2 },
-        { funcionario_id: 3, qualificacao_codigo: 'MNT_PROD_SK76', total: 2 },
+        { funcionario_id: 3, qualification_key: 'MNT_PROD_AS350', total: 2 },
+        { funcionario_id: 3, qualification_key: 'MNT_PROD_SK76', total: 2 },
       ],
       registrosPorGrupo: {
         MNT_PROD_AS350: [
@@ -353,7 +353,7 @@ describe('Cenário 5 — Planejado não renova vencido', () => {
   it('mesmo que o grupo apareça, registros com status PLANEJADA são filtrados nos records', async () => {
     // Edge case: group query somehow returns the pair, but per-record filter should exclude PLANEJADA
     const { db } = createDb({
-      grupos: [{ funcionario_id: 4, qualificacao_codigo: 'MNT_IRM', total: 2 }],
+      grupos: [{ funcionario_id: 4, qualification_key: 'MNT_IRM', total: 2 }],
       registrosPorGrupo: {
         MNT_IRM: [
           // Only 1 non-PLANEJADA row → per-group count <= 1 → no candidates
@@ -388,7 +388,7 @@ describe('Cenário 5 — Planejado não renova vencido', () => {
 describe('Cenário 6 — Manutenção MNT_* multi-ciclo', () => {
   it('com 3 ciclos: os dois mais antigos viram RENOVADA; o mais recente fica intacto', async () => {
     const { db } = createDb({
-      grupos: [{ funcionario_id: 5, qualificacao_codigo: 'MNT_SGSO', total: 3 }],
+      grupos: [{ funcionario_id: 5, qualification_key: 'MNT_SGSO', total: 3 }],
       registrosPorGrupo: {
         MNT_SGSO: [
           {
@@ -441,15 +441,15 @@ describe('Cenário 6 — Manutenção MNT_* multi-ciclo', () => {
     const antigos = body.data.items.map((item) => item.id_antigo).sort((a, b) => a - b);
     expect(antigos).toEqual([100, 101]);
 
-    // Both point to the latest record as the "mais recente"
-    for (const item of body.data.items) {
-      expect(item.id_mais_recente).toBe(102);
-    }
+    // A cadeia preserva cada renovação imediata: 100 -> 101 -> 102.
+    const sucessores = new Map(body.data.items.map((item) => [item.id_antigo, item.id_mais_recente]));
+    expect(sucessores.get(100)).toBe(101);
+    expect(sucessores.get(101)).toBe(102);
   });
 
   it('já-renovadas não são reprocessadas', async () => {
     const { db } = createDb({
-      grupos: [{ funcionario_id: 6, qualificacao_codigo: 'MNT_MEL', total: 2 }],
+      grupos: [{ funcionario_id: 6, qualification_key: 'MNT_MEL', total: 2 }],
       registrosPorGrupo: {
         MNT_MEL: [
           // already renovada — should be skipped

@@ -37,7 +37,7 @@ vi.mock('../../utils/logger', () => ({
 import fixRenovadasApp from '../../routes/fix-renovadas';
 
 type Row = Record<string, unknown>;
-type GrupoRow = { funcionario_id: number; qualificacao_codigo: string; total: number };
+type GrupoRow = { funcionario_id: number; qualification_key: string; total: number };
 type Dataset = { groups: GrupoRow[]; recordsByKey: Record<string, Row[]> };
 
 function createApp() {
@@ -66,9 +66,9 @@ function createMockDb(dataByTenant: Record<number, Dataset>) {
             const empresaId = Number(args[0]);
             return { results: dataByTenant[empresaId]?.groups ?? [] };
           }
-          // per-group fetch binds (funcionario_id, qualificacao_codigo, empresaId, ...)
-          const empresaId = Number(args[2]);
-          const key = `${args[0]}|${args[1]}`;
+          // per-group fetch binds (funcionario_id, empresaId, qualification_key)
+          const empresaId = Number(args[1]);
+          const key = `${args[0]}|${args[2]}`;
           return { results: dataByTenant[empresaId]?.recordsByKey[key] ?? [] };
         },
         run: async () => {
@@ -109,7 +109,7 @@ function createMockDb(dataByTenant: Record<number, Dataset>) {
 function makeTwoTenantDataset(): Record<number, Dataset> {
   return {
     1: {
-      groups: [{ funcionario_id: 10, qualificacao_codigo: 'MNT_MEL', total: 2 }],
+      groups: [{ funcionario_id: 10, qualification_key: 'MNT_MEL', total: 2 }],
       recordsByKey: {
         '10|MNT_MEL': [
           {
@@ -134,7 +134,7 @@ function makeTwoTenantDataset(): Record<number, Dataset> {
       },
     },
     2: {
-      groups: [{ funcionario_id: 20, qualificacao_codigo: 'MNT_MEL', total: 2 }],
+      groups: [{ funcionario_id: 20, qualification_key: 'MNT_MEL', total: 2 }],
       recordsByKey: {
         '20|MNT_MEL': [
           {

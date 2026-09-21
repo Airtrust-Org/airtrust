@@ -427,13 +427,38 @@ export async function resolveResourceDomain(
               AND qts.deleted_at IS NULL
               AND qts.setor_id IS NOT NULL)`
         : '0';
+      const tipoSingleSetorIdSql = hasTiposSetores
+        ? `(SELECT MIN(qts.setor_id)
+             FROM qualificacoes_tipos_setores qts
+            WHERE qts.tipo_id = qh.qualificacao_id
+              AND qts.empresa_id = qh.empresa_id
+              AND qts.deleted_at IS NULL
+              AND qts.setor_id IS NOT NULL)`
+        : 'NULL';
+      const tipoSingleSetorDomainSql = hasTiposSetores
+        ? `(SELECT s_tipo.dominio_codigo
+             FROM qualificacoes_tipos_setores qts
+             INNER JOIN setores s_tipo
+               ON s_tipo.id = qts.setor_id
+              AND s_tipo.empresa_id = qts.empresa_id
+              AND s_tipo.ativo = 1
+              AND s_tipo.deleted_at IS NULL
+            WHERE qts.tipo_id = qh.qualificacao_id
+              AND qts.empresa_id = qh.empresa_id
+              AND qts.deleted_at IS NULL
+              AND qts.setor_id IS NOT NULL
+            ORDER BY qts.setor_id
+            LIMIT 1)`
+        : 'NULL';
 
       const row = await db
         .prepare(
           `SELECT ${dominioSelect} AS dominio_codigo,
                   f.setor_id AS setor_id,
                   s.dominio_codigo AS setor_dominio_codigo,
-                  ${tipoSetorLinkCountSql} AS tipo_setor_link_count
+                  ${tipoSetorLinkCountSql} AS tipo_setor_link_count,
+                  ${tipoSingleSetorIdSql} AS tipo_single_setor_id,
+                  ${tipoSingleSetorDomainSql} AS tipo_single_setor_dominio_codigo
              FROM qualificacoes_historico qh
              LEFT JOIN qualificacoes_categorias qc_hist ON qc_hist.id = qh.categoria_id
              LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
@@ -449,12 +474,28 @@ export async function resolveResourceDomain(
           setor_id: number | null;
           setor_dominio_codigo: string | null;
           tipo_setor_link_count: number | null;
+          tipo_single_setor_id: number | null;
+          tipo_single_setor_dominio_codigo: string | null;
         }>();
 
-      const isMultiSetor = Number(row?.tipo_setor_link_count ?? 0) > 1;
-      const domain = isMultiSetor
+      const tipoSetorLinkCount = Number(row?.tipo_setor_link_count ?? 0);
+      const isMultiSetor = tipoSetorLinkCount > 1;
+      const canonicalDomain = isMultiSetor
         ? ((row?.setor_dominio_codigo as OperationalDomain | null) ?? null)
         : ((row?.dominio_codigo as OperationalDomain) ?? null);
+      // Para certificado legado sem domínio próprio, só aceitamos fallback
+      // quando há evidência explícita de vínculo do TIPO a exatamente um setor
+      // e esse setor é o mesmo do funcionário. Tipo genuinamente não
+      // classificado/sem vínculo continua fail-closed.
+      const singleSetorCertificateDomain =
+        resourceType === 'qualificacao_certificado' &&
+        !canonicalDomain &&
+        tipoSetorLinkCount === 1 &&
+        row?.tipo_single_setor_id != null &&
+        row.tipo_single_setor_id === row.setor_id
+          ? ((row?.tipo_single_setor_dominio_codigo as OperationalDomain | null) ?? null)
+          : null;
+      const domain = canonicalDomain ?? singleSetorCertificateDomain;
       return {
         domain,
         setorId: row?.setor_id ?? null,
