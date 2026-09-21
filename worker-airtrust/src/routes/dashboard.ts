@@ -32,10 +32,17 @@ app.use('*', auth());
 const QUALIFICATION_STATUS_EXPR = "UPPER(COALESCE(qh.status, ''))";
 const RENEWED_STATUS_VALUES = ['RENOVADA', 'RENOVADO'] as const;
 
-function buildCurrentOperationalQualificationPredicate(alias = 'qh'): string {
-  const statusExpr = `UPPER(COALESCE(${alias}.status, ''))`;
-  const cancelled = sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES);
-  const planned = sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES);
+function buildDashboardQualificationIdentity(alias: string): string {
+  return `UPPER(TRIM(COALESCE(
+    NULLIF(CAST(${alias}.qualificacao_id AS TEXT), ''),
+    NULLIF(${alias}.qualificacao_codigo, ''),
+    NULLIF(${alias}.tipo, '')
+  )))`;
+}
+
+function buildNewerDashboardQualificationExists(alias = 'qh'): string {
+  const identity = buildDashboardQualificationIdentity(alias);
+  const nextIdentity = buildDashboardQualificationIdentity('qh_next');
   const successorStatusExpr = "UPPER(COALESCE(qh_next.status, ''))";
   const successorCancelled = sqlStatusEqualsAny(successorStatusExpr, CANCELLED_STATUS_VALUES);
   const successorPlanned = sqlStatusEqualsAny(
@@ -43,36 +50,47 @@ function buildCurrentOperationalQualificationPredicate(alias = 'qh'): string {
     PLANNED_QUALIFICATION_STATUS_VALUES,
   );
 
+  return `EXISTS (
+    SELECT 1
+    FROM qualificacoes_historico qh_next
+    WHERE qh_next.empresa_id = ${alias}.empresa_id
+      AND qh_next.funcionario_id = ${alias}.funcionario_id
+      AND qh_next.deleted_at IS NULL
+      AND NOT (${successorCancelled})
+      AND NOT (${successorPlanned})
+      AND ${identity} <> ''
+      AND ${nextIdentity} = ${identity}
+      AND (
+        datetime(COALESCE(qh_next.data_conclusao, qh_next.data_vencimento, qh_next.updated_at, qh_next.created_at)) >
+          datetime(COALESCE(${alias}.data_conclusao, ${alias}.data_vencimento, ${alias}.updated_at, ${alias}.created_at))
+        OR (
+          datetime(COALESCE(qh_next.data_conclusao, qh_next.data_vencimento, qh_next.updated_at, qh_next.created_at)) =
+            datetime(COALESCE(${alias}.data_conclusao, ${alias}.data_vencimento, ${alias}.updated_at, ${alias}.created_at))
+          AND qh_next.id > ${alias}.id
+        )
+      )
+  )`;
+}
+
+function buildCurrentOperationalQualificationPredicate(alias = 'qh'): string {
+  const statusExpr = `UPPER(COALESCE(${alias}.status, ''))`;
+  const cancelled = sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES);
+  const planned = sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES);
+  const newerExists = buildNewerDashboardQualificationExists(alias);
+
   return `(${alias}.deleted_at IS NULL
     AND NOT (${cancelled})
     AND NOT (${planned})
     AND ${alias}.data_conclusao IS NOT NULL
-    AND NOT EXISTS (
-      SELECT 1
-      FROM qualificacoes_historico qh_next
-      WHERE qh_next.empresa_id = ${alias}.empresa_id
-        AND qh_next.renovacao_de = ${alias}.id
-        AND qh_next.deleted_at IS NULL
-        AND qh_next.data_conclusao IS NOT NULL
-        AND NOT (${successorCancelled})
-        AND NOT (${successorPlanned})
-    ))`;
+    AND NOT (${newerExists}))`;
 }
 
 function buildDashboardRenewalSqlPredicates() {
-  // renovacao_de column may not exist in older schemas — we consider only renovada flag + status
-  const renewedQualificationPredicate = `(COALESCE(qh.renovada, 0) = 1 OR ${sqlStatusEqualsAny(
+  const legacyRenewedPredicate = `(COALESCE(qh.renovada, 0) = 1 OR ${sqlStatusEqualsAny(
     QUALIFICATION_STATUS_EXPR,
     RENEWED_STATUS_VALUES,
   )})`;
-  const activeRenewedQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${sqlStatusEqualsAny(
-    QUALIFICATION_STATUS_EXPR,
-    CANCELLED_STATUS_VALUES,
-  )}) AND ${renewedQualificationPredicate})`;
-  return {
-    renewedQualificationPredicate,
-    activeRenewedQualificationPredicate,
-  };
+  return { legacyRenewedPredicate };
 }
 
 async function hasDashboardRenovacaoDeColumn(db: D1Database): Promise<boolean> {
@@ -100,21 +118,24 @@ app.get('/qualificacoes', async (c) => {
     const hojeSp = getTodayIsoSaoPaulo();
     const vencimentoExpr = getQualificacoesVencimentoExpr('qh', 'qt');
     const hasRenovacaoDe = await hasDashboardRenovacaoDeColumn(db);
-    const { renewedQualificationPredicate } = buildDashboardRenewalSqlPredicates();
+    const { legacyRenewedPredicate } = buildDashboardRenewalSqlPredicates();
     const currentOperationalPredicate = buildCurrentOperationalQualificationPredicate('qh');
+    const newerQualificationExistsPredicate = buildNewerDashboardQualificationExists('qh');
 
-    // If renovacao_de column exists, use the canonical rule for a renewed record
-    // (the older one), which is that there exists a newer valid record pointing to it.
-    // The legacy fallback (status='RENOVADA') is only used if renovacao_de doesn't exist.
-    const effectiveRenewedPredicate = hasRenovacaoDe
-      ? `(EXISTS (
-          SELECT 1 FROM qualificacoes_historico qh_renovadora 
-          WHERE qh_renovadora.deleted_at IS NULL 
+    // Canonical rule: older realizations of the same employee+qualification are
+    // renewed whenever a later valid realization exists. renovacao_de remains
+    // accepted where present; legacy flags are only the schema fallback.
+    const explicitRenewalLinkPredicate = hasRenovacaoDe
+      ? `EXISTS (
+          SELECT 1 FROM qualificacoes_historico qh_renovadora
+          WHERE qh_renovadora.deleted_at IS NULL
             AND qh_renovadora.empresa_id = qh.empresa_id
-            AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_renovadora.status, ''))", CANCELLED_STATUS_VALUES)}) 
+            AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_renovadora.status, ''))", CANCELLED_STATUS_VALUES)})
             AND qh_renovadora.renovacao_de = qh.id
-        ))`
-      : renewedQualificationPredicate;
+        )`
+      : legacyRenewedPredicate;
+    const effectiveRenewedPredicate =
+      `((${explicitRenewalLinkPredicate}) OR (${newerQualificationExistsPredicate}))`;
 
     const effectiveActiveRenewedPredicate = `(qh.deleted_at IS NULL AND NOT (${sqlStatusEqualsAny(QUALIFICATION_STATUS_EXPR, CANCELLED_STATUS_VALUES)}) AND ${effectiveRenewedPredicate})`;
 
