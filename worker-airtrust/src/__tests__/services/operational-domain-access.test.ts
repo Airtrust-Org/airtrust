@@ -860,7 +860,7 @@ describe('qualificacao_certificado — contrato admin/gestor preservado (sem car
     ).rejects.toMatchObject({ statusCode: 403, code: 'RESOURCE_DOMAIN_UNCLASSIFIED' });
   });
 
-  it('certificado legado sem domínio próprio usa o domínio classificado do setor do funcionário', async () => {
+  it('certificado legado sem domínio próprio usa vínculo explícito do tipo ao setor do funcionário', async () => {
     const base = buildFixtures();
     const db = makeDb({
       qualificacoesHistorico: [
@@ -870,8 +870,11 @@ describe('qualificacao_certificado — contrato admin/gestor preservado (sem car
           empresa_id: 2,
           categoria_id: null,
           funcionario_id: 2, // setor 11 -> MANUTENCAO
-          qualificacao_id: null,
+          qualificacao_id: 3, // categoria sem domínio
         },
+      ],
+      qualificacoesTiposSetores: [
+        { tipo_id: 3, setor_id: 11, empresa_id: 2, deleted_at: null },
       ],
     });
 
