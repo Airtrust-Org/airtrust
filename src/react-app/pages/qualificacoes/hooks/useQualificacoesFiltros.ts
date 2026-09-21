@@ -11,6 +11,11 @@ import type { SortConfig } from '@/react-app/utils/types';
 export const VALID_TABS = ['historico', 'planejados', 'tipos', 'categorias'] as const;
 export const VALID_PLANNED_VIEWS = ['lista', 'calendario', 'turmas'] as const;
 
+function sanitizeHistoricoCategoriaFilter(value: string | undefined): string {
+  const normalized = String(value ?? '').trim();
+  return /^\d+$/.test(normalized) ? '' : normalized;
+}
+
 export interface QualificacoesPrefs {
   activeTab?: string;
   plannedView?: string;
@@ -73,7 +78,9 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
   }, [searchTerm]);
 
   const [aeronaveFilter, setAeronaveFilter] = useState(initialPrefs.aeronaveFilter ?? '');
-  const [categoriaFilter, setCategoriaFilter] = useState(initialPrefs.categoriaFilter ?? '');
+  const [categoriaFilter, setCategoriaFilter] = useState(() =>
+    sanitizeHistoricoCategoriaFilter(initialPrefs.categoriaFilter),
+  );
   const [setorFilter, setSetorFilter] = useState<string[]>(initialPrefs.setorFilter ?? []);
   const [categoriasSetorFilter, setCategoriasSetorFilter] = useState<string[]>(
     initialPrefs.categoriasSetorFilter ?? [],

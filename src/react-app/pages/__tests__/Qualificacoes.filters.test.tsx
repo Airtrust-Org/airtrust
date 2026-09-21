@@ -216,8 +216,13 @@ describe('Qualificacoes - Filters and View State Characterization', () => {
     }));
   });
 
-  it('não deixa preferência de categoria dos Modelos vazar para o Histórico', async () => {
-    vi.spyOn(userPreferences, 'readUserPreference').mockImplementation((key, def) => def);
+  it('não deixa categoria numérica legada dos Modelos vazar para o Histórico', async () => {
+    vi.spyOn(userPreferences, 'readUserPreference').mockImplementation((key, def) => {
+      if (key === 'qualificacoes_prefs_v1') {
+        return { ...(def as object), activeTab: 'historico', categoriaFilter: '13' };
+      }
+      return def;
+    });
     fetchWithAuthMock.mockImplementation(async (url: string) => {
       if (url.includes('/api/preferencias/tabela/table.qualificacoes.modelos')) {
         return {
