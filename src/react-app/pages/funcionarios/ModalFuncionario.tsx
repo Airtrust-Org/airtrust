@@ -25,6 +25,7 @@ import {
 } from '@/react-app/constants';
 import {
   aplicarMascaraMatricula,
+  normalizarMatriculaCincoDigitos,
   aplicarMascaraTelefone,
   aplicarMascaraCodigoANAC,
   removerMascara,
@@ -725,7 +726,7 @@ export default function ModalFuncionario({
     let matriculaFinal = '';
     if (formData.matricula && formData.matricula.trim()) {
       const numerosSemMascara = removerMascara(formData.matricula);
-      matriculaFinal = numerosSemMascara.padStart(5, '0');
+      matriculaFinal = normalizarMatriculaCincoDigitos(numerosSemMascara);
 
       if (matriculaFinal.length !== 5) {
         toast.warning('A matrícula deve ter exatamente 5 dígitos.');
@@ -1274,7 +1275,7 @@ export default function ModalFuncionario({
                       if (formData.matricula && formData.matricula.length < 5) {
                         setFormData({
                           ...formData,
-                          matricula: formData.matricula.padStart(5, '0'),
+                          matricula: normalizarMatriculaCincoDigitos(formData.matricula),
                         });
                       }
                     }}
