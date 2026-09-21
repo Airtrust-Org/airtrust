@@ -186,30 +186,31 @@ function isTipoCodigoUniqueConstraintError(error: unknown): boolean {
   );
 }
 
+let qualificacoesTiposColumnsSupportPromise: Promise<TiposColumnsSupport> | null = null;
+
 async function loadQualificacoesTiposColumnsSupport(db: D1Database): Promise<TiposColumnsSupport> {
-  const info = await db.prepare("PRAGMA table_info('qualificacoes_tipos')").all();
-  const cols = (info.results || []) as Array<{ name?: string }>;
-  const hasColumn = (columnName: string) => cols.some((c) => c.name === columnName);
+  if (!qualificacoesTiposColumnsSupportPromise) {
+    qualificacoesTiposColumnsSupportPromise = db
+      .prepare("PRAGMA table_info('qualificacoes_tipos')")
+      .all()
+      .then((info) => {
+        const cols = (info.results || []) as Array<{ name?: string }>;
+        const hasColumn = (columnName: string) => cols.some((column) => column.name === columnName);
 
-  const hasCargaInicial = hasColumn('carga_horaria_inicial');
-  const hasCargaRecorrente = hasColumn('carga_horaria_recorrente');
-  const hasConteudoProgramatico = hasColumn('conteudo_programatico');
-  const hasIsCheck = hasColumn('is_check');
-  const hasFormatoId = hasColumn('formato_id');
-  const hasClasseRequisito = hasColumn('classe_requisito');
-  const hasCategoriaId = hasColumn('categoria_id');
-  const hasDominioOverride = hasColumn('dominio_codigo');
+        return {
+          hasCargaInicial: hasColumn('carga_horaria_inicial'),
+          hasCargaRecorrente: hasColumn('carga_horaria_recorrente'),
+          hasConteudoProgramatico: hasColumn('conteudo_programatico'),
+          hasIsCheck: hasColumn('is_check'),
+          hasFormatoId: hasColumn('formato_id'),
+          hasClasseRequisito: hasColumn('classe_requisito'),
+          hasCategoriaId: hasColumn('categoria_id'),
+          hasDominioOverride: hasColumn('dominio_codigo'),
+        };
+      });
+  }
 
-  return {
-    hasIsCheck,
-    hasFormatoId,
-    hasConteudoProgramatico,
-    hasCargaInicial,
-    hasCargaRecorrente,
-    hasClasseRequisito,
-    hasCategoriaId,
-    hasDominioOverride,
-  };
+  return qualificacoesTiposColumnsSupportPromise;
 }
 
 function buildFormatoJoin(hasFormatoId: boolean): string {
@@ -308,14 +309,19 @@ async function logAuditoria(db: D1Database, entidade: string, entidade_id: strin
   }
 }
 
-async function hasQualificacoesTiposSetoresTable(db: D1Database): Promise<boolean> {
-  const table = await db
-    .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores' LIMIT 1",
-    )
-    .first<{ name: string }>();
+let qualificacoesTiposSetoresTablePromise: Promise<boolean> | null = null;
 
-  return Boolean(table?.name);
+async function hasQualificacoesTiposSetoresTable(db: D1Database): Promise<boolean> {
+  if (!qualificacoesTiposSetoresTablePromise) {
+    qualificacoesTiposSetoresTablePromise = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores' LIMIT 1",
+      )
+      .first<{ name: string }>()
+      .then((table) => Boolean(table?.name));
+  }
+
+  return qualificacoesTiposSetoresTablePromise;
 }
 
 function normalizeSetorIds(values: Array<string | number>): number[] {
