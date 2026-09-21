@@ -464,6 +464,40 @@ async function main() {
   });
   rdvVersao += 1;
 
+  // ── 14.5 Provar recebimento na fila da Coordenação ──────────────────
+  // Este é o caso operacional real: o piloto só pode considerar o handoff
+  // concluído se a consulta da Coordenação enxergar o mesmo RDV como enviado.
+  const filaRecebidos = await call({
+    operation: 'consultar_fila_coordenacao_apos_envio',
+    method: 'GET',
+    path: `/api/controle-voos/rdv/fila?status=enviado&data_inicio=${dataProg}&data_fim=${dataProg}`,
+    actor: coordA,
+    tenant: 'A',
+    expectedStatus: 200,
+  });
+  const filaItems = Array.isArray(filaRecebidos.json?.data) ? filaRecebidos.json.data : [];
+  const filaContemRdvEnviado =
+    filaRecebidos.passed &&
+    filaItems.some(
+      (item) =>
+        Number(item?.voo_id) === Number(vooId) &&
+        String(item?.workflow_status || '') === 'enviado',
+    );
+  report.push({
+    operation: 'fila_coordenacao_contem_rdv_enviado',
+    method: 'GET',
+    route: '/api/controle-voos/rdv/fila?status=enviado',
+    expected_status: 'RDV do voo presente com workflow_status=enviado',
+    observed_status: filaContemRdvEnviado ? 'presente' : 'ausente',
+    operation_id: vooId,
+    tenant: 'A',
+    result: filaContemRdvEnviado ? 'PASS' : 'FAIL',
+    duration_ms: 0,
+  });
+  if (!filaContemRdvEnviado) {
+    log(`FAIL fila_coordenacao_contem_rdv_enviado — vooId=${vooId}`);
+  }
+
   // ── 15. Iniciar revisao (coordenacao) ────────────────────────────────
   await call({
     operation: 'iniciar_revisao',
