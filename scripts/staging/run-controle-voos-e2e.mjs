@@ -498,6 +498,32 @@ async function main() {
     log(`FAIL fila_coordenacao_contem_rdv_enviado — vooId=${vooId}`);
   }
 
+  // ── 14.5 Provar recebimento na fila da Coordenação ───────────────────
+  const filaEnviado = await call({
+    operation: 'fila_coordenacao_recebe_rdv_enviado',
+    method: 'GET',
+    path: '/api/controle-voos/rdv/fila?status=enviado',
+    actor: coordA,
+    tenant: 'A',
+    expectedStatus: 200,
+  });
+  const filaRows = Array.isArray(filaEnviado.json?.data) ? filaEnviado.json.data : [];
+  const filaContainsFlight = filaRows.some((row) => Number(row?.voo_id) === Number(vooId) && row?.workflow_status === 'enviado');
+  report.push({
+    operation: 'fila_coordenacao_contem_voo_enviado',
+    method: 'GET',
+    route: '/api/controle-voos/rdv/fila?status=enviado',
+    expected_status: 'voo_id presente com workflow_status=enviado',
+    observed_status: filaContainsFlight ? 'present' : 'missing',
+    operation_id: vooId,
+    tenant: 'A',
+    result: filaContainsFlight ? 'PASS' : 'FAIL',
+    duration_ms: 0,
+  });
+  if (!filaContainsFlight) {
+    log('FAIL fila_coordenacao_contem_voo_enviado -> voo enviado nao apareceu na fila');
+  }
+
   // ── 15. Iniciar revisao (coordenacao) ────────────────────────────────
   await call({
     operation: 'iniciar_revisao',
