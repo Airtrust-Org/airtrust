@@ -860,6 +860,42 @@ describe('qualificacao_certificado — contrato admin/gestor preservado (sem car
     ).rejects.toMatchObject({ statusCode: 403, code: 'RESOURCE_DOMAIN_UNCLASSIFIED' });
   });
 
+  it('certificado legado sem domínio próprio usa o domínio classificado do setor do funcionário', async () => {
+    const base = buildFixtures();
+    const db = makeDb({
+      qualificacoesHistorico: [
+        ...(base.qualificacoesHistorico || []),
+        {
+          id: 1004,
+          empresa_id: 2,
+          categoria_id: null,
+          funcionario_id: 2, // setor 11 -> MANUTENCAO
+          qualificacao_id: null,
+        },
+      ],
+    });
+
+    await expect(
+      assertOperationalAccess({
+        db: db as unknown as D1Database,
+        empresaId: 2,
+        userId: 101, // gestor dos setores 10 e 11
+        userRole: 'gestor',
+        action: 'issue',
+        resourceType: 'qualificacao_certificado',
+        resourceId: 1004,
+      }),
+    ).resolves.toBeDefined();
+
+    const historicoDomain = await resolveResourceDomain(
+      db as unknown as D1Database,
+      2,
+      'qualificacao_historico',
+      1004,
+    );
+    expect(historicoDomain.domain).toBeNull();
+  });
+
   it('gestor continua restrito por setor mesmo dentro do domínio correto', async () => {
     const db = makeDb();
     await expect(
