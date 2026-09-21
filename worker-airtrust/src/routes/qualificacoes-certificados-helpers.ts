@@ -213,13 +213,17 @@ export function toBase64Safe(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-let certificadosStorageColumnsPromise: Promise<CertificadosStorageColumns> | null = null;
+const certificadosStorageColumnsCache = new WeakMap<
+  D1Database,
+  Promise<CertificadosStorageColumns>
+>();
 
 export async function getCertificadosStorageColumns(
   db: D1Database,
 ): Promise<CertificadosStorageColumns> {
-  if (!certificadosStorageColumnsPromise) {
-    certificadosStorageColumnsPromise = Promise.all([
+  let cached = certificadosStorageColumnsCache.get(db);
+  if (!cached) {
+    cached = Promise.all([
       tableHasColumn(db, 'pasta_virtual', 'documento_id'),
       tableHasColumn(db, 'pasta_virtual', 'certificacao_id'),
       tableHasColumn(db, 'pasta_virtual', 'empresa_id'),
@@ -237,9 +241,10 @@ export async function getCertificadosStorageColumns(
         documentosHasEmpresaId,
       }),
     );
+    certificadosStorageColumnsCache.set(db, cached);
   }
 
-  return certificadosStorageColumnsPromise;
+  return cached;
 }
 
 export async function listHistoricoCertificados(
