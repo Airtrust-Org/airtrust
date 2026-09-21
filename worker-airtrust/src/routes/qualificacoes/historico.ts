@@ -235,20 +235,39 @@ function buildStatsExtendedCacheScope(params: {
   };
 }
 
+const historicoColumnSupportCache = new WeakMap<
+  D1Database,
+  Map<string, Promise<boolean>>
+>();
+
 async function hasTableColumn(
   db: D1Database,
   tableName: string,
   columnName: string,
 ): Promise<boolean> {
-  try {
-    const columns = await db.prepare(`PRAGMA table_info('${tableName}')`).all<{ name: string }>();
-    if (!columns.results || columns.results.length === 0) {
+  const cacheKey = `${tableName}:${columnName}`;
+  let dbCache = historicoColumnSupportCache.get(db);
+  if (!dbCache) {
+    dbCache = new Map<string, Promise<boolean>>();
+    historicoColumnSupportCache.set(db, dbCache);
+  }
+  const cached = dbCache.get(cacheKey);
+  if (cached) return cached;
+
+  const lookup = (async () => {
+    try {
+      const columns = await db.prepare(`PRAGMA table_info('${tableName}')`).all<{ name: string }>();
+      if (!columns.results || columns.results.length === 0) {
+        return true;
+      }
+      return (columns.results || []).some((column) => column.name === columnName);
+    } catch {
       return true;
     }
-    return (columns.results || []).some((column) => column.name === columnName);
-  } catch {
-    return true;
-  }
+  })();
+
+  dbCache.set(cacheKey, lookup);
+  return lookup;
 }
 
 async function buildHistoricoEmployeeScopeCompat(

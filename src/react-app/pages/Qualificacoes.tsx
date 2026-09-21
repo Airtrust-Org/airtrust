@@ -146,8 +146,6 @@ export default function Qualificacoes() {
     return Number.isInteger(parsedId) && parsedId > 0 ? parsedId : null;
   }, [searchParams]);
 
-  const { aeronaves: aeronavesConfig } = useAeronavesConfig();
-
   const {
     activeTab,
     setActiveTab,
@@ -186,6 +184,8 @@ export default function Qualificacoes() {
     isDefaultStatusFilter,
   } = useQualificacoesFiltros(highlightedHistoricoId);
 
+  const { aeronaves: aeronavesConfig } = useAeronavesConfig(isHistoricoTab);
+
   const [autoOpenTurmasModal, setAutoOpenTurmasModal] = useState(false);
 
   const {
@@ -208,7 +208,7 @@ export default function Qualificacoes() {
     effectiveHistoricoStatusFiltro,
     setorFilter.length > 0 ? setorFilter : undefined,
     highlightedHistoricoId || undefined,
-    true,
+    usesHistoricoDataset,
     historicoCategoriaId,
   );
 
@@ -238,24 +238,18 @@ export default function Qualificacoes() {
     shouldLoadPlannedRelatedHistorico,
   );
 
-  // Query without status filter so we can count operational turmas for the Planejadas chip
-  // (PLANEJADO + CONFIRMADO + EM_ANDAMENTO). Existing consumers filter by status internally.
-  const treinamentosPlanejadosConvocacaoQuery = useTreinamentosPlanejados({});
+  const [showConvocacaoPlanejadaModal, setShowConvocacaoPlanejadaModal] = useState(false);
+
+  // A lista completa de turmas só é necessária dentro do modal de convocação.
+  const treinamentosPlanejadosConvocacaoQuery = useTreinamentosPlanejados(
+    {},
+    showConvocacaoPlanejadaModal,
+  );
   const previewConvocacaoPlanejada = usePreviewConvocacaoTreinamento();
   const enviarConvocacaoPlanejada = useEnviarConvocacaoTreinamento();
   const reenviarConvocacaoPlanejada = useReenviarConvocacaoTreinamento();
 
   const historicoTotal = historicoMeta?.total ?? 0;
-
-  // 🎯 Stats corretos do endpoint de dashboard
-  const [dashboardStats, setDashboardStats] = useState({
-    total: 0,
-    validas: 0,
-    vencendo: 0,
-    vencidas: 0,
-    renovadas: 0,
-    planejadas: 0,
-  });
 
   // 🔍 Aplicar filtros da URL ao montar componente
   useEffect(() => {
@@ -307,43 +301,7 @@ export default function Qualificacoes() {
   }>({ isOpen: false, qualificacao: null });
 
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
-  const [loadingStats, setLoadingStats] = useState(true);
-
-  const carregarStats = useCallback(async () => {
-    try {
-      setLoadingStats(true);
-      // Cache busting
-      const response = await fetchWithAuth(
-        `${API_BASE_URL}/dashboard/qualificacoes?t=${new Date().getTime()}`,
-        {
-          headers: {
-            'Cache-Control': 'no-cache',
-            Pragma: 'no-cache',
-          },
-        },
-      );
-      if (!response.ok) throw new Error('Erro ao carregar stats');
-      const json = await response.json();
-      const data = json.data || json;
-      setDashboardStats({
-        total: data.total_ativas || 0,
-        validas: data.validas || 0,
-        vencendo: data.a_vencer_30_dias || 0,
-        vencidas: data.vencidas || 0,
-        renovadas: data.renovadas || 0,
-        planejadas: data.planejadas || 0,
-      });
-    } catch (error) {
-      console.error('Erro ao carregar stats do dashboard:', error);
-    } finally {
-      setLoadingStats(false);
-    }
-  }, []);
-
-  // Buscar stats do dashboard
-  useEffect(() => {
-    void carregarStats();
-  }, [carregarStats]);
+  const loadingStats = loading;
 
   const stats = historicoStats;
 
@@ -411,7 +369,6 @@ export default function Qualificacoes() {
   const [planejadaSelecionada, setPlanejadaSelecionada] = useState<HistoricoItem | null>(null);
   const [novaDataPlanejada, setNovaDataPlanejada] = useState('');
   const [salvandoPlanejadaId, setSalvandoPlanejadaId] = useState<number | null>(null);
-  const [showConvocacaoPlanejadaModal, setShowConvocacaoPlanejadaModal] = useState(false);
   const [planejadaConvocacaoSelecionada, setPlanejadaConvocacaoSelecionada] =
     useState<HistoricoItem | null>(null);
   const [turmaConvocacaoSelecionadaId, setTurmaConvocacaoSelecionadaId] = useState<number | null>(
@@ -477,7 +434,7 @@ export default function Qualificacoes() {
   });
 
   const { data: funcionariosAtivosData = [], isLoading: loadingFuncionariosAtivos } =
-    useFuncionariosAtivos();
+    useFuncionariosAtivos(showTurmaPlanejadaModal);
   // Remover estados locais desnecessários
   const [showTipoModal, setShowTipoModal] = useState(false);
   const [editingTipo, setEditingTipo] = useState<QualificacaoTipoDTO | null>(null);
@@ -781,25 +738,6 @@ export default function Qualificacoes() {
       await carregarHistorico();
       // Invalidate consolidated training list so Turmas tab reflects new records immediately
       void queryClient.invalidateQueries({ queryKey: ['treinamentos-planejados'] });
-      try {
-        const statsResponse = await fetchWithAuth(
-          `${API_BASE_URL}/dashboard/qualificacoes?t=${Date.now()}`,
-        );
-        if (statsResponse.ok) {
-          const json = await statsResponse.json();
-          const data = json.data || json;
-          setDashboardStats({
-            total: data.total_ativas || 0,
-            validas: data.validas || 0,
-            vencendo: data.a_vencer_30_dias || 0,
-            vencidas: data.vencidas || 0,
-            renovadas: data.renovadas || 0,
-            planejadas: data.planejadas || 0,
-          });
-        }
-      } catch {
-        // no-op
-      }
     }
 
     if (falhas.length === 0) {
@@ -839,8 +777,16 @@ export default function Qualificacoes() {
   const {
     data: categoriasData,
     error: categoriasError,
-    refetch: refetchCategorias,
-  } = useApi(categoriasApiUrl);
+  } = useApi(categoriasApiUrl, {
+    enabled:
+      activeTab === 'historico' ||
+      activeTab === 'tipos' ||
+      activeTab === 'categorias' ||
+      showTipoModal ||
+      showCategoriaModal,
+    requireAuth: true,
+    staleTime: 60_000,
+  });
 
   // Atualizar tipos quando dados forem carregados
   // Removido efeito de sincronização antigo (tiposData)
@@ -866,13 +812,6 @@ export default function Qualificacoes() {
     });
     return map;
   }, [categorias]);
-
-  // Carregar categorias ao abrir a aba histórico (para garantir cores)
-  useEffect(() => {
-    if (usesHistoricoDataset) {
-      refetchCategorias();
-    }
-  }, [refetchCategorias, usesHistoricoDataset]);
 
   // Tipo para itens do histórico
   type HistoricoItem = (typeof historico)[number] & {
@@ -1299,31 +1238,6 @@ export default function Qualificacoes() {
 
   const recarregarHistoricoEStats = useCallback(async () => {
     await carregarHistorico();
-
-    const statsResponse = await fetchWithAuth(
-      `${API_BASE_URL}/dashboard/qualificacoes?t=${Date.now()}`,
-      {
-        headers: {
-          'Cache-Control': 'no-cache',
-          Pragma: 'no-cache',
-        },
-      },
-    );
-
-    if (!statsResponse.ok) {
-      throw new Error('Erro ao carregar stats');
-    }
-
-    const json = await statsResponse.json();
-    const data = json.data || json;
-    setDashboardStats({
-      total: data.total_ativas || 0,
-      validas: data.validas || 0,
-      vencendo: data.a_vencer_30_dias || 0,
-      vencidas: data.vencidas || 0,
-      renovadas: data.renovadas || 0,
-      planejadas: data.planejadas || 0,
-    });
   }, [carregarHistorico]);
 
   const {
@@ -3529,24 +3443,6 @@ export default function Qualificacoes() {
           onSuccess={async () => {
             // ⚡ ATUALIZAÇÃO IMEDIATA - CRÍTICO PARA COMPLIANCE
             await carregarHistorico();
-            // Recarregar stats também
-            try {
-              const statsResponse = await fetchWithAuth(`${API_BASE_URL}/dashboard/qualificacoes`);
-              if (statsResponse.ok) {
-                const json = await statsResponse.json();
-                const data = json.data || json;
-                setDashboardStats({
-                  total: data.total_ativas || 0,
-                  validas: data.validas || 0,
-                  vencendo: data.a_vencer_30_dias || 0,
-                  vencidas: data.vencidas || 0,
-                  renovadas: data.renovadas || 0,
-                  planejadas: data.planejadas || 0,
-                });
-              }
-            } catch (error) {
-              console.error('Erro ao atualizar stats:', error);
-            }
           }}
         />
       </Suspense>
@@ -3584,24 +3480,6 @@ export default function Qualificacoes() {
           onSuccess={async () => {
             // ⚡ ATUALIZAÇÃO IMEDIATA - CRÍTICO PARA COMPLIANCE
             await carregarHistorico();
-            // Recarregar stats também
-            try {
-              const statsResponse = await fetchWithAuth(`${API_BASE_URL}/dashboard/qualificacoes`);
-              if (statsResponse.ok) {
-                const json = await statsResponse.json();
-                const data = json.data || json;
-                setDashboardStats({
-                  total: data.total_ativas || 0,
-                  validas: data.validas || 0,
-                  vencendo: data.a_vencer_30_dias || 0,
-                  vencidas: data.vencidas || 0,
-                  renovadas: data.renovadas || 0,
-                  planejadas: data.planejadas || 0,
-                });
-              }
-            } catch (error) {
-              console.error('Erro ao atualizar stats:', error);
-            }
             setShowModal(false);
             setEditingQualificacao(null);
           }}
@@ -4324,24 +4202,6 @@ export default function Qualificacoes() {
           onSuccess={async () => {
             // ⚡ ATUALIZAÇÃO IMEDIATA - CRÍTICO PARA COMPLIANCE
             await carregarHistorico();
-            // Recarregar stats também
-            try {
-              const statsResponse = await fetchWithAuth(`${API_BASE_URL}/dashboard/qualificacoes`);
-              if (statsResponse.ok) {
-                const json = await statsResponse.json();
-                const data = json.data || json;
-                setDashboardStats({
-                  total: data.total_ativas || 0,
-                  validas: data.validas || 0,
-                  vencendo: data.a_vencer_30_dias || 0,
-                  vencidas: data.vencidas || 0,
-                  renovadas: data.renovadas || 0,
-                  planejadas: data.planejadas || 0,
-                });
-              }
-            } catch (error) {
-              console.error('Erro ao atualizar stats:', error);
-            }
             setModalEditarAberto(false);
             setRegistroSelecionado(null);
           }}
@@ -4638,7 +4498,7 @@ export default function Qualificacoes() {
                   setShowTipoModal(false);
                   setEditingTipo(null);
                   try {
-                    await Promise.all([refetchTipos(), carregarHistorico(), carregarStats()]);
+                    await Promise.all([refetchTipos(), carregarHistorico()]);
                     setTipoUpdates((prev) => {
                       const next = { ...prev };
                       delete next[tipoIdStr];
