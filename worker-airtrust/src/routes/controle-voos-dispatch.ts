@@ -83,48 +83,61 @@ async function loadDispatchContexts(
   if (ids.length === 0) return contexts;
 
   const compatible = await resolveCompatibleExpressions(db);
-  const placeholders = ids.map(() => '?').join(', ');
-  const [crewResult, stageResult, fuelResult, contractResult] = await Promise.all([
-    db.prepare(
-      `SELECT t.voo_id, t.funcionario_id, t.funcao, f.nome,
-              ${compatible.nomeGuerraSql} AS nome_guerra,
-              f.telefone, f.email
-         FROM cv_voo_tripulantes t
-         JOIN funcionarios f ON f.id = t.funcionario_id
-          AND f.empresa_id = t.empresa_id AND f.deleted_at IS NULL
-        WHERE t.empresa_id = ? AND t.voo_id IN (${placeholders}) AND t.deleted_at IS NULL
-        ORDER BY t.voo_id ASC,
-                 CASE t.funcao WHEN 'PIC' THEN 0 WHEN 'SIC' THEN 1 ELSE 2 END,
-                 t.id ASC`,
-    ).bind(empresaId, ...ids).all<CrewRecipient>(),
-    db.prepare(
-      `SELECT e.voo_id, e.numero_etapa, e.origem_icao, e.destino_icao, e.pax, e.payload,
-              ${compatible.pesoPassageirosSql}, ${compatible.pesoBagagemSql}, ${compatible.unidadePesoSql},
-              e.horario_motor_ligado, e.horario_decolagem, e.horario_pouso, e.horario_motor_desligado
-         FROM cv_voo_etapas e
-        WHERE e.empresa_id = ? AND e.voo_id IN (${placeholders}) AND e.deleted_at IS NULL
-        ORDER BY e.voo_id ASC, e.numero_etapa ASC, e.id ASC`,
-    ).bind(empresaId, ...ids).all<FlightStageSummary>(),
-    db.prepare(
-      `SELECT voo_id, combustivel_solicitado, unidade
-         FROM cv_voo_abastecimentos
-        WHERE empresa_id = ? AND voo_id IN (${placeholders}) AND deleted_at IS NULL
-          AND combustivel_solicitado IS NOT NULL
-        ORDER BY voo_id ASC, id ASC`,
-    ).bind(empresaId, ...ids).all<FuelSummary>(),
-    db.prepare(
-      `SELECT v.id AS voo_id, c.nome AS contrato_nome
-         FROM cv_voos v
-         LEFT JOIN cv_contratos c
-           ON c.id = v.contrato_id
-          AND c.empresa_id = v.empresa_id
-          AND c.deleted_at IS NULL
-        WHERE v.empresa_id = ? AND v.id IN (${placeholders}) AND v.deleted_at IS NULL`,
-    ).bind(empresaId, ...ids).all<{ voo_id: number; contrato_nome: string | null }>(),
-  ]);
+  const crewRows: CrewRecipient[] = [];
+  const stageRows: FlightStageSummary[] = [];
+  const fuelRows: FuelSummary[] = [];
+  const contractRows: Array<{ voo_id: number; contrato_nome: string | null }> = [];
+  const chunkSize = 80;
+
+  for (let offset = 0; offset < ids.length; offset += chunkSize) {
+    const chunk = ids.slice(offset, offset + chunkSize);
+    const placeholders = chunk.map(() => '?').join(', ');
+    const [crewResult, stageResult, fuelResult, contractResult] = await Promise.all([
+      db.prepare(
+        `SELECT t.voo_id, t.funcionario_id, t.funcao, f.nome,
+                ${compatible.nomeGuerraSql} AS nome_guerra,
+                f.telefone, f.email
+           FROM cv_voo_tripulantes t
+           JOIN funcionarios f ON f.id = t.funcionario_id
+            AND f.empresa_id = t.empresa_id AND f.deleted_at IS NULL
+          WHERE t.empresa_id = ? AND t.voo_id IN (${placeholders}) AND t.deleted_at IS NULL
+          ORDER BY t.voo_id ASC,
+                   CASE t.funcao WHEN 'PIC' THEN 0 WHEN 'SIC' THEN 1 ELSE 2 END,
+                   t.id ASC`,
+      ).bind(empresaId, ...chunk).all<CrewRecipient>(),
+      db.prepare(
+        `SELECT e.voo_id, e.numero_etapa, e.origem_icao, e.destino_icao, e.pax, e.payload,
+                ${compatible.pesoPassageirosSql}, ${compatible.pesoBagagemSql}, ${compatible.unidadePesoSql},
+                e.horario_motor_ligado, e.horario_decolagem, e.horario_pouso, e.horario_motor_desligado
+           FROM cv_voo_etapas e
+          WHERE e.empresa_id = ? AND e.voo_id IN (${placeholders}) AND e.deleted_at IS NULL
+          ORDER BY e.voo_id ASC, e.numero_etapa ASC, e.id ASC`,
+      ).bind(empresaId, ...chunk).all<FlightStageSummary>(),
+      db.prepare(
+        `SELECT voo_id, combustivel_solicitado, unidade
+           FROM cv_voo_abastecimentos
+          WHERE empresa_id = ? AND voo_id IN (${placeholders}) AND deleted_at IS NULL
+            AND combustivel_solicitado IS NOT NULL
+          ORDER BY voo_id ASC, id ASC`,
+      ).bind(empresaId, ...chunk).all<FuelSummary>(),
+      db.prepare(
+        `SELECT v.id AS voo_id, c.nome AS contrato_nome
+           FROM cv_voos v
+           LEFT JOIN cv_contratos c
+             ON c.id = v.contrato_id
+            AND c.empresa_id = v.empresa_id
+            AND c.deleted_at IS NULL
+          WHERE v.empresa_id = ? AND v.id IN (${placeholders}) AND v.deleted_at IS NULL`,
+      ).bind(empresaId, ...chunk).all<{ voo_id: number; contrato_nome: string | null }>(),
+    ]);
+    crewRows.push(...(crewResult.results || []));
+    stageRows.push(...(stageResult.results || []));
+    fuelRows.push(...(fuelResult.results || []));
+    contractRows.push(...(contractResult.results || []));
+  }
 
   const crewByFlight = new Map<number, CrewRecipient[]>();
-  for (const member of crewResult.results || []) {
+  for (const member of crewRows) {
     const id = Number(member.voo_id);
     const entries = crewByFlight.get(id) || [];
     entries.push(member);
@@ -132,7 +145,7 @@ async function loadDispatchContexts(
   }
 
   const stagesByFlight = new Map<number, FlightStageSummary[]>();
-  for (const stage of stageResult.results || []) {
+  for (const stage of stageRows) {
     const id = Number(stage.voo_id);
     const entries = stagesByFlight.get(id) || [];
     entries.push(stage);
@@ -140,13 +153,13 @@ async function loadDispatchContexts(
   }
 
   const fuelByFlight = new Map<number, FuelSummary>();
-  for (const fuel of fuelResult.results || []) {
+  for (const fuel of fuelRows) {
     const id = Number(fuel.voo_id);
     if (!fuelByFlight.has(id)) fuelByFlight.set(id, fuel);
   }
 
   const contractByFlight = new Map<number, string | null>();
-  for (const contract of contractResult.results || []) {
+  for (const contract of contractRows) {
     contractByFlight.set(Number(contract.voo_id), contract.contrato_nome || null);
   }
 
