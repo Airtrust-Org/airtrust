@@ -196,6 +196,10 @@ async function main() {
         VALUES (${empresaId}, ${sqlString('TV' + suffix)}, ${sqlString('E2E Tipo Voo ' + tenant)}, 1, 1);
         INSERT INTO cv_naturezas_voo (empresa_id, codigo, nome, ativo, ordem)
         VALUES (${empresaId}, ${sqlString('NV' + suffix)}, ${sqlString('E2E Natureza ' + tenant)}, 1, 1);
+        -- Schema V2 0504 keeps OPERACIONAL as the internal compatibility nature
+        -- used by new flight creation when Natureza is not exposed by the UI.
+        INSERT INTO cv_naturezas_voo (empresa_id, codigo, nome, ativo, ordem)
+        VALUES (${empresaId}, 'OPERACIONAL', 'Operacional', 1, 0);
         INSERT INTO cv_motivos_operacionais (empresa_id, codigo, nome, tipo, ativo, ordem)
         VALUES (${empresaId}, ${sqlString('MO' + suffix)}, ${sqlString('E2E Motivo Cancelamento ' + tenant)}, 'cancelamento', 1, 1);
       `;
