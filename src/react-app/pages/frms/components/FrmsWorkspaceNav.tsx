@@ -108,10 +108,12 @@ export default function FrmsWorkspaceNav({
         <NavLink to="/frms/configuracoes" className={primaryClass(adminActive)}>
           Administração
         </NavLink>
-        <NavLink to="/frms/checkin" className={checkinClass(checkinActive)}>
-          <HeartPulse className="h-4 w-4" />
-          Check-in de fadiga
-        </NavLink>
+        {access.data?.can_checkin !== false ? (
+          <NavLink to="/frms/checkin" className={checkinClass(checkinActive)}>
+            <HeartPulse className="h-4 w-4" />
+            Check-in de fadiga
+          </NavLink>
+        ) : null}
       </nav>
 
       {adminActive ? <FrmsSourcePolicyBanner compact /> : null}

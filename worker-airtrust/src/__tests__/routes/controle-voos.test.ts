@@ -182,6 +182,18 @@ function createSqliteD1(): SqliteD1 {
         funcionario_id INTEGER,
         deleted_at TEXT
       );
+      CREATE TABLE IF NOT EXISTS usuarios_empresas (
+        usuario_id INTEGER NOT NULL,
+        empresa_id INTEGER NOT NULL,
+        role TEXT,
+        PRIMARY KEY (usuario_id, empresa_id)
+      );
+      CREATE TABLE IF NOT EXISTS usuario_permissoes (
+        usuario_id INTEGER NOT NULL,
+        permissao TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        PRIMARY KEY (usuario_id, permissao)
+      );
 
       CREATE TABLE IF NOT EXISTS aeronaves (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1248,6 +1260,23 @@ describe('controle voos routes', () => {
       'viewer',
     );
     expect(patchResponse.status).toBe(403);
+  });
+
+  it('viewer com grant configurado de controle_voos.edit consegue criar voo', async () => {
+    const db = createSqliteD1();
+    runSql(
+      db.databasePath,
+      "INSERT INTO usuarios_empresas(usuario_id, empresa_id, role) VALUES (10,1,'VIEWER'); INSERT INTO usuario_permissoes(usuario_id, permissao, tipo) VALUES (10,'controle_voos.edit','GRANT');",
+    );
+
+    const createResponse = await request(
+      db,
+      '/api/controle-voos/voos',
+      { method: 'POST', body: JSON.stringify(validFlightPayload()) },
+      1,
+      'viewer',
+    );
+    expect(createResponse.status).toBe(201);
   });
 
   it('editor cria e edita', async () => {

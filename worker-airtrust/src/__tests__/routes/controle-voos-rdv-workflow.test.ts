@@ -214,6 +214,12 @@ function createSqliteD1(): SqliteD1 {
         funcionario_id INTEGER,
         deleted_at TEXT
       );
+      CREATE TABLE IF NOT EXISTS usuarios_empresas (
+        usuario_id INTEGER NOT NULL,
+        empresa_id INTEGER NOT NULL,
+        role TEXT,
+        PRIMARY KEY (usuario_id, empresa_id)
+      );
       -- Schema minimo de 'empresas' espelhando SOMENTE as colunas confirmadas
       -- no schema real (staging e producao via PRAGMA table_info, ver
       -- scripts/validation/controle-voos-rdv-empresas-schema-contract.mjs).
@@ -324,6 +330,12 @@ function seed(databasePath: string) {
       -- 20 = tenant B.
       INSERT INTO usuarios (id, funcionario_id, deleted_at) VALUES
         (10, 1001, NULL), (11, NULL, NULL), (12, 1002, NULL), (13, NULL, NULL), (20, 2001, NULL);
+      INSERT INTO usuarios_empresas (usuario_id, empresa_id, role) VALUES
+        (10, 1, 'ALUNO'),
+        (11, 1, 'GESTOR'),
+        (12, 1, 'ALUNO'),
+        (13, 1, 'GESTOR'),
+        (20, 2, 'ALUNO');
 
       -- DENY explícito: manager 13 perde o default de Coordenação em aprovar_coordenacao.
       INSERT INTO usuario_permissoes (usuario_id, permissao, tipo)

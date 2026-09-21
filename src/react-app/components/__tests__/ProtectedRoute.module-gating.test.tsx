@@ -142,6 +142,25 @@ describe('ProtectedRoute module gating', () => {
     expect(screen.queryByText('conteudo liberado')).toBeNull();
   });
 
+  it('permite Controle de Voos completo para usuário comum com GRANT explícito', () => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: {
+        name: 'Coordenação',
+        role: 'USUARIO',
+        permissions: ['GRANT:controle_voos.view'],
+      },
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['controle_voos'] }],
+      empresaAtualId: 1,
+    });
+
+    renderAt('/controle-voos');
+
+    expect(screen.queryByText('protected.denied.title')).toBeNull();
+    expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
+  });
+
   it('permite Meus Voos para tripulante mesmo com Controle de Voos ainda restrito no menu de desenvolvimento', () => {
     authMock.mockReturnValue({
       isAuthenticated: true,

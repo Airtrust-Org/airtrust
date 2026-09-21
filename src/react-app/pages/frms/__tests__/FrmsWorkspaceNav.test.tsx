@@ -5,9 +5,14 @@ import type { FrmsOperationalAccess } from '@/react-app/hooks/useFrmsOperational
 import FrmsWorkspaceNav from '../components/FrmsWorkspaceNav';
 
 const useFrmsOperationalAccessMock = vi.fn();
+const isDeniedMock = vi.fn(() => false);
 
 vi.mock('@/react-app/hooks/useFrmsOperationalAccess', () => ({
   useFrmsOperationalAccess: (...args: unknown[]) => useFrmsOperationalAccessMock(...args),
+}));
+
+vi.mock('@/react-app/hooks/usePermissions', () => ({
+  usePermissions: () => ({ isDenied: isDeniedMock }),
 }));
 
 vi.mock('../components/FrmsSourcePolicyBanner', () => ({
@@ -88,6 +93,14 @@ describe('FrmsWorkspaceNav', () => {
     expect(within(admin).getByRole('link', { name: 'SIGVOOS' })).toHaveAttribute('href', '/frms/sigvoos');
     expect(within(admin).queryByRole('link', { name: /check-in/i })).not.toBeInTheDocument();
     expect(within(admin).getByRole('link', { name: 'Relatórios' })).toHaveAttribute('href', '/frms/relatorios');
+  });
+
+  it('oculta o check-in quando há DENY explícito para frms.checkin', () => {
+    mockAccess(access({ administrative_role: 'GESTOR', domains: ['OPERACOES'], can_manage_maintenance: false, can_checkin: false }));
+    renderNav('/frms');
+
+    const nav = screen.getByRole('navigation', { name: 'Áreas FRMS' });
+    expect(within(nav).queryByRole('link', { name: /check-in de fadiga/i })).not.toBeInTheDocument();
   });
 
   it('marca o check-in como ação ativa sem transformar a tela em Administração', () => {

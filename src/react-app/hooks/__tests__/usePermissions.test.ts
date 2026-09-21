@@ -131,6 +131,7 @@ describe('usePermissions', () => {
     expect(result.current.can('relatorios.export')).toBe(true);
   });
 
+
   it('canAll exige todas as permissões da lista, não apenas uma', () => {
     mockAuth({
       user: { id: 5, role: 'INSTRUTOR', permissions: [] },

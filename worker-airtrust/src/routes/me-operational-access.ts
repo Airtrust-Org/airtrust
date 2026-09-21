@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { auth } from '../middleware/auth';
+import { getUserPermissionOverride } from '../middleware/rbac';
 import { getEmpresaId, normalizeTenantRole } from '../middleware/tenant';
 import type { Env } from '../types';
 import {
@@ -272,9 +273,10 @@ router.get('/', async (c) => {
   const userRole = (c.get as (key: string) => unknown)('userRole');
 
   const access = await resolveOperationalAccess({ db, empresaId, userId, userRole });
-  const [employee, maintenanceScope] = await Promise.all([
+  const [employee, maintenanceScope, checkinOverride] = await Promise.all([
     resolveOwnFrmsEmployee(db, empresaId, userId, funcionarioId),
     resolveMaintenanceManagerScope(c, access),
+    getUserPermissionOverride(c, 'frms.checkin'),
   ]);
   const frmsProfile = resolveFrmsWorkforceProfile(employee?.cargo, employee?.funcao);
 
@@ -297,6 +299,7 @@ router.get('/', async (c) => {
           }
         : null,
       can_manage_maintenance: maintenanceScope.allowed,
+      can_checkin: checkinOverride !== 'DENY',
       maintenance_setor_ids: maintenanceScope.setorIds,
     },
   });

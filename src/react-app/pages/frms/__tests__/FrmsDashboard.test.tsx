@@ -16,6 +16,10 @@ vi.mock('@/react-app/hooks/useFrmsOperationalSnapshot', () => ({
   useFrmsOperationalSnapshot: (...args: unknown[]) => useFrmsOperationalSnapshotMock(...args),
 }));
 
+vi.mock('@/react-app/hooks/usePermissions', () => ({
+  usePermissions: () => ({ isDenied: () => false }),
+}));
+
 vi.mock('@/react-app/hooks/useOperationalReadiness', () => ({
   useReadinessTeam: (...args: unknown[]) => useReadinessTeamMock(...args),
   useReadinessBaseline: () => ({ data: null }),

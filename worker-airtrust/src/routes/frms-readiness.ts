@@ -4,7 +4,7 @@ import type { Context } from 'hono';
 import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
-import { canSeeFrmsTeamScope } from '../lib/frms/access';
+import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
 import {
   countReadinessBaselineSessions,
   persistReadinessAssessment,
@@ -171,7 +171,7 @@ router.get('/team', async (c) => {
     return c.json({ success: false, error: 'invalid_reference_date' }, 400);
   }
 
-  const hasTeamScope = canSeeFrmsTeamScope(c.get('userRole'));
+  const hasTeamScope = await canSeeFrmsTeamScopeForContext(c);
   let forcedFuncionarioId: number | undefined;
   if (!hasTeamScope) {
     const funcionarioId = await resolveOwnFuncionarioId(c, empresaId);

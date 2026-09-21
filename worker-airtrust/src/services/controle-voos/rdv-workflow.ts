@@ -11,6 +11,7 @@
  */
 import type { Context, MiddlewareHandler } from 'hono';
 import { ApiError } from '../../middleware/error-handler';
+import { getUserPermissionOverride } from '../../middleware/rbac';
 import type { Env } from '../../types';
 import {
   getActorId,
@@ -64,23 +65,6 @@ const COORDENACAO_CAPABILITIES = new Set<string>([
 // por GRANT explícito em `usuario_permissoes` (gate futuro, ver seção 8 do
 // enunciado: "quando exigido").
 
-async function readPermissionOverride(
-  db: D1Database,
-  userId: number | string,
-  capability: string,
-): Promise<'GRANT' | 'DENY' | null> {
-  const rows = await db
-    .prepare(`SELECT tipo FROM usuario_permissoes WHERE usuario_id = ? AND permissao = ?`)
-    .bind(userId, capability)
-    .all<{ tipo: string }>()
-    .catch(() => ({ results: [] as Array<{ tipo: string }> }));
-
-  const results = rows.results || [];
-  if (results.some((r) => String(r.tipo).toUpperCase() === 'DENY')) return 'DENY';
-  if (results.some((r) => String(r.tipo).toUpperCase() === 'GRANT')) return 'GRANT';
-  return null;
-}
-
 function defaultGrantForRole(capability: string, role: string): boolean {
   const hierarchy: Record<string, number> = {
     admin: 100,
@@ -115,7 +99,7 @@ export async function hasRdvCapability(
     tenantContext?.role || (c.get as (key: string) => unknown)('userRole') || 'viewer',
   ).toLowerCase();
 
-  const override = await readPermissionOverride(c.env.DB, userId, capability);
+  const override = await getUserPermissionOverride(c, capability);
   if (override === 'DENY') return false;
   if (override === 'GRANT') return true;
 

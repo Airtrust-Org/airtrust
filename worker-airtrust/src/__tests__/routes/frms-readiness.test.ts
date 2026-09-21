@@ -55,6 +55,7 @@ function createDb(
         },
         first: async <T = unknown>() => {
           record();
+          if (normalized.includes('FROM usuario_permissoes')) return null;
           if (normalized.includes('FROM funcionarios') && normalized.includes('WHERE id = ?')) {
             return { id: 70 } as T;
           }

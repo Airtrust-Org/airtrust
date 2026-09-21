@@ -132,6 +132,10 @@ export default function ProtectedRoute({
   const { isAuthenticated, isLoading, user, empresas = [], empresaAtualId = null } = useAuth();
   const { can } = usePermissions();
   const operationalAccess = useOperationalAccess();
+  const explicitPermissions = Array.isArray(user?.permissions) ? user.permissions : [];
+  const hasControleVoosGrant =
+    explicitPermissions.includes('GRANT:controle_voos.view') &&
+    !explicitPermissions.includes('DENY:controle_voos.view');
   const location = useLocation();
   const { t } = useLanguage();
 
@@ -176,7 +180,9 @@ export default function ProtectedRoute({
 
   const canAccessRestrictedDevelopmentModule =
     moduleKey === 'controle_voos'
-      ? canSeeControleVoosDevelopmentModule(user) || isControleVoosRestrictedAccessPath(location.pathname)
+      ? canSeeControleVoosDevelopmentModule(user) ||
+        hasControleVoosGrant ||
+        isControleVoosRestrictedAccessPath(location.pathname)
       : canSeeDevelopmentModules(user);
 
   if (

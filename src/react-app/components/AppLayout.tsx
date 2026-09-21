@@ -150,6 +150,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const canSeeAdminDashboard = canSeeAdministrativeDashboard(user);
   const canSeeRestrictedDevelopmentNav = canSeeDevelopmentModules(user);
   const canSeeControleVoosNav = canSeeControleVoosDevelopmentModule(user);
+  const explicitPermissions = Array.isArray(user?.permissions) ? user.permissions : [];
+  const hasControleVoosGrant =
+    explicitPermissions.includes('GRANT:controle_voos.view') &&
+    !explicitPermissions.includes('DENY:controle_voos.view');
 
   // Flags de acesso a módulos
   const showDashboard = canAccessModule('dashboard', modulosAtivos) && canSeeAdminDashboard;
@@ -171,9 +175,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
     canSeeRestrictedDevelopmentNav;
   const showControleVoos =
     canAccessModule('controle_voos', modulosAtivos) &&
-    !isAluno &&
     !isInstrutor &&
-    canSeeControleVoosNav;
+    (canSeeControleVoosNav || hasControleVoosGrant);
   const showTreinamentosPlanejados =
     canAccessModule('treinamentos_planejados', modulosAtivos) && !isAluno && !isInstrutor;
   const showConhecimentoAtivoAdmin = !isAluno && !isInstrutor && (isAdmin || isGestor);

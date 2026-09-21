@@ -200,6 +200,12 @@ function createSqliteD1(): SqliteD1 {
         funcionario_id INTEGER,
         deleted_at TEXT
       );
+      CREATE TABLE IF NOT EXISTS usuarios_empresas (
+        usuario_id INTEGER NOT NULL,
+        empresa_id INTEGER NOT NULL,
+        role TEXT,
+        PRIMARY KEY (usuario_id, empresa_id)
+      );
       CREATE TABLE IF NOT EXISTS empresas (
         id INTEGER PRIMARY KEY,
         razao_social TEXT
@@ -309,6 +315,8 @@ function seed(databasePath: string) {
 
       INSERT INTO usuarios (id, funcionario_id, deleted_at) VALUES
         (10, NULL, NULL), (13, NULL, NULL), (20, NULL, NULL);
+      INSERT INTO usuarios_empresas (usuario_id, empresa_id, role) VALUES
+        (10, 1, 'MANAGER'), (13, 1, 'MANAGER'), (20, 2, 'MANAGER');
 
       -- Usuario 13: manager tenant 1 com DENY explicito na capability de
       -- Coordenacao — deve perder o default do role.

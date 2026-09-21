@@ -68,6 +68,7 @@ vi.mock('../../hooks/useAuth', () => ({
 vi.mock('../../hooks/usePermissions', () => ({
   usePermissions: () => ({
     can: (permission: string) => permission === 'frms.view',
+    isGranted: () => false,
     isAdmin: false,
     isGestor: true,
     isInstrutor: false,

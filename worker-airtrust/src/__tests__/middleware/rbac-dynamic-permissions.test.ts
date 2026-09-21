@@ -3,23 +3,24 @@ import { Hono } from 'hono';
 import { requirePermission, type UserRole } from '../../middleware/rbac';
 import { errorHandler } from '../../middleware/error-handler';
 
-type OverrideRow = { permitido: number } | null;
+type OverrideRow = { permitido: number } | { tipo: string } | null;
 
-function makeDb(resolve: (binds: unknown[]) => OverrideRow | Promise<OverrideRow>) {
+function makeDb(resolve: (binds: unknown[], sql: string) => OverrideRow | Promise<OverrideRow>) {
   return {
-    prepare: (_sql: string) => ({
+    prepare: (sql: string) => ({
       bind: (...binds: unknown[]) => ({
-        first: async () => resolve(binds),
+        first: async () => resolve(binds, sql),
       }),
     }),
   } as unknown as D1Database;
 }
 
-function createApp(options: { role: UserRole; empresaId: number; defaults?: UserRole[] }) {
+function createApp(options: { role: UserRole; empresaId: number; userId?: number; defaults?: UserRole[] }) {
   const app = new Hono<any>();
   app.onError(errorHandler as any);
   app.use('*', async (c, next) => {
     c.set('userRole', options.role);
+    c.set('userId', options.userId);
     c.set('empresaId', options.empresaId);
     c.set('tenantContext', {
       empresaId: options.empresaId,
@@ -48,6 +49,40 @@ function env(db: D1Database) {
 }
 
 describe('requirePermission', () => {
+
+  it('applies an individual GRANT before profile and role defaults', async () => {
+    let permissionSql = '';
+    let permissionBinds: unknown[] = [];
+    const db = makeDb((binds, sql) => {
+      if (sql.includes('usuario_permissoes')) {
+        permissionSql = sql;
+        permissionBinds = binds;
+        return { tipo: 'GRANT' };
+      }
+      return null;
+    });
+    const app = createApp({ role: 'student', empresaId: 9, userId: 77 });
+    const response = await app.request('/protected', {}, env(db));
+
+    expect(response.status).toBe(200);
+    expect(permissionBinds).toEqual([77, 'lms.view', 9]);
+    expect(permissionSql).toContain('SELECT COUNT(*) FROM usuarios_empresas');
+  });
+
+  it('applies an individual DENY before an otherwise allowed manager baseline', async () => {
+    let profileQueried = false;
+    const db = makeDb((_binds, sql) => {
+      if (sql.includes('usuario_permissoes')) return { tipo: 'DENY' };
+      profileQueried = true;
+      return { permitido: 1 };
+    });
+    const app = createApp({ role: 'manager', empresaId: 9, userId: 78 });
+    const response = await app.request('/protected', {}, env(db));
+
+    expect(response.status).toBe(403);
+    expect(profileQueried).toBe(false);
+  });
+
   it('preserves the existing role baseline when no tenant override exists', async () => {
     const app = createApp({ role: 'manager', empresaId: 6 });
     const response = await app.request('/protected', {}, env(makeDb(() => null)));
