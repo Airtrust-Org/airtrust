@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { HeartPulse } from 'lucide-react';
 import { useFrmsOperationalAccess } from '@/react-app/hooks/useFrmsOperationalAccess';
+import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { canManageFrmsOperations } from '../frmsDashboardRouting';
 import FrmsSourcePolicyBanner from './FrmsSourcePolicyBanner';
 
@@ -71,6 +72,7 @@ export default function FrmsWorkspaceNav({
 }: FrmsWorkspaceNavProps = {}) {
   const location = useLocation();
   const access = useFrmsOperationalAccess();
+  const { isDenied } = usePermissions();
   const adminActive = isAdminPath(location.pathname);
   const checkinActive =
     location.pathname === '/frms/checkin' || location.pathname.startsWith('/frms/checkin/');
@@ -108,10 +110,12 @@ export default function FrmsWorkspaceNav({
         <NavLink to="/frms/configuracoes" className={primaryClass(adminActive)}>
           Administração
         </NavLink>
-        <NavLink to="/frms/checkin" className={checkinClass(checkinActive)}>
-          <HeartPulse className="h-4 w-4" />
-          Check-in de fadiga
-        </NavLink>
+        {!isDenied('frms.checkin') ? (
+          <NavLink to="/frms/checkin" className={checkinClass(checkinActive)}>
+            <HeartPulse className="h-4 w-4" />
+            Check-in de fadiga
+          </NavLink>
+        ) : null}
       </nav>
 
       {adminActive ? <FrmsSourcePolicyBanner compact /> : null}

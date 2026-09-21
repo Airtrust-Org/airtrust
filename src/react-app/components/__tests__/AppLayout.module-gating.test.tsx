@@ -63,6 +63,7 @@ describe('AppLayout module gating', () => {
     });
     permissionsMock.mockReturnValue({
       can: (permission: string) => permission === 'dashboard.view' || permission === 'sgso.view',
+      isGranted: () => false,
       isAdmin: false,
       isGestor: true,
       isInstrutor: false,
@@ -136,6 +137,7 @@ describe('AppLayout module gating', () => {
     });
     permissionsMock.mockReturnValue({
       can: () => false,
+      isGranted: () => false,
       isAdmin: false,
       isGestor: false,
       isInstrutor: false,
@@ -151,6 +153,32 @@ describe('AppLayout module gating', () => {
     );
 
     expect(screen.getByRole('link', { name: 'LMS' })).toHaveAttribute('href', '/lms/cursos');
+  });
+
+  it('exibe Controle de Voos para usuário comum com GRANT explícito configurado', () => {
+    authMock.mockReturnValue({
+      user: { nome: 'Coordenação', role: 'USUARIO' },
+      logout: vi.fn(),
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['controle_voos'] }],
+      empresaAtualId: 1,
+      selectEmpresa: vi.fn(async () => undefined),
+    });
+    permissionsMock.mockReturnValue({
+      can: () => false,
+      isGranted: (permission: string) => permission === 'controle_voos.view',
+      isAdmin: false,
+      isGestor: false,
+      isInstrutor: false,
+      isAluno: false,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppLayout><div>conteudo</div></AppLayout>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: /Controle de Voos/i })).toBeInTheDocument();
   });
 
   it('exibe Controle de Voos para admin comum sem liberar Manutencao', () => {
@@ -173,6 +201,7 @@ describe('AppLayout module gating', () => {
     });
     permissionsMock.mockReturnValue({
       can: () => true,
+      isGranted: () => false,
       isAdmin: true,
       isGestor: false,
       isInstrutor: false,
@@ -212,6 +241,7 @@ describe('AppLayout module gating', () => {
     });
     permissionsMock.mockReturnValue({
       can: () => true,
+      isGranted: () => false,
       isAdmin: true,
       isGestor: false,
       isInstrutor: false,

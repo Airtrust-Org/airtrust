@@ -9,7 +9,7 @@ import {
   type FrmsOperationalSnapshotFilters,
 } from '../lib/frms/operational-snapshot';
 import { FrmsParameterResolutionError } from '../lib/frms/parameter-governance';
-import { canSeeFrmsTeamScope } from '../lib/frms/access';
+import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
 import { createLogger, toError } from '../utils/logger';
 
 type SnapshotContext = Context<{ Bindings: Env; Variables: Partial<Variables> }>;
@@ -46,8 +46,8 @@ const QuerySchema = z
     path: ['data_fim'],
   });
 
-function canSeeTeam(c: SnapshotContext): boolean {
-  return canSeeFrmsTeamScope(c.get('userRole'));
+async function canSeeTeam(c: SnapshotContext): Promise<boolean> {
+  return canSeeFrmsTeamScopeForContext(c as unknown as Context<{ Bindings: Env }>);
 }
 
 async function resolveOwnFuncionarioId(
@@ -135,7 +135,7 @@ router.get('/operational-snapshot', async (c) => {
       : undefined,
     include_inconsistencies: data.include_inconsistencies,
   };
-  const hasTeamScope = canSeeTeam(c);
+  const hasTeamScope = await canSeeTeam(c);
   let forcedFuncionarioId: number | undefined;
 
   if (!hasTeamScope) {

@@ -15,4 +15,13 @@ describe('FRMS dynamic permission wiring', () => {
     expect(source).toContain("requirePermission('frms', 'editar', 'manager')");
     expect(source).not.toContain("requireRole('manager')");
   });
+
+
+  it('supports an explicit per-user deny for fatigue check-in writes', () => {
+    expect(source).toContain("'frms.checkin'");
+    expect(source).toContain('FRMS_CHECKIN_FORBIDDEN');
+    expect(source).toContain("router.post('/daily-fatigue', requireFatigueCheckinAccess");
+    expect(source).toContain("router.post('/fadiga-checkin', requireFatigueCheckinAccess");
+    expect(source).toContain("router.post('/fadiga-checkin/me', requireFatigueCheckinAccess");
+  });
 });

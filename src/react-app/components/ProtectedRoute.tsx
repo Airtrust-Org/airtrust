@@ -130,7 +130,7 @@ export default function ProtectedRoute({
   requiredPermission,
 }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading, user, empresas = [], empresaAtualId = null } = useAuth();
-  const { can } = usePermissions();
+  const { can, isGranted } = usePermissions();
   const operationalAccess = useOperationalAccess();
   const location = useLocation();
   const { t } = useLanguage();
@@ -176,7 +176,9 @@ export default function ProtectedRoute({
 
   const canAccessRestrictedDevelopmentModule =
     moduleKey === 'controle_voos'
-      ? canSeeControleVoosDevelopmentModule(user) || isControleVoosRestrictedAccessPath(location.pathname)
+      ? canSeeControleVoosDevelopmentModule(user) ||
+        isGranted('controle_voos.view') ||
+        isControleVoosRestrictedAccessPath(location.pathname)
       : canSeeDevelopmentModules(user);
 
   if (

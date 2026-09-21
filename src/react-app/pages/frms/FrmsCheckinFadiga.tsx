@@ -1,5 +1,6 @@
 import AppLayout from '@/react-app/components/AppLayout';
 import { useFrmsOperationalAccess } from '@/react-app/hooks/useFrmsOperationalAccess';
+import { usePermissions } from '@/react-app/hooks/usePermissions';
 import FrmsFlightCheckinFadiga from './FrmsFlightCheckinFadiga';
 import FrmsMaintenanceCheckin from './FrmsMaintenanceCheckin';
 
@@ -22,6 +23,19 @@ export {
  */
 export default function FrmsCheckinFadiga() {
   const access = useFrmsOperationalAccess();
+  const { isDenied } = usePermissions();
+
+  if (isDenied('frms.checkin')) {
+    return (
+      <AppLayout>
+        <div className="mx-auto max-w-3xl p-4">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+            O check-in de fadiga não está habilitado para este perfil de acesso.
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   if (access.isLoading) {
     return (

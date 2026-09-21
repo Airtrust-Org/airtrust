@@ -32,6 +32,60 @@ type DynamicPermissionRow = {
   permitido: number;
 };
 
+export type UserPermissionOverride = 'GRANT' | 'DENY' | null;
+
+const DYNAMIC_ACTION_PERMISSION_SUFFIX: Record<DynamicPermissionAction, string> = {
+  visualizar: 'view',
+  editar: 'edit',
+  criar: 'create',
+  deletar: 'delete',
+};
+
+export async function getUserPermissionOverride(
+  c: Context<{ Bindings: Env }>,
+  permission: string,
+): Promise<UserPermissionOverride> {
+  const rawUserId = (c.get as (key: string) => unknown)('userId');
+  const rawEmpresaId = (c.get as (key: string) => unknown)('empresaId');
+  const userId = Number(rawUserId);
+  const empresaId = Number(rawEmpresaId);
+  if (!Number.isInteger(userId) || userId <= 0) return null;
+  if (!Number.isInteger(empresaId) || empresaId <= 0) return null;
+
+  // usuario_permissoes is identity-wide in the current schema. To prevent a
+  // grant configured for one tenant from leaking into another membership,
+  // individual overrides are effective only for single-tenant identities.
+  const row = await c.env.DB.prepare(
+    `SELECT up.tipo
+       FROM usuario_permissoes up
+      WHERE up.usuario_id = ?
+        AND up.permissao = ?
+        AND EXISTS (
+          SELECT 1 FROM usuarios_empresas ue
+           WHERE ue.usuario_id = up.usuario_id AND ue.empresa_id = ?
+        )
+        AND 1 = (
+          SELECT COUNT(*) FROM usuarios_empresas ue_all
+           WHERE ue_all.usuario_id = up.usuario_id
+        )
+      LIMIT 1`,
+  )
+    .bind(userId, permission, empresaId)
+    .first<{ tipo: string }>();
+
+  const tipo = String(row?.tipo || '').trim().toUpperCase();
+  if (tipo === 'DENY') return 'DENY';
+  if (tipo === 'GRANT') return 'GRANT';
+  return null;
+}
+
+export function dynamicPermissionKey(
+  modulo: DynamicPermissionModule,
+  acao: DynamicPermissionAction,
+): string {
+  return `${modulo}.${DYNAMIC_ACTION_PERMISSION_SUFFIX[acao]}`;
+}
+
 /**
  * Normaliza role do banco (PT-BR) para o padrão RBAC.
  * Delega para normalizeTenantRole (fonte canônica do mapeamento):
@@ -135,6 +189,18 @@ export function requirePermission(
     await enforceLegacyTenantBoundaries(c);
 
     const baselineAllowed = defaultRoles.includes(userRole);
+    const individualOverride = await getUserPermissionOverride(
+      c as unknown as Context<{ Bindings: Env }>,
+      dynamicPermissionKey(modulo, acao),
+    );
+    if (individualOverride === 'DENY') {
+      throw forbidden('Permissão negada', 'RBAC_FORBIDDEN');
+    }
+    if (individualOverride === 'GRANT') {
+      await next();
+      return;
+    }
+
     const perfil = dynamicProfileForRole(userRole);
 
     if (!perfil) {

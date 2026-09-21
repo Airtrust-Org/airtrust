@@ -144,9 +144,19 @@ export function usePermissions() {
     return permissions.every((p) => can(p));
   }
 
+  function isGranted(permission: string): boolean {
+    return grants.has(permission) && !denies.has(permission);
+  }
+
+  function isDenied(permission: string): boolean {
+    return denies.has(permission);
+  }
+
   return {
     can,
     canAll,
+    isGranted,
+    isDenied,
     role,
     isAdmin: role === 'ADMINISTRADOR' || role === 'ADMIN',
     isGestor: role === 'GESTOR',

@@ -1,8 +1,8 @@
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import type { Context } from 'hono';
 import type { AppEnv, Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requirePermission } from '../middleware/rbac';
+import { getUserPermissionOverride, requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { registrarAuditoria } from '../utils/auditoria';
 import {
@@ -14,7 +14,7 @@ import {
 import { FrmsParameterResolutionError, resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
 import { sincronizarCheckinComFrms } from '../lib/frms/fadiga-frms-sync';
 import { buildFratSuggestion } from '../lib/frms/fadiga-frat-bridge';
-import { canSeeFrmsTeamScope } from '../lib/frms/access';
+import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
 import {
   getEmployeeSectorAccess,
   buildFuncionarioScopeWhere,
@@ -104,9 +104,23 @@ function minutesToTime(minutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-function isManagerPlus(c: FrmsContext): boolean {
-  return canSeeFrmsTeamScope(c.get('userRole'));
+async function isManagerPlus(c: FrmsContext): Promise<boolean> {
+  return canSeeFrmsTeamScopeForContext(c as unknown as Context<{ Bindings: Env }>);
 }
+
+const requireFatigueCheckinAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const override = await getUserPermissionOverride(
+    c as unknown as Context<{ Bindings: Env }>,
+    'frms.checkin',
+  );
+  if (override === 'DENY') {
+    return c.json(
+      { success: false, error: 'FRMS_CHECKIN_FORBIDDEN', message: 'Check-in de fadiga não habilitado para este usuário.' },
+      403,
+    );
+  }
+  await next();
+};
 
 async function getConfig(db: D1Database, empresaId: number): Promise<FadigaConfigRow> {
   const row = await db
@@ -743,7 +757,7 @@ router.get('/daily-fatigue', async (c) => {
     const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
     const date = c.req.query('date') || todayIso();
     const scope = (c.req.query('scope') || '').toLowerCase();
-    const canSeeTeam = isManagerPlus(c) && scope === 'team';
+    const canSeeTeam = (await isManagerPlus(c)) && scope === 'team';
 
     if (!canSeeTeam) {
       const funcionarioId = await resolveFuncionarioId(c);
@@ -897,7 +911,7 @@ router.get('/daily-fatigue/alerts', async (c) => {
   try {
     const date = c.req.query('date') || todayIso();
     const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
-    if (!isManagerPlus(c)) {
+    if (!(await isManagerPlus(c))) {
       const funcionarioId = await resolveFuncionarioId(c);
       if (!funcionarioId) {
         return c.json(
@@ -1021,11 +1035,11 @@ router.get('/daily-fatigue/alerts', async (c) => {
   }
 });
 
-router.post('/daily-fatigue', async (c) => {
+router.post('/daily-fatigue', requireFatigueCheckinAccess, async (c) => {
   return router.fetch(new Request(c.req.url.replace('/daily-fatigue', '/fadiga-checkin'), c.req.raw), c.env, c.executionCtx);
 });
 
-router.post('/fadiga-checkin', async (c) => {
+router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
   try {
     const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
     const userId = Number(c.get('userId') || 0);
@@ -1466,7 +1480,7 @@ router.post('/fadiga-checkin', async (c) => {
   }
 });
 
-router.post('/fadiga-checkin/me', async (c) => {
+router.post('/fadiga-checkin/me', requireFatigueCheckinAccess, async (c) => {
   return router.fetch(new Request(c.req.url.replace('/me', ''), c.req.raw), c.env, c.executionCtx);
 });
 
@@ -1489,7 +1503,7 @@ router.get('/fadiga-checkin/historico', async (c) => {
 
     const requestedFuncionario = (c.req.query('funcionario_id') || '').trim();
     const search = (c.req.query('search') || c.req.query('q') || '').trim().slice(0, 120);
-    const canSeeAll = isManagerPlus(c);
+    const canSeeAll = await isManagerPlus(c);
     const whereClauses = [
       'ch.empresa_id = ?',
       'ch.deleted_at IS NULL',

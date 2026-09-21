@@ -135,7 +135,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, empresas, empresaAtualId, selectEmpresa } = useAuth();
-  const { can, isAdmin, isGestor, isInstrutor, isAluno } = usePermissions();
+  const { can, isGranted, isAdmin, isGestor, isInstrutor, isAluno } = usePermissions();
   const { logoSrc, settings } = useSystemSettings();
   const { t } = useLanguage();
   const { isDark, toggleTheme } = useTheme();
@@ -171,9 +171,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
     canSeeRestrictedDevelopmentNav;
   const showControleVoos =
     canAccessModule('controle_voos', modulosAtivos) &&
-    !isAluno &&
     !isInstrutor &&
-    canSeeControleVoosNav;
+    (canSeeControleVoosNav || isGranted('controle_voos.view'));
   const showTreinamentosPlanejados =
     canAccessModule('treinamentos_planejados', modulosAtivos) && !isAluno && !isInstrutor;
   const showConhecimentoAtivoAdmin = !isAluno && !isInstrutor && (isAdmin || isGestor);

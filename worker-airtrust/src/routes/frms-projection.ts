@@ -9,7 +9,7 @@ import {
   type FrmsOperationalSnapshotFilters,
   type FrmsOperationalSnapshotItem,
 } from '../lib/frms/operational-snapshot';
-import { canSeeFrmsTeamScope } from '../lib/frms/access';
+import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
 import { buildDecisaoFields } from '../lib/frms/decision-policy';
 
 type ProjectionContext = Context<{ Bindings: Env; Variables: Partial<Variables> }>;
@@ -140,7 +140,7 @@ router.get('/projection', async (c) => {
     include_inconsistencies: parsed.data.include_inconsistencies,
   };
 
-  const hasTeamScope = canSeeFrmsTeamScope(c.get('userRole'));
+  const hasTeamScope = await canSeeFrmsTeamScopeForContext(c as unknown as Context<{ Bindings: Env }>);
   let forcedFuncionarioId: number | undefined;
   if (!hasTeamScope) {
     const ownFuncionarioId = await resolveOwnFuncionarioId(c, empresaId);
