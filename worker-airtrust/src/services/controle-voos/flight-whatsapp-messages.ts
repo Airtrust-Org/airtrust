@@ -214,6 +214,8 @@ export function buildCompletedFlightLogMessage(context: WhatsAppFlightContext): 
   return [
     '*Flight Log | Costa do Sol*',
     '',
+    'Prezados,',
+    '',
     flight.contrato_nome ? `*Cliente:* ${flight.contrato_nome}` : null,
     `*Aeronave:* ${flight.prefixo}`,
     `*Data:* ${formatFlightDate(flight.data_programacao)}`,
