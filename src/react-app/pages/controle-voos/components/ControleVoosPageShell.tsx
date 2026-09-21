@@ -4,7 +4,6 @@ import ControleVoosPrototypeBanner from './ControleVoosPrototypeBanner';
 import ControleVoosSubnav from './ControleVoosSubnav';
 
 const DEMO_ROUTES = [
-  { prefix: '/controle-voos/jornadas', label: 'Jornadas' },
   { prefix: '/controle-voos/indisponibilidades', label: 'Indisponibilidades' },
   { prefix: '/controle-voos/hangaragem', label: 'Hangaragem' },
 ];
