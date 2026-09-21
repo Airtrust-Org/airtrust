@@ -149,6 +149,26 @@ export default function ProtectedRoute({
 
   const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
   const moduleKey = getModuleKeyForPath(location.pathname);
+  const isTrainingAreaPath = [
+    '/treinamentos',
+    '/qualificacoes',
+    '/lms',
+    '/simuladores',
+    '/conhecimento-ativo',
+  ].some((prefix) => matchesPathPrefix(normalizePathname(location.pathname), prefix));
+
+  const trainingAreaDenied = explicitPermissions.includes('DENY:treinamentos.view');
+
+  if (isTrainingAreaPath && trainingAreaDenied) {
+    return (
+      <RouteStatusScreen
+        title={t('protected.denied.title')}
+        description={t('protected.denied.description')}
+        backHref="/controle-voos"
+        backLabel={t('protected.denied.backHome')}
+      />
+    );
+  }
   const effectiveRequiredRole =
     requiredRole && requiredRole.length > 0
       ? requiredRole

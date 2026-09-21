@@ -154,6 +154,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const hasControleVoosGrant =
     explicitPermissions.includes('GRANT:controle_voos.view') &&
     !explicitPermissions.includes('DENY:controle_voos.view');
+  const hideTrainingArea = explicitPermissions.includes('DENY:treinamentos.view');
 
   // Flags de acesso a módulos
   const showDashboard = canAccessModule('dashboard', modulosAtivos) && canSeeAdminDashboard;
@@ -178,11 +179,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
     !isInstrutor &&
     (canSeeControleVoosNav || hasControleVoosGrant);
   const showTreinamentosPlanejados =
-    canAccessModule('treinamentos_planejados', modulosAtivos) && !isAluno && !isInstrutor;
+    canAccessModule('treinamentos_planejados', modulosAtivos) &&
+    !isAluno &&
+    !isInstrutor &&
+    can('qualificacoes.view');
   const showConhecimentoAtivoAdmin = !isAluno && !isInstrutor && (isAdmin || isGestor);
 
   // Grupo "Treinamentos" — visível se pelo menos um sub-módulo estiver acessível
   const showTreinamentosGroup =
+    !hideTrainingArea &&
     !isAluno &&
     !isInstrutor &&
     (showQualificacoes ||
@@ -429,7 +434,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               )}
 
               {/* LMS standalone — visível somente para alunos/instrutores (não entram no grupo Treinamentos) */}
-              {(isAluno || isInstrutor) && showLms && (
+              {!hideTrainingArea && (isAluno || isInstrutor) && showLms && (
                 <Link
                   to="/lms/cursos"
                   className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/lms') ? NAV_ACTIVE : NAV_INACTIVE}`}
@@ -735,7 +740,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               )}
 
               {/* LMS standalone — alunos/instrutores não entram no grupo Treinamentos */}
-              {(isAluno || isInstrutor) && showLms && (
+              {!hideTrainingArea && (isAluno || isInstrutor) && showLms && (
                 <>
                   <Link
                     to="/lms/cursos"

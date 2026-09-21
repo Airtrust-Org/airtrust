@@ -157,9 +157,19 @@ describe('AppLayout module gating', () => {
 
   it('exibe Controle de Voos para usuário comum com GRANT explícito configurado', () => {
     authMock.mockReturnValue({
-      user: { nome: 'Coordenação', role: 'USUARIO', permissions: ['GRANT:controle_voos.view'] },
+      user: {
+        nome: 'Coordenação',
+        role: 'USUARIO',
+        permissions: ['GRANT:controle_voos.view', 'DENY:treinamentos.view'],
+      },
       logout: vi.fn(),
-      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: ['controle_voos'] }],
+      empresas: [
+        {
+          id: 1,
+          nome: 'AirTrust',
+          modulos_ativos: ['controle_voos', 'lms', 'treinamentos_planejados'],
+        },
+      ],
       empresaAtualId: 1,
       selectEmpresa: vi.fn(async () => undefined),
     });
@@ -179,6 +189,8 @@ describe('AppLayout module gating', () => {
     );
 
     expect(screen.getByRole('link', { name: /Controle de Voos/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Treinamentos' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'LMS' })).toBeNull();
   });
 
   it('exibe Controle de Voos para admin comum sem liberar Manutencao', () => {

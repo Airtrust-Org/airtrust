@@ -296,6 +296,27 @@ describe('ProtectedRoute module gating', () => {
     expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
   });
 
+  it('bloqueia área de Treinamentos quando há DENY explícito', () => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: {
+        name: 'Coordenação',
+        role: 'USUARIO',
+        permissions: ['GRANT:controle_voos.view', 'DENY:treinamentos.view'],
+      },
+      empresas: [
+        { id: 1, nome: 'AirTrust', modulos_ativos: ['lms', 'controle_voos'] },
+      ],
+      empresaAtualId: 1,
+    });
+
+    renderAt('/lms/cursos');
+
+    expect(screen.getByText('protected.denied.title')).toBeInTheDocument();
+    expect(screen.queryByText('conteudo liberado')).toBeNull();
+  });
+
   it('bloqueia rota administrativa LMS quando requiredRole exclui aluno', () => {
     authMock.mockReturnValue({
       isAuthenticated: true,
