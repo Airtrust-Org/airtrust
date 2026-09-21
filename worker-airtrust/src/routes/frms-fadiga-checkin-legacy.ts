@@ -25,6 +25,7 @@ import {
   GestorRespostaSchema,
   type CheckinCreateInput,
 } from './frms-fadiga-checkin.schema';
+import { validateCheckinPayloadCompleteness } from './frms-fadiga-checkin-validation';
 
 const router = new Hono<AppEnv>();
 router.use('*', auth());
@@ -272,43 +273,6 @@ function normalizeFitForDutyPayload(
   if (hasFitForDuty) return { apto: input.fit_for_duty ? 1 : 0 };
   if (hasApto) return { apto: input.apto === 0 ? 0 : 1 };
   return { missing: true };
-}
-
-function validateCheckinPayloadCompleteness(
-  input: CheckinCreateInput,
-): { ok: true } | { ok: false; error: string; message: string; field: string } {
-  const presentationTime = input.hora_apresentacao || input.jornada_inicio_prevista;
-  if (!presentationTime) {
-    return {
-      ok: false,
-      error: 'presentation_time_required',
-      field: 'hora_apresentacao',
-      message: 'Informe a hora de apresentação para registrar o check-in de fadiga.',
-    };
-  }
-
-  const wakeTime = input.wake_time || input.hora_acordou;
-  if (!wakeTime) {
-    return {
-      ok: false,
-      error: 'wake_time_required',
-      field: 'wake_time',
-      message: 'Informe wake_time ou hora_acordou para registrar o check-in de fadiga.',
-    };
-  }
-
-  const hasHorasSono24h = typeof input.horas_sono_24h === 'number';
-  const hasHoraDormiu = Boolean(input.hora_dormiu);
-  if (!hasHorasSono24h && !hasHoraDormiu) {
-    return {
-      ok: false,
-      error: 'sleep_data_required',
-      field: 'horas_sono_24h',
-      message: 'Informe horas_sono_24h ou hora_dormiu para registrar o check-in de fadiga.',
-    };
-  }
-
-  return { ok: true };
 }
 
 function normalizeCheckinInput(
