@@ -1041,6 +1041,12 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
   it('fila da Coordenacao filtra por status de fluxo', async () => {
     const db = createSqliteD1();
     await preencherRdvCompleto(db);
+    runSql(
+      db.databasePath,
+      `UPDATE cv_voo_etapas
+          SET horario_motor_ligado = '09:55', horario_motor_desligado = '11:00'
+        WHERE empresa_id = 1 AND voo_id = 601 AND numero_etapa = 1;`,
+    );
     await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
@@ -2176,6 +2182,14 @@ describe('RDV — A2: versao obrigatoria e CAS nas 8 transicoes de fluxo', () =>
     it(`${caso.nome}: concorrencia com a mesma versao — exatamente uma chamada vence, a outra recebe 409, versao avanca uma unica vez`, async () => {
       const db = createSqliteD1();
       await prepararEstado(db, caso.estado);
+      if (caso.nome === 'enviar') {
+        runSql(
+          db.databasePath,
+          `UPDATE cv_voo_etapas
+              SET horario_motor_ligado = '09:55', horario_motor_desligado = '11:00'
+            WHERE empresa_id = 1 AND voo_id = 601 AND numero_etapa = 1;`,
+        );
+      }
       const versaoConhecida = await currentVersao(db);
 
       const [primeira, segunda] = await Promise.all([
