@@ -78,3 +78,13 @@ test('orphan cleanup derives only exact synthetic companies/users from an 8-hex 
   assert.ok(orphan.indexOf("['refresh_tokens'") < orphan.indexOf("['usuarios'"));
   assert.ok(orphan.indexOf("['funcionarios'") < orphan.indexOf("['usuarios'"));
 });
+
+
+test('canonical staging runner records only safe API failure diagnostics and narrows etapa failures', () => {
+  assert.match(canonicalRunner, /record\.api_error_code = safeCode/);
+  assert.match(canonicalRunner, /record\.request_id = safeRequestId/);
+  assert.match(canonicalRunner, /diagnostico_listar_etapas_apos_falha_criacao/);
+  assert.match(canonicalRunner, /if \(!etapaCreate\.passed\)/);
+  assert.doesNotMatch(canonicalRunner, /Authorization.*record/);
+  assert.doesNotMatch(canonicalRunner, /fetchBody.*record/);
+});

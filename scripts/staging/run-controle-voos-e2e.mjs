@@ -74,9 +74,21 @@ async function call({ operation, method, path, actor, tenant, body, expectedStat
     duration_ms: durationMs,
   };
   if (error) record.error = error;
+  if (!passed && json && typeof json === 'object') {
+    const safeCode = typeof json.code === 'string' ? json.code : null;
+    const safeMessage = typeof json.error === 'string' ? json.error : null;
+    const safeRequestId = typeof json.requestId === 'string' ? json.requestId : null;
+    if (safeCode) record.api_error_code = safeCode;
+    if (safeMessage) record.api_error = safeMessage;
+    if (safeRequestId) record.request_id = safeRequestId;
+  }
   report.push(record);
 
-  log(`${passed ? 'OK  ' : 'FAIL'} ${operation} (${method} ${path}) -> ${status} in ${durationMs}ms`);
+  log(
+    `${passed ? 'OK  ' : 'FAIL'} ${operation} (${method} ${path}) -> ${status} in ${durationMs}ms` +
+      (!passed && record.api_error_code ? ` code=${record.api_error_code}` : '') +
+      (!passed && record.request_id ? ` requestId=${record.request_id}` : ''),
+  );
 
   return { status, json, passed };
 }
@@ -299,7 +311,7 @@ async function main() {
   let rdvVersao = rdvJson?.data?.versao ?? 1;
 
   // ── 7. Criar etapa ───────────────────────────────────────────────────
-  await call({
+  const etapaCreate = await call({
     operation: 'criar_etapa',
     method: 'POST',
     path: `/api/controle-voos/voos/${vooId}/etapas`,
@@ -319,6 +331,17 @@ async function main() {
       combustivel_fim: 400,
     },
   });
+  if (!etapaCreate.passed) {
+    await call({
+      operation: 'diagnostico_listar_etapas_apos_falha_criacao',
+      method: 'GET',
+      path: `/api/controle-voos/voos/${vooId}/etapas`,
+      actor: adminA,
+      tenant: 'A',
+      expectedStatus: 200,
+    });
+    return finish(manifest, false);
+  }
   rdvVersao += 1;
 
   // ── 7.5 Criar setor + funcionario via cadastro CANONICO (Funcionarios) ──
