@@ -59,6 +59,7 @@ export interface CvVoo {
   observacoes: string | null;
   cancelado_motivo_id: number | null;
   alternado_destino_id: number | null;
+  versao: number;
   created_at: string;
   updated_at: string;
 }
