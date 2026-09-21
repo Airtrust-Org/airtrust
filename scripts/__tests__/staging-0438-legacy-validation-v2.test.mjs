@@ -11,6 +11,9 @@ const workflow = readFileSync('.github/workflows/staging-0438-legacy-validation-
 const runner = readFileSync('scripts/staging/run-controle-voos-e2e-cas-v2.mjs', 'utf8');
 const cleanup = readFileSync('scripts/staging/cleanup-controle-voos-e2e-fixtures-v2.mjs', 'utf8');
 const orphan = readFileSync('scripts/staging/cleanup-controle-voos-e2e-orphan-run-v2.mjs', 'utf8');
+const provision = readFileSync('scripts/staging/provision-controle-voos-e2e-fixtures.mjs', 'utf8');
+const canonicalRunner = readFileSync('scripts/staging/run-controle-voos-e2e.mjs', 'utf8');
+const legacyCleanup = readFileSync('scripts/staging/cleanup-controle-voos-e2e-fixtures.mjs', 'utf8');
 
 test('0438 validation v2 stays staging-only and has no schema apply path', () => {
   assert.match(workflow, /AIRTRUST_STAGING_0438_LEGACY_VALIDATION_V2/);
@@ -36,6 +39,16 @@ test('V2 overlay is fail closed, revision-only and exercises coordination etapa 
   assert.match(runner, /const etapaId = etapaJson\.data\.id/);
   assert.doesNotMatch(runner, /CANONICAL_SOURCE_ALREADY_CAS_AWARE/);
   assert.doesNotMatch(runner, /operation: 'corrigir_apos_devolucao'/);
+});
+
+test('synthetic flight fixture satisfies the required contract catalog contract', () => {
+  assert.match(provision, /INSERT INTO cv_contratos \(empresa_id, codigo, nome, ativo, ordem\)/);
+  assert.match(provision, /contratoId: findCatalog\('cv_contratos', 'CT', 'A'\)/);
+  assert.match(provision, /contratoId: findCatalog\('cv_contratos', 'CT', 'B'\)/);
+  assert.match(canonicalRunner, /operation: 'criar_voo'[\s\S]*?contrato_id: catA\.contratoId/);
+  assert.match(cleanup, /DELETE FROM cv_contratos WHERE empresa_id IN/);
+  assert.match(orphan, /DELETE FROM cv_contratos WHERE empresa_id IN/);
+  assert.match(legacyCleanup, /DELETE FROM cv_contratos WHERE empresa_id IN/);
 });
 
 test('fixture cleanup is fail closed and deletes auth/employee dependencies before users', () => {

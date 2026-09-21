@@ -194,6 +194,8 @@ async function main() {
         VALUES (${empresaId}, ${sqlString('DE' + suffix)}, ${sqlString('DE' + suffix)}, ${sqlString('E2E Destino ' + tenant)}, 'aeroporto', 1, 2);
         INSERT INTO cv_tipos_voo (empresa_id, codigo, nome, ativo, ordem)
         VALUES (${empresaId}, ${sqlString('TV' + suffix)}, ${sqlString('E2E Tipo Voo ' + tenant)}, 1, 1);
+        INSERT INTO cv_contratos (empresa_id, codigo, nome, ativo, ordem)
+        VALUES (${empresaId}, ${sqlString('CT' + suffix)}, ${sqlString('E2E Contrato ' + tenant)}, 1, 1);
         INSERT INTO cv_naturezas_voo (empresa_id, codigo, nome, ativo, ordem)
         VALUES (${empresaId}, ${sqlString('NV' + suffix)}, ${sqlString('E2E Natureza ' + tenant)}, 1, 1);
         -- Schema V2 0504 keeps OPERACIONAL as the internal compatibility nature
@@ -211,6 +213,7 @@ async function main() {
   for (const [table, key] of [
     ['cv_aeroportos', 'codigo'],
     ['cv_tipos_voo', 'codigo'],
+    ['cv_contratos', 'codigo'],
     ['cv_naturezas_voo', 'codigo'],
     ['cv_motivos_operacionais', 'codigo'],
   ]) {
@@ -235,6 +238,7 @@ async function main() {
       origemId: findCatalog('cv_aeroportos', 'OR', 'A'),
       destinoId: findCatalog('cv_aeroportos', 'DE', 'A'),
       tipoVooId: findCatalog('cv_tipos_voo', 'TV', 'A'),
+      contratoId: findCatalog('cv_contratos', 'CT', 'A'),
       naturezaVooId: findCatalog('cv_naturezas_voo', 'NV', 'A'),
       motivoCancelamentoId: findCatalog('cv_motivos_operacionais', 'MO', 'A'),
     },
@@ -242,6 +246,7 @@ async function main() {
       origemId: findCatalog('cv_aeroportos', 'OR', 'B'),
       destinoId: findCatalog('cv_aeroportos', 'DE', 'B'),
       tipoVooId: findCatalog('cv_tipos_voo', 'TV', 'B'),
+      contratoId: findCatalog('cv_contratos', 'CT', 'B'),
       naturezaVooId: findCatalog('cv_naturezas_voo', 'NV', 'B'),
       motivoCancelamentoId: findCatalog('cv_motivos_operacionais', 'MO', 'B'),
     },
