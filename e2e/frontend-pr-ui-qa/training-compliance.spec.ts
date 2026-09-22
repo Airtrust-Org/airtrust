@@ -83,7 +83,11 @@ test('training compliance intelligent staging flow is live and read-only', async
   expect(typeof qaPending.tem_email).toBe('boolean');
   expect(typeof qaPending.tem_whatsapp).toBe('boolean');
 
-  const pendingRow = page.locator('tbody tr').filter({ hasText: QA_CODE }).first();
+  const pendingRow = page
+    .locator('tbody tr')
+    .filter({ hasText: String(qaPending.funcionario_nome) })
+    .filter({ hasText: String(qaPending.qualificacao_tipo_nome || qaPending.qualificacao_tipo_codigo) })
+    .first();
   await expect(pendingRow).toBeVisible();
   await expect(pendingRow.getByText('Nunca realizou', { exact: true })).toBeVisible();
   await expect(pendingRow.getByRole('button', { name: /Enviar aviso|Reenviar aviso/ })).toBeVisible();
