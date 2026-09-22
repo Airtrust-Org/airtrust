@@ -57,6 +57,7 @@ vi.mock('../../utils/auditoria', () => ({
 }));
 
 import controleVoosRoutes from '../../routes/controle-voos';
+import controleVoosFlightPlanRoutes from '../../routes/controle-voos-flight-plan';
 
 type SqliteD1 = D1Database & {
   databasePath: string;
@@ -84,6 +85,10 @@ const flightVersionMigrationPath = join(
 const operationalModelMigrationPath = join(
   dirname(fileURLToPath(import.meta.url)),
   '../../../migrations/0504_controle_voos_operational_model.sql',
+);
+const flightPlanMigrationPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../migrations/0509_controle_voos_flight_plan.sql',
 );
 const routePath = join(dirname(fileURLToPath(import.meta.url)), '../../routes/controle-voos.ts');
 const sigvoosRealPreviewServicePath = join(
@@ -225,6 +230,7 @@ function createSqliteD1(): SqliteD1 {
   );
   seed(databasePath);
   runSql(databasePath, readFileSync(operationalModelMigrationPath, 'utf8'));
+  runSql(databasePath, readFileSync(flightPlanMigrationPath, 'utf8'));
   runSql(databasePath, "INSERT INTO cv_contratos(id, empresa_id, codigo, nome, ativo, ordem) VALUES (601,1,'C-TESTE','Contrato Teste',1,1),(602,2,'C-TESTE-B','Contrato Teste B',1,1);");
 
   const db = {
@@ -383,6 +389,7 @@ function seedCrewEligibilityState(databasePath: string) {
 function createApp() {
   const app = new Hono<{ Bindings: Env }>();
   app.onError(errorHandler);
+  app.route('/api/controle-voos', controleVoosFlightPlanRoutes);
   app.route('/api/controle-voos', controleVoosRoutes);
   return app;
 }
@@ -3244,4 +3251,105 @@ describe('controle voos routes', () => {
       expect(routeSource).not.toContain(term);
     }
   });
+
+  it('monta e persiste plano de voo estruturado por perna com tenant e CAS', async () => {
+    const db = createSqliteD1();
+    runSql(
+      db.databasePath,
+      `INSERT INTO cv_voo_etapas (
+         empresa_id, voo_id, numero_etapa, origem_icao, destino_icao, pax, origem_dados, created_by, updated_by
+       ) VALUES (1, 601, 1, 'SBRJ', 'SBSP', 3, 'MANUAL', 10, 10);`,
+    );
+
+    const first = await request(db, '/api/controle-voos/voos/601/plano-voo');
+    expect(first.status).toBe(200);
+    const firstBody = (await first.json()) as any;
+    expect(firstBody.data.available).toBe(true);
+    expect(firstBody.data.plan).toBeNull();
+    expect(firstBody.data.draft.comuns.identificacao_aeronave).toBe('ATX1001');
+    expect(firstBody.data.draft.pernas).toHaveLength(1);
+    expect(firstBody.data.draft.pernas[0]).toMatchObject({
+      origem: 'SBRJ',
+      destino: 'SBSP',
+      eobt_utc: '1000',
+      eet: '0100',
+      pessoas_bordo: '3',
+    });
+
+    const payload = {
+      ...firstBody.data.draft,
+      comuns: {
+        ...firstBody.data.draft.comuns,
+        regra_voo: 'V',
+        tipo_voo: 'G',
+        tipo_aeronave: 'A139',
+        categoria_esteira: 'L',
+        equipamento: 'SDFGRY',
+        vigilancia: 'S',
+      },
+      pernas: [
+        {
+          ...firstBody.data.draft.pernas[0],
+          velocidade_cruzeiro: 'N0130',
+          nivel_cruzeiro: 'A015',
+          rota: 'DCT',
+          autonomia: '0300',
+          outros_dados: 'RMK/TESTE',
+        },
+      ],
+    };
+
+    const preview = await request(db, '/api/controle-voos/voos/601/plano-voo/preview', {
+      method: 'POST',
+      body: JSON.stringify({ payload }),
+    }, 1, 'manager');
+    expect(preview.status).toBe(200);
+    const previewBody = (await preview.json()) as any;
+    expect(previewBody.data.readiness.ready).toBe(true);
+    expect(previewBody.data.readiness.pernas[0].preview).toContain('(FPL-ATX1001-VG');
+
+    const save = await request(db, '/api/controle-voos/voos/601/plano-voo', {
+      method: 'PUT',
+      body: JSON.stringify({ payload, status: 'rascunho' }),
+    }, 1, 'manager');
+    expect(save.status).toBe(200);
+    const saveBody = (await save.json()) as any;
+    expect(saveBody.data.plan).toMatchObject({ status: 'rascunho', versao: 1, provider: 'MANUAL' });
+
+    const ready = await request(db, '/api/controle-voos/voos/601/plano-voo', {
+      method: 'PUT',
+      body: JSON.stringify({ payload, status: 'pronto', versao: 1 }),
+    }, 1, 'manager');
+    expect(ready.status).toBe(200);
+    const readyBody = (await ready.json()) as any;
+    expect(readyBody.data.plan).toMatchObject({ status: 'pronto', versao: 2, provider: 'MANUAL' });
+
+    const stale = await request(db, '/api/controle-voos/voos/601/plano-voo', {
+      method: 'PUT',
+      body: JSON.stringify({ payload, status: 'rascunho', versao: 1 }),
+    }, 1, 'manager');
+    expect(stale.status).toBe(409);
+
+    runSql(db.databasePath, "UPDATE cv_planos_voo SET status='aceito' WHERE empresa_id=1 AND voo_id=601;");
+    const locked = await request(db, '/api/controle-voos/voos/601/plano-voo', {
+      method: 'PUT',
+      body: JSON.stringify({ payload, status: 'rascunho', versao: 2 }),
+    }, 1, 'manager');
+    expect(locked.status).toBe(409);
+    const lockedBody = (await locked.json()) as any;
+    expect(lockedBody.code).toBe('CONTROLE_VOOS_FLIGHT_PLAN_LOCKED');
+  });
+
+  it('bloqueia escrita de plano de voo para viewer e isola tenant na leitura', async () => {
+    const db = createSqliteD1();
+    const forbidden = await request(db, '/api/controle-voos/voos/601/plano-voo', {
+      method: 'PUT',
+      body: JSON.stringify({ payload: {}, status: 'rascunho' }),
+    }, 1, 'viewer');
+    expect(forbidden.status).toBe(403);
+
+    const crossTenant = await request(db, '/api/controle-voos/voos/601/plano-voo', {}, 2, 'admin');
+    expect(crossTenant.status).toBe(404);
+  });
+
 });

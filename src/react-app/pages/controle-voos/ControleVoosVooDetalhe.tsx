@@ -13,6 +13,7 @@ import EdbShadowReadinessCard from './components/EdbShadowReadinessCard';
 import ControleVoosTripulacaoCard from './components/ControleVoosTripulacaoCard';
 import ControleVoosEditarVooDialog from './components/ControleVoosEditarVooDialog';
 import ControleVoosStatusActions from './components/ControleVoosStatusActions';
+import ControleVoosPlanoVooCard from './components/ControleVoosPlanoVooCard';
 import {
   useControleVoosVoo,
   useControleVoosRdv,
@@ -319,6 +320,8 @@ export default function ControleVoosVooDetalhe() {
                   </div>
                 )}
               </div>
+
+              <ControleVoosPlanoVooCard vooId={voo.id} canEdit={canCoordinate} />
 
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Status do voo</h2>
