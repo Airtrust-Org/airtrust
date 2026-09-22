@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-09-20",
-    "last_reconciled_against": "0507 Controle de Voos Petrobras AA delay-justification catalog prepared; remote apply pending",
-    "schema_v2_digest": "910d43ffe8db07dfec51bfb5e70458469f636f62575f18437a25a8f63c342a4b",
+    "last_reconciled_at": "2026-09-21",
+    "last_reconciled_against": "0508 training compliance daily snapshots prepared; remote apply pending",
+    "schema_v2_digest": "d13575e05538504e861b0926cee86dbb06d2232df645628a51c18a9cc11a0553",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1004,6 +1004,19 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "controle-voos-delay-justification-catalog-0507.json",
       "note": "0507 is reviewed and prepared only. It adds the source category field and seeds exactly 54 Petrobras AA41-AA94 codes for empresa_id 6, preserving source titles/descriptions. Remote apply requires governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0508_training_compliance_daily_snapshots.sql",
+      "change_id": "training-compliance-daily-snapshots-0508",
+      "sha256": "03db09a365602bd52436e326a7e4bd98b40e905816546ce88f03cc8671f678ab",
+      "targets": [
+        "training_compliance_daily_snapshots"
+      ],
+      "domain": "tenant-scoped daily training-compliance aggregate snapshots for company, sector, role and sector+role trend reporting",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-daily-snapshots-0508.json",
+      "note": "0508 is reviewed and prepared only. It adds an aggregate-only, PII-free daily snapshot table for real Compliance trend reporting. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",

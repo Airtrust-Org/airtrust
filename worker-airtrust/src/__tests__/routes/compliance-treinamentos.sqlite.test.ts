@@ -751,4 +751,53 @@ describe('training compliance engine', () => {
     expect(body.data.funcoes.map((item: any) => item.id)).toEqual([3, 1]);
     expect(body.data.funcoes.map((item: any) => item.nome)).toEqual(['Engenheiro', 'Mecânico']);
   });
+
+  it('lista pendências obrigatórias por pessoa sem transformar nunca realizado em conformidade', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+    `);
+    const response = await createApp(sqlite.asD1()).request('/pendencias?status=NAO_REALIZADO');
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    expect(body.data.map((row: any) => row.funcionario_id).sort()).toEqual([1000, 1001, 1002]);
+    expect(body.data.every((row: any) => row.status_compliance === 'NAO_REALIZADO')).toBe(true);
+    expect(body.meta).toMatchObject({ total: 3, funcionarios: 3, nunca_realizados: 3 });
+  });
+
+  it('mantém a central de pendências limitada aos setores autorizados do gestor', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+    `);
+    sectorAccessMock.access = { mode: 'restricted', setorIds: [10], funcionarioId: null };
+    const response = await createApp(sqlite.asD1()).request('/pendencias?status=NAO_REALIZADO');
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    expect(body.data.map((row: any) => row.funcionario_id).sort()).toEqual([1000, 1001]);
+    expect(body.data.some((row: any) => row.funcionario_id === 1002)).toBe(false);
+  });
+
+  it('expõe o ponto atual de tendência sem inventar histórico quando o snapshot ainda não existe', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+    `);
+    const response = await createApp(sqlite.asD1()).request('/tendencias?days=90');
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    expect(body.meta.history_ready).toBe(false);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]).toMatchObject({
+      pessoas: 3,
+      requisitos_obrigatorios: 3,
+      conformes: 0,
+      nao_realizados: 3,
+      compliance_pct: 0,
+    });
+  });
+
 });
