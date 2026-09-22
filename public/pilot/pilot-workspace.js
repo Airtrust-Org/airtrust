@@ -19,6 +19,13 @@ function numberText(value, suffix = '') {
   return Number.isFinite(parsed) ? String(parsed) + suffix : '—';
 }
 
+function formatTime(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return 'Aguardando FRMS';
+  const direct = raw.match(/(?:T|^)(\d{2}:\d{2})(?::\d{2})?/);
+  return direct ? direct[1] : raw;
+}
+
 function formatDateTime(value) {
   if (!value) return '—';
   const date = new Date(value);
@@ -200,7 +207,10 @@ function renderPlanning(panel, packageData, workspace, actions = {}) {
       const card = el('div', { className: 'pilot-workspace-row-card' });
       card.append(
         el('strong', { text: text(member.nome, 'Funcionário #' + text(member.funcionario_id)) }),
+        el('span', { text: 'Nome de guerra: ' + text(member.nome_guerra, '—') }),
+        el('span', { text: 'ANAC: ' + text(member.codigo_anac, '—') }),
         el('span', { text: text(member.funcao) }),
+        el('span', { text: 'Apresentação: ' + formatTime(member.horario_apresentacao) }),
       );
       list.append(card);
     }
