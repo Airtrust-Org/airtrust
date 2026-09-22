@@ -1292,6 +1292,42 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
   if (input.status) assertStatusTransition(existing.status, input.status);
   await assertCatalogsForInput(c.env.DB, merged, empresaId);
 
+  if (
+    input.aeronave_id !== undefined &&
+    input.aeronave_id != null &&
+    input.aeronave_id !== existing.aeronave_id
+  ) {
+    const crewRows = await c.env.DB
+      .prepare(
+        `SELECT funcionario_id, funcao
+           FROM cv_voo_tripulantes
+          WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+            AND funcao IN ('PIC', 'SIC')
+          ORDER BY id ASC`,
+      )
+      .bind(empresaId, existing.id)
+      .all<{ funcionario_id: number; funcao: 'PIC' | 'SIC' }>();
+
+    const activeCrew = crewRows.results || [];
+    if (activeCrew.length > 0) {
+      const eligible = await listEligibleFlightCrew(c.env.DB, empresaId, input.aeronave_id);
+      for (const assignment of activeCrew) {
+        const member = eligible.find((item) => item.id === Number(assignment.funcionario_id));
+        const valid =
+          assignment.funcao === 'PIC'
+            ? member?.funcao_codigo === 'PIC'
+            : member != null && ['PIC', 'SIC'].includes(member.funcao_codigo);
+        if (!valid) {
+          throw new ApiError(
+            `${assignment.funcao} atual não está habilitado na nova aeronave`,
+            409,
+            'CONTROLE_VOOS_CREW_AIRCRAFT_CHANGE_INELIGIBLE',
+          );
+        }
+      }
+    }
+  }
+
   const fields: string[] = [];
   const values: unknown[] = [];
 
