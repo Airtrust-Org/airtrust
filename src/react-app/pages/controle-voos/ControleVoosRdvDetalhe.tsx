@@ -21,6 +21,8 @@ import ControleVoosRdvWorkflowPanel from './components/ControleVoosRdvWorkflowPa
 import ControleVoosRdvStepper from './components/ControleVoosRdvStepper';
 import ControleVoosRdvSaveStatus from './components/ControleVoosRdvSaveStatus';
 import ControleVoosRdvTrechoCard from './components/ControleVoosRdvTrechoCard';
+import ControleVoosEditarVooDialog from './components/ControleVoosEditarVooDialog';
+import ControleVoosTripulacaoCard from './components/ControleVoosTripulacaoCard';
 import {
   useControleVoosVoo,
   useControleVoosRdv,
@@ -100,6 +102,7 @@ export default function ControleVoosRdvDetalhe() {
   const [activeTrechoIndex, setActiveTrechoIndex] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [coordenacaoJustificativa, setCoordenacaoJustificativa] = useState('');
+  const [programacaoEditOpen, setProgramacaoEditOpen] = useState(false);
   const hydratedKeyRef = useRef<string | null>(null);
 
   const {
@@ -463,16 +466,30 @@ export default function ControleVoosRdvDetalhe() {
                       ? 'Edição auditada habilitada.'
                       : 'Os campos permanecem somente leitura até informar a justificativa.'}
                   </span>
-                  <Link
-                    to={`/controle-voos/voos/${voo.id}`}
+                  <button
+                    type="button"
+                    onClick={() => setProgramacaoEditOpen(true)}
                     className="inline-flex items-center gap-1 font-semibold text-blue-700 hover:underline dark:text-blue-300"
                   >
                     <Pencil className="h-3.5 w-3.5" />
-                    Corrigir programação, rota, aeronave ou tripulação
-                  </Link>
+                    Corrigir programação e aeronave
+                  </button>
+                  <span className="text-amber-800 dark:text-amber-200">
+                    Rota e etapas: edite abaixo · Tripulação: gerencie nesta revisão.
+                  </span>
                 </div>
               </div>
             </section>
+          )}
+
+          {isCoordenacaoRevisando && (
+            <div className="mb-4">
+              <ControleVoosTripulacaoCard
+                vooId={voo.id}
+                aeronaveId={voo.aeronave_id}
+                rdvVersion={rdv?.versao}
+              />
+            </div>
           )}
 
           {rdv?.motivo_devolucao &&
@@ -1052,6 +1069,17 @@ export default function ControleVoosRdvDetalhe() {
               </p>
             </aside>
           </div>
+
+          {voo && (
+            <ControleVoosEditarVooDialog
+              open={programacaoEditOpen}
+              voo={voo}
+              onClose={() => setProgramacaoEditOpen(false)}
+              onSaved={() => {
+                void refetchVoo();
+              }}
+            />
+          )}
         </ControleVoosPageShell>
       </div>
     </AppLayout>
