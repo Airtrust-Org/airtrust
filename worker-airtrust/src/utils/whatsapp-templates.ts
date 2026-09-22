@@ -1,6 +1,7 @@
 export type AlertWhatsAppTemplateKey =
   | 'ead_expiring'
   | 'ead_expired'
+  | 'ead_required'
   | 'cma_expiring'
   | 'cma_expired'
   | 'licenca_expiring'
@@ -38,6 +39,25 @@ const ALERT_WHATSAPP_TEMPLATE_DEFINITIONS: AlertWhatsAppTemplateDefinition[] = [
         name: 'status_vencimento',
         sample:
           'Vence em 7 dias\n\n*Acesse diretamente o treinamento:*\nhttps://app.airtrust.online/treinamentos/123',
+      },
+    ],
+  },
+  {
+    key: 'ead_required',
+    friendlyName: 'AirTrust treinamento EAD obrigatório pendente',
+    templateName: 'airtrust_treinamento_ead_obrigatorio_pendente',
+    category: 'UTILITY',
+    language: 'pt_BR',
+    bodyText:
+      '*GERÊNCIA DE TREINAMENTO | COSTA DO SOL*\n\nOlá, {{1}}!\n\nExiste um treinamento obrigatório vinculado ao seu cargo/setor que ainda não consta como realizado:\n\n*Treinamento:* {{2}}\n*Status:* {{3}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação, sendo acompanhado pela *Gerência de Treinamento* e sujeito à verificação em auditorias.\n\nPor favor, acesse o treinamento e realize-o o quanto antes para regularizar sua situação.\n\n*Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.*',
+    variables: [
+      { id: '1', name: 'funcionario_nome', sample: 'Filipe Daumas' },
+      { id: '2', name: 'qualificacao_nome', sample: 'Treinamento EAD' },
+      {
+        id: '3',
+        name: 'status_acesso',
+        sample:
+          'Obrigatório ainda não realizado\n\n*Acesse diretamente o treinamento:*\nhttps://app.airtrust.online/treinamentos/123',
       },
     ],
   },

@@ -1,5 +1,6 @@
 import type { Env } from '../types';
 import { processarNotificacoes } from './notificacoes';
+import { processTrainingComplianceNotifications } from './training-compliance-notifications';
 import { enviarEmailAlert } from './notificacoes';
 import { alertasDiariosHandler } from './alertasDiarios';
 import { frmsDailyCheck } from './frms-daily-check';
@@ -737,6 +738,20 @@ export async function runScheduledJobs(
       console.log('[CRON] ✅ Notificações processadas com sucesso');
     } catch (notifErr) {
       console.error('[CRON] ❌ Erro ao processar notificações:', notifErr);
+    }
+
+    // Compliance de treinamentos: avaliação horária com deduplicação por ciclo/estágio.
+    // O cron principal pode executar em intervalos menores; limitar aos primeiros 10 min
+    // de cada hora reduz custo sem perder a régua de cobrança.
+    if (new Date().getUTCMinutes() < 10) {
+      try {
+        const complianceResult = await processTrainingComplianceNotifications(env);
+        console.log(
+          `[CRON] ✅ Compliance treinamentos: ${complianceResult.avaliadas} pendências avaliadas, ${complianceResult.enviadas} avisos enviados, ${complianceResult.gestores} gestores avisados, ${complianceResult.falhas} falhas`,
+        );
+      } catch (complianceErr) {
+        console.error('[CRON] ❌ Erro na régua de compliance de treinamentos:', complianceErr);
+      }
     }
 
     try {

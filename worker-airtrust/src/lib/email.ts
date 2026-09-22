@@ -14,6 +14,7 @@ export interface EmailPayload {
   subject: string;
   textContent: string;
   htmlContent: string;
+  attachments?: { content: string; name: string }[];
 }
 
 export interface EmailSendResult {
@@ -53,6 +54,7 @@ export async function sendEmailDetailed(
         subject: payload.subject,
         textContent: payload.textContent,
         htmlContent: payload.htmlContent,
+        ...(payload.attachments?.length ? { attachment: payload.attachments } : {}),
       }),
     });
 
