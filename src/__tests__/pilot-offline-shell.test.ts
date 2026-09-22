@@ -531,6 +531,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("peso_bagagem: 'Peso da bagagem'");
     expect(pilotApp).toContain("payload: 'Carga'");
     expect(pilotApp).toContain("peso_total: 'Peso total da aeronave'");
+    expect(pilotApp).toContain("formatWeightPair(rdv?.carga_kg, 'KG')");
     expect(pilotApp).not.toContain("label: 'Unidade da carga'");
     expect(pilotApp).toContain("label: 'Unidade do combustível'");
     expect(pilotApp).toContain("'Transmissão bloqueada: ' + detail");

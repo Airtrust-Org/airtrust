@@ -3393,6 +3393,16 @@ function convertWeightFieldValue(value, fromUnit, toUnit) {
   return converted === null ? '' : String(converted);
 }
 
+function formatWeightPair(value, sourceUnit = 'KG') {
+  const numeric = parseNumber(value);
+  if (numeric === null) return null;
+  const source = String(sourceUnit || 'KG').trim().toUpperCase() || 'KG';
+  const pounds = convertWeight(numeric, source, 'LB');
+  const kilograms = convertWeight(numeric, source, 'KG');
+  if (pounds === null || kilograms === null) return null;
+  return pounds + ' lb · ' + kilograms + ' kg';
+}
+
 function createDualWeightField({
   label,
   valueLb,
@@ -4312,7 +4322,7 @@ function openPackageRecord(record, initialWorkspaceTab = 'summary') {
     ['Fluxo', rdv?.workflow_status],
     ['Versão', rdv?.versao],
     ['POB', rdv?.pob],
-    ['Carga', rdv?.carga_kg],
+    ['Carga', formatWeightPair(rdv?.carga_kg, 'KG')],
   ]);
 
   flightDetailCard.classList.add('hidden');
