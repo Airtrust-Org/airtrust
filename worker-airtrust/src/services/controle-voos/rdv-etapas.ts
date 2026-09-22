@@ -543,6 +543,46 @@ export function computeFlightTotalsFromEtapas(
   };
 }
 
+async function hydrateAircraftBasicWeightFallback(
+  db: D1Database,
+  empresaId: number,
+  vooId: number,
+  etapas: EtapaRow[],
+): Promise<EtapaRow[]> {
+  if (etapas.length === 0 || etapas.every((etapa) => etapa.peso_vazio != null)) return etapas;
+
+  const aircraft = await db
+    .prepare(
+      `SELECT a.peso_vazio, a.unidade_peso
+         FROM cv_voos v
+         JOIN aeronaves a
+           ON a.id = v.aeronave_id
+          AND a.empresa_id = v.empresa_id
+          AND a.deleted_at IS NULL
+        WHERE v.id = ?
+          AND v.empresa_id = ?
+          AND v.deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(vooId, empresaId)
+    .first<{ peso_vazio: number | null; unidade_peso: string | null }>();
+
+  if (!aircraft?.peso_vazio || !aircraft.unidade_peso) return etapas;
+
+  return etapas.map((etapa) => {
+    if (etapa.peso_vazio != null) return etapa;
+    const targetUnit = String(etapa.unidade_peso || aircraft.unidade_peso).trim().toUpperCase();
+    const converted =
+      convertWeightValue(aircraft.peso_vazio, aircraft.unidade_peso, targetUnit) ??
+      aircraft.peso_vazio;
+    return {
+      ...etapa,
+      peso_vazio: converted,
+      unidade_peso: targetUnit,
+    };
+  });
+}
+
 export async function listEtapas(
   db: D1Database,
   empresaId: number,
@@ -559,7 +599,7 @@ export async function listEtapas(
     )
     .bind(vooId, empresaId)
     .all<EtapaRow>();
-  return results || [];
+  return hydrateAircraftBasicWeightFallback(db, empresaId, vooId, results || []);
 }
 
 export async function getEtapaOrThrow(
@@ -582,7 +622,7 @@ export async function getEtapaOrThrow(
   if (!row) {
     throw new ApiError('Etapa nao encontrada', 404, 'CONTROLE_VOOS_ETAPA_NOT_FOUND');
   }
-  return row;
+  return (await hydrateAircraftBasicWeightFallback(db, empresaId, vooId, [row]))[0];
 }
 
 export type EtapaEditMode = 'pilot' | 'coordenacao';
