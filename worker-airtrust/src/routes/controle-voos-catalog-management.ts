@@ -319,4 +319,62 @@ catalogManagement.patch(
   },
 );
 
+
+catalogManagement.delete(
+  '/catalogos/:nome/:id',
+  auth(),
+  requireCatalogManager(),
+  async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    const actorId = getActorId(c);
+    const key = resolveCatalog(c.req.param('nome'));
+    if (!key) {
+      throw new ApiError('Catalogo nao encontrado', 404, 'CONTROLE_VOOS_CATALOG_NOT_FOUND');
+    }
+    if (key !== 'tipos') {
+      throw new ApiError(
+        'Exclusao disponivel apenas para tipos de voo',
+        400,
+        'CONTROLE_VOOS_CATALOG_DELETE_UNSUPPORTED',
+      );
+    }
+
+    const id = asPositiveId(c.req.param('id'));
+    const existing = await loadCatalogRow(c.env.DB, key, id, empresaId);
+    if (!existing) {
+      throw new ApiError('Cadastro operacional nao encontrado', 404, 'CONTROLE_VOOS_CATALOG_ITEM_NOT_FOUND');
+    }
+
+    const inUse = await c.env.DB.prepare(
+      `SELECT id FROM cv_voos WHERE empresa_id = ? AND tipo_voo_id = ? AND deleted_at IS NULL LIMIT 1`,
+    )
+      .bind(empresaId, id)
+      .first<{ id: number }>();
+
+    if (inUse) {
+      throw new ApiError(
+        'Este tipo de voo ja esta vinculado a um voo e nao pode ser excluido',
+        409,
+        'CONTROLE_VOOS_CATALOG_IN_USE',
+      );
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE cv_tipos_voo
+       SET ativo = 0, deleted_at = datetime('now'), updated_by = ?, updated_at = datetime('now')
+       WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+    )
+      .bind(actorId, id, empresaId)
+      .run();
+
+    await maybeRecordSystemAudit(c, 'cv_tipos_voo', 'UPDATE', id, existing, {
+      ...existing,
+      ativo: 0,
+      deleted_at: 'set',
+    });
+
+    return c.json({ success: true, data: { id, deleted: true } });
+  },
+);
+
 export default catalogManagement;

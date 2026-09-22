@@ -254,6 +254,60 @@ describe('Controle de Voos operational catalog management', () => {
     expect(query<{ nome: string }>(db.path, `SELECT nome FROM cv_tipos_voo WHERE id = ${id}`)[0].nome).toBe('Regular');
   });
 
+  it('deletes an unused flight type from the operational catalog', async () => {
+    const db = createDb();
+    exec(
+      db.path,
+      "INSERT INTO cv_tipos_voo (empresa_id, codigo, nome, ativo) VALUES (1, 'ERR', 'Tipo incorreto', 1);",
+    );
+    const id = query<{ id: number }>(db.path, 'SELECT id FROM cv_tipos_voo LIMIT 1')[0].id;
+    const { app, env } = createApp(db);
+
+    const response = await request(app, env, `/api/controle-voos/catalogos/tipos/${id}`, {
+      method: 'DELETE',
+    });
+
+    expect(response.status).toBe(200);
+    const row = query<{ ativo: number; deleted_at: string | null }>(
+      db.path,
+      `SELECT ativo, deleted_at FROM cv_tipos_voo WHERE id = ${id}`,
+    )[0];
+    expect(row.ativo).toBe(0);
+    expect(row.deleted_at).not.toBeNull();
+  });
+
+  it('refuses to delete a flight type already used by a flight', async () => {
+    const db = createDb();
+    exec(
+      db.path,
+      "INSERT INTO cv_tipos_voo (id, empresa_id, codigo, nome, ativo) VALUES (301, 1, 'REG', 'Regular', 1);",
+    );
+    exec(
+      db.path,
+      "INSERT INTO cv_naturezas_voo (id, empresa_id, codigo, nome, ativo) VALUES (401, 1, 'PAX', 'Passageiros', 1);",
+    );
+    exec(
+      db.path,
+      "INSERT INTO cv_aeroportos (id, empresa_id, codigo, nome, tipo, ativo) VALUES (501, 1, 'SBME', 'Macaé', 'aeroporto', 1); INSERT INTO cv_aeroportos (id, empresa_id, codigo, nome, tipo, ativo) VALUES (502, 1, 'SBRJ', 'Santos Dumont', 'aeroporto', 1);",
+    );
+    exec(
+      db.path,
+      "INSERT INTO cv_voos (empresa_id, prefixo, data_programacao, origem_id, destino_id, tipo_voo_id, natureza_voo_id, horario_previsto_partida, horario_previsto_chegada) VALUES (1, 'PS-CDV', '2026-09-22', 501, 502, 301, 401, '2026-09-22T10:00:00', '2026-09-22T11:00:00');",
+    );
+    const { app, env } = createApp(db);
+
+    const response = await request(app, env, '/api/controle-voos/catalogos/tipos/301', {
+      method: 'DELETE',
+    });
+
+    expect(response.status).toBe(409);
+    const row = query<{ deleted_at: string | null }>(
+      db.path,
+      'SELECT deleted_at FROM cv_tipos_voo WHERE id = 301',
+    )[0];
+    expect(row.deleted_at).toBeNull();
+  });
+
   it('inactivates without deleting the historical catalog row', async () => {
     const db = createDb();
     exec(
