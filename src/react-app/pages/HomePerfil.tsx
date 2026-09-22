@@ -266,7 +266,7 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
         const res = await api.get<{
           success: boolean;
           data: NotificacaoRecente[];
-        }>('/notificacoes/sistema?limit=10&lida=false');
+        }>('/notificacoes/sistema?limit=10&lida=false&tipo_prefix=FICHA_&include_count=false');
         const payload = res.data as { success?: boolean; data?: NotificacaoRecente[] } | undefined;
 
         if (!ativo) return;
