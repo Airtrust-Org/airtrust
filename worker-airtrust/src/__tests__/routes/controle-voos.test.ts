@@ -3252,6 +3252,26 @@ describe('controle voos routes', () => {
     }
   });
 
+  it('usa origem e destino vinculados ao voo quando ainda nao existem rota_pontos/etapas', async () => {
+    const db = createSqliteD1();
+
+    const response = await request(db, '/api/controle-voos/voos/601/plano-voo');
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+
+    expect(body.data.reference.rota).toEqual([
+      expect.objectContaining({ codigo: 'SBRJ', codigo_icao: 'SBRJ', nome: 'Santos Dumont' }),
+      expect.objectContaining({ codigo: 'SBSP', codigo_icao: 'SBSP', nome: 'Congonhas' }),
+    ]);
+    expect(body.data.draft.pernas).toHaveLength(1);
+    expect(body.data.draft.pernas[0]).toMatchObject({
+      origem: 'SBRJ',
+      destino: 'SBSP',
+      eobt_utc: '1000',
+      eet: '0100',
+    });
+  });
+
   it('monta e persiste plano de voo estruturado por perna com tenant e CAS', async () => {
     const db = createSqliteD1();
     runSql(
