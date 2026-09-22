@@ -1021,6 +1021,33 @@ describe('controle voos routes', () => {
     expect(body.code).toBe('CONTROLE_VOOS_INVALID_CATALOG');
   });
 
+  it('rejeita troca de aeronave quando a tripulacao atual nao e elegivel no novo modelo', async () => {
+    const db = createSqliteD1();
+    seedCrewEligibilityState(db.databasePath);
+    runSql(
+      db.databasePath,
+      `
+        INSERT INTO aeronaves (id, empresa_id, modelo, prefixo, status)
+        VALUES (904, 1, 'SK76', 'PT-SK1', 'ATIVO');
+        INSERT INTO cv_voo_tripulantes (
+          empresa_id, voo_id, funcionario_id, funcao, created_at, updated_at
+        ) VALUES
+          (1, 601, 1001, 'PIC', datetime('now'), datetime('now')),
+          (1, 601, 1002, 'SIC', datetime('now'), datetime('now'));
+      `,
+    );
+
+    const response = await request(db, '/api/controle-voos/voos/601', {
+      method: 'PATCH',
+      body: JSON.stringify({ aeronave_id: 904, prefixo: 'PT-SK1', versao: 1 }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_CREW_AIRCRAFT_CHANGE_INELIGIBLE',
+    });
+  });
+
   it('lista somente voos do tenant atual com limite maximo', async () => {
     const db = createSqliteD1();
 
