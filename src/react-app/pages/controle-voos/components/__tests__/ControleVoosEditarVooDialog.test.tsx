@@ -3,8 +3,36 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ControleVoosEditarVooDialog from '../ControleVoosEditarVooDialog';
 import type { CvVoo } from '@/react-app/hooks/useControleVoos';
 
-const { patchMock } = vi.hoisted(() => ({ patchMock: vi.fn() }));
-vi.mock('@/react-app/services/apiClient', () => ({ apiClient: { patch: patchMock } }));
+const { getMock, patchMock } = vi.hoisted(() => ({ getMock: vi.fn(), patchMock: vi.fn() }));
+vi.mock('@/react-app/services/apiClient', () => ({ apiClient: { get: getMock, patch: patchMock } }));
+
+const aeronaves = [
+  { id: 30, codigo: 'PR-ABC', prefixo: 'PR-ABC', modelo: 'AW139', status: 'ATIVA' },
+  { id: 31, codigo: 'PS-CDV', prefixo: 'PS-CDV', modelo: 'AW139', status: 'ATIVA' },
+];
+const contratos = [
+  { id: 40, codigo: 'CTR-001', nome: 'Contrato 001' },
+  { id: 41, codigo: 'CTR-002', nome: 'Contrato 002' },
+];
+const tipos = [
+  { id: 10, codigo: 'REGULAR', nome: 'Regular' },
+  { id: 11, codigo: 'EXTRA', nome: 'Extra' },
+];
+
+function mockCatalogs() {
+  getMock.mockImplementation((url: string) => {
+    if (url === '/aeronaves?somente_ativas=1') {
+      return Promise.resolve({ success: true, data: aeronaves });
+    }
+    if (url === '/controle-voos/catalogos/contratos') {
+      return Promise.resolve({ success: true, data: contratos });
+    }
+    if (url === '/controle-voos/catalogos/tipos') {
+      return Promise.resolve({ success: true, data: tipos });
+    }
+    return Promise.reject(new Error(`GET inesperado: ${url}`));
+  });
+}
 
 const voo: CvVoo = {
   id: 77,
@@ -33,7 +61,10 @@ const voo: CvVoo = {
 };
 
 describe('ControleVoosEditarVooDialog', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCatalogs();
+  });
 
   it('edita programação existente usando a versão CAS atual do voo', async () => {
     patchMock.mockResolvedValue({
@@ -47,6 +78,7 @@ describe('ControleVoosEditarVooDialog', () => {
       <ControleVoosEditarVooDialog open voo={voo} onClose={onClose} onSaved={onSaved} />,
     );
 
+    await waitFor(() => expect(screen.getByLabelText('Aeronave')).not.toBeDisabled());
     fireEvent.change(screen.getByLabelText('Número do voo'), { target: { value: 'V999' } });
     fireEvent.change(screen.getByLabelText('Observações'), { target: { value: 'Atualizado' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
@@ -64,6 +96,42 @@ describe('ControleVoosEditarVooDialog', () => {
     );
     expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ versao: 5, numero_voo: 'V999' }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('permite à Coordenação corrigir aeronave, contrato e tipo no mesmo modal', async () => {
+    patchMock.mockResolvedValue({
+      success: true,
+      data: {
+        ...voo,
+        prefixo: 'PS-CDV',
+        aeronave_id: 31,
+        contrato_id: 41,
+        tipo_voo_id: 11,
+        versao: 5,
+      },
+    });
+
+    render(
+      <ControleVoosEditarVooDialog open voo={voo} onClose={vi.fn()} onSaved={vi.fn()} />,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText('Aeronave')).not.toBeDisabled());
+    fireEvent.change(screen.getByLabelText('Aeronave'), { target: { value: '31' } });
+    fireEvent.change(screen.getByLabelText('Contrato'), { target: { value: '41' } });
+    fireEvent.change(screen.getByLabelText('Tipo de voo'), { target: { value: '11' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+
+    await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1));
+    expect(patchMock).toHaveBeenCalledWith(
+      '/controle-voos/voos/77',
+      expect.objectContaining({
+        versao: 4,
+        prefixo: 'PS-CDV',
+        aeronave_id: 31,
+        contrato_id: 41,
+        tipo_voo_id: 11,
+      }),
+    );
   });
 
   it('ao mudar a data preserva os horários na nova data antes de salvar', async () => {
