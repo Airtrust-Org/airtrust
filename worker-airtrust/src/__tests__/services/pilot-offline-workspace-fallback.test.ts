@@ -56,11 +56,24 @@ describe('Pilot workspace aerodrome fallback', () => {
       alternado: null,
       aeronave: { id: 3, modelo: 'AW139' },
       tripulantes: [],
-      etapas: [{ id: 1, numero_etapa: 1, origem_icao: 'SBME', destino_icao: 'SBCB', combustivel_inicio: null, combustivel_fim: null, unidade_combustivel: null, updated_at: null }],
+      etapas: [{
+        id: 1, numero_etapa: 1, origem_icao: 'SBME', destino_icao: 'SBCB',
+        combustivel_inicio: null, combustivel_fim: null, unidade_combustivel: null,
+        peso_vazio: 9300, peso_passageiros: 1200, peso_bagagem: 150, peso_total: 13490,
+        unidade_peso: 'LB', updated_at: null,
+      }],
       abastecimentos: [],
       rdv: null,
     });
 
+    expect(workspace.planning).toMatchObject({
+      peso_vazio: 9300,
+      peso_passageiros: 1200,
+      peso_bagagem: 150,
+      peso_total: 13490,
+      peso_planejado: 13490,
+      unidade_peso_planejado: 'LB',
+    });
     expect(workspace.locations).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: 'SBME', source_reference: 'CV_AEROPORTOS_FALLBACK', weather_source_kind: 'REDEMET' }),
       expect.objectContaining({ code: 'SBCB', source_reference: 'CV_AEROPORTOS_FALLBACK', weather_source_kind: 'REDEMET' }),
