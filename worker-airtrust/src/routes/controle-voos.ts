@@ -1217,7 +1217,13 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
     ...planning,
   });
   if (relatedStatements.length > 0) await c.env.DB.batch(relatedStatements);
-  await updateFlightStagePlanningIfSupported(c.env.DB, empresaId, newId, planning);
+  await updateFlightStagePlanningIfSupported(
+    c.env.DB,
+    empresaId,
+    newId,
+    input.aeronave_id || null,
+    planning,
+  );
 
   await recordFlightEvent({
     db: c.env.DB,
