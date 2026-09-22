@@ -2,9 +2,10 @@
 
 // source_reference: revision-evidence overlay for the governed staging 0438 validation.
 // The historical filename is retained for workflow compatibility. The canonical
-// run-controle-voos-e2e.mjs now owns the current CAS correction contract; this
-// overlay only captures the created etapa id and exercises a coordination-time
-// etapa edit so cv_rdv_revisoes receives real evidence. Product code is not modified.
+// run-controle-voos-e2e.mjs owns the current CAS contract and the seeded
+// planning-leg realization, including the canonical etapaId. This overlay only
+// exercises a coordination-time etapa edit so cv_rdv_revisoes receives real
+// evidence. Product code is not modified.
 
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -15,37 +16,8 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const sourcePath = join(here, 'run-controle-voos-e2e.mjs');
 
-const etapaStartMarker = "  // ── 7. Criar etapa ───────────────────────────────────────────────────";
-const etapaEndMarker = "  // ── 7.5 Criar setor + funcionario via cadastro CANONICO (Funcionarios) ──";
 const reviewStartMarker = "  // ── 15. Iniciar revisao (coordenacao) ────────────────────────────────";
 const reviewEndMarker = "  // ── 16. Devolver ──────────────────────────────────────────────────────";
-
-const etapaReplacement = [
-  '  // ── 7. Criar etapa ───────────────────────────────────────────────────',
-  '  const { json: etapaJson, passed: etapaPassed } = await call({',
-  "    operation: 'criar_etapa',",
-  "    method: 'POST',",
-  '    path: `/api/controle-voos/voos/${vooId}/etapas`,',
-  '    actor: adminA,',
-  "    tenant: 'A',",
-  '    expectedStatus: 201,',
-  '    body: {',
-  '      versao: rdvVersao,',
-  '      numero_etapa: 1,',
-  "      origem_icao: 'OR' + 'A' + manifest.runId,",
-  "      destino_icao: 'DE' + 'A' + manifest.runId,",
-  '      horario_decolagem: `${dataProg}T10:05:00Z`,',
-  '      horario_pouso: `${dataProg}T10:55:00Z`,',
-  '      combustivel_inicio: 500,',
-  '      combustivel_fim: 400,',
-  '    },',
-  '  });',
-  '  if (!etapaPassed || !etapaJson?.data?.id) return finish(manifest, false);',
-  '  const etapaId = etapaJson.data.id;',
-  '  rdvVersao += 1;',
-  '',
-  '',
-].join('\n');
 
 const reviewReplacement = [
   '  // ── 15. Iniciar revisao (coordenacao) ────────────────────────────────',
@@ -103,14 +75,6 @@ const manifestPath = process.argv[2];
 if (!manifestPath) fail('Uso: run-controle-voos-e2e-cas-v2.mjs <manifest.json>');
 
 let patched = readFileSync(sourcePath, 'utf8');
-patched = replaceSlice(
-  patched,
-  etapaStartMarker,
-  etapaEndMarker,
-  etapaReplacement,
-  'ETAPA_CAPTURE',
-  "operation: 'criar_etapa'",
-);
 patched = replaceSlice(
   patched,
   reviewStartMarker,
