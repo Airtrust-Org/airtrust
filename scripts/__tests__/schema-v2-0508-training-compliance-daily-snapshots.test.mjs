@@ -57,7 +57,8 @@ test('staging allowlists 0508 through recovery-point runner and postconditions',
   assert.match(generic, /validate-0508-postconditions\.sh/);
   const stagingValidator = readFileSync('scripts/staging/validate-0508-postconditions.sh', 'utf8');
   assert.doesNotMatch(stagingValidator, /AND notnull=1/);
-  assert.equal((stagingValidator.match(/AND \"notnull\"=1/g) ?? []).length, 4);
+  assert.doesNotMatch(stagingValidator, /AND "notnull"=1/);
+  assert.equal((stagingValidator.match(/AND \\\"notnull\\\"=1/g) ?? []).length, 4);
   execFileSync('bash', ['-n', 'scripts/staging/apply-approved-migrations.sh']);
   execFileSync('bash', ['-n', 'scripts/staging/apply-approved-migration-with-recovery-point.sh']);
   execFileSync('bash', ['-n', 'scripts/staging/validate-0508-postconditions.sh']);
