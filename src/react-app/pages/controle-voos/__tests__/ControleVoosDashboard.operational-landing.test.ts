@@ -24,6 +24,15 @@ describe('ControleVoosDashboard operational landing', () => {
     expect(source).toContain('canCoordinate');
   });
 
+  it('prioriza Criar voo e permite quebra de layout em telas menores', () => {
+    const createIndex = source.indexOf('Criar voo');
+    const dateControlsIndex = source.indexOf('<ControleVoosDateControls');
+    expect(createIndex).toBeGreaterThan(-1);
+    expect(dateControlsIndex).toBeGreaterThan(createIndex);
+    expect(source).toContain('w-full min-w-0 max-w-full flex-wrap');
+    expect(source).toContain('overflow-x-auto');
+  });
+
   it('mantém erros técnicos fora da mensagem apresentada ao usuário', () => {
     expect(source).toContain('Não foi possível carregar a situação operacional.');
     expect(source).not.toContain('Erro ao carregar dashboard: {error.message}');

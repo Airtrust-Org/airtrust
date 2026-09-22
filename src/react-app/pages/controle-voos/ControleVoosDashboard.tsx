@@ -93,22 +93,24 @@ function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: 
             title="Controle de Voos — Hoje"
             description="Acompanhe primeiro o que exige ação e, em seguida, a programação do período. Uso operacional interno N1."
           >
-            <div className="flex flex-wrap items-center gap-2">
-              <ControleVoosDateControls
-                value={selectedDate}
-                onChange={setSelectedDate}
-                onToday={setToday}
-              />
+            <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
               {canCoordinate && (
                 <button
                   type="button"
                   onClick={() => setNovoVooOpen(true)}
-                  className="inline-flex min-h-[40px] items-center gap-2 rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800"
+                  className="inline-flex min-h-[40px] shrink-0 items-center gap-2 rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800"
                 >
                   <Plane className="h-4 w-4" />
                   Criar voo
                 </button>
               )}
+              <div className="min-w-0 max-w-full overflow-x-auto">
+                <ControleVoosDateControls
+                  value={selectedDate}
+                  onChange={setSelectedDate}
+                  onToday={setToday}
+                />
+              </div>
             </div>
           </ControleVoosPageHeader>
 
