@@ -106,6 +106,20 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
       deleted_at TEXT
     );
 
+    CREATE TABLE notificacoes_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      empresa_id INTEGER,
+      funcionario_cpf TEXT,
+      tipo TEXT,
+      destinatario TEXT,
+      assunto TEXT,
+      corpo TEXT,
+      status TEXT,
+      erro_mensagem TEXT,
+      enviado_em TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE lms_cursos (
       id INTEGER PRIMARY KEY,
       empresa_id INTEGER NOT NULL,
@@ -764,6 +778,34 @@ describe('training compliance engine', () => {
     expect(body.data.map((row: any) => row.funcionario_id).sort()).toEqual([1000, 1001, 1002]);
     expect(body.data.every((row: any) => row.status_compliance === 'NAO_REALIZADO')).toBe(true);
     expect(body.meta).toMatchObject({ total: 3, funcionarios: 3, nunca_realizados: 3 });
+  });
+
+  it('agrega histórico de cobrança sem depender de LIMIT alto', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+
+      INSERT INTO notificacoes_log
+        (empresa_id, funcionario_cpf, tipo, destinatario, assunto, corpo, status, enviado_em)
+      VALUES
+        (1, '111', 'EMAIL_COMPLIANCE', 'pessoa@example.com', '[COMPLIANCE_TREINAMENTO:100:A]',
+         '{"funcionario_id":1000,"qualificacao_tipo_id":100}', 'enviada', '2026-09-20 10:00:00'),
+        (1, '111', 'WHATSAPP_COMPLIANCE', '+5522999999999', '[COMPLIANCE_TREINAMENTO:100:B]',
+         '{"funcionario_id":1000,"qualificacao_tipo_id":100}', 'enviada', '2026-09-21 10:00:00'),
+        (1, '111', 'EMAIL_COMPLIANCE', 'pessoa@example.com', '[COMPLIANCE_TREINAMENTO:100:C]',
+         '{"funcionario_id":1000,"qualificacao_tipo_id":100}', 'erro', '2026-09-21 12:00:00');
+    `);
+    const response = await createApp(sqlite.asD1()).request('/pendencias?status=NAO_REALIZADO');
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    const row = body.data.find((item: any) => item.funcionario_id === 1000);
+    expect(row).toMatchObject({
+      avisos_enviados: 2,
+      ultimo_aviso_em: '2026-09-21 12:00:00',
+      ultimo_canal: 'EMAIL_COMPLIANCE',
+      ultimo_status_envio: 'erro',
+    });
   });
 
   it('mantém a central de pendências limitada aos setores autorizados do gestor', async () => {
