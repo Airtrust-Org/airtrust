@@ -209,18 +209,40 @@ export default function ControleVoosRdvTrechoCard({
             className={inputClass}
           />
         </label>
-        <label className="space-y-1 text-sm">
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Carga (kg)</span>
-          <input
-            type="number"
-            min="0"
-            step="0.1"
-            value={trecho.carga_kg}
-            disabled={readOnly}
-            onChange={(e) => setField('carga_kg', e.target.value)}
-            className={inputClass}
-          />
-        </label>
+        <div className="space-y-1 text-sm">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Carga</span>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
+              kg
+              <input
+                aria-label="Carga (kg)"
+                type="number"
+                min="0"
+                step="any"
+                value={trecho.carga_kg}
+                disabled={readOnly}
+                onChange={(e) => setField('carga_kg', e.target.value)}
+                className={inputClass}
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
+              lb
+              <input
+                aria-label="Carga (lb)"
+                type="number"
+                min="0"
+                step="any"
+                value={trecho.carga_kg === '' ? '' : String(Number(((Number(trecho.carga_kg) || 0) * 2.2046226218).toFixed(3)))}
+                disabled={readOnly}
+                onChange={(e) => {
+                  const pounds = Number(e.target.value);
+                  setField('carga_kg', e.target.value === '' || !Number.isFinite(pounds) ? '' : String(Number((pounds / 2.2046226218).toFixed(3))));
+                }}
+                className={inputClass}
+              />
+            </label>
+          </div>
+        </div>
       </div>
     </article>
   );

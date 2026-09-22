@@ -19,6 +19,25 @@ function numberText(value, suffix = '') {
   return Number.isFinite(parsed) ? String(parsed) + suffix : '—';
 }
 
+function weightPairText(value, sourceUnit = 'KG') {
+  if (value === null || value === undefined || value === '') return '—';
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '—';
+  const unit = String(sourceUnit || 'KG').trim().toUpperCase();
+  const kilograms = unit === 'LB' ? numeric / 2.2046226218 : numeric;
+  const pounds = unit === 'LB' ? numeric : numeric * 2.2046226218;
+  const roundedKg = Number(kilograms.toFixed(3));
+  const roundedLb = Number(pounds.toFixed(3));
+  return roundedLb + ' lb · ' + roundedKg + ' kg';
+}
+
+function formatTime(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return 'Aguardando FRMS';
+  const direct = raw.match(/(?:T|^)(\d{2}:\d{2})(?::\d{2})?/);
+  return direct ? direct[1] : raw;
+}
+
 function formatDateTime(value) {
   if (!value) return '—';
   const date = new Date(value);
@@ -182,7 +201,7 @@ function renderPlanning(panel, packageData, workspace, actions = {}) {
     ['Alternado', airportLabel(packageData.alternado, packageData.voo?.alternado_destino_id)],
     ['Aeronave', packageData.aeronave?.modelo],
     ['Passageiros previstos', planning.pax_planejado],
-    ['Peso previsto', planning.peso_planejado != null ? planning.peso_planejado + ' ' + text(planning.unidade_peso_planejado, 'KG') : null],
+    ['Peso previsto', weightPairText(planning.peso_planejado, planning.unidade_peso_planejado || 'KG')],
     ['Combustível solicitado', planning.combustivel_solicitado != null ? planning.combustivel_solicitado + ' ' + text(planning.unidade_combustivel_solicitado, 'KG') : null],
     ['Tripulantes', planning.crew_count],
     ['Etapas', planning.stage_count],
@@ -200,7 +219,10 @@ function renderPlanning(panel, packageData, workspace, actions = {}) {
       const card = el('div', { className: 'pilot-workspace-row-card' });
       card.append(
         el('strong', { text: text(member.nome, 'Funcionário #' + text(member.funcionario_id)) }),
+        el('span', { text: 'Nome de guerra: ' + text(member.nome_guerra, '—') }),
+        el('span', { text: 'ANAC: ' + text(member.codigo_anac, '—') }),
         el('span', { text: text(member.funcao) }),
+        el('span', { text: 'Apresentação: ' + formatTime(member.horario_apresentacao) }),
       );
       list.append(card);
     }
@@ -253,7 +275,7 @@ function renderRdv(panel, packageData) {
     ['Status', rdv.status],
     ['Fluxo', rdv.workflow_status],
     ['POB', rdv.pob],
-    ['Carga', rdv.carga_kg != null ? rdv.carga_kg + ' kg' : null],
+    ['Carga', weightPairText(rdv.carga_kg, 'KG')],
     ['Versão', rdv.versao],
   ]);
 

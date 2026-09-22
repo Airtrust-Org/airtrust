@@ -134,15 +134,23 @@ export function calcTotalBlockTimeHhMm(stageDrafts) {
     : [];
   const completedCycles = [];
   let cycleStart = '';
+  let provisionalCycleEnd = '';
   for (const stage of stages) {
     const start = String(stage.horario_motor_ligado || '').trim();
+    const landing = String(stage.horario_pouso || '').trim();
     const cut = String(stage.horario_motor_desligado || '').trim();
     if (!cycleStart && start) cycleStart = start;
+    if (cycleStart && landing) provisionalCycleEnd = landing;
     if (cycleStart && cut) {
       const duration = calcClockDurationHhMm(cycleStart, cut);
       if (duration) completedCycles.push(duration);
       cycleStart = '';
+      provisionalCycleEnd = '';
     }
+  }
+  if (cycleStart && provisionalCycleEnd) {
+    const provisionalDuration = calcClockDurationHhMm(cycleStart, provisionalCycleEnd);
+    if (provisionalDuration) completedCycles.push(provisionalDuration);
   }
   return sumClockDurations(completedCycles);
 }
@@ -336,7 +344,7 @@ export function buildStageDraftsFromPackage(packageData) {
       stage.tempo_total ||
       calcClockDurationHhMm(
         toInputTime(stage.horario_motor_ligado),
-        toInputTime(stage.horario_motor_desligado),
+        toInputTime(stage.horario_motor_desligado || stage.horario_pouso),
       ),
     tempo_ifr: toDurationInput(stage.tempo_ifr),
     tempo_noturno: toDurationInput(stage.tempo_noturno),
@@ -620,8 +628,15 @@ export function realizedFlightMinutes(stageDrafts) {
   return total;
 }
 
+export function realizedTotalMinutes(stageDrafts) {
+  const duration = calcTotalBlockTimeHhMm(stageDrafts);
+  const match = String(duration || '').match(/^(\d+):([0-5]\d)$/);
+  if (!match) return 0;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
 export function requiredJustificationMinutes(packageData, stageDrafts) {
-  return Math.max(0, realizedFlightMinutes(stageDrafts) - plannedFlightMinutes(packageData));
+  return Math.max(0, realizedTotalMinutes(stageDrafts) - plannedFlightMinutes(packageData));
 }
 
 export function totalJustificationMinutes(items) {

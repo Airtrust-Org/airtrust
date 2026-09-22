@@ -56,6 +56,7 @@ type CrewRow = {
   horario_dispensa: string | null;
   observacoes: string | null;
   nome: string | null;
+  nome_guerra: string | null;
   codigo_anac: string | null;
   updated_at: string | null;
 };
@@ -398,8 +399,20 @@ pilotOffline.get(
           `
             SELECT
               t.id, t.funcionario_id, t.etapa_id, t.funcao,
-              t.horario_apresentacao, t.horario_dispensa, t.observacoes,
-              f.nome, f.codigo_anac, t.updated_at
+              COALESCE(
+                (
+                  SELECT fj.hora_apresentacao
+                  FROM frms_jornada fj
+                  WHERE fj.tripulante_id = t.funcionario_id
+                    AND fj.data = ?
+                    AND fj.deleted_at IS NULL
+                  ORDER BY fj.updated_at DESC, fj.created_at DESC
+                  LIMIT 1
+                ),
+                t.horario_apresentacao
+              ) AS horario_apresentacao,
+              t.horario_dispensa, t.observacoes,
+              f.nome, f.guerra AS nome_guerra, f.codigo_anac, t.updated_at
             FROM cv_voo_tripulantes t
             LEFT JOIN funcionarios f
               ON f.id = t.funcionario_id
@@ -411,7 +424,7 @@ pilotOffline.get(
             ORDER BY t.funcao ASC, t.id ASC
           `,
         )
-        .bind(voo.id, empresaId)
+        .bind(voo.data_programacao, voo.id, empresaId)
         .all<CrewRow>(),
       c.env.DB
         .prepare(

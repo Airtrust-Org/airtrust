@@ -333,6 +333,7 @@ describe('ControleVoosRdvSaveStatus + TrechoCard', () => {
 
   it('renderiza card de trecho com cálculos e ações', () => {
     const onDuplicate = vi.fn();
+    const onChange = vi.fn();
     const trecho = seedTrechosFromVoo(
       {
         data_programacao: '2026-06-14',
@@ -346,12 +347,13 @@ describe('ControleVoosRdvSaveStatus + TrechoCard', () => {
     trecho.id = 42;
     trecho.combustivel_decolagem = '800';
     trecho.combustivel_pouso = '500';
+    trecho.carga_kg = '100';
 
     render(
       <ControleVoosRdvTrechoCard
         index={0}
         trecho={trecho}
-        onChange={vi.fn()}
+        onChange={onChange}
         onDuplicate={onDuplicate}
         onRemove={vi.fn()}
         canRemove
@@ -360,6 +362,10 @@ describe('ControleVoosRdvSaveStatus + TrechoCard', () => {
 
     expect(screen.getByTestId('rdv-trecho-card-0')).toBeInTheDocument();
     expect(screen.getByText('300')).toBeInTheDocument();
+    expect(screen.getByLabelText('Carga (kg)')).toHaveValue(100);
+    expect(screen.getByLabelText('Carga (lb)')).toHaveValue(220.462);
+    fireEvent.change(screen.getByLabelText('Carga (lb)'), { target: { value: '440.925' } });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ carga_kg: '200' }));
     fireEvent.click(screen.getByRole('button', { name: /Duplicar/i }));
     expect(onDuplicate).toHaveBeenCalled();
   });

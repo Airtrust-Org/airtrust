@@ -175,7 +175,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v30'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v31'");
     expect(pilotSw).not.toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
@@ -455,6 +455,8 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('2. Registrar voo');
     expect(pilotIndex).toContain('3. Enviar');
     expect(pilotIndex).toContain('id="rdv-core-fields"');
+    expect(pilotIndex).toContain('Tripulação do voo');
+    expect(pilotIndex).toContain('id="rdv-crew-summary"');
     expect(pilotIndex).toContain('Dados comuns do voo');
     expect(pilotIndex).toContain('+ Nova etapa');
     expect(pilotIndex).toContain('Resumo automático do voo');
@@ -463,6 +465,11 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("label: 'Relatório de voo'");
     expect(pilotApp).toContain("['Tempo de voo', activeRdvDraft.form.tempo_voo_total_hhmm");
     expect(pilotApp).toContain("['Tempo total', activeRdvDraft.form.tempo_total_hhmm");
+    expect(pilotApp).toContain('realizedTotalMinutes(activeStageDrafts)');
+    expect(pilotApp).toContain('Tempo total realizado');
+    expect(pilotApp).toContain('Nome de guerra: ');
+    expect(pilotApp).toContain('ANAC: ');
+    expect(pilotApp).toContain('Aguardando FRMS');
     expect(pilotIndex).not.toContain('PIN offline');
     expect(pilotIndex).not.toContain('Código local antigo');
     expect(pilotIndex).not.toContain('Atualizar armazenamento deste tablet');
@@ -519,7 +526,13 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("['IFR (duração)', 'tempo_ifr', 'duration'");
     expect(pilotApp).toContain("['Noturno (duração)', 'tempo_noturno', 'duration'");
     expect(pilotApp).toContain('toDurationInput(value)');
-    expect(pilotApp).toContain("label: 'Unidade da carga'");
+    expect(pilotApp).toContain('function createDualWeightField');
+    expect(pilotApp).toContain("peso_passageiros: 'Peso dos passageiros'");
+    expect(pilotApp).toContain("peso_bagagem: 'Peso da bagagem'");
+    expect(pilotApp).toContain("payload: 'Carga'");
+    expect(pilotApp).toContain("peso_total: 'Peso total da aeronave'");
+    expect(pilotApp).toContain("formatWeightPair(rdv?.carga_kg, 'KG')");
+    expect(pilotApp).not.toContain("label: 'Unidade da carga'");
     expect(pilotApp).toContain("label: 'Unidade do combustível'");
     expect(pilotApp).toContain("'Transmissão bloqueada: ' + detail");
     expect(pilotApp).toContain("status: 'superseded'");
