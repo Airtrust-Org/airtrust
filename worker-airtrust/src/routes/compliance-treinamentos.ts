@@ -4,6 +4,7 @@ import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaId } from '../middleware/tenant';
 import type { Env } from '../types';
+import { createTrainingComplianceIntelligenceRoutes } from './compliance-treinamentos-intelligence';
 import {
   CANCELLED_STATUS_VALUES,
   PLANNED_QUALIFICATION_STATUS_VALUES,
@@ -42,6 +43,10 @@ type ComplianceStatus = 'CONFORME' | 'VENCENDO' | 'VENCIDO' | 'NAO_REALIZADO' | 
 type Employee = {
   id: number;
   nome: string;
+  cpf: string | null;
+  matricula: string | null;
+  email: string | null;
+  telefone: string | null;
   setor_id: number | null;
   setor_nome: string | null;
   funcao_id: number | null;
@@ -193,6 +198,10 @@ async function loadEmployees(db: D1Database, empresaId: number): Promise<Employe
   const { results } = await db
     .prepare(
       `SELECT f.id, f.nome,
+              ${cols.has('cpf') ? 'f.cpf' : 'NULL'} AS cpf,
+              ${cols.has('matricula') ? 'f.matricula' : 'NULL'} AS matricula,
+              ${cols.has('email') ? 'f.email' : 'NULL'} AS email,
+              ${cols.has('telefone') ? 'f.telefone' : 'NULL'} AS telefone,
               ${hasSetorId ? 'f.setor_id' : 'NULL'} AS setor_id,
               ${hasFuncaoId ? 'f.funcao_id' : 'NULL'} AS funcao_id,
               s.nome AS setor_nome,
@@ -580,7 +589,7 @@ function filterEmployeesByAccess(employees: Employee[], access: EmployeeSectorAc
   );
 }
 
-async function buildSnapshot(db: D1Database, empresaId: number, access: EmployeeSectorAccess) {
+export async function buildSnapshot(db: D1Database, empresaId: number, access: EmployeeSectorAccess) {
   const [allEmployees, rules, historyMap, lmsMap] = await Promise.all([
     loadEmployees(db, empresaId),
     loadRules(db, empresaId),
@@ -621,6 +630,8 @@ async function buildSnapshot(db: D1Database, empresaId: number, access: Employee
 
   return { employees, rules, people };
 }
+
+export type TrainingComplianceSnapshot = Awaited<ReturnType<typeof buildSnapshot>>;
 
 type LmsEnrollment = {
   id: number;
@@ -880,6 +891,10 @@ async function assertIndividualRuleWithinAccess(
     await assertFuncionarioInScope(db, empresaId, data.funcionario_id, access);
   }
 }
+
+
+
+app.route('/', createTrainingComplianceIntelligenceRoutes({ buildSnapshot, tableExists }));
 
 app.get('/capabilities', async (c) => {
   const db = c.env.DB;
@@ -1229,6 +1244,7 @@ app.delete('/regras/:id', requireRole('admin', 'manager'), async (c) => {
   });
   return c.json({ success: true });
 });
+
 
 app.get('/funcionarios/:id', async (c) => {
   const empresaId = getEmpresaId(c);

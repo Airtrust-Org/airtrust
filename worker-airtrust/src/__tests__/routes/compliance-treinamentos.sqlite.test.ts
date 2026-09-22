@@ -106,6 +106,20 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
       deleted_at TEXT
     );
 
+    CREATE TABLE notificacoes_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      empresa_id INTEGER,
+      funcionario_cpf TEXT,
+      tipo TEXT,
+      destinatario TEXT,
+      assunto TEXT,
+      corpo TEXT,
+      status TEXT,
+      erro_mensagem TEXT,
+      enviado_em TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE lms_cursos (
       id INTEGER PRIMARY KEY,
       empresa_id INTEGER NOT NULL,
@@ -751,4 +765,81 @@ describe('training compliance engine', () => {
     expect(body.data.funcoes.map((item: any) => item.id)).toEqual([3, 1]);
     expect(body.data.funcoes.map((item: any) => item.nome)).toEqual(['Engenheiro', 'Mecânico']);
   });
+
+  it('lista pendências obrigatórias por pessoa sem transformar nunca realizado em conformidade', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+    `);
+    const response = await createApp(sqlite.asD1()).request('/pendencias?status=NAO_REALIZADO');
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    expect(body.data.map((row: any) => row.funcionario_id).sort()).toEqual([1000, 1001, 1002]);
+    expect(body.data.every((row: any) => row.status_compliance === 'NAO_REALIZADO')).toBe(true);
+    expect(body.meta).toMatchObject({ total: 3, funcionarios: 3, nunca_realizados: 3 });
+  });
+
+  it('agrega histórico de cobrança sem depender de LIMIT alto', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+
+      INSERT INTO notificacoes_log
+        (empresa_id, funcionario_cpf, tipo, destinatario, assunto, corpo, status, enviado_em)
+      VALUES
+        (1, '111', 'EMAIL_COMPLIANCE', 'pessoa@example.com', '[COMPLIANCE_TREINAMENTO:100:A]',
+         '{"funcionario_id":1000,"qualificacao_tipo_id":100}', 'enviada', '2026-09-20 10:00:00'),
+        (1, '111', 'WHATSAPP_COMPLIANCE', '+5522999999999', '[COMPLIANCE_TREINAMENTO:100:B]',
+         '{"funcionario_id":1000,"qualificacao_tipo_id":100}', 'enviada', '2026-09-21 10:00:00'),
+        (1, '111', 'EMAIL_COMPLIANCE', 'pessoa@example.com', '[COMPLIANCE_TREINAMENTO:100:C]',
+         '{"funcionario_id":1000,"qualificacao_tipo_id":100}', 'erro', '2026-09-21 12:00:00');
+    `);
+    const response = await createApp(sqlite.asD1()).request('/pendencias?status=NAO_REALIZADO');
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    const row = body.data.find((item: any) => item.funcionario_id === 1000);
+    expect(row).toMatchObject({
+      avisos_enviados: 2,
+      ultimo_aviso_em: '2026-09-21 12:00:00',
+      ultimo_canal: 'EMAIL_COMPLIANCE',
+      ultimo_status_envio: 'erro',
+    });
+  });
+
+  it('mantém a central de pendências limitada aos setores autorizados do gestor', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+    `);
+    sectorAccessMock.access = { mode: 'restricted', setorIds: [10], funcionarioId: null };
+    const response = await createApp(sqlite.asD1()).request('/pendencias?status=NAO_REALIZADO');
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    expect(body.data.map((row: any) => row.funcionario_id).sort()).toEqual([1000, 1001]);
+    expect(body.data.some((row: any) => row.funcionario_id === 1002)).toBe(false);
+  });
+
+  it('expõe o ponto atual de tendência sem inventar histórico quando o snapshot ainda não existe', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+    `);
+    const response = await createApp(sqlite.asD1()).request('/tendencias?days=90');
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    expect(body.meta.history_ready).toBe(false);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]).toMatchObject({
+      pessoas: 3,
+      requisitos_obrigatorios: 3,
+      conformes: 0,
+      nao_realizados: 3,
+      compliance_pct: 0,
+    });
+  });
+
 });

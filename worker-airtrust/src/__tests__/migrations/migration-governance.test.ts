@@ -118,8 +118,9 @@ describe('migration governance', () => {
     // 0504 adds the governed Controle de Voos operational model catalogs and flight identifiers.
     // 0505 adds the governed Conhecimento Ativo challenge cadence schema.
     // 0506 adds the governed Controle de Voos planning-deviation justification schema.
-    // 0507 adds the governed Petrobras AA delay-justification catalog.
-    const expectedLatest = 507;
+    // 0508 adds governed daily training-compliance snapshots.
+    // 0509 adds the governed structured Controle de Voos flight-plan schema.
+    const expectedLatest = 509;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
