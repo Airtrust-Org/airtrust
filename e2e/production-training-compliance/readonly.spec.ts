@@ -86,14 +86,14 @@ async function login(page: Page) {
   await expect(page).not.toHaveURL(/\/login/);
 }
 
-test('production training compliance UI and APIs are coherent and read-only', async ({ page }) => {
+test('production intelligent training compliance UI and APIs are coherent and read-only', async ({ page }) => {
   const guard = installProductionReadOnlyGuard(page);
   await login(page);
 
   const capabilitiesP = waitApi(page, '/api/compliance-treinamentos/capabilities');
   const catalogsP = waitApi(page, '/api/compliance-treinamentos/catalogos');
   const summaryP = waitApi(page, '/api/compliance-treinamentos/resumo');
-  const trainingsP = waitApi(page, '/api/compliance-treinamentos/treinamentos');
+  const pendingsP = waitApi(page, '/api/compliance-treinamentos/pendencias');
   await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
   await assertProductionFrontendShaFromPage(
     page,
@@ -103,12 +103,13 @@ test('production training compliance UI and APIs are coherent and read-only', as
   await expect(page.getByRole('heading', { name: 'Compliance de Treinamentos' })).toBeVisible();
   await expect(page.getByRole('combobox').first()).toContainText('Todos os setores');
   await expect(page.getByRole('combobox').nth(1)).toContainText('Todos os cargos');
+  await expect(page.getByRole('heading', { name: 'Central de pendências' })).toBeVisible();
 
-  const [capabilities, catalogs, summary, trainings] = await Promise.all([
+  const [capabilities, catalogs, summary, pendings] = await Promise.all([
     capabilitiesP.then(payload),
     catalogsP.then(payload),
     summaryP.then(payload),
-    trainingsP.then(payload),
+    pendingsP.then(payload),
   ]);
   expect(capabilities.data.schema_ready).toBe(true);
   expect(capabilities.data.reconciliation_ready).toBe(true);
@@ -120,8 +121,20 @@ test('production training compliance UI and APIs are coherent and read-only', as
   expect(Array.isArray(catalogs.data.funcoes)).toBe(true);
   expect(Array.isArray(catalogs.data.setor_funcoes)).toBe(true);
   assertSummary(summary.data);
-  expect(Array.isArray(trainings.data)).toBe(true);
+  expect(Array.isArray(pendings.data)).toBe(true);
+  for (const row of pendings.data) {
+    expect(['VENCIDO', 'NAO_REALIZADO', 'VENCENDO', 'EM_ANDAMENTO']).toContain(
+      row.status_compliance,
+    );
+    expectCount(row.avisos_enviados, 'pending.avisos_enviados');
+    expect(typeof row.tem_email).toBe('boolean');
+    expect(typeof row.tem_whatsapp).toBe('boolean');
+  }
 
+  const trainingsP = waitApi(page, '/api/compliance-treinamentos/treinamentos');
+  await page.getByRole('button', { name: 'Treinamentos', exact: true }).click();
+  const trainings = await trainingsP.then(payload);
+  expect(Array.isArray(trainings.data)).toBe(true);
   for (const row of trainings.data) {
     for (const key of [
       'pessoas',
@@ -130,8 +143,9 @@ test('production training compliance UI and APIs are coherent and read-only', as
       'vencidos',
       'nao_realizados',
       'em_andamento',
-    ])
+    ]) {
       expectCount(row[key], `training.${key}`);
+    }
     expect(row.vencendo).toBeLessThanOrEqual(row.conformes);
     expect(row.pessoas).toBe(row.conformes + row.vencidos + row.nao_realizados + row.em_andamento);
     expect(row.compliance_pct).toBeCloseTo(
@@ -197,6 +211,29 @@ test('production training compliance UI and APIs are coherent and read-only', as
     expect(Array.isArray(sector.cargos)).toBe(true);
   }
 
+  const trendP = waitApi(page, '/api/compliance-treinamentos/tendencias');
+  await page.getByRole('button', { name: 'Relatórios', exact: true }).click();
+  const trend = await trendP.then(payload);
+  expect(Array.isArray(trend.data)).toBe(true);
+  expect(trend.data.length).toBeGreaterThan(0);
+  const currentTrend = trend.data.at(-1);
+  expect(currentTrend?.snapshot_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  expectCount(currentTrend?.pessoas ?? -1, 'trend.pessoas');
+  expectCount(currentTrend?.requisitos_obrigatorios ?? -1, 'trend.requisitos_obrigatorios');
+  await expect(page.getByRole('heading', { name: 'Evolução do compliance — 90 dias' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Relatório inteligente' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Exportar PDF' })).toBeVisible();
+
+  const communicationsP = waitApi(page, '/api/compliance-treinamentos/comunicacoes');
+  await page.getByRole('button', { name: 'Comunicações', exact: true }).click();
+  const communications = await communicationsP.then(payload);
+  expect(Array.isArray(communications.data)).toBe(true);
+  await expect(page.getByRole('heading', { name: 'Histórico de comunicações' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Administração', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Por organização', exact: true })).toBeVisible();
+  await expect(page.getByText('Matriz por organização', { exact: true })).toBeVisible();
+
   const reconciliationP = waitApi(page, '/api/compliance-treinamentos/reconciliacao');
   await page.getByRole('button', { name: 'Matrículas', exact: true }).click();
   const reconciliation = await reconciliationP.then(payload);
@@ -206,13 +243,13 @@ test('production training compliance UI and APIs are coherent and read-only', as
     'gaps_matricula_acionaveis',
     'matriculados_sem_requisito',
     'nao_aplica_matriculados',
-  ])
+  ]) {
     expectCount(reconciliation.data.resumo[key], `reconciliation.${key}`);
+  }
   expect(Array.isArray(reconciliation.data.gaps_matricula)).toBe(true);
   expect(Array.isArray(reconciliation.data.matriculas_revisao)).toBe(true);
 
-  await page.getByRole('button', { name: 'Matriz', exact: true }).click();
-  await expect(page.getByText('Matriz por organização', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Por organização', exact: true }).click();
   const orgSector = page.getByLabel('Setor', { exact: true });
   const orgSectorIds = await orgSector
     .locator('option')
@@ -234,11 +271,17 @@ test('production training compliance UI and APIs are coherent and read-only', as
       expect(orgMatrix.data[0].impacto.atingidas_neste_nivel).toBeLessThanOrEqual(
         orgMatrix.data[0].impacto.pessoas,
       );
-      await expect(
-        page.getByRole('columnheader', { name: 'Impacto' }),
-      ).toBeVisible();
+      await expect(page.getByRole('columnheader', { name: 'Impacto' })).toBeVisible();
     }
   }
+
+  const policyP = waitApi(page, '/api/compliance-treinamentos/configuracao-alertas');
+  await page.getByRole('button', { name: 'Automação', exact: true }).click();
+  const policy = await policyP.then(payload);
+  expect(typeof policy.data.enabled).toBe('boolean');
+  expect(Array.isArray(policy.data.due_day_thresholds)).toBe(true);
+  expect(Array.isArray(policy.data.manager_overdue_thresholds)).toBe(true);
+  await expect(page.getByRole('heading', { name: 'Régua automática de cobrança' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Por treinamento', exact: true }).click();
   const trainingSelector = page

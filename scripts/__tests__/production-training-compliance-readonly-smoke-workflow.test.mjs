@@ -22,7 +22,12 @@ test('production compliance browser coverage is read-only and exercises canonica
   assert.match(spec, /\/treinamentos\/compliance/);
   assert.match(spec, /\/api\/compliance-treinamentos\/capabilities/);
   assert.match(spec, /\/api\/compliance-treinamentos\/resumo/);
-  assert.match(spec, /Configuração da matriz/);
+  assert.match(spec, /Central de pendências/);
+  assert.match(spec, /\/api\/compliance-treinamentos\/pendencias/);
+  assert.match(spec, /\/api\/compliance-treinamentos\/tendencias/);
+  assert.match(spec, /\/api\/compliance-treinamentos\/comunicacoes/);
+  assert.match(spec, /Administração/);
+  assert.match(spec, /Régua automática de cobrança/);
   assert.match(spec, /guard\.assertClean\(\)/);
   assert.match(guard, /operational-post/);
   assert.match(guard, /mutation-method/);
