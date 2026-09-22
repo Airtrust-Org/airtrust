@@ -66,6 +66,10 @@ describe('ControleVoosEditarVooDialog', () => {
     mockCatalogs();
   });
 
+  async function waitCatalogsReady() {
+    await waitFor(() => expect(screen.getByLabelText('Aeronave')).not.toBeDisabled());
+  }
+
   it('edita programação existente usando a versão CAS atual do voo', async () => {
     patchMock.mockResolvedValue({
       success: true,
@@ -78,7 +82,7 @@ describe('ControleVoosEditarVooDialog', () => {
       <ControleVoosEditarVooDialog open voo={voo} onClose={onClose} onSaved={onSaved} />,
     );
 
-    await waitFor(() => expect(screen.getByLabelText('Aeronave')).not.toBeDisabled());
+    await waitCatalogsReady();
     fireEvent.change(screen.getByLabelText('Número do voo'), { target: { value: 'V999' } });
     fireEvent.change(screen.getByLabelText('Observações'), { target: { value: 'Atualizado' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
@@ -115,7 +119,7 @@ describe('ControleVoosEditarVooDialog', () => {
       <ControleVoosEditarVooDialog open voo={voo} onClose={vi.fn()} onSaved={vi.fn()} />,
     );
 
-    await waitFor(() => expect(screen.getByLabelText('Aeronave')).not.toBeDisabled());
+    await waitCatalogsReady();
     fireEvent.change(screen.getByLabelText('Aeronave'), { target: { value: '31' } });
     fireEvent.change(screen.getByLabelText('Contrato'), { target: { value: '41' } });
     fireEvent.change(screen.getByLabelText('Tipo de voo'), { target: { value: '11' } });
@@ -143,6 +147,7 @@ describe('ControleVoosEditarVooDialog', () => {
     render(
       <ControleVoosEditarVooDialog open voo={voo} onClose={vi.fn()} onSaved={vi.fn()} />,
     );
+    await waitCatalogsReady();
 
     fireEvent.change(screen.getByLabelText('Data da programação'), {
       target: { value: '2026-09-22' },
@@ -164,6 +169,7 @@ describe('ControleVoosEditarVooDialog', () => {
     render(
       <ControleVoosEditarVooDialog open voo={voo} onClose={vi.fn()} onSaved={vi.fn()} />,
     );
+    await waitCatalogsReady();
     fireEvent.change(screen.getByLabelText('Partida prevista'), {
       target: { value: '2026-09-21T18:00' },
     });
@@ -184,6 +190,7 @@ describe('ControleVoosEditarVooDialog', () => {
     render(
       <ControleVoosEditarVooDialog open voo={voo} onClose={onClose} onSaved={vi.fn()} />,
     );
+    await waitCatalogsReady();
 
     fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
 

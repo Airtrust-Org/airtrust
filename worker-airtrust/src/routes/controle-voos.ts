@@ -40,6 +40,7 @@ import { RDV_CAPABILITIES, assertRdvSelfScope, requireExpectedRdvVersion, assert
 import { assertRdvRules, normalizeRdvInput } from '../services/controle-voos/rdv-validation';
 import { finalizeRdvPreenchimentoHandler } from './controle-voos-rdv-finalization';
 import { assertFlightCrewAssignment, listEligibleFlightCrew } from '../services/controle-voos/crew-eligibility';
+import { assertCrewEligibleForAircraftChange } from '../services/controle-voos/flight-aircraft-change';
 import { buildFlightRelatedStatements, normalizeFlightRouteIds, parseFlightCrewIds, resolveFlightRoutePoints } from '../services/controle-voos/flight-creation';
 import { parseFlightPlanningInput, updateFlightStagePlanningIfSupported } from '../services/controle-voos/flight-planning';
 import { enrichFlightsWithPresentation } from '../services/controle-voos/flight-presentation';
@@ -1292,41 +1293,13 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
   if (input.status) assertStatusTransition(existing.status, input.status);
   await assertCatalogsForInput(c.env.DB, merged, empresaId);
 
-  if (
-    input.aeronave_id !== undefined &&
-    input.aeronave_id != null &&
-    input.aeronave_id !== existing.aeronave_id
-  ) {
-    const crewRows = await c.env.DB
-      .prepare(
-        `SELECT funcionario_id, funcao
-           FROM cv_voo_tripulantes
-          WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
-            AND funcao IN ('PIC', 'SIC')
-          ORDER BY id ASC`,
-      )
-      .bind(empresaId, existing.id)
-      .all<{ funcionario_id: number; funcao: 'PIC' | 'SIC' }>();
-
-    const activeCrew = crewRows.results || [];
-    if (activeCrew.length > 0) {
-      const eligible = await listEligibleFlightCrew(c.env.DB, empresaId, input.aeronave_id);
-      for (const assignment of activeCrew) {
-        const member = eligible.find((item) => item.id === Number(assignment.funcionario_id));
-        const valid =
-          assignment.funcao === 'PIC'
-            ? member?.funcao_codigo === 'PIC'
-            : member != null && ['PIC', 'SIC'].includes(member.funcao_codigo);
-        if (!valid) {
-          throw new ApiError(
-            `${assignment.funcao} atual não está habilitado na nova aeronave`,
-            409,
-            'CONTROLE_VOOS_CREW_AIRCRAFT_CHANGE_INELIGIBLE',
-          );
-        }
-      }
-    }
-  }
+  await assertCrewEligibleForAircraftChange(
+    c.env.DB,
+    empresaId,
+    existing.id,
+    existing.aeronave_id,
+    input.aeronave_id,
+  );
 
   const fields: string[] = [];
   const values: unknown[] = [];
