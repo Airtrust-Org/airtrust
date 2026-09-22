@@ -37,6 +37,8 @@ test('V2 overlay is fail closed, revision-only and exercises coordination etapa 
   assert.match(runner, /mode: 'coordenacao'/);
   assert.match(runner, /justificativa: 'Ajuste de combustivel durante revisao/);
   assert.match(runner, /const etapaId = etapaJson\.data\.id/);
+  assert.match(runner, /diagnostico_listar_etapas_apos_falha_criacao/);
+  assert.match(runner, /if \(!etapaPassed \|\| !etapaJson\?\.data\?\.id\) \{/);
   assert.doesNotMatch(runner, /CANONICAL_SOURCE_ALREADY_CAS_AWARE/);
   assert.doesNotMatch(runner, /operation: 'corrigir_apos_devolucao'/);
 });
