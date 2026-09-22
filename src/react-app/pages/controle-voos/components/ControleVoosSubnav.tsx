@@ -30,9 +30,13 @@ export const CONTROLE_VOOS_NAV_LINKS: ControleVoosNavLink[] = [
 
 
 export function getVisibleControleVoosNavLinks(
-  user?: { email?: string | null; role?: string | null } | null,
+  user?: { email?: string | null; role?: string | null; permissions?: string[] | null } | null,
 ): ControleVoosNavLink[] {
-  if (canSeeControleVoosDevelopmentModule(user)) return CONTROLE_VOOS_NAV_LINKS;
+  if (canSeeControleVoosDevelopmentModule(user)) {
+    // "Meus voos" é uma superfície pessoal do piloto. Coordenação/Admin/Gestor
+    // operam pela visão de Operação, fila e programação.
+    return CONTROLE_VOOS_NAV_LINKS.filter((link) => link.to !== '/controle-voos/meus-voos');
+  }
   return CONTROLE_VOOS_NAV_LINKS.filter((link) => link.to === '/controle-voos/meus-voos');
 }
 

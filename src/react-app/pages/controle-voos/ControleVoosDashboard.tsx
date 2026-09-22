@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { BookOpenCheck, CheckCircle, FileText, Plane } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
@@ -12,6 +13,8 @@ import ControleVoosDateControls from './components/ControleVoosDateControls';
 import { useControleVoosDate } from './hooks/useControleVoosDate';
 import EdbShadowPrototypeWithAssessment from './EdbShadowPrototypeWithAssessment';
 import { isEdbShadowPilotEnabled } from '@/react-app/config/edbShadowPilot';
+import { usePermissions } from '@/react-app/hooks/usePermissions';
+import ControleVoosNovoVooDialog from './components/ControleVoosNovoVooDialog';
 
 function AttentionDot({ critical }: { critical?: boolean }) {
   return (
@@ -23,6 +26,10 @@ function AttentionDot({ critical }: { critical?: boolean }) {
 }
 
 function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: boolean }) {
+  const qc = useQueryClient();
+  const { isAdmin, isGestor } = usePermissions();
+  const canCoordinate = isAdmin || isGestor;
+  const [novoVooOpen, setNovoVooOpen] = useState(false);
   const { selectedDate, setSelectedDate, setToday } = useControleVoosDate();
   const { data: dashboard, isLoading, error } = useControleVoosDashboard(selectedDate);
   const { data: aeroportos = [] } = useControleVoosAeroportos();
@@ -86,11 +93,23 @@ function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: 
             title="Controle de Voos — Hoje"
             description="Acompanhe primeiro o que exige ação e, em seguida, a programação do período. Uso operacional interno N1."
           >
-            <ControleVoosDateControls
-              value={selectedDate}
-              onChange={setSelectedDate}
-              onToday={setToday}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <ControleVoosDateControls
+                value={selectedDate}
+                onChange={setSelectedDate}
+                onToday={setToday}
+              />
+              {canCoordinate && (
+                <button
+                  type="button"
+                  onClick={() => setNovoVooOpen(true)}
+                  className="inline-flex min-h-[40px] items-center gap-2 rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800"
+                >
+                  <Plane className="h-4 w-4" />
+                  Criar voo
+                </button>
+              )}
+            </div>
           </ControleVoosPageHeader>
 
           {isLoading && (
@@ -322,6 +341,19 @@ function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: 
           </p>
         </ControleVoosPageShell>
       </div>
+
+      {canCoordinate && (
+        <ControleVoosNovoVooDialog
+          open={novoVooOpen}
+          mode="coordenacao"
+          onClose={() => setNovoVooOpen(false)}
+          onCreated={(voo) => {
+            setSelectedDate(voo.data_programacao);
+            void qc.invalidateQueries({ queryKey: ['cv-voos'] });
+            void qc.invalidateQueries({ queryKey: ['cv-dashboard'] });
+          }}
+        />
+      )}
     </AppLayout>
   );
 }
