@@ -15,37 +15,50 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const sourcePath = join(here, 'run-controle-voos-e2e.mjs');
 
-const etapaStartMarker = "  // ── 7. Criar etapa ───────────────────────────────────────────────────";
+const etapaStartMarker = "  // ── 7. Completar a etapa criada pelo planejamento ────────────────────";
 const etapaEndMarker = "  // ── 7.5 Criar setor + funcionario via cadastro CANONICO (Funcionarios) ──";
 const reviewStartMarker = "  // ── 15. Iniciar revisao (coordenacao) ────────────────────────────────";
 const reviewEndMarker = "  // ── 16. Devolver ──────────────────────────────────────────────────────";
 
 const etapaReplacement = [
-  '  // ── 7. Criar etapa ───────────────────────────────────────────────────',
-  '  const { json: etapaJson, passed: etapaPassed } = await call({',
-  "    operation: 'criar_etapa',",
-  "    method: 'POST',",
+  '  // ── 7. Completar a etapa criada pelo planejamento ────────────────────',
+  '  // POST /voos cria as etapas canônicas a partir da rota. O overlay',
+  '  // reutiliza a primeira etapa para preservar o contrato real e capturar',
+  '  // seu id para a evidência de revisão da Coordenação.',
+  '  const etapasPlanejadas = await call({',
+  "    operation: 'listar_etapas_planejadas',",
+  "    method: 'GET',",
   '    path: `/api/controle-voos/voos/${vooId}/etapas`,',
   '    actor: adminA,',
   "    tenant: 'A',",
-  '    expectedStatus: 201,',
+  '    expectedStatus: 200,',
+  '  });',
+  '  const primeiraEtapaId = etapasPlanejadas.json?.data?.[0]?.id ?? null;',
+  '  if (!etapasPlanejadas.passed || !primeiraEtapaId) return finish(manifest, false);',
+  '  const etapaId = primeiraEtapaId;',
+  '',
+  '  const etapaUpdate = await call({',
+  "    operation: 'atualizar_etapa_planejada',",
+  "    method: 'PATCH',",
+  '    path: `/api/controle-voos/voos/${vooId}/etapas/${etapaId}`,',
+  '    actor: adminA,',
+  "    tenant: 'A',",
+  '    expectedStatus: 200,',
   '    body: {',
   '      versao: rdvVersao,',
-  '      numero_etapa: 1,',
-  "      origem_icao: 'OR' + 'A' + manifest.runId,",
-  "      destino_icao: 'DE' + 'A' + manifest.runId,",
+  '      horario_motor_ligado: `${dataProg}T09:58:00Z`,',
   '      horario_decolagem: `${dataProg}T10:05:00Z`,',
   '      horario_pouso: `${dataProg}T10:55:00Z`,',
+  '      horario_motor_desligado: `${dataProg}T11:02:00Z`,',
   '      combustivel_inicio: 500,',
   '      combustivel_fim: 400,',
   '    },',
   '  });',
-  '  if (!etapaPassed || !etapaJson?.data?.id) return finish(manifest, false);',
-  '  const etapaId = etapaJson.data.id;',
+  '  if (!etapaUpdate.passed) return finish(manifest, false);',
   '  rdvVersao += 1;',
   '',
   '',
-].join('\n');
+].join('\\n');
 
 const reviewReplacement = [
   '  // ── 15. Iniciar revisao (coordenacao) ────────────────────────────────',
@@ -109,7 +122,7 @@ patched = replaceSlice(
   etapaEndMarker,
   etapaReplacement,
   'ETAPA_CAPTURE',
-  "operation: 'criar_etapa'",
+  "operation: 'listar_etapas_planejadas'",
 );
 patched = replaceSlice(
   patched,
