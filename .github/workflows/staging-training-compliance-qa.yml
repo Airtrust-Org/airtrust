@@ -89,6 +89,7 @@ jobs:
           bash scripts/staging/validate-0491-postconditions.sh --target="$STAGING_D1_NAME"
           bash scripts/staging/validate-0492-postconditions.sh --target="$STAGING_D1_NAME"
           bash scripts/staging/validate-0494-postconditions.sh --target="$STAGING_D1_NAME"
+          bash scripts/staging/validate-0508-postconditions.sh --target="$STAGING_D1_NAME"
           node scripts/staging/seed-qa-training-compliance.mjs --code="$QA_COMPLIANCE_CODE" --marker="$QA_COMPLIANCE_MARKER"
           node scripts/staging/seed-qa-training-compliance.mjs --apply --code="$QA_COMPLIANCE_CODE" --marker="$QA_COMPLIANCE_MARKER"
 
@@ -152,7 +153,7 @@ jobs:
             echo '## Staging Training Compliance QA'
             echo ''
             echo "- deployed SHA: \`$EXPECTED_DEPLOYED_SHA\`"
-            echo '- Schemas 0491 + 0492 + 0494 postconditions: `${{ needs.d1_fixture.result }}`'
+            echo '- Schemas 0491 + 0492 + 0494 + 0508 postconditions: `${{ needs.d1_fixture.result }}`'
             echo '- Synthetic never-realized case: `${{ needs.browser.result }}`'
             echo '- Synthetic cleanup: `${{ needs.d1_cleanup.result }}`'
             echo '- Production action: `none`'
