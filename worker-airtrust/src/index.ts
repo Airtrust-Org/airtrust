@@ -99,6 +99,7 @@ import controleVoosRdvWorkflowRoutes from './routes/controle-voos-rdv-workflow';
 import controleVoosRdvEtapasRoutes from './routes/controle-voos-rdv-etapas';
 import controleVoosPilotOfflineRoutes from './routes/controle-voos-pilot-offline';
 import controleVoosFrmsContractRoutes from './routes/controle-voos-frms-contract';
+import controleVoosFlightPlanRoutes from './routes/controle-voos-flight-plan';
 import controleVoosFrmsDispatchGateRoutes, {
   controleVoosDispatchGateGuard,
 } from './routes/controle-voos-frms-dispatch-gate';
@@ -719,6 +720,7 @@ app.use('/api/controle-voos/voos/:id/status', controleVoosDispatchGateGuard());
 // montadas antes do CRUD genérico /voos/:id para evitar captura de "meus" como id.
 app.route('/api/controle-voos', controleVoosRdvWorkflowRoutes);
 app.route('/api/controle-voos', controleVoosPilotOfflineRoutes);
+app.route('/api/controle-voos', controleVoosFlightPlanRoutes);
 app.route('/api/controle-voos', controleVoosRoutes);
 app.route('/api/controle-voos', controleVoosRdvEtapasRoutes);
 app.route('/api/controle-voos', controleVoosFrmsContractRoutes);
