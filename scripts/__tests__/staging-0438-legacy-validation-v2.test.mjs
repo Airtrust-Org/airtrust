@@ -91,3 +91,10 @@ test('canonical staging runner reuses route-created etapa and keeps safe API dia
   assert.doesNotMatch(canonicalRunner, /Authorization.*record/);
   assert.doesNotMatch(canonicalRunner, /fetchBody.*record/);
 });
+
+
+test('workflow evidence contract follows route-created stage operations', () => {
+  assert.match(workflow, /'listar_etapas_programadas'/);
+  assert.match(workflow, /'atualizar_etapa_programada'/);
+  assert.doesNotMatch(workflow, /'criar_etapa','adicionar_abastecimento'/);
+});
