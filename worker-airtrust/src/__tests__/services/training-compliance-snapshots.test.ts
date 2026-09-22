@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { buildDailyComplianceSnapshots } from '../../services/training-compliance-snapshots';
-import { selectDueThreshold } from '../../services/training-compliance-notifications';
+import { DEFAULT_COMPLIANCE_NOTIFICATION_POLICY, selectDueThreshold } from '../../services/training-compliance-notifications';
 
 describe('training compliance intelligence primitives', () => {
+  it('keeps automatic outbound compliance reminders opt-in by default', () => {
+    expect(DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.enabled).toBe(false);
+  });
+
   it('builds company, sector, role and sector+role snapshots without PII', () => {
     const data = buildDailyComplianceSnapshots(
       [

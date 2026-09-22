@@ -25,7 +25,7 @@ export type ComplianceNotificationPolicy = {
 };
 
 export const DEFAULT_COMPLIANCE_NOTIFICATION_POLICY: ComplianceNotificationPolicy = {
-  enabled: true,
+  enabled: false,
   email: true,
   whatsapp: true,
   due_day_thresholds: [30, 15, 7, 0, -7, -15, -30],
@@ -72,7 +72,7 @@ function normalizePolicy(value: unknown): ComplianceNotificationPolicy {
     return values.length ? values.sort((a, b) => b - a) : fallback;
   };
   return {
-    enabled: input.enabled !== false,
+    enabled: input.enabled === true,
     email: input.email !== false,
     whatsapp: input.whatsapp !== false,
     due_day_thresholds: normalizeThresholds(

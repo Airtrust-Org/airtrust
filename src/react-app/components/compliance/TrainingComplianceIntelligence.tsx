@@ -703,7 +703,7 @@ export function TrainingComplianceNotificationSettings() {
   return (
     <section className="rounded-xl border border-blue-200 bg-blue-50/30 p-4">
       <div className="flex items-start justify-between gap-3">
-        <div><h3 className="flex items-center gap-2 font-semibold text-slate-900"><Settings2 className="h-4 w-4 text-primary" /> Régua automática de cobrança</h3><p className="mt-1 text-xs text-slate-500">Dispara lembretes por estágio e interrompe automaticamente quando o requisito volta a ficar conforme.</p></div>
+        <div><h3 className="flex items-center gap-2 font-semibold text-slate-900"><Settings2 className="h-4 w-4 text-primary" /> Régua automática de cobrança</h3><p className="mt-1 text-xs text-slate-500">Opt-in: quando ativada pelo administrador, dispara lembretes por estágio e interrompe automaticamente quando o requisito volta a ficar conforme.</p></div>
         <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" disabled={!canEdit} checked={policy.enabled} onChange={(event) => setPolicy({ ...policy, enabled: event.target.checked })} /> Ativa</label>
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
