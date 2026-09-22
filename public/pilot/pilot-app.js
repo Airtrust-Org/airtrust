@@ -21,7 +21,7 @@ import {
   PILOT_DRAFT_SCHEMA_VERSION,
   parseNumber,
   plannedFlightMinutes,
-  realizedFlightMinutes,
+  realizedTotalMinutes,
   requiredJustificationMinutes,
   totalJustificationMinutes,
   toDurationInput,
@@ -102,6 +102,7 @@ const rdvEditorSaveStatus = document.querySelector('#rdv-editor-save-status');
 const rdvLocalSequenceLabel = document.querySelector('#rdv-local-sequence');
 const rdvLeaseUntilLabel = document.querySelector('#rdv-lease-until');
 const rdvCoreFields = document.querySelector('#rdv-core-fields');
+const rdvCrewSummary = document.querySelector('#rdv-crew-summary');
 const rdvFormFields = document.querySelector('#rdv-form-fields');
 const rdvStageFields = document.querySelector('#rdv-stage-fields');
 const rdvFuelingFields = document.querySelector('#rdv-fueling-fields');
@@ -3362,11 +3363,28 @@ function updateOperationFlow(step) {
 function applyCommonFieldsToStages() {
   if (!activeRdvDraft) return;
   const common = activeRdvDraft.common || (activeRdvDraft.common = buildCommonFlightFields(activePackageData()));
+  const commonUnit = String(common.unidade_peso || 'LB').toUpperCase();
+  if (commonUnit !== 'LB') {
+    common.peso_tripulacao = convertWeightFieldValue(common.peso_tripulacao, commonUnit, 'LB');
+    common.peso_vazio = convertWeightFieldValue(common.peso_vazio, commonUnit, 'LB');
+  }
+  common.unidade_peso = 'LB';
   for (const stageDraft of activeStageDrafts) {
     const fields = stageDraft.fields || {};
+    const stageUnit = String(fields.unidade_peso || commonUnit || 'LB').toUpperCase();
+    if (stageUnit !== 'LB') {
+      fields.peso_passageiros = convertWeightFieldValue(fields.peso_passageiros, stageUnit, 'LB');
+      fields.peso_bagagem = convertWeightFieldValue(fields.peso_bagagem, stageUnit, 'LB');
+      fields.peso_total = convertWeightFieldValue(fields.peso_total, stageUnit, 'LB');
+    }
+    const payloadUnit = String(fields.unidade_payload || 'LB').toUpperCase();
+    if (payloadUnit !== 'LB') {
+      fields.payload = convertWeightFieldValue(fields.payload, payloadUnit, 'LB');
+    }
     fields.peso_tripulacao = common.peso_tripulacao ?? '';
     fields.peso_vazio = common.peso_vazio ?? '';
-    fields.unidade_peso = common.unidade_peso || 'LB';
+    fields.unidade_peso = 'LB';
+    fields.unidade_payload = 'LB';
   }
 }
 
@@ -3375,23 +3393,93 @@ function convertWeightFieldValue(value, fromUnit, toUnit) {
   return converted === null ? '' : String(converted);
 }
 
-function changeCommonWeightUnit(nextUnit) {
-  if (!activeRdvDraft) return;
-  const common = activeRdvDraft.common || (activeRdvDraft.common = buildCommonFlightFields(activePackageData()));
-  const previousUnit = String(common.unidade_peso || 'LB').toUpperCase();
-  const targetUnit = String(nextUnit || 'LB').toUpperCase();
-  if (previousUnit === targetUnit) return;
-  common.peso_tripulacao = convertWeightFieldValue(common.peso_tripulacao, previousUnit, targetUnit);
-  common.peso_vazio = convertWeightFieldValue(common.peso_vazio, previousUnit, targetUnit);
-  for (const stageDraft of activeStageDrafts) {
-    const fields = stageDraft.fields || {};
-    fields.peso_passageiros = convertWeightFieldValue(fields.peso_passageiros, previousUnit, targetUnit);
-    fields.peso_bagagem = convertWeightFieldValue(fields.peso_bagagem, previousUnit, targetUnit);
-    fields.unidade_peso = targetUnit;
+function createDualWeightField({
+  label,
+  valueLb,
+  readOnly = false,
+  note,
+  onChangeLb,
+  onBlur,
+}) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'weight-pair-field';
+  const title = document.createElement('span');
+  title.className = 'weight-pair-title';
+  title.textContent = label;
+  const inputs = document.createElement('div');
+  inputs.className = 'weight-pair-inputs';
+
+  const buildUnitInput = (unit) => {
+    const field = document.createElement('label');
+    const unitLabel = document.createElement('span');
+    unitLabel.textContent = unit === 'LB' ? 'lb' : 'kg';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = 'any';
+    input.inputMode = 'decimal';
+    input.readOnly = readOnly || operationalSyncInFlight;
+    input.value = unit === 'LB'
+      ? String(valueLb ?? '')
+      : convertWeightFieldValue(valueLb, 'LB', 'KG');
+    field.append(unitLabel, input);
+    return { field, input };
+  };
+
+  const pounds = buildUnitInput('LB');
+  const kilograms = buildUnitInput('KG');
+  const syncFrom = (sourceUnit, rawValue) => {
+    const canonicalLb = sourceUnit === 'LB'
+      ? String(rawValue ?? '')
+      : convertWeightFieldValue(rawValue, 'KG', 'LB');
+    if (sourceUnit === 'LB') kilograms.input.value = convertWeightFieldValue(rawValue, 'LB', 'KG');
+    else pounds.input.value = canonicalLb;
+    if (onChangeLb) onChangeLb(canonicalLb);
+  };
+  pounds.input.addEventListener('input', () => syncFrom('LB', pounds.input.value));
+  kilograms.input.addEventListener('input', () => syncFrom('KG', kilograms.input.value));
+  if (onBlur) {
+    pounds.input.addEventListener('blur', () => onBlur(pounds.input.value, 'LB'));
+    kilograms.input.addEventListener('blur', () => onBlur(kilograms.input.value, 'KG'));
   }
-  common.unidade_peso = targetUnit;
-  applyCommonFieldsToStages();
-  refreshAllStageDerivedTimes();
+  inputs.append(pounds.field, kilograms.field);
+  wrapper.append(title, inputs);
+  if (note) {
+    const noteEl = document.createElement('span');
+    noteEl.className = 'field-note';
+    noteEl.textContent = note;
+    wrapper.append(noteEl);
+  }
+  return wrapper;
+}
+
+function renderPilotCrewSummary(packageData) {
+  if (!rdvCrewSummary) return;
+  rdvCrewSummary.replaceChildren();
+  const crew = Array.isArray(packageData?.tripulantes) ? packageData.tripulantes : [];
+  if (crew.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'pilot-crew-card';
+    empty.textContent = 'Nenhum tripulante informado para este voo.';
+    rdvCrewSummary.append(empty);
+    return;
+  }
+  for (const member of crew) {
+    const card = document.createElement('div');
+    card.className = 'pilot-crew-card';
+    const name = document.createElement('strong');
+    name.textContent = displayText(member.nome, 'Funcionário #' + member.funcionario_id);
+    const warName = document.createElement('span');
+    warName.textContent = 'Nome de guerra: ' + displayText(member.nome_guerra, '—');
+    const anac = document.createElement('span');
+    anac.textContent = 'ANAC: ' + displayText(member.codigo_anac, '—');
+    const role = document.createElement('span');
+    role.textContent = 'Função: ' + displayText(member.funcao, '—');
+    const presentation = document.createElement('span');
+    const presentationTime = toInputTime(member.horario_apresentacao);
+    presentation.textContent = 'Apresentação: ' + (presentationTime || 'Aguardando FRMS');
+    card.append(name, warName, anac, role, presentation);
+    rdvCrewSummary.append(card);
+  }
 }
 
 function renderRdvFormFields() {
@@ -3425,14 +3513,13 @@ function renderRdvFormFields() {
       onInput: (value) => { common.numero_db = value; scheduleOperationalSave(); },
       onBlur: () => void flushOperationalSave(),
     }),
-    createEditorField({
+    createDualWeightField({
       label: 'Peso da tripulação',
-      value: common.peso_tripulacao || '',
-      type: 'number',
-      inputMode: 'decimal',
-      note: 'Valor comum a todas as etapas.',
-      onInput: (value) => {
+      valueLb: common.peso_tripulacao || '',
+      note: 'Valor comum a todas as etapas. Digite em lb ou kg; a outra unidade é calculada automaticamente.',
+      onChangeLb: (value) => {
         common.peso_tripulacao = value;
+        common.unidade_peso = 'LB';
         applyCommonFieldsToStages();
         refreshAllStageDerivedTimes();
         scheduleOperationalSave();
@@ -3440,23 +3527,11 @@ function renderRdvFormFields() {
       },
       onBlur: () => void flushOperationalSave(),
     }),
-    createEditorField({
+    createDualWeightField({
       label: 'Peso vazio da aeronave',
-      value: common.peso_vazio || '',
-      type: 'number',
-      inputMode: 'decimal',
+      valueLb: common.peso_vazio || '',
       readOnly: true,
-      note: 'Vem do cadastro da aeronave.',
-    }),
-    createEditorSelect({
-      label: 'Unidade dos pesos',
-      value: common.unidade_peso || 'LB',
-      options: [{ code: 'LB', label: 'lb' }, { code: 'KG', label: 'kg' }],
-      onChange: (value) => {
-        changeCommonWeightUnit(value || 'LB');
-        scheduleOperationalSave();
-        renderOperationalEditor({ preserveScroll: true });
-      },
+      note: 'Vem do cadastro da aeronave; exibido simultaneamente em lb e kg.',
     }),
     createEditorField({
       label: 'Ocorrências',
@@ -3478,7 +3553,7 @@ function renderRdvFormFields() {
 
   const summaryFields = [
     ['Tempo de voo', activeRdvDraft.form.tempo_voo_total_hhmm || '—', 'Soma de decolagem → pouso em todas as etapas.'],
-    ['Tempo total', activeRdvDraft.form.tempo_total_hhmm || '—', 'Soma de partida → corte em todas as etapas.'],
+    ['Tempo total', activeRdvDraft.form.tempo_total_hhmm || '—', 'Partida → corte; enquanto não houver corte, usa o último pouso como fechamento provisório.'],
     ['Pousos', activeRdvDraft.form.numero_pousos || '0', 'Contado automaticamente pelas etapas com hora de pouso registrada.'],
   ];
   for (const [label, value, note] of summaryFields) {
@@ -3486,7 +3561,7 @@ function renderRdvFormFields() {
   }
 
   const plannedMinutes = plannedFlightMinutes(packageData);
-  const realizedMinutes = realizedFlightMinutes(activeStageDrafts);
+  const realizedMinutes = realizedTotalMinutes(activeStageDrafts);
   const requiredMinutes = requiredJustificationMinutes(packageData, activeStageDrafts);
   const assignedMinutes = totalJustificationMinutes(activeRdvDraft.justifications);
   const justificationPanel = document.createElement('section');
@@ -3500,7 +3575,7 @@ function renderRdvFormFields() {
   headingNote.className = 'field-note';
   headingNote.textContent =
     'Planejado ' + minutesToHhMm(plannedMinutes) +
-    ' · Realizado ' + minutesToHhMm(realizedMinutes) +
+    ' · Tempo total realizado ' + minutesToHhMm(realizedMinutes) +
     ' · Diferença a justificar ' + String(requiredMinutes) + ' min.';
   const sourceGuidance = document.createElement('span');
   sourceGuidance.className = 'field-note justification-guidance';
@@ -3626,7 +3701,7 @@ function refreshStageDerivedTimes(stageDraft) {
   );
   fields.tempo_total = calcClockDurationHhMm(
     fields.horario_motor_ligado,
-    fields.horario_motor_desligado,
+    fields.horario_motor_desligado || fields.horario_pouso,
   );
   fields.starts = String(fields.horario_motor_ligado || '').trim() ? '1' : '';
   const totalWeight = calcStageTotalWeight(fields);
@@ -3761,7 +3836,7 @@ function renderStageFields() {
     ['Hora de pouso', 'horario_pouso', 'time', null, false, false, null],
     ['Hora de corte', 'horario_motor_desligado', 'time', null, false, false, 'Motor desligado'],
     ['Tempo de voo', 'tempo_decolagem_pouso', 'text', null, true, false, 'Calculado: decolagem → pouso'],
-    ['Tempo total', 'tempo_total', 'text', null, true, false, 'Calculado: partida → corte'],
+    ['Tempo total', 'tempo_total', 'text', null, true, false, 'Calculado: partida → corte; sem corte, partida → pouso'],
     ['IFR (duração)', 'tempo_ifr', 'duration', 'numeric', false, false, 'Digite apenas os números, por exemplo 0130'],
     ['Noturno (duração)', 'tempo_noturno', 'duration', 'numeric', false, false, 'Digite apenas os números, por exemplo 0130'],
     ['Partidas', 'starts', 'number', 'numeric', true, false, 'Calculado automaticamente pela hora de partida'],
@@ -3783,7 +3858,46 @@ function renderStageFields() {
     ['Observações da etapa', 'observacoes', 'textarea', null, false, true, null],
   ];
 
+  const dualWeightLabels = {
+    peso_passageiros: 'Peso dos passageiros',
+    peso_bagagem: 'Peso da bagagem',
+    payload: 'Carga',
+    peso_total: 'Peso total da aeronave',
+  };
+
   for (const [label, key, type, inputMode, readOnly, wide, note] of stageFields) {
+    if (Object.prototype.hasOwnProperty.call(dualWeightLabels, key)) {
+      const weightNode = createDualWeightField({
+        label: dualWeightLabels[key],
+        valueLb: fields[key] ?? '',
+        readOnly,
+        note: readOnly
+          ? 'Calculado automaticamente e exibido em lb e kg.'
+          : 'Digite em lb ou kg; a outra unidade é calculada automaticamente.',
+        onChangeLb: readOnly
+          ? null
+          : (value) => {
+              fields[key] = value;
+              if (key === 'payload') fields.unidade_payload = 'LB';
+              else fields.unidade_peso = 'LB';
+              refreshAllStageDerivedTimes();
+              activeRdvDraft.form = applySafeStageAggregates(activeRdvDraft.form, activeStageDrafts);
+              scheduleOperationalSave();
+            },
+        onBlur: readOnly
+          ? null
+          : () => {
+              void flushOperationalSave();
+              renderStageFields();
+              renderRdvFormFields();
+              refreshDraftValidationPresentation();
+            },
+      });
+      if (readOnly) weightNode.classList.add('derived-time');
+      grid.append(weightNode);
+      continue;
+    }
+
     const fieldNode = createEditorField({
       label,
       value: fields[key],
@@ -3847,22 +3961,6 @@ function renderStageFields() {
   }
 
   grid.append(
-    createEditorSelect({
-      label: 'Unidade da carga',
-      value: fields.unidade_payload || 'LB',
-      options: [
-        { code: 'KG', label: 'kg' },
-        { code: 'LB', label: 'lb' },
-      ],
-      onChange: (value) => {
-        fields.unidade_payload = value || 'LB';
-        refreshAllStageDerivedTimes();
-        activeRdvDraft.form = applySafeStageAggregates(activeRdvDraft.form, activeStageDrafts);
-        scheduleOperationalSave();
-        renderStageFields();
-        renderRdvFormFields();
-      },
-    }),
     createEditorSelect({
       label: 'Unidade do combustível',
       value: fields.unidade_combustivel || 'LB',
@@ -4043,6 +4141,7 @@ function renderOperationalEditor(options = {}) {
   );
   rdvLocalSequenceLabel.textContent = String(operationalLocalSequence);
 
+  renderPilotCrewSummary(packageData);
   renderRdvFormFields();
   renderStageFields();
   renderFuelingFields();
@@ -4061,6 +4160,7 @@ function closeOperationalEditor() {
   activeStageTabIndex = 0;
   rdvEditorCard.classList.add('hidden');
   setFlightSelectionVisible(true);
+  rdvCrewSummary?.replaceChildren();
   rdvCoreFields.replaceChildren();
   rdvFormFields.replaceChildren();
   rdvStageFields.replaceChildren();
@@ -4129,8 +4229,10 @@ function openPackageRecord(record, initialWorkspaceTab = 'summary') {
       const li = document.createElement('li');
       li.textContent =
         displayText(member.nome, 'Funcionário #' + member.funcionario_id) +
-        ' · ' +
-        displayText(member.funcao);
+        ' · Guerra: ' + displayText(member.nome_guerra, '—') +
+        ' · ANAC: ' + displayText(member.codigo_anac, '—') +
+        ' · ' + displayText(member.funcao) +
+        ' · Apresentação: ' + (toInputTime(member.horario_apresentacao) || 'Aguardando FRMS');
       list.append(li);
     }
     flightDetail.append(list);

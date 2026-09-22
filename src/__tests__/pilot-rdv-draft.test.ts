@@ -12,6 +12,7 @@ import {
   payloadToKg,
   plannedFlightMinutes,
   realizedFlightMinutes,
+  realizedTotalMinutes,
   requiredJustificationMinutes,
   totalJustificationMinutes,
   toDurationInput,
@@ -127,13 +128,14 @@ describe('Pilot RDV operational calculations', () => {
       },
     };
     const stages = [
-      { horario_decolagem: '10:05', horario_pouso: '11:00' },
-      { horario_decolagem: '11:10', horario_pouso: '12:00' },
+      { horario_motor_ligado: '10:00', horario_decolagem: '10:05', horario_pouso: '11:00', horario_motor_desligado: '' },
+      { horario_motor_ligado: '11:00', horario_decolagem: '11:10', horario_pouso: '12:00', horario_motor_desligado: '12:05' },
     ];
     expect(plannedFlightMinutes(packageData)).toBe(90);
     expect(realizedFlightMinutes(stages)).toBe(105);
-    expect(requiredJustificationMinutes(packageData, stages)).toBe(15);
-    expect(totalJustificationMinutes([{ minutos: '3' }, { minutos: 5 }, { minutos: '7' }])).toBe(15);
+    expect(realizedTotalMinutes(stages)).toBe(125);
+    expect(requiredJustificationMinutes(packageData, stages)).toBe(35);
+    expect(totalJustificationMinutes([{ minutos: '10' }, { minutos: 10 }, { minutos: '15' }])).toBe(35);
   });
 
   it('encadeia combustível final como inicial da perna seguinte', () => {
@@ -200,6 +202,32 @@ describe('Pilot RDV operational calculations', () => {
     const stages = buildStageDraftsFromPackage(packageData);
     expect(stages[0]).toMatchObject({ unidade_payload: 'LB', unidade_combustivel: 'LB', unidade_peso: 'LB' });
     expect(stages[0].peso_tripulacao).toBe('');
+  });
+
+  it('usa pouso como fechamento provisório do tempo total quando ainda não há corte', () => {
+    const firstLeg = [
+      { horario_motor_ligado: '08:00', horario_decolagem: '08:10', horario_pouso: '08:40', horario_motor_desligado: '' },
+    ];
+    expect(calcTotalBlockTimeHhMm(firstLeg)).toBe('00:40');
+
+    const form = applySafeStageAggregates({}, firstLeg);
+    expect(form.tempo_voo_total_hhmm).toBe('00:30');
+    expect(form.tempo_total_hhmm).toBe('00:40');
+  });
+
+  it('exige justificativa pelo tempo total, e não pelo tempo de decolagem a pouso', () => {
+    const packageData = {
+      voo: {
+        horario_previsto_partida: '2026-09-20T10:00:00.000Z',
+        horario_previsto_chegada: '2026-09-20T11:00:00.000Z',
+      },
+    };
+    const stages = [
+      { horario_motor_ligado: '10:00', horario_decolagem: '10:10', horario_pouso: '11:00', horario_motor_desligado: '11:10' },
+    ];
+    expect(realizedFlightMinutes(stages)).toBe(50);
+    expect(realizedTotalMinutes(stages)).toBe(70);
+    expect(requiredJustificationMinutes(packageData, stages)).toBe(10);
   });
 
   it('soma tempo de voo por etapa e tempo total por ciclos de motor contínuos', () => {

@@ -188,6 +188,33 @@
         text-align: left;
       }
       .editor-grid .wide { grid-column: 1 / -1; }
+      .pilot-crew-summary {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin: 14px 0 20px;
+      }
+      .pilot-crew-card {
+        border: 1px solid #d7e0ea;
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: #f8fbff;
+        display: grid;
+        gap: 5px;
+      }
+      .pilot-crew-card strong { color: #10213d; }
+      .pilot-crew-card span { color: #52637a; font-size: .84rem; line-height: 1.35; }
+      .weight-pair-field { min-width: 0; }
+      .weight-pair-title { display: block; margin-bottom: 6px; font-weight: 800; }
+      .weight-pair-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .weight-pair-inputs label { min-width: 0; }
+      .weight-pair-inputs label > span:first-child {
+        margin-bottom: 4px;
+        color: #66758a;
+        font-size: .76rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
       .flight-date-controls {
         display: grid;
         grid-template-columns: auto minmax(190px, 240px) auto auto;
@@ -217,6 +244,7 @@
       }
       @media (max-width: 620px) {
         .editor-grid { grid-template-columns: 1fr; }
+        .pilot-crew-summary { grid-template-columns: 1fr; }
         .editor-grid .wide { grid-column: auto; }
         .flight-date-controls { grid-template-columns: 1fr 1fr; }
         .flight-date-controls label { grid-column: 1 / -1; }
@@ -768,6 +796,14 @@
             </div>
             <button id="close-rdv-editor" class="secondary" type="button">Sair do voo offline</button>
           </div>
+          <div class="section-head" style="margin-top:20px">
+            <div>
+              <h3>Tripulação do voo</h3>
+              <p class="muted">Confira os tripulantes antes de iniciar o lançamento.</p>
+            </div>
+          </div>
+          <div id="rdv-crew-summary" class="pilot-crew-summary"></div>
+
           <div class="section-head" style="margin-top:20px">
             <div>
               <h3>Dados comuns do voo</h3>
