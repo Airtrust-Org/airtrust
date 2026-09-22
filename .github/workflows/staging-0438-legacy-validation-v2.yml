@@ -221,7 +221,7 @@ jobs:
           const report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
           if (report.ranFully !== true || Number(report.failed) !== 0) throw new Error('E2E_NOT_GREEN');
           const required = [
-            'criar_voo','criar_rdv','criar_etapa','adicionar_abastecimento',
+            'criar_voo','criar_rdv','listar_etapas_programadas','atualizar_etapa_programada','adicionar_abastecimento',
             'finalizar_preenchimento_rdv','enviar_rdv','iniciar_revisao','devolver_rdv',
             'corrigir_apos_devolucao','refinalizar_preenchimento_rdv','reenviar_rdv',
             'iniciar_revisao_2','aprovar_rdv','finalizar_rdv','viewer_403_em_mutacao',
