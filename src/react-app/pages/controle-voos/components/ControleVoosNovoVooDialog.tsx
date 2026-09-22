@@ -447,6 +447,14 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     }
   }
 
+  const selectedAircraft = aeronaves.find((item) => String(item.id) === form.aeronave_id);
+  const basicWeightLabel =
+    selectedAircraft?.peso_vazio != null
+      ? `${Number(selectedAircraft.peso_vazio).toLocaleString('pt-BR', {
+          maximumFractionDigits: 3,
+        })} ${String(selectedAircraft.unidade_peso || '').trim().toUpperCase() || '—'}`
+      : null;
+
   const picOptions = eligibleCrew.filter((member) => member.funcao_codigo === 'PIC' && String(member.id) !== form.sic_funcionario_id);
   const sicOptions = eligibleCrew.filter((member) => String(member.id) !== form.pic_funcionario_id);
 
@@ -487,6 +495,18 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
             </select>
           </label>
           <label className="text-sm">Data<input type="date" className={fieldClass} value={form.data_programacao} onChange={(e) => set('data_programacao', e.target.value)} required /></label>
+
+          {form.aeronave_id && (
+            <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950/30">
+              <span className="font-medium text-slate-900 dark:text-slate-100">Peso básico da aeronave: </span>
+              <span className="text-slate-700 dark:text-slate-300">
+                {basicWeightLabel || 'não cadastrado'}
+              </span>
+              <span className="ml-2 text-xs text-slate-500">
+                {basicWeightLabel ? 'carregado automaticamente do cadastro da aeronave' : 'cadastre o peso básico para preencher o planejamento automaticamente'}
+              </span>
+            </div>
+          )}
 
           <div className="md:col-span-2 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
