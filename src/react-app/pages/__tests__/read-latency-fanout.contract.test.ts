@@ -40,7 +40,7 @@ describe('read latency fan-out contracts', () => {
 
   it('mantém a tabela de Modelos fora da virtualização que oculta linhas com pageSize 100', () => {
     expect(qualificacoes).toMatch(
-      /tableId="qualificacoes-tipos"[\s\S]*?data=\{filteredTipos\}[\s\S]*?virtualizeRows=\{false\}/,
+      /tableId="qualificacoes-tipos-v2"[\s\S]*?data=\{filteredTipos\}[\s\S]*?virtualizeRows=\{false\}/,
     );
   });
 

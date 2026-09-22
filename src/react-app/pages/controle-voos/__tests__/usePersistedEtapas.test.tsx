@@ -121,6 +121,53 @@ describe('usePersistedEtapas', () => {
     expect(result.current.knownVersao).toBe(3);
   });
 
+  it('envia contexto auditado nas mutacoes de etapa da Coordenacao', async () => {
+    mutateCriar.mockResolvedValue({
+      data: {
+        id: 204,
+        numero_etapa: 2,
+        origem_icao: 'SBSP',
+        destino_icao: null,
+        horario_decolagem: null,
+        horario_pouso: null,
+        combustivel_inicio: null,
+        combustivel_fim: null,
+        pousos_diurnos: null,
+        pousos_noturnos: null,
+        pax: null,
+        payload: null,
+      },
+      meta: { versao: 3 },
+    });
+
+    const { result } = renderHook(
+      () =>
+        usePersistedEtapas({
+          vooId: 601,
+          rdv: { id: 1, versao: 2, workflow_status: 'em_revisao' } as never,
+          editable: true,
+          editMode: 'coordenacao',
+          justificativa: 'Conferência operacional da Coordenação',
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.drafts[0]?.id).toBe(101));
+
+    await act(async () => {
+      await result.current.addEtapa();
+    });
+
+    expect(mutateCriar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vooId: 601,
+        versao: 2,
+        mode: 'coordenacao',
+        justificativa: 'Conferência operacional da Coordenação',
+      }),
+    );
+  });
+
   it('duplica e remove via API', async () => {
     mutateDuplicar.mockResolvedValue({
       data: {

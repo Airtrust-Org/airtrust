@@ -40,6 +40,7 @@ import { RDV_CAPABILITIES, assertRdvSelfScope, requireExpectedRdvVersion, assert
 import { assertRdvRules, normalizeRdvInput } from '../services/controle-voos/rdv-validation';
 import { finalizeRdvPreenchimentoHandler } from './controle-voos-rdv-finalization';
 import { assertFlightCrewAssignment, listEligibleFlightCrew } from '../services/controle-voos/crew-eligibility';
+import { assertCrewEligibleForAircraftChange } from '../services/controle-voos/flight-aircraft-change';
 import { buildFlightRelatedStatements, normalizeFlightRouteIds, parseFlightCrewIds, resolveFlightRoutePoints } from '../services/controle-voos/flight-creation';
 import { parseFlightPlanningInput, updateFlightStagePlanningIfSupported } from '../services/controle-voos/flight-planning';
 import { enrichFlightsWithPresentation } from '../services/controle-voos/flight-presentation';
@@ -1223,7 +1224,13 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
     ...planning,
   });
   if (relatedStatements.length > 0) await c.env.DB.batch(relatedStatements);
-  await updateFlightStagePlanningIfSupported(c.env.DB, empresaId, newId, planning);
+  await updateFlightStagePlanningIfSupported(
+    c.env.DB,
+    empresaId,
+    newId,
+    input.aeronave_id || null,
+    planning,
+  );
 
   await recordFlightEvent({
     db: c.env.DB,
@@ -1291,6 +1298,14 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
   assertCancellationReason(merged);
   if (input.status) assertStatusTransition(existing.status, input.status);
   await assertCatalogsForInput(c.env.DB, merged, empresaId);
+
+  await assertCrewEligibleForAircraftChange(
+    c.env.DB,
+    empresaId,
+    existing.id,
+    existing.aeronave_id,
+    input.aeronave_id,
+  );
 
   const fields: string[] = [];
   const values: unknown[] = [];

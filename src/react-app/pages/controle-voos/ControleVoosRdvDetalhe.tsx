@@ -9,6 +9,7 @@ import {
   Plus,
   Send,
   Users,
+  Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppLayout from '@/react-app/components/AppLayout';
@@ -20,11 +21,14 @@ import ControleVoosRdvWorkflowPanel from './components/ControleVoosRdvWorkflowPa
 import ControleVoosRdvStepper from './components/ControleVoosRdvStepper';
 import ControleVoosRdvSaveStatus from './components/ControleVoosRdvSaveStatus';
 import ControleVoosRdvTrechoCard from './components/ControleVoosRdvTrechoCard';
+import ControleVoosEditarVooDialog from './components/ControleVoosEditarVooDialog';
+import ControleVoosTripulacaoCard from './components/ControleVoosTripulacaoCard';
 import {
   useControleVoosVoo,
   useControleVoosRdv,
   useControleVoosAeroportos,
   useSalvarRdv,
+  useCorrigirRdv,
   useFinalizarPreenchimentoRdv,
   useTripulantes,
   useAbastecimentos,
@@ -97,6 +101,8 @@ export default function ControleVoosRdvDetalhe() {
   const [versionConflict, setVersionConflict] = useState(false);
   const [activeTrechoIndex, setActiveTrechoIndex] = useState(0);
   const [hydrated, setHydrated] = useState(false);
+  const [coordenacaoJustificativa, setCoordenacaoJustificativa] = useState('');
+  const [programacaoEditOpen, setProgramacaoEditOpen] = useState(false);
   const hydratedKeyRef = useRef<string | null>(null);
 
   const {
@@ -112,6 +118,7 @@ export default function ControleVoosRdvDetalhe() {
   const { data: alertas = [] } = useRdvAlertas(rdv ? id : undefined);
 
   const salvarMutation = useSalvarRdv();
+  const corrigirMutation = useCorrigirRdv();
   const finalizarMutation = useFinalizarPreenchimentoRdv();
   const criarAbastecimento = useCriarAbastecimento();
   const removerAbastecimento = useRemoverAbastecimento();
@@ -124,7 +131,11 @@ export default function ControleVoosRdvDetalhe() {
 
   const aeroMap = buildAeroMap(aeroportos);
   const isLoading = vooLoading || rdvLoading;
-  const editable = isCoordenacao && canEditRdv(rdv);
+  const isCoordenacaoRevisando = isCoordenacao && rdv?.workflow_status === 'em_revisao';
+  const justificativaCoordenacaoValida = coordenacaoJustificativa.trim().length > 0;
+  const editable =
+    isCoordenacao &&
+    (canEditRdv(rdv) || (isCoordenacaoRevisando && justificativaCoordenacaoValida));
   const form = formState;
 
   const origemIcao = voo ? aeroMap.get(voo.origem_id)?.codigo_icao || '' : '';
@@ -134,6 +145,8 @@ export default function ControleVoosRdvDetalhe() {
     vooId: id,
     rdv,
     editable,
+    editMode: isCoordenacaoRevisando ? 'coordenacao' : 'pilot',
+    justificativa: isCoordenacaoRevisando ? coordenacaoJustificativa : undefined,
     origemIcao,
     destinoIcao,
   });
@@ -151,8 +164,17 @@ export default function ControleVoosRdvDetalhe() {
     form,
     enabled: Boolean(id && form && editable && hydrated),
     debounceMs: 800,
-    saveFn: async ({ vooId, dados }) =>
-      salvarMutation.mutateAsync({ vooId, dados: { ...dados, versao: rdv?.versao } }),
+    saveFn: async ({ vooId, dados }) => {
+      if (isCoordenacaoRevisando) {
+        return corrigirMutation.mutateAsync({
+          vooId,
+          versao: rdv?.versao,
+          justificativa: coordenacaoJustificativa.trim(),
+          campos: dados,
+        });
+      }
+      return salvarMutation.mutateAsync({ vooId, dados: { ...dados, versao: rdv?.versao } });
+    },
   });
 
   useUnsavedChangesGuard((autosave.hasPending || etapasState.hasPending) && editable);
@@ -415,6 +437,60 @@ export default function ControleVoosRdvDetalhe() {
               )}
             </div>
           </ControleVoosPageHeader>
+
+          {isCoordenacaoRevisando && (
+            <section className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20">
+              <div className="flex flex-col gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-amber-950 dark:text-amber-100">
+                    Correção pela Coordenação
+                  </h2>
+                  <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
+                    Informe uma justificativa para habilitar correções no RDV e nas etapas. Cada
+                    alteração é versionada e registrada no histórico antes da aprovação.
+                  </p>
+                </div>
+                <label className="text-xs font-medium text-amber-950 dark:text-amber-100">
+                  Justificativa das correções
+                  <textarea
+                    rows={2}
+                    value={coordenacaoJustificativa}
+                    onChange={(event) => setCoordenacaoJustificativa(event.target.value)}
+                    placeholder="Ex.: Ajuste após conferência da Coordenação"
+                    className="mt-1 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 dark:border-amber-800 dark:bg-slate-950 dark:text-slate-100"
+                  />
+                </label>
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  <span className={justificativaCoordenacaoValida ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-800 dark:text-amber-200'}>
+                    {justificativaCoordenacaoValida
+                      ? 'Edição auditada habilitada.'
+                      : 'Os campos permanecem somente leitura até informar a justificativa.'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setProgramacaoEditOpen(true)}
+                    className="inline-flex items-center gap-1 font-semibold text-blue-700 hover:underline dark:text-blue-300"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Corrigir programação e aeronave
+                  </button>
+                  <span className="text-amber-800 dark:text-amber-200">
+                    Rota e etapas: edite abaixo · Tripulação: gerencie nesta revisão.
+                  </span>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {isCoordenacaoRevisando && (
+            <div className="mb-4">
+              <ControleVoosTripulacaoCard
+                vooId={voo.id}
+                aeronaveId={voo.aeronave_id}
+                rdvVersion={rdv?.versao}
+              />
+            </div>
+          )}
 
           {rdv?.motivo_devolucao &&
             (rdv.workflow_status === 'devolvido' || rdv.workflow_status === 'rascunho') && (
@@ -993,6 +1069,17 @@ export default function ControleVoosRdvDetalhe() {
               </p>
             </aside>
           </div>
+
+          {voo && (
+            <ControleVoosEditarVooDialog
+              open={programacaoEditOpen}
+              voo={voo}
+              onClose={() => setProgramacaoEditOpen(false)}
+              onSaved={() => {
+                void refetchVoo();
+              }}
+            />
+          )}
         </ControleVoosPageShell>
       </div>
     </AppLayout>

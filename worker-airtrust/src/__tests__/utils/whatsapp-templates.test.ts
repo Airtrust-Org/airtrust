@@ -69,4 +69,19 @@ describe('whatsapp-templates', () => {
     expect(template!.bodyText).not.toContain('GERÊNCIA DE TREINAMENTO | COSTA DO SOL');
     expect(template!.bodyText).not.toContain('Gerência de Treinamento');
   });
+
+  it('usa template próprio para treinamento obrigatório nunca realizado', () => {
+    const template = getAlertWhatsAppTemplateDefinition('ead_required');
+    expect(template).toBeDefined();
+    const message = renderTemplateBody(template!.bodyText, {
+      '1': 'Viviane',
+      '2': 'CRM',
+      '3': 'Obrigatório ainda não realizado\n\n*Acesse diretamente o treinamento:*\nhttps://app.airtrust.online/treinamentos/999',
+    });
+    expect(message).toContain('ainda não consta como realizado');
+    expect(message).toContain('*Treinamento:* CRM');
+    expect(message).toContain('sujeito à verificação em auditorias');
+    expect(message).toContain('https://app.airtrust.online/treinamentos/999');
+  });
+
 });

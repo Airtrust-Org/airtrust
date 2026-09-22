@@ -74,9 +74,21 @@ async function call({ operation, method, path, actor, tenant, body, expectedStat
     duration_ms: durationMs,
   };
   if (error) record.error = error;
+  if (!passed && json && typeof json === 'object') {
+    const safeCode = typeof json.code === 'string' ? json.code : null;
+    const safeMessage = typeof json.error === 'string' ? json.error : null;
+    const safeRequestId = typeof json.requestId === 'string' ? json.requestId : null;
+    if (safeCode) record.api_error_code = safeCode;
+    if (safeMessage) record.api_error = safeMessage;
+    if (safeRequestId) record.request_id = safeRequestId;
+  }
   report.push(record);
 
-  log(`${passed ? 'OK  ' : 'FAIL'} ${operation} (${method} ${path}) -> ${status} in ${durationMs}ms`);
+  log(
+    `${passed ? 'OK  ' : 'FAIL'} ${operation} (${method} ${path}) -> ${status} in ${durationMs}ms` +
+      (!passed && record.api_error_code ? ` code=${record.api_error_code}` : '') +
+      (!passed && record.request_id ? ` requestId=${record.request_id}` : ''),
+  );
 
   return { status, json, passed };
 }
@@ -207,7 +219,7 @@ async function main() {
       origem_id: catA.origemId,
       destino_id: catA.destinoId,
       tipo_voo_id: catA.tipoVooId,
-      natureza_voo_id: catA.naturezaVooId,
+      contrato_id: catA.contratoId,
       aeronave_id: aeronaveId,
       horario_previsto_partida: `${dataProg}T10:00:00Z`,
       horario_previsto_chegada: `${dataProg}T11:00:00Z`,
@@ -298,28 +310,58 @@ async function main() {
   });
   let rdvVersao = rdvJson?.data?.versao ?? 1;
 
-  // ── 7. Criar etapa ───────────────────────────────────────────────────
-  await call({
-    operation: 'criar_etapa',
-    method: 'POST',
+  // ── 7. Completar etapa programada criada junto com a rota ─────────────
+  const etapasProgramadas = await call({
+    operation: 'listar_etapas_programadas',
+    method: 'GET',
     path: `/api/controle-voos/voos/${vooId}/etapas`,
     actor: adminA,
     tenant: 'A',
-    expectedStatus: 201,
-    body: {
-      versao: rdvVersao,
-      numero_etapa: 1,
-      origem_icao: 'OR' + 'A' + manifest.runId,
-      destino_icao: 'DE' + 'A' + manifest.runId,
-      horario_motor_ligado: `${dataProg}T09:58:00Z`,
-      horario_decolagem: `${dataProg}T10:05:00Z`,
-      horario_pouso: `${dataProg}T10:55:00Z`,
-      horario_motor_desligado: `${dataProg}T11:02:00Z`,
-      combustivel_inicio: 500,
-      combustivel_fim: 400,
-    },
+    expectedStatus: 200,
   });
-  rdvVersao += 1;
+  if (!etapasProgramadas.passed) return finish(manifest, false);
+
+  const primeiraEtapa = Array.isArray(etapasProgramadas.json?.data)
+    ? etapasProgramadas.json.data[0]
+    : null;
+  let etapaId = primeiraEtapa?.id ?? null;
+
+  const etapaPayload = {
+    versao: rdvVersao,
+    origem_icao: 'OR' + 'A' + manifest.runId,
+    destino_icao: 'DE' + 'A' + manifest.runId,
+    horario_motor_ligado: `${dataProg}T09:58:00Z`,
+    horario_decolagem: `${dataProg}T10:05:00Z`,
+    horario_pouso: `${dataProg}T10:55:00Z`,
+    horario_motor_desligado: `${dataProg}T11:02:00Z`,
+    combustivel_inicio: 500,
+    combustivel_fim: 400,
+  };
+
+  const etapaResult = etapaId
+    ? await call({
+        operation: 'atualizar_etapa_programada',
+        method: 'PATCH',
+        path: `/api/controle-voos/voos/${vooId}/etapas/${etapaId}`,
+        actor: adminA,
+        tenant: 'A',
+        expectedStatus: 200,
+        body: etapaPayload,
+      })
+    : await call({
+        operation: 'criar_etapa_fallback',
+        method: 'POST',
+        path: `/api/controle-voos/voos/${vooId}/etapas`,
+        actor: adminA,
+        tenant: 'A',
+        expectedStatus: 201,
+        body: { ...etapaPayload, numero_etapa: 1 },
+      });
+
+  if (!etapaResult.passed) return finish(manifest, false);
+  etapaId = etapaId ?? etapaResult.json?.data?.id ?? null;
+  if (!etapaId) return finish(manifest, false);
+  rdvVersao = etapaResult.json?.meta?.versao ?? rdvVersao + 1;
 
   // ── 7.5 Criar setor + funcionario via cadastro CANONICO (Funcionarios) ──
   // funcionarios.setor_id e exigido por trigger real (achado em staging:

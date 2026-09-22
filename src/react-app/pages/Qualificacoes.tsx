@@ -2758,7 +2758,8 @@ export default function Qualificacoes() {
                 </div>
               ) : (
                 <DataTable
-                  tableId="qualificacoes-tipos"
+                  key={`qualificacoes-tipos-v2-${modelosPrefsReady ? 'ready' : 'loading'}-${filteredTipos.length}-${String(filteredTipos[0]?.id ?? 'none')}-${String(filteredTipos[filteredTipos.length - 1]?.id ?? 'none')}`}
+                  tableId="qualificacoes-tipos-v2"
                   data={filteredTipos}
                   virtualizeRows={false}
                   columns={[

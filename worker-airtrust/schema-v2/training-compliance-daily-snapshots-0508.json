@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-daily-snapshots-0508",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0508_training_compliance_daily_snapshots.sql",
+  "fileHash": "03db09a365602bd52436e326a7e4bd98b40e905816546ce88f03cc8671f678ab",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-daily-snapshots-0508.md",
+  "planHash": "7c517867ca000e7fb1f85f7c4a94e9f0add303e9e3c15a4b94649e360230febf"
+}

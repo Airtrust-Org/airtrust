@@ -11,6 +11,9 @@ const workflow = readFileSync('.github/workflows/staging-0438-legacy-validation-
 const runner = readFileSync('scripts/staging/run-controle-voos-e2e-cas-v2.mjs', 'utf8');
 const cleanup = readFileSync('scripts/staging/cleanup-controle-voos-e2e-fixtures-v2.mjs', 'utf8');
 const orphan = readFileSync('scripts/staging/cleanup-controle-voos-e2e-orphan-run-v2.mjs', 'utf8');
+const provision = readFileSync('scripts/staging/provision-controle-voos-e2e-fixtures.mjs', 'utf8');
+const canonicalRunner = readFileSync('scripts/staging/run-controle-voos-e2e.mjs', 'utf8');
+const legacyCleanup = readFileSync('scripts/staging/cleanup-controle-voos-e2e-fixtures.mjs', 'utf8');
 
 test('0438 validation v2 stays staging-only and has no schema apply path', () => {
   assert.match(workflow, /AIRTRUST_STAGING_0438_LEGACY_VALIDATION_V2/);
@@ -23,19 +26,29 @@ test('0438 validation v2 stays staging-only and has no schema apply path', () =>
   assert.match(workflow, /cleanup-controle-voos-e2e-orphan-run-v2\.mjs/);
 });
 
-test('V2 overlay is fail closed, revision-only and exercises coordination etapa revisions', () => {
+test('V2 overlay is fail closed, revision-only and reuses canonical etapa id', () => {
   assert.match(runner, /START_MARKER_NOT_FOUND/);
   assert.match(runner, /END_MARKER_NOT_FOUND/);
   assert.match(runner, /START_MARKER_NOT_UNIQUE/);
   assert.match(runner, /SHAPE_CHANGED/);
-  assert.match(runner, /'ETAPA_CAPTURE'/);
+  assert.doesNotMatch(runner, /'ETAPA_CAPTURE'/);
   assert.match(runner, /'ETAPA_REVISION'/);
   assert.match(runner, /editar_etapa_coordenacao_revisao/);
   assert.match(runner, /mode: 'coordenacao'/);
   assert.match(runner, /justificativa: 'Ajuste de combustivel durante revisao/);
-  assert.match(runner, /const etapaId = etapaJson\.data\.id/);
+  assert.match(runner, /etapas\/\$\{etapaId\}/);
   assert.doesNotMatch(runner, /CANONICAL_SOURCE_ALREADY_CAS_AWARE/);
   assert.doesNotMatch(runner, /operation: 'corrigir_apos_devolucao'/);
+});
+
+test('synthetic flight fixture satisfies the required contract catalog contract', () => {
+  assert.match(provision, /INSERT INTO cv_contratos \(empresa_id, codigo, nome, ativo, ordem\)/);
+  assert.match(provision, /contratoId: findCatalog\('cv_contratos', 'CT', 'A'\)/);
+  assert.match(provision, /contratoId: findCatalog\('cv_contratos', 'CT', 'B'\)/);
+  assert.match(canonicalRunner, /operation: 'criar_voo'[\s\S]*?contrato_id: catA\.contratoId/);
+  assert.match(cleanup, /DELETE FROM cv_contratos WHERE empresa_id IN/);
+  assert.match(orphan, /DELETE FROM cv_contratos WHERE empresa_id IN/);
+  assert.match(legacyCleanup, /DELETE FROM cv_contratos WHERE empresa_id IN/);
 });
 
 test('fixture cleanup is fail closed and deletes auth/employee dependencies before users', () => {
@@ -64,4 +77,24 @@ test('orphan cleanup derives only exact synthetic companies/users from an 8-hex 
   assert.match(orphan, /DELETE FROM refresh_tokens WHERE user_id IN/);
   assert.ok(orphan.indexOf("['refresh_tokens'") < orphan.indexOf("['usuarios'"));
   assert.ok(orphan.indexOf("['funcionarios'") < orphan.indexOf("['usuarios'"));
+});
+
+
+test('canonical staging runner reuses route-created etapa and keeps safe API diagnostics', () => {
+  assert.match(canonicalRunner, /record\.api_error_code = safeCode/);
+  assert.match(canonicalRunner, /record\.request_id = safeRequestId/);
+  assert.match(canonicalRunner, /operation: 'listar_etapas_programadas'/);
+  assert.match(canonicalRunner, /operation: 'atualizar_etapa_programada'/);
+  assert.match(canonicalRunner, /operation: 'criar_etapa_fallback'/);
+  assert.match(canonicalRunner, /let etapaId = primeiraEtapa\?\.id \?\? null/);
+  assert.doesNotMatch(canonicalRunner, /operation: 'criar_etapa'[),]/);
+  assert.doesNotMatch(canonicalRunner, /Authorization.*record/);
+  assert.doesNotMatch(canonicalRunner, /fetchBody.*record/);
+});
+
+
+test('workflow evidence contract follows route-created stage operations', () => {
+  assert.match(workflow, /'listar_etapas_programadas'/);
+  assert.match(workflow, /'atualizar_etapa_programada'/);
+  assert.doesNotMatch(workflow, /'criar_etapa','adicionar_abastecimento'/);
 });

@@ -75,6 +75,27 @@ test('E2E CAS contract enforces version on corrigir_apos_devolucao and bumps rdv
   assert.doesNotMatch(e2eScript, /rdvVersao NAO muda aqui/);
 });
 
+test('E2E fixture honors the Schema V2 0504 operational nature compatibility contract', () => {
+  const provisionScript = readFileSync(resolve(root, 'scripts/staging/provision-controle-voos-e2e-fixtures.mjs'), 'utf8');
+  const e2eScript = readFileSync(resolve(root, 'scripts/staging/run-controle-voos-e2e.mjs'), 'utf8');
+
+  assert.match(
+    provisionScript,
+    /VALUES \(\$\{empresaId\}, 'OPERACIONAL', 'Operacional', 1, 0\)/,
+    'disposable tenants must include the internal OPERACIONAL compatibility nature',
+  );
+
+  const createFlightStart = e2eScript.indexOf("operation: 'criar_voo'");
+  const createFlightEnd = e2eScript.indexOf('if (!vooPassed)', createFlightStart);
+  assert.ok(createFlightStart > 0 && createFlightEnd > createFlightStart, 'criar_voo block must exist');
+  const createFlightBlock = e2eScript.slice(createFlightStart, createFlightEnd);
+  assert.doesNotMatch(
+    createFlightBlock,
+    /natureza_voo_id/,
+    'current flight creation E2E must exercise the internal OPERACIONAL fallback',
+  );
+});
+
 test('fixture cleanup script is fail closed, handles FKs child-first, and never touches production', () => {
   const cleanupScript = readFileSync(resolve(root, 'scripts/staging/cleanup-controle-voos-e2e-fixtures.mjs'), 'utf8');
 

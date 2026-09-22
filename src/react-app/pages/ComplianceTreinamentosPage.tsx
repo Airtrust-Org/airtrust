@@ -14,6 +14,10 @@ import AppLayout from '@/react-app/components/AppLayout';
 import { TrainingComplianceApplicabilityEditor } from '@/react-app/components/compliance/TrainingComplianceApplicabilityEditor';
 import { TrainingComplianceOrganizationEditor } from '@/react-app/components/compliance/TrainingComplianceOrganizationEditor';
 import { TrainingEnrollmentReconciliation } from '@/react-app/components/compliance/TrainingEnrollmentReconciliation';
+import {
+  TrainingComplianceIntelligence,
+  TrainingComplianceNotificationSettings,
+} from '@/react-app/components/compliance/TrainingComplianceIntelligence';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { useQualificacaoTipos } from '@/react-app/hooks/useQualificacoesExt';
 
@@ -121,7 +125,7 @@ function buildFilter(setorId: number | null, funcaoId: number | null) {
   return query ? `?${query}` : '';
 }
 
-type ComplianceTab = 'treinamentos' | 'pessoas' | 'setores' | 'reconciliacao' | 'configuracao';
+type ComplianceTab = 'pendencias' | 'treinamentos' | 'pessoas' | 'setores' | 'relatorios' | 'comunicacoes' | 'administracao';
 
 type ComplianceDrilldownStatus =
   | 'CONFORME'
@@ -132,11 +136,13 @@ type ComplianceDrilldownStatus =
 
 function isComplianceTab(value: string | null): value is ComplianceTab {
   return (
+    value === 'pendencias' ||
     value === 'treinamentos' ||
     value === 'pessoas' ||
     value === 'setores' ||
-    value === 'reconciliacao' ||
-    value === 'configuracao'
+    value === 'relatorios' ||
+    value === 'comunicacoes' ||
+    value === 'administracao'
   );
 }
 
@@ -270,11 +276,11 @@ export default function ComplianceTreinamentosPage() {
   const [funcaoId, setFuncaoId] = useState<number | null>(null);
   const [tab, setTab] = useState<ComplianceTab>(() => {
     const requested = searchParams.get('tab');
-    return isComplianceTab(requested) ? requested : 'treinamentos';
+    return isComplianceTab(requested) ? requested : 'pendencias';
   });
-  const [configurationMode, setConfigurationMode] = useState<'organizacao' | 'treinamento'>(
-    'organizacao',
-  );
+  const [configurationMode, setConfigurationMode] = useState<
+    'organizacao' | 'treinamento' | 'reconciliacao' | 'automacao'
+  >('organizacao');
   const [expandedSectors, setExpandedSectors] = useState<Set<number | null>>(new Set());
   const [selectedTipoId, setSelectedTipoId] = useState<number | null>(null);
   const [drilldown, setDrilldown] = useState<{
@@ -286,7 +292,7 @@ export default function ComplianceTreinamentosPage() {
 
   useEffect(() => {
     const requested = searchParams.get('tab');
-    const nextTab = isComplianceTab(requested) ? requested : 'treinamentos';
+    const nextTab = isComplianceTab(requested) ? requested : 'pendencias';
     setTab(nextTab);
     if (nextTab !== 'pessoas') setDrilldown(null);
   }, [searchParams]);
@@ -362,7 +368,7 @@ export default function ComplianceTreinamentosPage() {
     if (nextTab === 'setores') setFuncaoId(null);
     setTab(nextTab);
     const nextParams = new URLSearchParams(searchParams);
-    if (nextTab === 'treinamentos') nextParams.delete('tab');
+    if (nextTab === 'pendencias') nextParams.delete('tab');
     else nextParams.set('tab', nextTab);
     setSearchParams(nextParams, { replace: true });
   };
@@ -413,7 +419,7 @@ export default function ComplianceTreinamentosPage() {
               Visão geral dos requisitos, vencimentos e pendências de treinamento.
             </p>
           </div>
-          {tab !== 'configuracao' ? (
+          {tab !== 'administracao' ? (
             <div className="flex min-w-[300px] flex-col gap-2">
               <div className={`grid gap-2 ${tab === 'setores' ? '' : 'sm:grid-cols-2'}`}>
                 <select
@@ -482,7 +488,7 @@ export default function ComplianceTreinamentosPage() {
 
         {schemaReady ? (
           <>
-            {tab === 'treinamentos' ? (
+            {(['pendencias', 'treinamentos', 'pessoas', 'setores', 'relatorios'] as ComplianceTab[]).includes(tab) ? (
               <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)_minmax(260px,0.95fr)]">
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
@@ -580,7 +586,7 @@ export default function ComplianceTreinamentosPage() {
                 type="button"
                 onClick={() => {
                   setConfigurationMode('organizacao');
-                  selectTab('configuracao');
+                  selectTab('administracao');
                 }}
                 className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 text-left shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
               >
@@ -615,11 +621,13 @@ export default function ComplianceTreinamentosPage() {
               <div className="flex flex-wrap gap-2 border-b border-slate-100 p-3">
                 {(
                   [
+                    ['pendencias', 'Pendências'],
                     ['treinamentos', 'Treinamentos'],
                     ['pessoas', 'Pessoas'],
                     ['setores', 'Setores'],
-                    ['reconciliacao', 'Matrículas'],
-                    ['configuracao', 'Matriz'],
+                    ['relatorios', 'Relatórios'],
+                    ['comunicacoes', 'Comunicações'],
+                    ['administracao', 'Administração'],
                   ] as const
                 ).map(([value, label]) => (
                   <button
@@ -632,6 +640,25 @@ export default function ComplianceTreinamentosPage() {
                   </button>
                 ))}
               </div>
+
+              {tab === 'pendencias' || tab === 'relatorios' || tab === 'comunicacoes' ? (
+                <TrainingComplianceIntelligence
+                  mode={tab}
+                  setorId={setorId}
+                  funcaoId={funcaoId}
+                  catalogs={catalogs.data}
+                  summary={{
+                    pessoas: summary.data?.pessoas ?? 0,
+                    requisitos_obrigatorios: summary.data?.requisitos_obrigatorios ?? 0,
+                    conformes: summary.data?.conformes ?? 0,
+                    vencendo: summary.data?.vencendo ?? 0,
+                    vencidos: summary.data?.vencidos ?? 0,
+                    nao_realizados: summary.data?.nao_realizados ?? 0,
+                    em_andamento: summary.data?.em_andamento ?? 0,
+                    compliance_pct: summary.data?.compliance_pct ?? null,
+                  }}
+                />
+              ) : null}
 
               {tab === 'treinamentos' ? (
                 <div className="overflow-x-auto">
@@ -913,11 +940,7 @@ export default function ComplianceTreinamentosPage() {
                 </div>
               ) : null}
 
-              {tab === 'reconciliacao' ? (
-                <TrainingEnrollmentReconciliation setorId={setorId} funcaoId={funcaoId} />
-              ) : null}
-
-              {tab === 'configuracao' ? (
+              {tab === 'administracao' ? (
                 <div className="space-y-4 p-4">
                   <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
                     <button
@@ -934,9 +957,27 @@ export default function ComplianceTreinamentosPage() {
                     >
                       Por treinamento
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfigurationMode('reconciliacao')}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium ${configurationMode === 'reconciliacao' ? 'bg-white text-primary shadow-sm' : 'text-slate-600'}`}
+                    >
+                      Matrículas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfigurationMode('automacao')}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium ${configurationMode === 'automacao' ? 'bg-white text-primary shadow-sm' : 'text-slate-600'}`}
+                    >
+                      Automação
+                    </button>
                   </div>
                   {configurationMode === 'organizacao' ? (
                     <TrainingComplianceOrganizationEditor />
+                  ) : configurationMode === 'reconciliacao' ? (
+                    <TrainingEnrollmentReconciliation setorId={setorId} funcaoId={funcaoId} />
+                  ) : configurationMode === 'automacao' ? (
+                    <TrainingComplianceNotificationSettings />
                   ) : (
                     <>
                       <div className="max-w-xl">
