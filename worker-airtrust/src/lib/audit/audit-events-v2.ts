@@ -18,6 +18,7 @@ const AUDIT_EVENT_CATEGORIES = new Set([
   'D1_OPERATION',
   'MODULE_GATING_CHANGE',
   'SECURITY_GUARD',
+  'SYSTEM_ERROR',
 ]);
 
 const AUDIT_RISK_LEVELS = new Set(['low', 'medium', 'high', 'critical']);
@@ -85,7 +86,8 @@ export type AuditEventCategory =
   | 'DATA_EXPORT'
   | 'D1_OPERATION'
   | 'MODULE_GATING_CHANGE'
-  | 'SECURITY_GUARD';
+  | 'SECURITY_GUARD'
+  | 'SYSTEM_ERROR';
 
 export type AuditRiskLevel = 'low' | 'medium' | 'high' | 'critical';
 export type AuditRetentionClass =

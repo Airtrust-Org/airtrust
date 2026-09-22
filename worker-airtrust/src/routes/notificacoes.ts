@@ -18,6 +18,7 @@ const app = new Hono<{ Bindings: Env }>();
 
 const GLOBAL_NOTIFICATION_TYPES = ['ALERTA_DADOS', 'ALERTA_SEMANAL_QUALIFICACOES'] as const;
 const GLOBAL_NOTIFICATION_GROUPS = ['auditoria', 'qualificacoes'] as const;
+const NOTIFICATION_TYPE_PREFIX_PATTERN = /^[A-Za-z0-9_:-]{1,64}$/;
 
 function isGlobalNotificationAllowed(tipo?: string | null, grupo?: string | null): boolean {
   const normalizedTipo = String(tipo || '')
@@ -522,7 +523,24 @@ app.put('/config/:id', auth(), requireRole('admin', 'manager'), async (c) => {
 app.get('/sistema', auth(), async (c) => {
   try {
     const db = c.env.DB;
-    const { lidas = 'false', limit = '50', tipo = '' } = c.req.query();
+    const {
+      lidas = 'false',
+      limit = '50',
+      tipo = '',
+      tipo_prefix: tipoPrefixRaw = '',
+      include_count: includeCountRaw = 'true',
+    } = c.req.query();
+    const tipoPrefix = tipoPrefixRaw.trim();
+    if (tipoPrefix && !NOTIFICATION_TYPE_PREFIX_PATTERN.test(tipoPrefix)) {
+      return c.json(
+        {
+          success: false,
+          error: 'Prefixo de tipo de notificação inválido',
+          code: 'INVALID_NOTIFICATION_TYPE_PREFIX',
+        },
+        400,
+      );
+    }
     const empresaId = getEmpresaId(c);
     const { userId } = getNotificationUserId(c as unknown as { get: (key: string) => unknown });
     const scope = buildSystemNotificationScope('n', empresaId, userId);
@@ -540,16 +558,23 @@ app.get('/sistema', auth(), async (c) => {
       conditions.push('n.tipo = ?');
       params.push(tipo);
     }
+    if (tipoPrefix) {
+      conditions.push('n.tipo GLOB ?');
+      params.push(`${tipoPrefix}*`);
+    }
 
     const whereClause = conditions.join(' AND ');
     const limitNum = Math.min(parseInt(limit, 10) || 50, 200);
+    const notificationTable = tipoPrefix
+      ? 'notificacoes_sistema n INDEXED BY idx_notificacoes_tipo'
+      : 'notificacoes_sistema n';
 
     const query = `
       SELECT 
         n.*,
         f.nome as funcionario_nome,
         f.matricula as funcionario_matricula
-      FROM notificacoes_sistema n
+      FROM ${notificationTable}
       LEFT JOIN funcionarios f
         ON f.id = n.funcionario_id
        AND f.empresa_id = ?
@@ -578,13 +603,17 @@ app.get('/sistema', auth(), async (c) => {
         [key: string]: unknown;
       }>();
 
-    const countScope = buildSystemNotificationScope('', empresaId, userId);
-    const countParams: unknown[] = [...countScope.params];
-    const countWhere = `lida = 0 AND deleted_at IS NULL AND ${countScope.clause}`;
-    const countResult = await db
-      .prepare(`SELECT COUNT(*) as total FROM notificacoes_sistema WHERE ${countWhere}`)
-      .bind(...countParams)
-      .first<{ total: number }>();
+    let totalNaoLidas = 0;
+    if (includeCountRaw !== 'false') {
+      const countScope = buildSystemNotificationScope('', empresaId, userId);
+      const countParams: unknown[] = [...countScope.params];
+      const countWhere = `lida = 0 AND deleted_at IS NULL AND ${countScope.clause}`;
+      const countResult = await db
+        .prepare(`SELECT COUNT(*) as total FROM notificacoes_sistema WHERE ${countWhere}`)
+        .bind(...countParams)
+        .first<{ total: number }>();
+      totalNaoLidas = countResult?.total || 0;
+    }
 
     const sanitizedResults = (results || []).filter(
       (row) =>
@@ -598,7 +627,7 @@ app.get('/sistema', auth(), async (c) => {
     return c.json({
       success: true,
       data: sanitizedResults,
-      total_nao_lidas: countResult?.total || 0,
+      total_nao_lidas: totalNaoLidas,
     });
   } catch (error) {
     return notificacoesErrorResponse(

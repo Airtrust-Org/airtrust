@@ -180,4 +180,73 @@ describe('requestIdMiddleware', () => {
     expect(JSON.stringify(payload)).not.toContain('invalid api key');
     expect(JSON.stringify(payload)).not.toContain('auth token rejected');
   });
+
+  it('records a sanitized audit event for authenticated 5xx responses', async () => {
+    const calls: Array<{ query: string; args: unknown[] }> = [];
+    const db = {
+      prepare: vi.fn((query: string) => ({
+        bind: (...args: unknown[]) => ({
+          run: async () => {
+            calls.push({ query, args });
+            return { meta: { changes: 1 } };
+          },
+        }),
+      })),
+    } as unknown as D1Database;
+
+    const app = new Hono<{
+      Bindings: {
+        ENVIRONMENT?: string;
+        AIRTRUST_SOURCE_SHA?: string;
+        DB: D1Database;
+      };
+      Variables: {
+        requestId: string;
+        empresaId: number;
+        userId: number;
+        userRole: string;
+      };
+    }>();
+    app.use('*', requestIdMiddleware());
+    app.use('*', async (c, next) => {
+      c.set('empresaId', 6);
+      c.set('userId', 16);
+      c.set('userRole', 'INSTRUTOR');
+      await next();
+    });
+    app.get('/legacy-500', (c) =>
+      c.json({ success: false, error: 'raw failure', code: 'ME_ERROR' }, 500),
+    );
+
+    const response = await app.request(
+      '/legacy-500',
+      { headers: { 'X-Request-ID': 'carlos-incident-001' } },
+      {
+        ENVIRONMENT: 'production',
+        AIRTRUST_SOURCE_SHA: 'a99f4d8627f4e5ff41524a7baf7aff77f926a29d',
+        DB: db,
+      },
+    );
+
+    expect(response.status).toBe(500);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].query).toContain('INSERT INTO audit_events_v2');
+    expect(calls[0].args[1]).toBe(6);
+    expect(calls[0].args[3]).toBe(16);
+    expect(calls[0].args[5]).toBe('INSTRUTOR');
+    expect(calls[0].args[9]).toBe('carlos-incident-001');
+    expect(calls[0].args[13]).toBe('SYSTEM_ERROR');
+    expect(calls[0].args[14]).toBe('HTTP_5XX');
+    expect(calls[0].args[18]).toBe(0);
+    expect(calls[0].args[19]).toBe('ME_ERROR');
+    expect(JSON.parse(String(calls[0].args[20]))).toEqual({
+      module: 'http',
+      source: 'a99f4d8627f4e5ff41524a7baf7aff77f926a29d',
+      request_path: '/legacy-500',
+      http_method: 'GET',
+      result: 500,
+      reason_code: 'ME_ERROR',
+    });
+    expect(calls[0].args[21]).toBe('OPS_SHORT');
+  });
 });

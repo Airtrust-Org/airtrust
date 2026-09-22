@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
+import { recordAuditEventV2 } from '../lib/audit/audit-events-v2';
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 const SAFE_ERROR_CODE_PATTERN = /^[A-Z][A-Z0-9_:-]{0,127}$/;
@@ -26,6 +27,65 @@ function getSafeErrorCode(payload: unknown): string | undefined {
 
   const code = (payload as { code?: unknown }).code;
   return typeof code === 'string' && SAFE_ERROR_CODE_PATTERN.test(code) ? code : undefined;
+}
+
+function positiveContextId(value: unknown): number | null {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+async function recordServerFailureAudit(
+  c: {
+    env?: Record<string, unknown>;
+    get: (key: string) => unknown;
+    req: { path: string; method: string };
+  },
+  response: Response,
+  requestId: string,
+): Promise<void> {
+  if (response.status < 500 || response.status > 599) return;
+
+  const db = c.env?.DB as D1Database | undefined;
+  if (!db || typeof db.prepare !== 'function') return;
+
+  let failureReasonCode =
+    response.status === 503 ? 'SERVICE_UNAVAILABLE' : 'INTERNAL_ERROR';
+  try {
+    const payload = await response.clone().json();
+    failureReasonCode = getSafeErrorCode(payload) ?? failureReasonCode;
+  } catch {
+    // Non-JSON 5xx responses are still correlated with the generic safe code.
+  }
+
+  const empresaId = positiveContextId(c.get('empresaId'));
+  const actorUserId = positiveContextId(c.get('userId'));
+  const actorRoleRaw = c.get('userRole');
+  const actorRole = typeof actorRoleRaw === 'string' ? actorRoleRaw : null;
+  const sourceShaRaw = c.env?.AIRTRUST_SOURCE_SHA;
+  const sourceSha = typeof sourceShaRaw === 'string' ? sourceShaRaw : null;
+
+  await recordAuditEventV2(db, {
+    empresaId,
+    actorUserId,
+    actorEmpresaId: empresaId,
+    actorRole,
+    actorType: actorUserId ? 'user' : 'system',
+    requestId,
+    eventCategory: 'SYSTEM_ERROR',
+    eventAction: 'HTTP_5XX',
+    riskLevel: 'medium',
+    success: false,
+    failureReasonCode,
+    retentionClass: 'OPS_SHORT',
+    metadata: {
+      module: 'http',
+      source: sourceSha,
+      request_path: c.req.path,
+      http_method: c.req.method,
+      result: response.status,
+      reason_code: failureReasonCode,
+    },
+  });
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -156,6 +216,7 @@ export const requestIdMiddleware = (): MiddlewareHandler => {
 
     const environment = typeof c.env?.ENVIRONMENT === 'string' ? c.env.ENVIRONMENT : undefined;
     c.res = await sanitizeProductionServerErrorResponse(c.res, environment, requestId);
+    await recordServerFailureAudit(c, c.res, requestId);
     c.header('X-Request-ID', requestId);
   };
 };

@@ -446,4 +446,29 @@ describe('notificacoes sistema tenant isolation', () => {
     expect(listQuery?.query).toContain('LEFT JOIN funcionarios f');
     expect(listQuery?.query).toContain('f.empresa_id = ?');
   });
+
+  it('usa indice por tipo e evita count quando a home pede somente FICHA_', async () => {
+    const { env, setCurrentContext, calls } = createMockEnv();
+
+    const response = await request(
+      env,
+      setCurrentContext,
+      '/api/notificacoes/sistema?limit=10&lida=false&tipo_prefix=FICHA_&include_count=false',
+    );
+
+    expect(response.status).toBe(200);
+    const listQuery = calls.find(
+      (call) => call.method === 'all' && call.query.includes('FROM notificacoes_sistema n'),
+    );
+    expect(listQuery?.query).toContain('INDEXED BY idx_notificacoes_tipo');
+    expect(listQuery?.query).toContain('n.tipo GLOB ?');
+    expect(listQuery?.args).toContain('FICHA_*');
+    expect(
+      calls.some(
+        (call) =>
+          call.method === 'first' &&
+          call.query.includes('SELECT COUNT(*) as total FROM notificacoes_sistema'),
+      ),
+    ).toBe(false);
+  });
 });
