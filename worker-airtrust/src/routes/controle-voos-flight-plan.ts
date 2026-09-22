@@ -51,6 +51,49 @@ function parseJsonBody(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+type FlightEndpointAirportRow = {
+  id: number;
+  codigo: string;
+  codigo_icao: string | null;
+  nome: string | null;
+};
+
+async function loadFlightEndpointRoutePoints(
+  db: D1Database,
+  empresaId: number,
+  origemId: number,
+  destinoId: number,
+): Promise<Array<{ codigo: string; codigo_icao: string | null; nome: string | null }>> {
+  const ids = [Number(origemId), Number(destinoId)];
+  if (ids.some((id) => !Number.isInteger(id) || id <= 0)) return [];
+
+  const uniqueIds = [...new Set(ids)];
+  const placeholders = uniqueIds.map(() => '?').join(', ');
+  const result = await db
+    .prepare(
+      `SELECT id, codigo, codigo_icao, nome
+         FROM cv_aeroportos
+        WHERE empresa_id = ?
+          AND deleted_at IS NULL
+          AND id IN (${placeholders})`,
+    )
+    .bind(empresaId, ...uniqueIds)
+    .all<FlightEndpointAirportRow>();
+
+  const byId = new Map<number, FlightEndpointAirportRow>(
+    (result.results || []).map((row) => [Number(row.id), row]),
+  );
+
+  return ids
+    .map((id) => byId.get(id))
+    .filter((row): row is FlightEndpointAirportRow => Boolean(row))
+    .map((row) => ({
+      codigo: String(row.codigo || '').trim(),
+      codigo_icao: row.codigo_icao ? String(row.codigo_icao).trim() : null,
+      nome: row.nome ? String(row.nome).trim() : null,
+    }));
+}
+
 async function hasStructuredFlightPlanSchema(db: D1Database): Promise<boolean> {
   const row = await db
     .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='cv_planos_voo'")
@@ -98,6 +141,14 @@ async function buildReference(db: D1Database, empresaId: number, vooIdText: stri
     )
     .bind(empresaId, flight.id)
     .first<{ pax: number | null }>();
+  const routePoints = enriched.rota_pontos.length >= 2
+    ? enriched.rota_pontos
+    : await loadFlightEndpointRoutePoints(
+        db,
+        empresaId,
+        flight.origem_id,
+        flight.destino_id,
+      );
   const crew = await db
     .prepare(
       `SELECT COUNT(DISTINCT funcionario_id) AS count
@@ -113,7 +164,7 @@ async function buildReference(db: D1Database, empresaId: number, vooIdText: stri
     horarioPrevistoPartida: flight.horario_previsto_partida,
     horarioPrevistoChegada: flight.horario_previsto_chegada,
     modeloAeronave: aircraft?.modelo || null,
-    routePoints: enriched.rota_pontos || [],
+    routePoints,
     plannedPax: stage?.pax == null ? null : Number(stage.pax),
     crewCount: Number(crew?.count || 0),
   };
