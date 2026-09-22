@@ -106,6 +106,15 @@ const rdvCrewSummary = document.querySelector('#rdv-crew-summary');
 const rdvFormFields = document.querySelector('#rdv-form-fields');
 const rdvStageFields = document.querySelector('#rdv-stage-fields');
 const rdvFuelingFields = document.querySelector('#rdv-fueling-fields');
+const openLogbookHelperButton = document.querySelector('#open-logbook-helper');
+const closeLogbookHelperButton = document.querySelector('#close-logbook-helper');
+const toggleLogbookCopyModeButton = document.querySelector('#toggle-logbook-copy-mode');
+const logbookHelper = document.querySelector('#logbook-helper');
+const logbookHeader = document.querySelector('#logbook-header');
+const logbookCrew = document.querySelector('#logbook-crew');
+const logbookStages = document.querySelector('#logbook-stages');
+const logbookSummary = document.querySelector('#logbook-summary');
+const logbookExtra = document.querySelector('#logbook-extra');
 const addStageButton = document.querySelector('#add-stage');
 const addFuelingButton = document.querySelector('#add-fueling');
 const operationFlow = document.querySelector('#operation-flow');
@@ -3492,6 +3501,202 @@ function renderPilotCrewSummary(packageData) {
   }
 }
 
+
+function createLogbookCell(label, value, missingText = '—') {
+  const cell = document.createElement('div');
+  cell.className = 'logbook-cell';
+  const labelEl = document.createElement('span');
+  labelEl.textContent = label;
+  const valueEl = document.createElement('strong');
+  const hasValue = value !== null && value !== undefined && String(value).trim() !== '';
+  valueEl.textContent = hasValue ? String(value) : missingText;
+  if (!hasValue) cell.classList.add('missing');
+  cell.append(labelEl, valueEl);
+  return cell;
+}
+
+function appendLogbookSection(target, title, entries, gridClass = 'logbook-grid') {
+  target.replaceChildren();
+  const heading = document.createElement('h3');
+  heading.textContent = title;
+  const grid = document.createElement('div');
+  grid.className = gridClass;
+  for (const [label, value, missingText] of entries) {
+    grid.append(createLogbookCell(label, value, missingText));
+  }
+  target.append(heading, grid);
+}
+
+function durationToMinutes(value) {
+  const text = String(value || '').trim();
+  const match = text.match(/^(\d{1,3}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function subtractDurations(totalValue, subtractValue) {
+  const total = durationToMinutes(totalValue);
+  const subtract = durationToMinutes(subtractValue);
+  if (total === null) return '';
+  const result = Math.max(0, total - (subtract ?? 0));
+  return String(Math.floor(result / 60)).padStart(2, '0') + ':' + String(result % 60).padStart(2, '0');
+}
+
+function stageLandingCount(fields) {
+  const explicit = Number(fields?.pousos_diurnos || 0) + Number(fields?.pousos_noturnos || 0);
+  if (explicit > 0) return String(explicit);
+  return String(fields?.horario_pouso || '').trim() ? '1' : '0';
+}
+
+function renderLogbookHelper() {
+  if (!activeRdvDraft || !activePackageRecord) return;
+  const packageData = activePackageData();
+  const voo = packageData?.voo || {};
+  const aircraft = packageData?.aeronave || {};
+  const natureza = packageData?.natureza || {};
+  const form = activeRdvDraft.form || {};
+  refreshAllStageDerivedTimes();
+  activeRdvDraft.form = applySafeStageAggregates(form, activeStageDrafts);
+
+  appendLogbookSection(logbookHeader, 'Identificação do diário', [
+    ['Fabricante', aircraft.fabricante],
+    ['Modelo', aircraft.modelo],
+    ['Matrícula', aircraft.prefixo || voo.prefixo],
+    ['Nº de série', aircraft.numero_serie, 'Não cadastrado no AirTrust'],
+    ['Data', formatDate(voo.data_programacao)],
+    ['Nº do voo', activeRdvDraft.common?.numero_voo || voo.numero_voo],
+    ['Diário / relatório', activeRdvDraft.common?.numero_db || voo.numero_db],
+    ['Natureza', natureza.codigo ? natureza.codigo + (natureza.nome ? ' — ' + natureza.nome : '') : natureza.nome],
+  ]);
+
+  const crew = Array.isArray(packageData?.tripulantes) ? packageData.tripulantes : [];
+  logbookCrew.replaceChildren();
+  const crewHeading = document.createElement('h3');
+  crewHeading.textContent = 'Apresentação da tripulação';
+  const crewGrid = document.createElement('div');
+  crewGrid.className = 'logbook-grid';
+  if (crew.length === 0) {
+    crewGrid.append(createLogbookCell('Tripulação', '', 'Nenhum tripulante informado'));
+  } else {
+    for (const member of crew) {
+      const role = displayText(member.funcao, 'Tripulante');
+      crewGrid.append(
+        createLogbookCell(role + ' — nome', member.nome),
+        createLogbookCell(role + ' — nome de guerra', member.nome_guerra),
+        createLogbookCell(role + ' — ANAC', member.codigo_anac),
+        createLogbookCell(role + ' — apresentação', toInputTime(member.horario_apresentacao), 'Aguardando FRMS'),
+      );
+    }
+  }
+  logbookCrew.append(crewHeading, crewGrid);
+
+  logbookStages.replaceChildren();
+  const stagesHeading = document.createElement('h3');
+  stagesHeading.textContent = 'Etapas — copie da esquerda para a direita';
+  logbookStages.append(stagesHeading);
+  for (let index = 0; index < activeStageDrafts.length; index += 1) {
+    const fields = activeStageDrafts[index]?.fields || {};
+    const card = document.createElement('section');
+    card.className = 'logbook-stage-card';
+    const title = document.createElement('div');
+    title.className = 'logbook-stage-title';
+    title.textContent =
+      'Etapa ' + String(fields.numero_etapa || index + 1) + ' · ' +
+      displayText(fields.origem_icao) + ' → ' + displayText(fields.destino_icao);
+    const grid = document.createElement('div');
+    grid.className = 'logbook-stage-grid';
+    const daytime = subtractDurations(fields.tempo_decolagem_pouso, fields.tempo_noturno);
+    const entries = [
+      ['DE', fields.origem_icao],
+      ['PARA', fields.destino_icao],
+      ['PARTIDA', toInputTime(fields.horario_motor_ligado)],
+      ['DECOLAGEM', toInputTime(fields.horario_decolagem)],
+      ['POUSO', toInputTime(fields.horario_pouso)],
+      ['CORTE', toInputTime(fields.horario_motor_desligado)],
+      ['DIURNO', daytime],
+      ['NOTURNO', toDurationInput(fields.tempo_noturno)],
+      ['IFR', toDurationInput(fields.tempo_ifr)],
+      ['TOTAL', fields.tempo_decolagem_pouso],
+      ['POUSOS', stageLandingCount(fields)],
+      ['PAX / POB', fields.pax],
+      ['PESO PAX', formatWeightPair(fields.peso_passageiros, fields.unidade_peso || 'LB')],
+      ['BAGAGEM', formatWeightPair(fields.peso_bagagem, fields.unidade_peso || 'LB')],
+      ['CARGA', formatWeightPair(fields.payload, fields.unidade_payload || 'LB')],
+      ['NATUREZA', natureza.codigo || natureza.nome],
+      ['COMB. INICIAL', fields.combustivel_inicio ? String(fields.combustivel_inicio) + ' ' + displayText(fields.unidade_combustivel, '') : ''],
+      ['COMB. FINAL', fields.combustivel_fim ? String(fields.combustivel_fim) + ' ' + displayText(fields.unidade_combustivel, '') : ''],
+    ];
+    for (const [label, value] of entries) grid.append(createLogbookCell(label, value));
+    card.append(title, grid);
+    logbookStages.append(card);
+  }
+
+  appendLogbookSection(logbookSummary, 'Totais do voo', [
+    ['Tempo de voo', activeRdvDraft.form.tempo_voo_total_hhmm],
+    ['Tempo total', activeRdvDraft.form.tempo_total_hhmm],
+    ['Nº de pousos', activeRdvDraft.form.numero_pousos],
+    ['Nº de partidas', activeStageDrafts.filter((stage) => String(stage?.fields?.horario_motor_ligado || '').trim()).length],
+    ['Peso tripulação', formatWeightPair(activeRdvDraft.common?.peso_tripulacao, 'LB')],
+  ], 'logbook-summary-row');
+
+  logbookExtra.replaceChildren();
+  const extraHeading = document.createElement('h3');
+  extraHeading.textContent = 'Abastecimentos, ocorrências e observações';
+  logbookExtra.append(extraHeading);
+  const fuelings = Array.isArray(activeRdvDraft.fuelings) ? activeRdvDraft.fuelings : [];
+  const list = document.createElement('ul');
+  list.className = 'logbook-extra-list';
+  if (fuelings.length === 0) {
+    const item = document.createElement('li');
+    item.textContent = 'Abastecimentos: nenhum registrado.';
+    list.append(item);
+  } else {
+    for (const fueling of fuelings) {
+      const item = document.createElement('li');
+      item.textContent =
+        'Abastecimento etapa ' + displayText(fueling.etapa_numero) +
+        ': nota ' + displayText(fueling.numero_nota) +
+        ' · ' + displayText(fueling.litros_abastecidos) + ' L' +
+        ' · ' + displayText(fueling.empresa_abastecimento_codigo, 'empresa não informada');
+      list.append(item);
+    }
+  }
+  const occurrences = document.createElement('li');
+  occurrences.textContent = 'Ocorrências: ' + displayText(activeRdvDraft.form.ocorrencias, 'sem registro');
+  const divergences = document.createElement('li');
+  divergences.textContent = 'Divergências: ' + displayText(activeRdvDraft.form.divergencias, 'sem registro');
+  list.append(occurrences, divergences);
+  logbookExtra.append(list);
+}
+
+function openLogbookHelper() {
+  renderLogbookHelper();
+  logbookHelper?.classList.remove('hidden');
+  logbookHelper?.setAttribute('aria-hidden', 'false');
+  openLogbookHelperButton?.setAttribute('aria-expanded', 'true');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeLogbookHelper() {
+  logbookHelper?.classList.add('hidden');
+  logbookHelper?.classList.remove('copy-mode');
+  logbookHelper?.setAttribute('aria-hidden', 'true');
+  openLogbookHelperButton?.setAttribute('aria-expanded', 'false');
+  if (toggleLogbookCopyModeButton) toggleLogbookCopyModeButton.textContent = 'Modo copiar';
+  document.body.style.overflow = '';
+}
+
+function toggleLogbookCopyMode() {
+  if (!logbookHelper) return;
+  const enabled = logbookHelper.classList.toggle('copy-mode');
+  if (toggleLogbookCopyModeButton) {
+    toggleLogbookCopyModeButton.textContent = enabled ? 'Sair do modo copiar' : 'Modo copiar';
+  }
+}
+
 function renderRdvFormFields() {
   const automaticSummary = document.getElementById('flight-auto-summary');
   if (automaticSummary instanceof HTMLDetailsElement) automaticSummary.open = true;
@@ -4167,6 +4372,7 @@ function renderOperationalEditor(options = {}) {
 }
 
 function closeOperationalEditor() {
+  closeLogbookHelper();
   activeStageTabIndex = 0;
   rdvEditorCard.classList.add('hidden');
   setFlightSelectionVisible(true);
@@ -4499,6 +4705,9 @@ openLocalDraftButton.addEventListener('click', () => void openExistingOperationa
 syncRdvButton.addEventListener('click', () => void queueCurrentDraftForSync());
 addStageButton.addEventListener('click', addOperationalStage);
 addFuelingButton.addEventListener('click', addOperationalFueling);
+openLogbookHelperButton?.addEventListener('click', openLogbookHelper);
+closeLogbookHelperButton?.addEventListener('click', closeLogbookHelper);
+toggleLogbookCopyModeButton?.addEventListener('click', toggleLogbookCopyMode);
 refreshCanonicalPackageButton.addEventListener('click', () =>
   void refreshCanonicalPackageForActiveFlight(),
 );

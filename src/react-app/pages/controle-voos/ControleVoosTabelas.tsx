@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   Tag,
+  Trash2,
   X,
   Clock3,
 } from 'lucide-react';
@@ -274,6 +275,19 @@ export default function ControleVoosTabelas() {
     }
   }
 
+  async function deleteFlightType(item: CatalogItem) {
+    if (!canManage || activeCatalog !== 'tipos') return;
+    const label = item.nome || item.codigo || `#${item.id}`;
+    if (!window.confirm(`Excluir o tipo de voo "${label}"? Esta ação só será permitida se ele não estiver em uso por nenhum voo.`)) return;
+    setError(null);
+    try {
+      await apiClient.delete(`/controle-voos/catalogos/tipos/${item.id}`);
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível excluir o tipo de voo.');
+    }
+  }
+
   return (
     <AppLayout>
       <div className="w-full">
@@ -350,7 +364,9 @@ export default function ControleVoosTabelas() {
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   {activeCatalog === 'pontos'
                     ? 'Cadastro canônico de aeródromos, helipontos, plataformas e demais pontos aeronáuticos. Classificações inferidas ficam identificadas para revisão.'
-                    : 'Itens inativos permanecem no histórico, mas não aparecem em novos voos.'}
+                    : activeCatalog === 'tipos'
+                      ? 'Tipos cadastrados por engano podem ser excluídos quando ainda não estiverem vinculados a nenhum voo.'
+                      : 'Itens inativos permanecem no histórico, mas não aparecem em novos voos.'}
                 </p>
               </div>
               {canManage && activeCatalog !== 'pontos' && (
@@ -465,13 +481,23 @@ export default function ControleVoosTabelas() {
                               >
                                 <Edit3 className="h-3.5 w-3.5" /> Editar
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => void toggleActive(item)}
-                                className="min-h-[36px] rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200"
-                              >
-                                {isActive(item) ? 'Inativar' : 'Reativar'}
-                              </button>
+                              {activeCatalog === 'tipos' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void deleteFlightType(item)}
+                                  className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" /> Excluir
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => void toggleActive(item)}
+                                  className="min-h-[36px] rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200"
+                                >
+                                  {isActive(item) ? 'Inativar' : 'Reativar'}
+                                </button>
+                              )}
                             </div>
                           </td>
                         )}
