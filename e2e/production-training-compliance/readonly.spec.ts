@@ -190,7 +190,7 @@ test('production intelligent training compliance UI and APIs are coherent and re
       '/api/compliance-treinamentos/pessoas',
       (url) => url.searchParams.get('status') === drill[1],
     );
-    await page.getByRole('button', { name: new RegExp(`^${drill[0]}`, 'i') }).click();
+    await page.getByRole('button', { name: new RegExp(drill[0], 'i') }).click();
     const people = await peopleP.then(payload);
     expect(Array.isArray(people.data)).toBe(true);
     expect(people.data.length).toBeGreaterThan(0);
