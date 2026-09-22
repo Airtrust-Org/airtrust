@@ -119,7 +119,8 @@ describe('migration governance', () => {
     // 0505 adds the governed Conhecimento Ativo challenge cadence schema.
     // 0506 adds the governed Controle de Voos planning-deviation justification schema.
     // 0508 adds governed daily training-compliance snapshots.
-    const expectedLatest = 508;
+    // 0509 adds the governed structured Controle de Voos flight-plan schema.
+    const expectedLatest = 509;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
