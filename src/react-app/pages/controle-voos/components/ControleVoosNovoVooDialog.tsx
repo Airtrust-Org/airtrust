@@ -12,7 +12,15 @@ type Props = {
 };
 
 type ApiEnvelope<T> = { success: boolean; data?: { data?: T } | T; error?: string };
-type Aeronave = { id: number; codigo?: string | null; prefixo?: string | null; modelo?: string | null; status?: string | null };
+type Aeronave = {
+  id: number;
+  codigo?: string | null;
+  prefixo?: string | null;
+  modelo?: string | null;
+  status?: string | null;
+  peso_vazio?: number | null;
+  unidade_peso?: string | null;
+};
 type EligibleCrewMember = { id: number; nome: string; nome_guerra?: string; matricula: string | null; funcao_codigo: 'PIC' | 'SIC'; funcao_nome: string };
 type CatalogItem = { id: number; codigo: string; nome: string; descricao?: string | null };
 
@@ -24,6 +32,15 @@ function extract<T>(response: unknown): T {
     return (first as { data: T }).data;
   }
   return first as T;
+}
+
+function convertWeight(value: number, from: string, to: string) {
+  const source = from.trim().toUpperCase();
+  const target = to.trim().toUpperCase();
+  if (source === target) return value;
+  if (source === 'KG' && target === 'LB') return value * 2.2046226218;
+  if (source === 'LB' && target === 'KG') return value / 2.2046226218;
+  return value;
 }
 
 function toLocalInput(date: Date) {
@@ -294,6 +311,19 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     }));
   };
 
+  const selectedAircraft = useMemo(
+    () => aeronaves.find((item) => String(item.id) === form.aeronave_id) ?? null,
+    [aeronaves, form.aeronave_id],
+  );
+  const basicWeightForPlan =
+    selectedAircraft?.peso_vazio == null
+      ? null
+      : convertWeight(
+          Number(selectedAircraft.peso_vazio),
+          selectedAircraft.unidade_peso || form.unidade_peso_planejado,
+          form.unidade_peso_planejado,
+        );
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
@@ -561,6 +591,19 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
               <label className="text-sm">Passageiros previstos
                 <input type="number" min="0" step="1" className={fieldClass} value={form.pax_planejado} onChange={(e) => set('pax_planejado', e.target.value)} placeholder="Quantidade" />
               </label>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/30">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Peso básico da aeronave</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {basicWeightForPlan == null
+                    ? 'Não cadastrado'
+                    : `${basicWeightForPlan.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${form.unidade_peso_planejado.toLowerCase()}`}
+                </p>
+                {selectedAircraft?.peso_vazio != null && selectedAircraft.unidade_peso && (
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Cadastro mestre: {Number(selectedAircraft.peso_vazio).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} {selectedAircraft.unidade_peso.toLowerCase()}
+                  </p>
+                )}
+              </div>
               <label className="text-sm">Peso dos passageiros
                 <input type="number" min="0" step="0.1" className={fieldClass} value={form.peso_passageiros} onChange={(e) => set('peso_passageiros', e.target.value)} placeholder="Peso dos passageiros" />
               </label>
