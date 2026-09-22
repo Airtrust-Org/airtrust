@@ -6,19 +6,26 @@ export interface ControleVoosNavLink {
   to: string;
   label: string;
   exact?: boolean;
+  activePrefixes?: string[];
 }
 
+// Navegação orientada ao trabalho: páginas técnicas/legadas continuam roteáveis,
+// mas deixam de competir como destinos primários do operador.
 export const CONTROLE_VOOS_NAV_LINKS: ControleVoosNavLink[] = [
-  { to: '/controle-voos', label: 'Dashboard', exact: true },
-  { to: '/controle-voos/voos', label: 'Voos' },
-  { to: '/controle-voos/rdv', label: 'RDV' },
+  {
+    to: '/controle-voos',
+    label: 'Operação',
+    exact: true,
+    activePrefixes: ['/controle-voos/voos', '/controle-voos/rdv'],
+  },
   { to: '/controle-voos/meus-voos', label: 'Meus voos' },
-  { to: '/controle-voos/coordenacao/fila', label: 'Fila da Coordenação' },
-  { to: '/controle-voos/jornadas', label: 'Jornadas' },
-  { to: '/controle-voos/indisponibilidades', label: 'Indisponibilidades' },
-  { to: '/controle-voos/hangaragem', label: 'Hangaragem' },
-  { to: '/controle-voos/relatorios', label: 'Relatórios' },
-  { to: '/controle-voos/tabelas', label: 'Cadastros Operacionais' },
+  { to: '/controle-voos/coordenacao/fila', label: 'Coordenação' },
+  {
+    to: '/controle-voos/relatorios',
+    label: 'Relatórios e exportações',
+    activePrefixes: ['/controle-voos/jornadas'],
+  },
+  { to: '/controle-voos/tabelas', label: 'Cadastros' },
 ];
 
 
@@ -30,6 +37,7 @@ export function getVisibleControleVoosNavLinks(
 }
 
 export function isControleVoosLinkActive(pathname: string, link: ControleVoosNavLink): boolean {
+  if (link.activePrefixes?.some((prefix) => pathname.startsWith(prefix))) return true;
   if (link.exact) {
     return pathname === '/controle-voos' || pathname === '/controle-voos/dashboard';
   }
