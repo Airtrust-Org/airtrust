@@ -551,21 +551,29 @@ async function hydrateAircraftBasicWeightFallback(
 ): Promise<EtapaRow[]> {
   if (etapas.length === 0 || etapas.every((etapa) => etapa.peso_vazio != null)) return etapas;
 
-  const aircraft = await db
-    .prepare(
-      `SELECT a.peso_vazio, a.unidade_peso
-         FROM cv_voos v
-         JOIN aeronaves a
-           ON a.id = v.aeronave_id
-          AND a.empresa_id = v.empresa_id
-          AND a.deleted_at IS NULL
-        WHERE v.id = ?
-          AND v.empresa_id = ?
-          AND v.deleted_at IS NULL
-        LIMIT 1`,
-    )
-    .bind(vooId, empresaId)
-    .first<{ peso_vazio: number | null; unidade_peso: string | null }>();
+  let aircraft: { peso_vazio: number | null; unidade_peso: string | null } | null = null;
+  try {
+    aircraft = await db
+      .prepare(
+        `SELECT a.peso_vazio, a.unidade_peso
+           FROM cv_voos v
+           JOIN aeronaves a
+             ON a.id = v.aeronave_id
+            AND a.empresa_id = v.empresa_id
+            AND a.deleted_at IS NULL
+          WHERE v.id = ?
+            AND v.empresa_id = ?
+            AND v.deleted_at IS NULL
+          LIMIT 1`,
+      )
+      .bind(vooId, empresaId)
+      .first<{ peso_vazio: number | null; unidade_peso: string | null }>();
+  } catch {
+    // Compatibility: older/local schemas may not yet expose the tenant-scoped
+    // aircraft columns. Reading an RDV must not fail only because the optional
+    // basic-weight fallback cannot be hydrated.
+    return etapas;
+  }
 
   if (!aircraft?.peso_vazio || !aircraft.unidade_peso) return etapas;
 
