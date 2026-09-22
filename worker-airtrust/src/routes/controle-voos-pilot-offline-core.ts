@@ -124,6 +124,7 @@ type AirportRow = {
 type AircraftRow = {
   id: number;
   modelo: string | null;
+  fabricante: string | null;
   prefixo: string | null;
   peso_vazio: number | null;
   unidade_peso: string | null;
@@ -509,7 +510,7 @@ pilotOffline.get(
         : Promise.resolve(null),
       voo.aeronave_id
         ? c.env.DB
-            .prepare('SELECT id, modelo, prefixo, peso_vazio, unidade_peso FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1')
+            .prepare('SELECT id, modelo, fabricante, prefixo, peso_vazio, unidade_peso FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1')
             .bind(voo.aeronave_id, empresaId)
             .first<AircraftRow>()
         : Promise.resolve(null),

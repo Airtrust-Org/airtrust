@@ -47,6 +47,22 @@ describe('Pilot Logbook x RDV - contrato de lançamento único', () => {
     expect(trechoCard).not.toContain('#{trecho.id}');
   });
 
+  it('oferece uma visualizacao de transcricao do diario sem criar formulario paralelo', () => {
+    expect(pilotIndex).toContain('Diário de bordo — dados para transcrição');
+    expect(pilotIndex).toContain('id="open-logbook-helper"');
+    expect(pilotIndex).toContain('id="toggle-logbook-copy-mode"');
+    expect(pilotApp).toContain('function renderLogbookHelper()');
+    expect(pilotApp).toContain("stagesHeading.textContent = 'Etapas — copie da esquerda para a direita'");
+    expect(pilotApp).toContain("['PARTIDA', toInputTime(fields.horario_motor_ligado)]");
+    expect(pilotApp).toContain("['DECOLAGEM', toInputTime(fields.horario_decolagem)]");
+    expect(pilotApp).toContain("['POUSO', toInputTime(fields.horario_pouso)]");
+    expect(pilotApp).toContain("['CORTE', toInputTime(fields.horario_motor_desligado)]");
+    expect(pilotApp).toContain("['COMB. INICIAL'");
+    expect(pilotApp).toContain("['COMB. FINAL'");
+    expect(pilotApp).toContain("['Nº de série', aircraft.numero_serie, 'Não cadastrado no AirTrust']");
+    expect(pilotApp).not.toContain('logbookDraft');
+  });
+
   it('gera o historico operacional somente de RDV finalizado e no escopo do tripulante', () => {
     expect(history).toContain('Não existe lançamento manual paralelo para o piloto');
     expect(workflowRoute).toContain("'/pilot/logbook'");

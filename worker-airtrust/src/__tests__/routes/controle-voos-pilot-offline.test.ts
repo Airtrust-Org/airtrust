@@ -297,7 +297,7 @@ function statementFor(sql: string) {
         };
       }
       if (normalized.includes('FROM aeronaves')) {
-        return { id: 3, modelo: 'AW139', prefixo: 'PR-TST', peso_vazio: 9300, unidade_peso: 'LB' };
+        return { id: 3, modelo: 'AW139', fabricante: 'Leonardo', prefixo: 'PR-TST', peso_vazio: 9300, unidade_peso: 'LB' };
       }
       if (normalized.includes('FROM cv_naturezas_voo')) {
         return { id: 5, codigo: 'MANUTENCAO', nome: 'Manutenção' };
@@ -470,7 +470,7 @@ describe('Pilot offline package', () => {
       unidade_peso: 'LB',
       observacoes: 'Etapa de teste',
     });
-    expect(body.data.aeronave).toMatchObject({ peso_vazio: 9300, unidade_peso: 'LB' });
+    expect(body.data.aeronave).toMatchObject({ fabricante: 'Leonardo', modelo: 'AW139', peso_vazio: 9300, unidade_peso: 'LB' });
     expect(body.data.catalogos.naturezas_voo).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ codigo: 'MANUTENCAO' }),

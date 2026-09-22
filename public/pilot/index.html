@@ -671,6 +671,97 @@
       .expandable-panel > summary::-webkit-details-marker { display:none; }
       .expandable-panel > summary::after { content:'Abrir'; font-size:12px; font-weight:800; color:#0369a1; border:1px solid #7dd3fc; border-radius:999px; padding:3px 9px; background:#fff; }
       .expandable-panel[open] > summary::after { content:'Fechar'; }
+      .logbook-edge-tab {
+        position: fixed;
+        right: 0;
+        top: 42%;
+        z-index: 55;
+        min-height: 142px;
+        width: 42px;
+        border: 1px solid #0e7490;
+        border-right: 0;
+        border-radius: 12px 0 0 12px;
+        background: #0e7490;
+        color: #fff;
+        font-weight: 900;
+        letter-spacing: .02em;
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        padding: 10px 8px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, .22);
+      }
+      .logbook-helper {
+        position: fixed;
+        inset: 0;
+        z-index: 90;
+        overflow: auto;
+        background: #eef4f8;
+        padding: 20px;
+      }
+      .logbook-helper.hidden, .logbook-edge-tab.hidden { display: none !important; }
+      .logbook-sheet {
+        width: min(1180px, 100%);
+        margin: 0 auto;
+        border: 1px solid #b7c7d8;
+        border-radius: 16px;
+        background: #fff;
+        box-shadow: 0 18px 48px rgba(15, 23, 42, .18);
+        overflow: hidden;
+      }
+      .logbook-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        padding: 14px 16px;
+        background: #0f355b;
+        color: #fff;
+      }
+      .logbook-toolbar h2 { margin: 0; color: #fff; }
+      .logbook-toolbar .actions { margin: 0; }
+      .logbook-toolbar button { min-height: 42px; }
+      .logbook-body { padding: 16px; }
+      .logbook-copy-note { margin: 0 0 14px; color: #52637a; line-height: 1.5; }
+      .logbook-section { margin-top: 18px; }
+      .logbook-section:first-child { margin-top: 0; }
+      .logbook-section h3 { margin-bottom: 8px; }
+      .logbook-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+      .logbook-cell {
+        min-width: 0;
+        border: 1px solid #c7d4df;
+        border-radius: 10px;
+        background: #f3f8ef;
+        padding: 9px 10px;
+      }
+      .logbook-cell span { display: block; color: #5d6e7f; font-size: .72rem; font-weight: 800; text-transform: uppercase; }
+      .logbook-cell strong { display: block; margin-top: 3px; color: #10213d; font-size: .98rem; overflow-wrap: anywhere; }
+      .logbook-cell.missing { background: #fff8e7; }
+      .logbook-cell.missing strong { color: #8a5a00; }
+      .logbook-stage-card { margin-top: 10px; border: 2px solid #9fb8a0; border-radius: 12px; overflow: hidden; }
+      .logbook-stage-title { padding: 9px 11px; background: #dcebd2; color: #203b23; font-weight: 900; }
+      .logbook-stage-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+      .logbook-stage-grid .logbook-cell { border-radius: 0; border-width: 1px 1px 0 0; }
+      .logbook-summary-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+      .logbook-extra-list { margin: 8px 0 0; padding-left: 20px; line-height: 1.65; }
+      .logbook-helper.copy-mode .logbook-toolbar { position: static; }
+      .logbook-helper.copy-mode .logbook-copy-note { display: none; }
+      .logbook-helper.copy-mode .logbook-cell { padding: 12px; }
+      .logbook-helper.copy-mode .logbook-cell strong { font-size: 1.13rem; }
+      @media (max-width: 900px) {
+        .logbook-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .logbook-stage-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .logbook-summary-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 620px) {
+        .logbook-helper { padding: 0; }
+        .logbook-sheet { border-radius: 0; border-width: 0; min-height: 100vh; }
+        .logbook-toolbar { align-items: flex-start; flex-direction: column; }
+        .logbook-grid, .logbook-stage-grid, .logbook-summary-row { grid-template-columns: 1fr 1fr; }
+        .logbook-edge-tab { top: 48%; }
+      }
       .stage-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:24px; }
       .stage-toolbar #add-stage { min-height:32px; padding:5px 9px; font-size:12px; border-radius:8px; flex:0 0 auto; align-self:flex-start; }
       .stage-delete { margin-top:10px; border-color:#fecaca !important; color:#b91c1c !important; }
@@ -796,6 +887,32 @@
             </div>
             <button id="close-rdv-editor" class="secondary" type="button">Sair do voo offline</button>
           </div>
+          <button id="open-logbook-helper" class="logbook-edge-tab" type="button" aria-controls="logbook-helper" aria-expanded="false">
+            Diário de bordo
+          </button>
+          <aside id="logbook-helper" class="logbook-helper hidden" aria-label="Diário de bordo — dados para transcrição" aria-hidden="true">
+            <div class="logbook-sheet">
+              <div class="logbook-toolbar">
+                <div>
+                  <h2>Diário de bordo — dados para transcrição</h2>
+                  <div class="muted" style="color:#d8e7f4">Mesmos dados do Pilot App, organizados na ordem da folha em papel.</div>
+                </div>
+                <div class="actions">
+                  <button id="toggle-logbook-copy-mode" class="secondary" type="button">Modo copiar</button>
+                  <button id="close-logbook-helper" class="secondary" type="button">Fechar</button>
+                </div>
+              </div>
+              <div class="logbook-body">
+                <p class="logbook-copy-note">Use esta tela somente para transcrever. Para corrigir algum valor, feche esta aba e altere o campo correspondente no lançamento do voo.</p>
+                <div id="logbook-header" class="logbook-section"></div>
+                <div id="logbook-crew" class="logbook-section"></div>
+                <div id="logbook-stages" class="logbook-section"></div>
+                <div id="logbook-summary" class="logbook-section"></div>
+                <div id="logbook-extra" class="logbook-section"></div>
+              </div>
+            </div>
+          </aside>
+
           <div class="section-head" style="margin-top:20px">
             <div>
               <h3>Tripulação do voo</h3>
