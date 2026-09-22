@@ -3619,7 +3619,7 @@ function renderLogbookHelper() {
       ['DIURNO', daytime],
       ['NOTURNO', toDurationInput(fields.tempo_noturno)],
       ['IFR', toDurationInput(fields.tempo_ifr)],
-      ['TOTAL', fields.tempo_decolagem_pouso],
+      ['TOTAL', fields.tempo_total],
       ['POUSOS', stageLandingCount(fields)],
       ['PAX / POB', fields.pax],
       ['PESO PAX', formatWeightPair(fields.peso_passageiros, fields.unidade_peso || 'LB')],

@@ -57,6 +57,7 @@ describe('Pilot Logbook x RDV - contrato de lançamento único', () => {
     expect(pilotApp).toContain("['DECOLAGEM', toInputTime(fields.horario_decolagem)]");
     expect(pilotApp).toContain("['POUSO', toInputTime(fields.horario_pouso)]");
     expect(pilotApp).toContain("['CORTE', toInputTime(fields.horario_motor_desligado)]");
+    expect(pilotApp).toContain("['TOTAL', fields.tempo_total]");
     expect(pilotApp).toContain("['COMB. INICIAL'");
     expect(pilotApp).toContain("['COMB. FINAL'");
     expect(pilotApp).toContain("['Nº de série', aircraft.numero_serie, 'Não cadastrado no AirTrust']");

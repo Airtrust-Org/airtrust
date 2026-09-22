@@ -1044,21 +1044,23 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     runSql(
       db.databasePath,
       `UPDATE cv_voo_etapas
-          SET horario_motor_ligado = '09:55', horario_motor_desligado = '11:00'
+          SET horario_motor_ligado = '10:00', horario_motor_desligado = '11:00'
         WHERE empresa_id = 1 AND voo_id = 601 AND numero_etapa = 1;`,
     );
-    await request(
+    const finalizarPreenchimento = await request(
       db,
       '/api/controle-voos/voos/601/rdv/finalizar-preenchimento',
       { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
-    await request(
+    expect(finalizarPreenchimento.status).toBe(200);
+    const enviar = await request(
       db,
       '/api/controle-voos/voos/601/rdv/enviar',
       { method: 'POST', body: await transitionBody(db) },
       PILOTO,
     );
+    expect(enviar.status).toBe(200);
 
     const fila = await request(db, '/api/controle-voos/rdv/fila?status=enviado', {}, COORDENACAO);
     const filaBody = (await fila.json()) as {

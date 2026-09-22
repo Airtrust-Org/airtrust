@@ -202,9 +202,10 @@ export function computeEtapaTempos(
     }
   }
 
-  if (motorLigado && motorDesligado) {
+  const totalEnd = motorDesligado || pouso;
+  if (motorLigado && totalEnd) {
     const start = parseEtapaInstant(motorLigado);
-    const end = parseEtapaInstant(motorDesligado);
+    const end = parseEtapaInstant(totalEnd);
     if (start && end) {
       tempoTotal = formatMinutesAsHhMm(minutesBetween(start, end));
     }
