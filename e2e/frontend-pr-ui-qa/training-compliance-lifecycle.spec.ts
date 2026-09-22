@@ -214,7 +214,8 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   );
   const employeeIds = people.json.data.map((p: any) => Number(p.id));
 
-  await page.getByRole('button', { name: 'Matriz', exact: true }).click();
+  await page.getByRole('button', { name: 'Administração', exact: true }).click();
+  await page.getByRole('button', { name: 'Por organização', exact: true }).click();
   await expect(page.getByText('Matriz por organização', { exact: true })).toBeVisible();
   await chooseOrgScope(page, sector.id);
 
@@ -390,7 +391,7 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   expect(cargoAggregate).toMatchObject({ pessoas: 2, requisitos_obrigatorios: 2, conformes: 2, compliance_pct: 100 });
 
   // 5) Recommended keeps applicability but leaves the mandatory denominator; restore afterwards.
-  await page.getByRole('button', { name: 'Matriz', exact: true }).click();
+  await page.getByRole('button', { name: 'Por organização', exact: true }).click();
   await chooseOrgScope(page, sector.id);
   await changeMatrixRule(page, requiredTypeCode, 'RECOMENDADA', 'PUT');
   await expect.poll(async () => (await filteredSummary(page, sector.id, fn.id)).requisitos_obrigatorios).toBe(0);
