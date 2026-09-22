@@ -34,7 +34,7 @@ describe('ControleVoosSubnav navigation contract (N-03)', () => {
     });
   });
 
-  it('contains five task-oriented primary destinations while legacy routes stay routable', () => {
+  it('keeps five registered destinations while visibility is role-oriented', () => {
     expect(CONTROLE_VOOS_NAV_LINKS).toHaveLength(5);
     const paths = CONTROLE_VOOS_NAV_LINKS.map((link) => link.to);
     expect(paths).toEqual([
@@ -54,27 +54,33 @@ describe('ControleVoosSubnav navigation contract (N-03)', () => {
     expect(links.map((link) => link.to)).toEqual(['/controle-voos/meus-voos']);
   });
 
-  it('shows the full operational module to Gestor/Manager used by Coordenação', () => {
+  it('shows operational navigation to Gestor/Manager without the pilot-only Meus voos tab', () => {
     for (const role of ['GESTOR', 'MANAGER']) {
       const links = getVisibleControleVoosNavLinks({
         email: 'coordenacao@empresa.com',
         role,
       });
-      expect(links.map((link) => link.to)).toEqual(
-        CONTROLE_VOOS_NAV_LINKS.map((link) => link.to),
-      );
+      expect(links.map((link) => link.to)).toEqual([
+        '/controle-voos',
+        '/controle-voos/coordenacao/fila',
+        '/controle-voos/relatorios',
+        '/controle-voos/tabelas',
+      ]);
     }
   });
 
-  it('shows full navigation to a configurable Coordenação grant', () => {
+  it('shows coordination navigation without Meus voos to a configurable Coordenação grant', () => {
     const links = getVisibleControleVoosNavLinks({
       email: 'coordenacao@empresa.com',
       role: 'USUARIO',
       permissions: ['GRANT:controle_voos.view'],
     });
-    expect(links.map((link) => link.to)).toEqual(
-      CONTROLE_VOOS_NAV_LINKS.map((link) => link.to),
-    );
+    expect(links.map((link) => link.to)).toEqual([
+      '/controle-voos',
+      '/controle-voos/coordenacao/fila',
+      '/controle-voos/relatorios',
+      '/controle-voos/tabelas',
+    ]);
   });
 
   it('honors explicit deny above Gestor role', () => {
@@ -113,7 +119,7 @@ describe('ControleVoosSubnav navigation contract (N-03)', () => {
     expect(activeForNested.label).toBe('Coordenação');
   });
 
-  it('renders mobile accessible select with five primary options for the primary admin', () => {
+  it('renders mobile accessible select without pilot-only Meus voos for the primary admin', () => {
     render(
       <MemoryRouter initialEntries={['/controle-voos/relatorios']}>
         <ControleVoosSubnav />
@@ -128,10 +134,13 @@ describe('ControleVoosSubnav navigation contract (N-03)', () => {
     expect(mobileSelect).toHaveValue('/controle-voos/relatorios');
 
     const options = screen.getAllByRole('option');
-    expect(options).toHaveLength(5);
-    expect(options.map((opt) => (opt as HTMLOptionElement).value)).toEqual(
-      CONTROLE_VOOS_NAV_LINKS.map((link) => link.to),
-    );
+    expect(options).toHaveLength(4);
+    expect(options.map((opt) => (opt as HTMLOptionElement).value)).toEqual([
+      '/controle-voos',
+      '/controle-voos/coordenacao/fila',
+      '/controle-voos/relatorios',
+      '/controle-voos/tabelas',
+    ]);
   });
 
   it('renders only Meus voos for pilot/aluno', () => {
@@ -179,7 +188,7 @@ describe('ControleVoosSubnav navigation contract (N-03)', () => {
     expect(nav).toBeInTheDocument();
 
     const links = screen.getAllByRole('link');
-    expect(links).toHaveLength(5);
+    expect(links).toHaveLength(4);
 
     const activeLink = links.find((link) => link.getAttribute('aria-current') === 'page');
     expect(activeLink).toBeDefined();

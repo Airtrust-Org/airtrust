@@ -16,6 +16,14 @@ describe('ControleVoosDashboard operational landing', () => {
     expect(source).not.toContain('lg:grid-cols-5');
   });
 
+
+  it('mantém o comando de criação de voo disponível para a Coordenação', () => {
+    expect(source).toContain('Criar voo');
+    expect(source).toContain('ControleVoosNovoVooDialog');
+    expect(source).toContain('mode="coordenacao"');
+    expect(source).toContain('canCoordinate');
+  });
+
   it('mantém erros técnicos fora da mensagem apresentada ao usuário', () => {
     expect(source).toContain('Não foi possível carregar a situação operacional.');
     expect(source).not.toContain('Erro ao carregar dashboard: {error.message}');
