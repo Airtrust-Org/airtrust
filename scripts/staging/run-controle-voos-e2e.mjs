@@ -310,19 +310,43 @@ async function main() {
   });
   let rdvVersao = rdvJson?.data?.versao ?? 1;
 
-  // ── 7. Criar etapa ───────────────────────────────────────────────────
-  const etapaCreate = await call({
-    operation: 'criar_etapa',
-    method: 'POST',
+  // ── 7. Completar a etapa criada pelo planejamento ────────────────────
+  // POST /voos cria as etapas canônicas a partir da rota. O E2E deve
+  // preencher a etapa existente, não tentar criar outra numero_etapa=1.
+  const etapasPlanejadas = await call({
+    operation: 'listar_etapas_planejadas',
+    method: 'GET',
     path: `/api/controle-voos/voos/${vooId}/etapas`,
     actor: adminA,
     tenant: 'A',
-    expectedStatus: 201,
+    expectedStatus: 200,
+  });
+  const primeiraEtapaId = etapasPlanejadas.json?.data?.[0]?.id ?? null;
+  if (!etapasPlanejadas.passed || !primeiraEtapaId) {
+    report.push({
+      operation: 'validar_etapa_planejada_existente',
+      method: 'GET',
+      route: `/api/controle-voos/voos/${vooId}/etapas`,
+      expected_status: 200,
+      observed_status: etapasPlanejadas.status,
+      operation_id: null,
+      tenant: 'A',
+      result: 'FAIL',
+      duration_ms: 0,
+      error: 'Etapa canônica esperada após criação do voo não foi encontrada',
+    });
+    return finish(manifest, false);
+  }
+
+  const etapaUpdate = await call({
+    operation: 'atualizar_etapa_planejada',
+    method: 'PATCH',
+    path: `/api/controle-voos/voos/${vooId}/etapas/${primeiraEtapaId}`,
+    actor: adminA,
+    tenant: 'A',
+    expectedStatus: 200,
     body: {
       versao: rdvVersao,
-      numero_etapa: 1,
-      origem_icao: 'OR' + 'A' + manifest.runId,
-      destino_icao: 'DE' + 'A' + manifest.runId,
       horario_motor_ligado: `${dataProg}T09:58:00Z`,
       horario_decolagem: `${dataProg}T10:05:00Z`,
       horario_pouso: `${dataProg}T10:55:00Z`,
@@ -331,17 +355,7 @@ async function main() {
       combustivel_fim: 400,
     },
   });
-  if (!etapaCreate.passed) {
-    await call({
-      operation: 'diagnostico_listar_etapas_apos_falha_criacao',
-      method: 'GET',
-      path: `/api/controle-voos/voos/${vooId}/etapas`,
-      actor: adminA,
-      tenant: 'A',
-      expectedStatus: 200,
-    });
-    return finish(manifest, false);
-  }
+  if (!etapaUpdate.passed) return finish(manifest, false);
   rdvVersao += 1;
 
   // ── 7.5 Criar setor + funcionario via cadastro CANONICO (Funcionarios) ──
