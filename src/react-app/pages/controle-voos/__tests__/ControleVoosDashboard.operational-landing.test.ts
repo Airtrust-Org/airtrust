@@ -21,7 +21,7 @@ describe('ControleVoosDashboard operational landing', () => {
     expect(source).toContain('Criar voo');
     expect(source).toContain('ControleVoosNovoVooDialog');
     expect(source).toContain('mode="coordenacao"');
-    expect(source).toContain('canCoordinate');
+    expect(source).toContain("can('controle_voos.edit')");
   });
 
   it('prioriza Criar voo e permite quebra de layout em telas menores', () => {
