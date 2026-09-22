@@ -10,6 +10,46 @@ export type FlightPlanningInput = {
   unidadeCombustivelSolicitado: string;
 };
 
+
+type AircraftBasicWeight = {
+  pesoVazio: number | null;
+  unidadePeso: 'KG' | 'LB' | null;
+};
+
+function convertWeight(value: number, from: 'KG' | 'LB', to: 'KG' | 'LB'): number {
+  if (from === to) return value;
+  const converted = from === 'KG' ? value * 2.2046226218 : value / 2.2046226218;
+  return Number(converted.toFixed(3));
+}
+
+async function getAircraftBasicWeightIfSupported(
+  db: D1Database,
+  empresaId: number,
+  aeronaveId: number | null,
+): Promise<AircraftBasicWeight> {
+  if (!aeronaveId) return { pesoVazio: null, unidadePeso: null };
+  try {
+    const row = await db
+      .prepare(
+        `SELECT peso_vazio, unidade_peso
+           FROM aeronaves
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
+          LIMIT 1`,
+      )
+      .bind(aeronaveId, empresaId)
+      .first<{ peso_vazio: number | null; unidade_peso: string | null }>();
+    const unit = String(row?.unidade_peso || '').trim().toUpperCase();
+    return {
+      pesoVazio: row?.peso_vazio == null ? null : Number(row.peso_vazio),
+      unidadePeso: unit === 'KG' || unit === 'LB' ? unit : null,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('no such column')) return { pesoVazio: null, unidadePeso: null };
+    throw error;
+  }
+}
+
 function parseOptionalNonNegativeNumber(value: unknown, field: string): number | null {
   if (value === null || value === undefined || value === '') return null;
   const parsed = typeof value === 'number' ? value : Number(value);
@@ -70,23 +110,42 @@ export async function updateFlightStagePlanningIfSupported(
   db: D1Database,
   empresaId: number,
   vooId: number,
+  aeronaveId: number | null,
   planning: FlightPlanningInput,
 ): Promise<void> {
+  const aircraftWeight = await getAircraftBasicWeightIfSupported(
+    db,
+    empresaId,
+    aeronaveId,
+  );
+  const planningUnit =
+    planning.unidadePesoPlanejado === 'LB' ? 'LB' : 'KG';
+  const aircraftWeightInPlanningUnit =
+    aircraftWeight.pesoVazio != null && aircraftWeight.unidadePeso
+      ? convertWeight(aircraftWeight.pesoVazio, aircraftWeight.unidadePeso, planningUnit)
+      : null;
+
   if (
     planning.pesoPlanejado == null &&
     planning.pesoPassageiros == null &&
-    planning.pesoBagagem == null
+    planning.pesoBagagem == null &&
+    aircraftWeightInPlanningUnit == null
   ) return;
 
   try {
     await db.prepare(
       `UPDATE cv_voo_etapas
-          SET peso_passageiros = ?, peso_bagagem = ?, unidade_peso = ?, updated_at = datetime('now')
-        WHERE empresa_id = ? AND voo_id = ? AND numero_etapa = 1 AND deleted_at IS NULL`,
+          SET peso_passageiros = CASE WHEN numero_etapa = 1 THEN ? ELSE peso_passageiros END,
+              peso_bagagem = CASE WHEN numero_etapa = 1 THEN ? ELSE peso_bagagem END,
+              peso_vazio = ?,
+              unidade_peso = ?,
+              updated_at = datetime('now')
+        WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL`,
     ).bind(
       planning.pesoPassageiros,
       planning.pesoBagagem,
-      planning.unidadePesoPlanejado,
+      aircraftWeightInPlanningUnit,
+      planningUnit,
       empresaId,
       vooId,
     ).run();
@@ -98,7 +157,7 @@ export async function updateFlightStagePlanningIfSupported(
       await db.prepare(
         `UPDATE cv_voo_etapas SET unidade_peso = ?, updated_at = datetime('now')
           WHERE empresa_id = ? AND voo_id = ? AND numero_etapa = 1 AND deleted_at IS NULL`,
-      ).bind(planning.unidadePesoPlanejado, empresaId, vooId).run();
+      ).bind(planningUnit, empresaId, vooId).run();
     } catch (legacyError) {
       const legacyMessage = legacyError instanceof Error ? legacyError.message : String(legacyError);
       if (!legacyMessage.includes('no such column')) throw legacyError;

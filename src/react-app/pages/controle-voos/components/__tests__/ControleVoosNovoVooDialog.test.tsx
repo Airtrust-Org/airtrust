@@ -19,7 +19,17 @@ const funcoes = [
   { id: 53, codigo: 'COMANDANTE', nome: 'Comandante' },
   { id: 54, codigo: 'COPILOTO', nome: 'Copiloto' },
 ];
-const aeronaves = [{ id: 30, codigo: 'PR-ABC', prefixo: 'PR-ABC', modelo: 'AW139', status: 'ATIVA' }];
+const aeronaves = [
+  {
+    id: 30,
+    codigo: 'PR-ABC',
+    prefixo: 'PR-ABC',
+    modelo: 'AW139',
+    status: 'ATIVA',
+    peso_vazio: 4200,
+    unidade_peso: 'KG',
+  },
+];
 const crew = [
   { id: 101, nome: 'Comandante AW', matricula: 'CMD-101', funcao_codigo: 'PIC', funcao_nome: 'Comandante' },
   { id: 102, nome: 'Copiloto AW', matricula: 'COP-102', funcao_codigo: 'SIC', funcao_nome: 'Copiloto' },
@@ -120,8 +130,12 @@ describe('ControleVoosNovoVooDialog operational model', () => {
     expect(duration.value).toBe('2:15');
   });
 
-  it('Coordenação usa pesos separados e libra como unidade padrão', async () => {
+  it('Coordenação usa pesos separados, libra padrão e mostra o peso básico cadastrado da aeronave', async () => {
     renderDialog('coordenacao'); await waitReady();
+    fireEvent.change(screen.getByLabelText(/Aeronave \/ Prefixo/), { target: { value: '30' } });
+    expect(screen.getByText('Peso básico da aeronave')).toBeInTheDocument();
+    expect(screen.getByText(/9\.259,4 lb/)).toBeInTheDocument();
+    expect(screen.getByText(/Cadastro mestre: 4\.200 kg/)).toBeInTheDocument();
     expect(screen.getByLabelText('Peso dos passageiros')).toBeInTheDocument();
     expect(screen.getByLabelText('Peso da bagagem')).toBeInTheDocument();
     expect(screen.queryByLabelText('Peso previsto')).toBeNull();
