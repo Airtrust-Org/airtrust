@@ -106,6 +106,29 @@ export function parseFlightPlanningInput(payload: Record<string, unknown>): Flig
   };
 }
 
+export async function applyAircraftBasicWeightToFlightStages(
+  db: D1Database,
+  empresaId: number,
+  vooId: number,
+  aeronaveId: number | null,
+  unidadePesoPlanejado: string = 'LB',
+): Promise<void> {
+  const aircraftWeight = await getAircraftBasicWeightIfSupported(db, empresaId, aeronaveId);
+  if (aircraftWeight.pesoVazio == null || !aircraftWeight.unidadePeso) return;
+  const planningUnit: 'KG' | 'LB' = unidadePesoPlanejado === 'KG' ? 'KG' : 'LB';
+  const pesoVazio = convertWeight(aircraftWeight.pesoVazio, aircraftWeight.unidadePeso, planningUnit);
+  try {
+    await db.prepare(
+      `UPDATE cv_voo_etapas
+          SET peso_vazio = ?, unidade_peso = ?, updated_at = datetime('now')
+        WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL`,
+    ).bind(pesoVazio, planningUnit, empresaId, vooId).run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('no such column')) throw error;
+  }
+}
+
 export async function updateFlightStagePlanningIfSupported(
   db: D1Database,
   empresaId: number,

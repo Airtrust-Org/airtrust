@@ -15,6 +15,7 @@ import {
   normalizeFlightRouteIds,
   resolveFlightRoutePoints,
 } from '../services/controle-voos/flight-creation';
+import { applyAircraftBasicWeightToFlightStages } from '../services/controle-voos/flight-planning';
 
 const pilotSelfCreate = new Hono<{ Bindings: Env }>();
 
@@ -189,6 +190,7 @@ pilotSelfCreate.post('/voos/meus/criar', auth(), requireAnyRdvAccess(), async (c
   );
   try {
     await c.env.DB.batch(relatedStatements);
+    await applyAircraftBasicWeightToFlightStages(c.env.DB, empresaId, vooId, aeronaveId);
   } catch (error) {
     await c.env.DB.prepare("UPDATE cv_voos SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND empresa_id = ?")
       .bind(vooId, empresaId).run();
