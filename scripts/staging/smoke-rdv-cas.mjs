@@ -42,6 +42,93 @@ function validateVooPayload(payload) {
   validatePayloadField(payload.status, 'status');
 }
 
+function buildReadyFlightPlanPayload(draft) {
+  assert(draft?.comuns && Array.isArray(draft?.pernas) && draft.pernas.length > 0,
+    'Plano estruturado precisa fornecer dados comuns e ao menos uma perna.');
+
+  const operationalDate = new Date().toISOString().split('T')[0];
+  return {
+    ...draft,
+    comuns: {
+      ...draft.comuns,
+      regra_voo: 'V',
+      tipo_voo: 'G',
+      tipo_aeronave: draft.comuns.tipo_aeronave || 'A139',
+      categoria_esteira: 'L',
+      equipamento: 'SDFGRY',
+      vigilancia: 'S',
+    },
+    pernas: draft.pernas.map((leg, index) => ({
+      ...leg,
+      data_partida_utc: leg.data_partida_utc || operationalDate,
+      eobt_utc: leg.eobt_utc || `${String(12 + index).padStart(2, '0')}00`,
+      velocidade_cruzeiro: leg.velocidade_cruzeiro || 'N0130',
+      nivel_cruzeiro: leg.nivel_cruzeiro || 'A015',
+      rota: leg.rota || 'DCT',
+      eet: leg.eet || '0030',
+      outros_dados: leg.outros_dados || 'RMK/QA STAGING SMOKE',
+      autonomia: leg.autonomia || '0300',
+      pessoas_bordo: leg.pessoas_bordo || '1',
+    })),
+  };
+}
+
+async function exerciseStructuredFlightPlan(baseUrl, token, vooId) {
+  console.log('\n[E2E] Plano de voo estruturado: carregar draft automático...');
+  const initial = await authFetch(baseUrl, token, `/api/controle-voos/voos/${vooId}/plano-voo`);
+  assert(initial.status === 200 && initial.json?.success === true,
+    `GET plano estruturado falhou (${initial.status} - ${JSON.stringify(initial.json)})`);
+  const initialData = initial.json?.data;
+  assert(initialData?.available === true, 'Schema 0509 deve estar disponível no staging.');
+  assert(initialData?.transmission?.provider === 'MANUAL' && initialData?.transmission?.enabled === false,
+    'Plano de voo em staging deve permanecer MANUAL e sem transmissão automática ao DECEA.');
+  assert(initialData?.plan === null, 'Voo sintético novo não deve iniciar com plano persistido.');
+
+  const payload = buildReadyFlightPlanPayload(initialData?.draft);
+  const preview = await authFetch(baseUrl, token, `/api/controle-voos/voos/${vooId}/plano-voo/preview`, {
+    method: 'POST',
+    body: JSON.stringify({ payload }),
+  });
+  assert(preview.status === 200 && preview.json?.data?.readiness?.ready === true,
+    `Preview do plano estruturado não ficou pronto (${preview.status} - ${JSON.stringify(preview.json)})`);
+  const previews = preview.json.data.readiness.pernas || [];
+  assert(previews.length === payload.pernas.length && previews.every((leg) => typeof leg.preview === 'string' && leg.preview.includes('(FPL-')),
+    'Cada perna pronta deve gerar uma prévia FPL textual.');
+
+  const saveDraft = await authFetch(baseUrl, token, `/api/controle-voos/voos/${vooId}/plano-voo`, {
+    method: 'PUT',
+    body: JSON.stringify({ payload: preview.json.data.payload, status: 'rascunho' }),
+  });
+  assert(saveDraft.status === 200,
+    `Falha ao persistir rascunho do plano (${saveDraft.status} - ${JSON.stringify(saveDraft.json)})`);
+  assert(saveDraft.json?.data?.plan?.status === 'rascunho' && saveDraft.json?.data?.plan?.versao === 1,
+    'Primeiro save do plano deve criar rascunho na versão 1.');
+  assert(saveDraft.json?.data?.plan?.provider === 'MANUAL', 'Provider persistido do plano deve permanecer MANUAL.');
+
+  const markReady = await authFetch(baseUrl, token, `/api/controle-voos/voos/${vooId}/plano-voo`, {
+    method: 'PUT',
+    body: JSON.stringify({ payload: preview.json.data.payload, status: 'pronto', versao: 1 }),
+  });
+  assert(markReady.status === 200,
+    `Falha ao marcar plano pronto (${markReady.status} - ${JSON.stringify(markReady.json)})`);
+  assert(markReady.json?.data?.plan?.status === 'pronto' && markReady.json?.data?.plan?.versao === 2,
+    'Plano pronto deve avançar para versão 2.');
+  assert(markReady.json?.data?.readiness?.ready === true,
+    'Plano persistido como pronto deve continuar estruturalmente pronto.');
+
+  const staleWrite = await authFetch(baseUrl, token, `/api/controle-voos/voos/${vooId}/plano-voo`, {
+    method: 'PUT',
+    body: JSON.stringify({ payload: preview.json.data.payload, status: 'rascunho', versao: 1 }),
+  });
+  assert(staleWrite.status === 409 && staleWrite.json?.code === 'CONTROLE_VOOS_FLIGHT_PLAN_VERSION_CONFLICT',
+    `CAS do plano deveria rejeitar versão stale com 409 (${staleWrite.status} - ${JSON.stringify(staleWrite.json)})`);
+
+  const finalRead = await authFetch(baseUrl, token, `/api/controle-voos/voos/${vooId}/plano-voo`);
+  assert(finalRead.status === 200 && finalRead.json?.data?.plan?.status === 'pronto' && finalRead.json?.data?.plan?.versao === 2,
+    `Leitura final do plano não confirmou pronto/v2 (${finalRead.status} - ${JSON.stringify(finalRead.json)})`);
+  console.log('[E2E] Plano de voo estruturado validado: preview por perna, persistência, provider MANUAL e CAS 409.');
+}
+
 // Identificador curto e unico por execucao, usado em todo campo sujeito a
 // UNIQUE(empresa_id, numero) em cv_rdv_operacional. Sem isso, reexecucoes do
 // smoke reusavam os mesmos literais ("v1".."v4", "concorrencia") e colidiam
@@ -252,6 +339,9 @@ async function run() {
     vooId = criarVooRes.json?.data?.id;
     assert(vooId, `Falha ao criar voo sintético: ${JSON.stringify(criarVooRes.json)}`);
     console.log(`[E2E] Voo sintético criado: ID ${vooId}`);
+
+    // 1A. Validar plano de voo estruturado no mesmo voo sintético antes do RDV.
+    await exerciseStructuredFlightPlan(EXPECTED_API_URL, token, vooId);
 
     // 2. Criar rascunho inicial com versão 1
     console.log('\n[E2E] 2. Criar rascunho inicial do RDV...');
