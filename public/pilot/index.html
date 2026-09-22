@@ -188,6 +188,17 @@
         text-align: left;
       }
       .editor-grid .wide { grid-column: 1 / -1; }
+      .dual-weight-field { min-width: 0; }
+      .dual-weight-title { display: block; margin-bottom: 6px; font-weight: 700; }
+      .dual-weight-inputs { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+      .dual-weight-unit { display: flex; flex-direction: column; gap: 4px; margin: 0; }
+      .dual-weight-unit > span { margin: 0 !important; color: #66758a; font-size: .72rem; font-weight: 800; text-transform: uppercase; }
+      .crew-summary { grid-column: 1 / -1; border: 1px solid #cbd8e7; border-radius: 14px; background: #f8fbff; padding: 14px; }
+      .crew-summary h4 { margin: 0 0 10px; font-size: .95rem; }
+      .crew-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+      .crew-member-card { border: 1px solid #d9e3ef; border-radius: 12px; background: #fff; padding: 10px 12px; }
+      .crew-member-card strong, .crew-member-card span { display: block; }
+      .crew-member-card .crew-meta { margin-top: 3px; color: #52637a; font-size: .8rem; }
       .flight-date-controls {
         display: grid;
         grid-template-columns: auto minmax(190px, 240px) auto auto;

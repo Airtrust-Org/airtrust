@@ -145,6 +145,12 @@ function statementFor(sql: string) {
       return statement;
     },
     async all() {
+      if (normalized.includes('PRAGMA table_info(funcionarios)')) {
+        return { results: [{ name: 'id' }, { name: 'nome' }, { name: 'guerra' }, { name: 'codigo_anac' }] };
+      }
+      if (normalized.includes('FROM frms_jornada j')) {
+        return { results: [{ funcionario_id: 77, hora_apresentacao: '06:30' }] };
+      }
       if (normalized.includes('FROM cv_voo_tripulantes')) {
         return {
           results: [
@@ -157,6 +163,7 @@ function statementFor(sql: string) {
               horario_dispensa: null,
               observacoes: null,
               nome: 'Piloto Teste',
+              nome_guerra: 'Teste',
               codigo_anac: '123456',
               updated_at: '2026-09-09T09:01:00Z',
             },
@@ -454,6 +461,13 @@ describe('Pilot offline package', () => {
     expect(body.data.voo).toMatchObject({ id: 42, prefixo: 'PR-TST', versao: 6, numero_voo: 'COORD-321', numero_db: null, contrato_id: 9 });
     expect(body.data.rdv).toMatchObject({ id: 90, versao: 3, workflow_status: 'rascunho' });
     expect(body.data.tripulantes).toHaveLength(1);
+    expect(body.data.tripulantes[0]).toMatchObject({
+      nome: 'Piloto Teste',
+      nome_guerra: 'Teste',
+      codigo_anac: '123456',
+      horario_apresentacao: '06:30',
+      horario_apresentacao_fonte: 'FRMS',
+    });
     expect(body.data.etapas).toHaveLength(1);
     expect(body.data.etapas[0]).toMatchObject({
       peso_passageiros: 1200,

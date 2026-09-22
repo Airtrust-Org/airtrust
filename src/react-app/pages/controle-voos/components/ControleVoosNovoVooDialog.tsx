@@ -43,6 +43,53 @@ function convertWeight(value: number, from: string, to: string) {
   return value;
 }
 
+function weightInputValue(value: string | number | null | undefined, from: 'LB' | 'KG', to: 'LB' | 'KG'): string {
+  if (value === null || value === undefined || value === '') return '';
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return '';
+  return String(Number(convertWeight(parsed, from, to).toFixed(3)));
+}
+
+function DualWeightInput({
+  label,
+  valueLb,
+  onLbChange,
+  className,
+  readOnly = false,
+  note,
+}: {
+  label: string;
+  valueLb: string | number | null | undefined;
+  onLbChange?: (value: string) => void;
+  className: string;
+  readOnly?: boolean;
+  note?: string;
+}) {
+  const lbValue = weightInputValue(valueLb, 'LB', 'LB');
+  const kgValue = weightInputValue(valueLb, 'LB', 'KG');
+  const apply = (raw: string, unit: 'LB' | 'KG') => {
+    if (!onLbChange) return;
+    if (raw === '') return onLbChange('');
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return;
+    onLbChange(unit === 'LB' ? raw : weightInputValue(parsed, 'KG', 'LB'));
+  };
+  return (
+    <div className="text-sm">
+      <span>{label}</span>
+      <div className="mt-1 grid grid-cols-2 gap-2">
+        <label className="text-xs text-slate-500">lb
+          <input aria-label={`${label} (lb)`} type="number" min="0" step="any" className={className} value={lbValue} readOnly={readOnly} onChange={(event) => apply(event.target.value, 'LB')} />
+        </label>
+        <label className="text-xs text-slate-500">kg
+          <input aria-label={`${label} (kg)`} type="number" min="0" step="any" className={className} value={kgValue} readOnly={readOnly} onChange={(event) => apply(event.target.value, 'KG')} />
+        </label>
+      </div>
+      {note ? <span className="mt-1 block text-xs text-slate-500">{note}</span> : null}
+    </div>
+  );
+}
+
 function toLocalInput(date: Date) {
   const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return shifted.toISOString().slice(0, 16);
@@ -315,13 +362,13 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     () => aeronaves.find((item) => String(item.id) === form.aeronave_id) ?? null,
     [aeronaves, form.aeronave_id],
   );
-  const basicWeightForPlan =
+  const basicWeightLb =
     selectedAircraft?.peso_vazio == null
       ? null
       : convertWeight(
           Number(selectedAircraft.peso_vazio),
-          selectedAircraft.unidade_peso || form.unidade_peso_planejado,
-          form.unidade_peso_planejado,
+          selectedAircraft.unidade_peso || 'LB',
+          'LB',
         );
 
   async function submit(event: React.FormEvent) {
@@ -391,7 +438,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
             pax_planejado: form.pax_planejado === '' ? null : Number(form.pax_planejado),
             peso_passageiros: form.peso_passageiros === '' ? null : Number(form.peso_passageiros),
             peso_bagagem: form.peso_bagagem === '' ? null : Number(form.peso_bagagem),
-            unidade_peso_planejado: form.unidade_peso_planejado,
+            unidade_peso_planejado: 'LB',
             combustivel_solicitado: form.combustivel_solicitado === '' ? null : Number(form.combustivel_solicitado),
             unidade_combustivel_solicitado: form.unidade_combustivel_solicitado,
           };
@@ -591,30 +638,25 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
               <label className="text-sm">Passageiros previstos
                 <input type="number" min="0" step="1" className={fieldClass} value={form.pax_planejado} onChange={(e) => set('pax_planejado', e.target.value)} placeholder="Quantidade" />
               </label>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/30">
-                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Peso básico da aeronave</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  {basicWeightForPlan == null
-                    ? 'Não cadastrado'
-                    : `${basicWeightForPlan.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${form.unidade_peso_planejado.toLowerCase()}`}
-                </p>
-                {selectedAircraft?.peso_vazio != null && selectedAircraft.unidade_peso && (
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Cadastro mestre: {Number(selectedAircraft.peso_vazio).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} {selectedAircraft.unidade_peso.toLowerCase()}
-                  </p>
-                )}
-              </div>
-              <label className="text-sm">Peso dos passageiros
-                <input type="number" min="0" step="0.1" className={fieldClass} value={form.peso_passageiros} onChange={(e) => set('peso_passageiros', e.target.value)} placeholder="Peso dos passageiros" />
-              </label>
-              <label className="text-sm">Peso da bagagem
-                <input type="number" min="0" step="0.1" className={fieldClass} value={form.peso_bagagem} onChange={(e) => set('peso_bagagem', e.target.value)} placeholder="Peso da bagagem" />
-              </label>
-              <label className="text-sm">Unidade dos pesos
-                <select aria-label="Unidade dos pesos" className={fieldClass} value={form.unidade_peso_planejado} onChange={(e) => set('unidade_peso_planejado', e.target.value)}>
-                  <option value="LB">lb</option><option value="KG">kg</option>
-                </select>
-              </label>
+              <DualWeightInput
+                label="Peso básico da aeronave"
+                valueLb={basicWeightLb}
+                className={fieldClass}
+                readOnly
+                note={basicWeightLb == null ? 'Não cadastrado na aeronave.' : 'Vem do cadastro mestre da aeronave.'}
+              />
+              <DualWeightInput
+                label="Peso dos passageiros"
+                valueLb={form.peso_passageiros}
+                className={fieldClass}
+                onLbChange={(value) => set('peso_passageiros', value)}
+              />
+              <DualWeightInput
+                label="Peso da bagagem"
+                valueLb={form.peso_bagagem}
+                className={fieldClass}
+                onLbChange={(value) => set('peso_bagagem', value)}
+              />
               <label className="text-sm">Combustível solicitado
                 <div className="flex gap-2">
                   <input type="number" min="0" step="0.1" className={fieldClass} value={form.combustivel_solicitado} onChange={(e) => set('combustivel_solicitado', e.target.value)} placeholder="Quantidade solicitada" />

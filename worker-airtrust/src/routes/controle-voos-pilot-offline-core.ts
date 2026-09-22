@@ -56,9 +56,51 @@ type CrewRow = {
   horario_dispensa: string | null;
   observacoes: string | null;
   nome: string | null;
+  nome_guerra: string | null;
   codigo_anac: string | null;
   updated_at: string | null;
 };
+
+async function resolvePilotCrewNomeGuerraSql(db: D1Database): Promise<string> {
+  const columns = await db.prepare('PRAGMA table_info(funcionarios)').all<{ name: string }>();
+  const names = new Set((columns.results || []).map((column) => String(column.name || '').trim()));
+  return names.has('guerra')
+    ? `COALESCE(NULLIF(TRIM(f.guerra), ''), f.nome)`
+    : 'f.nome';
+}
+
+async function loadFrmsPresentationTimes(
+  db: D1Database,
+  empresaId: number,
+  dataProgramacao: string,
+  funcionarioIds: number[],
+): Promise<Map<number, string>> {
+  const ids = [...new Set(funcionarioIds.map(Number).filter((id) => Number.isInteger(id) && id > 0))];
+  if (!dataProgramacao || ids.length === 0) return new Map();
+
+  const placeholders = ids.map(() => '?').join(', ');
+  const result = await db
+    .prepare(
+      `SELECT CAST(j.tripulante_id AS INTEGER) AS funcionario_id, j.hora_apresentacao
+         FROM frms_jornada j
+         JOIN funcionarios f
+           ON f.id = CAST(j.tripulante_id AS INTEGER)
+          AND f.deleted_at IS NULL
+        WHERE j.deleted_at IS NULL
+          AND j.data = ?
+          AND f.empresa_id = ?
+          AND CAST(j.tripulante_id AS INTEGER) IN (${placeholders})
+          AND j.hora_apresentacao IS NOT NULL`,
+    )
+    .bind(dataProgramacao, empresaId, ...ids)
+    .all<{ funcionario_id: number; hora_apresentacao: string | null }>();
+
+  return new Map(
+    (result.results || [])
+      .filter((row) => row.hora_apresentacao)
+      .map((row) => [Number(row.funcionario_id), String(row.hora_apresentacao)] as const),
+  );
+}
 
 type StageRow = {
   id: number;
@@ -375,6 +417,7 @@ pilotOffline.get(
 
     const userId = getActorId(c);
     const funcionarioId = await getFuncionarioIdForUser(c.env.DB, userId);
+    const crewNomeGuerraSql = await resolvePilotCrewNomeGuerraSql(c.env.DB);
 
     const [
       rdv,
@@ -399,7 +442,7 @@ pilotOffline.get(
             SELECT
               t.id, t.funcionario_id, t.etapa_id, t.funcao,
               t.horario_apresentacao, t.horario_dispensa, t.observacoes,
-              f.nome, f.codigo_anac, t.updated_at
+              f.nome, ${crewNomeGuerraSql} AS nome_guerra, f.codigo_anac, t.updated_at
             FROM cv_voo_tripulantes t
             LEFT JOIN funcionarios f
               ON f.id = t.funcionario_id
@@ -554,7 +597,25 @@ pilotOffline.get(
         .all<{ id: number; codigo: string; nome: string; minutos: number; observacao: string | null }>(),
     ]);
 
-    const tripulantes = crewResult.results || [];
+    const crewRows = crewResult.results || [];
+    const frmsPresentation = await loadFrmsPresentationTimes(
+      c.env.DB,
+      empresaId,
+      String(voo.data_programacao || ''),
+      crewRows.map((member) => Number(member.funcionario_id)),
+    );
+    const tripulantes = crewRows.map((member) => {
+      const frmsTime = frmsPresentation.get(Number(member.funcionario_id)) || null;
+      return {
+        ...member,
+        horario_apresentacao: frmsTime || member.horario_apresentacao || null,
+        horario_apresentacao_fonte: frmsTime
+          ? 'FRMS'
+          : member.horario_apresentacao
+            ? 'CONTROLE_VOOS'
+            : null,
+      };
+    });
     const etapas = stagesResult.results || [];
     const abastecimentos = (fuelResult.results || []).map(({ anexo_r2_key, ...entry }) => ({
       ...entry,

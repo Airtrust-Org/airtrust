@@ -134,12 +134,14 @@ describe('ControleVoosNovoVooDialog operational model', () => {
     renderDialog('coordenacao'); await waitReady();
     fireEvent.change(screen.getByLabelText(/Aeronave \/ Prefixo/), { target: { value: '30' } });
     expect(screen.getByText('Peso básico da aeronave')).toBeInTheDocument();
-    expect(screen.getByText(/9\.259,4 lb/)).toBeInTheDocument();
-    expect(screen.getByText(/Cadastro mestre: 4\.200 kg/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Peso dos passageiros')).toBeInTheDocument();
-    expect(screen.getByLabelText('Peso da bagagem')).toBeInTheDocument();
+    expect(screen.getByLabelText('Peso básico da aeronave (lb)')).toHaveValue(9259.415);
+    expect(screen.getByLabelText('Peso básico da aeronave (kg)')).toHaveValue(4200);
+    expect(screen.getByLabelText('Peso dos passageiros (lb)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Peso dos passageiros (kg)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Peso da bagagem (lb)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Peso da bagagem (kg)')).toBeInTheDocument();
     expect(screen.queryByLabelText('Peso previsto')).toBeNull();
-    expect(screen.getByLabelText('Unidade dos pesos')).toHaveValue('LB');
+    expect(screen.queryByLabelText('Unidade dos pesos')).toBeNull();
     expect(screen.getByLabelText('Unidade do combustível solicitado')).toHaveValue('LB');
   });
 
@@ -203,8 +205,8 @@ describe('ControleVoosNovoVooDialog operational model', () => {
     fireEvent.change(screen.getByLabelText('Tripulante — posto SIC'), { target: { value: '102' } });
     fireEvent.change(screen.getByLabelText('Função a bordo — posto PIC'), { target: { value: '52' } });
     fireEvent.change(screen.getByLabelText('Função a bordo — posto SIC'), { target: { value: '51' } });
-    fireEvent.change(screen.getByLabelText('Peso dos passageiros'), { target: { value: '900' } });
-    fireEvent.change(screen.getByLabelText('Peso da bagagem'), { target: { value: '180' } });
+    fireEvent.change(screen.getByLabelText('Peso dos passageiros (lb)'), { target: { value: '900' } });
+    fireEvent.change(screen.getByLabelText('Peso da bagagem (kg)'), { target: { value: '81.6466' } });
     fireEvent.change(screen.getByLabelText('Combustível solicitado'), { target: { value: '1200' } });
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar parada' }));
     fireEvent.change(screen.getByLabelText('Parada 2'), { target: { value: 'SBRJ — Santos Dumont' } });

@@ -19,6 +19,16 @@ function numberText(value, suffix = '') {
   return Number.isFinite(parsed) ? String(parsed) + suffix : '—';
 }
 
+function formatWeightBoth(value, unit = 'LB') {
+  if (value === null || value === undefined || value === '') return '—';
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return '—';
+  const normalized = String(unit || 'LB').trim().toUpperCase();
+  const lb = normalized === 'KG' ? parsed * 2.2046226218 : parsed;
+  const kg = normalized === 'LB' ? parsed / 2.2046226218 : parsed;
+  return Number(lb.toFixed(1)).toLocaleString('pt-BR') + ' lb · ' + Number(kg.toFixed(1)).toLocaleString('pt-BR') + ' kg';
+}
+
 function formatDateTime(value) {
   if (!value) return '—';
   const date = new Date(value);
@@ -182,7 +192,10 @@ function renderPlanning(panel, packageData, workspace, actions = {}) {
     ['Alternado', airportLabel(packageData.alternado, packageData.voo?.alternado_destino_id)],
     ['Aeronave', packageData.aeronave?.modelo],
     ['Passageiros previstos', planning.pax_planejado],
-    ['Peso previsto', planning.peso_planejado != null ? planning.peso_planejado + ' ' + text(planning.unidade_peso_planejado, 'KG') : null],
+    ['Peso básico', formatWeightBoth(planning.peso_vazio, planning.unidade_peso_planejado)],
+    ['Peso dos passageiros', formatWeightBoth(planning.peso_passageiros, planning.unidade_peso_planejado)],
+    ['Peso da bagagem', formatWeightBoth(planning.peso_bagagem, planning.unidade_peso_planejado)],
+    ['Peso total', formatWeightBoth(planning.peso_total, planning.unidade_peso_planejado)],
     ['Combustível solicitado', planning.combustivel_solicitado != null ? planning.combustivel_solicitado + ' ' + text(planning.unidade_combustivel_solicitado, 'KG') : null],
     ['Tripulantes', planning.crew_count],
     ['Etapas', planning.stage_count],
@@ -198,9 +211,15 @@ function renderPlanning(panel, packageData, workspace, actions = {}) {
     const list = el('div', { className: 'pilot-workspace-list' });
     for (const member of crew) {
       const card = el('div', { className: 'pilot-workspace-row-card' });
+      const presentation = member.horario_apresentacao
+        ? text(String(member.horario_apresentacao).match(/(\d{2}:\d{2})/)?.[1], text(member.horario_apresentacao))
+        : '— · aguardando integração FRMS';
       card.append(
         el('strong', { text: text(member.nome, 'Funcionário #' + text(member.funcionario_id)) }),
-        el('span', { text: text(member.funcao) }),
+        el('span', { text: 'Nome de guerra: ' + text(member.nome_guerra) }),
+        el('span', { text: 'Função: ' + text(member.funcao) }),
+        el('span', { text: 'Código ANAC: ' + text(member.codigo_anac) }),
+        el('span', { text: 'Hora de apresentação: ' + presentation }),
       );
       list.append(card);
     }

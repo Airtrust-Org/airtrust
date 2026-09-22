@@ -175,7 +175,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v30'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v31'");
     expect(pilotSw).not.toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
@@ -410,14 +410,16 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).not.toContain("label: 'Natureza do voo'");
     expect(pilotRdvDraft).not.toContain('PILOT_NATUREZA_OPTIONS');
     expect(pilotApp).toContain("className = 'stage-tabs'");
-    expect(pilotApp).toContain("['Peso dos passageiros', 'peso_passageiros'");
-    expect(pilotApp).toContain("['Peso da bagagem', 'peso_bagagem'");
+    expect(pilotApp).toContain("label: 'Peso dos passageiros'");
+    expect(pilotApp).toContain("label: 'Peso da bagagem'");
     expect(pilotApp).toContain("label: 'Peso da tripulação'");
     expect(pilotApp).toContain("label: 'Peso vazio da aeronave'");
+    expect(pilotApp).toContain('function createDualWeightField');
+    expect(pilotApp).toContain("input.step = 'any'");
     const stageFieldsBlock = pilotApp.slice(pilotApp.indexOf('const stageFields = ['), pilotApp.indexOf('for (const [label, key, type', pilotApp.indexOf('const stageFields = [')));
     expect(stageFieldsBlock).not.toContain('Peso da tripulação');
     expect(stageFieldsBlock).not.toContain('Peso vazio da aeronave');
-    expect(pilotApp).toContain("['Peso total', 'peso_total'");
+    expect(pilotApp).toContain("label: 'Peso total'");
     expect(pilotApp).toContain("['Observações da etapa', 'observacoes'");
     expect(pilotSync).toContain('fuelings:');
     expect(pilotSync).toContain('numero_voo: optionalText(rdvDraft.common?.numero_voo)');
@@ -519,8 +521,10 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("['IFR (duração)', 'tempo_ifr', 'duration'");
     expect(pilotApp).toContain("['Noturno (duração)', 'tempo_noturno', 'duration'");
     expect(pilotApp).toContain('toDurationInput(value)');
-    expect(pilotApp).toContain("label: 'Unidade da carga'");
+    expect(pilotApp).not.toContain("label: 'Unidade da carga'");
     expect(pilotApp).toContain("label: 'Unidade do combustível'");
+    expect(pilotApp).toContain('kg são convertidos automaticamente');
+    expect(pilotApp).toContain('Hora de apresentação: ');
     expect(pilotApp).toContain("'Transmissão bloqueada: ' + detail");
     expect(pilotApp).toContain("status: 'superseded'");
     expect(pilotRdvDraft).toContain('selecione a unidade do combustível');

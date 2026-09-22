@@ -12,6 +12,7 @@ import {
   payloadToKg,
   plannedFlightMinutes,
   realizedFlightMinutes,
+  realizedTotalMinutes,
   requiredJustificationMinutes,
   totalJustificationMinutes,
   toDurationInput,
@@ -119,7 +120,7 @@ describe('Pilot RDV operational calculations', () => {
     expect(next.numero_pousos).toBe('2');
   });
 
-  it('calcula exatamente o desvio planejado e a soma de justificativas', () => {
+  it('usa tempo total, e não tempo de voo, para calcular a justificativa', () => {
     const packageData = {
       voo: {
         horario_previsto_partida: '2026-09-20T10:00:00.000Z',
@@ -127,13 +128,14 @@ describe('Pilot RDV operational calculations', () => {
       },
     };
     const stages = [
-      { horario_decolagem: '10:05', horario_pouso: '11:00' },
-      { horario_decolagem: '11:10', horario_pouso: '12:00' },
+      { horario_motor_ligado: '10:00', horario_decolagem: '10:05', horario_pouso: '11:00', horario_motor_desligado: '' },
+      { horario_motor_ligado: '11:00', horario_decolagem: '11:10', horario_pouso: '12:00', horario_motor_desligado: '12:05' },
     ];
     expect(plannedFlightMinutes(packageData)).toBe(90);
     expect(realizedFlightMinutes(stages)).toBe(105);
-    expect(requiredJustificationMinutes(packageData, stages)).toBe(15);
-    expect(totalJustificationMinutes([{ minutos: '3' }, { minutos: 5 }, { minutos: '7' }])).toBe(15);
+    expect(realizedTotalMinutes(stages)).toBe(125);
+    expect(requiredJustificationMinutes(packageData, stages)).toBe(35);
+    expect(totalJustificationMinutes([{ minutos: '10' }, { minutos: 15 }, { minutos: '10' }])).toBe(35);
   });
 
   it('encadeia combustível final como inicial da perna seguinte', () => {
@@ -200,6 +202,14 @@ describe('Pilot RDV operational calculations', () => {
     const stages = buildStageDraftsFromPackage(packageData);
     expect(stages[0]).toMatchObject({ unidade_payload: 'LB', unidade_combustivel: 'LB', unidade_peso: 'LB' });
     expect(stages[0].peso_tripulacao).toBe('');
+  });
+
+  it('usa pouso como fim provisório do tempo total quando a primeira perna ainda não tem corte', () => {
+    const stages = [
+      { horario_motor_ligado: '08:00', horario_decolagem: '08:10', horario_pouso: '08:45', horario_motor_desligado: '' },
+    ];
+    expect(calcTotalBlockTimeHhMm(stages)).toBe('00:45');
+    expect(applySafeStageAggregates({}, stages).tempo_total_hhmm).toBe('00:45');
   });
 
   it('soma tempo de voo por etapa e tempo total por ciclos de motor contínuos', () => {

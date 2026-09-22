@@ -128,21 +128,37 @@ export function sumClockDurations(values) {
   return String(Math.floor(totalMinutes / 60)).padStart(2, '0') + ':' + String(totalMinutes % 60).padStart(2, '0');
 }
 
+export function calcStageTotalTimeHhMm(fields) {
+  const start = String(fields?.horario_motor_ligado || '').trim();
+  const cut = String(fields?.horario_motor_desligado || '').trim();
+  const landing = String(fields?.horario_pouso || '').trim();
+  if (!start) return '';
+  return calcClockDurationHhMm(start, cut || landing);
+}
+
 export function calcTotalBlockTimeHhMm(stageDrafts) {
   const stages = Array.isArray(stageDrafts)
     ? stageDrafts.map((stage) => stage?.fields || stage || {})
     : [];
   const completedCycles = [];
   let cycleStart = '';
+  let lastLanding = '';
   for (const stage of stages) {
     const start = String(stage.horario_motor_ligado || '').trim();
+    const landing = String(stage.horario_pouso || '').trim();
     const cut = String(stage.horario_motor_desligado || '').trim();
     if (!cycleStart && start) cycleStart = start;
+    if (landing) lastLanding = landing;
     if (cycleStart && cut) {
       const duration = calcClockDurationHhMm(cycleStart, cut);
       if (duration) completedCycles.push(duration);
       cycleStart = '';
+      lastLanding = '';
     }
+  }
+  if (cycleStart && lastLanding) {
+    const provisional = calcClockDurationHhMm(cycleStart, lastLanding);
+    if (provisional) completedCycles.push(provisional);
   }
   return sumClockDurations(completedCycles);
 }
@@ -334,10 +350,11 @@ export function buildStageDraftsFromPackage(packageData) {
       calcClockDurationHhMm(toInputTime(stage.horario_decolagem), toInputTime(stage.horario_pouso)),
     tempo_total:
       stage.tempo_total ||
-      calcClockDurationHhMm(
-        toInputTime(stage.horario_motor_ligado),
-        toInputTime(stage.horario_motor_desligado),
-      ),
+      calcStageTotalTimeHhMm({
+        horario_motor_ligado: toInputTime(stage.horario_motor_ligado),
+        horario_pouso: toInputTime(stage.horario_pouso),
+        horario_motor_desligado: toInputTime(stage.horario_motor_desligado),
+      }),
     tempo_ifr: toDurationInput(stage.tempo_ifr),
     tempo_noturno: toDurationInput(stage.tempo_noturno),
     pousos_diurnos: toInputNumber(stage.pousos_diurnos),
@@ -620,8 +637,15 @@ export function realizedFlightMinutes(stageDrafts) {
   return total;
 }
 
+export function realizedTotalMinutes(stageDrafts) {
+  const duration = calcTotalBlockTimeHhMm(stageDrafts);
+  const match = String(duration || '').match(/^(\d+):([0-5]\d)$/);
+  if (!match) return 0;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
 export function requiredJustificationMinutes(packageData, stageDrafts) {
-  return Math.max(0, realizedFlightMinutes(stageDrafts) - plannedFlightMinutes(packageData));
+  return Math.max(0, realizedTotalMinutes(stageDrafts) - plannedFlightMinutes(packageData));
 }
 
 export function totalJustificationMinutes(items) {

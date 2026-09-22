@@ -35,6 +35,10 @@ type StageLike = {
   unidade_combustivel: string | null;
   pax?: number | null;
   payload?: number | null;
+  peso_passageiros?: number | null;
+  peso_bagagem?: number | null;
+  peso_vazio?: number | null;
+  peso_total?: number | null;
   unidade_peso?: string | null;
   updated_at: string | null;
 };
@@ -618,7 +622,11 @@ export async function buildPilotOfflineWorkspace(options: {
       horario_previsto_chegada: options.voo.horario_previsto_chegada,
       observacoes: options.voo.observacoes,
       pax_planejado: firstStage?.pax ?? null,
-      peso_planejado: firstStage?.payload ?? null,
+      peso_vazio: firstStage?.peso_vazio ?? null,
+      peso_passageiros: firstStage?.peso_passageiros ?? null,
+      peso_bagagem: firstStage?.peso_bagagem ?? null,
+      peso_total: firstStage?.peso_total ?? null,
+      peso_planejado: firstStage?.peso_total ?? null,
       unidade_peso_planejado: firstStage?.unidade_peso ?? null,
       combustivel_solicitado: requestedFuel?.combustivel_solicitado ?? null,
       unidade_combustivel_solicitado: requestedFuel?.unidade ?? null,
