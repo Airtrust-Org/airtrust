@@ -132,7 +132,7 @@ test('production intelligent training compliance UI and APIs are coherent and re
   }
 
   const trainingsP = waitApi(page, '/api/compliance-treinamentos/treinamentos');
-  await page.getByRole('button', { name: 'Treinamentos', exact: true }).click();
+  await page.getByRole('main').getByRole('button', { name: 'Treinamentos', exact: true }).click();
   const trainings = await trainingsP.then(payload);
   expect(Array.isArray(trainings.data)).toBe(true);
   for (const row of trainings.data) {
