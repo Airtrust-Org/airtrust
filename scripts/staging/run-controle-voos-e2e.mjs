@@ -310,39 +310,58 @@ async function main() {
   });
   let rdvVersao = rdvJson?.data?.versao ?? 1;
 
-  // ── 7. Criar etapa ───────────────────────────────────────────────────
-  const etapaCreate = await call({
-    operation: 'criar_etapa',
-    method: 'POST',
+  // ── 7. Completar etapa programada criada junto com a rota ─────────────
+  const etapasProgramadas = await call({
+    operation: 'listar_etapas_programadas',
+    method: 'GET',
     path: `/api/controle-voos/voos/${vooId}/etapas`,
     actor: adminA,
     tenant: 'A',
-    expectedStatus: 201,
-    body: {
-      versao: rdvVersao,
-      numero_etapa: 1,
-      origem_icao: 'OR' + 'A' + manifest.runId,
-      destino_icao: 'DE' + 'A' + manifest.runId,
-      horario_motor_ligado: `${dataProg}T09:58:00Z`,
-      horario_decolagem: `${dataProg}T10:05:00Z`,
-      horario_pouso: `${dataProg}T10:55:00Z`,
-      horario_motor_desligado: `${dataProg}T11:02:00Z`,
-      combustivel_inicio: 500,
-      combustivel_fim: 400,
-    },
+    expectedStatus: 200,
   });
-  if (!etapaCreate.passed) {
-    await call({
-      operation: 'diagnostico_listar_etapas_apos_falha_criacao',
-      method: 'GET',
-      path: `/api/controle-voos/voos/${vooId}/etapas`,
-      actor: adminA,
-      tenant: 'A',
-      expectedStatus: 200,
-    });
-    return finish(manifest, false);
-  }
-  rdvVersao += 1;
+  if (!etapasProgramadas.passed) return finish(manifest, false);
+
+  const primeiraEtapa = Array.isArray(etapasProgramadas.json?.data)
+    ? etapasProgramadas.json.data[0]
+    : null;
+  let etapaId = primeiraEtapa?.id ?? null;
+
+  const etapaPayload = {
+    versao: rdvVersao,
+    origem_icao: 'OR' + 'A' + manifest.runId,
+    destino_icao: 'DE' + 'A' + manifest.runId,
+    horario_motor_ligado: `${dataProg}T09:58:00Z`,
+    horario_decolagem: `${dataProg}T10:05:00Z`,
+    horario_pouso: `${dataProg}T10:55:00Z`,
+    horario_motor_desligado: `${dataProg}T11:02:00Z`,
+    combustivel_inicio: 500,
+    combustivel_fim: 400,
+  };
+
+  const etapaResult = etapaId
+    ? await call({
+        operation: 'atualizar_etapa_programada',
+        method: 'PATCH',
+        path: `/api/controle-voos/voos/${vooId}/etapas/${etapaId}`,
+        actor: adminA,
+        tenant: 'A',
+        expectedStatus: 200,
+        body: etapaPayload,
+      })
+    : await call({
+        operation: 'criar_etapa_fallback',
+        method: 'POST',
+        path: `/api/controle-voos/voos/${vooId}/etapas`,
+        actor: adminA,
+        tenant: 'A',
+        expectedStatus: 201,
+        body: { ...etapaPayload, numero_etapa: 1 },
+      });
+
+  if (!etapaResult.passed) return finish(manifest, false);
+  etapaId = etapaId ?? etapaResult.json?.data?.id ?? null;
+  if (!etapaId) return finish(manifest, false);
+  rdvVersao = etapaResult.json?.meta?.versao ?? rdvVersao + 1;
 
   // ── 7.5 Criar setor + funcionario via cadastro CANONICO (Funcionarios) ──
   // funcionarios.setor_id e exigido por trigger real (achado em staging:
