@@ -26,17 +26,17 @@ test('0438 validation v2 stays staging-only and has no schema apply path', () =>
   assert.match(workflow, /cleanup-controle-voos-e2e-orphan-run-v2\.mjs/);
 });
 
-test('V2 overlay is fail closed, revision-only and exercises coordination etapa revisions', () => {
+test('V2 overlay is fail closed, revision-only and reuses canonical etapa id', () => {
   assert.match(runner, /START_MARKER_NOT_FOUND/);
   assert.match(runner, /END_MARKER_NOT_FOUND/);
   assert.match(runner, /START_MARKER_NOT_UNIQUE/);
   assert.match(runner, /SHAPE_CHANGED/);
-  assert.match(runner, /'ETAPA_CAPTURE'/);
+  assert.doesNotMatch(runner, /'ETAPA_CAPTURE'/);
   assert.match(runner, /'ETAPA_REVISION'/);
   assert.match(runner, /editar_etapa_coordenacao_revisao/);
   assert.match(runner, /mode: 'coordenacao'/);
   assert.match(runner, /justificativa: 'Ajuste de combustivel durante revisao/);
-  assert.match(runner, /const etapaId = etapaJson\.data\.id/);
+  assert.match(runner, /etapas\/\$\{etapaId\}/);
   assert.doesNotMatch(runner, /CANONICAL_SOURCE_ALREADY_CAS_AWARE/);
   assert.doesNotMatch(runner, /operation: 'corrigir_apos_devolucao'/);
 });
@@ -80,11 +80,14 @@ test('orphan cleanup derives only exact synthetic companies/users from an 8-hex 
 });
 
 
-test('canonical staging runner records only safe API failure diagnostics and narrows etapa failures', () => {
+test('canonical staging runner reuses route-created etapa and keeps safe API diagnostics', () => {
   assert.match(canonicalRunner, /record\.api_error_code = safeCode/);
   assert.match(canonicalRunner, /record\.request_id = safeRequestId/);
-  assert.match(canonicalRunner, /diagnostico_listar_etapas_apos_falha_criacao/);
-  assert.match(canonicalRunner, /if \(!etapaCreate\.passed\)/);
+  assert.match(canonicalRunner, /operation: 'listar_etapas_programadas'/);
+  assert.match(canonicalRunner, /operation: 'atualizar_etapa_programada'/);
+  assert.match(canonicalRunner, /operation: 'criar_etapa_fallback'/);
+  assert.match(canonicalRunner, /let etapaId = primeiraEtapa\?\.id \?\? null/);
+  assert.doesNotMatch(canonicalRunner, /operation: 'criar_etapa'[),]/);
   assert.doesNotMatch(canonicalRunner, /Authorization.*record/);
   assert.doesNotMatch(canonicalRunner, /fetchBody.*record/);
 });
