@@ -43,4 +43,16 @@ describe('smoke-rdv-cas governed cleanup contract', () => {
     assert.match(source, /typeof flight\.versao !== 'number'/);
     assert.match(source, /nao identifica voo sintetico deste smoke/);
   });
+
+  it('validates the structured flight-plan contract on the disposable QA flight', () => {
+    assert.match(source, /exerciseStructuredFlightPlan/);
+    assert.match(source, /\/plano-voo\/preview/);
+    assert.match(source, /status:\s*'rascunho'/);
+    assert.match(source, /status:\s*'pronto'/);
+    assert.match(source, /CONTROLE_VOOS_FLIGHT_PLAN_VERSION_CONFLICT/);
+    assert.match(source, /transmission\?\.provider === 'MANUAL'/);
+    assert.match(source, /transmission\?\.enabled === false/);
+    assert.match(source, /preview\.includes\('\(FPL-'/);
+    assert.match(source, /await exerciseStructuredFlightPlan\(EXPECTED_API_URL, token, vooId\)/);
+  });
 });
