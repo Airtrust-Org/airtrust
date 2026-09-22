@@ -328,6 +328,14 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0507-production-preflight.sh --target=airtrust-db
 
+      - name: Preflight training compliance daily snapshots 0508
+        if: ${{ inputs.change_id == 'training-compliance-daily-snapshots-0508' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0508-production-preflight.sh --target=airtrust-db
+
       - name: Preflight Controle de Voos flight plan 0509
         if: ${{ inputs.change_id == 'controle-voos-flight-plan-0509' }}
         shell: bash
@@ -589,6 +597,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0507-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate training compliance daily snapshots 0508
+        if: ${{ inputs.change_id == 'training-compliance-daily-snapshots-0508' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0508-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate Controle de Voos flight plan 0509
         if: ${{ inputs.change_id == 'controle-voos-flight-plan-0509' }}
