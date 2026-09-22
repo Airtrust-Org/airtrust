@@ -93,7 +93,7 @@ test('training compliance intelligent staging flow is live and read-only', async
   await expect(pendingRow.getByRole('button', { name: /Enviar aviso|Reenviar aviso/ })).toBeVisible();
 
   const trainingsP = waitApi(page, '/api/compliance-treinamentos/treinamentos');
-  await page.getByRole('button', { name: 'Treinamentos', exact: true }).click();
+  await page.getByRole('main').getByRole('button', { name: 'Treinamentos', exact: true }).click();
   const trainings = await trainingsP.then(payload);
   const qaTraining = trainings.data.find((row: any) => row.qualificacao_tipo_codigo === QA_CODE);
   expect(qaTraining, 'synthetic never-realized training must be visible').toBeTruthy();
