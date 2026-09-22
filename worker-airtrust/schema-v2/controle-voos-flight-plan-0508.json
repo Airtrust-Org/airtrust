@@ -1,8 +1,0 @@
-{
-  "changeId": "controle-voos-flight-plan-0508",
-  "baselineId": "production-d1-baseline-v2-20260714",
-  "filePath": "worker-airtrust/schema-v2/changes/0508_controle_voos_flight_plan.sql",
-  "fileHash": "f3e1fb4f60973ed6f5b37a485c46d3402d4746736e5be2d62719ac3d7f73856c",
-  "planPath": "worker-airtrust/schema-v2/plans/controle-voos-flight-plan-0508.md",
-  "planHash": "10b9464a9174de18ead6ac5cabcdea9fe4930ba7e3e58a5ede7f5a117460ac9d"
-}

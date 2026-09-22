@@ -1,7 +1,7 @@
-// source_reference: worker-airtrust/schema-v2/controle-voos-flight-plan-0508.json
+// source_reference: worker-airtrust/schema-v2/controle-voos-flight-plan-0509.json
 // operational_decision: static/local governance test only; never writes to staging or production D1
 // dry_run_required: true
-// rollback_plan_required: worker-airtrust/schema-v2/plans/controle-voos-flight-plan-0508.md
+// rollback_plan_required: worker-airtrust/schema-v2/plans/controle-voos-flight-plan-0509.md
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -11,12 +11,12 @@ import path from 'node:path';
 import test from 'node:test';
 import { buildReviewedSchemaApply } from '../schema-v2/build-reviewed-schema-apply.mjs';
 
-const MANIFEST = 'worker-airtrust/schema-v2/controle-voos-flight-plan-0508.json';
-const MIGRATION = 'worker-airtrust/migrations/0508_controle_voos_flight_plan.sql';
-const CHANGE_ID = 'controle-voos-flight-plan-0508';
+const MANIFEST = 'worker-airtrust/schema-v2/controle-voos-flight-plan-0509.json';
+const MIGRATION = 'worker-airtrust/migrations/0509_controle_voos_flight_plan.sql';
+const CHANGE_ID = 'controle-voos-flight-plan-0509';
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
-test('pins reviewed hashes and canonical SQL for 0508', () => {
+test('pins reviewed hashes and canonical SQL for 0509', () => {
   const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
   assert.equal(manifest.changeId, CHANGE_ID);
   assert.equal(manifest.baselineId, 'production-d1-baseline-v2-20260714');
@@ -25,8 +25,8 @@ test('pins reviewed hashes and canonical SQL for 0508', () => {
   assert.equal(readFileSync(manifest.filePath, 'utf8'), readFileSync(MIGRATION, 'utf8'));
 });
 
-test('official Schema V2 builder accepts 0508 and appends exactly one ledger row', () => {
-  const outputPath = path.join(mkdtempSync(path.join(tmpdir(), 'airtrust-0508-')), 'apply.sql');
+test('official Schema V2 builder accepts 0509 and appends exactly one ledger row', () => {
+  const outputPath = path.join(mkdtempSync(path.join(tmpdir(), 'airtrust-0509-')), 'apply.sql');
   const result = buildReviewedSchemaApply({
     manifestPath: MANIFEST,
     outputPath,
@@ -38,24 +38,24 @@ test('official Schema V2 builder accepts 0508 and appends exactly one ledger row
   assert.equal((sql.match(/INSERT INTO airtrust_schema_changes_v2/g) ?? []).length, 1);
 });
 
-test('production workflow wires dedicated 0508 preflight and postconditions', () => {
+test('production workflow wires dedicated 0509 preflight and postconditions', () => {
   const workflow = readFileSync('.github/workflows/apply-schema-change-v2.yml', 'utf8');
-  assert.match(workflow, /controle-voos-flight-plan-0508/);
-  assert.match(workflow, /validate-0508-production-preflight\.sh/);
-  assert.match(workflow, /validate-0508-production-postconditions\.sh/);
+  assert.match(workflow, /controle-voos-flight-plan-0509/);
+  assert.match(workflow, /validate-0509-production-preflight\.sh/);
+  assert.match(workflow, /validate-0509-production-postconditions\.sh/);
   for (const file of [
-    'scripts/schema-v2/validate-0508-production-preflight.sh',
-    'scripts/schema-v2/validate-0508-production-postconditions.sh',
+    'scripts/schema-v2/validate-0509-production-preflight.sh',
+    'scripts/schema-v2/validate-0509-production-postconditions.sh',
   ]) execFileSync('bash', ['-n', file]);
 });
 
-test('staging allowlists 0508 with recovery-point postconditions', () => {
+test('staging allowlists 0509 with recovery-point postconditions', () => {
   const outer = readFileSync('scripts/staging/apply-approved-migrations.sh', 'utf8');
   const generic = readFileSync('scripts/staging/apply-approved-migration-with-recovery-point.sh', 'utf8');
-  assert.match(outer, /0508_controle_voos_flight_plan\.sql/);
-  assert.match(generic, /0508_controle_voos_flight_plan\.sql/);
-  assert.match(generic, /validate-0508-postconditions\.sh/);
+  assert.match(outer, /0509_controle_voos_flight_plan\.sql/);
+  assert.match(generic, /0509_controle_voos_flight_plan\.sql/);
+  assert.match(generic, /validate-0509-postconditions\.sh/);
   execFileSync('bash', ['-n', 'scripts/staging/apply-approved-migrations.sh']);
   execFileSync('bash', ['-n', 'scripts/staging/apply-approved-migration-with-recovery-point.sh']);
-  execFileSync('bash', ['-n', 'scripts/staging/validate-0508-postconditions.sh']);
+  execFileSync('bash', ['-n', 'scripts/staging/validate-0509-postconditions.sh']);
 });

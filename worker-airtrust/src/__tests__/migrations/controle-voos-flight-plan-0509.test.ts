@@ -7,11 +7,11 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const changeSql = readFileSync(
-  join(root, 'schema-v2/changes/0508_controle_voos_flight_plan.sql'),
+  join(root, 'schema-v2/changes/0509_controle_voos_flight_plan.sql'),
   'utf8',
 );
 const migrationSql = readFileSync(
-  join(root, 'migrations/0508_controle_voos_flight_plan.sql'),
+  join(root, 'migrations/0509_controle_voos_flight_plan.sql'),
   'utf8',
 );
 const tempDirs: string[] = [];
@@ -29,7 +29,7 @@ function query<T>(db: string, sql: string): T[] {
 }
 
 function createDb() {
-  const dir = mkdtempSync(join(tmpdir(), 'airtrust-flight-plan-0508-'));
+  const dir = mkdtempSync(join(tmpdir(), 'airtrust-flight-plan-0509-'));
   tempDirs.push(dir);
   const db = join(dir, 'db.sqlite');
   run(
@@ -54,7 +54,7 @@ afterAll(() => {
   for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
 });
 
-describe('schema-v2 0508 Controle de Voos flight plan', () => {
+describe('schema-v2 0509 Controle de Voos flight plan', () => {
   it('keeps migration mirror byte-identical to reviewed Schema V2 SQL', () => {
     expect(migrationSql).toBe(changeSql);
   });

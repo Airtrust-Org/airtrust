@@ -42,7 +42,7 @@ APPROVED_MIGRATIONS=(
   "0504_controle_voos_operational_model.sql"
   "0506_controle_voos_flight_justifications.sql"
   "0507_controle_voos_delay_justification_catalog.sql"
-  "0508_controle_voos_flight_plan.sql"
+  "0509_controle_voos_flight_plan.sql"
 )
 
 apply=false
@@ -203,8 +203,8 @@ validate_postconditions() {
     0507_controle_voos_delay_justification_catalog.sql)
       bash scripts/staging/validate-0507-postconditions.sh --target="$db_name"
       ;;
-    0508_controle_voos_flight_plan.sql)
-      bash scripts/staging/validate-0508-postconditions.sh --target="$db_name"
+    0509_controle_voos_flight_plan.sql)
+      bash scripts/staging/validate-0509-postconditions.sh --target="$db_name"
       ;;
   esac
 }

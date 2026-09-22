@@ -364,7 +364,7 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-21",
-    "last_reconciled_against": "0508 Controle de Voos structured flight-plan schema prepared; remote apply pending",
+    "last_reconciled_against": "0509 Controle de Voos structured flight-plan schema prepared; remote apply pending",
     "schema_v2_digest": "ebedffddb06c1016d84d86ea7718af03316c04dbf2500c231c2d3f79919cd4e7",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
@@ -1006,8 +1006,8 @@
       "note": "0507 is reviewed and prepared only. It adds the source category field and seeds exactly 54 Petrobras AA41-AA94 codes for empresa_id 6, preserving source titles/descriptions. Remote apply requires governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
     },
     {
-      "change_file": "0508_controle_voos_flight_plan.sql",
-      "change_id": "controle-voos-flight-plan-0508",
+      "change_file": "0509_controle_voos_flight_plan.sql",
+      "change_id": "controle-voos-flight-plan-0509",
       "sha256": "f3e1fb4f60973ed6f5b37a485c46d3402d4746736e5be2d62719ac3d7f73856c",
       "targets": [
         "cv_planos_voo",
@@ -1016,8 +1016,8 @@
       "domain": "tenant-scoped Controle de Voos structured flight-plan aggregate and append-only DECEA/SIGMA provider event ledger",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
-      "reviewed_manifest": "controle-voos-flight-plan-0508.json",
-      "note": "0508 is reviewed and prepared only. It adds one active structured flight plan per tenant flight, CAS versioning, closed workflow/provider domains and an append-only FPL/CHG/DLA/CNL provider event ledger. It stores no DECEA credentials. Remote apply requires the governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
+      "reviewed_manifest": "controle-voos-flight-plan-0509.json",
+      "note": "0509 is reviewed and prepared only. It adds one active structured flight plan per tenant flight, CAS versioning, closed workflow/provider domains and an append-only FPL/CHG/DLA/CNL provider event ledger. It stores no DECEA credentials. Remote apply requires the governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",

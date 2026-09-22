@@ -50,7 +50,7 @@ CREATE INDEX IF NOT EXISTS idx_cv_planos_voo_empresa_provider_status
   ON cv_planos_voo (empresa_id, provider, status)
   WHERE deleted_at IS NULL;
 
-CREATE TRIGGER IF NOT EXISTS trg_cv_planos_voo_tenant_insert_0508
+CREATE TRIGGER IF NOT EXISTS trg_cv_planos_voo_tenant_insert_0509
 BEFORE INSERT ON cv_planos_voo
 BEGIN
   SELECT CASE WHEN NOT EXISTS(
@@ -62,7 +62,7 @@ BEGIN
   ) THEN RAISE(ABORT, 'flight plan flight tenant mismatch') END;
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_cv_planos_voo_link_immutable_0508
+CREATE TRIGGER IF NOT EXISTS trg_cv_planos_voo_link_immutable_0509
 BEFORE UPDATE OF empresa_id, voo_id ON cv_planos_voo
 BEGIN
   SELECT RAISE(ABORT, 'flight plan tenant/flight link is immutable');
@@ -98,7 +98,7 @@ CREATE INDEX IF NOT EXISTS idx_cv_plano_voo_eventos_empresa_external
   ON cv_plano_voo_eventos (empresa_id, external_id)
   WHERE external_id IS NOT NULL;
 
-CREATE TRIGGER IF NOT EXISTS trg_cv_plano_voo_eventos_tenant_insert_0508
+CREATE TRIGGER IF NOT EXISTS trg_cv_plano_voo_eventos_tenant_insert_0509
 BEFORE INSERT ON cv_plano_voo_eventos
 BEGIN
   SELECT CASE WHEN NOT EXISTS(
@@ -110,13 +110,13 @@ BEGIN
   ) THEN RAISE(ABORT, 'flight plan event tenant mismatch') END;
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_cv_plano_voo_eventos_no_update_0508
+CREATE TRIGGER IF NOT EXISTS trg_cv_plano_voo_eventos_no_update_0509
 BEFORE UPDATE ON cv_plano_voo_eventos
 BEGIN
   SELECT RAISE(ABORT, 'flight plan events are append-only');
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_cv_plano_voo_eventos_no_delete_0508
+CREATE TRIGGER IF NOT EXISTS trg_cv_plano_voo_eventos_no_delete_0509
 BEFORE DELETE ON cv_plano_voo_eventos
 BEGIN
   SELECT RAISE(ABORT, 'flight plan events are append-only');
