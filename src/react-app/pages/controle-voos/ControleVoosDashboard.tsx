@@ -27,8 +27,8 @@ function AttentionDot({ critical }: { critical?: boolean }) {
 
 function ControleVoosDashboardContent({ edbShadowEnabled }: { edbShadowEnabled: boolean }) {
   const qc = useQueryClient();
-  const { isAdmin, isGestor } = usePermissions();
-  const canCoordinate = isAdmin || isGestor;
+  const { can } = usePermissions();
+  const canCoordinate = can('controle_voos.edit');
   const [novoVooOpen, setNovoVooOpen] = useState(false);
   const { selectedDate, setSelectedDate, setToday } = useControleVoosDate();
   const { data: dashboard, isLoading, error } = useControleVoosDashboard(selectedDate);
