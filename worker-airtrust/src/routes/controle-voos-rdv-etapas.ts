@@ -240,6 +240,27 @@ rdvEtapas.post('/voos/:id/etapas', auth(), requireAnyRdvAccess(), async (c) => {
     input.numero_etapa = await nextNumeroEtapa(c.env.DB, empresaId, voo.id);
   }
   validateEtapaInput(input);
+
+  const duplicate = await c.env.DB
+    .prepare(
+      `SELECT id
+         FROM cv_voo_etapas
+        WHERE empresa_id = ?
+          AND voo_id = ?
+          AND numero_etapa = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(empresaId, voo.id, input.numero_etapa)
+    .first<{ id: number }>();
+  if (duplicate) {
+    throw new ApiError(
+      `Etapa ${input.numero_etapa} ja existe neste voo`,
+      409,
+      'CONTROLE_VOOS_ETAPA_NUMBER_CONFLICT',
+    );
+  }
+
   const withTempos = applyComputedTempos(input);
 
   const novaVersao = await bumpRdvVersion(c.env.DB, empresaId, rdv, payload.versao, userId);
