@@ -33,10 +33,12 @@ test('V2 overlay is fail closed, revision-only and exercises coordination etapa 
   assert.match(runner, /SHAPE_CHANGED/);
   assert.match(runner, /'ETAPA_CAPTURE'/);
   assert.match(runner, /'ETAPA_REVISION'/);
+  assert.match(runner, /listar_etapas_planejadas/);
+  assert.match(runner, /atualizar_etapa_planejada/);
+  assert.match(runner, /const etapaId = primeiraEtapaId/);
   assert.match(runner, /editar_etapa_coordenacao_revisao/);
   assert.match(runner, /mode: 'coordenacao'/);
   assert.match(runner, /justificativa: 'Ajuste de combustivel durante revisao/);
-  assert.match(runner, /const etapaId = etapaJson\.data\.id/);
   assert.doesNotMatch(runner, /CANONICAL_SOURCE_ALREADY_CAS_AWARE/);
   assert.doesNotMatch(runner, /operation: 'corrigir_apos_devolucao'/);
 });
@@ -80,11 +82,13 @@ test('orphan cleanup derives only exact synthetic companies/users from an 8-hex 
 });
 
 
-test('canonical staging runner records only safe API failure diagnostics and narrows etapa failures', () => {
+test('canonical staging runner records only safe API diagnostics and reuses route-created stages', () => {
   assert.match(canonicalRunner, /record\.api_error_code = safeCode/);
   assert.match(canonicalRunner, /record\.request_id = safeRequestId/);
-  assert.match(canonicalRunner, /diagnostico_listar_etapas_apos_falha_criacao/);
-  assert.match(canonicalRunner, /if \(!etapaCreate\.passed\)/);
+  assert.match(canonicalRunner, /operation: 'listar_etapas_planejadas'/);
+  assert.match(canonicalRunner, /operation: 'atualizar_etapa_planejada'/);
+  assert.match(canonicalRunner, /const primeiraEtapaId = etapasPlanejadas\.json\?\.data\?\.\[0\]\?\.id/);
+  assert.doesNotMatch(canonicalRunner, /operation: 'criar_etapa'/);
   assert.doesNotMatch(canonicalRunner, /Authorization.*record/);
   assert.doesNotMatch(canonicalRunner, /fetchBody.*record/);
 });
