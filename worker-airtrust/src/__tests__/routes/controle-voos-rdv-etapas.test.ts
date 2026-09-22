@@ -391,6 +391,12 @@ describe('rdv-etapas — compute helpers', () => {
     expect(tempos.tempo_total).toBe('01:35');
   });
 
+  it('computeEtapaTempos usa pouso como fechamento provisório quando ainda não houve corte', () => {
+    const tempos = computeEtapaTempos('10:10', '11:00', '10:00', null);
+    expect(tempos.tempo_decolagem_pouso).toBe('00:50');
+    expect(tempos.tempo_total).toBe('01:00');
+  });
+
   it('computeFlightTotalsFromEtapas agrega duas pernas', () => {
     const totals = computeFlightTotalsFromEtapas([
       {

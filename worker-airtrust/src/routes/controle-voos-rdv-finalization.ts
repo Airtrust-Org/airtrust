@@ -44,23 +44,28 @@ export async function assertPlanningDeviationJustified(
 ): Promise<void> {
   const stages = await db
     .prepare(
-      `SELECT horario_decolagem, horario_pouso
+      `SELECT horario_motor_ligado, horario_decolagem, horario_pouso, horario_motor_desligado
          FROM cv_voo_etapas
         WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
         ORDER BY numero_etapa ASC, id ASC`,
     )
     .bind(empresaId, flight.id)
-    .all<{ horario_decolagem: string | null; horario_pouso: string | null }>();
+    .all<{
+      horario_motor_ligado: string | null;
+      horario_decolagem: string | null;
+      horario_pouso: string | null;
+      horario_motor_desligado: string | null;
+    }>();
 
   let realizedMinutes = 0;
   for (const stage of stages.results || []) {
     const computed = computeEtapaTempos(
       stage.horario_decolagem,
       stage.horario_pouso,
-      null,
-      null,
+      stage.horario_motor_ligado,
+      stage.horario_motor_desligado,
     );
-    realizedMinutes += parseHhMmMinutes(computed.tempo_decolagem_pouso);
+    realizedMinutes += parseHhMmMinutes(computed.tempo_total);
   }
 
   const requiredMinutes = Math.max(0, realizedMinutes - plannedFlightMinutes(flight));
