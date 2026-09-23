@@ -42,6 +42,8 @@ type FadigaConfigRow = {
   ativo: number;
   janela_inicio: string;
   janela_fim: string;
+  jornada_pos_corte_minutos: number;
+  jornada_sem_voo_fim: string;
 };
 
 type DailyRiskLevel = 'normal' | 'attention' | 'critical' | 'unfit_for_duty';
@@ -122,7 +124,9 @@ async function getConfig(db: D1Database, empresaId: number): Promise<FadigaConfi
         peso_kss,
         peso_sono_duracao,
         peso_sono_qualidade,
-        peso_sintomas
+        peso_sintomas,
+        jornada_pos_corte_minutos,
+        jornada_sem_voo_fim
        FROM frms_fadiga_config_empresa
        WHERE empresa_id = ? AND deleted_at IS NULL
        LIMIT 1`,
@@ -151,6 +155,8 @@ async function getConfig(db: D1Database, empresaId: number): Promise<FadigaConfi
     peso_sono_duracao: 0.25,
     peso_sono_qualidade: 0.2,
     peso_sintomas: 0.2,
+    jornada_pos_corte_minutos: 30,
+    jornada_sem_voo_fim: '17:00',
   };
 }
 
@@ -710,6 +716,75 @@ router.get('/fadiga-checkin/config', async (c) => {
     return c.json({ success: true, data: config });
   } catch {
     return c.json({ success: false, error: 'Erro ao carregar configuração de fadiga diária' }, 500);
+  }
+});
+
+router.put('/fadiga-checkin/config', requirePermission('frms', 'editar', 'manager'), async (c) => {
+  try {
+    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const body = await c.req.json().catch(() => null) as {
+      jornada_pos_corte_minutos?: unknown;
+      jornada_sem_voo_fim?: unknown;
+    } | null;
+    const postCut = Number(body?.jornada_pos_corte_minutos);
+    const noFlightEnd = String(body?.jornada_sem_voo_fim ?? '').trim();
+    if (!Number.isInteger(postCut) || postCut < 0 || postCut > 240) {
+      return c.json({ success: false, error: 'jornada_pos_corte_minutos deve estar entre 0 e 240.' }, 400);
+    }
+    const endMin = parseTimeToMinutes(noFlightEnd);
+    if (endMin == null) {
+      return c.json({ success: false, error: 'jornada_sem_voo_fim deve usar HH:mm.' }, 400);
+    }
+
+    await getConfig(c.env.DB, empresaId);
+    const before = await c.env.DB
+      .prepare(
+        `SELECT jornada_pos_corte_minutos, jornada_sem_voo_fim
+           FROM frms_fadiga_config_empresa
+          WHERE empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
+      )
+      .bind(empresaId)
+      .first<Record<string, unknown>>();
+
+    await c.env.DB
+      .prepare(
+        `UPDATE frms_fadiga_config_empresa
+            SET jornada_pos_corte_minutos = ?,
+                jornada_sem_voo_fim = ?,
+                updated_at = ?
+          WHERE empresa_id = ? AND deleted_at IS NULL`,
+      )
+      .bind(postCut, noFlightEnd, nowSql(), empresaId)
+      .run();
+
+    await registrarAcaoAdmin(c.env.DB, {
+      userId: Number(c.get('userId') || 0),
+      action: 'FRMS_DUTY_BOUNDARY_CONFIG_UPDATE',
+      module: 'FRMS',
+      success: true,
+      metadata: {
+        empresa_id: empresaId,
+        antes: before ?? null,
+        depois: {
+          jornada_pos_corte_minutos: postCut,
+          jornada_sem_voo_fim: noFlightEnd,
+        },
+      },
+    });
+
+    return c.json({
+      success: true,
+      data: {
+        jornada_pos_corte_minutos: postCut,
+        jornada_sem_voo_fim: noFlightEnd,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    if (message.includes('no such column')) {
+      return c.json({ success: false, error: 'FRMS_DUTY_BOUNDARY_SCHEMA_REQUIRED' }, 503);
+    }
+    return c.json({ success: false, error: 'Erro ao salvar configuração de jornada' }, 500);
   }
 });
 
