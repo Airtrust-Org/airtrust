@@ -233,7 +233,10 @@ function createSqliteD1(): SqliteD1 {
       );
       CREATE TABLE IF NOT EXISTS aeronaves (
         id INTEGER PRIMARY KEY,
-        modelo TEXT
+        modelo TEXT,
+        empresa_id INTEGER,
+        codigo TEXT,
+        deleted_at TEXT
       );
       CREATE TABLE IF NOT EXISTS auditoria (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -251,6 +254,7 @@ function createSqliteD1(): SqliteD1 {
   );
   seed(databasePath);
   runSql(databasePath, readFileSync(join(testDir, '../../../migrations/0504_controle_voos_operational_model.sql'), 'utf8'));
+  runSql(databasePath, readFileSync(join(testDir, '../../../migrations/0510_controle_voos_petrobras_rve_export.sql'), 'utf8'));
 
   const db = {
     databasePath,

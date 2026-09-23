@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardList, FileSearch, RefreshCw } from 'lucide-react';
+import { ClipboardList, FileDown, FileSearch, RefreshCw } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import ControleVoosPageShell from './components/ControleVoosPageShell';
 import ControleVoosPageHeader from './components/ControleVoosPageHeader';
 import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
 import ControleVoosRdvWorkflowBadge from './components/ControleVoosRdvWorkflowBadge';
 import ControleOperacionalFrmsPanel from './components/ControleOperacionalFrmsPanel';
-import { useRdvFila, type CvRdvWorkflowStatus } from '@/react-app/hooks/useControleVoos';
+import { baixarPetrobrasRveXml, useRdvFila, type CvRdvWorkflowStatus } from '@/react-app/hooks/useControleVoos';
 import { formatDate, formatDateTime } from './data/controleVoosUtils';
 import { flightOperationalRouteLabel, flightPresentationStatus } from './data/controleVoosFlightIdentity';
+import { toast } from 'sonner';
 
 const STATUS_OPTIONS: { value: CvRdvWorkflowStatus | ''; label: string }[] = [
   { value: '', label: 'Todos os status' },
@@ -27,6 +28,8 @@ export default function ControleVoosCoordenacaoFila() {
   const [status, setStatus] = useState<CvRdvWorkflowStatus | ''>('enviado');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
+  const [xmlDate, setXmlDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [xmlLoading, setXmlLoading] = useState(false);
 
   const {
     data: fila = [],
@@ -51,6 +54,20 @@ export default function ControleVoosCoordenacaoFila() {
           />
 
           <ControleOperacionalFrmsPanel />
+
+          <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-cyan-200 bg-cyan-50/60 p-4 dark:border-cyan-900/50 dark:bg-cyan-950/20">
+            <div className="mr-auto">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Exportação diária Petrobras</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Gera o XML RVE apenas com voos finalizados. Se faltar identificador ou horário, a exportação é bloqueada para correção.</p>
+            </div>
+            <label className="space-y-1 text-xs">
+              <span className="block font-medium text-slate-500 dark:text-slate-400">Data operacional</span>
+              <input type="date" value={xmlDate} onChange={(event) => setXmlDate(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+            </label>
+            <button type="button" disabled={!xmlDate || xmlLoading} onClick={async () => { setXmlLoading(true); try { await baixarPetrobrasRveXml(xmlDate); toast.success('XML Petrobras gerado.'); } catch (xmlError) { toast.error(xmlError instanceof Error ? xmlError.message : 'Falha ao gerar XML Petrobras'); } finally { setXmlLoading(false); } }} className="inline-flex min-h-[36px] items-center gap-2 rounded-lg bg-cyan-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-cyan-800 disabled:opacity-50">
+              <FileDown className="h-4 w-4" /> {xmlLoading ? 'Gerando…' : 'Gerar XML do dia'}
+            </button>
+          </div>
 
           <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
             <label className="space-y-1 text-xs">

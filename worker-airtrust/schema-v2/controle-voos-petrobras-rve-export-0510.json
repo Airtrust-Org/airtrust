@@ -1,0 +1,8 @@
+{
+  "changeId": "controle-voos-petrobras-rve-export-0510",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0510_controle_voos_petrobras_rve_export.sql",
+  "fileHash": "74fbcc66819b5f0ea564f7efb87509b1109643b4d065e2bf7e52bcf46dea2cb5",
+  "planPath": "worker-airtrust/schema-v2/plans/controle-voos-petrobras-rve-export-0510.md",
+  "planHash": "3cfb447e928c20e82bfb0cc03128f886f78d9c1e1b619a811c8bddb6dbf57fef"
+}

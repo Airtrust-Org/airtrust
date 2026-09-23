@@ -167,6 +167,12 @@ function createSqliteD1(): SqliteD1 {
   for (const migration of migrations) {
     runSql(databasePath, migration);
   }
+  // 0510 is additive; this focused harness models only the cv_voos surface
+  // required by the current FlightRow projection.
+  runSql(
+    databasePath,
+    'ALTER TABLE cv_voos ADD COLUMN petrobras_equipamento TEXT; ALTER TABLE cv_voos ADD COLUMN petrobras_atendimento TEXT;',
+  );
   runSql(
     databasePath,
     `

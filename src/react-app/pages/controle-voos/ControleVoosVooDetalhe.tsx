@@ -101,8 +101,8 @@ function StatusTimeline({ status }: { status: CvFlightStatus }) {
 
 export default function ControleVoosVooDetalhe() {
   const { id } = useParams<{ id: string }>();
-  const { isAdmin, isGestor } = usePermissions();
-  const canCoordinate = isAdmin || isGestor;
+  const { can } = usePermissions();
+  const canCoordinate = can('controle_voos.edit');
   const { data: voo, isLoading, error, refetch: refetchVoo } = useControleVoosVoo(id);
   const { data: rdv } = useControleVoosRdv(id);
   const { data: aeroportos = [] } = useControleVoosAeroportos();

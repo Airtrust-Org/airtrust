@@ -230,6 +230,12 @@ function createSqliteD1(): SqliteD1 {
   );
   seed(databasePath);
   runSql(databasePath, readFileSync(operationalModelMigrationPath, 'utf8'));
+  // 0510 is additive; this focused route harness keeps a minimal aeronaves
+  // schema, so add only the two cv_voos columns consumed by the route layer.
+  runSql(
+    databasePath,
+    'ALTER TABLE cv_voos ADD COLUMN petrobras_equipamento TEXT; ALTER TABLE cv_voos ADD COLUMN petrobras_atendimento TEXT;',
+  );
   runSql(databasePath, readFileSync(flightPlanMigrationPath, 'utf8'));
   runSql(databasePath, "INSERT INTO cv_contratos(id, empresa_id, codigo, nome, ativo, ordem) VALUES (601,1,'C-TESTE','Contrato Teste',1,1),(602,2,'C-TESTE-B','Contrato Teste B',1,1);");
 

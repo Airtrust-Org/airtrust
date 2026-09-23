@@ -47,6 +47,8 @@ export interface CvVoo {
   rdv_enviado_em?: string | null;
   numero_voo: string | null;
   numero_db: string | null;
+  petrobras_equipamento: string | null;
+  petrobras_atendimento: string | null;
   contrato_id: number | null;
   tipo_voo_id: number;
   natureza_voo_id: number;
@@ -1173,6 +1175,27 @@ export function useReordenarEtapas() {
 // ===========================================================================
 // Relatório Petrobras (PDF fictício, marca d'água TESTE)
 // ===========================================================================
+
+export async function baixarPetrobrasRveXml(data: string): Promise<void> {
+  const response = await fetchWithAuth(
+    `${API_BASE_URL}${API}/rdv/exportar-petrobras-xml?data=${encodeURIComponent(data)}`,
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: 'Falha ao gerar XML Petrobras' }));
+    throw new Error(body.error || 'Falha ao gerar XML Petrobras');
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('content-disposition') || '';
+  const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || `AE_${data}_AIRTRUST.xml`;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
 
 export async function abrirRelatorioPetrobrasPdf(vooId: string | number): Promise<void> {
   const response = await fetchWithAuth(

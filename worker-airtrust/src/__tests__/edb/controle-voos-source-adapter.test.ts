@@ -17,6 +17,8 @@ function flight(): FlightRow {
     destino_id: 2,
     numero_voo: null,
     numero_db: null,
+    petrobras_equipamento: null,
+    petrobras_atendimento: null,
     contrato_id: null,
     tipo_voo_id: 1,
     natureza_voo_id: 1,

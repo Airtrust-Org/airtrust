@@ -92,6 +92,8 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
   const [form, setForm] = useState({
     numero_voo: voo.numero_voo || '',
     numero_db: voo.numero_db || '',
+    petrobras_equipamento: voo.petrobras_equipamento || '',
+    petrobras_atendimento: voo.petrobras_atendimento || '',
     aeronave_id: voo.aeronave_id ? String(voo.aeronave_id) : '',
     prefixo: voo.prefixo || '',
     contrato_id: voo.contrato_id ? String(voo.contrato_id) : '',
@@ -109,6 +111,8 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
     setForm({
       numero_voo: voo.numero_voo || '',
       numero_db: voo.numero_db || '',
+      petrobras_equipamento: voo.petrobras_equipamento || '',
+      petrobras_atendimento: voo.petrobras_atendimento || '',
       aeronave_id: voo.aeronave_id ? String(voo.aeronave_id) : '',
       prefixo: voo.prefixo || '',
       contrato_id: voo.contrato_id ? String(voo.contrato_id) : '',
@@ -177,6 +181,8 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
         versao: voo.versao,
         numero_voo: form.numero_voo.trim() || null,
         numero_db: form.numero_db.trim() || null,
+        petrobras_equipamento: form.petrobras_equipamento.trim() || null,
+        petrobras_atendimento: form.petrobras_atendimento.trim() || null,
         prefixo: form.prefixo.trim().toUpperCase(),
         aeronave_id: Number(form.aeronave_id),
         contrato_id: Number(form.contrato_id),
@@ -227,6 +233,14 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
             Número DB
             <input className={fieldClass} value={form.numero_db} onChange={(event) => setForm((prev) => ({ ...prev, numero_db: event.target.value }))} />
+          </label>
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            Equipamento Petrobras
+            <input className={fieldClass} value={form.petrobras_equipamento} onChange={(event) => setForm((prev) => ({ ...prev, petrobras_equipamento: event.target.value }))} placeholder="Ex.: 30131647" />
+          </label>
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            Atendimento Petrobras
+            <input className={fieldClass} value={form.petrobras_atendimento} onChange={(event) => setForm((prev) => ({ ...prev, petrobras_atendimento: event.target.value }))} placeholder="Ex.: 509573593" />
           </label>
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
             Aeronave

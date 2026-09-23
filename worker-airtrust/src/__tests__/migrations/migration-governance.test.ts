@@ -120,7 +120,8 @@ describe('migration governance', () => {
     // 0506 adds the governed Controle de Voos planning-deviation justification schema.
     // 0508 adds governed daily training-compliance snapshots.
     // 0509 adds the governed structured Controle de Voos flight-plan schema.
-    const expectedLatest = 509;
+    // 0510 adds the governed Petrobras RVE daily-export identifiers.
+    const expectedLatest = 510;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

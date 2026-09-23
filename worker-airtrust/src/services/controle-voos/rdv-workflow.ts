@@ -103,6 +103,15 @@ export async function hasRdvCapability(
   if (override === 'DENY') return false;
   if (override === 'GRANT') return true;
 
+  // A permissão operacional canônica da Coordenação também concede as
+  // capabilities de RDV. Isso mantém frontend/backend alinhados para contas
+  // de Coordenação com role base VIEWER e grant individual, sem elevar o role.
+  if (COORDENACAO_CAPABILITIES.has(capability)) {
+    const coordinationOverride = await getUserPermissionOverride(c, 'controle_voos.edit');
+    if (coordinationOverride === 'DENY') return false;
+    if (coordinationOverride === 'GRANT') return true;
+  }
+
   return defaultGrantForRole(capability, resolvedRole);
 }
 
