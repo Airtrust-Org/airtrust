@@ -735,6 +735,8 @@ export interface FrmsFadigaConfig {
   peso_sono_duracao: number;
   peso_sono_qualidade: number;
   peso_sintomas: number;
+  jornada_pos_corte_minutos: number;
+  jornada_sem_voo_fim: string;
 }
 
 export interface FrmsFadigaFratSuggestion {
