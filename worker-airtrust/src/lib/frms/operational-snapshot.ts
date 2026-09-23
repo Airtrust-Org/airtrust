@@ -70,6 +70,9 @@ export interface FrmsOperationalSnapshotItem {
   jornada_origem: Origem | null;
   snapshot_status: FrmsOperationalSnapshotStatus;
   fortnight_indicator: FrmsFortnightIndicator | null;
+  recovery_credit_points?: number;
+  recovery_state?: string | null;
+  recovery_activity_type?: string | null;
 
   alertas: FrmsOperationalSnapshotAlertCode[];
   natureza_dado: FrmsNaturezaDado;
@@ -719,6 +722,8 @@ interface RecoveryCreditSnapshotRow {
   data_operacional: string;
   funcionario_id: number;
   recovery_credit_points: number;
+  recovery_state: string | null;
+  activity_type: string | null;
 }
 
 async function loadRecoveryCreditRows(
@@ -729,13 +734,19 @@ async function loadRecoveryCreditRows(
 ): Promise<RecoveryCreditSnapshotRow[]> {
   try {
     const rows = await db.prepare(
-      `SELECT reference_date AS data_operacional,
-              CAST(funcionario_id AS INTEGER) AS funcionario_id,
-              MAX(COALESCE(recovery_credit_points, 0)) AS recovery_credit_points
-         FROM frms_recovery_assessment
-        WHERE empresa_id = ? AND reference_date >= ? AND reference_date <= ?
-          AND deleted_at IS NULL
-        GROUP BY reference_date, funcionario_id`,
+      `SELECT ra.reference_date AS data_operacional,
+              CAST(ra.funcionario_id AS INTEGER) AS funcionario_id,
+              COALESCE(ra.recovery_credit_points, 0) AS recovery_credit_points,
+              ra.recovery_state,
+              rd.activity_type
+         FROM frms_recovery_assessment ra
+         LEFT JOIN frms_recovery_activity_day rd
+           ON rd.id = ra.recovery_day_id
+          AND rd.empresa_id = ra.empresa_id
+          AND rd.funcionario_id = ra.funcionario_id
+          AND rd.deleted_at IS NULL
+        WHERE ra.empresa_id = ? AND ra.reference_date >= ? AND ra.reference_date <= ?
+          AND ra.deleted_at IS NULL`,
     ).bind(empresaId, start, end).all<RecoveryCreditSnapshotRow>();
     return rows.results ?? [];
   } catch (error) {
@@ -1078,7 +1089,14 @@ export async function listFrmsOperationalSnapshot(
 
   const recoveryCredits = await loadRecoveryCreditRows(db, params.empresaId, contextStart, contextEnd);
   const recoveryCreditByKey = new Map(
-    recoveryCredits.map((row) => [`${row.data_operacional}::${Number(row.funcionario_id)}`, Number(row.recovery_credit_points || 0)]),
+    recoveryCredits.map((row) => [
+      `${row.data_operacional}::${Number(row.funcionario_id)}`,
+      {
+        points: Number(row.recovery_credit_points || 0),
+        state: row.recovery_state ?? null,
+        activityType: row.activity_type ?? null,
+      },
+    ]),
   );
 
   const ids = collectCandidateIds(contextRows).filter(
@@ -1210,7 +1228,7 @@ export async function listFrmsOperationalSnapshot(
         horas_sono: item.horas_sono,
         kss_score: item.kss_score,
         effectiveness_pct: item.effectiveness_pct,
-        recovery_credit_points: recoveryCreditByKey.get(itemKey) ?? 0,
+        recovery_credit_points: recoveryCreditByKey.get(itemKey)?.points ?? 0,
         dia_periodo_embarcado:
           derivedFortnight?.dia_periodo_embarcado ??
           (effectivenessRow?.dia_periodo_embarcado != null
@@ -1234,9 +1252,13 @@ export async function listFrmsOperationalSnapshot(
 
   const itemsWithFortnight = snapshot.items.map((item) => {
     const key = `${item.data_operacional}::${item.funcionario_id}`;
+    const recovery = recoveryCreditByKey.get(key);
     const itemWithFortnight = {
       ...item,
       fortnight_indicator: fortnightIndicatorMap.get(key) ?? null,
+      recovery_credit_points: recovery?.points ?? 0,
+      recovery_state: recovery?.state ?? null,
+      recovery_activity_type: recovery?.activityType ?? null,
     };
     return {
       ...itemWithFortnight,
