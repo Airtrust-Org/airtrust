@@ -45,7 +45,7 @@ export interface FrmsOperationalSnapshotItem {
 
   escalado: boolean;
   escala_source: 'SIGVOOS' | 'MANUAL' | 'EVD' | 'AUSENTE';
-  hora_apresentacao?: string | null;
+  hora_apresentacao: string | null;
   hora_termino: string | null;
   horas_voo_minutos: number;
   duracao_jornada_minutos: number;
@@ -156,7 +156,7 @@ interface CheckinSnapshotRow {
   data_operacional: string;
   funcionario_id: number;
   hora_checkin: string | null;
-  hora_apresentacao: string | null;
+  hora_apresentacao?: string | null;
   kss_score: number | null;
   horas_sono: number | null;
   qualidade_sono: number | null;
