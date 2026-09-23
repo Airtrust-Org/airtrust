@@ -120,6 +120,9 @@ export interface FrmsOperationalSnapshotItem {
   jornada_origem: string | null;
   snapshot_status: FrmsOperationalSnapshotStatus;
   fortnight_indicator: FrmsFortnightIndicator | null;
+  recovery_credit_points?: number;
+  recovery_state?: string | null;
+  recovery_activity_type?: string | null;
 
   alertas: FrmsOperationalSnapshotAlertCode[];
 
