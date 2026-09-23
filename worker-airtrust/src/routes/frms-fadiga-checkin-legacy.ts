@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import type { AppEnv, Env } from '../types';
+import type { AppEnv } from '../types';
 import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
@@ -161,7 +161,7 @@ async function getConfig(db: D1Database, empresaId: number): Promise<FadigaConfi
 }
 
 async function resolveFuncionarioId(c: FrmsContext): Promise<number | null> {
-  const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+  const empresaId = getEmpresaId(c);
   const funcionarioIdFromContext = Number(c.get('funcionarioId') || 0);
   const userId = Number(c.get('userId') || 0);
   if (funcionarioIdFromContext > 0) {
@@ -659,7 +659,7 @@ async function buildDailyFatigueStatus(params: {
 
 router.get('/fadiga-checkin/hoje', async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const funcionarioId = await resolveFuncionarioId(c);
     if (!funcionarioId) {
       return c.json(
@@ -687,7 +687,7 @@ router.get('/fadiga-checkin/hoje', async (c) => {
 router.get('/fadiga-checkin/me', async (c) => {
   const date = c.req.query('date') || todayIso();
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const funcionarioId = await resolveFuncionarioId(c);
     if (!funcionarioId) {
       return c.json(
@@ -711,7 +711,7 @@ router.get('/fadiga-checkin/me', async (c) => {
 
 router.get('/fadiga-checkin/config', async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const config = await getConfig(c.env.DB, empresaId);
     return c.json({ success: true, data: config });
   } catch {
@@ -721,7 +721,7 @@ router.get('/fadiga-checkin/config', async (c) => {
 
 router.put('/fadiga-checkin/config', requirePermission('frms', 'editar', 'manager'), async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const body = await c.req.json().catch(() => null) as {
       jornada_pos_corte_minutos?: unknown;
       jornada_sem_voo_fim?: unknown;
@@ -790,7 +790,7 @@ router.put('/fadiga-checkin/config', requirePermission('frms', 'editar', 'manage
 
 router.get('/daily-fatigue', async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const date = c.req.query('date') || todayIso();
     const scope = (c.req.query('scope') || '').toLowerCase();
     const canSeeTeam = (await isManagerPlus(c)) && scope === 'team';
@@ -823,7 +823,7 @@ router.get('/daily-fatigue', async (c) => {
     const offset = Math.max(Number(c.req.query('offset') || 0), 0);
 
     const sectorAccess = await getEmployeeSectorAccess(
-      c as unknown as Context<{ Bindings: Env }>,
+      c,
       empresaId,
     );
     const sectorScope = buildFuncionarioScopeWhere(sectorAccess, 'f');
@@ -946,7 +946,7 @@ router.get('/daily-fatigue', async (c) => {
 router.get('/daily-fatigue/alerts', async (c) => {
   try {
     const date = c.req.query('date') || todayIso();
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     if (!(await isManagerPlus(c))) {
       const funcionarioId = await resolveFuncionarioId(c);
       if (!funcionarioId) {
@@ -998,7 +998,7 @@ router.get('/daily-fatigue/alerts', async (c) => {
     }
 
     const alertsSectorAccess = await getEmployeeSectorAccess(
-      c as unknown as Context<{ Bindings: Env }>,
+      c,
       empresaId,
     );
     const alertsSectorScope = buildFuncionarioScopeWhere(alertsSectorAccess, 'f');
@@ -1077,7 +1077,7 @@ router.post('/daily-fatigue', requireFatigueCheckinAccess, async (c) => {
 
 router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const userId = Number(c.get('userId') || 0);
     const funcionarioId = await resolveFuncionarioId(c);
     if (!funcionarioId) {
@@ -1527,7 +1527,7 @@ router.post('/fadiga-checkin/me', requireFatigueCheckinAccess, async (c) => {
 
 router.get('/fadiga-checkin/historico', async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const funcionarioId = await resolveFuncionarioId(c);
     if (!funcionarioId) {
       return c.json(
@@ -1660,11 +1660,11 @@ router.get('/fadiga-checkin/historico', async (c) => {
 
 router.get('/fadiga-checkin/painel-gestor', requirePermission('frms', 'visualizar', 'manager'), async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const data = c.req.query('data') || todayIso();
 
     const painelSectorAccess = await getEmployeeSectorAccess(
-      c as unknown as Context<{ Bindings: Env }>,
+      c,
       empresaId,
     );
     const painelSectorScope = buildFuncionarioScopeWhere(painelSectorAccess, 'f');
@@ -1774,13 +1774,13 @@ router.get('/fadiga-checkin/painel', requirePermission('frms', 'visualizar', 'ma
 
 router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 'manager'), async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const dataInicio =
       c.req.query('data_inicio') || new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
     const dataFim = c.req.query('data_fim') || todayIso();
 
     const analyticsSectorAccess = await getEmployeeSectorAccess(
-      c as unknown as Context<{ Bindings: Env }>,
+      c,
       empresaId,
     );
     const analyticsSectorScope = buildFuncionarioScopeWhere(analyticsSectorAccess, 'f');
@@ -1894,7 +1894,7 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
 
 router.patch('/fadiga-checkin/:id/resposta-gestor', requirePermission('frms', 'editar', 'manager'), async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const gestorId = Number(c.get('userId') || 0);
     const { id } = c.req.param();
     const body = await c.req.json();
@@ -1957,12 +1957,12 @@ router.patch('/fadiga-checkin/:id/resposta-gestor', requirePermission('frms', 'e
 
 router.get('/fadiga-checkin/export', requirePermission('frms', 'visualizar', 'manager'), async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const dataInicio = c.req.query('data_inicio') || todayIso().slice(0, 8) + '01';
     const dataFim = c.req.query('data_fim') || todayIso();
 
     const exportSectorAccess = await getEmployeeSectorAccess(
-      c as unknown as Context<{ Bindings: Env }>,
+      c,
       empresaId,
     );
     const exportSectorScope = buildFuncionarioScopeWhere(exportSectorAccess, 'f');
@@ -2042,7 +2042,7 @@ router.get('/fadiga-checkin/export', requirePermission('frms', 'visualizar', 'ma
 
 router.get('/fadiga-checkin/frat-prefill', async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const date = c.req.query('date') || todayIso();
     const funcionarioIdQuery = c.req.query('funcionario_id');
     const funcionarioId = funcionarioIdQuery
