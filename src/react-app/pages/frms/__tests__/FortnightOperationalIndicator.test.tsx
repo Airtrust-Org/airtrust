@@ -103,7 +103,13 @@ function buildTimelineItem(
       total_dias_periodo: 3,
       status_quinzena: 'ATENCAO',
     }),
+    recovery_credit_points: 1.5,
+    recovery_state: 'PARTIAL',
+    recovery_activity_type: 'STANDBY_ONSITE',
     alertas: [],
+    estado_operacional: 'NORMAL',
+    motivos_principais: [],
+    acao_recomendada_texto: 'Sem ação imediata.',
     ...overrides,
   };
 }
