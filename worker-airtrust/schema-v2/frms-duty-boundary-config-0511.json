@@ -1,0 +1,8 @@
+{
+  "changeId": "frms-duty-boundary-config-0511",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0511_frms_duty_boundary_config.sql",
+  "fileHash": "85346f31b4b07e5f2ae55236df15b3d80d7a8ff43a564a82e46420daf0e38888",
+  "planPath": "worker-airtrust/schema-v2/plans/frms-duty-boundary-config-0511.md",
+  "planHash": "b513185b97cb66be3bae5b4f51ede3ed5e931585d9faeb0f3a7905386dc39a79"
+}
