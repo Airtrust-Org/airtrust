@@ -131,10 +131,11 @@ describe('FortnightOperationalIndicator components', () => {
     });
     render(<FortnightDetailPanel indicator={buildIndicator()} item={{ teve_jornada: true }} />);
     expect(screen.getByText('Ver evolução diária')).toBeInTheDocument();
-    expect(screen.getByText(/Indicador operacional da quinzena/)).toBeInTheDocument();
+    expect(screen.getByText(/indicador operacional/i)).toBeInTheDocument();
     expect(screen.getByText('Projeção')).toBeInTheDocument();
-    expect(screen.getByText(/Score acumulado:/)).toBeInTheDocument();
+    expect(screen.getByText(/Sinais que exigem atenção:/)).toBeInTheDocument();
     expect(screen.getByText(/Sequência longa/)).toBeInTheDocument();
+    expect(screen.queryByText(/Score acumulado:/)).not.toBeInTheDocument();
   });
 
   it('expõe fallbacks honestos para contexto embarcado e campos nulos', () => {
