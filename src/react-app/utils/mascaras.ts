@@ -11,6 +11,20 @@ export function aplicarMascaraMatricula(valor: string): string {
 }
 
 /**
+ * Normaliza matrícula de funcionário para o contrato canônico de 5 dígitos.
+ * Zeros excedentes à esquerda são descartados antes do padding.
+ */
+export function normalizarMatriculaCincoDigitos(valor: string): string {
+  const numeros = valor.replace(/\D/g, '');
+  if (!numeros) return '';
+
+  const semZerosExcedentes = numeros.replace(/^0+(?=\d)/, '');
+  if (semZerosExcedentes.length > 5) return numeros;
+
+  return semZerosExcedentes.padStart(5, '0');
+}
+
+/**
  * Aplica máscara de telefone brasileiro
  * Formato: (XX) XXXXX-XXXX ou (XX) XXXX-XXXX
  */
