@@ -1,6 +1,5 @@
 import type { Origem } from './types';
 import { calcularDiaDoCiclo } from './db-service-jornadas';
-import { resolverFrmsConfig } from './frms-config';
 import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
 import {
   buildFrmsFortnightIndicatorMap,
@@ -117,7 +116,6 @@ export interface FrmsOperationalSnapshotFilters {
 
 export interface BuildOperationalSnapshotInput {
   empresaId: number;
-  wakeFallbackLeadMinutes?: number;
   policy?: FrmsDecisaoPolicy;
   hoje?: string;
   rows: {
@@ -155,6 +153,7 @@ interface CheckinSnapshotRow {
   data_operacional: string;
   funcionario_id: number;
   hora_checkin: string | null;
+  hora_apresentacao: string | null;
   kss_score: number | null;
   horas_sono: number | null;
   qualidade_sono: number | null;
@@ -205,20 +204,6 @@ function hmsDiffInMinutes(start: string | null, end: string | null): number {
   const endMinutes = Number(endMatch[1]) * 60 + Number(endMatch[2]);
   if (endMinutes >= startMinutes) return endMinutes - startMinutes;
   return 24 * 60 - startMinutes + endMinutes;
-}
-
-function computeWakeFromPresentation(
-  horaApresentacao: string | null,
-  leadMinutes = 90,
-): string | null {
-  if (!horaApresentacao) return null;
-  const match = /^(\d{2}):(\d{2})$/.exec(horaApresentacao);
-  if (!match) return null;
-  const total = Number(match[1]) * 60 + Number(match[2]);
-  const wake = ((total - leadMinutes) % 1440 + 1440) % 1440;
-  const hh = String(Math.floor(wake / 60)).padStart(2, '0');
-  const mm = String(wake % 60).padStart(2, '0');
-  return `${hh}:${mm}`;
 }
 
 function alertPriority(status: FrmsOperationalSnapshotStatus): number {
@@ -408,9 +393,6 @@ const ROLLING_168H_CONTEXT_LEAD_DAYS = 6;
 export function buildFrmsOperationalSnapshot(
   input: BuildOperationalSnapshotInput,
 ): FrmsOperationalSnapshotResult {
-  const wakeFallbackLeadMinutes = Number.isFinite(input.wakeFallbackLeadMinutes)
-    ? Number(input.wakeFallbackLeadMinutes)
-    : 90;
   const escalaMap = new Map<string, ScaleSnapshotRow>();
   const jornadaMap = new Map<string, JornadaSnapshotRow>();
   const checkinMap = new Map<string, CheckinSnapshotRow>();
@@ -517,8 +499,10 @@ export function buildFrmsOperationalSnapshot(
     const escalado = Boolean(escala);
     const teveJornada = Boolean(jornada);
 
-    const horaApresentacao =
-      normalizeText(escala?.hora_apresentacao) ?? normalizeText(jornada?.hora_apresentacao);
+    // A apresentação declarada no check-in diário é a fonte canônica para o FRMS.
+    // Escala/SIGVOOS continuam sendo evidência operacional, mas não substituem o dado
+    // subjetivo obrigatório quando ele estiver ausente.
+    const horaApresentacao = normalizeText(checkin?.hora_apresentacao);
     const horaTermino = normalizeText(jornada?.hora_termino) ?? normalizeText(escala?.hora_termino);
 
     const horasVooMinutos = asNumber(jornada?.horas_voo_minutos);
@@ -538,31 +522,20 @@ export function buildFrmsOperationalSnapshot(
     const kss = checkin ? asNumber(checkin.kss_score, 0) : null;
     const horasSonoCheckin = checkin ? Number(checkin.horas_sono ?? 0) : null;
 
-    const sleepDataSource: FrmsOperationalSnapshotItem['sleep_data_source'] = checkin
-      ? 'REAL'
-      : escalado || teveJornada
-        ? 'ESTIMADO'
+    // Sem check-in válido não há fallback de sono de 8 h nem despertar inferido.
+    // O snapshot permanece incompleto/ausente e a decisão operacional deve refletir
+    // a falta de evidência, em vez de fabricar precisão.
+    const sleepDataSource: FrmsOperationalSnapshotItem['sleep_data_source'] =
+      checkin && horasSonoCheckin != null && Number.isFinite(horasSonoCheckin) && horasSonoCheckin > 0
+        ? 'REAL'
         : 'AUSENTE';
 
     const wakeDataSource: FrmsOperationalSnapshotItem['wake_data_source'] = checkin?.wake_time
       ? 'REAL'
-      : horaApresentacao
-        ? 'ESTIMADO'
-        : 'AUSENTE';
+      : 'AUSENTE';
 
-    const horasSono =
-      sleepDataSource === 'REAL'
-        ? horasSonoCheckin
-        : sleepDataSource === 'ESTIMADO'
-          ? 8
-          : null;
-
-    const horaAcordar =
-      wakeDataSource === 'REAL'
-        ? normalizeText(checkin?.wake_time)
-        : wakeDataSource === 'ESTIMADO'
-          ? computeWakeFromPresentation(horaApresentacao, wakeFallbackLeadMinutes)
-          : null;
+    const horasSono = sleepDataSource === 'REAL' ? horasSonoCheckin : null;
+    const horaAcordar = wakeDataSource === 'REAL' ? normalizeText(checkin?.wake_time) : null;
 
     const effectivenessPctRaw = efetividade?.effectiveness_pct;
     const effectivenessPct =
@@ -873,6 +846,7 @@ async function loadOperationalSnapshotRows(
            ch.data_checkin AS data_operacional,
            CAST(ch.funcionario_id AS INTEGER) AS funcionario_id,
            ch.hora_checkin,
+           ch.jornada_inicio_prevista AS hora_apresentacao,
            ch.kss_score,
            ch.horas_sono,
            ch.qualidade_sono,
@@ -1003,7 +977,6 @@ export async function listFrmsOperationalSnapshot(
     referenceAt: params.hoje ?? params.dataFim,
   });
   const limites = asOperationalLimitesMap(operationalContext.parameters, operationalContext.cyclePolicyApproved);
-  const frmsConfig = resolverFrmsConfig(limites);
 
   const requestedStart = params.dataInicio;
   const requestedEnd = params.dataFim;
@@ -1152,7 +1125,6 @@ export async function listFrmsOperationalSnapshot(
   // linhas históricas necessárias ao acumulado quinzenal.
   const snapshot = buildFrmsOperationalSnapshot({
     empresaId: params.empresaId,
-    wakeFallbackLeadMinutes: frmsConfig.minutosAntesApresentacao,
     policy: params.policy,
     hoje: params.hoje,
     rows: {
