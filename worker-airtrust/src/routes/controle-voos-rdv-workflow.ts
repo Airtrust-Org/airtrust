@@ -58,6 +58,7 @@ import {
   type RelatorioPetrobrasData,
   type RelatorioPetrobrasEtapa,
 } from '../services/controle-voos/rdv-pdf';
+import { exportDailyPetrobrasRveXmlHandler } from './controle-voos-rdv-petrobras-export';
 
 const rdvWorkflow = new Hono<{ Bindings: Env }>();
 
@@ -704,6 +705,14 @@ rdvWorkflow.get(
       },
     });
   },
+);
+
+
+rdvWorkflow.get(
+  '/rdv/exportar-petrobras-xml',
+  auth(),
+  requireRdvCapability(RDV_CAPABILITIES.exportarPetrobras),
+  exportDailyPetrobrasRveXmlHandler,
 );
 
 rdvWorkflow.get(

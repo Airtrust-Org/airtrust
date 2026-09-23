@@ -80,18 +80,6 @@ function FieldError({ message }: { message?: string }) {
   return <p className="text-[11px] text-red-600 dark:text-red-400">{message}</p>;
 }
 
-function canEditRdv(rdv: CvRdv | null | undefined) {
-  if (!rdv) return true;
-  if (rdv.status === 'cancelado') return false;
-  if (
-    rdv.status === 'preenchimento_finalizado' &&
-    !['devolvido', 'reaberto'].includes(rdv.workflow_status)
-  ) {
-    return false;
-  }
-  return rdv.status === 'rascunho' || ['devolvido', 'reaberto'].includes(rdv.workflow_status);
-}
-
 export default function ControleVoosRdvDetalhe() {
   const { id } = useParams<{ id: string }>();
   const [step, setStep] = useState<RdvPilotStepId>('identificacao');
@@ -125,8 +113,8 @@ export default function ControleVoosRdvDetalhe() {
   const removerTripulante = useRemoverTripulante();
   const enviar = useEnviarRdv();
 
-  const { isAdmin, isGestor, isAuthenticated } = usePermissions();
-  const isCoordenacao = isAdmin || isGestor;
+  const { can, isAuthenticated } = usePermissions();
+  const isCoordenacao = can('controle_voos.edit');
   const shouldOpenPilotApp = isAuthenticated && !isCoordenacao && Boolean(id);
 
   const aeroMap = buildAeroMap(aeroportos);
@@ -134,8 +122,7 @@ export default function ControleVoosRdvDetalhe() {
   const isCoordenacaoRevisando = isCoordenacao && rdv?.workflow_status === 'em_revisao';
   const justificativaCoordenacaoValida = coordenacaoJustificativa.trim().length > 0;
   const editable =
-    isCoordenacao &&
-    (canEditRdv(rdv) || (isCoordenacaoRevisando && justificativaCoordenacaoValida));
+    isCoordenacao && isCoordenacaoRevisando && justificativaCoordenacaoValida;
   const form = formState;
 
   const origemIcao = voo ? aeroMap.get(voo.origem_id)?.codigo_icao || '' : '';

@@ -165,6 +165,8 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     data_programacao: toLocalInput(now).slice(0, 10),
     numero_voo: '',
     numero_db: '',
+    petrobras_equipamento: '',
+    petrobras_atendimento: '',
     contrato_id: '',
     tipo_voo_id: '',
     funcao_bordo_id: '',
@@ -417,6 +419,10 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
         data_programacao: form.data_programacao,
         numero_voo: form.numero_voo.trim() || null,
         ...(mode === 'pilot' ? { numero_db: form.numero_db.trim() || null } : {}),
+        ...(mode === 'coordenacao' ? {
+          petrobras_equipamento: form.petrobras_equipamento.trim() || null,
+          petrobras_atendimento: form.petrobras_atendimento.trim() || null,
+        } : {}),
         contrato_id: Number(form.contrato_id),
         tipo_voo_id: Number(form.tipo_voo_id),
         rota_ids: routeIds.map(Number),
@@ -509,6 +515,10 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
 
         <form onSubmit={submit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <label className="text-sm">Número do voo<input className={fieldClass} value={form.numero_voo} onChange={(e) => set('numero_voo', e.target.value)} placeholder={mode === 'pilot' ? 'Preencha se a Coordenação não informou' : 'Número operacional do voo'} /></label>
+          {mode === 'coordenacao' && (<>
+            <label className="text-sm">Equipamento Petrobras<input className={fieldClass} value={form.petrobras_equipamento} onChange={(e) => set('petrobras_equipamento', e.target.value)} placeholder="Ex.: 30131647" /></label>
+            <label className="text-sm">Atendimento Petrobras<input className={fieldClass} value={form.petrobras_atendimento} onChange={(e) => set('petrobras_atendimento', e.target.value)} placeholder="Ex.: 509573593" /></label>
+          </>)}
           {mode === 'pilot' && (
             <label className="text-sm">Relatório de voo<input className={fieldClass} value={form.numero_db} onChange={(e) => set('numero_db', e.target.value)} placeholder="Número do relatório de voo" /></label>
           )}

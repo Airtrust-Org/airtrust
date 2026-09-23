@@ -185,6 +185,13 @@ function createSqliteD1(): SqliteD1 {
   for (const migration of migrations) {
     runSql(databasePath, migration);
   }
+  // 0510 is additive; this focused FRMS harness does not model the full
+  // aeronaves table needed by its conservative backfill, so add only the
+  // two cv_voos columns required by the current FlightRow projection.
+  runSql(
+    databasePath,
+    'ALTER TABLE cv_voos ADD COLUMN petrobras_equipamento TEXT; ALTER TABLE cv_voos ADD COLUMN petrobras_atendimento TEXT;',
+  );
   runSql(
     databasePath,
     `

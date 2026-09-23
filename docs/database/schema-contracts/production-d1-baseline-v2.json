@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-09-21",
-    "last_reconciled_against": "0509 Controle de Voos structured flight-plan schema prepared; remote apply pending",
-    "schema_v2_digest": "ab3c5a91f318647d75e0d9598fce625b9680f77bb52b54e70b678ef8301e91a2",
+    "last_reconciled_at": "2026-09-23",
+    "last_reconciled_against": "0510 Controle de Voos Petrobras daily RVE XML export schema prepared; remote apply pending",
+    "schema_v2_digest": "29f00a804ff87e001df8a3d08bd30fa9b187a3e3ac4577bab7feef50652de11a",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1031,6 +1031,19 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "controle-voos-flight-plan-0509.json",
       "note": "0509 is reviewed and prepared only. It adds one active structured flight plan per tenant flight, CAS versioning, closed workflow/provider domains and an append-only FPL/CHG/DLA/CNL provider event ledger. It stores no DECEA credentials. Remote apply requires the governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0510_controle_voos_petrobras_rve_export.sql",
+      "change_id": "controle-voos-petrobras-rve-export-0510",
+      "sha256": "74fbcc66819b5f0ea564f7efb87509b1109643b4d065e2bf7e52bcf46dea2cb5",
+      "targets": [
+        "cv_voos"
+      ],
+      "domain": "tenant-scoped Controle de Voos Petrobras daily RVE XML export identifiers on operational flights",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-petrobras-rve-export-0510.json",
+      "note": "0510 is reviewed and prepared only. It adds nullable Petrobras EQUIPAMENTO/ATENDIMENTO identifiers to cv_voos for deterministic daily RVE XML export after Coordenação finalization. Backfill is restricted to confident SIGVOOS attendance ids and strictly numeric aircraft codes. Remote apply requires governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",
