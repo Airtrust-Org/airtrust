@@ -155,4 +155,29 @@ describe('ModalFuncionario organization integrity', () => {
     });
     expect(screen.queryByRole('option', { name: 'Comandante' })).not.toBeInTheDocument();
   });
+  it('normalizes employee registration to exactly five digits on blur and submit', async () => {
+    installFetchRouter();
+    const onSalvar = vi.fn();
+    const { container } = render(
+      <ModalFuncionario
+        aberto
+        funcionario={{ id: 7 }}
+        onFechar={vi.fn()}
+        onSalvar={onSalvar}
+      />,
+    );
+
+    const matriculaInput = container.querySelector('input[name="matricula"]') as HTMLInputElement;
+    const form = container.querySelector('form') as HTMLFormElement;
+
+    await waitFor(() => expect(container.querySelector('input[name="nome"]')).toHaveValue('Fernando Teste'));
+    fireEvent.change(matriculaInput, { target: { value: '300' } });
+    fireEvent.blur(matriculaInput);
+    await waitFor(() => expect(matriculaInput).toHaveValue('00300'));
+
+    fireEvent.submit(form);
+    await waitFor(() => expect(onSalvar).toHaveBeenCalledTimes(1));
+    expect(onSalvar.mock.calls[0][0]).toMatchObject({ matricula: '00300' });
+  });
+
 });
