@@ -67,7 +67,7 @@ function FortnightTimelinePanel({
   funcionarioId,
   focusDate,
   enabled,
-  title = 'Evolução diária da quinzena',
+  title = 'Cenário diário do período',
   compact = false,
 }: {
   indicator: FrmsFortnightIndicator | null | undefined;
@@ -101,65 +101,55 @@ function FortnightTimelinePanel({
       focusDate,
     });
   }, [data, focusDate, hasContext, indicator?.periodo_fim, indicator?.periodo_inicio]);
-  const notice = resolveFortnightNotice(indicator ?? null, null);
 
   if (!enabled || !hasContext) return null;
 
   return (
-    <div className={`rounded-lg border border-slate-200 bg-white ${compact ? 'p-3' : 'p-4'} space-y-3`}>
+    <div className={`space-y-3 rounded-lg border border-slate-200 bg-white ${compact ? 'p-3' : 'p-4'}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-sm font-semibold text-slate-900">{title}</p>
           <p className="text-[11px] text-slate-500">
-            Acumulado observado por dia no período {formatFortnightPeriod(indicator?.periodo_inicio, indicator?.periodo_fim)}.
+            Leitura diária de carga, recuperação e qualidade dos dados em{' '}
+            {formatFortnightPeriod(indicator?.periodo_inicio, indicator?.periodo_fim)}.
           </p>
         </div>
         {focusDate ? (
           <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700">
-            Foco {focusDate.slice(8, 10)}/{focusDate.slice(5, 7)}
+            Hoje {focusDate.slice(8, 10)}/{focusDate.slice(5, 7)}
           </span>
         ) : null}
       </div>
 
-      {notice ? <p className={`rounded-md border px-3 py-2 text-xs ${notice.toneClassName}`}>{notice.message}</p> : null}
-
       {loading ? (
-        <p className="text-xs text-slate-500">Carregando evolução diária...</p>
+        <p className="text-xs text-slate-500">Carregando cenário diário...</p>
       ) : error ? (
-        <p className="text-xs text-rose-700">Não foi possível carregar a evolução da quinzena.</p>
+        <p className="text-xs text-rose-700">Não foi possível carregar o cenário diário.</p>
       ) : !timeline || timeline.days.length === 0 ? (
-        <p className="text-xs text-slate-500">Sem dados suficientes para montar a evolução diária.</p>
+        <p className="text-xs text-slate-500">Sem dados suficientes para montar o período.</p>
       ) : (
         <>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[11px] text-slate-500">Dias visíveis</p>
-              <p className="text-sm font-semibold text-slate-900">{timeline.summary.visible_days}</p>
-            </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-[11px] text-slate-500">Dias com jornada</p>
               <p className="text-sm font-semibold text-slate-900">{timeline.summary.jornadas_days}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[11px] text-slate-500">Jornada acumulada visível</p>
-              <p className="text-sm font-semibold text-slate-900">
-                {formatFortnightMinutes(timeline.summary.cumulative_duty_min)}
-              </p>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[11px] text-slate-500">HV acumulada</p>
-              <p className="text-sm font-semibold text-slate-900">
-                {formatFortnightMinutes(timeline.summary.cumulative_flight_min)}
-              </p>
+              <p className="text-[11px] text-slate-500">Check-ins recebidos</p>
+              <p className="text-sm font-semibold text-slate-900">{timeline.summary.received_checkins}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-[11px] text-slate-500">Check-ins pendentes</p>
               <p className="text-sm font-semibold text-slate-900">{timeline.summary.pending_checkins}</p>
             </div>
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
+              <p className="text-[11px] text-emerald-700">Dias com recuperação</p>
+              <p className="text-sm font-semibold text-emerald-900">{timeline.summary.recovery_days}</p>
+            </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[11px] text-slate-500">Dias críticos/atenção</p>
+              <p className="text-[11px] text-slate-500">Crítico / atenção</p>
               <p className="text-sm font-semibold text-slate-900">
-                {timeline.summary.critical_days}/{timeline.summary.attention_days}
+                {timeline.summary.critical_days} / {timeline.summary.attention_days}
               </p>
             </div>
           </div>
@@ -169,84 +159,78 @@ function FortnightTimelinePanel({
               <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-2 py-2 text-left">Dia</th>
-                  <th className="px-2 py-2 text-left">Jornada / HV</th>
-                  <th className="px-2 py-2 text-left">Acumulado</th>
-                  <th className="px-2 py-2 text-left">Check-in / efetividade estimada</th>
-                  <th className="px-2 py-2 text-left">Status / tendência</th>
-                  <th className="px-2 py-2 text-left">Sinais operacionais</th>
+                  <th className="px-2 py-2 text-left">Atividade / jornada</th>
+                  <th className="px-2 py-2 text-left">Sono / KSS</th>
+                  <th className="px-2 py-2 text-left">HV do dia</th>
+                  <th className="px-2 py-2 text-left">Recuperação</th>
+                  <th className="px-2 py-2 text-left">Efetividade</th>
+                  <th className="px-2 py-2 text-left">Situação / ação</th>
                 </tr>
               </thead>
               <tbody>
-                {timeline.days.map((day) => (
-                  <tr
-                    key={day.data_operacional}
-                    className={`border-t border-slate-200 align-top ${day.is_focus_day ? 'bg-sky-50/60' : ''}`}
-                  >
-                    <td className="px-2 py-2">
-                      <div className="font-medium text-slate-900">{day.label}</div>
-                      <div className="text-[11px] text-slate-500">
-                        Dia {day.day_index}/{day.total_days}
-                      </div>
-                    </td>
-                    <td className="px-2 py-2 text-slate-700">
-                      {!day.has_snapshot_data ? (
-                        <>
-                          <div>Sem dado confirmado</div>
-                          <div className="text-[11px] text-slate-500">Lacuna no snapshot do período</div>
-                        </>
-                      ) : !day.teve_jornada ? (
-                        <>
-                          <div>Sem jornada FRMS confirmada</div>
-                          <div className="text-[11px] text-slate-500">HV não confirmada neste dia</div>
-                        </>
-                      ) : (
-                        <>
-                          <div>Jornada {formatFortnightMinutes(day.jornada_min)}</div>
-                          <div className="text-[11px] text-slate-500">HV {formatFortnightMinutes(day.voo_min)}</div>
-                        </>
-                      )}
-                    </td>
-                    <td className="px-2 py-2 text-slate-700">
-                      <div>Jornada {formatFortnightMinutes(day.jornada_acumulada_min)}</div>
-                      <div className="text-[11px] text-slate-500">
-                        HV {formatFortnightMinutes(day.voo_acumulada_min)} visível
-                      </div>
-                    </td>
-                    <td className="px-2 py-2 text-slate-700">
-                      {!day.has_snapshot_data ? (
-                        <>
-                          <div>Sem snapshot do dia</div>
-                          <div className="text-[11px] text-slate-500">Efetividade estimada --</div>
-                        </>
-                      ) : (
-                        <>
-                          <div>{formatTimelineCheckin(day.checkin_status)}</div>
-                          <div className="text-[11px] text-slate-500">
-                            Efetividade estimada {formatTimelinePct(day.effectiveness_pct)}
-                          </div>
-                        </>
-                      )}
-                    </td>
-                    <td className="px-2 py-2">
-                      <span
-                        className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium ${toneByTimelineStatus(day.snapshot_status)}`}
-                      >
-                        {formatTimelineStatus(day.snapshot_status)}
-                      </span>
-                      <div className="mt-1 text-[11px] text-slate-500">
-                        Tendência {formatFortnightTendencia(day.tendencia)}
-                      </div>
-                    </td>
-                    <td className="px-2 py-2 text-slate-700">
-                      <div>{formatTimelineHighlight(day.highlights)}</div>
-                      {day.is_focus_day && day.mitigacao_recomendada && day.mitigacao_recomendada !== 'SEM_ACAO' ? (
-                        <div className="mt-1 text-[11px] text-sky-700">
-                          Ação: {formatFortnightMitigacao(day.mitigacao_recomendada)}
-                        </div>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
+                {timeline.days.map((day) => {
+                  const activity = day.recovery_activity_type
+                    ? day.recovery_activity_type.replaceAll('_', ' ')
+                    : null;
+                  return (
+                    <tr
+                      key={day.data_operacional}
+                      className={`border-t border-slate-200 align-top ${day.is_focus_day ? 'bg-sky-50/60' : ''}`}
+                    >
+                      <td className="px-2 py-2">
+                        <div className="font-medium text-slate-900">{day.label}</div>
+                        <div className="text-[11px] text-slate-500">Dia {day.day_index}/{day.total_days}</div>
+                      </td>
+                      <td className="px-2 py-2 text-slate-700">
+                        {!day.has_snapshot_data ? (
+                          <span className="text-slate-500">Sem dado confirmado</span>
+                        ) : day.teve_jornada ? (
+                          <>
+                            <div>{formatFortnightMinutes(day.jornada_min)}</div>
+                            <div className="text-[11px] text-slate-500">
+                              {day.hora_apresentacao?.slice(0, 5) || '—'} → {day.hora_termino?.slice(0, 5) || '—'}
+                            </div>
+                          </>
+                        ) : activity ? (
+                          <span className="font-medium text-slate-700">{activity}</span>
+                        ) : (
+                          <span className="text-slate-500">Sem jornada confirmada</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 text-slate-700">
+                        <div>{day.horas_sono == null ? 'Não informado' : `${Number(day.horas_sono).toFixed(1)} h`}</div>
+                        <div className="text-[11px] text-slate-500">KSS {day.kss_score ?? '—'}</div>
+                      </td>
+                      <td className="px-2 py-2 text-slate-700">
+                        {day.voo_min > 0 ? formatFortnightMinutes(day.voo_min) : '—'}
+                      </td>
+                      <td className="px-2 py-2">
+                        {day.recovery_credit_points > 0 ? (
+                          <>
+                            <div className="font-semibold text-emerald-700">+{day.recovery_credit_points.toFixed(1)} pt</div>
+                            <div className="text-[11px] text-slate-500">{activity || day.recovery_state || 'Recuperação'}</div>
+                          </>
+                        ) : (
+                          <div className="text-slate-500">{activity || day.recovery_state || '—'}</div>
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className="font-semibold text-slate-800">{formatTimelinePct(day.effectiveness_pct)}</div>
+                        <div className="text-[11px] text-slate-500">{formatTimelineCheckin(day.checkin_status)}</div>
+                      </td>
+                      <td className="px-2 py-2">
+                        <span className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium ${toneByTimelineStatus(day.snapshot_status)}`}>
+                          {formatTimelineStatus(day.snapshot_status)}
+                        </span>
+                        {day.acao_recomendada_texto ? (
+                          <div className="mt-1 max-w-[260px] text-[11px] text-sky-700">{day.acao_recomendada_texto}</div>
+                        ) : day.highlights.length > 0 ? (
+                          <div className="mt-1 max-w-[260px] text-[11px] text-slate-500">{formatTimelineHighlight(day.highlights)}</div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -307,56 +291,28 @@ export function FortnightOperationalCore({
       <div className="flex flex-wrap items-center gap-2">
         <FortnightStatusBadge status={indicator.status_quinzena} />
         <FortnightNaturezaBadge natureza={indicator.natureza_dado} />
-        <span className="text-[10px] text-slate-500">
-          {formatFortnightFreshness(indicator.freshness_dado)}
-        </span>
+        <span className="text-[10px] text-slate-500">{formatFortnightFreshness(indicator.freshness_dado)}</span>
       </div>
-
-      <div className="grid gap-x-3 gap-y-1 sm:grid-cols-2">
-        <div>
-          <span className="font-medium text-slate-700">Score acumulado:</span>{' '}
-          {formatFortnightScore(indicator.score_acumulado)}
-        </div>
-        <div>
-          <span className="font-medium text-slate-700">Tendência:</span>{' '}
-          {formatFortnightTendencia(indicator.tendencia)}
-        </div>
-        <div>
-          <span className="font-medium text-slate-700">Agravantes:</span>{' '}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="rounded-md border border-amber-100 bg-amber-50/50 p-2">
+          <span className="font-medium text-slate-700">Sinais que exigem atenção:</span>{' '}
           {formatTopModifiers(indicator.agravantes_aplicados)}
         </div>
-        <div>
-          <span className="font-medium text-slate-700">Atenuadores:</span>{' '}
+        <div className="rounded-md border border-emerald-100 bg-emerald-50/50 p-2">
+          <span className="font-medium text-slate-700">Fatores favoráveis:</span>{' '}
           {formatTopModifiers(indicator.atenuadores_aplicados)}
         </div>
       </div>
-
-      {indicator.explicacao_operacional?.trim() ? (
-        <p>
-          <span className="font-medium text-slate-700">Explicação:</span>{' '}
-          {indicator.explicacao_operacional}
-        </p>
-      ) : null}
-
       {indicator.mitigacao_recomendada && indicator.mitigacao_recomendada !== 'SEM_ACAO' ? (
         <p>
-          <span className="font-medium text-slate-700">Mitigação sugerida:</span>{' '}
+          <span className="font-medium text-slate-700">Ação recomendada:</span>{' '}
           {formatFortnightMitigacao(indicator.mitigacao_recomendada)}
         </p>
       ) : null}
-
       {indicator.decisao && indicator.decisao !== 'INFORMA' ? (
         <p>
-          <span className="font-medium text-slate-700">Decisão operacional:</span>{' '}
+          <span className="font-medium text-slate-700">Nível de decisão:</span>{' '}
           {formatFortnightDecisao(indicator.decisao)}
-        </p>
-      ) : null}
-
-      {indicator.limite_referencia ? (
-        <p className="text-[10px] text-slate-500">
-          Referência de limite ({indicator.limite_referencia.tipo.replace(/_/g, ' ').toLowerCase()}
-          ): {Math.round(indicator.limite_referencia.pct_atingido)}% — indicador operacional, não
-          avaliação regulatória.
         </p>
       ) : null}
     </div>
@@ -518,7 +474,7 @@ export function FortnightCrewSummaryCard({
 export function FortnightConsolidatedPanel({
   indicator,
   loading = false,
-  title = 'Indicador operacional da quinzena',
+  title = 'Contexto operacional do período',
   funcionarioId,
   focusDate,
 }: {
@@ -543,8 +499,7 @@ export function FortnightConsolidatedPanel({
       <div>
         <h3 className="text-base font-semibold text-gray-800">{title}</h3>
         <p className="mt-1 text-xs text-slate-500">
-          Apoio à decisão do gestor sobre o acúmulo visível da quinzena. Não é diagnóstico nem
-          critério regulatório final.
+          Visão do período embarcado para apoiar a leitura diária de carga, recuperação e pendências.
         </p>
       </div>
 
