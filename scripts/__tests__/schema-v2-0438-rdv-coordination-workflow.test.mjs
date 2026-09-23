@@ -22,6 +22,7 @@ const STAGING_WORKFLOW = '.github/workflows/staging-0438-schema-v2.yml';
 const PRODUCTION_PREFLIGHT = 'scripts/schema-v2/validate-0438-production-preflight.sh';
 const PRODUCTION_POSTCONDITIONS = 'scripts/schema-v2/validate-0438-production-postconditions.sh';
 const PRODUCTION_SCHEMA_WORKFLOW = '.github/workflows/apply-schema-change-v2.yml';
+const FUNCTIONAL_RUNNER = 'scripts/staging/run-controle-voos-e2e.mjs';
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -351,4 +352,13 @@ test('production Schema V2 workflow fail-closes 0438 with dedicated read-only gu
     workflow,
     /inputs\.change_id == '0438-rdv-coordination-workflow-production'/,
   );
+});
+
+
+test('legacy 0438 functional fixture does not create an unintended planning deviation', () => {
+  const runner = readFileSync(FUNCTIONAL_RUNNER, 'utf8');
+  assert.match(runner, /horario_previsto_partida: \`\$\{dataProg\}T09:58:00Z\`/);
+  assert.match(runner, /horario_previsto_chegada: \`\$\{dataProg\}T11:02:00Z\`/);
+  assert.match(runner, /horario_motor_ligado: \`\$\{dataProg\}T09:58:00Z\`/);
+  assert.match(runner, /horario_motor_desligado: \`\$\{dataProg\}T11:02:00Z\`/);
 });
