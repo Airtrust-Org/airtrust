@@ -12,6 +12,14 @@ export interface FortnightTimelineDay {
   voo_min: number;
   jornada_acumulada_min: number;
   voo_acumulada_min: number;
+  hora_apresentacao: string | null;
+  hora_termino: string | null;
+  horas_sono: number | null;
+  kss_score: number | null;
+  recovery_credit_points: number;
+  recovery_state: string | null;
+  recovery_activity_type: string | null;
+  acao_recomendada_texto: string | null;
   snapshot_status: FrmsOperationalSnapshotItem['snapshot_status'] | 'SEM_REGISTRO';
   checkin_status: FrmsOperationalSnapshotItem['checkin_status'];
   effectiveness_pct: number | null;
@@ -30,6 +38,8 @@ export interface FortnightTimelineSummary {
   critical_days: number;
   cumulative_duty_min: number;
   cumulative_flight_min: number;
+  received_checkins: number;
+  recovery_days: number;
 }
 
 export interface FortnightTimelineResult {
@@ -133,6 +143,8 @@ export function buildFortnightTimeline(
   let estimatedDays = 0;
   let attentionDays = 0;
   let criticalDays = 0;
+  let receivedCheckins = 0;
+  let recoveryDays = 0;
 
   for (let index = 0; index < totalDays; index += 1) {
     const isoDate = addDays(params.periodStart, index);
@@ -144,6 +156,8 @@ export function buildFortnightTimeline(
     cumulativeFlight += vooMin;
 
     if (item?.teve_jornada) jornadasDays += 1;
+    if (item?.checkin_status === 'RECEBIDO') receivedCheckins += 1;
+    if ((item?.recovery_credit_points ?? 0) > 0 || Boolean(item?.recovery_state)) recoveryDays += 1;
     if (item && (item.checkin_status === 'PENDENTE' || item.checkin_status === 'AUSENTE')) {
       pendingCheckins += 1;
     }
@@ -171,6 +185,14 @@ export function buildFortnightTimeline(
       voo_min: vooMin,
       jornada_acumulada_min: cumulativeDuty,
       voo_acumulada_min: cumulativeFlight,
+      hora_apresentacao: item?.hora_apresentacao ?? null,
+      hora_termino: item?.hora_termino ?? null,
+      horas_sono: item?.horas_sono ?? null,
+      kss_score: item?.kss_score ?? null,
+      recovery_credit_points: Number(item?.recovery_credit_points ?? 0),
+      recovery_state: item?.recovery_state ?? null,
+      recovery_activity_type: item?.recovery_activity_type ?? null,
+      acao_recomendada_texto: item?.acao_recomendada_texto ?? null,
       snapshot_status: item?.snapshot_status ?? 'SEM_REGISTRO',
       checkin_status: item?.checkin_status ?? 'NAO_APLICAVEL',
       effectiveness_pct: item?.effectiveness_pct ?? null,
@@ -192,6 +214,8 @@ export function buildFortnightTimeline(
       critical_days: criticalDays,
       cumulative_duty_min: cumulativeDuty,
       cumulative_flight_min: cumulativeFlight,
+      received_checkins: receivedCheckins,
+      recovery_days: recoveryDays,
     },
   };
 }
