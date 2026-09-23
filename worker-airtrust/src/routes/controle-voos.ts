@@ -92,9 +92,7 @@ const allowedFields = new Set([
   'origem_id',
   'destino_id',
   'numero_voo',
-  'numero_db',
-  'petrobras_equipamento',
-  'petrobras_atendimento',
+  'numero_db', 'petrobras_equipamento', 'petrobras_atendimento',
   'contrato_id',
   'tipo_voo_id',
   'natureza_voo_id',
@@ -108,7 +106,6 @@ const allowedFields = new Set([
   'cancelado_motivo_id',
   'alternado_destino_id',
 ]);
-
 const allowedCreateFields = new Set([
   ...allowedFields,
   'pic_funcionario_id',
@@ -434,8 +431,7 @@ function normalizeFlightInput(
   }
   if (payload.numero_voo !== undefined) input.numero_voo = normalizeString(payload.numero_voo, 'numero_voo');
   if (payload.numero_db !== undefined) input.numero_db = normalizeString(payload.numero_db, 'numero_db');
-  if (payload.petrobras_equipamento !== undefined) input.petrobras_equipamento = normalizeString(payload.petrobras_equipamento, 'petrobras_equipamento');
-  if (payload.petrobras_atendimento !== undefined) input.petrobras_atendimento = normalizeString(payload.petrobras_atendimento, 'petrobras_atendimento');
+  if (payload.petrobras_equipamento !== undefined) input.petrobras_equipamento = normalizeString(payload.petrobras_equipamento, 'petrobras_equipamento'); if (payload.petrobras_atendimento !== undefined) input.petrobras_atendimento = normalizeString(payload.petrobras_atendimento, 'petrobras_atendimento');
   if (payload.contrato_id !== undefined || requireBaseFields) input.contrato_id = parsePositiveInteger(payload.contrato_id, 'contrato_id');
   if (payload.tipo_voo_id !== undefined || requireBaseFields) {
     input.tipo_voo_id = parsePositiveInteger(payload.tipo_voo_id, 'tipo_voo_id');
@@ -718,8 +714,7 @@ function buildMergedFlight(existing: FlightRow, input: FlightInput): FlightInput
     destino_id: input.destino_id ?? existing.destino_id,
     numero_voo: input.numero_voo !== undefined ? input.numero_voo : existing.numero_voo,
     numero_db: input.numero_db !== undefined ? input.numero_db : existing.numero_db,
-    petrobras_equipamento: input.petrobras_equipamento !== undefined ? input.petrobras_equipamento : existing.petrobras_equipamento,
-    petrobras_atendimento: input.petrobras_atendimento !== undefined ? input.petrobras_atendimento : existing.petrobras_atendimento,
+    petrobras_equipamento: input.petrobras_equipamento !== undefined ? input.petrobras_equipamento : existing.petrobras_equipamento, petrobras_atendimento: input.petrobras_atendimento !== undefined ? input.petrobras_atendimento : existing.petrobras_atendimento,
     contrato_id: input.contrato_id !== undefined ? input.contrato_id : existing.contrato_id,
     tipo_voo_id: input.tipo_voo_id ?? existing.tipo_voo_id,
     natureza_voo_id: input.natureza_voo_id ?? existing.natureza_voo_id,
@@ -1180,10 +1175,8 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
     INSERT INTO cv_voos (
       empresa_id, prefixo, data_programacao, origem_id, destino_id,
       numero_voo, numero_db, petrobras_equipamento, petrobras_atendimento, contrato_id, tipo_voo_id, natureza_voo_id, aeronave_id,
-      horario_previsto_partida, horario_previsto_chegada,
-      horario_real_partida, horario_real_chegada,
-      status, observacoes, cancelado_motivo_id, alternado_destino_id,
-      created_by, updated_by, created_at, updated_at
+      horario_previsto_partida, horario_previsto_chegada, horario_real_partida, horario_real_chegada,
+      status, observacoes, cancelado_motivo_id, alternado_destino_id, created_by, updated_by, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
   `,
   )
@@ -1195,8 +1188,7 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
       input.destino_id,
       input.numero_voo || null,
       input.numero_db || null,
-      input.petrobras_equipamento || null,
-      input.petrobras_atendimento || null,
+      input.petrobras_equipamento || null, input.petrobras_atendimento || null,
       input.contrato_id || null,
       input.tipo_voo_id,
       input.natureza_voo_id,
