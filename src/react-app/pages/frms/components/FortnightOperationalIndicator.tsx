@@ -170,7 +170,7 @@ function FortnightTimelinePanel({
               <tbody>
                 {timeline.days.map((day) => {
                   const activity = day.recovery_activity_type
-                    ? day.recovery_activity_type.replaceAll('_', ' ')
+                    ? day.recovery_activity_type.replace(/_/g, ' ')
                     : null;
                   return (
                     <tr
