@@ -2505,3 +2505,1459 @@ frmsRoutes.get(
     }
 
     const row = await c.env.DB.prepare(
+      `SELECT
+          j.tripulante_id,
+          p.nome as tripulante_nome,
+          p.cargo as tripulante_cargo,
+          j.data as data_apresentacao,
+          j.hora_apresentacao,
+          j.hora_acordou,
+          j.fonte_sono,
+          fj.processado_com_bug,
+          fj.effectiveness_pct,
+          fj.effectiveness_nivel,
+          fj.effectiveness_componentes_json,
+          fj.fator_basica_pct,
+          fj.tempo_abaixo_limiar_min,
+          fj.hora_despertar_estimada,
+          fj.hora_inicio_sono_estimado,
+          fj.duracao_sono_efetiva_min,
+          fj.dia_periodo_embarcado,
+          fj.total_dias_periodo
+       FROM frms_fatorizacao_jornada fj
+       JOIN frms_jornada j ON j.id = fj.jornada_id AND j.deleted_at IS NULL
+       JOIN funcionarios p ON p.id = CAST(j.tripulante_id AS INTEGER)
+       WHERE j.tripulante_id = ?
+         AND p.empresa_id = ?
+         AND p.deleted_at IS NULL
+         AND COALESCE(p.ativo, 1) = 1
+         AND UPPER(COALESCE(NULLIF(TRIM(p.status), ''), 'ATIVO')) = 'ATIVO'
+         AND fj.deleted_at IS NULL
+         AND j.data = ?
+       ORDER BY j.data DESC
+       LIMIT 1`,
+    )
+      .bind(tripulanteId, empresaId, data)
+      .first<Record<string, unknown>>();
+
+    if (!row) {
+      return c.json(
+        {
+          success: false,
+          error: 'Nenhuma jornada encontrada para o dia solicitado.',
+          code: 'FRMS_DAY_NOT_FOUND',
+        },
+        404,
+      );
+    }
+
+    const [checkinRow, recalcEvent, worst7d, worst28d] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT id, wake_time, report_source
+         FROM frms_fadiga_checkin
+         WHERE empresa_id = ?
+           AND funcionario_id = ?
+           AND data_checkin = ?
+           AND deleted_at IS NULL
+         LIMIT 1`,
+      )
+        .bind(empresaId, Number(tripulanteId), data)
+        .first<{ id: string; wake_time: string | null; report_source: string | null }>()
+        .catch(() => null),
+      c.env.DB.prepare(
+        `SELECT 1 AS has_pending
+         FROM frms_fadiga_evento e
+         JOIN frms_fadiga_checkin c ON c.id = e.checkin_id
+         WHERE c.empresa_id = ?
+           AND c.funcionario_id = ?
+           AND c.data_checkin = ?
+           AND c.deleted_at IS NULL
+           AND e.empresa_id = ?
+           AND e.tipo = 'FRMS_RECALCULO_NECESSARIO'
+         LIMIT 1`,
+      )
+        .bind(empresaId, Number(tripulanteId), data, empresaId)
+        .first<{ has_pending: number }>()
+        .catch(() => null),
+      findWorstEffectivenessInWindow(c.env, {
+        tripulanteId,
+        empresaId,
+        data,
+        days: 7,
+      }),
+      findWorstEffectivenessInWindow(c.env, {
+        tripulanteId,
+        empresaId,
+        data,
+        days: 28,
+      }),
+    ]);
+
+    const wakeTimeSource = normalizeHora(row.hora_acordou as string | null | undefined)
+      ? 'crew_reported'
+      : normalizeHora(row.hora_despertar_estimada as string | null | undefined)
+        ? 'fallback_apresentacao_minus_config'
+        : normalizeHora(checkinRow?.wake_time)
+          ? 'crew_reported'
+          : null;
+    const sourceByCheckin =
+      checkinRow != null
+        ? ({
+            dataSource: 'crew_reported',
+            confidence: 'reported',
+          } as const)
+        : ({
+            dataSource: 'default_estimate',
+            confidence: 'reduced',
+          } as const);
+    const traceLimitations: string[] = [];
+    if (!checkinRow) {
+      traceLimitations.push('Sem check-in diário para a data selecionada; usando estimativa operacional.');
+    }
+    if (!row.hora_apresentacao) {
+      traceLimitations.push('Sem hora de apresentação na jornada; minutos acordado antes da apresentação não disponíveis.');
+    }
+    if (!worst7d.available) {
+      traceLimitations.push('Janela de 7 dias indisponível para determinar pior dia.');
+    }
+    if (!worst28d.available) {
+      traceLimitations.push('Janela de 28 dias indisponível para determinar pior dia.');
+    }
+    if (Number(row.processado_com_bug ?? 0) === 1) {
+      traceLimitations.push('Registro marcado como legado pré-C2; considerar reprocessamento histórico em fase separada.');
+    }
+
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' },
+        403,
+      );
+    }
+    const operationalContext = await resolveFrmsOperationalContext(c.env.DB, {
+      empresaId,
+      referenceAt: data,
+      funcionarioId: Number(tripulanteId),
+    });
+    const limites = operationalContext.parameters;
+    const diasCriticosConsecutivos = await countDiasCriticosConsecutivos(
+      c.env,
+      tripulanteId,
+      empresaId,
+      data,
+      limites,
+    );
+    const explanation = await buildFrmsDayExplanation(
+      c.env,
+      {
+        ...row,
+        dias_criticos_consecutivos: diasCriticosConsecutivos,
+      },
+      limites,
+      {
+        dataSource: sourceByCheckin.dataSource,
+        confidence: sourceByCheckin.confidence,
+        wakeTimeSource,
+        recalculationPending: Boolean(recalcEvent?.has_pending) || !Boolean(row.hora_apresentacao),
+        windows: {
+          sevenDays: worst7d,
+          twentyEightDays: worst28d,
+        },
+        limitations: traceLimitations,
+      },
+    );
+
+    try {
+      await upsertFrmsDayExplanationCache(c.env, {
+        empresaId,
+        tripulanteId,
+        dataRef: data,
+        origemTela,
+        payload: explanation,
+        ttlSeconds: explanation.copiloto.provider === 'cloudflare-workers-ai' ? 6 * 3600 : 2 * 60,
+      });
+    } catch {
+      // Falha de cache não deve bloquear resposta.
+    }
+
+    try {
+      const userId = Number(c.get('userId') || 0);
+      const userAgent = c.req.header('user-agent') ?? null;
+      const ipAddress = c.req.header('CF-Connecting-IP') ?? c.req.header('x-forwarded-for') ?? null;
+
+      await c.env.DB.prepare(
+        `INSERT INTO auditoria_avancada_v2 (tabela, acao, registro_id, dados_novos, created_at)
+         VALUES (?, ?, ?, ?, datetime('now'))`,
+      )
+        .bind(
+          'frms_explicacao_dia',
+          'VIEW_EXPLICACAO_DIA',
+          `${tripulanteId}:${data}`,
+          JSON.stringify({
+            tripulante_id: Number(tripulanteId),
+            data,
+            origem_tela: origemTela,
+            user_id: userId || null,
+            user_agent: userAgent,
+            ip_address: ipAddress,
+            faixa: explanation.diagnostico.faixa,
+            effectiveness_pct: explanation.jornada.effectiveness_pct,
+            provider: explanation.copiloto.provider,
+            model: explanation.copiloto.model,
+          }),
+        )
+        .run();
+    } catch {
+      // Não bloquear explicação por falha de telemetria.
+    }
+
+    return c.json({ success: true, data: explanation });
+  }),
+);
+
+/**
+ * GET /api/frms/comparar-dias/:tripulanteId?data_a=YYYY-MM-DD&data_b=YYYY-MM-DD
+ * Compara dois dias de um mesmo tripulante com base no payload de explicação diária.
+ */
+frmsRoutes.get(
+  '/comparar-dias/:tripulanteId',
+  safe(async (c) => {
+    const tripulanteId = c.req.param('tripulanteId') ?? '';
+    const denied = await assertTripulanteEmpresa(c, tripulanteId);
+    if (denied) return denied;
+
+    const dataA = c.req.query('data_a') ?? '';
+    const dataB = c.req.query('data_b') ?? '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dataA) || !/^\d{4}-\d{2}-\d{2}$/.test(dataB)) {
+      return c.json(
+        {
+          success: false,
+          error: 'Parâmetros data_a e data_b são obrigatórios no formato YYYY-MM-DD.',
+          code: 'VALIDATION_ERROR',
+        },
+        400,
+      );
+    }
+
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' },
+        403,
+      );
+    }
+    const operationalContext = await resolveFrmsOperationalContext(c.env.DB, {
+      empresaId,
+      referenceAt: dataB > dataA ? dataB : dataA,
+      funcionarioId: Number(tripulanteId),
+    });
+    const limites = operationalContext.parameters;
+
+    const fetchDay = async (data: string) => {
+      const row = await c.env.DB.prepare(
+        `SELECT
+            j.tripulante_id,
+            p.nome as tripulante_nome,
+            p.cargo as tripulante_cargo,
+            j.data as data_apresentacao,
+            j.hora_apresentacao,
+            j.hora_acordou,
+            j.fonte_sono,
+            fj.processado_com_bug,
+            fj.effectiveness_pct,
+            fj.effectiveness_nivel,
+            fj.effectiveness_componentes_json,
+            fj.tempo_abaixo_limiar_min,
+            fj.hora_despertar_estimada,
+            fj.hora_inicio_sono_estimado,
+            fj.duracao_sono_efetiva_min,
+            fj.dia_periodo_embarcado,
+            fj.total_dias_periodo
+         FROM frms_fatorizacao_jornada fj
+         JOIN frms_jornada j ON j.id = fj.jornada_id AND j.deleted_at IS NULL
+         JOIN funcionarios p ON p.id = CAST(j.tripulante_id AS INTEGER)
+         WHERE j.tripulante_id = ?
+           AND p.empresa_id = ?
+           AND p.deleted_at IS NULL
+           AND COALESCE(p.ativo, 1) = 1
+           AND UPPER(COALESCE(NULLIF(TRIM(p.status), ''), 'ATIVO')) = 'ATIVO'
+           AND fj.deleted_at IS NULL
+           AND j.data = ?
+         LIMIT 1`,
+      )
+        .bind(tripulanteId, empresaId, data)
+        .first<Record<string, unknown>>();
+
+      if (!row) return null;
+
+      const diasCriticosConsecutivos = await countDiasCriticosConsecutivos(
+        c.env,
+        tripulanteId,
+        empresaId,
+        data,
+        limites,
+      );
+
+      return buildFrmsDayExplanation(
+        c.env,
+        { ...row, dias_criticos_consecutivos: diasCriticosConsecutivos },
+        limites,
+      );
+    };
+
+    const [expA, expB] = await Promise.all([fetchDay(dataA), fetchDay(dataB)]);
+    if (!expA || !expB) {
+      const erros: Record<string, string> = {};
+      if (!expA) erros.dia_a = `Sem jornada para ${dataA}`;
+      if (!expB) erros.dia_b = `Sem jornada para ${dataB}`;
+      return c.json(
+        {
+          success: false,
+          error: 'Não foi possível comparar: um ou mais dias não possuem jornada processada.',
+          code: 'FRMS_COMPARE_DAY_NOT_FOUND',
+          data: { erros },
+        },
+        404,
+      );
+    }
+
+    const diaA = toComparisonDay(expA);
+    const diaB = toComparisonDay(expB);
+    const pctA = diaA.effectiveness_pct ?? 0;
+    const pctB = diaB.effectiveness_pct ?? 0;
+    const diferencaPts = roundOne(pctB - pctA);
+
+    const fatoresPioraram: string[] = [];
+    const fatoresMelhoraram: string[] = [];
+
+    for (const fatorA of diaA.fatores) {
+      const fatorB = diaB.fatores.find((item) => item.codigo === fatorA.codigo);
+      if (!fatorB) continue;
+      const delta = roundOne(fatorB.impacto_pts - fatorA.impacto_pts);
+      if (delta < -0.1) fatoresPioraram.push(fatorA.codigo);
+      if (delta > 0.1) fatoresMelhoraram.push(fatorA.codigo);
+    }
+
+    const analiseDelta =
+      diferencaPts < 0
+        ? `O dia B foi ${Math.abs(diferencaPts).toFixed(1)} pts pior que o dia A.`
+        : diferencaPts > 0
+          ? `O dia B foi ${Math.abs(diferencaPts).toFixed(1)} pts melhor que o dia A.`
+          : 'Os dois dias ficaram com efetividade equivalente.';
+
+    await registrarAuditoriaFrmsAcao(c, {
+      acao: 'FRMS_COMPARACAO_DIAS',
+      tripulante_id: tripulanteId,
+      data_jornada: dataB,
+      origem_tela:
+        normalizeFrmsExplanationOrigin(c.req.query('origem')) === 'ficha' ? 'ficha' : 'dashboard',
+      extra: { data_a: dataA, data_b: dataB, diferenca_pts: diferencaPts },
+    });
+
+    return c.json({
+      success: true,
+      data: {
+        dia_a: diaA,
+        dia_b: diaB,
+        diferenca_pts: diferencaPts,
+        fatores_pioraram: fatoresPioraram,
+        fatores_melhoraram: fatoresMelhoraram,
+        analise_delta: analiseDelta,
+      },
+    });
+  }),
+);
+
+/**
+ * POST /api/frms/simular-cenario/:tripulanteId/:data
+ * Simula impacto de ajustes de horário/sono sem persistir no banco.
+ */
+frmsRoutes.post(
+  '/simular-cenario/:tripulanteId/:data',
+  safe(async (c) => {
+    const tripulanteId = c.req.param('tripulanteId') ?? '';
+    const data = c.req.param('data') ?? '';
+    const denied = await assertTripulanteEmpresa(c, tripulanteId);
+    if (denied) return denied;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+      return c.json(
+        { success: false, error: 'Parâmetro data inválido.', code: 'VALIDATION_ERROR' },
+        400,
+      );
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = frmsSimularCenarioSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        { success: false, error: parsed.error.flatten(), code: 'VALIDATION_ERROR' },
+        400,
+      );
+    }
+
+    const empresaId = getEmpresaIdSafe(c);
+    const row = await c.env.DB.prepare(
+      `SELECT
+          j.*,
+          f.effectiveness_pct,
+          f.effectiveness_nivel,
+          f.effectiveness_componentes_json,
+          f.tempo_abaixo_limiar_min,
+          f.dia_periodo_embarcado,
+          f.total_dias_periodo
+       FROM frms_jornada j
+       JOIN funcionarios p ON p.id = CAST(j.tripulante_id AS INTEGER)
+       LEFT JOIN frms_fatorizacao_jornada f ON f.jornada_id = j.id AND f.deleted_at IS NULL
+       WHERE j.tripulante_id = ?
+         AND j.data = ?
+         AND j.deleted_at IS NULL
+         AND p.empresa_id = ?
+         AND p.deleted_at IS NULL
+       LIMIT 1`,
+    )
+      .bind(tripulanteId, data, empresaId)
+      .first<Record<string, unknown>>();
+
+    if (!row) {
+      return c.json(
+        { success: false, error: 'Jornada não encontrada para simulação.', code: 'NOT_FOUND' },
+        404,
+      );
+    }
+
+    const limites = (await carregarLimites(c.env.DB)) as LimitesMap;
+    const horaApresentacaoReal = normalizeHora(row.hora_apresentacao as string | null | undefined);
+    const horaAcordouReal = normalizeHora(row.hora_acordou as string | null | undefined);
+    const sonoEfetivoReal =
+      row.sono_efetivo_min == null ? null : Number(row.sono_efetivo_min as number);
+
+    const horaApresentacaoSimulada =
+      parsed.data.hora_apresentacao_simulada ?? horaApresentacaoReal ?? null;
+    const horaAcordouSimulada = parsed.data.hora_acordou_simulada ?? horaAcordouReal ?? null;
+    const sonoEfetivoSimuladoMin = parsed.data.sono_efetivo_simulado_min ?? sonoEfetivoReal ?? 480;
+
+    let horaDormiuSimulada: string | null = normalizeHora(
+      row.hora_dormiu as string | null | undefined,
+    );
+    if (horaAcordouSimulada) {
+      horaDormiuSimulada = minutesToHhmm(
+        hhmmToMinutes(horaAcordouSimulada) - Math.max(0, Math.round(sonoEfetivoSimuladoMin)),
+      );
+    }
+
+    const jornadaSimulada: FrmsJornada = {
+      ...(row as unknown as FrmsJornada),
+      tripulante_id: Number(row.tripulante_id),
+      hora_apresentacao: horaApresentacaoSimulada,
+      hora_dormiu: horaDormiuSimulada,
+      duracao_jornada_minutos: calcDuracaoJornada({
+        ...(row as unknown as FrmsJornada),
+        tripulante_id: Number(row.tripulante_id),
+        hora_apresentacao: horaApresentacaoSimulada,
+      }),
+    };
+
+    const [ano, mes] = data.split('-').map(Number);
+    const fatorizacaoSimulada = calcFatorizacao({
+      jornada: jornadaSimulada,
+      repousoAnteriorMin:
+        row.repouso_regulatorio_min == null ? null : Number(row.repouso_regulatorio_min),
+      limites,
+      diasDoMes: diasNoMes(ano, mes),
+      diaDoCiclo:
+        row.dia_periodo_embarcado == null ? null : Number(row.dia_periodo_embarcado as number),
+    });
+
+    const effectSimulado = calcEffectiveness(fatorizacaoSimulada, limites, {
+      hora_apresentacao: jornadaSimulada.hora_apresentacao,
+      hora_primeira_decolagem: jornadaSimulada.hora_primeira_decolagem,
+      hora_ultimo_pouso: jornadaSimulada.hora_ultimo_pouso,
+      hora_corte_motor: jornadaSimulada.hora_corte_motor,
+      hora_termino: jornadaSimulada.hora_termino,
+      hora_dormiu: jornadaSimulada.hora_dormiu ?? null,
+      dia_periodo_embarcado:
+        row.dia_periodo_embarcado == null ? null : Number(row.dia_periodo_embarcado as number),
+      total_dias_periodo:
+        row.total_dias_periodo == null ? null : Number(row.total_dias_periodo as number),
+    });
+
+    const componentesReais = parseEffectivenessComponents(
+      typeof row.effectiveness_componentes_json === 'string'
+        ? row.effectiveness_componentes_json
+        : null,
+    );
+    const realPct = row.effectiveness_pct == null ? null : Number(row.effectiveness_pct);
+    const diferencaPts = roundOne((effectSimulado.effectiveness_pct ?? 0) - (realPct ?? 0));
+    const conclusao =
+      diferencaPts >= 0
+        ? `Com apresentação às ${horaApresentacaoSimulada || '--:--'}, a efetividade subiria ${Math.abs(diferencaPts).toFixed(1)} pts.`
+        : `Com apresentação às ${horaApresentacaoSimulada || '--:--'}, a efetividade cairia ${Math.abs(diferencaPts).toFixed(1)} pts.`;
+
+    await registrarAuditoriaFrmsAcao(c, {
+      acao: 'FRMS_CENARIO_SIMULADO',
+      tripulante_id: tripulanteId,
+      data_jornada: data,
+      origem_tela: parsed.data.origem_tela,
+      extra: {
+        hora_apresentacao_simulada: parsed.data.hora_apresentacao_simulada,
+        hora_acordou_simulada: parsed.data.hora_acordou_simulada,
+        sono_efetivo_simulado_min: parsed.data.sono_efetivo_simulado_min,
+        diferenca_pts: diferencaPts,
+      },
+    });
+
+    return c.json({
+      success: true,
+      data: {
+        is_simulacao: true,
+        parametros_simulados: {
+          hora_apresentacao_simulada: horaApresentacaoSimulada,
+          hora_acordou_simulada: horaAcordouSimulada,
+          sono_efetivo_simulado_min: Math.round(sonoEfetivoSimuladoMin),
+        },
+        resultado_real: {
+          effectiveness_pct: realPct,
+          nivel: typeof row.effectiveness_nivel === 'string' ? row.effectiveness_nivel : null,
+          fatores: {
+            processo_s: Number(componentesReais.processo_s ?? 0),
+            processo_c: Number(componentesReais.processo_c ?? 0),
+            repouso: Number(componentesReais.repouso ?? 0),
+            hv: Number(componentesReais.hv ?? 0),
+            duracao: Number(componentesReais.duracao ?? 0),
+          },
+        },
+        resultado_simulado: {
+          effectiveness_pct: effectSimulado.effectiveness_pct,
+          nivel: effectSimulado.nivel,
+          fatores: effectSimulado.componentes,
+        },
+        diferenca_pts: diferencaPts,
+        conclusao,
+      },
+    });
+  }),
+);
+
+/**
+ * POST /api/frms/justificativas/:tripulanteId/:data
+ * Gera documento operacional auditável (com assinatura hash) para decisão FRMS.
+ */
+frmsRoutes.post(
+  '/justificativas/:tripulanteId/:data',
+  safe(async (c) => {
+    const tripulanteId = c.req.param('tripulanteId') ?? '';
+    const data = c.req.param('data') ?? '';
+    const denied = await assertTripulanteEmpresa(c, tripulanteId);
+    if (denied) return denied;
+
+    const role = normalizeRole(c.get('userRole'));
+    if (!canGenerateJustificativa(role)) {
+      return c.json(
+        { success: false, error: 'Sem permissão para gerar justificativa.', code: 'FORBIDDEN' },
+        403,
+      );
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+      return c.json(
+        { success: false, error: 'Parâmetro data inválido.', code: 'VALIDATION_ERROR' },
+        400,
+      );
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = frmsJustificativaSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        { success: false, error: parsed.error.flatten(), code: 'VALIDATION_ERROR' },
+        400,
+      );
+    }
+
+    const empresaId = getEmpresaIdSafe(c);
+    const tripulante = await c.env.DB.prepare(
+      `SELECT id, nome, matricula
+         FROM funcionarios
+        WHERE id = ?
+          AND empresa_id = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+      .bind(Number(tripulanteId), empresaId)
+      .first<{ id: number; nome: string; matricula: string | null }>();
+
+    if (!tripulante) {
+      return c.json(
+        { success: false, error: 'Tripulante não encontrado.', code: 'NOT_FOUND' },
+        404,
+      );
+    }
+
+    const row = await c.env.DB.prepare(
+      `SELECT
+          j.tripulante_id,
+          p.nome as tripulante_nome,
+          p.cargo as tripulante_cargo,
+          j.data as data_apresentacao,
+          j.hora_apresentacao,
+          j.hora_acordou,
+          j.fonte_sono,
+          fj.processado_com_bug,
+          fj.effectiveness_pct,
+          fj.effectiveness_nivel,
+          fj.effectiveness_componentes_json,
+          fj.tempo_abaixo_limiar_min,
+          fj.hora_despertar_estimada,
+          fj.hora_inicio_sono_estimado,
+          fj.duracao_sono_efetiva_min,
+          fj.dia_periodo_embarcado,
+          fj.total_dias_periodo
+       FROM frms_fatorizacao_jornada fj
+       JOIN frms_jornada j ON j.id = fj.jornada_id AND j.deleted_at IS NULL
+       JOIN funcionarios p ON p.id = CAST(j.tripulante_id AS INTEGER)
+       WHERE j.tripulante_id = ?
+         AND p.empresa_id = ?
+         AND fj.deleted_at IS NULL
+         AND j.data = ?
+       LIMIT 1`,
+    )
+      .bind(tripulanteId, empresaId, data)
+      .first<Record<string, unknown>>();
+
+    if (!row) {
+      return c.json(
+        { success: false, error: 'Não há jornada processada para este dia.', code: 'NOT_FOUND' },
+        404,
+      );
+    }
+
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' },
+        403,
+      );
+    }
+    const operationalContext = await resolveFrmsOperationalContext(c.env.DB, {
+      empresaId,
+      referenceAt: data,
+      funcionarioId: Number(tripulanteId),
+    });
+    const limites = operationalContext.parameters;
+    const diasCriticosConsecutivos = await countDiasCriticosConsecutivos(
+      c.env,
+      tripulanteId,
+      empresaId,
+      data,
+      limites,
+    );
+    const explanation = await buildFrmsDayExplanation(
+      c.env,
+      { ...row, dias_criticos_consecutivos: diasCriticosConsecutivos },
+      limites,
+    );
+
+    const geradoPorId = String(c.get('userId') || '0');
+    const geradoPorNome = String(c.get('userEmail') || `Usuário ${geradoPorId}`);
+    const recomendacaoSistema =
+      explanation.diagnostico.recomendacoes[0]?.descricao ||
+      explanation.diagnostico.resumo_executivo;
+
+    const documentoBase = {
+      tripulante: {
+        id: String(tripulante.id),
+        nome: tripulante.nome,
+        matricula: tripulante.matricula,
+      },
+      data_voo: data,
+      effectiveness_real: explanation.jornada.effectiveness_pct,
+      nivel_fadiga: explanation.jornada.effectiveness_nivel || explanation.diagnostico.faixa,
+      fatores_determinantes: explanation.diagnostico.fatores
+        .filter((f) => f.direcao === 'penaliza')
+        .slice(0, 3)
+        .map((f) => f.titulo),
+      decisao_tomada: parsed.data.decisao_tomada,
+      fundamentacao: 'RBAC 135 Art. X — Gerenciamento de Fadiga',
+      recomendacao_sistema: recomendacaoSistema,
+      observacoes: parsed.data.observacoes || '',
+      gerado_por: { id: geradoPorId, nome: geradoPorNome, role },
+      gerado_em: new Date().toISOString(),
+    };
+
+    let textoFormal =
+      `JUSTIFICATIVA OPERACIONAL FRMS\n` +
+      `Tripulante: ${documentoBase.tripulante.nome} (${documentoBase.tripulante.matricula || 'sem matrícula'})\n` +
+      `Data: ${documentoBase.data_voo}\n` +
+      `Efetividade: ${documentoBase.effectiveness_real ?? 'sem dado'}%\n` +
+      `Nível de fadiga: ${documentoBase.nivel_fadiga}\n` +
+      `Decisão tomada: ${documentoBase.decisao_tomada}\n` +
+      `Fundamentação: ${documentoBase.fundamentacao}\n` +
+      `Recomendação do sistema: ${documentoBase.recomendacao_sistema}\n` +
+      `Observações: ${documentoBase.observacoes || 'Nenhuma.'}`;
+
+    if (c.env.AI) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const aiResult = (await (c.env.AI as any).run('@cf/meta/llama-3.1-8b-instruct', {
+          messages: [
+            {
+              role: 'system',
+              content:
+                'Reescreva em português formal, objetivo e auditável, sem inventar dados. Não use markdown.',
+            },
+            {
+              role: 'user',
+              content: `Documento base:\n${JSON.stringify(documentoBase)}`,
+            },
+          ],
+          max_tokens: 420,
+        })) as { response?: string };
+
+        if (aiResult?.response?.trim()) {
+          textoFormal = sanitizeCopilotoTexto(aiResult.response, textoFormal);
+        }
+      } catch {
+        // fallback determinístico já montado.
+      }
+    }
+
+    const documento = {
+      ...documentoBase,
+      texto_formal: textoFormal,
+    };
+    const assinaturaHash = await hashSha256Hex(JSON.stringify(documento));
+    const justificativaId = crypto.randomUUID();
+
+    await c.env.DB.prepare(
+      `INSERT INTO frms_justificativas (
+         id,
+         tripulante_id,
+         data_voo,
+         empresa_id,
+         gerado_por_id,
+         gerado_por_nome,
+         decisao_tomada,
+         observacoes,
+         documento_json,
+         assinatura_hash,
+         created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    )
+      .bind(
+        justificativaId,
+        String(tripulante.id),
+        data,
+        empresaId,
+        geradoPorId,
+        geradoPorNome,
+        parsed.data.decisao_tomada,
+        parsed.data.observacoes || null,
+        JSON.stringify(documento),
+        assinaturaHash,
+      )
+      .run();
+
+    await registrarAuditoriaFrmsAcao(c, {
+      acao: 'FRMS_JUSTIFICATIVA_GERADA',
+      tripulante_id: tripulanteId,
+      data_jornada: data,
+      origem_tela: parsed.data.origem_tela,
+      extra: { justificativa_id: justificativaId },
+    });
+
+    return c.json({
+      success: true,
+      data: {
+        documento,
+        assinatura_hash: assinaturaHash,
+        justificativa_id: justificativaId,
+      },
+    });
+  }),
+);
+
+/**
+ * GET /api/frms/justificativas/:tripulanteId
+ * Lista justificativas do tripulante dentro da empresa do usuário.
+ */
+frmsRoutes.get(
+  '/justificativas/:tripulanteId',
+  safe(async (c) => {
+    const tripulanteId = c.req.param('tripulanteId') ?? '';
+    const denied = await assertTripulanteEmpresa(c, tripulanteId);
+    if (denied) return denied;
+
+    const empresaId = getEmpresaIdSafe(c);
+    const rows = await c.env.DB.prepare(
+      `SELECT
+          id,
+          data_voo,
+          decisao_tomada,
+          gerado_por_nome,
+          created_at
+       FROM frms_justificativas
+       WHERE tripulante_id = ?
+         AND empresa_id = ?
+         AND deleted_at IS NULL
+       ORDER BY data_voo DESC, created_at DESC
+       LIMIT 200`,
+    )
+      .bind(tripulanteId, empresaId)
+      .all();
+
+    return c.json({ success: true, data: rows.results ?? [] });
+  }),
+);
+
+/**
+ * GET /api/frms/acumulo-frota
+ * Snapshot de todos os tripulantes
+ */
+frmsRoutes.get(
+  '/acumulo-frota',
+  safe(async (c) => {
+    const mes = c.req.query('mes') ?? undefined;
+    const periodo = Math.min(Math.max(Number(c.req.query('periodo') ?? '30'), 7), 365);
+    const quinzenaParam = c.req.query('quinzena') ?? undefined;
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' },
+        403,
+      );
+    }
+    if (mes && !/^\d{4}-\d{2}$/.test(mes)) {
+      return c.json(
+        {
+          success: false,
+          error: 'Parâmetro mes inválido. Use o formato YYYY-MM.',
+          code: 'VALIDATION_ERROR',
+        },
+        400,
+      );
+    }
+    if (quinzenaParam && quinzenaParam !== 'Q1' && quinzenaParam !== 'Q2') {
+      return c.json(
+        {
+          success: false,
+          error: 'Parametro quinzena invalido. Use Q1 ou Q2.',
+          code: 'VALIDATION_ERROR',
+        },
+        400,
+      );
+    }
+    const quinzena: 'Q1' | 'Q2' | undefined =
+      quinzenaParam === 'Q1' || quinzenaParam === 'Q2' ? quinzenaParam : undefined;
+    const sectorAccess = await getEmployeeSectorAccess(c, empresaId ?? 0);
+    const sectorScope = buildFuncionarioScopeWhere(sectorAccess, 'p');
+    const frota = await buscarAcumuloFrota(
+      c.env.DB,
+      mes,
+      empresaId,
+      periodo,
+      quinzena,
+      sectorScope,
+    );
+    return c.json({ success: true, data: frota });
+  }),
+);
+
+// ════════════════════════════════════════════════════════
+// ALERTAS
+// ════════════════════════════════════════════════════════
+
+/**
+ * GET /api/frms/alertas
+ * Query: ?tripulante_id= &nivel= &resolvido=false &data_inicio= &data_fim= &page= &limit=
+ */
+frmsRoutes.get(
+  '/alertas',
+  safe(async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    const filtro = {
+      tripulante_id: c.req.query('tripulante_id') ?? undefined,
+      nivel: (c.req.query('nivel') as (typeof NIVEIS_ALERTA)[number]) ?? undefined,
+      resolvido:
+        c.req.query('resolvido') !== undefined ? c.req.query('resolvido') === 'true' : undefined,
+      data_inicio: c.req.query('data_inicio') ?? undefined,
+      data_fim: c.req.query('data_fim') ?? undefined,
+      page: c.req.query('page') ? parseInt(c.req.query('page')!) : undefined,
+      limit: c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined,
+    };
+
+    if (filtro.tripulante_id) {
+      const denied = await assertTripulanteEmpresa(c, filtro.tripulante_id);
+      if (denied) return denied;
+    }
+
+    const result = await buscarAlertas(c.env.DB, filtro, empresaId);
+    return c.json({ success: true, data: result.alertas, total: result.total });
+  }),
+);
+
+/**
+ * GET /api/frms/alertas/count
+ * Conta alertas não visualizados (para badge no menu)
+ */
+frmsRoutes.get(
+  '/alertas/count',
+  safe(async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    const row = await c.env.DB.prepare(
+      `SELECT COUNT(*) as count
+         FROM frms_alerta a
+         JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER)
+        WHERE a.visualizado = 0
+          AND a.resolvido = 0
+          AND a.deleted_at IS NULL
+          AND f.deleted_at IS NULL
+          AND COALESCE(f.ativo, 1) = 1
+          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+          AND (? IS NULL OR f.empresa_id = ?)`,
+    )
+      .bind(empresaId ?? null, empresaId ?? null)
+      .first<{ count: number }>();
+    return c.json({ success: true, data: { count: row?.count ?? 0 } });
+  }),
+);
+
+/**
+ * POST /api/frms/alertas/teste-email
+ * Envio manual de teste do canal de alertas (apenas admin).
+ */
+frmsRoutes.post(
+  '/alertas/teste-email',
+  requireRole('admin'),
+  safe(async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = alertaTesteEmailSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return c.json(
+        { success: false, error: parsed.error.flatten(), code: 'VALIDATION_ERROR' },
+        400,
+      );
+    }
+
+    const userId = Number(c.get('userId') || 0);
+    const userEmail = String(c.get('userEmail') || 'admin@airtrust.com');
+    const admin = await c.env.DB.prepare(
+      `SELECT nome, email
+         FROM usuarios
+        WHERE id = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+      .bind(userId)
+      .first<{ nome: string | null; email: string | null }>();
+
+    const empresa = await c.env.DB.prepare(
+      `SELECT nome
+         FROM empresas
+        WHERE id = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+      .bind(empresaId ?? null)
+      .first<{ nome: string | null }>();
+
+    const nomeAdmin = admin?.nome || userEmail;
+    const emailAdmin = admin?.email || userEmail;
+    const nomeEmpresa = empresa?.nome || `Empresa ${empresaId ?? 'N/A'}`;
+    const timestampIso = new Date().toISOString();
+    const corpo =
+      'Este é um e-mail de teste do sistema de alertas AirTrust.\n' +
+      'Se você está recebendo esta mensagem, o sistema de notificações está funcionando corretamente.\n\n' +
+      `Enviado por: ${nomeAdmin} (${emailAdmin})\n` +
+      `Data/hora: ${formatarDataHoraBrasilia()}\n` +
+      `Empresa: ${nomeEmpresa}`;
+
+    try {
+      await enviarEmailAlert(
+        c.env,
+        parsed.data.destinatarios.map((item) => item.toLowerCase()),
+        '[AirTrust] ✅ Teste de e-mail — sistema funcionando',
+        corpo,
+      );
+
+      await registrarEventoSigvoosEmail(c.env.DB, empresaId ?? null, 'EMAIL_TESTE', 'SUCESSO', {
+        destinatarios: parsed.data.destinatarios,
+        executado_por: { user_id: userId, email: userEmail },
+        timestamp: timestampIso,
+      });
+
+      return c.json({
+        success: true,
+        data: {
+          destinatarios: parsed.data.destinatarios,
+          timestamp: timestampIso,
+        },
+      });
+    } catch (error) {
+      const mensagemErro = error instanceof Error ? error.message : String(error ?? 'EMAIL_ERROR');
+      await registrarEventoSigvoosEmail(
+        c.env.DB,
+        empresaId ?? null,
+        'EMAIL_TESTE',
+        'FALHA',
+        {
+          destinatarios: parsed.data.destinatarios,
+          executado_por: { user_id: userId, email: userEmail },
+          timestamp: timestampIso,
+        },
+        mensagemErro,
+      );
+
+      return c.json({ success: false, error: mensagemErro, code: 'EMAIL_TESTE_FAILED' }, 500);
+    }
+  }),
+);
+
+/**
+ * POST /api/frms/alertas/enviar
+ * Envio manual de alerta (admin/manager/gestor/operador).
+ */
+frmsRoutes.post(
+  '/alertas/enviar',
+  safe(async (c) => {
+    const role = String(c.get('userRole') || '')
+      .trim()
+      .toUpperCase();
+    const allowedRoles = new Set(['ADMIN', 'MANAGER', 'GESTOR', 'OPERADOR', 'OPERATOR']);
+    if (!allowedRoles.has(role)) {
+      return c.json(
+        { success: false, error: 'Sem permissão para enviar alertas manuais.', code: 'FORBIDDEN' },
+        403,
+      );
+    }
+
+    const empresaId = getEmpresaIdSafe(c);
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = alertaManualSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        { success: false, error: parsed.error.flatten(), code: 'VALIDATION_ERROR' },
+        400,
+      );
+    }
+
+    let destinatarios = (parsed.data.destinatarios || []).map((item) => item.toLowerCase());
+    if (destinatarios.length === 0) {
+      const config = await getSigvoosConfig(c.env.DB, empresaId);
+      if (config.notificar_falha_email) {
+        destinatarios = [config.notificar_falha_email.trim().toLowerCase()];
+      }
+    }
+
+    if (destinatarios.length === 0) {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Nenhum destinatário informado e notificar_falha_email não está configurado para a empresa.',
+          code: 'NO_RECIPIENTS',
+        },
+        400,
+      );
+    }
+
+    const meta = prioridadeMeta(parsed.data.prioridade);
+    const assunto = `${meta.icone} [AirTrust] [${meta.label}] ${parsed.data.assunto}`;
+    const timestampIso = new Date().toISOString();
+    const corpo =
+      `${meta.icone} Alerta manual AirTrust\n` +
+      `Prioridade: ${meta.label}\n` +
+      `Data/hora: ${formatarDataHoraBrasilia()}\n\n` +
+      `${parsed.data.mensagem}`;
+
+    try {
+      await enviarEmailAlert(c.env, destinatarios, assunto, corpo);
+      await registrarEventoSigvoosEmail(c.env.DB, empresaId ?? null, 'ALERTA_MANUAL', 'SUCESSO', {
+        destinatarios,
+        assunto: parsed.data.assunto,
+        prioridade: parsed.data.prioridade,
+        mensagem: parsed.data.mensagem,
+        executado_por: {
+          user_id: Number(c.get('userId') || 0),
+          email: String(c.get('userEmail') || ''),
+          role,
+        },
+        timestamp: timestampIso,
+      });
+
+      return c.json({
+        success: true,
+        data: {
+          destinatarios,
+          assunto,
+          prioridade: parsed.data.prioridade,
+          timestamp: timestampIso,
+        },
+      });
+    } catch (error) {
+      const mensagemErro = error instanceof Error ? error.message : String(error ?? 'EMAIL_ERROR');
+      await registrarEventoSigvoosEmail(
+        c.env.DB,
+        empresaId ?? null,
+        'ALERTA_MANUAL',
+        'FALHA',
+        {
+          destinatarios,
+          assunto: parsed.data.assunto,
+          prioridade: parsed.data.prioridade,
+          mensagem: parsed.data.mensagem,
+          executado_por: {
+            user_id: Number(c.get('userId') || 0),
+            email: String(c.get('userEmail') || ''),
+            role,
+          },
+          timestamp: timestampIso,
+        },
+        mensagemErro,
+      );
+
+      return c.json({ success: false, error: mensagemErro, code: 'ALERTA_MANUAL_FAILED' }, 500);
+    }
+  }),
+);
+
+/**
+ * PUT /api/frms/alertas/:id/visualizar
+ */
+frmsRoutes.put(
+  '/alertas/:id/visualizar',
+  safe(async (c) => {
+    const id = c.req.param('id') ?? '';
+    const denied = await assertAlertaEmpresa(c, id);
+    if (denied) return denied;
+
+    const userId = String(c.get('userId') || 'system');
+    await marcarAlertaVisualizado(c.env.DB, id, userId);
+    return c.json({ success: true });
+  }),
+);
+
+/**
+ * PUT /api/frms/alertas/:id/resolver
+ */
+frmsRoutes.put(
+  '/alertas/:id/resolver',
+  safe(async (c) => {
+    const id = c.req.param('id') ?? '';
+    const denied = await assertAlertaEmpresa(c, id);
+    if (denied) return denied;
+
+    const userId = String(c.get('userId') || 'system');
+    // Aceita corpo opcional com notas de resolução
+    let notasResolucao: string | null = null;
+    try {
+      const body = await c.req.json();
+      if (typeof body?.notas_resolucao === 'string') {
+        notasResolucao = body.notas_resolucao || null;
+      }
+    } catch {
+      // Corpo vazio é permitido — retrocompatível
+    }
+    await marcarAlertaResolvido(c.env.DB, id, userId, notasResolucao);
+    return c.json({ success: true });
+  }),
+);
+
+// ════════════════════════════════════════════════════════
+// ESCALAS QUINZENAIS
+// ════════════════════════════════════════════════════════
+
+const escalaCreateSchema = z.object({
+  tripulante_id: z.union([z.string(), z.number()]).transform(String),
+  ano: z.number().int().min(2020),
+  ciclo: z.number().int().min(1),
+  data_inicio_embarque: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  data_fim_embarque: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  data_inicio_folga: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  data_fim_folga: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  observacao: z.string().optional().nullable(),
+});
+
+const escalaUpdateSchema = escalaCreateSchema.partial().extend({
+  status_ciclo: z.enum(['ATIVO', 'ENCERRADO', 'CANCELADO']).optional(),
+});
+
+/**
+ * POST /api/frms/escalas
+ */
+frmsRoutes.post(
+  '/escalas',
+  safe(async (c) => {
+    const body = await c.req.json();
+    const parsed = escalaCreateSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ success: false, error: parsed.error.flatten() }, 400);
+    }
+    const denied = await assertTripulanteEmpresa(c, String(parsed.data.tripulante_id));
+    if (denied) return denied;
+
+    let escala;
+    try {
+      escala = await salvarEscala(c.env.DB, parsed.data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('UNIQUE') || msg.includes('unique')) {
+        return c.json(
+          {
+            success: false,
+            error: 'Já existe uma escala para este tripulante neste ciclo.',
+            code: 'DUPLICATE_ESCALA',
+          },
+          409,
+        );
+      }
+      throw err;
+    }
+    await auditFrms(c, 'frms_escala', 'INSERT', escala?.id || 0, { depois: parsed.data });
+    const tripId = String(parsed.data.tripulante_id);
+    // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
+    c.executionCtx.waitUntil(
+      reprocessarTripulanteCompleto(c.env.DB, Number(tripId), LIMITES_DEFAULT),
+    );
+    return c.json({ success: true, data: escala }, 201);
+  }),
+);
+
+/**
+ * GET /api/frms/escalas/:tripulante_id
+ */
+frmsRoutes.get(
+  '/escalas/:tripulante_id',
+  safe(async (c) => {
+    const tripulanteId = c.req.param('tripulante_id') ?? '';
+    const denied = await assertTripulanteEmpresa(c, tripulanteId);
+    if (denied) return denied;
+
+    const escalas = await buscarEscalas(c.env.DB, tripulanteId);
+    return c.json({ success: true, data: escalas });
+  }),
+);
+
+/**
+ * PUT /api/frms/escalas/:id
+ */
+frmsRoutes.put(
+  '/escalas/:id',
+  safe(async (c) => {
+    const id = c.req.param('id') ?? '';
+    const body = await c.req.json();
+    const parsed = escalaUpdateSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ success: false, error: parsed.error.flatten() }, 400);
+    }
+
+    // SECURITY: Validar tenant via tripulante antes de permitir mutação
+    const escalaExiste = await c.env.DB.prepare(
+      'SELECT tripulante_id FROM frms_escala_quinzenal WHERE id = ? AND deleted_at IS NULL',
+    )
+      .bind(id)
+      .first<{ tripulante_id: string }>();
+    if (!escalaExiste) {
+      return c.json({ success: false, error: 'Escala não encontrada' }, 404);
+    }
+    const denied = await assertTripulanteEmpresa(c, escalaExiste.tripulante_id);
+    if (denied) return denied;
+
+    const escala = await atualizarEscala(c.env.DB, id, parsed.data);
+    await auditFrms(c, 'frms_escala', 'UPDATE', id, { depois: parsed.data });
+    // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
+    c.executionCtx.waitUntil(
+      reprocessarTripulanteCompleto(c.env.DB, Number(escala.tripulante_id), LIMITES_DEFAULT),
+    );
+    return c.json({ success: true, data: escala });
+  }),
+);
+
+/**
+ * DELETE /api/frms/escalas/:id
+ */
+frmsRoutes.delete(
+  '/escalas/:id',
+  safe(async (c) => {
+    const id = c.req.param('id') ?? '';
+    // Look up tripulante_id before soft-deleting
+    const escalaDel = await c.env.DB.prepare(
+      'SELECT tripulante_id FROM frms_escala_quinzenal WHERE id = ? AND deleted_at IS NULL',
+    )
+      .bind(id)
+      .first<{ tripulante_id: string }>();
+
+    if (!escalaDel) {
+      return c.json({ success: false, error: 'Escala não encontrada' }, 404);
+    }
+
+    // SECURITY: Validar tenant via tripulante antes de permitir deleção
+    const denied = await assertTripulanteEmpresa(c, escalaDel.tripulante_id);
+    if (denied) return denied;
+
+    await deletarEscala(c.env.DB, id);
+    await auditFrms(c, 'frms_escala', 'DELETE', id);
+    // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
+    c.executionCtx.waitUntil(
+      reprocessarTripulanteCompleto(c.env.DB, Number(escalaDel.tripulante_id), LIMITES_DEFAULT),
+    );
+    return c.json({ success: true });
+  }),
+);
+
+// ════════════════════════════════════════════════════════
+// IMPORTAÇÃO
+// ════════════════════════════════════════════════════════
+
+/**
+ * POST /api/frms/importacao/apus
+ * Body: array de jornadas no formato APUS
+ */
+frmsRoutes.post(
+  '/importacao/apus',
+  rateLimiter({ maxRequests: 5, windowSeconds: 60, keyPrefix: 'frms-import-apus', keyExtractor: tenantAwareKeyExtractor }),
+  safe(async (c) => {
+    const body = await c.req.json();
+    const arraySchema = z
+      .array(jornadaCreateSchema)
+      .max(500, 'Máximo 500 registros por importação');
+    const parsed = arraySchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ success: false, error: parsed.error.flatten() }, 400);
+    }
+
+    for (const item of parsed.data) {
+      const denied = await assertTripulanteEmpresa(c, String(item.tripulante_id));
+      if (denied) return denied;
+    }
+
+    // importarApus resolves governed context per row internally; this param is inert.
+    const userId = await resolveFuncionarioId(c);
+    const items = parsed.data.map((j) => ({
+      ...j,
+      registrado_por: userId,
+      origem: 'APUS' as const,
+    }));
+    const result = await importarApus(c.env.DB, items, LIMITES_DEFAULT);
+    return c.json({ success: true, data: result });
+  }),
+);
+
+/**
+ * POST /api/frms/importacao/simulador
+ * Body: { sessao_simulador_id, tripulante_id, data, duracao_minutos }
+ */
+frmsRoutes.post(
+  '/importacao/simulador',
+  rateLimiter({ maxRequests: 30, windowSeconds: 60, keyPrefix: 'frms-import-sim', keyExtractor: tenantAwareKeyExtractor }),
+  safe(async (c) => {
+    const body = await c.req.json();
+    const schema = z.object({
+      sessao_simulador_id: z.string(),
+      tripulante_id: z.union([z.string(), z.number()]).transform(String),
+      data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      duracao_minutos: z.number().int().min(0),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ success: false, error: parsed.error.flatten() }, 400);
+    }
+
+    const denied = await assertTripulanteEmpresa(c, String(parsed.data.tripulante_id));
+    if (denied) return denied;
+
+    // importarSimulador -> salvarJornada self-resolves governed context; this param is inert.
+    const userId = await resolveFuncionarioId(c);
+    const result = await importarSimulador(c.env.DB, parsed.data, LIMITES_DEFAULT, userId);
+    return c.json({ success: true, data: result }, 201);
+  }),
+);
+
+// ════════════════════════════════════════════════════════
+// VALIDAÇÃO DE ESCALA FUTURA
+// ════════════════════════════════════════════════════════
+
+/**
+ * POST /api/frms/validar-escala
+ * Simula jornadas futuras e verifica violações projetadas
+ */
+frmsRoutes.post(
+  '/validar-escala',
+  safe(async (c) => {
+    const body = await c.req.json();
+    const schema = z.object({
+      tripulante_id: z.union([z.string(), z.number()]).transform(String),
+      periodos: z.array(
+        z.object({
+          data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          status: z.enum(['ES', 'TS', 'TV', 'EX', 'RE', 'SA', 'FE', 'FR', 'FS', 'AM', 'DM', 'OT']),
+          duracao_estimada_min: z.number().int().min(0),
+          hv_estimada_min: z.number().int().min(0),
+          hora_apresentacao_estimada: z
+            .string()
+            .regex(/^\d{2}:\d{2}$/)
+            .optional()
+            .nullable(),
+          hora_termino_estimada: z
+            .string()
+            .regex(/^\d{2}:\d{2}$/)
+            .optional()
+            .nullable(),
+        }),
+      ),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ success: false, error: parsed.error.flatten() }, 400);
+    }
+
+    const denied = await assertTripulanteEmpresa(c, String(parsed.data.tripulante_id));
+    if (denied) return denied;
+
+    const empresaIdEscala = getEmpresaIdSafe(c);
+    if (!empresaIdEscala) {
+      return c.json(
+        { success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' },
+        403,
+      );
+    }
+    const operationalContextEscala = await resolveFrmsOperationalContext(c.env.DB, {
+      empresaId: empresaIdEscala,
+      referenceAt: new Date().toISOString().slice(0, 10),
+      funcionarioId: Number(parsed.data.tripulante_id),
+    });
+    const limites = asOperationalLimitesMap(operationalContextEscala.parameters, operationalContextEscala.cyclePolicyApproved);
+
+    // Buscar histórico existente do tripulante (365 dias)
+    const dataInicio = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+    const historico = await c.env.DB.prepare(
+      `SELECT ${FRMS_JORNADA_SELECT_COLUMNS}
+         FROM frms_jornada
+        WHERE tripulante_id = ?
+          AND data >= ?
+          AND deleted_at IS NULL
+        ORDER BY data ASC`,
+    )
+      .bind(parsed.data.tripulante_id, dataInicio)
+      .all();
+
+    const result = validarEscalaFutura(
+      parsed.data.periodos,
+      (historico.results || []) as Parameters<typeof validarEscalaFutura>[1],
+      limites,
+    );
+
+    return c.json({ success: true, data: result });
+  }),
+);
+
+// --- Relatórios, Configurações e Notificações ---
+frmsRoutes.route('/', frmsRelatoriosConfig);
+
+// --- FIRA importação + Heatmap/Timeline ---
+frmsRoutes.route('/', firaRoutes);
+
+// --- Fadiga Acumulada Legal (PRC-OPS-012) ---
+frmsRoutes.route('/', fadigaAcumulada);
+
+export default frmsRoutes;
