@@ -561,10 +561,6 @@ export function buildFrmsOperationalSnapshot(
       alertas.push('DADO_INCONSISTENTE');
     }
 
-    if (sleepDataSource === 'ESTIMADO') {
-      alertas.push('SONO_ESTIMADO');
-    }
-
     if ((horasSono ?? 0) > 0 && (horasSono ?? 0) < 6) {
       alertas.push('SONO_INSUFICIENTE');
     }
