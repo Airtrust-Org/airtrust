@@ -295,6 +295,10 @@ export interface FrmsEffectivenessJornadaRow {
   processado_com_bug: number | null;
   data_apresentacao: string;
   data_liberacao: string;
+  hora_apresentacao: string | null;
+  hora_termino: string | null;
+  duracao_jornada_minutos: number | null;
+  horas_voo_minutos: number | null;
   effectiveness_pct: number | null;
   effectiveness_nivel: string | null;
   effectiveness_componentes_json: string | null;
@@ -307,6 +311,9 @@ export interface FrmsEffectivenessJornadaRow {
   fator_apresentacao_pct: number | null;
   fator_ciclo_embarcado_pct: number | null;
   duracao_sono_efetiva_min: number | null;
+  operational_load_landings_count: number | null;
+  operational_load_temperature_max_c: number | null;
+  operational_load_data_quality: string | null;
   hora_despertar_estimada: string | null;
   hora_inicio_sono_estimado: string | null;
   tempo_abaixo_limiar_min: number | null;
