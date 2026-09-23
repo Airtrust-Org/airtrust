@@ -197,18 +197,6 @@ function asNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function hmsDiffInMinutes(start: string | null, end: string | null): number {
-  if (!start || !end) return 0;
-  const startMatch = /^(\d{2}):(\d{2})$/.exec(start);
-  const endMatch = /^(\d{2}):(\d{2})$/.exec(end);
-  if (!startMatch || !endMatch) return 0;
-
-  const startMinutes = Number(startMatch[1]) * 60 + Number(startMatch[2]);
-  const endMinutes = Number(endMatch[1]) * 60 + Number(endMatch[2]);
-  if (endMinutes >= startMinutes) return endMinutes - startMinutes;
-  return 24 * 60 - startMinutes + endMinutes;
-}
-
 function alertPriority(status: FrmsOperationalSnapshotStatus): number {
   if (status === 'CRITICO') return 0;
   if (status === 'INCOMPLETO') return 1;
@@ -509,10 +497,9 @@ export function buildFrmsOperationalSnapshot(
     const horaTermino = normalizeText(jornada?.hora_termino) ?? normalizeText(escala?.hora_termino);
 
     const horasVooMinutos = asNumber(jornada?.horas_voo_minutos);
-    let duracaoJornadaMinutos = asNumber(jornada?.duracao_jornada_minutos);
-    if (duracaoJornadaMinutos <= 0) {
-      duracaoJornadaMinutos = hmsDiffInMinutes(horaApresentacao, horaTermino);
-    }
+    // A duração canônica é produzida pelo pipeline após o check-in. O snapshot
+    // não reconstrói jornada a partir de horários parciais/legados.
+    const duracaoJornadaMinutos = Math.max(0, asNumber(jornada?.duracao_jornada_minutos));
 
     const { source: jornadaDataSource, origem: jornadaOrigem } = resolveJornadaSource(jornada);
 
@@ -540,7 +527,13 @@ export function buildFrmsOperationalSnapshot(
     const horasSono = sleepDataSource === 'REAL' ? horasSonoCheckin : null;
     const horaAcordar = wakeDataSource === 'REAL' ? normalizeText(checkin?.wake_time) : null;
 
-    const effectivenessPctRaw = efetividade?.effectiveness_pct;
+    const completeDailyCheckin =
+      Boolean(checkin) &&
+      Boolean(horaApresentacao) &&
+      sleepDataSource === 'REAL' &&
+      wakeDataSource === 'REAL';
+
+    const effectivenessPctRaw = completeDailyCheckin ? efetividade?.effectiveness_pct : null;
     const effectivenessPct =
       effectivenessPctRaw == null ? null : Number(effectivenessPctRaw);
     const effectivenessPctNormalized =
@@ -548,8 +541,9 @@ export function buildFrmsOperationalSnapshot(
         ? Number(effectivenessPct.toFixed(1))
         : null;
 
-    const nivelFadigaCalculado =
-      normalizeText(efetividade?.effectiveness_nivel) ?? normalizeText(checkin?.nivel_fadiga);
+    const nivelFadigaCalculado = completeDailyCheckin
+      ? normalizeText(efetividade?.effectiveness_nivel) ?? normalizeText(checkin?.nivel_fadiga)
+      : null;
 
     const alertas: FrmsOperationalSnapshotAlertCode[] = [];
 
@@ -559,6 +553,12 @@ export function buildFrmsOperationalSnapshot(
 
     if (isCriticalCheckin(checkin)) {
       alertas.push('CHECKIN_CRITICO');
+    }
+
+    // Check-in existente mas incompleto não é "recebido com precisão reduzida":
+    // é dado insuficiente para o cálculo canônico e deve ficar fail-closed.
+    if (checkin && !completeDailyCheckin) {
+      alertas.push('DADO_INCONSISTENTE');
     }
 
     if (sleepDataSource === 'ESTIMADO') {
