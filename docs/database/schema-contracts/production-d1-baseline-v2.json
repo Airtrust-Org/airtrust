@@ -1046,6 +1046,19 @@
       "note": "0510 is reviewed and prepared only. It adds nullable Petrobras EQUIPAMENTO/ATENDIMENTO identifiers to cv_voos for deterministic daily RVE XML export after Coordenação finalization. Backfill is restricted to confident SIGVOOS attendance ids and strictly numeric aircraft codes. Remote apply requires governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     },
     {
+      "change_file": "0511_frms_duty_boundary_config.sql",
+      "change_id": "frms-duty-boundary-config-0511",
+      "sha256": "85346f31b4b07e5f2ae55236df15b3d80d7a8ff43a564a82e46420daf0e38888",
+      "targets": [
+        "frms_fadiga_config_empresa"
+      ],
+      "domain": "tenant-scoped FRMS duty-boundary configuration for post-flight cutoff offset and no-flight workday end",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "frms-duty-boundary-config-0511.json",
+      "note": "0511 is reviewed and prepared only. It adds two additive tenant-scoped FRMS configuration columns and does not rewrite historical journey/check-in/effectiveness data. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
       "change_file": "ead-category-reconciliation-executor-0453.sql",
       "change_id": null,
       "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
