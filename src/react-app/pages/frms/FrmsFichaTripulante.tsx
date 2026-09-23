@@ -614,7 +614,7 @@ export default function FrmsFichaTripulante() {
               +{Number(todayFortnightSnapshotItem?.recovery_credit_points ?? 0).toFixed(1)} pt
             </p>
             <p className="mt-1 text-xs text-slate-600">
-              {todayFortnightSnapshotItem?.recovery_activity_type?.replaceAll('_', ' ') ||
+              {todayFortnightSnapshotItem?.recovery_activity_type?.replace(/_/g, ' ') ||
                 todayFortnightSnapshotItem?.recovery_state ||
                 'Sem crédito registrado'}
             </p>
