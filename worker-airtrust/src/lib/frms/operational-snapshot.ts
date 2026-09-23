@@ -45,7 +45,7 @@ export interface FrmsOperationalSnapshotItem {
 
   escalado: boolean;
   escala_source: 'SIGVOOS' | 'MANUAL' | 'EVD' | 'AUSENTE';
-  hora_apresentacao: string | null;
+  hora_apresentacao?: string | null;
   hora_termino: string | null;
   horas_voo_minutos: number;
   duracao_jornada_minutos: number;
