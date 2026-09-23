@@ -26,6 +26,7 @@ import {
   useFrmsConfiguracoesHistorico,
   useFrmsMutation,
   useFrmsNotificacaoConfig,
+  useFrmsFadigaConfig,
   FrmsNotificacaoConfigRow,
 } from '@/react-app/hooks/useFrms';
 import { clearApiCacheByPattern } from '@/react-app/hooks/useApi';
@@ -787,6 +788,7 @@ export default function FrmsConfiguracoes() {
                       Operação offshore e ambiente: parâmetros ativos de política interna e modelo. Parâmetros reservados sem efeito nesta versão foram ocultados desta interface operacional.
                     </span>
                   </div>
+                  <DutyBoundaryConfigCard />
                   {GRUPOS_OPERACIONAIS.map(renderGroup)}
                 </div>
               )}
@@ -797,6 +799,104 @@ export default function FrmsConfiguracoes() {
         </div>
       </div>
     </AppLayout>
+  );
+}
+
+
+function DutyBoundaryConfigCard() {
+  const { data, loading, refetch } = useFrmsFadigaConfig();
+  const { mutate } = useFrmsMutation();
+  const [postCutMinutes, setPostCutMinutes] = useState(30);
+  const [noFlightEnd, setNoFlightEnd] = useState('17:00');
+  const [saving, setSaving] = useState(false);
+  const [state, setState] = useState<'idle' | 'saved' | 'error'>('idle');
+
+  useEffect(() => {
+    if (!data) return;
+    if (Number.isFinite(Number(data.jornada_pos_corte_minutos))) {
+      setPostCutMinutes(Number(data.jornada_pos_corte_minutos));
+    }
+    if (/^\d{2}:\d{2}$/.test(String(data.jornada_sem_voo_fim || ''))) {
+      setNoFlightEnd(String(data.jornada_sem_voo_fim));
+    }
+  }, [data]);
+
+  const save = async () => {
+    setSaving(true);
+    setState('idle');
+    try {
+      await mutate('/api/frms/fadiga-checkin/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jornada_pos_corte_minutos: postCutMinutes,
+          jornada_sem_voo_fim: noFlightEnd,
+        }),
+      });
+      await refetch();
+      setState('saved');
+    } catch {
+      setState('error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="mb-5 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
+      <div className="mb-3 flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900">Regras operacionais de encerramento da jornada</h3>
+          <p className="mt-1 text-xs text-gray-600">
+            A apresentação vem do check-in diário. Em dia com voo, a jornada termina após o corte do último voo; sem voo, usa o horário padrão abaixo.
+          </p>
+        </div>
+        <Settings2 className="h-5 w-5 shrink-0 text-blue-600" />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-xs font-medium text-gray-700">
+          Minutos após o corte do último voo
+          <input
+            type="number"
+            min={0}
+            max={240}
+            step={1}
+            value={postCutMinutes}
+            disabled={loading || saving}
+            onChange={(event) => setPostCutMinutes(Number(event.target.value))}
+            className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+          />
+        </label>
+        <label className="text-xs font-medium text-gray-700">
+          Encerramento padrão da jornada sem voo
+          <input
+            type="time"
+            value={noFlightEnd}
+            disabled={loading || saving}
+            onChange={(event) => setNoFlightEnd(event.target.value)}
+            className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+          />
+        </label>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <p className="text-xs text-gray-500">
+          Valores tenant-scoped e auditados; não são hardcoded no cálculo.
+        </p>
+        <div className="flex items-center gap-2">
+          {state === 'saved' && <span className="text-xs font-medium text-emerald-700">Salvo</span>}
+          {state === 'error' && <span className="text-xs font-medium text-red-700">Erro ao salvar</span>}
+          <button
+            type="button"
+            onClick={save}
+            disabled={loading || saving}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {saving ? 'Salvando...' : 'Salvar regras'}
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 
