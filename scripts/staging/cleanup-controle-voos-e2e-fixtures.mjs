@@ -71,6 +71,23 @@ async function main() {
   const empresaIdList = empresaIds.join(', ');
   const userIdList = userIds.join(', ');
 
+  // `auditoria` e uma tabela legada cujo schema varia entre baselines.
+  // Descobre as colunas antes do cleanup para nao assumir empresa_id quando
+  // staging ainda estiver no formato historico. Sempre restringe a remocao aos
+  // usuarios/tenants sinteticos deste manifest.
+  const auditoriaColumns = new Set(
+    queryD1(dbName, 'PRAGMA table_info(auditoria);', 'auditoria-schema').map((row) => String(row?.name || '')),
+  );
+  const auditoriaPredicates = [];
+  if (auditoriaColumns.has('usuario_id')) auditoriaPredicates.push(`usuario_id IN (${userIdList})`);
+  if (auditoriaColumns.has('empresa_id')) auditoriaPredicates.push(`empresa_id IN (${empresaIdList})`);
+  // Em mocks locais antigos, PRAGMA pode nao devolver metadados. O fallback
+  // continua fail-closed no D1 real: tenta somente usuario_id (coluna historica
+  // conhecida) e a propria execucao falha se ela nao existir; nunca amplia o
+  // escopo para uma coluna nao comprovada.
+  if (auditoriaPredicates.length === 0) auditoriaPredicates.push(`usuario_id IN (${userIdList})`);
+  const auditoriaDeleteSql = `DELETE FROM auditoria WHERE ${auditoriaPredicates.join(' OR ')};`;
+
   // Ordem estrita de delecao por dependencias FK (filhos antes de pais):
   // 1. cv_voo_* e cv_rdv_* (filhos de cv_voos e cv_rdv_operacional)
   // 2. cv_rdv_operacional e cv_voos
@@ -107,7 +124,7 @@ async function main() {
                 SELECT id FROM domain_events WHERE empresa_id IN (${empresaIdList})
              ));`,
     ],
-    ['auditoria', `DELETE FROM auditoria WHERE usuario_id IN (${userIdList}) OR empresa_id IN (${empresaIdList});`],
+    ['auditoria', auditoriaDeleteSql],
     ['domain_events', `DELETE FROM domain_events WHERE empresa_id IN (${empresaIdList});`],
     ['refresh_tokens', `DELETE FROM refresh_tokens WHERE user_id IN (${userIdList});`],
     ['convites_usuarios', `DELETE FROM convites_usuarios WHERE empresa_id IN (${empresaIdList}) OR usuario_id IN (${userIdList});`],
