@@ -16,38 +16,6 @@ export function calcularNivelEffectiveness(effectivenessPct: number): string {
   return 'VERMELHO';
 }
 
-type JornadaRow = {
-  id: string;
-  hora_apresentacao: string | null;
-  hora_primeira_decolagem: string | null;
-  hora_ultimo_pouso: string | null;
-  hora_corte_motor: string | null;
-  hora_termino: string | null;
-  hora_acordou: string | null;
-};
-
-type FatorizacaoRow = {
-  id: string;
-  fator_basica_pct: number;
-  fator_apresentacao_pct: number;
-  fator_duracao_pct: number;
-  fator_repouso_pct: number;
-  fator_noturno_dep_pct: number;
-  fator_noturno_arr_pct: number;
-  fator_ciclo_embarcado_pct: number;
-  fator_base_away_pct: number | null;
-  fator_aclimatacao_pct: number | null;
-  total_fatorizado_jornada: number;
-  fator_hv_basica_pct: number | null;
-  fator_hv_quantidade_pct: number | null;
-  fator_hv_noturno_dep_pct: number | null;
-  fator_hv_noturno_arr_pct: number | null;
-  total_fatorizado_hv: number | null;
-  effectiveness_pct: number | null;
-  dia_periodo_embarcado: number | null;
-  total_dias_periodo: number | null;
-};
-
 const EVENTOS_DIAGNOSTICOS_PERMITIDOS = new Set([
   'CHECKIN_SEM_JORNADA',
   'FRMS_SYNC_SEM_FATORIZACAO',
