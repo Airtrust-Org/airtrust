@@ -25,7 +25,18 @@ function log(msg) {
 
 const report = [];
 
-async function call({ operation, method, path, actor, tenant, body, expectedStatus, isMultipart, expectJson = true }) {
+async function call({
+  operation,
+  method,
+  path,
+  actor,
+  tenant,
+  body,
+  expectedStatus,
+  isMultipart,
+  expectJson = true,
+  expectedTextFragments = [],
+}) {
   const url = `${BASE_URL}${path}`;
   const headers = {};
   if (actor?.token) headers.Authorization = `Bearer ${actor.token}`;
@@ -50,6 +61,10 @@ async function call({ operation, method, path, actor, tenant, body, expectedStat
       } catch {
         json = null;
       }
+    } else if (expectedTextFragments.length > 0) {
+      const text = await res.text();
+      const missingFragment = expectedTextFragments.find((fragment) => !text.includes(fragment));
+      if (missingFragment) error = 'RESPONSE_TEXT_MISSING:' + missingFragment;
     } else {
       // drain body without keeping it (binary responses — PDF/anexo)
       await res.arrayBuffer();
@@ -224,6 +239,8 @@ async function main() {
       horario_previsto_partida: `${dataProg}T10:00:00Z`,
       horario_previsto_chegada: `${dataProg}T11:00:00Z`,
       observacoes: 'Voo sintetico E2E',
+      petrobras_equipamento: 'E2E-' + manifest.runId,
+      petrobras_atendimento: 'AT-' + manifest.runId,
     },
   });
   if (!vooPassed) return finish(manifest, false);
@@ -643,6 +660,86 @@ async function main() {
     body: { versao: rdvVersao },
   });
   rdvVersao += 1;
+
+  // ── 20.5 Reabrir, corrigir e finalizar novamente pela Coordenação ───
+  await call({
+    operation: 'reabrir_rdv_finalizado',
+    method: 'POST',
+    path: '/api/controle-voos/voos/' + vooId + '/rdv/reabrir',
+    actor: coordA,
+    tenant: 'A',
+    expectedStatus: 200,
+    body: {
+      versao: rdvVersao,
+      justificativa: 'Correcao final solicitada pela Coordenacao (E2E sintetico)',
+    },
+  });
+  rdvVersao += 1;
+
+  await call({
+    operation: 'iniciar_revisao_apos_reabertura',
+    method: 'POST',
+    path: '/api/controle-voos/voos/' + vooId + '/rdv/iniciar-revisao',
+    actor: coordA,
+    tenant: 'A',
+    expectedStatus: 200,
+    body: { versao: rdvVersao },
+  });
+  rdvVersao += 1;
+
+  await call({
+    operation: 'corrigir_etapa_apos_reabertura',
+    method: 'PATCH',
+    path: '/api/controle-voos/voos/' + vooId + '/etapas/' + etapaId,
+    actor: coordA,
+    tenant: 'A',
+    expectedStatus: 200,
+    body: {
+      versao: rdvVersao,
+      mode: 'coordenacao',
+      justificativa: 'Ajuste final auditado da Coordenacao (E2E sintetico)',
+      combustivel_fim: 390,
+    },
+  });
+  rdvVersao += 1;
+
+  await call({
+    operation: 'reaprovar_rdv_apos_correcao_final',
+    method: 'POST',
+    path: '/api/controle-voos/voos/' + vooId + '/rdv/aprovar',
+    actor: aprovA,
+    tenant: 'A',
+    expectedStatus: 200,
+    body: { versao: rdvVersao },
+  });
+  rdvVersao += 1;
+
+  await call({
+    operation: 'refinalizar_rdv_apos_correcao_final',
+    method: 'POST',
+    path: '/api/controle-voos/voos/' + vooId + '/rdv/finalizar',
+    actor: aprovA,
+    tenant: 'A',
+    expectedStatus: 200,
+    body: { versao: rdvVersao },
+  });
+  rdvVersao += 1;
+
+  await call({
+    operation: 'exportar_xml_petrobras_diario_apos_refinalizacao',
+    method: 'GET',
+    path: '/api/controle-voos/rdv/exportar-petrobras-xml?data=' + dataProg,
+    actor: coordA,
+    tenant: 'A',
+    expectedStatus: 200,
+    expectJson: false,
+    expectedTextFragments: [
+      '<?xml version="1.0" encoding="ISO-8859-1"?>',
+      '<meadinkent>',
+      '<EQUIPAMENTO>E2E-' + manifest.runId + '</EQUIPAMENTO>',
+      '<ATENDIMENTO>AT-' + manifest.runId + '</ATENDIMENTO>',
+    ],
+  });
 
   // ── 21. Gerar PDF ─────────────────────────────────────────────────────
   await call({
