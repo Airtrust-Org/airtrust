@@ -5,7 +5,6 @@ import {
   type FrmsOperationalSnapshotItem,
   listFrmsOperationalSnapshot,
 } from '../../lib/frms/operational-snapshot';
-import * as frmsConfigModule from '../../lib/frms/frms-config';
 import * as jornadasModule from '../../lib/frms/db-service-jornadas';
 import * as parameterGovernanceModule from '../../lib/frms/parameter-governance';
 import { LEGACY_FORTNIGHT_POLICY } from '../../lib/frms/fortnight-indicator';
@@ -114,9 +113,6 @@ function mockFrmsOperationalContext() {
     fadigaPolicy: {} as never,
     fortnightPolicy: LEGACY_FORTNIGHT_POLICY,
   } as never);
-  vi.spyOn(frmsConfigModule, 'resolverFrmsConfig').mockReturnValue({
-    minutosAntesApresentacao: 90,
-  } as never);
 }
 
 function isoRange(startIso: string, endIso: string): string[] {
@@ -188,6 +184,7 @@ describe('frms operational snapshot builder', () => {
       data_operacional: '2026-05-25',
       funcionario_id: 10,
       hora_checkin: '06:45',
+      hora_apresentacao: '08:00',
       kss_score: 4,
       horas_sono: 7,
       qualidade_sono: 4,
@@ -271,6 +268,7 @@ describe('frms operational snapshot builder', () => {
       data_operacional: '2026-05-27',
       funcionario_id: 11,
       hora_checkin: '06:10',
+      hora_apresentacao: '08:00',
       kss_score: 5,
       horas_sono: 6.5,
       qualidade_sono: 3,
@@ -290,7 +288,7 @@ describe('frms operational snapshot builder', () => {
     expect(item?.checkin_status).toBe('RECEBIDO');
   });
 
-  it('5) diferencia sono REAL vs ESTIMADO', () => {
+  it('5) usa sono REAL somente quando informado no check-in e não estima ausência', () => {
     const input = createBaseInput();
 
     input.rows.jornadas.push({
@@ -309,6 +307,7 @@ describe('frms operational snapshot builder', () => {
       data_operacional: '2026-05-28',
       funcionario_id: 10,
       hora_checkin: '06:30',
+      hora_apresentacao: '08:00',
       kss_score: 4,
       horas_sono: 7.2,
       qualidade_sono: 4,
@@ -336,8 +335,10 @@ describe('frms operational snapshot builder', () => {
     const estimatedSleep = getByKey(result.items, '2026-05-28', 11);
 
     expect(realSleep?.sleep_data_source).toBe('REAL');
-    expect(estimatedSleep?.sleep_data_source).toBe('ESTIMADO');
-    expect(estimatedSleep?.alertas).toContain('SONO_ESTIMADO');
+    expect(estimatedSleep?.sleep_data_source).toBe('AUSENTE');
+    expect(estimatedSleep?.wake_data_source).toBe('AUSENTE');
+    expect(estimatedSleep?.horas_sono).toBeNull();
+    expect(estimatedSleep?.alertas).not.toContain('SONO_ESTIMADO');
   });
 
   it('6) jornada sem effectiveness_pct gera JORNADA_SEM_FATORIZACAO', () => {
@@ -364,13 +365,21 @@ describe('frms operational snapshot builder', () => {
     expect(item?.fatorizacao_status).toBe('AUSENTE');
   });
 
-  it('7) wake estimado respeita parâmetro configurável de minutos antes da apresentação', () => {
+  it('7) apresentação do check-in prevalece sobre escala/jornada e ausência de check-in não gera fallback', () => {
     const input = createBaseInput();
 
+    input.rows.escalas.push({
+      data_operacional: '2026-05-30',
+      funcionario_id: 10,
+      hora_apresentacao: '06:00',
+      hora_termino: '13:00',
+      aeronave_prefixo: 'PR-ATX',
+      aeronave_modelo: 'AW139',
+    });
     input.rows.jornadas.push({
       data_operacional: '2026-05-30',
       funcionario_id: 10,
-      hora_apresentacao: '09:00',
+      hora_apresentacao: '06:15',
       hora_termino: '13:00',
       horas_voo_minutos: 120,
       duracao_jornada_minutos: 240,
@@ -378,20 +387,98 @@ describe('frms operational snapshot builder', () => {
       has_operational_data: 1,
       is_manual_empty: 0,
     });
-
-    const defaultSnapshot = buildFrmsOperationalSnapshot(input);
-    const customSnapshot = buildFrmsOperationalSnapshot({
-      ...input,
-      wakeFallbackLeadMinutes: 75,
+    input.rows.checkins.push({
+      data_operacional: '2026-05-30',
+      funcionario_id: 10,
+      hora_checkin: '06:30',
+      hora_apresentacao: '09:00',
+      kss_score: 4,
+      horas_sono: 7.5,
+      qualidade_sono: 4,
+      wake_time: '07:15',
+      score_fadiga: 20,
+      nivel_fadiga: 'VERDE',
+      status_operacional: 'APTO',
+      computed_risk_level: 'normal',
+    });
+    input.rows.effectiveness.push({
+      data_operacional: '2026-05-30',
+      funcionario_id: 10,
+      effectiveness_pct: 94,
+      effectiveness_nivel: 'VERDE',
     });
 
-    const defaultItem = getByKey(defaultSnapshot.items, '2026-05-30', 10);
-    const customItem = getByKey(customSnapshot.items, '2026-05-30', 10);
+    const result = buildFrmsOperationalSnapshot(input);
+    const item = getByKey(result.items, '2026-05-30', 10);
 
-    expect(defaultItem?.wake_data_source).toBe('ESTIMADO');
-    expect(defaultItem?.hora_acordar).toBe('07:30');
-    expect(customItem?.wake_data_source).toBe('ESTIMADO');
-    expect(customItem?.hora_acordar).toBe('07:45');
+    expect(item?.hora_apresentacao).toBe('09:00');
+    expect(item?.hora_acordar).toBe('07:15');
+    expect(item?.horas_sono).toBe(7.5);
+    expect(item?.effectiveness_pct).toBe(94);
+
+    const missing = createBaseInput();
+    missing.rows.jornadas.push({
+      data_operacional: '2026-05-31',
+      funcionario_id: 10,
+      hora_apresentacao: '06:00',
+      hora_termino: '12:00',
+      horas_voo_minutos: 90,
+      duracao_jornada_minutos: 180,
+      origem: 'SIGVOOS',
+      has_operational_data: 1,
+      is_manual_empty: 0,
+    });
+    missing.rows.effectiveness.push({
+      data_operacional: '2026-05-31',
+      funcionario_id: 10,
+      effectiveness_pct: 99,
+      effectiveness_nivel: 'VERDE',
+    });
+    const missingItem = getByKey(buildFrmsOperationalSnapshot(missing).items, '2026-05-31', 10);
+    expect(missingItem?.hora_apresentacao).toBeNull();
+    expect(missingItem?.hora_acordar).toBeNull();
+    expect(missingItem?.horas_sono).toBeNull();
+    expect(missingItem?.effectiveness_pct).toBeNull();
+  });
+
+  it('7b) check-in existente mas incompleto é marcado INCOMPLETO e não exibe efetividade histórica', () => {
+    const input = createBaseInput();
+    input.rows.jornadas.push({
+      data_operacional: '2026-06-02',
+      funcionario_id: 10,
+      hora_apresentacao: '08:00',
+      hora_termino: '14:00',
+      horas_voo_minutos: 120,
+      duracao_jornada_minutos: 360,
+      origem: 'SIGVOOS',
+      has_operational_data: 1,
+      is_manual_empty: 0,
+    });
+    input.rows.checkins.push({
+      data_operacional: '2026-06-02',
+      funcionario_id: 10,
+      hora_checkin: '06:30',
+      hora_apresentacao: null,
+      kss_score: 4,
+      horas_sono: 7,
+      qualidade_sono: 4,
+      wake_time: '05:55',
+      score_fadiga: 20,
+      nivel_fadiga: 'VERDE',
+      status_operacional: 'APTO',
+      computed_risk_level: 'normal',
+    });
+    input.rows.effectiveness.push({
+      data_operacional: '2026-06-02',
+      funcionario_id: 10,
+      effectiveness_pct: 96,
+      effectiveness_nivel: 'VERDE',
+    });
+
+    const item = getByKey(buildFrmsOperationalSnapshot(input).items, '2026-06-02', 10);
+    expect(item?.snapshot_status).toBe('INCOMPLETO');
+    expect(item?.alertas).toContain('DADO_INCONSISTENTE');
+    expect(item?.effectiveness_pct).toBeNull();
   });
 
   it('8) snapshot operacional preenche dia/total quinzenal via calcularDiaDoCiclo quando falta fatorizacao', async () => {
@@ -405,6 +492,7 @@ describe('frms operational snapshot builder', () => {
           data_operacional: '2026-06-19',
           funcionario_id: 10,
           hora_checkin: '05:40',
+      hora_apresentacao: '08:00',
           kss_score: 8,
           horas_sono: 5,
           qualidade_sono: 4,
@@ -533,6 +621,7 @@ describe('frms operational snapshot builder', () => {
             data_operacional: '2026-06-19',
             funcionario_id: 10,
             hora_checkin: '05:40',
+      hora_apresentacao: '08:00',
             kss_score: 6,
             horas_sono: 6,
             qualidade_sono: 3,
@@ -612,6 +701,7 @@ describe('frms operational snapshot builder', () => {
             data_operacional: '2026-06-19',
             funcionario_id: 10,
             hora_checkin: '06:30',
+      hora_apresentacao: '08:00',
             kss_score: 3,
             horas_sono: 7,
             qualidade_sono: 4,
@@ -674,6 +764,7 @@ describe('frms operational snapshot builder', () => {
       data_operacional: '2026-05-31',
       funcionario_id: 12,
       hora_checkin: '07:10',
+      hora_apresentacao: '08:00',
       kss_score: 3,
       horas_sono: 7,
       qualidade_sono: 4,
