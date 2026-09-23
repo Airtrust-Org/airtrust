@@ -11,6 +11,8 @@ import {
   calcDuracaoMinutos,
   validarRepousoPlataforma,
   diasNoMes,
+  hhmmToMinutes,
+  minutesToHhmm,
 } from './calculos';
 import type { AcumuloRollingResult } from './calculos';
 import { processarAlertas, deveBloquearLancamento } from './alertas';
@@ -27,6 +29,7 @@ import {
 } from './frms-iogp-shadow-caller';
 import { resolveOperationalLoadForJornada } from './operational-load-resolver';
 import { computeFlightHoursDelta, resolveOperationalPolicyV2, type FrmsOperationalPolicyV2 } from './operational-policy-v2';
+import { loadFrmsDutyBoundaryConfig, resolveFrmsDutyBoundary } from './duty-boundary';
 // ────────────────────────────────────────────────────────
 // Período embarcado
 // ────────────────────────────────────────────────────────
@@ -189,6 +192,60 @@ async function readPriorRecoveryCreditPoints(db: D1Database, tripulanteId: numbe
   }
 }
 
+interface DailyCheckinEvidence {
+  checkinId: string;
+  presentationTime: string;
+  wakeTime: string;
+  sleepHours24h: number;
+}
+
+async function loadDailyCheckinEvidence(
+  db: D1Database,
+  empresaId: number,
+  funcionarioId: number,
+  dateYmd: string,
+): Promise<DailyCheckinEvidence | null> {
+  const row = await db
+    .prepare(
+      `SELECT id,
+              jornada_inicio_prevista,
+              wake_time,
+              horas_sono
+         FROM frms_fadiga_checkin
+        WHERE empresa_id = ?
+          AND funcionario_id = ?
+          AND data_checkin = ?
+          AND deleted_at IS NULL
+        ORDER BY submitted_at DESC, hora_checkin DESC
+        LIMIT 1`,
+    )
+    .bind(empresaId, funcionarioId, dateYmd)
+    .first<{
+      id: string;
+      jornada_inicio_prevista: string | null;
+      wake_time: string | null;
+      horas_sono: number | null;
+    }>();
+
+  if (!row?.id || !row.jornada_inicio_prevista || !row.wake_time) return null;
+  const sleepHours = Number(row.horas_sono);
+  if (!Number.isFinite(sleepHours) || sleepHours <= 0 || sleepHours > 24) return null;
+  if (hhmmToMinutes(row.jornada_inicio_prevista) < 0 || hhmmToMinutes(row.wake_time) < 0) return null;
+  return {
+    checkinId: row.id,
+    presentationTime: row.jornada_inicio_prevista,
+    wakeTime: row.wake_time,
+    sleepHours24h: sleepHours,
+  };
+}
+
+function deriveSleepStartFromCheckin(wakeTime: string, sleepHours24h: number): string {
+  const wakeMinutes = hhmmToMinutes(wakeTime);
+  const sleepMinutes = Math.max(0, Math.min(24 * 60, Math.round(sleepHours24h * 60)));
+  return minutesToHhmm(wakeMinutes - sleepMinutes);
+}
+
+
 export async function recalcularPipeline(
   db: D1Database,
   jornada: FrmsJornada,
@@ -244,8 +301,9 @@ export async function recalcularPipeline(
     return { fatorizacao, acumulo: acumuloVazio, alertas: [], bloqueado: false };
   }
 
+  const empresaId = await resolveTripulanteEmpresaId(db, jornada.tripulante_id);
   const operationalContext = await resolveFrmsOperationalContext(db, {
-    empresaId: await resolveTripulanteEmpresaId(db, jornada.tripulante_id),
+    empresaId,
     referenceAt: jornada.data,
     jornadaId: jornada.id,
   });
@@ -260,18 +318,80 @@ export async function recalcularPipeline(
     v2Policy = resolveOperationalPolicyV2(operationalContext.parameters);
   }
 
-  // Garantir consistência pós-regra de almoço: duração sempre recalculada pelos horários
-  const duracaoRecalculada = calcDuracaoJornada(jornada);
-  if (jornada.duracao_jornada_minutos !== duracaoRecalculada) {
+  // A jornada canônica depende do check-in diário. SIGVOOS fornece o corte do
+  // último voo, mas não define a apresentação FRMS. Sem check-in completo,
+  // nenhuma apresentação/sono é inferida e a effectiveness fica indisponível.
+  const checkinEvidence = await loadDailyCheckinEvidence(
+    db,
+    empresaId,
+    Number(jornada.tripulante_id),
+    jornada.data,
+  );
+  const rawCutoffTime = jornada.hora_corte_motor ?? (
+    String(jornada.origem || '').toUpperCase() === 'SIGVOOS' ? jornada.hora_termino : null
+  );
+  let dutyBoundaryComplete = false;
+
+  if (checkinEvidence) {
+    const dutyConfig = await loadFrmsDutyBoundaryConfig(db, empresaId);
+    const boundary = resolveFrmsDutyBoundary({
+      presentationTime: checkinEvidence.presentationTime,
+      hasFlight: Math.max(0, Number(jornada.horas_voo_minutos ?? 0)) > 0,
+      lastCutoffTime: rawCutoffTime,
+      config: dutyConfig,
+    });
+    if (boundary.complete && boundary.dutyEndTime != null && boundary.durationMinutes != null) {
+      jornada.hora_apresentacao = checkinEvidence.presentationTime;
+      jornada.hora_termino = boundary.dutyEndTime;
+      jornada.duracao_jornada_minutos = boundary.durationMinutes;
+      jornada.hora_dormiu = deriveSleepStartFromCheckin(
+        checkinEvidence.wakeTime,
+        checkinEvidence.sleepHours24h,
+      );
+      dutyBoundaryComplete = true;
+      await db
+        .prepare(
+          `UPDATE frms_jornada
+              SET hora_apresentacao = ?,
+                  hora_termino = ?,
+                  duracao_jornada_minutos = ?,
+                  hora_corte_motor = COALESCE(hora_corte_motor, ?),
+                  hora_dormiu = ?,
+                  hora_acordou = ?,
+                  sono_efetivo_min = ?,
+                  fonte_sono = 'INFORMADO',
+                  updated_at = ?
+            WHERE id = ? AND deleted_at IS NULL`,
+        )
+        .bind(
+          jornada.hora_apresentacao,
+          jornada.hora_termino,
+          jornada.duracao_jornada_minutos,
+          rawCutoffTime,
+          jornada.hora_dormiu,
+          checkinEvidence.wakeTime,
+          Math.round(checkinEvidence.sleepHours24h * 60),
+          now(),
+          jornada.id,
+        )
+        .run();
+    }
+  }
+
+  if (!dutyBoundaryComplete) {
+    jornada.hora_apresentacao = null;
+    jornada.duracao_jornada_minutos = 0;
     await db
       .prepare(
         `UPDATE frms_jornada
-         SET duracao_jornada_minutos = ?, updated_at = ?
-         WHERE id = ? AND deleted_at IS NULL`,
+            SET hora_apresentacao = NULL,
+                duracao_jornada_minutos = 0,
+                hora_corte_motor = COALESCE(hora_corte_motor, ?),
+                updated_at = ?
+          WHERE id = ? AND deleted_at IS NULL`,
       )
-      .bind(duracaoRecalculada, now(), jornada.id)
+      .bind(rawCutoffTime, now(), jornada.id)
       .run();
-    jornada.duracao_jornada_minutos = duracaoRecalculada;
   }
 
   // 1. Buscar histórico para fatorização (repouso anterior)
@@ -355,7 +475,8 @@ export async function recalcularPipeline(
       hora_ultimo_pouso: jornada.hora_ultimo_pouso,
       hora_corte_motor: jornada.hora_corte_motor,
       hora_termino: jornada.hora_termino,
-      hora_dormiu: jornada.hora_dormiu ?? null,
+      hora_dormiu: dutyBoundaryComplete ? jornada.hora_dormiu ?? null : null,
+      hora_acordou: dutyBoundaryComplete ? checkinEvidence?.wakeTime ?? null : null,
       dia_periodo_embarcado: periodoEmbarcado?.dia ?? null,
       total_dias_periodo: periodoEmbarcado?.total ?? null,
     },
@@ -448,8 +569,8 @@ export async function recalcularPipeline(
       fatResult.fator_hv_noturno_dep_pct,
       fatResult.fator_hv_noturno_arr_pct,
       fatResult.total_fatorizado_hv,
-      effectResult.effectiveness_pct,
-      effectResult.nivel,
+      dutyBoundaryComplete ? effectResult.effectiveness_pct : null,
+      dutyBoundaryComplete ? effectResult.nivel : null,
       JSON.stringify({
         ...effectResult.componentes,
         operational_load: effectResult.operational_load,
@@ -554,8 +675,8 @@ export async function recalcularPipeline(
     fator_apresentacao_pct: effectResult.fator_apresentacao_calibrado_pct,
     fator_repouso_pct: effectResult.fator_repouso_calibrado_pct,
     total_fatorizado_jornada: effectResult.total_fatorizado_calibrado_jornada,
-    effectiveness_nivel: effectResult.nivel,
-    effectiveness_pct: effectResult.effectiveness_pct,
+    effectiveness_nivel: dutyBoundaryComplete ? effectResult.nivel : null,
+    effectiveness_pct: dutyBoundaryComplete ? effectResult.effectiveness_pct : null,
     created_at: timestamp,
     updated_at: timestamp,
     deleted_at: null,
