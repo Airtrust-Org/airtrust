@@ -56,7 +56,7 @@ describe('FRMS operational snapshot extended decision fields', () => {
     expect(Object.prototype.hasOwnProperty.call(item, 'limite_referencia')).toBe(true);
   });
 
-  it('PROJECAO nunca gera EXIGE_OVERRIDE mesmo quando critica', () => {
+  it('PROJECAO sem check-in completo não fabrica criticidade a partir de effectiveness isolada', () => {
     const input = baseInput();
     input.rows.escalas.push({
       data_operacional: '2026-06-21',
@@ -75,7 +75,8 @@ describe('FRMS operational snapshot extended decision fields', () => {
 
     const item = buildFrmsOperationalSnapshot(input).items[0];
     expect(item.natureza_dado).toBe('PROJECAO');
-    expect(item.snapshot_status).toBe('CRITICO');
+    expect(item.effectiveness_pct).toBeNull();
+    expect(item.snapshot_status).toBe('ATENCAO');
     expect(item.decisao).toBe('ALERTA');
   });
 
@@ -91,6 +92,20 @@ describe('FRMS operational snapshot extended decision fields', () => {
       origem: 'SIGVOOS',
       has_operational_data: 1,
       is_manual_empty: 0,
+    });
+    input.rows.checkins.push({
+      data_operacional: '2026-06-19',
+      funcionario_id: 10,
+      hora_checkin: '06:30',
+      hora_apresentacao: '08:00',
+      kss_score: 5,
+      horas_sono: 6.5,
+      qualidade_sono: 3,
+      wake_time: '06:00',
+      score_fadiga: 36,
+      nivel_fadiga: 'AMARELO',
+      status_operacional: 'MONITORAR',
+      computed_risk_level: 'attention',
     });
     input.rows.effectiveness.push({
       data_operacional: '2026-06-19',
