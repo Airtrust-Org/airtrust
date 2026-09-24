@@ -182,6 +182,27 @@ const STATUS_COLORS: Record<string, string> = {
   POSITIONING: 'bg-cyan-100 text-cyan-800',
 };
 
+const DAILY_BALANCE_ALERT_LABELS: Record<string, string> = {
+  CHECKIN_PENDENTE: 'Check-in pendente',
+  CHECKIN_CRITICO: 'Check-in requer revisão',
+  SONO_INSUFICIENTE: 'Sono insuficiente informado',
+  KSS_ALTO: 'KSS elevado informado',
+  EFETIVIDADE_BAIXA: 'Efetividade abaixo do limiar configurado',
+  JORNADA_SEM_FATORIZACAO: 'Jornada sem fatorização',
+  ESCALADO_SEM_JORNADA_FRMS: 'Escalado sem jornada FRMS',
+  JORNADA_FRMS_SEM_ESCALA: 'Jornada FRMS sem escala vinculada',
+  DADO_INCONSISTENTE: 'Dado inconsistente',
+};
+
+function formatSnapshotSource(value: string | null | undefined): string {
+  if (!value || value === 'AUSENTE') return 'ausente';
+  if (value === 'REAL') return 'confirmado';
+  if (value === 'MANUAL') return 'manual';
+  if (value === 'ESTIMADO') return 'estimado';
+  if (value === 'INCONSISTENTE') return 'inconsistente';
+  return value.toLowerCase();
+}
+
 function getCurrentMonthKeyLocal(): string {
   const now = new Date();
   const year = now.getFullYear();
@@ -628,6 +649,64 @@ export default function FrmsFichaTripulante() {
               de {Number(limites?.HV_MES_HORAS ?? 90)}h ·{' '}
               {(rolling?.pct_limite_mes_calendario ?? 0).toFixed(1)}%
             </p>
+          </div>
+        </section>
+
+        {/* Balanço do dia: carga e recuperação sem criar um segundo score. */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">Balanço do dia</h3>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Carga observada × recuperação confirmada. Este bloco explica os dados usados; não recalcula a efetividade.
+              </p>
+            </div>
+            <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-600">
+              {todayFortnightSnapshotItem?.data_operacional || hojeIso}
+            </span>
+          </div>
+
+          <div className="mt-3 grid gap-3 lg:grid-cols-3">
+            <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800">Carga observada</p>
+              <div className="mt-2 space-y-1 text-xs text-slate-700">
+                <p>Jornada: <strong>{todayFortnightSnapshotItem?.teve_jornada ? formatMin(todayFortnightSnapshotItem.duracao_jornada_minutos) : 'sem jornada confirmada'}</strong></p>
+                <p>HV do dia: <strong>{todayFortnightSnapshotItem?.teve_jornada ? formatMin(todayFortnightSnapshotItem.horas_voo_minutos) : '00h00'}</strong></p>
+                <p>Origem da jornada: <strong>{todayFortnightSnapshotItem?.jornada_origem || 'não informada'}</strong></p>
+                <div className="pt-1">
+                  <span className="font-medium text-slate-600">Sinais: </span>
+                  {todayFortnightSnapshotItem?.alertas?.length
+                    ? todayFortnightSnapshotItem.alertas
+                        .map((alerta) => DAILY_BALANCE_ALERT_LABELS[alerta] || alerta)
+                        .join(' · ')
+                    : 'sem alerta ativo nos dados do dia'}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">Recuperação confirmada</p>
+              <div className="mt-2 space-y-1 text-xs text-slate-700">
+                <p>Sono/repouso: <strong>{todayFortnightSnapshotItem?.horas_sono == null ? 'não informado' : `${Number(todayFortnightSnapshotItem.horas_sono).toFixed(1)} h`}</strong></p>
+                <p>KSS: <strong>{todayFortnightSnapshotItem?.kss_score ?? 'não informado'}</strong></p>
+                <p>Crédito aplicado: <strong className="text-emerald-800">+{Number(todayFortnightSnapshotItem?.recovery_credit_points ?? 0).toFixed(1)} pt</strong></p>
+                <p>Atividade: <strong>{todayFortnightSnapshotItem?.recovery_activity_type?.replace(/_/g, ' ') || todayFortnightSnapshotItem?.recovery_state || 'sem recuperação registrada'}</strong></p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-sky-100 bg-sky-50/40 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-800">Resultado e rastreabilidade</p>
+              <div className="mt-2 space-y-1 text-xs text-slate-700">
+                <p>Efetividade: <strong>{todayFortnightSnapshotItem?.effectiveness_pct == null ? 'indisponível' : `${Number(todayFortnightSnapshotItem.effectiveness_pct).toFixed(1)}%`}</strong></p>
+                <p>Check-in: <strong>{todayFortnightSnapshotItem?.checkin_status || 'AUSENTE'}{todayFortnightSnapshotItem?.checkin_horario ? ` às ${todayFortnightSnapshotItem.checkin_horario.slice(0, 5)}` : ''}</strong></p>
+                <p>Fonte sono/despertar: <strong>{formatSnapshotSource(todayFortnightSnapshotItem?.sleep_data_source)} / {formatSnapshotSource(todayFortnightSnapshotItem?.wake_data_source)}</strong></p>
+                <p>Fonte jornada: <strong>{formatSnapshotSource(todayFortnightSnapshotItem?.jornada_data_source)}</strong></p>
+                <p>Regra: <strong>cálculo canônico FRMS; sem fallback de apresentação/sono</strong></p>
+                <p className="pt-1 text-sky-800">
+                  {todayFortnightSnapshotItem?.acao_recomendada_texto || 'Complete os dados obrigatórios para liberar a avaliação.'}
+                </p>
+              </div>
+            </div>
           </div>
         </section>
 

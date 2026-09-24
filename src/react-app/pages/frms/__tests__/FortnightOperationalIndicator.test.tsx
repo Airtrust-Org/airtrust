@@ -257,7 +257,8 @@ describe('FortnightOperationalIndicator components', () => {
     expect(screen.getAllByText(/Não usar isoladamente como decisão final/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Sem dado confirmado/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/Cenário diário do período/)).toBeInTheDocument();
-    expect(screen.getByText(/Recuperação/)).toBeInTheDocument();
+    expect(screen.getByText('Padrões do período')).toBeInTheDocument();
+    expect(screen.getAllByText(/Recuperação/).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/Jornada acumulada visível/)).not.toBeInTheDocument();
   });
 });

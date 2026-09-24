@@ -214,27 +214,28 @@ function resolvePrimaryReason(
   if (item.checkin_status === 'PENDENTE' || item.alertas.includes('CHECKIN_PENDENTE')) {
     return 'Check-in pendente — solicitar confirmação';
   }
+  const firstAlert = item.alertas.find((alerta) => ALERT_REASON_LABELS[alerta]);
+  if (firstAlert) return ALERT_REASON_LABELS[firstAlert];
+
   if (
     item.fortnight_indicator?.status_quinzena === 'CRITICO' ||
     item.snapshot_status === 'CRITICO'
   ) {
-    return 'Acúmulo elevado — revisar escala';
+    return 'Status crítico no período — revisar fatores e programação';
   }
   if (
     item.fortnight_indicator?.status_quinzena === 'ATENCAO' ||
     item.snapshot_status === 'ATENCAO'
   ) {
-    return 'Acúmulo elevado — revisar escala';
+    return 'Status de atenção no período — revisar fatores e programação';
   }
   if (estimatedOrIncomplete) return 'Fonte insuficiente — validar jornada antes de decidir';
 
-  const firstAlert = item.alertas.find((alerta) => ALERT_REASON_LABELS[alerta]);
-  if (firstAlert) return ALERT_REASON_LABELS[firstAlert];
-
-  if (item.fortnight_indicator?.tendencia === 'CRESCENTE') {
-    return 'Acúmulo em alta — acompanhar quinzena';
+  const consecutiveDutyDays = item.fortnight_indicator?.dias_consecutivos_com_jornada;
+  if (item.fortnight_indicator?.tendencia === 'CRESCENTE' && consecutiveDutyDays != null) {
+    return `${consecutiveDutyDays} dia(s) consecutivo(s) com jornada — revisar recuperação`;
   }
-  return 'Em observação — acompanhar quinzena';
+  return 'Sem alerta ativo — manter acompanhamento dos dados diários';
 }
 
 function resolveRecommendedAction(

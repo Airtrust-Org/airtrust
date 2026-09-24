@@ -14,10 +14,10 @@ export const FORTNIGHT_STATUS_LABELS: Record<string, string> = {
 };
 
 export const FORTNIGHT_TENDENCIA_LABELS: Record<string, string> = {
-  ESTAVEL: 'Estável',
-  CRESCENTE: 'Em alta',
-  REDUZINDO: 'Em redução',
-  INDETERMINADA: 'Indeterminada',
+  ESTAVEL: 'Jornada sem variação relevante',
+  CRESCENTE: 'Jornada/carga maior que a referência recente',
+  REDUZINDO: 'Jornada/carga menor que a referência recente',
+  INDETERMINADA: 'Sem base suficiente para comparar jornada/carga',
 };
 
 export const FORTNIGHT_NATUREZA_LABELS: Record<string, string> = {
@@ -170,10 +170,10 @@ export function resolveOperationalSourceChip(input: {
 }
 
 export function formatTrendArrow(trend: string | null | undefined): string {
-  if (trend === 'CRESCENTE') return 'Subindo';
-  if (trend === 'REDUZINDO') return 'Reduzindo';
-  if (trend === 'ESTAVEL') return 'Estável';
-  return 'Indeterminada';
+  if (trend === 'CRESCENTE') return 'Carga maior';
+  if (trend === 'REDUZINDO') return 'Carga menor';
+  if (trend === 'ESTAVEL') return 'Carga sem variação relevante';
+  return 'Sem comparação';
 }
 
 export function formatFortnightScore(value: number | null | undefined): string {
@@ -227,20 +227,12 @@ export function formatFortnightLabel(indicator: FrmsFortnightIndicator | null | 
     INCOMPLETO: 'incompleta',
   };
   const statusLabel = statusMap[indicator.status_quinzena] || indicator.status_quinzena.toLowerCase();
-  const scoreText =
-    indicator.score_acumulado != null && Number.isFinite(indicator.score_acumulado)
-      ? ` · score ${formatFortnightScore(indicator.score_acumulado)}`
-      : '';
-  const tendenciaText =
-    indicator.tendencia && indicator.tendencia !== 'INDETERMINADA'
-      ? ` · ${formatFortnightTendencia(indicator.tendencia).toLowerCase()}`
-      : '';
   const dutyText =
     indicator.duty_time_periodo_min != null && Number.isFinite(indicator.duty_time_periodo_min)
       ? ` · jornada ${formatMinutesAsHours(indicator.duty_time_periodo_min)}`
       : '';
 
-  return `Quinzena ${statusLabel}${scoreText}${tendenciaText}${dutyText}`;
+  return `Quinzena ${statusLabel}${dutyText}`;
 }
 
 export function buildFortnightCrewOrientation(
@@ -272,14 +264,6 @@ export function buildFortnightTooltipSuffix(
 
   const parts: string[] = [];
   parts.push(FORTNIGHT_STATUS_LABELS[indicator.status_quinzena] || indicator.status_quinzena);
-
-  if (indicator.score_acumulado != null && Number.isFinite(indicator.score_acumulado)) {
-    parts.push(`score ${formatFortnightScore(indicator.score_acumulado)}`);
-  }
-
-  if (indicator.tendencia && indicator.tendencia !== 'INDETERMINADA') {
-    parts.push(formatFortnightTendencia(indicator.tendencia).toLowerCase());
-  }
 
   if (indicator.explicacao_operacional?.trim()) {
     parts.push(indicator.explicacao_operacional.trim());

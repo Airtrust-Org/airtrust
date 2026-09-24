@@ -40,6 +40,9 @@ export interface FortnightTimelineSummary {
   cumulative_flight_min: number;
   received_checkins: number;
   recovery_days: number;
+  low_sleep_days: number;
+  no_flight_recovery_days: number;
+  max_effectiveness_decline_streak_days: number;
 }
 
 export interface FortnightTimelineResult {
@@ -145,6 +148,11 @@ export function buildFortnightTimeline(
   let criticalDays = 0;
   let receivedCheckins = 0;
   let recoveryDays = 0;
+  let lowSleepDays = 0;
+  let noFlightRecoveryDays = 0;
+  let currentEffectivenessDeclineStreakDays = 0;
+  let maxEffectivenessDeclineStreakDays = 0;
+  let previousEffectiveness: number | null = null;
 
   for (let index = 0; index < totalDays; index += 1) {
     const isoDate = addDays(params.periodStart, index);
@@ -157,7 +165,30 @@ export function buildFortnightTimeline(
 
     if (item?.teve_jornada) jornadasDays += 1;
     if (item?.checkin_status === 'RECEBIDO') receivedCheckins += 1;
-    if ((item?.recovery_credit_points ?? 0) > 0 || Boolean(item?.recovery_state)) recoveryDays += 1;
+    const hasRecovery = (item?.recovery_credit_points ?? 0) > 0 || Boolean(item?.recovery_state);
+    if (hasRecovery) recoveryDays += 1;
+    if (item?.alertas.includes('SONO_INSUFICIENTE')) lowSleepDays += 1;
+    if (item && vooMin === 0 && hasRecovery) noFlightRecoveryDays += 1;
+
+    const effectiveness = item?.effectiveness_pct;
+    if (effectiveness != null && Number.isFinite(effectiveness)) {
+      if (previousEffectiveness != null && effectiveness < previousEffectiveness) {
+        currentEffectivenessDeclineStreakDays = currentEffectivenessDeclineStreakDays === 0
+          ? 2
+          : currentEffectivenessDeclineStreakDays + 1;
+        maxEffectivenessDeclineStreakDays = Math.max(
+          maxEffectivenessDeclineStreakDays,
+          currentEffectivenessDeclineStreakDays,
+        );
+      } else {
+        currentEffectivenessDeclineStreakDays = 0;
+      }
+      previousEffectiveness = effectiveness;
+    } else {
+      currentEffectivenessDeclineStreakDays = 0;
+      previousEffectiveness = null;
+    }
+
     if (item && (item.checkin_status === 'PENDENTE' || item.checkin_status === 'AUSENTE')) {
       pendingCheckins += 1;
     }
@@ -216,6 +247,9 @@ export function buildFortnightTimeline(
       cumulative_flight_min: cumulativeFlight,
       received_checkins: receivedCheckins,
       recovery_days: recoveryDays,
+      low_sleep_days: lowSleepDays,
+      no_flight_recovery_days: noFlightRecoveryDays,
+      max_effectiveness_decline_streak_days: maxEffectivenessDeclineStreakDays,
     },
   };
 }
