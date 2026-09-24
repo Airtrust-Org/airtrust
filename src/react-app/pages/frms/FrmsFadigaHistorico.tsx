@@ -40,9 +40,16 @@ function resolveCheckinDataSource(
   }
   if (row.data_source === 'default_estimate') {
     return {
-      label: 'Dado estimado',
+      label: 'Estimativa legada',
       tone: 'border-amber-200 bg-amber-50 text-amber-700',
-      help: 'Estimativa operacional (fallback) antes de envio do check-in.',
+      help: 'Registro histórico produzido pela regra antiga. Novos dias sem check-in ficam sem cálculo.',
+    };
+  }
+  if (row.data_source === 'missing_checkin') {
+    return {
+      label: 'Sem check-in',
+      tone: 'border-violet-200 bg-violet-50 text-violet-700',
+      help: 'Sem check-in obrigatório; nenhum cálculo de efetividade deve ser produzido.',
     };
   }
   return {
