@@ -32,7 +32,13 @@ function createLegacyRouter() {
             funcionario_id: 101,
             funcionario_nome: 'Tripulante Sem Check-in',
             status: 'not_submitted',
-            data_source: 'default_estimate',
+            data_source: 'missing_checkin',
+          },
+          {
+            funcionario_id: 106,
+            funcionario_nome: 'Tripulante Check-in Incompleto',
+            status: 'incomplete_checkin',
+            data_source: 'crew_reported',
           },
           {
             funcionario_id: 102,
@@ -93,13 +99,18 @@ describe('GET /api/frms/daily-fatigue/alerts', () => {
     const body = (await response.json()) as any;
     expect(body.success).toBe(true);
     expect(body.data.source).toBe('daily_fatigue_status');
-    expect(body.data.count).toBe(4);
+    expect(body.data.count).toBe(5);
     expect(body.data.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           tripulante_id: 101,
           nivel: 'ATENCAO',
           alert_type: 'daily_fatigue_not_submitted',
+        }),
+        expect.objectContaining({
+          tripulante_id: 106,
+          nivel: 'ATENCAO',
+          alert_type: 'daily_fatigue_incomplete_checkin',
         }),
         expect.objectContaining({
           tripulante_id: 102,
