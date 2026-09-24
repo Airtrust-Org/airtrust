@@ -23,7 +23,10 @@ type DailyFatigueStatusItem = Record<string, unknown> & {
 // for profiles without team visibility, so this wrapper does not duplicate auth logic.
 function dailyFatigueAlertMessage(status: string): string {
   if (status === 'not_submitted') {
-    return 'Fadiga diária não preenchida pelo tripulante — usando estimativa padrão. Revisão operacional necessária.';
+    return 'Fadiga diária não preenchida pelo tripulante — cálculo indisponível até o check-in.';
+  }
+  if (status === 'incomplete_checkin') {
+    return 'Check-in de fadiga incompleto — cálculo indisponível até completar os dados obrigatórios.';
   }
   if (status === 'unfit_for_duty') {
     return 'Fadiga diária indica condição não apta para jornada. Revisão operacional imediata necessária.';
@@ -80,6 +83,7 @@ export function createFrmsFadigaCheckinRouter(
 
     const alertableStatuses = new Set([
       'not_submitted',
+      'incomplete_checkin',
       'attention',
       'critical',
       'unfit_for_duty',
