@@ -347,10 +347,13 @@ async function main() {
     versao: rdvVersao,
     origem_icao: 'OR' + 'A' + manifest.runId,
     destino_icao: 'DE' + 'A' + manifest.runId,
-    horario_motor_ligado: `${dataProg}T09:58:00Z`,
+    // Mantém o tempo TOTAL realizado igual ao planejamento de 60 min neste
+    // cenário de lifecycle. O contrato de justificativas é coberto separadamente;
+    // aqui o objetivo é chegar até revisão, reabertura, refinalização e XML.
+    horario_motor_ligado: `${dataProg}T10:00:00Z`,
     horario_decolagem: `${dataProg}T10:05:00Z`,
     horario_pouso: `${dataProg}T10:55:00Z`,
-    horario_motor_desligado: `${dataProg}T11:02:00Z`,
+    horario_motor_desligado: `${dataProg}T11:00:00Z`,
     combustivel_inicio: 500,
     combustivel_fim: 400,
   };

@@ -60,5 +60,5 @@ export function formatarMatricula(matricula: string | number | null | undefined)
   if (!matricula) return '-';
 
   const matriculaStr = String(matricula);
-  return matriculaStr.padStart(6, '0');
+  return matriculaStr.padStart(5, '0');
 }
