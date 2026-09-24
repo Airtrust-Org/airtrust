@@ -187,7 +187,7 @@ function FortnightTimelinePanel({
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Sem jornada + recuperação</p>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">Sem voo + recuperação</p>
                 <p className="text-xs font-semibold text-slate-800">
                   {timeline.summary.no_flight_recovery_days} dia(s)
                 </p>
