@@ -398,8 +398,7 @@ async function computeContextoPiloto(
     alertas_ativos: alertasAtivos?.total ?? 0,
   };
 }
-
-async function createDailyFatigueAlertasync function createDailyFatigueAlert(params: {
+async function createDailyFatigueAlert(params: {
   db: D1Database;
   empresaId: number;
   tripulanteId: number;
@@ -593,8 +592,7 @@ async function buildDailyFatigueStatus(params: {
     jornada_id: jornada?.id ?? null,
   };
 }
-
-router.get('/fadiga-checkin/hoje'router.get('/fadiga-checkin/hoje', async (c) => {
+router.get('/fadiga-checkin/hoje', async (c) => {
   try {
     const empresaId = getEmpresaId(c);
     const funcionarioId = await resolveFuncionarioId(c);
@@ -821,8 +819,7 @@ router.get('/daily-fatigue', async (c) => {
     return c.json({ success: false, error: 'Erro ao carregar status de fadiga diária' }, 500);
   }
 });
-
-router.get('/daily-fatigue/alerts'router.get('/daily-fatigue/alerts', async (c) => {
+router.get('/daily-fatigue/alerts', async (c) => {
   try {
     const date = c.req.query('date') || todayIso();
     const empresaId = getEmpresaId(c);
