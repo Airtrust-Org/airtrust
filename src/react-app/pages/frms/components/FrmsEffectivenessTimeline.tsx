@@ -27,6 +27,7 @@ interface ChartPoint {
   data_apresentacao: string;
   effectiveness_pct: number | null;
   processado_com_bug: number | null;
+  jornada_boundary_source: 'REAL' | 'ESTIMADO' | 'AUSENTE' | null;
   duty_hours: number | null;
   flight_hours: number | null;
   sleep_hours: number | null;
@@ -92,9 +93,9 @@ function ColoredDot(props: {
       cx={cx}
       cy={cy}
       r={4}
-      fill={getNivelDotColor(payload.effectiveness_pct, config)}
-      stroke="#fff"
-      strokeWidth={1.5}
+      fill={payload.jornada_boundary_source === 'ESTIMADO' ? '#fff' : getNivelDotColor(payload.effectiveness_pct, config)}
+      stroke={getNivelDotColor(payload.effectiveness_pct, config)}
+      strokeWidth={payload.jornada_boundary_source === 'ESTIMADO' ? 2.5 : 1.5}
     />
   );
 }
@@ -130,7 +131,7 @@ function CustomTooltip({
       </div>
       {point.hora_apresentacao && point.hora_termino && (
         <p className="mt-2 text-slate-500">
-          Jornada declarada/calculada: {point.hora_apresentacao.slice(0, 5)}–{point.hora_termino.slice(0, 5)}
+          Jornada {point.jornada_boundary_source === 'REAL' ? 'real (check-in)' : point.jornada_boundary_source === 'ESTIMADO' ? 'estimada (janela operacional)' : 'não classificada'}: {point.hora_apresentacao.slice(0, 5)}–{point.hora_termino.slice(0, 5)}
         </p>
       )}
       {point.operational_load_data_quality && point.operational_load_data_quality !== 'COMPLETE' && (
@@ -186,6 +187,7 @@ export default function FrmsEffectivenessTimeline({
         data_apresentacao: j.data_apresentacao,
         effectiveness_pct: j.effectiveness_pct,
         processado_com_bug: j.processado_com_bug ?? null,
+        jornada_boundary_source: j.jornada_boundary_source ?? null,
         duty_hours:
           j.duracao_jornada_minutos == null ? null : Number(j.duracao_jornada_minutos) / 60,
         flight_hours: j.horas_voo_minutos == null ? null : Number(j.horas_voo_minutos) / 60,
@@ -385,7 +387,7 @@ export default function FrmsEffectivenessTimeline({
       )}
 
       <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
-        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">Efetividade sempre visível</span>
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">Ponto cheio = dado real · ponto vazado = estimado</span>
         {mode === 'workload' && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1">Jornada e HV em horas</span>}
         {mode === 'operational' && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1">Pousos + temperatura observada</span>}
         {mode === 'recovery' && <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1">Sono + crédito efetivamente aplicado</span>}

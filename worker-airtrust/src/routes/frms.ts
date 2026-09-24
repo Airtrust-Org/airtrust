@@ -2418,6 +2418,22 @@ frmsRoutes.get(
           fj.processado_com_bug,
           j.data as data_apresentacao,
           j.data as data_liberacao,
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+                FROM frms_fadiga_checkin ch
+               WHERE ch.empresa_id = p.empresa_id
+                 AND ch.funcionario_id = p.id
+                 AND ch.data_checkin = j.data
+                 AND ch.deleted_at IS NULL
+                 AND ch.jornada_inicio_prevista IS NOT NULL
+                 AND ch.wake_time IS NOT NULL
+                 AND ch.horas_sono > 0
+                 AND ch.horas_sono <= 24
+            ) THEN 'REAL'
+            WHEN j.hora_apresentacao IS NOT NULL AND j.hora_termino IS NOT NULL THEN 'ESTIMADO'
+            ELSE 'AUSENTE'
+          END AS jornada_boundary_source,
           j.hora_apresentacao, j.hora_termino, j.duracao_jornada_minutos, j.horas_voo_minutos, fj.effectiveness_pct,
           fj.effectiveness_nivel,
           fj.effectiveness_componentes_json,

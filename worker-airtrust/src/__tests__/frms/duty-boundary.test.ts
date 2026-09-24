@@ -3,6 +3,7 @@ import {
   addMinutesToClock,
   durationBetweenClocks,
   resolveFrmsDutyBoundary,
+  resolveFrmsEstimatedDutyBoundary,
 } from '../../lib/frms/duty-boundary';
 
 describe('FRMS duty boundary', () => {
@@ -78,4 +79,37 @@ describe('FRMS duty boundary', () => {
       }).reason,
     ).toBe('INVALID_CONFIG');
   });
+  it('preserva a janela histórica como estimada quando não há check-in', () => {
+    expect(resolveFrmsEstimatedDutyBoundary({
+      presentationTime: '06:10',
+      firstEngineStart: '06:15',
+      firstTakeoff: '06:30',
+      endTime: '12:20',
+      lastLanding: '12:10',
+    })).toEqual({
+      presentationTime: '06:10',
+      dutyEndTime: '12:20',
+      durationMinutes: 370,
+      complete: true,
+    });
+  });
+
+  it('usa primeiro acionamento/decolagem como fallback e nunca inventa janela incompleta', () => {
+    expect(resolveFrmsEstimatedDutyBoundary({
+      presentationTime: null,
+      firstEngineStart: '06:20',
+      firstTakeoff: '06:35',
+      endTime: '12:20',
+      lastLanding: '12:10',
+    })).toMatchObject({ presentationTime: '06:20', dutyEndTime: '12:20', durationMinutes: 360, complete: true });
+
+    expect(resolveFrmsEstimatedDutyBoundary({
+      presentationTime: null,
+      firstEngineStart: null,
+      firstTakeoff: null,
+      endTime: '12:20',
+      lastLanding: '12:10',
+    }).complete).toBe(false);
+  });
+
 });

@@ -94,6 +94,45 @@ export function resolveFrmsDutyBoundary(input: FrmsDutyBoundaryInput): FrmsDutyB
   };
 }
 
+
+export interface FrmsEstimatedDutyBoundaryInput {
+  presentationTime?: string | null;
+  firstEngineStart?: string | null;
+  firstTakeoff?: string | null;
+  endTime?: string | null;
+  lastLanding?: string | null;
+}
+
+export interface FrmsEstimatedDutyBoundaryResult {
+  presentationTime: string | null;
+  dutyEndTime: string | null;
+  durationMinutes: number | null;
+  complete: boolean;
+}
+
+/**
+ * Historical compatibility only. Before the daily fatigue check-in became the
+ * authoritative presentation source, SIGVOOS/FIRA used the first operational
+ * event and the operational end as the displayed duty window. The result must
+ * always be labelled ESTIMADO by callers and never override complete check-in evidence.
+ */
+export function resolveFrmsEstimatedDutyBoundary(
+  input: FrmsEstimatedDutyBoundaryInput,
+): FrmsEstimatedDutyBoundaryResult {
+  const presentationCandidates = [input.presentationTime, input.firstEngineStart, input.firstTakeoff];
+  const endCandidates = [input.endTime, input.lastLanding];
+  const presentationTime = presentationCandidates.find((value) => parseClock(value) != null) ?? null;
+  const dutyEndTime = endCandidates.find((value) => parseClock(value) != null) ?? null;
+  const durationMinutes =
+    presentationTime && dutyEndTime ? durationBetweenClocks(presentationTime, dutyEndTime) : null;
+  return {
+    presentationTime,
+    dutyEndTime,
+    durationMinutes: durationMinutes != null && durationMinutes > 0 ? durationMinutes : null,
+    complete: durationMinutes != null && durationMinutes > 0,
+  };
+}
+
 export async function loadFrmsDutyBoundaryConfig(
   db: D1Database,
   empresaId: number,

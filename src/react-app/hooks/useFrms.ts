@@ -23,6 +23,7 @@ export interface FrmsJornadaRow {
   registrado_por: string;
   origem: string;
   created_at: string;
+  jornada_boundary_source?: 'REAL' | 'ESTIMADO' | 'AUSENTE';
   hora_dormiu?: string | null;
   hora_acordou?: string | null;
   sono_efetivo_min?: number | null;
@@ -297,6 +298,7 @@ export interface FrmsEffectivenessJornadaRow {
   processado_com_bug: number | null;
   data_apresentacao: string;
   data_liberacao: string;
+  jornada_boundary_source?: 'REAL' | 'ESTIMADO' | 'AUSENTE';
   hora_apresentacao: string | null;
   hora_termino: string | null;
   duracao_jornada_minutos: number | null;
