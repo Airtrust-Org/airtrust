@@ -94,7 +94,7 @@ function createMockDb(options?: { withCheckin?: boolean }) {
 
           if (query.includes('FROM frms_fadiga_checkin') && query.includes('report_source')) {
             if (options?.withCheckin === false) return null;
-            return { id: 'ck-1', wake_time: '06:05', report_source: 'CREW_REPORTED' };
+            return { id: 'ck-1', wake_time: '06:05', jornada_inicio_prevista: '07:30', horas_sono: 7, report_source: 'CREW_REPORTED' };
           }
 
           if (query.includes('FROM frms_fadiga_evento e') && query.includes('FRMS_RECALCULO_NECESSARIO')) {

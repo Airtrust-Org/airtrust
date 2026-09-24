@@ -80,6 +80,7 @@ import {
 import { syncHorasVooFromFrmsJornada } from '../shared/handlers/horasVooFromFrms.handler';
 import { recalcularPipeline } from '../lib/frms/db-service-jornadas';
 import { buildCanonicalOperationalSourceSql } from '../lib/frms/frms-source-policy';
+import { buildFrmsDayCheckinExplanationState } from '../lib/frms/day-explanation-checkin';
 import { getSigvoosConfig } from '../services/sigvoos-frms';
 import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../services/employee-sector-access';
 import fadigaAcumulada from './frms-fadiga-acumulada';
@@ -2593,55 +2594,12 @@ frmsRoutes.get(
       }),
     ]);
 
-    const checkinPresentation = normalizeHora(checkinRow?.jornada_inicio_prevista);
-    const checkinWake = normalizeHora(checkinRow?.wake_time);
-    const checkinSleepHours = Number(checkinRow?.horas_sono);
-    const checkinComplete =
-      Boolean(checkinRow?.id) &&
-      Boolean(checkinPresentation) &&
-      Boolean(checkinWake) &&
-      Number.isFinite(checkinSleepHours) &&
-      checkinSleepHours > 0 &&
-      checkinSleepHours <= 24;
-
-    const wakeTimeSource = checkinComplete ? 'crew_reported' : null;
-    const sourceByCheckin =
-      checkinComplete
-        ? ({
-            dataSource: 'crew_reported',
-            confidence: 'reported',
-          } as const)
-        : checkinRow != null
-          ? ({
-              dataSource: 'crew_reported',
-              confidence: 'incomplete',
-            } as const)
-          : ({
-              dataSource: 'missing_checkin',
-              confidence: 'unavailable',
-            } as const);
-    const traceLimitations: string[] = [];
-    if (!checkinRow) {
-      traceLimitations.push(
-        'Sem check-in diário para a data selecionada; a efetividade fica indisponível até o check-in.',
-      );
-    } else if (!checkinComplete) {
-      traceLimitations.push(
-        'Check-in diário incompleto; apresentação, despertar e sono/repouso absoluto são obrigatórios para calcular a efetividade.',
-      );
-    }
-    if (!row.hora_apresentacao) {
-      traceLimitations.push('Sem hora de apresentação na jornada; minutos acordado antes da apresentação não disponíveis.');
-    }
-    if (!worst7d.available) {
-      traceLimitations.push('Janela de 7 dias indisponível para determinar pior dia.');
-    }
-    if (!worst28d.available) {
-      traceLimitations.push('Janela de 28 dias indisponível para determinar pior dia.');
-    }
-    if (Number(row.processado_com_bug ?? 0) === 1) {
-      traceLimitations.push('Registro marcado como legado pré-C2; considerar reprocessamento histórico em fase separada.');
-    }
+    const checkinState = buildFrmsDayCheckinExplanationState({
+      checkinRow,
+      row,
+      worst7d,
+      worst28d,
+    });
 
     if (!empresaId) {
       return c.json(
@@ -2662,51 +2620,21 @@ frmsRoutes.get(
       data,
       limites,
     );
-    const rowForExplanation: Record<string, unknown> = checkinComplete
-      ? {
-          ...row,
-          hora_apresentacao: checkinPresentation,
-          hora_acordou: checkinWake,
-          fonte_sono: 'INFORMADO',
-        }
-      : {
-          ...row,
-          hora_apresentacao: null,
-          hora_acordou: null,
-          fonte_sono: null,
-          effectiveness_pct: null,
-          effectiveness_nivel: null,
-          effectiveness_componentes_json: null,
-          fator_basica_pct: null,
-          tempo_abaixo_limiar_min: null,
-          hora_despertar_estimada: null,
-          hora_inicio_sono_estimado: null,
-          duracao_sono_efetiva_min: null,
-        };
-
-    const unavailableWindow = {
-      available: false,
-      worstDay: null,
-      worstEffectivenessPct: null,
-    };
     const explanation = await buildFrmsDayExplanation(
       c.env,
       {
-        ...rowForExplanation,
-        dias_criticos_consecutivos: checkinComplete ? diasCriticosConsecutivos : 0,
+        ...checkinState.rowForExplanation,
+        dias_criticos_consecutivos: checkinState.complete ? diasCriticosConsecutivos : 0,
       },
       limites,
       {
-        dataSource: sourceByCheckin.dataSource,
-        confidence: sourceByCheckin.confidence,
-        wakeTimeSource,
+        dataSource: checkinState.dataSource,
+        confidence: checkinState.confidence,
+        wakeTimeSource: checkinState.wakeTimeSource,
         recalculationPending:
-          Boolean(recalcEvent?.has_pending) || !checkinComplete || !Boolean(checkinPresentation),
-        windows: {
-          sevenDays: checkinComplete ? worst7d : unavailableWindow,
-          twentyEightDays: checkinComplete ? worst28d : unavailableWindow,
-        },
-        limitations: traceLimitations,
+          Boolean(recalcEvent?.has_pending) || !checkinState.complete || !Boolean(checkinState.presentation),
+        windows: checkinState.windows,
+        limitations: checkinState.limitations,
       },
     );
 
