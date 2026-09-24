@@ -70,6 +70,11 @@ test('the production Pages smoke step enforces equality against APP_VERSION', ()
   assert.match(smoke, /assert-pages-build-version\.mjs/);
   assert.match(smoke, /--expected "\$\{APP_VERSION\}"|--expected "\$APP_VERSION"/);
   assert.match(smoke, /APP_VERSION:\s*\$\{\{\s*needs\.guard\.outputs\.app_version\s*\}\}/);
+  assert.match(smoke, /bootstrap_assets/);
+  assert.match(smoke, /content-type/);
+  assert.match(smoke, /expected_type='javascript'/);
+  assert.match(smoke, /expected_type='text\/css'/);
+  assert.match(smoke, /Bootstrap asset not ready/);
   // the old existence-only gate must be gone
   assert.doesNotMatch(
     smoke.slice(0, smoke.indexOf('name: Write pages summary')),

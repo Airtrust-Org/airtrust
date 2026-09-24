@@ -104,15 +104,15 @@
 /pilot/pilot.webmanifest
   Cache-Control: public, max-age=300
 
-# ===== JAVASCRIPT - CACHE LONGO (com hash) =====
-# Apenas assets versionados por hash devem receber cache imutavel.
+# ===== BOOTSTRAP JS/CSS - REVALIDAR =====
+# Durante a troca atomica do Pages, um edge antigo pode responder o fallback SPA
+# (text/html) para um asset da release nova. Nunca torne essa resposta imutavel:
+# revalidacao obrigatoria permite recuperacao assim que o edge converge.
 /assets/*.js
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=0, must-revalidate
 
-# ===== CSS - CACHE LONGO (com hash) =====
-# Apenas assets versionados por hash devem receber cache imutavel.
 /assets/*.css
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=0, must-revalidate
 
 # ===== FONTES - CACHE LONGO =====
 /*.woff
