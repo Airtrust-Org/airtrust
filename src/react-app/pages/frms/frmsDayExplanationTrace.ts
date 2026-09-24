@@ -309,7 +309,7 @@ function buildTraceFallback(
       sleepDurationMinutes: journey.duracao_sono_efetiva_min,
       sleepSource: informedData ? 'dado informado' : estimatedData ? 'dado estimado' : 'sem dado',
       wakeTime: journey.hora_acordou || journey.hora_despertar_estimada,
-      wakeTimeSource: informedData ? 'crew_reported' : estimatedData ? 'default_estimate' : 'missing',
+      wakeTimeSource: informedData ? 'crew_reported' : estimatedData ? 'legacy_estimate' : 'missing',
       reportTime: journey.hora_apresentacao,
       minutesAwakeBeforeReport,
       dutyStart: journey.hora_apresentacao,

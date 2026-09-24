@@ -194,12 +194,6 @@ const GRUPOS_OPERACIONAIS: ConfigGroup[] = [
     keys: ['PRESENTATION_NIGHT_START_HOUR','PRESENTATION_NIGHT_END_HOUR','PRESENTATION_NIGHT_DELTA_POINTS','ACCUMULATION_WINDOW_MODE','ACCUMULATION_USE_MONTH_CALENDAR','ACCUMULATION_USE_YEAR_CALENDAR','ACCUMULATION_USE_28D_ROLLING','ACCUMULATION_USE_365D_ROLLING'],
   },
   {
-    label: 'Parâmetros Operacionais',
-    icon: <Brain className="h-4 w-4" />,
-    description: 'Premissa de sono provisória configurável por empresa.',
-    keys: ['MINUTOS_ANTES_APRESENTACAO', 'HORAS_SONO_PADRAO'],
-  },
-  {
     label: 'Fatores Operacionais',
     icon: <Brain className="h-4 w-4" />,
     description:
@@ -329,8 +323,6 @@ const LABELS: Record<string, string> = {
   REPOUSO_MIN_PRE_APRESENTACAO: 'Repouso mín. pré-apresentação (min)',
   REPOUSO_MIN_POS_LIBERACAO: 'Repouso mín. pós-liberação (min)',
   REPOUSO_QUALIDADE_HOTEL: 'Qualidade sono hotel (%)',
-  MINUTOS_ANTES_APRESENTACAO: 'Tempo entre acordar e se apresentar (min)',
-  HORAS_SONO_PADRAO: 'Horas de sono assumidas (padrão)',
 };
 
 const FIELD_HELPERS: Record<string, string> = {
@@ -338,10 +330,6 @@ const FIELD_HELPERS: Record<string, string> = {
   IMC_VISIBILITY_THRESHOLD_M: 'Critério interno configurável para classificar a condição meteorológica observada; não define se o voo foi IFR ou VFR.',
   IMC_CEILING_THRESHOLD_FT: 'Critério interno configurável de teto para VMC/IMC. METAR ausente permanece indeterminado.',
   RECOVERY_ABSOLUTE_REST_FULL_HOURS: 'Repouso absoluto não pressupõe sono contínuo; é a oportunidade efetiva de descanso informada no check-in.',
-  MINUTOS_ANTES_APRESENTACAO:
-    'Tempo entre o tripulante acordar e se apresentar para o voo (padrão ICAO: 90 min).',
-  HORAS_SONO_PADRAO:
-    'Usado quando o tripulante não informa a hora que foi dormir. Quando informar, este valor é substituído automaticamente.',
   CICLO_EMBARCADO_PCT_MAX:
     'Fator fracionário do modelo (não é percentual). Default do modelo: -0.15. O valor exibido é o da revisão ativa; não mutar V1 in-place.',
   CICLO_EMBARCADO_PCT_MIN: 'Fator fracionário do modelo (não é percentual).',
@@ -365,8 +353,6 @@ const FIELD_BOUNDS: Record<string, { min?: number; max?: number; step?: number }
   ACCUMULATION_USE_YEAR_CALENDAR: { min: 0, max: 1, step: 1 },
   ACCUMULATION_USE_28D_ROLLING: { min: 0, max: 1, step: 1 },
   ACCUMULATION_USE_365D_ROLLING: { min: 0, max: 1, step: 1 },
-  MINUTOS_ANTES_APRESENTACAO: { min: 30, max: 180, step: 1 },
-  HORAS_SONO_PADRAO: { min: 4, max: 12, step: 0.1 },
 };
 
 export const PARAMETROS_DECORATIVOS = new Set([
