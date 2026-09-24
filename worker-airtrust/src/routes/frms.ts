@@ -2417,11 +2417,7 @@ frmsRoutes.get(
           fj.processado_com_bug,
           j.data as data_apresentacao,
           j.data as data_liberacao,
-          j.hora_apresentacao,
-          j.hora_termino,
-          j.duracao_jornada_minutos,
-          j.horas_voo_minutos,
-          fj.effectiveness_pct,
+          j.hora_apresentacao, j.hora_termino, j.duracao_jornada_minutos, j.horas_voo_minutos, fj.effectiveness_pct,
           fj.effectiveness_nivel,
           fj.effectiveness_componentes_json,
           fj.tempo_abaixo_limiar_min,
@@ -2436,9 +2432,7 @@ frmsRoutes.get(
           fj.hora_despertar_estimada,
           fj.hora_inicio_sono_estimado,
           fj.duracao_sono_efetiva_min,
-          fj.operational_load_landings_count,
-          fj.operational_load_temperature_max_c,
-          fj.operational_load_data_quality,
+          fj.operational_load_landings_count, fj.operational_load_temperature_max_c, fj.operational_load_data_quality,
           fj.dia_periodo_embarcado,
           fj.total_dias_periodo
        FROM frms_fatorizacao_jornada fj
