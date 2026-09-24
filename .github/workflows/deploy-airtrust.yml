@@ -488,7 +488,36 @@ jobs:
               sleep "$delay"; continue
             fi
             if node scripts/ci/assert-pages-build-version.mjs --expected "${APP_VERSION}" --html-file "$login_body"; then
-              break
+              mapfile -t bootstrap_assets < <(
+                grep -Eo '(src|href)="/assets/[^"]+\.(js|css)"' "$login_body" \
+                  | sed -E 's/^(src|href)="([^"]+)"$/\2/' \
+                  | sort -u
+              )
+              assets_ok=1
+              if [[ "${#bootstrap_assets[@]}" -eq 0 ]]; then
+                echo "No bootstrap JS/CSS assets found in deployed login HTML." >&2
+                assets_ok=0
+              fi
+              for asset_path in "${bootstrap_assets[@]}"; do
+                asset_headers="$(mktemp)"
+                asset_url="https://airtrust.online${asset_path}"
+                asset_status="$(curl -sS -L -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+                  -D "$asset_headers" -o /dev/null -w '%{http_code}' "$asset_url" || true)"
+                asset_content_type="$(awk -F': ' 'tolower($1)=="content-type" {gsub("\r", "", $2); value=$2} END {print value}' "$asset_headers")"
+                rm -f "$asset_headers"
+                case "$asset_path" in
+                  *.js) expected_type='javascript' ;;
+                  *.css) expected_type='text/css' ;;
+                  *) expected_type='' ;;
+                esac
+                if [[ "$asset_status" != "200" || -z "$expected_type" || "$asset_content_type" != *"$expected_type"* ]]; then
+                  echo "Bootstrap asset not ready: path=$asset_path status=$asset_status content-type=$asset_content_type (attempt $i/$attempts)." >&2
+                  assets_ok=0
+                fi
+              done
+              if [[ "$assets_ok" -eq 1 ]]; then
+                break
+              fi
             fi
             if [[ "$i" -eq "$attempts" ]]; then
               echo "Custom-domain build-version never converged to ${APP_VERSION} after $((attempts * delay))s." >&2

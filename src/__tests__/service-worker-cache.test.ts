@@ -10,6 +10,7 @@ const serviceWorkerManagerSource = readFileSync(
 );
 const headersSource = readFileSync(resolve(process.cwd(), 'public/_headers'), 'utf8');
 const indexHtmlSource = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
+const viteConfigSource = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8');
 
 describe('service worker cache guard', () => {
   it('trata navegacoes HTML como network-only sem cache local', () => {
@@ -53,6 +54,12 @@ describe('service worker cache guard', () => {
     expect(indexHtmlSource).toContain('window.location.replace(currentUrl.toString());');
   });
 
+  it('versiona URLs de assets por release para escapar de cache HTML envenenado', () => {
+    expect(viteConfigSource).toContain('const BUILD_ASSET_TAG =');
+    expect(viteConfigSource).toContain('assets/[name]-${BUILD_ASSET_TAG}-[hash].js');
+    expect(viteConfigSource).toContain('assets/[name]-${BUILD_ASSET_TAG}-[hash][extname]');
+  });
+
   it('desregistra service workers existentes e limpa caches no sw-manager sem registrar outro', () => {
     const bypassFunctionMatch = serviceWorkerManagerSource.match(
       /function shouldBypassCleanupForPath\(pathname: string\): boolean \{([\s\S]*?)\n\}/,
@@ -86,5 +93,11 @@ describe('service worker cache guard', () => {
     expect(headersSource).toContain('\n/sw.js\n');
     expect(headersSource).toContain('\n/assets/*.js\n');
     expect(headersSource).toContain('\n/assets/*.css\n');
+    const jsAssetHeaders = headersSource.slice(headersSource.indexOf('/assets/*.js'));
+    const cssAssetHeaders = headersSource.slice(headersSource.indexOf('/assets/*.css'));
+    expect(jsAssetHeaders.split('\n\n')[0]).toContain('max-age=0, must-revalidate');
+    expect(cssAssetHeaders.split('\n\n')[0]).toContain('max-age=0, must-revalidate');
+    expect(jsAssetHeaders.split('\n\n')[0]).not.toContain('immutable');
+    expect(cssAssetHeaders.split('\n\n')[0]).not.toContain('immutable');
   });
 });

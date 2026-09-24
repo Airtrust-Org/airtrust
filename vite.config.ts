@@ -88,6 +88,8 @@ function getBuildVersion(): string {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const BUILD_VERSION = getBuildVersion();
+  const BUILD_ASSET_TAG =
+    BUILD_VERSION.replace(/[^a-zA-Z0-9_-]/g, '').slice(-40) || 'build';
   const apiUrl =
     env.VITE_API_URL || (mode === 'development' ? '' : 'https://api.airtrust.online/api');
   const devProxyTarget = env.VITE_DEV_PROXY_TARGET || 'http://localhost:8787';
@@ -171,13 +173,12 @@ export default defineConfig(({ mode }) => {
       manifest: 'manifest.json',
       rollupOptions: {
         output: {
-          // ✅ CACHE BUSTING: Hash determinístico (não adicionar timestamp aleatório)
-          // Vite usa [hash] baseado no conteúdo do arquivo, garantindo que:
-          // - Mesmos conteúdos = mesmo hash = reusam cache
-          // - Conteúdos diferentes = hashes diferentes = cliente busca novo
-          entryFileNames: 'assets/[name]-[hash].js',
-          chunkFileNames: 'assets/[name]-[hash].js',
-          assetFileNames: 'assets/[name]-[hash][extname]',
+          // CACHE BUSTING: content hash + release tag. The tag deliberately changes
+          // on every governed build so a new deployment cannot reuse a poisoned
+          // browser/CDN URL from a previous custom-domain edge transition.
+          entryFileNames: `assets/[name]-${BUILD_ASSET_TAG}-[hash].js`,
+          chunkFileNames: `assets/[name]-${BUILD_ASSET_TAG}-[hash].js`,
+          assetFileNames: `assets/[name]-${BUILD_ASSET_TAG}-[hash][extname]`,
           // Function form catches React 19 CommonJS proxy/virtual modules that the
           // package-name object form can leave outside the intended vendor chunk.
           manualChunks: manualChunkForModule,
