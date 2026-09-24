@@ -244,7 +244,7 @@ describe('GET /frms/tripulante/:id/explicacao-dia backend trace', () => {
     expect(writesLower.some((query) => query.includes('frms_fatorizacao_jornada'))).toBe(false);
   });
 
-  it('degrada para default_estimate quando não há check-in', async () => {
+  it('fica indisponível quando não há check-in, sem reaproveitar estimativa legada', async () => {
     const app = createFrmsApp();
     const { db } = createMockDb({ withCheckin: false });
 
@@ -256,9 +256,13 @@ describe('GET /frms/tripulante/:id/explicacao-dia backend trace', () => {
 
     expect(response.status).toBe(200);
     const payload = (await response.json()) as {
-      data: { explanation_trace: { dataQuality: { data_source: string; confidence: string } } };
+      data: {
+        jornada: { effectiveness_pct: number | null };
+        explanation_trace: { dataQuality: { data_source: string; confidence: string } };
+      };
     };
-    expect(payload.data.explanation_trace.dataQuality.data_source).toBe('default_estimate');
-    expect(payload.data.explanation_trace.dataQuality.confidence).toBe('reduced');
+    expect(payload.data.jornada.effectiveness_pct).toBeNull();
+    expect(payload.data.explanation_trace.dataQuality.data_source).toBe('missing_checkin');
+    expect(payload.data.explanation_trace.dataQuality.confidence).toBe('unavailable');
   });
 });

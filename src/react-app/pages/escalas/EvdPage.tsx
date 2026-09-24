@@ -127,10 +127,11 @@ interface FrmsDailyFatigueItem {
     | 'critical'
     | 'unfit_for_duty'
     | 'not_submitted'
+    | 'incomplete_checkin'
     | 'no_duty';
   status_label?: string;
   requires_operational_review?: number | boolean;
-  data_source?: 'crew_reported' | 'default_estimate' | 'not_applicable' | string;
+  data_source?: 'crew_reported' | 'missing_checkin' | 'default_estimate' | 'not_applicable' | string;
 }
 
 interface FrmsDailyFatigueAlertItem {
@@ -505,7 +506,7 @@ function getFrmsRosterLabel(signal: FrmsTripulanteSignal | null | undefined): {
     | 'Atenção'
     | 'Revisão operacional'
     | 'Sem check-in'
-    | 'Sem check-in · estimativa padrão'
+    | 'Check-in incompleto'
     | 'Sem jornada'
     | 'Sem referência'
     | 'Indisponível';
@@ -524,10 +525,10 @@ function getFrmsRosterLabel(signal: FrmsTripulanteSignal | null | undefined): {
     return { short: 'ATN', long: 'Atenção' };
   }
   if (signal.status === 'not_submitted') {
-    if (signal.dataSource === 'default_estimate') {
-      return { short: 'SC', long: 'Sem check-in · estimativa padrão', isEstimated: true };
-    }
     return { short: 'SC', long: 'Sem check-in' };
+  }
+  if (signal.status === 'incomplete_checkin') {
+    return { short: 'SC', long: 'Check-in incompleto' };
   }
   if (signal.requiresReview || signal.hasAlert) {
     return { short: 'REV', long: 'Revisão operacional' };
@@ -1781,7 +1782,7 @@ export default function EvdPage() {
           ) : (
             <div className="overflow-x-auto">
               <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
-                Fadiga (F): <code>OK</code> = Check-in recebido / FRMS OK, <code>ATN</code> = Atenção, <code>REV</code> = Revisar com gestor, <code>SC</code> = Check-in pendente (<code>SC Est.</code> = sem check-in, estimativa padrão aplicada), <code>IND</code> = FRMS indisponível.{' '}
+                Fadiga (F): <code>OK</code> = Check-in recebido / FRMS OK, <code>ATN</code> = Atenção, <code>REV</code> = Revisar com gestor, <code>SC</code> = check-in ausente ou incompleto — cálculo FRMS indisponível, <code>IND</code> = FRMS indisponível.{' '}
                 Clique no badge F para abrir o Controle Operacional FRMS filtrado pelo tripulante.
               </div>
               <table className="min-w-full text-sm">

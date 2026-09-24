@@ -266,8 +266,8 @@ type FrmsExplanationTraceSourceSummary = 'informed' | 'estimated' | 'mixed' | 'l
 interface FrmsDayExplanationTrace {
   version: 'frms-day-trace-v1';
   dataQuality: {
-    data_source: 'crew_reported' | 'default_estimate' | 'not_applicable' | null;
-    confidence: 'reported' | 'reduced' | null;
+    data_source: 'crew_reported' | 'missing_checkin' | 'default_estimate' | 'not_applicable' | null;
+    confidence: 'reported' | 'incomplete' | 'unavailable' | 'reduced' | null;
     sourceSummary: FrmsExplanationTraceSourceSummary;
     limitations: string[];
   };
@@ -337,8 +337,8 @@ interface FrmsTraceWindowWorst {
 }
 
 interface FrmsDayExplanationTraceContext {
-  dataSource: 'crew_reported' | 'default_estimate' | 'not_applicable' | null;
-  confidence: 'reported' | 'reduced' | null;
+  dataSource: 'crew_reported' | 'missing_checkin' | 'default_estimate' | 'not_applicable' | null;
+  confidence: 'reported' | 'incomplete' | 'unavailable' | 'reduced' | null;
   wakeTimeSource: string | null;
   recalculationPending: boolean;
   windows: {
@@ -2547,7 +2547,7 @@ frmsRoutes.get(
 
     const [checkinRow, recalcEvent, worst7d, worst28d] = await Promise.all([
       c.env.DB.prepare(
-        `SELECT id, wake_time, report_source
+        `SELECT id, wake_time, jornada_inicio_prevista, horas_sono, report_source
          FROM frms_fadiga_checkin
          WHERE empresa_id = ?
            AND funcionario_id = ?
@@ -2556,7 +2556,13 @@ frmsRoutes.get(
          LIMIT 1`,
       )
         .bind(empresaId, Number(tripulanteId), data)
-        .first<{ id: string; wake_time: string | null; report_source: string | null }>()
+        .first<{
+          id: string;
+          wake_time: string | null;
+          jornada_inicio_prevista: string | null;
+          horas_sono: number | null;
+          report_source: string | null;
+        }>()
         .catch(() => null),
       c.env.DB.prepare(
         `SELECT 1 AS has_pending
@@ -2587,26 +2593,42 @@ frmsRoutes.get(
       }),
     ]);
 
-    const wakeTimeSource = normalizeHora(row.hora_acordou as string | null | undefined)
-      ? 'crew_reported'
-      : normalizeHora(row.hora_despertar_estimada as string | null | undefined)
-        ? 'fallback_apresentacao_minus_config'
-        : normalizeHora(checkinRow?.wake_time)
-          ? 'crew_reported'
-          : null;
+    const checkinPresentation = normalizeHora(checkinRow?.jornada_inicio_prevista);
+    const checkinWake = normalizeHora(checkinRow?.wake_time);
+    const checkinSleepHours = Number(checkinRow?.horas_sono);
+    const checkinComplete =
+      Boolean(checkinRow?.id) &&
+      Boolean(checkinPresentation) &&
+      Boolean(checkinWake) &&
+      Number.isFinite(checkinSleepHours) &&
+      checkinSleepHours > 0 &&
+      checkinSleepHours <= 24;
+
+    const wakeTimeSource = checkinComplete ? 'crew_reported' : null;
     const sourceByCheckin =
-      checkinRow != null
+      checkinComplete
         ? ({
             dataSource: 'crew_reported',
             confidence: 'reported',
           } as const)
-        : ({
-            dataSource: 'default_estimate',
-            confidence: 'reduced',
-          } as const);
+        : checkinRow != null
+          ? ({
+              dataSource: 'crew_reported',
+              confidence: 'incomplete',
+            } as const)
+          : ({
+              dataSource: 'missing_checkin',
+              confidence: 'unavailable',
+            } as const);
     const traceLimitations: string[] = [];
     if (!checkinRow) {
-      traceLimitations.push('Sem check-in diário para a data selecionada; usando estimativa operacional.');
+      traceLimitations.push(
+        'Sem check-in diário para a data selecionada; a efetividade fica indisponível até o check-in.',
+      );
+    } else if (!checkinComplete) {
+      traceLimitations.push(
+        'Check-in diário incompleto; apresentação, despertar e sono/repouso absoluto são obrigatórios para calcular a efetividade.',
+      );
     }
     if (!row.hora_apresentacao) {
       traceLimitations.push('Sem hora de apresentação na jornada; minutos acordado antes da apresentação não disponíveis.');
@@ -2640,21 +2662,49 @@ frmsRoutes.get(
       data,
       limites,
     );
+    const rowForExplanation: Record<string, unknown> = checkinComplete
+      ? {
+          ...row,
+          hora_apresentacao: checkinPresentation,
+          hora_acordou: checkinWake,
+          fonte_sono: 'INFORMADO',
+        }
+      : {
+          ...row,
+          hora_apresentacao: null,
+          hora_acordou: null,
+          fonte_sono: null,
+          effectiveness_pct: null,
+          effectiveness_nivel: null,
+          effectiveness_componentes_json: null,
+          fator_basica_pct: null,
+          tempo_abaixo_limiar_min: null,
+          hora_despertar_estimada: null,
+          hora_inicio_sono_estimado: null,
+          duracao_sono_efetiva_min: null,
+        };
+
+    const unavailableWindow = {
+      available: false,
+      worstDay: null,
+      worstEffectivenessPct: null,
+    };
     const explanation = await buildFrmsDayExplanation(
       c.env,
       {
-        ...row,
-        dias_criticos_consecutivos: diasCriticosConsecutivos,
+        ...rowForExplanation,
+        dias_criticos_consecutivos: checkinComplete ? diasCriticosConsecutivos : 0,
       },
       limites,
       {
         dataSource: sourceByCheckin.dataSource,
         confidence: sourceByCheckin.confidence,
         wakeTimeSource,
-        recalculationPending: Boolean(recalcEvent?.has_pending) || !Boolean(row.hora_apresentacao),
+        recalculationPending:
+          Boolean(recalcEvent?.has_pending) || !checkinComplete || !Boolean(checkinPresentation),
         windows: {
-          sevenDays: worst7d,
-          twentyEightDays: worst28d,
+          sevenDays: checkinComplete ? worst7d : unavailableWindow,
+          twentyEightDays: checkinComplete ? worst28d : unavailableWindow,
         },
         limitations: traceLimitations,
       },

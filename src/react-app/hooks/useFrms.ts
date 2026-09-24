@@ -340,8 +340,8 @@ export interface FrmsDayExplanationRecommendation {
 export interface FrmsDayExplanationTraceResponse {
   version: 'frms-day-trace-v1';
   dataQuality: {
-    data_source?: 'crew_reported' | 'default_estimate' | 'not_applicable' | null;
-    confidence?: 'reported' | 'reduced' | null;
+    data_source?: 'crew_reported' | 'missing_checkin' | 'default_estimate' | 'not_applicable' | null;
+    confidence?: 'reported' | 'incomplete' | 'unavailable' | 'reduced' | null;
     sourceSummary: 'informed' | 'estimated' | 'mixed' | 'legacy' | 'unknown';
     limitations: string[];
   };
@@ -722,9 +722,9 @@ export interface FrmsFadigaCheckinRow {
   horas_sono_48h?: number | null;
   subjective_fatigue_level?: number | null;
   sleepiness_level?: number | null;
-  computed_risk_level?: 'normal' | 'attention' | 'critical' | 'unfit_for_duty' | 'not_submitted';
+  computed_risk_level?: 'normal' | 'attention' | 'critical' | 'unfit_for_duty' | 'not_submitted' | 'incomplete_checkin';
   requires_operational_review?: number;
-  data_source?: 'crew_reported' | 'default_estimate' | 'not_applicable';
+  data_source?: 'crew_reported' | 'missing_checkin' | 'default_estimate' | 'not_applicable';
   requires_frat_review: number;
   frat_sugerido_nivel: string | null;
   associado_frat_avaliacao_id: string | null;
@@ -800,16 +800,18 @@ export function useFrmsFadigaPainel(data?: string) {
 export interface FrmsDailyFatigueStatus {
   date: string;
   funcionario_id?: number;
-  status: 'normal' | 'attention' | 'critical' | 'unfit_for_duty' | 'not_submitted' | 'no_duty';
+  status: 'normal' | 'attention' | 'critical' | 'unfit_for_duty' | 'not_submitted' | 'incomplete_checkin' | 'no_duty';
   submitted: boolean;
-  data_source: 'crew_reported' | 'default_estimate' | 'not_applicable';
-  confidence: 'reported' | 'reduced';
+  data_source: 'crew_reported' | 'missing_checkin' | 'default_estimate' | 'not_applicable';
+  confidence: 'reported' | 'incomplete' | 'unavailable' | 'reduced';
   message: string;
   requires_operational_review: boolean | number;
-  sleep_hours_24h: number;
+  sleep_hours_24h: number | null;
   sleep_hours_48h?: number | null;
-  wake_time: string;
+  wake_time: string | null;
   fit_for_duty?: boolean | null;
+  calculation_available?: boolean;
+  presentation_time?: string | null;
 }
 
 export interface FrmsDailyFatigueAlert {
