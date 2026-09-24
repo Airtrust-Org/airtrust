@@ -50,20 +50,21 @@ function buildIndicator(
 }
 
 describe('fortnightOperationalLabels', () => {
-  it('formata label com score e tendência', () => {
+  it('formata label sem expor score ou tendência vaga', () => {
     expect(formatFortnightLabel(buildIndicator())).toContain('Quinzena completa');
-    expect(formatFortnightLabel(buildIndicator())).toContain('score 42');
-    expect(formatFortnightLabel(buildIndicator())).toContain('estável');
+    expect(formatFortnightLabel(buildIndicator())).toContain('jornada 30.0h');
+    expect(formatFortnightLabel(buildIndicator())).not.toContain('score');
+    expect(formatFortnightLabel(buildIndicator())).not.toContain('estável');
   });
 
   it('retorna fallback sem indicador', () => {
     expect(formatFortnightLabel(null)).toBe('Quinzena sem indicador');
   });
 
-  it('formata tendências', () => {
-    expect(formatFortnightTendencia('CRESCENTE')).toBe('Em alta');
-    expect(formatFortnightTendencia('REDUZINDO')).toBe('Em redução');
-    expect(formatFortnightTendencia('ESTAVEL')).toBe('Estável');
+  it('explica a comparação de carga sem rótulo vago', () => {
+    expect(formatFortnightTendencia('CRESCENTE')).toBe('Jornada/carga maior que a referência recente');
+    expect(formatFortnightTendencia('REDUZINDO')).toBe('Jornada/carga menor que a referência recente');
+    expect(formatFortnightTendencia('ESTAVEL')).toBe('Jornada sem variação relevante');
   });
 
   it('formata natureza do dado', () => {
@@ -99,7 +100,8 @@ describe('fortnightOperationalLabels', () => {
     );
 
     expect(suffix).toContain('Quinzena com atenção');
-    expect(suffix).toContain('score 42');
+    expect(suffix).not.toContain('score 42');
+    expect(suffix).not.toContain('em alta');
     expect(suffix).toContain('Sequência de jornadas elevada.');
     expect(suffix).toContain('Revisar check-in');
   });

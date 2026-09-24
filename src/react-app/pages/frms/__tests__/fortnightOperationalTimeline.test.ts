@@ -156,4 +156,41 @@ describe('buildFortnightTimeline', () => {
       cumulative_flight_min: 390,
     });
   });
+
+  it('resume padrões históricos sem criar novo critério de risco', () => {
+    const result = buildFortnightTimeline(
+      [
+        buildSnapshotItem({
+          data_operacional: '2026-06-16',
+          effectiveness_pct: 92,
+        }),
+        buildSnapshotItem({
+          data_operacional: '2026-06-17',
+          effectiveness_pct: 84,
+          alertas: ['SONO_INSUFICIENTE'],
+        }),
+        buildSnapshotItem({
+          data_operacional: '2026-06-18',
+          teve_jornada: false,
+          duracao_jornada_minutos: 0,
+          horas_voo_minutos: 0,
+          effectiveness_pct: 76,
+          recovery_credit_points: 2,
+          recovery_state: 'FULL',
+          recovery_activity_type: 'STANDBY_HOME_HOTEL',
+        }),
+      ],
+      {
+        periodStart: '2026-06-16',
+        periodEnd: '2026-06-18',
+      },
+    );
+
+    expect(result.summary).toMatchObject({
+      low_sleep_days: 1,
+      recovery_days: 1,
+      no_flight_recovery_days: 1,
+      max_effectiveness_decline_streak_days: 3,
+    });
+  });
 });

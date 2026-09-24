@@ -14,8 +14,6 @@ import {
   formatFortnightMinutes,
   formatFortnightNatureza,
   formatFortnightPeriod,
-  formatFortnightScore,
-  formatFortnightTendencia,
   formatTopModifiers,
   formatFortnightMitigacao,
   resolveFortnightNotice,
@@ -151,6 +149,49 @@ function FortnightTimelinePanel({
               <p className="text-sm font-semibold text-slate-900">
                 {timeline.summary.critical_days} / {timeline.summary.attention_days}
               </p>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+            <p className="text-xs font-semibold text-slate-800">Padrões do período</p>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              Resumo descritivo dos dados confirmados. Não cria um novo score nem substitui a regra FRMS.
+            </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">Queda de efetividade</p>
+                <p className="text-xs font-semibold text-slate-800">
+                  {timeline.summary.max_effectiveness_decline_streak_days >= 2
+                    ? `${timeline.summary.max_effectiveness_decline_streak_days} dias seguidos`
+                    : 'Sem sequência confirmada'}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">Sono insuficiente</p>
+                <p className="text-xs font-semibold text-slate-800">
+                  {timeline.summary.low_sleep_days} dia(s) com alerta canônico
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">Sequência de jornada</p>
+                <p className="text-xs font-semibold text-slate-800">
+                  {indicator?.dias_consecutivos_com_jornada == null
+                    ? 'Não confirmada'
+                    : `${indicator.dias_consecutivos_com_jornada} dia(s) consecutivo(s)`}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">Recuperação real</p>
+                <p className="text-xs font-semibold text-emerald-800">
+                  {timeline.summary.recovery_days} dia(s) registrado(s)
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">Sem jornada + recuperação</p>
+                <p className="text-xs font-semibold text-slate-800">
+                  {timeline.summary.no_flight_recovery_days} dia(s)
+                </p>
+              </div>
             </div>
           </div>
 
@@ -448,22 +489,12 @@ export function FortnightCrewSummaryCard({
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <FortnightStatusBadge status={indicator.status_quinzena} />
-            {!simplified ? (
-              <span className="text-xs text-slate-600">
-                Tendência: {formatFortnightTendencia(indicator.tendencia)}
-              </span>
-            ) : null}
             {checkinPendente || (indicator.dias_com_checkin_pendente ?? 0) > 0 ? (
               <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
                 Check-in pendente
               </span>
             ) : null}
           </div>
-          {!simplified && indicator.score_acumulado != null ? (
-            <p className="text-sm text-slate-700">
-              Score acumulado: <span className="font-semibold">{formatFortnightScore(indicator.score_acumulado)}</span>
-            </p>
-          ) : null}
           <p className="text-sm text-slate-700">{orientation}</p>
         </div>
       )}
