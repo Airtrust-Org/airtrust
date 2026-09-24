@@ -46,7 +46,7 @@ describe('FRMS Data Transparency - historico', () => {
     useFrmsFadigaHistoricoMock.mockReset();
   });
 
-  it('renderiza badges de fonte do dado informado e estimado', () => {
+  it('renderiza badges de fonte do dado informado e estimativa legada', () => {
     useFrmsFadigaHistoricoMock.mockReturnValue({
       data: [
         {
@@ -89,7 +89,7 @@ describe('FRMS Data Transparency - historico', () => {
     );
 
     expect(screen.getByText('Dado informado')).toBeInTheDocument();
-    expect(screen.getByText('Dado estimado')).toBeInTheDocument();
+    expect(screen.getByText('Estimativa legada')).toBeInTheDocument();
     expect(screen.queryByText(/SAFTE-FAST validado/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^inapto$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^apto$/i)).not.toBeInTheDocument();
