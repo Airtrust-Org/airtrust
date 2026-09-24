@@ -42,6 +42,9 @@ function createDbForJornadas(rows: Array<Record<string, unknown>>) {
           if (normalized.includes('FROM frms_jornada j LEFT JOIN frms_fatorizacao_jornada f')) {
             return { results: rows as T[] };
           }
+          if (normalized.includes('SELECT DISTINCT data_checkin FROM frms_fadiga_checkin')) {
+            return { results: [] as T[] };
+          }
           throw new Error(`Unexpected query: ${normalized} :: ${JSON.stringify(binds)}`);
         },
         first: async <T = unknown>() => {

@@ -548,6 +548,7 @@ export default function FrmsFichaTripulante() {
                   } | null
                 }
                 config={limites}
+                dataSource={todayFortnightSnapshotItem?.jornada_data_source ?? null}
               />
             ) : (
               <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 p-5 text-center">
@@ -843,10 +844,16 @@ export default function FrmsFichaTripulante() {
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-gray-600 tabular-nums">
-                        {j.hora_apresentacao || '—'}
+                        <div>{j.hora_apresentacao || '—'}</div>
+                        <div className={`mt-0.5 text-[10px] font-semibold ${presentation.boundarySourceClass}`}>
+                          {presentation.boundarySourceLabel}
+                        </div>
                       </td>
                       <td className="px-4 py-2.5 text-gray-600 tabular-nums">
-                        {j.hora_termino || '—'}
+                        <div>{j.hora_termino || '—'}</div>
+                        <div className={`mt-0.5 text-[10px] font-semibold ${presentation.boundarySourceClass}`}>
+                          {presentation.boundarySourceLabel}
+                        </div>
                       </td>
                       <td className="px-4 py-2.5 text-right text-gray-600 tabular-nums">
                         {presentation.operationalJourneyLabel}

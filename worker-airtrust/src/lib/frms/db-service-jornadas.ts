@@ -29,7 +29,7 @@ import {
 } from './frms-iogp-shadow-caller';
 import { resolveOperationalLoadForJornada } from './operational-load-resolver';
 import { computeFlightHoursDelta, resolveOperationalPolicyV2, type FrmsOperationalPolicyV2 } from './operational-policy-v2';
-import { loadFrmsDutyBoundaryConfig, resolveFrmsDutyBoundary } from './duty-boundary';
+import { loadFrmsDutyBoundaryConfig, resolveFrmsDutyBoundary, resolveFrmsEstimatedDutyBoundary } from './duty-boundary';
 // ────────────────────────────────────────────────────────
 // Período embarcado
 // ────────────────────────────────────────────────────────
@@ -330,7 +330,7 @@ export async function recalcularPipeline(
   const rawCutoffTime = jornada.hora_corte_motor ?? (
     String(jornada.origem || '').toUpperCase() === 'SIGVOOS' ? jornada.hora_termino : null
   );
-  let dutyBoundaryComplete = false;
+  let dutyBoundarySource: 'REAL' | 'ESTIMADO' | 'AUSENTE' = 'AUSENTE';
 
   if (checkinEvidence) {
     const dutyConfig = await loadFrmsDutyBoundaryConfig(db, empresaId);
@@ -348,7 +348,7 @@ export async function recalcularPipeline(
         checkinEvidence.wakeTime,
         checkinEvidence.sleepHours24h,
       );
-      dutyBoundaryComplete = true;
+      dutyBoundarySource = 'REAL';
       await db
         .prepare(
           `UPDATE frms_jornada
@@ -378,20 +378,62 @@ export async function recalcularPipeline(
     }
   }
 
-  if (!dutyBoundaryComplete) {
-    jornada.hora_apresentacao = null;
-    jornada.duracao_jornada_minutos = 0;
-    await db
-      .prepare(
-        `UPDATE frms_jornada
-            SET hora_apresentacao = NULL,
-                duracao_jornada_minutos = 0,
-                hora_corte_motor = COALESCE(hora_corte_motor, ?),
-                updated_at = ?
-          WHERE id = ? AND deleted_at IS NULL`,
-      )
-      .bind(rawCutoffTime, now(), jornada.id)
-      .run();
+  if (dutyBoundarySource === 'AUSENTE') {
+    // Compatibilidade histórica: antes do check-in diário tornar-se a fonte
+    // autoritativa, o SIGVOOS/FIRA fornecia uma janela operacional baseada no
+    // primeiro evento do voo e no encerramento operacional. Mantemos essa
+    // janela apenas como ESTIMADA quando não há check-in completo.
+    const estimatedBoundary = resolveFrmsEstimatedDutyBoundary({
+      presentationTime: jornada.hora_apresentacao,
+      firstEngineStart: jornada.hora_primeiro_acionamento,
+      firstTakeoff: jornada.hora_primeira_decolagem,
+      endTime: rawCutoffTime ?? jornada.hora_termino,
+      lastLanding: jornada.hora_ultimo_pouso,
+    });
+    const estimatedPresentation = estimatedBoundary.presentationTime;
+    const estimatedEnd = estimatedBoundary.dutyEndTime;
+    const estimatedDuration = estimatedBoundary.durationMinutes;
+
+    if (estimatedBoundary.complete && estimatedPresentation && estimatedEnd && estimatedDuration != null) {
+      jornada.hora_apresentacao = estimatedPresentation;
+      jornada.hora_termino = estimatedEnd;
+      jornada.duracao_jornada_minutos = estimatedDuration;
+      dutyBoundarySource = 'ESTIMADO';
+      await db
+        .prepare(
+          `UPDATE frms_jornada
+              SET hora_apresentacao = ?,
+                  hora_termino = ?,
+                  duracao_jornada_minutos = ?,
+                  hora_corte_motor = COALESCE(hora_corte_motor, ?),
+                  updated_at = ?
+            WHERE id = ? AND deleted_at IS NULL`,
+        )
+        .bind(
+          estimatedPresentation,
+          estimatedEnd,
+          estimatedDuration,
+          rawCutoffTime,
+          now(),
+          jornada.id,
+        )
+        .run();
+    } else {
+      // Sem base operacional suficiente, não inventar duração.
+      jornada.hora_apresentacao = null;
+      jornada.duracao_jornada_minutos = null;
+      await db
+        .prepare(
+          `UPDATE frms_jornada
+              SET hora_apresentacao = NULL,
+                  duracao_jornada_minutos = NULL,
+                  hora_corte_motor = COALESCE(hora_corte_motor, ?),
+                  updated_at = ?
+            WHERE id = ? AND deleted_at IS NULL`,
+        )
+        .bind(rawCutoffTime, now(), jornada.id)
+        .run();
+    }
   }
 
   // 1. Buscar histórico para fatorização (repouso anterior)
@@ -475,8 +517,8 @@ export async function recalcularPipeline(
       hora_ultimo_pouso: jornada.hora_ultimo_pouso,
       hora_corte_motor: jornada.hora_corte_motor,
       hora_termino: jornada.hora_termino,
-      hora_dormiu: dutyBoundaryComplete ? jornada.hora_dormiu ?? null : null,
-      hora_acordou: dutyBoundaryComplete ? checkinEvidence?.wakeTime ?? null : null,
+      hora_dormiu: dutyBoundarySource === 'REAL' ? jornada.hora_dormiu ?? null : null,
+      hora_acordou: dutyBoundarySource === 'REAL' ? checkinEvidence?.wakeTime ?? null : null,
       dia_periodo_embarcado: periodoEmbarcado?.dia ?? null,
       total_dias_periodo: periodoEmbarcado?.total ?? null,
     },
@@ -569,8 +611,8 @@ export async function recalcularPipeline(
       fatResult.fator_hv_noturno_dep_pct,
       fatResult.fator_hv_noturno_arr_pct,
       fatResult.total_fatorizado_hv,
-      dutyBoundaryComplete ? effectResult.effectiveness_pct : null,
-      dutyBoundaryComplete ? effectResult.nivel : null,
+      dutyBoundarySource !== 'AUSENTE' ? effectResult.effectiveness_pct : null,
+      dutyBoundarySource !== 'AUSENTE' ? effectResult.nivel : null,
       JSON.stringify({
         ...effectResult.componentes,
         operational_load: effectResult.operational_load,
@@ -675,8 +717,8 @@ export async function recalcularPipeline(
     fator_apresentacao_pct: effectResult.fator_apresentacao_calibrado_pct,
     fator_repouso_pct: effectResult.fator_repouso_calibrado_pct,
     total_fatorizado_jornada: effectResult.total_fatorizado_calibrado_jornada,
-    effectiveness_nivel: dutyBoundaryComplete ? effectResult.nivel : null,
-    effectiveness_pct: dutyBoundaryComplete ? effectResult.effectiveness_pct : null,
+    effectiveness_nivel: dutyBoundarySource !== 'AUSENTE' ? effectResult.nivel : null,
+    effectiveness_pct: dutyBoundarySource !== 'AUSENTE' ? effectResult.effectiveness_pct : null,
     created_at: timestamp,
     updated_at: timestamp,
     deleted_at: null,
@@ -1397,6 +1439,41 @@ export async function buscarJornadas(
     }
     return jornada;
   });
+
+  const realCheckinDates = new Set<string>();
+  if (data.length > 0) {
+    const dates = data.map((jornada) => String(jornada.data || '')).filter(Boolean).sort();
+    const firstDate = dates[0];
+    const lastDate = dates[dates.length - 1];
+    if (firstDate && lastDate) {
+      const checkins = await db
+        .prepare(
+          `SELECT DISTINCT data_checkin
+             FROM frms_fadiga_checkin
+            WHERE funcionario_id = ?
+              AND data_checkin >= ?
+              AND data_checkin <= ?
+              AND deleted_at IS NULL
+              AND jornada_inicio_prevista IS NOT NULL
+              AND wake_time IS NOT NULL
+              AND horas_sono > 0
+              AND horas_sono <= 24`,
+        )
+        .bind(Number(tripulanteId), firstDate, lastDate)
+        .all<{ data_checkin: string }>();
+      for (const row of checkins.results || []) realCheckinDates.add(String(row.data_checkin));
+    }
+  }
+
+  for (const jornada of data) {
+    Object.assign(jornada as FrmsJornada & Record<string, unknown>, {
+      jornada_boundary_source: realCheckinDates.has(String(jornada.data))
+        ? 'REAL'
+        : jornada.hora_apresentacao && jornada.hora_termino
+          ? 'ESTIMADO'
+          : 'AUSENTE',
+    });
+  }
 
   const canonicalDates = new Set(
     data.filter((jornada) => shouldUseForOperationalFrms(jornada)).map((jornada) => jornada.data),

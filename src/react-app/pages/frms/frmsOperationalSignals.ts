@@ -103,9 +103,16 @@ export function resolveComplianceSignal(
   const indicator = item.fortnight_indicator;
 
   const pct = indicator?.limite_referencia?.pct_atingido;
+  const limitMinutes = indicator?.limite_referencia?.valor_limite;
+  const currentMinutes = indicator?.limite_referencia?.valor_atual;
   const detail =
     pct != null && Number.isFinite(pct)
-      ? `${Math.round(pct)}% do limite de referência`
+      ? [
+          `${Math.round(pct)}% do limite de referência para o período`,
+          currentMinutes != null && Number.isFinite(currentMinutes) && limitMinutes != null && Number.isFinite(limitMinutes)
+            ? `${(Number(currentMinutes) / 60).toFixed(1).replace('.', ',')} h de ${(Number(limitMinutes) / 60).toFixed(1).replace('.', ',')} h`
+            : null,
+        ].filter(Boolean).join(' · ')
       : undefined;
 
   if (!indicator) {

@@ -52,6 +52,7 @@ interface Props {
   componentes?: EffectivenessComponentes | null;
   operationalLoad?: OperationalLoadDetail | null;
   config: Partial<Record<string, number>> | null;
+  dataSource?: 'REAL' | 'MANUAL' | 'ESTIMADO' | 'AUSENTE' | 'INCONSISTENTE' | null;
   compact?: boolean;
 }
 
@@ -123,6 +124,7 @@ export default function FrmsEffectivenessPanel({
   componentes,
   operationalLoad,
   config,
+  dataSource = null,
   compact = false,
 }: Props) {
   const pct = effectiveness_pct;
@@ -161,8 +163,8 @@ export default function FrmsEffectivenessPanel({
   }
 
   const componentLabels: Record<string, string> = {
-    processo_s: 'Proc. S',
-    processo_c: 'Proc. C',
+    processo_s: 'Sono acumulado (Proc. S)',
+    processo_c: 'Ritmo circadiano (Proc. C)',
     recuperacao: 'Recuperação',
     repouso: 'Repouso',
     hv: 'Horas Voo',
@@ -181,9 +183,14 @@ export default function FrmsEffectivenessPanel({
       <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
         Efetividade estimada
       </h4>
-      <p className="mb-3 text-[11px] text-slate-500">
-        Proxy operacional/fisiológico derivado de jornada, repouso, sono, circadiano e ciclo.
-        Quanto maior, melhor.
+      <p className="mb-2 text-[11px] text-slate-500">
+        Estimativa operacional que combina jornada, sono/repouso, ritmo circadiano e carga de voo.
+        100% representa a referência do modelo; reduções mostram os fatores que degradaram o índice.
+      </p>
+      <p className={`mb-3 text-[11px] font-medium ${
+        dataSource === 'REAL' ? 'text-emerald-700' : dataSource === 'ESTIMADO' ? 'text-amber-700' : 'text-slate-500'
+      }`}>
+        Fonte da jornada: {dataSource === 'REAL' ? 'real — horário informado no check-in' : dataSource === 'ESTIMADO' ? 'estimada — janela operacional anterior ao check-in' : 'não confirmada'}.
       </p>
 
       {/* Score circle + label */}
@@ -223,7 +230,11 @@ export default function FrmsEffectivenessPanel({
       {componentes && (
         <div className="space-y-1.5">
           <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">
-            Decomposição
+            O que alterou o índice
+          </p>
+          <p className="text-[10px] leading-4 text-slate-500">
+            Valores negativos reduzem a efetividade; 0,0% significa que o fator calculado não alterou o índice.
+            Evidência ausente é indicada separadamente e não deve ser interpretada como zero.
           </p>
           {componentKeys.map((key) => {
             const value = componentes[key] as number;

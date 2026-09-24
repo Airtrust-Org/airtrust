@@ -11,6 +11,8 @@ export interface JornadaMensalPresentation {
   operationalHvLabel: string;
   operationalJourneyLabel: string;
   auxiliarySourceLabel: string | null;
+  boundarySourceLabel: 'Real' | 'Estimado' | 'Sem dado';
+  boundarySourceClass: string;
 }
 
 function formatPct(value?: number | null): string {
@@ -78,6 +80,7 @@ export function buildJornadaMensalPresentation(
         | 'usado_no_frms_operacional'
         | 'duracao_jornada_minutos'
         | 'horas_voo_minutos'
+        | 'jornada_boundary_source'
       >
     >,
 ): JornadaMensalPresentation {
@@ -113,5 +116,17 @@ export function buildJornadaMensalPresentation(
       !usedOperationally && originalSource
         ? `${originalSource}: ${formatOperationalMinutes(jornada.horas_voo_minutos)}`
         : null,
+    boundarySourceLabel:
+      jornada.jornada_boundary_source === 'REAL'
+        ? 'Real'
+        : jornada.jornada_boundary_source === 'ESTIMADO'
+          ? 'Estimado'
+          : 'Sem dado',
+    boundarySourceClass:
+      jornada.jornada_boundary_source === 'REAL'
+        ? 'text-emerald-700'
+        : jornada.jornada_boundary_source === 'ESTIMADO'
+          ? 'text-amber-700'
+          : 'text-slate-400',
   };
 }
