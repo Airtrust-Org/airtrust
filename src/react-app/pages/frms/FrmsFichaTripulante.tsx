@@ -324,6 +324,8 @@ export default function FrmsFichaTripulante() {
       effectiveness_nivel: string;
       effectiveness_componentes: Record<string, number> | null;
     } | null;
+    effectiveness_status?: 'AVAILABLE' | 'CHECKIN_REQUIRED' | 'CALCULATION_PENDING' | 'NO_JOURNEY';
+    effectiveness_reference_date?: string | null;
   } | null;
   const alertasMes: FrmsAlertaRow[] = (alertasMesRaw as FrmsAlertaRow[] | null) ?? [];
   const rolling = acumulo?.rolling;
@@ -495,13 +497,6 @@ export default function FrmsFichaTripulante() {
           </section>
         ) : null}
 
-        <FortnightConsolidatedPanel
-          indicator={fortnightIndicator}
-          loading={loadingFrmsSnapshot}
-          funcionarioId={requestedFuncionarioId}
-          focusDate={hojeIso}
-        />
-
         {/* Non-operational crew warning */}
         {!loadingFrmsSnapshot && todayFortnightSnapshotItem && !isTripulanteOperacional(todayFortnightSnapshotItem.funcao) && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -635,6 +630,14 @@ export default function FrmsFichaTripulante() {
             </p>
           </div>
         </section>
+
+        {/* A quinzena permanece como contexto, depois da decisão diária. */}
+        <FortnightConsolidatedPanel
+          indicator={fortnightIndicator}
+          loading={loadingFrmsSnapshot}
+          funcionarioId={requestedFuncionarioId}
+          focusDate={hojeIso}
+        />
 
         {/* Month selector + Table */}
         <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
