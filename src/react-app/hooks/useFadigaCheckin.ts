@@ -102,8 +102,9 @@ export interface FadigaPainelEquipeItem {
     | 'critical'
     | 'unfit_for_duty'
     | 'not_submitted'
+    | 'incomplete_checkin'
     | 'no_duty';
-  data_source: 'crew_reported' | 'default_estimate' | 'not_applicable';
+  data_source: 'crew_reported' | 'missing_checkin' | 'default_estimate' | 'not_applicable';
   kss_score: number | null;
   score_fadiga: number | null;
   nivel_fadiga: string | null;
