@@ -73,7 +73,7 @@ function formatPercent(value: number): string {
 export function resolveDailyFatigueSignal(
   item: FrmsOperationalSnapshotItem,
 ): FrmsOperationalSignal {
-  const base = { key: 'daily-fatigue' as const, label: 'Fadiga diária' };
+  const base = { key: 'daily-fatigue' as const, label: 'Check-in diário' };
 
   const horario = item.checkin_horario?.trim();
   const kss = item.kss_score;
@@ -99,7 +99,7 @@ export function resolveDailyFatigueSignal(
 export function resolveComplianceSignal(
   item: FrmsOperationalSnapshotItem,
 ): FrmsOperationalSignal {
-  const base = { key: 'compliance' as const, label: 'Compliance' };
+  const base = { key: 'compliance' as const, label: 'Carga do período' };
   const indicator = item.fortnight_indicator;
 
   const pct = indicator?.limite_referencia?.pct_atingido;
@@ -114,7 +114,7 @@ export function resolveComplianceSignal(
 
   switch (indicator.status_quinzena) {
     case 'OK':
-      return { ...base, value: 'Conforme', tone: 'ok', detail };
+      return { ...base, value: 'Dentro da referência', tone: 'ok', detail };
     case 'ATENCAO':
       return { ...base, value: 'Atenção', tone: 'warning', detail };
     case 'CRITICO':
