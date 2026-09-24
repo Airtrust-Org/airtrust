@@ -34,6 +34,8 @@ export async function buscarAcumuloTripulante(
     effectiveness_nivel: string;
     effectiveness_componentes: Record<string, number> | null;
   } | null;
+  effectiveness_status: 'AVAILABLE' | 'CHECKIN_REQUIRED' | 'CALCULATION_PENDING' | 'NO_JOURNEY';
+  effectiveness_reference_date: string | null;
 }> {
   const hoje = new Date().toISOString().slice(0, 10);
 
@@ -118,42 +120,89 @@ export async function buscarAcumuloTripulante(
     fatorizacoes: fatorizacoes.results || [],
   });
 
-  // Latest effectiveness for this tripulante
+  // Effectiveness is valid only for the latest operational day when the crew
+  // submitted the daily fatigue check-in. Never fall back to an older score.
   let effectiveness: {
     effectiveness_pct: number;
     effectiveness_nivel: string;
     effectiveness_componentes: Record<string, number> | null;
   } | null = null;
+  let effectivenessStatus: 'AVAILABLE' | 'CHECKIN_REQUIRED' | 'CALCULATION_PENDING' | 'NO_JOURNEY' =
+    'NO_JOURNEY';
+  let effectivenessReferenceDate: string | null = null;
   try {
     const effRow = await db
       .prepare(
-        `SELECT f.effectiveness_pct, f.effectiveness_nivel, f.effectiveness_componentes_json
-         FROM frms_fatorizacao_jornada f
-         JOIN frms_jornada j ON j.id = f.jornada_id AND j.deleted_at IS NULL
-         WHERE j.tripulante_id = ? AND f.deleted_at IS NULL
-           AND f.effectiveness_pct IS NOT NULL
-         ORDER BY j.data DESC LIMIT 1`,
+        `SELECT j.data AS reference_date, ch.id AS checkin_id,
+                ch.jornada_inicio_prevista AS checkin_hora_apresentacao,
+                ch.wake_time AS checkin_wake_time,
+                ch.horas_sono AS checkin_horas_sono,
+                f.effectiveness_pct, f.effectiveness_nivel, f.effectiveness_componentes_json
+         FROM frms_jornada j
+         LEFT JOIN frms_fatorizacao_jornada f
+           ON f.jornada_id = j.id AND f.deleted_at IS NULL
+         LEFT JOIN frms_fadiga_checkin ch
+           ON ch.empresa_id = ?
+          AND ch.funcionario_id = CAST(j.tripulante_id AS INTEGER)
+          AND ch.data_checkin = j.data
+          AND ch.deleted_at IS NULL
+         WHERE j.tripulante_id = ?
+           AND j.deleted_at IS NULL
+           AND ${CANONICAL_JOINED_JORNADA_SOURCE_SQL}
+         ORDER BY j.data DESC, j.created_at DESC, j.id DESC
+         LIMIT 1`,
       )
-      .bind(tripulanteId)
+      .bind(empresaId, tripulanteId)
       .first<{
-        effectiveness_pct: number;
-        effectiveness_nivel: string;
+        reference_date: string;
+        checkin_id: string | null;
+        checkin_hora_apresentacao: string | null;
+        checkin_wake_time: string | null;
+        checkin_horas_sono: number | null;
+        effectiveness_pct: number | null;
+        effectiveness_nivel: string | null;
         effectiveness_componentes_json: string | null;
       }>();
+
     if (effRow) {
-      effectiveness = {
-        effectiveness_pct: effRow.effectiveness_pct,
-        effectiveness_nivel: effRow.effectiveness_nivel,
-        effectiveness_componentes: effRow.effectiveness_componentes_json
-          ? JSON.parse(effRow.effectiveness_componentes_json)
-          : null,
-      };
+      effectivenessReferenceDate = effRow.reference_date;
+      const checkinComplete =
+        Boolean(effRow.checkin_id) &&
+        /^\d{2}:\d{2}$/.test(effRow.checkin_hora_apresentacao ?? '') &&
+        /^\d{2}:\d{2}$/.test(effRow.checkin_wake_time ?? '') &&
+        Number.isFinite(Number(effRow.checkin_horas_sono)) &&
+        Number(effRow.checkin_horas_sono) > 0;
+
+      if (!checkinComplete) {
+        effectivenessStatus = 'CHECKIN_REQUIRED';
+      } else if (effRow.effectiveness_pct == null || !Number.isFinite(Number(effRow.effectiveness_pct))) {
+        effectivenessStatus = 'CALCULATION_PENDING';
+      } else {
+        effectivenessStatus = 'AVAILABLE';
+        effectiveness = {
+          effectiveness_pct: Number(effRow.effectiveness_pct),
+          effectiveness_nivel: effRow.effectiveness_nivel ?? 'INDEFINIDO',
+          effectiveness_componentes: effRow.effectiveness_componentes_json
+            ? JSON.parse(effRow.effectiveness_componentes_json)
+            : null,
+        };
+      }
     }
   } catch {
-    // pre-migration graceful fallback
+    // Fail closed: missing schema/context must never resurrect an older effectiveness.
+    effectiveness = null;
+    effectivenessStatus = 'CALCULATION_PENDING';
   }
 
-  return { nome, rolling: rolling ?? null, mensal, limites, effectiveness };
+  return {
+    nome,
+    rolling: rolling ?? null,
+    mensal,
+    limites,
+    effectiveness,
+    effectiveness_status: effectivenessStatus,
+    effectiveness_reference_date: effectivenessReferenceDate,
+  };
 }
 
 /**

@@ -51,6 +51,16 @@ type FatorizacaoRow = {
 function createDbFixture(input: {
   jornadaRows: JornadaRow[];
   fatorizacaoRows: FatorizacaoRow[];
+  effectivenessRow?: {
+    reference_date: string;
+    checkin_id: string | null;
+    checkin_hora_apresentacao: string | null;
+    checkin_wake_time: string | null;
+    checkin_horas_sono: number | null;
+    effectiveness_pct: number | null;
+    effectiveness_nivel: string | null;
+    effectiveness_componentes_json: string | null;
+  } | null;
 }) {
   const statements: string[] = [];
 
@@ -172,6 +182,10 @@ function createDbFixture(input: {
               .sort((left, right) => right.data.localeCompare(left.data));
             const mes = eligible[0]?.data.slice(0, 7);
             return mes ? { mes } : null;
+          }
+
+          if (query.includes('SELECT j.data AS reference_date, ch.id AS checkin_id')) {
+            return input.effectivenessRow ?? null;
           }
 
           if (query.includes('SELECT f.effectiveness_pct')) {
@@ -301,4 +315,73 @@ describe('buscarAcumuloTripulante source policy', () => {
       hv_realizada_min: 189,
     });
   });
+
+  it('não reutiliza effectiveness antigo quando a jornada mais recente não tem check-in completo', async () => {
+    const { db } = createDbFixture({
+      jornadaRows: [
+        {
+          tripulante_id: TRIPULANTE_ID,
+          data: '2026-06-05',
+          status: 'ES',
+          duracao_jornada_minutos: 315,
+          horas_voo_minutos: 189,
+          origem: 'SIGVOOS',
+        },
+      ],
+      fatorizacaoRows: [],
+      effectivenessRow: {
+        reference_date: '2026-06-05',
+        checkin_id: null,
+        checkin_hora_apresentacao: null,
+        checkin_wake_time: null,
+        checkin_horas_sono: null,
+        effectiveness_pct: 92,
+        effectiveness_nivel: 'Normal',
+        effectiveness_componentes_json: '{"repouso":0.1}',
+      },
+    });
+
+    const resultado = await buscarAcumuloTripulante(db, TRIPULANTE_ID, EMPRESA_ID, '2026-06');
+
+    expect(resultado.effectiveness).toBeNull();
+    expect(resultado.effectiveness_status).toBe('CHECKIN_REQUIRED');
+    expect(resultado.effectiveness_reference_date).toBe('2026-06-05');
+  });
+
+  it('expõe effectiveness somente para a jornada mais recente com check-in completo do mesmo dia', async () => {
+    const { db } = createDbFixture({
+      jornadaRows: [
+        {
+          tripulante_id: TRIPULANTE_ID,
+          data: '2026-06-05',
+          status: 'ES',
+          duracao_jornada_minutos: 315,
+          horas_voo_minutos: 189,
+          origem: 'SIGVOOS',
+        },
+      ],
+      fatorizacaoRows: [],
+      effectivenessRow: {
+        reference_date: '2026-06-05',
+        checkin_id: 'ck-5',
+        checkin_hora_apresentacao: '06:20',
+        checkin_wake_time: '04:45',
+        checkin_horas_sono: 7.5,
+        effectiveness_pct: 82,
+        effectiveness_nivel: 'ATENCAO',
+        effectiveness_componentes_json: '{"repouso":-0.2}',
+      },
+    });
+
+    const resultado = await buscarAcumuloTripulante(db, TRIPULANTE_ID, EMPRESA_ID, '2026-06');
+
+    expect(resultado.effectiveness).toMatchObject({
+      effectiveness_pct: 82,
+      effectiveness_nivel: 'ATENCAO',
+      effectiveness_componentes: { repouso: -0.2 },
+    });
+    expect(resultado.effectiveness_status).toBe('AVAILABLE');
+    expect(resultado.effectiveness_reference_date).toBe('2026-06-05');
+  });
+
 });
