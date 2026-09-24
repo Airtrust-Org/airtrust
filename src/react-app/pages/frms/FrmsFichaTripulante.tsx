@@ -538,7 +538,11 @@ export default function FrmsFichaTripulante() {
                 <div>
                   <p className="text-sm font-semibold text-rose-800">Efetividade indisponível</p>
                   <p className="mt-1 text-xs text-rose-700">
-                    O cálculo exige check-in diário completo: apresentação, sono/repouso absoluto e horário de despertar.
+                    {acumulo?.effectiveness_status === 'NO_JOURNEY'
+                      ? 'Sem jornada operacional confirmada para calcular a efetividade.'
+                      : acumulo?.effectiveness_status === 'CALCULATION_PENDING'
+                        ? 'Check-in recebido; o cálculo de efetividade ainda não está disponível.'
+                        : 'O cálculo exige check-in diário completo: apresentação, sono/repouso absoluto e horário de despertar.'}
                   </p>
                 </div>
               </div>

@@ -261,6 +261,8 @@ export function useFrmsAcumulo(tripulanteId: string | undefined, mes?: string) {
       effectiveness_nivel: string;
       effectiveness_componentes: Record<string, number> | null;
     } | null;
+    effectiveness_status: 'AVAILABLE' | 'CHECKIN_REQUIRED' | 'CALCULATION_PENDING' | 'NO_JOURNEY';
+    effectiveness_reference_date: string | null;
   }>(url || '', { enabled: !!tripulanteId, requireAuth: false, bypassGetCache: true });
 }
 
