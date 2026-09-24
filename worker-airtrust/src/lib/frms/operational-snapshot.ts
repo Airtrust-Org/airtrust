@@ -1,6 +1,5 @@
 import type { Origem } from './types';
 import { calcularDiaDoCiclo } from './db-service-jornadas';
-import { resolverFrmsConfig } from './frms-config';
 import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
 import {
   buildFrmsFortnightIndicatorMap,
@@ -71,6 +70,9 @@ export interface FrmsOperationalSnapshotItem {
   jornada_origem: Origem | null;
   snapshot_status: FrmsOperationalSnapshotStatus;
   fortnight_indicator: FrmsFortnightIndicator | null;
+  recovery_credit_points?: number;
+  recovery_state?: string | null;
+  recovery_activity_type?: string | null;
 
   alertas: FrmsOperationalSnapshotAlertCode[];
   natureza_dado: FrmsNaturezaDado;
@@ -117,7 +119,6 @@ export interface FrmsOperationalSnapshotFilters {
 
 export interface BuildOperationalSnapshotInput {
   empresaId: number;
-  wakeFallbackLeadMinutes?: number;
   policy?: FrmsDecisaoPolicy;
   hoje?: string;
   rows: {
@@ -155,6 +156,7 @@ interface CheckinSnapshotRow {
   data_operacional: string;
   funcionario_id: number;
   hora_checkin: string | null;
+  hora_apresentacao?: string | null;
   kss_score: number | null;
   horas_sono: number | null;
   qualidade_sono: number | null;
@@ -193,32 +195,6 @@ function normalizeText(value: unknown): string | null {
 function asNumber(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function hmsDiffInMinutes(start: string | null, end: string | null): number {
-  if (!start || !end) return 0;
-  const startMatch = /^(\d{2}):(\d{2})$/.exec(start);
-  const endMatch = /^(\d{2}):(\d{2})$/.exec(end);
-  if (!startMatch || !endMatch) return 0;
-
-  const startMinutes = Number(startMatch[1]) * 60 + Number(startMatch[2]);
-  const endMinutes = Number(endMatch[1]) * 60 + Number(endMatch[2]);
-  if (endMinutes >= startMinutes) return endMinutes - startMinutes;
-  return 24 * 60 - startMinutes + endMinutes;
-}
-
-function computeWakeFromPresentation(
-  horaApresentacao: string | null,
-  leadMinutes = 90,
-): string | null {
-  if (!horaApresentacao) return null;
-  const match = /^(\d{2}):(\d{2})$/.exec(horaApresentacao);
-  if (!match) return null;
-  const total = Number(match[1]) * 60 + Number(match[2]);
-  const wake = ((total - leadMinutes) % 1440 + 1440) % 1440;
-  const hh = String(Math.floor(wake / 60)).padStart(2, '0');
-  const mm = String(wake % 60).padStart(2, '0');
-  return `${hh}:${mm}`;
 }
 
 function alertPriority(status: FrmsOperationalSnapshotStatus): number {
@@ -408,9 +384,6 @@ const ROLLING_168H_CONTEXT_LEAD_DAYS = 6;
 export function buildFrmsOperationalSnapshot(
   input: BuildOperationalSnapshotInput,
 ): FrmsOperationalSnapshotResult {
-  const wakeFallbackLeadMinutes = Number.isFinite(input.wakeFallbackLeadMinutes)
-    ? Number(input.wakeFallbackLeadMinutes)
-    : 90;
   const escalaMap = new Map<string, ScaleSnapshotRow>();
   const jornadaMap = new Map<string, JornadaSnapshotRow>();
   const checkinMap = new Map<string, CheckinSnapshotRow>();
@@ -517,15 +490,16 @@ export function buildFrmsOperationalSnapshot(
     const escalado = Boolean(escala);
     const teveJornada = Boolean(jornada);
 
-    const horaApresentacao =
-      normalizeText(escala?.hora_apresentacao) ?? normalizeText(jornada?.hora_apresentacao);
+    // A apresentação declarada no check-in diário é a fonte canônica para o FRMS.
+    // Escala/SIGVOOS continuam sendo evidência operacional, mas não substituem o dado
+    // subjetivo obrigatório quando ele estiver ausente.
+    const horaApresentacao = normalizeText(checkin?.hora_apresentacao);
     const horaTermino = normalizeText(jornada?.hora_termino) ?? normalizeText(escala?.hora_termino);
 
     const horasVooMinutos = asNumber(jornada?.horas_voo_minutos);
-    let duracaoJornadaMinutos = asNumber(jornada?.duracao_jornada_minutos);
-    if (duracaoJornadaMinutos <= 0) {
-      duracaoJornadaMinutos = hmsDiffInMinutes(horaApresentacao, horaTermino);
-    }
+    // A duração canônica é produzida pelo pipeline após o check-in. O snapshot
+    // não reconstrói jornada a partir de horários parciais/legados.
+    const duracaoJornadaMinutos = Math.max(0, asNumber(jornada?.duracao_jornada_minutos));
 
     const { source: jornadaDataSource, origem: jornadaOrigem } = resolveJornadaSource(jornada);
 
@@ -538,33 +512,28 @@ export function buildFrmsOperationalSnapshot(
     const kss = checkin ? asNumber(checkin.kss_score, 0) : null;
     const horasSonoCheckin = checkin ? Number(checkin.horas_sono ?? 0) : null;
 
-    const sleepDataSource: FrmsOperationalSnapshotItem['sleep_data_source'] = checkin
-      ? 'REAL'
-      : escalado || teveJornada
-        ? 'ESTIMADO'
+    // Sem check-in válido não há fallback de sono de 8 h nem despertar inferido.
+    // O snapshot permanece incompleto/ausente e a decisão operacional deve refletir
+    // a falta de evidência, em vez de fabricar precisão.
+    const sleepDataSource: FrmsOperationalSnapshotItem['sleep_data_source'] =
+      checkin && horasSonoCheckin != null && Number.isFinite(horasSonoCheckin) && horasSonoCheckin > 0
+        ? 'REAL'
         : 'AUSENTE';
 
     const wakeDataSource: FrmsOperationalSnapshotItem['wake_data_source'] = checkin?.wake_time
       ? 'REAL'
-      : horaApresentacao
-        ? 'ESTIMADO'
-        : 'AUSENTE';
+      : 'AUSENTE';
 
-    const horasSono =
-      sleepDataSource === 'REAL'
-        ? horasSonoCheckin
-        : sleepDataSource === 'ESTIMADO'
-          ? 8
-          : null;
+    const horasSono = sleepDataSource === 'REAL' ? horasSonoCheckin : null;
+    const horaAcordar = wakeDataSource === 'REAL' ? normalizeText(checkin?.wake_time) : null;
 
-    const horaAcordar =
-      wakeDataSource === 'REAL'
-        ? normalizeText(checkin?.wake_time)
-        : wakeDataSource === 'ESTIMADO'
-          ? computeWakeFromPresentation(horaApresentacao, wakeFallbackLeadMinutes)
-          : null;
+    const completeDailyCheckin =
+      Boolean(checkin) &&
+      Boolean(horaApresentacao) &&
+      sleepDataSource === 'REAL' &&
+      wakeDataSource === 'REAL';
 
-    const effectivenessPctRaw = efetividade?.effectiveness_pct;
+    const effectivenessPctRaw = completeDailyCheckin ? efetividade?.effectiveness_pct : null;
     const effectivenessPct =
       effectivenessPctRaw == null ? null : Number(effectivenessPctRaw);
     const effectivenessPctNormalized =
@@ -572,8 +541,9 @@ export function buildFrmsOperationalSnapshot(
         ? Number(effectivenessPct.toFixed(1))
         : null;
 
-    const nivelFadigaCalculado =
-      normalizeText(efetividade?.effectiveness_nivel) ?? normalizeText(checkin?.nivel_fadiga);
+    const nivelFadigaCalculado = completeDailyCheckin
+      ? normalizeText(efetividade?.effectiveness_nivel) ?? normalizeText(checkin?.nivel_fadiga)
+      : null;
 
     const alertas: FrmsOperationalSnapshotAlertCode[] = [];
 
@@ -585,8 +555,10 @@ export function buildFrmsOperationalSnapshot(
       alertas.push('CHECKIN_CRITICO');
     }
 
-    if (sleepDataSource === 'ESTIMADO') {
-      alertas.push('SONO_ESTIMADO');
+    // Check-in existente mas incompleto não é "recebido com precisão reduzida":
+    // é dado insuficiente para o cálculo canônico e deve ficar fail-closed.
+    if (checkin && !completeDailyCheckin) {
+      alertas.push('DADO_INCONSISTENTE');
     }
 
     if ((horasSono ?? 0) > 0 && (horasSono ?? 0) < 6) {
@@ -746,6 +718,8 @@ interface RecoveryCreditSnapshotRow {
   data_operacional: string;
   funcionario_id: number;
   recovery_credit_points: number;
+  recovery_state: string | null;
+  activity_type: string | null;
 }
 
 async function loadRecoveryCreditRows(
@@ -756,13 +730,19 @@ async function loadRecoveryCreditRows(
 ): Promise<RecoveryCreditSnapshotRow[]> {
   try {
     const rows = await db.prepare(
-      `SELECT reference_date AS data_operacional,
-              CAST(funcionario_id AS INTEGER) AS funcionario_id,
-              MAX(COALESCE(recovery_credit_points, 0)) AS recovery_credit_points
-         FROM frms_recovery_assessment
-        WHERE empresa_id = ? AND reference_date >= ? AND reference_date <= ?
-          AND deleted_at IS NULL
-        GROUP BY reference_date, funcionario_id`,
+      `SELECT ra.reference_date AS data_operacional,
+              CAST(ra.funcionario_id AS INTEGER) AS funcionario_id,
+              COALESCE(ra.recovery_credit_points, 0) AS recovery_credit_points,
+              ra.recovery_state,
+              rd.activity_type
+         FROM frms_recovery_assessment ra
+         LEFT JOIN frms_recovery_activity_day rd
+           ON rd.id = ra.recovery_day_id
+          AND rd.empresa_id = ra.empresa_id
+          AND rd.funcionario_id = ra.funcionario_id
+          AND rd.deleted_at IS NULL
+        WHERE ra.empresa_id = ? AND ra.reference_date >= ? AND ra.reference_date <= ?
+          AND ra.deleted_at IS NULL`,
     ).bind(empresaId, start, end).all<RecoveryCreditSnapshotRow>();
     return rows.results ?? [];
   } catch (error) {
@@ -873,6 +853,7 @@ async function loadOperationalSnapshotRows(
            ch.data_checkin AS data_operacional,
            CAST(ch.funcionario_id AS INTEGER) AS funcionario_id,
            ch.hora_checkin,
+           ch.jornada_inicio_prevista AS hora_apresentacao,
            ch.kss_score,
            ch.horas_sono,
            ch.qualidade_sono,
@@ -1003,7 +984,6 @@ export async function listFrmsOperationalSnapshot(
     referenceAt: params.hoje ?? params.dataFim,
   });
   const limites = asOperationalLimitesMap(operationalContext.parameters, operationalContext.cyclePolicyApproved);
-  const frmsConfig = resolverFrmsConfig(limites);
 
   const requestedStart = params.dataInicio;
   const requestedEnd = params.dataFim;
@@ -1105,7 +1085,14 @@ export async function listFrmsOperationalSnapshot(
 
   const recoveryCredits = await loadRecoveryCreditRows(db, params.empresaId, contextStart, contextEnd);
   const recoveryCreditByKey = new Map(
-    recoveryCredits.map((row) => [`${row.data_operacional}::${Number(row.funcionario_id)}`, Number(row.recovery_credit_points || 0)]),
+    recoveryCredits.map((row) => [
+      `${row.data_operacional}::${Number(row.funcionario_id)}`,
+      {
+        points: Number(row.recovery_credit_points || 0),
+        state: row.recovery_state ?? null,
+        activityType: row.activity_type ?? null,
+      },
+    ]),
   );
 
   const ids = collectCandidateIds(contextRows).filter(
@@ -1152,7 +1139,6 @@ export async function listFrmsOperationalSnapshot(
   // linhas históricas necessárias ao acumulado quinzenal.
   const snapshot = buildFrmsOperationalSnapshot({
     empresaId: params.empresaId,
-    wakeFallbackLeadMinutes: frmsConfig.minutosAntesApresentacao,
     policy: params.policy,
     hoje: params.hoje,
     rows: {
@@ -1238,7 +1224,7 @@ export async function listFrmsOperationalSnapshot(
         horas_sono: item.horas_sono,
         kss_score: item.kss_score,
         effectiveness_pct: item.effectiveness_pct,
-        recovery_credit_points: recoveryCreditByKey.get(itemKey) ?? 0,
+        recovery_credit_points: recoveryCreditByKey.get(itemKey)?.points ?? 0,
         dia_periodo_embarcado:
           derivedFortnight?.dia_periodo_embarcado ??
           (effectivenessRow?.dia_periodo_embarcado != null
@@ -1262,9 +1248,13 @@ export async function listFrmsOperationalSnapshot(
 
   const itemsWithFortnight = snapshot.items.map((item) => {
     const key = `${item.data_operacional}::${item.funcionario_id}`;
+    const recovery = recoveryCreditByKey.get(key);
     const itemWithFortnight = {
       ...item,
       fortnight_indicator: fortnightIndicatorMap.get(key) ?? null,
+      recovery_credit_points: recovery?.points ?? 0,
+      recovery_state: recovery?.state ?? null,
+      recovery_activity_type: recovery?.activityType ?? null,
     };
     return {
       ...itemWithFortnight,

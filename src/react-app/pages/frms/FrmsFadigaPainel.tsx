@@ -144,7 +144,7 @@ export default function FrmsFadigaPainel() {
                   const tone =
                     status === 'critical' || status === 'unfit_for_duty'
                       ? 'bg-red-50 border-red-200 text-red-700'
-                      : status === 'attention'
+                      : status === 'attention' || status === 'incomplete_checkin'
                         ? 'bg-amber-50 border-amber-200 text-amber-700'
                         : status === 'not_submitted'
                           ? 'bg-violet-50 border-violet-200 text-violet-700'
@@ -152,7 +152,9 @@ export default function FrmsFadigaPainel() {
                   const statusLabel =
                     status === 'not_submitted'
                       ? 'Não preenchida'
-                      : status === 'attention'
+                      : status === 'incomplete_checkin'
+                        ? 'Check-in incompleto'
+                        : status === 'attention'
                         ? 'Atenção'
                         : status === 'critical' || status === 'unfit_for_duty'
                           ? 'Crítica'
@@ -160,9 +162,13 @@ export default function FrmsFadigaPainel() {
                             ? 'Preenchida'
                             : 'Sem jornada';
                   const sourceLabel =
-                    String(item.data_source || 'crew_reported') === 'default_estimate'
-                      ? 'Não preenchido pelo tripulante — usando estimativa padrão'
-                      : 'Informado pelo tripulante';
+                    String(item.data_source || 'crew_reported') === 'missing_checkin'
+                      ? 'Check-in pendente — sem cálculo'
+                      : status === 'incomplete_checkin'
+                        ? 'Dados obrigatórios incompletos — sem cálculo'
+                        : String(item.data_source || '') === 'default_estimate'
+                          ? 'Estimativa legada'
+                          : 'Informado pelo tripulante';
 
                   return (
                     <div key={String(item.funcionario_id)} className={`rounded-xl border px-3 py-3 ${tone}`}>
@@ -179,7 +185,9 @@ export default function FrmsFadigaPainel() {
                           <p className="text-xs opacity-80">{statusLabel} • {sourceLabel}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-lg font-bold">{Number(item.score_fadiga || 0)}</p>
+                          <p className="text-lg font-bold">
+                            {item.score_fadiga == null ? '—' : Number(item.score_fadiga)}
+                          </p>
                           <p className="text-[11px] uppercase tracking-wide">{statusLabel}</p>
                         </div>
                       </div>

@@ -131,58 +131,6 @@ function formatMonthLabel(monthValue: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-function ProgressBar({
-  pct,
-  label,
-  limiteAvisoPct = 85,
-  limiteCriticoPct = 95,
-  limiteViolacaoPct = 101,
-}: {
-  pct: number;
-  label: string;
-  limiteAvisoPct?: number;
-  limiteCriticoPct?: number;
-  limiteViolacaoPct?: number;
-}) {
-  const clamped = Math.min(pct, 120);
-  const barColor =
-    pct >= limiteViolacaoPct
-      ? 'bg-gradient-to-r from-red-500 to-red-600'
-      : pct >= limiteCriticoPct
-        ? 'bg-gradient-to-r from-red-400 to-orange-500'
-        : pct >= limiteAvisoPct
-          ? 'bg-gradient-to-r from-amber-400 to-orange-500'
-          : 'bg-gradient-to-r from-primary to-emerald-600';
-  const textColor =
-    pct >= limiteCriticoPct
-      ? 'text-red-700'
-      : pct >= limiteAvisoPct
-        ? 'text-amber-700'
-        : 'text-slate-900';
-
-  return (
-    <div className="group">
-      <div className="flex justify-between text-xs font-semibold text-slate-700 mb-2">
-        <span>{label}</span>
-        <span className={`font-bold ${textColor}`}>{pct.toFixed(1)}%</span>
-      </div>
-      <div
-        role="progressbar"
-        aria-valuenow={Math.round(pct)}
-        aria-valuemin={0}
-        aria-valuemax={120}
-        aria-label={`${label}: ${pct.toFixed(1)}%`}
-        className="relative h-3 rounded-xl bg-slate-100 overflow-hidden shadow-inner border border-slate-200/50"
-      >
-        <div
-          className={`${barColor} h-full shadow-lg group-hover:shadow-xl transition-all duration-700 motion-safe:transition-all`}
-          style={{ width: `${Math.min(clamped, 100)}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 function nivelBadge(nivel: string) {
   // Tratar AVISO como ATENCAO na UI
   const displayNivel = nivel === 'AVISO' ? 'ATENCAO' : nivel;
@@ -371,15 +319,17 @@ export default function FrmsFichaTripulante() {
     rolling: FrmsAcumuloRolling | null;
     mensal: Record<string, number> | null;
     limites: Record<string, number> | null;
+    effectiveness?: {
+      effectiveness_pct: number;
+      effectiveness_nivel: string;
+      effectiveness_componentes: Record<string, number> | null;
+    } | null;
+    effectiveness_status?: 'AVAILABLE' | 'CHECKIN_REQUIRED' | 'CALCULATION_PENDING' | 'NO_JOURNEY';
+    effectiveness_reference_date?: string | null;
   } | null;
   const alertasMes: FrmsAlertaRow[] = (alertasMesRaw as FrmsAlertaRow[] | null) ?? [];
   const rolling = acumulo?.rolling;
   const limites = acumulo?.limites ?? null;
-  const accumulationWindowMode = Number(limites?.ACCUMULATION_WINDOW_MODE ?? 0);
-  const useCalendarAccumulation = accumulationWindowMode === 0 || (accumulationWindowMode === 2 && Number(limites?.ACCUMULATION_USE_MONTH_CALENDAR ?? 1) === 1);
-  const limiteAvisoPct = Number(limites?.ALERTA_AVISO_PCT ?? 85);
-  const limiteCriticoPct = Number(limites?.ALERTA_CRITICO_PCT ?? 95);
-  const limiteViolacaoPct = Number(limites?.ALERTA_VIOLACAO_PCT ?? 101);
 
   const alertasPorJornada = alertasMes.reduce<Record<string, FrmsAlertaRow[]>>((acc, alerta) => {
     if (!alerta.jornada_id) return acc;
@@ -547,13 +497,6 @@ export default function FrmsFichaTripulante() {
           </section>
         ) : null}
 
-        <FortnightConsolidatedPanel
-          indicator={fortnightIndicator}
-          loading={loadingFrmsSnapshot}
-          funcionarioId={requestedFuncionarioId}
-          focusDate={hojeIso}
-        />
-
         {/* Non-operational crew warning */}
         {!loadingFrmsSnapshot && todayFortnightSnapshotItem && !isTripulanteOperacional(todayFortnightSnapshotItem.funcao) && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -563,16 +506,10 @@ export default function FrmsFichaTripulante() {
           </div>
         )}
 
-        {/* Effectiveness Panel (Painel A) + Compliance Cards (Painel B) */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          {/* Painel A — Score de Efetividade */}
-          {acumulo?.effectiveness ? (
-            <div className="lg:col-span-4 xl:col-span-3">
-              {latestJornada?.processado_com_bug === 0 && (
-                <div className="mb-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
-                  Dados recalculados com a fórmula corrigida de effectiveness FRMS.
-                </div>
-              )}
+        {/* Painel de decisão diária: explicação à esquerda, continuidade temporal à direita. */}
+        <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-12">
+          <div className="xl:col-span-4">
+            {acumulo?.effectiveness ? (
               <FrmsEffectivenessPanel
                 effectiveness_pct={acumulo.effectiveness.effectiveness_pct}
                 effectiveness_nivel={acumulo.effectiveness.effectiveness_nivel}
@@ -583,103 +520,124 @@ export default function FrmsFichaTripulante() {
                     repouso: number;
                     hv: number;
                     duracao: number;
+                    pousos?: number;
+                    temperatura?: number;
+                    imc?: number;
+                    recuperacao?: number;
                   } | null
                 }
                 config={limites}
               />
-              {latestJornada?.dia_periodo_embarcado != null &&
-                latestJornada.total_dias_periodo != null &&
-                latestJornada.total_dias_periodo > 1 && (
-                  <div className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-primary px-3 py-1 text-xs font-semibold text-blue-700 mt-2">
-                    <Calendar className="w-3 h-3" />
-                    <span>
-                      Dia {latestJornada.dia_periodo_embarcado} de{' '}
-                      {latestJornada.total_dias_periodo} embarcado
-                    </span>
-                  </div>
-                )}
-            </div>
-          ) : null}
-
-          {/* Painel B — Compliance Regulatório */}
-          <div className={`${acumulo?.effectiveness ? 'lg:col-span-8 xl:col-span-9' : 'lg:col-span-12'}`}>
-            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              Compliance Regulatório
-            </h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {rolling || acumulo?.mensal ? (
-                <>
-                  {/* Janela 15 dias — Jornada */}
-                  <div className="rounded-xl border border-gray-200 bg-white p-4">
-                    <ProgressBar
-                      pct={Math.min(100, acumulo?.mensal?.jornada_fatorizada_pct ?? 0)}
-                      label="Jornada 15 dias"
-                      limiteAvisoPct={limiteAvisoPct}
-                      limiteCriticoPct={limiteCriticoPct}
-                      limiteViolacaoPct={limiteViolacaoPct}
-                    />
-                    <p className="mt-2 text-center text-xs text-gray-500">
-                      {formatMin(acumulo?.mensal?.jornada_realizada_min ?? 0)} acumuladas
-                    </p>
-                  </div>
-                  {/* Janela 30 dias — HV */}
-                  <div className="rounded-xl border border-gray-200 bg-white p-4">
-                    <ProgressBar
-                      pct={useCalendarAccumulation ? (rolling?.pct_limite_mes_calendario ?? 0) : (rolling?.pct_limite_28d ?? 0)}
-                      label={useCalendarAccumulation ? 'HV mês calendário' : 'HV 28 dias corridos'}
-                      limiteAvisoPct={limiteAvisoPct}
-                      limiteCriticoPct={limiteCriticoPct}
-                      limiteViolacaoPct={limiteViolacaoPct}
-                    />
-                    <p className="mt-2 text-center text-xs text-gray-500">
-                      {formatMin(useCalendarAccumulation ? (rolling?.hv_mes_calendario_min ?? 0) : (rolling?.hv_28_dias_min ?? 0))} /{' '}
-                      {useCalendarAccumulation ? (limites?.HV_MES_HORAS ?? 90) : (limites?.HV_28_DIAS_HORAS ?? 93)}h
-                    </p>
-                  </div>
-                  {/* HV Diária */}
-                  <div className="rounded-xl border border-gray-200 bg-white p-4">
-                    <ProgressBar
-                      pct={rolling?.pct_limite_dia ?? 0}
-                      label="HV Dia"
-                      limiteAvisoPct={limiteAvisoPct}
-                      limiteCriticoPct={limiteCriticoPct}
-                      limiteViolacaoPct={limiteViolacaoPct}
-                    />
-                    <p className="mt-2 text-center text-xs text-gray-500">
-                      {formatMin(rolling?.hv_dia_min ?? 0)} / {limites?.HV_DIARIA_HORAS ?? 8}h
-                    </p>
-                  </div>
-                  {/* Janela 365 dias — Acúmulo */}
-                  <div className="rounded-xl border border-gray-200 bg-white p-4">
-                    <ProgressBar
-                      pct={useCalendarAccumulation ? (rolling?.pct_limite_ano_calendario ?? 0) : (rolling?.pct_limite_365d ?? 0)}
-                      label={useCalendarAccumulation ? 'HV ano calendário' : 'HV 365 dias corridos'}
-                      limiteAvisoPct={limiteAvisoPct}
-                      limiteCriticoPct={limiteCriticoPct}
-                      limiteViolacaoPct={limiteViolacaoPct}
-                    />
-                    <p className="mt-2 text-center text-xs text-gray-500">
-                      {formatMin(useCalendarAccumulation ? (rolling?.hv_ano_calendario_min ?? 0) : (rolling?.hv_365_dias_min ?? 0))} / {limites?.HV_365_DIAS_HORAS ?? 930}h
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <div className="col-span-full rounded-xl border border-gray-200 bg-white p-5 text-center text-gray-400 text-sm">
-                  {loadingA ? 'Carregando acúmulo...' : 'Sem dados de acúmulo'}
+            ) : (
+              <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 p-5 text-center">
+                <div>
+                  <p className="text-sm font-semibold text-rose-800">Efetividade indisponível</p>
+                  <p className="mt-1 text-xs text-rose-700">
+                    {acumulo?.effectiveness_status === 'NO_JOURNEY'
+                      ? 'Sem jornada operacional confirmada para calcular a efetividade.'
+                      : acumulo?.effectiveness_status === 'CALCULATION_PENDING'
+                        ? 'Check-in recebido; o cálculo de efetividade ainda não está disponível.'
+                        : 'O cálculo exige check-in diário completo: apresentação, sono/repouso absoluto e horário de despertar.'}
+                  </p>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+          </div>
+          <div className="xl:col-span-8">
+            <Suspense fallback={<div className="h-[300px] rounded-2xl border border-gray-200 bg-white" />}>
+              <FrmsEffectivenessTimeline
+                tripulanteId={id ?? null}
+                tripulanteNome={nomeTrip}
+                config={limites}
+                mapPeriodoDias={15}
+                mapPeriodoInicio={fortnightPeriodStart || undefined}
+                mapPeriodoFim={fortnightPeriodEnd || undefined}
+                mapPeriodoLabel="Período embarcado atual"
+                compact
+              />
+            </Suspense>
           </div>
         </div>
 
-        {/* Curva de Efetividade (Modelo Offshore Sleep) */}
-        <Suspense fallback={<div className="h-48 rounded-xl border border-gray-200 bg-white" />}>
-          <FrmsEffectivenessTimeline
-            tripulanteId={id ?? null}
-            tripulanteNome={nomeTrip}
-            config={limites}
-          />
-        </Suspense>
+        {/* Resumo acionável do cenário de hoje. */}
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Situação de hoje</p>
+            <p className="mt-2 text-lg font-bold text-slate-900">
+              {todayFortnightSnapshotItem?.snapshot_status === 'OK'
+                ? 'OK'
+                : todayFortnightSnapshotItem?.snapshot_status === 'ATENCAO'
+                  ? 'Atenção'
+                  : todayFortnightSnapshotItem?.snapshot_status === 'CRITICO'
+                    ? 'Crítico'
+                    : 'Dados insuficientes'}
+            </p>
+            <p className="mt-1 text-xs text-slate-600">
+              {todayFortnightSnapshotItem?.acao_recomendada_texto || 'Complete os dados diários para avaliação.'}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Jornada de hoje</p>
+            {todayFortnightSnapshotItem?.teve_jornada && todayFortnightSnapshotItem.duracao_jornada_minutos > 0 ? (
+              <>
+                <p className="mt-2 text-lg font-bold text-slate-900">
+                  {formatMin(todayFortnightSnapshotItem.duracao_jornada_minutos)}
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  {todayFortnightSnapshotItem.hora_apresentacao?.slice(0, 5) || '—'} →{' '}
+                  {todayFortnightSnapshotItem.hora_termino?.slice(0, 5) || '—'}
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-sm font-semibold text-slate-500">Sem jornada confirmada</p>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Sono / KSS</p>
+            <p className="mt-2 text-lg font-bold text-slate-900">
+              {todayFortnightSnapshotItem?.horas_sono != null
+                ? `${Number(todayFortnightSnapshotItem.horas_sono).toFixed(1)} h`
+                : 'Não informado'}
+            </p>
+            <p className="mt-1 text-xs text-slate-600">
+              KSS {todayFortnightSnapshotItem?.kss_score ?? '—'} ·{' '}
+              {todayFortnightSnapshotItem?.sleep_data_source === 'REAL' ? 'check-in' : 'sem fallback'}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Recuperação</p>
+            <p className="mt-2 text-lg font-bold text-emerald-700">
+              +{Number(todayFortnightSnapshotItem?.recovery_credit_points ?? 0).toFixed(1)} pt
+            </p>
+            <p className="mt-1 text-xs text-slate-600">
+              {todayFortnightSnapshotItem?.recovery_activity_type?.replace(/_/g, ' ') ||
+                todayFortnightSnapshotItem?.recovery_state ||
+                'Sem crédito registrado'}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">HV mês calendário</p>
+            <p className="mt-2 text-lg font-bold text-slate-900">
+              {formatMin(rolling?.hv_mes_calendario_min ?? 0)}
+            </p>
+            <p className="mt-1 text-xs text-slate-600">
+              de {Number(limites?.HV_MES_HORAS ?? 90)}h ·{' '}
+              {(rolling?.pct_limite_mes_calendario ?? 0).toFixed(1)}%
+            </p>
+          </div>
+        </section>
+
+        {/* A quinzena permanece como contexto, depois da decisão diária. */}
+        <FortnightConsolidatedPanel
+          indicator={fortnightIndicator}
+          loading={loadingFrmsSnapshot}
+          funcionarioId={requestedFuncionarioId}
+          focusDate={hojeIso}
+        />
 
         {/* Month selector + Table */}
         <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">

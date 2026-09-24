@@ -64,7 +64,6 @@ const LARGE_FILE_LINE_CAPS = {
   // block, replacing the legacy carregarLimites fallback).
   // Cap raised 2026-09-08: concurrent first submissions now stop at the
   // existing daily UNIQUE boundary before operational side effects.
-  'routes/frms-fadiga-checkin-legacy.ts': 2064,
   // Cap raised 2026-07-31: counted 2548 after scoped short-lived asset sessions,
   // request-aware cookie policy and CSP hardening in PR #565. Extraction remains
   // a follow-up and is not mixed into this security hotfix.

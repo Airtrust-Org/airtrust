@@ -103,7 +103,13 @@ function buildTimelineItem(
       total_dias_periodo: 3,
       status_quinzena: 'ATENCAO',
     }),
+    recovery_credit_points: 1.5,
+    recovery_state: 'PARTIAL',
+    recovery_activity_type: 'STANDBY_ONSITE',
     alertas: [],
+    estado_operacional: 'NORMAL',
+    motivos_principais: [],
+    acao_recomendada_texto: 'Sem ação imediata.',
     ...overrides,
   };
 }
@@ -125,10 +131,11 @@ describe('FortnightOperationalIndicator components', () => {
     });
     render(<FortnightDetailPanel indicator={buildIndicator()} item={{ teve_jornada: true }} />);
     expect(screen.getByText('Ver evolução diária')).toBeInTheDocument();
-    expect(screen.getByText(/Indicador operacional da quinzena/)).toBeInTheDocument();
+    expect(screen.getByText(/indicador operacional/i)).toBeInTheDocument();
     expect(screen.getByText('Projeção')).toBeInTheDocument();
-    expect(screen.getByText(/Score acumulado:/)).toBeInTheDocument();
+    expect(screen.getByText(/Sinais que exigem atenção:/)).toBeInTheDocument();
     expect(screen.getByText(/Sequência longa/)).toBeInTheDocument();
+    expect(screen.queryByText(/Score acumulado:/)).not.toBeInTheDocument();
   });
 
   it('expõe fallbacks honestos para contexto embarcado e campos nulos', () => {
@@ -244,13 +251,13 @@ describe('FortnightOperationalIndicator components', () => {
       }),
       expect.objectContaining({ enabled: true }),
     );
-    expect(screen.getByText(/Tendência:/)).toBeInTheDocument();
-    expect(screen.getByText(/Mitigação sugerida:/)).toBeInTheDocument();
+    expect(screen.queryByText(/Tendência:/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Ação recomendada:/)).toBeInTheDocument();
     expect(screen.getAllByText(/Período incompleto/).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/A leitura considera apenas os dias disponíveis/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Não usar isoladamente como decisão final/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Sem dado confirmado/).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/Lacuna no snapshot do período/)).toBeInTheDocument();
-    expect(screen.getByText(/Ação: Reduzir jornada/)).toBeInTheDocument();
+    expect(screen.getByText(/Cenário diário do período/)).toBeInTheDocument();
+    expect(screen.getByText(/Recuperação/)).toBeInTheDocument();
+    expect(screen.queryByText(/Jornada acumulada visível/)).not.toBeInTheDocument();
   });
 });

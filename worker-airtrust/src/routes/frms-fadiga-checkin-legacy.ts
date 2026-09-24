@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import type { AppEnv, Env } from '../types';
+import type { AppEnv } from '../types';
 import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
@@ -26,23 +26,12 @@ import {
   type CheckinCreateInput,
 } from './frms-fadiga-checkin.schema';
 import { validateCheckinPayloadCompleteness } from './frms-fadiga-checkin-validation';
+import { getFadigaConfig as getConfig, updateFadigaDutyConfig } from './frms-fadiga-config';
 
 const router = new Hono<AppEnv>();
 router.use('*', auth());
 
 type FrmsContext = Context<AppEnv>;
-
-type FadigaConfigRow = {
-  threshold_amarelo: number;
-  threshold_vermelho: number;
-  peso_kss: number;
-  peso_sono_duracao: number;
-  peso_sono_qualidade: number;
-  peso_sintomas: number;
-  ativo: number;
-  janela_inicio: string;
-  janela_fim: string;
-};
 
 type DailyRiskLevel = 'normal' | 'attention' | 'critical' | 'unfit_for_duty';
 
@@ -110,52 +99,8 @@ async function isManagerPlus(c: FrmsContext): Promise<boolean> {
   return canSeeFrmsTeamScopeForContext(c);
 }
 
-async function getConfig(db: D1Database, empresaId: number): Promise<FadigaConfigRow> {
-  const row = await db
-    .prepare(
-      `SELECT
-        ativo,
-        janela_inicio,
-        janela_fim,
-        threshold_amarelo,
-        threshold_vermelho,
-        peso_kss,
-        peso_sono_duracao,
-        peso_sono_qualidade,
-        peso_sintomas
-       FROM frms_fadiga_config_empresa
-       WHERE empresa_id = ? AND deleted_at IS NULL
-       LIMIT 1`,
-    )
-    .bind(empresaId)
-    .first<FadigaConfigRow>();
-
-  if (row) return row;
-
-  await db
-    .prepare(
-      `INSERT INTO frms_fadiga_config_empresa
-       (empresa_id, ativo, janela_inicio, janela_fim, threshold_amarelo, threshold_vermelho, peso_kss, peso_sono_duracao, peso_sono_qualidade, peso_sintomas, created_at, updated_at)
-       VALUES (?, 1, '04:00', '11:00', 40, 60, 0.35, 0.25, 0.20, 0.20, ?, ?)`,
-    )
-    .bind(empresaId, nowSql(), nowSql())
-    .run();
-
-  return {
-    ativo: 1,
-    janela_inicio: '04:00',
-    janela_fim: '11:00',
-    threshold_amarelo: 40,
-    threshold_vermelho: 60,
-    peso_kss: 0.35,
-    peso_sono_duracao: 0.25,
-    peso_sono_qualidade: 0.2,
-    peso_sintomas: 0.2,
-  };
-}
-
 async function resolveFuncionarioId(c: FrmsContext): Promise<number | null> {
-  const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+  const empresaId = getEmpresaId(c);
   const funcionarioIdFromContext = Number(c.get('funcionarioId') || 0);
   const userId = Number(c.get('userId') || 0);
   if (funcionarioIdFromContext > 0) {
@@ -453,49 +398,6 @@ async function computeContextoPiloto(
     alertas_ativos: alertasAtivos?.total ?? 0,
   };
 }
-
-async function getFrmsSleepDefaults(db: D1Database): Promise<{
-  horasSonoPadrao: number;
-  minutosAntesApresentacao: number;
-}> {
-  const rows = await db
-    .prepare(
-      `SELECT nome, valor_numerico
-         FROM frms_configuracao_limites
-        WHERE nome IN ('HORAS_SONO_PADRAO', 'MINUTOS_ANTES_APRESENTACAO')
-          AND ativo = 1
-          AND deleted_at IS NULL`,
-    )
-    .all<{ nome: string; valor_numerico: number }>();
-
-  const horasSonoPadrao = clamp(
-    Number(rows.results?.find((r) => r.nome === 'HORAS_SONO_PADRAO')?.valor_numerico ?? 8),
-    4,
-    12,
-  );
-  const minutosAntesApresentacao = clamp(
-    Number(
-      rows.results?.find((r) => r.nome === 'MINUTOS_ANTES_APRESENTACAO')?.valor_numerico ?? 90,
-    ),
-    30,
-    240,
-  );
-
-  return {
-    horasSonoPadrao,
-    minutosAntesApresentacao,
-  };
-}
-
-function computeWakeTimeFromJornada(
-  horaApresentacao: string | null | undefined,
-  minutosAntesApresentacao: number,
-): string {
-  const startMin = parseTimeToMinutes(horaApresentacao || '');
-  if (startMin == null) return '06:00';
-  return minutesToTime(startMin - minutosAntesApresentacao);
-}
-
 async function createDailyFatigueAlert(params: {
   db: D1Database;
   empresaId: number;
@@ -571,12 +473,12 @@ async function buildDailyFatigueStatus(params: {
   funcionarioId: number;
   date: string;
 }): Promise<Record<string, unknown>> {
-  const [defaults, checkin, jornada] = await Promise.all([
-    getFrmsSleepDefaults(params.db),
+  const [checkin, jornada] = await Promise.all([
     params.db
       .prepare(
         `SELECT
             id, data_checkin, hora_checkin, horas_sono, horas_sono_48h, wake_time,
+            jornada_inicio_prevista,
             qualidade_sono, kss_score, subjective_fatigue_level, sleepiness_level,
             fit_for_duty, score_fadiga, nivel_fadiga, status_operacional,
             computed_risk_level, requires_operational_review, observacoes, submitted_at
@@ -591,7 +493,7 @@ async function buildDailyFatigueStatus(params: {
       .first<Record<string, unknown>>(),
     params.db
       .prepare(
-        `SELECT id, hora_apresentacao
+        `SELECT id
          FROM frms_jornada
          WHERE tripulante_id = ?
            AND data = ?
@@ -600,26 +502,63 @@ async function buildDailyFatigueStatus(params: {
          LIMIT 1`,
       )
       .bind(params.funcionarioId, params.date)
-      .first<{ id: string; hora_apresentacao: string | null }>(),
+      .first<{ id: string }>(),
   ]);
-
-  const wakeEstimated = computeWakeTimeFromJornada(
-    jornada?.hora_apresentacao,
-    defaults.minutosAntesApresentacao,
-  );
 
   if (!checkin) {
     return {
       status: 'not_submitted',
       submitted: false,
-      data_source: 'default_estimate',
-      confidence: 'reduced',
+      data_source: 'missing_checkin',
+      confidence: 'unavailable',
       message:
-        'Fadiga diária não preenchida pelo tripulante — usando estimativa padrão. Revisão operacional necessária.',
+        'Fadiga diária não preenchida pelo tripulante. O cálculo permanece indisponível até o envio do check-in.',
       requires_operational_review: true,
-      sleep_hours_24h: defaults.horasSonoPadrao,
-      wake_time: wakeEstimated,
+      calculation_available: false,
+      presentation_time: null,
+      sleep_hours_24h: null,
+      sleep_hours_48h: null,
+      wake_time: null,
       fit_for_duty: null,
+      score_fadiga: null,
+      nivel_fadiga: null,
+      status_operacional: null,
+      has_jornada: Boolean(jornada?.id),
+      jornada_id: jornada?.id ?? null,
+    };
+  }
+
+  const presentationTime = String(checkin.jornada_inicio_prevista || '').trim();
+  const wakeTime = String(checkin.wake_time || '').trim();
+  const sleepHours = Number(checkin.horas_sono);
+  const checkinComplete =
+    parseTimeToMinutes(presentationTime) != null &&
+    parseTimeToMinutes(wakeTime) != null &&
+    Number.isFinite(sleepHours) &&
+    sleepHours > 0 &&
+    sleepHours <= 24;
+
+  if (!checkinComplete) {
+    return {
+      status: 'incomplete_checkin',
+      submitted: true,
+      data_source: 'crew_reported',
+      confidence: 'incomplete',
+      message:
+        'Check-in de fadiga incompleto. Informe apresentação, despertar e sono/repouso absoluto para habilitar o cálculo.',
+      requires_operational_review: true,
+      calculation_available: false,
+      presentation_time: parseTimeToMinutes(presentationTime) == null ? null : presentationTime,
+      sleep_hours_24h: Number.isFinite(sleepHours) && sleepHours > 0 ? sleepHours : null,
+      sleep_hours_48h:
+        checkin.horas_sono_48h == null ? null : Number(checkin.horas_sono_48h || 0),
+      wake_time: parseTimeToMinutes(wakeTime) == null ? null : wakeTime,
+      fit_for_duty:
+        checkin.fit_for_duty == null ? null : Number(checkin.fit_for_duty || 0) === 1,
+      score_fadiga: null,
+      nivel_fadiga: null,
+      status_operacional: null,
+      checkin,
       has_jornada: Boolean(jornada?.id),
       jornada_id: jornada?.id ?? null,
     };
@@ -636,24 +575,26 @@ async function buildDailyFatigueStatus(params: {
         ? 'Fadiga diária informada pelo tripulante.'
         : 'Fadiga diária informada pelo tripulante com revisão operacional necessária.',
     requires_operational_review: Number(checkin.requires_operational_review || 0) === 1,
-    sleep_hours_24h: Number(checkin.horas_sono || 0),
+    calculation_available: true,
+    presentation_time: presentationTime,
+    sleep_hours_24h: sleepHours,
     sleep_hours_48h:
       checkin.horas_sono_48h == null ? null : Number(checkin.horas_sono_48h || 0),
-    wake_time: String(checkin.wake_time || wakeEstimated),
+    wake_time: wakeTime,
     fit_for_duty:
       checkin.fit_for_duty == null ? null : Number(checkin.fit_for_duty || 0) === 1,
-    score_fadiga: Number(checkin.score_fadiga || 0),
-    nivel_fadiga: String(checkin.nivel_fadiga || ''),
-    status_operacional: String(checkin.status_operacional || ''),
+    score_fadiga: checkin.score_fadiga == null ? null : Number(checkin.score_fadiga),
+    nivel_fadiga: checkin.nivel_fadiga == null ? null : String(checkin.nivel_fadiga),
+    status_operacional:
+      checkin.status_operacional == null ? null : String(checkin.status_operacional),
     checkin,
     has_jornada: Boolean(jornada?.id),
     jornada_id: jornada?.id ?? null,
   };
 }
-
 router.get('/fadiga-checkin/hoje', async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const funcionarioId = await resolveFuncionarioId(c);
     if (!funcionarioId) {
       return c.json(
@@ -681,7 +622,7 @@ router.get('/fadiga-checkin/hoje', async (c) => {
 router.get('/fadiga-checkin/me', async (c) => {
   const date = c.req.query('date') || todayIso();
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const funcionarioId = await resolveFuncionarioId(c);
     if (!funcionarioId) {
       return c.json(
@@ -705,7 +646,7 @@ router.get('/fadiga-checkin/me', async (c) => {
 
 router.get('/fadiga-checkin/config', async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const config = await getConfig(c.env.DB, empresaId);
     return c.json({ success: true, data: config });
   } catch {
@@ -713,9 +654,11 @@ router.get('/fadiga-checkin/config', async (c) => {
   }
 });
 
+router.put('/fadiga-checkin/config', requirePermission('frms', 'editar', 'manager'), updateFadigaDutyConfig);
+
 router.get('/daily-fatigue', async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const date = c.req.query('date') || todayIso();
     const scope = (c.req.query('scope') || '').toLowerCase();
     const canSeeTeam = (await isManagerPlus(c)) && scope === 'team';
@@ -747,13 +690,9 @@ router.get('/daily-fatigue', async (c) => {
     const limit = Math.min(Math.max(Number(c.req.query('limit') || 100), 1), 500);
     const offset = Math.max(Number(c.req.query('offset') || 0), 0);
 
-    const sectorAccess = await getEmployeeSectorAccess(
-      c as unknown as Context<{ Bindings: Env }>,
-      empresaId,
-    );
+    const sectorAccess = await getEmployeeSectorAccess(c, empresaId);
     const sectorScope = buildFuncionarioScopeWhere(sectorAccess, 'f');
 
-    const defaults = await getFrmsSleepDefaults(c.env.DB);
     const rows = await c.env.DB
       .prepare(
         `SELECT
@@ -761,8 +700,8 @@ router.get('/daily-fatigue', async (c) => {
             f.nome AS funcionario_nome,
             COALESCE(f.cargo, f.funcao) AS cargo,
             fj.id AS jornada_id,
-            fj.hora_apresentacao,
             ch.id AS checkin_id,
+            ch.jornada_inicio_prevista AS checkin_apresentacao,
             ch.hora_checkin, ch.kss_score,
             ch.horas_sono,
             ch.horas_sono_48h,
@@ -804,23 +743,33 @@ router.get('/daily-fatigue', async (c) => {
 
     const itens = (rows.results || []).map((row) => {
       const hasCheckin = Boolean(row.checkin_id);
-      const wakeEstimated = computeWakeTimeFromJornada(
-        String(row.hora_apresentacao || ''),
-        defaults.minutosAntesApresentacao,
-      );
-      const status = hasCheckin
-        ? String(row.computed_risk_level || 'normal')
-        : row.jornada_id
+      const presentationTime = String(row.checkin_apresentacao || '').trim();
+      const wakeTime = String(row.wake_time || '').trim();
+      const sleepHours = Number(row.horas_sono);
+      const checkinComplete =
+        hasCheckin &&
+        parseTimeToMinutes(presentationTime) != null &&
+        parseTimeToMinutes(wakeTime) != null &&
+        Number.isFinite(sleepHours) &&
+        sleepHours > 0 &&
+        sleepHours <= 24;
+
+      const status = !hasCheckin
+        ? row.jornada_id
           ? 'not_submitted'
-          : 'no_duty';
+          : 'no_duty'
+        : !checkinComplete
+          ? 'incomplete_checkin'
+          : String(row.computed_risk_level || 'normal');
       const source =
         status === 'not_submitted'
-          ? 'default_estimate'
+          ? 'missing_checkin'
           : hasCheckin
             ? 'crew_reported'
             : 'not_applicable';
       const reviewRequired =
         status === 'not_submitted' ||
+        status === 'incomplete_checkin' ||
         status === 'attention' ||
         status === 'critical' ||
         status === 'unfit_for_duty';
@@ -830,24 +779,31 @@ router.get('/daily-fatigue', async (c) => {
         date,
         status,
         data_source: source,
-        sleep_hours_24h: hasCheckin ? Number(row.horas_sono || 0) : defaults.horasSonoPadrao,
-        sleep_hours_48h: hasCheckin
-          ? row.horas_sono_48h == null
-            ? null
-            : Number(row.horas_sono_48h || 0)
-          : null,
-        wake_time: hasCheckin ? String(row.wake_time || wakeEstimated) : wakeEstimated,
+        calculation_available: checkinComplete,
+        hora_apresentacao: checkinComplete ? presentationTime : null,
+        presentation_time: checkinComplete ? presentationTime : null,
+        sleep_hours_24h:
+          hasCheckin && Number.isFinite(sleepHours) && sleepHours > 0 ? sleepHours : null,
+        sleep_hours_48h:
+          hasCheckin && row.horas_sono_48h != null ? Number(row.horas_sono_48h || 0) : null,
+        wake_time: hasCheckin && parseTimeToMinutes(wakeTime) != null ? wakeTime : null,
+        score_fadiga: checkinComplete && row.score_fadiga != null ? Number(row.score_fadiga) : null,
+        nivel_fadiga: checkinComplete && row.nivel_fadiga != null ? String(row.nivel_fadiga) : null,
+        status_operacional:
+          checkinComplete && row.status_operacional != null ? String(row.status_operacional) : null,
         requires_operational_review: reviewRequired ? 1 : 0,
         status_label:
           status === 'not_submitted'
             ? 'Não preenchida'
-            : status === 'attention'
-              ? 'Atenção'
-              : status === 'critical' || status === 'unfit_for_duty'
-                ? 'Crítica'
-                : status === 'normal'
-                  ? 'Preenchida'
-                  : 'Sem jornada',
+            : status === 'incomplete_checkin'
+              ? 'Check-in incompleto'
+              : status === 'attention'
+                ? 'Atenção'
+                : status === 'critical' || status === 'unfit_for_duty'
+                  ? 'Crítica'
+                  : status === 'normal'
+                    ? 'Preenchida'
+                    : 'Sem jornada',
       };
     });
 
@@ -855,10 +811,6 @@ router.get('/daily-fatigue', async (c) => {
       success: true,
       data: {
         date,
-        defaults: {
-          horas_sono_padrao: defaults.horasSonoPadrao,
-          minutos_antes_apresentacao: defaults.minutosAntesApresentacao,
-        },
         items: itens,
         pagination: { limit, offset },
       },
@@ -867,11 +819,10 @@ router.get('/daily-fatigue', async (c) => {
     return c.json({ success: false, error: 'Erro ao carregar status de fadiga diária' }, 500);
   }
 });
-
 router.get('/daily-fatigue/alerts', async (c) => {
   try {
     const date = c.req.query('date') || todayIso();
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     if (!(await isManagerPlus(c))) {
       const funcionarioId = await resolveFuncionarioId(c);
       if (!funcionarioId) {
@@ -889,6 +840,7 @@ router.get('/daily-fatigue/alerts', async (c) => {
       const statusName = String(status.status || '');
       const shouldAlert =
         statusName === 'not_submitted' ||
+        statusName === 'incomplete_checkin' ||
         statusName === 'attention' ||
         statusName === 'critical' ||
         statusName === 'unfit_for_duty';
@@ -903,14 +855,16 @@ router.get('/daily-fatigue/alerts', async (c) => {
                   id: `daily-fatigue-self-${funcionarioId}-${date}`,
                   tripulante_id: funcionarioId,
                   nivel:
-                    statusName === 'attention' || statusName === 'not_submitted'
+                    statusName === 'attention' || statusName === 'not_submitted' || statusName === 'incomplete_checkin'
                       ? 'ATENCAO'
                       : 'CRITICO',
                   tipo_limite: statusName,
                   mensagem:
                     statusName === 'not_submitted'
-                      ? 'Fadiga diária não preenchida pelo tripulante — usando estimativa padrão.'
-                      : 'Fadiga diária com revisão operacional necessária.',
+                      ? 'Fadiga diária não preenchida pelo tripulante — cálculo indisponível até o check-in.'
+                      : statusName === 'incomplete_checkin'
+                        ? 'Check-in de fadiga incompleto — cálculo indisponível até completar os dados obrigatórios.'
+                        : 'Fadiga diária com revisão operacional necessária.',
                   created_at: `${date} 00:00:00`,
                   resolvido: 0,
                   resolvido_em: null,
@@ -923,7 +877,7 @@ router.get('/daily-fatigue/alerts', async (c) => {
     }
 
     const alertsSectorAccess = await getEmployeeSectorAccess(
-      c as unknown as Context<{ Bindings: Env }>,
+      c,
       empresaId,
     );
     const alertsSectorScope = buildFuncionarioScopeWhere(alertsSectorAccess, 'f');
@@ -956,20 +910,24 @@ router.get('/daily-fatigue/alerts', async (c) => {
       data?: { items?: Array<Record<string, unknown>> };
     };
     const syntheticNotSubmitted = (teamPayload.data?.items || [])
-      .filter((item) => item.status === 'not_submitted')
+      .filter((item) => item.status === 'not_submitted' || item.status === 'incomplete_checkin')
       .map((item) => ({
-        id: `daily-fatigue-not-submitted-${item.funcionario_id}-${date}`,
+        id: `daily-fatigue-checkin-required-${item.funcionario_id}-${date}`,
         tripulante_id: item.funcionario_id,
         nivel: 'ATENCAO',
-        tipo_limite: 'daily_fatigue_not_submitted',
+        tipo_limite:
+          item.status === 'incomplete_checkin' ? 'daily_fatigue_incomplete_checkin' : 'daily_fatigue_not_submitted',
         mensagem:
-          'Fadiga diária não preenchida pelo tripulante — usando estimativa padrão. Revisão operacional necessária.',
+          item.status === 'incomplete_checkin'
+            ? 'Check-in de fadiga incompleto — cálculo indisponível até completar os dados obrigatórios.'
+            : 'Fadiga diária não preenchida pelo tripulante — cálculo indisponível até o check-in.',
         created_at: `${date} 00:00:00`,
         resolvido: 0,
         resolvido_em: null,
         tripulante_nome: item.funcionario_nome,
         requires_operational_review: 1,
-        alert_type: 'daily_fatigue_not_submitted',
+        alert_type:
+          item.status === 'incomplete_checkin' ? 'daily_fatigue_incomplete_checkin' : 'daily_fatigue_not_submitted',
       }));
 
     const persisted = (rows.results || []).map((row) => ({
@@ -1002,7 +960,7 @@ router.post('/daily-fatigue', requireFatigueCheckinAccess, async (c) => {
 
 router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const userId = Number(c.get('userId') || 0);
     const funcionarioId = await resolveFuncionarioId(c);
     if (!funcionarioId) {
@@ -1452,7 +1410,7 @@ router.post('/fadiga-checkin/me', requireFatigueCheckinAccess, async (c) => {
 
 router.get('/fadiga-checkin/historico', async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const funcionarioId = await resolveFuncionarioId(c);
     if (!funcionarioId) {
       return c.json(
@@ -1585,11 +1543,11 @@ router.get('/fadiga-checkin/historico', async (c) => {
 
 router.get('/fadiga-checkin/painel-gestor', requirePermission('frms', 'visualizar', 'manager'), async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const data = c.req.query('data') || todayIso();
 
     const painelSectorAccess = await getEmployeeSectorAccess(
-      c as unknown as Context<{ Bindings: Env }>,
+      c,
       empresaId,
     );
     const painelSectorScope = buildFuncionarioScopeWhere(painelSectorAccess, 'f');
@@ -1699,13 +1657,13 @@ router.get('/fadiga-checkin/painel', requirePermission('frms', 'visualizar', 'ma
 
 router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 'manager'), async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const dataInicio =
       c.req.query('data_inicio') || new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
     const dataFim = c.req.query('data_fim') || todayIso();
 
     const analyticsSectorAccess = await getEmployeeSectorAccess(
-      c as unknown as Context<{ Bindings: Env }>,
+      c,
       empresaId,
     );
     const analyticsSectorScope = buildFuncionarioScopeWhere(analyticsSectorAccess, 'f');
@@ -1819,7 +1777,7 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
 
 router.patch('/fadiga-checkin/:id/resposta-gestor', requirePermission('frms', 'editar', 'manager'), async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const gestorId = Number(c.get('userId') || 0);
     const { id } = c.req.param();
     const body = await c.req.json();
@@ -1882,12 +1840,12 @@ router.patch('/fadiga-checkin/:id/resposta-gestor', requirePermission('frms', 'e
 
 router.get('/fadiga-checkin/export', requirePermission('frms', 'visualizar', 'manager'), async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const dataInicio = c.req.query('data_inicio') || todayIso().slice(0, 8) + '01';
     const dataFim = c.req.query('data_fim') || todayIso();
 
     const exportSectorAccess = await getEmployeeSectorAccess(
-      c as unknown as Context<{ Bindings: Env }>,
+      c,
       empresaId,
     );
     const exportSectorScope = buildFuncionarioScopeWhere(exportSectorAccess, 'f');
@@ -1967,7 +1925,7 @@ router.get('/fadiga-checkin/export', requirePermission('frms', 'visualizar', 'ma
 
 router.get('/fadiga-checkin/frat-prefill', async (c) => {
   try {
-    const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env }>);
+    const empresaId = getEmpresaId(c);
     const date = c.req.query('date') || todayIso();
     const funcionarioIdQuery = c.req.query('funcionario_id');
     const funcionarioId = funcionarioIdQuery

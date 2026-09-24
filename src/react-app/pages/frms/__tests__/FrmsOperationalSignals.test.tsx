@@ -64,8 +64,8 @@ describe('FrmsSignalChips', () => {
     render(<FrmsSignalChips item={item()} />);
     const list = screen.getByLabelText('Sinais operacionais do dia');
     const chips = within(list);
-    expect(chips.getByLabelText('Fadiga diária: Realizada — normal')).toBeInTheDocument();
-    expect(chips.getByLabelText('Compliance: Dados incompletos — sem dado')).toBeInTheDocument();
+    expect(chips.getByLabelText('Check-in diário: Realizada — normal')).toBeInTheDocument();
+    expect(chips.getByLabelText('Carga do período: Dados incompletos — sem dado')).toBeInTheDocument();
     expect(chips.getByLabelText('Efetividade: 92,0% — normal')).toBeInTheDocument();
     expect(chips.getByLabelText('Prontidão: Não avaliado — sem dado')).toBeInTheDocument();
   });

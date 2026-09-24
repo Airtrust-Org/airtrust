@@ -80,6 +80,7 @@ import {
 import { syncHorasVooFromFrmsJornada } from '../shared/handlers/horasVooFromFrms.handler';
 import { recalcularPipeline } from '../lib/frms/db-service-jornadas';
 import { buildCanonicalOperationalSourceSql } from '../lib/frms/frms-source-policy';
+import { buildFrmsDayCheckinExplanationState } from '../lib/frms/day-explanation-checkin';
 import { getSigvoosConfig } from '../services/sigvoos-frms';
 import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../services/employee-sector-access';
 import fadigaAcumulada from './frms-fadiga-acumulada';
@@ -266,8 +267,8 @@ type FrmsExplanationTraceSourceSummary = 'informed' | 'estimated' | 'mixed' | 'l
 interface FrmsDayExplanationTrace {
   version: 'frms-day-trace-v1';
   dataQuality: {
-    data_source: 'crew_reported' | 'default_estimate' | 'not_applicable' | null;
-    confidence: 'reported' | 'reduced' | null;
+    data_source: 'crew_reported' | 'missing_checkin' | 'default_estimate' | 'not_applicable' | null;
+    confidence: 'reported' | 'incomplete' | 'unavailable' | 'reduced' | null;
     sourceSummary: FrmsExplanationTraceSourceSummary;
     limitations: string[];
   };
@@ -337,8 +338,8 @@ interface FrmsTraceWindowWorst {
 }
 
 interface FrmsDayExplanationTraceContext {
-  dataSource: 'crew_reported' | 'default_estimate' | 'not_applicable' | null;
-  confidence: 'reported' | 'reduced' | null;
+  dataSource: 'crew_reported' | 'missing_checkin' | 'default_estimate' | 'not_applicable' | null;
+  confidence: 'reported' | 'incomplete' | 'unavailable' | 'reduced' | null;
   wakeTimeSource: string | null;
   recalculationPending: boolean;
   windows: {
@@ -2417,7 +2418,7 @@ frmsRoutes.get(
           fj.processado_com_bug,
           j.data as data_apresentacao,
           j.data as data_liberacao,
-          fj.effectiveness_pct,
+          j.hora_apresentacao, j.hora_termino, j.duracao_jornada_minutos, j.horas_voo_minutos, fj.effectiveness_pct,
           fj.effectiveness_nivel,
           fj.effectiveness_componentes_json,
           fj.tempo_abaixo_limiar_min,
@@ -2432,6 +2433,7 @@ frmsRoutes.get(
           fj.hora_despertar_estimada,
           fj.hora_inicio_sono_estimado,
           fj.duracao_sono_efetiva_min,
+          fj.operational_load_landings_count, fj.operational_load_temperature_max_c, fj.operational_load_data_quality,
           fj.dia_periodo_embarcado,
           fj.total_dias_periodo
        FROM frms_fatorizacao_jornada fj
@@ -2546,7 +2548,7 @@ frmsRoutes.get(
 
     const [checkinRow, recalcEvent, worst7d, worst28d] = await Promise.all([
       c.env.DB.prepare(
-        `SELECT id, wake_time, report_source
+        `SELECT id, wake_time, jornada_inicio_prevista, horas_sono, report_source
          FROM frms_fadiga_checkin
          WHERE empresa_id = ?
            AND funcionario_id = ?
@@ -2555,7 +2557,13 @@ frmsRoutes.get(
          LIMIT 1`,
       )
         .bind(empresaId, Number(tripulanteId), data)
-        .first<{ id: string; wake_time: string | null; report_source: string | null }>()
+        .first<{
+          id: string;
+          wake_time: string | null;
+          jornada_inicio_prevista: string | null;
+          horas_sono: number | null;
+          report_source: string | null;
+        }>()
         .catch(() => null),
       c.env.DB.prepare(
         `SELECT 1 AS has_pending
@@ -2586,39 +2594,12 @@ frmsRoutes.get(
       }),
     ]);
 
-    const wakeTimeSource = normalizeHora(row.hora_acordou as string | null | undefined)
-      ? 'crew_reported'
-      : normalizeHora(row.hora_despertar_estimada as string | null | undefined)
-        ? 'fallback_apresentacao_minus_config'
-        : normalizeHora(checkinRow?.wake_time)
-          ? 'crew_reported'
-          : null;
-    const sourceByCheckin =
-      checkinRow != null
-        ? ({
-            dataSource: 'crew_reported',
-            confidence: 'reported',
-          } as const)
-        : ({
-            dataSource: 'default_estimate',
-            confidence: 'reduced',
-          } as const);
-    const traceLimitations: string[] = [];
-    if (!checkinRow) {
-      traceLimitations.push('Sem check-in diário para a data selecionada; usando estimativa operacional.');
-    }
-    if (!row.hora_apresentacao) {
-      traceLimitations.push('Sem hora de apresentação na jornada; minutos acordado antes da apresentação não disponíveis.');
-    }
-    if (!worst7d.available) {
-      traceLimitations.push('Janela de 7 dias indisponível para determinar pior dia.');
-    }
-    if (!worst28d.available) {
-      traceLimitations.push('Janela de 28 dias indisponível para determinar pior dia.');
-    }
-    if (Number(row.processado_com_bug ?? 0) === 1) {
-      traceLimitations.push('Registro marcado como legado pré-C2; considerar reprocessamento histórico em fase separada.');
-    }
+    const checkinState = buildFrmsDayCheckinExplanationState({
+      checkinRow,
+      row,
+      worst7d,
+      worst28d,
+    });
 
     if (!empresaId) {
       return c.json(
@@ -2642,20 +2623,18 @@ frmsRoutes.get(
     const explanation = await buildFrmsDayExplanation(
       c.env,
       {
-        ...row,
-        dias_criticos_consecutivos: diasCriticosConsecutivos,
+        ...checkinState.rowForExplanation,
+        dias_criticos_consecutivos: checkinState.complete ? diasCriticosConsecutivos : 0,
       },
       limites,
       {
-        dataSource: sourceByCheckin.dataSource,
-        confidence: sourceByCheckin.confidence,
-        wakeTimeSource,
-        recalculationPending: Boolean(recalcEvent?.has_pending) || !Boolean(row.hora_apresentacao),
-        windows: {
-          sevenDays: worst7d,
-          twentyEightDays: worst28d,
-        },
-        limitations: traceLimitations,
+        dataSource: checkinState.dataSource,
+        confidence: checkinState.confidence,
+        wakeTimeSource: checkinState.wakeTimeSource,
+        recalculationPending:
+          Boolean(recalcEvent?.has_pending) || !checkinState.complete || !Boolean(checkinState.presentation),
+        windows: checkinState.windows,
+        limitations: checkinState.limitations,
       },
     );
 

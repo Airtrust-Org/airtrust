@@ -1,180 +1,62 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sincronizarCheckinComFrms } from '../../lib/frms/fadiga-frms-sync';
-import { calcEffectiveness, hhmmToMinutes, minutesToHhmm } from '../../lib/frms/calculos';
-import { LIMITES_DEFAULT } from '../../lib/frms/types';
+import { recalcularPipeline } from '../../lib/frms/db-service-jornadas';
 
-const REVISION_ID = 'rev-governed-1';
-const MODEL_VERSION = 'FRMS_CONFIG_V1_TEST';
+vi.mock('../../lib/frms/db-service-jornadas', () => ({
+  recalcularPipeline: vi.fn(),
+}));
 
-function governedRevisionRow(empresaId: number, overrides: Partial<Record<string, number>> = {}) {
-  return {
-    id: REVISION_ID,
-    empresa_id: empresaId,
-    profile_code: 'LEGACY_GENERAL',
-    revision_number: 1,
-    status: 'ACTIVE',
-    source_type: 'TEST_FIXTURE',
-    source_reference: null,
-    regulatory_profile_id: 'profile-1',
-    policy_version: MODEL_VERSION,
-    effective_from: '2000-01-01',
-    effective_to: null,
-    actor_user_id: null,
-    reason: 'test fixture',
-    supersedes_revision_id: null,
-    created_at: '2000-01-01T00:00:00.000Z',
-  };
-}
+const recalcularPipelineMock = vi.mocked(recalcularPipeline);
 
-const FADIGA_POLICY_DEFAULTS = {
-  FATIGUE_MEDICATION_BONUS: 8, FATIGUE_ALCOHOL_BONUS: 15,
-  WOCL_START_MINUTE: 120, WOCL_END_MINUTE: 360, WOCL_CENTER_PENALTY: 0.3, WOCL_EDGE_PENALTY: 0.15,
-  KSS_NORM_LE_2: 0, KSS_NORM_LE_4: 0.15, KSS_NORM_LE_6: 0.4, KSS_NORM_EQ_7: 0.7, KSS_NORM_EQ_8: 0.85, KSS_NORM_GE_9: 1,
-  SLEEP_DURATION_MISSING_NORM: 0.6, SLEEP_DURATION_GE_8_NORM: 0, SLEEP_DURATION_GE_7_NORM: 0.15,
-  SLEEP_DURATION_GE_6_NORM: 0.35, SLEEP_DURATION_GE_5_NORM: 0.6, SLEEP_DURATION_GE_4_NORM: 0.8, SLEEP_DURATION_LT_4_NORM: 1,
-  SLEEP_QUALITY_MISSING_NORM: 0.4, SLEEP_QUALITY_GE_5_NORM: 0, SLEEP_QUALITY_EQ_4_NORM: 0.2,
-  SLEEP_QUALITY_EQ_3_NORM: 0.45, SLEEP_QUALITY_EQ_2_NORM: 0.7, SLEEP_QUALITY_LT_2_NORM: 1,
-};
-
-// Mirrors LEGACY_FORTNIGHT_POLICY (fortnight-indicator.ts) mapped through its
-// FORTNIGHT_POLICY_PARAMETER_KEYS so a governed revision resolves the same policy.
-const FORTNIGHT_POLICY_DEFAULTS = {
-  FORTNIGHT_CONSECUTIVE_DAYS_ATTENTION: 4, FORTNIGHT_CONSECUTIVE_DAYS_CRITICAL: 5, FORTNIGHT_LOW_SLEEP_HOURS: 6,
-  KSS_HIGH_THRESHOLD: 7, FORTNIGHT_LOW_EFFECTIVENESS_PCT: 70,
-  FORTNIGHT_DAYS_WITHOUT_DUTY: 2, FORTNIGHT_LONG_REST_MINUTES: 13 * 60, FORTNIGHT_SHORT_AVG_DUTY_MINUTES: 6 * 60,
-  FORTNIGHT_SHORT_REST_MINUTES: 10 * 60, FORTNIGHT_EARLY_0600_MINUTES: 6 * 60, FORTNIGHT_EARLY_0700_MINUTES: 7 * 60,
-  FORTNIGHT_RECURRING_EARLY_PRESENTATIONS: 2, FORTNIGHT_ROLLING_DUTY_PCT: 0.8,
-  FORTNIGHT_SCORE_ATTENTION: 45, FORTNIGHT_SCORE_CRITICAL: 75, FORTNIGHT_SCORE_LIMIT_WEIGHT: 0.65,
-  FORTNIGHT_TREND_INCREASING_IMPACT: 6, FORTNIGHT_TREND_REDUCING_IMPACT: -4,
-  FORTNIGHT_IMPACT_DAYS_WITHOUT_DUTY: -8, FORTNIGHT_IMPACT_LONG_REST: -6, FORTNIGHT_IMPACT_SHORT_AVG_DUTY: -5,
-  FORTNIGHT_IMPACT_NO_EARLY_PRESENTATION: -3, FORTNIGHT_IMPACT_COMPLETE_DATA: -4,
-  FORTNIGHT_IMPACT_CONSECUTIVE_ATTENTION: 8, FORTNIGHT_IMPACT_CONSECUTIVE_CRITICAL: 14,
-  FORTNIGHT_IMPACT_CHECKIN_PENDING: 10, FORTNIGHT_IMPACT_ESTIMATED_DATA: 7, FORTNIGHT_IMPACT_EARLY_0600: 8,
-  FORTNIGHT_IMPACT_RECURRING_EARLY: 5, FORTNIGHT_IMPACT_SHORT_REST: 16, FORTNIGHT_IMPACT_LOW_SLEEP: 12,
-  FORTNIGHT_IMPACT_HIGH_KSS: 12, FORTNIGHT_IMPACT_LOW_EFFECTIVENESS: 14, FORTNIGHT_IMPACT_ROLLING_DUTY: 10,
-  FORTNIGHT_IMPACT_DAILY_CRITICAL: 18, FORTNIGHT_IMPACT_DAILY_ATTENTION: 7,
-};
-
-function governedParameterRows(overrides: Partial<Record<string, number>> = {}) {
-  const merged = {
-    ...LIMITES_DEFAULT,
-    ...FADIGA_POLICY_DEFAULTS,
-    ...FORTNIGHT_POLICY_DEFAULTS,
-    ...overrides,
-  };
-  return Object.entries(merged).map(([key, value]) => ({
-    revision_id: REVISION_ID,
-    parameter_key: key,
-    numeric_value: value,
-    json_value: null,
-  }));
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-const DEFAULT_FATORIZACAO = {
-  id: 'fator-1',
-  fator_basica_pct: 0,
-  fator_apresentacao_pct: 0,
-  fator_duracao_pct: 0,
-  fator_repouso_pct: 0,
-  fator_noturno_dep_pct: 0,
-  fator_noturno_arr_pct: 0,
-  fator_ciclo_embarcado_pct: 0,
-  fator_base_away_pct: 0,
-  fator_aclimatacao_pct: 0,
-  total_fatorizado_jornada: 0,
-  fator_hv_basica_pct: 0,
-  fator_hv_quantidade_pct: 0,
-  fator_hv_noturno_dep_pct: 0,
-  fator_hv_noturno_arr_pct: 0,
-  total_fatorizado_hv: 0,
-  effectiveness_pct: 90,
-  dia_periodo_embarcado: null,
-  total_dias_periodo: null,
-};
-
-type MockOpts = {
-  minutosAntesApresentacao?: number;
-  horaApresentacao?: string | null;
+type DbOptions = {
   noJornada?: boolean;
-  noFatorizacao?: boolean;
-  fatorizacao?: Partial<typeof DEFAULT_FATORIZACAO>;
+  previousEffectiveness?: number | null;
+  existingSyncEventId?: string | null;
 };
 
-function createDb(opts: MockOpts = {}) {
-  const fatorizacaoUpdateArgs: unknown[][] = [];
-  const jornadaUpdateArgs: unknown[][] = [];
-  const eventInserts: Array<{ tipo: string; payloadStr: string }> = [];
-
-  const minutosAntes = opts.minutosAntesApresentacao ?? 90;
-  const horaApresentacao = opts.horaApresentacao !== undefined ? opts.horaApresentacao : '09:00';
-  const fat = { ...DEFAULT_FATORIZACAO, ...opts.fatorizacao };
+function createDb(options: DbOptions = {}) {
+  const eventInserts: Array<{ tipo: string; payload: Record<string, unknown> }> = [];
+  const eventUpdates: Array<{ payload: Record<string, unknown>; id: string }> = [];
 
   const db = {
     prepare: (query: string) => ({
-      all: async () => {
-        if (query.includes('FROM frms_profile_assignments')) {
-          return { results: [{ regulatory_profile_id: 'profile-1', profile_code: 'LEGACY_GENERAL' }] };
-        }
-        if (query.includes('FROM frms_config_revisions')) {
-          return { results: [governedRevisionRow(10)] };
-        }
-        if (query.includes('FROM frms_config_parameters')) {
-          return { results: governedParameterRows({ MINUTOS_ANTES_APRESENTACAO: minutosAntes }) };
-        }
-        return { results: [] };
-      },
       bind: (...bindArgs: unknown[]) => ({
-        all: async () => {
-          if (query.includes('FROM frms_profile_assignments')) {
-            return { results: [{ regulatory_profile_id: 'profile-1', profile_code: 'LEGACY_GENERAL' }] };
-          }
-          if (query.includes('FROM frms_config_revisions')) {
-            return { results: [governedRevisionRow(10)] };
-          }
-          if (query.includes('FROM frms_config_parameters')) {
-            return { results: governedParameterRows({ MINUTOS_ANTES_APRESENTACAO: minutosAntes }) };
-          }
-          return { results: [] };
-        },
         first: async () => {
           if (query.includes('FROM frms_jornada')) {
-            if (opts.noJornada) return null;
+            if (options.noJornada) return null;
             return {
               id: 'jornada-1',
-              hora_apresentacao: horaApresentacao,
-              hora_primeira_decolagem: null,
-              hora_ultimo_pouso: null,
-              hora_corte_motor: null,
-              hora_termino: null,
+              tripulante_id: 1,
+              data: '2026-05-28',
+              status: 'ES',
+              origem: 'SIGVOOS',
+              horas_voo_minutos: 120,
+              hora_corte_motor: '14:00',
+              hora_termino: '14:00',
             };
           }
           if (query.includes('FROM frms_fatorizacao_jornada')) {
-            if (opts.noFatorizacao) return null;
-            return fat;
+            return { effectiveness_pct: options.previousEffectiveness ?? 85 };
           }
-          if (query.includes('FROM frms_fadiga_evento')) {
-            return null; // no existing event → always INSERT path
+          if (query.includes("tipo = 'FRMS_SYNC'")) {
+            return options.existingSyncEventId ? { id: options.existingSyncEventId } : null;
           }
+          if (query.includes('FROM frms_fadiga_evento')) return null;
           return null;
         },
         run: async () => {
-          if (query.includes('UPDATE frms_fatorizacao_jornada')) {
-            fatorizacaoUpdateArgs.push(bindArgs);
-          } else if (query.includes('UPDATE frms_jornada') && !query.includes('fadiga_evento')) {
-            jornadaUpdateArgs.push(bindArgs);
-          } else if (query.includes('INSERT INTO frms_fadiga_evento')) {
-            // tipo is hardcoded as a string literal in the SQL VALUES clause
-            const TIPOS = [
-              'CHECKIN_SEM_JORNADA',
-              'FRMS_SYNC_SEM_FATORIZACAO',
-              'FRMS_RECALCULO_NECESSARIO',
-              'FRMS_SYNC',
-            ] as const;
-            const tipo = TIPOS.find((t) => query.includes(`'${t}'`)) ?? 'UNKNOWN';
-            // bindArgs: [uuid, empresaId, checkinId, payloadJson]
-            eventInserts.push({ tipo, payloadStr: bindArgs[3] as string });
+          if (query.includes('INSERT INTO frms_fadiga_evento')) {
+            const tipo = /VALUES \(\?, \?, \?, '([^']+)'/.exec(query)?.[1] ?? 'UNKNOWN';
+            eventInserts.push({
+              tipo,
+              payload: JSON.parse(String(bindArgs[3] ?? '{}')) as Record<string, unknown>,
+            });
+          }
+          if (query.includes('UPDATE frms_fadiga_evento')) {
+            eventUpdates.push({
+              payload: JSON.parse(String(bindArgs[0] ?? '{}')) as Record<string, unknown>,
+              id: String(bindArgs[1] ?? ''),
+            });
           }
           return { success: true };
         },
@@ -182,287 +64,127 @@ function createDb(opts: MockOpts = {}) {
     }),
   } as unknown as D1Database;
 
-  return { db, fatorizacaoUpdateArgs, jornadaUpdateArgs, eventInserts };
+  return { db, eventInserts, eventUpdates };
 }
 
-// Posições do bind em UPDATE frms_fatorizacao_jornada:
-// 0: duracao_sono_efetiva_min
-// 1: hora_despertar_estimada
-// 2: hora_inicio_sono_estimado
-// 3: fator_basica_pct
-// 4: fator_apresentacao_pct
-// 5: fator_duracao_pct
-// 6: fator_repouso_pct
-// 7: total_fatorizado_jornada
-// 8: effectiveness_pct
-// 9: effectiveness_nivel
-// 10: effectiveness_componentes_json
-// 11: config_revision_id
-// 12: model_version
-// 13: id (WHERE)
+beforeEach(() => {
+  vi.clearAllMocks();
+  recalcularPipelineMock.mockResolvedValue({
+    fatorizacao: { effectiveness_pct: 72 },
+    acumulo: {},
+    alertas: [],
+    bloqueado: false,
+  } as never);
+});
 
-// Posições do bind em UPDATE frms_jornada:
-// 0: hora_apresentacao efetiva
-// 1: hora_acordou
-// 2: sono_efetivo_min
-// 3: fonte_sono
-// 4: acordou_na_wocl
-// 5: id (WHERE)
-
-// ─── Tests ──────────────────────────────────────────────────────────────────
-
-describe('sincronizarCheckinComFrms — C2 patch', () => {
-  it('1. sem jornada: retorna sincronizado=false e registra CHECKIN_SEM_JORNADA', async () => {
+describe('sincronizarCheckinComFrms — check-in diário autoritativo', () => {
+  it('sem jornada registra diagnóstico e não aciona o pipeline', async () => {
     const { db, eventInserts } = createDb({ noJornada: true });
 
-    const result = await sincronizarCheckinComFrms(db, 'ck-1', 1, '2026-05-28', 7, 10);
+    const result = await sincronizarCheckinComFrms(
+      db, 'ck-1', 1, '2026-05-28', 7, 10, '06:30', '08:00',
+    );
 
-    expect(result.sincronizado).toBe(false);
-    expect(result.jornada_id).toBeUndefined();
-    expect(eventInserts.some((e) => e.tipo === 'CHECKIN_SEM_JORNADA')).toBe(true);
+    expect(result).toEqual({ sincronizado: false });
+    expect(eventInserts.some((event) => event.tipo === 'CHECKIN_SEM_JORNADA')).toBe(true);
+    expect(recalcularPipelineMock).not.toHaveBeenCalled();
   });
 
-  it('2. sem fatorizacao: retorna sincronizado=false e registra FRMS_SYNC_SEM_FATORIZACAO', async () => {
-    const { db, eventInserts } = createDb({ noFatorizacao: true });
+  it.each([
+    { wake: null, presentation: '08:00' },
+    { wake: '06:30', presentation: null },
+    { wake: '06:30', presentation: '08:00', sleep: 0 },
+  ])('falha fechado com check-in incompleto: %o', async ({ wake, presentation, sleep = 7 }) => {
+    const { db, eventInserts } = createDb();
 
-    const result = await sincronizarCheckinComFrms(db, 'ck-2', 1, '2026-05-28', 7, 10);
+    const result = await sincronizarCheckinComFrms(
+      db, 'ck-incomplete', 1, '2026-05-28', sleep, 10, wake, presentation,
+    );
 
-    expect(result.sincronizado).toBe(false);
-    expect(result.jornada_id).toBe('jornada-1');
-    expect(eventInserts.some((e) => e.tipo === 'FRMS_SYNC_SEM_FATORIZACAO')).toBe(true);
+    expect(result).toMatchObject({ sincronizado: false, jornada_id: 'jornada-1' });
+    expect(eventInserts.some((event) => event.tipo === 'FRMS_RECALCULO_NECESSARIO')).toBe(true);
+    expect(recalcularPipelineMock).not.toHaveBeenCalled();
   });
 
-  it('3. paridade com calcEffectiveness: effectiveness_pct dentro de ±0.1 pp', async () => {
-    const fat = {
-      total_fatorizado_jornada: -0.05,
-      fator_basica_pct: 0.7,
-      fator_apresentacao_pct: 0,
-      fator_duracao_pct: -0.1,
-      fator_repouso_pct: -0.1,
-      fator_noturno_dep_pct: 0,
-      fator_noturno_arr_pct: 0,
-      fator_ciclo_embarcado_pct: 0,
-      fator_base_away_pct: 0,
-      fator_aclimatacao_pct: 0,
-      fator_hv_basica_pct: 0,
-      fator_hv_quantidade_pct: 0,
-      fator_hv_noturno_dep_pct: 0,
-      fator_hv_noturno_arr_pct: 0,
-      total_fatorizado_hv: 0,
-      effectiveness_pct: 85,
-      dia_periodo_embarcado: null,
-      total_dias_periodo: null,
-    };
+  it('com check-in completo delega ao pipeline canônico e registra provenance real', async () => {
+    const { db, eventInserts } = createDb({ previousEffectiveness: 85 });
 
-    const { db, fatorizacaoUpdateArgs } = createDb({
-      horaApresentacao: '09:00',
-      fatorizacao: fat,
+    const result = await sincronizarCheckinComFrms(
+      db, 'ck-complete', 1, '2026-05-28', 7, 10, '06:30', '08:00',
+    );
+
+    expect(recalcularPipelineMock).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      sincronizado: true,
+      jornada_id: 'jornada-1',
+      effectiveness_anterior: 85,
+      effectiveness_nova: 72,
+      delta_effectiveness: -13,
     });
 
-    const horasSono = 6;
-    await sincronizarCheckinComFrms(db, 'ck-3', 1, '2026-05-28', horasSono, 10);
+    const syncEvent = eventInserts.find((event) => event.tipo === 'FRMS_SYNC');
+    expect(syncEvent?.payload).toMatchObject({
+      formula_version: 'FRMS_DAILY_CHECKIN_AUTHORITY_V1',
+      jornada_id: 'jornada-1',
+      checkin_id: 'ck-complete',
+      presentation_time_source: 'CREW_REPORTED',
+      wake_time_source: 'CREW_REPORTED',
+      sleep_source: 'CREW_REPORTED',
+      hora_apresentacao_efetiva: '08:00',
+      hora_despertar_real: '06:30',
+      horas_sono_24h: 7,
+    });
+    expect(JSON.stringify(syncEvent?.payload)).not.toMatch(/apto_para_voo|NAO_APTO|bloqueio/i);
+  });
 
-    // Reproduce the same calculation that fadiga-frms-sync uses internally
-    const duracaoSonoMin = Math.round(horasSono * 60);
-    const apresentacaoMin = hhmmToMinutes('09:00');
-    const standardWakeMin = apresentacaoMin - 90; // minutosAntesApresentacao = 90 (default)
-    const hora_dormiu = minutesToHhmm(standardWakeMin - duracaoSonoMin);
+  it('mantém sincronizado=false quando o pipeline não produz effectiveness', async () => {
+    recalcularPipelineMock.mockResolvedValueOnce({
+      fatorizacao: { effectiveness_pct: null },
+      acumulo: {},
+      alertas: [],
+      bloqueado: false,
+    } as never);
+    const { db } = createDb({ previousEffectiveness: 85 });
 
-    const limites = { ...LIMITES_DEFAULT };
-    const expected = calcEffectiveness(fat as never, limites, {
-      hora_apresentacao: '09:00',
-      hora_dormiu,
-      dia_periodo_embarcado: null,
-      total_dias_periodo: null,
+    const result = await sincronizarCheckinComFrms(
+      db, 'ck-null', 1, '2026-05-28', 7, 10, '06:30', '08:00',
+    );
+
+    expect(result).toMatchObject({
+      sincronizado: false,
+      effectiveness_nova: null,
+      delta_effectiveness: null,
+    });
+  });
+
+  it('atualiza o evento FRMS_SYNC existente em vez de duplicar', async () => {
+    const { db, eventInserts, eventUpdates } = createDb({
+      existingSyncEventId: 'event-sync-1',
     });
 
-    const actual = fatorizacaoUpdateArgs[0]?.[8] as number;
-    expect(typeof actual).toBe('number');
-    expect(Math.abs(actual - expected.effectiveness_pct)).toBeLessThanOrEqual(0.1);
+    await sincronizarCheckinComFrms(
+      db, 'ck-repeat', 1, '2026-05-28', 7, 10, '06:30', '08:00',
+    );
+
+    expect(eventInserts.some((event) => event.tipo === 'FRMS_SYNC')).toBe(false);
+    expect(eventUpdates).toHaveLength(1);
+    expect(eventUpdates[0].id).toBe('event-sync-1');
+    expect(eventUpdates[0].payload).toMatchObject({ checkin_id: 'ck-repeat' });
   });
 
-  it('4. WOCL: apresentacao 05:00, sono 5h → acordou_na_wocl=true', async () => {
-    const { db, jornadaUpdateArgs } = createDb({ horaApresentacao: '05:00' });
-
-    await sincronizarCheckinComFrms(db, 'ck-4', 1, '2026-05-28', 5, 10);
-
-    // standardWake = 05:00 - 90min = 03:30 → 210 min → WOCL (120–359)
-    const acordouNaWocl = jornadaUpdateArgs[0]?.[4];
-    expect(acordouNaWocl).toBe(1);
-  });
-
-  it('5. MINUTOS_ANTES_APRESENTACAO default 90: apresentacao 09:00 → wake 07:30', async () => {
-    const { db, fatorizacaoUpdateArgs } = createDb({
-      horaApresentacao: '09:00',
-      minutosAntesApresentacao: 90,
+  it('propaga erro do pipeline governado sem fabricar fallback local', async () => {
+    const governedError = Object.assign(new Error('FRMS_CONTEXT_UNAVAILABLE'), {
+      code: 'FRMS_CONTEXT_UNAVAILABLE',
     });
-
-    await sincronizarCheckinComFrms(db, 'ck-5', 1, '2026-05-28', 6, 10);
-
-    // hora_despertar_estimada from calcEffectiveness = hora_apresentacao - minutosAntes = 07:30
-    const horaDespertar = fatorizacaoUpdateArgs[0]?.[1];
-    expect(horaDespertar).toBe('07:30');
-  });
-
-  it('6. MINUTOS_ANTES_APRESENTACAO custom 75: apresentacao 09:00 → wake 07:45', async () => {
-    const { db, fatorizacaoUpdateArgs } = createDb({
-      horaApresentacao: '09:00',
-      minutosAntesApresentacao: 75,
-    });
-
-    await sincronizarCheckinComFrms(db, 'ck-6', 1, '2026-05-28', 6, 10);
-
-    const horaDespertar = fatorizacaoUpdateArgs[0]?.[1];
-    expect(horaDespertar).toBe('07:45');
-  });
-
-  it('7. hora_apresentacao=null: não altera effectiveness_pct, registra FRMS_RECALCULO_NECESSARIO', async () => {
-    const { db, fatorizacaoUpdateArgs, eventInserts } = createDb({ horaApresentacao: null });
-
-    const result = await sincronizarCheckinComFrms(db, 'ck-7', 1, '2026-05-28', 6, 10);
-
-    expect(result.sincronizado).toBe(false);
-    expect(fatorizacaoUpdateArgs).toHaveLength(0);
-    expect(eventInserts.some((e) => e.tipo === 'FRMS_RECALCULO_NECESSARIO')).toBe(true);
-  });
-
-  it('8. atualiza frms_jornada com hora_acordou, sono_efetivo_min, fonte_sono, acordou_na_wocl', async () => {
-    const { db, jornadaUpdateArgs } = createDb({ horaApresentacao: '09:00' });
-
-    await sincronizarCheckinComFrms(db, 'ck-8', 1, '2026-05-28', 6, 10);
-
-    expect(jornadaUpdateArgs).toHaveLength(1);
-    const [horaApresentacao, horaAcordou, sonoEfetivoMin, fonteSono, acordouNaWocl, jornadaId] =
-      jornadaUpdateArgs[0] as [string, string | null, number, string, number, string];
-
-    expect(horaApresentacao).toBe('09:00');
-
-    // D-02: `hora_acordou` guarda apenas despertar REAL. Aqui não houve
-    // wakeTimeReal nem hora_acordou prévia, então permanece nulo; a estimativa
-    // vai para `frms_fatorizacao_jornada.hora_despertar_estimada`.
-    expect(horaAcordou).toBeNull();
-    expect(sonoEfetivoMin).toBe(360); // 6h * 60
-    // D-01: `fonte_sono` é a proveniência do DADO DE SONO. O tripulante
-    // reportou 6 h no check-in, logo INFORMADO — mesmo com despertar estimado.
-    expect(fonteSono).toBe('INFORMADO');
-    expect(typeof acordouNaWocl).toBe('number'); // 0 or 1
-    expect(jornadaId).toBe('jornada-1');
-  });
-
-  it('8b. hora_acordou usa wakeTimeReal quando fornecida', async () => {
-    const { db, jornadaUpdateArgs } = createDb({ horaApresentacao: '09:00' });
-
-    await sincronizarCheckinComFrms(db, 'ck-8b', 1, '2026-05-28', 6, 10, '06:55');
-
-    const horaAcordou = jornadaUpdateArgs[0]?.[1];
-    expect(horaAcordou).toBe('06:55');
-  });
-
-  it('9. evento FRMS_SYNC: payload de auditoria sem apto_para_voo, INAPTO ou bloqueio', async () => {
-    const { db, eventInserts } = createDb({ horaApresentacao: '09:00' });
-
-    const result = await sincronizarCheckinComFrms(db, 'ck-9', 1, '2026-05-28', 7, 10);
-
-    expect(result.sincronizado).toBe(true);
-
-    const syncEvent = eventInserts.find((e) => e.tipo === 'FRMS_SYNC');
-    expect(syncEvent).toBeDefined();
-
-    const payload = syncEvent!.payloadStr;
-    expect(payload).toContain('jornada_id');
-    expect(payload).toContain('effectiveness_anterior');
-    expect(payload).toContain('effectiveness_nova');
-    expect(payload).toContain('duracao_sono_min');
-    expect(payload).toContain('componentes');
-
-    expect(payload).not.toContain('apto_para_voo');
-    expect(payload).not.toContain('INAPTO');
-    expect(payload).not.toContain('NAO_APTO');
-    expect(payload).not.toContain('bloqueio');
-  });
-
-  it('10. garantia contra aritmética incremental: effectivenessNova nunca é efectuada', async () => {
-    // Test that two calls with different fatorizacao.effectiveness_pct produce
-    // different results that track calcEffectiveness, not the incremental formula.
-
-    const fatBase = {
-      total_fatorizado_jornada: 0,
-      fator_basica_pct: 0,
-      fator_apresentacao_pct: 0,
-      fator_duracao_pct: 0,
-      fator_repouso_pct: 0,
-      fator_noturno_dep_pct: 0,
-      fator_noturno_arr_pct: 0,
-      fator_ciclo_embarcado_pct: 0,
-      fator_base_away_pct: 0,
-      fator_aclimatacao_pct: 0,
-      fator_hv_basica_pct: 0,
-      fator_hv_quantidade_pct: 0,
-      fator_hv_noturno_dep_pct: 0,
-      fator_hv_noturno_arr_pct: 0,
-      total_fatorizado_hv: 0,
-      dia_periodo_embarcado: null,
-      total_dias_periodo: null,
-    };
-
-    const { db: db50, fatorizacaoUpdateArgs: args50 } = createDb({
-      horaApresentacao: '09:00',
-      fatorizacao: { ...fatBase, effectiveness_pct: 50 },
-    });
-    const { db: db95, fatorizacaoUpdateArgs: args95 } = createDb({
-      horaApresentacao: '09:00',
-      fatorizacao: { ...fatBase, effectiveness_pct: 95 },
-    });
-
-    await sincronizarCheckinComFrms(db50, 'ck-10a', 1, '2026-05-28', 7, 10);
-    await sincronizarCheckinComFrms(db95, 'ck-10b', 1, '2026-05-28', 7, 10);
-
-    const eff50 = args50[0]?.[4] as number;
-    const eff95 = args95[0]?.[4] as number;
-
-    // Both calls use the same fatorizacao factors and same sleep hours.
-    // calcEffectiveness is deterministic on factors + sleep, independent of prior effectiveness_pct.
-    // The incremental formula would have given different results (eff50 ≠ eff95 by design).
-    // The correct formula gives identical results regardless of prior effectiveness_pct stored.
-    expect(Math.abs(eff50 - eff95)).toBeLessThan(0.5);
-  });
-
-  it('11. fail-closed: sem assignment de perfil FRMS vigente, propaga erro e não grava effectiveness com LIMITES_DEFAULT', async () => {
-    const fatorizacaoUpdateArgs: unknown[][] = [];
-    const db = {
-      prepare: (query: string) => ({
-        all: async () => ({ results: [] }),
-        bind: (...bindArgs: unknown[]) => ({
-          all: async () => ({ results: [] }),
-          first: async () => {
-            if (query.includes('FROM frms_jornada')) {
-              return {
-                id: 'jornada-1',
-                hora_apresentacao: '09:00',
-                hora_primeira_decolagem: null,
-                hora_ultimo_pouso: null,
-                hora_corte_motor: null,
-                hora_termino: null,
-              };
-            }
-            if (query.includes('FROM frms_fatorizacao_jornada')) {
-              return { ...DEFAULT_FATORIZACAO };
-            }
-            return null;
-          },
-          run: async () => {
-            if (query.includes('UPDATE frms_fatorizacao_jornada')) {
-              fatorizacaoUpdateArgs.push(bindArgs);
-            }
-            return { success: true };
-          },
-        }),
-      }),
-    } as unknown as D1Database;
+    recalcularPipelineMock.mockRejectedValueOnce(governedError);
+    const { db, eventInserts } = createDb();
 
     await expect(
-      sincronizarCheckinComFrms(db, 'ck-11', 1, '2026-05-28', 7, 10),
+      sincronizarCheckinComFrms(
+        db, 'ck-error', 1, '2026-05-28', 7, 10, '06:30', '08:00',
+      ),
     ).rejects.toMatchObject({ code: 'FRMS_CONTEXT_UNAVAILABLE' });
-    expect(fatorizacaoUpdateArgs).toHaveLength(0);
+
+    expect(eventInserts.some((event) => event.tipo === 'FRMS_SYNC')).toBe(false);
   });
 });

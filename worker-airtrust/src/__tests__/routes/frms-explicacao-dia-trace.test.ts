@@ -94,7 +94,7 @@ function createMockDb(options?: { withCheckin?: boolean }) {
 
           if (query.includes('FROM frms_fadiga_checkin') && query.includes('report_source')) {
             if (options?.withCheckin === false) return null;
-            return { id: 'ck-1', wake_time: '06:05', report_source: 'CREW_REPORTED' };
+            return { id: 'ck-1', wake_time: '06:05', jornada_inicio_prevista: '07:30', horas_sono: 7, report_source: 'CREW_REPORTED' };
           }
 
           if (query.includes('FROM frms_fadiga_evento e') && query.includes('FRMS_RECALCULO_NECESSARIO')) {
@@ -244,7 +244,7 @@ describe('GET /frms/tripulante/:id/explicacao-dia backend trace', () => {
     expect(writesLower.some((query) => query.includes('frms_fatorizacao_jornada'))).toBe(false);
   });
 
-  it('degrada para default_estimate quando não há check-in', async () => {
+  it('fica indisponível quando não há check-in, sem reaproveitar estimativa legada', async () => {
     const app = createFrmsApp();
     const { db } = createMockDb({ withCheckin: false });
 
@@ -256,9 +256,13 @@ describe('GET /frms/tripulante/:id/explicacao-dia backend trace', () => {
 
     expect(response.status).toBe(200);
     const payload = (await response.json()) as {
-      data: { explanation_trace: { dataQuality: { data_source: string; confidence: string } } };
+      data: {
+        jornada: { effectiveness_pct: number | null };
+        explanation_trace: { dataQuality: { data_source: string; confidence: string } };
+      };
     };
-    expect(payload.data.explanation_trace.dataQuality.data_source).toBe('default_estimate');
-    expect(payload.data.explanation_trace.dataQuality.confidence).toBe('reduced');
+    expect(payload.data.jornada.effectiveness_pct).toBeNull();
+    expect(payload.data.explanation_trace.dataQuality.data_source).toBe('missing_checkin');
+    expect(payload.data.explanation_trace.dataQuality.confidence).toBe('unavailable');
   });
 });
