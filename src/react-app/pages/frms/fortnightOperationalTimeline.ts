@@ -8,8 +8,15 @@ export interface FortnightTimelineDay {
   is_focus_day: boolean;
   has_snapshot_data: boolean;
   teve_jornada: boolean;
+  teve_atividade_frms: boolean;
+  atividade_principal: FrmsOperationalSnapshotItem['atividade_principal'];
+  atividade_min: number;
+  simulador_min: number;
+  treinamento_min: number;
+  atividade_rotulos: string[];
   jornada_min: number;
   voo_min: number;
+  voo_real_min: number;
   jornada_acumulada_min: number;
   voo_acumulada_min: number;
   hora_apresentacao: string | null;
@@ -91,8 +98,14 @@ function buildHighlights(item: FrmsOperationalSnapshotItem | null | undefined): 
 
   const highlights: string[] = [];
 
-  if (!item.teve_jornada) {
-    highlights.push('Sem jornada FRMS confirmada');
+  if (!(item.teve_atividade_frms ?? item.teve_jornada)) {
+    highlights.push('Sem atividade FRMS confirmada');
+  } else if (item.atividade_principal === 'SIMULADOR') {
+    highlights.push('Sessão de simulador');
+  } else if (item.atividade_principal === 'TREINAMENTO') {
+    highlights.push('Treinamento');
+  } else if (item.atividade_principal === 'MISTA') {
+    highlights.push('Atividade mista');
   }
 
   for (const alerta of item.alertas) {
@@ -157,13 +170,19 @@ export function buildFortnightTimeline(
   for (let index = 0; index < totalDays; index += 1) {
     const isoDate = addDays(params.periodStart, index);
     const item = byDate.get(isoDate);
-    const jornadaMin = item?.teve_jornada ? Math.max(0, item.duracao_jornada_minutos || 0) : 0;
-    const vooMin = item?.teve_jornada ? Math.max(0, item.horas_voo_minutos || 0) : 0;
+    const hasActivity = Boolean(item?.teve_atividade_frms ?? item?.teve_jornada);
+    const jornadaMin = hasActivity
+      ? Math.max(0, item?.atividade_frms_minutos ?? item?.duracao_jornada_minutos ?? 0)
+      : 0;
+    const vooRealMin = item?.teve_jornada ? Math.max(0, item.horas_voo_minutos || 0) : 0;
+    const vooMin = hasActivity
+      ? Math.max(0, item?.horas_voo_frms_minutos ?? vooRealMin)
+      : 0;
 
     cumulativeDuty += jornadaMin;
     cumulativeFlight += vooMin;
 
-    if (item?.teve_jornada) jornadasDays += 1;
+    if (hasActivity) jornadasDays += 1;
     if (item?.checkin_status === 'RECEBIDO') receivedCheckins += 1;
     const hasRecovery = (item?.recovery_credit_points ?? 0) > 0 || Boolean(item?.recovery_state);
     if (hasRecovery) recoveryDays += 1;
@@ -212,11 +231,18 @@ export function buildFortnightTimeline(
       is_focus_day: isoDate === params.focusDate,
       has_snapshot_data: Boolean(item),
       teve_jornada: Boolean(item?.teve_jornada),
+      teve_atividade_frms: hasActivity,
+      atividade_principal: item?.atividade_principal ?? (item?.teve_jornada ? 'VOO' : 'SEM_DADO'),
+      atividade_min: jornadaMin,
+      simulador_min: Math.max(0, item?.simulador_minutos ?? 0),
+      treinamento_min: Math.max(0, item?.treinamento_minutos ?? 0),
+      atividade_rotulos: item?.atividade_rotulos ?? [],
       jornada_min: jornadaMin,
       voo_min: vooMin,
+      voo_real_min: vooRealMin,
       jornada_acumulada_min: cumulativeDuty,
       voo_acumulada_min: cumulativeFlight,
-      hora_apresentacao: item?.hora_apresentacao ?? null,
+      hora_apresentacao: item?.hora_apresentacao ?? item?.atividade_hora_inicio ?? null,
       hora_termino: item?.hora_termino ?? null,
       horas_sono: item?.horas_sono ?? null,
       kss_score: item?.kss_score ?? null,

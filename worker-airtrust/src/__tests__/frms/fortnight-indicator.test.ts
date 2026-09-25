@@ -198,6 +198,7 @@ describe('frms fortnight indicator', () => {
       windowStart: '2026-05-01',
       windowEnd: '2026-05-14',
       items,
+      flightLimit168hMinutes: 35 * 60,
     }).get('2026-05-14::10');
 
     expect(indicator?.fonte_periodo).toBe('DERIVADO');
@@ -207,7 +208,7 @@ describe('frms fortnight indicator', () => {
     expect(indicator?.score_acumulado).toBeGreaterThanOrEqual(75);
     expect(indicator?.tendencia).toBe('CRESCENTE');
     expect(indicator?.decisao).toBe('EXIGE_OVERRIDE');
-    expect(indicator?.limite_referencia?.tipo).toBe('QUINZENA_DUTY');
+    expect(indicator?.limite_referencia?.tipo).toBe('VOO_168H_FRMS');
     expect(indicator?.agravantes_aplicados.map((item) => item.codigo)).toContain(
       'SEQUENCIA_5_DIAS_OU_MAIS',
     );

@@ -99,21 +99,32 @@ export function resolveDailyFatigueSignal(
 export function resolveComplianceSignal(
   item: FrmsOperationalSnapshotItem,
 ): FrmsOperationalSignal {
-  const base = { key: 'compliance' as const, label: 'Carga do período' };
+  const base = { key: 'compliance' as const, label: 'Carga operacional' };
   const indicator = item.fortnight_indicator;
 
-  const pct = indicator?.limite_referencia?.pct_atingido;
-  const limitMinutes = indicator?.limite_referencia?.valor_limite;
-  const currentMinutes = indicator?.limite_referencia?.valor_atual;
-  const detail =
-    pct != null && Number.isFinite(pct)
-      ? [
-          `${Math.round(pct)}% do limite de referência para o período`,
-          currentMinutes != null && Number.isFinite(currentMinutes) && limitMinutes != null && Number.isFinite(limitMinutes)
-            ? `${(Number(currentMinutes) / 60).toFixed(1).replace('.', ',')} h de ${(Number(limitMinutes) / 60).toFixed(1).replace('.', ',')} h`
-            : null,
-        ].filter(Boolean).join(' · ')
-      : undefined;
+  const formatHours = (minutes: number | null | undefined) => {
+    const value = Number(minutes ?? 0);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return `${(value / 60).toFixed(1).replace('.', ',')} h`;
+  };
+  const details = [
+    formatHours(indicator?.horas_voo_frms_periodo_min)
+      ? `HV FRMS ${formatHours(indicator?.horas_voo_frms_periodo_min)}`
+      : null,
+    formatHours(indicator?.horas_voo_periodo_min)
+      ? `voo ${formatHours(indicator?.horas_voo_periodo_min)}`
+      : null,
+    formatHours(indicator?.simulador_periodo_min)
+      ? `simulador ${formatHours(indicator?.simulador_periodo_min)}`
+      : null,
+    formatHours(indicator?.treinamento_periodo_min)
+      ? `treinamento ${formatHours(indicator?.treinamento_periodo_min)}`
+      : null,
+    indicator?.dias_atividade_periodo != null
+      ? `${indicator.dias_atividade_periodo} dia(s) de atividade`
+      : null,
+  ].filter(Boolean);
+  const detail = details.length > 0 ? details.join(' · ') : undefined;
 
   if (!indicator) {
     return { ...base, value: 'Dados incompletos', tone: 'unknown' };
@@ -147,9 +158,11 @@ export function resolveEffectivenessSignal(
   const value = formatPercent(effectiveness);
   const hasLowAlert = item.alertas.includes('EFETIVIDADE_BAIXA');
   const projectionDetail =
-    item.effectiveness_source === 'PROJETADA_APRESENTACAO'
-      ? 'Projetada para a hora de apresentação com base no check-in; carga operacional futura ainda não incorporada.'
-      : undefined;
+    item.effectiveness_source === 'PROJETADA_ATIVIDADE'
+      ? 'Projetada com check-in e atividade planejada do dia; simulador entra como HV equivalente FRMS.'
+      : item.effectiveness_source === 'PROJETADA_APRESENTACAO'
+        ? 'Projetada para a hora de apresentação com base no check-in; carga operacional futura ainda não incorporada.'
+        : undefined;
 
   if (item.estado_operacional === 'CRITICO_VIOLACAO' || item.snapshot_status === 'CRITICO') {
     return { ...base, value, tone: 'critical', detail: projectionDetail };

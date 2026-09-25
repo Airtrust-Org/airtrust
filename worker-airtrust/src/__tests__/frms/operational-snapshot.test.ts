@@ -176,6 +176,26 @@ describe('morning effectiveness projection', () => {
     expect(projected?.effectiveness_pct).toBeLessThanOrEqual(100);
   });
 
+  it('incorpora simulador planejado na projeção como HV equivalente FRMS', () => {
+    const projected = calculateMorningEffectivenessProjection({
+      dataOperacional: '2026-09-25',
+      funcionarioId: 10,
+      presentationTime: '23:00',
+      wakeTime: '08:00',
+      sleepHours: 8,
+      limites: LIMITES_DEFAULT,
+      plannedEndTime: '02:00',
+      plannedActivityMinutes: 180,
+      frmsFlightEquivalentMinutes: 180,
+      diaPeriodo: 3,
+      totalDiasPeriodo: 14,
+    });
+
+    expect(projected).not.toBeNull();
+    expect(projected?.source).toBe('PROJETADA_ATIVIDADE');
+    expect(projected?.effectiveness_pct).toEqual(expect.any(Number));
+  });
+
   it('permanece fail-closed quando o check-in não tem sono/despertar/apresentação completos', () => {
     expect(
       calculateMorningEffectivenessProjection({
@@ -514,6 +534,51 @@ describe('frms operational snapshot builder', () => {
     expect(item?.snapshot_status).toBe('INCOMPLETO');
     expect(item?.alertas).toContain('DADO_INCONSISTENTE');
     expect(item?.effectiveness_pct).toBeNull();
+  });
+
+  it('conta treinamento em sala como atividade FRMS sem gerar HV', () => {
+    const input = createBaseInput();
+    input.rows.activities = [{
+      data_operacional: '2026-09-23',
+      funcionario_id: 10,
+      activity_type: 'TREINAMENTO',
+      hora_inicio: '08:00',
+      hora_fim: '17:00',
+      titulo: 'Treinamento em sala',
+      source_id: 300,
+    }];
+
+    const item = getByKey(buildFrmsOperationalSnapshot(input).items, '2026-09-23', 10);
+    expect(item).toBeTruthy();
+    expect(item?.teve_atividade_frms).toBe(true);
+    expect(item?.atividade_principal).toBe('TREINAMENTO');
+    expect(item?.treinamento_minutos).toBe(540);
+    expect(item?.horas_voo_minutos).toBe(0);
+    expect(item?.horas_voo_frms_minutos).toBe(0);
+    expect(item?.checkin_status).toBe('PENDENTE');
+  });
+
+  it('conta simulador como atividade e HV equivalente FRMS sem contaminar HV real', () => {
+    const input = createBaseInput();
+    input.rows.activities = [{
+      data_operacional: '2026-09-24',
+      funcionario_id: 10,
+      activity_type: 'SIMULADOR',
+      hora_inicio: '23:00',
+      hora_fim: '02:00',
+      titulo: 'Emergências AW139',
+      source_id: 301,
+    }];
+
+    const item = getByKey(buildFrmsOperationalSnapshot(input).items, '2026-09-24', 10);
+    expect(item).toBeTruthy();
+    expect(item?.teve_atividade_frms).toBe(true);
+    expect(item?.atividade_principal).toBe('SIMULADOR');
+    expect(item?.simulador_minutos).toBe(180);
+    expect(item?.horas_voo_minutos).toBe(0);
+    expect(item?.horas_voo_frms_minutos).toBe(180);
+    expect(item?.atividade_hora_inicio).toBe('23:00');
+    expect(item?.atividade_hora_fim).toBe('02:00');
   });
 
   it('8) snapshot operacional preenche dia/total quinzenal via calcularDiaDoCiclo quando falta fatorizacao', async () => {

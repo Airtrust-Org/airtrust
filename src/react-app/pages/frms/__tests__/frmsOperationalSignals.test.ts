@@ -111,6 +111,26 @@ describe('resolveComplianceSignal', () => {
     expect(resolveComplianceSignal(item({ fortnight_indicator: fortnight({ status_quinzena: 'OK' }) })).tone).toBe('ok');
   });
 
+  it('expõe carga operacional por HV real, simulador, treinamento e dias ativos sem usar 11h/dia', () => {
+    const s = resolveComplianceSignal(item({
+      fortnight_indicator: fortnight({
+        status_quinzena: 'ATENCAO',
+        horas_voo_periodo_min: 600,
+        horas_voo_frms_periodo_min: 780,
+        simulador_periodo_min: 180,
+        treinamento_periodo_min: 540,
+        dias_atividade_periodo: 6,
+      }),
+    }));
+    expect(s.label).toBe('Carga operacional');
+    expect(s.detail).toContain('HV FRMS 13,0 h');
+    expect(s.detail).toContain('voo 10,0 h');
+    expect(s.detail).toContain('simulador 3,0 h');
+    expect(s.detail).toContain('treinamento 9,0 h');
+    expect(s.detail).toContain('6 dia(s) de atividade');
+    expect(s.detail).not.toContain('165');
+  });
+
   it('ATENCAO → amarelo', () => {
     expect(
       resolveComplianceSignal(item({ fortnight_indicator: fortnight({ status_quinzena: 'ATENCAO' }) })).tone,
@@ -145,6 +165,19 @@ describe('resolveEffectivenessSignal', () => {
     expect(s.tone).toBe('ok');
     expect(s.value).toBe('88,4%');
     expect(s.detail).toContain('Projetada para a hora de apresentação');
+  });
+
+  it('efetividade projetada com atividade informa que simulador entrou como HV FRMS', () => {
+    const s = resolveEffectivenessSignal(
+      item({
+        effectiveness_pct: 79.1,
+        effectiveness_source: 'PROJETADA_ATIVIDADE',
+        fatorizacao_status: 'PROJETADA',
+      }),
+    );
+    expect(s.value).toBe('79,1%');
+    expect(s.detail).toContain('atividade planejada');
+    expect(s.detail).toContain('simulador entra como HV equivalente FRMS');
   });
 
   it('alerta EFETIVIDADE_BAIXA → atenção', () => {

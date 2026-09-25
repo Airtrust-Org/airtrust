@@ -44,7 +44,7 @@ export interface FrmsFortnightModifier {
 }
 
 export interface FrmsFortnightLimiteReferencia {
-  tipo: 'QUINZENA_DUTY' | 'DUTY_168H' | 'VOO_168H';
+  tipo: 'QUINZENA_DUTY' | 'DUTY_168H' | 'VOO_168H' | 'VOO_168H_FRMS';
   valor_atual: number;
   valor_limite: number;
   pct_atingido: number;
@@ -62,6 +62,12 @@ export interface FrmsFortnightIndicator {
   duty_time_168h_min: number | null;
   horas_voo_periodo_min: number | null;
   horas_voo_168h_min: number | null;
+  atividade_frms_periodo_min?: number | null;
+  horas_voo_frms_periodo_min?: number | null;
+  simulador_periodo_min?: number | null;
+  treinamento_periodo_min?: number | null;
+  dias_atividade_periodo?: number | null;
+  dias_consecutivos_com_atividade?: number | null;
   jornadas_periodo: number | null;
   apresentacoes_antes_0600: number | null;
   apresentacoes_antes_0700: number | null;
@@ -96,7 +102,13 @@ export interface FrmsFortnightIndicatorItemSeed {
   hora_termino: string | null;
   duracao_jornada_minutos: number;
   horas_voo_minutos: number;
+  horas_voo_frms_minutos?: number;
+  atividade_frms_minutos?: number;
+  simulador_minutos?: number;
+  treinamento_minutos?: number;
   teve_jornada: boolean;
+  teve_atividade_frms?: boolean;
+  atividade_principal?: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'MISTA' | 'SEM_DADO';
   horas_sono?: number | null;
   kss_score?: number | null;
   effectiveness_pct?: number | null;
@@ -111,6 +123,8 @@ export interface BuildFrmsFortnightIndicatorInput {
   windowEnd: string;
   today?: string;
   policy?: FrmsFortnightPolicy;
+  /** Governed FRMS HV limit for the rolling 168 h window. No hard-coded duty surrogate. */
+  flightLimit168hMinutes?: number;
 }
 
 /** Immutable compatibility policy; production callers must supply a resolved revision. */
@@ -168,11 +182,6 @@ interface PeriodAnchor {
   dia_periodo: number;
   total_dias_periodo: number;
 }
-
-const TECHNICAL_DEFAULT_DAILY_DUTY_LIMIT_MINUTES = 11 * 60;
-const TECHNICAL_DEFAULT_DAILY_FLIGHT_LIMIT_MINUTES = 8 * 60;
-const TECHNICAL_DEFAULT_168H_DUTY_LIMIT_MINUTES = 7 * TECHNICAL_DEFAULT_DAILY_DUTY_LIMIT_MINUTES;
-const TECHNICAL_DEFAULT_168H_FLIGHT_LIMIT_MINUTES = 7 * TECHNICAL_DEFAULT_DAILY_FLIGHT_LIMIT_MINUTES;
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
@@ -242,7 +251,7 @@ function resolvePeriodAnchor(item: FrmsFortnightIndicatorItemSeed): PeriodAnchor
 
 function countMaxConsecutiveDays(items: FrmsFortnightIndicatorItemSeed[]): number {
   const dias = items
-    .filter((item) => item.teve_jornada)
+    .filter((item) => item.teve_atividade_frms ?? item.teve_jornada)
     .map((item) => item.data_operacional)
     .sort();
   if (dias.length === 0) return 0;
@@ -263,7 +272,7 @@ function countMaxConsecutiveDays(items: FrmsFortnightIndicatorItemSeed[]): numbe
 
 function resolveMinRestBetweenJornadas(items: FrmsFortnightIndicatorItemSeed[]): number | null {
   const jornadas = items
-    .filter((item) => item.teve_jornada)
+    .filter((item) => item.teve_atividade_frms ?? item.teve_jornada)
     .sort((a, b) => (a.data_operacional < b.data_operacional ? -1 : a.data_operacional > b.data_operacional ? 1 : 0));
 
   let minRest: number | null = null;
@@ -285,33 +294,17 @@ function resolveMinRestBetweenJornadas(items: FrmsFortnightIndicatorItemSeed[]):
 }
 
 function buildLimitReference(input: {
-  dutyTimePeriodoMin: number;
-  totalDiasPeriodo: number;
-  rolling168h: { dutyMin: number; vooMin: number };
-}): FrmsFortnightLimiteReferencia {
-  const periodLimit = input.totalDiasPeriodo * TECHNICAL_DEFAULT_DAILY_DUTY_LIMIT_MINUTES;
-  const references: FrmsFortnightLimiteReferencia[] = [
-    {
-      tipo: 'QUINZENA_DUTY',
-      valor_atual: input.dutyTimePeriodoMin,
-      valor_limite: periodLimit,
-      pct_atingido: periodLimit > 0 ? round1((input.dutyTimePeriodoMin / periodLimit) * 100) : 0,
-    },
-    {
-      tipo: 'DUTY_168H',
-      valor_atual: input.rolling168h.dutyMin,
-      valor_limite: TECHNICAL_DEFAULT_168H_DUTY_LIMIT_MINUTES,
-      pct_atingido: round1((input.rolling168h.dutyMin / TECHNICAL_DEFAULT_168H_DUTY_LIMIT_MINUTES) * 100),
-    },
-    {
-      tipo: 'VOO_168H',
-      valor_atual: input.rolling168h.vooMin,
-      valor_limite: TECHNICAL_DEFAULT_168H_FLIGHT_LIMIT_MINUTES,
-      pct_atingido: round1((input.rolling168h.vooMin / TECHNICAL_DEFAULT_168H_FLIGHT_LIMIT_MINUTES) * 100),
-    },
-  ];
-
-  return references.sort((a, b) => b.pct_atingido - a.pct_atingido)[0];
+  rolling168h: { vooFrmsMin: number };
+  flightLimit168hMinutes?: number;
+}): FrmsFortnightLimiteReferencia | null {
+  const limit = Number(input.flightLimit168hMinutes ?? 0);
+  if (!Number.isFinite(limit) || limit <= 0) return null;
+  return {
+    tipo: 'VOO_168H_FRMS',
+    valor_atual: input.rolling168h.vooFrmsMin,
+    valor_limite: limit,
+    pct_atingido: round1((input.rolling168h.vooFrmsMin / limit) * 100),
+  };
 }
 
 function resolveTendencia(
@@ -327,14 +320,17 @@ function resolveTendencia(
   if (currentIndex < 0) return 'INDETERMINADA';
 
   const current = sorted[currentIndex];
-  const previousJornadas = sorted.slice(0, currentIndex).filter((entry) => entry.teve_jornada);
+  const previousJornadas = sorted
+    .slice(0, currentIndex)
+    .filter((entry) => entry.teve_atividade_frms ?? entry.teve_jornada);
   const previous = previousJornadas.length > 0 ? previousJornadas[previousJornadas.length - 1] : null;
-  if (!current.teve_jornada && previous) return 'REDUZINDO';
+  const currentActive = current.teve_atividade_frms ?? current.teve_jornada;
+  if (!currentActive && previous) return 'REDUZINDO';
   if (diasConsecutivosComJornada >= policy.consecutiveAttentionDays) return 'CRESCENTE';
-  if (!previous) return current.teve_jornada ? 'ESTAVEL' : 'INDETERMINADA';
+  if (!previous) return currentActive ? 'ESTAVEL' : 'INDETERMINADA';
 
-  const currentDuty = current.teve_jornada ? Math.max(0, current.duracao_jornada_minutos || 0) : 0;
-  const previousDuty = Math.max(0, previous.duracao_jornada_minutos || 0);
+  const currentDuty = currentActive ? Math.max(0, (current.atividade_frms_minutos ?? current.duracao_jornada_minutos) || 0) : 0;
+  const previousDuty = Math.max(0, (previous.atividade_frms_minutos ?? previous.duracao_jornada_minutos) || 0);
   if (currentDuty >= previousDuty + 120) return 'CRESCENTE';
   if (currentDuty <= Math.max(0, previousDuty - 120)) return 'REDUZINDO';
   return 'ESTAVEL';
@@ -346,7 +342,10 @@ function resolveNaturezaDado(
   today: string,
 ): FrmsFortnightNaturezaDado {
   if (item.data_operacional > today) return 'PROJECAO';
-  if (item.checkin_status === 'RECEBIDO' && !item.teve_jornada) return 'CHECKIN_SUBJETIVO';
+  if (
+    item.checkin_status === 'RECEBIDO' &&
+    !(item.teve_atividade_frms ?? item.teve_jornada)
+  ) return 'CHECKIN_SUBJETIVO';
   if (periodFullyCoveredByQuery) return 'ACUMULADO_LEGAL';
   if (item.jornada_data_source === 'REAL') return 'JORNADA_REALIZADA';
   if (
@@ -370,8 +369,10 @@ function buildModifiers(input: {
   apresentacoesAntes0700: number;
   menorDescansoEntreJornadasMin: number | null;
   jornadasPeriodo: number;
-  dutyTimePeriodoMin: number;
-  rolling168h: { dutyMin: number; vooMin: number };
+  diasAtividadePeriodo: number;
+  atividadeFrmsPeriodoMin: number;
+  rolling168h: { dutyMin: number; vooMin: number; vooFrmsMin: number };
+  flightLimit168hMinutes?: number;
   periodHasCritical: boolean;
   periodHasAttention: boolean;
   totalRecoveryCreditPoints: number;
@@ -379,9 +380,9 @@ function buildModifiers(input: {
 }): { atenuadores: FrmsFortnightModifier[]; agravantes: FrmsFortnightModifier[] } {
   const atenuadores: FrmsFortnightModifier[] = [];
   const agravantes: FrmsFortnightModifier[] = [];
-  const diasSemJornada = Math.max(0, input.totalDiasPeriodo - input.jornadasPeriodo);
+  const diasSemJornada = Math.max(0, input.totalDiasPeriodo - input.diasAtividadePeriodo);
   const avgDuty =
-    input.jornadasPeriodo > 0 ? input.dutyTimePeriodoMin / input.jornadasPeriodo : 0;
+    input.diasAtividadePeriodo > 0 ? input.atividadeFrmsPeriodoMin / input.diasAtividadePeriodo : 0;
   const lowSleepDays = input.scoped.filter(
     (entry) => entry.horas_sono != null && entry.horas_sono > 0 && entry.horas_sono < input.policy.lowSleepHours,
   ).length;
@@ -397,7 +398,7 @@ function buildModifiers(input: {
   if (input.policy.impactDaysWithoutDuty !== 0 && diasSemJornada >= input.policy.daysWithoutDuty) {
     atenuadores.push({
       codigo: 'DIAS_SEM_JORNADA_NO_PERIODO',
-      descricao: `${diasSemJornada} dia(s) sem jornada registrada na quinzena.`,
+      descricao: `${diasSemJornada} dia(s) sem atividade operacional registrada no período.`,
       impacto_score: input.policy.impactDaysWithoutDuty,
     });
   }
@@ -415,14 +416,14 @@ function buildModifiers(input: {
       impacto_score: input.policy.impactLongRest,
     });
   }
-  if (input.jornadasPeriodo > 0 && avgDuty <= input.policy.shortAverageDutyMinutes) {
+  if (input.diasAtividadePeriodo > 0 && avgDuty <= input.policy.shortAverageDutyMinutes) {
     atenuadores.push({
       codigo: 'JORNADA_MEDIA_CURTA',
-      descricao: 'Duty time medio da quinzena em ate 6h por jornada.',
+      descricao: 'Duração média das atividades FRMS no período em até 6h por dia de atividade.',
       impacto_score: input.policy.impactShortAverageDuty,
     });
   }
-  if (input.apresentacoesAntes0700 === 0 && input.jornadasPeriodo > 0) {
+  if (input.apresentacoesAntes0700 === 0 && input.diasAtividadePeriodo > 0) {
     atenuadores.push({
       codigo: 'SEM_APRESENTACAO_CEDO',
       descricao: 'Sem apresentacoes antes de 07:00 no periodo analisado.',
@@ -505,10 +506,15 @@ function buildModifiers(input: {
       impacto_score: input.policy.impactLowEffectiveness,
     });
   }
-  if (input.rolling168h.dutyMin >= TECHNICAL_DEFAULT_168H_DUTY_LIMIT_MINUTES * input.policy.rollingDutyPct) {
+  const flightLimit168hMinutes = Number(input.flightLimit168hMinutes ?? 0);
+  if (
+    Number.isFinite(flightLimit168hMinutes) &&
+    flightLimit168hMinutes > 0 &&
+    input.rolling168h.vooFrmsMin >= flightLimit168hMinutes * input.policy.rollingDutyPct
+  ) {
     agravantes.push({
-      codigo: 'DUTY_168H_ELEVADO',
-      descricao: 'Duty time acumulado em 168h acima de 80% da referencia tecnica.',
+      codigo: 'HV_FRMS_168H_ELEVADA',
+      descricao: 'HV FRMS equivalente em 168h acima da faixa de referência configurada.',
       impacto_score: input.policy.impactRollingDuty,
     });
   }
@@ -590,17 +596,20 @@ function resolveMitigacaoFromStatus(input: {
 function buildExplanation(input: {
   status: FrmsFortnightStatus;
   score: number;
-  limitReference: FrmsFortnightLimiteReferencia;
+  limitReference: FrmsFortnightLimiteReferencia | null;
   atenuadores: FrmsFortnightModifier[];
   agravantes: FrmsFortnightModifier[];
   tendencia: FrmsFortnightTendencia;
 }): string {
   const leadingAggravant = input.agravantes[0]?.codigo ?? 'SEM_AGRAVANTE_RELEVANTE';
   const leadingAttenuator = input.atenuadores[0]?.codigo ?? 'SEM_ATENUADOR_RELEVANTE';
+  const referenceText = input.limitReference
+    ? `HV FRMS em 168h: ${input.limitReference.pct_atingido}% da referência configurada.`
+    : 'Sem referência configurada de HV FRMS em 168h; score composto apenas pelos fatores observados.';
   return [
-    `Quinzena ${input.status} com score acumulado ${input.score}.`,
-    `Referencia predominante: ${input.limitReference.tipo} em ${input.limitReference.pct_atingido}% do limite tecnico.`,
-    `Tendencia ${input.tendencia}; principal agravante ${leadingAggravant}; principal atenuador ${leadingAttenuator}.`,
+    `Período ${input.status} com score acumulado ${input.score}.`,
+    referenceText,
+    `Tendência ${input.tendencia}; principal agravante ${leadingAggravant}; principal atenuador ${leadingAttenuator}.`,
   ].join(' ');
 }
 
@@ -617,6 +626,12 @@ function buildEmptyIndicator(): FrmsFortnightIndicator {
     duty_time_168h_min: null,
     horas_voo_periodo_min: null,
     horas_voo_168h_min: null,
+    atividade_frms_periodo_min: null,
+    horas_voo_frms_periodo_min: null,
+    simulador_periodo_min: null,
+    treinamento_periodo_min: null,
+    dias_atividade_periodo: null,
+    dias_consecutivos_com_atividade: null,
     jornadas_periodo: null,
     apresentacoes_antes_0600: null,
     apresentacoes_antes_0700: null,
@@ -644,11 +659,11 @@ function buildEmptyIndicator(): FrmsFortnightIndicator {
 function buildRolling168h(
   employeeItems: FrmsFortnightIndicatorItemSeed[],
   anchorDate: string,
-): { dutyMin: number; vooMin: number } {
+): { dutyMin: number; vooMin: number; vooFrmsMin: number } {
   const startDate = addDays(anchorDate, -6);
   const relevant = employeeItems.filter(
     (item) =>
-      item.teve_jornada &&
+      (item.teve_atividade_frms ?? item.teve_jornada) &&
       item.data_operacional >= startDate &&
       item.data_operacional <= anchorDate,
   );
@@ -656,6 +671,10 @@ function buildRolling168h(
   return {
     dutyMin: relevant.reduce((sum, item) => sum + Math.max(0, item.duracao_jornada_minutos || 0), 0),
     vooMin: relevant.reduce((sum, item) => sum + Math.max(0, item.horas_voo_minutos || 0), 0),
+    vooFrmsMin: relevant.reduce(
+      (sum, item) => sum + Math.max(0, (item.horas_voo_frms_minutos ?? item.horas_voo_minutos) || 0),
+      0,
+    ),
   };
 }
 
@@ -730,7 +749,26 @@ export function buildFrmsFortnightIndicatorMap(
       (sum, entry) => sum + (entry.teve_jornada ? Math.max(0, entry.horas_voo_minutos || 0) : 0),
       0,
     );
+    const atividadeFrmsPeriodoMin = scoped.reduce(
+      (sum, entry) => sum + Math.max(0, (entry.atividade_frms_minutos ?? entry.duracao_jornada_minutos) || 0),
+      0,
+    );
+    const horasVooFrmsPeriodoMin = scoped.reduce(
+      (sum, entry) => sum + Math.max(0, (entry.horas_voo_frms_minutos ?? entry.horas_voo_minutos) || 0),
+      0,
+    );
+    const simuladorPeriodoMin = scoped.reduce(
+      (sum, entry) => sum + Math.max(0, entry.simulador_minutos ?? 0),
+      0,
+    );
+    const treinamentoPeriodoMin = scoped.reduce(
+      (sum, entry) => sum + Math.max(0, entry.treinamento_minutos ?? 0),
+      0,
+    );
     const jornadasPeriodo = scoped.filter((entry) => entry.teve_jornada).length;
+    const diasAtividadePeriodo = scoped.filter(
+      (entry) => entry.teve_atividade_frms ?? entry.teve_jornada,
+    ).length;
     const diasComCheckinPendente = scoped.filter(
       (entry) => entry.checkin_status === 'PENDENTE' || entry.checkin_status === 'AUSENTE',
     ).length;
@@ -769,9 +807,8 @@ export function buildFrmsFortnightIndicatorMap(
     ));
 
     const limitReference = buildLimitReference({
-      dutyTimePeriodoMin,
-      totalDiasPeriodo: anchor.total_dias_periodo,
       rolling168h,
+      flightLimit168hMinutes: input.flightLimit168hMinutes,
     });
     const tendencia = resolveTendencia(scoped, item.data_operacional, diasConsecutivosComJornada, policy);
     const { atenuadores, agravantes } = buildModifiers({
@@ -784,8 +821,10 @@ export function buildFrmsFortnightIndicatorMap(
       apresentacoesAntes0700,
       menorDescansoEntreJornadasMin,
       jornadasPeriodo,
-      dutyTimePeriodoMin,
+      diasAtividadePeriodo,
+      atividadeFrmsPeriodoMin,
       rolling168h,
+      flightLimit168hMinutes: input.flightLimit168hMinutes,
       periodHasCritical,
       periodHasAttention,
       totalRecoveryCreditPoints,
@@ -795,8 +834,10 @@ export function buildFrmsFortnightIndicatorMap(
       agravantes.reduce((sum, modifier) => sum + modifier.impacto_score, 0) +
       atenuadores.reduce((sum, modifier) => sum + modifier.impacto_score, 0);
     const tendencyImpact = tendencia === 'CRESCENTE' ? policy.trendIncreasingImpact : tendencia === 'REDUZINDO' ? policy.trendReducingImpact : 0;
+    const loadImpact =
+      limitReference != null ? limitReference.pct_atingido * policy.scoreLimitWeight : 0;
     const scoreAcumulado = round1(
-      clamp(limitReference.pct_atingido * policy.scoreLimitWeight + modifierImpact + tendencyImpact, 0, 100),
+      clamp(loadImpact + modifierImpact + tendencyImpact, 0, 100),
     );
 
     const limitationNotes: string[] = [
@@ -859,6 +900,12 @@ export function buildFrmsFortnightIndicatorMap(
       duty_time_168h_min: rolling168h.dutyMin,
       horas_voo_periodo_min: horasVooPeriodoMin,
       horas_voo_168h_min: rolling168h.vooMin,
+      atividade_frms_periodo_min: atividadeFrmsPeriodoMin,
+      horas_voo_frms_periodo_min: horasVooFrmsPeriodoMin,
+      simulador_periodo_min: simuladorPeriodoMin,
+      treinamento_periodo_min: treinamentoPeriodoMin,
+      dias_atividade_periodo: diasAtividadePeriodo,
+      dias_consecutivos_com_atividade: diasConsecutivosComJornada,
       jornadas_periodo: jornadasPeriodo,
       apresentacoes_antes_0600: apresentacoesAntes0600,
       apresentacoes_antes_0700: apresentacoesAntes0700,
