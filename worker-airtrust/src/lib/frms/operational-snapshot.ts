@@ -59,8 +59,12 @@ export interface FrmsOperationalSnapshotItem {
   treinamento_minutos: number;
   atividade_frms_minutos: number;
   atividade_principal: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'MISTA' | 'SEM_DADO';
+  atividade_hora_inicio: string | null;
+  atividade_hora_fim: string | null;
+  atividade_rotulos: string[];
   duracao_jornada_minutos: number;
   teve_jornada: boolean;
+  teve_atividade_frms: boolean;
 
   checkin_status: 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL';
   checkin_horario: string | null;
