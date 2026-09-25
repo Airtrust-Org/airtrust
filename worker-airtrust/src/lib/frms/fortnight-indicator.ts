@@ -398,7 +398,7 @@ function buildModifiers(input: {
   if (input.policy.impactDaysWithoutDuty !== 0 && diasSemJornada >= input.policy.daysWithoutDuty) {
     atenuadores.push({
       codigo: 'DIAS_SEM_JORNADA_NO_PERIODO',
-      descricao: `${diasSemJornada} dia(s) sem jornada registrada na quinzena.`,
+      descricao: `${diasSemJornada} dia(s) sem atividade operacional registrada no período.`,
       impacto_score: input.policy.impactDaysWithoutDuty,
     });
   }
@@ -419,7 +419,7 @@ function buildModifiers(input: {
   if (input.diasAtividadePeriodo > 0 && avgDuty <= input.policy.shortAverageDutyMinutes) {
     atenuadores.push({
       codigo: 'JORNADA_MEDIA_CURTA',
-      descricao: 'Duty time medio da quinzena em ate 6h por jornada.',
+      descricao: 'Duração média das atividades FRMS no período em até 6h por dia de atividade.',
       impacto_score: input.policy.impactShortAverageDuty,
     });
   }

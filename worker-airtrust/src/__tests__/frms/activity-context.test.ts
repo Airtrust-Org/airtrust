@@ -128,6 +128,7 @@ describe('FRMS activity context', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.activity_type).toBe('SIMULADOR');
     expect(queries).toHaveLength(3);
+    expect(queries[2]?.sql).toContain('FROM sessoes_participantes sp');
     for (const query of queries) {
       expect(query.binds[0]).toBe(63);
       expect(query.sql).toContain('empresa_id');

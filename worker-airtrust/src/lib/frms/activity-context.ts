@@ -211,6 +211,10 @@ export async function loadFrmsActivityRows(
        SELECT id AS sessao_id, checador_id AS funcionario_id FROM simulador_agendamentos WHERE checador_id IS NOT NULL
        UNION
        SELECT id AS sessao_id, examinador_id AS funcionario_id FROM simulador_agendamentos WHERE examinador_id IS NOT NULL
+       UNION
+       SELECT sp.sessao_id, sp.funcionario_id
+         FROM sessoes_participantes sp
+        WHERE sp.deleted_at IS NULL
      )
      SELECT sa.data AS data_operacional,
             CAST(sp.funcionario_id AS INTEGER) AS funcionario_id,
