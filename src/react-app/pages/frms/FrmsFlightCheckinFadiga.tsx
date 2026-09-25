@@ -26,7 +26,7 @@ import OperationalVigilanceTest, {
   type OperationalVigilanceResult,
 } from './OperationalVigilanceTest';
 import RecoveryActivityCard from './RecoveryActivityCard';
-import { useReadinessBaseline, useReadinessToday, useSubmitReadiness } from '@/react-app/hooks/useOperationalReadiness';
+import { useReadinessBaseline, useReadinessToday } from '@/react-app/hooks/useOperationalReadiness';
 
 /* eslint-disable react-refresh/only-export-components */
 
@@ -512,7 +512,6 @@ export default function FrmsFlightCheckinFadiga() {
 
   const { data: existente, refetch } = useCheckinHoje();
   const submitMutation = useSubmitCheckin();
-  const readinessMutation = useSubmitReadiness();
   const { data: readinessBaseline } = useReadinessBaseline(today);
   const { data: readinessToday } = useReadinessToday(today);
 
@@ -561,7 +560,7 @@ export default function FrmsFlightCheckinFadiga() {
   if (!aceitePrivacidade) missingItems.push('Aceite da política de privacidade');
 
   const submit = async () => {
-    if (submitMutation.isPending || readinessMutation.isPending) return;
+    if (submitMutation.isPending) return;
 
     setSubmitAttempted(true);
     if (!canSubmitWithReadiness) {
@@ -616,13 +615,11 @@ export default function FrmsFlightCheckinFadiga() {
         alcool_ult_12h: optionalBinaryResponseToPayload(alcoolUlt12h),
         aceite_termos: true,
         aceite_privacidade: true,
-      });
-
-      await readinessMutation.mutateAsync({
-        reference_date: today,
-        duration_ms: vigilanceResult.summary.durationMs,
-        trials: vigilanceResult.trials,
-        protocol_version: vigilanceResult.summary.protocolVersion,
+        readiness: {
+          duration_ms: vigilanceResult.summary.durationMs,
+          trials: vigilanceResult.trials,
+          protocol_version: vigilanceResult.summary.protocolVersion,
+        },
       });
 
       toast.success('Check-in de fadiga e teste de atenção registrados com sucesso');
@@ -1129,8 +1126,8 @@ export default function FrmsFlightCheckinFadiga() {
               <Button
                 id="submit-checkin-fadiga"
                 onClick={submit}
-                loading={submitMutation.isPending || readinessMutation.isPending}
-                disabled={!canSubmitWithReadiness || submitMutation.isPending || readinessMutation.isPending}
+                loading={submitMutation.isPending}
+                disabled={!canSubmitWithReadiness || submitMutation.isPending}
                 className="min-h-12 w-full text-base"
               >
                 Confirmar Check-in Diário

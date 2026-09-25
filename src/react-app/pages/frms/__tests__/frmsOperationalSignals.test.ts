@@ -161,8 +161,15 @@ describe('resolveEffectivenessSignal', () => {
 });
 
 describe('resolveReadinessSignal', () => {
-  it('sem adapter/contrato → "Não avaliado" cinza', () => {
+  it('check-in recebido sem resultado persistido distingue falha de registro de não avaliação', () => {
     const s = resolveReadinessSignal(item());
+    expect(s.tone).toBe('unknown');
+    expect(s.value).toBe('Resultado não registrado');
+    expect(s.detail).toContain('não há avaliação de prontidão persistida');
+  });
+
+  it('sem check-in e sem adapter continua "Não avaliado"', () => {
+    const s = resolveReadinessSignal(item({ checkin_status: 'PENDENTE' }));
     expect(s.tone).toBe('unknown');
     expect(s.value).toBe('Não avaliado');
   });

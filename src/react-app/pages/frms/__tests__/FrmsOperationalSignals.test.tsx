@@ -67,7 +67,7 @@ describe('FrmsSignalChips', () => {
     expect(chips.getByLabelText('Check-in diário: Realizada — normal')).toBeInTheDocument();
     expect(chips.getByLabelText('Carga do período: Dados incompletos — sem dado')).toBeInTheDocument();
     expect(chips.getByLabelText('Efetividade: 92,0% — normal')).toBeInTheDocument();
-    expect(chips.getByLabelText('Prontidão: Não avaliado — sem dado')).toBeInTheDocument();
+    expect(chips.getByLabelText('Prontidão: Resultado não registrado — sem dado')).toBeInTheDocument();
   });
 
   it('usa automaticamente a prontidão persistida do mesmo tripulante e dia', () => {

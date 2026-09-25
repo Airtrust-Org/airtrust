@@ -14,6 +14,8 @@ import {
 } from '../lib/frms/fadiga-score';
 import { FrmsParameterResolutionError, resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
 import { sincronizarCheckinComFrms } from '../lib/frms/fadiga-frms-sync';
+import { persistReadinessAssessment } from '../lib/frms/readiness-persistence';
+import { refreshRecoveryAssessmentForActivityDate } from './frms-recovery';
 import { buildFratSuggestion } from '../lib/frms/fadiga-frat-bridge';
 import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
 import {
@@ -1225,6 +1227,51 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       }
     }
 
+    let readinessResult: Awaited<ReturnType<typeof persistReadinessAssessment>> | null = null;
+    if (parsed.data.readiness) {
+      try {
+        readinessResult = await persistReadinessAssessment(c.env.DB, {
+          empresaId,
+          funcionarioId,
+          userId: userId || null,
+          checkinId,
+          referenceDate: dataCheckin,
+          kssScore: input.kssScore,
+          sleepHours: input.horasSono24h,
+          durationMs: parsed.data.readiness.duration_ms,
+          trials: parsed.data.readiness.trials,
+          protocolVersion: parsed.data.readiness.protocol_version,
+        });
+      } catch (error) {
+        // The browser submits check-in + vigilance as one logical operation. If the
+        // objective assessment cannot be persisted, a newly-created check-in must
+        // not remain visible as a completed daily check-in without readiness.
+        if (!existing?.id) {
+          await c.env.DB.prepare(
+            `UPDATE frms_fadiga_checkin
+                SET deleted_at = ?, updated_at = ?
+              WHERE id = ? AND empresa_id = ? AND funcionario_id = ? AND deleted_at IS NULL`,
+          )
+            .bind(now, now, checkinId, empresaId, funcionarioId)
+            .run();
+        }
+        const code = error instanceof Error ? error.message : 'readiness_persistence_failed';
+        if (code === 'invalid_trial_sequence' || code === 'invalid_trial_timing') {
+          return c.json({ success: false, error: code }, 400);
+        }
+        throw error;
+      }
+
+      const previous = new Date(`${dataCheckin}T12:00:00Z`);
+      previous.setUTCDate(previous.getUTCDate() - 1);
+      await refreshRecoveryAssessmentForActivityDate({
+        db: c.env.DB,
+        empresaId,
+        funcionarioId,
+        referenceDate: previous.toISOString().slice(0, 10),
+      });
+    }
+
     const sync = await sincronizarCheckinComFrms(
       c.env.DB,
       checkinId,
@@ -1388,6 +1435,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         },
         sincronizacao_frms: {
           sincronizado: sync.sincronizado,
+          readiness: readinessResult,
           jornada_encontrada: Boolean(sync.jornada_id),
           effectiveness_anterior: sync.effectiveness_anterior ?? null,
           effectiveness_nova: sync.effectiveness_nova ?? null,

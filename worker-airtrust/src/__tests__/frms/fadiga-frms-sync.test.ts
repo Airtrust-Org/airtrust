@@ -17,15 +17,16 @@ type DbOptions = {
 function createDb(options: DbOptions = {}) {
   const eventInserts: Array<{ tipo: string; payload: Record<string, unknown> }> = [];
   const eventUpdates: Array<{ payload: Record<string, unknown>; id: string }> = [];
+  let autoJornadaCreated = false;
 
   const db = {
     prepare: (query: string) => ({
       bind: (...bindArgs: unknown[]) => ({
         first: async () => {
           if (query.includes('FROM frms_jornada')) {
-            if (options.noJornada) return null;
+            if (options.noJornada && !autoJornadaCreated) return null;
             return {
-              id: 'jornada-1',
+              id: options.noJornada ? 'jornada-auto' : 'jornada-1',
               tripulante_id: 1,
               data: '2026-05-28',
               status: 'ES',
@@ -45,6 +46,9 @@ function createDb(options: DbOptions = {}) {
           return null;
         },
         run: async () => {
+          if (query.includes('INSERT OR IGNORE INTO frms_jornada')) {
+            autoJornadaCreated = true;
+          }
           if (query.includes('INSERT INTO frms_fadiga_evento')) {
             const tipo = /VALUES \(\?, \?, \?, '([^']+)'/.exec(query)?.[1] ?? 'UNKNOWN';
             eventInserts.push({
@@ -78,11 +82,27 @@ beforeEach(() => {
 });
 
 describe('sincronizarCheckinComFrms — check-in diário autoritativo', () => {
-  it('sem jornada registra diagnóstico e não aciona o pipeline', async () => {
+  it('check-in completo cria jornada FRMS canônica quando ela ainda não existe', async () => {
     const { db, eventInserts } = createDb({ noJornada: true });
 
     const result = await sincronizarCheckinComFrms(
       db, 'ck-1', 1, '2026-05-28', 7, 10, '06:30', '08:00',
+    );
+
+    expect(result).toMatchObject({
+      sincronizado: true,
+      jornada_id: 'jornada-auto',
+      effectiveness_nova: 72,
+    });
+    expect(eventInserts.some((event) => event.tipo === 'CHECKIN_SEM_JORNADA')).toBe(false);
+    expect(recalcularPipelineMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('sem jornada e com check-in incompleto continua fail-closed', async () => {
+    const { db, eventInserts } = createDb({ noJornada: true });
+
+    const result = await sincronizarCheckinComFrms(
+      db, 'ck-missing', 1, '2026-05-28', 7, 10, '06:30', null,
     );
 
     expect(result).toEqual({ sincronizado: false });

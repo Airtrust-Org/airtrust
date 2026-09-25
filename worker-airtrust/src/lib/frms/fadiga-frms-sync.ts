@@ -60,19 +60,58 @@ export async function sincronizarCheckinComFrms(
   wakeTimeReal?: string | null,
   presentationTimeReal?: string | null,
 ): Promise<SyncResult> {
-  const jornada = await db
-    .prepare(
-      `SELECT *
-         FROM frms_jornada
-        WHERE tripulante_id = ?
-          AND data = ?
-          AND deleted_at IS NULL
-          AND status IN ('ES','TS','TV','EX','RE','SA')
-        ORDER BY updated_at DESC
-        LIMIT 1`,
-    )
-    .bind(funcionarioId, dataCheckin)
-    .first<FrmsJornada>();
+  const completeCheckin =
+    Boolean(presentationTimeReal) &&
+    Boolean(wakeTimeReal) &&
+    Number.isFinite(Number(horasSono)) &&
+    Number(horasSono) > 0;
+
+  const findJornada = () =>
+    db
+      .prepare(
+        `SELECT *
+           FROM frms_jornada
+          WHERE empresa_id = ?
+            AND tripulante_id = ?
+            AND data = ?
+            AND deleted_at IS NULL
+            AND status IN ('ES','TS','TV','EX','RE','SA')
+          ORDER BY updated_at DESC
+          LIMIT 1`,
+      )
+      .bind(empresaId, funcionarioId, dataCheckin)
+      .first<FrmsJornada>();
+
+  let jornada = await findJornada();
+
+  // A check-in completo é evidência suficiente para iniciar a jornada FRMS do
+  // dia, mesmo antes de existir escala/SIGVOOS. O pipeline governado fechará a
+  // janela como "sem voo" pela configuração tenant-scoped e reconciliará a
+  // mesma jornada quando chegar evidência operacional posterior.
+  if (!jornada?.id && completeCheckin) {
+    const generatedId = crypto.randomUUID();
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO frms_jornada (
+           id, empresa_id, tripulante_id, data, status,
+           hora_apresentacao, hora_termino, duracao_jornada_minutos,
+           horas_voo_minutos, repouso_plataforma_valido,
+           observacao, registrado_por, origem,
+           tipo_base, tripulacao_aumentada, aclimatado,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'ES', ?, NULL, 0, 0, 0, ?, 'FRMS_CHECKIN_AUTO', 'MANUAL', 'HOME', 0, 1, datetime('now'), datetime('now'))`,
+      )
+      .bind(
+        generatedId,
+        empresaId,
+        funcionarioId,
+        dataCheckin,
+        presentationTimeReal,
+        'Jornada FRMS criada automaticamente a partir do check-in diário.',
+      )
+      .run();
+    jornada = await findJornada();
+  }
 
   if (!jornada?.id) {
     await registrarEventoUnico(db, empresaId, checkinId, 'CHECKIN_SEM_JORNADA', {
@@ -82,12 +121,7 @@ export async function sincronizarCheckinComFrms(
     return { sincronizado: false };
   }
 
-  if (
-    !presentationTimeReal ||
-    !wakeTimeReal ||
-    !Number.isFinite(Number(horasSono)) ||
-    Number(horasSono) <= 0
-  ) {
+  if (!completeCheckin) {
     await registrarEventoUnico(db, empresaId, checkinId, 'FRMS_RECALCULO_NECESSARIO', {
       jornada_id: jornada.id,
       motivo: 'checkin_diario_incompleto',
