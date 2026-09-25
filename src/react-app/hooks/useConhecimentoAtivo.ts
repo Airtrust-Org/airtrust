@@ -32,6 +32,7 @@ export interface ConhecimentoResumo {
 
 export interface ConhecimentoMapaTopico {
   topico_id: number;
+  topico_ids?: number[];
   nome: string;
   aeronave_modelo: string | null;
   itens: number;
