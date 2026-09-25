@@ -117,7 +117,7 @@ router.post('/operational-snapshot/reconcile-checkins', async (c) => {
     return c.json({ success: false, error: parsed.error.flatten() }, 400);
   }
 
-  const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env; Variables: Variables }>);
+  const empresaId = getEmpresaId(c);
   const hasTeamScope = await canSeeTeam(c);
   let funcionarioIds = [...new Set(parsed.data.funcionario_ids)];
   let forcedFuncionarioId: number | undefined;
@@ -232,7 +232,7 @@ router.get('/operational-snapshot', async (c) => {
     return c.json({ success: false, error: parsed.error.flatten() }, 400);
   }
 
-  const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env; Variables: Variables }>);
+  const empresaId = getEmpresaId(c);
   const data = parsed.data;
 
   const filters: FrmsOperationalSnapshotFilters = {
