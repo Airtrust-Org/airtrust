@@ -530,25 +530,39 @@ export default function FrmsFichaTripulante() {
         {/* Painel de decisão diária: explicação à esquerda, continuidade temporal à direita. */}
         <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-12">
           <div className="xl:col-span-4">
-            {acumulo?.effectiveness ? (
+            {acumulo?.effectiveness || todayFortnightSnapshotItem?.effectiveness_pct != null ? (
               <FrmsEffectivenessPanel
-                effectiveness_pct={acumulo.effectiveness.effectiveness_pct}
-                effectiveness_nivel={acumulo.effectiveness.effectiveness_nivel}
+                effectiveness_pct={
+                  acumulo?.effectiveness?.effectiveness_pct ??
+                  Number(todayFortnightSnapshotItem?.effectiveness_pct)
+                }
+                effectiveness_nivel={
+                  acumulo?.effectiveness?.effectiveness_nivel ??
+                  todayFortnightSnapshotItem?.nivel_fadiga_calculado ??
+                  undefined
+                }
                 componentes={
-                  acumulo.effectiveness.effectiveness_componentes as {
-                    processo_s: number;
-                    processo_c: number;
-                    repouso: number;
-                    hv: number;
-                    duracao: number;
-                    pousos?: number;
-                    temperatura?: number;
-                    imc?: number;
-                    recuperacao?: number;
-                  } | null
+                  acumulo?.effectiveness
+                    ? (acumulo.effectiveness.effectiveness_componentes as {
+                        processo_s: number;
+                        processo_c: number;
+                        repouso: number;
+                        hv: number;
+                        duracao: number;
+                        pousos?: number;
+                        temperatura?: number;
+                        imc?: number;
+                        recuperacao?: number;
+                      } | null)
+                    : null
                 }
                 config={limites}
-                dataSource={todayFortnightSnapshotItem?.jornada_data_source ?? null}
+                dataSource={
+                  todayFortnightSnapshotItem?.effectiveness_source === 'PROJETADA_APRESENTACAO' ||
+                  todayFortnightSnapshotItem?.effectiveness_source === 'PROJETADA_ATIVIDADE'
+                    ? 'ESTIMADO'
+                    : todayFortnightSnapshotItem?.jornada_data_source ?? null
+                }
               />
             ) : (
               <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 p-5 text-center">
@@ -600,19 +614,32 @@ export default function FrmsFichaTripulante() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Jornada de hoje</p>
-            {todayFortnightSnapshotItem?.teve_jornada && todayFortnightSnapshotItem.duracao_jornada_minutos > 0 ? (
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Atividade de hoje</p>
+            {todayFortnightSnapshotItem?.teve_atividade_frms ? (
               <>
                 <p className="mt-2 text-lg font-bold text-slate-900">
-                  {formatMin(todayFortnightSnapshotItem.duracao_jornada_minutos)}
+                  {todayFortnightSnapshotItem.atividade_principal === 'SIMULADOR'
+                    ? 'Simulador'
+                    : todayFortnightSnapshotItem.atividade_principal === 'TREINAMENTO'
+                      ? 'Treinamento'
+                      : todayFortnightSnapshotItem.atividade_principal === 'MISTA'
+                        ? 'Atividade mista'
+                        : 'Voo'}
+                  {' · '}
+                  {formatMin(
+                    todayFortnightSnapshotItem.atividade_frms_minutos ??
+                    todayFortnightSnapshotItem.duracao_jornada_minutos,
+                  )}
                 </p>
                 <p className="mt-1 text-xs text-slate-600">
-                  {todayFortnightSnapshotItem.hora_apresentacao?.slice(0, 5) || '—'} →{' '}
-                  {todayFortnightSnapshotItem.hora_termino?.slice(0, 5) || '—'}
+                  {(todayFortnightSnapshotItem.hora_apresentacao ??
+                    todayFortnightSnapshotItem.atividade_hora_inicio)?.slice(0, 5) || '—'} →{' '}
+                  {(todayFortnightSnapshotItem.hora_termino ??
+                    todayFortnightSnapshotItem.atividade_hora_fim)?.slice(0, 5) || '—'}
                 </p>
               </>
             ) : (
-              <p className="mt-2 text-sm font-semibold text-slate-500">Sem jornada confirmada</p>
+              <p className="mt-2 text-sm font-semibold text-slate-500">Sem atividade confirmada</p>
             )}
           </div>
 
@@ -671,9 +698,12 @@ export default function FrmsFichaTripulante() {
             <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800">Carga observada</p>
               <div className="mt-2 space-y-1 text-xs text-slate-700">
-                <p>Jornada: <strong>{todayFortnightSnapshotItem?.teve_jornada ? formatMin(todayFortnightSnapshotItem.duracao_jornada_minutos) : 'sem jornada confirmada'}</strong></p>
-                <p>HV do dia: <strong>{todayFortnightSnapshotItem?.teve_jornada ? formatMin(todayFortnightSnapshotItem.horas_voo_minutos) : '00h00'}</strong></p>
-                <p>Origem da jornada: <strong>{todayFortnightSnapshotItem?.jornada_origem || 'não informada'}</strong></p>
+                <p>Atividade: <strong>{todayFortnightSnapshotItem?.teve_atividade_frms ? formatMin(todayFortnightSnapshotItem.atividade_frms_minutos ?? todayFortnightSnapshotItem.duracao_jornada_minutos) : 'sem atividade confirmada'}</strong></p>
+                <p>HV real: <strong>{formatMin(todayFortnightSnapshotItem?.horas_voo_minutos ?? 0)}</strong></p>
+                <p>Simulador: <strong>{formatMin(todayFortnightSnapshotItem?.simulador_minutos ?? 0)}</strong></p>
+                <p>HV FRMS: <strong>{formatMin(todayFortnightSnapshotItem?.horas_voo_frms_minutos ?? todayFortnightSnapshotItem?.horas_voo_minutos ?? 0)}</strong></p>
+                <p>Treinamento: <strong>{formatMin(todayFortnightSnapshotItem?.treinamento_minutos ?? 0)}</strong></p>
+                <p>Tipo de atividade: <strong>{todayFortnightSnapshotItem?.atividade_principal || 'não informada'}</strong></p>
                 <div className="pt-1">
                   <span className="font-medium text-slate-600">Sinais: </span>
                   {todayFortnightSnapshotItem?.alertas?.length
@@ -702,7 +732,8 @@ export default function FrmsFichaTripulante() {
                 <p>Check-in: <strong>{todayFortnightSnapshotItem?.checkin_status || 'AUSENTE'}{todayFortnightSnapshotItem?.checkin_horario ? ` às ${todayFortnightSnapshotItem.checkin_horario.slice(0, 5)}` : ''}</strong></p>
                 <p>Fonte sono/despertar: <strong>{formatSnapshotSource(todayFortnightSnapshotItem?.sleep_data_source)} / {formatSnapshotSource(todayFortnightSnapshotItem?.wake_data_source)}</strong></p>
                 <p>Fonte jornada: <strong>{formatSnapshotSource(todayFortnightSnapshotItem?.jornada_data_source)}</strong></p>
-                <p>Regra: <strong>cálculo canônico FRMS; sem fallback de apresentação/sono</strong></p>
+                <p>Atividade FRMS: <strong>{todayFortnightSnapshotItem?.atividade_principal || 'sem atividade registrada'}</strong></p>
+                <p>Regra: <strong>HV real separado; simulador entra apenas como HV equivalente FRMS para fadiga</strong></p>
                 <p className="pt-1 text-sky-800">
                   {todayFortnightSnapshotItem?.acao_recomendada_texto || 'Complete os dados obrigatórios para liberar a avaliação.'}
                 </p>
