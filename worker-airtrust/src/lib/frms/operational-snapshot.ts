@@ -142,6 +142,7 @@ export interface BuildOperationalSnapshotInput {
     jornadas: JornadaSnapshotRow[];
     checkins: CheckinSnapshotRow[];
     effectiveness: EffectivenessSnapshotRow[];
+    activities: FrmsActivitySnapshotRow[];
     funcionarios: FuncionarioSnapshotRow[];
   };
   filters?: FrmsOperationalSnapshotFilters;
