@@ -57,6 +57,8 @@ export interface FrmsOperationalSnapshotItem {
   horas_voo_frms_minutos: number;
   simulador_minutos: number;
   treinamento_minutos: number;
+  atividade_frms_minutos: number;
+  atividade_principal: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'MISTA' | 'SEM_DADO';
   duracao_jornada_minutos: number;
   teve_jornada: boolean;
 
