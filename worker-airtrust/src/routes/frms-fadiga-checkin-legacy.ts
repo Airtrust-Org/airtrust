@@ -13,9 +13,7 @@ import {
   type FadigaScoreInput,
 } from '../lib/frms/fadiga-score';
 import { FrmsParameterResolutionError, resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
-import { sincronizarCheckinComFrms } from '../lib/frms/fadiga-frms-sync';
-import { persistReadinessAssessment } from '../lib/frms/readiness-persistence';
-import { refreshRecoveryAssessmentForActivityDate } from './frms-recovery';
+import { EmbeddedReadinessValidationError, persistReadinessAndSyncFrms } from './frms-fadiga-checkin-readiness-sync';
 import { buildFratSuggestion } from '../lib/frms/fadiga-frat-bridge';
 import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
 import {
@@ -29,10 +27,8 @@ import {
 } from './frms-fadiga-checkin.schema';
 import { validateCheckinPayloadCompleteness } from './frms-fadiga-checkin-validation';
 import { getFadigaConfig as getConfig, updateFadigaDutyConfig } from './frms-fadiga-config';
-
 const router = new Hono<AppEnv>();
 router.use('*', auth());
-
 type FrmsContext = Context<AppEnv>;
 
 type DailyRiskLevel = 'normal' | 'attention' | 'critical' | 'unfit_for_duty';
@@ -1226,63 +1222,20 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         );
       }
     }
-
-    let readinessResult: Awaited<ReturnType<typeof persistReadinessAssessment>> | null = null;
-    if (parsed.data.readiness) {
-      try {
-        readinessResult = await persistReadinessAssessment(c.env.DB, {
-          empresaId,
-          funcionarioId,
-          userId: userId || null,
-          checkinId,
-          referenceDate: dataCheckin,
-          kssScore: input.kssScore,
-          sleepHours: input.horasSono24h,
-          durationMs: parsed.data.readiness.duration_ms,
-          trials: parsed.data.readiness.trials,
-          protocolVersion: parsed.data.readiness.protocol_version,
-        });
-      } catch (error) {
-        // The browser submits check-in + vigilance as one logical operation. If the
-        // objective assessment cannot be persisted, a newly-created check-in must
-        // not remain visible as a completed daily check-in without readiness.
-        if (!existing?.id) {
-          await c.env.DB.prepare(
-            `UPDATE frms_fadiga_checkin
-                SET deleted_at = ?, updated_at = ?
-              WHERE id = ? AND empresa_id = ? AND funcionario_id = ? AND deleted_at IS NULL`,
-          )
-            .bind(now, now, checkinId, empresaId, funcionarioId)
-            .run();
-        }
-        const code = error instanceof Error ? error.message : 'readiness_persistence_failed';
-        if (code === 'invalid_trial_sequence' || code === 'invalid_trial_timing') {
-          return c.json({ success: false, error: code }, 400);
-        }
-        throw error;
+    let sync;
+    try {
+      ({ sync } = await persistReadinessAndSyncFrms({
+        db: c.env.DB, empresaId, funcionarioId, userId: userId || null, checkinId, dataCheckin,
+        kssScore: input.kssScore, sleepHours: input.horasSono24h, wakeTime: input.horaAcordou,
+        presentationTime: input.jornadaInicioPrevista, readiness: parsed.data.readiness,
+        isNewCheckin: !existing?.id, now,
+      }));
+    } catch (error) {
+      if (error instanceof EmbeddedReadinessValidationError) {
+        return c.json({ success: false, error: error.code }, 400);
       }
-
-      const previous = new Date(`${dataCheckin}T12:00:00Z`);
-      previous.setUTCDate(previous.getUTCDate() - 1);
-      await refreshRecoveryAssessmentForActivityDate({
-        db: c.env.DB,
-        empresaId,
-        funcionarioId,
-        referenceDate: previous.toISOString().slice(0, 10),
-      });
+      throw error;
     }
-
-    const sync = await sincronizarCheckinComFrms(
-      c.env.DB,
-      checkinId,
-      funcionarioId,
-      dataCheckin,
-      input.horasSono24h,
-      empresaId,
-      input.horaAcordou,
-      input.jornadaInicioPrevista,
-    );
-
     const eventType = existing?.id ? 'CHECKIN_ATUALIZADO' : 'CHECKIN_CRIADO';
     await c.env.DB.prepare(
       `INSERT INTO frms_fadiga_evento (id, empresa_id, checkin_id, tipo, payload_json, created_at)
@@ -1435,7 +1388,6 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         },
         sincronizacao_frms: {
           sincronizado: sync.sincronizado,
-          readiness: readinessResult,
           jornada_encontrada: Boolean(sync.jornada_id),
           effectiveness_anterior: sync.effectiveness_anterior ?? null,
           effectiveness_nova: sync.effectiveness_nova ?? null,
