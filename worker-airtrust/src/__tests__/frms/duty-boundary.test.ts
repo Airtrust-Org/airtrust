@@ -4,6 +4,7 @@ import {
   durationBetweenClocks,
   resolveFrmsDutyBoundary,
   resolveFrmsEstimatedDutyBoundary,
+  canCalculateFrmsEffectivenessFromBoundary,
 } from '../../lib/frms/duty-boundary';
 
 describe('FRMS duty boundary', () => {
@@ -110,6 +111,12 @@ describe('FRMS duty boundary', () => {
       endTime: '12:20',
       lastLanding: '12:10',
     }).complete).toBe(false);
+  });
+
+  it('não calcula efetividade fisiológica para jornada apenas estimada', () => {
+    expect(canCalculateFrmsEffectivenessFromBoundary('REAL')).toBe(true);
+    expect(canCalculateFrmsEffectivenessFromBoundary('ESTIMADO')).toBe(false);
+    expect(canCalculateFrmsEffectivenessFromBoundary('AUSENTE')).toBe(false);
   });
 
 });

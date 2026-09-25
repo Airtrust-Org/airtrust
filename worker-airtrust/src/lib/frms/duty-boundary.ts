@@ -95,6 +95,12 @@ export function resolveFrmsDutyBoundary(input: FrmsDutyBoundaryInput): FrmsDutyB
 }
 
 
+export type FrmsDutyBoundarySource = 'REAL' | 'ESTIMADO' | 'AUSENTE';
+
+export function canCalculateFrmsEffectivenessFromBoundary(source: FrmsDutyBoundarySource): boolean {
+  return source === 'REAL';
+}
+
 export interface FrmsEstimatedDutyBoundaryInput {
   presentationTime?: string | null;
   firstEngineStart?: string | null;
