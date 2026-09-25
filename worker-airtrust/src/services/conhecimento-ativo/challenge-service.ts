@@ -52,7 +52,7 @@ const MACRO_AREAS_POR_MODELO: Record<string, MacroAreaDefinition[]> = {
     {
       key: 'ROTOR_TRANSMISSAO_TREM',
       nome: 'Rotor / Transmission / Landing Gear',
-      topicos: ['Transmission / Rotor', 'Landing Gear'],
+      topicos: ['Transmission / Rotor', 'Drive System / Transmission', 'Landing Gear'],
     },
     {
       key: 'GELO_AMBIENTE',
