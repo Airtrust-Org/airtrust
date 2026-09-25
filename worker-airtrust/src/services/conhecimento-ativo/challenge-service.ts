@@ -832,10 +832,11 @@ export async function gerarOuObterDesafio(params: {
         .prepare(
           'SELECT * FROM conhecimento_ativo_desafios ' +
             'WHERE empresa_id=? AND funcionario_id=? AND aeronave_modelo=? ' +
-            "AND periodo_chave=? AND topico_id=? AND status IN ('DISPONIVEL','EM_ANDAMENTO') " +
+            `AND periodo_chave=? AND topico_id IN (${topicosSelecionados.map(() => '?').join(',')}) ` +
+            "AND status IN ('DISPONIVEL','EM_ANDAMENTO') " +
             'AND deleted_at IS NULL ORDER BY COALESCE(numero_sequencial,numero_desafio) LIMIT 1',
         )
-        .bind(empresaId, funcionarioId, modelo, periodo.chave, topicoId)
+        .bind(empresaId, funcionarioId, modelo, periodo.chave, ...topicosSelecionados)
         .first<ChallengeRow>();
   if (existing) {
     await garantirQuantidadeQuestoesDesafio({ db, empresaId, funcionarioId, desafio: existing });
@@ -1522,6 +1523,7 @@ export async function mapaConhecimento(params: {
     string,
     {
       topico_id: number;
+      topico_ids: number[];
       nome: string;
       aeronave_modelo: string | null;
       itens: number;
@@ -1557,6 +1559,7 @@ export async function mapaConhecimento(params: {
       agrupados.get(chave) ||
       {
         topico_id: Number(row.topico_id),
+        topico_ids: [Number(row.topico_id)],
         nome: macro?.nome || row.nome,
         aeronave_modelo: modelo,
         itens: 0,
@@ -1574,6 +1577,9 @@ export async function mapaConhecimento(params: {
       };
 
     atual.topico_id = Math.min(atual.topico_id, Number(row.topico_id));
+    if (!atual.topico_ids.includes(Number(row.topico_id))) {
+      atual.topico_ids.push(Number(row.topico_id));
+    }
     atual.itens += itens;
     atual.questoes += questoes;
     atual.respondidas += respondidas;
@@ -1594,6 +1600,7 @@ export async function mapaConhecimento(params: {
   return Array.from(agrupados.values())
     .map((row) => ({
       topico_id: row.topico_id,
+      topico_ids: [...row.topico_ids].sort((a, b) => a - b),
       nome: row.nome,
       aeronave_modelo: row.aeronave_modelo,
       itens: row.itens,
