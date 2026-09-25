@@ -111,8 +111,9 @@ export interface FrmsOperationalSnapshotItem {
   status_operacional_checkin: string | null;
 
   effectiveness_pct: number | null;
+  effectiveness_source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'AUSENTE';
   nivel_fadiga_calculado: string | null;
-  fatorizacao_status: 'CALCULADA' | 'AUSENTE';
+  fatorizacao_status: 'CALCULADA' | 'PROJETADA' | 'AUSENTE';
 
   sleep_data_source: 'REAL' | 'ESTIMADO' | 'AUSENTE';
   wake_data_source: 'REAL' | 'ESTIMADO' | 'AUSENTE';

@@ -138,6 +138,15 @@ describe('resolveEffectivenessSignal', () => {
     expect(s.value).toBe('84,2%');
   });
 
+  it('efetividade projetada deixa explícito que é estimativa para a apresentação', () => {
+    const s = resolveEffectivenessSignal(
+      item({ effectiveness_pct: 88.4, effectiveness_source: 'PROJETADA_APRESENTACAO', fatorizacao_status: 'PROJETADA' }),
+    );
+    expect(s.tone).toBe('ok');
+    expect(s.value).toBe('88,4%');
+    expect(s.detail).toContain('Projetada para a hora de apresentação');
+  });
+
   it('alerta EFETIVIDADE_BAIXA → atenção', () => {
     const s = resolveEffectivenessSignal(
       item({ effectiveness_pct: 62.4, alertas: ['EFETIVIDADE_BAIXA'], estado_operacional: 'ATENCAO' }),
