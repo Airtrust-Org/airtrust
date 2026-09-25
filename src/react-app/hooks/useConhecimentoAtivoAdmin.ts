@@ -197,6 +197,29 @@ export function useAprovarItemConhecimento() {
   });
 }
 
+export interface ConhecimentoAprovacaoLoteResult {
+  aeronave_modelo: string;
+  fontes_vigentes: number;
+  itens_aprovados: number;
+  questoes_aprovadas: number;
+}
+
+export function useAprovarTudoConhecimento() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (aeronaveModelo: string) =>
+      adminRequest<ConhecimentoAprovacaoLoteResult>('/aprovar-tudo', {
+        method: 'POST',
+        body: JSON.stringify({ aeronave_modelo: aeronaveModelo }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.fontes });
+      qc.invalidateQueries({ queryKey: keys.itens });
+      qc.invalidateQueries({ queryKey: keys.questoes });
+    },
+  });
+}
+
 export function useConhecimentoQuestoesAdmin() {
   return useQuery({
     queryKey: keys.questoes,
