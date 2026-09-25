@@ -20,6 +20,24 @@ function normalizeClock(value: unknown): string | null {
   return text;
 }
 
+export function maskFrmsEffectivenessRead<T extends Record<string, unknown>>(
+  row: T,
+  available: boolean,
+): T {
+  if (available) return row;
+  return {
+    ...row,
+    effectiveness_pct: null,
+    effectiveness_nivel: null,
+    effectiveness_componentes_json: null,
+    fator_basica_pct: null,
+    tempo_abaixo_limiar_min: null,
+    hora_despertar_estimada: null,
+    hora_inicio_sono_estimado: null,
+    duracao_sono_efetiva_min: null,
+  };
+}
+
 export function buildFrmsDayCheckinExplanationState(params: {
   checkinRow: FrmsDayCheckinRow | null;
   row: Record<string, unknown>;

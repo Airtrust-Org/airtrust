@@ -80,7 +80,10 @@ import {
 import { syncHorasVooFromFrmsJornada } from '../shared/handlers/horasVooFromFrms.handler';
 import { recalcularPipeline } from '../lib/frms/db-service-jornadas';
 import { buildCanonicalOperationalSourceSql } from '../lib/frms/frms-source-policy';
-import { buildFrmsDayCheckinExplanationState } from '../lib/frms/day-explanation-checkin';
+import {
+  buildFrmsDayCheckinExplanationState,
+  maskFrmsEffectivenessRead,
+} from '../lib/frms/day-explanation-checkin';
 import { getSigvoosConfig } from '../services/sigvoos-frms';
 import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../services/employee-sector-access';
 import fadigaAcumulada from './frms-fadiga-acumulada';
@@ -2525,7 +2528,14 @@ frmsRoutes.get(
       .bind(tripulanteId, empresaId, hasRange ? 1 : 0, inicio, fim, hasRange ? 1 : 0, dias)
       .all();
 
-    return c.json({ success: true, data: rows.results ?? [] });
+    const sanitizedRows = (rows.results ?? []).map((row) =>
+      maskFrmsEffectivenessRead(
+        row as Record<string, unknown>,
+        String((row as Record<string, unknown>).jornada_boundary_source ?? '') === 'REAL',
+      ),
+    );
+
+    return c.json({ success: true, data: sanitizedRows });
   }),
 );
 
@@ -2880,9 +2890,14 @@ frmsRoutes.get(
         limites,
       );
 
+      const guardedRow = maskFrmsEffectivenessRead(
+        row,
+        row.effectiveness_pct != null && Number.isFinite(Number(row.effectiveness_pct)),
+      );
+
       return buildFrmsDayExplanation(
         c.env,
-        { ...row, dias_criticos_consecutivos: diasCriticosConsecutivos },
+        { ...guardedRow, dias_criticos_consecutivos: diasCriticosConsecutivos },
         limites,
       );
     };
@@ -2905,9 +2920,10 @@ frmsRoutes.get(
 
     const diaA = toComparisonDay(expA);
     const diaB = toComparisonDay(expB);
-    const pctA = diaA.effectiveness_pct ?? 0;
-    const pctB = diaB.effectiveness_pct ?? 0;
-    const diferencaPts = roundOne(pctB - pctA);
+    const pctA = diaA.effectiveness_pct;
+    const pctB = diaB.effectiveness_pct;
+    const diferencaPts =
+      pctA == null || pctB == null ? null : roundOne(Number(pctB) - Number(pctA));
 
     const fatoresPioraram: string[] = [];
     const fatoresMelhoraram: string[] = [];
@@ -2921,11 +2937,13 @@ frmsRoutes.get(
     }
 
     const analiseDelta =
-      diferencaPts < 0
-        ? `O dia B foi ${Math.abs(diferencaPts).toFixed(1)} pts pior que o dia A.`
-        : diferencaPts > 0
-          ? `O dia B foi ${Math.abs(diferencaPts).toFixed(1)} pts melhor que o dia A.`
-          : 'Os dois dias ficaram com efetividade equivalente.';
+      diferencaPts == null
+        ? 'Comparação de efetividade indisponível: um ou ambos os dias não possuem check-in completo.'
+        : diferencaPts < 0
+          ? `O dia B foi ${Math.abs(diferencaPts).toFixed(1)} pts pior que o dia A.`
+          : diferencaPts > 0
+            ? `O dia B foi ${Math.abs(diferencaPts).toFixed(1)} pts melhor que o dia A.`
+            : 'Os dois dias ficaram com efetividade equivalente.';
 
     await registrarAuditoriaFrmsAcao(c, {
       acao: 'FRMS_COMPARACAO_DIAS',
@@ -2987,7 +3005,22 @@ frmsRoutes.post(
           f.effectiveness_componentes_json,
           f.tempo_abaixo_limiar_min,
           f.dia_periodo_embarcado,
-          f.total_dias_periodo
+          f.total_dias_periodo,
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+                FROM frms_fadiga_checkin ch
+               WHERE ch.empresa_id = p.empresa_id
+                 AND ch.funcionario_id = p.id
+                 AND ch.data_checkin = j.data
+                 AND ch.deleted_at IS NULL
+                 AND ch.jornada_inicio_prevista IS NOT NULL
+                 AND ch.wake_time IS NOT NULL
+                 AND ch.horas_sono > 0
+                 AND ch.horas_sono <= 24
+            ) THEN 1
+            ELSE 0
+          END AS effectiveness_available
        FROM frms_jornada j
        JOIN funcionarios p ON p.id = CAST(j.tripulante_id AS INTEGER)
        LEFT JOIN frms_fatorizacao_jornada f ON f.jornada_id = j.id AND f.deleted_at IS NULL
@@ -3007,6 +3040,11 @@ frmsRoutes.post(
         404,
       );
     }
+
+    const guardedReal = maskFrmsEffectivenessRead(
+      row,
+      Number(row.effectiveness_available ?? 0) === 1,
+    );
 
     const limites = (await carregarLimites(c.env.DB)) as LimitesMap;
     const horaApresentacaoReal = normalizeHora(row.hora_apresentacao as string | null | undefined);
@@ -3065,16 +3103,22 @@ frmsRoutes.post(
     });
 
     const componentesReais = parseEffectivenessComponents(
-      typeof row.effectiveness_componentes_json === 'string'
-        ? row.effectiveness_componentes_json
+      typeof guardedReal.effectiveness_componentes_json === 'string'
+        ? guardedReal.effectiveness_componentes_json
         : null,
     );
-    const realPct = row.effectiveness_pct == null ? null : Number(row.effectiveness_pct);
-    const diferencaPts = roundOne((effectSimulado.effectiveness_pct ?? 0) - (realPct ?? 0));
+    const realPct =
+      guardedReal.effectiveness_pct == null ? null : Number(guardedReal.effectiveness_pct);
+    const diferencaPts =
+      realPct == null || effectSimulado.effectiveness_pct == null
+        ? null
+        : roundOne(effectSimulado.effectiveness_pct - realPct);
     const conclusao =
-      diferencaPts >= 0
-        ? `Com apresentação às ${horaApresentacaoSimulada || '--:--'}, a efetividade subiria ${Math.abs(diferencaPts).toFixed(1)} pts.`
-        : `Com apresentação às ${horaApresentacaoSimulada || '--:--'}, a efetividade cairia ${Math.abs(diferencaPts).toFixed(1)} pts.`;
+      diferencaPts == null
+        ? `Cenário simulado para apresentação às ${horaApresentacaoSimulada || '--:--'}; sem comparação com efetividade real porque o check-in completo não está disponível.`
+        : diferencaPts >= 0
+          ? `Com apresentação às ${horaApresentacaoSimulada || '--:--'}, a efetividade subiria ${Math.abs(diferencaPts).toFixed(1)} pts.`
+          : `Com apresentação às ${horaApresentacaoSimulada || '--:--'}, a efetividade cairia ${Math.abs(diferencaPts).toFixed(1)} pts.`;
 
     await registrarAuditoriaFrmsAcao(c, {
       acao: 'FRMS_CENARIO_SIMULADO',
@@ -3100,7 +3144,10 @@ frmsRoutes.post(
         },
         resultado_real: {
           effectiveness_pct: realPct,
-          nivel: typeof row.effectiveness_nivel === 'string' ? row.effectiveness_nivel : null,
+          nivel:
+            typeof guardedReal.effectiveness_nivel === 'string'
+              ? guardedReal.effectiveness_nivel
+              : null,
           fatores: {
             processo_s: Number(componentesReais.processo_s ?? 0),
             processo_c: Number(componentesReais.processo_c ?? 0),
@@ -3214,6 +3261,36 @@ frmsRoutes.post(
       );
     }
 
+    const checkinRow = await c.env.DB.prepare(
+      `SELECT id, wake_time, jornada_inicio_prevista, horas_sono
+         FROM frms_fadiga_checkin
+        WHERE empresa_id = ?
+          AND funcionario_id = ?
+          AND data_checkin = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+      .bind(empresaId, Number(tripulanteId), data)
+      .first<{
+        id: string;
+        wake_time: string | null;
+        jornada_inicio_prevista: string | null;
+        horas_sono: number | null;
+      }>()
+      .catch(() => null);
+
+    const unavailableWindow = {
+      available: false,
+      worstDay: null,
+      worstEffectivenessPct: null,
+    };
+    const justificationCheckinState = buildFrmsDayCheckinExplanationState({
+      checkinRow,
+      row,
+      worst7d: unavailableWindow,
+      worst28d: unavailableWindow,
+    });
+
     if (!empresaId) {
       return c.json(
         { success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' },
@@ -3235,7 +3312,12 @@ frmsRoutes.post(
     );
     const explanation = await buildFrmsDayExplanation(
       c.env,
-      { ...row, dias_criticos_consecutivos: diasCriticosConsecutivos },
+      {
+        ...justificationCheckinState.rowForExplanation,
+        dias_criticos_consecutivos: justificationCheckinState.complete
+          ? diasCriticosConsecutivos
+          : 0,
+      },
       limites,
     );
 
@@ -3270,7 +3352,7 @@ frmsRoutes.post(
       `JUSTIFICATIVA OPERACIONAL FRMS\n` +
       `Tripulante: ${documentoBase.tripulante.nome} (${documentoBase.tripulante.matricula || 'sem matrícula'})\n` +
       `Data: ${documentoBase.data_voo}\n` +
-      `Efetividade: ${documentoBase.effectiveness_real ?? 'sem dado'}%\n` +
+      `Efetividade: ${documentoBase.effectiveness_real == null ? 'sem dado' : `${documentoBase.effectiveness_real}%`}\n` +
       `Nível de fadiga: ${documentoBase.nivel_fadiga}\n` +
       `Decisão tomada: ${documentoBase.decisao_tomada}\n` +
       `Fundamentação: ${documentoBase.fundamentacao}\n` +

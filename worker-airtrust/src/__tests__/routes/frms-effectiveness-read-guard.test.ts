@@ -38,8 +38,11 @@ describe('FRMS effectiveness read guard', () => {
                 data_apresentacao: '2026-09-20',
                 data_liberacao: '2026-09-20',
                 jornada_boundary_source: 'ESTIMADO',
-                effectiveness_pct: null,
-                effectiveness_nivel: null,
+                effectiveness_pct: 82.4,
+                effectiveness_nivel: 'ATENCAO',
+                effectiveness_componentes_json: 'stale',
+                tempo_abaixo_limiar_min: 35,
+                duracao_sono_efetiva_min: 420,
               },
             ],
           }),
@@ -57,10 +60,22 @@ describe('FRMS effectiveness read guard', () => {
     expect(response.status).toBe(200);
     const payload = (await response.json()) as {
       success: boolean;
-      data: Array<{ effectiveness_pct: number | null; effectiveness_nivel: string | null }>;
+      data: Array<{
+        effectiveness_pct: number | null;
+        effectiveness_nivel: string | null;
+        effectiveness_componentes_json: string | null;
+        tempo_abaixo_limiar_min: number | null;
+        duracao_sono_efetiva_min: number | null;
+      }>;
     };
     expect(payload.success).toBe(true);
-    expect(payload.data[0]).toMatchObject({ effectiveness_pct: null, effectiveness_nivel: null });
+    expect(payload.data[0]).toMatchObject({
+      effectiveness_pct: null,
+      effectiveness_nivel: null,
+      effectiveness_componentes_json: null,
+      tempo_abaixo_limiar_min: null,
+      duracao_sono_efetiva_min: null,
+    });
 
     const timelineSql = preparedSql.find((sql) =>
       sql.includes('FROM frms_fatorizacao_jornada fj') && sql.includes('jornada_boundary_source'),
