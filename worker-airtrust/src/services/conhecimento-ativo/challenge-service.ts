@@ -77,8 +77,13 @@ const MACRO_AREAS_POR_MODELO: Record<string, MacroAreaDefinition[]> = {
     { key: 'PROCEDIMENTOS_NORMAIS', nome: 'Normal Procedures', topicos: ['Normal Procedures'] },
     {
       key: 'ANORMAIS_QRH',
-      nome: 'Abnormal / Emergency / QRH',
-      topicos: ['Abnormal / Emergency Procedures', 'QRH'],
+      nome: 'Abnormal / Emergency / QRH / Survival',
+      topicos: [
+        'Abnormal / Emergency Procedures',
+        'QRH',
+        'Ditching / Flotation',
+        'Emergency Equipment',
+      ],
     },
     {
       key: 'SOP_OPERADOR',
@@ -94,11 +99,6 @@ const MACRO_AREAS_POR_MODELO: Record<string, MacroAreaDefinition[]> = {
       key: 'OFFSHORE_SAR',
       nome: 'Offshore / SAR Operations',
       topicos: ['Offshore Operations', 'SAR Operations'],
-    },
-    {
-      key: 'EMERGENCIA_SOBREVIVENCIA',
-      nome: 'Emergency / Survival Equipment',
-      topicos: ['Ditching / Flotation', 'Emergency Equipment'],
     },
   ],
   SK76: [
@@ -125,7 +125,7 @@ const MACRO_AREAS_POR_MODELO: Record<string, MacroAreaDefinition[]> = {
     {
       key: 'AVIONICOS_DISPLAY',
       nome: 'Avionics / Displays',
-      topicos: ['Avionics / Displays / Warning-Caution-Advisory'],
+      topicos: ['Avionics / Displays', 'Avionics / Displays / Warning-Caution-Advisory'],
     },
     {
       key: 'PERFORMANCE_WB',
