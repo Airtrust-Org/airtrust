@@ -36,6 +36,40 @@ function toMinutes(value: string | null): number | null {
   return hours * 60 + minutes;
 }
 
+function isIsoDate(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function addIsoDay(value: string): string {
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function expandPlannedTrainingRows(
+  rows: ActivityDbRow[],
+  windowStart: string,
+  windowEnd: string,
+): ActivityDbRow[] {
+  const expanded: ActivityDbRow[] = [];
+  for (const row of rows) {
+    const first = isIsoDate(row.range_start) ? row.range_start : row.data_operacional;
+    const last = isIsoDate(row.range_end) ? row.range_end : row.data_operacional;
+    if (!isIsoDate(first) || !isIsoDate(last)) continue;
+    let current = first < windowStart ? windowStart : first;
+    const end = last > windowEnd ? windowEnd : last;
+    while (current <= end) {
+      expanded.push({
+        ...row,
+        data_operacional: current,
+        dedupe_key: row.dedupe_key ? `${row.dedupe_key}:${current}` : null,
+      });
+      current = addIsoDay(current);
+    }
+  }
+  return expanded;
+}
+
 export function frmsActivityDurationMinutes(
   startValue: string | null | undefined,
   endValue: string | null | undefined,
@@ -94,7 +128,11 @@ export function summarizeFrmsActivities(
   };
 }
 
-type ActivityDbRow = FrmsActivitySnapshotRow & { dedupe_key: string | null };
+type ActivityDbRow = FrmsActivitySnapshotRow & {
+  dedupe_key: string | null;
+  range_start?: string | null;
+  range_end?: string | null;
+};
 
 const PEOPLE_SQL = `
   SELECT treinamento_id, funcionario_id FROM treinamentos_participantes
@@ -143,6 +181,8 @@ export async function loadFrmsActivityRows(
             t.hora_inicio, t.hora_fim,
             COALESCE(NULLIF(t.titulo, ''), NULLIF(t.codigo_turma, ''), 'Treinamento') AS titulo,
             t.id AS source_id,
+            COALESCE(t.data_inicio, t.data_prevista, t.data_fim) AS range_start,
+            COALESCE(t.data_fim, t.data_prevista, t.data_inicio) AS range_end,
             CASE WHEN t.sessao_id IS NOT NULL
                  THEN 'SIM:' || t.sessao_id || ':' || p.funcionario_id
                  ELSE 'TRNPLAN:' || t.id || ':' || p.funcionario_id END AS dedupe_key
@@ -152,7 +192,8 @@ export async function loadFrmsActivityRows(
       WHERE t.empresa_id = ?
         AND t.deleted_at IS NULL
         AND UPPER(COALESCE(t.status, 'PLANEJADO')) <> 'CANCELADO'
-        AND date(COALESCE(t.data_prevista, t.data_inicio, t.data_fim)) BETWEEN date(?) AND date(?)
+        AND date(COALESCE(t.data_fim, t.data_prevista, t.data_inicio)) >= date(?)
+        AND date(COALESCE(t.data_inicio, t.data_prevista, t.data_fim)) <= date(?)
         AND NOT EXISTS (
           SELECT 1 FROM treinamentos_dias td
           WHERE td.empresa_id = t.empresa_id
@@ -189,7 +230,7 @@ export async function loadFrmsActivityRows(
 
   const merged = [
     ...(trainingDays.results ?? []),
-    ...(plannedTraining.results ?? []),
+    ...expandPlannedTrainingRows(plannedTraining.results ?? [], startDate, endDate),
     ...(simulatorSessions.results ?? []),
   ];
   const deduped = new Map<string, FrmsActivitySnapshotRow>();

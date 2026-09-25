@@ -47,6 +47,43 @@ describe('FRMS activity context', () => {
     expect(summary.simulator_minutes).toBe(0);
   });
 
+  it('expande treinamento planejado de vários dias quando não existem treinamentos_dias', async () => {
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        bind: () => ({
+          all: async () => {
+            if (sql.includes('SELECT td.data AS data_operacional')) return { results: [] };
+            if (sql.includes('SELECT COALESCE(t.data_prevista')) {
+              return {
+                results: [{
+                  data_operacional: '2026-09-23',
+                  funcionario_id: 20,
+                  activity_type: 'TREINAMENTO',
+                  hora_inicio: '08:00',
+                  hora_fim: '17:00',
+                  titulo: 'CRM em sala',
+                  source_id: 77,
+                  range_start: '2026-09-23',
+                  range_end: '2026-09-25',
+                  dedupe_key: 'TRNPLAN:77:20',
+                }],
+              };
+            }
+            return { results: [] };
+          },
+        }),
+      })),
+    } as unknown as D1Database;
+
+    const rows = await loadFrmsActivityRows(db, 63, '2026-09-23', '2026-09-25');
+    expect(rows.map((row) => row.data_operacional)).toEqual([
+      '2026-09-23',
+      '2026-09-24',
+      '2026-09-25',
+    ]);
+    expect(rows.every((row) => row.activity_type === 'TREINAMENTO')).toBe(true);
+  });
+
   it('faz todas as leituras tenant-scoped e deduplica a mesma sessão de simulador', async () => {
     const queries: Array<{ sql: string; binds: unknown[] }> = [];
     const db = {
@@ -54,7 +91,7 @@ describe('FRMS activity context', () => {
         bind: (...binds: unknown[]) => ({
           all: async () => {
             queries.push({ sql, binds });
-            if (sql.includes('FROM treinamentos_dias td')) {
+            if (sql.includes('SELECT td.data AS data_operacional')) {
               return {
                 results: [{
                   data_operacional: '2026-09-25',
