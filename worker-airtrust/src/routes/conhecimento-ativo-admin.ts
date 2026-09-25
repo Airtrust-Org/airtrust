@@ -328,6 +328,105 @@ adminRoutes.post('/itens/:id/aprovar', async (c) => {
   return c.json({ success: true, data: { id: itemId, status: 'APROVADO' } });
 });
 
+adminRoutes.post('/aprovar-tudo', async (c) => {
+  const empresaId = empresaIdFrom(c);
+  const body = await c.req.json<{ aeronave_modelo?: string }>();
+  const modelo = normalizarModeloConhecimento(nonEmpty(body.aeronave_modelo, 'Aeronave/modelo'));
+  const userId = c.get('userId');
+
+  const itemScope =
+    "i.empresa_id=? AND UPPER(REPLACE(COALESCE(i.aeronave_modelo,''),'-',''))=? " +
+    "AND i.deleted_at IS NULL AND i.status<>'ARQUIVADO'";
+  const modelKey = modelo.replace(/-/g, '');
+
+  const stats = await c.env.DB
+    .prepare(
+      'SELECT ' +
+        'COUNT(*) AS itens, ' +
+        "SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM conhecimento_ativo_item_fontes jf " +
+        'JOIN conhecimento_ativo_fontes f ON f.id=jf.fonte_id AND f.empresa_id=jf.empresa_id ' +
+        'WHERE jf.empresa_id=i.empresa_id AND jf.item_id=i.id AND jf.deleted_at IS NULL ' +
+        "AND f.deleted_at IS NULL AND f.status IN ('RASCUNHO','VIGENTE')) THEN 1 ELSE 0 END) AS itens_sem_fonte_aprovavel " +
+        'FROM conhecimento_ativo_itens i WHERE ' + itemScope,
+    )
+    .bind(empresaId, modelKey)
+    .first<{ itens: number; itens_sem_fonte_aprovavel: number }>();
+
+  if (!stats || Number(stats.itens) < 1) {
+    throw new ApiError('Nenhum item encontrado para o modelo informado.', 404, 'CONHECIMENTO_ATIVO_MODELO_SEM_ITENS');
+  }
+  if (Number(stats.itens_sem_fonte_aprovavel) > 0) {
+    throw new ApiError(
+      `${stats.itens_sem_fonte_aprovavel} item(ns) não possuem fonte em RASCUNHO ou VIGENTE.`,
+      400,
+      'CONHECIMENTO_ATIVO_FONTE_VIGENTE_OBRIGATORIA',
+    );
+  }
+
+  const invalidQuestions = await c.env.DB
+    .prepare(
+      'SELECT COUNT(*) AS total FROM conhecimento_ativo_questoes q ' +
+        'JOIN conhecimento_ativo_itens i ON i.id=q.item_id AND i.empresa_id=q.empresa_id ' +
+        'WHERE ' + itemScope +
+        " AND q.deleted_at IS NULL AND q.status<>'ARQUIVADA' AND (" +
+        '(SELECT COUNT(*) FROM conhecimento_ativo_alternativas a WHERE a.empresa_id=q.empresa_id ' +
+        'AND a.questao_id=q.id AND a.deleted_at IS NULL) NOT BETWEEN 2 AND 6 OR ' +
+        '(SELECT COUNT(*) FROM conhecimento_ativo_alternativas a WHERE a.empresa_id=q.empresa_id ' +
+        'AND a.questao_id=q.id AND a.correta=1 AND a.deleted_at IS NULL)<>1)',
+    )
+    .bind(empresaId, modelKey)
+    .first<{ total: number }>();
+
+  if (Number(invalidQuestions?.total || 0) > 0) {
+    throw new ApiError(
+      `${invalidQuestions?.total} questão(ões) possuem contrato de alternativas inválido.`,
+      400,
+      'CONHECIMENTO_ATIVO_ALTERNATIVAS_INVALIDAS',
+    );
+  }
+
+  const sourceUpdate = c.env.DB
+    .prepare(
+      "UPDATE conhecimento_ativo_fontes SET status='VIGENTE',updated_at=datetime('now') " +
+        "WHERE empresa_id=? AND status='RASCUNHO' AND deleted_at IS NULL AND id IN (" +
+        'SELECT DISTINCT jf.fonte_id FROM conhecimento_ativo_item_fontes jf ' +
+        'JOIN conhecimento_ativo_itens i ON i.id=jf.item_id AND i.empresa_id=jf.empresa_id ' +
+        'WHERE ' + itemScope + ' AND jf.deleted_at IS NULL)',
+    )
+    .bind(empresaId, empresaId, modelKey);
+
+  const itemUpdate = c.env.DB
+    .prepare(
+      "UPDATE conhecimento_ativo_itens SET status='APROVADO',aprovado_por_usuario_id=?, " +
+        "aprovado_em=datetime('now'),updated_at=datetime('now') WHERE " + itemScope,
+    )
+    .bind(userId, empresaId, modelKey);
+
+  const questionUpdate = c.env.DB
+    .prepare(
+      "UPDATE conhecimento_ativo_questoes SET status='APROVADA',aprovado_por_usuario_id=?, " +
+        "aprovado_em=datetime('now'),updated_at=datetime('now') WHERE empresa_id=? " +
+        "AND deleted_at IS NULL AND status<>'ARQUIVADA' AND item_id IN (" +
+        'SELECT i.id FROM conhecimento_ativo_itens i WHERE ' + itemScope + ')',
+    )
+    .bind(userId, empresaId, empresaId, modelKey);
+
+  const [sourcesResult, itemsResult, questionsResult] = await c.env.DB.batch([
+    sourceUpdate,
+    itemUpdate,
+    questionUpdate,
+  ]);
+
+  const data = {
+    aeronave_modelo: modelo,
+    fontes_vigentes: Number(sourcesResult.meta.changes || 0),
+    itens_aprovados: Number(itemsResult.meta.changes || 0),
+    questoes_aprovadas: Number(questionsResult.meta.changes || 0),
+  };
+  await audit(c, 'conhecimento_ativo_aprovacao_lote', 'BULK_UPDATE', 0, data);
+  return c.json({ success: true, data });
+});
+
 adminRoutes.get('/questoes', async (c) => {
   const empresaId = empresaIdFrom(c);
   const result = await c.env.DB
