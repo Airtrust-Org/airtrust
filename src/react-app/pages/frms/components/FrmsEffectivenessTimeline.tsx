@@ -211,6 +211,17 @@ export default function FrmsEffectivenessTimeline({
   const hasValidEffectiveness = chartData.some(
     (point) => point.effectiveness_pct != null && Number.isFinite(point.effectiveness_pct),
   );
+  const hasOperationalHistory = chartData.some(
+    (point) =>
+      (point.duty_hours != null && Number.isFinite(point.duty_hours)) ||
+      (point.flight_hours != null && Number.isFinite(point.flight_hours)),
+  );
+
+  useEffect(() => {
+    if (!loading && !hasValidEffectiveness && hasOperationalHistory && mode === 'effectiveness') {
+      setMode('workload');
+    }
+  }, [hasOperationalHistory, hasValidEffectiveness, loading, mode]);
 
   if (!tripulanteId) {
     return (
@@ -289,13 +300,18 @@ export default function FrmsEffectivenessTimeline({
         <div className="flex h-44 items-center justify-center">
           <div className="h-4 w-32 animate-pulse rounded bg-slate-200" />
         </div>
-      ) : !hasValidEffectiveness ? (
+      ) : mode === 'effectiveness' && !hasValidEffectiveness ? (
         <div className="flex min-h-44 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-5 text-center">
           <div>
             <p className="text-sm font-semibold text-slate-700">Efetividade indisponível</p>
             <p className="mt-1 text-xs text-slate-500">
               O cálculo só é apresentado quando o check-in diário contém apresentação, sono/repouso e despertar válidos.
             </p>
+            {hasOperationalHistory ? (
+              <button type="button" onClick={() => setMode('workload')} className="mt-3 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
+                Ver histórico de jornada / HV
+              </button>
+            ) : null}
           </div>
         </div>
       ) : (
@@ -387,7 +403,7 @@ export default function FrmsEffectivenessTimeline({
       )}
 
       <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
-        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">Ponto cheio = dado real · ponto vazado = estimado</span>
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">Efetividade: somente check-in completo · Jornada/HV: real ou estimada, conforme fonte</span>
         {mode === 'workload' && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1">Jornada e HV em horas</span>}
         {mode === 'operational' && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1">Pousos + temperatura observada</span>}
         {mode === 'recovery' && <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1">Sono + crédito efetivamente aplicado</span>}

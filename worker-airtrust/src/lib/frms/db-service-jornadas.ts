@@ -29,7 +29,7 @@ import {
 } from './frms-iogp-shadow-caller';
 import { resolveOperationalLoadForJornada } from './operational-load-resolver';
 import { computeFlightHoursDelta, resolveOperationalPolicyV2, type FrmsOperationalPolicyV2 } from './operational-policy-v2';
-import { loadFrmsDutyBoundaryConfig, resolveFrmsDutyBoundary, resolveFrmsEstimatedDutyBoundary } from './duty-boundary';
+import { canCalculateFrmsEffectivenessFromBoundary, loadFrmsDutyBoundaryConfig, resolveFrmsDutyBoundary, resolveFrmsEstimatedDutyBoundary } from './duty-boundary';
 // ────────────────────────────────────────────────────────
 // Período embarcado
 // ────────────────────────────────────────────────────────
@@ -611,8 +611,8 @@ export async function recalcularPipeline(
       fatResult.fator_hv_noturno_dep_pct,
       fatResult.fator_hv_noturno_arr_pct,
       fatResult.total_fatorizado_hv,
-      dutyBoundarySource !== 'AUSENTE' ? effectResult.effectiveness_pct : null,
-      dutyBoundarySource !== 'AUSENTE' ? effectResult.nivel : null,
+      canCalculateFrmsEffectivenessFromBoundary(dutyBoundarySource) ? effectResult.effectiveness_pct : null,
+      canCalculateFrmsEffectivenessFromBoundary(dutyBoundarySource) ? effectResult.nivel : null,
       JSON.stringify({
         ...effectResult.componentes,
         operational_load: effectResult.operational_load,
@@ -717,8 +717,8 @@ export async function recalcularPipeline(
     fator_apresentacao_pct: effectResult.fator_apresentacao_calibrado_pct,
     fator_repouso_pct: effectResult.fator_repouso_calibrado_pct,
     total_fatorizado_jornada: effectResult.total_fatorizado_calibrado_jornada,
-    effectiveness_nivel: dutyBoundarySource !== 'AUSENTE' ? effectResult.nivel : null,
-    effectiveness_pct: dutyBoundarySource !== 'AUSENTE' ? effectResult.effectiveness_pct : null,
+    effectiveness_nivel: canCalculateFrmsEffectivenessFromBoundary(dutyBoundarySource) ? effectResult.nivel : null,
+    effectiveness_pct: canCalculateFrmsEffectivenessFromBoundary(dutyBoundarySource) ? effectResult.effectiveness_pct : null,
     created_at: timestamp,
     updated_at: timestamp,
     deleted_at: null,
