@@ -14,6 +14,156 @@ const QUESTOES_POR_DESAFIO = 10;
 const DESAFIOS_RECOMENDADOS_POR_QUINZENA = 2;
 const MODELOS_CONHECIMENTO_ATIVO = ['AW139', 'SK76'] as const;
 
+type MacroAreaDefinition = {
+  key: string;
+  nome: string;
+  topicos: string[];
+};
+
+const MACRO_AREAS_POR_MODELO: Record<string, MacroAreaDefinition[]> = {
+  AW139: [
+    {
+      key: 'GERAL_MISSAO',
+      nome: 'Aircraft General / Cabin / Mission Equipment',
+      topicos: [
+        'Aircraft General',
+        'Cabin',
+        'Baggage Compartment',
+        'Mission Systems',
+        'Cargo Hook',
+        'Lighting / Searchlight',
+        'OPLS',
+      ],
+    },
+    { key: 'LIMITACOES', nome: 'Limitations', topicos: ['Limitations'] },
+    {
+      key: 'MOTORES_FOGO',
+      nome: 'Engines / Fire Protection',
+      topicos: ['Engines', 'Fire Protection', 'Inlet Barrier Filter'],
+    },
+    { key: 'COMBUSTIVEL', nome: 'Fuel', topicos: ['Fuel'] },
+    { key: 'ELETRICO', nome: 'Electrical', topicos: ['Electrical'] },
+    { key: 'HIDRAULICO', nome: 'Hydraulic', topicos: ['Hydraulic'] },
+    {
+      key: 'CONTROLES_AFCS',
+      nome: 'Flight Controls / AFCS',
+      topicos: ['Flight Controls', 'AFCS', 'CF AVCS'],
+    },
+    {
+      key: 'ROTOR_TRANSMISSAO_TREM',
+      nome: 'Rotor / Transmission / Landing Gear',
+      topicos: ['Transmission / Rotor', 'Landing Gear'],
+    },
+    {
+      key: 'GELO_AMBIENTE',
+      nome: 'Ice / Rain / Environmental',
+      topicos: ['Ice / Rain Protection', 'Environmental Control / Ventilation'],
+    },
+    {
+      key: 'AVIONICOS_DISPLAY',
+      nome: 'Avionics / Displays',
+      topicos: ['Avionics', 'Synthetic Vision System'],
+    },
+    {
+      key: 'NAVEGACAO_VIGILANCIA',
+      nome: 'Navigation / Surveillance',
+      topicos: ['Navigation', 'RNP / PBN', 'TCAS / ACAS', 'EGPWS / HTAWS'],
+    },
+    {
+      key: 'PERFORMANCE_WB',
+      nome: 'Performance / Weight & Balance',
+      topicos: ['Performance', 'Weight and Balance'],
+    },
+    { key: 'PROCEDIMENTOS_NORMAIS', nome: 'Normal Procedures', topicos: ['Normal Procedures'] },
+    {
+      key: 'ANORMAIS_QRH',
+      nome: 'Abnormal / Emergency / QRH',
+      topicos: ['Abnormal / Emergency Procedures', 'QRH'],
+    },
+    {
+      key: 'SOP_OPERADOR',
+      nome: 'SOP / CRM / Operator Procedures',
+      topicos: ['SOP', 'Human Factors', 'Regras de Voo', 'Dispatch / Operator-specific'],
+    },
+    {
+      key: 'FASES_CAT',
+      nome: 'Takeoff / Approach / Landing / CAT A-B',
+      topicos: ['Takeoff / CAT A / CAT B', 'Approach', 'Landing / CAT A Offshore', 'Category A Operations'],
+    },
+    {
+      key: 'OFFSHORE_SAR',
+      nome: 'Offshore / SAR Operations',
+      topicos: ['Offshore Operations', 'SAR Operations'],
+    },
+    {
+      key: 'EMERGENCIA_SOBREVIVENCIA',
+      nome: 'Emergency / Survival Equipment',
+      topicos: ['Ditching / Flotation', 'Emergency Equipment'],
+    },
+  ],
+  SK76: [
+    {
+      key: 'GERAL_MEC_ELETRICO',
+      nome: 'Aircraft / Mechanical / Electrical Systems',
+      topicos: [
+        'Aircraft General / Variant & Source Control',
+        'Rotor / Transmission / Drive System',
+        'Landing Gear / Rotor Brake',
+        'Electrical',
+      ],
+    },
+    {
+      key: 'MOTORES_COMBUSTIVEL_FOGO',
+      nome: 'Powerplant / Fuel / Fire',
+      topicos: ['Powerplant / Engines', 'Fuel', 'Fire Detection / Protection'],
+    },
+    {
+      key: 'AFCS_AUTOMACAO',
+      nome: 'AFCS / Automation',
+      topicos: ['AFCS / Autopilot / Flight Director / Automation'],
+    },
+    {
+      key: 'AVIONICOS_DISPLAY',
+      nome: 'Avionics / Displays',
+      topicos: ['Avionics / Displays / Warning-Caution-Advisory'],
+    },
+    {
+      key: 'PERFORMANCE_WB',
+      nome: 'Performance / Weight & Balance',
+      topicos: ['Performance / Weight & Balance / Performance Class'],
+    },
+    { key: 'PROCEDIMENTOS_NORMAIS', nome: 'Normal Procedures', topicos: ['Normal Procedures'] },
+    {
+      key: 'ANORMAIS_EMERGENCIA',
+      nome: 'Abnormal / Emergency & Emergency Equipment',
+      topicos: ['Abnormal / Emergency Procedures / ECL', 'Emergency Equipment'],
+    },
+    {
+      key: 'FASES_OFFSHORE',
+      nome: 'Takeoff / Approach / Landing / Offshore Operations',
+      topicos: ['Takeoff / Approach / Landing / Offshore Operations'],
+    },
+    {
+      key: 'SOP_CRM',
+      nome: 'SOP / CRM / Checklist / Standard Calls',
+      topicos: ['SOP / CRM / Checklist / Standard Calls'],
+    },
+  ],
+};
+
+function normalizarNomeTopico(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function macroAreaDoTopico(modelo: string, nomeTopico: string): MacroAreaDefinition | null {
+  const alvo = normalizarNomeTopico(nomeTopico);
+  return (
+    (MACRO_AREAS_POR_MODELO[modelo] || []).find((macro) =>
+      macro.topicos.some((nome) => normalizarNomeTopico(nome) === alvo),
+    ) || null
+  );
+}
+
 type Criticidade = CandidatoDesafio['criticidade'];
 
 interface CandidatoRow {
@@ -148,6 +298,35 @@ async function validarTopicoModelo(params: {
   return topico;
 }
 
+async function resolverTopicosDaSelecao(params: {
+  db: D1Database;
+  empresaId: number;
+  modelo: string;
+  topicoId: number;
+}): Promise<number[]> {
+  const { db, empresaId, modelo, topicoId } = params;
+  const selecionado = await validarTopicoModelo({ db, empresaId, modelo, topicoId });
+  const macro = macroAreaDoTopico(modelo, selecionado.nome);
+  if (!macro) return [selecionado.id];
+
+  const result = await db
+    .prepare(
+      'SELECT id,nome FROM conhecimento_ativo_topicos ' +
+        'WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL ' +
+        "AND UPPER(REPLACE(COALESCE(aeronave_modelo,''),'-',''))=?",
+    )
+    .bind(empresaId, modelo.replace(/-/g, ''))
+    .all<{ id: number; nome: string }>();
+
+  const nomes = new Set(macro.topicos.map(normalizarNomeTopico));
+  const ids = (result.results || [])
+    .filter((row) => nomes.has(normalizarNomeTopico(row.nome)))
+    .map((row) => Number(row.id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  return ids.length ? ids : [selecionado.id];
+}
+
 async function primeiroTopicoElegivel(
   db: D1Database,
   empresaId: number,
@@ -219,6 +398,13 @@ async function buscarCandidatos(
   modelo: string,
   topicoId: number | null,
 ): Promise<CandidatoRow[]> {
+  const topicoIds =
+    topicoId == null
+      ? []
+      : await resolverTopicosDaSelecao({ db, empresaId, modelo, topicoId });
+  const topicoFilter = topicoIds.length
+    ? `AND i.topico_id IN (${topicoIds.map(() => '?').join(',')})`
+    : '';
   const candidatos: CandidatoRow[] = [];
   const tamanhoPagina = 500;
   let ultimoQuestaoId = 0;
@@ -277,7 +463,7 @@ async function buscarCandidatos(
           AND t.deleted_at IS NULL
           AND UPPER(REPLACE(t.aeronave_modelo,'-',''))=?
           AND (i.aeronave_modelo IS NULL OR UPPER(REPLACE(i.aeronave_modelo,'-',''))=?)
-          AND (? IS NULL OR i.topico_id=?)
+          ${topicoFilter}
           AND EXISTS (
             SELECT 1
             FROM conhecimento_ativo_item_fontes jf
@@ -316,8 +502,7 @@ async function buscarCandidatos(
         ultimoQuestaoId,
         modelo.replace(/-/g, ''),
         modelo.replace(/-/g, ''),
-        topicoId,
-        topicoId,
+        ...topicoIds,
       )
       .all<CandidatoRow>();
 
@@ -546,11 +731,24 @@ async function garantirQuantidadeQuestoesDesafio(params: {
   if (atuais.length >= QUESTOES_POR_DESAFIO) return;
 
   const itensUsados = new Set(atuais.map((row) => row.item_id));
+  const topicosSelecionados =
+    desafio.topico_id == null
+      ? []
+      : await resolverTopicosDaSelecao({
+          db,
+          empresaId,
+          modelo: desafio.aeronave_modelo,
+          topicoId: desafio.topico_id,
+        });
   const candidatos = (
     await buscarCandidatos(db, empresaId, funcionarioId, desafio.aeronave_modelo, desafio.topico_id)
   ).filter((row) => !itensUsados.has(row.item_id));
   const faltantes = QUESTOES_POR_DESAFIO - atuais.length;
-  const selecionadas = selecionarPersonalizado(candidatos, faltantes, desafio.topico_id == null);
+  const selecionadas = selecionarPersonalizado(
+    candidatos,
+    faltantes,
+    desafio.topico_id == null || topicosSelecionados.length > 1,
+  );
 
   if (selecionadas.length < faltantes) {
     const error = new Error(
@@ -614,7 +812,10 @@ export async function gerarOuObterDesafio(params: {
     error.name = 'CONTEUDO_INSUFICIENTE';
     throw error;
   }
-  if (topicoId) await validarTopicoModelo({ db, empresaId, modelo, topicoId });
+  const topicosSelecionados =
+    topicoId == null
+      ? []
+      : await resolverTopicosDaSelecao({ db, empresaId, modelo, topicoId });
 
   const periodo = periodoQuinzena();
   const existing = modoMisto
@@ -654,7 +855,11 @@ export async function gerarOuObterDesafio(params: {
   const numeroDesafioLegado = Math.min(numeroDesafio, DESAFIOS_RECOMENDADOS_POR_QUINZENA);
 
   const candidatos = await buscarCandidatos(db, empresaId, funcionarioId, modelo, topicoId);
-  const selecionadas = selecionarPersonalizado(candidatos, QUESTOES_POR_DESAFIO, topicoId == null);
+  const selecionadas = selecionarPersonalizado(
+    candidatos,
+    QUESTOES_POR_DESAFIO,
+    topicoId == null || topicosSelecionados.length > 1,
+  );
 
   if (selecionadas.length < QUESTOES_POR_DESAFIO) {
     const error = new Error(
@@ -1313,26 +1518,107 @@ export async function mapaConhecimento(params: {
       aprendendo: number;
     }>();
 
-  return (result.results || []).map((row) => {
+  const agrupados = new Map<
+    string,
+    {
+      topico_id: number;
+      nome: string;
+      aeronave_modelo: string | null;
+      itens: number;
+      questoes: number;
+      respondidas: number;
+      consolidados: number;
+      em_reforco: number;
+      aprendendo: number;
+      itens_avaliados: number;
+      itens_novos: number;
+      itens_vencidos: number;
+      itens_frageis: number;
+      retencao_ponderada: number;
+      prioridade_ponderada: number;
+    }
+  >();
+
+  for (const row of result.results || []) {
+    const modelo = row.aeronave_modelo
+      ? normalizarModeloConhecimento(row.aeronave_modelo)
+      : null;
+    const macro = modelo ? macroAreaDoTopico(modelo, row.nome) : null;
+    const chave = macro
+      ? modelo + '|macro|' + macro.key
+      : (modelo || '') + '|topico|' + row.topico_id;
+    const stats = diagnostico.get(Number(row.topico_id));
+    const itens = Number(row.itens || 0);
     const questoes = Number(row.questoes || 0);
     const respondidas = Number(row.respondidas || 0);
-    const stats = diagnostico.get(Number(row.topico_id));
-    return {
-      ...row,
-      aeronave_modelo: row.aeronave_modelo
-        ? normalizarModeloConhecimento(row.aeronave_modelo)
-        : null,
-      questoes,
-      respondidas,
-      questoes_restantes: Math.max(0, questoes - respondidas),
-      desafios_estimados: Math.ceil(questoes / QUESTOES_POR_DESAFIO),
-      disponivel_para_desafio: Number(row.itens || 0) >= QUESTOES_POR_DESAFIO,
-      retencao_media: stats?.retencaoMedia ?? null,
-      prioridade_revisao: stats?.prioridadeRevisao ?? 0,
-      itens_avaliados: stats?.itensAvaliados ?? 0,
-      itens_novos: stats?.itensNovos ?? Number(row.itens || 0),
-      itens_vencidos: stats?.itensVencidos ?? 0,
-      itens_frageis: stats?.itensFrageis ?? 0,
-    };
-  });
+    const avaliados = stats?.itensAvaliados ?? 0;
+
+    const atual =
+      agrupados.get(chave) ||
+      {
+        topico_id: Number(row.topico_id),
+        nome: macro?.nome || row.nome,
+        aeronave_modelo: modelo,
+        itens: 0,
+        questoes: 0,
+        respondidas: 0,
+        consolidados: 0,
+        em_reforco: 0,
+        aprendendo: 0,
+        itens_avaliados: 0,
+        itens_novos: 0,
+        itens_vencidos: 0,
+        itens_frageis: 0,
+        retencao_ponderada: 0,
+        prioridade_ponderada: 0,
+      };
+
+    atual.topico_id = Math.min(atual.topico_id, Number(row.topico_id));
+    atual.itens += itens;
+    atual.questoes += questoes;
+    atual.respondidas += respondidas;
+    atual.consolidados += Number(row.consolidados || 0);
+    atual.em_reforco += Number(row.em_reforco || 0);
+    atual.aprendendo += Number(row.aprendendo || 0);
+    atual.itens_avaliados += avaliados;
+    atual.itens_novos += stats?.itensNovos ?? itens;
+    atual.itens_vencidos += stats?.itensVencidos ?? 0;
+    atual.itens_frageis += stats?.itensFrageis ?? 0;
+    if (stats?.retencaoMedia != null && avaliados > 0) {
+      atual.retencao_ponderada += stats.retencaoMedia * avaliados;
+    }
+    atual.prioridade_ponderada += (stats?.prioridadeRevisao ?? 0) * itens;
+    agrupados.set(chave, atual);
+  }
+
+  return Array.from(agrupados.values())
+    .map((row) => ({
+      topico_id: row.topico_id,
+      nome: row.nome,
+      aeronave_modelo: row.aeronave_modelo,
+      itens: row.itens,
+      questoes: row.questoes,
+      respondidas: row.respondidas,
+      questoes_restantes: Math.max(0, row.questoes - row.respondidas),
+      desafios_estimados: Math.ceil(row.questoes / QUESTOES_POR_DESAFIO),
+      disponivel_para_desafio: row.itens >= QUESTOES_POR_DESAFIO,
+      consolidados: row.consolidados,
+      em_reforco: row.em_reforco,
+      aprendendo: row.aprendendo,
+      retencao_media:
+        row.itens_avaliados > 0
+          ? Math.round(row.retencao_ponderada / row.itens_avaliados)
+          : null,
+      prioridade_revisao:
+        row.itens > 0 ? Math.round(row.prioridade_ponderada / row.itens) : 0,
+      itens_avaliados: row.itens_avaliados,
+      itens_novos: row.itens_novos,
+      itens_vencidos: row.itens_vencidos,
+      itens_frageis: row.itens_frageis,
+    }))
+    .sort(
+      (a, b) =>
+        String(a.aeronave_modelo || '').localeCompare(String(b.aeronave_modelo || '')) ||
+        a.nome.localeCompare(b.nome),
+    );
 }
