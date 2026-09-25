@@ -215,6 +215,7 @@ async function enrichWithEffectiveness<T extends { tripulante_id: string }>(
   options?: {
     startDate?: string;
     endDate?: string;
+    empresaId?: number;
   },
 ): Promise<
   (T & {
@@ -227,6 +228,7 @@ async function enrichWithEffectiveness<T extends { tripulante_id: string }>(
 
   const startDate = options?.startDate ?? null;
   const endDate = options?.endDate ?? null;
+  const empresaId = options?.empresaId ?? null;
 
   try {
     const effRows = await db
@@ -239,6 +241,18 @@ async function enrichWithEffectiveness<T extends { tripulante_id: string }>(
          JOIN frms_jornada j ON j.id = f.jornada_id AND j.deleted_at IS NULL
          WHERE f.deleted_at IS NULL
            AND f.effectiveness_pct IS NOT NULL
+           AND EXISTS (
+             SELECT 1
+             FROM frms_fadiga_checkin ch
+             WHERE ch.funcionario_id = CAST(j.tripulante_id AS INTEGER)
+               AND ch.data_checkin = j.data
+               AND ch.deleted_at IS NULL
+               AND ch.jornada_inicio_prevista IS NOT NULL
+               AND ch.wake_time IS NOT NULL
+               AND ch.horas_sono > 0
+               AND ch.horas_sono <= 24
+               AND (? IS NULL OR ch.empresa_id = ?)
+           )
            AND (? IS NULL OR j.data >= ?)
            AND (? IS NULL OR j.data <= ?)
            AND f.id = (
@@ -247,6 +261,18 @@ async function enrichWithEffectiveness<T extends { tripulante_id: string }>(
              JOIN frms_jornada j2 ON j2.id = f2.jornada_id AND j2.deleted_at IS NULL
              WHERE f2.deleted_at IS NULL
                AND f2.effectiveness_pct IS NOT NULL
+               AND EXISTS (
+                 SELECT 1
+                 FROM frms_fadiga_checkin ch2
+                 WHERE ch2.funcionario_id = CAST(j2.tripulante_id AS INTEGER)
+                   AND ch2.data_checkin = j2.data
+                   AND ch2.deleted_at IS NULL
+                   AND ch2.jornada_inicio_prevista IS NOT NULL
+                   AND ch2.wake_time IS NOT NULL
+                   AND ch2.horas_sono > 0
+                   AND ch2.horas_sono <= 24
+                   AND (? IS NULL OR ch2.empresa_id = ?)
+               )
                AND (? IS NULL OR j2.data >= ?)
                AND (? IS NULL OR j2.data <= ?)
                AND j2.tripulante_id = j.tripulante_id
@@ -254,7 +280,20 @@ async function enrichWithEffectiveness<T extends { tripulante_id: string }>(
              LIMIT 1
            )`,
       )
-      .bind(startDate, startDate, endDate, endDate, startDate, startDate, endDate, endDate)
+      .bind(
+        empresaId,
+        empresaId,
+        startDate,
+        startDate,
+        endDate,
+        endDate,
+        empresaId,
+        empresaId,
+        startDate,
+        startDate,
+        endDate,
+        endDate,
+      )
       .all();
 
     const effMap = new Map<
@@ -760,6 +799,7 @@ export async function buscarAcumuloFrota(
     const comEffectiveness = await enrichWithEffectiveness(db, resultadosMes, {
       startDate: periodoInicio,
       endDate: periodoFim,
+      empresaId,
     });
     const comContextoOperacional = await enrichWithOperationalContext(db, comEffectiveness, {
       startDate: periodoInicio,

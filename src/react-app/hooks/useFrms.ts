@@ -498,7 +498,7 @@ export interface FrmsCompareDiasResponse {
     nivel: string;
     fatores: Array<{ codigo: string; impacto_pts: number; motivo_simples: string }>;
   };
-  diferenca_pts: number;
+  diferenca_pts: number | null;
   fatores_pioraram: string[];
   fatores_melhoraram: string[];
   analise_delta: string;
@@ -539,7 +539,7 @@ export interface FrmsSimulacaoResponse {
     nivel: string | null;
     fatores: Record<string, number>;
   };
-  diferenca_pts: number;
+  diferenca_pts: number | null;
   conclusao: string;
 }
 

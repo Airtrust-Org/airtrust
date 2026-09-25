@@ -20,6 +20,24 @@ function normalizeClock(value: unknown): string | null {
   return text;
 }
 
+export function maskFrmsEffectivenessRead<T extends Record<string, unknown>>(
+  row: T,
+  available: boolean,
+): T {
+  if (available) return row;
+  return {
+    ...row,
+    effectiveness_pct: null,
+    effectiveness_nivel: null,
+    effectiveness_componentes_json: null,
+    fator_basica_pct: null,
+    tempo_abaixo_limiar_min: null,
+    hora_despertar_estimada: null,
+    hora_inicio_sono_estimado: null,
+    duracao_sono_efetiva_min: null,
+  };
+}
+
 export function buildFrmsDayCheckinExplanationState(params: {
   checkinRow: FrmsDayCheckinRow | null;
   row: Record<string, unknown>;
@@ -99,4 +117,37 @@ export function buildFrmsDayCheckinExplanationState(params: {
       twentyEightDays: complete ? params.worst28d : unavailableWindow,
     },
   };
+}
+
+export async function buildFrmsJustificationCheckinState(params: {
+  db: D1Database;
+  empresaId: number | null;
+  funcionarioId: number;
+  data: string;
+  row: Record<string, unknown>;
+}) {
+  const checkinRow = await params.db
+    .prepare(
+      `SELECT id, wake_time, jornada_inicio_prevista, horas_sono
+         FROM frms_fadiga_checkin
+        WHERE empresa_id = ?
+          AND funcionario_id = ?
+          AND data_checkin = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(params.empresaId, params.funcionarioId, params.data)
+    .first<FrmsDayCheckinRow>()
+    .catch(() => null);
+  const unavailableWindow: FrmsTraceWindowWorstLike = {
+    available: false,
+    worstDay: null,
+    worstEffectivenessPct: null,
+  };
+  return buildFrmsDayCheckinExplanationState({
+    checkinRow,
+    row: params.row,
+    worst7d: unavailableWindow,
+    worst28d: unavailableWindow,
+  });
 }
