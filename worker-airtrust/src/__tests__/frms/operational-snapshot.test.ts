@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildFrmsOperationalSnapshot,
+  calculateMorningEffectivenessProjection,
   type BuildOperationalSnapshotInput,
   type FrmsOperationalSnapshotItem,
   listFrmsOperationalSnapshot,
@@ -154,6 +155,40 @@ const FUNCIONARIO_10 = {
   base: 'SBJR',
   aeronave: 'AW139',
 };
+
+describe('morning effectiveness projection', () => {
+  it('calcula efetividade na apresentação a partir de check-in completo sem inventar jornada futura', () => {
+    const projected = calculateMorningEffectivenessProjection({
+      dataOperacional: '2026-09-25',
+      funcionarioId: 10,
+      presentationTime: '06:30',
+      wakeTime: '05:00',
+      sleepHours: 7,
+      limites: LIMITES_DEFAULT,
+      diaPeriodo: 2,
+      totalDiasPeriodo: 14,
+    });
+
+    expect(projected).not.toBeNull();
+    expect(projected?.source).toBe('PROJETADA_APRESENTACAO');
+    expect(projected?.effectiveness_pct).toEqual(expect.any(Number));
+    expect(projected?.effectiveness_pct).toBeGreaterThanOrEqual(0);
+    expect(projected?.effectiveness_pct).toBeLessThanOrEqual(100);
+  });
+
+  it('permanece fail-closed quando o check-in não tem sono/despertar/apresentação completos', () => {
+    expect(
+      calculateMorningEffectivenessProjection({
+        dataOperacional: '2026-09-25',
+        funcionarioId: 10,
+        presentationTime: '06:30',
+        wakeTime: null,
+        sleepHours: 7,
+        limites: LIMITES_DEFAULT,
+      }),
+    ).toBeNull();
+  });
+});
 
 describe('frms operational snapshot builder', () => {
   it('1) escalado com check-in real e fatorização', () => {

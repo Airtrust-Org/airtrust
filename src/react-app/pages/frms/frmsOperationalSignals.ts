@@ -146,9 +146,13 @@ export function resolveEffectivenessSignal(
 
   const value = formatPercent(effectiveness);
   const hasLowAlert = item.alertas.includes('EFETIVIDADE_BAIXA');
+  const projectionDetail =
+    item.effectiveness_source === 'PROJETADA_APRESENTACAO'
+      ? 'Projetada para a hora de apresentação com base no check-in; carga operacional futura ainda não incorporada.'
+      : undefined;
 
   if (item.estado_operacional === 'CRITICO_VIOLACAO' || item.snapshot_status === 'CRITICO') {
-    return { ...base, value, tone: 'critical' };
+    return { ...base, value, tone: 'critical', detail: projectionDetail };
   }
 
   if (hasLowAlert) {
@@ -156,11 +160,13 @@ export function resolveEffectivenessSignal(
       ...base,
       value,
       tone: 'warning',
-      detail: 'Efetividade cognitiva reduzida',
+      detail: projectionDetail
+        ? `Efetividade cognitiva reduzida. ${projectionDetail}`
+        : 'Efetividade cognitiva reduzida',
     };
   }
 
-  return { ...base, value, tone: 'ok' };
+  return { ...base, value, tone: 'ok', detail: projectionDetail };
 }
 
 /** Sinal 4 — Prontidão (classificação autoritativa opcional). */

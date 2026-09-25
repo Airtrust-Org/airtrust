@@ -1,5 +1,6 @@
-import type { Origem } from './types';
+import type { Origem, FrmsJornada, LimitesMap } from './types';
 import { calcularDiaDoCiclo } from './db-service-jornadas';
+import { calcEffectiveness, calcFatorizacao } from './calculos';
 import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
 import {
   buildFrmsFortnightIndicatorMap,
@@ -61,8 +62,9 @@ export interface FrmsOperationalSnapshotItem {
   status_operacional_checkin: string | null;
 
   effectiveness_pct: number | null;
+  effectiveness_source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'AUSENTE';
   nivel_fadiga_calculado: string | null;
-  fatorizacao_status: 'CALCULADA' | 'AUSENTE';
+  fatorizacao_status: 'CALCULADA' | 'PROJETADA' | 'AUSENTE';
 
   sleep_data_source: 'REAL' | 'ESTIMADO' | 'AUSENTE';
   wake_data_source: 'REAL' | 'ESTIMADO' | 'AUSENTE';
@@ -172,6 +174,7 @@ interface EffectivenessSnapshotRow {
   funcionario_id: number;
   effectiveness_pct: number | null;
   effectiveness_nivel: string | null;
+  source?: 'REAL' | 'PROJETADA_APRESENTACAO';
   dia_periodo_embarcado?: number | null;
   total_dias_periodo?: number | null;
 }
@@ -195,6 +198,122 @@ function normalizeText(value: unknown): string | null {
 function asNumber(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clockToMinutes(value: string | null | undefined): number | null {
+  if (!value || !/^\d{2}:\d{2}$/.test(value)) return null;
+  const [hours, minutes] = value.split(':').map(Number);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function minutesToClock(value: number): string {
+  const normalized = ((Math.round(value) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(normalized / 60)).padStart(2, '0')}:${String(normalized % 60).padStart(2, '0')}`;
+}
+
+function projectSleepStart(wakeTime: string, sleepHours: number): string | null {
+  const wake = clockToMinutes(wakeTime);
+  if (wake == null || !Number.isFinite(sleepHours) || sleepHours <= 0 || sleepHours > 24) return null;
+  return minutesToClock(wake - Math.round(sleepHours * 60));
+}
+
+export function calculateMorningEffectivenessProjection(input: {
+  dataOperacional: string;
+  funcionarioId: number;
+  presentationTime: string | null | undefined;
+  wakeTime: string | null | undefined;
+  sleepHours: number | null | undefined;
+  limites: LimitesMap;
+  diaPeriodo?: number | null;
+  totalDiasPeriodo?: number | null;
+}): EffectivenessSnapshotRow | null {
+  const presentation = normalizeText(input.presentationTime);
+  const wakeTime = normalizeText(input.wakeTime);
+  const sleepHours = Number(input.sleepHours ?? 0);
+  if (!presentation || !wakeTime || !Number.isFinite(sleepHours) || sleepHours <= 0 || sleepHours > 24) return null;
+  if (clockToMinutes(presentation) == null || clockToMinutes(wakeTime) == null) return null;
+
+  const sleepStart = projectSleepStart(wakeTime, sleepHours);
+  if (!sleepStart) return null;
+  const [year, month] = input.dataOperacional.split('-').map(Number);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+  const jornada = {
+    id: `projection-${input.dataOperacional}::${input.funcionarioId}`,
+    empresa_id: 0,
+    tripulante_id: input.funcionarioId,
+    data: input.dataOperacional,
+    status: 'ES',
+    hora_apresentacao: presentation,
+    hora_termino: presentation,
+    duracao_jornada_minutos: 0,
+    horas_voo_minutos: 0,
+    hora_dormiu: sleepStart,
+    hora_acordou: wakeTime,
+    origem: 'MANUAL',
+    tipo_base: 'HOME',
+    tripulacao_aumentada: 0,
+    aclimatado: 1,
+  } as FrmsJornada;
+
+  const fatorizacao = calcFatorizacao({
+    jornada,
+    repousoAnteriorMin: null,
+    limites: input.limites,
+    diasDoMes: daysInMonth,
+    diaDoCiclo: input.diaPeriodo ?? null,
+  });
+  const effectiveness = calcEffectiveness(fatorizacao, input.limites, {
+    hora_apresentacao: presentation,
+    hora_termino: presentation,
+    hora_dormiu: sleepStart,
+    hora_acordou: wakeTime,
+    dia_periodo_embarcado: input.diaPeriodo ?? null,
+    total_dias_periodo: input.totalDiasPeriodo ?? null,
+  });
+
+  return {
+    data_operacional: input.dataOperacional,
+    funcionario_id: input.funcionarioId,
+    effectiveness_pct: effectiveness.effectiveness_pct,
+    effectiveness_nivel: effectiveness.nivel,
+    source: 'PROJETADA_APRESENTACAO',
+    dia_periodo_embarcado: input.diaPeriodo ?? null,
+    total_dias_periodo: input.totalDiasPeriodo ?? null,
+  };
+}
+
+function appendMorningEffectivenessProjections(
+  rows: OperationalSnapshotRows,
+  limites: LimitesMap,
+  anchorByKey: Map<string, { dia: number; total: number }>,
+): void {
+  const existing = new Set(
+    rows.effectiveness
+      .filter((row) => row.effectiveness_pct != null && Number.isFinite(Number(row.effectiveness_pct)))
+      .map((row) => `${row.data_operacional}::${Number(row.funcionario_id)}`),
+  );
+
+  for (const checkin of rows.checkins) {
+    const key = `${checkin.data_operacional}::${Number(checkin.funcionario_id)}`;
+    if (existing.has(key)) continue;
+    const anchor = anchorByKey.get(key);
+    const projected = calculateMorningEffectivenessProjection({
+      dataOperacional: checkin.data_operacional,
+      funcionarioId: Number(checkin.funcionario_id),
+      presentationTime: checkin.hora_apresentacao,
+      wakeTime: checkin.wake_time,
+      sleepHours: checkin.horas_sono,
+      limites,
+      diaPeriodo: anchor?.dia ?? null,
+      totalDiasPeriodo: anchor?.total ?? null,
+    });
+    if (!projected) continue;
+    rows.effectiveness.push(projected);
+    existing.add(key);
+  }
 }
 
 function alertPriority(status: FrmsOperationalSnapshotStatus): number {
@@ -540,6 +659,12 @@ export function buildFrmsOperationalSnapshot(
       effectivenessPct != null && Number.isFinite(effectivenessPct)
         ? Number(effectivenessPct.toFixed(1))
         : null;
+    const effectivenessSource: FrmsOperationalSnapshotItem['effectiveness_source'] =
+      effectivenessPctNormalized == null
+        ? 'AUSENTE'
+        : efetividade?.source === 'PROJETADA_APRESENTACAO'
+          ? 'PROJETADA_APRESENTACAO'
+          : 'REAL';
 
     const nivelFadigaCalculado = completeDailyCheckin
       ? normalizeText(efetividade?.effectiveness_nivel) ?? normalizeText(checkin?.nivel_fadiga)
@@ -639,9 +764,14 @@ export function buildFrmsOperationalSnapshot(
       status_operacional_checkin: normalizeText(checkin?.status_operacional),
 
       effectiveness_pct: effectivenessPctNormalized,
+      effectiveness_source: effectivenessSource,
       nivel_fadiga_calculado: nivelFadigaCalculado,
       fatorizacao_status:
-        teveJornada && effectivenessPctNormalized != null ? 'CALCULADA' : 'AUSENTE',
+        effectivenessPctNormalized == null
+          ? 'AUSENTE'
+          : effectivenessSource === 'PROJETADA_APRESENTACAO'
+            ? 'PROJETADA'
+            : 'CALCULADA',
 
       sleep_data_source: sleepDataSource,
       wake_data_source: wakeDataSource,
@@ -1132,6 +1262,11 @@ export async function listFrmsOperationalSnapshot(
       filteredMissingFuncionario: missingFuncionario,
     });
   }
+
+  // Para a decisão pré-voo da manhã, um check-in completo já permite calcular
+  // a efetividade cognitiva projetada no instante da apresentação. Isso é
+  // read-only e não transforma uma jornada planejada em jornada realizada.
+  appendMorningEffectivenessProjections(contextRows, limites, resolvedAnchorByKey);
 
   // Snapshot montado sobre TODO o contexto. Só `funcionario_id` (tenant-safe) pode
   // restringir aqui — os filtros de apresentação (status/base/aeronave/

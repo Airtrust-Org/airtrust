@@ -7,7 +7,7 @@ export function hasIncompleteOperationalData(item: FrmsOperationalSnapshotItem):
   return (
     item.snapshot_status === 'INCOMPLETO' ||
     item.estado_operacional === 'NAO_AVALIADO' ||
-    item.fatorizacao_status !== 'CALCULADA' ||
+    item.fatorizacao_status === 'AUSENTE' ||
     item.jornada_data_source === 'AUSENTE' ||
     item.jornada_data_source === 'INCONSISTENTE' ||
     (item.escalado && item.checkin_status !== 'RECEBIDO') ||
@@ -43,7 +43,7 @@ export function classifyOperationalItem(item: FrmsOperationalSnapshotItem): Frms
 
 export function trustedEffectiveness(item: FrmsOperationalSnapshotItem): number | null {
   if (
-    item.fatorizacao_status !== 'CALCULADA' ||
+    item.fatorizacao_status === 'AUSENTE' ||
     item.snapshot_status === 'INCOMPLETO' ||
     item.jornada_data_source === 'AUSENTE' ||
     item.jornada_data_source === 'INCONSISTENTE' ||
@@ -63,6 +63,7 @@ export function operationalConfidence(item: FrmsOperationalSnapshotItem): FrmsDa
     item.sleep_data_source === 'ESTIMADO' ||
     item.wake_data_source === 'ESTIMADO' ||
     item.jornada_data_source === 'ESTIMADO' ||
+    item.effectiveness_source === 'PROJETADA_APRESENTACAO' ||
     item.escala_source === 'MANUAL';
 
   return estimated ? 'MEDIA' : 'ALTA';
