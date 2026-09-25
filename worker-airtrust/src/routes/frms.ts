@@ -849,6 +849,18 @@ async function countDiasCriticosConsecutivos(
        AND UPPER(COALESCE(NULLIF(TRIM(p.status), ''), 'ATIVO')) = 'ATIVO'
        AND (? IS NULL OR p.empresa_id = ?)
        AND fj.deleted_at IS NULL
+       AND EXISTS (
+         SELECT 1
+           FROM frms_fadiga_checkin ch
+          WHERE ch.empresa_id = p.empresa_id
+            AND ch.funcionario_id = p.id
+            AND ch.data_checkin = j.data
+            AND ch.deleted_at IS NULL
+            AND ch.jornada_inicio_prevista IS NOT NULL
+            AND ch.wake_time IS NOT NULL
+            AND ch.horas_sono > 0
+            AND ch.horas_sono <= 24
+       )
        AND j.data <= ?
      ORDER BY j.data DESC
      LIMIT 45`,
@@ -1056,6 +1068,18 @@ async function findWorstEffectivenessInWindow(
          AND (? IS NULL OR p.empresa_id = ?)
          AND fj.deleted_at IS NULL
          AND fj.effectiveness_pct IS NOT NULL
+         AND EXISTS (
+           SELECT 1
+             FROM frms_fadiga_checkin ch
+            WHERE ch.empresa_id = p.empresa_id
+              AND ch.funcionario_id = p.id
+              AND ch.data_checkin = j.data
+              AND ch.deleted_at IS NULL
+              AND ch.jornada_inicio_prevista IS NOT NULL
+              AND ch.wake_time IS NOT NULL
+              AND ch.horas_sono > 0
+              AND ch.horas_sono <= 24
+         )
          AND j.data >= date(?, '-' || ? || ' days')
          AND j.data <= ?
        ORDER BY fj.effectiveness_pct ASC, j.data DESC, fj.created_at DESC
@@ -2434,8 +2458,37 @@ frmsRoutes.get(
             WHEN j.hora_apresentacao IS NOT NULL AND j.hora_termino IS NOT NULL THEN 'ESTIMADO'
             ELSE 'AUSENTE'
           END AS jornada_boundary_source,
-          j.hora_apresentacao, j.hora_termino, j.duracao_jornada_minutos, j.horas_voo_minutos, fj.effectiveness_pct,
-          fj.effectiveness_nivel,
+          j.hora_apresentacao, j.hora_termino, j.duracao_jornada_minutos, j.horas_voo_minutos,
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+                FROM frms_fadiga_checkin ch
+               WHERE ch.empresa_id = p.empresa_id
+                 AND ch.funcionario_id = p.id
+                 AND ch.data_checkin = j.data
+                 AND ch.deleted_at IS NULL
+                 AND ch.jornada_inicio_prevista IS NOT NULL
+                 AND ch.wake_time IS NOT NULL
+                 AND ch.horas_sono > 0
+                 AND ch.horas_sono <= 24
+            ) THEN fj.effectiveness_pct
+            ELSE NULL
+          END AS effectiveness_pct,
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+                FROM frms_fadiga_checkin ch
+               WHERE ch.empresa_id = p.empresa_id
+                 AND ch.funcionario_id = p.id
+                 AND ch.data_checkin = j.data
+                 AND ch.deleted_at IS NULL
+                 AND ch.jornada_inicio_prevista IS NOT NULL
+                 AND ch.wake_time IS NOT NULL
+                 AND ch.horas_sono > 0
+                 AND ch.horas_sono <= 24
+            ) THEN fj.effectiveness_nivel
+            ELSE NULL
+          END AS effectiveness_nivel,
           fj.effectiveness_componentes_json,
           fj.tempo_abaixo_limiar_min,
           fj.total_fatorizado_jornada,
@@ -2751,9 +2804,51 @@ frmsRoutes.get(
             j.hora_acordou,
             j.fonte_sono,
             fj.processado_com_bug,
-            fj.effectiveness_pct,
-            fj.effectiveness_nivel,
-            fj.effectiveness_componentes_json,
+            CASE
+              WHEN EXISTS (
+                SELECT 1
+                  FROM frms_fadiga_checkin ch
+                 WHERE ch.empresa_id = p.empresa_id
+                   AND ch.funcionario_id = p.id
+                   AND ch.data_checkin = j.data
+                   AND ch.deleted_at IS NULL
+                   AND ch.jornada_inicio_prevista IS NOT NULL
+                   AND ch.wake_time IS NOT NULL
+                   AND ch.horas_sono > 0
+                   AND ch.horas_sono <= 24
+              ) THEN fj.effectiveness_pct
+              ELSE NULL
+            END AS effectiveness_pct,
+            CASE
+              WHEN EXISTS (
+                SELECT 1
+                  FROM frms_fadiga_checkin ch
+                 WHERE ch.empresa_id = p.empresa_id
+                   AND ch.funcionario_id = p.id
+                   AND ch.data_checkin = j.data
+                   AND ch.deleted_at IS NULL
+                   AND ch.jornada_inicio_prevista IS NOT NULL
+                   AND ch.wake_time IS NOT NULL
+                   AND ch.horas_sono > 0
+                   AND ch.horas_sono <= 24
+              ) THEN fj.effectiveness_nivel
+              ELSE NULL
+            END AS effectiveness_nivel,
+            CASE
+              WHEN EXISTS (
+                SELECT 1
+                  FROM frms_fadiga_checkin ch
+                 WHERE ch.empresa_id = p.empresa_id
+                   AND ch.funcionario_id = p.id
+                   AND ch.data_checkin = j.data
+                   AND ch.deleted_at IS NULL
+                   AND ch.jornada_inicio_prevista IS NOT NULL
+                   AND ch.wake_time IS NOT NULL
+                   AND ch.horas_sono > 0
+                   AND ch.horas_sono <= 24
+              ) THEN fj.effectiveness_componentes_json
+              ELSE NULL
+            END AS effectiveness_componentes_json,
             fj.tempo_abaixo_limiar_min,
             fj.hora_despertar_estimada,
             fj.hora_inicio_sono_estimado,
