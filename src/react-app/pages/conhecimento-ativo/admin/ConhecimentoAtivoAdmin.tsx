@@ -388,29 +388,38 @@ function ItensTab() {
               {modelos.map((modelo) => {
                 const pendentes = pendentesPorModelo.get(modelo) || 0;
                 return (
-                <button
-                  key={modelo}
-                  type="button"
-                  disabled={aprovarTudo.isPending || pendentes === 0}
-                  onClick={async () => {
-                    if (!window.confirm(`Confirma aprovar todo o conteúdo de ${modelo}? As fontes serão tornadas vigentes e os itens e questões serão aprovados.`)) return;
-                    try {
-                      const result = await aprovarTudo.mutateAsync(modelo);
-                      toast.success(
-                        `${result.aeronave_modelo}: ${result.itens_aprovados} item(ns) e ${result.questoes_aprovadas} questão(ões) aprovados.`,
-                      );
-                    } catch (error) {
-                      toast.error(error instanceof Error ? error.message : 'Não foi possível aprovar o conteúdo em lote.');
-                    }
-                  }}
-                  className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {aprovarTudo.isPending
-                    ? 'Aprovando…'
-                    : pendentes === 0
-                      ? `Tudo aprovado — ${modelo}`
-                      : `Aprovar tudo — ${modelo} (${pendentes})`}
-                </button>
+                  <button
+                    key={modelo}
+                    type="button"
+                    disabled={aprovarTudo.isPending || pendentes === 0}
+                    onClick={async () => {
+                      if (
+                        !window.confirm(
+                          `Confirma aprovar todo o conteúdo de ${modelo}? As fontes serão tornadas vigentes e os itens e questões serão aprovados.`,
+                        )
+                      )
+                        return;
+                      try {
+                        const result = await aprovarTudo.mutateAsync(modelo);
+                        toast.success(
+                          `${result.aeronave_modelo}: ${result.itens_aprovados} item(ns) e ${result.questoes_aprovadas} questão(ões) aprovados.`,
+                        );
+                      } catch (error) {
+                        toast.error(
+                          error instanceof Error
+                            ? error.message
+                            : 'Não foi possível aprovar o conteúdo em lote.',
+                        );
+                      }
+                    }}
+                    className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {aprovarTudo.isPending
+                      ? 'Aprovando…'
+                      : pendentes === 0
+                        ? `Tudo aprovado — ${modelo}`
+                        : `Aprovar tudo — ${modelo} (${pendentes})`}
+                  </button>
                 );
               })}
             </div>
