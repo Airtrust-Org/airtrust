@@ -162,15 +162,24 @@ export async function loadFrmsActivityRows(
   ).bind(empresaId, startDate, endDate).all<ActivityDbRow>();
 
   const simulatorSessions = await db.prepare(
-    `SELECT sa.data AS data_operacional,
+    `WITH simulator_people AS (
+       SELECT id AS sessao_id, funcionario_id FROM simulador_agendamentos WHERE funcionario_id IS NOT NULL
+       UNION
+       SELECT id AS sessao_id, instrutor_id AS funcionario_id FROM simulador_agendamentos WHERE instrutor_id IS NOT NULL
+       UNION
+       SELECT id AS sessao_id, checador_id AS funcionario_id FROM simulador_agendamentos WHERE checador_id IS NOT NULL
+       UNION
+       SELECT id AS sessao_id, examinador_id AS funcionario_id FROM simulador_agendamentos WHERE examinador_id IS NOT NULL
+     )
+     SELECT sa.data AS data_operacional,
             CAST(sp.funcionario_id AS INTEGER) AS funcionario_id,
             'SIMULADOR' AS activity_type,
             sa.hora_inicio, sa.hora_fim,
-            COALESCE(NULLIF(sa.nome, ''), NULLIF(sa.tipo_sessao, ''), 'Sessao de simulador') AS titulo,
+            COALESCE(NULLIF(sa.nome, ''), NULLIF(sa.tipo_sessao, ''), 'Sessão de simulador') AS titulo,
             sa.id AS source_id,
             'SIM:' || sa.id || ':' || sp.funcionario_id AS dedupe_key
        FROM simulador_agendamentos sa
-       JOIN sessoes_participantes sp ON sp.sessao_id = sa.id AND sp.deleted_at IS NULL
+       JOIN simulator_people sp ON sp.sessao_id = sa.id
        JOIN funcionarios f ON f.id = sp.funcionario_id AND f.empresa_id = sa.empresa_id AND f.deleted_at IS NULL
       WHERE sa.empresa_id = ?
         AND sa.deleted_at IS NULL

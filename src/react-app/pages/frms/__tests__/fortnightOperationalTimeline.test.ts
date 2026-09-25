@@ -157,6 +157,45 @@ describe('buildFortnightTimeline', () => {
     });
   });
 
+  it('mostra simulador como atividade e soma suas horas ao HV FRMS sem alterar HV real', () => {
+    const result = buildFortnightTimeline(
+      [
+        buildSnapshotItem({
+          data_operacional: '2026-06-16',
+          teve_jornada: false,
+          teve_atividade_frms: true,
+          atividade_principal: 'SIMULADOR',
+          atividade_frms_minutos: 180,
+          simulador_minutos: 180,
+          treinamento_minutos: 0,
+          horas_voo_minutos: 0,
+          horas_voo_frms_minutos: 180,
+          atividade_hora_inicio: '23:00',
+          atividade_hora_fim: '02:00',
+          atividade_rotulos: ['Emergências AW139'],
+          hora_apresentacao: null,
+          hora_termino: '02:00',
+        }),
+      ],
+      {
+        periodStart: '2026-06-16',
+        periodEnd: '2026-06-16',
+      },
+    );
+
+    expect(result.days[0]).toMatchObject({
+      teve_atividade_frms: true,
+      atividade_principal: 'SIMULADOR',
+      atividade_min: 180,
+      voo_min: 180,
+      voo_real_min: 0,
+      simulador_min: 180,
+      hora_apresentacao: '23:00',
+    });
+    expect(result.summary.cumulative_flight_min).toBe(180);
+    expect(result.summary.jornadas_days).toBe(1);
+  });
+
   it('resume padrões históricos sem criar novo critério de risco', () => {
     const result = buildFortnightTimeline(
       [

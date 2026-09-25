@@ -42,7 +42,7 @@ export interface FrmsFortnightModifier {
 }
 
 export interface FrmsFortnightLimiteReferencia {
-  tipo: 'QUINZENA_DUTY' | 'DUTY_168H' | 'VOO_168H';
+  tipo: 'QUINZENA_DUTY' | 'DUTY_168H' | 'VOO_168H' | 'VOO_168H_FRMS';
   valor_atual: number;
   valor_limite: number;
   pct_atingido: number;
@@ -60,6 +60,12 @@ export interface FrmsFortnightIndicator {
   duty_time_168h_min: number | null;
   horas_voo_periodo_min: number | null;
   horas_voo_168h_min: number | null;
+  atividade_frms_periodo_min?: number | null;
+  horas_voo_frms_periodo_min?: number | null;
+  simulador_periodo_min?: number | null;
+  treinamento_periodo_min?: number | null;
+  dias_atividade_periodo?: number | null;
+  dias_consecutivos_com_atividade?: number | null;
   jornadas_periodo: number | null;
   apresentacoes_antes_0600: number | null;
   apresentacoes_antes_0700: number | null;
@@ -98,8 +104,17 @@ export interface FrmsOperationalSnapshotItem {
   hora_apresentacao: string | null;
   hora_termino: string | null;
   horas_voo_minutos: number;
+  horas_voo_frms_minutos?: number;
+  simulador_minutos?: number;
+  treinamento_minutos?: number;
+  atividade_frms_minutos?: number;
+  atividade_principal?: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'MISTA' | 'SEM_DADO';
+  atividade_hora_inicio?: string | null;
+  atividade_hora_fim?: string | null;
+  atividade_rotulos?: string[];
   duracao_jornada_minutos: number;
   teve_jornada: boolean;
+  teve_atividade_frms?: boolean;
 
   checkin_status: 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL';
   checkin_horario: string | null;
@@ -111,7 +126,7 @@ export interface FrmsOperationalSnapshotItem {
   status_operacional_checkin: string | null;
 
   effectiveness_pct: number | null;
-  effectiveness_source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'AUSENTE';
+  effectiveness_source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'PROJETADA_ATIVIDADE' | 'AUSENTE';
   nivel_fadiga_calculado: string | null;
   fatorizacao_status: 'CALCULADA' | 'PROJETADA' | 'AUSENTE';
 

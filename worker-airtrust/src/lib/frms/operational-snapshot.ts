@@ -54,17 +54,17 @@ export interface FrmsOperationalSnapshotItem {
   hora_apresentacao: string | null;
   hora_termino: string | null;
   horas_voo_minutos: number;
-  horas_voo_frms_minutos: number;
-  simulador_minutos: number;
-  treinamento_minutos: number;
-  atividade_frms_minutos: number;
-  atividade_principal: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'MISTA' | 'SEM_DADO';
-  atividade_hora_inicio: string | null;
-  atividade_hora_fim: string | null;
-  atividade_rotulos: string[];
+  horas_voo_frms_minutos?: number;
+  simulador_minutos?: number;
+  treinamento_minutos?: number;
+  atividade_frms_minutos?: number;
+  atividade_principal?: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'MISTA' | 'SEM_DADO';
+  atividade_hora_inicio?: string | null;
+  atividade_hora_fim?: string | null;
+  atividade_rotulos?: string[];
   duracao_jornada_minutos: number;
   teve_jornada: boolean;
-  teve_atividade_frms: boolean;
+  teve_atividade_frms?: boolean;
 
   checkin_status: 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL';
   checkin_horario: string | null;
@@ -76,7 +76,7 @@ export interface FrmsOperationalSnapshotItem {
   status_operacional_checkin: string | null;
 
   effectiveness_pct: number | null;
-  effectiveness_source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'AUSENTE';
+  effectiveness_source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'PROJETADA_ATIVIDADE' | 'AUSENTE';
   nivel_fadiga_calculado: string | null;
   fatorizacao_status: 'CALCULADA' | 'PROJETADA' | 'AUSENTE';
 
@@ -142,7 +142,7 @@ export interface BuildOperationalSnapshotInput {
     jornadas: JornadaSnapshotRow[];
     checkins: CheckinSnapshotRow[];
     effectiveness: EffectivenessSnapshotRow[];
-    activities: FrmsActivitySnapshotRow[];
+    activities?: FrmsActivitySnapshotRow[];
     funcionarios: FuncionarioSnapshotRow[];
   };
   filters?: FrmsOperationalSnapshotFilters;
@@ -189,7 +189,7 @@ interface EffectivenessSnapshotRow {
   funcionario_id: number;
   effectiveness_pct: number | null;
   effectiveness_nivel: string | null;
-  source?: 'REAL' | 'PROJETADA_APRESENTACAO';
+  source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'PROJETADA_ATIVIDADE';
   dia_periodo_embarcado?: number | null;
   total_dias_periodo?: number | null;
 }
@@ -311,7 +311,7 @@ export function calculateMorningEffectivenessProjection(input: {
     funcionario_id: input.funcionarioId,
     effectiveness_pct: effectiveness.effectiveness_pct,
     effectiveness_nivel: effectiveness.nivel,
-    source: 'PROJETADA_APRESENTACAO',
+    source: plannedDutyMinutes > 0 || frmsFlightEquivalentMinutes > 0 ? 'PROJETADA_ATIVIDADE' : 'PROJETADA_APRESENTACAO',
     dia_periodo_embarcado: input.diaPeriodo ?? null,
     total_dias_periodo: input.totalDiasPeriodo ?? null,
   };
@@ -630,7 +630,7 @@ export function buildFrmsOperationalSnapshot(
     effectivenessMap.set(key, row);
   }
 
-  for (const row of input.rows.activities) {
+  for (const row of input.rows.activities ?? []) {
     const key = `${row.data_operacional}::${asNumber(row.funcionario_id)}`;
     const current = activityMap.get(key) ?? [];
     current.push(row);
@@ -721,9 +721,11 @@ export function buildFrmsOperationalSnapshot(
     const effectivenessSource: FrmsOperationalSnapshotItem['effectiveness_source'] =
       effectivenessPctNormalized == null
         ? 'AUSENTE'
-        : efetividade?.source === 'PROJETADA_APRESENTACAO'
-          ? 'PROJETADA_APRESENTACAO'
-          : 'REAL';
+        : efetividade?.source === 'PROJETADA_ATIVIDADE'
+          ? 'PROJETADA_ATIVIDADE'
+          : efetividade?.source === 'PROJETADA_APRESENTACAO'
+            ? 'PROJETADA_APRESENTACAO'
+            : 'REAL';
 
     const nivelFadigaCalculado = completeDailyCheckin
       ? normalizeText(efetividade?.effectiveness_nivel) ?? normalizeText(checkin?.nivel_fadiga)
@@ -731,7 +733,7 @@ export function buildFrmsOperationalSnapshot(
 
     const alertas: FrmsOperationalSnapshotAlertCode[] = [];
 
-    if (escalado && !checkin) {
+    if ((escalado || teveAtividadeFrms) && !checkin) {
       alertas.push('CHECKIN_PENDENTE');
     }
 
@@ -837,7 +839,8 @@ export function buildFrmsOperationalSnapshot(
       fatorizacao_status:
         effectivenessPctNormalized == null
           ? 'AUSENTE'
-          : effectivenessSource === 'PROJETADA_APRESENTACAO'
+          : effectivenessSource === 'PROJETADA_APRESENTACAO' ||
+              effectivenessSource === 'PROJETADA_ATIVIDADE'
             ? 'PROJETADA'
             : 'CALCULADA',
 
@@ -1425,7 +1428,7 @@ export async function listFrmsOperationalSnapshot(
         sleep_data_source: item.sleep_data_source,
         wake_data_source: item.wake_data_source,
         jornada_data_source: item.jornada_data_source,
-        hora_apresentacao: item.hora_apresentacao,
+        hora_apresentacao: item.hora_apresentacao ?? item.atividade_hora_inicio ?? null,
         hora_termino: item.hora_termino,
         duracao_jornada_minutos: item.duracao_jornada_minutos,
         horas_voo_minutos: item.horas_voo_minutos,
@@ -1459,6 +1462,10 @@ export async function listFrmsOperationalSnapshot(
     windowEnd: contextEnd,
     today: params.hoje,
     policy: operationalContext.fortnightPolicy,
+    flightLimit168hMinutes:
+      Number.isFinite(Number(limites.HV_7_DIAS_HORAS)) && Number(limites.HV_7_DIAS_HORAS) > 0
+        ? Number(limites.HV_7_DIAS_HORAS) * 60
+        : undefined,
   });
 
   const itemsWithFortnight = snapshot.items.map((item) => {

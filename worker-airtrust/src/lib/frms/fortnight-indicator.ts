@@ -62,12 +62,12 @@ export interface FrmsFortnightIndicator {
   duty_time_168h_min: number | null;
   horas_voo_periodo_min: number | null;
   horas_voo_168h_min: number | null;
-  atividade_frms_periodo_min: number | null;
-  horas_voo_frms_periodo_min: number | null;
-  simulador_periodo_min: number | null;
-  treinamento_periodo_min: number | null;
-  dias_atividade_periodo: number | null;
-  dias_consecutivos_com_atividade: number | null;
+  atividade_frms_periodo_min?: number | null;
+  horas_voo_frms_periodo_min?: number | null;
+  simulador_periodo_min?: number | null;
+  treinamento_periodo_min?: number | null;
+  dias_atividade_periodo?: number | null;
+  dias_consecutivos_com_atividade?: number | null;
   jornadas_periodo: number | null;
   apresentacoes_antes_0600: number | null;
   apresentacoes_antes_0700: number | null;
@@ -123,6 +123,8 @@ export interface BuildFrmsFortnightIndicatorInput {
   windowEnd: string;
   today?: string;
   policy?: FrmsFortnightPolicy;
+  /** Governed FRMS HV limit for the rolling 168 h window. No hard-coded duty surrogate. */
+  flightLimit168hMinutes?: number;
 }
 
 /** Immutable compatibility policy; production callers must supply a resolved revision. */
@@ -180,9 +182,6 @@ interface PeriodAnchor {
   dia_periodo: number;
   total_dias_periodo: number;
 }
-
-const TECHNICAL_DEFAULT_DAILY_FLIGHT_LIMIT_MINUTES = 8 * 60;
-const TECHNICAL_DEFAULT_168H_FLIGHT_LIMIT_MINUTES = 7 * TECHNICAL_DEFAULT_DAILY_FLIGHT_LIMIT_MINUTES;
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
@@ -296,14 +295,15 @@ function resolveMinRestBetweenJornadas(items: FrmsFortnightIndicatorItemSeed[]):
 
 function buildLimitReference(input: {
   rolling168h: { vooFrmsMin: number };
-}): FrmsFortnightLimiteReferencia {
+  flightLimit168hMinutes?: number;
+}): FrmsFortnightLimiteReferencia | null {
+  const limit = Number(input.flightLimit168hMinutes ?? 0);
+  if (!Number.isFinite(limit) || limit <= 0) return null;
   return {
     tipo: 'VOO_168H_FRMS',
     valor_atual: input.rolling168h.vooFrmsMin,
-    valor_limite: TECHNICAL_DEFAULT_168H_FLIGHT_LIMIT_MINUTES,
-    pct_atingido: round1(
-      (input.rolling168h.vooFrmsMin / TECHNICAL_DEFAULT_168H_FLIGHT_LIMIT_MINUTES) * 100,
-    ),
+    valor_limite: limit,
+    pct_atingido: round1((input.rolling168h.vooFrmsMin / limit) * 100),
   };
 }
 
@@ -329,8 +329,8 @@ function resolveTendencia(
   if (diasConsecutivosComJornada >= policy.consecutiveAttentionDays) return 'CRESCENTE';
   if (!previous) return currentActive ? 'ESTAVEL' : 'INDETERMINADA';
 
-  const currentDuty = currentActive ? Math.max(0, current.atividade_frms_minutos ?? current.duracao_jornada_minutos || 0) : 0;
-  const previousDuty = Math.max(0, previous.atividade_frms_minutos ?? previous.duracao_jornada_minutos || 0);
+  const currentDuty = currentActive ? Math.max(0, (current.atividade_frms_minutos ?? current.duracao_jornada_minutos) || 0) : 0;
+  const previousDuty = Math.max(0, (previous.atividade_frms_minutos ?? previous.duracao_jornada_minutos) || 0);
   if (currentDuty >= previousDuty + 120) return 'CRESCENTE';
   if (currentDuty <= Math.max(0, previousDuty - 120)) return 'REDUZINDO';
   return 'ESTAVEL';
@@ -372,6 +372,7 @@ function buildModifiers(input: {
   diasAtividadePeriodo: number;
   atividadeFrmsPeriodoMin: number;
   rolling168h: { dutyMin: number; vooMin: number; vooFrmsMin: number };
+  flightLimit168hMinutes?: number;
   periodHasCritical: boolean;
   periodHasAttention: boolean;
   totalRecoveryCreditPoints: number;
@@ -505,10 +506,15 @@ function buildModifiers(input: {
       impacto_score: input.policy.impactLowEffectiveness,
     });
   }
-  if (input.rolling168h.vooFrmsMin >= TECHNICAL_DEFAULT_168H_FLIGHT_LIMIT_MINUTES * input.policy.rollingDutyPct) {
+  const flightLimit168hMinutes = Number(input.flightLimit168hMinutes ?? 0);
+  if (
+    Number.isFinite(flightLimit168hMinutes) &&
+    flightLimit168hMinutes > 0 &&
+    input.rolling168h.vooFrmsMin >= flightLimit168hMinutes * input.policy.rollingDutyPct
+  ) {
     agravantes.push({
       codigo: 'HV_FRMS_168H_ELEVADA',
-      descricao: 'HV FRMS equivalente em 168h acima da faixa de referência operacional.',
+      descricao: 'HV FRMS equivalente em 168h acima da faixa de referência configurada.',
       impacto_score: input.policy.impactRollingDuty,
     });
   }
@@ -590,17 +596,20 @@ function resolveMitigacaoFromStatus(input: {
 function buildExplanation(input: {
   status: FrmsFortnightStatus;
   score: number;
-  limitReference: FrmsFortnightLimiteReferencia;
+  limitReference: FrmsFortnightLimiteReferencia | null;
   atenuadores: FrmsFortnightModifier[];
   agravantes: FrmsFortnightModifier[];
   tendencia: FrmsFortnightTendencia;
 }): string {
   const leadingAggravant = input.agravantes[0]?.codigo ?? 'SEM_AGRAVANTE_RELEVANTE';
   const leadingAttenuator = input.atenuadores[0]?.codigo ?? 'SEM_ATENUADOR_RELEVANTE';
+  const referenceText = input.limitReference
+    ? `HV FRMS em 168h: ${input.limitReference.pct_atingido}% da referência configurada.`
+    : 'Sem referência configurada de HV FRMS em 168h; score composto apenas pelos fatores observados.';
   return [
-    `Quinzena ${input.status} com score acumulado ${input.score}.`,
-    `Referencia predominante: ${input.limitReference.tipo} em ${input.limitReference.pct_atingido}% do limite tecnico.`,
-    `Tendencia ${input.tendencia}; principal agravante ${leadingAggravant}; principal atenuador ${leadingAttenuator}.`,
+    `Período ${input.status} com score acumulado ${input.score}.`,
+    referenceText,
+    `Tendência ${input.tendencia}; principal agravante ${leadingAggravant}; principal atenuador ${leadingAttenuator}.`,
   ].join(' ');
 }
 
@@ -663,7 +672,7 @@ function buildRolling168h(
     dutyMin: relevant.reduce((sum, item) => sum + Math.max(0, item.duracao_jornada_minutos || 0), 0),
     vooMin: relevant.reduce((sum, item) => sum + Math.max(0, item.horas_voo_minutos || 0), 0),
     vooFrmsMin: relevant.reduce(
-      (sum, item) => sum + Math.max(0, item.horas_voo_frms_minutos ?? item.horas_voo_minutos || 0),
+      (sum, item) => sum + Math.max(0, (item.horas_voo_frms_minutos ?? item.horas_voo_minutos) || 0),
       0,
     ),
   };
@@ -741,11 +750,11 @@ export function buildFrmsFortnightIndicatorMap(
       0,
     );
     const atividadeFrmsPeriodoMin = scoped.reduce(
-      (sum, entry) => sum + Math.max(0, entry.atividade_frms_minutos ?? entry.duracao_jornada_minutos || 0),
+      (sum, entry) => sum + Math.max(0, (entry.atividade_frms_minutos ?? entry.duracao_jornada_minutos) || 0),
       0,
     );
     const horasVooFrmsPeriodoMin = scoped.reduce(
-      (sum, entry) => sum + Math.max(0, entry.horas_voo_frms_minutos ?? entry.horas_voo_minutos || 0),
+      (sum, entry) => sum + Math.max(0, (entry.horas_voo_frms_minutos ?? entry.horas_voo_minutos) || 0),
       0,
     );
     const simuladorPeriodoMin = scoped.reduce(
@@ -797,7 +806,10 @@ export function buildFrmsFortnightIndicatorMap(
       0,
     ));
 
-    const limitReference = buildLimitReference({ rolling168h });
+    const limitReference = buildLimitReference({
+      rolling168h,
+      flightLimit168hMinutes: input.flightLimit168hMinutes,
+    });
     const tendencia = resolveTendencia(scoped, item.data_operacional, diasConsecutivosComJornada, policy);
     const { atenuadores, agravantes } = buildModifiers({
       scoped,
@@ -812,6 +824,7 @@ export function buildFrmsFortnightIndicatorMap(
       diasAtividadePeriodo,
       atividadeFrmsPeriodoMin,
       rolling168h,
+      flightLimit168hMinutes: input.flightLimit168hMinutes,
       periodHasCritical,
       periodHasAttention,
       totalRecoveryCreditPoints,
@@ -821,8 +834,10 @@ export function buildFrmsFortnightIndicatorMap(
       agravantes.reduce((sum, modifier) => sum + modifier.impacto_score, 0) +
       atenuadores.reduce((sum, modifier) => sum + modifier.impacto_score, 0);
     const tendencyImpact = tendencia === 'CRESCENTE' ? policy.trendIncreasingImpact : tendencia === 'REDUZINDO' ? policy.trendReducingImpact : 0;
+    const loadImpact =
+      limitReference != null ? limitReference.pct_atingido * policy.scoreLimitWeight : 0;
     const scoreAcumulado = round1(
-      clamp(limitReference.pct_atingido * policy.scoreLimitWeight + modifierImpact + tendencyImpact, 0, 100),
+      clamp(loadImpact + modifierImpact + tendencyImpact, 0, 100),
     );
 
     const limitationNotes: string[] = [

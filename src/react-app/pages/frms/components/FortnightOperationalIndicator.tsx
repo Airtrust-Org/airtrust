@@ -129,7 +129,7 @@ function FortnightTimelinePanel({
         <>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[11px] text-slate-500">Dias com jornada</p>
+              <p className="text-[11px] text-slate-500">Dias com atividade</p>
               <p className="text-sm font-semibold text-slate-900">{timeline.summary.jornadas_days}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
@@ -173,11 +173,11 @@ function FortnightTimelinePanel({
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Sequência de jornada</p>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">Sequência de atividade</p>
                 <p className="text-xs font-semibold text-slate-800">
-                  {indicator?.dias_consecutivos_com_jornada == null
+                  {(indicator?.dias_consecutivos_com_atividade ?? indicator?.dias_consecutivos_com_jornada) == null
                     ? 'Não confirmada'
-                    : `${indicator.dias_consecutivos_com_jornada} dia(s) consecutivo(s)`}
+                    : `${indicator?.dias_consecutivos_com_atividade ?? indicator?.dias_consecutivos_com_jornada} dia(s) consecutivo(s)`}
                 </p>
               </div>
               <div>
@@ -202,7 +202,7 @@ function FortnightTimelinePanel({
                   <th className="px-2 py-2 text-left">Dia</th>
                   <th className="px-2 py-2 text-left">Atividade / jornada</th>
                   <th className="px-2 py-2 text-left">Sono / KSS</th>
-                  <th className="px-2 py-2 text-left">HV do dia</th>
+                  <th className="px-2 py-2 text-left">HV FRMS</th>
                   <th className="px-2 py-2 text-left">Recuperação</th>
                   <th className="px-2 py-2 text-left">Efetividade</th>
                   <th className="px-2 py-2 text-left">Situação / ação</th>
@@ -225,17 +225,32 @@ function FortnightTimelinePanel({
                       <td className="px-2 py-2 text-slate-700">
                         {!day.has_snapshot_data ? (
                           <span className="text-slate-500">Sem dado confirmado</span>
-                        ) : day.teve_jornada ? (
+                        ) : day.teve_atividade_frms ? (
                           <>
-                            <div>{formatFortnightMinutes(day.jornada_min)}</div>
+                            <div className="font-medium text-slate-800">
+                              {day.atividade_principal === 'SIMULADOR'
+                                ? 'Simulador'
+                                : day.atividade_principal === 'TREINAMENTO'
+                                  ? 'Treinamento'
+                                  : day.atividade_principal === 'MISTA'
+                                    ? 'Atividade mista'
+                                    : 'Voo'}
+                              {' · '}
+                              {formatFortnightMinutes(day.atividade_min)}
+                            </div>
                             <div className="text-[11px] text-slate-500">
                               {day.hora_apresentacao?.slice(0, 5) || '—'} → {day.hora_termino?.slice(0, 5) || '—'}
                             </div>
+                            {day.atividade_rotulos[0] ? (
+                              <div className="mt-0.5 max-w-[220px] truncate text-[11px] text-slate-500">
+                                {day.atividade_rotulos[0]}
+                              </div>
+                            ) : null}
                           </>
                         ) : activity ? (
                           <span className="font-medium text-slate-700">{activity}</span>
                         ) : (
-                          <span className="text-slate-500">Sem jornada confirmada</span>
+                          <span className="text-slate-500">Sem atividade confirmada</span>
                         )}
                       </td>
                       <td className="px-2 py-2 text-slate-700">
@@ -243,7 +258,16 @@ function FortnightTimelinePanel({
                         <div className="text-[11px] text-slate-500">KSS {day.kss_score ?? '—'}</div>
                       </td>
                       <td className="px-2 py-2 text-slate-700">
-                        {day.voo_min > 0 ? formatFortnightMinutes(day.voo_min) : '—'}
+                        {day.voo_min > 0 ? (
+                          <>
+                            <div>{formatFortnightMinutes(day.voo_min)}</div>
+                            {day.simulador_min > 0 ? (
+                              <div className="text-[11px] text-slate-500">
+                                voo {formatFortnightMinutes(day.voo_real_min)} · sim {formatFortnightMinutes(day.simulador_min)}
+                              </div>
+                            ) : null}
+                          </>
+                        ) : '—'}
                       </td>
                       <td className="px-2 py-2">
                         {day.recovery_credit_points > 0 ? (
