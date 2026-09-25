@@ -13,7 +13,7 @@ import {
   type FadigaScoreInput,
 } from '../lib/frms/fadiga-score';
 import { FrmsParameterResolutionError, resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
-import { sincronizarCheckinComFrms } from '../lib/frms/fadiga-frms-sync';
+import { EmbeddedReadinessValidationError, persistReadinessAndSyncFrms } from './frms-fadiga-checkin-readiness-sync';
 import { buildFratSuggestion } from '../lib/frms/fadiga-frat-bridge';
 import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
 import {
@@ -27,10 +27,8 @@ import {
 } from './frms-fadiga-checkin.schema';
 import { validateCheckinPayloadCompleteness } from './frms-fadiga-checkin-validation';
 import { getFadigaConfig as getConfig, updateFadigaDutyConfig } from './frms-fadiga-config';
-
 const router = new Hono<AppEnv>();
 router.use('*', auth());
-
 type FrmsContext = Context<AppEnv>;
 
 type DailyRiskLevel = 'normal' | 'attention' | 'critical' | 'unfit_for_duty';
@@ -1224,18 +1222,20 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         );
       }
     }
-
-    const sync = await sincronizarCheckinComFrms(
-      c.env.DB,
-      checkinId,
-      funcionarioId,
-      dataCheckin,
-      input.horasSono24h,
-      empresaId,
-      input.horaAcordou,
-      input.jornadaInicioPrevista,
-    );
-
+    let sync;
+    try {
+      ({ sync } = await persistReadinessAndSyncFrms({
+        db: c.env.DB, empresaId, funcionarioId, userId: userId || null, checkinId, dataCheckin,
+        kssScore: input.kssScore, sleepHours: input.horasSono24h, wakeTime: input.horaAcordou,
+        presentationTime: input.jornadaInicioPrevista, readiness: parsed.data.readiness,
+        isNewCheckin: !existing?.id, now,
+      }));
+    } catch (error) {
+      if (error instanceof EmbeddedReadinessValidationError) {
+        return c.json({ success: false, error: error.code }, 400);
+      }
+      throw error;
+    }
     const eventType = existing?.id ? 'CHECKIN_ATUALIZADO' : 'CHECKIN_CRIADO';
     await c.env.DB.prepare(
       `INSERT INTO frms_fadiga_evento (id, empresa_id, checkin_id, tipo, payload_json, created_at)

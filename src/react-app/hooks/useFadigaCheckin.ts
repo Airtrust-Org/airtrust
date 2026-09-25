@@ -46,6 +46,18 @@ export interface CheckinFormData {
   jornada_inicio_prevista?: string;
   aceite_termos?: true;
   aceite_privacidade?: true;
+  readiness?: {
+    duration_ms: number;
+    trials: Array<{
+      sequence: number;
+      scheduledAtMs: number;
+      stimulusAtMs: number;
+      responseAtMs: number | null;
+      reactionTimeMs: number | null;
+      outcome: 'response' | 'lapse' | 'false_start' | 'missed';
+    }>;
+    protocol_version?: string;
+  };
 }
 
 export interface FadigaHistoricoResponse {

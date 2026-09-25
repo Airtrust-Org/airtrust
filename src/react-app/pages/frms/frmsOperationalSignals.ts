@@ -199,6 +199,14 @@ export function resolveReadinessSignal(
       };
     case null:
     default:
+      if (item.checkin_status === 'RECEBIDO') {
+        return {
+          ...base,
+          value: 'Resultado não registrado',
+          tone: 'unknown',
+          detail: 'Check-in recebido, mas não há avaliação de prontidão persistida para este dia.',
+        };
+      }
       return { ...base, value: 'Não avaliado', tone: 'unknown' };
   }
 }

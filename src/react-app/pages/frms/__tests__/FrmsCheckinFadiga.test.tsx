@@ -481,10 +481,10 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
 
     await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(readinessMutateAsyncMock).toHaveBeenCalledTimes(1));
+    expect(readinessMutateAsyncMock).not.toHaveBeenCalled();
 
     const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
-    const readinessPayload = readinessMutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
+    const readinessPayload = payload.readiness as Record<string, unknown>;
     expect(readinessPayload.duration_ms).toBe(180000);
     expect(readinessPayload.trials).toHaveLength(1);
 

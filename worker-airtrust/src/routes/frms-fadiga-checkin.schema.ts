@@ -1,4 +1,25 @@
 import { z } from 'zod';
+import { READINESS_PROTOCOL, READINESS_PROTOCOL_VERSIONS } from '../lib/frms/readiness';
+
+
+const ReadinessTrialSchema = z.object({
+  sequence: z.number().int().positive(),
+  scheduledAtMs: z.number().int().nonnegative(),
+  stimulusAtMs: z.number().int().min(-1),
+  responseAtMs: z.number().int().nonnegative().nullable(),
+  reactionTimeMs: z.number().int().nonnegative().nullable(),
+  outcome: z.enum(['response', 'lapse', 'false_start', 'missed']),
+});
+
+const EmbeddedReadinessSchema = z.object({
+  duration_ms: z
+    .number()
+    .int()
+    .min(READINESS_PROTOCOL.defaultDurationMs - READINESS_PROTOCOL.allowedDurationDriftMs)
+    .max(READINESS_PROTOCOL.defaultDurationMs + READINESS_PROTOCOL.allowedDurationDriftMs),
+  trials: z.array(ReadinessTrialSchema).min(READINESS_PROTOCOL.minimumTrials).max(300),
+  protocol_version: z.enum(READINESS_PROTOCOL_VERSIONS).optional(),
+});
 
 export const SintomasSchema = z
   .object({
@@ -63,6 +84,7 @@ export const CheckinCreateSchema = z
       .optional(),
     aceite_termos: z.literal(true).optional(),
     aceite_privacidade: z.literal(true).optional(),
+    readiness: EmbeddedReadinessSchema.optional(),
   })
   .refine((data) => {
     const temHoras = typeof data.horas_sono_24h === 'number';
