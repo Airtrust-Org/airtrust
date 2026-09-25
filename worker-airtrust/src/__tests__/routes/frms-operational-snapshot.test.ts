@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { Env } from '../../types';
 
 const listSnapshotMock = vi.fn();
+const syncCheckinMock = vi.fn();
 
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: any, next: () => Promise<void>) => {
@@ -22,6 +23,10 @@ vi.mock('../../lib/frms/operational-snapshot', () => ({
   listFrmsOperationalSnapshot: (...args: unknown[]) => listSnapshotMock(...args),
 }));
 
+vi.mock('../../lib/frms/fadiga-frms-sync', () => ({
+  sincronizarCheckinComFrms: (...args: unknown[]) => syncCheckinMock(...args),
+}));
+
 import snapshotRoutes from '../../routes/frms-operational-snapshot';
 
 function createApp() {
@@ -30,7 +35,10 @@ function createApp() {
   return app;
 }
 
-function createDb(resolveFuncionarioId: number | null) {
+function createDb(
+  resolveFuncionarioId: number | null,
+  reconcileRows: Array<Record<string, unknown>> = [],
+) {
   return {
     prepare: vi.fn((query: string) => {
       if (query.includes('FROM usuarios u') && query.includes('JOIN funcionarios f')) {
@@ -53,6 +61,18 @@ function createDb(resolveFuncionarioId: number | null) {
         };
       }
 
+      if (query.includes('FROM frms_fadiga_checkin ch')) {
+        let binds: unknown[] = [];
+        return {
+          bind: (...args: unknown[]) => {
+            binds = args;
+            return {
+              all: async () => ({ results: reconcileRows, binds }),
+            };
+          },
+        };
+      }
+
       throw new Error(`Unhandled query: ${query}`);
     }),
   } as unknown as D1Database;
@@ -61,6 +81,12 @@ function createDb(resolveFuncionarioId: number | null) {
 describe('GET /frms/operational-snapshot', () => {
   beforeEach(() => {
     listSnapshotMock.mockReset();
+    syncCheckinMock.mockReset();
+    syncCheckinMock.mockResolvedValue({
+      sincronizado: true,
+      jornada_id: 'jornada-auto',
+      effectiveness_nova: 88.4,
+    });
   });
 
   it('7) mantém isolamento por empresa_id', async () => {
@@ -205,6 +231,95 @@ describe('GET /frms/operational-snapshot', () => {
       success: true,
       meta: { scope: 'self', forced_funcionario_id: 11 },
     });
+  });
+
+  it('reconcilia check-in completo sem jornada no mesmo tenant', async () => {
+    const candidate = {
+      id: 'checkin-6',
+      funcionario_id: 6,
+      horas_sono: 6,
+      wake_time: '05:30',
+      jornada_inicio_prevista: '06:30',
+    };
+    const db = createDb(null, [candidate]);
+    const app = createApp();
+    const response = await app.fetch(
+      new Request('http://localhost/frms/operational-snapshot/reconcile-checkins', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': 'manager',
+          'x-empresa-id': '6',
+          'x-user-id': '41',
+        },
+        body: JSON.stringify({ data_operacional: '2026-09-24', funcionario_ids: [6] }),
+      }),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { requested: 1, eligible: 1, reconciled: 1, unresolved: 0 },
+      meta: { scope: 'team' },
+    });
+    expect(syncCheckinMock).toHaveBeenCalledWith(
+      db,
+      'checkin-6',
+      6,
+      '2026-09-24',
+      6,
+      6,
+      '05:30',
+      '06:30',
+    );
+    const query = (db.prepare as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([sql]) => String(sql).includes('FROM frms_fadiga_checkin ch'),
+    )?.[0] as string;
+    expect(query).toContain('WHERE ch.empresa_id = ?');
+    expect(query).toContain('j.empresa_id = ch.empresa_id');
+    expect(query).toContain('NOT EXISTS');
+  });
+
+  it('bloqueia reconciliação cross-tenant/cross-user para role sem escopo de equipe', async () => {
+    const db = createDb(11, []);
+    const app = createApp();
+    const response = await app.fetch(
+      new Request('http://localhost/frms/operational-snapshot/reconcile-checkins', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-role': 'user',
+          'x-empresa-id': '7',
+          'x-user-id': '44',
+        },
+        body: JSON.stringify({ data_operacional: '2026-09-24', funcionario_ids: [999] }),
+      }),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(403);
+    expect(syncCheckinMock).not.toHaveBeenCalled();
+  });
+
+  it('rejeita payload inválido de reconciliação antes de tocar o banco', async () => {
+    const db = createDb(null, []);
+    const app = createApp();
+    const response = await app.fetch(
+      new Request('http://localhost/frms/operational-snapshot/reconcile-checkins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-role': 'manager', 'x-empresa-id': '6' },
+        body: JSON.stringify({ data_operacional: '24/09/2026', funcionario_ids: [] }),
+      }),
+      { DB: db } as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(400);
+    expect(db.prepare).not.toHaveBeenCalled();
+    expect(syncCheckinMock).not.toHaveBeenCalled();
   });
 
   it('9) falha explicitamente em vez de fingir fila vazia quando o perfil regulatório não está configurado', async () => {

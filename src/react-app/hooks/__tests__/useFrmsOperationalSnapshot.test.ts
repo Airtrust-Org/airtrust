@@ -138,6 +138,79 @@ describe('useFrmsOperationalSnapshot', () => {
     expect(fetchWithAuthMock).toHaveBeenCalledTimes(2);
   });
 
+  it('reconcilia automaticamente check-in completo sem jornada e refaz o snapshot uma única vez', async () => {
+    fetchWithAuthMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: [
+            {
+              funcionario_id: 6,
+              data_operacional: '2026-09-24',
+              checkin_status: 'RECEBIDO',
+              teve_jornada: false,
+              hora_apresentacao: '06:30',
+              hora_acordar: '05:30',
+              horas_sono: 6,
+            },
+          ],
+          summary: { total_tripulantes: 1, sem_fatorizacao: 0 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: { requested: 1, eligible: 1, reconciled: 1, unresolved: 0 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: [
+            {
+              funcionario_id: 6,
+              data_operacional: '2026-09-24',
+              checkin_status: 'RECEBIDO',
+              teve_jornada: true,
+              hora_apresentacao: '06:30',
+              hora_acordar: '05:30',
+              horas_sono: 6,
+              effectiveness_pct: 88.4,
+            },
+          ],
+          summary: { total_tripulantes: 1, sem_fatorizacao: 0 },
+        }),
+      });
+
+    const { result } = renderHook(() =>
+      useFrmsOperationalSnapshot({
+        data_inicio: '2026-09-24',
+        data_fim: '2026-09-24',
+      }),
+    );
+
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledTimes(3));
+    expect(String(fetchWithAuthMock.mock.calls[1][0])).toContain(
+      '/frms/operational-snapshot/reconcile-checkins',
+    );
+    expect(fetchWithAuthMock.mock.calls[1][1]).toMatchObject({ method: 'POST' });
+    expect(JSON.parse(String(fetchWithAuthMock.mock.calls[1][1]?.body))).toEqual({
+      data_operacional: '2026-09-24',
+      funcionario_ids: [6],
+    });
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.data[0]?.teve_jornada).toBe(true);
+      expect(result.current.data[0]?.effectiveness_pct).toBe(88.4);
+    });
+  });
+
   it('preserves the last valid snapshot and lastUpdatedAt when refresh fails', async () => {
     fetchWithAuthMock
       .mockResolvedValueOnce({
