@@ -1,6 +1,11 @@
 import type { Origem, FrmsJornada, LimitesMap } from './types';
 import { calcularDiaDoCiclo } from './db-service-jornadas';
 import { calcEffectiveness, calcFatorizacao } from './calculos';
+import {
+  loadFrmsActivityRows,
+  summarizeFrmsActivities,
+  type FrmsActivitySnapshotRow,
+} from './activity-context';
 import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
 import {
   buildFrmsFortnightIndicatorMap,
