@@ -69,12 +69,19 @@ export default function ConhecimentoAtivoHome() {
   const itensDoModelo = topicosDoModelo.reduce((sum, topico) => sum + Number(topico.itens || 0), 0);
   const mistoDisponivel = itensDoModelo >= 10;
 
+  const idsTopicoSelecionado =
+    topicoSelecionado?.topico_ids?.length
+      ? topicoSelecionado.topico_ids
+      : topicoSelecionadoId != null
+        ? [topicoSelecionadoId]
+        : [];
+
   const pendenteSelecionado = desafios.find(
     (item) =>
       item.aeronave_modelo === modeloSelecionado &&
       (modoSelecionado === 'MISTO'
         ? item.topico_id == null
-        : item.topico_id === topicoSelecionadoId) &&
+        : item.topico_id != null && idsTopicoSelecionado.includes(item.topico_id)) &&
       (item.status === 'DISPONIVEL' || item.status === 'EM_ANDAMENTO'),
   );
 
@@ -480,7 +487,10 @@ export default function ConhecimentoAtivoHome() {
                       .reverse()
                       .map((desafio) => {
                         const nomeTopico = (mapa.data ?? []).find(
-                          (topico) => topico.topico_id === desafio.topico_id,
+                          (topico) =>
+                            topico.topico_id === desafio.topico_id ||
+                            (desafio.topico_id != null &&
+                              topico.topico_ids?.includes(desafio.topico_id)),
                         )?.nome;
                         return (
                           <button
