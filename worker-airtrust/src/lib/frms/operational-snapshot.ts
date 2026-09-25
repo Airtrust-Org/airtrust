@@ -55,6 +55,8 @@ export interface FrmsOperationalSnapshotItem {
   hora_termino: string | null;
   horas_voo_minutos: number;
   horas_voo_frms_minutos: number;
+  simulador_minutos: number;
+  treinamento_minutos: number;
   duracao_jornada_minutos: number;
   teve_jornada: boolean;
 
