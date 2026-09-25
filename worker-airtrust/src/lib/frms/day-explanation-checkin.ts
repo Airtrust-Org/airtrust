@@ -118,3 +118,36 @@ export function buildFrmsDayCheckinExplanationState(params: {
     },
   };
 }
+
+export async function buildFrmsJustificationCheckinState(params: {
+  db: D1Database;
+  empresaId: number | null;
+  funcionarioId: number;
+  data: string;
+  row: Record<string, unknown>;
+}) {
+  const checkinRow = await params.db
+    .prepare(
+      `SELECT id, wake_time, jornada_inicio_prevista, horas_sono
+         FROM frms_fadiga_checkin
+        WHERE empresa_id = ?
+          AND funcionario_id = ?
+          AND data_checkin = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(params.empresaId, params.funcionarioId, params.data)
+    .first<FrmsDayCheckinRow>()
+    .catch(() => null);
+  const unavailableWindow: FrmsTraceWindowWorstLike = {
+    available: false,
+    worstDay: null,
+    worstEffectivenessPct: null,
+  };
+  return buildFrmsDayCheckinExplanationState({
+    checkinRow,
+    row: params.row,
+    worst7d: unavailableWindow,
+    worst28d: unavailableWindow,
+  });
+}
