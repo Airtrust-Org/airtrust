@@ -242,6 +242,9 @@ export function calculateMorningEffectivenessProjection(input: {
   limites: LimitesMap;
   diaPeriodo?: number | null;
   totalDiasPeriodo?: number | null;
+  plannedEndTime?: string | null;
+  plannedActivityMinutes?: number | null;
+  frmsFlightEquivalentMinutes?: number | null;
 }): EffectivenessSnapshotRow | null {
   const presentation = normalizeText(input.presentationTime);
   const wakeTime = normalizeText(input.wakeTime);
