@@ -354,17 +354,28 @@ function ItensTab() {
   const itens = useConhecimentoItensAdmin();
   const aprovar = useAprovarItemConhecimento();
   const aprovarTudo = useAprovarTudoConhecimento();
-  const modelosPendentes = Array.from(
+  const modelos = Array.from(
     new Set(
       (itens.data || [])
-        .filter((item) => item.status !== 'APROVADO' && item.status !== 'ARQUIVADO' && item.aeronave_modelo)
+        .filter((item) => item.aeronave_modelo)
         .map((item) => item.aeronave_modelo as string),
     ),
   ).sort();
+  const pendentesPorModelo = new Map(
+    modelos.map((modelo) => [
+      modelo,
+      (itens.data || []).filter(
+        (item) =>
+          item.aeronave_modelo === modelo &&
+          item.status !== 'APROVADO' &&
+          item.status !== 'ARQUIVADO',
+      ).length,
+    ]),
+  );
 
   return (
     <ListShell title="Itens de conhecimento" icon={<BadgeCheck className="h-5 w-5" />}>
-      {modelosPendentes.length > 0 && (
+      {modelos.length > 0 && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -374,11 +385,13 @@ function ItensTab() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {modelosPendentes.map((modelo) => (
+              {modelos.map((modelo) => {
+                const pendentes = pendentesPorModelo.get(modelo) || 0;
+                return (
                 <button
                   key={modelo}
                   type="button"
-                  disabled={aprovarTudo.isPending}
+                  disabled={aprovarTudo.isPending || pendentes === 0}
                   onClick={async () => {
                     if (!window.confirm(`Confirma aprovar todo o conteúdo de ${modelo}? As fontes serão tornadas vigentes e os itens e questões serão aprovados.`)) return;
                     try {
@@ -392,9 +405,14 @@ function ItensTab() {
                   }}
                   className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {aprovarTudo.isPending ? 'Aprovando…' : `Aprovar tudo — ${modelo}`}
+                  {aprovarTudo.isPending
+                    ? 'Aprovando…'
+                    : pendentes === 0
+                      ? `Tudo aprovado — ${modelo}`
+                      : `Aprovar tudo — ${modelo} (${pendentes})`}
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
