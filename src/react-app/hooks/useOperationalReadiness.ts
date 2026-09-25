@@ -58,7 +58,7 @@ export type ReadinessToday = {
 export type ReadinessTeamItem = {
   funcionario_id: number;
   reference_date: string;
-  classification: ReadinessClassification;
+  classification: ReadinessClassification | null;
   baseline_sessions: number;
   baseline_ready: number;
   median_rt_delta_pct: number | null;
@@ -66,6 +66,7 @@ export type ReadinessTeamItem = {
   warning_signals_json: string | null;
   critical_signals_json: string | null;
   created_at: string;
+  assessment_missing: number;
 };
 
 type ReadinessEnvelope<T> = {

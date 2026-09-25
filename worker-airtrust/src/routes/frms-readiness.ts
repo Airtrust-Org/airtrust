@@ -181,28 +181,78 @@ router.get('/team', async (c) => {
     forcedFuncionarioId = funcionarioId;
   }
 
+  // Anchor the team view in the authoritative daily check-in instead of the
+  // readiness table alone. Historical builds persisted these in two requests;
+  // if the second request failed, the operator saw "check-in realizado" beside
+  // a readiness gap without knowing whether the test write had been lost.
   const fields = `
-    funcionario_id, reference_date, classification,
-    baseline_sessions, baseline_ready, median_rt_delta_pct, lapse_rate_delta,
-    warning_signals_json, critical_signals_json, created_at`;
+    CAST(ch.funcionario_id AS INTEGER) AS funcionario_id,
+    ch.data_checkin AS reference_date,
+    CASE
+      WHEN ra.id IS NOT NULL THEN ra.classification
+      WHEN (
+        SELECT COUNT(*)
+          FROM frms_readiness_assessment prior
+         WHERE prior.empresa_id = ch.empresa_id
+           AND prior.funcionario_id = ch.funcionario_id
+           AND prior.protocol_version = ?
+           AND prior.reference_date < ch.data_checkin
+           AND prior.deleted_at IS NULL
+      ) < ? THEN 'baseline_building'
+      ELSE NULL
+    END AS classification,
+    COALESCE(
+      ra.baseline_sessions,
+      (
+        SELECT COUNT(*)
+          FROM frms_readiness_assessment prior
+         WHERE prior.empresa_id = ch.empresa_id
+           AND prior.funcionario_id = ch.funcionario_id
+           AND prior.protocol_version = ?
+           AND prior.reference_date < ch.data_checkin
+           AND prior.deleted_at IS NULL
+      )
+    ) AS baseline_sessions,
+    COALESCE(ra.baseline_ready, CASE WHEN (
+      SELECT COUNT(*)
+        FROM frms_readiness_assessment prior
+       WHERE prior.empresa_id = ch.empresa_id
+         AND prior.funcionario_id = ch.funcionario_id
+         AND prior.protocol_version = ?
+         AND prior.reference_date < ch.data_checkin
+         AND prior.deleted_at IS NULL
+    ) >= ? THEN 1 ELSE 0 END) AS baseline_ready,
+    ra.median_rt_delta_pct,
+    ra.lapse_rate_delta,
+    ra.warning_signals_json,
+    ra.critical_signals_json,
+    COALESCE(ra.created_at, ch.created_at) AS created_at,
+    CASE WHEN ra.id IS NULL THEN 1 ELSE 0 END AS assessment_missing`;
+  const baseSql = `SELECT ${fields}
+       FROM frms_fadiga_checkin ch
+       LEFT JOIN frms_readiness_assessment ra
+         ON ra.empresa_id = ch.empresa_id
+        AND ra.funcionario_id = ch.funcionario_id
+        AND ra.reference_date = ch.data_checkin
+        AND ra.deleted_at IS NULL
+      WHERE ch.empresa_id = ?
+        AND ch.data_checkin = ?
+        AND ch.deleted_at IS NULL`;
+  const commonBinds = [
+    READINESS_PROTOCOL.version,
+    READINESS_PROTOCOL.minimumBaselineSessions,
+    READINESS_PROTOCOL.version,
+    READINESS_PROTOCOL.version,
+    READINESS_PROTOCOL.minimumBaselineSessions,
+    empresaId,
+    referenceDate,
+  ] as const;
   const statement = forcedFuncionarioId
-    ? c.env.DB.prepare(
-        `SELECT ${fields}
-           FROM frms_readiness_assessment
-          WHERE empresa_id = ?
-            AND reference_date = ?
-            AND funcionario_id = ?
-            AND deleted_at IS NULL
-          ORDER BY funcionario_id ASC`,
-      ).bind(empresaId, referenceDate, forcedFuncionarioId)
-    : c.env.DB.prepare(
-        `SELECT ${fields}
-           FROM frms_readiness_assessment
-          WHERE empresa_id = ?
-            AND reference_date = ?
-            AND deleted_at IS NULL
-          ORDER BY funcionario_id ASC`,
-      ).bind(empresaId, referenceDate);
+    ? c.env.DB.prepare(`${baseSql} AND ch.funcionario_id = ? ORDER BY ch.funcionario_id ASC`).bind(
+        ...commonBinds,
+        forcedFuncionarioId,
+      )
+    : c.env.DB.prepare(`${baseSql} ORDER BY ch.funcionario_id ASC`).bind(...commonBinds);
 
   const result = await statement.all<Record<string, unknown>>();
   return c.json({

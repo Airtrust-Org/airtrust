@@ -65,7 +65,10 @@ function createDb(
         },
         all: async <T = unknown>() => {
           record();
-          if (normalized.includes('FROM frms_readiness_assessment')) {
+          if (
+            normalized.includes('FROM frms_readiness_assessment') ||
+            normalized.includes('FROM frms_fadiga_checkin ch')
+          ) {
             return { results: readinessRows as T[] };
           }
           throw new Error(`Unexpected list query: ${normalized}`);
@@ -218,9 +221,19 @@ describe('FRMS readiness route', () => {
       data: [readinessRow],
       meta: { scope: 'team' },
     });
-    const readinessQuery = statements.find((item) => item.sql.includes('FROM frms_readiness_assessment'));
-    expect(readinessQuery?.binds).toEqual([7, '2026-08-27']);
-    expect(readinessQuery?.sql).toContain('WHERE empresa_id = ?');
+    const readinessQuery = statements.find((item) => item.sql.includes('FROM frms_fadiga_checkin ch'));
+    expect(readinessQuery?.binds).toEqual([
+      'airtrust-pvtb-v2',
+      5,
+      'airtrust-pvtb-v2',
+      'airtrust-pvtb-v2',
+      5,
+      7,
+      '2026-08-27',
+    ]);
+    expect(readinessQuery?.sql).toContain('WHERE ch.empresa_id = ?');
+    expect(readinessQuery?.sql).toContain("THEN 'baseline_building'");
+    expect(readinessQuery?.sql).toContain('assessment_missing');
   });
 
   it('forces non-team roles to their own readiness assessment', async () => {
@@ -237,9 +250,18 @@ describe('FRMS readiness route', () => {
       data: [readinessRow],
       meta: { scope: 'self', forced_funcionario_id: 70 },
     });
-    const readinessQuery = statements.find((item) => item.sql.includes('FROM frms_readiness_assessment'));
-    expect(readinessQuery?.binds).toEqual([7, '2026-08-27', 70]);
-    expect(readinessQuery?.sql).toContain('AND funcionario_id = ?');
+    const readinessQuery = statements.find((item) => item.sql.includes('FROM frms_fadiga_checkin ch'));
+    expect(readinessQuery?.binds).toEqual([
+      'airtrust-pvtb-v2',
+      5,
+      'airtrust-pvtb-v2',
+      'airtrust-pvtb-v2',
+      5,
+      7,
+      '2026-08-27',
+      70,
+    ]);
+    expect(readinessQuery?.sql).toContain('AND ch.funcionario_id = ?');
   });
 
   it('rejects invalid team readiness dates before touching D1', async () => {

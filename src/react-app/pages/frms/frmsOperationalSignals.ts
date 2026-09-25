@@ -204,7 +204,9 @@ export function resolveReadinessSignal(
           ...base,
           value: 'Resultado não registrado',
           tone: 'unknown',
-          detail: 'Check-in recebido, mas não há avaliação de prontidão persistida para este dia.',
+          detail:
+            resolution.detail ??
+            'Check-in recebido, mas não há avaliação de prontidão persistida para este dia.',
         };
       }
       return { ...base, value: 'Não avaliado', tone: 'unknown' };

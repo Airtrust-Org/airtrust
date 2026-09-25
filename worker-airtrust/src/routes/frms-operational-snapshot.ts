@@ -10,12 +10,18 @@ import {
 } from '../lib/frms/operational-snapshot';
 import { FrmsParameterResolutionError } from '../lib/frms/parameter-governance';
 import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
+import { sincronizarCheckinComFrms } from '../lib/frms/fadiga-frms-sync';
 import { createLogger, toError } from '../utils/logger';
 
 type SnapshotContext = Context<{ Bindings: Env; Variables: Partial<Variables> }>;
 
 const router = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
 router.use('*', auth());
+
+const ReconcileSchema = z.object({
+  data_operacional: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  funcionario_ids: z.array(z.number().int().positive()).min(1).max(50),
+});
 
 const QuerySchema = z
   .object({
@@ -104,6 +110,112 @@ async function resolveOwnFuncionarioId(
 
   return byFuncionario?.id ?? null;
 }
+
+router.post('/operational-snapshot/reconcile-checkins', async (c) => {
+  const parsed = ReconcileSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ success: false, error: parsed.error.flatten() }, 400);
+  }
+
+  const empresaId = getEmpresaId(c as unknown as Context<{ Bindings: Env; Variables: Variables }>);
+  const hasTeamScope = await canSeeTeam(c);
+  let funcionarioIds = [...new Set(parsed.data.funcionario_ids)];
+  let forcedFuncionarioId: number | undefined;
+
+  if (!hasTeamScope) {
+    const ownFuncionarioId = await resolveOwnFuncionarioId(c, empresaId);
+    if (!ownFuncionarioId) {
+      return c.json({ success: false, error: 'Funcionário não encontrado para o usuário atual' }, 404);
+    }
+    if (funcionarioIds.some((id) => id !== ownFuncionarioId)) {
+      return c.json({ success: false, error: 'Escopo de reconciliação não autorizado' }, 403);
+    }
+    funcionarioIds = [ownFuncionarioId];
+    forcedFuncionarioId = ownFuncionarioId;
+  }
+
+  const placeholders = funcionarioIds.map(() => '?').join(', ');
+  const candidates = await c.env.DB.prepare(
+    `SELECT ch.id,
+            CAST(ch.funcionario_id AS INTEGER) AS funcionario_id,
+            ch.horas_sono,
+            ch.wake_time,
+            ch.jornada_inicio_prevista
+       FROM frms_fadiga_checkin ch
+       JOIN funcionarios f
+         ON f.id = ch.funcionario_id
+        AND f.empresa_id = ch.empresa_id
+        AND f.deleted_at IS NULL
+      WHERE ch.empresa_id = ?
+        AND ch.data_checkin = ?
+        AND ch.deleted_at IS NULL
+        AND ch.funcionario_id IN (${placeholders})
+        AND ch.jornada_inicio_prevista IS NOT NULL
+        AND TRIM(ch.jornada_inicio_prevista) <> ''
+        AND ch.wake_time IS NOT NULL
+        AND TRIM(ch.wake_time) <> ''
+        AND ch.horas_sono > 0
+        AND ch.horas_sono <= 24
+        AND NOT EXISTS (
+          SELECT 1
+            FROM frms_jornada j
+           WHERE j.empresa_id = ch.empresa_id
+             AND CAST(j.tripulante_id AS INTEGER) = ch.funcionario_id
+             AND j.data = ch.data_checkin
+             AND j.deleted_at IS NULL
+        )
+      ORDER BY ch.funcionario_id ASC`,
+  )
+    .bind(empresaId, parsed.data.data_operacional, ...funcionarioIds)
+    .all<{
+      id: string;
+      funcionario_id: number;
+      horas_sono: number;
+      wake_time: string;
+      jornada_inicio_prevista: string;
+    }>();
+
+  let reconciled = 0;
+  let unresolved = 0;
+  const logger = createLogger(c as SnapshotContext, 'FrmsOperationalSnapshotReconcile');
+
+  for (const row of candidates.results ?? []) {
+    try {
+      const result = await sincronizarCheckinComFrms(
+        c.env.DB,
+        row.id,
+        Number(row.funcionario_id),
+        parsed.data.data_operacional,
+        Number(row.horas_sono),
+        empresaId,
+        row.wake_time,
+        row.jornada_inicio_prevista,
+      );
+      if (result.sincronizado) reconciled += 1;
+      else unresolved += 1;
+    } catch (error) {
+      unresolved += 1;
+      logger.error('Falha ao reconciliar check-in FRMS completo sem jornada', toError(error), {
+        funcionarioId: Number(row.funcionario_id),
+        dataOperacional: parsed.data.data_operacional,
+      });
+    }
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      requested: funcionarioIds.length,
+      eligible: candidates.results?.length ?? 0,
+      reconciled,
+      unresolved,
+    },
+    meta: {
+      scope: hasTeamScope ? 'team' : 'self',
+      forced_funcionario_id: forcedFuncionarioId,
+    },
+  });
+});
 
 router.get('/operational-snapshot', async (c) => {
   const parsed = QuerySchema.safeParse({

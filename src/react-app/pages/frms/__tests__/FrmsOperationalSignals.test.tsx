@@ -123,6 +123,58 @@ describe('FrmsSignalGrid', () => {
     expect(screen.getByText('3 sessões válidas no baseline')).toBeInTheDocument();
   });
 
+  it('mostra baseline em formação quando o check-in histórico existe, o resultado do dia se perdeu e o baseline ainda é insuficiente', () => {
+    readinessState.rows = [
+      {
+        funcionario_id: 10,
+        reference_date: '2026-08-27',
+        classification: 'baseline_building',
+        baseline_sessions: 0,
+        baseline_ready: 0,
+        median_rt_delta_pct: null,
+        lapse_rate_delta: null,
+        warning_signals_json: null,
+        critical_signals_json: null,
+        created_at: '2026-08-27 10:00:00',
+        assessment_missing: 1,
+      },
+    ];
+
+    render(<FrmsSignalGrid item={item()} />);
+    expect(
+      screen.getByLabelText('Prontidão: Baseline em formação — sem dado'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('0 sessões válidas no baseline · resultado objetivo deste dia não foi persistido'),
+    ).toBeInTheDocument();
+  });
+
+  it('não inventa classificação quando o baseline já existe mas o resultado objetivo do dia não foi persistido', () => {
+    readinessState.rows = [
+      {
+        funcionario_id: 10,
+        reference_date: '2026-08-27',
+        classification: null,
+        baseline_sessions: 5,
+        baseline_ready: 1,
+        median_rt_delta_pct: null,
+        lapse_rate_delta: null,
+        warning_signals_json: null,
+        critical_signals_json: null,
+        created_at: '2026-08-27 10:00:00',
+        assessment_missing: 1,
+      },
+    ];
+
+    render(<FrmsSignalGrid item={item()} />);
+    expect(
+      screen.getByLabelText('Prontidão: Resultado não registrado — sem dado'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Check-in recebido, mas o resultado objetivo deste dia não foi persistido.'),
+    ).toBeInTheDocument();
+  });
+
   it('permite override explícito do adapter sem alterar a classificação persistida', () => {
     readinessState.rows = [
       {

@@ -65,6 +65,20 @@ function useAuthoritativeReadinessAdapter(
 
   return () => {
     if (!readiness) return null;
+
+    if (readiness.assessment_missing) {
+      if (readiness.classification === 'baseline_building') {
+        return {
+          classification: 'baseline_building',
+          detail: `${readiness.baseline_sessions} sessões válidas no baseline · resultado objetivo deste dia não foi persistido`,
+        };
+      }
+      return {
+        classification: null,
+        detail: 'Check-in recebido, mas o resultado objetivo deste dia não foi persistido.',
+      };
+    }
+
     return {
       classification: readiness.classification,
       detail:
