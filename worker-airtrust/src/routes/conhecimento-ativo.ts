@@ -10,6 +10,10 @@ import {
   responderQuestao,
   resumoConhecimentoAtivo,
 } from '../services/conhecimento-ativo/challenge-service';
+import {
+  obterDesafioDiario,
+  responderDesafioDiario,
+} from '../services/conhecimento-ativo/daily-challenge-service';
 import type { ConhecimentoConfianca } from '../services/conhecimento-ativo/retencao';
 import { conhecimentoAtivoEnabledForTenant } from '../services/conhecimento-ativo/feature-gate';
 
@@ -81,6 +85,45 @@ conhecimentoAtivoRoutes.get('/me', async (c) => {
     funcionarioId,
   });
   return c.json({ success: true, data });
+});
+
+conhecimentoAtivoRoutes.get('/me/desafio-diario', async (c) => {
+  const { empresaId, funcionarioId } = contextoFuncionario(c);
+  try {
+    const data = await obterDesafioDiario({
+      db: c.env.DB,
+      empresaId,
+      funcionarioId,
+    });
+    return c.json({ success: true, data });
+  } catch (error) {
+    return mapServiceError(error);
+  }
+});
+
+conhecimentoAtivoRoutes.post('/me/desafio-diario/responder', async (c) => {
+  const { empresaId, funcionarioId } = contextoFuncionario(c);
+  let body: { alternativa_id?: number } = {};
+  try {
+    body = await c.req.json<{ alternativa_id?: number }>();
+  } catch {
+    body = {};
+  }
+  const alternativaId = Number(body.alternativa_id);
+  if (!Number.isInteger(alternativaId) || alternativaId <= 0) {
+    throw new ApiError('Alternativa inválida', 400, 'CONHECIMENTO_ATIVO_ALTERNATIVA_INVALIDA');
+  }
+  try {
+    const data = await responderDesafioDiario({
+      db: c.env.DB,
+      empresaId,
+      funcionarioId,
+      alternativaId,
+    });
+    return c.json({ success: true, data });
+  } catch (error) {
+    return mapServiceError(error);
+  }
 });
 
 conhecimentoAtivoRoutes.get('/me/mapa', async (c) => {
