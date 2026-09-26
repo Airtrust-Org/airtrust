@@ -28,6 +28,34 @@ describe('FRMS activity context', () => {
     expect(summary.end_time).toBe('02:00');
   });
 
+  it('preserva o encerramento noturno em dia misto com treinamento e simulador', () => {
+    const summary = summarizeFrmsActivities([
+      {
+        data_operacional: '2026-09-25',
+        funcionario_id: 20,
+        activity_type: 'TREINAMENTO',
+        hora_inicio: '08:00',
+        hora_fim: '17:00',
+        titulo: 'Treinamento',
+        source_id: 1,
+      },
+      {
+        data_operacional: '2026-09-25',
+        funcionario_id: 20,
+        activity_type: 'SIMULADOR',
+        hora_inicio: '23:00',
+        hora_fim: '02:00',
+        titulo: 'Simulador noturno',
+        source_id: 2,
+      },
+    ]);
+
+    expect(summary.activity_type).toBe('MISTA');
+    expect(summary.activity_minutes).toBe(720);
+    expect(summary.start_time).toBe('08:00');
+    expect(summary.end_time).toBe('02:00');
+  });
+
   it('mantém treinamento em sala como carga de atividade sem transformá-lo em simulador', () => {
     const summary = summarizeFrmsActivities([
       {
