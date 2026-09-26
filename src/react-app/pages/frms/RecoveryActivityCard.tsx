@@ -227,6 +227,8 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                     activity_type: 'STANDBY_HOME_HOTEL',
                     standby_location: value,
                     immediate_callout_required: immediateCallout,
+                    duty_start_time: dutyStart || undefined,
+                    duty_end_time: dutyEnd || undefined,
                   };
                   stagePendingFrmsRecoveryActivity(referenceDate, input, true);
                 }}
@@ -308,6 +310,16 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                   {
                     reference_date: referenceDate,
                     activity_type: activityType!,
+                    standby_location:
+                      activityType === 'STANDBY_ONSITE'
+                        ? 'BASE_AIRPORT'
+                        : activityType === 'STANDBY_HOME_HOTEL'
+                          ? standbyLocation
+                          : undefined,
+                    immediate_callout_required:
+                      activityType === 'STANDBY_HOME_HOTEL' || activityType === 'STANDBY_ONSITE'
+                        ? immediateCallout
+                        : undefined,
                     duty_start_time: event.target.value || undefined,
                     duty_end_time: dutyEnd || undefined,
                     notes: notes.trim() || undefined,
@@ -330,6 +342,16 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                   {
                     reference_date: referenceDate,
                     activity_type: activityType!,
+                    standby_location:
+                      activityType === 'STANDBY_ONSITE'
+                        ? 'BASE_AIRPORT'
+                        : activityType === 'STANDBY_HOME_HOTEL'
+                          ? standbyLocation
+                          : undefined,
+                    immediate_callout_required:
+                      activityType === 'STANDBY_HOME_HOTEL' || activityType === 'STANDBY_ONSITE'
+                        ? immediateCallout
+                        : undefined,
                     duty_start_time: dutyStart || undefined,
                     duty_end_time: event.target.value || undefined,
                     notes: notes.trim() || undefined,
