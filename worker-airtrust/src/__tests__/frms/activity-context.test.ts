@@ -47,6 +47,23 @@ describe('FRMS activity context', () => {
     expect(summary.simulator_minutes).toBe(0);
   });
 
+  it('mantém standby reportado como atividade operacional sem virar HV', () => {
+    const summary = summarizeFrmsActivities([{
+      data_operacional: '2026-09-25',
+      funcionario_id: 20,
+      activity_type: 'ATIVIDADE',
+      hora_inicio: '08:00',
+      hora_fim: '17:00',
+      titulo: 'Standby base/aeroporto',
+      source_id: 'rec-1',
+    }]);
+    expect(summary.activity_type).toBe('ATIVIDADE');
+    expect(summary.activity_minutes).toBe(540);
+    expect(summary.other_activity_minutes).toBe(540);
+    expect(summary.training_minutes).toBe(0);
+    expect(summary.simulator_minutes).toBe(0);
+  });
+
   it('expande treinamento planejado de vários dias quando não existem treinamentos_dias', async () => {
     const db = {
       prepare: vi.fn((sql: string) => ({
