@@ -172,6 +172,12 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
             <p className="mt-1 text-sm text-emerald-800">
               {LABELS[existingType] || existingType || 'Classificação registrada'}
             </p>
+            {context.activity?.duty_start_time || context.activity?.duty_end_time ? (
+              <p className="mt-1 text-xs font-medium text-emerald-800">
+                Horário: {String(context.activity?.duty_start_time || '—').slice(0, 5)} →{' '}
+                {String(context.activity?.duty_end_time || '—').slice(0, 5)}
+              </p>
+            ) : null}
             <p className="mt-1 text-xs text-emerald-700">
               Esta informação qualifica a oportunidade de recuperação; ela não cria bônus automático de efetividade.
             </p>
