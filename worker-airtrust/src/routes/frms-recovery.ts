@@ -365,6 +365,9 @@ async function upsertRecoveryAssessment(params: {
     params.funcionarioId,
     params.referenceDate,
   );
+  const noWorkHours = params.totalDutyMinutes == null
+    ? (params.activityType === 'OFF_DUTY' ? 24 : null)
+    : Math.max(0, (1440 - params.totalDutyMinutes) / 60);
   const result = deriveRecoveryEvidence({
     activityType: params.activityType,
     sleepHours24h: evidence.sleepHours24h,
@@ -373,11 +376,10 @@ async function upsertRecoveryAssessment(params: {
     readinessClassification: evidence.readinessClassification,
     immediateCalloutRequired: params.immediateCalloutRequired,
     activityKnown: params.activityType !== 'UNKNOWN',
+    noWorkHours,
+    minimumNoWorkHours: v2Policy?.recoveryNoWorkMinHours ?? null,
   });
   const consecutiveQualifyingNights = result.qualifyingRecoveryNight ? priorNights + 1 : 0;
-  const noWorkHours = params.totalDutyMinutes == null
-    ? (params.activityType === 'OFF_DUTY' ? 24 : null)
-    : Math.max(0, (1440 - params.totalDutyMinutes) / 60);
   const credit = v2Policy ? computeRecoveryCredit({
     activityType: params.activityType === 'OFF_DUTY' || params.activityType === 'STANDBY_HOME_HOTEL' || params.activityType === 'STANDBY_ONSITE'
       ? params.activityType : 'OTHER',
