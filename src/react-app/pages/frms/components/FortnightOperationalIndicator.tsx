@@ -202,7 +202,7 @@ function FortnightTimelinePanel({
                   <th className="px-2 py-2 text-left">Dia</th>
                   <th className="px-2 py-2 text-left">Atividade / jornada</th>
                   <th className="px-2 py-2 text-left">Sono / KSS</th>
-                  <th className="px-2 py-2 text-left">HV FRMS</th>
+                  <th className="px-2 py-2 text-left">Voo real / simulador</th>
                   <th className="px-2 py-2 text-left">Recuperação</th>
                   <th className="px-2 py-2 text-left">Efetividade</th>
                   <th className="px-2 py-2 text-left">Situação / ação</th>
@@ -239,7 +239,9 @@ function FortnightTimelinePanel({
                               {formatFortnightMinutes(day.atividade_min)}
                             </div>
                             <div className="text-[11px] text-slate-500">
-                              {day.hora_apresentacao?.slice(0, 5) || '—'} → {day.hora_termino?.slice(0, 5) || '—'}
+                              {day.hora_apresentacao?.slice(0, 5) || '—'} →{' '}
+                              {day.hora_termino?.slice(0, 5) ||
+                                (day.data_operacional === focusDate ? 'em andamento' : 'não informado')}
                             </div>
                             {day.atividade_rotulos[0] ? (
                               <div className="mt-0.5 max-w-[220px] truncate text-[11px] text-slate-500">
@@ -258,15 +260,15 @@ function FortnightTimelinePanel({
                         <div className="text-[11px] text-slate-500">KSS {day.kss_score ?? '—'}</div>
                       </td>
                       <td className="px-2 py-2 text-slate-700">
-                        {day.voo_min > 0 ? (
-                          <>
-                            <div>{formatFortnightMinutes(day.voo_min)}</div>
-                            {day.simulador_min > 0 ? (
-                              <div className="text-[11px] text-slate-500">
-                                voo {formatFortnightMinutes(day.voo_real_min)} · sim {formatFortnightMinutes(day.simulador_min)}
-                              </div>
+                        {day.voo_real_min > 0 || day.simulador_min > 0 ? (
+                          <div className="space-y-0.5">
+                            {day.voo_real_min > 0 ? (
+                              <div>Voo {formatFortnightMinutes(day.voo_real_min)}</div>
                             ) : null}
-                          </>
+                            {day.simulador_min > 0 ? (
+                              <div>Simulador {formatFortnightMinutes(day.simulador_min)}</div>
+                            ) : null}
+                          </div>
                         ) : '—'}
                       </td>
                       <td className="px-2 py-2">
@@ -575,8 +577,8 @@ export function FortnightConsolidatedPanel({
                 : ' · contexto embarcado não confirmado'}
             </p>
             <p className="mt-1">
-              Jornadas no período: {indicator.jornadas_periodo ?? '--'} · Dias consecutivos:{' '}
-              {indicator.dias_consecutivos_com_jornada ?? '--'}
+              Dias com atividade: {indicator.dias_atividade_periodo ?? indicator.jornadas_periodo ?? '--'} · Sequência de atividade:{' '}
+              {indicator.dias_consecutivos_com_atividade ?? indicator.dias_consecutivos_com_jornada ?? '--'}
             </p>
           </div>
           <FortnightTimelinePanel
