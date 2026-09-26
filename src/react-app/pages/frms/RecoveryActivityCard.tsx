@@ -322,6 +322,13 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                   {
                     reference_date: referenceDate,
                     activity_type: activityType!,
+                    standby_location:
+                      activityType === 'STANDBY_ONSITE'
+                        ? 'BASE_AIRPORT'
+                        : activityType === 'STANDBY_HOME_HOTEL'
+                          ? standbyLocation
+                          : undefined,
+                    immediate_callout_required: needsStandbyDetail ? immediateCallout : undefined,
                     duty_start_time: event.target.value || undefined,
                     duty_end_time: dutyEnd || undefined,
                     notes: notes.trim() || undefined,
@@ -344,6 +351,13 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                   {
                     reference_date: referenceDate,
                     activity_type: activityType!,
+                    standby_location:
+                      activityType === 'STANDBY_ONSITE'
+                        ? 'BASE_AIRPORT'
+                        : activityType === 'STANDBY_HOME_HOTEL'
+                          ? standbyLocation
+                          : undefined,
+                    immediate_callout_required: needsStandbyDetail ? immediateCallout : undefined,
                     duty_start_time: dutyStart || undefined,
                     duty_end_time: event.target.value || undefined,
                     notes: notes.trim() || undefined,
