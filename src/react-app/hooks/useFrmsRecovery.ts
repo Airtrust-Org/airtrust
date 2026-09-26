@@ -75,6 +75,37 @@ const pendingRecoveryActivities = new Map<string, PendingRecoveryActivity>();
 
 export const RECOVERY_ACTIVITY_REQUIRED_MESSAGE =
   'Informe como foi sua condição operacional ontem antes de concluir o check-in.';
+export const RECOVERY_ACTIVITY_WINDOW_REQUIRED_MESSAGE =
+  'Informe o início e o fim da atividade de ontem.';
+export const RECOVERY_ACTIVITY_STANDBY_DETAIL_REQUIRED_MESSAGE =
+  'Informe se o standby exigia disponibilidade para acionamento imediato.';
+
+export function recoveryActivityRequiresDutyWindow(type: RecoveryActivityType): boolean {
+  return !['OFF_DUTY', 'MIXED', 'FLIGHT_NOT_IN_SOURCE', 'UNKNOWN'].includes(type);
+}
+
+export function validateRecoveryActivityInput(input: RecoveryActivityInput): string | null {
+  if (recoveryActivityRequiresDutyWindow(input.activity_type)) {
+    if (!input.duty_start_time || !input.duty_end_time) {
+      return RECOVERY_ACTIVITY_WINDOW_REQUIRED_MESSAGE;
+    }
+  }
+  if (
+    (input.activity_type === 'STANDBY_HOME_HOTEL' || input.activity_type === 'STANDBY_ONSITE') &&
+    input.immediate_callout_required == null
+  ) {
+    return RECOVERY_ACTIVITY_STANDBY_DETAIL_REQUIRED_MESSAGE;
+  }
+  if (input.activity_type === 'MIXED') {
+    if (!input.segments || input.segments.length < 2) {
+      return 'Informe pelo menos dois períodos para o dia com atividades mistas.';
+    }
+    if (input.segments.some((segment) => !segment.start_time || !segment.end_time)) {
+      return 'Informe início e fim de cada período do dia anterior.';
+    }
+  }
+  return null;
+}
 
 export function safeFrmsRecoveryError(kind: FrmsRecoveryRequestKind): string {
   return kind === 'submit'
@@ -144,6 +175,8 @@ export async function submitPendingFrmsRecoveryActivity(
   const pending = pendingRecoveryActivities.get(referenceDate);
   if (!pending?.required) return null;
   if (!pending.input) throw new Error(RECOVERY_ACTIVITY_REQUIRED_MESSAGE);
+  const validationError = validateRecoveryActivityInput(pending.input);
+  if (validationError) throw new Error(validationError);
 
   const result = await postRecovery<RecoveryActivityResult>(
     '/frms/readiness/recovery/activity',
