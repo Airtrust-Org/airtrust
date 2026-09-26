@@ -89,6 +89,9 @@ export function validateRecoveryActivityInput(input: RecoveryActivityInput): str
     if (!input.duty_start_time || !input.duty_end_time) {
       return RECOVERY_ACTIVITY_WINDOW_REQUIRED_MESSAGE;
     }
+    if (input.duty_start_time === input.duty_end_time) {
+      return 'O início e o fim da atividade não podem ser iguais.';
+    }
   }
   if (
     (input.activity_type === 'STANDBY_HOME_HOTEL' || input.activity_type === 'STANDBY_ONSITE') &&
@@ -102,6 +105,9 @@ export function validateRecoveryActivityInput(input: RecoveryActivityInput): str
     }
     if (input.segments.some((segment) => !segment.start_time || !segment.end_time)) {
       return 'Informe início e fim de cada período do dia anterior.';
+    }
+    if (input.segments.some((segment) => segment.start_time === segment.end_time)) {
+      return 'Início e fim de um período não podem ser iguais.';
     }
   }
   return null;
