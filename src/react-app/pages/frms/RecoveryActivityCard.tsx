@@ -71,6 +71,29 @@ const SEGMENT_OPTIONS: Array<{ value: RecoveryActivitySegmentInput['activity_typ
 
 const LABELS = Object.fromEntries(OPTIONS.map((option) => [option.value, option.label]));
 
+function activityPolicySummary(activityType: RecoveryActivityType | null): string | null {
+  switch (activityType) {
+    case 'OFF_DUTY':
+      return 'Folga não vira jornada. A recuperação depende do sono e da prontidão informados, sem bônus automático.';
+    case 'STANDBY_HOME_HOTEL':
+      return 'Hotel/residência preserva mais oportunidade de recuperação; o crédito depende do repouso real e do acionamento.';
+    case 'STANDBY_ONSITE':
+      return 'Standby na base restringe mais a recuperação; horário, repouso real e acionamento são considerados.';
+    case 'ADMIN_TRAINING':
+      return 'Treinamento/administrativo conta como atividade do dia e não gera crédito de recuperação.';
+    case 'DUTY_TRAVEL':
+      return 'Deslocamento a serviço conta como atividade e restringe a recuperação.';
+    case 'MIXED':
+      return 'Cada período é considerado conforme seu tipo e horário.';
+    case 'FLIGHT_NOT_IN_SOURCE':
+      return 'O voo relatado fica como divergência de fonte até reconciliação com a fonte canônica.';
+    case 'OTHER':
+      return 'A atividade é registrada com horário e tratada conservadoramente até classificação posterior.';
+    default:
+      return null;
+  }
+}
+
 function defaultSegments(): RecoveryActivitySegmentInput[] {
   return [
     { activity_type: 'ADMIN_TRAINING', start_time: '08:00', end_time: '12:00' },
@@ -198,6 +221,12 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
       >
         {showMoreOptions ? 'Mostrar apenas situações mais comuns' : 'Outra situação'}
       </button>
+
+      {activityPolicySummary(activityType) ? (
+        <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-4 text-slate-600">
+          {activityPolicySummary(activityType)}
+        </p>
+      ) : null}
 
       {needsStandbyDetail && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
