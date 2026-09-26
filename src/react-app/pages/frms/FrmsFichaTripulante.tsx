@@ -556,37 +556,33 @@ export default function FrmsFichaTripulante() {
                   undefined
                 }
                 componentes={
-                  todayFortnightSnapshotItem?.effectiveness_pct != null
-                    ? (
-                        todayFortnightSnapshotItem.effectiveness_source === 'REAL' &&
-                        acumulo?.effectiveness_reference_date === todayFortnightSnapshotItem.data_operacional &&
-                        acumulo?.effectiveness
-                          ? (acumulo.effectiveness.effectiveness_componentes as {
-                              processo_s: number;
-                              processo_c: number;
-                              repouso: number;
-                              hv: number;
-                              duracao: number;
-                              pousos?: number;
-                              temperatura?: number;
-                              imc?: number;
-                              recuperacao?: number;
-                            } | null)
-                          : null
-                      )
-                    : acumulo?.effectiveness
-                      ? (acumulo.effectiveness.effectiveness_componentes as {
-                          processo_s: number;
-                          processo_c: number;
-                          repouso: number;
-                          hv: number;
-                          duracao: number;
-                          pousos?: number;
-                          temperatura?: number;
-                          imc?: number;
-                          recuperacao?: number;
-                        } | null)
-                      : null
+                  todayFortnightSnapshotItem?.effectiveness_componentes
+                    ? (todayFortnightSnapshotItem.effectiveness_componentes as {
+                        processo_s: number;
+                        processo_c: number;
+                        repouso: number;
+                        hv: number;
+                        duracao: number;
+                        pousos?: number;
+                        temperatura?: number;
+                        imc?: number;
+                        recuperacao?: number;
+                      })
+                    : todayFortnightSnapshotItem?.effectiveness_pct != null
+                      ? null
+                      : acumulo?.effectiveness
+                        ? (acumulo.effectiveness.effectiveness_componentes as {
+                            processo_s: number;
+                            processo_c: number;
+                            repouso: number;
+                            hv: number;
+                            duracao: number;
+                            pousos?: number;
+                            temperatura?: number;
+                            imc?: number;
+                            recuperacao?: number;
+                          } | null)
+                        : null
                 }
                 config={limites}
                 dataSource={
