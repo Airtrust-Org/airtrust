@@ -108,6 +108,10 @@ export function resolveComplianceSignal(
     return `${(value / 60).toFixed(1).replace('.', ',')} h`;
   };
   const details = [
+    indicator?.score_acumulado != null && Number.isFinite(indicator.score_acumulado)
+      ? `score ${indicator.score_acumulado.toFixed(1).replace('.', ',')}/100`
+      : null,
+    indicator?.agravantes_aplicados?.[0]?.descricao ?? null,
     formatHours(indicator?.horas_voo_periodo_min)
       ? `voo real ${formatHours(indicator?.horas_voo_periodo_min)}`
       : null,
