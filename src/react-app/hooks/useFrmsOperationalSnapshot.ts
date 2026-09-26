@@ -108,7 +108,7 @@ export interface FrmsOperationalSnapshotItem {
   simulador_minutos?: number;
   treinamento_minutos?: number;
   atividade_frms_minutos?: number;
-  atividade_principal?: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'MISTA' | 'SEM_DADO';
+  atividade_principal?: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'ATIVIDADE' | 'MISTA' | 'SEM_DADO';
   atividade_hora_inicio?: string | null;
   atividade_hora_fim?: string | null;
   atividade_rotulos?: string[];
@@ -126,6 +126,20 @@ export interface FrmsOperationalSnapshotItem {
   status_operacional_checkin: string | null;
 
   effectiveness_pct: number | null;
+  effectiveness_componentes?: {
+    processo_s: number;
+    processo_c: number;
+    repouso: number;
+    hv: number;
+    duracao: number;
+    carga_operacional?: number;
+    recuperacao?: number;
+    pousos?: number;
+    temperatura?: number;
+    imc?: number;
+    noite_circadiano?: number;
+    hv_credito_aplicado?: number;
+  } | null;
   effectiveness_source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'PROJETADA_ATIVIDADE' | 'AUSENTE';
   nivel_fadiga_calculado: string | null;
   fatorizacao_status: 'CALCULADA' | 'PROJETADA' | 'AUSENTE';

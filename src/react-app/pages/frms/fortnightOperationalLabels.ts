@@ -52,6 +52,23 @@ export const FORTNIGHT_MITIGACAO_LABELS: Record<string, string> = {
   SEM_ACAO: 'Sem ação imediata',
 };
 
+const RECOVERY_ACTIVITY_LABELS: Record<string, string> = {
+  OFF_DUTY: 'Folga / descanso',
+  STANDBY_HOME_HOTEL: 'Standby em hotel/residência',
+  STANDBY_ONSITE: 'Standby na base/aeroporto',
+  ADMIN_TRAINING: 'Administrativo / treinamento',
+  DUTY_TRAVEL: 'Deslocamento a serviço',
+  MIXED: 'Atividade mista',
+  OTHER: 'Outra atividade',
+  FLIGHT_NOT_IN_SOURCE: 'Voo não localizado na fonte',
+  UNKNOWN: 'Atividade não informada',
+};
+
+export function formatRecoveryActivityType(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return RECOVERY_ACTIVITY_LABELS[value] || value.replace(/_/g, ' ');
+}
+
 const SOURCE_LABELS: Record<string, string> = {
   REAL: 'Real',
   ESTIMADO: 'Estimado',

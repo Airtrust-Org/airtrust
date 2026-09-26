@@ -126,7 +126,7 @@ test.describe('FRMS — Dashboard', () => {
 
       // Ficha should have acúmulo cards
       await expect(page.getByText(/% HV Mês/i)).toBeVisible();
-      await expect(page.getByText(/Jornadas Mensais/i)).toBeVisible();
+      await expect(page.getByText(/Jornadas de voo \/ SIGVOOS/i)).toBeVisible();
 
       // Back button works
       await page.goBack();

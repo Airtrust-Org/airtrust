@@ -79,6 +79,7 @@ describe('RecoveryActivityCard', () => {
     expect(screen.getByText('Administrativo / treinamento')).toBeInTheDocument();
     expect(screen.getByText('Mais de uma situação')).toBeInTheDocument();
     expect(screen.getByText('Houve voo, mas não aparece no sistema')).toBeInTheDocument();
+    expect(screen.getByText('Outras situações')).toBeInTheDocument();
     expect(screen.getByText(/será salva junto com as demais informações/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /salvar condição de ontem/i })).not.toBeInTheDocument();
   });
@@ -98,6 +99,32 @@ describe('RecoveryActivityCard', () => {
       ),
     );
     expect(screen.queryByRole('button', { name: /salvar condição de ontem/i })).not.toBeInTheDocument();
+  });
+
+  it('asks start/end and preserves standby context in the staged payload', async () => {
+    render(<RecoveryActivityCard today="2026-06-05" />);
+    fireEvent.click(screen.getByText('Standby na base / aeroporto'));
+
+    expect(screen.getByText(/início e o fim da atividade/i)).toBeInTheDocument();
+    const start = screen.getByLabelText('Início aproximado');
+    const end = screen.getByLabelText('Fim aproximado');
+    fireEvent.change(start, { target: { value: '08:00' } });
+    fireEvent.change(end, { target: { value: '17:00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Não' }));
+
+    await vi.waitFor(() =>
+      expect(stagePendingMock).toHaveBeenCalledWith(
+        '2026-06-04',
+        expect.objectContaining({
+          activity_type: 'STANDBY_ONSITE',
+          standby_location: 'BASE_AIRPORT',
+          duty_start_time: '08:00',
+          duty_end_time: '17:00',
+          immediate_callout_required: false,
+        }),
+        true,
+      ),
+    );
   });
 
   it('keeps a source discrepancy pending without persisting it before the final submit', async () => {
@@ -122,7 +149,7 @@ describe('RecoveryActivityCard', () => {
     };
     render(<RecoveryActivityCard today="2026-06-05" />);
     expect(screen.getByText('Atividade de ontem registrada')).toBeInTheDocument();
-    expect(screen.getByText(/não cria bônus automático de efetividade/i)).toBeInTheDocument();
+    expect(screen.getByText(/folga não cria bônus automático/i)).toBeInTheDocument();
     expect(clearPendingMock).toHaveBeenCalledWith('2026-06-04');
   });
 });

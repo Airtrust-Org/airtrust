@@ -74,6 +74,68 @@ const activitySchema = z
         message: 'Segmentos só podem ser informados quando activity_type=MIXED.',
       });
     }
+
+    const requiresDutyWindow = [
+      'STANDBY_HOME_HOTEL',
+      'STANDBY_ONSITE',
+      'ADMIN_TRAINING',
+      'DUTY_TRAVEL',
+      'OTHER',
+    ].includes(value.activity_type);
+    if (requiresDutyWindow && (!value.duty_start_time || !value.duty_end_time)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['duty_start_time'],
+        message: 'Atividade sem voo exige início e fim informados.',
+      });
+    }
+    if (
+      requiresDutyWindow &&
+      value.duty_start_time &&
+      value.duty_end_time &&
+      value.duty_start_time === value.duty_end_time
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['duty_end_time'],
+        message: 'Início e fim da atividade não podem ser iguais.',
+      });
+    }
+    if (
+      (value.activity_type === 'STANDBY_HOME_HOTEL' || value.activity_type === 'STANDBY_ONSITE') &&
+      value.immediate_callout_required == null
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['immediate_callout_required'],
+        message: 'Standby exige informar se havia acionamento imediato.',
+      });
+    }
+    if (
+      value.activity_type === 'MIXED' &&
+      value.segments?.some((segment) => !segment.start_time || !segment.end_time)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['segments'],
+        message: 'Cada período do dia misto exige início e fim.',
+      });
+    }
+    if (
+      value.activity_type === 'MIXED' &&
+      value.segments?.some(
+        (segment) =>
+          segment.start_time &&
+          segment.end_time &&
+          segment.start_time === segment.end_time,
+      )
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['segments'],
+        message: 'Início e fim de um período não podem ser iguais.',
+      });
+    }
   });
 
 type FlightSummary = {
@@ -330,6 +392,9 @@ async function upsertRecoveryAssessment(params: {
     params.funcionarioId,
     params.referenceDate,
   );
+  const noWorkHours = params.totalDutyMinutes == null
+    ? (params.activityType === 'OFF_DUTY' ? 24 : null)
+    : Math.max(0, (1440 - params.totalDutyMinutes) / 60);
   const result = deriveRecoveryEvidence({
     activityType: params.activityType,
     sleepHours24h: evidence.sleepHours24h,
@@ -338,11 +403,10 @@ async function upsertRecoveryAssessment(params: {
     readinessClassification: evidence.readinessClassification,
     immediateCalloutRequired: params.immediateCalloutRequired,
     activityKnown: params.activityType !== 'UNKNOWN',
+    noWorkHours,
+    minimumNoWorkHours: v2Policy?.recoveryNoWorkMinHours ?? null,
   });
   const consecutiveQualifyingNights = result.qualifyingRecoveryNight ? priorNights + 1 : 0;
-  const noWorkHours = params.totalDutyMinutes == null
-    ? (params.activityType === 'STANDBY_HOME_HOTEL' || params.activityType === 'STANDBY_ONSITE' ? 24 : null)
-    : Math.max(0, (1440 - params.totalDutyMinutes) / 60);
   const credit = v2Policy ? computeRecoveryCredit({
     activityType: params.activityType === 'OFF_DUTY' || params.activityType === 'STANDBY_HOME_HOTEL' || params.activityType === 'STANDBY_ONSITE'
       ? params.activityType : 'OTHER',
@@ -598,7 +662,15 @@ router.post('/activity', async (c) => {
   }
 
   const activityId = crypto.randomUUID();
-  const totalDutyMinutes = durationMinutes(data.duty_start_time, data.duty_end_time);
+  const totalDutyMinutes =
+    data.activity_type === 'OFF_DUTY'
+      ? 0
+      : data.activity_type === 'MIXED'
+        ? (data.segments ?? []).reduce((sum, segment) => {
+            if (segment.activity_type === 'OFF_DUTY') return sum;
+            return sum + (durationMinutes(segment.start_time, segment.end_time) ?? 0);
+          }, 0)
+        : durationMinutes(data.duty_start_time, data.duty_end_time);
   const noFlightConfirmed =
     data.activity_type !== 'FLIGHT_NOT_IN_SOURCE' && data.activity_type !== 'UNKNOWN' ? 1 : 0;
   await c.env.DB

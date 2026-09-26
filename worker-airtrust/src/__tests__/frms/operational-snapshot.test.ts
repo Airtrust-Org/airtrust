@@ -172,6 +172,15 @@ describe('morning effectiveness projection', () => {
     expect(projected).not.toBeNull();
     expect(projected?.source).toBe('PROJETADA_APRESENTACAO');
     expect(projected?.effectiveness_pct).toEqual(expect.any(Number));
+    expect(projected?.effectiveness_componentes).toEqual(
+      expect.objectContaining({
+        processo_s: expect.any(Number),
+        processo_c: expect.any(Number),
+        repouso: expect.any(Number),
+        hv: expect.any(Number),
+        duracao: expect.any(Number),
+      }),
+    );
     expect(projected?.effectiveness_pct).toBeGreaterThanOrEqual(0);
     expect(projected?.effectiveness_pct).toBeLessThanOrEqual(100);
   });
@@ -341,6 +350,44 @@ describe('frms operational snapshot builder', () => {
     expect(item?.escalado).toBe(false);
     expect(item?.teve_jornada).toBe(false);
     expect(item?.checkin_status).toBe('RECEBIDO');
+  });
+
+  it('4b) placeholder manual vazio do check-in não vira voo 0h nem inconsistência', () => {
+    const input = createBaseInput();
+    input.rows.jornadas.push({
+      data_operacional: '2026-05-27',
+      funcionario_id: 10,
+      hora_apresentacao: '06:00',
+      hora_termino: null,
+      horas_voo_minutos: 0,
+      duracao_jornada_minutos: 0,
+      origem: 'MANUAL',
+      has_operational_data: 0,
+      is_manual_empty: 1,
+    });
+    input.rows.checkins.push({
+      data_operacional: '2026-05-27',
+      funcionario_id: 10,
+      hora_checkin: '05:30',
+      hora_apresentacao: '06:00',
+      kss_score: 4,
+      horas_sono: 7,
+      qualidade_sono: 4,
+      wake_time: '04:30',
+      score_fadiga: 20,
+      nivel_fadiga: 'VERDE',
+      status_operacional: 'APTO',
+      computed_risk_level: 'normal',
+    });
+
+    const item = getByKey(buildFrmsOperationalSnapshot(input).items, '2026-05-27', 10);
+    expect(item?.teve_jornada).toBe(false);
+    expect(item?.teve_atividade_frms).toBe(false);
+    expect(item?.atividade_principal).toBe('SEM_DADO');
+    expect(item?.horas_voo_minutos).toBe(0);
+    expect(item?.jornada_data_source).toBe('AUSENTE');
+    expect(item?.alertas).not.toContain('DADO_INCONSISTENTE');
+    expect(item?.alertas).not.toContain('JORNADA_SEM_FATORIZACAO');
   });
 
   it('5) usa sono REAL somente quando informado no check-in e não estima ausência', () => {

@@ -25,6 +25,8 @@ export interface RecoveryEvidenceInput {
     | null;
   immediateCalloutRequired?: boolean | null;
   activityKnown?: boolean;
+  noWorkHours?: number | null;
+  minimumNoWorkHours?: number | null;
 }
 
 export interface RecoveryEvidenceResult {
@@ -113,10 +115,27 @@ export function deriveRecoveryEvidence(input: RecoveryEvidenceInput): RecoveryEv
     };
   }
 
-  if ((input.activityType === 'STANDBY_HOME_HOTEL' || input.activityType === 'STANDBY_ONSITE') && input.immediateCalloutRequired === true) {
-    // V2 does not erase recovery opportunity; the numeric policy applies a
-    // configurable multiplier while evidence confidence remains explicit.
-    reasons.push('STANDBY_COM_ACIONAMENTO_IMEDIATO');
+  if (input.activityType === 'STANDBY_HOME_HOTEL' || input.activityType === 'STANDBY_ONSITE') {
+    const noWorkHours = finiteOrNull(input.noWorkHours);
+    const minimumNoWorkHours = finiteOrNull(input.minimumNoWorkHours);
+    if (
+      minimumNoWorkHours != null &&
+      minimumNoWorkHours > 0 &&
+      (noWorkHours == null || noWorkHours < minimumNoWorkHours)
+    ) {
+      return {
+        state: 'LIMITED',
+        confidence: noWorkHours == null ? 'MEDIUM' : 'HIGH',
+        qualifyingRecoveryNight: false,
+        reasons: ['STANDBY_SEM_JANELA_MINIMA_SEM_ATIVIDADE'],
+        effectivenessDeltaPct: null,
+      };
+    }
+    if (input.immediateCalloutRequired === true) {
+      // Standby com acionamento imediato não equivale a folga: a oportunidade
+      // de recuperação pode existir, mas sua qualidade fica explicitamente reduzida.
+      reasons.push('STANDBY_COM_ACIONAMENTO_IMEDIATO');
+    }
   }
 
   if (!RECOVERY_FRIENDLY.has(input.activityType)) {

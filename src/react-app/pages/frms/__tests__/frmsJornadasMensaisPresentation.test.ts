@@ -55,6 +55,28 @@ describe('frms jornadas mensais presentation', () => {
     expect(presentation.integrityMessage).toContain('excedem');
   });
 
+  it('distingue jornada real de janela estimada pelo SIGVOOS', () => {
+    const real = buildJornadaMensalPresentation({
+      pct_jornada_diaria: null,
+      pct_voo_diaria: null,
+      integridade_status: 'OK',
+      integridade_codigo: null,
+      integridade_mensagem: null,
+      jornada_boundary_source: 'REAL',
+    });
+    const estimated = buildJornadaMensalPresentation({
+      pct_jornada_diaria: null,
+      pct_voo_diaria: null,
+      integridade_status: 'OK',
+      integridade_codigo: null,
+      integridade_mensagem: null,
+      jornada_boundary_source: 'ESTIMADO',
+    });
+
+    expect(real.boundarySourceLabel).toBe('Jornada real');
+    expect(estimated.boundarySourceLabel).toBe('Janela SIGVOOS estimada');
+  });
+
   it('exibe FIRA como auditoria pendente sem HV operacional validada', () => {
     const presentation = buildJornadaMensalPresentation({
       pct_jornada_diaria: null,

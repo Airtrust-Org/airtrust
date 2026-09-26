@@ -108,7 +108,7 @@ export interface FrmsFortnightIndicatorItemSeed {
   treinamento_minutos?: number;
   teve_jornada: boolean;
   teve_atividade_frms?: boolean;
-  atividade_principal?: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'MISTA' | 'SEM_DADO';
+  atividade_principal?: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'ATIVIDADE' | 'MISTA' | 'SEM_DADO';
   horas_sono?: number | null;
   kss_score?: number | null;
   effectiveness_pct?: number | null;

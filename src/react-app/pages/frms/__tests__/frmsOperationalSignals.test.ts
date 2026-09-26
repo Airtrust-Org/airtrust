@@ -122,9 +122,9 @@ describe('resolveComplianceSignal', () => {
         dias_atividade_periodo: 6,
       }),
     }));
-    expect(s.label).toBe('Carga operacional');
-    expect(s.detail).toContain('HV FRMS 13,0 h');
-    expect(s.detail).toContain('voo 10,0 h');
+    expect(s.label).toBe('Risco do período');
+    expect(s.detail).toContain('voo real 10,0 h');
+    expect(s.detail).not.toContain('HV FRMS');
     expect(s.detail).toContain('simulador 3,0 h');
     expect(s.detail).toContain('treinamento 9,0 h');
     expect(s.detail).toContain('6 dia(s) de atividade');

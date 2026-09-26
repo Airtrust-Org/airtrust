@@ -1,6 +1,12 @@
-import type { Origem, FrmsJornada, LimitesMap } from './types';
+import type { Origem, FrmsJornada, LimitesMap, EffectivenessResult } from './types';
 import { calcularDiaDoCiclo } from './db-service-jornadas';
-import { calcEffectiveness, calcFatorizacao } from './calculos';
+import { calcEffectiveness, calcFatorizacao, type FrmsV2DailyAdjustments } from './calculos';
+import {
+  computeFlightHoursDelta,
+  resolveOperationalPolicyV2,
+  type FrmsOperationalPolicyV2,
+} from './operational-policy-v2';
+import type { FadigaBusinessPolicy } from './fadiga-score';
 import {
   loadFrmsActivityRows,
   summarizeFrmsActivities,
@@ -58,7 +64,7 @@ export interface FrmsOperationalSnapshotItem {
   simulador_minutos?: number;
   treinamento_minutos?: number;
   atividade_frms_minutos?: number;
-  atividade_principal?: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'MISTA' | 'SEM_DADO';
+  atividade_principal?: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'ATIVIDADE' | 'MISTA' | 'SEM_DADO';
   atividade_hora_inicio?: string | null;
   atividade_hora_fim?: string | null;
   atividade_rotulos?: string[];
@@ -76,6 +82,7 @@ export interface FrmsOperationalSnapshotItem {
   status_operacional_checkin: string | null;
 
   effectiveness_pct: number | null;
+  effectiveness_componentes?: EffectivenessResult['componentes'] | null;
   effectiveness_source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'PROJETADA_ATIVIDADE' | 'AUSENTE';
   nivel_fadiga_calculado: string | null;
   fatorizacao_status: 'CALCULADA' | 'PROJETADA' | 'AUSENTE';
@@ -189,6 +196,8 @@ interface EffectivenessSnapshotRow {
   funcionario_id: number;
   effectiveness_pct: number | null;
   effectiveness_nivel: string | null;
+  effectiveness_componentes_json?: string | null;
+  effectiveness_componentes?: EffectivenessResult['componentes'] | null;
   source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'PROJETADA_ATIVIDADE';
   dia_periodo_embarcado?: number | null;
   total_dias_periodo?: number | null;
@@ -245,6 +254,7 @@ export function calculateMorningEffectivenessProjection(input: {
   plannedEndTime?: string | null;
   plannedActivityMinutes?: number | null;
   frmsFlightEquivalentMinutes?: number | null;
+  v2Adjustments?: FrmsV2DailyAdjustments | null;
 }): EffectivenessSnapshotRow | null {
   const presentation = normalizeText(input.presentationTime);
   const wakeTime = normalizeText(input.wakeTime);
@@ -264,8 +274,12 @@ export function calculateMorningEffectivenessProjection(input: {
   let plannedDutyMinutes = Math.max(0, Number(input.plannedActivityMinutes ?? 0));
   let endTime = presentation;
   if (plannedEndMinutes != null) {
-    plannedDutyMinutes = plannedEndMinutes - presentationMinutes;
-    if (plannedDutyMinutes < 0) plannedDutyMinutes += 24 * 60;
+    let boundaryMinutes = plannedEndMinutes - presentationMinutes;
+    if (boundaryMinutes < 0) boundaryMinutes += 24 * 60;
+    // Para dias mistos (ex.: treinamento diurno + simulador noturno), a soma
+    // das durações conhecidas é a carga de atividade; a janela início→fim é
+    // mantida apenas como limite temporal/circadiano e não substitui a carga.
+    if (plannedDutyMinutes <= 0) plannedDutyMinutes = boundaryMinutes;
     endTime = plannedEnd!;
   } else if (plannedDutyMinutes > 0) {
     endTime = minutesToClock(presentationMinutes + plannedDutyMinutes);
@@ -297,20 +311,27 @@ export function calculateMorningEffectivenessProjection(input: {
     diasDoMes: daysInMonth,
     diaDoCiclo: input.diaPeriodo ?? null,
   });
-  const effectiveness = calcEffectiveness(fatorizacao, input.limites, {
-    hora_apresentacao: presentation,
-    hora_termino: endTime,
-    hora_dormiu: sleepStart,
-    hora_acordou: wakeTime,
-    dia_periodo_embarcado: input.diaPeriodo ?? null,
-    total_dias_periodo: input.totalDiasPeriodo ?? null,
-  });
+  const effectiveness = calcEffectiveness(
+    fatorizacao,
+    input.limites,
+    {
+      hora_apresentacao: presentation,
+      hora_termino: endTime,
+      hora_dormiu: sleepStart,
+      hora_acordou: wakeTime,
+      dia_periodo_embarcado: input.diaPeriodo ?? null,
+      total_dias_periodo: input.totalDiasPeriodo ?? null,
+    },
+    null,
+    input.v2Adjustments ?? null,
+  );
 
   return {
     data_operacional: input.dataOperacional,
     funcionario_id: input.funcionarioId,
     effectiveness_pct: effectiveness.effectiveness_pct,
     effectiveness_nivel: effectiveness.nivel,
+    effectiveness_componentes: effectiveness.componentes,
     source: plannedDutyMinutes > 0 || frmsFlightEquivalentMinutes > 0 ? 'PROJETADA_ATIVIDADE' : 'PROJETADA_APRESENTACAO',
     dia_periodo_embarcado: input.diaPeriodo ?? null,
     total_dias_periodo: input.totalDiasPeriodo ?? null,
@@ -321,6 +342,11 @@ function appendMorningEffectivenessProjections(
   rows: OperationalSnapshotRows,
   limites: LimitesMap,
   anchorByKey: Map<string, { dia: number; total: number }>,
+  options?: {
+    v2Policy: FrmsOperationalPolicyV2 | null;
+    fadigaPolicy: FadigaBusinessPolicy;
+    recoveryCreditByKey: Map<string, { points: number; state: string | null; activityType: string | null }>;
+  },
 ): void {
   const existing = new Set(
     rows.effectiveness
@@ -334,12 +360,51 @@ function appendMorningEffectivenessProjections(
     current.push(activity);
     activitiesByKey.set(activityKey, current);
   }
+  const realHvByKey = new Map<string, number>();
+  for (const jornada of rows.jornadas) {
+    const jornadaKey = `${jornada.data_operacional}::${Number(jornada.funcionario_id)}`;
+    realHvByKey.set(
+      jornadaKey,
+      (realHvByKey.get(jornadaKey) ?? 0) + Math.max(0, Number(jornada.horas_voo_minutos ?? 0)),
+    );
+  }
 
   for (const checkin of rows.checkins) {
     const key = `${checkin.data_operacional}::${Number(checkin.funcionario_id)}`;
     if (existing.has(key)) continue;
     const anchor = anchorByKey.get(key);
     const activitySummary = summarizeFrmsActivities(activitiesByKey.get(key) ?? [], false);
+    let v2Adjustments: FrmsV2DailyAdjustments | null = null;
+    if (options?.v2Policy) {
+      const previousDate = addDaysIso(checkin.data_operacional, -1);
+      const previousKey = `${previousDate}::${Number(checkin.funcionario_id)}`;
+      const previousActivities = summarizeFrmsActivities(activitiesByKey.get(previousKey) ?? [], false);
+      const previousFrmsFlightMinutes =
+        (realHvByKey.get(previousKey) ?? 0) + previousActivities.simulator_minutes;
+      // Crédito de baixa HV é um modificador de carga de voo, não um sinônimo de
+      // descanso. Um dia com 0 h de voo pode ter 9 h de treinamento, standby ou
+      // outra atividade. Nesses casos a recuperação vem exclusivamente da
+      // evidência de recuperação governada, nunca de "HV zero".
+      const generatedCredit =
+        previousFrmsFlightMinutes > 0
+          ? computeFlightHoursDelta(
+              previousFrmsFlightMinutes,
+              0,
+              options.v2Policy,
+            ).generatedCreditForNextDayPoints
+          : 0;
+      v2Adjustments = {
+        policy: options.v2Policy,
+        fadigaPolicy: options.fadigaPolicy,
+        recoveryCreditPoints: options.recoveryCreditByKey.get(previousKey)?.points ?? 0,
+        flightHours: computeFlightHoursDelta(
+          activitySummary.simulator_minutes,
+          generatedCredit,
+          options.v2Policy,
+        ),
+      };
+    }
+
     const projected = calculateMorningEffectivenessProjection({
       dataOperacional: checkin.data_operacional,
       funcionarioId: Number(checkin.funcionario_id),
@@ -352,6 +417,7 @@ function appendMorningEffectivenessProjections(
       plannedEndTime: activitySummary.end_time,
       plannedActivityMinutes: activitySummary.activity_minutes,
       frmsFlightEquivalentMinutes: activitySummary.simulator_minutes,
+      v2Adjustments,
     });
     if (!projected) continue;
     rows.effectiveness.push(projected);
@@ -422,7 +488,9 @@ function resolveJornadaSource(jornada: JornadaSnapshotRow | null): {
 
   const origem = normalizeText(jornada.origem) as Origem | null;
   if (asNumber(jornada.is_manual_empty) === 1) {
-    return { source: 'INCONSISTENTE', origem: origem ?? 'MANUAL' };
+    // Linha manual vazia é apenas placeholder criado pelo fluxo de check-in.
+    // Não é uma jornada realizada nem evidência inconsistente.
+    return { source: 'AUSENTE', origem: origem ?? 'MANUAL' };
   }
 
   if (origem === 'MANUAL') {
@@ -660,7 +728,10 @@ export function buildFrmsOperationalSnapshot(
     if (!funcionario) continue;
 
     const escalado = Boolean(escala);
-    const teveJornada = Boolean(jornada);
+    const teveJornada =
+      Boolean(jornada) &&
+      asNumber(jornada?.has_operational_data) === 1 &&
+      asNumber(jornada?.is_manual_empty) !== 1;
     const activitySummary = summarizeFrmsActivities(activities, teveJornada);
     const teveAtividadeFrms = teveJornada || activities.length > 0;
 
@@ -669,15 +740,17 @@ export function buildFrmsOperationalSnapshot(
     // subjetivo obrigatório quando ele estiver ausente.
     const horaApresentacao = normalizeText(checkin?.hora_apresentacao);
     const horaTermino =
-      normalizeText(jornada?.hora_termino) ??
+      (teveJornada ? normalizeText(jornada?.hora_termino) : null) ??
       normalizeText(escala?.hora_termino) ??
       normalizeText(activitySummary.end_time);
 
-    const horasVooMinutos = asNumber(jornada?.horas_voo_minutos);
+    const horasVooMinutos = teveJornada ? asNumber(jornada?.horas_voo_minutos) : 0;
     const horasVooFrmsMinutos = horasVooMinutos + activitySummary.simulator_minutes;
     // A duração canônica é produzida pelo pipeline após o check-in. O snapshot
     // não reconstrói jornada a partir de horários parciais/legados.
-    const duracaoJornadaMinutos = Math.max(0, asNumber(jornada?.duracao_jornada_minutos));
+    const duracaoJornadaMinutos = teveJornada
+      ? Math.max(0, asNumber(jornada?.duracao_jornada_minutos))
+      : 0;
 
     const { source: jornadaDataSource, origem: jornadaOrigem } = resolveJornadaSource(jornada);
 
@@ -834,6 +907,8 @@ export function buildFrmsOperationalSnapshot(
       status_operacional_checkin: normalizeText(checkin?.status_operacional),
 
       effectiveness_pct: effectivenessPctNormalized,
+      effectiveness_componentes:
+        effectivenessPctNormalized == null ? null : efetividade?.effectiveness_componentes ?? null,
       effectiveness_source: effectivenessSource,
       nivel_fadiga_calculado: nivelFadigaCalculado,
       fatorizacao_status:
@@ -1081,6 +1156,7 @@ async function loadOperationalSnapshotRows(
              CAST(j.tripulante_id AS INTEGER) AS funcionario_id,
              fj.effectiveness_pct,
              fj.effectiveness_nivel,
+             fj.effectiveness_componentes_json,
              fj.dia_periodo_embarcado,
              fj.total_dias_periodo,
              ROW_NUMBER() OVER (
@@ -1102,6 +1178,7 @@ async function loadOperationalSnapshotRows(
            funcionario_id,
            effectiveness_pct,
            effectiveness_nivel,
+           effectiveness_componentes_json,
            dia_periodo_embarcado,
            total_dias_periodo
          FROM ranked
@@ -1117,7 +1194,17 @@ async function loadOperationalSnapshotRows(
     escalas: escalasResult.results || [],
     jornadas: jornadasResult.results || [],
     checkins: checkinsResult.results || [],
-    effectiveness: effectivenessResult.results || [],
+    effectiveness: (effectivenessResult.results || []).map((row) => {
+      let parsed: EffectivenessResult['componentes'] | null = null;
+      if (row.effectiveness_componentes_json) {
+        try {
+          parsed = JSON.parse(row.effectiveness_componentes_json) as EffectivenessResult['componentes'];
+        } catch {
+          parsed = null;
+        }
+      }
+      return { ...row, effectiveness_componentes: parsed };
+    }),
     activities,
   };
 }
@@ -1342,7 +1429,15 @@ export async function listFrmsOperationalSnapshot(
   // Para a decisão pré-voo da manhã, um check-in completo já permite calcular
   // a efetividade cognitiva projetada no instante da apresentação. Isso é
   // read-only e não transforma uma jornada planejada em jornada realizada.
-  appendMorningEffectivenessProjections(contextRows, limites, resolvedAnchorByKey);
+  const v2Policy =
+    operationalContext.parameters.FRMS_V2_ENABLED === 1
+      ? resolveOperationalPolicyV2(operationalContext.parameters)
+      : null;
+  appendMorningEffectivenessProjections(contextRows, limites, resolvedAnchorByKey, {
+    v2Policy,
+    fadigaPolicy: operationalContext.fadigaPolicy,
+    recoveryCreditByKey,
+  });
 
   // Snapshot montado sobre TODO o contexto. Só `funcionario_id` (tenant-safe) pode
   // restringir aqui — os filtros de apresentação (status/base/aeronave/

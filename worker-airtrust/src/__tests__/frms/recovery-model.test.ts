@@ -37,15 +37,51 @@ describe('deriveRecoveryEvidence', () => {
     });
   });
 
-  it('recognises onsite standby as a recovery opportunity while numeric credit remains separately lower', () => {
+  it('recognises onsite standby as a recovery opportunity only with a sufficient no-work window', () => {
     expect(
       deriveRecoveryEvidence({
         activityType: 'STANDBY_ONSITE',
         sleepHours24h: 8,
         sleepTargetHours: 8,
         consecutiveQualifyingNights: 0,
+        noWorkHours: 12,
+        minimumNoWorkHours: 12,
       }),
     ).toMatchObject({ state: 'PARTIAL', qualifyingRecoveryNight: true });
+  });
+
+  it('does not treat standby as off-duty when the no-work window is too short', () => {
+    expect(
+      deriveRecoveryEvidence({
+        activityType: 'STANDBY_HOME_HOTEL',
+        sleepHours24h: 8,
+        sleepTargetHours: 8,
+        consecutiveQualifyingNights: 1,
+        noWorkHours: 8,
+        minimumNoWorkHours: 12,
+      }),
+    ).toMatchObject({
+      state: 'LIMITED',
+      qualifyingRecoveryNight: false,
+      reasons: ['STANDBY_SEM_JANELA_MINIMA_SEM_ATIVIDADE'],
+    });
+  });
+
+  it('fails standby recovery closed when the duty window is unknown', () => {
+    expect(
+      deriveRecoveryEvidence({
+        activityType: 'STANDBY_ONSITE',
+        sleepHours24h: 8,
+        sleepTargetHours: 8,
+        consecutiveQualifyingNights: 1,
+        noWorkHours: null,
+        minimumNoWorkHours: 12,
+      }),
+    ).toMatchObject({
+      state: 'LIMITED',
+      confidence: 'MEDIUM',
+      qualifyingRecoveryNight: false,
+    });
   });
 
   it('treats one unrestricted adequate-sleep night as partial recovery', () => {

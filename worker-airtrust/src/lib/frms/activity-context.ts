@@ -1,4 +1,4 @@
-export type FrmsActivityType = 'TREINAMENTO' | 'SIMULADOR';
+export type FrmsActivityType = 'TREINAMENTO' | 'SIMULADOR' | 'ATIVIDADE';
 
 export interface FrmsActivitySnapshotRow {
   data_operacional: string;
@@ -11,10 +11,11 @@ export interface FrmsActivitySnapshotRow {
 }
 
 export interface FrmsActivitySummary {
-  activity_type: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'MISTA' | 'SEM_DADO';
+  activity_type: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'ATIVIDADE' | 'MISTA' | 'SEM_DADO';
   activity_minutes: number;
   training_minutes: number;
   simulator_minutes: number;
+  other_activity_minutes: number;
   start_time: string | null;
   end_time: string | null;
   labels: string[];
@@ -88,24 +89,33 @@ export function summarizeFrmsActivities(
 ): FrmsActivitySummary {
   let trainingMinutes = 0;
   let simulatorMinutes = 0;
+  let otherActivityMinutes = 0;
   const labels = new Set<string>();
-  const starts: string[] = [];
-  const ends: string[] = [];
+  const starts: Array<{ clock: string; minute: number }> = [];
+  const ends: Array<{ clock: string; absoluteMinute: number }> = [];
 
   for (const row of rows) {
     const duration = frmsActivityDurationMinutes(row.hora_inicio, row.hora_fim);
     if (row.activity_type === 'SIMULADOR') simulatorMinutes += duration;
-    else trainingMinutes += duration;
+    else if (row.activity_type === 'TREINAMENTO') trainingMinutes += duration;
+    else otherActivityMinutes += duration;
     if (row.titulo?.trim()) labels.add(row.titulo.trim());
     const start = normalizeClock(row.hora_inicio);
     const end = normalizeClock(row.hora_fim);
-    if (start) starts.push(start);
-    if (end) ends.push(end);
+    const startMinute = toMinutes(start);
+    const endMinute = toMinutes(end);
+    if (start && startMinute != null) starts.push({ clock: start, minute: startMinute });
+    if (end && endMinute != null) {
+      const absoluteMinute =
+        startMinute != null && endMinute < startMinute ? endMinute + 24 * 60 : endMinute;
+      ends.push({ clock: end, absoluteMinute });
+    }
   }
 
   const hasTraining = trainingMinutes > 0 || rows.some((row) => row.activity_type === 'TREINAMENTO');
   const hasSimulator = simulatorMinutes > 0 || rows.some((row) => row.activity_type === 'SIMULADOR');
-  const dimensions = Number(hasFlightDuty) + Number(hasTraining) + Number(hasSimulator);
+  const hasOtherActivity = otherActivityMinutes > 0 || rows.some((row) => row.activity_type === 'ATIVIDADE');
+  const dimensions = Number(hasFlightDuty) + Number(hasTraining) + Number(hasSimulator) + Number(hasOtherActivity);
   const activityType: FrmsActivitySummary['activity_type'] =
     dimensions === 0
       ? 'SEM_DADO'
@@ -115,15 +125,20 @@ export function summarizeFrmsActivities(
           ? 'VOO'
           : hasSimulator
             ? 'SIMULADOR'
-            : 'TREINAMENTO';
+            : hasTraining
+              ? 'TREINAMENTO'
+              : 'ATIVIDADE';
 
   return {
     activity_type: activityType,
-    activity_minutes: trainingMinutes + simulatorMinutes,
+    activity_minutes: trainingMinutes + simulatorMinutes + otherActivityMinutes,
     training_minutes: trainingMinutes,
     simulator_minutes: simulatorMinutes,
-    start_time: starts.sort()[0] ?? null,
-    end_time: ends.sort().slice(-1)[0] ?? null,
+    other_activity_minutes: otherActivityMinutes,
+    start_time:
+      starts.sort((a, b) => a.minute - b.minute)[0]?.clock ?? null,
+    end_time:
+      ends.sort((a, b) => b.absoluteMinute - a.absoluteMinute)[0]?.clock ?? null,
     labels: [...labels].slice(0, 5),
   };
 }
@@ -232,14 +247,83 @@ export async function loadFrmsActivityRows(
         AND UPPER(COALESCE(sa.status, 'AGENDADO')) <> 'CANCELADO'`,
   ).bind(empresaId, startDate, endDate).all<ActivityDbRow>();
 
+
+  const reportedActivityDays = await db.prepare(
+    `SELECT rd.reference_date AS data_operacional,
+            CAST(rd.funcionario_id AS INTEGER) AS funcionario_id,
+            CASE WHEN rd.activity_type = 'ADMIN_TRAINING' THEN 'TREINAMENTO' ELSE 'ATIVIDADE' END AS activity_type,
+            rd.duty_start_time AS hora_inicio,
+            rd.duty_end_time AS hora_fim,
+            CASE rd.activity_type
+              WHEN 'STANDBY_HOME_HOTEL' THEN 'Standby hotel/residência'
+              WHEN 'STANDBY_ONSITE' THEN 'Standby base/aeroporto'
+              WHEN 'ADMIN_TRAINING' THEN 'Treinamento/administrativo informado no check-in'
+              WHEN 'DUTY_TRAVEL' THEN 'Deslocamento a serviço'
+              ELSE 'Atividade informada no check-in'
+            END AS titulo,
+            rd.id AS source_id,
+            'REC:' || rd.id || ':' || rd.funcionario_id AS dedupe_key
+       FROM frms_recovery_activity_day rd
+       JOIN funcionarios f
+         ON f.id = rd.funcionario_id
+        AND f.empresa_id = rd.empresa_id
+        AND f.deleted_at IS NULL
+      WHERE rd.empresa_id = ?
+        AND rd.deleted_at IS NULL
+        AND date(rd.reference_date) BETWEEN date(?) AND date(?)
+        AND rd.activity_type IN ('STANDBY_HOME_HOTEL','STANDBY_ONSITE','ADMIN_TRAINING','DUTY_TRAVEL','OTHER')`,
+  ).bind(empresaId, startDate, endDate).all<ActivityDbRow>();
+
+  const reportedMixedSegments = await db.prepare(
+    `SELECT rd.reference_date AS data_operacional,
+            CAST(rs.funcionario_id AS INTEGER) AS funcionario_id,
+            CASE WHEN rs.activity_type = 'ADMIN_TRAINING' THEN 'TREINAMENTO' ELSE 'ATIVIDADE' END AS activity_type,
+            rs.start_time AS hora_inicio,
+            rs.end_time AS hora_fim,
+            CASE rs.activity_type
+              WHEN 'STANDBY_HOME_HOTEL' THEN 'Standby hotel/residência'
+              WHEN 'STANDBY_ONSITE' THEN 'Standby base/aeroporto'
+              WHEN 'ADMIN_TRAINING' THEN 'Treinamento/administrativo informado no check-in'
+              WHEN 'DUTY_TRAVEL' THEN 'Deslocamento a serviço'
+              WHEN 'OFF_DUTY' THEN 'Folga/descanso'
+              ELSE 'Atividade informada no check-in'
+            END AS titulo,
+            rs.id AS source_id,
+            'RECSEG:' || rs.id || ':' || rs.funcionario_id AS dedupe_key
+       FROM frms_recovery_activity_segment rs
+       JOIN frms_recovery_activity_day rd
+         ON rd.id = rs.recovery_day_id
+        AND rd.empresa_id = rs.empresa_id
+        AND rd.funcionario_id = rs.funcionario_id
+        AND rd.deleted_at IS NULL
+       JOIN funcionarios f
+         ON f.id = rs.funcionario_id
+        AND f.empresa_id = rs.empresa_id
+        AND f.deleted_at IS NULL
+      WHERE rs.empresa_id = ?
+        AND date(rd.reference_date) BETWEEN date(?) AND date(?)
+        AND rs.activity_type <> 'OFF_DUTY'`,
+  ).bind(empresaId, startDate, endDate).all<ActivityDbRow>();
+
   const merged = [
     ...(trainingDays.results ?? []),
     ...expandPlannedTrainingRows(plannedTraining.results ?? [], startDate, endDate),
     ...(simulatorSessions.results ?? []),
+    ...(reportedActivityDays.results ?? []),
+    ...(reportedMixedSegments.results ?? []),
   ];
   const deduped = new Map<string, FrmsActivitySnapshotRow>();
+  const semanticSeen = new Set<string>();
 
   for (const row of merged) {
+    const normalizedStart = normalizeClock(row.hora_inicio);
+    const normalizedEnd = normalizeClock(row.hora_fim);
+    const semanticKey =
+      normalizedStart && normalizedEnd
+        ? [row.activity_type, String(row.funcionario_id), String(row.data_operacional), normalizedStart, normalizedEnd].join(':')
+        : null;
+    if (semanticKey && semanticSeen.has(semanticKey)) continue;
+
     const key = row.dedupe_key || [
       row.activity_type,
       String(row.source_id ?? 'NA'),
@@ -251,11 +335,12 @@ export async function loadFrmsActivityRows(
       data_operacional: String(row.data_operacional),
       funcionario_id: Number(row.funcionario_id),
       activity_type: row.activity_type,
-      hora_inicio: normalizeClock(row.hora_inicio),
-      hora_fim: normalizeClock(row.hora_fim),
+      hora_inicio: normalizedStart,
+      hora_fim: normalizedEnd,
       titulo: row.titulo == null ? null : String(row.titulo),
       source_id: row.source_id,
     });
+    if (semanticKey) semanticSeen.add(semanticKey);
   }
 
   return [...deduped.values()].sort((a, b) => {

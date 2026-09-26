@@ -104,6 +104,8 @@ function buildHighlights(item: FrmsOperationalSnapshotItem | null | undefined): 
     highlights.push('Sessão de simulador');
   } else if (item.atividade_principal === 'TREINAMENTO') {
     highlights.push('Treinamento');
+  } else if (item.atividade_principal === 'ATIVIDADE') {
+    highlights.push('Atividade operacional');
   } else if (item.atividade_principal === 'MISTA') {
     highlights.push('Atividade mista');
   }

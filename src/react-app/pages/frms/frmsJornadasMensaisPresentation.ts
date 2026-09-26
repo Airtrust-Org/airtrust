@@ -11,7 +11,7 @@ export interface JornadaMensalPresentation {
   operationalHvLabel: string;
   operationalJourneyLabel: string;
   auxiliarySourceLabel: string | null;
-  boundarySourceLabel: 'Real' | 'Estimado' | 'Sem dado';
+  boundarySourceLabel: 'Jornada real' | 'Janela SIGVOOS estimada' | 'Sem término confirmado';
   boundarySourceClass: string;
 }
 
@@ -118,10 +118,10 @@ export function buildJornadaMensalPresentation(
         : null,
     boundarySourceLabel:
       jornada.jornada_boundary_source === 'REAL'
-        ? 'Real'
+        ? 'Jornada real'
         : jornada.jornada_boundary_source === 'ESTIMADO'
-          ? 'Estimado'
-          : 'Sem dado',
+          ? 'Janela SIGVOOS estimada'
+          : 'Sem término confirmado',
     boundarySourceClass:
       jornada.jornada_boundary_source === 'REAL'
         ? 'text-emerald-700'
