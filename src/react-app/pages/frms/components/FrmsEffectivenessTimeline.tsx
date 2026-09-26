@@ -19,6 +19,7 @@ import {
 } from 'recharts';
 import { useFrmsJornadasEffectiveness } from '@/react-app/hooks/useFrms';
 import type { FrmsEffectivenessJornadaRow } from '@/react-app/hooks/useFrms';
+import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { getEffectivenessHex, getEffectivenessLabel, type ConfigLimites } from '../frmsUtils';
 
 type ViewMode = 'effectiveness' | 'workload' | 'operational' | 'recovery';
@@ -29,7 +30,10 @@ interface ChartPoint {
   processado_com_bug: number | null;
   jornada_boundary_source: 'REAL' | 'ESTIMADO' | 'AUSENTE' | null;
   duty_hours: number | null;
+  activity_hours: number | null;
   flight_hours: number | null;
+  simulator_hours: number | null;
+  training_hours: number | null;
   sleep_hours: number | null;
   landings_count: number | null;
   temperature_c: number | null;
@@ -40,6 +44,7 @@ interface ChartPoint {
   tempo_abaixo_limiar_min: number | null;
   dia_periodo_embarcado: number | null;
   total_dias_periodo: number | null;
+  effectiveness_source: string | null;
 }
 
 interface Props {
@@ -50,6 +55,7 @@ interface Props {
   mapPeriodoInicio?: string;
   mapPeriodoFim?: string;
   mapPeriodoLabel?: string;
+  snapshotItems?: FrmsOperationalSnapshotItem[];
   compact?: boolean;
 }
 
@@ -122,18 +128,23 @@ function CustomTooltip({
         <p className="mt-1 font-semibold text-rose-600">Efetividade indisponível — check-in/dados insuficientes</p>
       )}
       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
-        <span>Jornada</span><strong>{formatHours(point.duty_hours)}</strong>
-        <span>HV do dia</span><strong>{formatHours(point.flight_hours)}</strong>
+        <span>Atividade total</span><strong>{formatHours(point.activity_hours ?? point.duty_hours)}</strong>
+        <span>Voo real</span><strong>{formatHours(point.flight_hours)}</strong>
+        <span>Simulador</span><strong>{formatHours(point.simulator_hours)}</strong>
+        <span>Treinamento</span><strong>{formatHours(point.training_hours)}</strong>
         <span>Sono/repouso</span><strong>{formatHours(point.sleep_hours)}</strong>
         <span>Pousos</span><strong>{point.landings_count ?? '—'}</strong>
         <span>Temperatura máx.</span><strong>{point.temperature_c == null ? '—' : `${point.temperature_c.toFixed(1)} °C`}</strong>
         <span>Recuperação</span><strong>{point.recovery_points == null ? '—' : `+${point.recovery_points.toFixed(1)} pt`}</strong>
       </div>
-      {point.hora_apresentacao && point.hora_termino && (
+      {point.hora_apresentacao && (
         <p className="mt-2 text-slate-500">
-          Jornada {point.jornada_boundary_source === 'REAL' ? 'real (check-in)' : point.jornada_boundary_source === 'ESTIMADO' ? 'estimada (janela operacional)' : 'não classificada'}: {point.hora_apresentacao.slice(0, 5)}–{point.hora_termino.slice(0, 5)}
+          Janela {point.jornada_boundary_source === 'REAL' ? 'informada/confirmada' : point.jornada_boundary_source === 'ESTIMADO' ? 'estimada pelo SIGVOOS' : 'não classificada'}: {point.hora_apresentacao.slice(0, 5)}–{point.hora_termino?.slice(0, 5) || 'em andamento'}
         </p>
       )}
+      {point.effectiveness_source?.startsWith('PROJETADA') ? (
+        <p className="mt-1 text-blue-700">Efetividade projetada para a decisão pré-voo.</p>
+      ) : null}
       {point.operational_load_data_quality && point.operational_load_data_quality !== 'COMPLETE' && (
         <p className="mt-1 text-amber-700">Carga operacional: {point.operational_load_data_quality}</p>
       )}
@@ -156,6 +167,7 @@ export default function FrmsEffectivenessTimeline({
   mapPeriodoInicio,
   mapPeriodoFim,
   mapPeriodoLabel,
+  snapshotItems = [],
   compact = false,
 }: Props) {
   const [dias, setDias] = useState(mapPeriodoDias);
@@ -181,16 +193,21 @@ export default function FrmsEffectivenessTimeline({
   const amarelo = config?.EFFECTIV_AMARELO_MAX ?? 77;
   const vermelho = config?.EFFECTIV_VERMELHO_MAX ?? 65;
 
-  const chartData = useMemo<ChartPoint[]>(
-    () =>
-      jornadas.map((j) => ({
+  const chartData = useMemo<ChartPoint[]>(() => {
+    const byDate = new Map<string, ChartPoint>();
+    for (const j of jornadas) {
+      const dutyHours =
+        j.duracao_jornada_minutos == null ? null : Number(j.duracao_jornada_minutos) / 60;
+      byDate.set(j.data_apresentacao, {
         data_apresentacao: j.data_apresentacao,
         effectiveness_pct: j.effectiveness_pct,
         processado_com_bug: j.processado_com_bug ?? null,
         jornada_boundary_source: j.jornada_boundary_source ?? null,
-        duty_hours:
-          j.duracao_jornada_minutos == null ? null : Number(j.duracao_jornada_minutos) / 60,
+        duty_hours: dutyHours,
+        activity_hours: dutyHours,
         flight_hours: j.horas_voo_minutos == null ? null : Number(j.horas_voo_minutos) / 60,
+        simulator_hours: null,
+        training_hours: null,
         sleep_hours:
           j.duracao_sono_efetiva_min == null ? null : Number(j.duracao_sono_efetiva_min) / 60,
         landings_count:
@@ -204,17 +221,70 @@ export default function FrmsEffectivenessTimeline({
         tempo_abaixo_limiar_min: j.tempo_abaixo_limiar_min ?? null,
         dia_periodo_embarcado: j.dia_periodo_embarcado ?? null,
         total_dias_periodo: j.total_dias_periodo ?? null,
-      })),
-    [jornadas],
-  );
+        effectiveness_source: 'REAL',
+      });
+    }
+
+    for (const item of snapshotItems) {
+      if (Number(item.funcionario_id) !== Number(tripulanteId)) continue;
+      const current = byDate.get(item.data_operacional);
+      const activityMinutes = item.atividade_frms_minutos ?? item.duracao_jornada_minutos;
+      const boundarySource =
+        item.jornada_data_source === 'ESTIMADO'
+          ? 'ESTIMADO'
+          : item.jornada_data_source === 'REAL' || item.jornada_data_source === 'MANUAL'
+            ? 'REAL'
+            : current?.jornada_boundary_source ?? null;
+      byDate.set(item.data_operacional, {
+        data_apresentacao: item.data_operacional,
+        effectiveness_pct:
+          item.effectiveness_pct == null ? current?.effectiveness_pct ?? null : Number(item.effectiveness_pct),
+        processado_com_bug: current?.processado_com_bug ?? null,
+        jornada_boundary_source: boundarySource,
+        duty_hours:
+          activityMinutes == null ? current?.duty_hours ?? null : Number(activityMinutes) / 60,
+        activity_hours:
+          activityMinutes == null ? current?.activity_hours ?? null : Number(activityMinutes) / 60,
+        flight_hours: Number(item.horas_voo_minutos ?? 0) / 60,
+        simulator_hours: Number(item.simulador_minutos ?? 0) / 60,
+        training_hours: Number(item.treinamento_minutos ?? 0) / 60,
+        sleep_hours:
+          item.horas_sono == null ? current?.sleep_hours ?? null : Number(item.horas_sono),
+        landings_count: current?.landings_count ?? null,
+        temperature_c: current?.temperature_c ?? null,
+        recovery_points:
+          item.recovery_credit_points == null
+            ? current?.recovery_points ?? null
+            : Number(item.recovery_credit_points),
+        hora_apresentacao:
+          item.hora_apresentacao ?? item.atividade_hora_inicio ?? current?.hora_apresentacao ?? null,
+        hora_termino:
+          item.hora_termino ?? item.atividade_hora_fim ?? current?.hora_termino ?? null,
+        operational_load_data_quality: current?.operational_load_data_quality ?? null,
+        tempo_abaixo_limiar_min: current?.tempo_abaixo_limiar_min ?? null,
+        dia_periodo_embarcado: current?.dia_periodo_embarcado ?? null,
+        total_dias_periodo: current?.total_dias_periodo ?? null,
+        effectiveness_source: item.effectiveness_source ?? current?.effectiveness_source ?? null,
+      });
+    }
+    return [...byDate.values()].sort((a, b) => a.data_apresentacao.localeCompare(b.data_apresentacao));
+  }, [jornadas, snapshotItems, tripulanteId]);
 
   const hasValidEffectiveness = chartData.some(
     (point) => point.effectiveness_pct != null && Number.isFinite(point.effectiveness_pct),
   );
   const hasOperationalHistory = chartData.some(
     (point) =>
-      (point.duty_hours != null && Number.isFinite(point.duty_hours)) ||
-      (point.flight_hours != null && Number.isFinite(point.flight_hours)),
+      (point.activity_hours != null && Number.isFinite(point.activity_hours)) ||
+      (point.flight_hours != null && Number.isFinite(point.flight_hours)) ||
+      (point.simulator_hours != null && Number.isFinite(point.simulator_hours)) ||
+      (point.training_hours != null && Number.isFinite(point.training_hours)),
+  );
+  const hasOperationalDrivers = chartData.some(
+    (point) => point.landings_count != null || point.temperature_c != null,
+  );
+  const hasRecoveryHistory = chartData.some(
+    (point) => point.sleep_hours != null || point.recovery_points != null,
   );
 
   useEffect(() => {
@@ -314,6 +384,18 @@ export default function FrmsEffectivenessTimeline({
             ) : null}
           </div>
         </div>
+      ) : mode === 'workload' && !hasOperationalHistory ? (
+        <div className="flex min-h-44 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-5 text-center">
+          <p className="text-sm text-slate-600">Sem atividade, voo, simulador ou treinamento confirmado neste período.</p>
+        </div>
+      ) : mode === 'operational' && !hasOperationalDrivers ? (
+        <div className="flex min-h-44 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-5 text-center">
+          <p className="text-sm text-slate-600">Pousos e temperatura ainda não estão disponíveis para este período. A ausência não é tratada como zero.</p>
+        </div>
+      ) : mode === 'recovery' && !hasRecoveryHistory ? (
+        <div className="flex min-h-44 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-5 text-center">
+          <p className="text-sm text-slate-600">Sem sono/recuperação confirmados neste período.</p>
+        </div>
       ) : (
         <ResponsiveContainer width="100%" height={compact ? 230 : 270}>
           <LineChart data={chartData} margin={{ top: 8, right: 48, left: 0, bottom: 0 }}>
@@ -380,8 +462,10 @@ export default function FrmsEffectivenessTimeline({
 
             {mode === 'workload' ? (
               <>
-                <Line yAxisId="hours" type="monotone" dataKey="duty_hours" name="Jornada" stroke="#2563EB" strokeWidth={1.8} dot={{ r: 3 }} connectNulls={false} />
-                <Line yAxisId="hours" type="monotone" dataKey="flight_hours" name="HV" stroke="#7C3AED" strokeWidth={1.8} dot={{ r: 3 }} connectNulls={false} />
+                <Line yAxisId="hours" type="monotone" dataKey="activity_hours" name="Atividade total" stroke="#2563EB" strokeWidth={1.8} dot={{ r: 3 }} connectNulls={false} />
+                <Line yAxisId="hours" type="monotone" dataKey="flight_hours" name="Voo real" stroke="#7C3AED" strokeWidth={1.8} dot={{ r: 3 }} connectNulls={false} />
+                <Line yAxisId="hours" type="monotone" dataKey="simulator_hours" name="Simulador" stroke="#0F766E" strokeWidth={1.8} dot={{ r: 3 }} connectNulls={false} />
+                <Line yAxisId="hours" type="monotone" dataKey="training_hours" name="Treinamento" stroke="#B45309" strokeWidth={1.8} dot={{ r: 3 }} connectNulls={false} />
               </>
             ) : null}
 
@@ -404,7 +488,7 @@ export default function FrmsEffectivenessTimeline({
 
       <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
         <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">Efetividade: somente check-in completo · Jornada/HV: real ou estimada, conforme fonte</span>
-        {mode === 'workload' && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1">Jornada e HV em horas</span>}
+        {mode === 'workload' && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1">Atividade, voo real, simulador e treinamento em horas; simulador permanece separado da HV regulatória</span>}
         {mode === 'operational' && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1">Pousos + temperatura observada</span>}
         {mode === 'recovery' && <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1">Sono + crédito efetivamente aplicado</span>}
       </div>
