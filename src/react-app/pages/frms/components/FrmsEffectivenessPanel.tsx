@@ -52,7 +52,15 @@ interface Props {
   componentes?: EffectivenessComponentes | null;
   operationalLoad?: OperationalLoadDetail | null;
   config: Partial<Record<string, number>> | null;
-  dataSource?: 'REAL' | 'MANUAL' | 'ESTIMADO' | 'AUSENTE' | 'INCONSISTENTE' | null;
+  dataSource?:
+    | 'REAL'
+    | 'MANUAL'
+    | 'ESTIMADO'
+    | 'AUSENTE'
+    | 'INCONSISTENTE'
+    | 'PROJETADA_APRESENTACAO'
+    | 'PROJETADA_ATIVIDADE'
+    | null;
   compact?: boolean;
 }
 
@@ -163,11 +171,11 @@ export default function FrmsEffectivenessPanel({
   }
 
   const componentLabels: Record<string, string> = {
-    processo_s: 'Sono acumulado (Proc. S)',
-    processo_c: 'Ritmo circadiano (Proc. C)',
+    processo_s: 'Período embarcado',
+    processo_c: 'Ritmo circadiano',
     recuperacao: 'Recuperação',
-    repouso: 'Repouso',
-    hv: 'Horas Voo',
+    repouso: 'Sono / repouso',
+    hv: 'Voo / simulador',
     pousos: 'Pousos',
     temperatura: 'Temperatura',
     imc: 'IMC',
@@ -188,9 +196,24 @@ export default function FrmsEffectivenessPanel({
         100% representa a referência do modelo; reduções mostram os fatores que degradaram o índice.
       </p>
       <p className={`mb-3 text-[11px] font-medium ${
-        dataSource === 'REAL' ? 'text-emerald-700' : dataSource === 'ESTIMADO' ? 'text-amber-700' : 'text-slate-500'
+        dataSource === 'REAL'
+          ? 'text-emerald-700'
+          : dataSource === 'PROJETADA_APRESENTACAO' || dataSource === 'PROJETADA_ATIVIDADE' || dataSource === 'ESTIMADO'
+            ? 'text-amber-700'
+            : 'text-slate-500'
       }`}>
-        Fonte da jornada: {dataSource === 'REAL' ? 'real — horário informado no check-in' : dataSource === 'ESTIMADO' ? 'estimada — janela operacional anterior ao check-in' : 'não confirmada'}.
+        Fonte do cálculo:{' '}
+        {dataSource === 'REAL'
+          ? 'real — jornada realizada/confirmada'
+          : dataSource === 'PROJETADA_ATIVIDADE'
+            ? 'projeção da manhã — check-in + atividade planejada do dia'
+            : dataSource === 'PROJETADA_APRESENTACAO'
+              ? 'projeção da manhã — check-in + horário de apresentação; carga futura ainda não incorporada'
+              : dataSource === 'ESTIMADO'
+                ? 'histórica estimada — janela operacional derivada do SIGVOOS'
+                : dataSource === 'MANUAL'
+                  ? 'manual — janela informada'
+                  : 'não confirmada'}.
       </p>
 
       {/* Score circle + label */}
