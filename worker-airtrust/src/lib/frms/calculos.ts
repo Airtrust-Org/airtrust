@@ -445,17 +445,14 @@ export function calcEffectiveness(
 
   const diaPeriodo = jornada.dia_periodo_embarcado ?? null;
   const totalPeriodo = jornada.total_dias_periodo ?? null;
-  let fatorProgressivo = 0;
-  if (
-    totalPeriodo != null &&
-    totalPeriodo >= 2 &&
-    diaPeriodo != null &&
-    diaPeriodo >= 1 &&
-    diaPeriodo <= totalPeriodo
-  ) {
-    const max = -Math.abs(limites.FRMS_EMBARQUE_PROGRESSO_MAX ?? 8) / 100;
-    fatorProgressivo = max * ((diaPeriodo - 1) / (totalPeriodo - 1));
-  }
+  // O desgaste progressivo do período embarcado já é representado por
+  // fator_ciclo_embarcado_pct, calculado por calcFatorCicloEmbarcado() com
+  // parâmetros governados e policy approval explícito. A migration 0268
+  // introduziu FRMS_EMBARQUE_PROGRESSO_MAX como uma segunda curva para o
+  // mesmo fenômeno e calcEffectiveness passou a somá-la novamente ao Processo S,
+  // duplicando a penalização. Mantemos dia/total para rastreabilidade, mas não
+  // aplicamos uma segunda degradação do ciclo aqui.
+  const fatorProgressivo = 0;
 
   // V2 keeps offshore dimensions independent. The legacy aggregate is retained only
   // as a compatibility field for historical consumers; there is no shared cap.
