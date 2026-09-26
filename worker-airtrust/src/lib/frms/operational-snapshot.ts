@@ -1,6 +1,12 @@
 import type { Origem, FrmsJornada, LimitesMap } from './types';
 import { calcularDiaDoCiclo } from './db-service-jornadas';
-import { calcEffectiveness, calcFatorizacao } from './calculos';
+import { calcEffectiveness, calcFatorizacao, type FrmsV2DailyAdjustments } from './calculos';
+import {
+  computeFlightHoursDelta,
+  resolveOperationalPolicyV2,
+  type FrmsOperationalPolicyV2,
+} from './operational-policy-v2';
+import type { FadigaBusinessPolicy } from './fadiga-score';
 import {
   loadFrmsActivityRows,
   summarizeFrmsActivities,
@@ -245,6 +251,7 @@ export function calculateMorningEffectivenessProjection(input: {
   plannedEndTime?: string | null;
   plannedActivityMinutes?: number | null;
   frmsFlightEquivalentMinutes?: number | null;
+  v2Adjustments?: FrmsV2DailyAdjustments | null;
 }): EffectivenessSnapshotRow | null {
   const presentation = normalizeText(input.presentationTime);
   const wakeTime = normalizeText(input.wakeTime);
@@ -297,14 +304,20 @@ export function calculateMorningEffectivenessProjection(input: {
     diasDoMes: daysInMonth,
     diaDoCiclo: input.diaPeriodo ?? null,
   });
-  const effectiveness = calcEffectiveness(fatorizacao, input.limites, {
-    hora_apresentacao: presentation,
-    hora_termino: endTime,
-    hora_dormiu: sleepStart,
-    hora_acordou: wakeTime,
-    dia_periodo_embarcado: input.diaPeriodo ?? null,
-    total_dias_periodo: input.totalDiasPeriodo ?? null,
-  });
+  const effectiveness = calcEffectiveness(
+    fatorizacao,
+    input.limites,
+    {
+      hora_apresentacao: presentation,
+      hora_termino: endTime,
+      hora_dormiu: sleepStart,
+      hora_acordou: wakeTime,
+      dia_periodo_embarcado: input.diaPeriodo ?? null,
+      total_dias_periodo: input.totalDiasPeriodo ?? null,
+    },
+    null,
+    input.v2Adjustments ?? null,
+  );
 
   return {
     data_operacional: input.dataOperacional,
@@ -321,6 +334,11 @@ function appendMorningEffectivenessProjections(
   rows: OperationalSnapshotRows,
   limites: LimitesMap,
   anchorByKey: Map<string, { dia: number; total: number }>,
+  options?: {
+    v2Policy: FrmsOperationalPolicyV2 | null;
+    fadigaPolicy: FadigaBusinessPolicy;
+    recoveryCreditByKey: Map<string, { points: number; state: string | null; activityType: string | null }>;
+  },
 ): void {
   const existing = new Set(
     rows.effectiveness
@@ -334,12 +352,44 @@ function appendMorningEffectivenessProjections(
     current.push(activity);
     activitiesByKey.set(activityKey, current);
   }
+  const realHvByKey = new Map<string, number>();
+  for (const jornada of rows.jornadas) {
+    const jornadaKey = `${jornada.data_operacional}::${Number(jornada.funcionario_id)}`;
+    realHvByKey.set(
+      jornadaKey,
+      (realHvByKey.get(jornadaKey) ?? 0) + Math.max(0, Number(jornada.horas_voo_minutos ?? 0)),
+    );
+  }
 
   for (const checkin of rows.checkins) {
     const key = `${checkin.data_operacional}::${Number(checkin.funcionario_id)}`;
     if (existing.has(key)) continue;
     const anchor = anchorByKey.get(key);
     const activitySummary = summarizeFrmsActivities(activitiesByKey.get(key) ?? [], false);
+    let v2Adjustments: FrmsV2DailyAdjustments | null = null;
+    if (options?.v2Policy) {
+      const previousDate = addDaysIso(checkin.data_operacional, -1);
+      const previousKey = `${previousDate}::${Number(checkin.funcionario_id)}`;
+      const previousActivities = summarizeFrmsActivities(activitiesByKey.get(previousKey) ?? [], false);
+      const previousFrmsFlightMinutes =
+        (realHvByKey.get(previousKey) ?? 0) + previousActivities.simulator_minutes;
+      const generatedCredit = computeFlightHoursDelta(
+        previousFrmsFlightMinutes,
+        0,
+        options.v2Policy,
+      ).generatedCreditForNextDayPoints;
+      v2Adjustments = {
+        policy: options.v2Policy,
+        fadigaPolicy: options.fadigaPolicy,
+        recoveryCreditPoints: options.recoveryCreditByKey.get(previousKey)?.points ?? 0,
+        flightHours: computeFlightHoursDelta(
+          activitySummary.simulator_minutes,
+          generatedCredit,
+          options.v2Policy,
+        ),
+      };
+    }
+
     const projected = calculateMorningEffectivenessProjection({
       dataOperacional: checkin.data_operacional,
       funcionarioId: Number(checkin.funcionario_id),
@@ -352,6 +402,7 @@ function appendMorningEffectivenessProjections(
       plannedEndTime: activitySummary.end_time,
       plannedActivityMinutes: activitySummary.activity_minutes,
       frmsFlightEquivalentMinutes: activitySummary.simulator_minutes,
+      v2Adjustments,
     });
     if (!projected) continue;
     rows.effectiveness.push(projected);
@@ -1342,7 +1393,15 @@ export async function listFrmsOperationalSnapshot(
   // Para a decisão pré-voo da manhã, um check-in completo já permite calcular
   // a efetividade cognitiva projetada no instante da apresentação. Isso é
   // read-only e não transforma uma jornada planejada em jornada realizada.
-  appendMorningEffectivenessProjections(contextRows, limites, resolvedAnchorByKey);
+  const v2Policy =
+    operationalContext.parameters.FRMS_V2_ENABLED === 1
+      ? resolveOperationalPolicyV2(operationalContext.parameters)
+      : null;
+  appendMorningEffectivenessProjections(contextRows, limites, resolvedAnchorByKey, {
+    v2Policy,
+    fadigaPolicy: operationalContext.fadigaPolicy,
+    recoveryCreditByKey,
+  });
 
   // Snapshot montado sobre TODO o contexto. Só `funcionario_id` (tenant-safe) pode
   // restringir aqui — os filtros de apresentação (status/base/aeronave/
