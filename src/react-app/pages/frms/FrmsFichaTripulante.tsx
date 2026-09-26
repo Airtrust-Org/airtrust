@@ -374,6 +374,22 @@ export default function FrmsFichaTripulante() {
     acumulo?.effectiveness != null &&
     acumulo.effectiveness_reference_date === hojeIso &&
     Math.abs(Number(acumulo.effectiveness.effectiveness_pct) - currentEffectivenessPct) < 0.05;
+  const currentEffectivenessComponentes =
+    todayFortnightSnapshotItem?.effectiveness_pct != null
+      ? todayFortnightSnapshotItem.effectiveness_componentes ?? null
+      : persistedEffectivenessMatchesToday && acumulo?.effectiveness
+        ? (acumulo.effectiveness.effectiveness_componentes as {
+            processo_s: number;
+            processo_c: number;
+            repouso: number;
+            hv: number;
+            duracao: number;
+            pousos?: number;
+            temperatura?: number;
+            imc?: number;
+            recuperacao?: number;
+          } | null)
+        : null;
 
   const handleEditar = (j: FrmsJornadaRow) => {
     setEditingJornada(j);
@@ -547,26 +563,12 @@ export default function FrmsFichaTripulante() {
               <FrmsEffectivenessPanel
                 effectiveness_pct={currentEffectivenessPct}
                 effectiveness_nivel={currentEffectivenessNivel}
-                componentes={
-                  persistedEffectivenessMatchesToday && acumulo?.effectiveness
-                    ? (acumulo.effectiveness.effectiveness_componentes as {
-                        processo_s: number;
-                        processo_c: number;
-                        repouso: number;
-                        hv: number;
-                        duracao: number;
-                        pousos?: number;
-                        temperatura?: number;
-                        imc?: number;
-                        recuperacao?: number;
-                      } | null)
-                    : null
-                }
+                componentes={currentEffectivenessComponentes}
                 config={limites}
                 dataSource={
                   todayFortnightSnapshotItem?.effectiveness_source === 'PROJETADA_APRESENTACAO' ||
                   todayFortnightSnapshotItem?.effectiveness_source === 'PROJETADA_ATIVIDADE'
-                    ? 'ESTIMADO'
+                    ? todayFortnightSnapshotItem.effectiveness_source
                     : todayFortnightSnapshotItem?.jornada_data_source ?? null
                 }
               />
