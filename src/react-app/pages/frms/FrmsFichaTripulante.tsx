@@ -622,9 +622,11 @@ export default function FrmsFichaTripulante() {
                     ? 'Simulador'
                     : todayFortnightSnapshotItem.atividade_principal === 'TREINAMENTO'
                       ? 'Treinamento'
-                      : todayFortnightSnapshotItem.atividade_principal === 'MISTA'
-                        ? 'Atividade mista'
-                        : 'Voo'}
+                      : todayFortnightSnapshotItem.atividade_principal === 'ATIVIDADE'
+                        ? 'Atividade operacional'
+                        : todayFortnightSnapshotItem.atividade_principal === 'MISTA'
+                          ? 'Atividade mista'
+                          : 'Voo'}
                   {' · '}
                   {formatMin(
                     todayFortnightSnapshotItem.atividade_frms_minutos ??
