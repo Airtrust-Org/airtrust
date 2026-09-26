@@ -174,6 +174,8 @@ describe('morning effectiveness projection', () => {
     expect(projected?.effectiveness_pct).toEqual(expect.any(Number));
     expect(projected?.effectiveness_pct).toBeGreaterThanOrEqual(0);
     expect(projected?.effectiveness_pct).toBeLessThanOrEqual(100);
+    expect(projected?.effectiveness_componentes_json).toBeTruthy();
+    expect(JSON.parse(String(projected?.effectiveness_componentes_json))).toHaveProperty('processo_s');
   });
 
   it('incorpora simulador planejado na projeção como HV equivalente FRMS', () => {
