@@ -172,6 +172,15 @@ describe('morning effectiveness projection', () => {
     expect(projected).not.toBeNull();
     expect(projected?.source).toBe('PROJETADA_APRESENTACAO');
     expect(projected?.effectiveness_pct).toEqual(expect.any(Number));
+    expect(projected?.effectiveness_componentes).toEqual(
+      expect.objectContaining({
+        processo_s: expect.any(Number),
+        processo_c: expect.any(Number),
+        repouso: expect.any(Number),
+        hv: expect.any(Number),
+        duracao: expect.any(Number),
+      }),
+    );
     expect(projected?.effectiveness_pct).toBeGreaterThanOrEqual(0);
     expect(projected?.effectiveness_pct).toBeLessThanOrEqual(100);
   });
