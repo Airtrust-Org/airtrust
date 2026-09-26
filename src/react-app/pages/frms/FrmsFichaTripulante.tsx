@@ -36,6 +36,7 @@ import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperational
 import { FortnightConsolidatedPanel } from './components/FortnightOperationalIndicator';
 import { FrmsSignalGrid } from './components/FrmsOperationalSignals';
 import { formatRecoveryActivityType } from './fortnightOperationalLabels';
+import { localTodayIso, resolveCalendarFortnightRange, resolveFrmsOperationalDate } from './frmsOperationalDate';
 
 const FrmsEffectivenessTimeline = lazy(() => import('./components/FrmsEffectivenessTimeline'));
 
@@ -245,7 +246,9 @@ export default function FrmsFichaTripulante() {
   const [showForm, setShowForm] = useState(false);
   const [editingJornada, setEditingJornada] = useState<FrmsJornadaRow | null>(null);
   const [selectedExplanationDate, setSelectedExplanationDate] = useState<string | null>(null);
-  const hojeIso = new Date().toISOString().slice(0, 10);
+  const actualTodayIso = localTodayIso();
+  const focusDate = resolveFrmsOperationalDate(searchParams.get('data'));
+  const calendarFortnight = resolveCalendarFortnightRange(focusDate);
 
   const requestedFuncionarioId = Number(id);
 
@@ -259,8 +262,8 @@ export default function FrmsFichaTripulante() {
     loading: loadingFrmsSnapshotToday,
     meta: frmsSnapshotMeta,
   } = useFrmsOperationalSnapshot({
-    data_inicio: hojeIso,
-    data_fim: hojeIso,
+    data_inicio: focusDate,
+    data_fim: focusDate,
     funcionario_id: id,
   });
   const todayFortnightSnapshotItem = frmsSnapshotItems.find(
@@ -274,8 +277,11 @@ export default function FrmsFichaTripulante() {
   const todayFortnightIndicator = shouldExposeFortnightIndicator
     ? todayFortnightSnapshotItem?.fortnight_indicator ?? null
     : null;
-  const fortnightPeriodStart = todayFortnightIndicator?.periodo_inicio || '';
-  const fortnightPeriodEnd = todayFortnightIndicator?.periodo_fim || '';
+  const hasResolvedFortnightPeriod = Boolean(
+    todayFortnightIndicator?.periodo_inicio && todayFortnightIndicator?.periodo_fim,
+  );
+  const fortnightPeriodStart = todayFortnightIndicator?.periodo_inicio || calendarFortnight.inicio;
+  const fortnightPeriodEnd = todayFortnightIndicator?.periodo_fim || calendarFortnight.fim;
   const shouldLoadFortnightPeriod =
     shouldExposeFortnightIndicator && Boolean(fortnightPeriodStart) && Boolean(fortnightPeriodEnd);
   const {
@@ -293,11 +299,16 @@ export default function FrmsFichaTripulante() {
   const fullPeriodFortnightSnapshotItem =
     fortnightPeriodSnapshotItems.find(
       (item) =>
-        item.funcionario_id === requestedFuncionarioId && item.data_operacional === hojeIso,
+        item.funcionario_id === requestedFuncionarioId &&
+        item.data_operacional === focusDate &&
+        item.fortnight_indicator != null,
     ) ||
     [...fortnightPeriodSnapshotItems]
       .reverse()
-      .find((item) => item.funcionario_id === requestedFuncionarioId) ||
+      .find(
+        (item) =>
+          item.funcionario_id === requestedFuncionarioId && item.fortnight_indicator != null,
+      ) ||
     null;
   const fortnightIndicator =
     shouldExposeFortnightIndicator
@@ -306,7 +317,7 @@ export default function FrmsFichaTripulante() {
   const loadingFrmsSnapshot = loadingFrmsSnapshotToday || (shouldLoadFortnightPeriod && loadingFortnightPeriodSnapshot);
 
   const { data: recentJornadasRaw } = useFrmsJornadasEffectiveness(id, 7);
-  const { data: ultimaJornadaRaw } = useFrmsUltimaJornada(id, { dataFim: hojeIso });
+  const { data: ultimaJornadaRaw } = useFrmsUltimaJornada(id, { dataFim: focusDate });
   const recentJornadas = recentJornadasRaw as FrmsEffectivenessJornadaRow[] | null;
   const latestJornada =
     recentJornadas && recentJornadas.length > 0 ? recentJornadas[recentJornadas.length - 1] : null;
@@ -362,18 +373,24 @@ export default function FrmsFichaTripulante() {
 
   // Nome real do tripulante
   const nomeTrip = acumulo?.nome ?? (id ? `Tripulante #${id}` : 'Tripulante');
+  const persistedEffectivenessMatchesFocusDate =
+    acumulo?.effectiveness != null && acumulo.effectiveness_reference_date === focusDate;
   const currentEffectivenessPct =
     todayFortnightSnapshotItem?.effectiveness_pct != null
       ? Number(todayFortnightSnapshotItem.effectiveness_pct)
-      : acumulo?.effectiveness?.effectiveness_pct ?? null;
+      : persistedEffectivenessMatchesFocusDate
+        ? Number(acumulo?.effectiveness?.effectiveness_pct)
+        : null;
   const currentEffectivenessNivel =
     todayFortnightSnapshotItem?.effectiveness_pct != null
       ? todayFortnightSnapshotItem.nivel_fadiga_calculado ?? undefined
-      : acumulo?.effectiveness?.effectiveness_nivel ?? undefined;
+      : persistedEffectivenessMatchesFocusDate
+        ? acumulo?.effectiveness?.effectiveness_nivel ?? undefined
+        : undefined;
   const persistedEffectivenessMatchesToday =
+    persistedEffectivenessMatchesFocusDate &&
     currentEffectivenessPct != null &&
     acumulo?.effectiveness != null &&
-    acumulo.effectiveness_reference_date === hojeIso &&
     Math.abs(Number(acumulo.effectiveness.effectiveness_pct) - currentEffectivenessPct) < 0.05;
   const currentEffectivenessComponentes =
     todayFortnightSnapshotItem?.effectiveness_pct != null
@@ -597,7 +614,9 @@ export default function FrmsFichaTripulante() {
                 mapPeriodoDias={15}
                 mapPeriodoInicio={fortnightPeriodStart || undefined}
                 mapPeriodoFim={fortnightPeriodEnd || undefined}
-                mapPeriodoLabel="Período embarcado atual"
+                mapPeriodoLabel={
+                  hasResolvedFortnightPeriod ? 'Período embarcado atual' : 'Quinzena civil selecionada'
+                }
                 snapshotItems={fortnightPeriodSnapshotItems}
                 compact
               />
@@ -648,7 +667,7 @@ export default function FrmsFichaTripulante() {
                     todayFortnightSnapshotItem.atividade_hora_inicio)?.slice(0, 5) || '—'} →{' '}
                   {(todayFortnightSnapshotItem.hora_termino ??
                     todayFortnightSnapshotItem.atividade_hora_fim)?.slice(0, 5) ||
-                    (todayFortnightSnapshotItem.data_operacional === hojeIso
+                    (todayFortnightSnapshotItem.data_operacional === actualTodayIso
                       ? 'Em andamento'
                       : 'fim não informado')}
                 </p>
@@ -705,7 +724,7 @@ export default function FrmsFichaTripulante() {
               </p>
             </div>
             <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-600">
-              {todayFortnightSnapshotItem?.data_operacional || hojeIso}
+              {todayFortnightSnapshotItem?.data_operacional || focusDate}
             </span>
           </div>
 
@@ -764,7 +783,7 @@ export default function FrmsFichaTripulante() {
           indicator={fortnightIndicator}
           loading={loadingFrmsSnapshot}
           funcionarioId={requestedFuncionarioId}
-          focusDate={hojeIso}
+          focusDate={focusDate}
         />
 
         {/* Month selector + Table */}
@@ -901,9 +920,9 @@ export default function FrmsFichaTripulante() {
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-gray-600 tabular-nums">
-                        <div>{j.hora_termino || (j.data === hojeIso ? 'Em andamento' : '—')}</div>
+                        <div>{j.hora_termino || (j.data === actualTodayIso ? 'Em andamento' : '—')}</div>
                         <div className={`mt-0.5 text-[10px] font-semibold ${presentation.boundarySourceClass}`}>
-                          {j.data === hojeIso && !j.hora_termino
+                          {j.data === actualTodayIso && !j.hora_termino
                             ? 'Término ainda não disponível'
                             : presentation.boundarySourceLabel}
                         </div>

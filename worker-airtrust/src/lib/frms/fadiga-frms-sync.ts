@@ -82,36 +82,12 @@ export async function sincronizarCheckinComFrms(
       .bind(empresaId, funcionarioId, dataCheckin)
       .first<FrmsJornada>();
 
-  let jornada = await findJornada();
+  const jornada = await findJornada();
 
-  // A check-in completo é evidência suficiente para iniciar a jornada FRMS do
-  // dia, mesmo antes de existir escala/SIGVOOS. O pipeline governado fechará a
-  // janela como "sem voo" pela configuração tenant-scoped e reconciliará a
-  // mesma jornada quando chegar evidência operacional posterior.
-  if (!jornada?.id && completeCheckin) {
-    const generatedId = crypto.randomUUID();
-    await db
-      .prepare(
-        `INSERT OR IGNORE INTO frms_jornada (
-           id, empresa_id, tripulante_id, data, status,
-           hora_apresentacao, hora_termino, duracao_jornada_minutos,
-           horas_voo_minutos, repouso_plataforma_valido,
-           observacao, registrado_por, origem,
-           tipo_base, tripulacao_aumentada, aclimatado,
-           created_at, updated_at
-         ) VALUES (?, ?, ?, ?, 'ES', ?, NULL, 0, 0, 0, ?, 'FRMS_CHECKIN_AUTO', 'MANUAL', 'HOME', 0, 1, datetime('now'), datetime('now'))`,
-      )
-      .bind(
-        generatedId,
-        empresaId,
-        funcionarioId,
-        dataCheckin,
-        presentationTimeReal,
-        'Jornada FRMS criada automaticamente a partir do check-in diário.',
-      )
-      .run();
-    jornada = await findJornada();
-  }
+  // O check-in diário não cria jornada operacional. Ele sustenta a projeção
+  // pré-voo no snapshot; a jornada persistida só nasce de evidência operacional
+  // (SIGVOOS/escala/manual governado). Isso evita placeholders MANUAL bloquearem
+  // a importação posterior do voo real.
 
   if (!jornada?.id) {
     await registrarEventoUnico(db, empresaId, checkinId, 'CHECKIN_SEM_JORNADA', {

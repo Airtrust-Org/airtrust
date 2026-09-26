@@ -143,6 +143,7 @@ export interface FrmsOperationalSnapshotFilters {
 export interface BuildOperationalSnapshotInput {
   empresaId: number;
   policy?: FrmsDecisaoPolicy;
+  limites?: Pick<LimitesMap, 'FDP_MAXIMO_HORAS' | 'HV_DIARIA_HORAS'>;
   hoje?: string;
   rows: {
     escalas: ScaleSnapshotRow[];
@@ -942,6 +943,7 @@ export function buildFrmsOperationalSnapshot(
     const decisaoFields = buildDecisaoFields(baseItem as FrmsOperationalSnapshotItem, {
       hoje: input.hoje,
       policy: input.policy,
+      limites: input.limites,
     });
 
     // Decisão operacional canônica V1 — fonte única de verdade para a fila da coordenação.
@@ -1316,6 +1318,8 @@ export async function listFrmsOperationalSnapshot(
     requestedKeys.add(`${row.data_operacional}::${asNumber(row.funcionario_id)}`);
   for (const row of requestedRows.effectiveness)
     requestedKeys.add(`${row.data_operacional}::${asNumber(row.funcionario_id)}`);
+  for (const row of requestedRows.activities)
+    requestedKeys.add(`${row.data_operacional}::${asNumber(row.funcionario_id)}`);
 
   // Âncoras resolvidas (dia/total) para os dias solicitados — reaproveitadas depois
   // para não repetir a chamada a calcularDiaDoCiclo().
@@ -1446,6 +1450,7 @@ export async function listFrmsOperationalSnapshot(
   const snapshot = buildFrmsOperationalSnapshot({
     empresaId: params.empresaId,
     policy: params.policy,
+    limites,
     hoje: params.hoje,
     rows: {
       escalas: contextRows.escalas,
@@ -1578,6 +1583,7 @@ export async function listFrmsOperationalSnapshot(
       ...buildDecisaoFields(itemWithFortnight, {
         hoje: params.hoje,
         policy: params.policy,
+        limites,
       }),
     };
   });
