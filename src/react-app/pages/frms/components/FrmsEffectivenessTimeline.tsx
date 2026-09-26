@@ -19,6 +19,7 @@ import {
 } from 'recharts';
 import { useFrmsJornadasEffectiveness } from '@/react-app/hooks/useFrms';
 import type { FrmsEffectivenessJornadaRow } from '@/react-app/hooks/useFrms';
+import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { getEffectivenessHex, getEffectivenessLabel, type ConfigLimites } from '../frmsUtils';
 
 type ViewMode = 'effectiveness' | 'workload' | 'operational' | 'recovery';
@@ -30,6 +31,8 @@ interface ChartPoint {
   jornada_boundary_source: 'REAL' | 'ESTIMADO' | 'AUSENTE' | null;
   duty_hours: number | null;
   flight_hours: number | null;
+  simulator_hours: number | null;
+  training_hours: number | null;
   sleep_hours: number | null;
   landings_count: number | null;
   temperature_c: number | null;
@@ -51,6 +54,7 @@ interface Props {
   mapPeriodoFim?: string;
   mapPeriodoLabel?: string;
   compact?: boolean;
+  snapshotItems?: FrmsOperationalSnapshotItem[];
 }
 
 function formatDate(dateStr: string): string {
@@ -123,7 +127,9 @@ function CustomTooltip({
       )}
       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
         <span>Jornada</span><strong>{formatHours(point.duty_hours)}</strong>
-        <span>HV do dia</span><strong>{formatHours(point.flight_hours)}</strong>
+        <span>Voo real</span><strong>{formatHours(point.flight_hours)}</strong>
+        <span>Simulador</span><strong>{formatHours(point.simulator_hours)}</strong>
+        <span>Treinamento</span><strong>{formatHours(point.training_hours)}</strong>
         <span>Sono/repouso</span><strong>{formatHours(point.sleep_hours)}</strong>
         <span>Pousos</span><strong>{point.landings_count ?? '—'}</strong>
         <span>Temperatura máx.</span><strong>{point.temperature_c == null ? '—' : `${point.temperature_c.toFixed(1)} °C`}</strong>
@@ -157,6 +163,7 @@ export default function FrmsEffectivenessTimeline({
   mapPeriodoFim,
   mapPeriodoLabel,
   compact = false,
+  snapshotItems = [],
 }: Props) {
   const [dias, setDias] = useState(mapPeriodoDias);
   const [usarPeriodoMapa, setUsarPeriodoMapa] = useState(true);
@@ -181,9 +188,11 @@ export default function FrmsEffectivenessTimeline({
   const amarelo = config?.EFFECTIV_AMARELO_MAX ?? 77;
   const vermelho = config?.EFFECTIV_VERMELHO_MAX ?? 65;
 
-  const chartData = useMemo<ChartPoint[]>(
-    () =>
-      jornadas.map((j) => ({
+  const chartData = useMemo<ChartPoint[]>(() => {
+    const byDate = new Map<string, ChartPoint>();
+
+    for (const j of jornadas) {
+      byDate.set(j.data_apresentacao, {
         data_apresentacao: j.data_apresentacao,
         effectiveness_pct: j.effectiveness_pct,
         processado_com_bug: j.processado_com_bug ?? null,
@@ -191,6 +200,8 @@ export default function FrmsEffectivenessTimeline({
         duty_hours:
           j.duracao_jornada_minutos == null ? null : Number(j.duracao_jornada_minutos) / 60,
         flight_hours: j.horas_voo_minutos == null ? null : Number(j.horas_voo_minutos) / 60,
+        simulator_hours: null,
+        training_hours: null,
         sleep_hours:
           j.duracao_sono_efetiva_min == null ? null : Number(j.duracao_sono_efetiva_min) / 60,
         landings_count:
@@ -204,9 +215,57 @@ export default function FrmsEffectivenessTimeline({
         tempo_abaixo_limiar_min: j.tempo_abaixo_limiar_min ?? null,
         dia_periodo_embarcado: j.dia_periodo_embarcado ?? null,
         total_dias_periodo: j.total_dias_periodo ?? null,
-      })),
-    [jornadas],
-  );
+      });
+    }
+
+    for (const snapshot of snapshotItems) {
+      const current = byDate.get(snapshot.data_operacional);
+      const snapshotBoundary =
+        snapshot.jornada_data_source === 'REAL'
+          ? 'REAL'
+          : snapshot.jornada_data_source === 'ESTIMADO' || snapshot.jornada_data_source === 'MANUAL'
+            ? 'ESTIMADO'
+            : 'AUSENTE';
+      byDate.set(snapshot.data_operacional, {
+        data_apresentacao: snapshot.data_operacional,
+        effectiveness_pct: snapshot.effectiveness_pct ?? current?.effectiveness_pct ?? null,
+        processado_com_bug: current?.processado_com_bug ?? null,
+        jornada_boundary_source: snapshotBoundary,
+        duty_hours:
+          snapshot.atividade_frms_minutos != null
+            ? Number(snapshot.atividade_frms_minutos) / 60
+            : snapshot.duracao_jornada_minutos > 0
+              ? Number(snapshot.duracao_jornada_minutos) / 60
+              : current?.duty_hours ?? null,
+        flight_hours:
+          snapshot.horas_voo_minutos > 0
+            ? Number(snapshot.horas_voo_minutos) / 60
+            : current?.flight_hours ?? null,
+        simulator_hours:
+          Number(snapshot.simulador_minutos ?? 0) > 0 ? Number(snapshot.simulador_minutos) / 60 : null,
+        training_hours:
+          Number(snapshot.treinamento_minutos ?? 0) > 0 ? Number(snapshot.treinamento_minutos) / 60 : null,
+        sleep_hours:
+          snapshot.horas_sono != null ? Number(snapshot.horas_sono) : current?.sleep_hours ?? null,
+        landings_count: current?.landings_count ?? null,
+        temperature_c: current?.temperature_c ?? null,
+        recovery_points:
+          snapshot.recovery_credit_points != null
+            ? Number(snapshot.recovery_credit_points)
+            : current?.recovery_points ?? null,
+        hora_apresentacao:
+          snapshot.hora_apresentacao ?? snapshot.atividade_hora_inicio ?? current?.hora_apresentacao ?? null,
+        hora_termino:
+          snapshot.hora_termino ?? snapshot.atividade_hora_fim ?? current?.hora_termino ?? null,
+        operational_load_data_quality: current?.operational_load_data_quality ?? null,
+        tempo_abaixo_limiar_min: current?.tempo_abaixo_limiar_min ?? null,
+        dia_periodo_embarcado: snapshot.fortnight_indicator?.dia_periodo ?? current?.dia_periodo_embarcado ?? null,
+        total_dias_periodo: snapshot.fortnight_indicator?.total_dias_periodo ?? current?.total_dias_periodo ?? null,
+      });
+    }
+
+    return [...byDate.values()].sort((a, b) => a.data_apresentacao.localeCompare(b.data_apresentacao));
+  }, [jornadas, snapshotItems]);
 
   const hasValidEffectiveness = chartData.some(
     (point) => point.effectiveness_pct != null && Number.isFinite(point.effectiveness_pct),
@@ -214,8 +273,24 @@ export default function FrmsEffectivenessTimeline({
   const hasOperationalHistory = chartData.some(
     (point) =>
       (point.duty_hours != null && Number.isFinite(point.duty_hours)) ||
-      (point.flight_hours != null && Number.isFinite(point.flight_hours)),
+      (point.flight_hours != null && Number.isFinite(point.flight_hours)) ||
+      (point.simulator_hours != null && Number.isFinite(point.simulator_hours)) ||
+      (point.training_hours != null && Number.isFinite(point.training_hours)),
   );
+  const hasOperationalMetrics = chartData.some(
+    (point) => point.landings_count != null || point.temperature_c != null,
+  );
+  const hasRecoveryMetrics = chartData.some(
+    (point) => point.sleep_hours != null || point.recovery_points != null,
+  );
+  const modeHasData =
+    mode === 'effectiveness'
+      ? hasValidEffectiveness
+      : mode === 'workload'
+        ? hasOperationalHistory
+        : mode === 'operational'
+          ? hasOperationalMetrics
+          : hasRecoveryMetrics;
 
   useEffect(() => {
     if (!loading && !hasValidEffectiveness && hasOperationalHistory && mode === 'effectiveness') {
@@ -300,16 +375,26 @@ export default function FrmsEffectivenessTimeline({
         <div className="flex h-44 items-center justify-center">
           <div className="h-4 w-32 animate-pulse rounded bg-slate-200" />
         </div>
-      ) : mode === 'effectiveness' && !hasValidEffectiveness ? (
+      ) : !modeHasData ? (
         <div className="flex min-h-44 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-5 text-center">
           <div>
-            <p className="text-sm font-semibold text-slate-700">Efetividade indisponível</p>
-            <p className="mt-1 text-xs text-slate-500">
-              O cálculo só é apresentado quando o check-in diário contém apresentação, sono/repouso e despertar válidos.
+            <p className="text-sm font-semibold text-slate-700">
+              {mode === 'effectiveness'
+                ? 'Efetividade indisponível'
+                : mode === 'workload'
+                  ? 'Sem carga operacional registrada'
+                  : mode === 'operational'
+                    ? 'Sem dados de pousos ou temperatura'
+                    : 'Sem dados de sono ou recuperação'}
             </p>
-            {hasOperationalHistory ? (
+            <p className="mt-1 text-xs text-slate-500">
+              {mode === 'effectiveness'
+                ? 'O cálculo só é apresentado quando o check-in diário contém apresentação, sono/repouso e despertar válidos.'
+                : 'Não há dados confiáveis desta dimensão no período selecionado; ausência não é tratada como zero.'}
+            </p>
+            {mode === 'effectiveness' && hasOperationalHistory ? (
               <button type="button" onClick={() => setMode('workload')} className="mt-3 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
-                Ver histórico de jornada / HV
+                Ver histórico de atividade / voo
               </button>
             ) : null}
           </div>
@@ -381,7 +466,9 @@ export default function FrmsEffectivenessTimeline({
             {mode === 'workload' ? (
               <>
                 <Line yAxisId="hours" type="monotone" dataKey="duty_hours" name="Jornada" stroke="#2563EB" strokeWidth={1.8} dot={{ r: 3 }} connectNulls={false} />
-                <Line yAxisId="hours" type="monotone" dataKey="flight_hours" name="HV" stroke="#7C3AED" strokeWidth={1.8} dot={{ r: 3 }} connectNulls={false} />
+                <Line yAxisId="hours" type="monotone" dataKey="flight_hours" name="Voo real" stroke="#7C3AED" strokeWidth={1.8} dot={{ r: 3 }} connectNulls={false} />
+                <Line yAxisId="hours" type="monotone" dataKey="simulator_hours" name="Simulador" stroke="#0F766E" strokeWidth={1.8} dot={{ r: 3 }} connectNulls={false} />
+                <Line yAxisId="hours" type="monotone" dataKey="training_hours" name="Treinamento" stroke="#D97706" strokeWidth={1.8} dot={{ r: 3 }} connectNulls={false} />
               </>
             ) : null}
 
@@ -404,7 +491,7 @@ export default function FrmsEffectivenessTimeline({
 
       <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
         <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">Efetividade: somente check-in completo · Jornada/HV: real ou estimada, conforme fonte</span>
-        {mode === 'workload' && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1">Jornada e HV em horas</span>}
+        {mode === 'workload' && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1">Atividade, voo real, simulador e treinamento em horas</span>}
         {mode === 'operational' && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1">Pousos + temperatura observada</span>}
         {mode === 'recovery' && <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1">Sono + crédito efetivamente aplicado</span>}
       </div>
