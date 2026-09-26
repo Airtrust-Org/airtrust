@@ -30,6 +30,20 @@ const TIMELINE_STATUS_LABELS: Record<string, string> = {
   INCOMPLETO: 'Incompleto',
 };
 
+function formatActivityPrincipal(value: string | null | undefined): string {
+  switch (value) {
+    case 'VOO': return 'Voo';
+    case 'TREINAMENTO': return 'Treinamento';
+    case 'SIMULADOR': return 'Simulador';
+    case 'STANDBY': return 'Standby';
+    case 'DESLOCAMENTO': return 'Deslocamento a serviço';
+    case 'OUTRA_ATIVIDADE': return 'Outra atividade';
+    case 'MISTA': return 'Atividade mista';
+    case 'FOLGA': return 'Folga / descanso';
+    default: return 'Atividade';
+  }
+}
+
 function formatTimelineCheckin(status: string): string {
   if (status === 'RECEBIDO') return 'Recebido';
   if (status === 'PENDENTE') return 'Pendente';
@@ -228,13 +242,7 @@ function FortnightTimelinePanel({
                         ) : day.teve_atividade_frms ? (
                           <>
                             <div className="font-medium text-slate-800">
-                              {day.atividade_principal === 'SIMULADOR'
-                                ? 'Simulador'
-                                : day.atividade_principal === 'TREINAMENTO'
-                                  ? 'Treinamento'
-                                  : day.atividade_principal === 'MISTA'
-                                    ? 'Atividade mista'
-                                    : 'Voo'}
+                              {formatActivityPrincipal(day.atividade_principal)}
                               {' · '}
                               {formatFortnightMinutes(day.atividade_min)}
                             </div>
