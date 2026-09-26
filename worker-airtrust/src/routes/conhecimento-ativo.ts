@@ -89,11 +89,14 @@ conhecimentoAtivoRoutes.get('/me', async (c) => {
 
 conhecimentoAtivoRoutes.get('/me/desafio-diario', async (c) => {
   const { empresaId, funcionarioId } = contextoFuncionario(c);
+  const rodadaRaw = Number(c.req.query('rodada') || 0);
+  const rodada = Number.isInteger(rodadaRaw) && rodadaRaw >= 0 && rodadaRaw <= 9999 ? rodadaRaw : 0;
   try {
     const data = await obterDesafioDiario({
       db: c.env.DB,
       empresaId,
       funcionarioId,
+      rodada,
     });
     return c.json({ success: true, data });
   } catch (error) {
@@ -103,13 +106,15 @@ conhecimentoAtivoRoutes.get('/me/desafio-diario', async (c) => {
 
 conhecimentoAtivoRoutes.post('/me/desafio-diario/responder', async (c) => {
   const { empresaId, funcionarioId } = contextoFuncionario(c);
-  let body: { alternativa_id?: number } = {};
+  let body: { alternativa_id?: number; rodada?: number } = {};
   try {
-    body = await c.req.json<{ alternativa_id?: number }>();
+    body = await c.req.json<{ alternativa_id?: number; rodada?: number }>();
   } catch {
     body = {};
   }
   const alternativaId = Number(body.alternativa_id);
+  const rodadaRaw = Number(body.rodada ?? 0);
+  const rodada = Number.isInteger(rodadaRaw) && rodadaRaw >= 0 && rodadaRaw <= 9999 ? rodadaRaw : 0;
   if (!Number.isInteger(alternativaId) || alternativaId <= 0) {
     throw new ApiError('Alternativa inválida', 400, 'CONHECIMENTO_ATIVO_ALTERNATIVA_INVALIDA');
   }
@@ -119,6 +124,7 @@ conhecimentoAtivoRoutes.post('/me/desafio-diario/responder', async (c) => {
       empresaId,
       funcionarioId,
       alternativaId,
+      rodada,
     });
     return c.json({ success: true, data });
   } catch (error) {
