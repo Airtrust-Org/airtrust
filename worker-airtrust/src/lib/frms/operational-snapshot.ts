@@ -457,7 +457,9 @@ function resolveJornadaSource(jornada: JornadaSnapshotRow | null): {
 
   const origem = normalizeText(jornada.origem) as Origem | null;
   if (asNumber(jornada.is_manual_empty) === 1) {
-    return { source: 'INCONSISTENTE', origem: origem ?? 'MANUAL' };
+    // Stub técnico criado pelo check-in: preserva rastreabilidade MANUAL, mas
+    // não representa jornada concluída nem inconsistência operacional.
+    return { source: 'MANUAL', origem: origem ?? 'MANUAL' };
   }
 
   if (origem === 'MANUAL') {
