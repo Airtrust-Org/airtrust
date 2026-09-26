@@ -381,11 +381,18 @@ function appendMorningEffectivenessProjections(
       const previousActivities = summarizeFrmsActivities(activitiesByKey.get(previousKey) ?? [], false);
       const previousFrmsFlightMinutes =
         (realHvByKey.get(previousKey) ?? 0) + previousActivities.simulator_minutes;
-      const generatedCredit = computeFlightHoursDelta(
-        previousFrmsFlightMinutes,
-        0,
-        options.v2Policy,
-      ).generatedCreditForNextDayPoints;
+      // Crédito de baixa HV é um modificador de carga de voo, não um sinônimo de
+      // descanso. Um dia com 0 h de voo pode ter 9 h de treinamento, standby ou
+      // outra atividade. Nesses casos a recuperação vem exclusivamente da
+      // evidência de recuperação governada, nunca de "HV zero".
+      const generatedCredit =
+        previousFrmsFlightMinutes > 0
+          ? computeFlightHoursDelta(
+              previousFrmsFlightMinutes,
+              0,
+              options.v2Policy,
+            ).generatedCreditForNextDayPoints
+          : 0;
       v2Adjustments = {
         policy: options.v2Policy,
         fadigaPolicy: options.fadigaPolicy,
