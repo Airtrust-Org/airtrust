@@ -53,6 +53,13 @@ const OPTIONS: Array<{ value: RecoveryActivityType; label: string; description: 
   },
 ];
 
+const PRIMARY_ACTIVITY_TYPES = new Set<RecoveryActivityType>([
+  'OFF_DUTY',
+  'STANDBY_HOME_HOTEL',
+  'STANDBY_ONSITE',
+  'ADMIN_TRAINING',
+]);
+
 const SEGMENT_OPTIONS: Array<{ value: RecoveryActivitySegmentInput['activity_type']; label: string }> = [
   { value: 'OFF_DUTY', label: 'Livre / descanso' },
   { value: 'STANDBY_HOME_HOTEL', label: 'Standby hotel/residência' },
@@ -75,6 +82,7 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
   const referenceDate = useMemo(() => previousOperationalDate(today), [today]);
   const { data: context, isLoading, isError } = useFrmsRecoveryContext(referenceDate);
   const [editing, setEditing] = useState(false);
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [activityType, setActivityType] = useState<RecoveryActivityType | null>(null);
   const [standbyLocation, setStandbyLocation] = useState<'HOME' | 'HOTEL' | 'BASE_AIRPORT' | 'OTHER'>('HOTEL');
   const [immediateCallout, setImmediateCallout] = useState<boolean | null>(null);
@@ -86,7 +94,10 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
   const needsStandbyDetail =
     activityType === 'STANDBY_HOME_HOTEL' || activityType === 'STANDBY_ONSITE';
   const needsDutyWindow =
-    activityType === 'ADMIN_TRAINING' || activityType === 'DUTY_TRAVEL' || activityType === 'OTHER';
+    activityType !== null && activityType !== 'OFF_DUTY' && activityType !== 'MIXED';
+  const visibleOptions = showMoreOptions
+    ? OPTIONS
+    : OPTIONS.filter((option) => PRIMARY_ACTIVITY_TYPES.has(option.value));
 
   const stageActivity = (nextType: RecoveryActivityType | null) => {
     setActivityType(nextType);
@@ -108,11 +119,11 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
           ? immediateCallout
           : undefined,
       duty_start_time:
-        nextType === 'ADMIN_TRAINING' || nextType === 'DUTY_TRAVEL' || nextType === 'OTHER'
+        nextType !== 'OFF_DUTY' && nextType !== 'MIXED'
           ? dutyStart || undefined
           : undefined,
       duty_end_time:
-        nextType === 'ADMIN_TRAINING' || nextType === 'DUTY_TRAVEL' || nextType === 'OTHER'
+        nextType !== 'OFF_DUTY' && nextType !== 'MIXED'
           ? dutyEnd || undefined
           : undefined,
       notes: notes.trim() || undefined,
@@ -155,12 +166,12 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
       <div className="mb-3">
         <h2 className="text-sm font-semibold text-slate-900">Atividade de ontem</h2>
         <p className="mt-1 text-xs text-slate-600">
-          Não encontramos atividade de voo no SIGVOOS em {referenceDate}. Como foi sua condição operacional?
+          Não encontramos voo no SIGVOOS em {referenceDate}. Informe o que você fez e, quando houve atividade ou standby, o horário de início e fim.
         </p>
       </div>
 
       <div className="grid gap-2 md:grid-cols-2">
-        {OPTIONS.map((option) => {
+        {visibleOptions.map((option) => {
           const selected = activityType === option.value;
           return (
             <button
@@ -180,6 +191,14 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
         })}
       </div>
 
+      <button
+        type="button"
+        onClick={() => setShowMoreOptions((value) => !value)}
+        className="mt-3 text-xs font-semibold text-sky-700 hover:underline"
+      >
+        {showMoreOptions ? 'Mostrar apenas situações mais comuns' : 'Outra situação'}
+      </button>
+
       {needsStandbyDetail && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {activityType === 'STANDBY_HOME_HOTEL' && (
@@ -195,6 +214,8 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                     activity_type: 'STANDBY_HOME_HOTEL',
                     standby_location: value,
                     immediate_callout_required: immediateCallout,
+                    duty_start_time: dutyStart || undefined,
+                    duty_end_time: dutyEnd || undefined,
                   };
                   stagePendingFrmsRecoveryActivity(referenceDate, input, true);
                 }}
@@ -223,6 +244,8 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                       standby_location:
                         activityType === 'STANDBY_ONSITE' ? 'BASE_AIRPORT' : standbyLocation,
                       immediate_callout_required: true,
+                      duty_start_time: dutyStart || undefined,
+                      duty_end_time: dutyEnd || undefined,
                     },
                     true,
                   );
@@ -242,6 +265,8 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                       standby_location:
                         activityType === 'STANDBY_ONSITE' ? 'BASE_AIRPORT' : standbyLocation,
                       immediate_callout_required: false,
+                      duty_start_time: dutyStart || undefined,
+                      duty_end_time: dutyEnd || undefined,
                     },
                     true,
                   );
