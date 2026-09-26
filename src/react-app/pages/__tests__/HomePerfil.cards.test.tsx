@@ -17,6 +17,10 @@ vi.mock('../../components/dashboard/CardMeusEAD', () => ({
   CardMeusEAD: () => <div data-testid="card-meus-ead">Meus cursos EAD</div>,
 }));
 
+vi.mock('../../components/conhecimento-ativo/DesafioDiarioCard', () => ({
+  DesafioDiarioCard: () => <div data-testid="desafio-diario">Desafio diário</div>,
+}));
+
 vi.mock('../../hooks/useAuth', () => ({
   useAuth: () => ({
     user: null,
@@ -212,5 +216,51 @@ describe('HomePerfil EAD visibility', () => {
       </MemoryRouter>,
     );
     expect(screen.queryByRole('button', { name: /Conhecimento Ativo/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('HomePerfil desafio diário da tripulação', () => {
+  it('mostra o desafio apenas para tripulantes', () => {
+    const { unmount } = render(
+      <MemoryRouter>
+        <HomePerfil homeProfile="STUDENT_TRIPULACAO" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('desafio-diario')).toBeInTheDocument();
+    unmount();
+
+    render(
+      <MemoryRouter>
+        <HomePerfil homeProfile="STUDENT_MANUTENCAO" />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId('desafio-diario')).not.toBeInTheDocument();
+  });
+
+  it('posiciona o desafio depois dos dados do tripulante e antes da Fadiga Diária', () => {
+    render(
+      <MemoryRouter>
+        <HomePerfil
+          homeProfile="STUDENT_TRIPULACAO"
+          funcionarioContext={{
+            id: 7,
+            setor: 'Operações de Voo',
+            funcao: 'Piloto',
+            cargo: 'Comandante',
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    const dadosTripulante = screen.getByText('Operações de Voo');
+    const desafioDiario = screen.getByTestId('desafio-diario');
+    const fadiga = screen.getByRole('button', { name: /Fadiga Diária/i });
+
+    expect(
+      dadosTripulante.compareDocumentPosition(desafioDiario) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      desafioDiario.compareDocumentPosition(fadiga) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });
