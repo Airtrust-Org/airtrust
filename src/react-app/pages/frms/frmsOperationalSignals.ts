@@ -99,7 +99,7 @@ export function resolveDailyFatigueSignal(
 export function resolveComplianceSignal(
   item: FrmsOperationalSnapshotItem,
 ): FrmsOperationalSignal {
-  const base = { key: 'compliance' as const, label: 'Carga operacional' };
+  const base = { key: 'compliance' as const, label: 'Risco do período' };
   const indicator = item.fortnight_indicator;
 
   const formatHours = (minutes: number | null | undefined) => {
@@ -108,11 +108,8 @@ export function resolveComplianceSignal(
     return `${(value / 60).toFixed(1).replace('.', ',')} h`;
   };
   const details = [
-    formatHours(indicator?.horas_voo_frms_periodo_min)
-      ? `HV FRMS ${formatHours(indicator?.horas_voo_frms_periodo_min)}`
-      : null,
     formatHours(indicator?.horas_voo_periodo_min)
-      ? `voo ${formatHours(indicator?.horas_voo_periodo_min)}`
+      ? `voo real ${formatHours(indicator?.horas_voo_periodo_min)}`
       : null,
     formatHours(indicator?.simulador_periodo_min)
       ? `simulador ${formatHours(indicator?.simulador_periodo_min)}`
