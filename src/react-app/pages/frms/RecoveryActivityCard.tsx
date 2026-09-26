@@ -10,7 +10,7 @@ import {
   type RecoveryActivityType,
 } from '@/react-app/hooks/useFrmsRecovery';
 
-const OPTIONS: Array<{ value: RecoveryActivityType; label: string; description: string }> = [
+const PRIMARY_OPTIONS: Array<{ value: RecoveryActivityType; label: string; description: string }> = [
   {
     value: 'OFF_DUTY',
     label: 'Folga / descanso',
@@ -33,25 +33,30 @@ const OPTIONS: Array<{ value: RecoveryActivityType; label: string; description: 
   },
   {
     value: 'DUTY_TRAVEL',
-    label: 'Deslocamento a serviço / viagem',
-    description: 'Deslocamento operacional sem etapa de voo registrada como tripulante.',
+    label: 'Deslocamento a serviço',
+    description: 'Viagem ou deslocamento operacional sem voo como tripulante.',
   },
   {
     value: 'MIXED',
     label: 'Mais de uma situação',
     description: 'O dia teve dois ou mais períodos com condições diferentes.',
   },
+];
+
+const SECONDARY_OPTIONS: Array<{ value: RecoveryActivityType; label: string; description: string }> = [
   {
     value: 'OTHER',
-    label: 'Outro',
-    description: 'Outra condição operacional não contemplada acima.',
+    label: 'Outra atividade',
+    description: 'Use somente se nenhuma das opções acima representar o dia.',
   },
   {
     value: 'FLIGHT_NOT_IN_SOURCE',
     label: 'Houve voo, mas não aparece no sistema',
-    description: 'Registra uma possível falha de integração do SIGVOOS; não gera recuperação.',
+    description: 'Sinaliza falha de fonte para reconciliação; não cria voo no FRMS.',
   },
 ];
+
+const OPTIONS = [...PRIMARY_OPTIONS, ...SECONDARY_OPTIONS];
 
 const SEGMENT_OPTIONS: Array<{ value: RecoveryActivitySegmentInput['activity_type']; label: string }> = [
   { value: 'OFF_DUTY', label: 'Livre / descanso' },
@@ -86,7 +91,8 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
   const needsStandbyDetail =
     activityType === 'STANDBY_HOME_HOTEL' || activityType === 'STANDBY_ONSITE';
   const needsDutyWindow =
-    activityType === 'ADMIN_TRAINING' || activityType === 'DUTY_TRAVEL' || activityType === 'OTHER';
+    activityType != null &&
+    !['OFF_DUTY', 'MIXED', 'FLIGHT_NOT_IN_SOURCE', 'UNKNOWN'].includes(activityType);
 
   const stageActivity = (nextType: RecoveryActivityType | null) => {
     setActivityType(nextType);
@@ -108,11 +114,11 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
           ? immediateCallout
           : undefined,
       duty_start_time:
-        nextType === 'ADMIN_TRAINING' || nextType === 'DUTY_TRAVEL' || nextType === 'OTHER'
+        !['OFF_DUTY', 'MIXED', 'FLIGHT_NOT_IN_SOURCE', 'UNKNOWN'].includes(nextType)
           ? dutyStart || undefined
           : undefined,
       duty_end_time:
-        nextType === 'ADMIN_TRAINING' || nextType === 'DUTY_TRAVEL' || nextType === 'OTHER'
+        !['OFF_DUTY', 'MIXED', 'FLIGHT_NOT_IN_SOURCE', 'UNKNOWN'].includes(nextType)
           ? dutyEnd || undefined
           : undefined,
       notes: notes.trim() || undefined,
@@ -139,7 +145,7 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
               {LABELS[existingType] || existingType || 'Classificação registrada'}
             </p>
             <p className="mt-1 text-xs text-emerald-700">
-              Esta informação qualifica a oportunidade de recuperação; ela não cria bônus automático de efetividade.
+              Esta informação entra como evidência de carga/recuperação. Folga não cria bônus automático; standby e atividade de trabalho seguem critérios próprios de duração, sono e disponibilidade.
             </p>
           </div>
           <Button variant="secondary" onClick={() => setEditing(true)}>
@@ -160,7 +166,7 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
       </div>
 
       <div className="grid gap-2 md:grid-cols-2">
-        {OPTIONS.map((option) => {
+        {PRIMARY_OPTIONS.map((option) => {
           const selected = activityType === option.value;
           return (
             <button
@@ -178,6 +184,32 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
             </button>
           );
         })}
+      </div>
+
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          Outras situações
+        </p>
+        <div className="grid gap-2 md:grid-cols-2">
+          {SECONDARY_OPTIONS.map((option) => {
+            const selected = activityType === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => stageActivity(option.value)}
+                className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                  selected
+                    ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-200'
+                    : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                }`}
+              >
+                <span className="block text-sm font-semibold text-slate-800">{option.label}</span>
+                <span className="mt-0.5 block text-xs text-slate-500">{option.description}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {needsStandbyDetail && (
@@ -223,6 +255,8 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                       standby_location:
                         activityType === 'STANDBY_ONSITE' ? 'BASE_AIRPORT' : standbyLocation,
                       immediate_callout_required: true,
+                      duty_start_time: dutyStart || undefined,
+                      duty_end_time: dutyEnd || undefined,
                     },
                     true,
                   );
@@ -242,6 +276,8 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                       standby_location:
                         activityType === 'STANDBY_ONSITE' ? 'BASE_AIRPORT' : standbyLocation,
                       immediate_callout_required: false,
+                      duty_start_time: dutyStart || undefined,
+                      duty_end_time: dutyEnd || undefined,
                     },
                     true,
                   );
@@ -255,7 +291,11 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
       )}
 
       {needsDutyWindow && (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+          <p className="mb-3 text-xs text-slate-600">
+            Informe o início e o fim da atividade. Esses horários definem a janela de trabalho/standby do dia anterior e evitam inferir jornada pelo voo.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm font-medium text-slate-700">
             Início aproximado
             <input
@@ -300,6 +340,7 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
               className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2"
             />
           </label>
+          </div>
         </div>
       )}
 
