@@ -123,6 +123,9 @@ describe('FRMS activity context', () => {
               };
             }
             if (sql.includes('FROM treinamentos_planejados t')) return { results: [] };
+            if (sql.includes('FROM frms_recovery_activity_day rd') || sql.includes('FROM frms_recovery_activity_segment rs')) {
+              return { results: [] };
+            }
             return {
               results: [{
                 data_operacional: '2026-09-25',
@@ -144,8 +147,10 @@ describe('FRMS activity context', () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.activity_type).toBe('SIMULADOR');
-    expect(queries).toHaveLength(3);
+    expect(queries).toHaveLength(5);
     expect(queries[2]?.sql).toContain('FROM sessoes_participantes sp');
+    expect(queries[3]?.sql).toContain('FROM frms_recovery_activity_day rd');
+    expect(queries[4]?.sql).toContain('FROM frms_recovery_activity_segment rs');
     for (const query of queries) {
       expect(query.binds[0]).toBe(63);
       expect(query.sql).toContain('empresa_id');
