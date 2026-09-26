@@ -58,7 +58,7 @@ export interface FrmsOperationalSnapshotItem {
   simulador_minutos?: number;
   treinamento_minutos?: number;
   atividade_frms_minutos?: number;
-  atividade_principal?: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'MISTA' | 'SEM_DADO';
+  atividade_principal?: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'STANDBY' | 'DESLOCAMENTO' | 'OUTRA_ATIVIDADE' | 'MISTA' | 'FOLGA' | 'SEM_DADO';
   atividade_hora_inicio?: string | null;
   atividade_hora_fim?: string | null;
   atividade_rotulos?: string[];
@@ -76,6 +76,7 @@ export interface FrmsOperationalSnapshotItem {
   status_operacional_checkin: string | null;
 
   effectiveness_pct: number | null;
+  effectiveness_componentes?: Record<string, number> | null;
   effectiveness_source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'PROJETADA_ATIVIDADE' | 'AUSENTE';
   nivel_fadiga_calculado: string | null;
   fatorizacao_status: 'CALCULADA' | 'PROJETADA' | 'AUSENTE';
@@ -143,6 +144,7 @@ export interface BuildOperationalSnapshotInput {
     checkins: CheckinSnapshotRow[];
     effectiveness: EffectivenessSnapshotRow[];
     activities?: FrmsActivitySnapshotRow[];
+    reportedActivities?: ReportedActivitySnapshotRow[];
     funcionarios: FuncionarioSnapshotRow[];
   };
   filters?: FrmsOperationalSnapshotFilters;
@@ -189,9 +191,19 @@ interface EffectivenessSnapshotRow {
   funcionario_id: number;
   effectiveness_pct: number | null;
   effectiveness_nivel: string | null;
+  effectiveness_componentes_json?: string | null;
   source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'PROJETADA_ATIVIDADE';
   dia_periodo_embarcado?: number | null;
   total_dias_periodo?: number | null;
+}
+
+interface ReportedActivitySnapshotRow {
+  data_operacional: string;
+  funcionario_id: number;
+  activity_type: string | null;
+  duty_start_time: string | null;
+  duty_end_time: string | null;
+  total_duty_minutes: number | null;
 }
 
 interface FuncionarioSnapshotRow {
@@ -208,6 +220,21 @@ function normalizeText(value: unknown): string | null {
   if (value == null) return null;
   const text = String(value).trim();
   return text.length > 0 ? text : null;
+}
+
+function parseEffectivenessComponents(value: string | null | undefined): Record<string, number> | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    const out: Record<string, number> = {};
+    for (const [key, raw] of Object.entries(parsed)) {
+      const numberValue = Number(raw);
+      if (Number.isFinite(numberValue)) out[key] = numberValue;
+    }
+    return Object.keys(out).length > 0 ? out : null;
+  } catch {
+    return null;
+  }
 }
 
 function asNumber(value: unknown, fallback = 0): number {
@@ -231,6 +258,41 @@ function projectSleepStart(wakeTime: string, sleepHours: number): string | null 
   const wake = clockToMinutes(wakeTime);
   if (wake == null || !Number.isFinite(sleepHours) || sleepHours <= 0 || sleepHours > 24) return null;
   return minutesToClock(wake - Math.round(sleepHours * 60));
+}
+
+function clockSpanMinutes(start: string | null | undefined, end: string | null | undefined): number | null {
+  const startMinutes = clockToMinutes(start);
+  const endMinutes = clockToMinutes(end);
+  if (startMinutes == null || endMinutes == null) return null;
+  return endMinutes >= startMinutes ? endMinutes - startMinutes : 1440 - startMinutes + endMinutes;
+}
+
+function latestClockFromStart(
+  start: string | null | undefined,
+  candidates: Array<string | null | undefined>,
+): string | null {
+  const valid = candidates.map(normalizeText).filter((value): value is string => clockToMinutes(value) != null);
+  if (valid.length === 0) return null;
+  const startMinutes = clockToMinutes(start);
+  if (startMinutes == null) return valid.sort().slice(-1)[0] ?? null;
+  return valid
+    .map((value) => {
+      const endMinutes = clockToMinutes(value)!;
+      const distance = endMinutes >= startMinutes ? endMinutes - startMinutes : 1440 - startMinutes + endMinutes;
+      return { value, distance };
+    })
+    .sort((a, b) => b.distance - a.distance)[0]?.value ?? null;
+}
+
+function hasOperationalJourneyEvidence(jornada: JornadaSnapshotRow | null): boolean {
+  if (!jornada || asNumber(jornada.is_manual_empty) === 1 || asNumber(jornada.has_operational_data) !== 1) {
+    return false;
+  }
+  return (
+    asNumber(jornada.horas_voo_minutos) > 0 ||
+    asNumber(jornada.duracao_jornada_minutos) > 0 ||
+    Boolean(normalizeText(jornada.hora_termino))
+  );
 }
 
 export function calculateMorningEffectivenessProjection(input: {
@@ -311,6 +373,7 @@ export function calculateMorningEffectivenessProjection(input: {
     funcionario_id: input.funcionarioId,
     effectiveness_pct: effectiveness.effectiveness_pct,
     effectiveness_nivel: effectiveness.nivel,
+    effectiveness_componentes_json: JSON.stringify(effectiveness.componentes),
     source: plannedDutyMinutes > 0 || frmsFlightEquivalentMinutes > 0 ? 'PROJETADA_ATIVIDADE' : 'PROJETADA_APRESENTACAO',
     dia_periodo_embarcado: input.diaPeriodo ?? null,
     total_dias_periodo: input.totalDiasPeriodo ?? null,
@@ -422,7 +485,9 @@ function resolveJornadaSource(jornada: JornadaSnapshotRow | null): {
 
   const origem = normalizeText(jornada.origem) as Origem | null;
   if (asNumber(jornada.is_manual_empty) === 1) {
-    return { source: 'INCONSISTENTE', origem: origem ?? 'MANUAL' };
+    // Stub técnico criado pelo check-in: preserva rastreabilidade MANUAL, mas
+    // não representa jornada concluída nem inconsistência operacional.
+    return { source: 'MANUAL', origem: origem ?? 'MANUAL' };
   }
 
   if (origem === 'MANUAL') {
@@ -551,6 +616,7 @@ export function buildFrmsOperationalSnapshot(
   const checkinMap = new Map<string, CheckinSnapshotRow>();
   const effectivenessMap = new Map<string, EffectivenessSnapshotRow>();
   const activityMap = new Map<string, FrmsActivitySnapshotRow[]>();
+  const reportedActivityMap = new Map<string, ReportedActivitySnapshotRow>();
   const funcionarioMap = new Map<number, FuncionarioSnapshotRow>();
 
   for (const funcionario of input.rows.funcionarios) {
@@ -637,12 +703,18 @@ export function buildFrmsOperationalSnapshot(
     activityMap.set(key, current);
   }
 
+  for (const row of input.rows.reportedActivities ?? []) {
+    const key = `${row.data_operacional}::${asNumber(row.funcionario_id)}`;
+    reportedActivityMap.set(key, row);
+  }
+
   const keys = new Set<string>([
     ...escalaMap.keys(),
     ...jornadaMap.keys(),
     ...checkinMap.keys(),
     ...effectivenessMap.keys(),
     ...activityMap.keys(),
+    ...reportedActivityMap.keys(),
   ]);
 
   const items: FrmsOperationalSnapshotItem[] = [];
@@ -656,28 +728,64 @@ export function buildFrmsOperationalSnapshot(
     const checkin = checkinMap.get(key) ?? null;
     const efetividade = effectivenessMap.get(key) ?? null;
     const activities = activityMap.get(key) ?? [];
+    const reportedActivity = reportedActivityMap.get(key) ?? null;
     const funcionario = funcionarioMap.get(funcionario_id) ?? null;
     if (!funcionario) continue;
 
     const escalado = Boolean(escala);
-    const teveJornada = Boolean(jornada);
+    // Uma linha MANUAL criada pelo check-in é um stub técnico, não uma jornada/voo.
+    // Só há jornada operacional quando existe evidência operacional positiva.
+    const teveJornada = hasOperationalJourneyEvidence(jornada);
     const activitySummary = summarizeFrmsActivities(activities, teveJornada);
-    const teveAtividadeFrms = teveJornada || activities.length > 0;
+    const reportedPresentation = recoveryActivityPresentation(reportedActivity?.activity_type ?? null);
+    const reportedCountsAsActivity = Boolean(reportedActivity) && reportedPresentation.countsAsActivity;
+    const teveAtividadeFrms = teveJornada || activities.length > 0 || reportedCountsAsActivity;
 
     // A apresentação declarada no check-in diário é a fonte canônica para o FRMS.
-    // Escala/SIGVOOS continuam sendo evidência operacional, mas não substituem o dado
-    // subjetivo obrigatório quando ele estiver ausente.
+    // Para o término diário, porém, prevalece a ÚLTIMA atividade relevante do dia:
+    // voo, treinamento, simulador ou atividade reportada no check-in seguinte.
     const horaApresentacao = normalizeText(checkin?.hora_apresentacao);
-    const horaTermino =
-      normalizeText(jornada?.hora_termino) ??
-      normalizeText(escala?.hora_termino) ??
-      normalizeText(activitySummary.end_time);
+    const activityWindowStart =
+      horaApresentacao ??
+      normalizeText(jornada?.hora_apresentacao) ??
+      normalizeText(escala?.hora_apresentacao) ??
+      normalizeText(activitySummary.start_time) ??
+      normalizeText(reportedActivity?.duty_start_time);
+    const horaTermino = latestClockFromStart(activityWindowStart, [
+      jornada?.hora_termino,
+      escala?.hora_termino,
+      activitySummary.end_time,
+      reportedActivity?.duty_end_time,
+    ]);
 
-    const horasVooMinutos = asNumber(jornada?.horas_voo_minutos);
+    const horasVooMinutos = teveJornada ? asNumber(jornada?.horas_voo_minutos) : 0;
     const horasVooFrmsMinutos = horasVooMinutos + activitySummary.simulator_minutes;
-    // A duração canônica é produzida pelo pipeline após o check-in. O snapshot
-    // não reconstrói jornada a partir de horários parciais/legados.
-    const duracaoJornadaMinutos = Math.max(0, asNumber(jornada?.duracao_jornada_minutos));
+    const duracaoJornadaMinutos = teveJornada
+      ? Math.max(0, asNumber(jornada?.duracao_jornada_minutos))
+      : 0;
+    const combinedActivityWindowMinutes =
+      teveAtividadeFrms && activityWindowStart && horaTermino
+        ? clockSpanMinutes(activityWindowStart, horaTermino)
+        : null;
+    const reportedMinutes = reportedCountsAsActivity
+      ? Math.max(0, asNumber(reportedActivity?.total_duty_minutes))
+      : 0;
+    const atividadeFrmsMinutos =
+      combinedActivityWindowMinutes != null && combinedActivityWindowMinutes > 0
+        ? combinedActivityWindowMinutes
+        : Math.max(duracaoJornadaMinutos, activitySummary.activity_minutes, reportedMinutes);
+
+    const basePrincipal = activitySummary.activity_type;
+    const reportedPrincipal = reportedActivity ? reportedPresentation.principal : 'SEM_DADO';
+    const hasScheduledOrFlightActivity = teveJornada || activities.length > 0;
+    const atividadePrincipal: FrmsOperationalSnapshotItem['atividade_principal'] =
+      hasScheduledOrFlightActivity && reportedCountsAsActivity && basePrincipal !== reportedPrincipal
+        ? 'MISTA'
+        : hasScheduledOrFlightActivity
+          ? basePrincipal
+          : reportedActivity
+            ? reportedPrincipal
+            : 'SEM_DADO';
 
     const { source: jornadaDataSource, origem: jornadaOrigem } = resolveJornadaSource(jornada);
 
@@ -814,12 +922,20 @@ export function buildFrmsOperationalSnapshot(
       horas_voo_minutos: horasVooMinutos,
       horas_voo_frms_minutos: horasVooFrmsMinutos,
       simulador_minutos: activitySummary.simulator_minutes,
-      treinamento_minutos: activitySummary.training_minutes,
-      atividade_frms_minutos: duracaoJornadaMinutos + activitySummary.activity_minutes,
-      atividade_principal: activitySummary.activity_type,
-      atividade_hora_inicio: activitySummary.start_time,
-      atividade_hora_fim: activitySummary.end_time,
-      atividade_rotulos: activitySummary.labels,
+      treinamento_minutos:
+        reportedActivity?.activity_type === 'ADMIN_TRAINING'
+          ? Math.max(activitySummary.training_minutes, reportedMinutes)
+          : activitySummary.training_minutes,
+      atividade_frms_minutos: atividadeFrmsMinutos,
+      atividade_principal: atividadePrincipal,
+      atividade_hora_inicio: activityWindowStart,
+      atividade_hora_fim: horaTermino,
+      atividade_rotulos: [
+        ...activitySummary.labels,
+        ...(reportedActivity?.activity_type
+          ? [String(reportedActivity.activity_type).replace(/_/g, ' ')]
+          : []),
+      ].slice(0, 5),
       duracao_jornada_minutos: duracaoJornadaMinutos,
       teve_jornada: teveJornada,
       teve_atividade_frms: teveAtividadeFrms,
@@ -834,6 +950,7 @@ export function buildFrmsOperationalSnapshot(
       status_operacional_checkin: normalizeText(checkin?.status_operacional),
 
       effectiveness_pct: effectivenessPctNormalized,
+      effectiveness_componentes: parseEffectivenessComponents(efetividade?.effectiveness_componentes_json),
       effectiveness_source: effectivenessSource,
       nivel_fadiga_calculado: nivelFadigaCalculado,
       fatorizacao_status:
@@ -921,6 +1038,33 @@ interface RecoveryCreditSnapshotRow {
   recovery_credit_points: number;
   recovery_state: string | null;
   activity_type: string | null;
+  duty_start_time: string | null;
+  duty_end_time: string | null;
+  total_duty_minutes: number | null;
+}
+
+function recoveryActivityPresentation(activityType: string | null): {
+  principal: FrmsOperationalSnapshotItem['atividade_principal'];
+  countsAsActivity: boolean;
+} {
+  switch (String(activityType || '').toUpperCase()) {
+    case 'OFF_DUTY':
+      return { principal: 'FOLGA', countsAsActivity: false };
+    case 'STANDBY_HOME_HOTEL':
+    case 'STANDBY_ONSITE':
+      return { principal: 'STANDBY', countsAsActivity: true };
+    case 'ADMIN_TRAINING':
+      return { principal: 'TREINAMENTO', countsAsActivity: true };
+    case 'DUTY_TRAVEL':
+      return { principal: 'DESLOCAMENTO', countsAsActivity: true };
+    case 'MIXED':
+      return { principal: 'MISTA', countsAsActivity: true };
+    case 'FLIGHT_NOT_IN_SOURCE':
+    case 'OTHER':
+      return { principal: 'OUTRA_ATIVIDADE', countsAsActivity: true };
+    default:
+      return { principal: 'SEM_DADO', countsAsActivity: false };
+  }
 }
 
 async function loadRecoveryCreditRows(
@@ -935,7 +1079,10 @@ async function loadRecoveryCreditRows(
               CAST(ra.funcionario_id AS INTEGER) AS funcionario_id,
               COALESCE(ra.recovery_credit_points, 0) AS recovery_credit_points,
               ra.recovery_state,
-              rd.activity_type
+              rd.activity_type,
+              rd.duty_start_time,
+              rd.duty_end_time,
+              rd.total_duty_minutes
          FROM frms_recovery_assessment ra
          LEFT JOIN frms_recovery_activity_day rd
            ON rd.id = ra.recovery_day_id
@@ -1081,6 +1228,7 @@ async function loadOperationalSnapshotRows(
              CAST(j.tripulante_id AS INTEGER) AS funcionario_id,
              fj.effectiveness_pct,
              fj.effectiveness_nivel,
+             fj.effectiveness_componentes_json,
              fj.dia_periodo_embarcado,
              fj.total_dias_periodo,
              ROW_NUMBER() OVER (
@@ -1102,6 +1250,7 @@ async function loadOperationalSnapshotRows(
            funcionario_id,
            effectiveness_pct,
            effectiveness_nivel,
+           effectiveness_componentes_json,
            dia_periodo_embarcado,
            total_dias_periodo
          FROM ranked
@@ -1297,13 +1446,20 @@ export async function listFrmsOperationalSnapshot(
         points: Number(row.recovery_credit_points || 0),
         state: row.recovery_state ?? null,
         activityType: row.activity_type ?? null,
+        startTime: row.duty_start_time ?? null,
+        endTime: row.duty_end_time ?? null,
+        totalDutyMinutes:
+          row.total_duty_minutes == null ? null : Math.max(0, Number(row.total_duty_minutes)),
       },
     ]),
   );
 
-  const ids = collectCandidateIds(contextRows).filter(
-    (id) => scopedFuncionarioId == null || id === scopedFuncionarioId,
-  );
+  const ids = Array.from(
+    new Set([
+      ...collectCandidateIds(contextRows),
+      ...recoveryCredits.map((row) => Number(row.funcionario_id)),
+    ]),
+  ).filter((id) => id > 0 && (scopedFuncionarioId == null || id === scopedFuncionarioId));
   const funcionarios = await loadOperationalFuncionarios(db, params.empresaId, ids);
 
   const exclusionMetrics = funcionarios.reduce(
@@ -1358,10 +1514,20 @@ export async function listFrmsOperationalSnapshot(
       checkins: contextRows.checkins,
       effectiveness: contextRows.effectiveness,
       activities: contextRows.activities,
+      reportedActivities: recoveryCredits.map((row) => ({
+        data_operacional: row.data_operacional,
+        funcionario_id: Number(row.funcionario_id),
+        activity_type: row.activity_type,
+        duty_start_time: row.duty_start_time,
+        duty_end_time: row.duty_end_time,
+        total_duty_minutes: row.total_duty_minutes,
+      })),
       funcionarios,
     },
     filters: scopedFuncionarioId != null ? { funcionario_id: scopedFuncionarioId } : undefined,
   });
+
+  const snapshotItems = snapshot.items;
 
   const effectivenessByKey = new Map<string, EffectivenessSnapshotRow>();
   for (const row of contextRows.effectiveness) {
@@ -1395,7 +1561,7 @@ export async function listFrmsOperationalSnapshot(
   // calcularDiaDoCiclo() só para os dias efetivamente solicitados que ainda não
   // têm âncora; os demais dias do período são inferidos por jornadas vizinhas do
   // mesmo tripulante dentro de buildFrmsFortnightIndicatorMap.
-  const missingFortnightKeys = snapshot.items.filter((item) => {
+  const missingFortnightKeys = snapshotItems.filter((item) => {
     if (item.data_operacional < requestedStart || item.data_operacional > requestedEnd) {
       return false;
     }
@@ -1416,7 +1582,7 @@ export async function listFrmsOperationalSnapshot(
   );
 
   const fortnightIndicatorMap = buildFrmsFortnightIndicatorMap({
-    items: snapshot.items.map((item) => {
+    items: snapshotItems.map((item) => {
       const itemKey = `${item.data_operacional}::${Number(item.funcionario_id)}`;
       const effectivenessRow = effectivenessByKey.get(itemKey);
       const derivedFortnight = derivedFortnightByKey.get(itemKey);
@@ -1468,7 +1634,7 @@ export async function listFrmsOperationalSnapshot(
         : undefined,
   });
 
-  const itemsWithFortnight = snapshot.items.map((item) => {
+  const itemsWithFortnight = snapshotItems.map((item) => {
     const key = `${item.data_operacional}::${item.funcionario_id}`;
     const recovery = recoveryCreditByKey.get(key);
     const itemWithFortnight = {

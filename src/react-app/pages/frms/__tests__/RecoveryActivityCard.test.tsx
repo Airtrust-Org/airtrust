@@ -70,17 +70,29 @@ describe('RecoveryActivityCard', () => {
     expect(clearPendingMock).toHaveBeenCalledWith('2026-06-04');
   });
 
-  it('asks for the previous-day activity when SIGVOOS has no flight, including the source-gap option', () => {
+  it('prioriza as quatro situações comuns e mantém exceções recolhidas', () => {
     render(<RecoveryActivityCard today="2026-06-05" />);
     expect(screen.getByText('Atividade de ontem')).toBeInTheDocument();
     expect(screen.getByText('Folga / descanso')).toBeInTheDocument();
     expect(screen.getByText('Standby em hotel ou residência')).toBeInTheDocument();
     expect(screen.getByText('Standby na base / aeroporto')).toBeInTheDocument();
     expect(screen.getByText('Administrativo / treinamento')).toBeInTheDocument();
+    expect(screen.queryByText('Mais de uma situação')).not.toBeInTheDocument();
+    expect(screen.queryByText('Houve voo, mas não aparece no sistema')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Outra situação' }));
     expect(screen.getByText('Mais de uma situação')).toBeInTheDocument();
     expect(screen.getByText('Houve voo, mas não aparece no sistema')).toBeInTheDocument();
     expect(screen.getByText(/será salva junto com as demais informações/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /salvar condição de ontem/i })).not.toBeInTheDocument();
+  });
+
+  it('pede início e fim também para standby, além do tipo de acionamento', () => {
+    render(<RecoveryActivityCard today="2026-06-05" />);
+    fireEvent.click(screen.getByText('Standby na base / aeroporto'));
+
+    expect(screen.getByText('Início aproximado')).toBeInTheDocument();
+    expect(screen.getByText('Fim aproximado')).toBeInTheDocument();
+    expect(screen.getByText(/acionado imediatamente/i)).toBeInTheDocument();
   });
 
   it('keeps an off-duty classification pending for the final check-in submit', async () => {
@@ -102,6 +114,7 @@ describe('RecoveryActivityCard', () => {
 
   it('keeps a source discrepancy pending without persisting it before the final submit', async () => {
     render(<RecoveryActivityCard today="2026-06-05" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Outra situação' }));
     fireEvent.click(screen.getByText('Houve voo, mas não aparece no sistema'));
     expect(screen.getByText('Observação')).toBeInTheDocument();
 

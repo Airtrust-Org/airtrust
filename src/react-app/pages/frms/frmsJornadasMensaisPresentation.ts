@@ -89,22 +89,31 @@ export function buildJornadaMensalPresentation(
   const usedOperationally = jornada.usado_no_frms_operacional !== false;
   const hasSourceIssue = !usedOperationally;
   const originalSource = jornada.fonte_original || null;
+  const isCheckinStub =
+    !usedOperationally &&
+    String(originalSource || '').toUpperCase() === 'MANUAL' &&
+    Number(jornada.duracao_jornada_minutos ?? 0) <= 0 &&
+    Number(jornada.horas_voo_minutos ?? 0) <= 0;
 
   return {
     fatJornadaDiaLabel: formatPct(jornada.pct_jornada_diaria),
     fatHvDiaLabel: formatPct(jornada.pct_voo_diaria),
     hasIntegrityIssue: hasIntegrityIssue || hasSourceIssue,
-    integrityLabel: hasIntegrityIssue
-      ? integridadeLabel(jornada.integridade_codigo)
-      : hasSourceIssue
-        ? sourceLabel(jornada.source_status)
-        : null,
-    integrityMessage: hasIntegrityIssue
-      ? jornada.integridade_mensagem ?? integridadeLabel(null)
-      : hasSourceIssue
-        ? 'Linha exibida apenas para auditoria; nao alimenta FRMS operacional.'
-        : null,
-    sourceLabel: sourceLabel(jornada.source_status),
+    integrityLabel: isCheckinStub
+      ? 'Aguardando fonte operacional'
+      : hasIntegrityIssue
+        ? integridadeLabel(jornada.integridade_codigo)
+        : hasSourceIssue
+          ? sourceLabel(jornada.source_status)
+          : null,
+    integrityMessage: isCheckinStub
+      ? 'Registro técnico criado pelo check-in; não representa jornada concluída.'
+      : hasIntegrityIssue
+        ? jornada.integridade_mensagem ?? integridadeLabel(null)
+        : hasSourceIssue
+          ? 'Linha exibida apenas para auditoria; não alimenta FRMS operacional.'
+          : null,
+    sourceLabel: isCheckinStub ? 'Check-in / aguardando fonte' : sourceLabel(jornada.source_status),
     sourceBadgeClass: usedOperationally
       ? 'bg-emerald-100 text-emerald-700'
       : 'bg-amber-100 text-amber-800',
@@ -113,7 +122,7 @@ export function buildJornadaMensalPresentation(
       ? formatOperationalMinutes(jornada.duracao_jornada_minutos)
       : '—',
     auxiliarySourceLabel:
-      !usedOperationally && originalSource
+      !isCheckinStub && !usedOperationally && originalSource
         ? `${originalSource}: ${formatOperationalMinutes(jornada.horas_voo_minutos)}`
         : null,
     boundarySourceLabel:

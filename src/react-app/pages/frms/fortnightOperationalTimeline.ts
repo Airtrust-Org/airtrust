@@ -106,6 +106,14 @@ function buildHighlights(item: FrmsOperationalSnapshotItem | null | undefined): 
     highlights.push('Treinamento');
   } else if (item.atividade_principal === 'MISTA') {
     highlights.push('Atividade mista');
+  } else if (item.atividade_principal === 'STANDBY') {
+    highlights.push('Standby');
+  } else if (item.atividade_principal === 'DESLOCAMENTO') {
+    highlights.push('Deslocamento a serviço');
+  } else if (item.atividade_principal === 'OUTRA_ATIVIDADE') {
+    highlights.push('Outra atividade');
+  } else if (item.atividade_principal === 'FOLGA') {
+    highlights.push('Folga / descanso');
   }
 
   for (const alerta of item.alertas) {

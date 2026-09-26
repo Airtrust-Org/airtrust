@@ -174,6 +174,8 @@ describe('morning effectiveness projection', () => {
     expect(projected?.effectiveness_pct).toEqual(expect.any(Number));
     expect(projected?.effectiveness_pct).toBeGreaterThanOrEqual(0);
     expect(projected?.effectiveness_pct).toBeLessThanOrEqual(100);
+    expect(projected?.effectiveness_componentes_json).toBeTruthy();
+    expect(JSON.parse(String(projected?.effectiveness_componentes_json))).toHaveProperty('processo_s');
   });
 
   it('incorpora simulador planejado na projeção como HV equivalente FRMS', () => {
@@ -394,6 +396,126 @@ describe('frms operational snapshot builder', () => {
     expect(estimatedSleep?.wake_data_source).toBe('AUSENTE');
     expect(estimatedSleep?.horas_sono).toBeNull();
     expect(estimatedSleep?.alertas).not.toContain('SONO_ESTIMADO');
+  });
+
+  it('não transforma stub MANUAL do check-in em voo 0h00', () => {
+    const input = createBaseInput();
+    input.rows.jornadas.push({
+      data_operacional: '2026-05-28',
+      funcionario_id: 10,
+      hora_apresentacao: '06:00',
+      hora_termino: null,
+      horas_voo_minutos: 0,
+      duracao_jornada_minutos: 0,
+      origem: 'MANUAL',
+      has_operational_data: 1,
+      is_manual_empty: 1,
+    });
+    input.rows.checkins.push({
+      data_operacional: '2026-05-28',
+      funcionario_id: 10,
+      hora_checkin: '05:30',
+      hora_apresentacao: '06:00',
+      kss_score: 4,
+      horas_sono: 7,
+      qualidade_sono: 4,
+      wake_time: '04:45',
+      score_fadiga: 20,
+      nivel_fadiga: 'VERDE',
+      status_operacional: 'APTO',
+      computed_risk_level: 'normal',
+    });
+
+    const item = getByKey(buildFrmsOperationalSnapshot(input).items, '2026-05-28', 10);
+    expect(item?.teve_jornada).toBe(false);
+    expect(item?.teve_atividade_frms).toBe(false);
+    expect(item?.atividade_principal).toBe('SEM_DADO');
+    expect(item?.jornada_data_source).toBe('MANUAL');
+    expect(item?.alertas).not.toContain('JORNADA_SEM_FATORIZACAO');
+  });
+
+  it('atividade mista termina na última atividade do dia sem somar sobreposição', () => {
+    const input = createBaseInput();
+    input.rows.jornadas.push({
+      data_operacional: '2026-05-29',
+      funcionario_id: 10,
+      hora_apresentacao: '06:00',
+      hora_termino: '08:10',
+      horas_voo_minutos: 90,
+      duracao_jornada_minutos: 130,
+      origem: 'SIGVOOS',
+      has_operational_data: 1,
+      is_manual_empty: 0,
+    });
+    input.rows.checkins.push({
+      data_operacional: '2026-05-29',
+      funcionario_id: 10,
+      hora_checkin: '05:30',
+      hora_apresentacao: '06:00',
+      kss_score: 3,
+      horas_sono: 8,
+      qualidade_sono: 4,
+      wake_time: '04:30',
+      score_fadiga: 15,
+      nivel_fadiga: 'VERDE',
+      status_operacional: 'APTO',
+      computed_risk_level: 'normal',
+    });
+    input.rows.activities = [{
+      data_operacional: '2026-05-29',
+      funcionario_id: 10,
+      activity_type: 'TREINAMENTO',
+      hora_inicio: '08:00',
+      hora_fim: '17:00',
+      titulo: 'CRM',
+      source_id: 77,
+    }];
+
+    const item = getByKey(buildFrmsOperationalSnapshot(input).items, '2026-05-29', 10);
+    expect(item?.atividade_principal).toBe('MISTA');
+    expect(item?.hora_termino).toBe('17:00');
+    expect(item?.atividade_frms_minutos).toBe(660);
+    expect(item?.horas_voo_minutos).toBe(90);
+    expect(item?.treinamento_minutos).toBe(540);
+  });
+
+  it('mantém folga reportada visível sem fabricar atividade ou voo', () => {
+    const input = createBaseInput();
+    input.rows.reportedActivities = [{
+      data_operacional: '2026-05-30',
+      funcionario_id: 10,
+      activity_type: 'OFF_DUTY',
+      duty_start_time: null,
+      duty_end_time: null,
+      total_duty_minutes: null,
+    }];
+
+    const item = getByKey(buildFrmsOperationalSnapshot(input).items, '2026-05-30', 10);
+    expect(item).toBeTruthy();
+    expect(item?.atividade_principal).toBe('FOLGA');
+    expect(item?.teve_atividade_frms).toBe(false);
+    expect(item?.teve_jornada).toBe(false);
+    expect(item?.horas_voo_minutos).toBe(0);
+  });
+
+  it('usa início e fim reportados de standby como atividade FRMS sem fabricar HV', () => {
+    const input = createBaseInput();
+    input.rows.reportedActivities = [{
+      data_operacional: '2026-05-30',
+      funcionario_id: 10,
+      activity_type: 'STANDBY_ONSITE',
+      duty_start_time: '07:00',
+      duty_end_time: '15:00',
+      total_duty_minutes: 480,
+    }];
+
+    const item = getByKey(buildFrmsOperationalSnapshot(input).items, '2026-05-30', 10);
+    expect(item?.atividade_principal).toBe('STANDBY');
+    expect(item?.teve_atividade_frms).toBe(true);
+    expect(item?.atividade_hora_inicio).toBe('07:00');
+    expect(item?.atividade_hora_fim).toBe('15:00');
+    expect(item?.atividade_frms_minutos).toBe(480);
+    expect(item?.horas_voo_minutos).toBe(0);
   });
 
   it('6) jornada sem effectiveness_pct gera JORNADA_SEM_FATORIZACAO', () => {

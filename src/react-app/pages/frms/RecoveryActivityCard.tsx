@@ -53,6 +53,13 @@ const OPTIONS: Array<{ value: RecoveryActivityType; label: string; description: 
   },
 ];
 
+const PRIMARY_ACTIVITY_TYPES = new Set<RecoveryActivityType>([
+  'OFF_DUTY',
+  'STANDBY_HOME_HOTEL',
+  'STANDBY_ONSITE',
+  'ADMIN_TRAINING',
+]);
+
 const SEGMENT_OPTIONS: Array<{ value: RecoveryActivitySegmentInput['activity_type']; label: string }> = [
   { value: 'OFF_DUTY', label: 'Livre / descanso' },
   { value: 'STANDBY_HOME_HOTEL', label: 'Standby hotel/residência' },
@@ -63,6 +70,29 @@ const SEGMENT_OPTIONS: Array<{ value: RecoveryActivitySegmentInput['activity_typ
 ];
 
 const LABELS = Object.fromEntries(OPTIONS.map((option) => [option.value, option.label]));
+
+function activityPolicySummary(activityType: RecoveryActivityType | null): string | null {
+  switch (activityType) {
+    case 'OFF_DUTY':
+      return 'Folga não vira jornada. A recuperação depende do sono e da prontidão informados, sem bônus automático.';
+    case 'STANDBY_HOME_HOTEL':
+      return 'Hotel/residência preserva mais oportunidade de recuperação; o crédito depende do repouso real e do acionamento.';
+    case 'STANDBY_ONSITE':
+      return 'Standby na base restringe mais a recuperação; horário, repouso real e acionamento são considerados.';
+    case 'ADMIN_TRAINING':
+      return 'Treinamento/administrativo conta como atividade do dia e não gera crédito de recuperação.';
+    case 'DUTY_TRAVEL':
+      return 'Deslocamento a serviço conta como atividade e restringe a recuperação.';
+    case 'MIXED':
+      return 'Cada período é considerado conforme seu tipo e horário.';
+    case 'FLIGHT_NOT_IN_SOURCE':
+      return 'O voo relatado fica como divergência de fonte até reconciliação com a fonte canônica.';
+    case 'OTHER':
+      return 'A atividade é registrada com horário e tratada conservadoramente até classificação posterior.';
+    default:
+      return null;
+  }
+}
 
 function defaultSegments(): RecoveryActivitySegmentInput[] {
   return [
@@ -75,6 +105,7 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
   const referenceDate = useMemo(() => previousOperationalDate(today), [today]);
   const { data: context, isLoading, isError } = useFrmsRecoveryContext(referenceDate);
   const [editing, setEditing] = useState(false);
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [activityType, setActivityType] = useState<RecoveryActivityType | null>(null);
   const [standbyLocation, setStandbyLocation] = useState<'HOME' | 'HOTEL' | 'BASE_AIRPORT' | 'OTHER'>('HOTEL');
   const [immediateCallout, setImmediateCallout] = useState<boolean | null>(null);
@@ -86,7 +117,10 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
   const needsStandbyDetail =
     activityType === 'STANDBY_HOME_HOTEL' || activityType === 'STANDBY_ONSITE';
   const needsDutyWindow =
-    activityType === 'ADMIN_TRAINING' || activityType === 'DUTY_TRAVEL' || activityType === 'OTHER';
+    activityType !== null && activityType !== 'OFF_DUTY' && activityType !== 'MIXED';
+  const visibleOptions = showMoreOptions
+    ? OPTIONS
+    : OPTIONS.filter((option) => PRIMARY_ACTIVITY_TYPES.has(option.value));
 
   const stageActivity = (nextType: RecoveryActivityType | null) => {
     setActivityType(nextType);
@@ -108,11 +142,11 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
           ? immediateCallout
           : undefined,
       duty_start_time:
-        nextType === 'ADMIN_TRAINING' || nextType === 'DUTY_TRAVEL' || nextType === 'OTHER'
+        nextType !== 'OFF_DUTY' && nextType !== 'MIXED'
           ? dutyStart || undefined
           : undefined,
       duty_end_time:
-        nextType === 'ADMIN_TRAINING' || nextType === 'DUTY_TRAVEL' || nextType === 'OTHER'
+        nextType !== 'OFF_DUTY' && nextType !== 'MIXED'
           ? dutyEnd || undefined
           : undefined,
       notes: notes.trim() || undefined,
@@ -138,6 +172,12 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
             <p className="mt-1 text-sm text-emerald-800">
               {LABELS[existingType] || existingType || 'Classificação registrada'}
             </p>
+            {context.activity?.duty_start_time || context.activity?.duty_end_time ? (
+              <p className="mt-1 text-xs font-medium text-emerald-800">
+                Horário: {String(context.activity?.duty_start_time || '—').slice(0, 5)} →{' '}
+                {String(context.activity?.duty_end_time || '—').slice(0, 5)}
+              </p>
+            ) : null}
             <p className="mt-1 text-xs text-emerald-700">
               Esta informação qualifica a oportunidade de recuperação; ela não cria bônus automático de efetividade.
             </p>
@@ -155,12 +195,12 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
       <div className="mb-3">
         <h2 className="text-sm font-semibold text-slate-900">Atividade de ontem</h2>
         <p className="mt-1 text-xs text-slate-600">
-          Não encontramos atividade de voo no SIGVOOS em {referenceDate}. Como foi sua condição operacional?
+          Não encontramos voo no SIGVOOS em {referenceDate}. Informe o que você fez e, quando houve atividade ou standby, o horário de início e fim.
         </p>
       </div>
 
       <div className="grid gap-2 md:grid-cols-2">
-        {OPTIONS.map((option) => {
+        {visibleOptions.map((option) => {
           const selected = activityType === option.value;
           return (
             <button
@@ -180,6 +220,20 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
         })}
       </div>
 
+      <button
+        type="button"
+        onClick={() => setShowMoreOptions((value) => !value)}
+        className="mt-3 text-xs font-semibold text-sky-700 hover:underline"
+      >
+        {showMoreOptions ? 'Mostrar apenas situações mais comuns' : 'Outra situação'}
+      </button>
+
+      {activityPolicySummary(activityType) ? (
+        <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-4 text-slate-600">
+          {activityPolicySummary(activityType)}
+        </p>
+      ) : null}
+
       {needsStandbyDetail && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {activityType === 'STANDBY_HOME_HOTEL' && (
@@ -195,6 +249,8 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                     activity_type: 'STANDBY_HOME_HOTEL',
                     standby_location: value,
                     immediate_callout_required: immediateCallout,
+                    duty_start_time: dutyStart || undefined,
+                    duty_end_time: dutyEnd || undefined,
                   };
                   stagePendingFrmsRecoveryActivity(referenceDate, input, true);
                 }}
@@ -223,6 +279,8 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                       standby_location:
                         activityType === 'STANDBY_ONSITE' ? 'BASE_AIRPORT' : standbyLocation,
                       immediate_callout_required: true,
+                      duty_start_time: dutyStart || undefined,
+                      duty_end_time: dutyEnd || undefined,
                     },
                     true,
                   );
@@ -242,6 +300,8 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                       standby_location:
                         activityType === 'STANDBY_ONSITE' ? 'BASE_AIRPORT' : standbyLocation,
                       immediate_callout_required: false,
+                      duty_start_time: dutyStart || undefined,
+                      duty_end_time: dutyEnd || undefined,
                     },
                     true,
                   );
@@ -268,6 +328,13 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                   {
                     reference_date: referenceDate,
                     activity_type: activityType!,
+                    standby_location:
+                      activityType === 'STANDBY_ONSITE'
+                        ? 'BASE_AIRPORT'
+                        : activityType === 'STANDBY_HOME_HOTEL'
+                          ? standbyLocation
+                          : undefined,
+                    immediate_callout_required: needsStandbyDetail ? immediateCallout : undefined,
                     duty_start_time: event.target.value || undefined,
                     duty_end_time: dutyEnd || undefined,
                     notes: notes.trim() || undefined,
@@ -290,6 +357,13 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                   {
                     reference_date: referenceDate,
                     activity_type: activityType!,
+                    standby_location:
+                      activityType === 'STANDBY_ONSITE'
+                        ? 'BASE_AIRPORT'
+                        : activityType === 'STANDBY_HOME_HOTEL'
+                          ? standbyLocation
+                          : undefined,
+                    immediate_callout_required: needsStandbyDetail ? immediateCallout : undefined,
                     duty_start_time: dutyStart || undefined,
                     duty_end_time: event.target.value || undefined,
                     notes: notes.trim() || undefined,

@@ -190,7 +190,7 @@ export default function FrmsEffectivenessPanel({
       <p className={`mb-3 text-[11px] font-medium ${
         dataSource === 'REAL' ? 'text-emerald-700' : dataSource === 'ESTIMADO' ? 'text-amber-700' : 'text-slate-500'
       }`}>
-        Fonte da jornada: {dataSource === 'REAL' ? 'real — horário informado no check-in' : dataSource === 'ESTIMADO' ? 'estimada — janela operacional anterior ao check-in' : 'não confirmada'}.
+        Fonte do cálculo: {dataSource === 'REAL' ? 'real — jornada encerrada com dados confirmados' : dataSource === 'ESTIMADO' ? 'projeção do dia — check-in e atividade disponível até o momento' : 'não confirmada'}.
       </p>
 
       {/* Score circle + label */}
@@ -227,6 +227,13 @@ export default function FrmsEffectivenessPanel({
       </div>
 
       {/* Component decomposition */}
+      {!componentes && dataSource === 'ESTIMADO' ? (
+        <div className="rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-2 text-[10px] leading-4 text-amber-800">
+          A projeção atual está disponível, mas a decomposição por fator ainda não foi persistida.
+          O percentual acima é o valor operacional vigente para o dia; fatores ausentes não são mostrados como zero.
+        </div>
+      ) : null}
+
       {componentes && (
         <div className="space-y-1.5">
           <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">

@@ -55,6 +55,26 @@ describe('frms jornadas mensais presentation', () => {
     expect(presentation.integrityMessage).toContain('excedem');
   });
 
+  it('identifica stub MANUAL do check-in sem chamar de fonte não canônica operacional', () => {
+    const presentation = buildJornadaMensalPresentation({
+      pct_jornada_diaria: null,
+      pct_voo_diaria: null,
+      integridade_status: 'INCONSISTENTE',
+      integridade_codigo: 'FONTE_NAO_CANONICA',
+      integridade_mensagem: 'Fonte nao canonica para FRMS operacional.',
+      fonte_original: 'MANUAL',
+      source_status: 'FONTE_NAO_CANONICA',
+      usado_no_frms_operacional: false,
+      duracao_jornada_minutos: 0,
+      horas_voo_minutos: 0,
+    });
+
+    expect(presentation.sourceLabel).toBe('Check-in / aguardando fonte');
+    expect(presentation.integrityLabel).toBe('Aguardando fonte operacional');
+    expect(presentation.integrityMessage).toContain('não representa jornada concluída');
+    expect(presentation.auxiliarySourceLabel).toBeNull();
+  });
+
   it('exibe FIRA como auditoria pendente sem HV operacional validada', () => {
     const presentation = buildJornadaMensalPresentation({
       pct_jornada_diaria: null,

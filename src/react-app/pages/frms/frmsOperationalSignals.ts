@@ -99,7 +99,7 @@ export function resolveDailyFatigueSignal(
 export function resolveComplianceSignal(
   item: FrmsOperationalSnapshotItem,
 ): FrmsOperationalSignal {
-  const base = { key: 'compliance' as const, label: 'Carga operacional' };
+  const base = { key: 'compliance' as const, label: 'Risco do período' };
   const indicator = item.fortnight_indicator;
 
   const formatHours = (minutes: number | null | undefined) => {
@@ -107,12 +107,9 @@ export function resolveComplianceSignal(
     if (!Number.isFinite(value) || value <= 0) return null;
     return `${(value / 60).toFixed(1).replace('.', ',')} h`;
   };
-  const details = [
-    formatHours(indicator?.horas_voo_frms_periodo_min)
-      ? `HV FRMS ${formatHours(indicator?.horas_voo_frms_periodo_min)}`
-      : null,
+  const loadDetails = [
     formatHours(indicator?.horas_voo_periodo_min)
-      ? `voo ${formatHours(indicator?.horas_voo_periodo_min)}`
+      ? `voo real ${formatHours(indicator?.horas_voo_periodo_min)}`
       : null,
     formatHours(indicator?.simulador_periodo_min)
       ? `simulador ${formatHours(indicator?.simulador_periodo_min)}`
@@ -124,7 +121,12 @@ export function resolveComplianceSignal(
       ? `${indicator.dias_atividade_periodo} dia(s) de atividade`
       : null,
   ].filter(Boolean);
-  const detail = details.length > 0 ? details.join(' · ') : undefined;
+  const riskReasons = (indicator?.agravantes_aplicados ?? [])
+    .filter((modifier) => modifier.impacto_score > 0)
+    .slice(0, 2)
+    .map((modifier) => modifier.descricao);
+  const detailParts = [...riskReasons, ...loadDetails];
+  const detail = detailParts.length > 0 ? detailParts.join(' · ') : undefined;
 
   if (!indicator) {
     return { ...base, value: 'Dados incompletos', tone: 'unknown' };

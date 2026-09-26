@@ -1,16 +1,16 @@
 import type { FrmsFortnightIndicator } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 
-export const FORTNIGHT_OPERATIONAL_DISCLAIMER = 'Indicador operacional da quinzena';
+export const FORTNIGHT_OPERATIONAL_DISCLAIMER = 'Risco operacional do período';
 export const FORTNIGHT_MANAGER_DISCLAIMER =
   'Apoia a decisão do gestor, mas não substitui a avaliação operacional final';
 export const FORTNIGHT_NO_DATA_MESSAGE =
-  'Sem indicador quinzenal disponível para o período.';
+  'Sem indicador de risco disponível para o período.';
 
 export const FORTNIGHT_STATUS_LABELS: Record<string, string> = {
-  OK: 'Quinzena completa',
-  ATENCAO: 'Quinzena com atenção',
-  CRITICO: 'Quinzena crítica',
-  INCOMPLETO: 'Quinzena incompleta',
+  OK: 'Período dentro da referência',
+  ATENCAO: 'Período com atenção',
+  CRITICO: 'Período crítico',
+  INCOMPLETO: 'Período incompleto',
 };
 
 export const FORTNIGHT_TENDENCIA_LABELS: Record<string, string> = {
@@ -218,7 +218,7 @@ export function formatTopModifiers(
 }
 
 export function formatFortnightLabel(indicator: FrmsFortnightIndicator | null | undefined): string {
-  if (!indicator) return 'Quinzena sem indicador';
+  if (!indicator) return 'Período sem indicador';
 
   const statusMap: Record<string, string> = {
     OK: 'completa',
@@ -232,7 +232,7 @@ export function formatFortnightLabel(indicator: FrmsFortnightIndicator | null | 
       ? ` · jornada ${formatMinutesAsHours(indicator.duty_time_periodo_min)}`
       : '';
 
-  return `Quinzena ${statusLabel}${dutyText}`;
+  return `Período ${statusLabel}${dutyText}`;
 }
 
 export function buildFortnightCrewOrientation(
@@ -243,18 +243,18 @@ export function buildFortnightCrewOrientation(
     return 'Complete o check-in de fadiga para manter o acompanhamento atualizado.';
   }
   if (!indicator || indicator.fonte_periodo === 'AUSENTE') {
-    return 'Sem indicador quinzenal neste período. Consulte a coordenação se tiver dúvidas.';
+    return 'Sem indicador de risco neste período. Consulte a coordenação se tiver dúvidas.';
   }
   if (indicator.status_quinzena === 'CRITICO') {
-    return 'Sua quinzena pede atenção. Fale com a coordenação antes de assumir nova jornada.';
+    return 'O período pede atenção. Fale com a coordenação antes de assumir nova atividade operacional.';
   }
   if (indicator.status_quinzena === 'ATENCAO') {
     return 'Monitore jornada registrada e check-ins. Avise a coordenação se não se sentir apto.';
   }
   if (indicator.dias_com_checkin_pendente && indicator.dias_com_checkin_pendente > 0) {
-    return 'Há check-ins pendentes na quinzena. Registre o check-in diário.';
+    return 'Há check-ins pendentes no período. Registre o check-in diário.';
   }
-  return 'Quinzena dentro do esperado. Mantenha check-ins em dia.';
+  return 'Período dentro do esperado. Mantenha check-ins em dia.';
 }
 
 export function buildFortnightTooltipSuffix(
@@ -338,7 +338,7 @@ export function resolveFortnightNotice(
 
   if (item?.teve_jornada === false && hasLocatedFortnight(indicator)) {
     return {
-      message: 'Quinzena base identificada. Não há jornada FRMS vinculada neste dia.',
+      message: 'Período identificado. Não há atividade FRMS vinculada neste dia.',
       toneClassName: 'border-sky-200 bg-sky-50 text-sky-700',
     };
   }

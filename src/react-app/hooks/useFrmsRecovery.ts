@@ -75,6 +75,41 @@ const pendingRecoveryActivities = new Map<string, PendingRecoveryActivity>();
 
 export const RECOVERY_ACTIVITY_REQUIRED_MESSAGE =
   'Informe como foi sua condição operacional ontem antes de concluir o check-in.';
+export const RECOVERY_ACTIVITY_TIME_REQUIRED_MESSAGE =
+  'Informe o horário de início e de fim da atividade de ontem.';
+export const RECOVERY_STANDBY_CALLOUT_REQUIRED_MESSAGE =
+  'Informe se o standby exigia disponibilidade para acionamento imediato.';
+
+function hasClock(value: string | null | undefined): boolean {
+  return /^\d{2}:\d{2}$/.test(String(value ?? ''));
+}
+
+export function validateRecoveryActivityInput(input: RecoveryActivityInput): string | null {
+  if (input.activity_type === 'OFF_DUTY') return null;
+
+  if (input.activity_type === 'MIXED') {
+    if (!input.segments || input.segments.length < 2) {
+      return 'Informe pelo menos dois períodos para o dia com atividades diferentes.';
+    }
+    if (input.segments.some((segment) => !hasClock(segment.start_time) || !hasClock(segment.end_time))) {
+      return RECOVERY_ACTIVITY_TIME_REQUIRED_MESSAGE;
+    }
+    return null;
+  }
+
+  if (!hasClock(input.duty_start_time) || !hasClock(input.duty_end_time)) {
+    return RECOVERY_ACTIVITY_TIME_REQUIRED_MESSAGE;
+  }
+
+  if (
+    (input.activity_type === 'STANDBY_HOME_HOTEL' || input.activity_type === 'STANDBY_ONSITE') &&
+    input.immediate_callout_required == null
+  ) {
+    return RECOVERY_STANDBY_CALLOUT_REQUIRED_MESSAGE;
+  }
+
+  return null;
+}
 
 export function safeFrmsRecoveryError(kind: FrmsRecoveryRequestKind): string {
   return kind === 'submit'
@@ -144,6 +179,8 @@ export async function submitPendingFrmsRecoveryActivity(
   const pending = pendingRecoveryActivities.get(referenceDate);
   if (!pending?.required) return null;
   if (!pending.input) throw new Error(RECOVERY_ACTIVITY_REQUIRED_MESSAGE);
+  const validationError = validateRecoveryActivityInput(pending.input);
+  if (validationError) throw new Error(validationError);
 
   const result = await postRecovery<RecoveryActivityResult>(
     '/frms/readiness/recovery/activity',
