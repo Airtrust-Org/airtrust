@@ -56,10 +56,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const desafioDiarioConhecimentoKey = ['conhecimento-ativo', 'desafio-diario'] as const;
 
-export function useDesafioDiarioConhecimento(options?: { enabled?: boolean }) {
+export function useDesafioDiarioConhecimento(options?: { enabled?: boolean; rodada?: number }) {
+  const rodada = options?.rodada ?? 0;
   return useQuery({
-    queryKey: desafioDiarioConhecimentoKey,
-    queryFn: () => request<DesafioDiarioQuestao>('/me/desafio-diario'),
+    queryKey: [...desafioDiarioConhecimentoKey, rodada],
+    queryFn: () => request<DesafioDiarioQuestao>(`/me/desafio-diario?rodada=${rodada}`),
     enabled: options?.enabled ?? true,
     staleTime: 5 * 60_000,
     retry: false,
@@ -69,10 +70,10 @@ export function useDesafioDiarioConhecimento(options?: { enabled?: boolean }) {
 
 export function useResponderDesafioDiario() {
   return useMutation({
-    mutationFn: (alternativaId: number) =>
+    mutationFn: ({ alternativaId, rodada }: { alternativaId: number; rodada: number }) =>
       request<DesafioDiarioFeedback>('/me/desafio-diario/responder', {
         method: 'POST',
-        body: JSON.stringify({ alternativa_id: alternativaId }),
+        body: JSON.stringify({ alternativa_id: alternativaId, rodada }),
       }),
   });
 }

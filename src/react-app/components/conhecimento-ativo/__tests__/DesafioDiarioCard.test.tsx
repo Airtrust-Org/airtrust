@@ -39,6 +39,7 @@ function responderState(overrides: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  window.localStorage.clear();
   hooks.mutate.mockReset();
   hooks.useDesafio.mockReset();
   hooks.useResponder.mockReset();
@@ -74,7 +75,10 @@ describe('DesafioDiarioCard', () => {
     expect(screen.getByText('Limitations')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Alternativa um/i }));
-    expect(hooks.mutate).toHaveBeenCalledWith(1);
+    expect(hooks.mutate).toHaveBeenCalledWith(
+      { alternativaId: 1, rodada: 0 },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
   });
 
   it('mostra correção, explicação e fonte depois da resposta', () => {
@@ -111,6 +115,7 @@ describe('DesafioDiarioCard', () => {
     expect(screen.getByText(/Memorize o limite operacional/)).toBeInTheDocument();
     expect(screen.getByText(/RFM · AW139 RFM · rev. 28/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Alternativa um/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Quero outra pergunta' })).toBeEnabled();
   });
 
   it('não renderiza fora do escopo quando desabilitado explicitamente', () => {

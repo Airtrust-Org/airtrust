@@ -301,17 +301,19 @@ async function selecionarQuestaoDiaria(params: {
   empresaId: number;
   funcionarioId: number;
   now?: Date;
+  rodada?: number;
 }): Promise<{ data: string; modelo: string; questao: QuestaoRow }> {
   const data = dataDesafioDiario(params.now);
   const modelos = await modelosDoFuncionario(params);
+  const rodada = Number.isInteger(params.rodada) && Number(params.rodada) >= 0 ? Number(params.rodada) : 0;
   const seedBase = `${params.empresaId}:${params.funcionarioId}:${data}`;
-  const inicio = indiceDeterministico(`${seedBase}:modelo`, modelos.length);
+  const inicio = (indiceDeterministico(`${seedBase}:modelo`, modelos.length) + rodada) % modelos.length;
 
   for (let step = 0; step < modelos.length; step += 1) {
     const modelo = modelos[(inicio + step) % modelos.length];
     const total = await contarQuestoes({ db: params.db, empresaId: params.empresaId, modelo });
     if (!total) continue;
-    const offset = indiceDeterministico(`${seedBase}:${modelo}:questao`, total);
+    const offset = (indiceDeterministico(`${seedBase}:${modelo}:questao`, total) + rodada) % total;
     const questao = await carregarQuestaoPorOffset({
       db: params.db,
       empresaId: params.empresaId,
@@ -331,6 +333,7 @@ export async function obterDesafioDiario(params: {
   empresaId: number;
   funcionarioId: number;
   now?: Date;
+  rodada?: number;
 }): Promise<DesafioDiarioQuestao> {
   const selecionada = await selecionarQuestaoDiaria(params);
   const alternativas = await alternativasDaQuestao(
@@ -355,6 +358,7 @@ export async function responderDesafioDiario(params: {
   funcionarioId: number;
   alternativaId: number;
   now?: Date;
+  rodada?: number;
 }): Promise<DesafioDiarioFeedback> {
   const selecionada = await selecionarQuestaoDiaria(params);
   const alternativas = await alternativasDaQuestao(

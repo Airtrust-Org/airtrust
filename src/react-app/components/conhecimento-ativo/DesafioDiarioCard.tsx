@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { BrainCircuit, CheckCircle2, Loader2, Plane, XCircle } from 'lucide-react';
 import {
   useDesafioDiarioConhecimento,
@@ -8,15 +9,42 @@ interface DesafioDiarioCardProps {
   enabled?: boolean;
 }
 
+const RODADA_STORAGE_KEY = 'airtrust:conhecimento-ativo:desafio-diario:rodada';
+
+function rodadaInicial(): number {
+  if (typeof window === 'undefined') return 0;
+  const value = Number(window.localStorage.getItem(RODADA_STORAGE_KEY) || 0);
+  return Number.isInteger(value) && value >= 0 ? value : 0;
+}
+
 export function DesafioDiarioCard({ enabled = true }: DesafioDiarioCardProps) {
-  const desafio = useDesafioDiarioConhecimento({ enabled });
+  const [rodada, setRodada] = useState(rodadaInicial);
+  const desafio = useDesafioDiarioConhecimento({ enabled, rodada });
   const responder = useResponderDesafioDiario();
 
   if (!enabled) return null;
 
   const questao = desafio.data;
   const feedback = responder.data;
-  const alternativaEmEnvio = responder.isPending ? responder.variables : null;
+  const alternativaEmEnvio = responder.isPending ? responder.variables?.alternativaId : null;
+
+  function avancarRodada() {
+    const proxima = rodada + 1;
+    window.localStorage.setItem(RODADA_STORAGE_KEY, String(proxima));
+    responder.reset();
+    setRodada(proxima);
+  }
+
+  function responderAlternativa(alternativaId: number) {
+    responder.mutate(
+      { alternativaId, rodada },
+      {
+        onSuccess: () => {
+          window.localStorage.setItem(RODADA_STORAGE_KEY, String(rodada + 1));
+        },
+      },
+    );
+  }
 
   function classeAlternativa(id: number): string {
     const base =
@@ -93,7 +121,7 @@ export function DesafioDiarioCard({ enabled = true }: DesafioDiarioCardProps) {
                   key={alternativa.id}
                   type="button"
                   disabled={Boolean(feedback) || responder.isPending}
-                  onClick={() => responder.mutate(alternativa.id)}
+                  onClick={() => responderAlternativa(alternativa.id)}
                   className={classeAlternativa(alternativa.id)}
                 >
                   <span className="flex items-start gap-2.5">
@@ -154,6 +182,13 @@ export function DesafioDiarioCard({ enabled = true }: DesafioDiarioCardProps) {
                     {feedback.fontes[0].pagina ? ` · p. ${feedback.fontes[0].pagina}` : ''}
                   </p>
                 )}
+                <button
+                  type="button"
+                  onClick={avancarRodada}
+                  className="mt-3 rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-800"
+                >
+                  Quero outra pergunta
+                </button>
               </div>
             )}
           </div>
