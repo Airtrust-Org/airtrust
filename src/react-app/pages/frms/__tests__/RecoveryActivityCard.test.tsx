@@ -90,9 +90,8 @@ describe('RecoveryActivityCard', () => {
     render(<RecoveryActivityCard today="2026-06-05" />);
     fireEvent.click(screen.getByText('Standby na base / aeroporto'));
 
-    expect(screen.getByText('Horário da atividade')).toBeInTheDocument();
-    expect(screen.getByText('Início')).toBeInTheDocument();
-    expect(screen.getByText('Fim')).toBeInTheDocument();
+    expect(screen.getByText('Início aproximado')).toBeInTheDocument();
+    expect(screen.getByText('Fim aproximado')).toBeInTheDocument();
     expect(screen.getByText(/acionado imediatamente/i)).toBeInTheDocument();
   });
 
