@@ -1390,10 +1390,25 @@ export async function buscarJornadas(
     binds.push(filtro.data_inicio, filtro.data_fim);
   }
 
+  // Legacy check-in placeholders were created by an older read/reconcile path.
+  // They are not operational journeys and must not pollute the monthly SIGVOOS table.
+  // Keep the guard narrow so a placeholder already reconciled with real operational
+  // data remains visible (origin/data are refreshed in place by the SIGVOOS sync).
+  const legacyCheckinPlaceholderWhere = `
+    AND NOT (
+      UPPER(COALESCE(j.origem, '')) = 'MANUAL'
+      AND COALESCE(j.registrado_por, '') = 'FRMS_CHECKIN_AUTO'
+      AND COALESCE(j.horas_voo_minutos, 0) = 0
+      AND COALESCE(j.duracao_jornada_minutos, 0) = 0
+      AND j.hora_termino IS NULL
+      AND j.hora_corte_motor IS NULL
+      AND j.hora_ultimo_pouso IS NULL
+    )`;
+
   // COUNT query
   const countRow = await db
     .prepare(
-      `SELECT COUNT(*) as total FROM frms_jornada j WHERE j.tripulante_id = ? AND j.deleted_at IS NULL${whereExtra}`,
+      `SELECT COUNT(*) as total FROM frms_jornada j WHERE j.tripulante_id = ? AND j.deleted_at IS NULL${legacyCheckinPlaceholderWhere}${whereExtra}`,
     )
     .bind(...binds)
     .first<{ total: number }>();
@@ -1413,7 +1428,7 @@ export async function buscarJornadas(
         f.total_fatorizado_hv
       FROM frms_jornada j
       LEFT JOIN frms_fatorizacao_jornada f ON f.jornada_id = j.id AND f.deleted_at IS NULL
-      WHERE j.tripulante_id = ? AND j.deleted_at IS NULL${whereExtra}
+      WHERE j.tripulante_id = ? AND j.deleted_at IS NULL${legacyCheckinPlaceholderWhere}${whereExtra}
       ORDER BY j.data DESC
       LIMIT ? OFFSET ?`,
     )

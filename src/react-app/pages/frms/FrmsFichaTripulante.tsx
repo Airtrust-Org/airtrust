@@ -17,13 +17,11 @@ import {
   useFrmsAcumulo,
   useFrmsAlertas,
   useFrmsMutation,
-  useFrmsJornadasEffectiveness,
 } from '@/react-app/hooks/useFrms';
 import type {
   FrmsJornadaRow,
   FrmsAlertaRow,
   FrmsAcumuloRolling,
-  FrmsEffectivenessJornadaRow,
 } from '@/react-app/hooks/useFrms';
 import { toast } from 'sonner';
 import FrmsFormJornada from './FrmsFormJornada';
@@ -316,11 +314,7 @@ export default function FrmsFichaTripulante() {
       : null;
   const loadingFrmsSnapshot = loadingFrmsSnapshotToday || (shouldLoadFortnightPeriod && loadingFortnightPeriodSnapshot);
 
-  const { data: recentJornadasRaw } = useFrmsJornadasEffectiveness(id, 7);
   const { data: ultimaJornadaRaw } = useFrmsUltimaJornada(id, { dataFim: focusDate });
-  const recentJornadas = recentJornadasRaw as FrmsEffectivenessJornadaRow[] | null;
-  const latestJornada =
-    recentJornadas && recentJornadas.length > 0 ? recentJornadas[recentJornadas.length - 1] : null;
   const ultimaJornadaMes =
     ultimaJornadaRaw?.data?.[0]?.data && /^\d{4}-\d{2}-\d{2}$/.test(ultimaJornadaRaw.data[0].data)
       ? ultimaJornadaRaw.data[0].data.slice(0, 7)
