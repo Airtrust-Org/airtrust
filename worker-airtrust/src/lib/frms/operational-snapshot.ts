@@ -76,6 +76,7 @@ export interface FrmsOperationalSnapshotItem {
   status_operacional_checkin: string | null;
 
   effectiveness_pct: number | null;
+  effectiveness_componentes?: Record<string, number> | null;
   effectiveness_source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'PROJETADA_ATIVIDADE' | 'AUSENTE';
   nivel_fadiga_calculado: string | null;
   fatorizacao_status: 'CALCULADA' | 'PROJETADA' | 'AUSENTE';
@@ -190,6 +191,7 @@ interface EffectivenessSnapshotRow {
   funcionario_id: number;
   effectiveness_pct: number | null;
   effectiveness_nivel: string | null;
+  effectiveness_componentes_json?: string | null;
   source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'PROJETADA_ATIVIDADE';
   dia_periodo_embarcado?: number | null;
   total_dias_periodo?: number | null;
@@ -218,6 +220,21 @@ function normalizeText(value: unknown): string | null {
   if (value == null) return null;
   const text = String(value).trim();
   return text.length > 0 ? text : null;
+}
+
+function parseEffectivenessComponents(value: string | null | undefined): Record<string, number> | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    const out: Record<string, number> = {};
+    for (const [key, raw] of Object.entries(parsed)) {
+      const numberValue = Number(raw);
+      if (Number.isFinite(numberValue)) out[key] = numberValue;
+    }
+    return Object.keys(out).length > 0 ? out : null;
+  } catch {
+    return null;
+  }
 }
 
 function asNumber(value: unknown, fallback = 0): number {
@@ -356,6 +373,7 @@ export function calculateMorningEffectivenessProjection(input: {
     funcionario_id: input.funcionarioId,
     effectiveness_pct: effectiveness.effectiveness_pct,
     effectiveness_nivel: effectiveness.nivel,
+    effectiveness_componentes_json: JSON.stringify(effectiveness.componentes),
     source: plannedDutyMinutes > 0 || frmsFlightEquivalentMinutes > 0 ? 'PROJETADA_ATIVIDADE' : 'PROJETADA_APRESENTACAO',
     dia_periodo_embarcado: input.diaPeriodo ?? null,
     total_dias_periodo: input.totalDiasPeriodo ?? null,
@@ -932,6 +950,7 @@ export function buildFrmsOperationalSnapshot(
       status_operacional_checkin: normalizeText(checkin?.status_operacional),
 
       effectiveness_pct: effectivenessPctNormalized,
+      effectiveness_componentes: parseEffectivenessComponents(efetividade?.effectiveness_componentes_json),
       effectiveness_source: effectivenessSource,
       nivel_fadiga_calculado: nivelFadigaCalculado,
       fatorizacao_status:
@@ -1209,6 +1228,7 @@ async function loadOperationalSnapshotRows(
              CAST(j.tripulante_id AS INTEGER) AS funcionario_id,
              fj.effectiveness_pct,
              fj.effectiveness_nivel,
+             fj.effectiveness_componentes_json,
              fj.dia_periodo_embarcado,
              fj.total_dias_periodo,
              ROW_NUMBER() OVER (
@@ -1230,6 +1250,7 @@ async function loadOperationalSnapshotRows(
            funcionario_id,
            effectiveness_pct,
            effectiveness_nivel,
+           effectiveness_componentes_json,
            dia_periodo_embarcado,
            total_dias_periodo
          FROM ranked
