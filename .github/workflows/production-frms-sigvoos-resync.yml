@@ -1,0 +1,239 @@
+name: Production FRMS SIGVOOS Resync
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA containing the reviewed resync code
+        required: true
+        type: string
+      mode:
+        description: verify performs a server-side dry-run; apply executes the bounded SIGVOOS FRMS resync
+        required: true
+        type: choice
+        options:
+          - verify
+          - apply
+        default: verify
+      from:
+        description: First operational date to reconcile (YYYY-MM-DD)
+        required: true
+        type: string
+      to:
+        description: Last operational date to reconcile (YYYY-MM-DD)
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_PRODUCTION_VERIFY_SIGVOOS_FRMS or AIRTRUST_PRODUCTION_APPLY_SIGVOOS_FRMS
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-frms-sigvoos-resync
+  cancel-in-progress: false
+
+env:
+  PROD_API_BASE_URL: https://api.airtrust.online
+  EXPECTED_TENANT_ID: '6'
+
+jobs:
+  resync:
+    name: Governed production FRMS SIGVOOS resync
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          MODE: ${{ inputs.mode }}
+          FROM_DATE: ${{ inputs.from }}
+          TO_DATE: ${{ inputs.to }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_REF_REQUIRED" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "EXPECTED_SHA_INVALID" >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo "EXPECTED_SHA_MISMATCH" >&2; exit 1; }
+          [[ "$FROM_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "FROM_DATE_INVALID" >&2; exit 1; }
+          [[ "$TO_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "TO_DATE_INVALID" >&2; exit 1; }
+          if [[ "$FROM_DATE" > "$TO_DATE" ]]; then echo "DATE_RANGE_INVALID" >&2; exit 1; fi
+
+          node --input-type=module <<'NODE'
+          const from = new Date(`${process.env.FROM_DATE}T00:00:00Z`);
+          const to = new Date(`${process.env.TO_DATE}T00:00:00Z`);
+          if (!Number.isFinite(from.valueOf()) || !Number.isFinite(to.valueOf())) throw new Error('DATE_PARSE_INVALID');
+          const days = Math.floor((to - from) / 86400000) + 1;
+          if (days < 1 || days > 31) throw new Error(`DATE_WINDOW_OUT_OF_BOUNDS:${days}`);
+          NODE
+
+          if [[ "$MODE" == "verify" ]]; then
+            [[ "$CONFIRMATION" == "AIRTRUST_PRODUCTION_VERIFY_SIGVOOS_FRMS" ]] || { echo "VERIFY_CONFIRMATION_REQUIRED" >&2; exit 1; }
+          elif [[ "$MODE" == "apply" ]]; then
+            [[ "$CONFIRMATION" == "AIRTRUST_PRODUCTION_APPLY_SIGVOOS_FRMS" ]] || { echo "APPLY_CONFIRMATION_REQUIRED" >&2; exit 1; }
+          else
+            echo "UNSUPPORTED_MODE" >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Verify current-main release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Require production administrator credential
+        env:
+          PROD_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$PROD_EMAIL" && -n "$PROD_PASSWORD" ]] || { echo "PRODUCTION_ADMIN_CREDENTIALS_MISSING" >&2; exit 1; }
+          [[ "$PROD_EMAIL" != *"staging.airtrust.invalid"* ]] || { echo "STAGING_QA_IDENTITY_REJECTED" >&2; exit 1; }
+
+      - name: Verify identity, live SHA and execute bounded resync
+        env:
+          PROD_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          MODE: ${{ inputs.mode }}
+          FROM_DATE: ${{ inputs.from }}
+          TO_DATE: ${{ inputs.to }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module > "$RUNNER_TEMP/frms-sigvoos-resync-result.json" <<'NODE'
+          import {
+            assertAllowedProductionBaseUrl,
+            decodeJwtPayload,
+            extractAccessToken,
+            fetchJson,
+            login,
+          } from './scripts/smoke-auth-common.mjs';
+
+          const base = assertAllowedProductionBaseUrl(process.env.PROD_API_BASE_URL);
+          const loginPayload = await login(base, process.env.PROD_EMAIL, process.env.PROD_PASSWORD);
+          const token = extractAccessToken(loginPayload);
+          const claims = decodeJwtPayload(token);
+          const tenantId = Number(claims?.empresa_id || 0);
+          const rawRole = String(claims?.role || '').trim().toLowerCase();
+          const role = rawRole === 'admin' ? 'administrador' : rawRole === 'manager' ? 'gestor' : rawRole;
+
+          if (tenantId !== Number(process.env.EXPECTED_TENANT_ID)) {
+            throw new Error(`PRODUCTION_TENANT_MISMATCH:${tenantId}`);
+          }
+          if (role !== 'administrador') {
+            throw new Error(`PRODUCTION_ADMIN_REQUIRED:${role || 'missing'}`);
+          }
+
+          const versionResult = await fetchJson(`${base}/api/version`);
+          if (versionResult.status !== 200) throw new Error(`PRODUCTION_VERSION_HTTP_${versionResult.status}`);
+          const versionBody = versionResult.json?.data && typeof versionResult.json.data === 'object'
+            ? versionResult.json.data
+            : versionResult.json;
+          const liveSha = String(versionBody?.sourceSha ?? versionBody?.source_sha ?? '');
+          if (liveSha !== process.env.GITHUB_SHA) {
+            throw new Error(`PRODUCTION_LIVE_SHA_MISMATCH:${liveSha || 'missing'}`);
+          }
+
+          const isApply = process.env.MODE === 'apply';
+          const endpoint = isApply
+            ? '/api/integracoes/sigvoos/sincronizar-frms'
+            : '/api/integracoes/sigvoos/maintenance/sincronizar-frms';
+          const requestBody = isApply
+            ? {
+                from: process.env.FROM_DATE,
+                to: process.env.TO_DATE,
+                chunkDays: 7,
+                retryAttempts: 1,
+                clearExisting: false,
+              }
+            : {
+                dryRun: true,
+                from: process.env.FROM_DATE,
+                to: process.env.TO_DATE,
+                chunkDays: 7,
+                retryAttempts: 1,
+                clearExisting: false,
+              };
+
+          const response = await fetchJson(`${base}${endpoint}`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+          });
+          if (response.status !== 200 || response.json?.success !== true) {
+            throw new Error(`SIGVOOS_FRMS_${isApply ? 'APPLY' : 'VERIFY'}_FAILED:${response.status}:${response.json?.code || 'UNKNOWN'}`);
+          }
+
+          const data = response.json?.data && typeof response.json.data === 'object' ? response.json.data : {};
+          process.stdout.write(JSON.stringify({
+            ok: true,
+            mode: process.env.MODE,
+            tenant_id: tenantId,
+            authorized_role: role,
+            live_worker_sha: liveSha,
+            period: data.periodo ?? data.period ?? { from: process.env.FROM_DATE, to: process.env.TO_DATE },
+            mutation_executed: isApply,
+            clear_existing: false,
+            total_raw: Number(data.totalRegistrosBrutos ?? 0),
+            total_normalized: Number(data.totalRegistrosNormalizados ?? 0),
+            total_grouped_days: Number(data.totalDiasAgrupados ?? 0),
+            total_imports: Number(data.totalImportacoes ?? 0),
+            total_imported: Number(data.totalImportados ?? 0),
+            total_replaced: Number(data.totalSubstituidos ?? 0),
+            total_ignored: Number(data.totalIgnorados ?? 0),
+            total_errors: Number(data.totalErros ?? 0),
+            operation_id_present: Boolean(response.json?.operation_id),
+            pii_emitted: false,
+          }, null, 2));
+          NODE
+
+      - name: Publish sanitized summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - "$RUNNER_TEMP/frms-sigvoos-resync-result.json" >> "$GITHUB_STEP_SUMMARY" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          console.log('## Production FRMS SIGVOOS resync');
+          console.log('');
+          console.log(`- mode: \`${data.mode}\``);
+          console.log(`- workflow source SHA: \`${process.env.GITHUB_SHA}\``);
+          console.log(`- live Worker SHA: \`${data.live_worker_sha}\``);
+          console.log(`- tenant: \`${data.tenant_id}\``);
+          console.log(`- authorized role: \`${data.authorized_role}\``);
+          console.log(`- period: \`${data.period?.from || 'unknown'} → ${data.period?.to || 'unknown'}\``);
+          console.log(`- mutation executed: \`${data.mutation_executed}\``);
+          console.log(`- clearExisting: \`${data.clear_existing}\``);
+          if (data.mutation_executed) {
+            console.log(`- imported/replaced/ignored/errors: \`${data.total_imported}/${data.total_replaced}/${data.total_ignored}/${data.total_errors}\``);
+          }
+          console.log('- credentials/PII emitted: no');
+          NODE
+
+      - name: Upload sanitized evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-frms-sigvoos-resync-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/frms-sigvoos-resync-result.json
+          if-no-files-found: error
+          retention-days: 14
