@@ -232,8 +232,10 @@ function FortnightTimelinePanel({
                                 ? 'Simulador'
                                 : day.atividade_principal === 'TREINAMENTO'
                                   ? 'Treinamento'
-                                  : day.atividade_principal === 'MISTA'
-                                    ? 'Atividade mista'
+                                  : day.atividade_principal === 'ATIVIDADE'
+                                    ? 'Atividade operacional'
+                                    : day.atividade_principal === 'MISTA'
+                                      ? 'Atividade mista'
                                     : 'Voo'}
                               {' · '}
                               {formatFortnightMinutes(day.atividade_min)}
