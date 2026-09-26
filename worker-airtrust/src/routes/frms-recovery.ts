@@ -90,6 +90,18 @@ const activitySchema = z
       });
     }
     if (
+      requiresDutyWindow &&
+      value.duty_start_time &&
+      value.duty_end_time &&
+      value.duty_start_time === value.duty_end_time
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['duty_end_time'],
+        message: 'Início e fim da atividade não podem ser iguais.',
+      });
+    }
+    if (
       (value.activity_type === 'STANDBY_HOME_HOTEL' || value.activity_type === 'STANDBY_ONSITE') &&
       value.immediate_callout_required == null
     ) {
@@ -107,6 +119,21 @@ const activitySchema = z
         code: z.ZodIssueCode.custom,
         path: ['segments'],
         message: 'Cada período do dia misto exige início e fim.',
+      });
+    }
+    if (
+      value.activity_type === 'MIXED' &&
+      value.segments?.some(
+        (segment) =>
+          segment.start_time &&
+          segment.end_time &&
+          segment.start_time === segment.end_time,
+      )
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['segments'],
+        message: 'Início e fim de um período não podem ser iguais.',
       });
     }
   });
