@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { calcDuracaoMinutos } from '../lib/frms/calculos';
 import { LIMITES_DEFAULT } from '../lib/frms/types';
 import { confirmarImportacaoFira, enrichFiraPreviewLineIntegridade, type FiraImportacaoPreview, type FiraLinhPreview } from '../lib/frms/fira-service';
 import { classifyOperationalCrewRole } from '../lib/frms/operational-crew';
@@ -1163,6 +1164,7 @@ export function normalizeSigvoosRecord(raw: Record<string, unknown>): SigvoosNor
 
   const horaApresentacao =
     extractTime(normalizeLookupValue(flightReportLeg?.engine_start_time_str)) ||
+    extractTime(normalizeLookupValue(flightReportLeg?.takeoff_time_str)) ||
     extractTime(
       pickFirstString(raw, [
         'hora_apresentacao',
@@ -1365,18 +1367,26 @@ export async function buildSigvoosMonthlyPreview(
   );
   const lines: FiraLinhPreview[] = input.groupedDays.map((day) => {
     const jornadaExistenteId = existingJornadasByDate.get(day.data) ?? null;
+    const observedWindowMin =
+      day.horaApresentacao && day.horaTermino
+        ? calcDuracaoMinutos(day.horaApresentacao, day.horaTermino)
+        : 0;
+    const hasConsistentObservedWindow =
+      day.horasVooMin <= 0 || observedWindowMin >= day.horasVooMin;
+    const horaApresentacao = hasConsistentObservedWindow ? day.horaApresentacao : null;
+    const duracaoJornadaMin =
+      horaApresentacao && day.horaTermino
+        ? calcDuracaoMinutos(horaApresentacao, day.horaTermino)
+        : 0;
 
     return enrichFiraPreviewLineIntegridade({
       dia: day.dia,
       data: day.data,
       status_fira: 'SIGVOOS',
       status_frms: 'ES',
-      hora_apresentacao: day.horaApresentacao,
+      hora_apresentacao: horaApresentacao,
       hora_termino: day.horaTermino,
-      duracao_jornada_min:
-        day.horaApresentacao && day.horaTermino
-          ? Math.max(0, hhmmToMin(day.horaTermino) - hhmmToMin(day.horaApresentacao))
-          : 0,
+      duracao_jornada_min: duracaoJornadaMin,
       horas_voo_min: day.horasVooMin,
       local_base: day.localBase,
       situacao: jornadaExistenteId ? 'DUPLICATA' : 'NOVO',
