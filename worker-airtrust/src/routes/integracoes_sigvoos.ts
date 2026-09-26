@@ -215,6 +215,15 @@ function buildUnresolvedErrorWindows(
   return unresolved;
 }
 
+export function assertSegmentedSyncComplete(
+  execution: Array<{ from: string; to: string; success: boolean; error?: string }>,
+): void {
+  const failedWindows = execution.filter((window) => !window.success);
+  if (failedWindows.length === 0) return;
+  const ranges = failedWindows.map((window) => `${window.from}..${window.to}`).join(',');
+  throw new Error(`SIGVOOS_SEGMENTED_SYNC_INCOMPLETE:${ranges}`);
+}
+
 async function runSegmentedSync(
   db: D1Database,
   empresaId: number | null | undefined,
@@ -287,6 +296,7 @@ async function runSegmentedSync(
     merged.importacoes.push(...(result.importacoes || []));
   }
 
+  assertSegmentedSyncComplete(execution);
   return { summary: merged, windows: execution };
 }
 
@@ -310,6 +320,14 @@ function formatSigvoosSyncError(error: unknown): {
       status: 400,
       code: 'SIGVOOS_CREDENTIALS_MISSING',
       message: 'Credenciais SIGVOOS ausentes. Informe usuario e senha antes de sincronizar.',
+    };
+  }
+
+  if (raw.startsWith('SIGVOOS_SEGMENTED_SYNC_INCOMPLETE:')) {
+    return {
+      status: 502,
+      code: 'SIGVOOS_SEGMENTED_SYNC_INCOMPLETE',
+      message: 'Sincronizacao SIGVOOS incompleta: pelo menos uma janela nao foi concluida.',
     };
   }
 

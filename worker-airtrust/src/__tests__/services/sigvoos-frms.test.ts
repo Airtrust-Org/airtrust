@@ -241,6 +241,77 @@ describe('sigvoos-frms service', () => {
     });
   });
 
+  it('fails closed instead of persisting an observed window shorter than summed HV', async () => {
+    const dbStub = {
+      prepare: () => ({
+        bind: () => ({ all: async () => ({ results: [] }) }),
+      }),
+    } as any;
+
+    const preview = await buildSigvoosMonthlyPreview({
+      db: dbStub,
+      importacaoId: 'import-short-window',
+      tripulanteId: '33',
+      tripulanteNomeFira: 'CREW MEMBER',
+      tripulanteNomeSistema: 'Crew Member',
+      canac: '951681',
+      identificadorSigvoos: null,
+      fonteResolucao: 'CANAC' as const,
+      ano: 2026,
+      mes: 9,
+      groupedDays: [{
+        canac: '951681', identificadorSigvoos: null, tripulanteNome: 'CREW MEMBER',
+        data: '2026-09-01', dia: 1, horaApresentacao: '14:00', horaTermino: '16:14',
+        horasVooMin: 192, localBase: 'SBME', matriculaAeronave: null,
+        tempoNoturnoMin: 0, tempoIfrMin: 0, rawItems: [{ etapa: 1 }],
+      }],
+    });
+
+    expect(preview.preview.linhas[0]).toMatchObject({
+      hora_apresentacao: null,
+      hora_termino: '16:14',
+      duracao_jornada_min: 0,
+      horas_voo_min: 192,
+      integridade_status: 'INCONSISTENTE',
+      integridade_codigo: 'JORNADA_ZERO_COM_HV',
+    });
+  });
+
+  it('calculates a SIGVOOS observed window across midnight with canonical duration logic', async () => {
+    const dbStub = {
+      prepare: () => ({
+        bind: () => ({ all: async () => ({ results: [] }) }),
+      }),
+    } as any;
+
+    const preview = await buildSigvoosMonthlyPreview({
+      db: dbStub,
+      importacaoId: 'import-overnight',
+      tripulanteId: '33',
+      tripulanteNomeFira: 'CREW MEMBER',
+      tripulanteNomeSistema: 'Crew Member',
+      canac: '951681',
+      identificadorSigvoos: null,
+      fonteResolucao: 'CANAC' as const,
+      ano: 2026,
+      mes: 9,
+      groupedDays: [{
+        canac: '951681', identificadorSigvoos: null, tripulanteNome: 'CREW MEMBER',
+        data: '2026-09-02', dia: 2, horaApresentacao: '23:30', horaTermino: '01:00',
+        horasVooMin: 60, localBase: 'SBME', matriculaAeronave: null,
+        tempoNoturnoMin: 60, tempoIfrMin: 0, rawItems: [{ etapa: 1 }],
+      }],
+    });
+
+    expect(preview.preview.linhas[0]).toMatchObject({
+      hora_apresentacao: '23:30',
+      hora_termino: '01:00',
+      duracao_jornada_min: 90,
+      horas_voo_min: 60,
+      integridade_status: 'OK',
+    });
+  });
+
   it('marks SIGVOOS preview line as inconsistent when HV has no jornada', async () => {
     const dbStub = {
       prepare: () => ({

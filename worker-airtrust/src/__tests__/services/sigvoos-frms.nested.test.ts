@@ -28,4 +28,27 @@ describe('sigvoos-frms nested payload', () => {
       localBase: 'SBME',
     });
   });
+
+  it('uses takeoff as the estimated start when nested engine start is absent', () => {
+    const normalized = normalizeSigvoosRecord({
+      staff: { id: 35, name: 'CREW MEMBER', inscription: 252 },
+      date: '26/09/2026',
+      flight_report_leg: {
+        departure_location: { icao_code: 'SBME' },
+        engine_start_time_str: null,
+        takeoff_time_str: '07:58',
+        landing_time_str: '08:40',
+        engine_shutoff_time_str: '08:45',
+        navigation_time_str: '00:42',
+      },
+    });
+
+    expect(normalized).toMatchObject({
+      data: '2026-09-26',
+      horaApresentacao: '07:58',
+      horaTermino: '08:45',
+      horasVooMin: 42,
+    });
+  });
+
 });

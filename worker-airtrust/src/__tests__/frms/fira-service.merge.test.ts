@@ -251,6 +251,13 @@ describe('confirmarImportacaoFira duplicate merge', () => {
 
     expect(atualizarJornada).toHaveBeenCalledTimes(1);
     expect(vi.mocked(atualizarJornada).mock.calls[0]?.[1]).toBe('jornada-sigvoos-existente');
+    expect(vi.mocked(atualizarJornada).mock.calls[0]?.[2]).toMatchObject({
+      hora_apresentacao: '02:30',
+      hora_termino: '08:00',
+      hora_corte_motor: '08:00',
+      horas_voo_minutos: 195,
+      origem: 'SIGVOOS',
+    });
     // Never falls through to a fresh insert — that would be the duplicate.
     expect(salvarJornada).not.toHaveBeenCalled();
     expect(result.substituidos).toBe(1);
@@ -417,6 +424,8 @@ describe('confirmarImportacaoFira duplicate merge', () => {
       data: '2026-05-26',
       origem: 'SIGVOOS',
       local_base: 'SBSP',
+      hora_termino: '14:30',
+      hora_corte_motor: '14:30',
     });
     expect(shouldUseForOperationalFrms({ origem: vi.mocked(salvarJornada).mock.calls[0]?.[1]?.origem })).toBe(true);
     expect(result.importados).toBe(1);

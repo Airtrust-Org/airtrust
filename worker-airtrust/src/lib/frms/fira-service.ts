@@ -967,6 +967,7 @@ export async function confirmarImportacaoFira(
       }
 
       if (jornadaExistenteId && (shouldMerge || forcarSubstituicao)) {
+        const isSigvoos = String(linha.status_fira || '').trim().toUpperCase() === 'SIGVOOS';
         const result = await atualizarJornada(
           db,
           jornadaExistenteId,
@@ -975,11 +976,9 @@ export async function confirmarImportacaoFira(
             hora_apresentacao: linha.hora_apresentacao,
             hora_termino: linha.hora_termino,
             horas_voo_minutos: linha.horas_voo_min || null,
+            hora_corte_motor: isSigvoos ? linha.hora_termino : undefined,
             observacao: null,
-            origem:
-              String(linha.status_fira || '').trim().toUpperCase() === 'SIGVOOS'
-                ? 'SIGVOOS'
-                : 'FIRA',
+            origem: isSigvoos ? 'SIGVOOS' : 'FIRA',
             local_base: linha.local_base ?? null,
             empresa_id: empresaId ?? null,
           },
@@ -1001,7 +1000,10 @@ export async function confirmarImportacaoFira(
         hora_primeiro_acionamento: null,
         hora_primeira_decolagem: null,
         hora_ultimo_pouso: null,
-        hora_corte_motor: null,
+        hora_corte_motor:
+          String(linha.status_fira || '').trim().toUpperCase() === 'SIGVOOS'
+            ? linha.hora_termino
+            : null,
         observacao: null,
         registrado_por: operadorId,
         origem: String(linha.status_fira || '').trim().toUpperCase() === 'SIGVOOS' ? ('SIGVOOS' as const) : ('FIRA' as const),
