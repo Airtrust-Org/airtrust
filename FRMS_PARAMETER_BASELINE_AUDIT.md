@@ -113,7 +113,7 @@ document.
 | REPOUSO_MIN_PRE_APRESENTACAO | 90 | types.ts | OFFSHORE_BENCHMARK (modelo de sono offshore) — **⚠ não consumido por nenhum cálculo**; apenas exibido/editável em `FrmsConfiguracoes.tsx` |
 | REPOUSO_MIN_POS_LIBERACAO | 60 | types.ts | OFFSHORE_BENCHMARK — **⚠ não consumido por nenhum cálculo**; apenas exibido/editável em `FrmsConfiguracoes.tsx` |
 | REPOUSO_QUALIDADE_HOTEL | 92 | types.ts | OFFSHORE_BENCHMARK — **⚠ não consumido por nenhum cálculo**; apenas exibido/editável em `FrmsConfiguracoes.tsx`; origem do valor "92" e sua escala (percentual? score?) não documentada em nenhum lugar do código |
-| FRMS_EMBARQUE_PROGRESSO_MAX | 8 | types.ts | OFFSHORE_BENCHMARK (unidade: **percentual**, não dias — penalidade cumulativa máxima de 8% ao final do período embarcado; ver `calculos.ts:419`, `/100`) |
+| FRMS_EMBARQUE_PROGRESSO_MAX | 8 | types.ts | LEGACY_COMPATIBILITY — a migration 0268 introduziu uma segunda curva de degradação do período embarcado para o mesmo fenômeno já modelado por `CICLO_EMBARCADO_*`. Desde a auditoria consolidada de 2026-09-25, o valor permanece versionado para rastreabilidade histórica, mas **não é somado novamente** ao Processo S; a única penalização progressiva ativa vem de `fator_ciclo_embarcado_pct`, sujeita a `CICLO_EMBARCADO_POLICY_APPROVED`. |
 | MINUTOS_ANTES_APRESENTACAO | 90 | types.ts | BIOLOGICAL_MODEL (premissa operacional de sono) |
 | HORAS_SONO_PADRAO | 8 | types.ts | BIOLOGICAL_MODEL |
 
@@ -193,6 +193,13 @@ All **OPERATIONAL_POLICY** (quinzena / trend / score thresholds and impact weigh
 | FORTNIGHT_IMPACT_DAILY_ATTENTION | 7 |
 
 ---
+
+> **Correção de dupla contagem (2026-09-25):** as migrations 0214 e 0268
+> modelavam duas curvas progressivas do mesmo período embarcado. O runtime
+> somava `fator_ciclo_embarcado_pct` e `FRMS_EMBARQUE_PROGRESSO_MAX` no
+> mesmo componente Processo S. A auditoria consolidada removeu apenas a segunda
+> aplicação em `calcEffectiveness`; nenhum dado histórico ou parâmetro foi
+> apagado. A curva governada `CICLO_EMBARCADO_*` permanece a fonte ativa.
 
 ## Consumers cross-referenced (no additional undocumented parameters found)
 
