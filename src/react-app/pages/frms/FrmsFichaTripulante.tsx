@@ -916,9 +916,18 @@ export default function FrmsFichaTripulante() {
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-gray-600 tabular-nums">
-                        <div>{j.hora_termino || '—'}</div>
-                        <div className={`mt-0.5 text-[10px] font-semibold ${presentation.boundarySourceClass}`}>
-                          {presentation.boundarySourceLabel}
+                        <div>
+                          {j.hora_termino ||
+                            (j.data === hojeIso ? 'Em andamento' : 'Não informado')}
+                        </div>
+                        <div className={`mt-0.5 max-w-[180px] text-[10px] font-semibold ${presentation.boundarySourceClass}`}>
+                          {!j.hora_termino
+                            ? 'Término operacional ainda não confirmado'
+                            : j.jornada_boundary_source === 'ESTIMADO'
+                              ? 'Fim estimado da janela de voo'
+                              : j.jornada_boundary_source === 'REAL'
+                                ? 'Fim FRMS confirmado/derivado'
+                                : presentation.boundarySourceLabel}
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-right text-gray-600 tabular-nums">
