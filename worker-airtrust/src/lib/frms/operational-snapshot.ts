@@ -473,7 +473,9 @@ function resolveJornadaSource(jornada: JornadaSnapshotRow | null): {
 
   const origem = normalizeText(jornada.origem) as Origem | null;
   if (asNumber(jornada.is_manual_empty) === 1) {
-    return { source: 'INCONSISTENTE', origem: origem ?? 'MANUAL' };
+    // Linha manual vazia é apenas placeholder criado pelo fluxo de check-in.
+    // Não é uma jornada realizada nem evidência inconsistente.
+    return { source: 'AUSENTE', origem: origem ?? 'MANUAL' };
   }
 
   if (origem === 'MANUAL') {
@@ -711,7 +713,10 @@ export function buildFrmsOperationalSnapshot(
     if (!funcionario) continue;
 
     const escalado = Boolean(escala);
-    const teveJornada = Boolean(jornada);
+    const teveJornada =
+      Boolean(jornada) &&
+      asNumber(jornada?.has_operational_data) === 1 &&
+      asNumber(jornada?.is_manual_empty) !== 1;
     const activitySummary = summarizeFrmsActivities(activities, teveJornada);
     const teveAtividadeFrms = teveJornada || activities.length > 0;
 
@@ -720,15 +725,17 @@ export function buildFrmsOperationalSnapshot(
     // subjetivo obrigatório quando ele estiver ausente.
     const horaApresentacao = normalizeText(checkin?.hora_apresentacao);
     const horaTermino =
-      normalizeText(jornada?.hora_termino) ??
+      (teveJornada ? normalizeText(jornada?.hora_termino) : null) ??
       normalizeText(escala?.hora_termino) ??
       normalizeText(activitySummary.end_time);
 
-    const horasVooMinutos = asNumber(jornada?.horas_voo_minutos);
+    const horasVooMinutos = teveJornada ? asNumber(jornada?.horas_voo_minutos) : 0;
     const horasVooFrmsMinutos = horasVooMinutos + activitySummary.simulator_minutes;
     // A duração canônica é produzida pelo pipeline após o check-in. O snapshot
     // não reconstrói jornada a partir de horários parciais/legados.
-    const duracaoJornadaMinutos = Math.max(0, asNumber(jornada?.duracao_jornada_minutos));
+    const duracaoJornadaMinutos = teveJornada
+      ? Math.max(0, asNumber(jornada?.duracao_jornada_minutos))
+      : 0;
 
     const { source: jornadaDataSource, origem: jornadaOrigem } = resolveJornadaSource(jornada);
 
