@@ -35,6 +35,7 @@ import { buildJornadaMensalPresentation } from './frmsJornadasMensaisPresentatio
 import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { FortnightConsolidatedPanel } from './components/FortnightOperationalIndicator';
 import { FrmsSignalGrid } from './components/FrmsOperationalSignals';
+import { formatRecoveryActivityType } from './fortnightOperationalLabels';
 
 const FrmsEffectivenessTimeline = lazy(() => import('./components/FrmsEffectivenessTimeline'));
 
@@ -676,7 +677,7 @@ export default function FrmsFichaTripulante() {
               +{Number(todayFortnightSnapshotItem?.recovery_credit_points ?? 0).toFixed(1)} pt
             </p>
             <p className="mt-1 text-xs text-slate-600">
-              {todayFortnightSnapshotItem?.recovery_activity_type?.replace(/_/g, ' ') ||
+              {formatRecoveryActivityType(todayFortnightSnapshotItem?.recovery_activity_type) ||
                 todayFortnightSnapshotItem?.recovery_state ||
                 'Sem crédito registrado'}
             </p>
@@ -737,7 +738,7 @@ export default function FrmsFichaTripulante() {
                 <p>Sono/repouso: <strong>{todayFortnightSnapshotItem?.horas_sono == null ? 'não informado' : `${Number(todayFortnightSnapshotItem.horas_sono).toFixed(1)} h`}</strong></p>
                 <p>KSS: <strong>{todayFortnightSnapshotItem?.kss_score ?? 'não informado'}</strong></p>
                 <p>Crédito aplicado: <strong className="text-emerald-800">+{Number(todayFortnightSnapshotItem?.recovery_credit_points ?? 0).toFixed(1)} pt</strong></p>
-                <p>Atividade: <strong>{todayFortnightSnapshotItem?.recovery_activity_type?.replace(/_/g, ' ') || todayFortnightSnapshotItem?.recovery_state || 'sem recuperação registrada'}</strong></p>
+                <p>Atividade: <strong>{formatRecoveryActivityType(todayFortnightSnapshotItem?.recovery_activity_type) || todayFortnightSnapshotItem?.recovery_state || 'sem recuperação registrada'}</strong></p>
               </div>
             </div>
 
