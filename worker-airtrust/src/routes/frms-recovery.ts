@@ -74,6 +74,37 @@ const activitySchema = z
         message: 'Segmentos só podem ser informados quando activity_type=MIXED.',
       });
     }
+
+    const needsDutyWindow = value.activity_type !== 'OFF_DUTY' && value.activity_type !== 'MIXED';
+    if (needsDutyWindow && (!value.duty_start_time || !value.duty_end_time)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['duty_start_time'],
+        message: 'Informe início e fim da atividade anterior.',
+      });
+    }
+
+    if (
+      (value.activity_type === 'STANDBY_HOME_HOTEL' || value.activity_type === 'STANDBY_ONSITE') &&
+      value.immediate_callout_required == null
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['immediate_callout_required'],
+        message: 'Informe se havia necessidade de acionamento imediato.',
+      });
+    }
+
+    if (
+      value.activity_type === 'MIXED' &&
+      value.segments?.some((segment) => !segment.start_time || !segment.end_time)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['segments'],
+        message: 'Cada período do dia misto precisa de início e fim.',
+      });
+    }
   });
 
 type FlightSummary = {
