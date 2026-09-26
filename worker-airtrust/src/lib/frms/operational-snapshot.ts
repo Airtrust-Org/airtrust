@@ -58,7 +58,7 @@ export interface FrmsOperationalSnapshotItem {
   simulador_minutos?: number;
   treinamento_minutos?: number;
   atividade_frms_minutos?: number;
-  atividade_principal?: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'MISTA' | 'SEM_DADO';
+  atividade_principal?: 'VOO' | 'TREINAMENTO' | 'SIMULADOR' | 'STANDBY' | 'DESLOCAMENTO' | 'OUTRA_ATIVIDADE' | 'MISTA' | 'FOLGA' | 'SEM_DADO';
   atividade_hora_inicio?: string | null;
   atividade_hora_fim?: string | null;
   atividade_rotulos?: string[];
@@ -975,6 +975,33 @@ interface RecoveryCreditSnapshotRow {
   recovery_credit_points: number;
   recovery_state: string | null;
   activity_type: string | null;
+  duty_start_time: string | null;
+  duty_end_time: string | null;
+  total_duty_minutes: number | null;
+}
+
+function recoveryActivityPresentation(activityType: string | null): {
+  principal: FrmsOperationalSnapshotItem['atividade_principal'];
+  countsAsActivity: boolean;
+} {
+  switch (String(activityType || '').toUpperCase()) {
+    case 'OFF_DUTY':
+      return { principal: 'FOLGA', countsAsActivity: false };
+    case 'STANDBY_HOME_HOTEL':
+    case 'STANDBY_ONSITE':
+      return { principal: 'STANDBY', countsAsActivity: true };
+    case 'ADMIN_TRAINING':
+      return { principal: 'TREINAMENTO', countsAsActivity: true };
+    case 'DUTY_TRAVEL':
+      return { principal: 'DESLOCAMENTO', countsAsActivity: true };
+    case 'MIXED':
+      return { principal: 'MISTA', countsAsActivity: true };
+    case 'FLIGHT_NOT_IN_SOURCE':
+    case 'OTHER':
+      return { principal: 'OUTRA_ATIVIDADE', countsAsActivity: true };
+    default:
+      return { principal: 'SEM_DADO', countsAsActivity: false };
+  }
 }
 
 async function loadRecoveryCreditRows(
@@ -989,7 +1016,10 @@ async function loadRecoveryCreditRows(
               CAST(ra.funcionario_id AS INTEGER) AS funcionario_id,
               COALESCE(ra.recovery_credit_points, 0) AS recovery_credit_points,
               ra.recovery_state,
-              rd.activity_type
+              rd.activity_type,
+              rd.duty_start_time,
+              rd.duty_end_time,
+              rd.total_duty_minutes
          FROM frms_recovery_assessment ra
          LEFT JOIN frms_recovery_activity_day rd
            ON rd.id = ra.recovery_day_id
@@ -1351,6 +1381,10 @@ export async function listFrmsOperationalSnapshot(
         points: Number(row.recovery_credit_points || 0),
         state: row.recovery_state ?? null,
         activityType: row.activity_type ?? null,
+        startTime: row.duty_start_time ?? null,
+        endTime: row.duty_end_time ?? null,
+        totalDutyMinutes:
+          row.total_duty_minutes == null ? null : Math.max(0, Number(row.total_duty_minutes)),
       },
     ]),
   );
@@ -1417,6 +1451,65 @@ export async function listFrmsOperationalSnapshot(
     filters: scopedFuncionarioId != null ? { funcionario_id: scopedFuncionarioId } : undefined,
   });
 
+  // O relato do dia sem voo, coletado no check-in da manhã seguinte, também é
+  // contexto operacional do FRMS. Ele preenche standby/treinamento/deslocamento
+  // sem transformar folga em jornada e sem fabricar HV.
+  const snapshotItems = snapshot.items.map((item) => {
+    const key = `${item.data_operacional}::${item.funcionario_id}`;
+    const recovery = recoveryCreditByKey.get(key);
+    if (!recovery?.activityType) return item;
+
+    const presentation = recoveryActivityPresentation(recovery.activityType);
+    if (!presentation.countsAsActivity) {
+      return {
+        ...item,
+        atividade_principal:
+          item.teve_atividade_frms ? item.atividade_principal : presentation.principal,
+      };
+    }
+
+    const activityStart =
+      item.atividade_hora_inicio ?? recovery.startTime ?? item.hora_apresentacao ?? null;
+    const activityEnd = latestClockFromStart(activityStart, [
+      item.atividade_hora_fim,
+      item.hora_termino,
+      recovery.endTime,
+    ]);
+    const reportedMinutes = Math.max(0, Number(recovery.totalDutyMinutes ?? 0));
+    const windowMinutes = clockSpanMinutes(activityStart, activityEnd);
+    const existingMinutes = Math.max(0, Number(item.atividade_frms_minutos ?? 0));
+    const combinedMinutes =
+      windowMinutes != null && windowMinutes > 0
+        ? windowMinutes
+        : Math.max(existingMinutes, reportedMinutes);
+
+    const hadExistingActivity = Boolean(item.teve_atividade_frms);
+    const nextPrincipal =
+      hadExistingActivity &&
+      item.atividade_principal &&
+      item.atividade_principal !== presentation.principal
+        ? 'MISTA'
+        : presentation.principal;
+
+    return {
+      ...item,
+      teve_atividade_frms: true,
+      atividade_principal: nextPrincipal,
+      atividade_hora_inicio: activityStart,
+      atividade_hora_fim: activityEnd,
+      hora_termino: item.hora_termino ?? activityEnd,
+      atividade_frms_minutos: combinedMinutes,
+      treinamento_minutos:
+        recovery.activityType === 'ADMIN_TRAINING'
+          ? Math.max(Number(item.treinamento_minutos ?? 0), reportedMinutes)
+          : item.treinamento_minutos,
+      atividade_rotulos: [
+        ...(item.atividade_rotulos ?? []),
+        String(recovery.activityType).replace(/_/g, ' '),
+      ].slice(0, 5),
+    } as FrmsOperationalSnapshotItem;
+  });
+
   const effectivenessByKey = new Map<string, EffectivenessSnapshotRow>();
   for (const row of contextRows.effectiveness) {
     const key = `${row.data_operacional}::${Number(row.funcionario_id)}`;
@@ -1449,7 +1542,7 @@ export async function listFrmsOperationalSnapshot(
   // calcularDiaDoCiclo() só para os dias efetivamente solicitados que ainda não
   // têm âncora; os demais dias do período são inferidos por jornadas vizinhas do
   // mesmo tripulante dentro de buildFrmsFortnightIndicatorMap.
-  const missingFortnightKeys = snapshot.items.filter((item) => {
+  const missingFortnightKeys = snapshotItems.filter((item) => {
     if (item.data_operacional < requestedStart || item.data_operacional > requestedEnd) {
       return false;
     }
@@ -1470,7 +1563,7 @@ export async function listFrmsOperationalSnapshot(
   );
 
   const fortnightIndicatorMap = buildFrmsFortnightIndicatorMap({
-    items: snapshot.items.map((item) => {
+    items: snapshotItems.map((item) => {
       const itemKey = `${item.data_operacional}::${Number(item.funcionario_id)}`;
       const effectivenessRow = effectivenessByKey.get(itemKey);
       const derivedFortnight = derivedFortnightByKey.get(itemKey);
@@ -1522,7 +1615,7 @@ export async function listFrmsOperationalSnapshot(
         : undefined,
   });
 
-  const itemsWithFortnight = snapshot.items.map((item) => {
+  const itemsWithFortnight = snapshotItems.map((item) => {
     const key = `${item.data_operacional}::${item.funcionario_id}`;
     const recovery = recoveryCreditByKey.get(key);
     const itemWithFortnight = {
