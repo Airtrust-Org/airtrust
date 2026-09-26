@@ -533,28 +533,46 @@ export default function FrmsFichaTripulante() {
             {acumulo?.effectiveness || todayFortnightSnapshotItem?.effectiveness_pct != null ? (
               <FrmsEffectivenessPanel
                 effectiveness_pct={
-                  acumulo?.effectiveness?.effectiveness_pct ??
-                  Number(todayFortnightSnapshotItem?.effectiveness_pct)
+                  todayFortnightSnapshotItem?.effectiveness_pct ??
+                  Number(acumulo?.effectiveness?.effectiveness_pct)
                 }
                 effectiveness_nivel={
-                  acumulo?.effectiveness?.effectiveness_nivel ??
                   todayFortnightSnapshotItem?.nivel_fadiga_calculado ??
+                  acumulo?.effectiveness?.effectiveness_nivel ??
                   undefined
                 }
                 componentes={
-                  acumulo?.effectiveness
-                    ? (acumulo.effectiveness.effectiveness_componentes as {
-                        processo_s: number;
-                        processo_c: number;
-                        repouso: number;
-                        hv: number;
-                        duracao: number;
-                        pousos?: number;
-                        temperatura?: number;
-                        imc?: number;
-                        recuperacao?: number;
-                      } | null)
-                    : null
+                  todayFortnightSnapshotItem?.effectiveness_pct != null
+                    ? (
+                        todayFortnightSnapshotItem.effectiveness_source === 'REAL' &&
+                        acumulo?.effectiveness_reference_date === todayFortnightSnapshotItem.data_operacional &&
+                        acumulo?.effectiveness
+                          ? (acumulo.effectiveness.effectiveness_componentes as {
+                              processo_s: number;
+                              processo_c: number;
+                              repouso: number;
+                              hv: number;
+                              duracao: number;
+                              pousos?: number;
+                              temperatura?: number;
+                              imc?: number;
+                              recuperacao?: number;
+                            } | null)
+                          : null
+                      )
+                    : acumulo?.effectiveness
+                      ? (acumulo.effectiveness.effectiveness_componentes as {
+                          processo_s: number;
+                          processo_c: number;
+                          repouso: number;
+                          hv: number;
+                          duracao: number;
+                          pousos?: number;
+                          temperatura?: number;
+                          imc?: number;
+                          recuperacao?: number;
+                        } | null)
+                      : null
                 }
                 config={limites}
                 dataSource={
@@ -590,6 +608,13 @@ export default function FrmsFichaTripulante() {
                 mapPeriodoFim={fortnightPeriodEnd || undefined}
                 mapPeriodoLabel="Período embarcado atual"
                 compact
+                snapshotItems={
+                  fortnightPeriodSnapshotItems.length > 0
+                    ? fortnightPeriodSnapshotItems
+                    : todayFortnightSnapshotItem
+                      ? [todayFortnightSnapshotItem]
+                      : []
+                }
               />
             </Suspense>
           </div>
@@ -635,7 +660,10 @@ export default function FrmsFichaTripulante() {
                   {(todayFortnightSnapshotItem.hora_apresentacao ??
                     todayFortnightSnapshotItem.atividade_hora_inicio)?.slice(0, 5) || '—'} →{' '}
                   {(todayFortnightSnapshotItem.hora_termino ??
-                    todayFortnightSnapshotItem.atividade_hora_fim)?.slice(0, 5) || '—'}
+                    todayFortnightSnapshotItem.atividade_hora_fim)?.slice(0, 5) ||
+                    (todayFortnightSnapshotItem.data_operacional === hojeIso
+                      ? 'em andamento'
+                      : 'término não informado')}
                 </p>
               </>
             ) : (
@@ -699,9 +727,8 @@ export default function FrmsFichaTripulante() {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800">Carga observada</p>
               <div className="mt-2 space-y-1 text-xs text-slate-700">
                 <p>Atividade: <strong>{todayFortnightSnapshotItem?.teve_atividade_frms ? formatMin(todayFortnightSnapshotItem.atividade_frms_minutos ?? todayFortnightSnapshotItem.duracao_jornada_minutos) : 'sem atividade confirmada'}</strong></p>
-                <p>HV real: <strong>{formatMin(todayFortnightSnapshotItem?.horas_voo_minutos ?? 0)}</strong></p>
+                <p>Voo real: <strong>{formatMin(todayFortnightSnapshotItem?.horas_voo_minutos ?? 0)}</strong></p>
                 <p>Simulador: <strong>{formatMin(todayFortnightSnapshotItem?.simulador_minutos ?? 0)}</strong></p>
-                <p>HV FRMS: <strong>{formatMin(todayFortnightSnapshotItem?.horas_voo_frms_minutos ?? todayFortnightSnapshotItem?.horas_voo_minutos ?? 0)}</strong></p>
                 <p>Treinamento: <strong>{formatMin(todayFortnightSnapshotItem?.treinamento_minutos ?? 0)}</strong></p>
                 <p>Tipo de atividade: <strong>{todayFortnightSnapshotItem?.atividade_principal || 'não informada'}</strong></p>
                 <div className="pt-1">
@@ -733,7 +760,7 @@ export default function FrmsFichaTripulante() {
                 <p>Fonte sono/despertar: <strong>{formatSnapshotSource(todayFortnightSnapshotItem?.sleep_data_source)} / {formatSnapshotSource(todayFortnightSnapshotItem?.wake_data_source)}</strong></p>
                 <p>Fonte jornada: <strong>{formatSnapshotSource(todayFortnightSnapshotItem?.jornada_data_source)}</strong></p>
                 <p>Atividade FRMS: <strong>{todayFortnightSnapshotItem?.atividade_principal || 'sem atividade registrada'}</strong></p>
-                <p>Regra: <strong>HV real separado; simulador entra apenas como HV equivalente FRMS para fadiga</strong></p>
+                <p>Regra: <strong>voo real e simulador permanecem separados na tela; ambos entram na carga de fadiga</strong></p>
                 <p className="pt-1 text-sky-800">
                   {todayFortnightSnapshotItem?.acao_recomendada_texto || 'Complete os dados obrigatórios para liberar a avaliação.'}
                 </p>
