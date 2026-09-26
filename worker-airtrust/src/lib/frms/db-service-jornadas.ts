@@ -496,7 +496,13 @@ export async function recalcularPipeline(
     const priorHvMinutes = historico
       .filter((item) => item.data === previousDate && shouldUseForRolling(item))
       .reduce((sum, item) => sum + Math.max(0, item.horas_voo_minutos ?? 0), 0);
-    const priorDayGenerated = computeFlightHoursDelta(priorHvMinutes, 0, v2Policy).generatedCreditForNextDayPoints;
+    // Crédito D+1 de baixa HV só existe quando houve carga de voo real no dia
+    // anterior. Zero HV não significa repouso: pode representar treinamento,
+    // standby, deslocamento ou outra atividade sem voo.
+    const priorDayGenerated =
+      priorHvMinutes > 0
+        ? computeFlightHoursDelta(priorHvMinutes, 0, v2Policy).generatedCreditForNextDayPoints
+        : 0;
     const flightHours = computeFlightHoursDelta(jornada.horas_voo_minutos ?? 0, priorDayGenerated, v2Policy);
     const recoveryCreditPoints = await readPriorRecoveryCreditPoints(db, jornada.tripulante_id, previousDate);
     v2Daily = {
