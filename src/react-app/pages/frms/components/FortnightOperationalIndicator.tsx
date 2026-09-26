@@ -14,6 +14,7 @@ import {
   formatFortnightMinutes,
   formatFortnightNatureza,
   formatFortnightPeriod,
+  formatRecoveryActivityType,
   formatTopModifiers,
   formatFortnightMitigacao,
   resolveFortnightNotice,
@@ -210,9 +211,7 @@ function FortnightTimelinePanel({
               </thead>
               <tbody>
                 {timeline.days.map((day) => {
-                  const activity = day.recovery_activity_type
-                    ? day.recovery_activity_type.replace(/_/g, ' ')
-                    : null;
+                  const activity = formatRecoveryActivityType(day.recovery_activity_type);
                   return (
                     <tr
                       key={day.data_operacional}
