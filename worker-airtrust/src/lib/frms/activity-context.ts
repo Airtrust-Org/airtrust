@@ -91,8 +91,8 @@ export function summarizeFrmsActivities(
   let simulatorMinutes = 0;
   let otherActivityMinutes = 0;
   const labels = new Set<string>();
-  const starts: string[] = [];
-  const ends: string[] = [];
+  const starts: Array<{ clock: string; minute: number }> = [];
+  const ends: Array<{ clock: string; absoluteMinute: number }> = [];
 
   for (const row of rows) {
     const duration = frmsActivityDurationMinutes(row.hora_inicio, row.hora_fim);
@@ -102,8 +102,14 @@ export function summarizeFrmsActivities(
     if (row.titulo?.trim()) labels.add(row.titulo.trim());
     const start = normalizeClock(row.hora_inicio);
     const end = normalizeClock(row.hora_fim);
-    if (start) starts.push(start);
-    if (end) ends.push(end);
+    const startMinute = toMinutes(start);
+    const endMinute = toMinutes(end);
+    if (start && startMinute != null) starts.push({ clock: start, minute: startMinute });
+    if (end && endMinute != null) {
+      const absoluteMinute =
+        startMinute != null && endMinute < startMinute ? endMinute + 24 * 60 : endMinute;
+      ends.push({ clock: end, absoluteMinute });
+    }
   }
 
   const hasTraining = trainingMinutes > 0 || rows.some((row) => row.activity_type === 'TREINAMENTO');
@@ -129,8 +135,10 @@ export function summarizeFrmsActivities(
     training_minutes: trainingMinutes,
     simulator_minutes: simulatorMinutes,
     other_activity_minutes: otherActivityMinutes,
-    start_time: starts.sort()[0] ?? null,
-    end_time: ends.sort().slice(-1)[0] ?? null,
+    start_time:
+      starts.sort((a, b) => a.minute - b.minute)[0]?.clock ?? null,
+    end_time:
+      ends.sort((a, b) => b.absoluteMinute - a.absoluteMinute)[0]?.clock ?? null,
     labels: [...labels].slice(0, 5),
   };
 }
