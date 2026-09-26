@@ -46,6 +46,20 @@ function formatMin(min: number | null | undefined): string {
   return `${hh}h${String(m).padStart(2, '0')}`;
 }
 
+function formatActivityPrincipal(value: string | null | undefined): string {
+  switch (value) {
+    case 'VOO': return 'Voo';
+    case 'TREINAMENTO': return 'Treinamento';
+    case 'SIMULADOR': return 'Simulador';
+    case 'STANDBY': return 'Standby';
+    case 'DESLOCAMENTO': return 'Deslocamento a serviço';
+    case 'OUTRA_ATIVIDADE': return 'Outra atividade';
+    case 'MISTA': return 'Atividade mista';
+    case 'FOLGA': return 'Folga / descanso';
+    default: return 'Atividade';
+  }
+}
+
 function getMonthRange(mes: string): { dataInicio: string; dataFim: string } | null {
   const matchMes = mes.match(/^(\d{4})-(\d{1,2})$/);
   if (!matchMes) return null;
@@ -643,13 +657,7 @@ export default function FrmsFichaTripulante() {
             {todayFortnightSnapshotItem?.teve_atividade_frms ? (
               <>
                 <p className="mt-2 text-lg font-bold text-slate-900">
-                  {todayFortnightSnapshotItem.atividade_principal === 'SIMULADOR'
-                    ? 'Simulador'
-                    : todayFortnightSnapshotItem.atividade_principal === 'TREINAMENTO'
-                      ? 'Treinamento'
-                      : todayFortnightSnapshotItem.atividade_principal === 'MISTA'
-                        ? 'Atividade mista'
-                        : 'Voo'}
+                  {formatActivityPrincipal(todayFortnightSnapshotItem.atividade_principal)}
                   {' · '}
                   {formatMin(
                     todayFortnightSnapshotItem.atividade_frms_minutos ??
