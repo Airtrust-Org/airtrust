@@ -149,9 +149,11 @@ async function modelosDoFuncionario(params: {
       .prepare(
         `SELECT id, modelo, codigo
            FROM modelos_aeronave
-          WHERE CAST(id AS TEXT) IN (${placeholders})`,
+          WHERE CAST(id AS TEXT) IN (${placeholders})
+            AND empresa_id=?
+            AND deleted_at IS NULL`,
       )
-      .bind(...ids)
+      .bind(...ids, params.empresaId)
       .all<ModeloCatalogoRow>();
     catalogo = result.results || [];
   }
