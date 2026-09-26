@@ -101,6 +101,40 @@ describe('FRMS activity context', () => {
     expect(rows.every((row) => row.activity_type === 'TREINAMENTO')).toBe(true);
   });
 
+  it('carrega atividade reportada no check-in sem voo para a linha temporal FRMS', async () => {
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        bind: () => ({
+          all: async () => {
+            if (sql.includes('FROM frms_recovery_activity_day rd')) {
+              return { results: [{
+                data_operacional: '2026-09-24',
+                funcionario_id: 20,
+                activity_type: 'ATIVIDADE',
+                hora_inicio: '08:00',
+                hora_fim: '17:00',
+                titulo: 'Standby base/aeroporto',
+                source_id: 'recovery-1',
+                dedupe_key: 'REC:recovery-1:20',
+              }] };
+            }
+            return { results: [] };
+          },
+        }),
+      })),
+    } as unknown as D1Database;
+
+    const rows = await loadFrmsActivityRows(db, 63, '2026-09-24', '2026-09-24');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      data_operacional: '2026-09-24',
+      funcionario_id: 20,
+      activity_type: 'ATIVIDADE',
+      hora_inicio: '08:00',
+      hora_fim: '17:00',
+    });
+  });
+
   it('faz todas as leituras tenant-scoped e deduplica a mesma sessão de simulador', async () => {
     const queries: Array<{ sql: string; binds: unknown[] }> = [];
     const db = {
