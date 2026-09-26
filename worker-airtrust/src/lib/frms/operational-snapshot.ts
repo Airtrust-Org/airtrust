@@ -233,6 +233,41 @@ function projectSleepStart(wakeTime: string, sleepHours: number): string | null 
   return minutesToClock(wake - Math.round(sleepHours * 60));
 }
 
+function clockSpanMinutes(start: string | null | undefined, end: string | null | undefined): number | null {
+  const startMinutes = clockToMinutes(start);
+  const endMinutes = clockToMinutes(end);
+  if (startMinutes == null || endMinutes == null) return null;
+  return endMinutes >= startMinutes ? endMinutes - startMinutes : 1440 - startMinutes + endMinutes;
+}
+
+function latestClockFromStart(
+  start: string | null | undefined,
+  candidates: Array<string | null | undefined>,
+): string | null {
+  const valid = candidates.map(normalizeText).filter((value): value is string => clockToMinutes(value) != null);
+  if (valid.length === 0) return null;
+  const startMinutes = clockToMinutes(start);
+  if (startMinutes == null) return valid.sort().slice(-1)[0] ?? null;
+  return valid
+    .map((value) => {
+      const endMinutes = clockToMinutes(value)!;
+      const distance = endMinutes >= startMinutes ? endMinutes - startMinutes : 1440 - startMinutes + endMinutes;
+      return { value, distance };
+    })
+    .sort((a, b) => b.distance - a.distance)[0]?.value ?? null;
+}
+
+function hasOperationalJourneyEvidence(jornada: JornadaSnapshotRow | null): boolean {
+  if (!jornada || asNumber(jornada.is_manual_empty) === 1 || asNumber(jornada.has_operational_data) !== 1) {
+    return false;
+  }
+  return (
+    asNumber(jornada.horas_voo_minutos) > 0 ||
+    asNumber(jornada.duracao_jornada_minutos) > 0 ||
+    Boolean(normalizeText(jornada.hora_termino))
+  );
+}
+
 export function calculateMorningEffectivenessProjection(input: {
   dataOperacional: string;
   funcionarioId: number;
@@ -660,24 +695,41 @@ export function buildFrmsOperationalSnapshot(
     if (!funcionario) continue;
 
     const escalado = Boolean(escala);
-    const teveJornada = Boolean(jornada);
+    // Uma linha MANUAL criada pelo check-in é um stub técnico, não uma jornada/voo.
+    // Só há jornada operacional quando existe evidência operacional positiva.
+    const teveJornada = hasOperationalJourneyEvidence(jornada);
     const activitySummary = summarizeFrmsActivities(activities, teveJornada);
     const teveAtividadeFrms = teveJornada || activities.length > 0;
 
     // A apresentação declarada no check-in diário é a fonte canônica para o FRMS.
-    // Escala/SIGVOOS continuam sendo evidência operacional, mas não substituem o dado
-    // subjetivo obrigatório quando ele estiver ausente.
+    // Para o término diário, porém, prevalece a ÚLTIMA atividade relevante do dia:
+    // voo, treinamento ou simulador. Isso evita encerrar uma atividade mista no
+    // corte do voo quando ainda existe treinamento depois.
     const horaApresentacao = normalizeText(checkin?.hora_apresentacao);
-    const horaTermino =
-      normalizeText(jornada?.hora_termino) ??
-      normalizeText(escala?.hora_termino) ??
-      normalizeText(activitySummary.end_time);
+    const activityWindowStart =
+      horaApresentacao ??
+      normalizeText(jornada?.hora_apresentacao) ??
+      normalizeText(escala?.hora_apresentacao) ??
+      normalizeText(activitySummary.start_time);
+    const horaTermino = latestClockFromStart(activityWindowStart, [
+      jornada?.hora_termino,
+      escala?.hora_termino,
+      activitySummary.end_time,
+    ]);
 
-    const horasVooMinutos = asNumber(jornada?.horas_voo_minutos);
+    const horasVooMinutos = teveJornada ? asNumber(jornada?.horas_voo_minutos) : 0;
     const horasVooFrmsMinutos = horasVooMinutos + activitySummary.simulator_minutes;
-    // A duração canônica é produzida pelo pipeline após o check-in. O snapshot
-    // não reconstrói jornada a partir de horários parciais/legados.
-    const duracaoJornadaMinutos = Math.max(0, asNumber(jornada?.duracao_jornada_minutos));
+    const duracaoJornadaMinutos = teveJornada
+      ? Math.max(0, asNumber(jornada?.duracao_jornada_minutos))
+      : 0;
+    const combinedActivityWindowMinutes =
+      teveAtividadeFrms && activityWindowStart && horaTermino
+        ? clockSpanMinutes(activityWindowStart, horaTermino)
+        : null;
+    const atividadeFrmsMinutos =
+      combinedActivityWindowMinutes != null && combinedActivityWindowMinutes > 0
+        ? combinedActivityWindowMinutes
+        : Math.max(duracaoJornadaMinutos, activitySummary.activity_minutes);
 
     const { source: jornadaDataSource, origem: jornadaOrigem } = resolveJornadaSource(jornada);
 
@@ -815,10 +867,10 @@ export function buildFrmsOperationalSnapshot(
       horas_voo_frms_minutos: horasVooFrmsMinutos,
       simulador_minutos: activitySummary.simulator_minutes,
       treinamento_minutos: activitySummary.training_minutes,
-      atividade_frms_minutos: duracaoJornadaMinutos + activitySummary.activity_minutes,
+      atividade_frms_minutos: atividadeFrmsMinutos,
       atividade_principal: activitySummary.activity_type,
-      atividade_hora_inicio: activitySummary.start_time,
-      atividade_hora_fim: activitySummary.end_time,
+      atividade_hora_inicio: activityWindowStart,
+      atividade_hora_fim: horaTermino,
       atividade_rotulos: activitySummary.labels,
       duracao_jornada_minutos: duracaoJornadaMinutos,
       teve_jornada: teveJornada,
