@@ -412,7 +412,7 @@ function buildModifiers(input: {
   if (input.menorDescansoEntreJornadasMin != null && input.menorDescansoEntreJornadasMin >= input.policy.longRestMinutes) {
     atenuadores.push({
       codigo: 'REPOUSO_ENTRE_JORNADAS_MAIOR_13H',
-      descricao: 'Menor descanso entre jornadas igual ou superior a 13h.',
+      descricao: 'Menor intervalo entre atividades igual ou superior a 13h.',
       impacto_score: input.policy.impactLongRest,
     });
   }
@@ -441,13 +441,13 @@ function buildModifiers(input: {
   if (input.diasConsecutivosComJornada >= input.policy.consecutiveCriticalDays) {
     agravantes.push({
       codigo: 'SEQUENCIA_5_DIAS_OU_MAIS',
-      descricao: `${input.diasConsecutivosComJornada} dia(s) consecutivos com jornada.`,
+      descricao: `${input.diasConsecutivosComJornada} dia(s) consecutivos com atividade FRMS.`,
       impacto_score: input.policy.impactConsecutiveCritical,
     });
   } else if (input.diasConsecutivosComJornada >= input.policy.consecutiveAttentionDays) {
     agravantes.push({
       codigo: 'SEQUENCIA_4_DIAS',
-      descricao: 'Quatro dias consecutivos com jornada.',
+      descricao: 'Quatro dias consecutivos com atividade FRMS.',
       impacto_score: input.policy.impactConsecutiveAttention,
     });
   }
@@ -481,7 +481,7 @@ function buildModifiers(input: {
   if (input.menorDescansoEntreJornadasMin != null && input.menorDescansoEntreJornadasMin < input.policy.shortRestMinutes) {
     agravantes.push({
       codigo: 'REPOUSO_ENTRE_JORNADAS_MENOR_10H',
-      descricao: 'Menor descanso entre jornadas abaixo de 10h.',
+      descricao: 'Menor intervalo entre atividades abaixo de 10h.',
       impacto_score: input.policy.impactShortRest,
     });
   }
