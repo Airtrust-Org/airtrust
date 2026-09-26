@@ -24,6 +24,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import AppLayout from '../components/AppLayout';
 import api from '../services/api';
 import { CardMeusEAD } from '../components/dashboard/CardMeusEAD';
+import { DesafioDiarioCard } from '../components/conhecimento-ativo/DesafioDiarioCard';
 import type { HomeProfile, HomeProfileFuncionarioContext } from '../lib/home-profile';
 import { buildPasta360Url } from '../utils/pasta360';
 
@@ -351,6 +352,8 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
               </div>
             </section>
           )}
+
+          {isFlightCrewHome && <DesafioDiarioCard />}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {cards.map((card, i) => (
