@@ -274,8 +274,12 @@ export function calculateMorningEffectivenessProjection(input: {
   let plannedDutyMinutes = Math.max(0, Number(input.plannedActivityMinutes ?? 0));
   let endTime = presentation;
   if (plannedEndMinutes != null) {
-    plannedDutyMinutes = plannedEndMinutes - presentationMinutes;
-    if (plannedDutyMinutes < 0) plannedDutyMinutes += 24 * 60;
+    let boundaryMinutes = plannedEndMinutes - presentationMinutes;
+    if (boundaryMinutes < 0) boundaryMinutes += 24 * 60;
+    // Para dias mistos (ex.: treinamento diurno + simulador noturno), a soma
+    // das durações conhecidas é a carga de atividade; a janela início→fim é
+    // mantida apenas como limite temporal/circadiano e não substitui a carga.
+    if (plannedDutyMinutes <= 0) plannedDutyMinutes = boundaryMinutes;
     endTime = plannedEnd!;
   } else if (plannedDutyMinutes > 0) {
     endTime = minutesToClock(presentationMinutes + plannedDutyMinutes);
