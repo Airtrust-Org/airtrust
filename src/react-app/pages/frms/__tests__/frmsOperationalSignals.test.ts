@@ -111,7 +111,7 @@ describe('resolveComplianceSignal', () => {
     expect(resolveComplianceSignal(item({ fortnight_indicator: fortnight({ status_quinzena: 'OK' }) })).tone).toBe('ok');
   });
 
-  it('expõe carga operacional por HV real, simulador, treinamento e dias ativos sem usar 11h/dia', () => {
+  it('separa risco do período da descrição de voo real, simulador e treinamento', () => {
     const s = resolveComplianceSignal(item({
       fortnight_indicator: fortnight({
         status_quinzena: 'ATENCAO',
@@ -122,9 +122,9 @@ describe('resolveComplianceSignal', () => {
         dias_atividade_periodo: 6,
       }),
     }));
-    expect(s.label).toBe('Carga operacional');
-    expect(s.detail).toContain('HV FRMS 13,0 h');
-    expect(s.detail).toContain('voo 10,0 h');
+    expect(s.label).toBe('Risco do período');
+    expect(s.detail).not.toContain('HV FRMS');
+    expect(s.detail).toContain('voo real 10,0 h');
     expect(s.detail).toContain('simulador 3,0 h');
     expect(s.detail).toContain('treinamento 9,0 h');
     expect(s.detail).toContain('6 dia(s) de atividade');
