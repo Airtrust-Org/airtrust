@@ -317,6 +317,11 @@ export default function FrmsFichaTripulante() {
       ? fullPeriodFortnightSnapshotItem?.fortnight_indicator ?? todayFortnightIndicator
       : null;
   const loadingFrmsSnapshot = loadingFrmsSnapshotToday || (shouldLoadFortnightPeriod && loadingFortnightPeriodSnapshot);
+  const operationalSnapshotByDate = new Map(
+    fortnightPeriodSnapshotItems
+      .filter((item) => item.funcionario_id === requestedFuncionarioId)
+      .map((item) => [item.data_operacional, item] as const),
+  );
 
   const { data: recentJornadasRaw } = useFrmsJornadasEffectiveness(id, 7);
   const { data: ultimaJornadaRaw } = useFrmsUltimaJornada(id, { dataFim: hojeIso });
@@ -843,10 +848,10 @@ export default function FrmsFichaTripulante() {
                     Término
                   </th>
                   <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
-                    Jornada
+                    Atividade FRMS
                   </th>
                   <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500 text-right">
-                    Horas de Voo
+                    Voo real
                   </th>
                   <th className="px-4 py-2.5 text-xs font-semibold uppercase text-gray-500">
                     Alertas do Dia
@@ -882,6 +887,25 @@ export default function FrmsFichaTripulante() {
                 ) : (
                   jornadas.map((j) => {
                     const presentation = buildJornadaMensalPresentation(j);
+                    const operationalDay = operationalSnapshotByDate.get(j.data);
+                    const displayStart =
+                      operationalDay?.hora_apresentacao ??
+                      operationalDay?.atividade_hora_inicio ??
+                      j.hora_apresentacao ??
+                      null;
+                    const displayEnd =
+                      operationalDay?.hora_termino ??
+                      operationalDay?.atividade_hora_fim ??
+                      j.hora_termino ??
+                      null;
+                    const activityDurationLabel =
+                      operationalDay?.teve_atividade_frms && Number(operationalDay.atividade_frms_minutos ?? 0) > 0
+                        ? formatMin(operationalDay.atividade_frms_minutos)
+                        : presentation.operationalJourneyLabel;
+                    const realFlightLabel =
+                      Number(operationalDay?.horas_voo_minutos ?? 0) > 0
+                        ? formatMin(operationalDay?.horas_voo_minutos)
+                        : presentation.operationalHvLabel;
                     return (
                     <tr
                       key={j.id}
@@ -906,32 +930,35 @@ export default function FrmsFichaTripulante() {
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-gray-600 tabular-nums">
-                        <div>{j.hora_apresentacao || '—'}</div>
+                        <div>{displayStart || '—'}</div>
                         <div className={`mt-0.5 text-[10px] font-semibold ${presentation.boundarySourceClass}`}>
                           {presentation.boundarySourceLabel}
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-gray-600 tabular-nums">
                         <div>
-                          {j.hora_termino ||
+                          {displayEnd ||
                             (j.data === hojeIso ? 'Em andamento' : 'Não informado')}
                         </div>
                         <div className={`mt-0.5 max-w-[180px] text-[10px] font-semibold ${presentation.boundarySourceClass}`}>
-                          {!j.hora_termino
+                          {!displayEnd
                             ? 'Término operacional ainda não confirmado'
-                            : j.jornada_boundary_source === 'ESTIMADO'
-                              ? 'Fim estimado da janela de voo'
-                              : j.jornada_boundary_source === 'REAL'
-                                ? 'Fim FRMS confirmado/derivado'
-                                : presentation.boundarySourceLabel}
+                            : operationalDay?.atividade_hora_fim &&
+                                operationalDay.atividade_hora_fim !== j.hora_termino
+                              ? 'Fim da última atividade FRMS do dia'
+                              : j.jornada_boundary_source === 'ESTIMADO'
+                                ? 'Fim estimado da janela de voo'
+                                : j.jornada_boundary_source === 'REAL'
+                                  ? 'Fim FRMS confirmado/derivado'
+                                  : presentation.boundarySourceLabel}
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-right text-gray-600 tabular-nums">
-                        {presentation.operationalJourneyLabel}
+                        {activityDurationLabel}
                       </td>
                       <td className="px-4 py-2.5 text-right text-gray-600 tabular-nums">
                         <div className="flex flex-col items-end gap-0.5">
-                          <span>{presentation.operationalHvLabel}</span>
+                          <span>{realFlightLabel}</span>
                           {presentation.auxiliarySourceLabel ? (
                             <span className="text-xs font-medium text-amber-700">
                               {presentation.auxiliarySourceLabel}
