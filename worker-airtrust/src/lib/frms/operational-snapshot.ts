@@ -1,4 +1,4 @@
-import type { Origem, FrmsJornada, LimitesMap } from './types';
+import type { Origem, FrmsJornada, LimitesMap, EffectivenessResult } from './types';
 import { calcularDiaDoCiclo } from './db-service-jornadas';
 import { calcEffectiveness, calcFatorizacao, type FrmsV2DailyAdjustments } from './calculos';
 import {
@@ -82,6 +82,7 @@ export interface FrmsOperationalSnapshotItem {
   status_operacional_checkin: string | null;
 
   effectiveness_pct: number | null;
+  effectiveness_componentes?: EffectivenessResult['componentes'] | null;
   effectiveness_source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'PROJETADA_ATIVIDADE' | 'AUSENTE';
   nivel_fadiga_calculado: string | null;
   fatorizacao_status: 'CALCULADA' | 'PROJETADA' | 'AUSENTE';
@@ -195,6 +196,8 @@ interface EffectivenessSnapshotRow {
   funcionario_id: number;
   effectiveness_pct: number | null;
   effectiveness_nivel: string | null;
+  effectiveness_componentes_json?: string | null;
+  effectiveness_componentes?: EffectivenessResult['componentes'] | null;
   source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'PROJETADA_ATIVIDADE';
   dia_periodo_embarcado?: number | null;
   total_dias_periodo?: number | null;
@@ -324,6 +327,7 @@ export function calculateMorningEffectivenessProjection(input: {
     funcionario_id: input.funcionarioId,
     effectiveness_pct: effectiveness.effectiveness_pct,
     effectiveness_nivel: effectiveness.nivel,
+    effectiveness_componentes: effectiveness.componentes,
     source: plannedDutyMinutes > 0 || frmsFlightEquivalentMinutes > 0 ? 'PROJETADA_ATIVIDADE' : 'PROJETADA_APRESENTACAO',
     dia_periodo_embarcado: input.diaPeriodo ?? null,
     total_dias_periodo: input.totalDiasPeriodo ?? null,
@@ -892,6 +896,8 @@ export function buildFrmsOperationalSnapshot(
       status_operacional_checkin: normalizeText(checkin?.status_operacional),
 
       effectiveness_pct: effectivenessPctNormalized,
+      effectiveness_componentes:
+        effectivenessPctNormalized == null ? null : efetividade?.effectiveness_componentes ?? null,
       effectiveness_source: effectivenessSource,
       nivel_fadiga_calculado: nivelFadigaCalculado,
       fatorizacao_status:
@@ -1139,6 +1145,7 @@ async function loadOperationalSnapshotRows(
              CAST(j.tripulante_id AS INTEGER) AS funcionario_id,
              fj.effectiveness_pct,
              fj.effectiveness_nivel,
+             fj.effectiveness_componentes_json,
              fj.dia_periodo_embarcado,
              fj.total_dias_periodo,
              ROW_NUMBER() OVER (
@@ -1160,6 +1167,7 @@ async function loadOperationalSnapshotRows(
            funcionario_id,
            effectiveness_pct,
            effectiveness_nivel,
+           effectiveness_componentes_json,
            dia_periodo_embarcado,
            total_dias_periodo
          FROM ranked
@@ -1175,7 +1183,17 @@ async function loadOperationalSnapshotRows(
     escalas: escalasResult.results || [],
     jornadas: jornadasResult.results || [],
     checkins: checkinsResult.results || [],
-    effectiveness: effectivenessResult.results || [],
+    effectiveness: (effectivenessResult.results || []).map((row) => {
+      let parsed: EffectivenessResult['componentes'] | null = null;
+      if (row.effectiveness_componentes_json) {
+        try {
+          parsed = JSON.parse(row.effectiveness_componentes_json) as EffectivenessResult['componentes'];
+        } catch {
+          parsed = null;
+        }
+      }
+      return { ...row, effectiveness_componentes: parsed };
+    }),
     activities,
   };
 }
