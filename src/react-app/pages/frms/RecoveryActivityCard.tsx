@@ -31,6 +31,9 @@ const PRIMARY_OPTIONS: Array<{ value: RecoveryActivityType; label: string; descr
     label: 'Administrativo / treinamento',
     description: 'Houve trabalho sem atividade de voo.',
   },
+];
+
+const SECONDARY_OPTIONS: Array<{ value: RecoveryActivityType; label: string; description: string }> = [
   {
     value: 'DUTY_TRAVEL',
     label: 'Deslocamento a serviço',
@@ -41,9 +44,6 @@ const PRIMARY_OPTIONS: Array<{ value: RecoveryActivityType; label: string; descr
     label: 'Mais de uma situação',
     description: 'O dia teve dois ou mais períodos com condições diferentes.',
   },
-];
-
-const SECONDARY_OPTIONS: Array<{ value: RecoveryActivityType; label: string; description: string }> = [
   {
     value: 'OTHER',
     label: 'Outra atividade',
@@ -80,6 +80,7 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
   const referenceDate = useMemo(() => previousOperationalDate(today), [today]);
   const { data: context, isLoading, isError } = useFrmsRecoveryContext(referenceDate);
   const [editing, setEditing] = useState(false);
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [activityType, setActivityType] = useState<RecoveryActivityType | null>(null);
   const [standbyLocation, setStandbyLocation] = useState<'HOME' | 'HOTEL' | 'BASE_AIRPORT' | 'OTHER'>('HOTEL');
   const [immediateCallout, setImmediateCallout] = useState<boolean | null>(null);
@@ -187,10 +188,15 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
       </div>
 
       <div className="mt-3 border-t border-slate-100 pt-3">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          Outras situações
-        </p>
-        <div className="grid gap-2 md:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => setShowMoreOptions((value) => !value)}
+          className="text-xs font-semibold text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"
+        >
+          {showMoreOptions ? 'Ocultar outras situações' : 'Outras situações'}
+        </button>
+        {showMoreOptions ? (
+          <div className="mt-2 grid gap-2 md:grid-cols-2">
           {SECONDARY_OPTIONS.map((option) => {
             const selected = activityType === option.value;
             return (
@@ -209,7 +215,8 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
               </button>
             );
           })}
-        </div>
+          </div>
+        ) : null}
       </div>
 
       {needsStandbyDetail && (

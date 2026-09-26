@@ -90,7 +90,11 @@ describe('P1-SIG-003: NOME_FUZZY requires manual review before FRMS confirmation
       name: 'JETHER PONTES E SILVA JR.',
     });
 
-    expect(matched).toMatchObject({ fonteResolucao: 'NOME_FUZZY', elegivelFrms: true });
+    expect(matched).toMatchObject({
+      fonteResolucao: 'NOME_FUZZY',
+      elegivelFrms: true,
+      requerConfirmacaoIdentidade: true,
+    });
   });
 
   it('reprocessing does NOT confirm a NOME_FUZZY-only match into FRMS', async () => {

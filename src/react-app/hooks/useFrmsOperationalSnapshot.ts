@@ -290,58 +290,7 @@ export function useFrmsOperationalSnapshot(
         throw new Error(errorMessage);
       }
 
-      let finalPayload = payload;
-      const snapshotItems = Array.isArray(payload.data) ? payload.data : [];
-      const repairGroups = new Map<string, number[]>();
-
-      for (const item of snapshotItems) {
-        const repairable =
-          item.checkin_status === 'RECEBIDO' &&
-          !item.teve_jornada &&
-          Boolean(item.hora_apresentacao) &&
-          Boolean(item.hora_acordar) &&
-          Number(item.horas_sono ?? 0) > 0;
-        if (!repairable) continue;
-        const ids = repairGroups.get(item.data_operacional) ?? [];
-        ids.push(item.funcionario_id);
-        repairGroups.set(item.data_operacional, ids);
-      }
-
-      let repairedAny = false;
-      for (const [dataOperacional, ids] of repairGroups) {
-        try {
-          const repairResponse = await fetchWithAuth(
-            `${API_BASE_URL}/frms/operational-snapshot/reconcile-checkins`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                data_operacional: dataOperacional,
-                funcionario_ids: [...new Set(ids)].slice(0, 50),
-              }),
-            },
-          );
-          const repairPayload = (await repairResponse.json().catch(() => null)) as
-            | { success?: boolean; data?: { reconciled?: number } }
-            | null;
-          if (repairResponse.ok && repairPayload?.success && Number(repairPayload.data?.reconciled ?? 0) > 0) {
-            repairedAny = true;
-          }
-        } catch (repairError) {
-          console.warn('[FRMS snapshot] automatic check-in reconciliation failed', repairError);
-        }
-      }
-
-      if (repairedAny) {
-        const refreshedResponse = await fetchWithAuth(buildSnapshotUrl(filters), {
-          method: 'GET',
-          cache: 'no-store',
-        });
-        const refreshedPayload = (await refreshedResponse.json()) as SnapshotApiResponse;
-        if (refreshedResponse.ok && refreshedPayload?.success) {
-          finalPayload = refreshedPayload;
-        }
-      }
+      const finalPayload = payload;
 
       setData(Array.isArray(finalPayload.data) ? finalPayload.data : []);
       setSummary({

@@ -82,20 +82,16 @@ beforeEach(() => {
 });
 
 describe('sincronizarCheckinComFrms — check-in diário autoritativo', () => {
-  it('check-in completo cria jornada FRMS canônica quando ela ainda não existe', async () => {
+  it('check-in completo sem jornada permanece read-only e não cria placeholder operacional', async () => {
     const { db, eventInserts } = createDb({ noJornada: true });
 
     const result = await sincronizarCheckinComFrms(
       db, 'ck-1', 1, '2026-05-28', 7, 10, '06:30', '08:00',
     );
 
-    expect(result).toMatchObject({
-      sincronizado: true,
-      jornada_id: 'jornada-auto',
-      effectiveness_nova: 72,
-    });
-    expect(eventInserts.some((event) => event.tipo === 'CHECKIN_SEM_JORNADA')).toBe(false);
-    expect(recalcularPipelineMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ sincronizado: false });
+    expect(eventInserts.some((event) => event.tipo === 'CHECKIN_SEM_JORNADA')).toBe(true);
+    expect(recalcularPipelineMock).not.toHaveBeenCalled();
   });
 
   it('sem jornada e com check-in incompleto continua fail-closed', async () => {

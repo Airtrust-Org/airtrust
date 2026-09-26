@@ -6,6 +6,7 @@ import {
   resolveDecisao,
   resolveMitigacao,
   resolveNaturezaDado,
+  resolveLimiteReferencia,
   sanitizeOverrideJustificativa,
 } from '../../lib/frms/decision-policy';
 
@@ -105,6 +106,37 @@ describe('FRMS decision policy', () => {
       }),
     ).toBe('BLOQUEIA');
   });
+
+
+  it('não fabrica limite de 11h/8h e só usa referência diária governada', () => {
+    const item = {
+      kss_score: null,
+      duracao_jornada_minutos: 330,
+      horas_voo_minutos: 180,
+      fortnight_indicator: {
+        duty_time_periodo_min: 2100,
+        total_dias_periodo: 15,
+      },
+    } as any;
+
+    expect(resolveLimiteReferencia(item)).toBeNull();
+    expect(
+      resolveLimiteReferencia(item, { FDP_MAXIMO_HORAS: 12, HV_DIARIA_HORAS: 9 }),
+    ).toMatchObject({
+      tipo: 'FDP_DIARIO',
+      valor_atual: 330,
+      valor_limite: 720,
+      pct_atingido: 45.8,
+    });
+
+    expect(
+      resolveLimiteReferencia(
+        { ...item, duracao_jornada_minutos: 0 },
+        { FDP_MAXIMO_HORAS: 12, HV_DIARIA_HORAS: 9 },
+      ),
+    ).toMatchObject({ tipo: 'HV_DIARIA', valor_limite: 540 });
+  });
+
 
   it('sanitiza justificativa e parseia ack_note de override v1', () => {
     expect(sanitizeOverrideJustificativa('curta')).toBeNull();

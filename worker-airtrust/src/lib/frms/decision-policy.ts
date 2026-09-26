@@ -1,4 +1,4 @@
-import type { TipoLimite } from './types';
+import type { LimitesMap, TipoLimite } from './types';
 import type {
   FrmsOperationalSnapshotAlertCode,
   FrmsOperationalSnapshotItem,
@@ -101,12 +101,6 @@ const ALERT_PRIORITY: FrmsOperationalSnapshotAlertCode[] = [
   'JORNADA_FRMS_SEM_ESCALA',
   'SONO_ESTIMADO',
 ];
-
-// Defaults tecnicos conservadores usados somente como referencia quando nao ha
-// limite contextual disponivel. Nao sao configuracao por empresa nem evidencia
-// ou afirmacao de limite regulatorio.
-const TECHNICAL_DEFAULT_FDP_DAILY_LIMIT_MINUTES = 11 * 60;
-const TECHNICAL_DEFAULT_HV_DAILY_LIMIT_MINUTES = 8 * 60;
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -217,6 +211,7 @@ export function resolveDecisao(
 
 export function resolveLimiteReferencia(
   item: FrmsOperationalSnapshotItem,
+  limites?: Pick<LimitesMap, 'FDP_MAXIMO_HORAS' | 'HV_DIARIA_HORAS'> | null,
 ): FrmsLimiteReferencia | null {
   if (item.kss_score != null && item.kss_score >= 7) {
     return {
@@ -227,38 +222,29 @@ export function resolveLimiteReferencia(
     };
   }
 
-  if (item.duracao_jornada_minutos > 0) {
+  const fdpLimitMinutes = Number(limites?.FDP_MAXIMO_HORAS ?? 0) * 60;
+  if (item.duracao_jornada_minutos > 0 && Number.isFinite(fdpLimitMinutes) && fdpLimitMinutes > 0) {
     return {
       tipo: 'FDP_DIARIO',
       valor_atual: item.duracao_jornada_minutos,
-      valor_limite: TECHNICAL_DEFAULT_FDP_DAILY_LIMIT_MINUTES,
-      pct_atingido: round1(
-        (item.duracao_jornada_minutos / TECHNICAL_DEFAULT_FDP_DAILY_LIMIT_MINUTES) * 100,
-      ),
+      valor_limite: fdpLimitMinutes,
+      pct_atingido: round1((item.duracao_jornada_minutos / fdpLimitMinutes) * 100),
     };
   }
 
-  if (item.horas_voo_minutos > 0) {
+  const hvLimitMinutes = Number(limites?.HV_DIARIA_HORAS ?? 0) * 60;
+  if (item.horas_voo_minutos > 0 && Number.isFinite(hvLimitMinutes) && hvLimitMinutes > 0) {
     return {
       tipo: 'HV_DIARIA',
       valor_atual: item.horas_voo_minutos,
-      valor_limite: TECHNICAL_DEFAULT_HV_DAILY_LIMIT_MINUTES,
-      pct_atingido: round1(
-        (item.horas_voo_minutos / TECHNICAL_DEFAULT_HV_DAILY_LIMIT_MINUTES) * 100,
-      ),
+      valor_limite: hvLimitMinutes,
+      pct_atingido: round1((item.horas_voo_minutos / hvLimitMinutes) * 100),
     };
   }
 
-  const fortnight = item.fortnight_indicator;
-  if (fortnight?.duty_time_periodo_min != null && fortnight.total_dias_periodo) {
-    const limit = fortnight.total_dias_periodo * TECHNICAL_DEFAULT_FDP_DAILY_LIMIT_MINUTES;
-    return {
-      tipo: 'QUINZENA',
-      valor_atual: fortnight.duty_time_periodo_min,
-      valor_limite: limit,
-      pct_atingido: limit > 0 ? round1((fortnight.duty_time_periodo_min / limit) * 100) : 0,
-    };
-  }
+  // Não fabricar limite quinzenal como dias × limite diário. O contexto do
+  // período possui regras próprias e só deve expor limite quando houver uma
+  // referência governada específica para aquela métrica.
 
   return null;
 }
@@ -269,6 +255,7 @@ export function buildDecisaoFields(
     hoje?: string;
     policy?: FrmsDecisaoPolicy;
     naturezaDado?: FrmsNaturezaDado;
+    limites?: Pick<LimitesMap, 'FDP_MAXIMO_HORAS' | 'HV_DIARIA_HORAS'> | null;
   } = {},
 ): FrmsDecisaoFields {
   const natureza =
@@ -278,7 +265,7 @@ export function buildDecisaoFields(
     causa: resolveCausa(item.alertas),
     mitigacao_recomendada: resolveMitigacao(item.alertas, natureza, item.snapshot_status),
     decisao: resolveDecisao(item.snapshot_status, natureza, options.policy ?? {}),
-    limite_referencia: resolveLimiteReferencia(item),
+    limite_referencia: resolveLimiteReferencia(item, options.limites),
   };
 }
 

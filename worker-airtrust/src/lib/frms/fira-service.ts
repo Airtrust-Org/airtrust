@@ -135,6 +135,8 @@ interface JornadaExistenteParaMerge {
   hora_termino: string | null;
   horas_voo_minutos: number | null;
   duracao_jornada_minutos: number | null;
+  registrado_por?: string | null;
+  observacao?: string | null;
 }
 
 function linhaTemDadosOperacionais(linha: FiraLinhPreview): boolean {
@@ -186,8 +188,13 @@ function shouldMergeIntoExistingManualJornada(params: {
   // refreshing it.
   if (origem === 'FIRA' || origem === 'SIGVOOS') return true;
 
-  // Manual placeholder merge (unchanged): only safe when the existing
-  // MANUAL row has no operational data of its own yet.
+  // Placeholder legado criado automaticamente pelo check-in: ele nunca representa
+  // evidência operacional e não pode bloquear a chegada posterior do SIGVOOS.
+  if (origem === 'MANUAL' && String(jornada.registrado_por || '') === 'FRMS_CHECKIN_AUTO') {
+    return true;
+  }
+
+  // Demais lançamentos MANUAL continuam protegidos: só mesclar quando realmente vazios.
   if (origem && origem !== 'MANUAL') return false;
   if (!jornadaExistenteOperacionalmenteVazia(jornada)) return false;
 
@@ -848,7 +855,9 @@ export async function confirmarImportacaoFira(
                 hora_apresentacao,
                 hora_termino,
                 horas_voo_minutos,
-                duracao_jornada_minutos
+                duracao_jornada_minutos,
+                registrado_por,
+                observacao
            FROM frms_jornada
           WHERE tripulante_id = ?
             AND data IN (${placeholders})
@@ -876,7 +885,9 @@ export async function confirmarImportacaoFira(
                 hora_apresentacao,
                 hora_termino,
                 horas_voo_minutos,
-                duracao_jornada_minutos
+                duracao_jornada_minutos,
+                registrado_por,
+                observacao
            FROM frms_jornada
           WHERE id IN (${placeholders})
             AND deleted_at IS NULL`,

@@ -437,6 +437,34 @@ describe('sigvoos-frms service', () => {
     });
   });
 
+  it('accepts a unique exact crew name without manual confirmation while preserving the schema-compatible source label', async () => {
+    const dbStub = createSigvoosDbStub({
+      funcionarios: [
+        {
+          id: '1',
+          nome: 'Adriana Brasil',
+          funcao: 'COPILOTO',
+          cargo: 'COPILOTO',
+          codigo_anac: '95168-1',
+          matricula: '000300',
+        },
+      ],
+    });
+
+    const matched = await findTripulanteByCanacOrName(dbStub, 6, {
+      canac: null,
+      identificadorSigvoos: '281',
+      name: 'ADRIANA BRASIL',
+    });
+
+    expect(matched).toMatchObject({
+      id: '1',
+      fonteResolucao: 'NOME_FUZZY',
+      elegivelFrms: true,
+      requerConfirmacaoIdentidade: false,
+    });
+  });
+
   it('matches normalized crew names after stripping suffix noise', async () => {
     const dbStub = createSigvoosDbStub({
       funcionarios: [
@@ -579,6 +607,39 @@ describe('sigvoos-frms service', () => {
         local_base: 'SBJR',
         situacao: 'DUPLICATA',
         jornada_existente_id: 'journey-1',
+        marcado: true,
+      },
+      empresaId: 6,
+    });
+
+    expect(shouldMerge).toBe(true);
+  });
+
+  it('merges a legacy FRMS_CHECKIN_AUTO placeholder even when it already has presentation time', () => {
+    const shouldMerge = shouldMergeDuplicataIntoManualEmpty({
+      existing: {
+        id: 'journey-checkin-auto',
+        origem: 'MANUAL',
+        empresa_id: 6,
+        hora_apresentacao: '06:30',
+        hora_termino: null,
+        horas_voo_minutos: 0,
+        duracao_jornada_minutos: 0,
+        registrado_por: 'FRMS_CHECKIN_AUTO',
+        observacao: 'Jornada FRMS criada automaticamente a partir do check-in diário.',
+      },
+      incomingLine: {
+        dia: 25,
+        data: '2026-09-25',
+        status_fira: 'SIGVOOS',
+        status_frms: 'ES',
+        hora_apresentacao: '07:00',
+        hora_termino: '12:10',
+        duracao_jornada_min: 310,
+        horas_voo_min: 190,
+        local_base: 'SBME',
+        situacao: 'DUPLICATA',
+        jornada_existente_id: 'journey-checkin-auto',
         marcado: true,
       },
       empresaId: 6,

@@ -146,6 +146,7 @@ interface MatchedTripulante {
   cargo: string | null;
   elegivelFrms: boolean;
   motivoInelegibilidade: 'NAO_TRIPULANTE_OPERACIONAL' | null;
+  requerConfirmacaoIdentidade: boolean;
 }
 
 interface MonthlyPreviewInput {
@@ -172,6 +173,7 @@ function buildMatchedTripulante(
     cargo?: string | null;
   },
   fonteResolucao: Exclude<SigvoosResolutionSource, 'NAO_ENCONTRADO'>,
+  requerConfirmacaoIdentidade = fonteResolucao === 'NOME_FUZZY',
 ): MatchedTripulante {
   const classification = classifyOperationalCrewRole(funcionario.funcao, funcionario.cargo);
   return {
@@ -182,6 +184,7 @@ function buildMatchedTripulante(
     cargo: funcionario.cargo ?? null,
     elegivelFrms: classification.isOperational,
     motivoInelegibilidade: classification.isOperational ? null : 'NAO_TRIPULANTE_OPERACIONAL',
+    requerConfirmacaoIdentidade,
   };
 }
 
@@ -1503,6 +1506,14 @@ export async function findTripulanteByCanacOrName(
     }
   }
 
+  const exactRawName = normalizeName(input.name);
+  if (exactRawName) {
+    const exactRawMatches = list.filter((item) => normalizeName(item.nome) === exactRawName);
+    if (exactRawMatches.length === 1) {
+      return buildMatchedTripulante(exactRawMatches[0], 'NOME_FUZZY', false);
+    }
+  }
+
   if (!normalizedName) return null;
 
   const exactMatches = list.filter((item) => normalizarNomeSigvoos(item.nome) === normalizedName);
@@ -1611,7 +1622,15 @@ function findTripulanteInMemory(
     if (byMatricula) return buildMatchedTripulante(byMatricula, 'MATRICULA');
   }
 
-  // NOME_FUZZY
+  // Nome exato: igualdade canônica sem remover sufixos familiares/geracionais. Mantém NOME_FUZZY no schema legado, mas dispensa confirmação manual.
+  const exactRawName = normalizeName(input.name);
+  if (exactRawName) {
+    const exactRawMatches = funcionarios.filter((f) => normalizeName(f.nome) === exactRawName);
+    if (exactRawMatches.length === 1)
+      return buildMatchedTripulante(exactRawMatches[0], 'NOME_FUZZY', false);
+  }
+
+  // NOME_FUZZY: qualquer normalização que remova sufixos continua exigindo revisão manual.
   if (!normalizedName) return null;
   const normalizedInputName = normalizarNomeSigvoos(input.name);
   if (!normalizedInputName) return null;
@@ -2207,6 +2226,8 @@ interface JornadaDuplicataCandidate {
   hora_termino: string | null;
   horas_voo_minutos: number | null;
   duracao_jornada_minutos: number | null;
+  registrado_por?: string | null;
+  observacao?: string | null;
 }
 
 function hasOperationalDataInPreviewLine(line: FiraLinhPreview): boolean {
@@ -2248,7 +2269,8 @@ export function shouldMergeDuplicataIntoManualEmpty(params: {
     return false;
   }
 
-  if (!isJornadaOperacionalmenteVazia(existing)) {
+  const isAutoCheckinPlaceholder = String(existing.registrado_por || '') === 'FRMS_CHECKIN_AUTO';
+  if (!isAutoCheckinPlaceholder && !isJornadaOperacionalmenteVazia(existing)) {
     return false;
   }
 
@@ -2288,7 +2310,9 @@ async function buildSelectedDaysForSigvoosImport(
                 hora_apresentacao,
                 hora_termino,
                 horas_voo_minutos,
-                duracao_jornada_minutos
+                duracao_jornada_minutos,
+                registrado_por,
+                observacao
            FROM frms_jornada
           WHERE id IN (${placeholders})`,
       )
@@ -2513,7 +2537,7 @@ export async function syncSigvoosForFrms(
         name: first.tripulanteNome,
       });
       const matchedOperational =
-        matched?.elegivelFrms && matched.fonteResolucao !== 'NOME_FUZZY' ? matched : null;
+        matched?.elegivelFrms && !matched.requerConfirmacaoIdentidade ? matched : null;
       const byMonth = groupDaysByMonth(days);
 
       for (const [monthKey, monthDays] of byMonth.entries()) {
@@ -2794,7 +2818,7 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
       continue;
     }
 
-    if (matched.fonteResolucao === 'NOME_FUZZY') {
+    if (matched.requerConfirmacaoIdentidade) {
       result.detalhes.push({
         importacao_id: row.id,
         tripulante_nome: nomeSigvoos,

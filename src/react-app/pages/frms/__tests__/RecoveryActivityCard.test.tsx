@@ -77,9 +77,10 @@ describe('RecoveryActivityCard', () => {
     expect(screen.getByText('Standby em hotel ou residência')).toBeInTheDocument();
     expect(screen.getByText('Standby na base / aeroporto')).toBeInTheDocument();
     expect(screen.getByText('Administrativo / treinamento')).toBeInTheDocument();
+    expect(screen.getByText('Outras situações')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Outras situações'));
     expect(screen.getByText('Mais de uma situação')).toBeInTheDocument();
     expect(screen.getByText('Houve voo, mas não aparece no sistema')).toBeInTheDocument();
-    expect(screen.getByText('Outras situações')).toBeInTheDocument();
     expect(screen.getByText(/será salva junto com as demais informações/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /salvar condição de ontem/i })).not.toBeInTheDocument();
   });
@@ -129,6 +130,7 @@ describe('RecoveryActivityCard', () => {
 
   it('keeps a source discrepancy pending without persisting it before the final submit', async () => {
     render(<RecoveryActivityCard today="2026-06-05" />);
+    fireEvent.click(screen.getByText('Outras situações'));
     fireEvent.click(screen.getByText('Houve voo, mas não aparece no sistema'));
     expect(screen.getByText('Observação')).toBeInTheDocument();
 
