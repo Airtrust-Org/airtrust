@@ -147,6 +147,57 @@ describe('Costa do Sol ACT mission compliance in canonical evaluator', () => {
     ]));
   });
 
+  it('blocks a new duty until the ACT post-mission off-days are completed', () => {
+    const result = evaluateRegulatoryCompliance({
+      empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+      costaDoSolActApplicable: true,
+      mission: {
+        inMission: false, missionDay: null, effectiveWorkDaysAtOperation: 17,
+        effectiveWorkEvidenceComplete: true, incompleteReasons: [],
+        postMissionRequiredOffDays: 15, postMissionCompletedOffDays: 14,
+        postMissionDutyOnDate: true, postMissionRestEvidenceComplete: true,
+      },
+      journeyDurationMin: 0, rolling, work, limites,
+    });
+    expect(result.status).toBe('VIOLATION');
+    expect(result.violations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'ACT_CDS_POST_MISSION_REST', source: 'ACT', limitMin: 15 * 24 * 60 }),
+    ]));
+  });
+
+  it('allows duty after the ACT post-mission off-days are completed', () => {
+    const result = evaluateRegulatoryCompliance({
+      empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+      costaDoSolActApplicable: true,
+      mission: {
+        inMission: false, missionDay: null, effectiveWorkDaysAtOperation: 17,
+        effectiveWorkEvidenceComplete: true, incompleteReasons: [],
+        postMissionRequiredOffDays: 15, postMissionCompletedOffDays: 15,
+        postMissionDutyOnDate: true, postMissionRestEvidenceComplete: true,
+      },
+      journeyDurationMin: 0, rolling, work, limites,
+    });
+    expect(result.violations.some((v) => v.code === 'ACT_CDS_POST_MISSION_REST')).toBe(false);
+  });
+
+  it('fails closed when a duty falls in the post-mission window without complete work evidence', () => {
+    const result = evaluateRegulatoryCompliance({
+      empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+      costaDoSolActApplicable: true,
+      mission: {
+        inMission: false, missionDay: null, effectiveWorkDaysAtOperation: null,
+        effectiveWorkEvidenceComplete: false, incompleteReasons: ['ACTIVITY_INTERVAL_MISSING'],
+        postMissionRequiredOffDays: null, postMissionCompletedOffDays: 3,
+        postMissionDutyOnDate: true, postMissionRestEvidenceComplete: false,
+      },
+      journeyDurationMin: 0, rolling, work, limites,
+    });
+    expect(result.status).toBe('UNKNOWN');
+    expect(result.unknownReasons).toEqual(expect.arrayContaining([
+      'ACT_CDS_POST_MISSION_REST_EVIDENCE_INCOMPLETE', 'ACTIVITY_INTERVAL_MISSING',
+    ]));
+  });
+
   it('fails closed when effective days at the operation are incomplete', () => {
     const result = evaluateRegulatoryCompliance({
       empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,

@@ -26,6 +26,11 @@ export interface CostaDoSolMissionEvidence {
   effectiveWorkDaysAtOperation: number | null;
   effectiveWorkEvidenceComplete: boolean;
   incompleteReasons: string[];
+  /** ACT Costa do Sol 2025/2027, cláusula 9ª §1º: folga pós-missão = trabalho efetivo no local - 2 dias. */
+  postMissionRequiredOffDays?: number | null;
+  postMissionCompletedOffDays?: number | null;
+  postMissionDutyOnDate?: boolean;
+  postMissionRestEvidenceComplete?: boolean;
 }
 
 export interface RegulatoryViolation {
@@ -171,30 +176,50 @@ export function evaluateRegulatoryCompliance(
     }
   }
 
-  if (input.costaDoSolActApplicable && input.mission?.inMission) {
-    const missionDay = input.mission.missionDay;
-    if (missionDay == null || !Number.isFinite(missionDay) || missionDay <= 0) {
-      unknownReasons.add('ACT_CDS_MISSION_DAY_EVIDENCE_MISSING');
-    } else if (missionDay > 21) {
-      violations.push({
-        code: 'ACT_CDS_MISSION_21D', source: 'ACT',
-        reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª caput',
-        actualMin: missionDay * 24 * 60, limitMin: 21 * 24 * 60,
-        message: `Missão com ${missionDay} dias > limite de 21 dias`,
-      });
+  if (input.costaDoSolActApplicable && input.mission) {
+    if (input.mission.inMission) {
+      const missionDay = input.mission.missionDay;
+      if (missionDay == null || !Number.isFinite(missionDay) || missionDay <= 0) {
+        unknownReasons.add('ACT_CDS_MISSION_DAY_EVIDENCE_MISSING');
+      } else if (missionDay > 21) {
+        violations.push({
+          code: 'ACT_CDS_MISSION_21D', source: 'ACT',
+          reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª caput',
+          actualMin: missionDay * 24 * 60, limitMin: 21 * 24 * 60,
+          message: `Missão com ${missionDay} dias > limite de 21 dias`,
+        });
+      }
+
+      const effective = input.mission.effectiveWorkDaysAtOperation;
+      if (effective != null && Number.isFinite(effective) && effective > 17) {
+        violations.push({
+          code: 'ACT_CDS_EFFECTIVE_17D', source: 'ACT',
+          reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª caput',
+          actualMin: effective * 24 * 60, limitMin: 17 * 24 * 60,
+          message: `Trabalho efetivo no local da operação em ${effective} dias > limite de 17 dias`,
+        });
+      } else if (!input.mission.effectiveWorkEvidenceComplete) {
+        unknownReasons.add('ACT_CDS_EFFECTIVE_DAYS_AT_LOCATION_EVIDENCE_INCOMPLETE');
+        for (const reason of input.mission.incompleteReasons) unknownReasons.add(reason);
+      }
     }
 
-    const effective = input.mission.effectiveWorkDaysAtOperation;
-    if (effective != null && Number.isFinite(effective) && effective > 17) {
-      violations.push({
-        code: 'ACT_CDS_EFFECTIVE_17D', source: 'ACT',
-        reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª caput',
-        actualMin: effective * 24 * 60, limitMin: 17 * 24 * 60,
-        message: `Trabalho efetivo no local da operação em ${effective} dias > limite de 17 dias`,
-      });
-    } else if (!input.mission.effectiveWorkEvidenceComplete) {
-      unknownReasons.add('ACT_CDS_EFFECTIVE_DAYS_AT_LOCATION_EVIDENCE_INCOMPLETE');
-      for (const reason of input.mission.incompleteReasons) unknownReasons.add(reason);
+    if (input.mission.postMissionDutyOnDate) {
+      const required = input.mission.postMissionRequiredOffDays;
+      const completed = input.mission.postMissionCompletedOffDays;
+      if (input.mission.postMissionRestEvidenceComplete === false || required == null || completed == null) {
+        unknownReasons.add('ACT_CDS_POST_MISSION_REST_EVIDENCE_INCOMPLETE');
+        for (const reason of input.mission.incompleteReasons) unknownReasons.add(reason);
+      } else if (completed < required) {
+        violations.push({
+          code: 'ACT_CDS_POST_MISSION_REST',
+          source: 'ACT',
+          reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª, parágrafo 1º',
+          actualMin: completed * 24 * 60,
+          limitMin: required * 24 * 60,
+          message: `Folga pós-missão: ${completed} de ${required} dias completos antes de nova atividade`,
+        });
+      }
     }
   }
 

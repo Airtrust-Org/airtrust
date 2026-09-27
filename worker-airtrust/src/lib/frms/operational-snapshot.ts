@@ -1066,11 +1066,15 @@ async function loadRecoveryCreditRows(
   }
 }
 
-interface MissionPeriodRow {
+export interface MissionPeriodRow {
   funcionario_id: number;
   data_inicio_embarque: string;
   data_fim_embarque: string;
+  source_priority?: number;
+  source_kind?: 'ALLOCATION' | 'BASE_FORTNIGHT' | 'FRMS_LEGACY';
 }
+
+const ACT_CDS_MAX_POST_MISSION_REST_DAYS = 15;
 
 interface OperationalSnapshotRows {
   escalas: ScaleSnapshotRow[];
@@ -1094,6 +1098,7 @@ async function loadOperationalSnapshotRows(
   janelaInicio: string,
   janelaFim: string,
 ): Promise<OperationalSnapshotRows> {
+  const missionHistoryStart = addDaysIso(janelaInicio, -ACT_CDS_MAX_POST_MISSION_REST_DAYS);
   const [escalasResult, jornadasResult, checkinsResult, effectivenessResult, activities, regulatoryRollingResult, missionPeriodsResult] = await Promise.all([
     db
       .prepare(
@@ -1259,19 +1264,52 @@ async function loadOperationalSnapshotRows(
 
     db
       .prepare(
-        `SELECT CAST(eq.tripulante_id AS INTEGER) AS funcionario_id,
-                eq.data_inicio_embarque,
-                eq.data_fim_embarque
-           FROM frms_escala_quinzenal eq
-           JOIN funcionarios f ON f.id = CAST(eq.tripulante_id AS INTEGER)
-          WHERE eq.deleted_at IS NULL
-            AND f.deleted_at IS NULL
-            AND f.empresa_id = ?
-            AND eq.status_ciclo IN ('ATIVO','ENCERRADO')
-            AND eq.data_inicio_embarque <= ?
-            AND eq.data_fim_embarque >= ?`,
+        `WITH mission_periods AS (
+           SELECT CAST(ea.funcionario_id AS INTEGER) AS funcionario_id,
+                  COALESCE(eq.data_inicio, ea.data_inicio) AS data_inicio_embarque,
+                  COALESCE(eq.data_fim, ea.data_fim) AS data_fim_embarque,
+                  1 AS source_priority,
+                  'ALLOCATION' AS source_kind
+             FROM escala_alocacoes ea
+             JOIN funcionarios f ON f.id = ea.funcionario_id AND f.empresa_id = ? AND f.deleted_at IS NULL
+             LEFT JOIN escalas_quinzenas eq ON eq.id = ea.quinzena_id AND eq.empresa_id = f.empresa_id AND eq.deleted_at IS NULL
+            WHERE ea.deleted_at IS NULL
+              AND LOWER(COALESCE(ea.status, '')) <> 'cancelado'
+              AND (ea.aeronave_id IS NOT NULL OR ea.quinzena_id IS NOT NULL OR (ea.situacao_tipo IS NOT NULL AND UPPER(ea.situacao_tipo) <> 'FOLGA'))
+              AND COALESCE(eq.data_inicio, ea.data_inicio) <= ?
+              AND COALESCE(eq.data_fim, ea.data_fim) >= ?
+           UNION ALL
+           SELECT CAST(f.id AS INTEGER), eq.data_inicio, eq.data_fim, 2, 'BASE_FORTNIGHT'
+             FROM funcionarios f
+             JOIN escalas_quinzenas eq
+               ON eq.empresa_id = f.empresa_id
+              AND eq.deleted_at IS NULL
+              AND eq.numero = CASE LOWER(TRIM(COALESCE(f.quinzena, '')))
+                WHEN 'primeira' THEN 1 WHEN '1' THEN 1 WHEN '1q' THEN 1 WHEN 'q1' THEN 1
+                WHEN '1ª' THEN 1 WHEN '1a' THEN 1 WHEN 'primeira quinzena' THEN 1
+                WHEN 'segunda' THEN 2 WHEN '2' THEN 2 WHEN '2q' THEN 2 WHEN 'q2' THEN 2
+                WHEN '2ª' THEN 2 WHEN '2a' THEN 2 WHEN 'segunda quinzena' THEN 2 ELSE 0 END
+            WHERE f.empresa_id = ? AND f.deleted_at IS NULL
+              AND eq.data_inicio <= ? AND eq.data_fim >= ?
+           UNION ALL
+           SELECT CAST(fq.tripulante_id AS INTEGER), fq.data_inicio_embarque, fq.data_fim_embarque, 3, 'FRMS_LEGACY'
+             FROM frms_escala_quinzenal fq
+             JOIN funcionarios f ON f.id = CAST(fq.tripulante_id AS INTEGER) AND f.empresa_id = ? AND f.deleted_at IS NULL
+            WHERE fq.deleted_at IS NULL
+              AND fq.status_ciclo IN ('ATIVO','ENCERRADO')
+              AND fq.data_inicio_embarque <= ? AND fq.data_fim_embarque >= ?
+         )
+         SELECT funcionario_id, data_inicio_embarque, data_fim_embarque, source_priority, source_kind
+           FROM mission_periods
+          WHERE data_inicio_embarque IS NOT NULL AND data_fim_embarque IS NOT NULL
+            AND data_inicio_embarque <= data_fim_embarque
+          ORDER BY funcionario_id, data_inicio_embarque, source_priority`,
       )
-      .bind(empresaId, janelaFim, janelaInicio)
+      .bind(
+        empresaId, janelaFim, missionHistoryStart,
+        empresaId, janelaFim, missionHistoryStart,
+        empresaId, janelaFim, missionHistoryStart,
+      )
       .all<MissionPeriodRow>(),
   ]);
 
@@ -1292,8 +1330,33 @@ async function loadOperationalSnapshotRows(
     }),
     activities,
     regulatoryRolling: regulatoryRollingResult.results || [],
-    missionPeriods: missionPeriodsResult.results || [],
+    missionPeriods: normalizeMissionPeriods(missionPeriodsResult.results || []),
   };
+}
+
+function normalizeMissionPeriods(rows: readonly MissionPeriodRow[]): MissionPeriodRow[] {
+  const byRange = new Map<string, MissionPeriodRow>();
+  for (const row of rows) {
+    const funcionarioId = Number(row.funcionario_id);
+    if (!Number.isInteger(funcionarioId) || funcionarioId <= 0) continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.data_inicio_embarque) || !/^\d{4}-\d{2}-\d{2}$/.test(row.data_fim_embarque)) continue;
+    if (row.data_inicio_embarque > row.data_fim_embarque) continue;
+    const normalized: MissionPeriodRow = {
+      ...row,
+      funcionario_id: funcionarioId,
+      source_priority: Number.isFinite(Number(row.source_priority)) ? Number(row.source_priority) : 99,
+    };
+    const key = `${funcionarioId}::${row.data_inicio_embarque}::${row.data_fim_embarque}`;
+    const current = byRange.get(key);
+    if (!current || Number(normalized.source_priority) < Number(current.source_priority ?? 99)) {
+      byRange.set(key, normalized);
+    }
+  }
+  return [...byRange.values()].sort((a, b) =>
+    a.funcionario_id - b.funcionario_id ||
+    a.data_inicio_embarque.localeCompare(b.data_inicio_embarque) ||
+    Number(a.source_priority ?? 99) - Number(b.source_priority ?? 99),
+  );
 }
 
 function collectCandidateIds(rows: OperationalSnapshotRows): number[] {
@@ -1377,48 +1440,126 @@ function deriveWorkEvidenceForDate(
   };
 }
 
-function deriveMissionEvidenceForDate(
+export function deriveCostaDoSolMissionEvidenceForDate(
   summary: LegalWorkMonthlyCrewSummary | null,
   missionPeriods: readonly MissionPeriodRow[],
   funcionarioId: number,
   date: string,
+  dutyOnDate: boolean,
 ): CostaDoSolMissionEvidence | null {
-  const period = missionPeriods.find((row) =>
-    Number(row.funcionario_id) === funcionarioId &&
-    row.data_inicio_embarque <= date &&
-    row.data_fim_embarque >= date,
-  );
-  if (!period) return null;
+  const crewPeriods = missionPeriods
+    .filter((row) => Number(row.funcionario_id) === funcionarioId)
+    .sort((a, b) =>
+      Number(a.source_priority ?? 99) - Number(b.source_priority ?? 99) ||
+      b.data_inicio_embarque.localeCompare(a.data_inicio_embarque),
+    );
+  const currentPeriod = crewPeriods
+    .filter((row) => row.data_inicio_embarque <= date && row.data_fim_embarque >= date)
+    .sort((a, b) =>
+      Number(a.source_priority ?? 99) - Number(b.source_priority ?? 99) ||
+      b.data_inicio_embarque.localeCompare(a.data_inicio_embarque),
+    )[0] ?? null;
+  const previousBoundary = currentPeriod?.data_inicio_embarque ?? date;
+  const previousPeriod = crewPeriods
+    .filter((row) => row.data_fim_embarque < previousBoundary)
+    .sort((a, b) =>
+      b.data_fim_embarque.localeCompare(a.data_fim_embarque) ||
+      Number(a.source_priority ?? 99) - Number(b.source_priority ?? 99),
+    )[0] ?? null;
 
-  const startMs = Date.parse(`${period.data_inicio_embarque}T00:00:00Z`);
-  const dateMs = Date.parse(`${date}T00:00:00Z`);
-  const missionDay = Number.isFinite(startMs) && Number.isFinite(dateMs)
-    ? Math.floor((dateMs - startMs) / 86400000) + 1
-    : null;
-  if (!summary) {
-    return {
-      inMission: true,
-      missionDay,
-      effectiveWorkDaysAtOperation: null,
-      effectiveWorkEvidenceComplete: false,
-      incompleteReasons: ['WORK_TIME_EVIDENCE_MISSING'],
-    };
+  if (!currentPeriod && !previousPeriod && !dutyOnDate) return null;
+
+  const monthStart = `${date.slice(0, 7)}-01`;
+  const legalContextStart = addDaysIso(monthStart, -40);
+  const incompleteReasons = new Set<string>();
+  let missionDay: number | null = null;
+  let effectiveWorkDaysAtOperation: number | null = null;
+  let effectiveWorkEvidenceComplete = true;
+
+  if (currentPeriod) {
+    const startMs = Date.parse(`${currentPeriod.data_inicio_embarque}T00:00:00Z`);
+    const dateMs = Date.parse(`${date}T00:00:00Z`);
+    missionDay = Number.isFinite(startMs) && Number.isFinite(dateMs)
+      ? Math.floor((dateMs - startMs) / 86400000) + 1
+      : null;
+    if (!summary || currentPeriod.data_inicio_embarque < legalContextStart) {
+      effectiveWorkEvidenceComplete = false;
+      incompleteReasons.add(!summary ? 'WORK_TIME_EVIDENCE_MISSING' : 'MISSION_WORK_CONTEXT_INCOMPLETE');
+    } else {
+      const currentReasons = Object.entries(summary.incomplete_reasons_by_date)
+        .filter(([day]) => day >= currentPeriod.data_inicio_embarque && day <= date)
+        .flatMap(([, reasons]) => reasons);
+      for (const reason of currentReasons) incompleteReasons.add(reason);
+      effectiveWorkDaysAtOperation = Object.entries(summary.trabalho_contexto_por_data_min)
+        .filter(([day, minutes]) =>
+          day >= currentPeriod.data_inicio_embarque && day <= date && Number(minutes) > 0,
+        ).length;
+      effectiveWorkEvidenceComplete = currentReasons.length === 0;
+    }
+  } else if (dutyOnDate) {
+    incompleteReasons.add('ACT_CDS_MISSION_PERIOD_EVIDENCE_MISSING');
   }
 
-  const relevantReasons = Object.entries(summary.incomplete_reasons_by_date)
-    .filter(([day]) => day >= period.data_inicio_embarque && day <= date)
-    .flatMap(([, reasons]) => reasons);
-  const effectiveWorkDaysAtOperation = Object.entries(summary.trabalho_contexto_por_data_min)
-    .filter(([day, minutes]) =>
-      day >= period.data_inicio_embarque && day <= date && Number(minutes) > 0,
-    ).length;
+  let postMissionRequiredOffDays: number | null | undefined;
+  let postMissionCompletedOffDays: number | null | undefined;
+  let postMissionRestEvidenceComplete: boolean | undefined;
+
+  if (previousPeriod) {
+    if (!summary || previousPeriod.data_inicio_embarque < legalContextStart) {
+      postMissionRequiredOffDays = null;
+      postMissionCompletedOffDays = null;
+      postMissionRestEvidenceComplete = false;
+      incompleteReasons.add(!summary ? 'WORK_TIME_EVIDENCE_MISSING' : 'POST_MISSION_WORK_CONTEXT_INCOMPLETE');
+    } else {
+      const previousReasons = Object.entries(summary.incomplete_reasons_by_date)
+        .filter(([day]) => day >= previousPeriod.data_inicio_embarque && day <= date)
+        .flatMap(([, reasons]) => reasons);
+      for (const reason of previousReasons) incompleteReasons.add(reason);
+      const previousEffectiveDays = Object.entries(summary.trabalho_contexto_por_data_min)
+        .filter(([day, minutes]) =>
+          day >= previousPeriod.data_inicio_embarque &&
+          day <= previousPeriod.data_fim_embarque &&
+          Number(minutes) > 0,
+        ).length;
+      if (!currentPeriod) {
+        effectiveWorkDaysAtOperation = previousEffectiveDays;
+        effectiveWorkEvidenceComplete = previousReasons.length === 0;
+      }
+      postMissionRequiredOffDays = Math.max(0, previousEffectiveDays - 2);
+
+      const dutyDatesAfterMission = Object.entries(summary.trabalho_contexto_por_data_min)
+        .filter(([day, minutes]) => day > previousPeriod.data_fim_embarque && day <= date && Number(minutes) > 0)
+        .map(([day]) => day);
+      if (dutyOnDate && !dutyDatesAfterMission.includes(date)) dutyDatesAfterMission.push(date);
+      dutyDatesAfterMission.sort();
+      const firstDutyAfterMission = dutyDatesAfterMission[0] ?? null;
+      if (firstDutyAfterMission) {
+        const endMs = Date.parse(`${previousPeriod.data_fim_embarque}T00:00:00Z`);
+        const firstDutyMs = Date.parse(`${firstDutyAfterMission}T00:00:00Z`);
+        postMissionCompletedOffDays = Number.isFinite(endMs) && Number.isFinite(firstDutyMs)
+          ? Math.max(0, Math.floor((firstDutyMs - endMs) / 86400000) - 1)
+          : null;
+      } else {
+        postMissionCompletedOffDays = null;
+      }
+      postMissionRestEvidenceComplete = previousReasons.length === 0 && postMissionCompletedOffDays != null;
+    }
+  } else if (dutyOnDate && !currentPeriod) {
+    postMissionRequiredOffDays = null;
+    postMissionCompletedOffDays = null;
+    postMissionRestEvidenceComplete = false;
+  }
 
   return {
-    inMission: true,
+    inMission: currentPeriod != null,
     missionDay,
     effectiveWorkDaysAtOperation,
-    effectiveWorkEvidenceComplete: relevantReasons.length === 0,
-    incompleteReasons: [...new Set(relevantReasons)],
+    effectiveWorkEvidenceComplete,
+    incompleteReasons: [...incompleteReasons],
+    postMissionRequiredOffDays,
+    postMissionCompletedOffDays,
+    postMissionDutyOnDate: dutyOnDate && (previousPeriod != null || currentPeriod == null),
+    postMissionRestEvidenceComplete,
   };
 }
 
@@ -1595,8 +1736,16 @@ export async function listFrmsOperationalSnapshot(
     const funcionarioId = Number(funcionarioRaw);
     const legalSummary = legalByMonthCrew.get(date.slice(0, 7))?.get(funcionarioId) ?? null;
     const workEvidence = deriveWorkEvidenceForDate(legalSummary, date);
+    const hasDutyOnDate =
+      contextRows.escalas.some((row) => row.data_operacional === date && asNumber(row.funcionario_id) === funcionarioId) ||
+      contextRows.jornadas.some((row) =>
+        row.data_operacional === date &&
+        asNumber(row.funcionario_id) === funcionarioId &&
+        (asNumber(row.has_operational_data) === 1 || asNumber(row.duracao_jornada_minutos) > 0),
+      ) ||
+      contextRows.activities.some((row) => row.data_operacional === date && asNumber(row.funcionario_id) === funcionarioId);
     const missionEvidence = costaDoSolActApplicable
-      ? deriveMissionEvidenceForDate(legalSummary, contextRows.missionPeriods, funcionarioId, date)
+      ? deriveCostaDoSolMissionEvidenceForDate(legalSummary, contextRows.missionPeriods, funcionarioId, date, hasDutyOnDate)
       : null;
     const journeyDurationMin = contextRows.jornadas
       .filter((row) =>
