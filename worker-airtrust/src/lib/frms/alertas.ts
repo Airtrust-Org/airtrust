@@ -161,12 +161,11 @@ export function processarAlertas(input: MotorAlertasInput): AlertaGerado[] {
 }
 
 /**
- * Determina se um alerta nível CRITICO (95%) bloqueia novo lançamento.
- * VIOLACAO (100%+) NÃO bloqueia — apenas registra flag para auditoria regulatória.
- * Spec: CRITICO bloqueia, VIOLACAO = registro de ocorrência apenas.
+ * Alertas críticos e violações obrigatórias bloqueiam novo lançamento.
+ * Uma violação jamais pode ser menos restritiva que o limiar preventivo crítico.
  */
 export function deveBloquearLancamento(alertas: AlertaGerado[]): boolean {
-  return alertas.some((a) => a.nivel === 'CRITICO');
+  return alertas.some((a) => a.nivel === 'CRITICO' || a.nivel === 'VIOLACAO');
 }
 
 // ────────────────────────────────────────────────────────────────────

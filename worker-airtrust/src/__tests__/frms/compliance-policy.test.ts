@@ -3,11 +3,15 @@ import {
   anacBasicRestAfterDutyMin,
   buildAnacBasicHelicopterCandidates,
   buildAnacRbac117BcHelicopterCumulativeCandidates,
+  buildCostaDoSolAct2025_2027WorkCandidates,
   buildIogp6902CoreCandidates,
+  evaluateCostaDoSolMissionCompliance,
   evaluateResolvedLimit,
   iogpRestAfterDutyMin,
   rbac117AppendixCLimit,
+  regulatoryProfileHasDocumentedAppendix,
   regulatoryProfileIsReady,
+  resolveDocumentedRbac117Appendices,
   resolveMostRestrictiveLimit,
   type LimitCandidate,
 } from '../../lib/frms/compliance-policy';
@@ -39,9 +43,21 @@ describe('FRMS compliance policy — most restrictive rule', () => {
     );
 
     expect(anacDuty?.limitMin).toBe(8 * 60);
+    expect(anacDuty?.winningRule.source).toBe('LAW');
     expect(iogpDay?.limitMin).toBe(10 * 60);
     expect(evaluateResolvedLimit(6 * 60, anacDuty).status).toBe('COMPLIANT');
     expect(evaluateResolvedLimit(12 * 60, iogpDay).status).toBe('VIOLATION');
+  });
+
+  it('keeps Costa do Sol ACT work-time rules distinct from flight-time law/RBAC limits', () => {
+    const normal = buildCostaDoSolAct2025_2027WorkCandidates({ regimeMissao: false });
+    const mission = buildCostaDoSolAct2025_2027WorkCandidates({ regimeMissao: true });
+    expect(normal.find((rule) => rule.metric === 'WORK_TIME_WEEK_LEGAL_MIN')?.applicable).toBe(true);
+    expect(mission.find((rule) => rule.metric === 'WORK_TIME_WEEK_LEGAL_MIN')?.applicable).toBe(false);
+    expect(mission.find((rule) => rule.metric === 'WORK_TIME_MONTH_CALENDAR_MIN')).toMatchObject({
+      limitMin: 176 * 60,
+      source: 'ACT',
+    });
   });
 
   it('keeps calendar month distinct from rolling 28 days', () => {
@@ -72,6 +88,13 @@ describe('FRMS compliance policy — most restrictive rule', () => {
     const rules = rulesForMetric('FLIGHT_TIME_28D_ROLLING_MIN', anac, iogp);
     const resolved = resolveMostRestrictiveLimit('FLIGHT_TIME_28D_ROLLING_MIN', 'MAX', rules);
     expect(resolved?.limitMin).toBe(93 * 60);
+  });
+
+  it('exposes B/C work limits as 60h/7d, 100h/14d and 176h/month', () => {
+    const rules = buildAnacRbac117BcHelicopterCumulativeCandidates();
+    expect(rules.find((rule) => rule.metric === 'WORK_TIME_7D_ROLLING_MIN')?.limitMin).toBe(60 * 60);
+    expect(rules.find((rule) => rule.metric === 'WORK_TIME_14D_ROLLING_MIN')?.limitMin).toBe(100 * 60);
+    expect(rules.find((rule) => rule.metric === 'WORK_TIME_MONTH_CALENDAR_MIN')?.limitMin).toBe(176 * 60);
   });
 
   it('uses 930h/365d ANAC B/C instead of IOGP 1200h/365d when B/C is approved', () => {
@@ -142,6 +165,34 @@ describe('FRMS compliance policy — rest', () => {
   });
 });
 
+describe('Costa do Sol ACT 2025/2027 — regime de missão', () => {
+  it('accepts exactly 21 mission days and 17 effective days', () => {
+    expect(evaluateCostaDoSolMissionCompliance({
+      consecutiveMissionDays: 21,
+      consecutiveEffectiveDaysAtOperation: 17,
+    }).status).toBe('COMPLIANT');
+  });
+
+  it('flags mission >21 days and effective work >17 days independently', () => {
+    const result = evaluateCostaDoSolMissionCompliance({
+      consecutiveMissionDays: 22,
+      consecutiveEffectiveDaysAtOperation: 18,
+    });
+    expect(result.status).toBe('VIOLATION');
+    expect(result.violations.map((item) => item.code)).toEqual([
+      'ACT_CDS_MISSION_21D',
+      'ACT_CDS_EFFECTIVE_17D',
+    ]);
+  });
+
+  it('fails closed when mission evidence is missing', () => {
+    expect(evaluateCostaDoSolMissionCompliance({
+      consecutiveMissionDays: null,
+      consecutiveEffectiveDaysAtOperation: 5,
+    }).status).toBe('UNKNOWN');
+  });
+});
+
 describe('RBAC 117 Appendix C table', () => {
   it('matches the 08:00–11:59 / 1-2 sector cell = 13h (10h flight)', () => {
     expect(rbac117AppendixCLimit('08:00', 2)).toEqual({ fdpMaxMin: 13 * 60, flightMaxMin: 10 * 60 });
@@ -154,6 +205,23 @@ describe('RBAC 117 Appendix C table', () => {
 
   it('matches 06:01 boundary', () => {
     expect(rbac117AppendixCLimit('06:01', 1)).toEqual({ fdpMaxMin: 11 * 60, flightMaxMin: 9 * 60 });
+  });
+});
+
+describe('RBAC 117 documented appendix resolution', () => {
+  it('does not infer an appendix from a commercial profile name', () => {
+    expect(resolveDocumentedRbac117Appendices({ limitsJson: null }).size).toBe(0);
+  });
+
+  it('reads only structured documented appendices from limits_json', () => {
+    const json = JSON.stringify({ rbac117_appendices: ['B', 'Appendix C'] });
+    expect([...resolveDocumentedRbac117Appendices({ limitsJson: json })]).toEqual(['B', 'C']);
+    expect(regulatoryProfileHasDocumentedAppendix({ limitsJson: json }, 'B', 'C')).toBe(true);
+  });
+
+  it('fails closed for malformed or unrelated limits metadata', () => {
+    expect(regulatoryProfileHasDocumentedAppendix({ limitsJson: '{bad' }, 'B', 'C')).toBe(false);
+    expect(regulatoryProfileHasDocumentedAppendix({ limitsJson: JSON.stringify({ type: 'HELICOPTER_OFFSHORE' }) }, 'B', 'C')).toBe(false);
   });
 });
 

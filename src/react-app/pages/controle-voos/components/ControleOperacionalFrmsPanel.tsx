@@ -19,6 +19,7 @@ import {
  */
 
 const REASON_LABELS: Record<FrmsDispatchGateReasonCode, string> = {
+  TRIPULACAO_AUSENTE: 'Tripulação não cadastrada',
   CHECKIN_DIARIO_PENDENTE: 'Check-in diário pendente',
   CHECKIN_INCONSISTENTE: 'Check-in inconsistente',
   DECISAO_FRMS_CRITICA: 'Violação crítica de FRMS',

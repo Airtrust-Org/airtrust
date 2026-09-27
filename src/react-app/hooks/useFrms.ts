@@ -870,3 +870,25 @@ export function useFrmsFadigaAnalytics(dias = 30) {
     },
   );
 }
+
+export interface FrmsLocationCatalogRow {
+  id: string;
+  code: string;
+  operational_class: 'AERODROME' | 'HELIDECK' | 'PLATFORM' | 'OTHER';
+  name: string | null;
+  timezone_iana: string | null;
+  weather_source_kind: 'REDEMET' | 'HELIDECK_FEED' | 'MANUAL_MEASURED' | 'NONE';
+  redemet_station_icao: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  source_reference: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export function useFrmsLocationCatalog() {
+  return useApi<FrmsLocationCatalogRow[]>('/api/frms/configuracoes/localidades', {
+    requireAuth: false,
+    bypassGetCache: true,
+  });
+}

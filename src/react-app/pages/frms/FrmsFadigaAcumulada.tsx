@@ -1,8 +1,8 @@
 /**
  * FRMS — Fadiga Acumulada Legal (PRC-OPS-012)
  *
- * Panorama de fadiga acumulada: % dos limites 176h jornada / 90h voo
- * com cores semânticas de risco independentes dos enums históricos do backend.
+ * Panorama de fadiga acumulada com limites legais e thresholds fornecidos pelo backend governado.
+ * A UI não replica valores regulatórios nem limiares operacionais em constantes locais.
  */
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -19,7 +19,7 @@ import {
 import AppLayout from '@/react-app/components/AppLayout';
 import { useApi } from '@/react-app/hooks/useApi';
 import {
-  FADIGA_ACUMULADA_LEGENDA,
+  buildFadigaAcumuladaLegenda,
   getFadigaAcumuladaVisual,
 } from './fadigaAcumuladaVisual';
 
@@ -27,27 +27,47 @@ interface TripulanteFadiga {
   tripulante_id: string;
   nome: string;
   funcao: string | null;
-  jornada_horas: number;
+  trabalho_status: 'COMPLETE' | 'UNKNOWN';
+  trabalho_horas: number;
+  trabalho_horas_confirmadas: number | null;
+  pct_trabalho: number | null;
+  trabalho_7d_max_horas: number | null;
+  trabalho_14d_max_horas: number | null;
+  pct_trabalho_7d_max: number | null;
+  pct_trabalho_14d_max: number | null;
   voo_horas: number;
-  pct_jornada: number;
   pct_voo: number;
+  jornada_horas: number;
+  pct_jornada: number | null;
   dias_jornada: number;
   dia_ciclo: number | null;
-  alerta: 'normal' | 'verde' | 'amarelo' | 'vermelho';
+  incomplete_reasons: string[];
+  alerta: 'normal' | 'verde' | 'amarelo' | 'vermelho' | 'incompleto';
   em_alerta: boolean;
+  violacao: boolean;
 }
 
 interface FrotaResponse {
   success: boolean;
   data: {
     mes: string;
-    limites: { jornada_horas: number; voo_horas: number };
+    limites: {
+      trabalho_mensal_horas: number;
+      trabalho_7d_horas: number | null;
+      trabalho_14d_horas: number | null;
+      jornada_horas: number;
+      voo_horas: number;
+      rbac_bc_documentado?: boolean;
+      aplicabilidade_rbac_bc?: string;
+    };
     thresholds: { verde: number; amarelo: number; vermelho: number };
     frota: TripulanteFadiga[];
     resumo: {
       total_tripulantes: number;
       em_alerta: number;
       criticos: number;
+      incompletos: number;
+      violacoes: number;
     };
   };
 }
@@ -68,6 +88,10 @@ interface EvolucaoItem {
   pct_voo_diaria: number;
   pct_jornada_mes: number;
   pct_voo_mes: number;
+  trabalho_acumulado_horas?: number;
+  pct_trabalho_mes_legal?: number | null;
+  trabalho_status_dia?: 'COMPLETE' | 'UNKNOWN';
+  alerta_trabalho_mes?: string;
   alerta_jornada: string;
   alerta_voo: string;
   alerta_jornada_mes: string;
@@ -147,10 +171,12 @@ function alertLabel(alerta: string) {
 function ProgressBar({
   value,
   alerta,
+  thresholds,
   max = 100,
 }: {
   value: number;
   alerta: string;
+  thresholds?: { verde: number; amarelo: number; vermelho: number };
   max?: number;
 }) {
   const pct = Math.min((value / max) * 100, 100);
@@ -161,9 +187,11 @@ function ProgressBar({
         style={{ width: `${pct}%` }}
       />
       {/* Threshold markers: atenção / alerta / crítico */}
-      <div className="absolute top-0 left-[80%] w-px h-full bg-amber-700/50" />
-      <div className="absolute top-0 left-[90%] w-px h-full bg-orange-700/50" />
-      <div className="absolute top-0 left-[95%] w-px h-full bg-red-700/50" />
+      {thresholds ? (<>
+        <div className="absolute top-0 w-px h-full bg-amber-700/50" style={{ left: `${Math.min(thresholds.verde, 100)}%` }} />
+        <div className="absolute top-0 w-px h-full bg-orange-700/50" style={{ left: `${Math.min(thresholds.amarelo, 100)}%` }} />
+        <div className="absolute top-0 w-px h-full bg-red-700/50" style={{ left: `${Math.min(thresholds.vermelho, 100)}%` }} />
+      </>) : null}
     </div>
   );
 }
@@ -190,6 +218,9 @@ export default function FrmsFadigaAcumulada() {
   );
   const frota = frotaRaw?.data?.frota || [];
   const resumo = frotaRaw?.data?.resumo;
+  const thresholds = frotaRaw?.data?.thresholds ?? null;
+  const limites = frotaRaw?.data?.limites ?? null;
+  const legenda = thresholds ? buildFadigaAcumuladaLegenda(thresholds) : [];
 
   const { data: individualRaw } = useApi<IndividualResponse>(
     expandedTrip ? `/api/frms/fadiga-acumulada?mes=${mes}&tripulante_id=${expandedTrip}` : null,
@@ -200,10 +231,10 @@ export default function FrmsFadigaAcumulada() {
     return [...frota].sort((a, b) => {
       // Critical first
       if (a.alerta !== b.alerta) {
-        const order = { vermelho: 0, amarelo: 1, verde: 2, normal: 3 };
-        return (order[a.alerta] ?? 3) - (order[b.alerta] ?? 3);
+        const order = { vermelho: 0, incompleto: 1, amarelo: 2, verde: 3, normal: 4 };
+        return (order[a.alerta] ?? 4) - (order[b.alerta] ?? 4);
       }
-      return Math.max(b.pct_jornada, b.pct_voo) - Math.max(a.pct_jornada, a.pct_voo);
+      return Math.max(b.pct_trabalho ?? 0, b.pct_voo) - Math.max(a.pct_trabalho ?? 0, a.pct_voo);
     });
   }, [frota]);
 
@@ -222,10 +253,10 @@ export default function FrmsFadigaAcumulada() {
             <div>
               <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <Activity className="h-5 w-5 text-blue-600 dark:text-blue-300" />
-                Fadiga Acumulada Legal
+                Acumulado Legal de Trabalho e Voo
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                PRC-OPS-012 — % dos limites 176h jornada / 90h voo mensal
+                Lei 13.475 + ACT vigente; limites RBAC 117 B/C somente quando documentados no perfil
               </p>
             </div>
           </div>
@@ -243,13 +274,13 @@ export default function FrmsFadigaAcumulada() {
             </div>
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm dark:border-amber-800 dark:bg-amber-950/20">
               <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 text-sm">
-                <AlertTriangle className="h-4 w-4" /> Em alerta (≥80%)
+                <AlertTriangle className="h-4 w-4" /> Em alerta {thresholds ? `(≥${thresholds.verde}%)` : `(limiar indisponível)`}
               </div>
               <p className="text-2xl font-bold text-amber-700 dark:text-amber-300 mt-1">{resumo.em_alerta}</p>
             </div>
             <div className="rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-800 dark:bg-red-950/20">
               <div className="flex items-center gap-2 text-red-700 dark:text-red-300 text-sm">
-                <AlertTriangle className="h-4 w-4" /> Críticos (≥95%)
+                <AlertTriangle className="h-4 w-4" /> Críticos {thresholds ? `(≥${thresholds.vermelho}%)` : `(limiar indisponível)`}
               </div>
               <p className="text-2xl font-bold text-red-700 dark:text-red-300 mt-1">{resumo.criticos}</p>
             </div>
@@ -258,7 +289,7 @@ export default function FrmsFadigaAcumulada() {
 
         {/* Legend */}
         <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
-          {FADIGA_ACUMULADA_LEGENDA.map(({ alerta, faixa }) => {
+          {legenda.map(({ alerta, faixa }) => {
             const meta = getFadigaAcumuladaVisual(alerta);
             return (
               <div key={alerta} className="flex items-center gap-1.5">
@@ -307,43 +338,59 @@ export default function FrmsFadigaAcumulada() {
                       <div className="mt-2 space-y-1">
                         <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                           <Clock className="h-3 w-3" />
-                          <span>Jornada {t.jornada_horas}h / 176h</span>
+                          <span>Trabalho total {t.trabalho_horas}h / {limites?.trabalho_mensal_horas ?? '—'}h</span>
                           <span className={`font-semibold ${alertText(t.alerta)}`}>
-                            {t.pct_jornada}%
+                            {t.pct_trabalho == null ? 'dados incompletos' : `${t.pct_trabalho}%`}
                           </span>
                         </div>
                         <ProgressBar
-                          value={t.pct_jornada}
-                          alerta={
-                            t.pct_jornada >= 95
+                          value={t.pct_trabalho ?? 0}
+                          thresholds={thresholds ?? undefined}
+                          alerta={t.pct_trabalho == null || !thresholds
+                            ? 'incompleto'
+                            : t.pct_trabalho >= thresholds.vermelho
                               ? 'vermelho'
-                              : t.pct_jornada >= 90
+                              : t.pct_trabalho >= thresholds.amarelo
                                 ? 'amarelo'
-                                : t.pct_jornada >= 80
+                                : t.pct_trabalho >= thresholds.verde
                                   ? 'verde'
                                   : 'normal'
                           }
                         />
+                        {(t.trabalho_7d_max_horas != null || t.trabalho_14d_max_horas != null) && (
+                          <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                            {t.trabalho_7d_max_horas != null && <span>RBAC B/C 7d: {t.trabalho_7d_max_horas}h / {limites?.trabalho_7d_horas ?? '—'}h</span>}
+                            {t.trabalho_14d_max_horas != null && <span>RBAC B/C 14d: {t.trabalho_14d_max_horas}h / {limites?.trabalho_14d_horas ?? '—'}h</span>}
+                          </div>
+                        )}
+                        {t.trabalho_status === 'UNKNOWN' && (
+                          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                            Acumulado mínimo conhecido: {t.trabalho_horas}h. Há atividade sem evidência suficiente de realização/intervalo.
+                          </div>
+                        )}
                       </div>
                       {/* Voo bar */}
                       <div className="mt-2 space-y-1">
                         <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                           <Plane className="h-3 w-3" />
-                          <span>Voo {t.voo_horas}h / 90h</span>
+                          <span>Voo {t.voo_horas}h / {limites?.voo_horas ?? '—'}h</span>
                           <span className={`font-semibold ${alertText(t.alerta)}`}>
                             {t.pct_voo}%
                           </span>
                         </div>
                         <ProgressBar
                           value={t.pct_voo}
+                          thresholds={thresholds ?? undefined}
                           alerta={
-                            t.pct_voo >= 95
-                              ? 'vermelho'
-                              : t.pct_voo >= 90
-                                ? 'amarelo'
-                                : t.pct_voo >= 80
-                                  ? 'verde'
-                                  : 'normal'
+                            !thresholds
+                              ? 'incompleto'
+                              : t.pct_voo >= thresholds.vermelho
+                                ? 'vermelho'
+                                : t.pct_voo >= thresholds.amarelo
+                                  ? 'amarelo'
+                                  : t.pct_voo >= thresholds.verde
+                                    ? 'verde'
+                                    : 'normal'
                           }
                         />
                       </div>
@@ -373,7 +420,7 @@ export default function FrmsFadigaAcumulada() {
                           <th className="px-3 py-2 text-right">FAT.JORNADA% dia</th>
                           <th className="px-3 py-2 text-right">HV diária</th>
                           <th className="px-3 py-2 text-right">FAT.HV% dia</th>
-                          <th className="px-3 py-2 text-right">Uso mês jornada</th>
+                          <th className="px-3 py-2 text-right">Jornada registrada mês</th>
                           <th className="px-3 py-2 text-right">Uso mês HV</th>
                           <th className="px-3 py-2 text-center">Auditoria</th>
                         </tr>
@@ -402,12 +449,10 @@ export default function FrmsFadigaAcumulada() {
                               </span>
                             </td>
                             <td className="px-3 py-1.5 text-right">
-                              <span className={`font-semibold ${alertText(e.alerta_jornada_mes)}`}>
-                                {Number(e.pct_jornada_mes || 0).toFixed(3)}%
+                              <span className="font-mono text-slate-600 dark:text-slate-300">
+                                {e.jornada_acumulada_horas}h
                               </span>
-                              <span className="ml-1 font-mono text-slate-400">
-                                ({e.jornada_acumulada_horas}h)
-                              </span>
+                              <span className="ml-1 text-[10px] text-slate-400">diagnóstico</span>
                             </td>
                             <td className="px-3 py-1.5 text-right">
                               <span className={`font-semibold ${alertText(e.alerta_voo_mes)}`}>

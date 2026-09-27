@@ -32,6 +32,7 @@ function getSaoPauloHour(now = new Date()): number {
   return Number(value);
 }
 
+
 async function inserirAlertaComDedupe24h(
   db: D1Database,
   input: {
@@ -354,127 +355,10 @@ export async function frmsDailyCheck(env: Env): Promise<{
         }
       }
 
-      // 4. Fadiga Acumulada Legal (PRC-OPS-012) — % do limite mensal
-      const mesAtual = dataOperacional.slice(0, 7);
-      const totaisMes = await db
-        .prepare(
-          `SELECT COALESCE(SUM(duracao_jornada_minutos), 0) AS total_jornada,
-                  COALESCE(SUM(horas_voo_minutos), 0) AS total_voo,
-                  NULL AS dia_ciclo
-           FROM frms_jornada
-           WHERE tripulante_id = ?
-             AND data LIKE ?
-             AND deleted_at IS NULL
-             AND UPPER(COALESCE(origem, '')) = 'SIGVOOS'`,
-        )
-        .bind(trip.id, `${mesAtual}-%`)
-        .first<{ total_jornada: number; total_voo: number; dia_ciclo: number | null }>();
-
-      if (totaisMes) {
-        const pctJornada = (totaisMes.total_jornada / 60 / 176) * 100;
-        const pctVoo = (totaisMes.total_voo / 60 / 90) * 100;
-        const pctMax = Math.max(pctJornada, pctVoo);
-
-        if (pctMax >= 80) {
-          const nivel = pctMax >= 95 ? 'VERMELHO' : pctMax >= 90 ? 'AMARELO' : 'VERDE';
-          const tipo = pctJornada >= pctVoo ? 'FADIGA_ACUMULADA_JORNADA' : 'FADIGA_ACUMULADA_VOO';
-
-          const existeFadiga = await db
-            .prepare(
-              `SELECT id FROM frms_alerta
-               WHERE tripulante_id = ? AND tipo_limite = ?
-                 AND created_at >= ? AND deleted_at IS NULL
-               LIMIT 1`,
-            )
-            .bind(String(trip.id), tipo, hoje + ' 00:00:00')
-            .first();
-
-          if (!existeFadiga) {
-            const id = crypto.randomUUID();
-            const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
-            const tipoLbl = pctJornada >= pctVoo ? 'Jornada' : 'Voo';
-            const valorAtual = pctJornada >= pctVoo ? totaisMes.total_jornada : totaisMes.total_voo;
-            const valorLimite = pctJornada >= pctVoo ? 176 * 60 : 90 * 60;
-            await db
-              .prepare(
-                `INSERT INTO frms_alerta (
-                  id, tripulante_id, jornada_id, tipo_limite, nivel,
-                  percentual_atingido, valor_atual_min, valor_limite_min,
-                  mensagem, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              )
-              .bind(
-                id,
-                String(trip.id),
-                null,
-                tipo,
-                nivel,
-                +pctMax.toFixed(1),
-                valorAtual,
-                valorLimite,
-                `[CRON] Fadiga acum. ${tipoLbl}: ${pctMax.toFixed(1)}% do limite mensal (dia ciclo: ${totaisMes.dia_ciclo || '?'})`,
-                timestamp,
-                timestamp,
-              )
-              .run();
-            await despacharNotificacoes(db, id, nivel, trip.id, tripEmpresaId);
-            alertasGerados++;
-          }
-        }
-      }
-
-      // 5. Acumulo 7d > limite configurado (política interna FRMS) com deduplicacao de 24h
-      const limite7dMin = Math.round(limites.HV_7_DIAS_HORAS * 60);
-      if (acumulo.hv_7_dias_min > limite7dMin) {
-        const pct7d = (acumulo.hv_7_dias_min / limite7dMin) * 100;
-        const criouAlerta60h = await inserirAlertaComDedupe24h(db, {
-          tripulanteId: trip.id,
-          jornadaId: jornadaSigvoosHoje.id,
-          tipoLimite: 'HV_7D',
-          nivel: 'CRITICO',
-          percentualAtingido: Number(pct7d.toFixed(1)),
-          valorAtualMin: acumulo.hv_7_dias_min,
-          valorLimiteMin: limite7dMin,
-          mensagem: `[CRON] Acumulo 7d acima de ${limites.HV_7_DIAS_HORAS}h: ${(acumulo.hv_7_dias_min / 60).toFixed(1)}h`,
-        });
-        if (criouAlerta60h) {
-          alertasGerados++;
-        }
-      }
-
-      // 6. Thresholds de effectiveness: <77 critico, 77-89 moderado
-      const effectivenessPct = jornadaSigvoosHoje.effectiveness_pct;
-      if (typeof effectivenessPct === 'number') {
-        if (effectivenessPct < 77) {
-          const criouCritico = await inserirAlertaComDedupe24h(db, {
-            tripulanteId: trip.id,
-            jornadaId: jornadaSigvoosHoje.id,
-            tipoLimite: 'EFFECTIVENESS',
-            nivel: 'CRITICO',
-            percentualAtingido: Number(effectivenessPct.toFixed(1)),
-            valorAtualMin: Math.round(effectivenessPct * 10),
-            valorLimiteMin: 770,
-            mensagem: `[CRON] Effectiveness critico: ${effectivenessPct.toFixed(1)}% (<77%)`,
-          });
-          if (criouCritico) {
-            alertasGerados++;
-          }
-        } else if (effectivenessPct <= 89) {
-          const criouModerado = await inserirAlertaComDedupe24h(db, {
-            tripulanteId: trip.id,
-            jornadaId: jornadaSigvoosHoje.id,
-            tipoLimite: 'EFFECTIVENESS',
-            nivel: 'ATENCAO',
-            percentualAtingido: Number(effectivenessPct.toFixed(1)),
-            valorAtualMin: Math.round(effectivenessPct * 10),
-            valorLimiteMin: 890,
-            mensagem: `[CRON] Effectiveness moderado: ${effectivenessPct.toFixed(1)}% (77-89%)`,
-          });
-          if (criouModerado) {
-            alertasGerados++;
-          }
-        }
-      }
+      // Acumulados legais de trabalho e effectiveness não são duplicados neste cron.
+      // O snapshot/decisão operacional canônica resolve esses domínios com a mesma
+      // revisão governada e falha fechado quando a evidência obrigatória está incompleta.
+      // `frms_alerta` permanece restrito à taxonomia legada suportada pelo schema.
     } catch (e) {
       const msg = `Tripulante ${trip.id} (${trip.nome}): ${(e as Error).message}`;
       console.error('[FRMS][CRON]', msg);

@@ -1,8 +1,8 @@
 /**
  * FRMS — Fadiga Acumulada Legal (PRC-OPS-012)
  *
- * Calculates accumulated fatigue as % of legal limits (176h jornada / 90h voo)
- * with aggravating/mitigating factors per PRC-OPS-012.
+ * Consolidates legal/collective work-time limits separately from flight-time limits.
+ * Daily PRC-OPS-012 journey factors remain diagnostic and are not labeled as legal work totals.
  *
  * GET /api/frms/fadiga-acumulada?mes=YYYY-MM&tripulante_id=...
  * GET /api/frms/fadiga-acumulada/frota?mes=YYYY-MM
@@ -12,26 +12,18 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
-import {
-  calcularEvolucaoFadigaAcumulada,
-  FADIGA_ACUMULADA_LIMITES,
-} from '../lib/frms/fadiga-acumulada-legal';
+import { calcularEvolucaoFadigaAcumulada } from '../lib/frms/fadiga-acumulada-legal';
 import { buildCanonicalOperationalSourceSql } from '../lib/frms/frms-source-policy';
+import { loadLegalWorkMonth } from '../lib/frms/legal-work-service';
+import { asOperationalLimitesMap, resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
+import { costaDoSolAct2025_2027Applies, regulatoryProfileHasDocumentedAppendix } from '../lib/frms/compliance-policy';
 
 const fadigaAcumulada = new Hono<{ Bindings: Env }>();
 
 fadigaAcumulada.use('*', auth());
 
-// PRC-OPS-012 limits
-const LIMITE_JORNADA_MES = FADIGA_ACUMULADA_LIMITES.JORNADA_MENSAL_HORAS; // hours
-const LIMITE_VOO_MES = FADIGA_ACUMULADA_LIMITES.HV_MENSAL_HORAS; // hours
-
-// Thresholds
-const THRESHOLD_VERDE = 80;
-const THRESHOLD_AMARELO = 90;
-const THRESHOLD_VERMELHO = 95;
+type AlertThresholds = { aviso: number; atencao: number; critico: number };
 const CANONICAL_JORNADA_SOURCE_SQL = buildCanonicalOperationalSourceSql('j.origem');
-const CANONICAL_BASE_SOURCE_SQL = buildCanonicalOperationalSourceSql('origem');
 
 interface JornadaDia {
   data: string;
@@ -96,11 +88,48 @@ function calcFatoresAgravantes(j: JornadaDia) {
   return { fatorJornada, fatorVoo };
 }
 
-function getAlertLevel(percentual: number): 'verde' | 'amarelo' | 'vermelho' | 'normal' {
-  if (percentual >= THRESHOLD_VERMELHO) return 'vermelho';
-  if (percentual >= THRESHOLD_AMARELO) return 'amarelo';
-  if (percentual >= THRESHOLD_VERDE) return 'verde';
+function getAlertLevel(
+  percentual: number,
+  thresholds: AlertThresholds,
+): 'verde' | 'amarelo' | 'vermelho' | 'normal' {
+  if (percentual >= thresholds.critico) return 'vermelho';
+  if (percentual >= thresholds.atencao) return 'amarelo';
+  if (percentual >= thresholds.aviso) return 'verde';
   return 'normal';
+}
+
+function lastDayOfMonth(month: string): string {
+  const [year, monthNumber] = month.split('-').map(Number);
+  const day = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  return `${month}-${String(day).padStart(2, '0')}`;
+}
+
+async function resolveRouteContext(db: D1Database, empresaId: number, month: string) {
+  const context = await resolveFrmsOperationalContext(db, {
+    empresaId,
+    referenceAt: lastDayOfMonth(month),
+  });
+  const limits = asOperationalLimitesMap(context.parameters, context.cyclePolicyApproved);
+  const rbacBcApplicable = regulatoryProfileHasDocumentedAppendix(
+    { limitsJson: context.regulatoryLimitsJson },
+    'B',
+    'C',
+  );
+  const costaDoSolActApplicable = costaDoSolAct2025_2027Applies({
+    empresaId,
+    limitsJson: context.regulatoryLimitsJson,
+  });
+  return {
+    context,
+    limits,
+    rbacBcApplicable,
+    costaDoSolActApplicable,
+    thresholds: {
+      aviso: limits.ALERTA_AVISO_PCT,
+      atencao: limits.ALERTA_ATENCAO_PCT,
+      critico: limits.ALERTA_CRITICO_PCT,
+    } satisfies AlertThresholds,
+  };
 }
 
 // GET /api/frms/fadiga-acumulada?mes=YYYY-MM&tripulante_id=...
@@ -115,7 +144,11 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
   }
 
   try {
-    // Fetch all jornadas for this crew member in the month
+    const { context, limits, thresholds, rbacBcApplicable, costaDoSolActApplicable } = await resolveRouteContext(db, empresaId, mes);
+    const legalRows = await loadLegalWorkMonth(db, empresaId, mes);
+    const legal = legalRows.find((row) => row.tripulante_id === Number(tripulanteId)) ?? null;
+
+    // Detalhe diário da jornada de voo permanece para auditoria operacional; não é o acumulado legal de trabalho.
     const jornadas = await db
       .prepare(
         `SELECT
@@ -147,26 +180,49 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
 
     const dias = jornadas.results || [];
 
-    const evolucao = calcularEvolucaoFadigaAcumulada(dias).map((linha, idx) => {
+    const evolucao = calcularEvolucaoFadigaAcumulada(dias, {
+      fdpDiarioHoras: limits.FDP_MAXIMO_HORAS,
+      hvDiariaHoras: limits.HV_DIARIA_HORAS,
+      hvMensalHoras: limits.HV_MES_HORAS,
+    }).map((linha, idx) => {
       const j = dias[idx];
       const { fatorJornada, fatorVoo } = calcFatoresAgravantes(j);
+      const trabalhoAteDataMin = legal
+        ? Object.entries(legal.trabalho_por_data_min)
+            .filter(([date]) => date <= linha.data)
+            .reduce((sum, [, minutes]) => sum + Math.max(0, Number(minutes) || 0), 0)
+        : 0;
+      const trabalhoIncompleteThroughDate = legal
+        ? Object.keys(legal.incomplete_reasons_by_date).some((date) => date <= linha.data)
+        : true;
+      const pctTrabalhoLegal = (trabalhoAteDataMin / (176 * 60)) * 100;
 
       return {
         ...linha,
+        trabalho_acumulado_horas: +(trabalhoAteDataMin / 60).toFixed(1),
+        pct_trabalho_mes_legal: trabalhoIncompleteThroughDate ? null : +pctTrabalhoLegal.toFixed(3),
+        trabalho_status_dia: trabalhoIncompleteThroughDate ? 'UNKNOWN' : 'COMPLETE',
+        alerta_trabalho_mes: trabalhoIncompleteThroughDate
+          ? 'incompleto'
+          : getAlertLevel(pctTrabalhoLegal, thresholds),
         dia: idx + 1,
         fator_jornada_dia: +fatorJornada.toFixed(2),
         fator_voo_dia: +fatorVoo.toFixed(2),
-        alerta_jornada: getAlertLevel(linha.pct_jornada_diaria),
-        alerta_voo: getAlertLevel(linha.pct_voo_diaria),
-        alerta_jornada_mes: getAlertLevel(linha.pct_jornada_mes),
-        alerta_voo_mes: getAlertLevel(linha.pct_voo_mes),
+        alerta_jornada: getAlertLevel(linha.pct_jornada_diaria, thresholds),
+        alerta_voo: getAlertLevel(linha.pct_voo_diaria, thresholds),
+        alerta_jornada_mes: getAlertLevel(linha.pct_jornada_mes, thresholds),
+        alerta_voo_mes: getAlertLevel(linha.pct_voo_mes, thresholds),
       };
     });
 
     const ultimo = evolucao[evolucao.length - 1];
-    const alertaGeral = ultimo
-      ? getAlertLevel(Math.max(ultimo.pct_jornada_mes, ultimo.pct_voo_mes))
-      : 'normal';
+    const trabalhoMesMin = legal?.trabalho_mes_min ?? null;
+    const trabalhoMesConhecidoMin = legal?.trabalho_mes_conhecido_min ?? 0;
+    const pctTrabalhoMes = trabalhoMesMin == null ? null : (trabalhoMesMin / (176 * 60)) * 100;
+    const pctTrabalho7d = !rbacBcApplicable || legal?.trabalho_7d_max_min == null ? null : (legal.trabalho_7d_max_min / (60 * 60)) * 100;
+    const pctTrabalho14d = !rbacBcApplicable || legal?.trabalho_14d_max_min == null ? null : (legal.trabalho_14d_max_min / (100 * 60)) * 100;
+    const pctVooLegal = legal ? (legal.voo_mes_min / (90 * 60)) * 100 : 0;
+    const alertaGeral = getAlertLevel(Math.max(pctTrabalhoMes ?? 0, pctVooLegal), thresholds);
 
     return c.json({
       success: true,
@@ -174,39 +230,69 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
         tripulante_id: tripulanteId,
         mes,
         limites: {
-          jornada_horas: LIMITE_JORNADA_MES,
-          voo_horas: LIMITE_VOO_MES,
-          jornada_diaria_horas: FADIGA_ACUMULADA_LIMITES.JORNADA_DIARIA_HORAS,
-          voo_diaria_horas: FADIGA_ACUMULADA_LIMITES.HV_DIARIA_HORAS,
+          trabalho_mensal_horas: 176,
+          trabalho_7d_horas: rbacBcApplicable ? 60 : null,
+          trabalho_14d_horas: rbacBcApplicable ? 100 : null,
+          voo_mensal_horas: 90,
+          voo_diaria_horas: 8,
+          voo_mensal_operacional_horas: limits.HV_MES_HORAS,
+          voo_diaria_operacional_horas: limits.HV_DIARIA_HORAS,
+          jornada_horas: 176, // alias legado: agora representa trabalho total, não só frms_jornada
+          voo_horas: 90,
+          fontes: {
+            trabalho: [
+              'Lei 13.475/2017 art. 41',
+              ...(costaDoSolActApplicable ? ['ACT Costa do Sol 2025/2027 cláusulas 8ª/9ª'] : []),
+              ...(rbacBcApplicable ? ['RBAC 117 EMD 01 B117.27/C117.27'] : []),
+            ],
+            voo_mes: ['Lei 13.475/2017 art. 33 IV'],
+            voo_dia: ['Lei 13.475/2017 art. 32 IV'],
+            limites_operacionais: `Revisão governada ${context.configRevisionId}`,
+          },
+          profile_code: context.profileCode,
+          config_revision_id: context.configRevisionId,
+          rbac_bc_documentado: rbacBcApplicable,
+          aplicabilidade_rbac_bc: rbacBcApplicable
+            ? 'DOCUMENTADA_NO_PERFIL'
+            : 'NAO_COMPROVADA_NO_PERFIL',
         },
         thresholds: {
-          verde: THRESHOLD_VERDE,
-          amarelo: THRESHOLD_AMARELO,
-          vermelho: THRESHOLD_VERMELHO,
+          verde: thresholds.aviso,
+          amarelo: thresholds.atencao,
+          vermelho: thresholds.critico,
         },
-        resumo: ultimo
+        resumo: ultimo || legal
           ? {
-              // Legacy generic fields stay monthly/accumulated for backward compatibility.
-              jornada_horas: ultimo.jornada_acumulada_horas,
-              voo_horas: ultimo.voo_acumulado_horas,
-              pct_jornada: ultimo.pct_jornada_mes,
-              pct_voo: ultimo.pct_voo_mes,
-              jornada_acumulada_horas: ultimo.jornada_acumulada_horas,
-              voo_acumulado_horas: ultimo.voo_acumulado_horas,
-              jornada_dia_horas: ultimo.jornada_horas,
-              voo_dia_horas: ultimo.voo_horas,
-              jornada_mes_horas: ultimo.jornada_acumulada_horas,
-              voo_mes_horas: ultimo.voo_acumulado_horas,
-              pct_jornada_dia: ultimo.pct_jornada_diaria,
-              pct_voo_dia: ultimo.pct_voo_diaria,
-              pct_jornada_mes: ultimo.pct_jornada_mes,
-              pct_voo_mes: ultimo.pct_voo_mes,
+              trabalho_status: legal?.trabalho_status ?? 'UNKNOWN',
+              trabalho_horas: +(trabalhoMesConhecidoMin / 60).toFixed(1),
+              trabalho_horas_confirmadas: trabalhoMesMin == null ? null : +(trabalhoMesMin / 60).toFixed(1),
+              pct_trabalho_mes: pctTrabalhoMes == null ? null : +pctTrabalhoMes.toFixed(3),
+              pct_trabalho_7d_max: pctTrabalho7d == null ? null : +pctTrabalho7d.toFixed(3),
+              pct_trabalho_14d_max: pctTrabalho14d == null ? null : +pctTrabalho14d.toFixed(3),
+              trabalho_7d_max_horas: legal?.trabalho_7d_max_min == null ? null : +(legal.trabalho_7d_max_min / 60).toFixed(1),
+              trabalho_14d_max_horas: legal?.trabalho_14d_max_min == null ? null : +(legal.trabalho_14d_max_min / 60).toFixed(1),
+              trabalho_incomplete_reasons: legal?.incomplete_reasons ?? ['LEGAL_WORK_DATA_UNAVAILABLE'],
+              // Legacy generic fields kept only for compatibility with older consumers.
+              jornada_horas: +(trabalhoMesConhecidoMin / 60).toFixed(1),
+              voo_horas: +(Number(legal?.voo_mes_min ?? 0) / 60).toFixed(1),
+              pct_jornada: pctTrabalhoMes == null ? null : +pctTrabalhoMes.toFixed(3),
+              pct_voo: +pctVooLegal.toFixed(3),
+              jornada_acumulada_horas: ultimo?.jornada_acumulada_horas,
+              voo_acumulado_horas: ultimo?.voo_acumulado_horas,
+              jornada_dia_horas: ultimo?.jornada_horas,
+              voo_dia_horas: ultimo?.voo_horas,
+              jornada_mes_horas: ultimo?.jornada_acumulada_horas,
+              voo_mes_horas: ultimo?.voo_acumulado_horas,
+              pct_jornada_dia: ultimo?.pct_jornada_diaria,
+              pct_voo_dia: ultimo?.pct_voo_diaria,
+              pct_jornada_mes: ultimo?.pct_jornada_mes,
+              pct_voo_mes: ultimo?.pct_voo_mes,
               alerta: alertaGeral,
-              integridade_status: ultimo.integridade_status,
-              integridade_codigo: ultimo.integridade_codigo,
-              integridade_codigos: ultimo.integridade_codigos,
-              integridade_mensagem: ultimo.integridade_mensagem,
-              valores_brutos: ultimo.valores_brutos,
+              integridade_status: ultimo?.integridade_status,
+              integridade_codigo: ultimo?.integridade_codigo,
+              integridade_codigos: ultimo?.integridade_codigos,
+              integridade_mensagem: ultimo?.integridade_mensagem,
+              valores_brutos: ultimo?.valores_brutos,
             }
           : null,
         evolucao,
@@ -218,7 +304,7 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
 });
 
 // GET /api/frms/fadiga-acumulada/frota?mes=YYYY-MM
-// Panorama de fadiga acumulada de toda a frota
+// Panorama legal: trabalho total (não apenas jornada de voo) + horas de voo.
 fadigaAcumulada.get('/fadiga-acumulada/frota', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
@@ -229,52 +315,51 @@ fadigaAcumulada.get('/fadiga-acumulada/frota', async (c) => {
   }
 
   try {
-    // Get all active crew members with jornadas this month
-    const tripulantes = await db
-      .prepare(
-        `SELECT DISTINCT j.tripulante_id, f.nome, f.guerra, f.funcao,
-                COALESCE(SUM(j.duracao_jornada_minutos), 0) AS total_jornada_min,
-                COALESCE(SUM(j.horas_voo_minutos), 0) AS total_voo_min,
-                COUNT(*) AS dias_jornada,
-                NULL AS max_dia_ciclo
-         FROM frms_jornada j
-         JOIN funcionarios f ON CAST(j.tripulante_id AS INTEGER) = f.id AND f.deleted_at IS NULL
-         WHERE j.data LIKE ?
-           AND j.deleted_at IS NULL
-           AND ${CANONICAL_JORNADA_SOURCE_SQL}
-           AND f.empresa_id = ?
-         GROUP BY j.tripulante_id
-         ORDER BY total_jornada_min DESC`,
-      )
-      .bind(`${mes}-%`, empresaId)
-      .all<{
-        tripulante_id: string;
-        nome: string;
-        guerra: string | null;
-        funcao: string | null;
-        total_jornada_min: number;
-        total_voo_min: number;
-        dias_jornada: number;
-        max_dia_ciclo: number | null;
-      }>();
-
-    const frota = (tripulantes.results || []).map((t) => {
-      const pctJornada = (t.total_jornada_min / 60 / LIMITE_JORNADA_MES) * 100;
-      const pctVoo = (t.total_voo_min / 60 / LIMITE_VOO_MES) * 100;
-      const alertaGeral = getAlertLevel(Math.max(pctJornada, pctVoo));
+    const { context, limits, thresholds, rbacBcApplicable, costaDoSolActApplicable } = await resolveRouteContext(db, empresaId, mes);
+    const rows = await loadLegalWorkMonth(db, empresaId, mes);
+    const frota = rows.map((row) => {
+      const pctTrabalho = row.trabalho_mes_min == null
+        ? null
+        : (row.trabalho_mes_min / (176 * 60)) * 100;
+      const pctTrabalho7d = !rbacBcApplicable || row.trabalho_7d_max_min == null
+        ? null
+        : (row.trabalho_7d_max_min / (60 * 60)) * 100;
+      const pctTrabalho14d = !rbacBcApplicable || row.trabalho_14d_max_min == null
+        ? null
+        : (row.trabalho_14d_max_min / (100 * 60)) * 100;
+      const pctVoo = (row.voo_mes_min / (90 * 60)) * 100;
+      const maxKnownPct = Math.max(pctTrabalho ?? 0, pctTrabalho7d ?? 0, pctTrabalho14d ?? 0, pctVoo);
+      const knownAlert = getAlertLevel(maxKnownPct, thresholds);
+      const alerta = knownAlert !== 'normal'
+        ? knownAlert
+        : row.trabalho_status === 'UNKNOWN'
+          ? 'incompleto'
+          : 'normal';
 
       return {
-        tripulante_id: t.tripulante_id,
-        nome: t.guerra || t.nome,
-        funcao: t.funcao,
-        jornada_horas: +(t.total_jornada_min / 60).toFixed(1),
-        voo_horas: +(t.total_voo_min / 60).toFixed(1),
-        pct_jornada: +pctJornada.toFixed(1),
+        tripulante_id: String(row.tripulante_id),
+        nome: row.guerra || row.nome,
+        funcao: row.funcao,
+        trabalho_status: row.trabalho_status,
+        trabalho_horas: +(row.trabalho_mes_conhecido_min / 60).toFixed(1),
+        trabalho_horas_confirmadas: row.trabalho_mes_min == null ? null : +(row.trabalho_mes_min / 60).toFixed(1),
+        pct_trabalho: pctTrabalho == null ? null : +pctTrabalho.toFixed(1),
+        trabalho_7d_max_horas: !rbacBcApplicable || row.trabalho_7d_max_min == null ? null : +(row.trabalho_7d_max_min / 60).toFixed(1),
+        trabalho_14d_max_horas: !rbacBcApplicable || row.trabalho_14d_max_min == null ? null : +(row.trabalho_14d_max_min / 60).toFixed(1),
+        pct_trabalho_7d_max: pctTrabalho7d == null ? null : +pctTrabalho7d.toFixed(1),
+        pct_trabalho_14d_max: pctTrabalho14d == null ? null : +pctTrabalho14d.toFixed(1),
+        voo_horas: +(row.voo_mes_min / 60).toFixed(1),
         pct_voo: +pctVoo.toFixed(1),
-        dias_jornada: t.dias_jornada,
-        dia_ciclo: t.max_dia_ciclo,
-        alerta: alertaGeral,
-        em_alerta: pctJornada >= THRESHOLD_VERDE || pctVoo >= THRESHOLD_VERDE,
+        jornada_registrada_horas: +(row.jornada_registrada_mes_min / 60).toFixed(1),
+        dias_jornada: row.dias_com_jornada,
+        dia_ciclo: null,
+        incomplete_reasons: row.incomplete_reasons,
+        // aliases legados: jornada_* agora aponta para o trabalho legal total conhecido.
+        jornada_horas: +(row.trabalho_mes_conhecido_min / 60).toFixed(1),
+        pct_jornada: pctTrabalho == null ? null : +pctTrabalho.toFixed(1),
+        alerta,
+        em_alerta: maxKnownPct >= thresholds.aviso,
+        violacao: maxKnownPct > 100,
       };
     });
 
@@ -283,125 +368,119 @@ fadigaAcumulada.get('/fadiga-acumulada/frota', async (c) => {
       data: {
         mes,
         limites: {
-          jornada_horas: LIMITE_JORNADA_MES,
-          voo_horas: LIMITE_VOO_MES,
-          jornada_diaria_horas: FADIGA_ACUMULADA_LIMITES.JORNADA_DIARIA_HORAS,
-          voo_diaria_horas: FADIGA_ACUMULADA_LIMITES.HV_DIARIA_HORAS,
+          trabalho_mensal_horas: 176,
+          trabalho_7d_horas: rbacBcApplicable ? 60 : null,
+          trabalho_14d_horas: rbacBcApplicable ? 100 : null,
+          voo_horas: 90,
+          voo_diaria_horas: 8,
+          voo_horas_operacional: limits.HV_MES_HORAS,
+          voo_diaria_horas_operacional: limits.HV_DIARIA_HORAS,
+          jornada_horas: 176,
+          profile_code: context.profileCode,
+          config_revision_id: context.configRevisionId,
+          rbac_bc_documentado: rbacBcApplicable,
+          aplicabilidade_rbac_bc: rbacBcApplicable
+            ? 'DOCUMENTADA_NO_PERFIL'
+            : 'NAO_COMPROVADA_NO_PERFIL',
         },
         thresholds: {
-          verde: THRESHOLD_VERDE,
-          amarelo: THRESHOLD_AMARELO,
-          vermelho: THRESHOLD_VERMELHO,
+          verde: thresholds.aviso,
+          amarelo: thresholds.atencao,
+          vermelho: thresholds.critico,
         },
         frota,
         resumo: {
           total_tripulantes: frota.length,
-          em_alerta: frota.filter((t) => t.em_alerta).length,
-          criticos: frota.filter((t) => t.alerta === 'vermelho').length,
+          em_alerta: frota.filter((row) => row.em_alerta).length,
+          criticos: frota.filter((row) => row.alerta === 'vermelho').length,
+          incompletos: frota.filter((row) => row.trabalho_status === 'UNKNOWN').length,
+          violacoes: frota.filter((row) => row.violacao).length,
         },
       },
     });
   } catch (e) {
+    console.error('[FRMS] fadiga acumulada/frota:', e);
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
 
 // GET /api/frms/fadiga-acumulada/projecao?mes=YYYY-MM&tripulante_id=...
-// Projeção do 12° dia: horas restantes no mês (PRC-OPS-012 §5.2)
+// Projeção usa trabalho legal agregado; dados incompletos não geram falsa precisão.
 fadigaAcumulada.get('/fadiga-acumulada/projecao', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const mes = c.req.query('mes') || '';
-  const tripulanteId = c.req.query('tripulante_id') || '';
+  const tripulanteId = Number(c.req.query('tripulante_id') || 0);
 
-  if (!mes || !tripulanteId) {
+  if (!mes || !Number.isInteger(tripulanteId) || tripulanteId <= 0) {
     return c.json({ success: false, error: 'Parâmetros obrigatórios: mes, tripulante_id' }, 400);
   }
 
   try {
-    const totais = await db
-      .prepare(
-        `SELECT
-           COALESCE(SUM(duracao_jornada_minutos), 0) AS total_jornada_min,
-           COALESCE(SUM(horas_voo_minutos), 0) AS total_voo_min,
-           COUNT(*) AS dias_trabalhados,
-           NULL AS dia_ciclo
-         FROM frms_jornada
-         WHERE tripulante_id = ? AND data LIKE ? AND deleted_at IS NULL
-           AND ${CANONICAL_BASE_SOURCE_SQL}
-           AND (? IS NULL OR empresa_id = ?)`,
-      )
-      .bind(tripulanteId, `${mes}-%`, empresaId ?? null, empresaId ?? null)
-      .first<{
-        total_jornada_min: number;
-        total_voo_min: number;
-        dias_trabalhados: number;
-        dia_ciclo: number | null;
-      }>();
-
-    if (!totais || totais.dias_trabalhados === 0) {
+    const { limits } = await resolveRouteContext(db, empresaId, mes);
+    const rows = await loadLegalWorkMonth(db, empresaId, mes);
+    const row = rows.find((item) => item.tripulante_id === tripulanteId);
+    if (!row) {
+      return c.json({ success: true, data: { projecao_disponivel: false, motivo: 'Sem trabalho registrado no mês' } });
+    }
+    if (row.trabalho_status !== 'COMPLETE' || row.trabalho_mes_min == null) {
       return c.json({
         success: true,
-        data: { projecao_disponivel: false, motivo: 'Sem jornadas no mês' },
+        data: {
+          projecao_disponivel: false,
+          motivo: 'Dados de trabalho incompletos; projeção legal bloqueada para evitar falsa precisão.',
+          trabalho_horas_conhecidas: +(row.trabalho_mes_conhecido_min / 60).toFixed(1),
+          incomplete_reasons: row.incomplete_reasons,
+        },
       });
     }
 
-    // Dias restantes no mês
-    const [year, month] = mes.split('-').map(Number);
-    const diasNoMes = new Date(year, month, 0).getDate();
-    const hoje = new Date();
-    const diaAtual =
-      hoje.getFullYear() === year && hoje.getMonth() + 1 === month ? hoje.getDate() : diasNoMes;
-
-    const diasRestantes = diasNoMes - diaAtual;
-
-    // Horas restantes
-    const jornadaRestanteH = Math.max(0, LIMITE_JORNADA_MES - totais.total_jornada_min / 60);
-    const vooRestanteH = Math.max(0, LIMITE_VOO_MES - totais.total_voo_min / 60);
-
-    // Média diária
-    const mediaJornadaDia = totais.total_jornada_min / 60 / totais.dias_trabalhados;
-    const mediaVooDia = totais.total_voo_min / 60 / totais.dias_trabalhados;
-
-    // Projeção: se mantiver ritmo atual, quantos dias até esgotar
-    const diasAteEstourarJornada =
-      mediaJornadaDia > 0 ? Math.floor(jornadaRestanteH / mediaJornadaDia) : Infinity;
-    const diasAteEstourarVoo = mediaVooDia > 0 ? Math.floor(vooRestanteH / mediaVooDia) : Infinity;
-
-    const diaCiclo = totais.dia_ciclo || 0;
-    const projecaoAtiva = diaCiclo >= 12 || diaAtual >= 12;
+    const [year, monthNumber] = mes.split('-').map(Number);
+    const diasNoMes = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+    const now = new Date();
+    const localDay = now.getFullYear() === year && now.getMonth() + 1 === monthNumber ? now.getDate() : diasNoMes;
+    const diasRestantes = Math.max(0, diasNoMes - localDay);
+    const diasComTrabalho = Object.values(row.trabalho_por_data_min).filter((min) => Number(min) > 0).length;
+    const trabalhoHoras = row.trabalho_mes_min / 60;
+    const vooHoras = row.voo_mes_min / 60;
+    const trabalhoRestanteH = Math.max(0, 176 - trabalhoHoras);
+    const vooRestanteH = Math.max(0, limits.HV_MES_HORAS - vooHoras);
+    const mediaTrabalhoDia = diasComTrabalho > 0 ? trabalhoHoras / diasComTrabalho : 0;
+    const mediaVooDia = diasComTrabalho > 0 ? vooHoras / diasComTrabalho : 0;
+    const diasAteTrabalho = mediaTrabalhoDia > 0 ? Math.floor(trabalhoRestanteH / mediaTrabalhoDia) : null;
+    const diasAteVoo = mediaVooDia > 0 ? Math.floor(vooRestanteH / mediaVooDia) : null;
 
     return c.json({
       success: true,
       data: {
         projecao_disponivel: true,
-        ativa_a_partir_dia_12: projecaoAtiva,
-        dia_atual: diaAtual,
-        dia_ciclo: diaCiclo,
+        ativa_a_partir_dia_12: localDay >= 12,
+        dia_atual: localDay,
         dias_no_mes: diasNoMes,
         dias_restantes: diasRestantes,
         acumulado: {
-          jornada_horas: +(totais.total_jornada_min / 60).toFixed(1),
-          voo_horas: +(totais.total_voo_min / 60).toFixed(1),
+          trabalho_horas: +trabalhoHoras.toFixed(1),
+          voo_horas: +vooHoras.toFixed(1),
         },
         restante: {
-          jornada_horas: +jornadaRestanteH.toFixed(1),
+          trabalho_horas: +trabalhoRestanteH.toFixed(1),
           voo_horas: +vooRestanteH.toFixed(1),
         },
         media_diaria: {
-          jornada_horas: +mediaJornadaDia.toFixed(1),
+          trabalho_horas: +mediaTrabalhoDia.toFixed(1),
           voo_horas: +mediaVooDia.toFixed(1),
         },
         projecao: {
-          dias_ate_limite_jornada:
-            diasAteEstourarJornada === Infinity ? null : diasAteEstourarJornada,
-          dias_ate_limite_voo: diasAteEstourarVoo === Infinity ? null : diasAteEstourarVoo,
+          dias_ate_limite_trabalho: diasAteTrabalho,
+          dias_ate_limite_voo: diasAteVoo,
           risco_estourar_mes:
-            diasAteEstourarJornada < diasRestantes || diasAteEstourarVoo < diasRestantes,
+            (diasAteTrabalho != null && diasAteTrabalho < diasRestantes) ||
+            (diasAteVoo != null && diasAteVoo < diasRestantes),
         },
       },
     });
   } catch (e) {
+    console.error('[FRMS] fadiga acumulada/projecao:', e);
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });

@@ -286,10 +286,10 @@ describe('aggregateFlightDispatchAssessment', () => {
     expect(result.can_release).toBe(true);
   });
 
-  it('voo sem tripulacao cadastrada e LIBERAVEL (nada a avaliar)', () => {
+  it('voo sem tripulacao cadastrada falha fechado e nao pode ser liberado', () => {
     const result = aggregateFlightDispatchAssessment([]);
-    expect(result.frms_status).toBe('LIBERAVEL');
-    expect(result.can_release).toBe(true);
-    expect(result.frms_primary_reason).toBeNull();
+    expect(result.frms_status).toBe('NAO_LIBERADO');
+    expect(result.can_release).toBe(false);
+    expect(result.frms_primary_reason).toBe('TRIPULACAO_AUSENTE');
   });
 });

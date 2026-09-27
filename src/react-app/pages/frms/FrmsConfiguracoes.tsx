@@ -32,6 +32,7 @@ import {
 import { clearApiCacheByPattern } from '@/react-app/hooks/useApi';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
+import FrmsLocationCatalogCard from './components/FrmsLocationCatalogCard';
 import { safeFrmsVisibleErrorMessage } from './frmsVisibleErrorPolicy';
 
 interface ConfigGroup {
@@ -356,6 +357,11 @@ const FIELD_BOUNDS: Record<string, { min?: number; max?: number; step?: number }
 };
 
 export const PARAMETROS_DECORATIVOS = new Set([
+  'ACCUMULATION_WINDOW_MODE',
+  'ACCUMULATION_USE_MONTH_CALENDAR',
+  'ACCUMULATION_USE_YEAR_CALENDAR',
+  'ACCUMULATION_USE_28D_ROLLING',
+  'ACCUMULATION_USE_365D_ROLLING',
   'EFFECTIV_PERIODO_PCT',
   'REPOUSO_MIN_PRE_APRESENTACAO',
   'REPOUSO_MIN_POS_LIBERACAO',
@@ -775,6 +781,7 @@ export default function FrmsConfiguracoes() {
                     </span>
                   </div>
                   <DutyBoundaryConfigCard />
+                  <FrmsLocationCatalogCard />
                   {GRUPOS_OPERACIONAIS.map(renderGroup)}
                 </div>
               )}

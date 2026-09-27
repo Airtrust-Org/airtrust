@@ -28,6 +28,7 @@ export type DispatchFadigaNivel = 'NORMAL' | 'ATENCAO' | 'CRITICO' | 'INDISPONIV
 export type DispatchCheckinStatus = 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL' | 'INDISPONIVEL';
 
 export type DispatchGateReasonCode =
+  | 'TRIPULACAO_AUSENTE'
   | 'CHECKIN_DIARIO_PENDENTE'
   | 'CHECKIN_INCONSISTENTE'
   | 'DECISAO_FRMS_CRITICA'
@@ -48,6 +49,7 @@ export type DispatchGateReasonCode =
  * `fortnight-indicator.ts` já produzem.
  */
 const REASON_PRIORITY: DispatchGateReasonCode[] = [
+  'TRIPULACAO_AUSENTE',
   'CHECKIN_DIARIO_PENDENTE',
   'CHECKIN_INCONSISTENTE',
   'DECISAO_FRMS_CRITICA',
@@ -62,6 +64,7 @@ const REASON_PRIORITY: DispatchGateReasonCode[] = [
 ];
 
 export const DISPATCH_GATE_HARD_BLOCK_REASONS: ReadonlySet<DispatchGateReasonCode> = new Set([
+  'TRIPULACAO_AUSENTE',
   'CHECKIN_DIARIO_PENDENTE',
   'CHECKIN_INCONSISTENTE',
   'DECISAO_FRMS_CRITICA',
@@ -217,7 +220,11 @@ export function aggregateFlightDispatchAssessment(
   crew: CrewDispatchAssessment[],
 ): FlightDispatchAssessmentAggregate {
   if (crew.length === 0) {
-    return { frms_status: 'LIBERAVEL', frms_primary_reason: null, can_release: true };
+    return {
+      frms_status: 'NAO_LIBERADO',
+      frms_primary_reason: 'TRIPULACAO_AUSENTE',
+      can_release: false,
+    };
   }
 
   const anyBlocked = crew.some((member) => member.frms_status === 'NAO_LIBERADO');

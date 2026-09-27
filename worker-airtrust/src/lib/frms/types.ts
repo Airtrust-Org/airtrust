@@ -207,7 +207,7 @@ export interface LimitesMap {
   HV_7_DIAS_HORAS: number; // política interna FRMS (RBAC 117 não define HV/7d para helicópteros)
   HV_28_DIAS_HORAS: number; // RBAC 117 Apêndice C: 93 h em 28 dias consecutivos
   HV_MES_HORAS: number; // Lei 13.475/2017 art. 30 IV: 90 h/mês calendário
-  HV_365_DIAS_HORAS: number; // RBAC 117 Apêndice C: 930 h/365 dias (mais restritivo que Lei: 960 h)
+  HV_365_DIAS_HORAS: number; // RBAC 117 Apêndice C: 930 h/365 dias; Lei 13.475 também estabelece 930 h/ano para helicópteros
   HV_DIARIA_HORAS: number;
   ALERTA_AVISO_PCT: number;
   ALERTA_ATENCAO_PCT: number;
@@ -310,7 +310,7 @@ export const LIMITES_DEFAULT: LimitesMap = {
   HV_7_DIAS_HORAS: 45, // política interna (conservadora) — RBAC 117 não define HV/7d
   HV_28_DIAS_HORAS: 93, // RBAC 117 Apêndice C — 28 dias consecutivos
   HV_MES_HORAS: 90, // Lei 13.475/2017 — mês calendário
-  HV_365_DIAS_HORAS: 930, // RBAC 117 — mais restritivo que Lei (960 h/ano)
+  HV_365_DIAS_HORAS: 930, // RBAC 117 B/C — 930 h/365 dias; Lei 13.475: 930 h/ano calendário
   HV_DIARIA_HORAS: 8,
   ALERTA_AVISO_PCT: 80,
   ALERTA_ATENCAO_PCT: 90,

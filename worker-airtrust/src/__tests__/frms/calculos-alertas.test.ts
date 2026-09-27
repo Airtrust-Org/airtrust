@@ -473,7 +473,7 @@ describe('deveBloquearLancamento', () => {
     expect(deveBloquearLancamento(alertas)).toBe(true);
   });
 
-  it('não bloqueia com alerta VIOLACAO (apenas registra flag)', () => {
+  it('bloqueia com alerta VIOLACAO, que nunca pode ser menos restritivo que CRITICO', () => {
     // VIOLACAO = 100%+ — registra ocorrência mas NÃO bloqueia (auditoria regulatória post-facto)
     const alertas = [
       {
@@ -488,7 +488,7 @@ describe('deveBloquearLancamento', () => {
       },
     ];
 
-    expect(deveBloquearLancamento(alertas)).toBe(false);
+    expect(deveBloquearLancamento(alertas)).toBe(true);
   });
 
   it('não bloqueia com apenas AVISO', () => {
@@ -1300,7 +1300,7 @@ describe('processarAlertas — FDP_DIARIO, HV_365D, HV_MES', () => {
   });
 
   it('gera alerta HV_365D ao atingir 80% do limite anual', () => {
-    // HV_365_DIAS_HORAS=960h=57600min → 80%=46080min
+    // HV_365_DIAS_HORAS=930h=55800min → limiar governado de aviso
     const alertas = processarAlertas({
       tripulanteId: 1,
       jornadaId: 'jhv365',

@@ -13,6 +13,16 @@ import {
   type FrmsActivitySnapshotRow,
 } from './activity-context';
 import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
+import { costaDoSolAct2025_2027Applies, regulatoryProfileHasDocumentedAppendix, regulatoryProfileIsReady } from './compliance-policy';
+import { loadLegalWorkMonth, type LegalWorkMonthlyCrewSummary } from './legal-work-service';
+import { sumLegalWorkRollingDays } from './legal-work-time';
+import {
+  evaluateRegulatoryCompliance,
+  type CostaDoSolMissionEvidence,
+  type RegulatoryComplianceResult,
+  type RollingRegulatoryEvidence,
+  type WorkRegulatoryEvidence,
+} from './regulatory-compliance';
 import {
   buildFrmsFortnightIndicatorMap,
   type FrmsFortnightIndicator,
@@ -110,6 +120,18 @@ export interface FrmsOperationalSnapshotItem {
   motivos_principais: string[];
   /** Texto curto da ação recomendada para exibição na fila de coordenação */
   acao_recomendada_texto: string;
+
+  /** Resultado regulatório calculado pelo backend; frontend não reinterpreta. */
+  compliance_status?: 'COMPLIANT' | 'VIOLATION' | 'UNKNOWN';
+  violacoes_normativas?: Array<{
+    code: string;
+    source: string;
+    reference: string;
+    actualMin: number;
+    limitMin: number;
+    message: string;
+  }>;
+  compliance_unknown_reasons?: string[];
 }
 
 export interface FrmsOperationalSnapshotSummary {
@@ -143,8 +165,10 @@ export interface FrmsOperationalSnapshotFilters {
 export interface BuildOperationalSnapshotInput {
   empresaId: number;
   policy?: FrmsDecisaoPolicy;
-  limites?: Pick<LimitesMap, 'FDP_MAXIMO_HORAS' | 'HV_DIARIA_HORAS'>;
+  limites?: Pick<LimitesMap, 'FDP_MAXIMO_HORAS' | 'HV_DIARIA_HORAS' | 'EFFECTIV_VERMELHO_MAX'>;
   hoje?: string;
+  regulatoryProfileConfigured?: boolean;
+  regulatoryComplianceByKey?: Readonly<Record<string, RegulatoryComplianceResult>>;
   rows: {
     escalas: ScaleSnapshotRow[];
     jornadas: JornadaSnapshotRow[];
@@ -829,7 +853,15 @@ export function buildFrmsOperationalSnapshot(
       alertas.push('KSS_ALTO');
     }
 
-    if (effectivenessPctNormalized != null && effectivenessPctNormalized < 70) {
+    const effectivenessNivel = normalizeText(efetividade?.effectiveness_nivel)?.toLowerCase() ?? null;
+    const effectivenessRedMax = Number(input.limites?.EFFECTIV_VERMELHO_MAX);
+    const effectivenessCritica =
+      completeDailyCheckin &&
+      (effectivenessNivel === 'vermelho' ||
+        (effectivenessPctNormalized != null &&
+          Number.isFinite(effectivenessRedMax) &&
+          effectivenessPctNormalized <= effectivenessRedMax));
+    if (effectivenessCritica) {
       alertas.push('EFETIVIDADE_BAIXA');
     }
 
@@ -946,16 +978,17 @@ export function buildFrmsOperationalSnapshot(
       limites: input.limites,
     });
 
-    // Decisão operacional canônica V1 — fonte única de verdade para a fila da coordenação.
-    // O perfil regulatório não é configurável por item neste momento (sem migration);
-    // usamos true como padrão conservador para não bloquear tripulantes com dados válidos.
-    // Dado complementar ausente (REDEMET, granular SIGVOOS) é registrado como nota, não
-    // como NAO_AVALIADO global.
+    // Decisão operacional canônica V1 — compliance vem do resolvedor backend tenant-scoped.
+    const compliance = input.regulatoryComplianceByKey?.[key] ?? null;
+    const complianceStrict = input.regulatoryComplianceByKey != null;
     const decisaoOperacional = deriveFrmsOperationalDecision({
       snapshot_status: snapshotStatus,
       alertas: alertasUnicos,
-      tem_violacao_normativa: false, // sem resolvedor por tenant nesta fase — não há compliance violation ativa
-      perfil_regulatorio_configurado: true,  // conservador: tenant com dados é considerado configurado
+      tem_violacao_normativa: compliance?.status === 'VIOLATION',
+      perfil_regulatorio_configurado: input.regulatoryProfileConfigured ?? true,
+      compliance_avaliavel: complianceStrict ? compliance?.status !== 'UNKNOWN' : true,
+      violacoes_normativas: compliance?.violations.map((violation) => violation.message) ?? [],
+      compliance_unknown_reasons: compliance?.unknownReasons ?? [],
       dados_complementares_ausentes: [],
     });
 
@@ -965,6 +998,9 @@ export function buildFrmsOperationalSnapshot(
       estado_operacional: decisaoOperacional.estado_operacional,
       motivos_principais: decisaoOperacional.motivos_principais,
       acao_recomendada_texto: decisaoOperacional.acao_recomendada_texto,
+      compliance_status: compliance?.status,
+      violacoes_normativas: compliance?.violations ?? [],
+      compliance_unknown_reasons: compliance?.unknownReasons ?? [],
     };
 
     items.push(item);
@@ -1030,12 +1066,20 @@ async function loadRecoveryCreditRows(
   }
 }
 
+interface MissionPeriodRow {
+  funcionario_id: number;
+  data_inicio_embarque: string;
+  data_fim_embarque: string;
+}
+
 interface OperationalSnapshotRows {
   escalas: ScaleSnapshotRow[];
   jornadas: JornadaSnapshotRow[];
   checkins: CheckinSnapshotRow[];
   effectiveness: EffectivenessSnapshotRow[];
   activities: FrmsActivitySnapshotRow[];
+  regulatoryRolling: RollingRegulatoryEvidence[];
+  missionPeriods: MissionPeriodRow[];
 }
 
 /**
@@ -1050,7 +1094,7 @@ async function loadOperationalSnapshotRows(
   janelaInicio: string,
   janelaFim: string,
 ): Promise<OperationalSnapshotRows> {
-  const [escalasResult, jornadasResult, checkinsResult, effectivenessResult, activities] = await Promise.all([
+  const [escalasResult, jornadasResult, checkinsResult, effectivenessResult, activities, regulatoryRollingResult, missionPeriodsResult] = await Promise.all([
     db
       .prepare(
         `WITH escala_crew AS (
@@ -1190,6 +1234,45 @@ async function loadOperationalSnapshotRows(
       .all<EffectivenessSnapshotRow>(),
 
     loadFrmsActivityRows(db, empresaId, janelaInicio, janelaFim),
+
+    db
+      .prepare(
+        `SELECT ar.data_referencia,
+                CAST(ar.tripulante_id AS INTEGER) AS funcionario_id,
+                COALESCE(ar.hv_dia_min, 0) AS hv_dia_min,
+                COALESCE(ar.hv_mes_calendario_min, 0) AS hv_mes_calendario_min,
+                COALESCE(ar.hv_28_dias_min, 0) AS hv_28_dias_min,
+                COALESCE(ar.hv_365_dias_min, 0) AS hv_365_dias_min,
+                ar.hv_ano_calendario_min,
+                COALESCE(ar.repouso_anterior_min, -1) AS repouso_anterior_min,
+                COALESCE(ar.repouso_suficiente, 0) AS repouso_suficiente
+           FROM frms_acumulo_rolling ar
+           JOIN funcionarios f ON f.id = CAST(ar.tripulante_id AS INTEGER)
+          WHERE ar.deleted_at IS NULL
+            AND f.deleted_at IS NULL
+            AND f.empresa_id = ?
+            AND ar.data_referencia >= ?
+            AND ar.data_referencia <= ?`,
+      )
+      .bind(empresaId, janelaInicio, janelaFim)
+      .all<RollingRegulatoryEvidence>(),
+
+    db
+      .prepare(
+        `SELECT CAST(eq.tripulante_id AS INTEGER) AS funcionario_id,
+                eq.data_inicio_embarque,
+                eq.data_fim_embarque
+           FROM frms_escala_quinzenal eq
+           JOIN funcionarios f ON f.id = CAST(eq.tripulante_id AS INTEGER)
+          WHERE eq.deleted_at IS NULL
+            AND f.deleted_at IS NULL
+            AND f.empresa_id = ?
+            AND eq.status_ciclo IN ('ATIVO','ENCERRADO')
+            AND eq.data_inicio_embarque <= ?
+            AND eq.data_fim_embarque >= ?`,
+      )
+      .bind(empresaId, janelaFim, janelaInicio)
+      .all<MissionPeriodRow>(),
   ]);
 
   return {
@@ -1208,6 +1291,8 @@ async function loadOperationalSnapshotRows(
       return { ...row, effectiveness_componentes: parsed };
     }),
     activities,
+    regulatoryRolling: regulatoryRollingResult.results || [],
+    missionPeriods: missionPeriodsResult.results || [],
   };
 }
 
@@ -1218,6 +1303,8 @@ function collectCandidateIds(rows: OperationalSnapshotRows): number[] {
   for (const row of rows.checkins) candidateIds.add(asNumber(row.funcionario_id));
   for (const row of rows.effectiveness) candidateIds.add(asNumber(row.funcionario_id));
   for (const row of rows.activities) candidateIds.add(asNumber(row.funcionario_id));
+  for (const row of rows.regulatoryRolling) candidateIds.add(asNumber(row.funcionario_id));
+  for (const row of rows.missionPeriods) candidateIds.add(asNumber(row.funcionario_id));
   return Array.from(candidateIds).filter((id) => id > 0);
 }
 
@@ -1247,6 +1334,103 @@ async function loadOperationalFuncionarios(
     .all<FuncionarioSnapshotRow>();
 
   return result.results || [];
+}
+
+function monthsInRange(start: string, end: string): string[] {
+  const out: string[] = [];
+  const [startYear, startMonth] = start.slice(0, 7).split('-').map(Number);
+  const [endYear, endMonth] = end.slice(0, 7).split('-').map(Number);
+  let year = startYear;
+  let month = startMonth;
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    out.push(`${year}-${String(month).padStart(2, '0')}`);
+    month += 1;
+    if (month > 12) { month = 1; year += 1; }
+  }
+  return out;
+}
+
+function deriveWorkEvidenceForDate(
+  summary: LegalWorkMonthlyCrewSummary | null,
+  date: string,
+): WorkRegulatoryEvidence | null {
+  if (!summary) return null;
+  const month = date.slice(0, 7);
+  const monthWorkToDateMin = Object.entries(summary.trabalho_contexto_por_data_min)
+    .filter(([day]) => day.startsWith(`${month}-`) && day <= date)
+    .reduce((sum, [, minutes]) => sum + Math.max(0, Number(minutes) || 0), 0);
+  const rolling7dWorkMin = sumLegalWorkRollingDays(summary.trabalho_contexto_por_data_min, date, 7);
+  const rolling14dWorkMin = sumLegalWorkRollingDays(summary.trabalho_contexto_por_data_min, date, 14);
+  const monthStart = `${month}-01`;
+  const dateDay = Date.parse(`${date}T00:00:00Z`) / 86400000;
+  const rollingStart = new Date((dateDay - 13) * 86400000).toISOString().slice(0, 10);
+  const relevantStart = rollingStart < monthStart ? rollingStart : monthStart;
+  const reasons = Object.entries(summary.incomplete_reasons_by_date)
+    .filter(([day]) => day >= relevantStart && day <= date)
+    .flatMap(([, values]) => values);
+  return {
+    monthWorkToDateMin: Math.round(monthWorkToDateMin),
+    rolling7dWorkMin,
+    rolling14dWorkMin,
+    completeThroughDate: reasons.length === 0,
+    incompleteReasons: [...new Set(reasons)],
+  };
+}
+
+function deriveMissionEvidenceForDate(
+  summary: LegalWorkMonthlyCrewSummary | null,
+  missionPeriods: readonly MissionPeriodRow[],
+  funcionarioId: number,
+  date: string,
+): CostaDoSolMissionEvidence | null {
+  const period = missionPeriods.find((row) =>
+    Number(row.funcionario_id) === funcionarioId &&
+    row.data_inicio_embarque <= date &&
+    row.data_fim_embarque >= date,
+  );
+  if (!period) return null;
+
+  const startMs = Date.parse(`${period.data_inicio_embarque}T00:00:00Z`);
+  const dateMs = Date.parse(`${date}T00:00:00Z`);
+  const missionDay = Number.isFinite(startMs) && Number.isFinite(dateMs)
+    ? Math.floor((dateMs - startMs) / 86400000) + 1
+    : null;
+  if (!summary) {
+    return {
+      inMission: true,
+      missionDay,
+      effectiveWorkDaysAtOperation: null,
+      effectiveWorkEvidenceComplete: false,
+      incompleteReasons: ['WORK_TIME_EVIDENCE_MISSING'],
+    };
+  }
+
+  const relevantReasons = Object.entries(summary.incomplete_reasons_by_date)
+    .filter(([day]) => day >= period.data_inicio_embarque && day <= date)
+    .flatMap(([, reasons]) => reasons);
+  const effectiveWorkDaysAtOperation = Object.entries(summary.trabalho_contexto_por_data_min)
+    .filter(([day, minutes]) =>
+      day >= period.data_inicio_embarque && day <= date && Number(minutes) > 0,
+    ).length;
+
+  return {
+    inMission: true,
+    missionDay,
+    effectiveWorkDaysAtOperation,
+    effectiveWorkEvidenceComplete: relevantReasons.length === 0,
+    incompleteReasons: [...new Set(relevantReasons)],
+  };
+}
+
+function collectOperationalKeys(rows: OperationalSnapshotRows): string[] {
+  const keys = new Set<string>();
+  const add = (date: string, funcionarioId: number) => keys.add(`${date}::${funcionarioId}`);
+  for (const row of rows.escalas) add(row.data_operacional, asNumber(row.funcionario_id));
+  for (const row of rows.jornadas) add(row.data_operacional, asNumber(row.funcionario_id));
+  for (const row of rows.checkins) add(row.data_operacional, asNumber(row.funcionario_id));
+  for (const row of rows.effectiveness) add(row.data_operacional, asNumber(row.funcionario_id));
+  for (const row of rows.activities) add(row.data_operacional, asNumber(row.funcionario_id));
+  return [...keys];
 }
 
 function anchorFromDiaTotal(
@@ -1380,6 +1564,60 @@ export async function listFrmsOperationalSnapshot(
       ? requestedRows
       : await loadOperationalSnapshotRows(db, params.empresaId, contextStart, contextEnd);
 
+  const rbacBcApplicable = regulatoryProfileHasDocumentedAppendix(
+    { limitsJson: operationalContext.regulatoryLimitsJson },
+    'B',
+    'C',
+  );
+  const costaDoSolActApplicable = costaDoSolAct2025_2027Applies({
+    empresaId: params.empresaId,
+    limitsJson: operationalContext.regulatoryLimitsJson,
+  });
+  const legalMonths = monthsInRange(contextStart, contextEnd);
+  const legalRowsByMonth = await Promise.all(
+    legalMonths.map(async (month) => [month, await loadLegalWorkMonth(db, params.empresaId, month)] as const),
+  );
+  const legalByMonthCrew = new Map(
+    legalRowsByMonth.map(([month, rows]) => [
+      month,
+      new Map(rows.map((row) => [row.tripulante_id, row])),
+    ]),
+  );
+  const rollingByKey = new Map(
+    contextRows.regulatoryRolling.map((row) => [
+      `${row.data_referencia}::${Number(row.funcionario_id)}`,
+      row,
+    ]),
+  );
+  const regulatoryComplianceByKey: Record<string, RegulatoryComplianceResult> = {};
+  for (const key of collectOperationalKeys(contextRows)) {
+    const [date, funcionarioRaw] = key.split('::');
+    const funcionarioId = Number(funcionarioRaw);
+    const legalSummary = legalByMonthCrew.get(date.slice(0, 7))?.get(funcionarioId) ?? null;
+    const workEvidence = deriveWorkEvidenceForDate(legalSummary, date);
+    const missionEvidence = costaDoSolActApplicable
+      ? deriveMissionEvidenceForDate(legalSummary, contextRows.missionPeriods, funcionarioId, date)
+      : null;
+    const journeyDurationMin = contextRows.jornadas
+      .filter((row) =>
+        row.data_operacional === date &&
+        asNumber(row.funcionario_id) === funcionarioId &&
+        String(row.origem ?? '').trim().toUpperCase() === 'SIGVOOS',
+      )
+      .reduce((sum, row) => sum + Math.max(0, asNumber(row.duracao_jornada_minutos)), 0);
+    regulatoryComplianceByKey[key] = evaluateRegulatoryCompliance({
+      empresaId: params.empresaId,
+      profileCode: operationalContext.profileCode,
+      rbacBcApplicable,
+      costaDoSolActApplicable,
+      mission: missionEvidence,
+      journeyDurationMin,
+      rolling: rollingByKey.get(key) ?? null,
+      work: workEvidence,
+      limites,
+    });
+  }
+
   const recoveryCredits = await loadRecoveryCreditRows(db, params.empresaId, contextStart, contextEnd);
   const recoveryCreditByKey = new Map(
     recoveryCredits.map((row) => [
@@ -1452,6 +1690,13 @@ export async function listFrmsOperationalSnapshot(
     policy: params.policy,
     limites,
     hoje: params.hoje,
+    regulatoryProfileConfigured: regulatoryProfileIsReady({
+      profileCode: operationalContext.profileCode,
+      documentedReference: operationalContext.regulatoryApprovalReference,
+      sourceDocumentHash: operationalContext.regulatorySourceDocumentHash,
+      limitsJson: operationalContext.regulatoryLimitsJson,
+    }),
+    regulatoryComplianceByKey,
     rows: {
       escalas: contextRows.escalas,
       jornadas: contextRows.jornadas,

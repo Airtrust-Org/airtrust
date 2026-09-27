@@ -165,7 +165,7 @@ describe('fadiga acumulada legal — escopo diario vs mensal', () => {
 
     expect(linha.pct_jornada_diaria).toBe(90.152);
     expect(linha.pct_jornada).toBe(90.152);
-    expect(linha.pct_jornada_mes).toBe(5.634);
+    expect(linha.pct_jornada_mes).toBe(0);
   });
 
   it('acumula mensalmente sem trocar o percentual diario da linha', () => {

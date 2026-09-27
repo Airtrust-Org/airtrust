@@ -84,6 +84,12 @@ export interface FrmsOperationalContext {
   empresaId: number;
   profileCode: string;
   regulatoryProfileId: string;
+  /** Metadados documentais do perfil. Ausência permanece explícita/fail-closed. */
+  regulatoryServiceCategory?: string | null;
+  regulatoryApprovalReference?: string | null;
+  regulatoryPolicyVersion?: string | null;
+  regulatoryLimitsJson?: string | null;
+  regulatorySourceDocumentHash?: string | null;
   configRevisionId: string;
   modelVersion: string;
   effectiveFrom: string;
@@ -99,7 +105,12 @@ export async function resolveFrmsOperationalContext(
   input: { empresaId: number; referenceAt: string; funcionarioId?: number; jornadaId?: string; checkinId?: string },
 ): Promise<FrmsOperationalContext> {
   const assignments = await db.prepare(
-    `SELECT a.regulatory_profile_id, a.profile_code
+    `SELECT a.regulatory_profile_id, a.profile_code,
+            p.service_category,
+            p.approval_reference,
+            p.policy_version AS regulatory_policy_version,
+            p.limits_json,
+            p.source_document_hash
        FROM frms_profile_assignments a
        JOIN frms_regulatory_profiles p ON p.id = a.regulatory_profile_id
       WHERE a.empresa_id = ? AND a.status = 'ACTIVE'
@@ -108,7 +119,15 @@ export async function resolveFrmsOperationalContext(
         AND p.profile_code = a.profile_code
         AND p.effective_from <= ? AND (p.effective_to IS NULL OR p.effective_to >= ?)`
   ).bind(input.empresaId, input.referenceAt, input.referenceAt, input.empresaId, input.referenceAt, input.referenceAt)
-    .all<{ regulatory_profile_id: string; profile_code: string }>();
+    .all<{
+      regulatory_profile_id: string;
+      profile_code: string;
+      service_category: string | null;
+      approval_reference: string | null;
+      regulatory_policy_version: string | null;
+      limits_json: string | null;
+      source_document_hash: string | null;
+    }>();
   const matches = assignments.results ?? [];
   if (matches.length !== 1) {
     throw new FrmsParameterResolutionError(
@@ -123,6 +142,11 @@ export async function resolveFrmsOperationalContext(
   return Object.freeze({
     empresaId: input.empresaId, profileCode: assignment.profile_code,
     regulatoryProfileId: assignment.regulatory_profile_id,
+    regulatoryServiceCategory: assignment.service_category,
+    regulatoryApprovalReference: assignment.approval_reference,
+    regulatoryPolicyVersion: assignment.regulatory_policy_version,
+    regulatoryLimitsJson: assignment.limits_json,
+    regulatorySourceDocumentHash: assignment.source_document_hash,
     configRevisionId: parameterSet.revision.id, modelVersion: parameterSet.modelVersion,
     effectiveFrom: parameterSet.revision.effective_from, effectiveTo: parameterSet.revision.effective_to,
     parameters: parameterSet.values,

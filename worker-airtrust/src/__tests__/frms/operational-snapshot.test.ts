@@ -53,6 +53,27 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+
+describe('effectiveness threshold governance', () => {
+  it('usa EFFECTIV_VERMELHO_MAX da revisão efetiva em vez de limiar fixo', () => {
+    const input = createBaseInput();
+    input.limites = { FDP_MAXIMO_HORAS: 11, HV_DIARIA_HORAS: 8, EFFECTIV_VERMELHO_MAX: 72 };
+    input.rows.checkins = [{
+      data_operacional: '2026-09-26', funcionario_id: 10, hora_checkin: '06:30',
+      hora_apresentacao: '07:00', kss_score: 3, horas_sono: 7, qualidade_sono: 4,
+      wake_time: '05:30', score_fadiga: 0, nivel_fadiga: 'NORMAL',
+      status_operacional: 'APTO', computed_risk_level: 'LOW',
+    }];
+    input.rows.effectiveness = [{
+      data_operacional: '2026-09-26', funcionario_id: 10,
+      effectiveness_pct: 70, effectiveness_nivel: null,
+    }];
+    const result = buildFrmsOperationalSnapshot(input);
+    const item = getByKey(result.items, '2026-09-26', 10);
+    expect(item?.alertas).toContain('EFETIVIDADE_BAIXA');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Helpers para os testes de janela de contexto do Compliance quinzenal.
 // ---------------------------------------------------------------------------
@@ -971,5 +992,53 @@ describe('frms operational snapshot builder', () => {
         dataFim: '2026-06-19',
       }),
     ).rejects.toMatchObject({ code: 'FRMS_CONTEXT_UNAVAILABLE' });
+  });
+});
+describe('operational snapshot — mandatory compliance wiring', () => {
+  function completeCheckinInput() {
+    const input = createBaseInput();
+    input.rows.checkins.push({
+      data_operacional: '2026-09-26', funcionario_id: 10, hora_checkin: '06:00',
+      hora_apresentacao: '08:00', kss_score: 3, horas_sono: 8, qualidade_sono: 4,
+      wake_time: '06:00', score_fadiga: 10, nivel_fadiga: 'VERDE',
+      status_operacional: 'APTO', computed_risk_level: 'normal',
+    });
+    input.rows.effectiveness.push({
+      data_operacional: '2026-09-26', funcionario_id: 10,
+      effectiveness_pct: 96, effectiveness_nivel: 'VERDE',
+    });
+    input.regulatoryProfileConfigured = true;
+    return input;
+  }
+
+  it('eleva violação normativa comprovada para CRITICO_VIOLACAO', () => {
+    const input = completeCheckinInput();
+    input.regulatoryComplianceByKey = {
+      '2026-09-26::10': {
+        status: 'VIOLATION', unknownReasons: [],
+        violations: [{
+          code: 'LAW_HELI_FLIGHT_MONTH_90H', source: 'LAW',
+          reference: 'Lei 13.475/2017 art. 33 IV', actualMin: 5401, limitMin: 5400,
+          message: 'Horas de voo no mês calendário: 5401 min > 5400 min',
+        }],
+      },
+    };
+    const item = getByKey(buildFrmsOperationalSnapshot(input).items, '2026-09-26', 10);
+    expect(item?.compliance_status).toBe('VIOLATION');
+    expect(item?.estado_operacional).toBe('CRITICO_VIOLACAO');
+    expect(item?.motivos_principais[0]).toContain('5401 min > 5400 min');
+  });
+
+  it('falha fechado quando compliance obrigatório não pode ser calculado', () => {
+    const input = completeCheckinInput();
+    input.regulatoryComplianceByKey = {
+      '2026-09-26::10': {
+        status: 'UNKNOWN', violations: [], unknownReasons: ['WORK_TIME_EVIDENCE_MISSING'],
+      },
+    };
+    const item = getByKey(buildFrmsOperationalSnapshot(input).items, '2026-09-26', 10);
+    expect(item?.compliance_status).toBe('UNKNOWN');
+    expect(item?.estado_operacional).toBe('NAO_AVALIADO');
+    expect(item?.motivos_principais).toContain('WORK_TIME_EVIDENCE_MISSING');
   });
 });

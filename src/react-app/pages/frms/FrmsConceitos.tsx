@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Shield, Brain, AlertTriangle, BarChart3, Clock, Activity } from 'lucide-react';
+import { useFrmsConfiguracoes } from '@/react-app/hooks/useFrms';
 
 function Section({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
@@ -59,6 +60,20 @@ function Badge({
 
 export default function FrmsConceitos() {
   const navigate = useNavigate();
+  const { data: governedConfig } = useFrmsConfiguracoes();
+  const limites = governedConfig?.limites ?? {};
+  const value = (key: string): number | null => {
+    const n = Number(limites[key]);
+    return Number.isFinite(n) ? n : null;
+  };
+  const aviso = value('ALERTA_AVISO_PCT');
+  const atencao = value('ALERTA_ATENCAO_PCT');
+  const critico = value('ALERTA_CRITICO_PCT');
+  const violacao = value('ALERTA_VIOLACAO_PCT');
+  const effVerde = value('EFFECTIV_VERDE_MIN');
+  const effAmarelo = value('EFFECTIV_AMARELO_MAX');
+  const effVermelho = value('EFFECTIV_VERMELHO_MAX');
+  const pct = (n: number | null) => n == null ? 'configurado' : `${n}%`;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -156,28 +171,29 @@ export default function FrmsConceitos() {
           </div>
 
           <p className="mb-3 text-sm text-slate-600">
-            O cálculo de compliance usa consumo de limites de <strong>horas de voo acumuladas</strong>.
-            As janelas implementadas são: HV diária (24h), 7 dias, 28 dias, mês calendário e 365
-            dias.
+            O compliance canônico combina <strong>limites obrigatórios de voo, trabalho e repouso</strong>
+            com a proveniência de cada regra. Lei, RBAC/ANAC, ACT/CCT e política interna permanecem
+            identificados separadamente.
           </p>
           <p className="mb-4 text-sm text-slate-600">
-            No heatmap de compliance, a célula diária usa o <strong>pior percentual entre dia, 7d e
-            28d</strong>. Em outras visões operacionais, também aparecem mês calendário e 365 dias.
+            Limites específicos dos Apêndices B/C do RBAC 117 só entram quando o perfil regulatório
+            ativo documenta essa aplicabilidade. Se a evidência necessária estiver ausente, o estado
+            é <strong>Não avaliado</strong>, nunca conformidade presumida.
           </p>
           <p className="mb-4 text-sm text-slate-600">
-            Referência de leitura atual: no limite anual, a base operacional considera <strong>930 h
-            em 365 dias</strong>.
+            A visão de consumo de HV continua útil como indicador, mas não substitui a decisão
+            regulatória consolidada, que também considera o tempo legal de trabalho e sua fonte.
           </p>
 
           <Formula>
-            pct_limite = horas_acumuladas_na_janela ÷ limite_da_janela × 100
+            pct_limite = valor_real_na_janela ÷ limite_aplicável_da_mesma_janela × 100
             <br />
-            compliance_do_dia_no_heatmap = max(pct_dia, pct_7d, pct_28d)
+            decisão_regulatória = pior_regra_obrigatória_documentada + qualidade_da_evidência
           </Formula>
 
           <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-            Exemplo didático: 38h em 7d, 82h no mês e 640h em 365d. Se os limites forem 45h, 90h e
-            930h, os percentuais ficam 84,4%, 91,1% e 68,8%.
+            Os valores mostrados abaixo vêm da revisão governada ativa do tenant. Alterações de
+            configuração não devem ser reproduzidas por números fixos nesta página.
           </div>
 
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -186,31 +202,31 @@ export default function FrmsConceitos() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
             <Badge
               label="Normal"
-              range="< 85%"
+              range={aviso == null ? 'abaixo do aviso configurado' : `< ${pct(aviso)}`}
               desc="Consumo abaixo da zona de aviso"
               className="border-emerald-200 bg-emerald-50 text-emerald-800"
             />
             <Badge
               label="Aviso"
-              range="85–89%"
+              range={aviso == null || atencao == null ? 'faixa configurada' : `${pct(aviso)} até < ${pct(atencao)}`}
               desc="Tendência de consumo elevada"
               className="border-amber-200 bg-amber-50 text-amber-800"
             />
             <Badge
               label="Atenção"
-              range="90–94%"
+              range={atencao == null || critico == null ? 'faixa configurada' : `${pct(atencao)} até < ${pct(critico)}`}
               desc="Zona de pressão operacional"
               className="border-orange-200 bg-orange-50 text-orange-800"
             />
             <Badge
               label="Crítico"
-              range="95–100%"
+              range={critico == null || violacao == null ? 'faixa configurada' : `${pct(critico)} até ${pct(violacao)}`}
               desc="Próximo do limite"
               className="border-orange-300 bg-orange-50 text-orange-900"
             />
             <Badge
               label="Violação"
-              range=">= 101%"
+              range={violacao == null ? 'acima do limite configurado' : `> ${pct(violacao)}`}
               desc="Limite excedido"
               className="border-red-200 bg-red-50 text-red-800"
             />
@@ -264,25 +280,25 @@ export default function FrmsConceitos() {
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Badge
               label="Alta"
-              range=">= 90%"
+              range={effVerde == null ? 'faixa verde configurada' : `≥ ${pct(effVerde)}`}
               desc="Margem operacional preservada"
               className="border-emerald-200 bg-emerald-50 text-emerald-800"
             />
             <Badge
               label="Atenção"
-              range="77–89,9%"
+              range={effAmarelo == null || effVerde == null ? 'faixa configurada' : `> ${pct(effAmarelo)} e < ${pct(effVerde)}`}
               desc="Redução estimada moderada"
               className="border-sky-200 bg-sky-50 text-sky-800"
             />
             <Badge
               label="Degradada"
-              range="65–77%"
+              range={effVermelho == null || effAmarelo == null ? 'faixa configurada' : `> ${pct(effVermelho)} e ≤ ${pct(effAmarelo)}`}
               desc="Redução relevante"
               className="border-amber-200 bg-amber-50 text-amber-800"
             />
             <Badge
               label="Baixa"
-              range="< 65%"
+              range={effVermelho == null ? 'faixa crítica configurada' : `≤ ${pct(effVermelho)}`}
               desc="Priorização para análise"
               className="border-red-200 bg-red-50 text-red-800"
             />
@@ -300,8 +316,8 @@ export default function FrmsConceitos() {
             <div>
               <p className="mb-1 font-semibold text-slate-800">Aba Compliance</p>
               <p>
-                A célula mostra o pior valor entre dia, 7d e 28d naquela data. O tooltip detalha
-                qual janela foi dominante.
+                A visão de consumo mostra a janela de HV dominante; a decisão regulatória final é
+                produzida separadamente pelo backend canônico e pode incluir trabalho, repouso e perfil aplicável.
               </p>
             </div>
             <div>
@@ -398,8 +414,7 @@ export default function FrmsConceitos() {
               fadiga aplicáveis ao cenário operacional.
             </li>
             <li>
-              • <strong className="text-slate-200">RBAC 135 / 91</strong> — referência regulatória
-              de operação.
+              • <strong className="text-slate-200">Lei 13.475, RBAC 117 e instrumentos coletivos aplicáveis</strong> — fontes identificadas separadamente no compliance.
             </li>
             <li>
               • <strong className="text-slate-200">Modelos biomatemáticos</strong> — referência

@@ -3,12 +3,17 @@ import {
   type FrmsIntegridadeCodigo,
 } from './integridade';
 
-export const FADIGA_ACUMULADA_LIMITES = {
-  JORNADA_MENSAL_HORAS: 176,
-  HV_MENSAL_HORAS: 90,
-  JORNADA_DIARIA_HORAS: 11,
-  HV_DIARIA_HORAS: 8,
-} as const;
+export interface FadigaAcumuladaDiagnosticLimits {
+  fdpDiarioHoras: number;
+  hvDiariaHoras: number;
+  hvMensalHoras: number;
+}
+
+const DIAGNOSTIC_FALLBACK_LIMITS: FadigaAcumuladaDiagnosticLimits = {
+  fdpDiarioHoras: 11,
+  hvDiariaHoras: 8,
+  hvMensalHoras: 90,
+};
 
 export type FadigaIntegridadeCodigo = FrmsIntegridadeCodigo;
 
@@ -69,6 +74,7 @@ export function calcularLinhaFadigaAcumulada(params: {
   jornada: JornadaFadigaAcumuladaInput;
   acumuladoJornadaMinAnterior: number;
   acumuladoVooMinAnterior: number;
+  limites?: FadigaAcumuladaDiagnosticLimits;
 }): JornadaFadigaAcumuladaOutput {
   const jornadaDiariaMin = Math.max(0, params.jornada.duracao_jornada_minutos ?? 0);
   const vooDiarioMin = Math.max(0, params.jornada.horas_voo_minutos ?? 0);
@@ -81,10 +87,13 @@ export function calcularLinhaFadigaAcumulada(params: {
     hora_termino: params.jornada.hora_termino,
   });
 
-  const pctJornadaDiaria = pct(jornadaDiariaMin, FADIGA_ACUMULADA_LIMITES.JORNADA_DIARIA_HORAS);
-  const pctVooDiaria = pct(vooDiarioMin, FADIGA_ACUMULADA_LIMITES.HV_DIARIA_HORAS);
-  const pctJornadaMes = pct(jornadaAcumuladaMin, FADIGA_ACUMULADA_LIMITES.JORNADA_MENSAL_HORAS);
-  const pctVooMes = pct(vooAcumuladoMin, FADIGA_ACUMULADA_LIMITES.HV_MENSAL_HORAS);
+  const limites = params.limites ?? DIAGNOSTIC_FALLBACK_LIMITS;
+  const pctJornadaDiaria = pct(jornadaDiariaMin, limites.fdpDiarioHoras);
+  const pctVooDiaria = pct(vooDiarioMin, limites.hvDiariaHoras);
+  // Jornada acumulada no mês não equivale ao tempo legal de trabalho; o valor
+  // percentual é deliberadamente neutro e não deve ser usado para compliance.
+  const pctJornadaMes = 0;
+  const pctVooMes = pct(vooAcumuladoMin, limites.hvMensalHoras);
 
   return {
     data: params.jornada.data,
@@ -115,6 +124,7 @@ export function calcularLinhaFadigaAcumulada(params: {
 
 export function calcularEvolucaoFadigaAcumulada(
   jornadas: JornadaFadigaAcumuladaInput[],
+  limites?: FadigaAcumuladaDiagnosticLimits,
 ): JornadaFadigaAcumuladaOutput[] {
   let acumuladoJornadaMin = 0;
   let acumuladoVooMin = 0;
@@ -124,6 +134,7 @@ export function calcularEvolucaoFadigaAcumulada(
       jornada,
       acumuladoJornadaMinAnterior: acumuladoJornadaMin,
       acumuladoVooMinAnterior: acumuladoVooMin,
+      limites,
     });
     acumuladoJornadaMin = linha.jornada_acumulada_min;
     acumuladoVooMin = linha.voo_acumulado_min;

@@ -152,3 +152,30 @@ describe('FRMS governed configuration routes', () => {
     expect(calls.some((call) => call.sql.includes('frms_config_revisions'))).toBe(false);
   });
 });
+
+
+describe('FRMS location catalogue governance', () => {
+  it('scopes catalogue reads to the authenticated tenant and requires admin', async () => {
+    const tenant = appFor(101, 'admin');
+    const response = await tenant.app.fetch(new Request('http://localhost/configuracoes/localidades'), {}, executionContext);
+    expect(response.status).toBe(200);
+    const call = tenant.calls.find((item) => item.sql.includes('FROM frms_location_catalog'));
+    expect(call?.params).toEqual([101]);
+
+    const manager = appFor(101, 'manager');
+    const denied = await manager.app.fetch(new Request('http://localhost/configuracoes/localidades'), {}, executionContext);
+    expect(denied.status).toBe(403);
+    expect(manager.calls.some((item) => item.sql.includes('frms_location_catalog'))).toBe(false);
+  });
+
+  it('rejects REDEMET configuration without an explicit ICAO station', async () => {
+    const tenant = appFor(101, 'admin');
+    const response = await tenant.app.fetch(new Request('http://localhost/configuracoes/localidades/SBME', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: 'SBME', operational_class: 'AERODROME', timezone_iana: 'America/Sao_Paulo', weather_source_kind: 'REDEMET', source_reference: 'Manual operacional controlado' }),
+    }), {}, executionContext);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: 'FRMS_LOCATION_INVALID' });
+    expect(tenant.calls.filter((item) => item.sql.includes('frms_location_catalog')).length).toBe(0);
+  });
+});

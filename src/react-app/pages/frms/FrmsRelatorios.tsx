@@ -140,9 +140,10 @@ export default function FrmsRelatorios() {
 
     let csvContent = '';
     if (tipo === 'compliance' && Array.isArray(data)) {
-      csvContent = 'Tripulante,Violações,Críticos,Atenção,Avisos\n';
+      csvContent = 'Tripulante,Dias avaliados,Conformes,Violações,Não avaliados,Mitigação,Atenção,Fontes normativas\n';
       for (const row of data) {
-        csvContent += `${row.nome || row.tripulante_id},${row.violacoes ?? 0},${row.alertas_criticos ?? 0},${row.alertas_atencao ?? 0},${row.alertas_aviso ?? 0}\n`;
+        const fontes = Array.isArray(row.fontes_normativas) ? row.fontes_normativas.join(' | ').replaceAll('"', '""') : '';
+        csvContent += `${row.nome || row.tripulante_id},${row.dias_avaliados ?? 0},${row.dias_conformes ?? 0},${row.dias_violacao ?? 0},${row.dias_nao_avaliados ?? 0},${row.dias_mitigacao ?? 0},${row.dias_atencao ?? 0},"${fontes}"\n`;
       }
     } else if (tipo === 'mapa-fadiga' && Array.isArray(data)) {
       csvContent = 'Tripulante,HV 7d%,HV Mês%,HV 365d%,Nível Max,Repouso OK\n';
@@ -291,44 +292,45 @@ export default function FrmsRelatorios() {
 
 function ComplianceTable({ data }: { data: any[] }) {
   return (
-    <table className="w-full text-left text-sm">
-      <thead>
-        <tr className="border-b border-gray-100 bg-gray-50/50">
-          <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Tripulante</th>
-          <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Violações</th>
-          <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Críticos</th>
-          <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Atenção</th>
-          <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Avisos</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-gray-50">
-        {data.map((r: any, i: number) => (
-          <tr key={i} className="hover:bg-gray-50/50">
-            <td className="px-4 py-2.5 font-medium text-gray-700">{r.nome || `#${r.tripulante_id}`}</td>
-            <td className="px-4 py-2.5 text-center">
-              <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${(r.violacoes ?? 0) > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'}`}>
-                {r.violacoes ?? 0}
-              </span>
-            </td>
-            <td className="px-4 py-2.5 text-center">
-              <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${(r.alertas_criticos ?? 0) > 0 ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
-                {r.alertas_criticos ?? 0}
-              </span>
-            </td>
-            <td className="px-4 py-2.5 text-center">
-              <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${(r.alertas_atencao ?? 0) > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
-                {r.alertas_atencao ?? 0}
-              </span>
-            </td>
-            <td className="px-4 py-2.5 text-center">
-              <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${(r.alertas_aviso ?? 0) > 0 ? 'bg-yellow-50 text-yellow-700' : 'bg-gray-100 text-gray-500'}`}>
-                {r.alertas_aviso ?? 0}
-              </span>
-            </td>
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead>
+          <tr className="border-b border-gray-100 bg-gray-50/50">
+            <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Tripulante</th>
+            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Avaliados</th>
+            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Conformes</th>
+            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Violações</th>
+            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Não avaliados</th>
+            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Mitigação</th>
+            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Atenção</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody className="divide-y divide-gray-50">
+          {data.map((r: any, i: number) => (
+            <tr key={i} className="hover:bg-gray-50/50" title={Array.isArray(r.fontes_normativas) ? r.fontes_normativas.join('\n') : undefined}>
+              <td className="px-4 py-2.5 font-medium text-gray-700">{r.nome || `#${r.tripulante_id}`}</td>
+              <td className="px-4 py-2.5 text-center text-gray-600">{r.dias_avaliados ?? 0}</td>
+              <td className="px-4 py-2.5 text-center font-semibold text-emerald-700">{r.dias_conformes ?? 0}</td>
+              <td className="px-4 py-2.5 text-center">
+                <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${(r.dias_violacao ?? 0) > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'}`}>
+                  {r.dias_violacao ?? 0}
+                </span>
+              </td>
+              <td className="px-4 py-2.5 text-center">
+                <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${(r.dias_nao_avaliados ?? 0) > 0 ? 'bg-slate-200 text-slate-700' : 'bg-gray-100 text-gray-500'}`}>
+                  {r.dias_nao_avaliados ?? 0}
+                </span>
+              </td>
+              <td className="px-4 py-2.5 text-center text-orange-700">{r.dias_mitigacao ?? 0}</td>
+              <td className="px-4 py-2.5 text-center text-amber-700">{r.dias_atencao ?? 0}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="border-t border-gray-100 px-4 py-3 text-xs text-slate-500">
+        Violações e não avaliados vêm do motor regulatório canônico. Mitigação e atenção são estados preventivos do FRMS e não equivalem a infração normativa.
+      </p>
+    </div>
   );
 }
 

@@ -18,6 +18,62 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
   };
 });
 
+
+const { loadLegalWorkMonthMock } = vi.hoisted(() => ({
+  loadLegalWorkMonthMock: vi.fn(async () => [{
+    tripulante_id: 7,
+    nome: 'Dieter',
+    guerra: 'Dieter',
+    funcao: 'Comandante',
+    trabalho_status: 'COMPLETE' as const,
+    trabalho_mes_min: 706,
+    trabalho_mes_conhecido_min: 706,
+    trabalho_7d_max_min: 706,
+    trabalho_14d_max_min: 706,
+    voo_mes_min: 471,
+    jornada_registrada_mes_min: 706,
+    dias_com_jornada: 2,
+    incomplete_reasons: [],
+    incomplete_reasons_by_date: {},
+    trabalho_contexto_por_data_min: {},
+  trabalho_por_data_min: { '2026-06-02': 315, '2026-06-03': 391 },
+  }]),
+}));
+
+vi.mock('../../lib/frms/legal-work-service', () => ({
+  loadLegalWorkMonth: loadLegalWorkMonthMock,
+}));
+
+vi.mock('../../lib/frms/parameter-governance', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/frms/parameter-governance')>();
+  return {
+    ...actual,
+    resolveFrmsOperationalContext: vi.fn(async () => ({
+      empresaId: 42,
+      profileCode: 'HELICOPTER_OFFSHORE',
+      regulatoryProfileId: 'profile-42',
+      regulatoryLimitsJson: JSON.stringify({ rbac117_appendices: ['C'] }),
+      regulatoryApprovalReference: 'MGO/GRF accepted revision',
+      configRevisionId: 'revision-42',
+      modelVersion: 'TEST',
+      effectiveFrom: '2026-01-01',
+      effectiveTo: null,
+      parameters: {},
+      cyclePolicyApproved: true,
+      fadigaPolicy: {} as never,
+      fortnightPolicy: {} as never,
+    })),
+    asOperationalLimitesMap: vi.fn(() => ({
+      FDP_MAXIMO_HORAS: 11,
+      HV_MES_HORAS: 90,
+      HV_DIARIA_HORAS: 8,
+      ALERTA_AVISO_PCT: 80,
+      ALERTA_ATENCAO_PCT: 90,
+      ALERTA_CRITICO_PCT: 95,
+    })),
+  };
+});
+
 import frmsFadigaAcumuladaRoutes from '../../routes/frms-fadiga-acumulada';
 
 type MockStatement = {
@@ -151,7 +207,7 @@ describe('frms fadiga acumulada contract', () => {
       pct_voo: 8.722,
       pct_jornada_dia: 59.242,
       pct_voo_dia: 58.75,
-      pct_jornada_mes: 6.686,
+      pct_jornada_mes: 0,
       pct_voo_mes: 8.722,
       integridade_status: 'OK',
       integridade_codigo: null,
@@ -219,7 +275,7 @@ describe('frms fadiga acumulada contract', () => {
     expect(payload.data.resumo?.integridade_codigo).toBe('JORNADA_ZERO_COM_HV');
   });
 
-  it('mantém /fadiga-acumulada/frota restrito à fonte operacional canônica SIGVOOS', async () => {
+  it('consome o dataset legal unificado na visão de frota', async () => {
     const { db, statements } = createDbForFadigaAcumulada();
 
     const response = await frmsFadigaAcumuladaRoutes.fetch(
@@ -245,12 +301,9 @@ describe('frms fadiga acumulada contract', () => {
       tripulante_id: '7',
       voo_horas: 7.8,
     });
-    expect(
-      statements.some(
-        (item) =>
-          item.sql.includes('GROUP BY j.tripulante_id') &&
-          item.sql.includes("UPPER(COALESCE(j.origem, '')) = 'SIGVOOS'"),
-      ),
-    ).toBe(true);
+    expect(loadLegalWorkMonthMock).toHaveBeenCalledWith(db, 42, '2026-06');
+    // A restrição SIGVOOS do voo pertence agora ao serviço legal-work-service,
+    // coberto por teste dedicado; a rota apenas consome o dataset unificado.
+    expect(statements.some((item) => item.sql.includes('GROUP BY j.tripulante_id'))).toBe(false);
   });
 });
