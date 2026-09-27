@@ -1,0 +1,308 @@
+name: Production FRMS Evidence Reprocess
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA deployed to the production Worker
+        required: true
+        type: string
+      from:
+        description: First operational date to re-evaluate (YYYY-MM-DD)
+        required: true
+        type: string
+      to:
+        description: Last operational date to re-evaluate (YYYY-MM-DD)
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_PRODUCTION_FRMS_EVIDENCE_REPROCESS
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-frms-evidence-reprocess
+  cancel-in-progress: false
+
+env:
+  PROD_API_BASE_URL: https://api.airtrust.online
+  EXPECTED_TENANT_ID: '6'
+  EXPECTED_PROFILE_ID: frms-regulatory-profile-6-helicopter-offshore-v1
+  REQUIRED_SCHEMA_CHANGE: frms-regulatory-evidence-location-catalog-0512
+  PRODUCTION_CONFIRMATION: AIRTRUST_PRODUCTION_FRMS_EVIDENCE_REPROCESS
+
+jobs:
+  d1-preflight-frms-reprocess:
+    name: D1 preflight, governed FRMS evidence reprocess and postvalidation
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          FROM_DATE: ${{ inputs.from }}
+          TO_DATE: ${{ inputs.to }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo 'MAIN_REF_REQUIRED' >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'EXPECTED_SHA_INVALID' >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo 'EXPECTED_SHA_MISMATCH' >&2; exit 1; }
+          [[ "$CONFIRMATION" == "$PRODUCTION_CONFIRMATION" ]] || { echo 'PRODUCTION_CONFIRMATION_REQUIRED' >&2; exit 1; }
+          [[ "$FROM_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo 'FROM_DATE_INVALID' >&2; exit 1; }
+          [[ "$TO_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo 'TO_DATE_INVALID' >&2; exit 1; }
+          [[ "$FROM_DATE" > "$TO_DATE" ]] && { echo 'DATE_RANGE_INVALID' >&2; exit 1; }
+          export FROM_DATE TO_DATE
+          node --input-type=module <<'NODE'
+          const from = new Date(`${process.env.FROM_DATE}T00:00:00Z`);
+          const to = new Date(`${process.env.TO_DATE}T00:00:00Z`);
+          if (!Number.isFinite(from.valueOf()) || !Number.isFinite(to.valueOf())) throw new Error('DATE_PARSE_INVALID');
+          const days = Math.floor((to - from) / 86400000) + 1;
+          if (days < 1 || days > 31) throw new Error(`DATE_WINDOW_OUT_OF_BOUNDS:${days}`);
+          NODE
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix worker-airtrust ci
+
+      - name: Verify current-main release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Require production credentials
+        shell: bash
+        env:
+          PROD_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          CLOUDFLARE_D1_MIGRATION_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$PROD_EMAIL" && -n "$PROD_PASSWORD" ]] || { echo 'PRODUCTION_ADMIN_CREDENTIALS_MISSING' >&2; exit 1; }
+          [[ "$PROD_EMAIL" != *'staging.airtrust.invalid'* ]] || { echo 'STAGING_QA_IDENTITY_REJECTED' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_D1_MIGRATION_API_TOKEN" ]] || { echo 'PRODUCTION_D1_TOKEN_MISSING' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_MISSING' >&2; exit 1; }
+
+      - name: Read-only preflight and candidate inventory
+        id: inventory
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FROM_DATE: ${{ inputs.from }}
+          TO_DATE: ${{ inputs.to }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/frms-evidence-candidates.json"
+          sql="SELECT DISTINCT t.funcionario_id AS tripulante_id
+                 FROM cv_voo_tripulantes t
+                 JOIN cv_voos v ON v.id=t.voo_id AND v.empresa_id=t.empresa_id AND v.deleted_at IS NULL
+                 JOIN cv_voo_etapas e ON e.voo_id=v.id AND e.empresa_id=t.empresa_id AND e.deleted_at IS NULL
+                                      AND (t.etapa_id IS NULL OR e.id=t.etapa_id)
+                 JOIN frms_jornada j ON CAST(j.tripulante_id AS INTEGER)=t.funcionario_id
+                                    AND j.data=v.data_programacao AND j.deleted_at IS NULL
+                WHERE t.empresa_id=${EXPECTED_TENANT_ID} AND t.deleted_at IS NULL
+                  AND v.data_programacao BETWEEN '${FROM_DATE}' AND '${TO_DATE}'
+                ORDER BY t.funcionario_id;"
+          (cd worker-airtrust && npx wrangler d1 execute airtrust-db --env production --remote --json --command="$sql") > "$out"
+
+          checks="$RUNNER_TEMP/frms-evidence-preflight.json"
+          check_sql="SELECT
+              (SELECT COUNT(*) FROM airtrust_schema_changes_v2 WHERE change_id='${REQUIRED_SCHEMA_CHANGE}') AS schema_change,
+              (SELECT COUNT(*) FROM frms_regulatory_profiles
+                WHERE id='${EXPECTED_PROFILE_ID}' AND empresa_id=${EXPECTED_TENANT_ID} AND active=1 AND deleted_at IS NULL
+                  AND approval_reference IS NOT NULL AND length(source_document_hash)=64) AS profile_ready,
+              (SELECT COUNT(*) FROM frms_location_catalog
+                WHERE empresa_id=${EXPECTED_TENANT_ID} AND active=1 AND deleted_at IS NULL
+                  AND location_code IN ('SBME','9PGB','9PGS','9PGF','9PHK','9PSS','9PUF')) AS catalogue_rows,
+              (SELECT COUNT(DISTINCT j.id)
+                 FROM cv_voo_tripulantes t
+                 JOIN cv_voos v ON v.id=t.voo_id AND v.empresa_id=t.empresa_id AND v.deleted_at IS NULL
+                 JOIN cv_voo_etapas e ON e.voo_id=v.id AND e.empresa_id=t.empresa_id AND e.deleted_at IS NULL
+                                      AND (t.etapa_id IS NULL OR e.id=t.etapa_id)
+                 JOIN frms_jornada j ON CAST(j.tripulante_id AS INTEGER)=t.funcionario_id
+                                    AND j.data=v.data_programacao AND j.deleted_at IS NULL
+                WHERE t.empresa_id=${EXPECTED_TENANT_ID} AND t.deleted_at IS NULL
+                  AND v.data_programacao BETWEEN '${FROM_DATE}' AND '${TO_DATE}') AS expected_jornadas;"
+          (cd worker-airtrust && npx wrangler d1 execute airtrust-db --env production --remote --json --command="$check_sql") > "$checks"
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          function parse(path) {
+            const raw = fs.readFileSync(path, 'utf8');
+            const start = raw.indexOf('['), end = raw.lastIndexOf(']');
+            if (start < 0 || end < start) throw new Error('D1_JSON_MISSING');
+            return JSON.parse(raw.slice(start, end + 1));
+          }
+          const candidates = parse(process.env.RUNNER_TEMP + '/frms-evidence-candidates.json')[0]?.results ?? [];
+          const row = parse(process.env.RUNNER_TEMP + '/frms-evidence-preflight.json')[0]?.results?.[0] ?? {};
+          const ids = candidates.map((item) => Number(item.tripulante_id)).filter((id) => Number.isInteger(id) && id > 0);
+          if (ids.length === 0) throw new Error('NO_FRMS_EVIDENCE_CANDIDATES');
+          if (ids.length > 10) throw new Error(`CANDIDATE_COUNT_OUT_OF_BOUNDS:${ids.length}`);
+          if (Number(row.schema_change) !== 1) throw new Error('SCHEMA_0512_NOT_APPLIED');
+          if (Number(row.profile_ready) !== 1) throw new Error('REGULATORY_PROFILE_NOT_READY');
+          if (Number(row.catalogue_rows) !== 7) throw new Error(`LOCATION_CATALOGUE_INCOMPLETE:${row.catalogue_rows}`);
+          const expected = Number(row.expected_jornadas || 0);
+          if (!Number.isInteger(expected) || expected < 1) throw new Error('EXPECTED_JOURNEYS_INVALID');
+          fs.writeFileSync(process.env.RUNNER_TEMP + '/frms-evidence-inventory-sanitized.json', JSON.stringify({ candidate_count: ids.length, expected_jornadas: expected }));
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `candidate_count=${ids.length}\nexpected_jornadas=${expected}\n`);
+          NODE
+
+      - name: Verify identity, live SHA and reprocess candidates
+        shell: bash
+        env:
+          PROD_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import {
+            assertAllowedProductionBaseUrl,
+            decodeJwtPayload,
+            extractAccessToken,
+            fetchJson,
+            login,
+          } from './scripts/smoke-auth-common.mjs';
+
+          function parseD1(path) {
+            const raw = fs.readFileSync(path, 'utf8');
+            const start = raw.indexOf('['), end = raw.lastIndexOf(']');
+            return JSON.parse(raw.slice(start, end + 1));
+          }
+
+          const base = assertAllowedProductionBaseUrl(process.env.PROD_API_BASE_URL);
+          const loginPayload = await login(base, process.env.PROD_EMAIL, process.env.PROD_PASSWORD);
+          const token = extractAccessToken(loginPayload);
+          const claims = decodeJwtPayload(token);
+          const tenantId = Number(claims?.empresa_id || 0);
+          const rawRole = String(claims?.role || '').trim().toLowerCase();
+          const role = rawRole === 'admin' ? 'administrador' : rawRole === 'manager' ? 'gestor' : rawRole;
+          if (tenantId !== Number(process.env.EXPECTED_TENANT_ID)) throw new Error(`PRODUCTION_TENANT_MISMATCH:${tenantId}`);
+          if (role !== 'administrador') throw new Error(`PRODUCTION_ADMIN_REQUIRED:${role || 'missing'}`);
+
+          const version = await fetchJson(`${base}/api/version`);
+          const body = version.json?.data && typeof version.json.data === 'object' ? version.json.data : version.json;
+          const liveSha = String(body?.sourceSha ?? body?.source_sha ?? '');
+          if (version.status !== 200 || liveSha !== process.env.GITHUB_SHA) throw new Error(`PRODUCTION_LIVE_SHA_MISMATCH:${liveSha || 'missing'}`);
+
+          const candidateRows = parseD1(process.env.RUNNER_TEMP + '/frms-evidence-candidates.json')[0]?.results ?? [];
+          const ids = candidateRows.map((row) => Number(row.tripulante_id)).filter((id) => Number.isInteger(id) && id > 0);
+          let reportedJourneys = 0;
+          for (const id of ids) {
+            const response = await fetchJson(`${base}/api/frms/reprocessar/${id}`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (response.status !== 200 || response.json?.success !== true) {
+              throw new Error(`FRMS_REPROCESS_FAILED:${response.status}:${response.json?.code || 'UNKNOWN'}`);
+            }
+            reportedJourneys += Number(response.json?.data?.jornadas ?? 0);
+          }
+          fs.writeFileSync(process.env.RUNNER_TEMP + '/frms-evidence-reprocess-result.json', JSON.stringify({
+            ok: true,
+            live_worker_sha: liveSha,
+            tenant_id: tenantId,
+            authorized_role: role,
+            candidate_count: ids.length,
+            endpoint_reported_journeys: reportedJourneys,
+            pii_emitted: false,
+          }, null, 2));
+          NODE
+
+      - name: Read-only postvalidation
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FROM_DATE: ${{ inputs.from }}
+          TO_DATE: ${{ inputs.to }}
+          EXPECTED_JOURNEYS: ${{ steps.inventory.outputs.expected_jornadas }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/frms-evidence-postvalidation.json"
+          sql="WITH eligible AS (
+                  SELECT DISTINCT j.id AS jornada_id
+                    FROM cv_voo_tripulantes t
+                    JOIN cv_voos v ON v.id=t.voo_id AND v.empresa_id=t.empresa_id AND v.deleted_at IS NULL
+                    JOIN cv_voo_etapas e ON e.voo_id=v.id AND e.empresa_id=t.empresa_id AND e.deleted_at IS NULL
+                                         AND (t.etapa_id IS NULL OR e.id=t.etapa_id)
+                    JOIN frms_jornada j ON CAST(j.tripulante_id AS INTEGER)=t.funcionario_id
+                                       AND j.data=v.data_programacao AND j.deleted_at IS NULL
+                   WHERE t.empresa_id=${EXPECTED_TENANT_ID} AND t.deleted_at IS NULL
+                     AND v.data_programacao BETWEEN '${FROM_DATE}' AND '${TO_DATE}'
+                )
+                SELECT
+                  COUNT(DISTINCT a.jornada_id) AS materialized_jornadas,
+                  SUM(CASE WHEN a.regulatory_profile_id='${EXPECTED_PROFILE_ID}' THEN 0 ELSE 1 END) AS wrong_profile_rows,
+                  SUM(CASE WHEN a.evidence_hash LIKE '%REGULATORY_PROFILE%' THEN 1 ELSE 0 END) AS missing_profile_evidence_rows
+                FROM frms_jornada_avaliacoes a
+                JOIN eligible e ON e.jornada_id=a.jornada_id
+               WHERE a.empresa_id=${EXPECTED_TENANT_ID} AND a.deleted_at IS NULL;"
+          (cd worker-airtrust && npx wrangler d1 execute airtrust-db --env production --remote --json --command="$sql") > "$out"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const raw = fs.readFileSync(process.env.RUNNER_TEMP + '/frms-evidence-postvalidation.json', 'utf8');
+          const start = raw.indexOf('['), end = raw.lastIndexOf(']');
+          const row = JSON.parse(raw.slice(start, end + 1))[0]?.results?.[0] ?? {};
+          const expected = Number(process.env.EXPECTED_JOURNEYS || 0);
+          const materialized = Number(row.materialized_jornadas || 0);
+          const wrongProfile = Number(row.wrong_profile_rows || 0);
+          const missingProfile = Number(row.missing_profile_evidence_rows || 0);
+          if (materialized !== expected) throw new Error(`FRMS_SNAPSHOT_COVERAGE_MISMATCH:${materialized}/${expected}`);
+          if (wrongProfile !== 0) throw new Error(`FRMS_SNAPSHOT_PROFILE_MISMATCH:${wrongProfile}`);
+          if (missingProfile !== 0) throw new Error(`FRMS_SNAPSHOT_PROFILE_EVIDENCE_MISSING:${missingProfile}`);
+          fs.writeFileSync(process.env.RUNNER_TEMP + '/frms-evidence-postvalidation-sanitized.json', JSON.stringify({ materialized_jornadas: materialized, expected_jornadas: expected, wrong_profile_rows: 0, missing_profile_evidence_rows: 0 }));
+          NODE
+
+      - name: Publish sanitized summary
+        if: always()
+        shell: bash
+        env:
+          FROM_DATE: ${{ inputs.from }}
+          TO_DATE: ${{ inputs.to }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const summary = [];
+          summary.push('## Production FRMS evidence reprocess', '');
+          summary.push(`- workflow/live SHA target: ${process.env.GITHUB_SHA}`);
+          summary.push(`- period: ${process.env.FROM_DATE} → ${process.env.TO_DATE}`);
+          const inventoryPath = process.env.RUNNER_TEMP + '/frms-evidence-inventory-sanitized.json';
+          if (fs.existsSync(inventoryPath)) {
+            const d = JSON.parse(fs.readFileSync(inventoryPath, 'utf8'));
+            summary.push(`- candidates: ${d.candidate_count}`);
+            summary.push(`- expected evidence journeys: ${d.expected_jornadas}`);
+          }
+          const postPath = process.env.RUNNER_TEMP + '/frms-evidence-postvalidation-sanitized.json';
+          if (fs.existsSync(postPath)) {
+            const d = JSON.parse(fs.readFileSync(postPath, 'utf8'));
+            summary.push(`- materialized evidence journeys: ${d.materialized_jornadas}/${d.expected_jornadas}`);
+            summary.push(`- profile mismatches: ${d.wrong_profile_rows}`);
+          }
+          summary.push('- SIGVOOS resync executed: no');
+          summary.push('- direct D1 mutation executed by workflow: no');
+          summary.push('- credentials/PII emitted: no');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary.join('\n') + '\n');
+          NODE

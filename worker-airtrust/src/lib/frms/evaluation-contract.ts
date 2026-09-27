@@ -28,8 +28,10 @@ export interface FrmsIogpEvaluationSnapshot {
   tripulanteId: number;
   jornadaId: string;
   dataOperacional: string;
+  regulatoryProfileId: string | null;
   regulatoryProfileCode: string | null;
   regulatoryProfileReference: string | null;
+  regulatoryProfileSourceDocumentHash: string | null;
   compliance: ComplianceEvaluation[];
   biological: FrmsBiologicalSummary;
   operational: OperationalDemandAssessment;

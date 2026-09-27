@@ -80,6 +80,17 @@ export class FrmsParameterResolutionError extends Error {
   }
 }
 
+export interface FrmsRegulatoryProfileEvidence {
+  empresaId: number;
+  profileCode: string;
+  regulatoryProfileId: string;
+  serviceCategory: string | null;
+  approvalReference: string | null;
+  policyVersion: string | null;
+  limitsJson: string | null;
+  sourceDocumentHash: string | null;
+}
+
 export interface FrmsOperationalContext {
   empresaId: number;
   profileCode: string;
@@ -100,10 +111,10 @@ export interface FrmsOperationalContext {
   fortnightPolicy: FrmsFortnightPolicy;
 }
 
-export async function resolveFrmsOperationalContext(
+export async function resolveFrmsRegulatoryProfileEvidence(
   db: FrmsGovernanceDb,
-  input: { empresaId: number; referenceAt: string; funcionarioId?: number; jornadaId?: string; checkinId?: string },
-): Promise<FrmsOperationalContext> {
+  input: { empresaId: number; referenceAt: string },
+): Promise<FrmsRegulatoryProfileEvidence> {
   const assignments = await db.prepare(
     `SELECT a.regulatory_profile_id, a.profile_code,
             p.service_category,
@@ -136,17 +147,34 @@ export async function resolveFrmsOperationalContext(
     );
   }
   const assignment = matches[0];
+  return Object.freeze({
+    empresaId: input.empresaId,
+    profileCode: assignment.profile_code,
+    regulatoryProfileId: assignment.regulatory_profile_id,
+    serviceCategory: assignment.service_category,
+    approvalReference: assignment.approval_reference,
+    policyVersion: assignment.regulatory_policy_version,
+    limitsJson: assignment.limits_json,
+    sourceDocumentHash: assignment.source_document_hash,
+  });
+}
+
+export async function resolveFrmsOperationalContext(
+  db: FrmsGovernanceDb,
+  input: { empresaId: number; referenceAt: string; funcionarioId?: number; jornadaId?: string; checkinId?: string },
+): Promise<FrmsOperationalContext> {
+  const profile = await resolveFrmsRegulatoryProfileEvidence(db, input);
   const parameterSet = await loadResolvedFrmsParameters(
-    db, input.empresaId, assignment.profile_code, input.referenceAt, Object.keys(LIMITES_DEFAULT),
+    db, input.empresaId, profile.profileCode, input.referenceAt, Object.keys(LIMITES_DEFAULT),
   );
   return Object.freeze({
-    empresaId: input.empresaId, profileCode: assignment.profile_code,
-    regulatoryProfileId: assignment.regulatory_profile_id,
-    regulatoryServiceCategory: assignment.service_category,
-    regulatoryApprovalReference: assignment.approval_reference,
-    regulatoryPolicyVersion: assignment.regulatory_policy_version,
-    regulatoryLimitsJson: assignment.limits_json,
-    regulatorySourceDocumentHash: assignment.source_document_hash,
+    empresaId: input.empresaId, profileCode: profile.profileCode,
+    regulatoryProfileId: profile.regulatoryProfileId,
+    regulatoryServiceCategory: profile.serviceCategory,
+    regulatoryApprovalReference: profile.approvalReference,
+    regulatoryPolicyVersion: profile.policyVersion,
+    regulatoryLimitsJson: profile.limitsJson,
+    regulatorySourceDocumentHash: profile.sourceDocumentHash,
     configRevisionId: parameterSet.revision.id, modelVersion: parameterSet.modelVersion,
     effectiveFrom: parameterSet.revision.effective_from, effectiveTo: parameterSet.revision.effective_to,
     parameters: parameterSet.values,

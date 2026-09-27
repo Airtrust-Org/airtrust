@@ -47,6 +47,10 @@ function generateId(): string {
 function buildInputFingerprint(snapshot: FrmsIogpEvaluationSnapshot): string {
   const parts = [
     snapshot.biological.level,
+    snapshot.regulatoryProfileId ?? 'profile:none',
+    snapshot.regulatoryProfileCode ?? 'profile-code:none',
+    snapshot.regulatoryProfileReference ?? 'profile-reference:none',
+    snapshot.regulatoryProfileSourceDocumentHash ?? 'profile-hash:none',
     snapshot.compliance.map((c) => c.status).join(','),
     snapshot.evidence.sigvoosLegKeys.join('|'),
     snapshot.evidence.weatherSource,
@@ -113,14 +117,22 @@ export async function persistFrmsJornadaAvaliacao(
       snapshot.jornadaId,
       snapshot.evaluationVersion,
       inputFingerprint,
-      snapshot.regulatoryProfileCode, // used as regulatory_profile_id reference
+      snapshot.regulatoryProfileId,
       JSON.stringify(snapshot.compliance),
       JSON.stringify(snapshot.biological),
       JSON.stringify(snapshot.operational),
       JSON.stringify(snapshot.environmental),
       snapshot.orchestration.overallLevel,
       snapshot.orchestration.automaticApprovalAllowed ? 1 : 0,
-      JSON.stringify(snapshot.evidence),
+      JSON.stringify({
+        ...snapshot.evidence,
+        regulatoryProfile: {
+          id: snapshot.regulatoryProfileId,
+          code: snapshot.regulatoryProfileCode,
+          reference: snapshot.regulatoryProfileReference,
+          sourceDocumentHash: snapshot.regulatoryProfileSourceDocumentHash,
+        },
+      }),
       snapshot.evaluatedAt,
       timestamp,
       timestamp,
