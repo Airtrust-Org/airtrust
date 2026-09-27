@@ -218,6 +218,7 @@ export type FrmsDispatchCheckinStatus =
   | 'INDISPONIVEL';
 
 export type FrmsDispatchGateReasonCode =
+  | 'TRIPULACAO_AUSENTE'
   | 'CHECKIN_DIARIO_PENDENTE'
   | 'CHECKIN_INCONSISTENTE'
   | 'DECISAO_FRMS_CRITICA'

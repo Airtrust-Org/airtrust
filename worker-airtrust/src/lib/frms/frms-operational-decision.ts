@@ -76,6 +76,12 @@ export interface FrmsDecisaoOperacionalInput {
    * false → NAO_AVALIADO (dado obrigatório ausente para decisão de compliance).
    */
   perfil_regulatorio_configurado: boolean;
+  /** Evidência suficiente para avaliar compliance no instante consultado. */
+  compliance_avaliavel?: boolean;
+  /** Motivos específicos das violações normativas detectadas. */
+  violacoes_normativas?: string[];
+  /** Lacunas que impedem concluir compliance sem fabricar precisão. */
+  compliance_unknown_reasons?: string[];
   /**
    * Dados complementares ausentes (REDEMET, telemetria granular SIGVOOS).
    * NÃO alteram o estado consolidado — registrados como nota de detalhe.
@@ -156,7 +162,9 @@ export function deriveFrmsOperationalDecision(
       estado_operacional: 'CRITICO_VIOLACAO',
       motivos_principais: buildMotivos(
         input.alertas,
-        ['Limite legal/regulatório/contratual ultrapassado'],
+        input.violacoes_normativas?.length
+          ? input.violacoes_normativas.slice(0, 3)
+          : ['Limite legal/regulatório/contratual ultrapassado'],
       ),
       acao_recomendada: 'NAO_RECOMENDAR_OPERACAO_ESCALAR_GESTAO',
       acao_recomendada_texto: ACAO_TEXTO_POR_ESTADO.CRITICO_VIOLACAO,
@@ -176,7 +184,21 @@ export function deriveFrmsOperationalDecision(
     };
   }
 
-  // 3. Dados inconsistentes comprometem a decisão.
+  // 3. Perfil existe, mas a evidência normativa obrigatória está incompleta.
+  if (input.compliance_avaliavel === false) {
+    const reasons = input.compliance_unknown_reasons?.filter(Boolean) ?? [];
+    return {
+      estado_operacional: 'NAO_AVALIADO',
+      motivos_principais: reasons.length
+        ? reasons.slice(0, 3)
+        : ['Evidência normativa insuficiente para concluir compliance'],
+      acao_recomendada: 'COMPLETAR_INFORMACAO_NECESSARIA',
+      acao_recomendada_texto: ACAO_TEXTO_POR_ESTADO.NAO_AVALIADO,
+      dados_complementares_ausentes: complementaresAusentes,
+    };
+  }
+
+  // 4. Dados inconsistentes comprometem a decisão.
   if (input.snapshot_status === 'INCOMPLETO') {
     return {
       estado_operacional: 'NAO_AVALIADO',
@@ -187,7 +209,7 @@ export function deriveFrmsOperationalDecision(
     };
   }
 
-  // 4. CRITICO biológico/operacional: check-in crítico ou efetividade baixa
+  // 5. CRITICO biológico/operacional: check-in crítico ou efetividade baixa
   //    elevam a MITIGACAO_NECESSARIA mesmo sem violação normativa formal.
   if (
     input.snapshot_status === 'CRITICO' ||
@@ -203,7 +225,7 @@ export function deriveFrmsOperationalDecision(
     };
   }
 
-  // 5. ATENCAO: alertas presentes sem criticidade.
+  // 6. ATENCAO: alertas presentes sem criticidade.
   if (input.snapshot_status === 'ATENCAO' || input.alertas.length > 0) {
     return {
       estado_operacional: 'ATENCAO',
@@ -214,7 +236,7 @@ export function deriveFrmsOperationalDecision(
     };
   }
 
-  // 6. Todos os domínios avaliáveis normais.
+  // 7. Todos os domínios avaliáveis normais.
   return {
     estado_operacional: 'NORMAL',
     motivos_principais: [],

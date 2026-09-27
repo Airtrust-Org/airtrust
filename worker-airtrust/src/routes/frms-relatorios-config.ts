@@ -39,6 +39,7 @@ import {
   FRMS_APPROVED_OPERATIONAL_POLICY_SOURCE,
   FrmsParameterResolutionError,
 } from '../lib/frms/parameter-governance';
+import { validateLocationCatalogEntry } from '../lib/frms/location-catalog';
 import {
   safe,
   type FrmsAppContext,
@@ -444,6 +445,122 @@ frmsRelatoriosConfig.post(
     } catch (error) {
       return frmsConfigurationUnavailable(c, error);
     }
+  }),
+);
+
+// ════════════════════════════════════════════════════════
+// CATÁLOGO OPERACIONAL DE LOCALIDADES — FRMS/IOGP/REDEMET
+// ════════════════════════════════════════════════════════
+
+const FrmsLocationCatalogSchema = z.object({
+  code: z.string().trim().min(2).max(32).transform((value) => value.toUpperCase()),
+  operational_class: z.enum(['AERODROME', 'HELIDECK', 'PLATFORM', 'OTHER']),
+  name: z.string().trim().max(160).nullable().optional(),
+  timezone_iana: z.string().trim().max(100).nullable().optional(),
+  weather_source_kind: z.enum(['REDEMET', 'HELIDECK_FEED', 'MANUAL_MEASURED', 'NONE']),
+  redemet_station_icao: z.string().trim().max(4).nullable().optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
+  source_reference: z.string().trim().min(3).max(500),
+}).strict();
+
+frmsRelatoriosConfig.get(
+  '/configuracoes/localidades',
+  requireRole('admin'),
+  safe(async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    const rows = await c.env.DB.prepare(
+      `SELECT id, location_code AS code, operational_class, name, timezone_iana,
+              weather_source_kind, redemet_station_icao, latitude, longitude,
+              source_reference, created_at, updated_at
+         FROM frms_location_catalog
+        WHERE empresa_id = ? AND active = 1 AND deleted_at IS NULL
+        ORDER BY location_code`,
+    ).bind(empresaId).all();
+    return c.json({ success: true, data: rows.results ?? [] });
+  }),
+);
+
+frmsRelatoriosConfig.put(
+  '/configuracoes/localidades/:code',
+  requireRole('admin'),
+  safe(async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    const routeCode = String(c.req.param('code') || '').trim().toUpperCase();
+    const parsed = FrmsLocationCatalogSchema.safeParse(await c.req.json());
+    if (!parsed.success) return c.json({ success: false, error: parsed.error.flatten() }, 400);
+    if (parsed.data.code !== routeCode) {
+      return c.json({ success: false, error: 'Código da rota e do payload divergem.', code: 'FRMS_LOCATION_CODE_MISMATCH' }, 400);
+    }
+    const validationErrors = validateLocationCatalogEntry({
+      code: parsed.data.code,
+      operationalClass: parsed.data.operational_class,
+      timezoneIana: parsed.data.timezone_iana ?? null,
+      weatherSourceKind: parsed.data.weather_source_kind,
+      redemetStationIcao: parsed.data.redemet_station_icao ?? null,
+      active: true,
+      sourceReference: parsed.data.source_reference,
+    });
+    if (validationErrors.length > 0) {
+      return c.json({ success: false, error: 'Localidade inválida para FRMS.', code: 'FRMS_LOCATION_INVALID', details: validationErrors }, 400);
+    }
+    const previous = await c.env.DB.prepare(
+      `SELECT id, location_code, operational_class, name, timezone_iana,
+              weather_source_kind, redemet_station_icao, latitude, longitude, source_reference
+         FROM frms_location_catalog
+        WHERE empresa_id = ? AND location_code = ? AND active = 1 AND deleted_at IS NULL
+        LIMIT 1`,
+    ).bind(empresaId, routeCode).first<Record<string, unknown>>();
+    const id = crypto.randomUUID();
+    const deactivate = c.env.DB.prepare(
+      `UPDATE frms_location_catalog
+          SET active = 0, deleted_at = datetime('now'), updated_at = datetime('now')
+        WHERE empresa_id = ? AND location_code = ? AND active = 1 AND deleted_at IS NULL`,
+    ).bind(empresaId, routeCode);
+    const insert = c.env.DB.prepare(
+      `INSERT INTO frms_location_catalog (
+         id, empresa_id, location_code, operational_class, name, timezone_iana,
+         weather_source_kind, redemet_station_icao, latitude, longitude, active,
+         source_reference, created_at, updated_at, deleted_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, datetime('now'), datetime('now'), NULL)`,
+    ).bind(
+      id, empresaId, parsed.data.code, parsed.data.operational_class,
+      parsed.data.name ?? null, parsed.data.timezone_iana ?? null,
+      parsed.data.weather_source_kind,
+      parsed.data.redemet_station_icao?.toUpperCase() ?? null,
+      parsed.data.latitude ?? null, parsed.data.longitude ?? null,
+      parsed.data.source_reference,
+    );
+    await c.env.DB.batch([deactivate, insert]);
+    await auditFrms(c, 'frms_location_catalog', previous ? 'UPDATE' : 'INSERT', id, {
+      antes: previous ?? null,
+      depois: { empresa_id: empresaId, ...parsed.data, id },
+    });
+    return c.json({ success: true, data: { id, code: parsed.data.code } });
+  }),
+);
+
+frmsRelatoriosConfig.delete(
+  '/configuracoes/localidades/:code',
+  requireRole('admin'),
+  safe(async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    const code = String(c.req.param('code') || '').trim().toUpperCase();
+    const previous = await c.env.DB.prepare(
+      `SELECT id, location_code, operational_class, name, timezone_iana,
+              weather_source_kind, redemet_station_icao, latitude, longitude, source_reference
+         FROM frms_location_catalog
+        WHERE empresa_id = ? AND location_code = ? AND active = 1 AND deleted_at IS NULL
+        LIMIT 1`,
+    ).bind(empresaId, code).first<Record<string, unknown>>();
+    if (!previous) return c.json({ success: false, error: 'Localidade não encontrada.' }, 404);
+    await c.env.DB.prepare(
+      `UPDATE frms_location_catalog
+          SET active = 0, deleted_at = datetime('now'), updated_at = datetime('now')
+        WHERE empresa_id = ? AND location_code = ? AND active = 1 AND deleted_at IS NULL`,
+    ).bind(empresaId, code).run();
+    await auditFrms(c, 'frms_location_catalog', 'DELETE', String(previous.id), { antes: previous });
+    return c.json({ success: true });
   }),
 );
 

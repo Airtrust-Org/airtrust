@@ -1,7 +1,7 @@
-export type FadigaAcumuladaAlerta = 'normal' | 'verde' | 'amarelo' | 'vermelho';
+export type FadigaAcumuladaAlerta = 'normal' | 'verde' | 'amarelo' | 'vermelho' | 'incompleto';
 
 export type FadigaAcumuladaVisualMeta = {
-  label: 'Normal' | 'Atenção' | 'Alerta' | 'Crítico';
+  label: 'Normal' | 'Atenção' | 'Alerta' | 'Crítico' | 'Dados incompletos';
   barClass: string;
   surfaceClass: string;
   textClass: string;
@@ -11,10 +11,8 @@ export type FadigaAcumuladaVisualMeta = {
 /**
  * O backend mantém os identificadores históricos `verde/amarelo/vermelho`.
  * A apresentação NÃO deve interpretar o nome bruto como a cor da UI:
- * - `normal` (<80%) é o estado seguro e, portanto, verde;
- * - `verde` (>=80%) significa ATENÇÃO e deve ser âmbar;
- * - `amarelo` (>=90%) significa ALERTA e deve ser laranja;
- * - `vermelho` (>=95%) significa CRÍTICO e permanece vermelho.
+ * Os identificadores históricos são apenas níveis semânticos; as faixas numéricas
+ * vêm dos thresholds governados retornados pelo backend e não são definidas aqui.
  */
 const META: Record<FadigaAcumuladaAlerta, FadigaAcumuladaVisualMeta> = {
   normal: {
@@ -47,21 +45,27 @@ const META: Record<FadigaAcumuladaAlerta, FadigaAcumuladaVisualMeta> = {
     textClass: 'text-red-700 dark:text-red-300',
     dotClass: 'bg-red-500',
   },
+  incompleto: {
+    label: 'Dados incompletos',
+    barClass: 'bg-slate-400',
+    surfaceClass: 'border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-900',
+    textClass: 'text-slate-600 dark:text-slate-300',
+    dotClass: 'bg-slate-400',
+  },
 };
 
 export function getFadigaAcumuladaVisual(alerta: string): FadigaAcumuladaVisualMeta {
-  if (alerta === 'verde' || alerta === 'amarelo' || alerta === 'vermelho') {
+  if (alerta === 'verde' || alerta === 'amarelo' || alerta === 'vermelho' || alerta === 'incompleto') {
     return META[alerta];
   }
   return META.normal;
 }
 
-export const FADIGA_ACUMULADA_LEGENDA: Array<{
-  alerta: FadigaAcumuladaAlerta;
-  faixa: string;
-}> = [
-  { alerta: 'normal', faixa: '<80%' },
-  { alerta: 'verde', faixa: '≥80%' },
-  { alerta: 'amarelo', faixa: '≥90%' },
-  { alerta: 'vermelho', faixa: '≥95%' },
-];
+export function buildFadigaAcumuladaLegenda(thresholds: { verde: number; amarelo: number; vermelho: number }) {
+  return [
+    { alerta: 'normal' as const, faixa: `<${thresholds.verde}%` },
+    { alerta: 'verde' as const, faixa: `≥${thresholds.verde}%` },
+    { alerta: 'amarelo' as const, faixa: `≥${thresholds.amarelo}%` },
+    { alerta: 'vermelho' as const, faixa: `≥${thresholds.vermelho}%` },
+  ];
+}

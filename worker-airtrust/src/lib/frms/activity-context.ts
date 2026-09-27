@@ -8,6 +8,13 @@ export interface FrmsActivitySnapshotRow {
   hora_fim: string | null;
   titulo: string | null;
   source_id: number | string | null;
+  /** Tipo original quando a atividade veio do check-in/recovery. */
+  source_activity_type?: string | null;
+  /**
+   * Fração computável no limite de trabalho do ACT Costa do Sol 2025/2027.
+   * 1 = trabalho/reserva; 1/3 = sobreaviso em hotel/residência.
+   */
+  legal_work_factor?: number | null;
 }
 
 export interface FrmsActivitySummary {
@@ -173,6 +180,8 @@ export async function loadFrmsActivityRows(
             td.hora_inicio, td.hora_fim,
             COALESCE(NULLIF(t.titulo, ''), NULLIF(t.codigo_turma, ''), 'Treinamento') AS titulo,
             td.id AS source_id,
+            CASE WHEN td.sessao_id IS NOT NULL THEN 'SIMULADOR' ELSE 'TREINAMENTO' END AS source_activity_type,
+            CASE WHEN UPPER(COALESCE(t.status, '')) = 'CONCLUIDO' THEN 1.0 ELSE NULL END AS legal_work_factor,
             CASE WHEN td.sessao_id IS NOT NULL
                  THEN 'SIM:' || td.sessao_id || ':' || p.funcionario_id
                  ELSE 'TRN:' || td.id || ':' || p.funcionario_id END AS dedupe_key
@@ -196,6 +205,8 @@ export async function loadFrmsActivityRows(
             t.hora_inicio, t.hora_fim,
             COALESCE(NULLIF(t.titulo, ''), NULLIF(t.codigo_turma, ''), 'Treinamento') AS titulo,
             t.id AS source_id,
+            CASE WHEN t.sessao_id IS NOT NULL THEN 'SIMULADOR' ELSE 'TREINAMENTO' END AS source_activity_type,
+            NULL AS legal_work_factor,
             COALESCE(t.data_inicio, t.data_prevista, t.data_fim) AS range_start,
             COALESCE(t.data_fim, t.data_prevista, t.data_inicio) AS range_end,
             CASE WHEN t.sessao_id IS NOT NULL
@@ -237,6 +248,8 @@ export async function loadFrmsActivityRows(
             sa.hora_inicio, sa.hora_fim,
             COALESCE(NULLIF(sa.nome, ''), NULLIF(sa.tipo_sessao, ''), 'Sessão de simulador') AS titulo,
             sa.id AS source_id,
+            'SIMULADOR' AS source_activity_type,
+            CASE WHEN UPPER(COALESCE(sa.status, '')) IN ('CONCLUIDO','CONCLUIDA') THEN 1.0 ELSE NULL END AS legal_work_factor,
             'SIM:' || sa.id || ':' || sp.funcionario_id AS dedupe_key
        FROM simulador_agendamentos sa
        JOIN simulator_people sp ON sp.sessao_id = sa.id
@@ -262,6 +275,15 @@ export async function loadFrmsActivityRows(
               ELSE 'Atividade informada no check-in'
             END AS titulo,
             rd.id AS source_id,
+            rd.activity_type AS source_activity_type,
+            CASE rd.activity_type
+              WHEN 'STANDBY_HOME_HOTEL' THEN 0.3333333333333333
+              WHEN 'STANDBY_ONSITE' THEN 1.0
+              WHEN 'ADMIN_TRAINING' THEN 1.0
+              WHEN 'DUTY_TRAVEL' THEN 1.0
+              WHEN 'OTHER' THEN 1.0
+              ELSE NULL
+            END AS legal_work_factor,
             'REC:' || rd.id || ':' || rd.funcionario_id AS dedupe_key
        FROM frms_recovery_activity_day rd
        JOIN funcionarios f
@@ -289,6 +311,15 @@ export async function loadFrmsActivityRows(
               ELSE 'Atividade informada no check-in'
             END AS titulo,
             rs.id AS source_id,
+            rs.activity_type AS source_activity_type,
+            CASE rs.activity_type
+              WHEN 'STANDBY_HOME_HOTEL' THEN 0.3333333333333333
+              WHEN 'STANDBY_ONSITE' THEN 1.0
+              WHEN 'ADMIN_TRAINING' THEN 1.0
+              WHEN 'DUTY_TRAVEL' THEN 1.0
+              WHEN 'OTHER' THEN 1.0
+              ELSE NULL
+            END AS legal_work_factor,
             'RECSEG:' || rs.id || ':' || rs.funcionario_id AS dedupe_key
        FROM frms_recovery_activity_segment rs
        JOIN frms_recovery_activity_day rd
@@ -339,6 +370,8 @@ export async function loadFrmsActivityRows(
       hora_fim: normalizedEnd,
       titulo: row.titulo == null ? null : String(row.titulo),
       source_id: row.source_id,
+      source_activity_type: row.source_activity_type == null ? null : String(row.source_activity_type),
+      legal_work_factor: row.legal_work_factor == null ? null : Number(row.legal_work_factor),
     });
     if (semanticKey) semanticSeen.add(semanticKey);
   }

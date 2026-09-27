@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FADIGA_ACUMULADA_LEGENDA,
+  buildFadigaAcumuladaLegenda,
   getFadigaAcumuladaVisual,
 } from '@/react-app/pages/frms/fadigaAcumuladaVisual';
 
@@ -30,11 +30,12 @@ describe('fadiga acumulada visual semantics', () => {
   });
 
   it('keeps the legend ordered by increasing severity', () => {
-    expect(FADIGA_ACUMULADA_LEGENDA.map((item) => item.faixa)).toEqual([
-      '<80%',
-      '≥80%',
-      '≥90%',
-      '≥95%',
+    const legenda = buildFadigaAcumuladaLegenda({ verde: 77, amarelo: 88, vermelho: 96 });
+    expect(legenda.map((item) => item.faixa)).toEqual([
+      '<77%',
+      '≥77%',
+      '≥88%',
+      '≥96%',
     ]);
   });
 });

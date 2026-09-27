@@ -186,6 +186,9 @@ jobs:
 
           const data = response.json?.data && typeof response.json.data === 'object' ? response.json.data : {};
           const windows = Array.isArray(response.json?.windows) ? response.json.windows : [];
+          const reprocessQueue = response.json?.reprocess_queue && typeof response.json.reprocess_queue === 'object'
+            ? response.json.reprocess_queue
+            : null;
           const fromMs = Date.parse(`${process.env.FROM_DATE}T00:00:00Z`);
           const toMs = Date.parse(`${process.env.TO_DATE}T00:00:00Z`);
           const requestedDays = Math.floor((toMs - fromMs) / 86400000) + 1;
@@ -218,6 +221,9 @@ jobs:
             window_count: windows.length,
             expected_window_count: expectedWindowCount,
             window_failures: failedWindows.map((window) => ({ from: window?.from ?? null, to: window?.to ?? null })),
+            reprocess_queue_status: isApply ? String(reprocessQueue?.status ?? 'MISSING') : 'NOT_APPLICABLE',
+            reprocess_queue_enqueued: isApply ? Number(reprocessQueue?.enqueued ?? 0) : 0,
+            reprocess_queue_error_code: isApply && reprocessQueue?.error_code ? String(reprocessQueue.error_code).slice(0, 120) : null,
             pii_emitted: false,
           }, null, 2));
           NODE
@@ -243,8 +249,26 @@ jobs:
             console.log(`- imported/replaced/ignored/errors: \`${data.total_imported}/${data.total_replaced}/${data.total_ignored}/${data.total_errors}\``);
             console.log(`- completed windows: \`${data.window_count}/${data.expected_window_count}\``);
             console.log(`- failed windows: \`${data.window_failures.length}\``);
+            console.log(`- FRMS reprocess queue: \`${data.reprocess_queue_status}\` (${data.reprocess_queue_enqueued} item(s))`);
+            if (data.reprocess_queue_status === 'FAILED' || data.reprocess_queue_status === 'MISSING') {
+              console.log(`- reprocess follow-up required: \`yes\``);
+              console.log(`- reprocess error code: \`${data.reprocess_queue_error_code || 'missing'}\``);
+            }
           }
           console.log('- credentials/PII emitted: no');
+          NODE
+
+      - name: Warn if FRMS reprocess enqueue needs follow-up
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - "$RUNNER_TEMP/frms-sigvoos-resync-result.json" <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (data.reprocess_queue_status === 'FAILED' || data.reprocess_queue_status === 'MISSING') {
+            console.log(`::warning title=FRMS reprocess follow-up required::SIGVOOS mutation succeeded; do not rerun the resync. Queue status=${data.reprocess_queue_status}, error=${data.reprocess_queue_error_code || 'missing'}.`);
+          }
           NODE
 
       - name: Upload sanitized evidence

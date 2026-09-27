@@ -10,12 +10,6 @@ export interface SyncResult {
   delta_effectiveness?: number | null;
 }
 
-export function calcularNivelEffectiveness(effectivenessPct: number): string {
-  if (effectivenessPct >= 90) return 'VERDE';
-  if (effectivenessPct >= 65) return 'AMARELO';
-  return 'VERMELHO';
-}
-
 const EVENTOS_DIAGNOSTICOS_PERMITIDOS = new Set([
   'CHECKIN_SEM_JORNADA',
   'FRMS_SYNC_SEM_FATORIZACAO',

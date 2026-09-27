@@ -20,6 +20,20 @@ vi.mock('../../routes/frms-shared', async (importOriginal) => {
   };
 });
 
+
+vi.mock('../../lib/frms/parameter-governance', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/frms/parameter-governance')>();
+  return {
+    ...actual,
+    resolveFrmsOperationalContext: vi.fn(async () => ({
+      empresaId: 42, profileCode: 'HELICOPTER_OFFSHORE', regulatoryProfileId: 'profile-42',
+      configRevisionId: 'rev-42', modelVersion: 'TEST', effectiveFrom: '2026-01-01', effectiveTo: null,
+      parameters: {}, cyclePolicyApproved: true, fadigaPolicy: {} as never, fortnightPolicy: {} as never,
+    })),
+    asOperationalLimitesMap: vi.fn(() => ({ FDP_MAXIMO_HORAS: 11, HV_DIARIA_HORAS: 8, HV_MES_HORAS: 90 })),
+  };
+});
+
 import frmsRoutes from '../../routes/frms';
 
 type MockStatement = {
@@ -48,6 +62,9 @@ function createDbForJornadas(rows: Array<Record<string, unknown>>) {
           throw new Error(`Unexpected query: ${normalized} :: ${JSON.stringify(binds)}`);
         },
         first: async <T = unknown>() => {
+          if (normalized.includes('SELECT empresa_id FROM funcionarios')) {
+            return { empresa_id: 42 } as T;
+          }
           if (normalized.includes('SELECT COUNT(*) as total FROM frms_jornada j')) {
             return { total: rows.length } as T;
           }
@@ -118,7 +135,7 @@ describe('frms jornadas contract', () => {
       data: '2026-06-03',
       pct_jornada_diaria: 59.242,
       pct_voo_diaria: 58.75,
-      pct_jornada_mes: 6.686,
+      pct_jornada_mes: 0,
       pct_voo_mes: 8.722,
       fatorizacao: {
         total_fatorizado_hv: 5.2222,

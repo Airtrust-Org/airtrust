@@ -26,6 +26,7 @@ import {
   upsertSigvoosManualMapping,
   upsertSigvoosConfig,
 } from '../services/sigvoos-frms';
+import { enqueueFrmsReprocessForSigvoosWindow } from '../services/frms-reprocess-enqueue';
 
 const sigvoosRouter = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
 
@@ -298,6 +299,35 @@ async function runSegmentedSync(
 
   assertSegmentedSyncComplete(execution);
   return { summary: merged, windows: execution };
+}
+
+async function enqueueManualSyncReprocess(
+  db: D1Database,
+  empresaId: number,
+  operationId: string,
+  result: SigvoosSyncResult,
+) {
+  const changed = Number(result.totalImportados || 0) + Number(result.totalSubstituidos || 0);
+  if (changed === 0 && Number(result.totalRegistrosNormalizados || 0) === 0) {
+    return { status: 'NOT_REQUIRED' as const, enqueued: 0 };
+  }
+  try {
+    const queued = await enqueueFrmsReprocessForSigvoosWindow(db, {
+      empresaId,
+      periodFrom: result.periodo.from,
+      periodTo: result.periodo.to,
+      operationKey: operationId,
+    });
+    return { status: 'ENQUEUED' as const, enqueued: queued.enqueued };
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'FRMS_REPROCESS_ENQUEUE_FAILED';
+    console.error('[sigvoos] FRMS reprocess enqueue failed after successful sync', {
+      empresaId,
+      operationId,
+      code,
+    });
+    return { status: 'FAILED' as const, enqueued: 0, error_code: code };
+  }
 }
 
 function formatSigvoosSyncError(error: unknown): {
@@ -614,6 +644,7 @@ sigvoosRouter.post(
         parsed.data,
         c.env,
       );
+      const reprocessQueue = await enqueueManualSyncReprocess(c.env.DB, empresaId, operationId, summary);
       await recordMaintenanceAudit(c, {
         action: 'SIGVOOS_SYNC_FRMS',
         module: 'integracoes_sigvoos',
@@ -627,10 +658,11 @@ sigvoosRouter.post(
         durationMs: Date.now() - startedAt,
         operationId,
       }).catch(() => {});
-      return c.json({ success: true, operation_id: operationId, data: summary, windows });
+      return c.json({ success: true, operation_id: operationId, data: summary, windows, reprocess_queue: reprocessQueue });
     }
 
     const result = await syncSigvoosForFrms(c.env.DB, empresaId, operadorId, parsed.data, c.env);
+    const reprocessQueue = await enqueueManualSyncReprocess(c.env.DB, empresaId, operationId, result);
     await recordMaintenanceAudit(c, {
       action: 'SIGVOOS_SYNC_FRMS',
       module: 'integracoes_sigvoos',
@@ -644,7 +676,7 @@ sigvoosRouter.post(
       durationMs: Date.now() - startedAt,
       operationId,
     }).catch(() => {});
-    return c.json({ success: true, operation_id: operationId, data: result });
+    return c.json({ success: true, operation_id: operationId, data: result, reprocess_queue: reprocessQueue });
   } catch (error) {
     const formatted = formatSigvoosSyncError(error);
     const safeInput = {

@@ -12,6 +12,11 @@ vi.mock('../components/FrmsWorkspaceNav', () => ({
 describe('FrmsConfiguracoes parametros decorativos', () => {
   it('mantem chaves decorativas marcadas para evitar promessas de efeito inexistente', () => {
     const expected = [
+      'ACCUMULATION_WINDOW_MODE',
+      'ACCUMULATION_USE_MONTH_CALENDAR',
+      'ACCUMULATION_USE_YEAR_CALENDAR',
+      'ACCUMULATION_USE_28D_ROLLING',
+      'ACCUMULATION_USE_365D_ROLLING',
       'EFFECTIV_PERIODO_PCT',
       'REPOUSO_MIN_PRE_APRESENTACAO',
       'REPOUSO_MIN_POS_LIBERACAO',

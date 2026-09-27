@@ -1509,6 +1509,18 @@ export async function buscarJornadas(
     );
   }
 
+  const empresaIdForRead = await resolveTripulanteEmpresaId(db, Number(tripulanteId));
+  const referenceDate = String(data[0]?.data || filtro.data_fim || new Date().toISOString().slice(0, 10));
+  const operationalContextForRead = await resolveFrmsOperationalContext(db, {
+    empresaId: empresaIdForRead,
+    referenceAt: referenceDate,
+    funcionarioId: Number(tripulanteId),
+  });
+  const readLimites = asOperationalLimitesMap(
+    operationalContextForRead.parameters,
+    operationalContextForRead.cyclePolicyApproved,
+  );
+
   const fatigueByJornadaId = new Map<string, JornadaFatigueSnapshot>();
   const orderedJornadas = [...data].sort((a, b) => {
     const byDate = String(a.data || '').localeCompare(String(b.data || ''));
@@ -1550,6 +1562,11 @@ export async function buscarJornadas(
       },
       acumuladoJornadaMinAnterior: acumuladoAnterior.jornada,
       acumuladoVooMinAnterior: acumuladoAnterior.voo,
+      limites: {
+        fdpDiarioHoras: readLimites.FDP_MAXIMO_HORAS,
+        hvDiariaHoras: readLimites.HV_DIARIA_HORAS,
+        hvMensalHoras: readLimites.HV_MES_HORAS,
+      },
     });
 
     fatigueByJornadaId.set(String(jornada.id), {

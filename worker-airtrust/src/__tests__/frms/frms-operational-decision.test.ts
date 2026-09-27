@@ -119,3 +119,25 @@ describe('frms-operational-decision', () => {
     });
   });
 });
+
+describe('FRMS decisão operacional — compliance obrigatório', () => {
+  it('usa motivo normativo específico em violação', () => {
+    const result = deriveFrmsOperationalDecision({
+      snapshot_status: 'OK', alertas: [], tem_violacao_normativa: true,
+      perfil_regulatorio_configurado: true, compliance_avaliavel: true,
+      violacoes_normativas: ['Lei 13.475: limite mensal de voo excedido'],
+    });
+    expect(result.estado_operacional).toBe('CRITICO_VIOLACAO');
+    expect(result.motivos_principais[0]).toContain('limite mensal de voo');
+  });
+
+  it('falha fechado quando compliance obrigatório é UNKNOWN', () => {
+    const result = deriveFrmsOperationalDecision({
+      snapshot_status: 'OK', alertas: [], tem_violacao_normativa: false,
+      perfil_regulatorio_configurado: true, compliance_avaliavel: false,
+      compliance_unknown_reasons: ['Acumulado legal mensal indisponível'],
+    });
+    expect(result.estado_operacional).toBe('NAO_AVALIADO');
+    expect(result.motivos_principais).toEqual(['Acumulado legal mensal indisponível']);
+  });
+});

@@ -11,7 +11,16 @@
  * "most restrictive" value.
  */
 
-export type RuleSource = 'ANAC' | 'IOGP' | 'OPERATOR' | 'CONTRACT' | 'CBA';
+/** Proveniência da regra; Lei, RBAC/ANAC e instrumentos coletivos ficam separados. */
+export type RuleSource =
+  | 'LAW'
+  | 'ANAC'
+  | 'ACT'
+  | 'CCT'
+  | 'IOGP'
+  | 'OPERATOR'
+  | 'CONTRACT'
+  | 'CBA';
 export type LimitDirection = 'MAX' | 'MIN';
 
 export type ComplianceMetric =
@@ -25,6 +34,7 @@ export type ComplianceMetric =
   | 'FDP_DUTY_MIN'
   | 'WORK_TIME_WEEK_LEGAL_MIN'
   | 'WORK_TIME_7D_ROLLING_MIN'
+  | 'WORK_TIME_14D_ROLLING_MIN'
   | 'WORK_TIME_MONTH_CALENDAR_MIN'
   | 'REST_AFTER_DUTY_MIN'
   | 'REST_PRE_NIGHT_STANDBY_MIN'
@@ -289,8 +299,8 @@ export function buildAnacBasicHelicopterCandidates(
       metric: 'FLIGHT_TIME_DUTY_MIN',
       direction: 'MAX',
       limitMin: anacBasicHelicopterDailyFlightMaxMin(context.service),
-      source: 'ANAC',
-      reference: 'RBAC 117 EMD 01 A117.13 Table A.1/A.2; Lei 13.475 arts. 31/32',
+      source: 'LAW',
+      reference: 'Lei 13.475/2017 art. 32 IV; RBAC 117 EMD 01 A117.13',
       label: 'Basic helicopter maximum flight time in one duty',
     },
     {
@@ -298,8 +308,8 @@ export function buildAnacBasicHelicopterCandidates(
       metric: 'FLIGHT_TIME_MONTH_CALENDAR_MIN',
       direction: 'MAX',
       limitMin: 90 * 60,
-      source: 'ANAC',
-      reference: 'RBAC 117 EMD 01 A117.13(c) Table A.3; Lei 13.475 art. 33(IV)',
+      source: 'LAW',
+      reference: 'Lei 13.475/2017 art. 33 IV; RBAC 117 EMD 01 A117.13(c)',
       label: 'Basic helicopter monthly flight-time limit',
     },
     {
@@ -307,8 +317,8 @@ export function buildAnacBasicHelicopterCandidates(
       metric: 'FLIGHT_TIME_YEAR_CALENDAR_MIN',
       direction: 'MAX',
       limitMin: 930 * 60,
-      source: 'ANAC',
-      reference: 'RBAC 117 EMD 01 A117.13(c) Table A.3; Lei 13.475 art. 33(IV)',
+      source: 'LAW',
+      reference: 'Lei 13.475/2017 art. 33 IV; RBAC 117 EMD 01 A117.13(c)',
       label: 'Basic helicopter annual flight-time limit',
     },
     {
@@ -325,8 +335,8 @@ export function buildAnacBasicHelicopterCandidates(
       metric: 'WORK_TIME_WEEK_LEGAL_MIN',
       direction: 'MAX',
       limitMin: 44 * 60,
-      source: 'ANAC',
-      reference: 'Lei 13.475 art. 41 / RBAC 117 Appendix A as applicable',
+      source: 'LAW',
+      reference: 'Lei 13.475/2017 art. 41',
       label: 'Weekly work-time limit',
       notes: 'May be altered by collective agreement within regulatory parameters.',
     },
@@ -335,8 +345,8 @@ export function buildAnacBasicHelicopterCandidates(
       metric: 'WORK_TIME_MONTH_CALENDAR_MIN',
       direction: 'MAX',
       limitMin: 176 * 60,
-      source: 'ANAC',
-      reference: 'Lei 13.475 art. 41 / RBAC 117 Appendix A as applicable',
+      source: 'LAW',
+      reference: 'Lei 13.475/2017 art. 41',
       label: 'Monthly work-time limit',
     },
   ];
@@ -354,6 +364,109 @@ export function buildAnacBasicHelicopterCandidates(
   }
 
   return rules;
+}
+
+export const COSTA_DO_SOL_ACT_2025_2027 = 'COSTA_DO_SOL_ACT_2025_2027' as const;
+
+/**
+ * Compatibilidade explícita de tenant enquanto o código do instrumento coletivo
+ * ainda não foi materializado no perfil regulatório. A decisão fica centralizada
+ * aqui para não espalhar `empresa_id === 6` pelo motor.
+ */
+export function resolveCollectiveAgreementCode(input: {
+  empresaId: number;
+  limitsJson?: string | null;
+}): string | null {
+  const raw = input.limitsJson?.trim();
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const explicit = parsed.collective_agreement_code ?? parsed.collectiveAgreementCode;
+      if (typeof explicit === 'string' && explicit.trim()) return explicit.trim().toUpperCase();
+    } catch {
+      // Perfil malformado não autoriza inferência de instrumento coletivo.
+      return null;
+    }
+  }
+  return input.empresaId === 6 ? COSTA_DO_SOL_ACT_2025_2027 : null;
+}
+
+export function costaDoSolAct2025_2027Applies(input: {
+  empresaId: number;
+  limitsJson?: string | null;
+}): boolean {
+  return resolveCollectiveAgreementCode(input) === COSTA_DO_SOL_ACT_2025_2027;
+}
+
+/**
+ * ACT Costa do Sol Táxi Aéreo S.A. 2025/2027 (01/12/2025–30/11/2027).
+ * Cláusula 8ª: 44 h semanais e 176 h mensais, com a composição de trabalho do ACT.
+ * Cláusula 9ª §2º: em regime de missão, 44 h/semana não se aplica; 176 h/mês permanece.
+ */
+export function buildCostaDoSolAct2025_2027WorkCandidates(input: {
+  regimeMissao: boolean;
+}): LimitCandidate[] {
+  return [
+    {
+      id: 'ACT_CDS_2025_2027_WORK_WEEK',
+      metric: 'WORK_TIME_WEEK_LEGAL_MIN',
+      direction: 'MAX',
+      limitMin: 44 * 60,
+      source: 'ACT',
+      reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 8ª e cláusula 9ª §2º',
+      label: 'Limite semanal de trabalho do ACT Costa do Sol',
+      applicable: !input.regimeMissao,
+      notes: 'No regime de missão, o ACT afasta 44 h/semana; 176 h/mês permanece obrigatório.',
+    },
+    {
+      id: 'ACT_CDS_2025_2027_WORK_MONTH',
+      metric: 'WORK_TIME_MONTH_CALENDAR_MIN',
+      direction: 'MAX',
+      limitMin: 176 * 60,
+      source: 'ACT',
+      reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 8ª e cláusula 9ª §2º',
+      label: 'Limite mensal de trabalho do ACT Costa do Sol',
+    },
+  ];
+}
+
+export interface CostaDoSolMissionComplianceInput {
+  consecutiveMissionDays: number | null | undefined;
+  consecutiveEffectiveDaysAtOperation: number | null | undefined;
+}
+
+export interface CostaDoSolMissionComplianceResult {
+  status: ComplianceStatus;
+  violations: Array<{
+    code: 'ACT_CDS_MISSION_21D' | 'ACT_CDS_EFFECTIVE_17D';
+    actualDays: number;
+    limitDays: number;
+    source: 'ACT';
+    reference: string;
+  }>;
+  reason?: string;
+}
+
+/** ACT Costa do Sol 2025/2027, cláusula 9ª: 21 dias de missão / 17 efetivos no local. */
+export function evaluateCostaDoSolMissionCompliance(
+  input: CostaDoSolMissionComplianceInput,
+): CostaDoSolMissionComplianceResult {
+  const mission = input.consecutiveMissionDays;
+  const effective = input.consecutiveEffectiveDaysAtOperation;
+  if (mission == null || effective == null || !Number.isFinite(mission) ||
+      !Number.isFinite(effective) || mission < 0 || effective < 0) {
+    return { status: 'UNKNOWN', violations: [], reason: 'MISSION_WINDOW_MISSING_OR_INVALID' };
+  }
+  const violations: CostaDoSolMissionComplianceResult['violations'] = [];
+  if (mission > 21) violations.push({
+    code: 'ACT_CDS_MISSION_21D', actualDays: mission, limitDays: 21, source: 'ACT',
+    reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª caput',
+  });
+  if (effective > 17) violations.push({
+    code: 'ACT_CDS_EFFECTIVE_17D', actualDays: effective, limitDays: 17, source: 'ACT',
+    reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª caput',
+  });
+  return { status: violations.length ? 'VIOLATION' : 'COMPLIANT', violations };
 }
 
 /** B/C cumulative helicopter limits. Use only when the approved profile is B/C. */
@@ -385,6 +498,24 @@ export function buildAnacRbac117BcHelicopterCumulativeCandidates(): LimitCandida
       source: 'ANAC',
       reference: 'RBAC 117 EMD 01 B117.27/C117.27',
       label: 'Work time in any 7 consecutive days',
+    },
+    {
+      id: 'ANAC_BC_WORK_14D',
+      metric: 'WORK_TIME_14D_ROLLING_MIN',
+      direction: 'MAX',
+      limitMin: 100 * 60,
+      source: 'ANAC',
+      reference: 'RBAC 117 EMD 01 B117.27/C117.27',
+      label: 'Work time in any 14 consecutive days',
+    },
+    {
+      id: 'ANAC_BC_WORK_MONTH',
+      metric: 'WORK_TIME_MONTH_CALENDAR_MIN',
+      direction: 'MAX',
+      limitMin: 176 * 60,
+      source: 'ANAC',
+      reference: 'RBAC 117 EMD 01 B117.27/C117.27',
+      label: 'Monthly work-time limit under RBAC 117 B/C',
     },
   ];
 }
@@ -472,9 +603,63 @@ export function rbac117AppendixCLimit(localDutyStart: string, sectorCount: numbe
   return row.values[column];
 }
 
+export type Rbac117Appendix = 'A' | 'B' | 'C' | 'D' | 'E';
+
 export interface RegulatoryProfileState {
-  profileCode: 'ANAC_BASIC' | 'RBAC117_B' | 'RBAC117_C' | 'SGRF_CUSTOM' | null;
+  profileCode: string | null;
   documentedReference?: string | null;
+  sourceDocumentHash?: string | null;
+  limitsJson?: string | null;
+}
+
+function normalizeAppendixToken(value: unknown): Rbac117Appendix | null {
+  const text = String(value ?? '').trim().toUpperCase();
+  const match = /^(?:APENDICE|APÊNDICE|APPENDIX|RBAC117[_-]?)?\s*([ABCDE])$/.exec(text);
+  return match ? (match[1] as Rbac117Appendix) : null;
+}
+
+/**
+ * Resolve somente apêndices explicitamente persistidos no perfil regulatório.
+ * O nome comercial do perfil (ex.: HELICOPTER_OFFSHORE) nunca implica B/C.
+ */
+export function resolveDocumentedRbac117Appendices(
+  state: Pick<RegulatoryProfileState, 'limitsJson'>,
+): ReadonlySet<Rbac117Appendix> {
+  const raw = state.limitsJson?.trim();
+  if (!raw) return new Set<Rbac117Appendix>();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return new Set<Rbac117Appendix>();
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return new Set<Rbac117Appendix>();
+  const record = parsed as Record<string, unknown>;
+  const candidates = [
+    record.rbac117_appendices,
+    record.rbac117Appendices,
+    record.applicable_appendices,
+    record.applicableAppendices,
+    record.appendices,
+    record.appendix,
+  ];
+  const out = new Set<Rbac117Appendix>();
+  for (const candidate of candidates) {
+    const values = Array.isArray(candidate) ? candidate : candidate == null ? [] : [candidate];
+    for (const value of values) {
+      const normalized = normalizeAppendixToken(value);
+      if (normalized) out.add(normalized);
+    }
+  }
+  return out;
+}
+
+export function regulatoryProfileHasDocumentedAppendix(
+  state: Pick<RegulatoryProfileState, 'limitsJson'>,
+  ...appendices: Rbac117Appendix[]
+): boolean {
+  const documented = resolveDocumentedRbac117Appendices(state);
+  return appendices.some((appendix) => documented.has(appendix));
 }
 
 /** Fail closed: without the active documented profile, final regulatory compliance is unknown. */
