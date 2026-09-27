@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -19,6 +19,7 @@ import {
   useFadigaPainel,
 } from '@/react-app/hooks/useFadigaCheckin';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
+import { useAuth } from '@/react-app/hooks/useAuth';
 import { normalizeTimeInput } from '@/react-app/lib/time-input';
 import { toast } from 'sonner';
 import { FADIGA_EMPLOYEE_HOME_PATH, resolveFadigaPostSavePath } from './frmsPostSaveNavigation';
@@ -27,6 +28,12 @@ import OperationalVigilanceTest, {
 } from './OperationalVigilanceTest';
 import RecoveryActivityCard from './RecoveryActivityCard';
 import { useReadinessBaseline, useReadinessToday } from '@/react-app/hooks/useOperationalReadiness';
+import {
+  clearFadigaCheckinDraft,
+  fadigaCheckinDraftKey,
+  loadFadigaCheckinDraft,
+  saveFadigaCheckinDraft,
+} from './fadigaCheckinDraft';
 
 /* eslint-disable react-refresh/only-export-components */
 
@@ -474,6 +481,12 @@ export default function FrmsFlightCheckinFadiga() {
   const [searchParams, setSearchParams] = useSearchParams();
   const today = getTodayLocalKey();
   const { isAdmin, isGestor, role } = usePermissions();
+  const { user, empresaAtualId } = useAuth();
+  const draftKey = useMemo(
+    () => fadigaCheckinDraftKey(user?.id, empresaAtualId, today),
+    [empresaAtualId, today, user?.id],
+  );
+  const restoredDraft = useMemo(() => loadFadigaCheckinDraft(draftKey), [draftKey]);
   const canViewTeam = isAdmin || isGestor;
 
   type TabType = 'form' | 'historico' | 'gestor';
@@ -494,27 +507,70 @@ export default function FrmsFlightCheckinFadiga() {
     setSearchParams(next, { replace: true });
   };
 
-  const [sonoOpcao, setSonoOpcao] = useState<SonoOpcao | null>(null);
-  const [presentationTime, setPresentationTime] = useState('');
+  const [sonoOpcao, setSonoOpcao] = useState<SonoOpcao | null>(
+    (restoredDraft?.sonoOpcao as SonoOpcao | null) ?? null,
+  );
+  const [presentationTime, setPresentationTime] = useState(restoredDraft?.presentationTime ?? '');
   const [presentationTimeTouched, setPresentationTimeTouched] = useState(false);
-  const [wakeTime, setWakeTime] = useState('');
+  const [wakeTime, setWakeTime] = useState(restoredDraft?.wakeTime ?? '');
   const [wakeTimeTouched, setWakeTimeTouched] = useState(false);
-  const [qualidadeSono, setQualidadeSono] = useState<number | null>(null);
-  const [kssScore, setKssScore] = useState<number | null>(null);
-  const [fitForDutyChoice, setFitForDutyChoice] = useState<FitForDutyChoice>(null);
-  const [medsUlt12h, setMedsUlt12h] = useState<OptionalBinaryResponse>(null);
-  const [alcoolUlt12h, setAlcoolUlt12h] = useState<OptionalBinaryResponse>(null);
-  const [observacao, setObservacao] = useState('');
-  const [aceiteTermos, setAceiteTermos] = useState(false);
-  const [aceitePrivacidade, setAceitePrivacidade] = useState(false);
+  const [qualidadeSono, setQualidadeSono] = useState<number | null>(restoredDraft?.qualidadeSono ?? null);
+  const [kssScore, setKssScore] = useState<number | null>(restoredDraft?.kssScore ?? null);
+  const [fitForDutyChoice, setFitForDutyChoice] = useState<FitForDutyChoice>(
+    (restoredDraft?.fitForDutyChoice as FitForDutyChoice) ?? null,
+  );
+  const [medsUlt12h, setMedsUlt12h] = useState<OptionalBinaryResponse>(restoredDraft?.medsUlt12h ?? null);
+  const [alcoolUlt12h, setAlcoolUlt12h] = useState<OptionalBinaryResponse>(restoredDraft?.alcoolUlt12h ?? null);
+  const [observacao, setObservacao] = useState(restoredDraft?.observacao ?? '');
+  const [aceiteTermos, setAceiteTermos] = useState(restoredDraft?.aceiteTermos ?? false);
+  const [aceitePrivacidade, setAceitePrivacidade] = useState(restoredDraft?.aceitePrivacidade ?? false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
-  const [vigilanceResult, setVigilanceResult] = useState<OperationalVigilanceResult | null>(null);
+  const [vigilanceResult, setVigilanceResult] = useState<OperationalVigilanceResult | null>(
+    restoredDraft?.vigilanceResult ?? null,
+  );
   const [vigilanceRunning, setVigilanceRunning] = useState(false);
+  const [interruptedPvtRecovered, setInterruptedPvtRecovered] = useState(
+    Boolean(restoredDraft?.vigilanceInProgress && !restoredDraft?.vigilanceResult),
+  );
 
   const { data: existente, refetch } = useCheckinHoje();
   const submitMutation = useSubmitCheckin();
   const { data: readinessBaseline } = useReadinessBaseline(today);
   const { data: readinessToday } = useReadinessToday(today);
+
+  useEffect(() => {
+    saveFadigaCheckinDraft(draftKey, {
+      version: 1,
+      sonoOpcao,
+      presentationTime,
+      wakeTime,
+      qualidadeSono,
+      kssScore,
+      fitForDutyChoice,
+      medsUlt12h,
+      alcoolUlt12h,
+      observacao,
+      aceiteTermos,
+      aceitePrivacidade,
+      vigilanceResult,
+      vigilanceInProgress: vigilanceRunning,
+    });
+  }, [
+    aceitePrivacidade,
+    aceiteTermos,
+    alcoolUlt12h,
+    draftKey,
+    fitForDutyChoice,
+    kssScore,
+    medsUlt12h,
+    observacao,
+    presentationTime,
+    qualidadeSono,
+    sonoOpcao,
+    vigilanceResult,
+    vigilanceRunning,
+    wakeTime,
+  ]);
 
   useEffect(() => {
     if (!vigilanceRunning) return;
@@ -633,6 +689,7 @@ export default function FrmsFlightCheckinFadiga() {
         },
       });
 
+      clearFadigaCheckinDraft(draftKey);
       toast.success('Check-in de fadiga e teste de atenção registrados com sucesso');
       await refetch();
 
@@ -950,6 +1007,11 @@ export default function FrmsFlightCheckinFadiga() {
                 label="Bloco 3 - Atenção e tempo de reação"
                 hint="Teste breve objetivo para complementar repouso absoluto, KSS e sua autoavaliação. O resultado não determina aptidão isoladamente."
               >
+                {interruptedPvtRecovered ? (
+                  <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="alert">
+                    A página foi interrompida durante o teste objetivo. Suas respostas do check-in foram preservadas; reinicie apenas o PVT-B para manter a validade da medição.
+                  </div>
+                ) : null}
                 <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                   {readinessBaseline?.ready
                     ? `Baseline individual disponível (${readinessBaseline.sessions} sessões anteriores).`
@@ -976,7 +1038,10 @@ export default function FrmsFlightCheckinFadiga() {
                       setVigilanceResult(result);
                       setVigilanceRunning(false);
                     }}
-                    onRunningChange={setVigilanceRunning}
+                    onRunningChange={(running) => {
+                      setVigilanceRunning(running);
+                      if (running) setInterruptedPvtRecovered(false);
+                    }}
                   />
                 )}
               </FormCard>

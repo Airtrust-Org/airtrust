@@ -1,3 +1,4 @@
+import { isReloadProtectedInteractivePath } from '@/react-app/lib/reloadProtection';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { lazy, type ComponentType } from 'react';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
@@ -106,7 +107,11 @@ export async function importWithRetry<T>(
         throw error;
       }
 
-      if (reloadOnChunkError && typeof window !== 'undefined') {
+      if (
+        reloadOnChunkError &&
+        typeof window !== 'undefined' &&
+        !isReloadProtectedInteractivePath(window.location.pathname)
+      ) {
         const retryKey = `${LAZY_RETRY_PREFIX}${key}`;
         const hasRetried = sessionStorage.getItem(retryKey) === '1';
         if (!hasRetried) {
