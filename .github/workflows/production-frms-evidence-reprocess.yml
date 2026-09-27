@@ -251,14 +251,30 @@ jobs:
                                        AND j.data=v.data_programacao AND j.deleted_at IS NULL
                    WHERE t.empresa_id=${EXPECTED_TENANT_ID} AND t.deleted_at IS NULL
                      AND v.data_programacao BETWEEN '${FROM_DATE}' AND '${TO_DATE}'
+                ), ranked AS (
+                  SELECT a.*,
+                         ROW_NUMBER() OVER (
+                           PARTITION BY a.jornada_id
+                           ORDER BY COALESCE(a.calculated_at, a.created_at) DESC, a.created_at DESC, a.id DESC
+                         ) AS rn
+                    FROM frms_jornada_avaliacoes a
+                    JOIN eligible e ON e.jornada_id=a.jornada_id
+                   WHERE a.empresa_id=${EXPECTED_TENANT_ID} AND a.deleted_at IS NULL
                 )
                 SELECT
                   COUNT(DISTINCT a.jornada_id) AS materialized_jornadas,
                   SUM(CASE WHEN a.regulatory_profile_id='${EXPECTED_PROFILE_ID}' THEN 0 ELSE 1 END) AS wrong_profile_rows,
-                  SUM(CASE WHEN a.evidence_hash LIKE '%REGULATORY_PROFILE%' THEN 1 ELSE 0 END) AS missing_profile_evidence_rows
-                FROM frms_jornada_avaliacoes a
-                JOIN eligible e ON e.jornada_id=a.jornada_id
-               WHERE a.empresa_id=${EXPECTED_TENANT_ID} AND a.deleted_at IS NULL;"
+                  SUM(CASE WHEN EXISTS (
+                    SELECT 1
+                      FROM json_each(
+                        CASE WHEN json_valid(a.evidence_hash) THEN a.evidence_hash
+                             ELSE '{"missingData":["REGULATORY_PROFILE"]}' END,
+                        '$.missingData'
+                      ) md
+                     WHERE md.value='REGULATORY_PROFILE'
+                  ) THEN 1 ELSE 0 END) AS missing_profile_evidence_rows
+                FROM ranked a
+               WHERE a.rn=1;"
           (cd worker-airtrust && npx wrangler d1 execute airtrust-db --env production --remote --json --command="$sql") > "$out"
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
