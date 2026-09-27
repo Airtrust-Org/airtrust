@@ -122,7 +122,9 @@ describe('migration governance', () => {
     // 0509 adds the governed structured Controle de Voos flight-plan schema.
     // 0510 adds the governed Petrobras RVE daily-export identifiers.
     // 0513 adds tenant-scoped qualification areas and qualificacoes_tipos.area_id.
-    const expectedLatest = 513;
+    // 0515 and 0516 are governed staging mirrors for qualification notification settings;
+    // production remains governed by their Schema V2 change manifests.
+    const expectedLatest = 516;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

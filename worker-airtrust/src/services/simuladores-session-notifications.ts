@@ -1,4 +1,5 @@
 import { sendEmailDetailed } from '../lib/email';
+import { getModuleAlertSettings, renderAlertTemplate } from './module-alert-settings';
 import type { Env } from '../types';
 
 export type SimulatorSessionNotificationReason = 'created' | 'updated' | 'canceled';
@@ -73,11 +74,7 @@ export interface SimulatorSessionNotificationResult {
   email: string | null;
   roles: string[];
   status: 'sent' | 'skipped' | 'failed';
-  reason?:
-    | 'DUPLICATE'
-    | 'EMAIL_MISSING'
-    | 'EMAIL_PROVIDER_NOT_CONFIGURED'
-    | 'EMAIL_SEND_FAILED';
+  reason?: 'DUPLICATE' | 'EMAIL_MISSING' | 'EMAIL_PROVIDER_NOT_CONFIGURED' | 'EMAIL_SEND_FAILED';
 }
 
 export interface SendSimulatorSessionNotificationOptions {
@@ -117,7 +114,9 @@ function buildHtmlEmail(text: string): string {
 }
 
 function simulatorAppLink(env: Env): string | null {
-  const baseUrl = String(env.FRONTEND_URL || '').trim().replace(/\/$/, '');
+  const baseUrl = String(env.FRONTEND_URL || '')
+    .trim()
+    .replace(/\/$/, '');
   if (!baseUrl) return null;
   return `${baseUrl}/simuladores`;
 }
@@ -328,7 +327,10 @@ function sanitizeProviderResult(
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const safe: Record<string, string | number> = { ...base };
 
-    const messageId = sanitizeText(typeof parsed.messageId === 'string' ? parsed.messageId : null, 80);
+    const messageId = sanitizeText(
+      typeof parsed.messageId === 'string' ? parsed.messageId : null,
+      80,
+    );
     const code = sanitizeText(typeof parsed.code === 'string' ? parsed.code : null, 80);
     const message = sanitizeText(
       typeof parsed.message === 'string'
@@ -358,8 +360,7 @@ function buildLogBodyPreview(text: string): string {
     .filter(Boolean);
 
   return (
-    sanitizeText([headline, greeting, intro].filter(Boolean).join(' | '), 160) ||
-    'SIMULADOR_SESSAO'
+    sanitizeText([headline, greeting, intro].filter(Boolean).join(' | '), 160) || 'SIMULADOR_SESSAO'
   );
 }
 
@@ -376,7 +377,9 @@ async function loadNotificationLogCapabilities(
   db: D1Database,
 ): Promise<NotificationLogCapabilities> {
   try {
-    const pragma = await db.prepare("PRAGMA table_info('notificacoes_log')").all<{ name: string }>();
+    const pragma = await db
+      .prepare("PRAGMA table_info('notificacoes_log')")
+      .all<{ name: string }>();
     const names = new Set((pragma.results || []).map((row) => String(row.name || '').trim()));
 
     const required = [
@@ -685,6 +688,30 @@ export function shouldNotifySimulatorSessionUpdate(
   );
 }
 
+function simulatorTemplateVariables(
+  env: Env,
+  session: SimulatorSessionRow,
+  recipient: SimulatorSessionRecipient,
+  recipients: SimulatorSessionRecipient[],
+): Record<string, string> {
+  const link = simulatorAppLink(env);
+  return {
+    destinatario: recipient.nome,
+    data: formatDateBr(session.data),
+    horario: `${normalizeTime(session.hora_inicio) || 'N/A'}${session.hora_fim ? ` às ${normalizeTime(session.hora_fim)}` : ''}`,
+    equipamento: getEquipmentLabel(session),
+    sessao: getSessionTitle(session),
+    funcao: recipient.roles.map(getRoleLabel).join(' / '),
+    equipe:
+      recipients
+        .map((item) => `${item.nome} (${item.roles.map(getRoleLabel).join(' / ')})`)
+        .join(', ') || 'Equipe não informada',
+    status: session.status || 'N/A',
+    observacoes: session.observacoes ? `Observações: ${session.observacoes}` : '',
+    acesso: link ? `Acesso seguro: ${link}` : '',
+  };
+}
+
 export async function sendSimulatorSessionEmailNotifications(
   env: Env,
   db: D1Database,
@@ -697,6 +724,17 @@ export async function sendSimulatorSessionEmailNotifications(
   if (!data) return [];
 
   const empresaId = Number(options.empresaId || data.session.empresa_id || 0);
+  const alertSettings =
+    empresaId > 0 ? (await getModuleAlertSettings(db, empresaId)).simulator_session_email : null;
+  if (alertSettings) {
+    const reasonEnabled =
+      options.reason === 'created'
+        ? alertSettings.created
+        : options.reason === 'updated'
+          ? alertSettings.updated
+          : alertSettings.canceled;
+    if (!alertSettings.enabled || !reasonEnabled) return [];
+  }
   const recipients = buildRecipients(data.session, data.participants);
   const providerConfigured = Boolean(env.BREVO_API_KEY && env.BREVO_FROM_EMAIL);
   const results: SimulatorSessionNotificationResult[] = [];
@@ -704,9 +742,33 @@ export async function sendSimulatorSessionEmailNotifications(
   const pendingSends: PreparedNotificationSend[] = [];
 
   for (const recipient of recipients) {
-    const textContent = buildEmailText(env, data.session, recipient, recipients, options.reason);
-    const subject = buildEmailSubject(data.session, options.reason);
-    const notificationKey = buildNotificationKey(data.session, recipient, recipients, options.reason);
+    const variables = simulatorTemplateVariables(env, data.session, recipient, recipients);
+    const subjectTemplate = alertSettings
+      ? options.reason === 'created'
+        ? alertSettings.created_subject_template
+        : options.reason === 'updated'
+          ? alertSettings.updated_subject_template
+          : alertSettings.canceled_subject_template
+      : null;
+    const messageTemplate = alertSettings
+      ? options.reason === 'created'
+        ? alertSettings.created_message_template
+        : options.reason === 'updated'
+          ? alertSettings.updated_message_template
+          : alertSettings.canceled_message_template
+      : null;
+    const textContent = messageTemplate
+      ? renderAlertTemplate(messageTemplate, variables)
+      : buildEmailText(env, data.session, recipient, recipients, options.reason);
+    const subject = subjectTemplate
+      ? renderAlertTemplate(subjectTemplate, variables)
+      : buildEmailSubject(data.session, options.reason);
+    const notificationKey = buildNotificationKey(
+      data.session,
+      recipient,
+      recipients,
+      options.reason,
+    );
     const bodyPreview = buildLogBodyPreview(textContent);
     let logRow =
       empresaId > 0 ? await findNotificationLog(db, caps, empresaId, notificationKey) : null;

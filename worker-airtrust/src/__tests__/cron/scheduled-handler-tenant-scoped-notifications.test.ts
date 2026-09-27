@@ -19,12 +19,14 @@ vi.mock('../../cron/frms-fadiga-reminder', () => ({
   frmsFadigaReminder: vi.fn().mockResolvedValue({ notificacoes: 0 }),
 }));
 vi.mock('../../cron/sgso-notificacoes', () => ({
-  processarNotificacoesSgso: vi
-    .fn()
-    .mockResolvedValue({ processadas: 0, enviadas: 0, falhas: 0 }),
-  enqueueSlaAlerts: vi
-    .fn()
-    .mockResolvedValue({ alertasTriagem: 0, alertasInvestigacao: 0, alertasBarreiras: 0 }),
+  processarNotificacoesSgso: vi.fn().mockResolvedValue({ processadas: 0, enviadas: 0, falhas: 0 }),
+  enqueueSlaAlerts: vi.fn().mockResolvedValue({
+    alertasTriagem: 0,
+    alertasInvestigacao: 0,
+    alertasBarreiras: 0,
+    alertasTriagemPrevios: 0,
+    alertasInvestigacaoPrevios: 0,
+  }),
 }));
 vi.mock('../../shared/handlers', () => ({
   processarEventosParaModulo: vi.fn().mockResolvedValue({ processados: 0, erros: 0 }),
@@ -99,10 +101,20 @@ function createFakeDb(opts: {
           if (sql.includes('SUM(CASE WHEN qh.deleted_at IS NULL THEN 1 ELSE 0 END) as ativos')) {
             return { results: softDeleteRows };
           }
-          if (sql.includes('ALERTA_SEMANAL_QUALIFICACOES') || sql.includes('dias_restantes')) {
-            if (sql.includes('SELECT') && sql.includes('funcionario_nome')) {
-              return { results: qualifRows };
-            }
+          if (sql.includes('SELECT id FROM empresas WHERE ativo = 1')) {
+            const ids = new Set([
+              ...softDeleteRows.map((row) => row.empresa_id),
+              ...qualifRows.map((row) => row.empresa_id),
+            ]);
+            return { results: [...ids].map((id) => ({ id })) };
+          }
+          if (sql.includes('dias_restantes') && sql.includes('funcionario_nome')) {
+            const empresaId = Number(statement._args[0] || 0);
+            return {
+              results: qualifRows
+                .filter((row) => row.empresa_id === empresaId)
+                .map(({ empresa_id: _empresaId, ...row }) => row),
+            };
           }
           // Everything else (LMS reminders, EAD renewal candidates, domain
           // events tenant list, etc.) — return empty so those code paths are
@@ -189,11 +201,11 @@ describe('runScheduledJobs — tenant-scoped audit notifications', () => {
     const tenantAInsert = auditInserts.find((i) => i.args[i.args.length - 1] === 111);
     const tenantBInsert = auditInserts.find((i) => i.args[i.args.length - 1] === 222);
 
-    expect(String(tenantAInsert?.args[0])).toContain('Alice Tenant A');
-    expect(String(tenantAInsert?.args[0])).not.toContain('Bruno Tenant B');
+    expect(String(tenantAInsert?.args[1])).toContain('Alice Tenant A');
+    expect(String(tenantAInsert?.args[1])).not.toContain('Bruno Tenant B');
 
-    expect(String(tenantBInsert?.args[0])).toContain('Bruno Tenant B');
-    expect(String(tenantBInsert?.args[0])).not.toContain('Alice Tenant A');
+    expect(String(tenantBInsert?.args[1])).toContain('Bruno Tenant B');
+    expect(String(tenantBInsert?.args[1])).not.toContain('Alice Tenant A');
   });
 
   it('emits one weekly qualifications-expiring notification per tenant, never mixing employee names across tenants', async () => {
@@ -242,11 +254,11 @@ describe('runScheduledJobs — tenant-scoped audit notifications', () => {
     const tenantAInsert = weeklyInserts.find((i) => i.args[i.args.length - 1] === 111);
     const tenantBInsert = weeklyInserts.find((i) => i.args[i.args.length - 1] === 222);
 
-    expect(String(tenantAInsert?.args[0])).toContain('Alice Tenant A');
-    expect(String(tenantAInsert?.args[0])).not.toContain('Bruno Tenant B');
+    expect(String(tenantAInsert?.args[1])).toContain('Alice Tenant A');
+    expect(String(tenantAInsert?.args[1])).not.toContain('Bruno Tenant B');
 
-    expect(String(tenantBInsert?.args[0])).toContain('Bruno Tenant B');
-    expect(String(tenantBInsert?.args[0])).not.toContain('Alice Tenant A');
+    expect(String(tenantBInsert?.args[1])).toContain('Bruno Tenant B');
+    expect(String(tenantBInsert?.args[1])).not.toContain('Alice Tenant A');
   });
 
   it('never writes empresa_id IS NULL for the PII-bearing audit notifications', async () => {

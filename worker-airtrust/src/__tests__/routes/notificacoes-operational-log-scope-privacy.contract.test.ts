@@ -35,6 +35,40 @@ describe('notificações operacionais — RBAC, tenant e privacidade', () => {
     expect(processRoute).toContain("code: 'NOTIFICACOES_PROCESS_ERROR'");
   });
 
+  it('mantém defaults globais separados de overrides tenant-scoped após o Schema 0516', () => {
+    const overview = source.slice(
+      source.indexOf("app.get('/whatsapp/overview'"),
+      source.indexOf("app.get('/log'"),
+    );
+    expect(overview).toContain("tipo = 'WHATSAPP'");
+    expect(overview).toContain('empresa_id IS NULL');
+
+    const legacyConfig = source.slice(
+      source.indexOf("app.get('/config'"),
+      source.indexOf("app.put('/config/:id'"),
+    );
+    expect(legacyConfig).toContain('empresa_id IS NULL');
+    expect(source).toContain(
+      "app.get('/configuracoes-qualificacoes', auth(), requireRole('admin', 'manager')",
+    );
+    expect(source).toContain('(empresa_id IS NULL OR empresa_id = ?)');
+    expect(source).toContain(
+      "app.put('/configuracoes-qualificacoes/:codigo', auth(), requireRole('admin')",
+    );
+  });
+
+  it('protege escrita das configurações de módulos e SGSO como admin tenant-scoped', () => {
+    expect(source).toContain(
+      "app.get('/configuracoes-modulos', auth(), requireRole('admin', 'manager')",
+    );
+    expect(source).toContain("app.put('/configuracoes-modulos', auth(), requireRole('admin')");
+    expect(source).toContain(
+      "app.get('/configuracoes-sgso-sla', auth(), requireRole('admin', 'manager')",
+    );
+    expect(source).toContain("app.put('/configuracoes-sgso-sla', auth(), requireRole('admin')");
+    expect(source).toContain('WHERE empresa_id = ?');
+  });
+
   it('preserva notificações pessoais do sistema sem exigir papel administrativo', () => {
     expect(source).toContain("app.get('/sistema', auth(), async (c) => {");
     expect(source).toContain("app.get('/sistema/contador', auth(), async (c) => {");

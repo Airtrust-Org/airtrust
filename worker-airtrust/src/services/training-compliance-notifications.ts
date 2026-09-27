@@ -13,6 +13,7 @@ import {
 } from '../utils/alert-whatsapp-templates-store';
 import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
 import { getSetorGestoresBySetor } from './setores-gestores';
+import { renderAlertTemplate } from './module-alert-settings';
 
 export type ComplianceNotificationPolicy = {
   enabled: boolean;
@@ -22,6 +23,10 @@ export type ComplianceNotificationPolicy = {
   never_done_every_days: number;
   notify_manager_on_overdue: boolean;
   manager_overdue_thresholds: number[];
+  email_subject_template: string;
+  email_message_template: string;
+  manager_subject_template: string;
+  manager_message_template: string;
 };
 
 export const DEFAULT_COMPLIANCE_NOTIFICATION_POLICY: ComplianceNotificationPolicy = {
@@ -32,6 +37,12 @@ export const DEFAULT_COMPLIANCE_NOTIFICATION_POLICY: ComplianceNotificationPolic
   never_done_every_days: 7,
   notify_manager_on_overdue: true,
   manager_overdue_thresholds: [0, -7, -15, -30],
+  email_subject_template: 'Treinamento obrigatório: {{treinamento}} — {{status}}',
+  email_message_template:
+    'GERÊNCIA DE TREINAMENTO | COSTA DO SOL\n\nOlá, {{funcionario}}!\n\nVocê possui um treinamento obrigatório que requer sua atenção:\nTreinamento: {{treinamento}}\nVencimento: {{data_vencimento}}\nStatus: {{status}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação e é acompanhado pela Gerência de Treinamento, inclusive para fins de auditoria.\n\nPor favor, realize-o o quanto antes para manter sua situação regularizada.{{link_bloco}}\n\nMensagem automática da Gerência de Treinamento da Costa do Sol.',
+  manager_subject_template: 'Pendência de treinamento — {{funcionario}} — {{treinamento}}',
+  manager_message_template:
+    'Gerência de Treinamento | Costa do Sol\n\nFuncionário: {{funcionario}}\nSetor: {{setor}}\nTreinamento: {{treinamento}}\nSituação: {{status}}\n\nSolicitamos apoio do gestor para regularização desta pendência obrigatória.',
 };
 
 export type ComplianceNotificationTarget = {
@@ -68,7 +79,9 @@ function normalizePolicy(value: unknown): ComplianceNotificationPolicy {
   const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   const normalizeThresholds = (raw: unknown, fallback: number[]) => {
     if (!Array.isArray(raw)) return fallback;
-    const values = [...new Set(raw.map(Number).filter((n) => Number.isInteger(n) && n >= -365 && n <= 365))];
+    const values = [
+      ...new Set(raw.map(Number).filter((n) => Number.isInteger(n) && n >= -365 && n <= 365)),
+    ];
     return values.length ? values.sort((a, b) => b - a) : fallback;
   };
   return {
@@ -81,13 +94,33 @@ function normalizePolicy(value: unknown): ComplianceNotificationPolicy {
     ),
     never_done_every_days: Math.min(
       90,
-      Math.max(1, Number(input.never_done_every_days) || DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.never_done_every_days),
+      Math.max(
+        1,
+        Number(input.never_done_every_days) ||
+          DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.never_done_every_days,
+      ),
     ),
     notify_manager_on_overdue: input.notify_manager_on_overdue !== false,
     manager_overdue_thresholds: normalizeThresholds(
       input.manager_overdue_thresholds,
       DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.manager_overdue_thresholds,
     ).filter((n) => n <= 0),
+    email_subject_template:
+      String(input.email_subject_template || '')
+        .trim()
+        .slice(0, 300) || DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_subject_template,
+    email_message_template:
+      String(input.email_message_template || '')
+        .trim()
+        .slice(0, 5000) || DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template,
+    manager_subject_template:
+      String(input.manager_subject_template || '')
+        .trim()
+        .slice(0, 300) || DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.manager_subject_template,
+    manager_message_template:
+      String(input.manager_message_template || '')
+        .trim()
+        .slice(0, 5000) || DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.manager_message_template,
   };
 }
 
@@ -155,9 +188,11 @@ function formatDateBr(value: string | null): string {
 }
 
 function statusText(target: ComplianceNotificationTarget): string {
-  if (target.status_compliance === 'NAO_REALIZADO') return 'Treinamento obrigatório ainda não realizado';
+  if (target.status_compliance === 'NAO_REALIZADO')
+    return 'Treinamento obrigatório ainda não realizado';
   const days = target.dias_para_vencer;
-  if (days == null) return target.status_compliance === 'VENCIDO' ? 'Treinamento vencido' : 'Requer atenção';
+  if (days == null)
+    return target.status_compliance === 'VENCIDO' ? 'Treinamento vencido' : 'Requer atenção';
   if (days < 0) {
     const n = Math.abs(days);
     return `Vencido há ${n} ${n === 1 ? 'dia' : 'dias'}`;
@@ -197,6 +232,21 @@ async function resolveCourseLink(
   } catch {
     return null;
   }
+}
+
+function complianceTemplateVariables(
+  target: ComplianceNotificationTarget,
+  trainingUrl: string | null = null,
+): Record<string, string> {
+  return {
+    funcionario: target.funcionario_nome,
+    treinamento: target.qualificacao_nome,
+    data_vencimento: formatDateBr(target.data_validade),
+    status: statusText(target),
+    setor: target.setor_nome || 'Não informado',
+    link: trainingUrl || '',
+    link_bloco: trainingUrl ? `\n\nAcesse diretamente o treinamento: ${trainingUrl}` : '',
+  };
 }
 
 function plainMessage(target: ComplianceNotificationTarget, trainingUrl: string | null): string {
@@ -293,18 +343,23 @@ async function sendEmailChannel(
   trainingUrl: string | null,
 ): Promise<{ attempted: boolean; ok: boolean; error?: string | null }> {
   if (!target.email) return { attempted: false, ok: false, error: 'SEM_EMAIL' };
-  const subject = `Treinamento obrigatório: ${target.qualificacao_nome} — ${statusText(target)}`;
-  const message = plainMessage(target, trainingUrl);
+  const policy = await getComplianceNotificationPolicy(db, target.empresa_id);
+  const vars = complianceTemplateVariables(target, trainingUrl);
+  const subject = renderAlertTemplate(policy.email_subject_template, vars);
+  const message = renderAlertTemplate(policy.email_message_template, vars);
   let result: EmailSendResult;
   try {
     result = await sendEmailDetailed(env, {
       to: [{ email: target.email, name: target.funcionario_nome }],
       subject,
       textContent: message,
-      htmlContent: htmlMessage(target, trainingUrl),
+      htmlContent: `<div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.55;max-width:640px;margin:auto;white-space:pre-wrap">${message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`,
     });
   } catch (error) {
-    result = { ok: false, providerResponse: error instanceof Error ? error.message : String(error) };
+    result = {
+      ok: false,
+      providerResponse: error instanceof Error ? error.message : String(error),
+    };
   }
   await insertLog(db, target, {
     tipo: 'EMAIL_COMPLIANCE',
@@ -314,7 +369,11 @@ async function sendEmailChannel(
     error: result.ok ? null : result.providerResponse || 'EMAIL_SEND_FAILED',
     message,
   });
-  return { attempted: true, ok: result.ok, error: result.ok ? null : result.providerResponse || 'EMAIL_SEND_FAILED' };
+  return {
+    attempted: true,
+    ok: result.ok,
+    error: result.ok ? null : result.providerResponse || 'EMAIL_SEND_FAILED',
+  };
 }
 
 async function sendWhatsappChannel(
@@ -344,7 +403,9 @@ async function sendWhatsappChannel(
           dataVencimento: formatDateBr(target.data_validade),
           statusVencimento: statusVariable,
         });
-  const rendered = template ? renderTemplateBody(template.bodyText, variables) : plainMessage(target, trainingUrl);
+  const rendered = template
+    ? renderTemplateBody(template.bodyText, variables)
+    : plainMessage(target, trainingUrl);
   try {
     let localTemplate = null;
     try {
@@ -440,7 +501,11 @@ export async function latestNeverDoneNotificationAt(
           AND assunto LIKE ? AND status = 'enviada'
         ORDER BY COALESCE(enviado_em, created_at) DESC LIMIT 1`,
     )
-    .bind(target.empresa_id, target.funcionario_cpf, `[COMPLIANCE_TREINAMENTO:${target.qualificacao_tipo_id}:NEVER_%`)
+    .bind(
+      target.empresa_id,
+      target.funcionario_cpf,
+      `[COMPLIANCE_TREINAMENTO:${target.qualificacao_tipo_id}:NEVER_%`,
+    )
     .first<{ sent_at: string | null }>();
   return row?.sent_at || null;
 }
@@ -453,24 +518,27 @@ export async function notifySectorManagersForOverdue(
 ): Promise<number> {
   if (!target.setor_id) return 0;
   const managers = await getSetorGestoresBySetor(db, target.empresa_id, target.setor_id, true);
-  const emails = [...new Set(managers.map((m) => String(m.gestor_email || '').trim().toLowerCase()).filter(Boolean))];
+  const emails = [
+    ...new Set(
+      managers
+        .map((m) =>
+          String(m.gestor_email || '')
+            .trim()
+            .toLowerCase(),
+        )
+        .filter(Boolean),
+    ),
+  ];
   if (!emails.length) return 0;
-  const subject = `Pendência de treinamento — ${target.funcionario_nome} — ${target.qualificacao_nome}`;
-  const text = [
-    'Gerência de Treinamento | Costa do Sol',
-    '',
-    `Funcionário: ${target.funcionario_nome}`,
-    `Setor: ${target.setor_nome || 'Não informado'}`,
-    `Treinamento: ${target.qualificacao_nome}`,
-    `Situação: ${statusText(target)}`,
-    '',
-    'Solicitamos apoio do gestor para regularização desta pendência obrigatória.',
-  ].join('\n');
+  const policy = await getComplianceNotificationPolicy(db, target.empresa_id);
+  const vars = complianceTemplateVariables(target);
+  const subject = renderAlertTemplate(policy.manager_subject_template, vars);
+  const text = renderAlertTemplate(policy.manager_message_template, vars);
   const result = await sendEmailDetailed(env, {
     to: emails.map((email) => ({ email })),
     subject,
     textContent: text,
-    htmlContent: `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#1f2937"><h2>Gerência de Treinamento | Costa do Sol</h2><p>Solicitamos apoio do gestor para regularização da pendência abaixo.</p><ul><li><strong>Funcionário:</strong> ${target.funcionario_nome}</li><li><strong>Setor:</strong> ${target.setor_nome || 'Não informado'}</li><li><strong>Treinamento:</strong> ${target.qualificacao_nome}</li><li><strong>Situação:</strong> ${statusText(target)}</li></ul></div>`,
+    htmlContent: `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#1f2937;white-space:pre-wrap">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`,
   });
   for (const email of emails) {
     await insertLog(db, target, {

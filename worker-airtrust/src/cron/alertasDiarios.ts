@@ -7,6 +7,7 @@ import {
   sqlStatusNotEqualsAny,
 } from '../lib/status/status-codes';
 import { publishDomainEvent } from '../shared/domainEvents';
+import { getModuleAlertSettings } from '../services/module-alert-settings';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 
 export async function alertasDiariosHandler(_event: ScheduledEvent, env: Env): Promise<void> {
@@ -125,6 +126,10 @@ async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string)
     );
   }
 
+  const simulatorSettings = (await getModuleAlertSettings(db, Number(empresaId)))
+    .simulator_upcoming;
+  if (!simulatorSettings.enabled) return;
+
   const simuladoresVencendo = await db
     .prepare(
       `SELECT
@@ -143,10 +148,10 @@ async function processarAlertasDiariosEmpresa(db: D1Database, empresaId: string)
            "UPPER(COALESCE(sa.status, 'AGENDADO'))",
            SCHEDULED_SESSION_STATUS_VALUES,
          )}
-         AND CAST(JULIANDAY(sa.data) - JULIANDAY('now') AS INTEGER) BETWEEN 0 AND 15
+         AND CAST(JULIANDAY(sa.data) - JULIANDAY('now') AS INTEGER) BETWEEN 0 AND ?
        GROUP BY sp.funcionario_id`,
     )
-    .bind(Number(empresaId))
+    .bind(Number(empresaId), simulatorSettings.days_before)
     .all<{ funcionario_id: string; data_sessao: string; dias: number }>();
 
   for (const row of simuladoresVencendo.results || []) {

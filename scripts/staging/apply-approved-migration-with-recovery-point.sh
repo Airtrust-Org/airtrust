@@ -47,6 +47,8 @@ APPROVED_MIGRATIONS=(
   "0510_controle_voos_petrobras_rve_export.sql"
   "0511_frms_duty_boundary_config.sql"
   "0513_qualification_areas.sql"
+  "0515_qualification_expiry_email_stages.sql"
+  "0516_qualification_expired_daily_alerts.sql"
 )
 
 apply=false
@@ -222,6 +224,12 @@ validate_postconditions() {
     0513_qualification_areas.sql)
       bash scripts/staging/validate-0513-postconditions.sh --target="$db_name"
       ;;
+    0515_qualification_expiry_email_stages.sql)
+      bash scripts/staging/validate-0515-postconditions.sh --target="$db_name"
+      ;;
+    0516_qualification_expired_daily_alerts.sql)
+      bash scripts/staging/validate-0516-postconditions.sh --target="$db_name"
+      ;;
   esac
 }
 
@@ -288,6 +296,15 @@ fi
 echo "PREFLIGHT_OK=true"
 
 ledger_count="$(read_ledger_count)"
+
+if [[ "$migration_basename" == "0516_qualification_expired_daily_alerts.sql" && "$ledger_count" == "0" ]]; then
+  dependency_count="$(query_count "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '0515_qualification_expiry_email_stages.sql';")"
+  if [[ "$dependency_count" != "1" ]]; then
+    echo "ERROR: 0516 requires exactly one applied 0515 staging ledger row; found=$dependency_count" >&2
+    exit 1
+  fi
+  echo "STAGING_DEPENDENCY_0515_OK=true"
+fi
 
 if [[ "$migration_basename" == 0461_* || "$migration_basename" == 0462_* ]]; then
   node scripts/staging/preflight-0461-0462.mjs --migration="$migration_basename"

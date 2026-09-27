@@ -5,6 +5,7 @@ import { getEmpresaId, isPlatformAdminContext } from '../middleware/tenant';
 import { processarNotificacoes } from '../cron/notificacoes';
 import { createLogger, toError } from '../utils/logger';
 import type { Env } from '../types';
+import { getModuleAlertSettings, saveModuleAlertSettings } from '../services/module-alert-settings';
 import {
   appendEmployeeSectorFilter,
   getEmployeeSectorAccess,
@@ -194,14 +195,13 @@ app.get('/whatsapp/overview', auth(), requireRole('admin', 'manager'), async (c)
       },
     );
 
-    // notificacoes_config é configuração global da plataforma (mesmo padrão de
-    // padroes_escala/restricoes_tripulacao/frms_configuracao_limites) — não há dado
-    // por empresa aqui, então a leitura permanece sem filtro de tenant. A escrita
-    // (PUT /config/:id) é restrita a platform-admin — ver comentário naquela rota.
+    // Esta visão usa apenas defaults globais. Desde o Schema V2 0516 a tabela
+    // também contém overrides tenant-scoped; nunca misturá-los nesta rota agregada.
     const whatsappConfigs = await c.env.DB.prepare(
       `SELECT id, ativo, dias_antes, urgencia, destinatarios, template, updated_at
          FROM notificacoes_config
         WHERE tipo = 'WHATSAPP'
+          AND empresa_id IS NULL
           AND deleted_at IS NULL
         ORDER BY dias_antes ASC`,
     ).all();
@@ -396,10 +396,343 @@ app.get('/log', auth(), requireRole('admin', 'manager'), async (c) => {
 });
 
 // =============================================
+// GET/PUT /api/notificacoes/configuracoes-modulos
+// Política tenant-scoped para alertas de comunicação ainda sem config própria.
+// Controles fail-closed de segurança não são expostos aqui.
+// =============================================
+app.get('/configuracoes-modulos', auth(), requireRole('admin', 'manager'), async (c) => {
+  try {
+    const empresaId = getEmpresaId(c);
+    const data = await getModuleAlertSettings(c.env.DB, empresaId);
+    return c.json({ success: true, data });
+  } catch (error) {
+    return notificacoesErrorResponse(
+      c,
+      error,
+      'Erro ao listar configurações de alertas dos módulos',
+      'MODULE_ALERT_CONFIG_LIST_ERROR',
+      { route: '/configuracoes-modulos' },
+    );
+  }
+});
+
+app.put('/configuracoes-modulos', auth(), requireRole('admin'), async (c) => {
+  try {
+    const empresaId = getEmpresaId(c);
+    const payload = await c.req.json().catch(() => ({}));
+    const data = await saveModuleAlertSettings(c.env.DB, empresaId, payload);
+    return c.json({ success: true, data });
+  } catch (error) {
+    return notificacoesErrorResponse(
+      c,
+      error,
+      'Erro ao salvar configurações de alertas dos módulos',
+      'MODULE_ALERT_CONFIG_UPDATE_ERROR',
+      { route: '/configuracoes-modulos' },
+    );
+  }
+});
+
+// =============================================
+// GET/PUT /api/notificacoes/configuracoes-sgso-sla
+// Reusa a tabela canônica sgso_sla_config; não cria regra paralela.
+// =============================================
+app.get('/configuracoes-sgso-sla', auth(), requireRole('admin', 'manager'), async (c) => {
+  try {
+    const empresaId = getEmpresaId(c);
+    const { results } = await c.env.DB.prepare(
+      `SELECT fase, horas_prazo, horas_alerta_previa, ativo
+           FROM sgso_sla_config
+          WHERE empresa_id = ?
+          ORDER BY CASE fase WHEN 'TRIAGEM' THEN 1 WHEN 'INVESTIGACAO' THEN 2 ELSE 3 END`,
+    )
+      .bind(empresaId)
+      .all();
+    return c.json({ success: true, data: results || [] });
+  } catch (error) {
+    return notificacoesErrorResponse(
+      c,
+      error,
+      'Erro ao listar SLAs do SGSO',
+      'SGSO_SLA_CONFIG_LIST_ERROR',
+      { route: '/configuracoes-sgso-sla' },
+    );
+  }
+});
+
+app.put('/configuracoes-sgso-sla', auth(), requireRole('admin'), async (c) => {
+  try {
+    const empresaId = getEmpresaId(c);
+    const body = (await c.req.json().catch(() => ({}))) as {
+      rows?: Array<{
+        fase?: unknown;
+        horas_prazo?: unknown;
+        horas_alerta_previa?: unknown;
+        ativo?: unknown;
+      }>;
+    };
+    const rows = Array.isArray(body.rows) ? body.rows : [];
+    const allowed = new Set(['TRIAGEM', 'INVESTIGACAO', 'RESOLUCAO']);
+    const normalized = rows.map((row) => {
+      const fase = String(row.fase || '')
+        .trim()
+        .toUpperCase();
+      const horasPrazo = Number(row.horas_prazo);
+      const horasAlerta = Number(row.horas_alerta_previa);
+      if (!allowed.has(fase)) throw new Error('SGSO_SLA_FASE_INVALIDA');
+      if (!Number.isInteger(horasPrazo) || horasPrazo < 1 || horasPrazo > 8760) {
+        throw new Error('SGSO_SLA_PRAZO_INVALIDO');
+      }
+      if (!Number.isInteger(horasAlerta) || horasAlerta < 0 || horasAlerta >= horasPrazo) {
+        throw new Error('SGSO_SLA_ALERTA_INVALIDO');
+      }
+      return { fase, horasPrazo, horasAlerta, ativo: row.ativo === false ? 0 : 1 };
+    });
+
+    for (const row of normalized) {
+      await c.env.DB.prepare(
+        `INSERT INTO sgso_sla_config
+             (empresa_id, fase, horas_prazo, horas_alerta_previa, ativo, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+           ON CONFLICT(empresa_id, fase) DO UPDATE SET
+             horas_prazo = excluded.horas_prazo,
+             horas_alerta_previa = excluded.horas_alerta_previa,
+             ativo = excluded.ativo,
+             updated_at = datetime('now')`,
+      )
+        .bind(empresaId, row.fase, row.horasPrazo, row.horasAlerta, row.ativo)
+        .run();
+    }
+
+    const { results } = await c.env.DB.prepare(
+      `SELECT fase, horas_prazo, horas_alerta_previa, ativo
+           FROM sgso_sla_config WHERE empresa_id = ? ORDER BY fase`,
+    )
+      .bind(empresaId)
+      .all();
+    return c.json({ success: true, data: results || [] });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (message.startsWith('SGSO_SLA_')) {
+      return c.json(
+        { success: false, error: 'Configuração de SLA SGSO inválida', code: message },
+        400,
+      );
+    }
+    return notificacoesErrorResponse(
+      c,
+      error,
+      'Erro ao salvar SLAs do SGSO',
+      'SGSO_SLA_CONFIG_UPDATE_ERROR',
+      { route: '/configuracoes-sgso-sla' },
+    );
+  }
+});
+
+// =============================================
+// GET /api/notificacoes/configuracoes-qualificacoes
+// Régua efetiva de e-mail por empresa. Linhas globais são defaults; overrides são tenant-scoped.
+// =============================================
+app.get('/configuracoes-qualificacoes', auth(), requireRole('admin', 'manager'), async (c) => {
+  try {
+    const empresaId = getEmpresaId(c);
+    const { results } = await c.env.DB.prepare(
+      `SELECT id, tipo, ativo, dias_antes, urgencia, destinatarios, template,
+                empresa_id, codigo, assunto_template, frequencia, intervalo_dias,
+                created_at, updated_at
+           FROM notificacoes_config
+          WHERE deleted_at IS NULL
+            AND tipo = 'EMAIL'
+            AND codigo LIKE 'QUALIFICACAO_%'
+            AND (empresa_id IS NULL OR empresa_id = ?)
+          ORDER BY CASE WHEN empresa_id IS NULL THEN 0 ELSE 1 END ASC, dias_antes DESC, id ASC`,
+    )
+      .bind(empresaId)
+      .all<Record<string, unknown>>();
+
+    const effective = new Map<string, Record<string, unknown>>();
+    for (const row of results || []) {
+      const codigo = String(row.codigo || '')
+        .trim()
+        .toUpperCase();
+      if (!codigo) continue;
+      effective.set(codigo, {
+        ...row,
+        origem: Number(row.empresa_id) === empresaId ? 'empresa' : 'padrao',
+      });
+    }
+
+    return c.json({
+      success: true,
+      data: [...effective.values()].sort(
+        (a, b) => Number(b.dias_antes || 0) - Number(a.dias_antes || 0),
+      ),
+    });
+  } catch (error) {
+    return notificacoesErrorResponse(
+      c,
+      error,
+      'Erro ao listar configurações de alertas de qualificações',
+      'QUALIFICATION_ALERT_CONFIG_LIST_ERROR',
+      { route: '/configuracoes-qualificacoes' },
+    );
+  }
+});
+
+app.put('/configuracoes-qualificacoes/:codigo', auth(), requireRole('admin'), async (c) => {
+  try {
+    const empresaId = getEmpresaId(c);
+    const codigo = String(c.req.param('codigo') || '')
+      .trim()
+      .toUpperCase();
+    if (!/^QUALIFICACAO_[A-Z0-9_]{2,64}$/.test(codigo)) {
+      return c.json({ success: false, error: 'Código de alerta inválido' }, 400);
+    }
+
+    const base = await c.env.DB.prepare(
+      `SELECT id, tipo, ativo, dias_antes, urgencia, destinatarios, template,
+                codigo, assunto_template, frequencia, intervalo_dias
+           FROM notificacoes_config
+          WHERE empresa_id IS NULL AND tipo = 'EMAIL' AND codigo = ? AND deleted_at IS NULL
+          ORDER BY id DESC LIMIT 1`,
+    )
+      .bind(codigo)
+      .first<Record<string, unknown>>();
+    if (!base) return c.json({ success: false, error: 'Alerta padrão não encontrado' }, 404);
+
+    const input = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const isExpired = codigo === 'QUALIFICACAO_VENCIDA';
+    const ativo = input.ativo === undefined ? Number(base.ativo ?? 1) : input.ativo ? 1 : 0;
+    const diasAntes = isExpired ? 0 : Number(input.dias_antes ?? base.dias_antes);
+    if (!Number.isInteger(diasAntes) || diasAntes < 0 || diasAntes > 365) {
+      return c.json({ success: false, error: 'dias_antes deve ser inteiro entre 0 e 365' }, 400);
+    }
+
+    const assuntoTemplate = String(input.assunto_template ?? base.assunto_template ?? '').trim();
+    const template = String(input.template ?? base.template ?? '').trim();
+    if (!assuntoTemplate || assuntoTemplate.length > 300) {
+      return c.json({ success: false, error: 'Assunto deve ter entre 1 e 300 caracteres' }, 400);
+    }
+    if (!template || template.length > 5000) {
+      return c.json({ success: false, error: 'Mensagem deve ter entre 1 e 5000 caracteres' }, 400);
+    }
+
+    const frequencia = String(input.frequencia ?? base.frequencia ?? 'ONCE')
+      .trim()
+      .toUpperCase();
+    if (!['ONCE', 'DAILY', 'EVERY_N_DAYS'].includes(frequencia)) {
+      return c.json({ success: false, error: 'Frequência inválida' }, 400);
+    }
+    const intervaloDias =
+      frequencia === 'EVERY_N_DAYS'
+        ? Math.max(1, Math.min(365, Number(input.intervalo_dias ?? base.intervalo_dias ?? 1)))
+        : frequencia === 'DAILY'
+          ? 1
+          : null;
+
+    const existing = await c.env.DB.prepare(
+      `SELECT id FROM notificacoes_config
+          WHERE empresa_id = ? AND tipo = 'EMAIL' AND codigo = ? AND deleted_at IS NULL
+          LIMIT 1`,
+    )
+      .bind(empresaId, codigo)
+      .first<{ id: number }>();
+
+    if (existing?.id) {
+      await c.env.DB.prepare(
+        `UPDATE notificacoes_config
+              SET ativo = ?, dias_antes = ?, urgencia = ?, destinatarios = ?, template = ?,
+                  assunto_template = ?, frequencia = ?, intervalo_dias = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND empresa_id = ?`,
+      )
+        .bind(
+          ativo,
+          diasAntes,
+          base.urgencia ?? null,
+          base.destinatarios ?? null,
+          template,
+          assuntoTemplate,
+          frequencia,
+          intervaloDias,
+          existing.id,
+          empresaId,
+        )
+        .run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO notificacoes_config
+            (tipo, ativo, dias_antes, urgencia, destinatarios, template, empresa_id, codigo,
+             assunto_template, frequencia, intervalo_dias, created_at, updated_at)
+           VALUES ('EMAIL', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      )
+        .bind(
+          ativo,
+          diasAntes,
+          base.urgencia ?? null,
+          base.destinatarios ?? null,
+          template,
+          empresaId,
+          codigo,
+          assuntoTemplate,
+          frequencia,
+          intervaloDias,
+        )
+        .run();
+    }
+
+    const updated = await c.env.DB.prepare(
+      `SELECT id, tipo, ativo, dias_antes, urgencia, destinatarios, template,
+                empresa_id, codigo, assunto_template, frequencia, intervalo_dias,
+                created_at, updated_at
+           FROM notificacoes_config
+          WHERE empresa_id = ? AND tipo = 'EMAIL' AND codigo = ? AND deleted_at IS NULL
+          LIMIT 1`,
+    )
+      .bind(empresaId, codigo)
+      .first();
+
+    return c.json({ success: true, data: { ...updated, origem: 'empresa' } });
+  } catch (error) {
+    return notificacoesErrorResponse(
+      c,
+      error,
+      'Erro ao salvar configuração de alerta de qualificação',
+      'QUALIFICATION_ALERT_CONFIG_UPDATE_ERROR',
+      { route: '/configuracoes-qualificacoes/:codigo', configCode: c.req.param('codigo') },
+    );
+  }
+});
+
+app.delete('/configuracoes-qualificacoes/:codigo', auth(), requireRole('admin'), async (c) => {
+  try {
+    const empresaId = getEmpresaId(c);
+    const codigo = String(c.req.param('codigo') || '')
+      .trim()
+      .toUpperCase();
+    await c.env.DB.prepare(
+      `UPDATE notificacoes_config
+            SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+          WHERE empresa_id = ? AND tipo = 'EMAIL' AND codigo = ? AND deleted_at IS NULL`,
+    )
+      .bind(empresaId, codigo)
+      .run();
+    return c.json({ success: true });
+  } catch (error) {
+    return notificacoesErrorResponse(
+      c,
+      error,
+      'Erro ao restaurar configuração padrão de alerta',
+      'QUALIFICATION_ALERT_CONFIG_RESET_ERROR',
+      { route: '/configuracoes-qualificacoes/:codigo', configCode: c.req.param('codigo') },
+    );
+  }
+});
+
+// =============================================
 // GET /api/notificacoes/config
 // Listar configurações de notificações
-// notificacoes_config é global (plataforma inteira), não por empresa — ver nota
-// na rota PUT abaixo.
+// Lista apenas defaults globais. Overrides tenant-scoped são expostos somente
+// pelas rotas específicas que resolvem a empresa autenticada.
 // =============================================
 app.get('/config', auth(), requireRole('admin', 'manager'), async (c) => {
   try {
@@ -417,6 +750,7 @@ app.get('/config', auth(), requireRole('admin', 'manager'), async (c) => {
         updated_at
       FROM notificacoes_config
       WHERE deleted_at IS NULL
+        AND empresa_id IS NULL
       ORDER BY dias_antes DESC
     `,
     ).all();
@@ -442,13 +776,10 @@ app.get('/config', auth(), requireRole('admin', 'manager'), async (c) => {
 // PUT /api/notificacoes/config/:id
 // Atualizar configuração
 //
-// SECURITY (auditoria 2026-07-08): notificacoes_config não tem coluna empresa_id —
-// é configuração global da plataforma (regras de "avisar N dias antes", por tipo/
-// urgência), no mesmo espírito de padroes_escala/frms_configuracao_limites. Antes,
-// qualquer admin/manager de QUALQUER empresa podia alterar essa config compartilhada
-// por todos os tenants. Restrito a platform-admin até existir uma decisão de produto
-// sobre tornar isso customizável por empresa (o que exigiria empresa_id nesta tabela
-// e uma estratégia de fallback para quando a empresa não tiver override próprio).
+// SECURITY: Schema V2 0516 adiciona empresa_id para overrides tenant-scoped das
+// regras de QUALIFICAÇÕES. Esta rota legada continua destinada apenas às linhas
+// globais da plataforma (empresa_id IS NULL) e permanece restrita a platform-admin.
+// Overrides da empresa devem usar /configuracoes-qualificacoes/:codigo.
 // =============================================
 app.put('/config/:id', auth(), requireRole('admin', 'manager'), async (c) => {
   try {
@@ -477,7 +808,7 @@ app.put('/config/:id', auth(), requireRole('admin', 'manager'), async (c) => {
         destinatarios = COALESCE(?, destinatarios),
         template = COALESCE(?, template),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
+      WHERE id = ? AND empresa_id IS NULL
     `,
     )
       .bind(
@@ -492,7 +823,7 @@ app.put('/config/:id', auth(), requireRole('admin', 'manager'), async (c) => {
 
     const updated = await c.env.DB.prepare(
       `
-      SELECT * FROM notificacoes_config WHERE id = ?
+      SELECT * FROM notificacoes_config WHERE id = ? AND empresa_id IS NULL
     `,
     )
       .bind(id)

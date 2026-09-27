@@ -8,10 +8,13 @@ import {
   EAD_RENEWAL_PROCESS_BATCH,
 } from '../../cron/resilient/ead-renewal';
 import {
+  buildLmsReminderContent,
   buildLmsReminderDiscoveryQuery,
+  isLmsReminderDue,
   LMS_REMINDER_DISCOVERY_BATCH,
   LMS_REMINDER_PROCESS_BATCH,
 } from '../../cron/resilient/lms-reminders';
+import { DEFAULT_MODULE_ALERT_SETTINGS } from '../../services/module-alert-settings';
 import {
   buildCronStateSchemaProbeQuery,
   getResilientCronPlan,
@@ -119,6 +122,33 @@ describe('bounded cron discovery', () => {
     expect(sql).toContain('LIMIT ?');
     expect(LMS_REMINDER_DISCOVERY_BATCH).toBeLessThanOrEqual(100);
     expect(LMS_REMINDER_PROCESS_BATCH).toBeLessThanOrEqual(100);
+  });
+
+  it('aplica régua e templates configuráveis também no caminho resiliente do LMS', () => {
+    const settings = {
+      ...DEFAULT_MODULE_ALERT_SETTINGS.lms_completion,
+      thresholds: [20, 5],
+      title_template: 'Treinamento {{treinamento}} — {{status_prazo}}',
+      message_template: 'Finalize {{treinamento}} até {{data_limite}} ({{dias}} dias).',
+    };
+
+    expect(isLmsReminderDue(settings, 20)).toBe(true);
+    expect(isLmsReminderDue(settings, 7)).toBe(false);
+    expect(isLmsReminderDue({ ...settings, enabled: false }, 20)).toBe(false);
+    expect(
+      buildLmsReminderContent(settings, {
+        titulo: 'CRM',
+        data_expiracao: '2026-10-17',
+        dias_restantes: 20,
+      }),
+    ).toEqual({
+      title: 'Treinamento CRM — Vence em 20 dias',
+      message: 'Finalize CRM até 17/10/2026 (20 dias).',
+    });
+
+    const sql = compactSql(buildLmsReminderDiscoveryQuery());
+    expect(sql).toContain('BETWEEN 0 AND 365');
+    expect(sql).not.toContain('IN (1, 7)');
   });
 
   it('usa keyset e limite explícito na renovação EAD', () => {

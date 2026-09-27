@@ -1,4 +1,4 @@
-import { calcularDiasAteVencimento, determinarUrgencia } from '../utils/qualificacoes-expiration';
+import { calcularDiasAteVencimento } from '../utils/qualificacoes-expiration';
 import type { Env } from '../types';
 import {
   getLocalWhatsAppTemplateRecord,
@@ -31,6 +31,11 @@ interface NotificacaoConfig {
   urgencia: string | null;
   destinatarios: string | null;
   template: string;
+  empresa_id: number | null;
+  codigo: string | null;
+  assunto_template: string | null;
+  frequencia: string | null;
+  intervalo_dias: number | null;
 }
 
 interface QualificacaoParaNotificar {
@@ -69,44 +74,6 @@ export async function processarNotificacoes(env: Env): Promise<ProcessamentoNoti
   log.log('[NOTIFICACOES] Iniciando processamento...', { dataHora: new Date().toISOString() });
 
   try {
-    // 1. Buscar configurações ativas (globais — notificacoes_config não tem empresa_id)
-    const { results: configs } = await env.DB.prepare(
-      `
-      SELECT
-        id,
-        tipo,
-        ativo,
-        dias_antes,
-        urgencia,
-        destinatarios,
-        template
-      FROM notificacoes_config
-      WHERE ativo = 1 AND deleted_at IS NULL
-      ORDER BY dias_antes ASC
-    `,
-    ).all();
-
-    log.log('[NOTIFICACOES] Configurações ativas encontradas', { total: configs.length });
-
-    if (configs.length === 0) {
-      log.warn('[NOTIFICACOES] Nenhuma configuração ativa. Abortando.');
-      return {
-        configsProcessadas: 0,
-        enviadas: 0,
-        erros: 0,
-        porTipo: {},
-      };
-    }
-
-    const temWhatsAppAtivo = (configs as unknown as NotificacaoConfig[]).some(
-      (config) => normalizeTipoCanal(config.tipo) === 'WHATSAPP',
-    );
-
-    if (temWhatsAppAtivo) {
-      await seedLocalWhatsAppTemplateCatalog(env.DB);
-    }
-
-    // 2. Listar empresas ativas para processamento tenant-aware
     const { results: empresas } = await env.DB.prepare(
       `SELECT id, codigo, nome FROM empresas WHERE ativo = 1 AND deleted_at IS NULL ORDER BY id`,
     ).all<{ id: number; codigo: string; nome: string }>();
@@ -115,9 +82,10 @@ export async function processarNotificacoes(env: Env): Promise<ProcessamentoNoti
 
     let totalEnviadas = 0;
     let totalErros = 0;
+    let configsProcessadas = 0;
+    let whatsappCatalogSeeded = false;
     const porTipo: ProcessamentoNotificacoesResumo['porTipo'] = {};
 
-    // 3. Processar cada empresa independentemente
     for (const empresa of empresas) {
       try {
         log.log('[NOTIFICACOES] Processando empresa', {
@@ -125,39 +93,62 @@ export async function processarNotificacoes(env: Env): Promise<ProcessamentoNoti
           empresaCodigo: empresa.codigo,
         });
 
+        const configs = await carregarConfiguracoesParaEmpresa(env.DB, empresa.id);
+        configsProcessadas += configs.length;
+        if (configs.length === 0) {
+          log.warn('[NOTIFICACOES] Empresa sem configurações ativas', { empresaId: empresa.id });
+          continue;
+        }
+
+        if (
+          !whatsappCatalogSeeded &&
+          configs.some((config) => normalizeTipoCanal(config.tipo) === 'WHATSAPP')
+        ) {
+          await seedLocalWhatsAppTemplateCatalog(env.DB);
+          whatsappCatalogSeeded = true;
+        }
+
         const qualificacoesBase = await carregarQualificacoesParaNotificar(env, empresa.id);
         log.log('[NOTIFICACOES] Qualificacoes base carregadas para empresa', {
           empresaId: empresa.id,
           total: qualificacoesBase.length,
+          configs: configs.length,
         });
 
-        // Processar cada configuração para esta empresa
-        for (const config of configs as unknown as NotificacaoConfig[]) {
-          const resultado = await processarConfiguracao(env, empresa.id, config, qualificacoesBase);
+        for (const config of configs) {
+          const lowerThreshold = getLowerThreshold(config, configs);
+          const resultado = await processarConfiguracao(
+            env,
+            empresa.id,
+            config,
+            qualificacoesBase,
+            lowerThreshold,
+          );
           totalEnviadas += resultado.enviadas;
           totalErros += resultado.erros;
-          porTipo[normalizeTipoCanal(config.tipo)] = {
-            enviadas: (porTipo[normalizeTipoCanal(config.tipo)]?.enviadas || 0) + resultado.enviadas,
-            erros: (porTipo[normalizeTipoCanal(config.tipo)]?.erros || 0) + resultado.erros,
+          const canal = normalizeTipoCanal(config.tipo);
+          porTipo[canal] = {
+            enviadas: (porTipo[canal]?.enviadas || 0) + resultado.enviadas,
+            erros: (porTipo[canal]?.erros || 0) + resultado.erros,
           };
         }
       } catch (empresaError) {
-        log.error('[NOTIFICACOES] Erro ao processar empresa — continuando com proxima', empresaError, {
-          empresaId: empresa.id,
-          empresaCodigo: empresa.codigo,
-        });
-        // Não interrompe outras empresas — erro é registrado e o loop continua
+        log.error(
+          '[NOTIFICACOES] Erro ao processar empresa — continuando com proxima',
+          empresaError,
+          { empresaId: empresa.id, empresaCodigo: empresa.codigo },
+        );
       }
     }
 
     log.log('[NOTIFICACOES] Processamento concluido', {
       totalEnviadas,
       totalErros,
-      configsProcessadas: configs.length,
+      configsProcessadas,
       empresasProcessadas: empresas.length,
     });
     return {
-      configsProcessadas: configs.length,
+      configsProcessadas,
       enviadas: totalEnviadas,
       erros: totalErros,
       porTipo,
@@ -168,9 +159,53 @@ export async function processarNotificacoes(env: Env): Promise<ProcessamentoNoti
   }
 }
 
+function configEffectiveKey(config: NotificacaoConfig): string {
+  const codigo = String(config.codigo || '')
+    .trim()
+    .toUpperCase();
+  if (codigo) return `${normalizeTipoCanal(config.tipo)}:${codigo}`;
+  return `${normalizeTipoCanal(config.tipo)}:${String(config.urgencia || '')}:${config.dias_antes}`;
+}
+
+export async function carregarConfiguracoesParaEmpresa(
+  db: D1Database,
+  empresaId: number,
+): Promise<NotificacaoConfig[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, tipo, ativo, dias_antes, urgencia, destinatarios, template,
+              empresa_id, codigo, assunto_template, frequencia, intervalo_dias
+         FROM notificacoes_config
+        WHERE deleted_at IS NULL
+          AND (empresa_id IS NULL OR empresa_id = ?)
+        ORDER BY CASE WHEN empresa_id IS NULL THEN 0 ELSE 1 END ASC, id ASC`,
+    )
+    .bind(empresaId)
+    .all<NotificacaoConfig>();
+
+  const effective = new Map<string, NotificacaoConfig>();
+  for (const config of results || []) effective.set(configEffectiveKey(config), config);
+  return [...effective.values()]
+    .filter((config) => Number(config.ativo) === 1)
+    .sort((a, b) => b.dias_antes - a.dias_antes || a.id - b.id);
+}
+
+function getLowerThreshold(config: NotificacaoConfig, configs: NotificacaoConfig[]): number | null {
+  if (isExpiredConfig(config)) return null;
+  const sameChannel = configs
+    .filter(
+      (candidate) =>
+        candidate.id !== config.id &&
+        normalizeTipoCanal(candidate.tipo) === normalizeTipoCanal(config.tipo) &&
+        !isExpiredConfig(candidate) &&
+        candidate.dias_antes < config.dias_antes,
+    )
+    .map((candidate) => candidate.dias_antes);
+  return sameChannel.length > 0 ? Math.max(...sameChannel) : -1;
+}
+
 export function buildQualificacoesParaNotificarQuery(): string {
-  const qualificationStatusExpr =
-    `UPPER(COALESCE(qh.status, '${QUALIFICACAO_STATUS.CONCLUIDA}'))`;
+  const qualificationStatusExpr = `UPPER(COALESCE(qh.status, '${QUALIFICACAO_STATUS.CONCLUIDA}'))`;
 
   return `
     SELECT
@@ -242,6 +277,7 @@ async function processarConfiguracao(
   empresaId: number,
   config: NotificacaoConfig,
   qualificacoes: QualificacaoParaNotificar[],
+  lowerThreshold: number | null,
 ): Promise<{ enviadas: number; erros: number }> {
   const log = getNotificacoesConsole(env);
   let enviadas = 0;
@@ -249,8 +285,7 @@ async function processarConfiguracao(
   const whatsAppTemplateCache = new Map<string, WhatsAppTemplateRecord | null>();
 
   const tipoCanal = normalizeTipoCanal(config.tipo);
-  const dedupWindowSql =
-    tipoCanal === 'EMAIL' ? '' : "AND enviado_em >= datetime('now', '-1 day')";
+  const dedupWindowSql = getDedupWindowSql(config);
   const { results: notificacoesAnteriores } = await env.DB.prepare(
     `
       SELECT qualificacao_historico_id, destinatario
@@ -280,15 +315,15 @@ async function processarConfiguracao(
 
   for (const qualificacao of qualificacoes) {
     const diasAteVencimento = calcularDiasAteVencimento(qualificacao.data_vencimento);
-    const urgencia = determinarUrgencia(diasAteVencimento);
 
-    // Verificar se deve notificar
-    if (!deveNotificar(config, diasAteVencimento, urgencia)) {
+    if (!deveNotificar(config, diasAteVencimento, lowerThreshold)) {
       continue;
     }
 
     const entregasAnteriores = notificacoesPorQualificacao.get(Number(qualificacao.id)) || [];
-    const funcionarioEmail = String(qualificacao.funcionario_email || '').trim().toLowerCase();
+    const funcionarioEmail = String(qualificacao.funcionario_email || '')
+      .trim()
+      .toLowerCase();
     const emailJaEntregueAoFuncionario =
       tipoCanal === 'EMAIL' && funcionarioEmail
         ? entregasAnteriores.some((destinatario) =>
@@ -335,23 +370,46 @@ async function processarConfiguracao(
   return { enviadas, erros };
 }
 
+function normalizeFrequency(value: string | null | undefined): 'ONCE' | 'DAILY' | 'EVERY_N_DAYS' {
+  const normalized = String(value || 'ONCE')
+    .trim()
+    .toUpperCase();
+  if (normalized === 'DAILY') return 'DAILY';
+  if (normalized === 'EVERY_N_DAYS') return 'EVERY_N_DAYS';
+  return 'ONCE';
+}
+
+function getDedupWindowSql(config: NotificacaoConfig): string {
+  const frequency = normalizeFrequency(config.frequencia);
+  if (frequency === 'DAILY') return "AND date(enviado_em) = date('now')";
+  if (frequency === 'EVERY_N_DAYS') {
+    const interval = Math.max(1, Math.min(365, Number(config.intervalo_dias) || 1));
+    return `AND enviado_em >= datetime('now', '-${interval} day')`;
+  }
+  return '';
+}
+
+function isExpiredConfig(config: NotificacaoConfig): boolean {
+  return (
+    String(config.codigo || '')
+      .trim()
+      .toUpperCase() === 'QUALIFICACAO_VENCIDA' ||
+    String(config.urgencia || '')
+      .trim()
+      .toLowerCase() === 'expired'
+  );
+}
+
 function deveNotificar(
   config: NotificacaoConfig,
   diasAteVencimento: number | null,
-  urgencia: string | null,
+  lowerThreshold: number | null,
 ): boolean {
-  // Se não tem vencimento (vitalício), não notifica
   if (diasAteVencimento === null) return false;
-
-  // Se já venceu, não notifica (já passou)
+  if (isExpiredConfig(config)) return diasAteVencimento < 0;
   if (diasAteVencimento < 0) return false;
-
-  // Se está muito longe do vencimento, não notifica
   if (diasAteVencimento > config.dias_antes) return false;
-
-  // Se config tem filtro de urgência e não bate, não notifica
-  if (config.urgencia && urgencia !== config.urgencia) return false;
-
+  if (lowerThreshold !== null && diasAteVencimento <= lowerThreshold) return false;
   return true;
 }
 
@@ -387,7 +445,11 @@ export function normalizeEmailRecipients(values: string[]): string[] {
   return [
     ...new Set(
       values
-        .map((value) => String(value || '').trim().toLowerCase())
+        .map((value) =>
+          String(value || '')
+            .trim()
+            .toLowerCase(),
+        )
         .filter(Boolean),
     ),
   ];
@@ -444,19 +506,29 @@ async function enviarNotificacao(
       : null;
 
     // Interpolar template
-    const corpoBase = interpolarTemplate(config.template, {
+    const diasVencida = Math.abs(Math.min(diasAteVencimento, 0));
+    const templateVars = {
       qualificacao: qualificacao.qualificacao_nome,
       funcionario: qualificacao.funcionario_nome,
       dias: diasAteVencimento.toString(),
+      dias_vencida: diasVencida.toString(),
+      unidade_dias_vencida: diasVencida === 1 ? 'dia' : 'dias',
       categoria: qualificacao.categoria,
-      data_vencimento: new Date(qualificacao.data_vencimento).toLocaleDateString('pt-BR'),
-    });
-    const corpo = trainingUrl
-      ? `${corpoBase}\n\nAcesse o treinamento: ${trainingUrl}`
-      : corpoBase;
+      data_vencimento: new Date(`${qualificacao.data_vencimento}T00:00:00`).toLocaleDateString(
+        'pt-BR',
+      ),
+    };
+    const corpoBase = interpolarTemplate(config.template, templateVars);
+    const corpo = trainingUrl ? `${corpoBase}\n\nAcesse o treinamento: ${trainingUrl}` : corpoBase;
 
     const urgenciaIcon = diasAteVencimento <= 7 ? '🚨' : diasAteVencimento <= 15 ? '⚠️' : '📅';
-    const assunto = `${urgenciaIcon} Alerta: Qualificação ${qualificacao.qualificacao_nome} expirando em ${diasAteVencimento} dias`;
+    const assuntoPadrao =
+      diasAteVencimento < 0
+        ? `🚨 Qualificação vencida: ${qualificacao.qualificacao_nome} — há ${Math.abs(diasAteVencimento)} ${Math.abs(diasAteVencimento) === 1 ? 'dia' : 'dias'}`
+        : `${urgenciaIcon} Alerta: Qualificação ${qualificacao.qualificacao_nome} expirando em ${diasAteVencimento} dias`;
+    const assunto = config.assunto_template
+      ? interpolarTemplate(config.assunto_template, templateVars)
+      : assuntoPadrao;
     let assuntoLog = assunto;
     let corpoLog = corpo;
     let destinatarioLog = '';

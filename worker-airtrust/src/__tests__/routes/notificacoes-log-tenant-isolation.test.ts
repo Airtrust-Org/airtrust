@@ -283,7 +283,7 @@ describe('notificacoes /whatsapp/overview tenant isolation', () => {
     expect(overviewQuery?.args[0]).toBe(2);
   });
 
-  it('notificacoes_config do overview permanece global (sem filtro empresa_id)', async () => {
+  it('notificacoes_config do overview usa somente defaults globais e não mistura overrides de tenant', async () => {
     const { env, calls } = createMockEnv();
 
     await request(env, '/api/notificacoes/whatsapp/overview', 1);
@@ -291,7 +291,7 @@ describe('notificacoes /whatsapp/overview tenant isolation', () => {
     const configQuery = calls.find(
       (call) => call.method === 'all' && call.query.includes('FROM notificacoes_config'),
     );
-    expect(configQuery?.query).not.toContain('empresa_id');
+    expect(configQuery?.query).toContain('empresa_id IS NULL');
   });
 });
 
