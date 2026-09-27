@@ -234,27 +234,41 @@ async function resolveBatchedWeather(
     .map((value) => new Date(value));
   const window = buildRedemetQueryWindow(allEventDates);
 
-  const rows =
-    client && allStations.length > 0 && window ? await client.fetchMetarRows(allStations, window) : [];
+  let rows = [] as Awaited<ReturnType<RedemetClient['fetchMetarRows']>>;
+  let redemetUnavailable = false;
+  if (client && allStations.length > 0 && window) {
+    try {
+      rows = await client.fetchMetarRows(allStations, window);
+    } catch {
+      // REDEMET is evidence enrichment, not a prerequisite for the FRMS snapshot.
+      // Keep the result fail-closed by marking weather unavailable instead of
+      // discarding the entire evidence snapshot when the external service fails.
+      redemetUnavailable = true;
+    }
+  }
 
   for (const plan of plans) {
     const departure = !plan.departureStation
       ? unavailable(null, plan.departureEventUtc, 'ICAO_INVALIDO')
       : !plan.departureEventUtc
         ? unavailable(plan.departureStation, null, 'HORARIO_EVENTO_AUSENTE')
-        : (selectMetarObservation(rows, plan.departureStation, new Date(plan.departureEventUtc), {
-            mode: selectionMode,
-            maxAgeMinutes,
-          }) ?? unavailable(plan.departureStation, plan.departureEventUtc, 'SEM_OBSERVACAO_COMPATIVEL'));
+        : redemetUnavailable
+          ? unavailable(plan.departureStation, plan.departureEventUtc, 'REDEMET_INDISPONIVEL')
+          : (selectMetarObservation(rows, plan.departureStation, new Date(plan.departureEventUtc), {
+              mode: selectionMode,
+              maxAgeMinutes,
+            }) ?? unavailable(plan.departureStation, plan.departureEventUtc, 'SEM_OBSERVACAO_COMPATIVEL'));
 
     const arrival = !plan.arrivalStation
       ? unavailable(null, plan.arrivalEventUtc, 'ICAO_INVALIDO')
       : !plan.arrivalEventUtc
         ? unavailable(plan.arrivalStation, null, 'HORARIO_EVENTO_AUSENTE')
-        : (selectMetarObservation(rows, plan.arrivalStation, new Date(plan.arrivalEventUtc), {
-            mode: selectionMode,
-            maxAgeMinutes,
-          }) ?? unavailable(plan.arrivalStation, plan.arrivalEventUtc, 'SEM_OBSERVACAO_COMPATIVEL'));
+        : redemetUnavailable
+          ? unavailable(plan.arrivalStation, plan.arrivalEventUtc, 'REDEMET_INDISPONIVEL')
+          : (selectMetarObservation(rows, plan.arrivalStation, new Date(plan.arrivalEventUtc), {
+              mode: selectionMode,
+              maxAgeMinutes,
+            }) ?? unavailable(plan.arrivalStation, plan.arrivalEventUtc, 'SEM_OBSERVACAO_COMPATIVEL'));
 
     results.set(plan.id, { departure, arrival });
   }

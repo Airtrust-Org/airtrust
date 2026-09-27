@@ -199,6 +199,42 @@ describe('FRMS IOGP shadow pipeline — end to end', () => {
     expect(weather.departure.temperatureC).toBe(31);
   });
 
+  it('keeps the snapshot fail-closed when REDEMET is temporarily unavailable', async () => {
+    const fetchMetarRows = vi.fn().mockRejectedValue(new Error('Falha REDEMET HTTP 503.'));
+    const client = { fetchMetarRows } as unknown as RedemetClient;
+    const catalogueWithTimezone: FrmsLocationCatalogEntry[] = CATALOGUE.map((entry) =>
+      entry.code === 'SBME' ? { ...entry, timezoneIana: 'America/Sao_Paulo' } : entry,
+    );
+
+    const result = await runFrmsIogpShadowPipeline({
+      env: { ENVIRONMENT: 'production', FRMS_IOGP_PRODUCTION_EVIDENCE_TENANTS: '6' },
+      tenantId: 6,
+      tripulanteId: 42,
+      jornadaId: 'j-redemet-outage',
+      dataOperacional: '2026-04-02',
+      naturezaDado: 'JORNADA_REALIZADA',
+      rawSigvoosLegs: [buildRawLeg('crewA')],
+      locationCatalogue: catalogueWithTimezone,
+      tenantOperationalTimezoneIana: null,
+      redemetClient: client,
+      complianceEvaluations: [{ status: 'COMPLIANT', actualMin: 100, resolved: null }],
+      regulatoryProfileReady: true,
+      regulatoryProfileId: 'profile-anac-basic',
+      regulatoryProfileCode: 'ANAC_BASIC',
+      regulatoryProfileReference: 'ref',
+      regulatoryProfileSourceDocumentHash: 'a'.repeat(64),
+      biologicalLevel: 'NORMAL',
+    });
+
+    if (!result.enabled) throw new Error('expected shadow pipeline to be enabled');
+    expect(fetchMetarRows).toHaveBeenCalledTimes(1);
+    const weather = [...result.weatherByLegId.values()][0];
+    expect(weather.departure).toMatchObject({ quality: 'UNAVAILABLE', reason: 'REDEMET_INDISPONIVEL' });
+    expect(result.snapshot.evidence.weatherSource).toBe('UNAVAILABLE');
+    expect(result.snapshot.evidence.missingData).toContain('WEATHER_EVIDENCE');
+    expect(result.orchestration.automaticApprovalAllowed).toBe(false);
+  });
+
   it('never resolves an UNKNOWN compliance/regulatory state to automatic approval', async () => {
     const client = mockRedemetClient([]);
     const result = await runFrmsIogpShadowPipeline({
