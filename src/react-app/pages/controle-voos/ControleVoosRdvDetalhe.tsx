@@ -49,6 +49,7 @@ import {
 } from './data/controleVoosUtils';
 import {
   RDV_PILOT_STEPS,
+  aggregateTrechosToFormPatch,
   buildFormState,
   calcConsumoCombustivel,
   calcHorasVoadas,
@@ -270,6 +271,17 @@ export default function ControleVoosRdvDetalhe() {
 
   const origem = aeroMap.get(voo.origem_id);
   const destino = aeroMap.get(voo.destino_id);
+  const etapaSummary = aggregateTrechosToFormPatch(trechos);
+  const reviewSummary = {
+    horario_decolagem_real:
+      form.horario_decolagem_real || etapaSummary.horario_decolagem_real || '',
+    horario_pouso_real: form.horario_pouso_real || etapaSummary.horario_pouso_real || '',
+    horas_voadas: form.horas_voadas || etapaSummary.horas_voadas || '',
+    numero_pousos: form.numero_pousos || etapaSummary.numero_pousos || '',
+    ciclos: form.ciclos || etapaSummary.ciclos || '',
+    pob: form.pob || etapaSummary.pob || '',
+    carga_kg: form.carga_kg || etapaSummary.carga_kg || '',
+  };
   const stepIndex = getStepIndex(step);
   const bloqueiosEnvio = alertas.filter((a) => a.severidade === 'IMPEDE_ENVIO');
   const canEnviar =
@@ -729,27 +741,27 @@ export default function ControleVoosRdvDetalhe() {
                       <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
                         <div>
                           <dt className="text-xs text-slate-500">Decolagem real</dt>
-                          <dd className="font-mono font-medium">{formatLocalDateTimeInput(form.horario_decolagem_real)}</dd>
+                          <dd className="font-mono font-medium">{formatLocalDateTimeInput(reviewSummary.horario_decolagem_real)}</dd>
                         </div>
                         <div>
                           <dt className="text-xs text-slate-500">Pouso real</dt>
-                          <dd className="font-mono font-medium">{formatLocalDateTimeInput(form.horario_pouso_real)}</dd>
+                          <dd className="font-mono font-medium">{formatLocalDateTimeInput(reviewSummary.horario_pouso_real)}</dd>
                         </div>
                         <div>
                           <dt className="text-xs text-slate-500">Horas voadas</dt>
-                          <dd className="font-medium">{formatHours(parseNumber(form.horas_voadas))}</dd>
+                          <dd className="font-medium">{formatHours(parseNumber(reviewSummary.horas_voadas))}</dd>
                         </div>
                         <div>
                           <dt className="text-xs text-slate-500">Pousos / ciclos</dt>
-                          <dd className="font-medium">{form.numero_pousos || 'Não informado'} / {form.ciclos || 'Não informado'}</dd>
+                          <dd className="font-medium">{reviewSummary.numero_pousos || 'Não informado'} / {reviewSummary.ciclos || 'Não informado'}</dd>
                         </div>
                         <div>
                           <dt className="text-xs text-slate-500">POB</dt>
-                          <dd className="font-medium">{form.pob || 'Não informado'}</dd>
+                          <dd className="font-medium">{reviewSummary.pob || 'Não informado'}</dd>
                         </div>
                         <div>
                           <dt className="text-xs text-slate-500">Carga</dt>
-                          <dd className="font-medium">{form.carga_kg ? `${form.carga_kg} kg` : 'Não informada'}</dd>
+                          <dd className="font-medium">{reviewSummary.carga_kg ? `${reviewSummary.carga_kg} kg` : 'Não informada'}</dd>
                         </div>
                       </dl>
                       <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
