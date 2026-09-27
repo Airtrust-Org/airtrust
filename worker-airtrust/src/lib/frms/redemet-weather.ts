@@ -64,7 +64,8 @@ export interface WeatherEvidenceUnavailable {
     | 'ICAO_INVALIDO'
     | 'TIMEZONE_NAO_CONFIGURADO'
     | 'HORARIO_EVENTO_AUSENTE'
-    | 'SEM_OBSERVACAO_COMPATIVEL';
+    | 'SEM_OBSERVACAO_COMPATIVEL'
+    | 'REDEMET_INDISPONIVEL';
 }
 
 export type WeatherEvidence = WeatherObservationEvidence | WeatherEvidenceUnavailable;
