@@ -13,6 +13,12 @@ import {
 import { sendEmailDetailed } from '../lib/email';
 import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import {
+  assertFlightPlanningPdfStored,
+  buildFlightPlanningEmailAttachment,
+  buildFlightPlanningPublicUrl,
+  findLatestFlightPlanningPdf,
+} from '../services/controle-voos/flight-planning-attachment';
+import {
   buildCompletedFlightLogMessage,
   buildDailyPlanningMessage,
   buildFlightProgramMessage,
@@ -201,6 +207,23 @@ async function loadFlightDispatchContext(c: Context<{ Bindings: Env }>) {
   return { empresaId, userId, flight, crew: context.crew as CrewRecipient[], context };
 }
 
+async function resolvePlanningPdfDispatch(
+  c: Context<{ Bindings: Env }>,
+  empresaId: number,
+  vooId: number,
+) {
+  const attachment = await findLatestFlightPlanningPdf(c.env.DB, empresaId, vooId);
+  if (!attachment) return { attachment: null, publicUrl: null };
+  await assertFlightPlanningPdfStored(c.env.BUCKET, attachment);
+  const publicUrl = await buildFlightPlanningPublicUrl(c.req.url, c.env, attachment);
+  return { attachment, publicUrl };
+}
+
+function appendPlanningPdfLink(message: string, publicUrl: string | null): string {
+  if (!publicUrl) return message;
+  return `${message}\n\n📎 Planejamento prévio do voo (PDF): ${publicUrl}`;
+}
+
 export async function getFlightWhatsAppShareHandler(c: Context<{ Bindings: Env }>) {
   const type = String(c.req.query('tipo') || 'programacao').trim().toLowerCase();
   if (type === 'flight_log') assertControleVoosCoordination(c);
@@ -235,9 +258,14 @@ export async function getFlightWhatsAppShareHandler(c: Context<{ Bindings: Env }
     throw new ApiError('Tipo de mensagem WhatsApp invalido', 400, 'CONTROLE_VOOS_WHATSAPP_SHARE_INVALID_TYPE');
   }
 
+  const { publicUrl } = await resolvePlanningPdfDispatch(c, Number(flight.empresa_id), Number(flight.id));
   return c.json({
     success: true,
-    data: { type: 'programacao', message: buildFlightProgramMessage(context) },
+    data: {
+      type: 'programacao',
+      message: appendPlanningPdfLink(buildFlightProgramMessage(context), publicUrl),
+      planning_pdf_attached: Boolean(publicUrl),
+    },
   });
 }
 
@@ -284,6 +312,11 @@ export async function getDailyPlanningWhatsAppShareHandler(c: Context<{ Bindings
 export async function sendFlightWhatsAppHandler(c: Context<{ Bindings: Env }>) {
   const { empresaId, userId, flight, crew, context } = await loadFlightDispatchContext(c);
   const message = buildFlightProgramMessage(context);
+  const { attachment: planningPdf, publicUrl: planningPdfUrl } = await resolvePlanningPdfDispatch(
+    c,
+    empresaId,
+    Number(flight.id),
+  );
   const results: Array<{ funcionario_id: number; nome_guerra: string; status: 'sent' | 'failed' | 'missing_phone'; error?: string }> = [];
   const seenPhones = new Set<string>();
 
@@ -296,7 +329,14 @@ export async function sendFlightWhatsAppHandler(c: Context<{ Bindings: Env }>) {
     if (seenPhones.has(phone)) continue;
     seenPhones.add(phone);
     try {
-      await sendWhatsAppMessage(c.env, phone, `Olá, ${member.nome_guerra}.\n\n${message}`);
+      await sendWhatsAppMessage(
+        c.env,
+        phone,
+        `Olá, ${member.nome_guerra}.\n\n${message}`,
+        undefined,
+        undefined,
+        planningPdfUrl ? { mediaUrl: planningPdfUrl } : undefined,
+      );
       results.push({ funcionario_id: Number(member.funcionario_id), nome_guerra: member.nome_guerra, status: 'sent' });
     } catch (error) {
       results.push({
@@ -318,7 +358,12 @@ export async function sendFlightWhatsAppHandler(c: Context<{ Bindings: Env }>) {
     statusAnterior: flight.status,
     statusNovo: flight.status,
     descricao: 'Programacao enviada por WhatsApp aos tripulantes',
-    metadata: { action: 'whatsapp_programacao_tripulantes', sent, failed },
+    metadata: {
+      action: 'whatsapp_programacao_tripulantes',
+      sent,
+      failed,
+      planning_pdf_document_id: planningPdf?.documentId || null,
+    },
     usuarioId: userId,
   });
   if (sent === 0) {
@@ -334,6 +379,10 @@ export async function sendFlightWhatsAppHandler(c: Context<{ Bindings: Env }>) {
 export async function sendFlightEmailHandler(c: Context<{ Bindings: Env }>) {
   const { empresaId, userId, flight, crew, context } = await loadFlightDispatchContext(c);
   const message = buildFlightProgramMessage(context);
+  const planningPdf = await findLatestFlightPlanningPdf(c.env.DB, empresaId, Number(flight.id));
+  const planningEmailAttachment = planningPdf
+    ? await buildFlightPlanningEmailAttachment(c.env, planningPdf)
+    : null;
   const results: Array<{ funcionario_id: number; nome_guerra: string; status: 'sent' | 'failed' | 'missing_email' }> = [];
   const seenEmails = new Set<string>();
 
@@ -351,6 +400,7 @@ export async function sendFlightEmailHandler(c: Context<{ Bindings: Env }>) {
       subject: `Programação de voo — ${flight.prefixo} — ${formatFlightDateTime(flight.horario_previsto_partida)}`,
       textContent: personalMessage,
       htmlContent: `<div style="font-family:Arial,sans-serif;white-space:pre-line">${escapeHtml(personalMessage)}</div>`,
+      attachments: planningEmailAttachment ? [planningEmailAttachment] : undefined,
     });
     results.push({
       funcionario_id: Number(member.funcionario_id),
@@ -369,7 +419,12 @@ export async function sendFlightEmailHandler(c: Context<{ Bindings: Env }>) {
     statusAnterior: flight.status,
     statusNovo: flight.status,
     descricao: 'Programacao enviada por e-mail aos tripulantes',
-    metadata: { action: 'email_programacao_tripulantes', sent, failed },
+    metadata: {
+      action: 'email_programacao_tripulantes',
+      sent,
+      failed,
+      planning_pdf_document_id: planningPdf?.documentId || null,
+    },
     usuarioId: userId,
   });
   if (sent === 0) {

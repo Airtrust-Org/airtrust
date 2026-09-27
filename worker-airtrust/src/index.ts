@@ -96,6 +96,7 @@ import backupRoutes from './routes/backup';
 // Integrações EdApp
 import { sigvoosRouter } from './routes/integracoes_sigvoos';
 import controleVoosRoutes from './routes/controle-voos';
+import controleVoosPublicRoutes from './routes/controle-voos-public';
 import controleVoosRdvWorkflowRoutes from './routes/controle-voos-rdv-workflow';
 import controleVoosRdvEtapasRoutes from './routes/controle-voos-rdv-etapas';
 import controleVoosPilotOfflineRoutes from './routes/controle-voos-pilot-offline';
@@ -711,6 +712,10 @@ app.all('/api/integracoes/edapp/*', (c) => {
 });
 
 app.route('/api/integracoes/sigvoos', sigvoosRouter);
+
+// Link temporário assinado para mídia de planejamento prévio enviada por WhatsApp.
+// O token autoriza apenas um documento/tenant/voo específico; não amplia isPublicPath.
+app.route('/api/public/controle-voos', controleVoosPublicRoutes);
 
 // Controle de Voos N1 - endpoints operacionais internos
 // Guard do gate de despacho FRMS: precisa rodar ANTES do handler real de
