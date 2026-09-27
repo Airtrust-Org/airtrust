@@ -803,12 +803,22 @@ export default function Qualificacoes() {
   }, [categoriasData]);
 
   useEffect(() => {
-    if (areasData) {
-      const rows = Array.isArray(areasData)
-        ? areasData
-        : (areasData as { data?: AreaQualificacao[] })?.data || [];
-      setAreas((rows as AreaQualificacao[]).slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')));
-    }
+    if (!areasData) return;
+    const rows = Array.isArray(areasData)
+      ? areasData
+      : (areasData as { data?: AreaQualificacao[] })?.data || [];
+    const nextAreas = (rows as AreaQualificacao[])
+      .slice()
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    setAreas((current) => {
+      const currentSignature = current
+        .map((area) => `${area.id ?? ''}:${area.codigo ?? ''}:${area.nome}:${area.descricao ?? ''}:${Number(area.ativo ?? 1)}`)
+        .join('|');
+      const nextSignature = nextAreas
+        .map((area) => `${area.id ?? ''}:${area.codigo ?? ''}:${area.nome}:${area.descricao ?? ''}:${Number(area.ativo ?? 1)}`)
+        .join('|');
+      return currentSignature === nextSignature ? current : nextAreas;
+    });
   }, [areasData]);
 
   const normalizeTipoCodigo = (value?: string | null) =>
