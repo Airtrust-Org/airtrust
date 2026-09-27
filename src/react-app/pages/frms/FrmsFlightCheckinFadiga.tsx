@@ -338,7 +338,7 @@ function PainelGestorTab() {
           </div>
         ) : rows.length === 0 ? (
           <div className="py-10 text-center text-sm text-slate-400">
-            Nenhum check-in registrado para esta data.
+            Nenhum tripulante vinculado à quinzena nesta data.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -365,11 +365,11 @@ function PainelGestorTab() {
                     </td>
                     <td className="px-4 py-3 text-slate-700">{String(r.kss_score ?? '-')}</td>
                     <td className="px-4 py-3 font-semibold text-slate-900">
-                      {Math.round(Number(r.score_fadiga ?? 0))}
+                      {r.score_fadiga == null ? '—' : Math.round(Number(r.score_fadiga))}
                     </td>
                     <td className="px-4 py-3">{badgeNivel(String(r.nivel_fadiga ?? ''))}</td>
                     <td className="px-4 py-3 text-slate-600">
-                      {statusOperacionalLabel(r.status_operacional)}
+                      {r.status === 'no_duty' ? 'Sem dados FRMS' : statusOperacionalLabel(r.status_operacional)}
                     </td>
                   </tr>
                 ))}

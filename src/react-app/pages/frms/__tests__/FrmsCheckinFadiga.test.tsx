@@ -287,6 +287,41 @@ describe('FrmsCheckinFadiga team panel adapter', () => {
     expect(rows.every((row) => row.status === 'normal')).toBe(true);
   });
 
+  it('mantém no painel o tripulante da quinzena mesmo quando não há nenhum dado FRMS', () => {
+    const rows = normalizeFadigaPainelPayload(
+      {
+        date: '2026-09-27',
+        items: [
+          {
+            funcionario_id: 999,
+            funcionario_nome: 'Tripulante Sem Dados',
+            cargo: 'Piloto',
+            status: 'no_duty',
+            data_source: 'not_applicable',
+            checkin_id: null,
+            kss_score: null,
+            score_fadiga: null,
+            nivel_fadiga: null,
+            status_operacional: null,
+          },
+        ],
+      },
+      '2026-09-27',
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      funcionario_id: 999,
+      funcionario_nome: 'Tripulante Sem Dados',
+      status: 'no_duty',
+      data_source: 'not_applicable',
+      kss_score: null,
+      score_fadiga: null,
+      nivel_fadiga: null,
+      status_operacional: null,
+    });
+  });
+
   it('não converte resposta individual ou shape inesperado em lista vazia', () => {
     const individualPayload = {
       date: '2026-06-05',
@@ -904,7 +939,7 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.getByText('Tripulante Charlie')).toBeInTheDocument();
     expect(screen.getByText('Tripulante Delta')).toBeInTheDocument();
     expect(screen.getByText('Tripulante Eco')).toBeInTheDocument();
-    expect(screen.queryByText('Nenhum check-in registrado para esta data.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nenhum tripulante vinculado à quinzena nesta data.')).not.toBeInTheDocument();
   });
 
   it('na aba Equipe troca de data refaz consulta com 2026-06-05', async () => {
@@ -937,7 +972,7 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Equipe' }));
 
     expect(await screen.findByText('Erro ao carregar check-ins da equipe.')).toBeInTheDocument();
-    expect(screen.queryByText('Nenhum check-in registrado para esta data.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nenhum tripulante vinculado à quinzena nesta data.')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
     expect(refetchPainel).toHaveBeenCalledTimes(1);
@@ -950,6 +985,6 @@ describe('FrmsCheckinFadiga UI', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Equipe' }));
 
-    expect(await screen.findByText('Nenhum check-in registrado para esta data.')).toBeInTheDocument();
+    expect(await screen.findByText('Nenhum tripulante vinculado à quinzena nesta data.')).toBeInTheDocument();
   });
 });

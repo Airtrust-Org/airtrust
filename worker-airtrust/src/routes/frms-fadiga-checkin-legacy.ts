@@ -693,10 +693,22 @@ router.get('/daily-fatigue', async (c) => {
 
     const rows = await c.env.DB
       .prepare(
-        `SELECT
+        `WITH current_fortnight AS (
+           SELECT numero, data_inicio, data_fim
+             FROM escalas_quinzenas
+            WHERE empresa_id = ?
+              AND deleted_at IS NULL
+              AND ? BETWEEN data_inicio AND data_fim
+            ORDER BY numero
+            LIMIT 1
+         )
+         SELECT
             f.id AS funcionario_id,
             f.nome AS funcionario_nome,
             COALESCE(f.cargo, f.funcao) AS cargo,
+            cf.numero AS quinzena_numero,
+            cf.data_inicio AS quinzena_inicio,
+            cf.data_fim AS quinzena_fim,
             fj.id AS jornada_id,
             ch.id AS checkin_id,
             ch.jornada_inicio_prevista AS checkin_apresentacao,
@@ -710,6 +722,14 @@ router.get('/daily-fatigue', async (c) => {
             ch.computed_risk_level,
             ch.requires_operational_review
          FROM funcionarios f
+         JOIN current_fortnight cf
+           ON (
+             (cf.numero = 1 AND LOWER(TRIM(COALESCE(f.quinzena, ''))) IN
+               ('primeira','1','1q','q1','1ª','1a','primeira quinzena'))
+             OR
+             (cf.numero = 2 AND LOWER(TRIM(COALESCE(f.quinzena, ''))) IN
+               ('segunda','2','2q','q2','2ª','2a','segunda quinzena'))
+           )
          LEFT JOIN frms_jornada fj
            ON fj.tripulante_id = f.id
           AND fj.data = ?
@@ -736,7 +756,7 @@ router.get('/daily-fatigue', async (c) => {
            f.nome ASC
          LIMIT ? OFFSET ?`,
       )
-      .bind(date, date, empresaId, ...sectorScope.bindings, limit, offset)
+      .bind(empresaId, date, date, date, empresaId, ...sectorScope.bindings, limit, offset)
       .all<Record<string, unknown>>();
 
     const itens = (rows.results || []).map((row) => {
