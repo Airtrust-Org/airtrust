@@ -225,7 +225,10 @@ describe('fetchControleVoosOperationalRecords', () => {
       vooId: 601,
       identificadorExterno: '700101',
       identificadorExternoTripulante: '7001001',
-      minutosVoo: 60,
+      // Controle de Voos is authoritative: use the explicit navigation/flight time
+      // rather than re-deriving it from takeoff/landing clock boundaries.
+      minutosVoo: 50,
+      minutosTotal: 60,
       timezone: null,
       timezoneFonte: 'INDISPONIVEL',
       statusOperacional: 'PLANEJADO',
