@@ -23,6 +23,7 @@ type OperationalVigilanceTestProps = {
   durationMs?: number;
   onComplete: (result: OperationalVigilanceResult) => void;
   onCancel?: () => void;
+  onRunningChange?: (running: boolean) => void;
 };
 
 function randomDelay(min: number, max: number): number {
@@ -63,6 +64,7 @@ export default function OperationalVigilanceTest({
   durationMs = PVTB_V2_PROTOCOL.defaultDurationMs,
   onComplete,
   onCancel,
+  onRunningChange,
 }: OperationalVigilanceTestProps) {
   const [phase, setPhase] = useState<Phase>('instructions');
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -129,8 +131,9 @@ export default function OperationalVigilanceTest({
       PVTB_V2_PROTOCOL.version,
     );
     setPhase('complete');
+    onRunningChange?.(false);
     onComplete({ summary, trials: trialsRef.current.map((trial) => ({ ...trial })) });
-  }, [cleanupTimers, durationMs, onComplete]);
+  }, [cleanupTimers, durationMs, onComplete, onRunningChange]);
 
   const scheduleNext = useCallback(() => {
     if (finishedRef.current || startedAtRef.current == null) return;
@@ -209,9 +212,10 @@ export default function OperationalVigilanceTest({
     setTrialFeedback(null);
     setCounterMs(0);
     startedAtRef.current = performance.now();
+    onRunningChange?.(true);
     setElapsedMs(0);
     scheduleNext();
-  }, [cleanupTimers, scheduleNext]);
+  }, [cleanupTimers, onRunningChange, scheduleNext]);
 
   const invalidate = useCallback(
     (reason: string) => {
@@ -226,8 +230,9 @@ export default function OperationalVigilanceTest({
       setCounterMs(0);
       setInvalidReason(reason);
       setPhase('invalidated');
+      onRunningChange?.(false);
     },
-    [cleanupTimers],
+    [cleanupTimers, onRunningChange],
   );
 
   useEffect(() => {

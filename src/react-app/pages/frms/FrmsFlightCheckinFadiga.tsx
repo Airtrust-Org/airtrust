@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -338,7 +338,7 @@ function PainelGestorTab() {
           </div>
         ) : rows.length === 0 ? (
           <div className="py-10 text-center text-sm text-slate-400">
-            Nenhum check-in registrado para esta data.
+            Nenhum tripulante vinculado à quinzena nesta data.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -365,11 +365,11 @@ function PainelGestorTab() {
                     </td>
                     <td className="px-4 py-3 text-slate-700">{String(r.kss_score ?? '-')}</td>
                     <td className="px-4 py-3 font-semibold text-slate-900">
-                      {Math.round(Number(r.score_fadiga ?? 0))}
+                      {r.score_fadiga == null ? '—' : Math.round(Number(r.score_fadiga))}
                     </td>
                     <td className="px-4 py-3">{badgeNivel(String(r.nivel_fadiga ?? ''))}</td>
                     <td className="px-4 py-3 text-slate-600">
-                      {statusOperacionalLabel(r.status_operacional)}
+                      {r.status === 'no_duty' ? 'Sem dados FRMS' : statusOperacionalLabel(r.status_operacional)}
                     </td>
                   </tr>
                 ))}
@@ -509,11 +509,22 @@ export default function FrmsFlightCheckinFadiga() {
   const [aceitePrivacidade, setAceitePrivacidade] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [vigilanceResult, setVigilanceResult] = useState<OperationalVigilanceResult | null>(null);
+  const [vigilanceRunning, setVigilanceRunning] = useState(false);
 
   const { data: existente, refetch } = useCheckinHoje();
   const submitMutation = useSubmitCheckin();
   const { data: readinessBaseline } = useReadinessBaseline(today);
   const { data: readinessToday } = useReadinessToday(today);
+
+  useEffect(() => {
+    if (!vigilanceRunning) return;
+    const protect = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', protect);
+    return () => window.removeEventListener('beforeunload', protect);
+  }, [vigilanceRunning]);
 
   const canSubmit = isFadigaCheckinSubmitReady({
     sonoOpcao,
@@ -960,7 +971,13 @@ export default function FrmsFlightCheckinFadiga() {
                     </Button>
                   </div>
                 ) : (
-                  <OperationalVigilanceTest onComplete={setVigilanceResult} />
+                  <OperationalVigilanceTest
+                    onComplete={(result) => {
+                      setVigilanceResult(result);
+                      setVigilanceRunning(false);
+                    }}
+                    onRunningChange={setVigilanceRunning}
+                  />
                 )}
               </FormCard>
 

@@ -148,7 +148,9 @@ export default function FrmsFadigaPainel() {
                         ? 'bg-amber-50 border-amber-200 text-amber-700'
                         : status === 'not_submitted'
                           ? 'bg-violet-50 border-violet-200 text-violet-700'
-                          : 'bg-emerald-50 border-emerald-200 text-emerald-700';
+                          : status === 'no_duty'
+                            ? 'bg-slate-50 border-slate-200 text-slate-600'
+                            : 'bg-emerald-50 border-emerald-200 text-emerald-700';
                   const statusLabel =
                     status === 'not_submitted'
                       ? 'Não preenchida'
@@ -160,9 +162,11 @@ export default function FrmsFadigaPainel() {
                           ? 'Crítica'
                           : status === 'normal'
                             ? 'Preenchida'
-                            : 'Sem jornada';
+                            : 'Sem dados FRMS';
                   const sourceLabel =
-                    String(item.data_source || 'crew_reported') === 'missing_checkin'
+                    String(item.data_source || 'crew_reported') === 'not_applicable'
+                      ? 'Sem jornada/check-in disponível para a data'
+                      : String(item.data_source || 'crew_reported') === 'missing_checkin'
                       ? 'Check-in pendente — sem cálculo'
                       : status === 'incomplete_checkin'
                         ? 'Dados obrigatórios incompletos — sem cálculo'

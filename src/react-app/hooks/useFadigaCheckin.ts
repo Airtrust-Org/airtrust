@@ -175,9 +175,7 @@ export function normalizeFadigaPainelPayload(
     throw new Error('Formato inesperado no painel de fadiga da equipe.');
   }
 
-  return items
-    .filter((item) => String(item.status || '') !== 'no_duty')
-    .map<FadigaPainelEquipeItem>((item) => ({
+  return items.map<FadigaPainelEquipeItem>((item) => ({
       id: String(item.checkin_id || `daily-fatigue-${item.funcionario_id || 'unknown'}-${item.date || requestedDate}`),
       funcionario_id: Number(item.funcionario_id || 0),
       funcionario_nome: String(item.funcionario_nome || item.funcionario_id || '-'),

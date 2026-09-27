@@ -61,8 +61,47 @@ describe('frontendVersionMonitor', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it('skips LMS player routes to avoid interrupting active training', () => {
+  it('skips LMS player and FRMS check-in routes to avoid interrupting active work', () => {
     expect(shouldSkipAutomaticRefresh('/lms/player/123')).toBe(true);
+    expect(shouldSkipAutomaticRefresh('/frms/checkin')).toBe(true);
+    expect(shouldSkipAutomaticRefresh('/frms/checkin/')).toBe(true);
+    expect(shouldSkipAutomaticRefresh('/frms/fadiga-checkin')).toBe(true);
     expect(shouldSkipAutomaticRefresh('/controle-voos/voos')).toBe(false);
+  });
+
+  it('defers an available update during FRMS check-in and refreshes after leaving it', async () => {
+    let focusListener: (() => void) | undefined;
+    const refresh = vi.fn(async () => undefined);
+    const location = { pathname: '/frms/checkin' };
+    const fetchVersion = vi.fn(async () => 'new-sha');
+
+    installFrontendVersionMonitor({
+      windowApi: {
+        location,
+        addEventListener: vi.fn((event: string, cb: () => void) => {
+          if (event === 'focus') focusListener = cb;
+        }),
+        removeEventListener: vi.fn(),
+        setInterval: vi.fn(() => 1 as unknown as number),
+        clearInterval: vi.fn(),
+      } as any,
+      documentApi: {
+        visibilityState: 'visible',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        querySelector: vi.fn(),
+      } as any,
+      readCurrentVersion: () => 'old-sha',
+      fetchVersion,
+      refresh,
+    });
+
+    await Promise.resolve();
+    expect(fetchVersion).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+
+    location.pathname = '/frms/controle-operacional';
+    focusListener?.();
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
   });
 });

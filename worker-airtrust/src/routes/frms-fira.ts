@@ -792,7 +792,12 @@ firaRoutes.post(
 
     // 3) Reprocessa para refletir cálculo/alertas com a fonte ativa escolhida.
     // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
-    const jornadasReprocessadas = await reprocessarTripulanteCompleto(c.env.DB, tripIdNum, LIMITES_DEFAULT);
+    const jornadasReprocessadas = await reprocessarTripulanteCompleto(
+      c.env.DB,
+      tripIdNum,
+      LIMITES_DEFAULT,
+      { env: c.env, empresaId: empresaId ?? null },
+    );
 
     return c.json({
       success: true,

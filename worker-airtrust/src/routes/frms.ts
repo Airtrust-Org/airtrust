@@ -2207,19 +2207,18 @@ frmsRoutes.post(
     if (impersonationDenied) return impersonationDenied;
 
     const empresaId = getEmpresaIdSafe(c);
-    if (!empresaId) {
+    if (!empresaId)
       return c.json(
         { success: false, error: 'Contexto de empresa inválido', code: 'INVALID_TENANT_CONTEXT' },
         403,
       );
-    }
 
     const operationId = crypto.randomUUID();
     const startedAt = Date.now();
     c.executionCtx.waitUntil(
       (async () => {
         try {
-          const result = await reprocessarTodosTripulantes(c.env.DB, empresaId);
+          const result = await reprocessarTodosTripulantes(c.env.DB, empresaId, c.env);
           await recordMaintenanceAudit(c, {
             action: 'FRMS_REPROCESS_ALL',
             module: 'frms',
@@ -2304,10 +2303,18 @@ frmsRoutes.post(
     const denied = await assertTripulanteEmpresa(c, String(tripulanteId));
     if (denied) return denied;
 
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Contexto de empresa inválido', code: 'INVALID_TENANT_CONTEXT' },
+        403,
+      );
+    }
+
     const operationId = crypto.randomUUID();
     const startedAt = Date.now();
-    // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
-    const count = await reprocessarTripulanteCompleto(c.env.DB, tripulanteId, LIMITES_DEFAULT);
+    const count = await reprocessarTripulanteCompleto(
+      c.env.DB, tripulanteId, LIMITES_DEFAULT, { env: c.env, empresaId });
     await recordMaintenanceAudit(c, {
       action: 'FRMS_REPROCESS_TRIPULANTE',
       module: 'frms',
@@ -3703,9 +3710,9 @@ frmsRoutes.post(
     await auditFrms(c, 'frms_escala', 'INSERT', escala?.id || 0, { depois: parsed.data });
     const tripId = String(parsed.data.tripulante_id);
     // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
-    c.executionCtx.waitUntil(
-      reprocessarTripulanteCompleto(c.env.DB, Number(tripId), LIMITES_DEFAULT),
-    );
+    c.executionCtx.waitUntil(reprocessarTripulanteCompleto(
+      c.env.DB, Number(tripId), LIMITES_DEFAULT, { env: c.env, empresaId: getEmpresaIdSafe(c) ?? null },
+    ));
     return c.json({ success: true, data: escala }, 201);
   }),
 );
@@ -3753,9 +3760,9 @@ frmsRoutes.put(
     const escala = await atualizarEscala(c.env.DB, id, parsed.data);
     await auditFrms(c, 'frms_escala', 'UPDATE', id, { depois: parsed.data });
     // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
-    c.executionCtx.waitUntil(
-      reprocessarTripulanteCompleto(c.env.DB, Number(escala.tripulante_id), LIMITES_DEFAULT),
-    );
+    c.executionCtx.waitUntil(reprocessarTripulanteCompleto(
+      c.env.DB, Number(escala.tripulante_id), LIMITES_DEFAULT, { env: c.env, empresaId: getEmpresaIdSafe(c) ?? null },
+    ));
     return c.json({ success: true, data: escala });
   }),
 );
@@ -3785,9 +3792,9 @@ frmsRoutes.delete(
     await deletarEscala(c.env.DB, id);
     await auditFrms(c, 'frms_escala', 'DELETE', id);
     // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
-    c.executionCtx.waitUntil(
-      reprocessarTripulanteCompleto(c.env.DB, Number(escalaDel.tripulante_id), LIMITES_DEFAULT),
-    );
+    c.executionCtx.waitUntil(reprocessarTripulanteCompleto(
+      c.env.DB, Number(escalaDel.tripulante_id), LIMITES_DEFAULT, { env: c.env, empresaId: getEmpresaIdSafe(c) ?? null },
+    ));
     return c.json({ success: true });
   }),
 );

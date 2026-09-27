@@ -1862,6 +1862,7 @@ export async function reprocessarTripulanteCompleto(
 export async function reprocessarTodosTripulantes(
   db: D1Database,
   empresaId?: number,
+  shadowEnv?: FrmsIogpShadowCallerEnv,
 ): Promise<{
   tripulantes: number;
   jornadas: number;
@@ -1873,7 +1874,12 @@ export async function reprocessarTodosTripulantes(
   let erros = 0;
   for (const trip of tripulantes) {
     try {
-      const count = await reprocessarTripulanteCompleto(db, trip.id, LIMITES_DEFAULT);
+      const count = await reprocessarTripulanteCompleto(
+        db,
+        trip.id,
+        LIMITES_DEFAULT,
+        empresaId && shadowEnv ? { env: shadowEnv, empresaId } : undefined,
+      );
       totalJornadas += count;
     } catch (e) {
       console.error(`[FRMS] Erro ao reprocessar tripulante ${trip.id}:`, (e as Error).message);

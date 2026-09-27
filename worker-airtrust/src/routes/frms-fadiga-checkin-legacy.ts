@@ -27,6 +27,7 @@ import {
 } from './frms-fadiga-checkin.schema';
 import { validateCheckinPayloadCompleteness } from './frms-fadiga-checkin-validation';
 import { getFadigaConfig as getConfig, updateFadigaDutyConfig } from './frms-fadiga-config';
+import { loadDailyFatigueTeamRoster } from '../lib/frms/daily-fatigue-team-roster';
 const router = new Hono<AppEnv>();
 router.use('*', auth());
 type FrmsContext = Context<AppEnv>;
@@ -691,55 +692,16 @@ router.get('/daily-fatigue', async (c) => {
     const sectorAccess = await getEmployeeSectorAccess(c, empresaId);
     const sectorScope = buildFuncionarioScopeWhere(sectorAccess, 'f');
 
-    const rows = await c.env.DB
-      .prepare(
-        `SELECT
-            f.id AS funcionario_id,
-            f.nome AS funcionario_nome,
-            COALESCE(f.cargo, f.funcao) AS cargo,
-            fj.id AS jornada_id,
-            ch.id AS checkin_id,
-            ch.jornada_inicio_prevista AS checkin_apresentacao,
-            ch.hora_checkin, ch.kss_score,
-            ch.horas_sono,
-            ch.horas_sono_48h,
-            ch.wake_time,
-            ch.score_fadiga,
-            ch.nivel_fadiga,
-            ch.status_operacional,
-            ch.computed_risk_level,
-            ch.requires_operational_review
-         FROM funcionarios f
-         LEFT JOIN frms_jornada fj
-           ON fj.tripulante_id = f.id
-          AND fj.data = ?
-          AND fj.deleted_at IS NULL
-          AND fj.status IN ('ES','TS','TV','EX','RE','SA')
-         LEFT JOIN frms_fadiga_checkin ch
-           ON ch.funcionario_id = f.id
-          AND ch.empresa_id = f.empresa_id
-          AND ch.data_checkin = ?
-          AND ch.deleted_at IS NULL
-         WHERE f.empresa_id = ?
-           AND f.deleted_at IS NULL
-           AND COALESCE(f.ativo, 1) = 1
-           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-           AND UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE')
-           AND ${sectorScope.clause}
-         ORDER BY
-           CASE
-             WHEN ch.id IS NULL AND fj.id IS NOT NULL THEN 1
-             WHEN ch.computed_risk_level IN ('critical', 'unfit_for_duty') THEN 2
-             WHEN ch.computed_risk_level = 'attention' THEN 3
-             ELSE 4
-           END,
-           f.nome ASC
-         LIMIT ? OFFSET ?`,
-      )
-      .bind(date, date, empresaId, ...sectorScope.bindings, limit, offset)
-      .all<Record<string, unknown>>();
+    const rows = await loadDailyFatigueTeamRoster({
+      db: c.env.DB,
+      empresaId,
+      date,
+      sectorScope,
+      limit,
+      offset,
+    });
 
-    const itens = (rows.results || []).map((row) => {
+    const itens = rows.map((row) => {
       const hasCheckin = Boolean(row.checkin_id);
       const presentationTime = String(row.checkin_apresentacao || '').trim();
       const wakeTime = String(row.wake_time || '').trim();
