@@ -3,6 +3,23 @@ import { upsertImportedEdappCycle } from './lms-matricula-cycle';
 /** The sole functional classifier for LMS-backed qualifications. */
 export const CANONICAL_TRAINING_CATEGORY = 'EAD';
 
+export async function isValidQualificationAreaId(
+  db: D1Database,
+  empresaId: number,
+  areaId: number | null | undefined,
+): Promise<boolean> {
+  if (!areaId) return true;
+  const area = await db
+    .prepare(
+      `SELECT id FROM qualificacoes_areas
+        WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(areaId, empresaId)
+    .first<{ id: number }>();
+  return Boolean(area?.id);
+}
+
 type QualificacaoTipoEadRow = {
   id: number;
   empresa_id: number;
