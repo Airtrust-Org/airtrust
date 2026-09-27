@@ -669,6 +669,7 @@ const CursoCreateSchema = z.object({
   scorm_versao: optionalNullableScormVersion,
   scorm_mastery_score: intWithDefault(70, 0, 100),
   qualificacao_tipo_id: optionalNullablePositiveInt,
+  qualificacao_area_id: optionalNullablePositiveInt,
   gerar_qualificacao_ao_concluir: binaryFlagWithDefault(0),
   publicado: binaryFlagWithDefault(0),
   setor_ids: setorIdsSchema,
@@ -696,6 +697,7 @@ const CursoUpdateSchema = z.object({
     z.number().int().min(0).max(100).optional(),
   ),
   qualificacao_tipo_id: optionalNullablePositiveInt,
+  qualificacao_area_id: optionalNullablePositiveInt,
   gerar_qualificacao_ao_concluir: optionalBinaryFlag,
   publicado: optionalBinaryFlag,
   ativo: optionalBinaryFlag,
@@ -964,6 +966,29 @@ async function validateSetorIds(
   const invalid = setorIds.filter((id) => !found.has(id));
   if (invalid.length > 0) {
     throw new ApiError(`Setor(es) inválido(s) para esta empresa: ${invalid.join(', ')}`, 400);
+  }
+}
+
+async function validateQualificationAreaId(
+  db: D1Database,
+  empresaId: number,
+  areaId: number | null | undefined,
+): Promise<void> {
+  if (!areaId) return;
+  const area = await db
+    .prepare(
+      `SELECT id
+         FROM qualificacoes_areas
+        WHERE id = ?
+          AND empresa_id = ?
+          AND ativo = 1
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(areaId, empresaId)
+    .first<{ id: number }>();
+  if (!area?.id) {
+    throw new ApiError('Área da qualificação inválida ou inativa para esta empresa', 400);
   }
 }
 
@@ -2037,6 +2062,7 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
   if (setorIds.length > 0) {
     await validateSetorIds(db, empresaId, setorIds);
   }
+  await validateQualificationAreaId(db, empresaId, d.qualificacao_area_id);
 
   const insertCols = [
     'empresa_id',
@@ -2141,7 +2167,11 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
     setores: cursoSetores,
   };
   if (finalQualificacaoTipoId) {
-    await syncQualificacaoTipoFromCurso(db, { empresaId, cursoId: Number(id) });
+    await syncQualificacaoTipoFromCurso(db, {
+      empresaId,
+      cursoId: Number(id),
+      qualificacaoAreaId: d.qualificacao_area_id ?? null,
+    });
     await syncLmsCourseFromQualificacaoTipo(db, {
       empresaId,
       qualificacaoTipoId: Number(finalQualificacaoTipoId),
@@ -2175,6 +2205,7 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
       tipo_conteudo: d.tipo_conteudo,
       publicado: d.publicado,
       qualificacao_tipo_id: finalQualificacaoTipoId,
+      qualificacao_area_id: d.qualificacao_area_id ?? null,
       gerar_qualificacao_ao_concluir:
         finalQualificacaoTipoId != null ? 1 : d.gerar_qualificacao_ao_concluir,
       setor_ids: setorIds,
@@ -2225,6 +2256,7 @@ app.put('/:id', requirePermission('lms', 'editar', 'admin', 'manager'), requireO
     throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
 
   const d = parsed.data;
+  await validateQualificationAreaId(db, empresaId, d.qualificacao_area_id);
   const nextGerarQualificacao =
     d.gerar_qualificacao_ao_concluir ?? existing.gerar_qualificacao_ao_concluir;
   const nextQualificacaoTipoId =
@@ -2343,7 +2375,11 @@ app.put('/:id', requirePermission('lms', 'editar', 'admin', 'manager'), requireO
   }
 
   if (resolvedQualificacaoTipoId) {
-    await syncQualificacaoTipoFromCurso(db, { empresaId, cursoId });
+    await syncQualificacaoTipoFromCurso(db, {
+      empresaId,
+      cursoId,
+      qualificacaoAreaId: d.qualificacao_area_id ?? null,
+    });
     await syncLmsCourseFromQualificacaoTipo(db, {
       empresaId,
       qualificacaoTipoId: Number(resolvedQualificacaoTipoId),
@@ -2400,6 +2436,7 @@ app.put('/:id', requirePermission('lms', 'editar', 'admin', 'manager'), requireO
     newValues: {
       ...d,
       qualificacao_tipo_id: resolvedQualificacaoTipoId ?? null,
+      qualificacao_area_id: d.qualificacao_area_id ?? undefined,
       gerar_qualificacao_ao_concluir:
         resolvedQualificacaoTipoId != null ? 1 : nextGerarQualificacao,
       setor_ids: updateSetorIds ?? undefined,

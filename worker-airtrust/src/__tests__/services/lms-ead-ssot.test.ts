@@ -240,7 +240,7 @@ describe('syncQualificacaoTipoFromCurso', () => {
               return { results: categoriaRows };
             }
             if (/PRAGMA\s+table_info\s*\(\s*qualificacoes_tipos\s*\)/i.test(query)) {
-              return { results: [{ name: 'categoria_id' }] };
+              return { results: [{ name: 'categoria_id' }, { name: 'area_id' }] };
             }
             return { results: [] };
           },
@@ -265,6 +265,20 @@ describe('syncQualificacaoTipoFromCurso', () => {
     expect(result).toBe(139);
     expect(updateCalls).toHaveLength(1);
     expect(updateCalls[0]).toContain(13);
+  });
+
+  it('sincroniza a área da qualificação quando o curso envia uma área válida', async () => {
+    const { db, updateCalls } = makeMockDb([{ id: 13 }]);
+
+    const result = await syncQualificacaoTipoFromCurso(db, {
+      empresaId: 6,
+      cursoId: 43,
+      qualificacaoAreaId: 4,
+    });
+
+    expect(result).toBe(139);
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0]).toContain(4);
   });
 
   it('continua fail-closed quando existem duas categorias EAD (mesmo com nenhuma ativa)', async () => {
