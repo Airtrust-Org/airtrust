@@ -1,0 +1,66 @@
+{
+  "manifest_id": "AIRTRUST_FRMS_REGULATORY_SOURCE_MANIFEST_2026-09-27",
+  "tenant": {
+    "empresa_id": 6,
+    "profile_code": "HELICOPTER_OFFSHORE",
+    "service_category": "OFFSHORE_HELICOPTER"
+  },
+  "generated_at": "2026-09-27",
+  "purpose": "Document the sources used by AirTrust prescriptive FRMS compliance without inferring an operator-selected RBAC 117 appendix or an ANAC-accepted GRF/SGRF.",
+  "sources": [
+    {
+      "id": "RBAC117_EMD01",
+      "authority": "ANAC",
+      "title": "RBAC 117 Emenda 01",
+      "url": "https://pergamum.anac.gov.br/pergamum/vinculos/RBAC117EMD01.pdf",
+      "sha256": "d0fb34eb1a1a1227a36ef03b9a156eb9814d9dfa39d800c418e78e9e19424520",
+      "verified_points": [
+        "117.11 operator appendix choice",
+        "B117.25/C117.25 cumulative helicopter flight time",
+        "B117.27/C117.27 cumulative work time"
+      ]
+    },
+    {
+      "id": "ACT_COSTA_DO_SOL_2025_2027",
+      "authority": "Sindicato Nacional dos Aeronautas / Costa do Sol",
+      "title": "Acordo Coletivo de Trabalho Costa do Sol 2025/2027",
+      "url": "https://aeronautas.org.br/wp-content/uploads/2026/01/ACT-Costa-do-Sol-2027.pdf",
+      "sha256": "4b4f6d37ffdad4a590257e71c8d3cf0066429c64552e7d3e9359414b223fcdd0",
+      "verified_points": [
+        "Clause 8: 44h weekly and 176h monthly work composition",
+        "Clause 9: mission regime 21 consecutive days / 17 effective work days; 176h monthly preserved"
+      ]
+    },
+    {
+      "id": "LEI_13475_2017",
+      "authority": "Presidência da República",
+      "title": "Lei 13.475/2017",
+      "url": "https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2017/lei/l13475.htm",
+      "verified_points": [
+        "Aeronaut work/flight-time statutory limits and collective-agreement framework"
+      ]
+    },
+    {
+      "id": "IS_117_001C",
+      "authority": "ANAC",
+      "title": "IS 117-001 Revisão C",
+      "url": "https://www.anac.gov.br/assuntos/legislacao/legislacao-1/boletim-de-pessoal/2026/bps-v-21-no-28-13-a-17-07-2026/is-117-001c/visualizar_ato_normativo",
+      "verified_points": [
+        "Appendix selection is operator-specific; helicopter operations requiring two pilots may have Appendix C applicability subject to the regulatory conditions"
+      ]
+    }
+  ],
+  "operator_specific_evidence": {
+    "rbac117_appendices": [],
+    "appendix_selection_status": "UNCONFIRMED_OPERATOR_SELECTION",
+    "grf_status": "NOT_DOCUMENTED_IN_AIRTRUST",
+    "sgrf_status": "NOT_APPROVED_EVIDENCE_IN_AIRTRUST",
+    "rule": "Do not infer Appendix B or C from HELICOPTER_OFFSHORE, RBAC 135, aircraft type, profile name, or source parameters. B/C-specific rules remain disabled until controlled operator-specific evidence is registered."
+  },
+  "prescriptive_sources_still_applicable_without_bc_selection": [
+    "Lei 13.475/2017",
+    "ACT Costa do Sol 2025/2027",
+    "RBAC 117 provisions whose applicability does not depend on an undocumented B/C selection"
+  ],
+  "copyright_note": "Only source identifiers, URLs, hashes and short factual traceability statements are versioned here; third-party source documents are not stored in the repository."
+}
