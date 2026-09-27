@@ -20,7 +20,7 @@ type Props = {
 };
 
 const inputClass =
-  'min-w-0 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
+  'min-w-0 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-500 disabled:cursor-default disabled:bg-slate-50 disabled:text-slate-700 disabled:opacity-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:disabled:bg-slate-900 dark:disabled:text-slate-300';
 
 const statusTone: Record<RdvSaveStatus, string> = {
   idle: 'text-slate-400',
@@ -67,6 +67,11 @@ export default function ControleVoosRdvTrechoCard({
           >
             {RDV_SAVE_STATUS_LABELS[saveStatus]}
           </span>
+          {readOnly && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+              Somente leitura
+            </span>
+          )}
         </div>
         {!readOnly && (
           <div className="flex gap-2">
@@ -131,6 +136,7 @@ export default function ControleVoosRdvTrechoCard({
             disabled={readOnly}
             onChange={(e) => setField('numero_pousos', e.target.value)}
             className={inputClass}
+            placeholder="Não informado"
           />
         </label>
         <label className="space-y-1 text-sm">
@@ -207,6 +213,7 @@ export default function ControleVoosRdvTrechoCard({
             disabled={readOnly}
             onChange={(e) => setField('pob', e.target.value)}
             className={inputClass}
+            placeholder="Não informado"
           />
         </label>
         <div className="space-y-1 text-sm">
@@ -223,6 +230,7 @@ export default function ControleVoosRdvTrechoCard({
                 disabled={readOnly}
                 onChange={(e) => setField('carga_kg', e.target.value)}
                 className={inputClass}
+                placeholder="Não informado"
               />
             </label>
             <label className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
@@ -239,6 +247,7 @@ export default function ControleVoosRdvTrechoCard({
                   setField('carga_kg', e.target.value === '' || !Number.isFinite(pounds) ? '' : String(Number((pounds / 2.2046226218).toFixed(3))));
                 }}
                 className={inputClass}
+                placeholder="Não informado"
               />
             </label>
           </div>
