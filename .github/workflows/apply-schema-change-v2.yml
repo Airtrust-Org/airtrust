@@ -360,22 +360,21 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0511-production-preflight.sh --target=airtrust-db
 
-<<<<<<< HEAD
-      - name: Preflight qualification areas 0513
-        if: ${{ inputs.change_id == 'qualification-areas-0513' }}
-=======
       - name: Preflight FRMS regulatory evidence + location catalogue 0512
         if: ${{ inputs.change_id == 'frms-regulatory-evidence-location-catalog-0512' }}
->>>>>>> origin/main
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-<<<<<<< HEAD
-        run: bash scripts/schema-v2/validate-0513-production-preflight.sh --target=airtrust-db
-=======
         run: bash scripts/schema-v2/validate-0512-production-preflight.sh --target=airtrust-db
->>>>>>> origin/main
+
+      - name: Preflight qualification areas 0513
+        if: ${{ inputs.change_id == 'qualification-areas-0513' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0513-production-preflight.sh --target=airtrust-db
 
       - name: Backup governance ledger
         shell: bash
@@ -663,22 +662,21 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0511-production-postconditions.sh --target=airtrust-db
 
-<<<<<<< HEAD
-      - name: Post-validate qualification areas 0513
-        if: ${{ inputs.change_id == 'qualification-areas-0513' }}
-=======
       - name: Post-validate FRMS regulatory evidence + location catalogue 0512
         if: ${{ inputs.change_id == 'frms-regulatory-evidence-location-catalog-0512' }}
->>>>>>> origin/main
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-<<<<<<< HEAD
-        run: bash scripts/schema-v2/validate-0513-production-postconditions.sh --target=airtrust-db
-=======
         run: bash scripts/schema-v2/validate-0512-production-postconditions.sh --target=airtrust-db
->>>>>>> origin/main
+
+      - name: Post-validate qualification areas 0513
+        if: ${{ inputs.change_id == 'qualification-areas-0513' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0513-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate EAD reconciliation ledger 0453
         if: ${{ inputs.change_id == 'ead-category-reconciliation-executor-0453' }}
