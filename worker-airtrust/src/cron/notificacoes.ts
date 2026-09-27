@@ -444,15 +444,23 @@ async function enviarNotificacao(
       }
 
       if (qualificacao.funcionario_setor_id) {
-        const gestores = await getSetorGestoresBySetor(
-          env.DB,
-          empresaId,
-          qualificacao.funcionario_setor_id,
-          true,
-        );
-        destinatariosDinamicos.push(
-          ...gestores.map((gestor) => gestor.gestor_email).filter(Boolean),
-        );
+        try {
+          const gestores = await getSetorGestoresBySetor(
+            env.DB,
+            empresaId,
+            qualificacao.funcionario_setor_id,
+            true,
+          );
+          destinatariosDinamicos.push(
+            ...gestores.map((gestor) => gestor.gestor_email).filter(Boolean),
+          );
+        } catch (gestorError) {
+          log.warn('[NOTIFICACOES] Falha ao resolver gestores; mantendo envio ao funcionario', {
+            qualificacaoHistoricoId: qualificacao.id,
+            setorId: qualificacao.funcionario_setor_id,
+            erro: gestorError instanceof Error ? gestorError.message : String(gestorError),
+          });
+        }
       }
 
       // Destinatarios fixos historicos nunca devem substituir funcionario/gestor.
