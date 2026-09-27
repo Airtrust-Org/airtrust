@@ -1,0 +1,8 @@
+{
+  "changeId": "qualification-expiry-email-stages-0515",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0515_qualification_expiry_email_stages.sql",
+  "fileHash": "07ec0d2e14a0c8e3a06ca3b03b4a46410f509f9fd781f661a6bc13244840b08f",
+  "planPath": "worker-airtrust/schema-v2/plans/qualification-expiry-email-stages-0515.md",
+  "planHash": "8f474be616c3869bfc6b05bf2821d4f24f1ee8179e4609dd4f55be2d7b35ac3b"
+}

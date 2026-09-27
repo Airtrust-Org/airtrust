@@ -248,24 +248,30 @@ async function processarConfiguracao(
   let erros = 0;
   const whatsAppTemplateCache = new Map<string, WhatsAppTemplateRecord | null>();
 
-  const { results: notificacoesRecentes } = await env.DB.prepare(
+  const tipoCanal = normalizeTipoCanal(config.tipo);
+  const dedupWindowSql =
+    tipoCanal === 'EMAIL' ? '' : "AND enviado_em >= datetime('now', '-1 day')";
+  const { results: notificacoesAnteriores } = await env.DB.prepare(
     `
-      SELECT qualificacao_historico_id
+      SELECT qualificacao_historico_id, destinatario
       FROM notificacoes_log
       WHERE empresa_id = ?
         AND config_id = ?
         AND status = 'enviada'
-        AND enviado_em >= datetime('now', '-1 day')
+        ${dedupWindowSql}
     `,
   )
     .bind(empresaId, config.id)
-    .all<{ qualificacao_historico_id: number }>();
+    .all<{ qualificacao_historico_id: number; destinatario: string | null }>();
 
-  const qualificacoesJaNotificadas = new Set(
-    (notificacoesRecentes || [])
-      .map((item) => Number(item.qualificacao_historico_id || 0))
-      .filter((value) => value > 0),
-  );
+  const notificacoesPorQualificacao = new Map<number, string[]>();
+  for (const item of notificacoesAnteriores || []) {
+    const qualificacaoId = Number(item.qualificacao_historico_id || 0);
+    if (qualificacaoId <= 0) continue;
+    const atuais = notificacoesPorQualificacao.get(qualificacaoId) || [];
+    atuais.push(String(item.destinatario || ''));
+    notificacoesPorQualificacao.set(qualificacaoId, atuais);
+  }
 
   log.log('[NOTIFICACOES] Qualificacoes encontradas para analise', {
     total: qualificacoes.length,
@@ -281,12 +287,28 @@ async function processarConfiguracao(
       continue;
     }
 
-    if (qualificacoesJaNotificadas.has(Number(qualificacao.id))) {
-      log.log('[NOTIFICACOES] Qualificacao ja notificada nas ultimas 24h', {
+    const entregasAnteriores = notificacoesPorQualificacao.get(Number(qualificacao.id)) || [];
+    const funcionarioEmail = String(qualificacao.funcionario_email || '').trim().toLowerCase();
+    const emailJaEntregueAoFuncionario =
+      tipoCanal === 'EMAIL' && funcionarioEmail
+        ? entregasAnteriores.some((destinatario) =>
+            normalizeLoggedEmailRecipients(destinatario).includes(funcionarioEmail),
+          )
+        : false;
+    const etapaJaEntregue =
+      tipoCanal === 'EMAIL'
+        ? funcionarioEmail
+          ? emailJaEntregueAoFuncionario
+          : entregasAnteriores.length > 0
+        : entregasAnteriores.length > 0;
+
+    if (etapaJaEntregue) {
+      log.log('[NOTIFICACOES] Etapa de alerta ja entregue', {
         configId: config.id,
         qualificacaoHistoricoId: qualificacao.id,
         funcionario: qualificacao.funcionario_nome,
         qualificacao: qualificacao.qualificacao_nome,
+        tipoCanal,
       });
       continue;
     }
@@ -304,7 +326,6 @@ async function processarConfiguracao(
     );
 
     if (sucesso) {
-      qualificacoesJaNotificadas.add(Number(qualificacao.id));
       enviadas++;
     } else {
       erros++;
@@ -370,6 +391,10 @@ export function normalizeEmailRecipients(values: string[]): string[] {
         .filter(Boolean),
     ),
   ];
+}
+
+function normalizeLoggedEmailRecipients(value: string): string[] {
+  return normalizeEmailRecipients(String(value || '').split(','));
 }
 
 function buildStatusVencimento(diasAteVencimento: number): string {
