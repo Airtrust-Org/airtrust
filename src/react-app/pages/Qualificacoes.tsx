@@ -106,6 +106,11 @@ import {
 } from '@/react-app/pages/qualificacoes/tipoSaveFeedback';
 import { readUserPreference, writeUserPreference } from '@/react-app/utils/userPreferences';
 import { normalizeQualificationHistorySectorFilter } from '@/react-app/lib/qualificationHistoryFilters';
+import {
+  QUALIFICATION_AREA_UNCLASSIFIED_FILTER,
+  filterUnclassifiedQualificationAreas,
+  getQualificationAreaBadgeClass,
+} from './qualificacoes/qualificationAreaUi';
 
 import {
   ALL_STATUS_VALUES,
@@ -1123,16 +1128,21 @@ export default function Qualificacoes() {
 
   // Filtrar tipos baseado no searchTipos
   const filteredTipos = useMemo(() => {
+    const areaFiltered = filterUnclassifiedQualificationAreas(
+      tiposEfetivos,
+      modelosPrefs.areaFilter,
+    );
     const searchLower = searchTipos.trim().toLowerCase();
-    if (!searchLower) return tiposEfetivos;
-    return tiposEfetivos.filter((tipo) => {
+    if (!searchLower) return areaFiltered;
+    return areaFiltered.filter((tipo) => {
       return (
         tipo.nome?.toLowerCase().includes(searchLower) ||
         tipo.codigo?.toLowerCase().includes(searchLower) ||
-        tipo.categoria?.toLowerCase().includes(searchLower)
+        tipo.categoria?.toLowerCase().includes(searchLower) ||
+        tipo.area_nome?.toLowerCase().includes(searchLower)
       );
     });
-  }, [searchTipos, tiposEfetivos]);
+  }, [modelosPrefs.areaFilter, searchTipos, tiposEfetivos]);
 
   const handleNew = () => {
     setEditingQualificacao(null);
@@ -2341,6 +2351,7 @@ export default function Qualificacoes() {
                   className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
                 >
                   <option value="">Área da Qualificação</option>
+                  <option value={QUALIFICATION_AREA_UNCLASSIFIED_FILTER}>Não classificada</option>
                   {areaOptionsTipos.map((area) => (
                     <option key={area.value} value={area.value}>
                       {area.label}
@@ -2960,15 +2971,22 @@ export default function Qualificacoes() {
                       id: 'area',
                       label: 'Área',
                       accessor: (row) => (row as { area_nome?: string | null }).area_nome || '',
-                      sortable: false,
+                      sortable: true,
                       visible: true,
-                      render: (value) =>
+                      render: (value, row) =>
                         value ? (
-                          <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${getQualificationAreaBadgeClass(
+                              (row as { area_id?: number | null }).area_id,
+                              String(value),
+                            )}`}
+                          >
                             {String(value)}
                           </span>
                         ) : (
-                          <span className="text-xs text-amber-700">Não classificada</span>
+                          <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                            Não classificada
+                          </span>
                         ),
                     },
                     {

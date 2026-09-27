@@ -193,6 +193,7 @@ export interface CreateCursoDTO {
   carga_horaria_inicial_horas?: number | null;
   carga_horaria_recorrente_horas?: number | null;
   qualificacao_tipo_id?: number | null;
+  qualificacao_area_id?: number | null;
   gerar_qualificacao_ao_concluir?: 0 | 1;
   scorm_mastery_score?: number;
   scorm_versao?: ScormVersao;
@@ -278,6 +279,7 @@ function sanitizeCreateCursoPayload(dto: CreateCursoDTO): CreateCursoDTO {
     carga_horaria_inicial_horas: dto.carga_horaria_inicial_horas ?? null,
     carga_horaria_recorrente_horas: dto.carga_horaria_recorrente_horas ?? null,
     qualificacao_tipo_id: dto.qualificacao_tipo_id ?? null,
+    qualificacao_area_id: dto.qualificacao_area_id ?? null,
     scorm_mastery_score: dto.scorm_mastery_score ?? 70,
     scorm_versao: dto.scorm_versao ?? null,
     setor_ids: dto.setor_ids && dto.setor_ids.length > 0 ? dto.setor_ids : undefined,
@@ -306,6 +308,8 @@ function sanitizeUpdateCursoPayload(dto: UpdateCursoDTO): UpdateCursoDTO {
   }
   if ('qualificacao_tipo_id' in dto)
     payload.qualificacao_tipo_id = dto.qualificacao_tipo_id ?? null;
+  if ('qualificacao_area_id' in dto)
+    payload.qualificacao_area_id = dto.qualificacao_area_id ?? null;
   if ('gerar_qualificacao_ao_concluir' in dto) {
     payload.gerar_qualificacao_ao_concluir = dto.gerar_qualificacao_ao_concluir;
   }

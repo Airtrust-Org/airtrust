@@ -29,6 +29,7 @@ import {
   syncAllEadCoursesFromQualificacoes,
   syncLmsCourseFromQualificacaoTipo,
   syncQualificacaoTipoFromCurso,
+  isValidQualificationAreaId,
 } from '../services/lms-ead-ssot';
 import { CANONICAL_TRAINING_CATEGORY } from '../services/lms-ead-ssot';
 import type { Env, AppEnv } from '../types';
@@ -669,6 +670,7 @@ const CursoCreateSchema = z.object({
   scorm_versao: optionalNullableScormVersion,
   scorm_mastery_score: intWithDefault(70, 0, 100),
   qualificacao_tipo_id: optionalNullablePositiveInt,
+  qualificacao_area_id: optionalNullablePositiveInt,
   gerar_qualificacao_ao_concluir: binaryFlagWithDefault(0),
   publicado: binaryFlagWithDefault(0),
   setor_ids: setorIdsSchema,
@@ -696,6 +698,7 @@ const CursoUpdateSchema = z.object({
     z.number().int().min(0).max(100).optional(),
   ),
   qualificacao_tipo_id: optionalNullablePositiveInt,
+  qualificacao_area_id: optionalNullablePositiveInt,
   gerar_qualificacao_ao_concluir: optionalBinaryFlag,
   publicado: optionalBinaryFlag,
   ativo: optionalBinaryFlag,
@@ -2037,6 +2040,8 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
   if (setorIds.length > 0) {
     await validateSetorIds(db, empresaId, setorIds);
   }
+  if (!(await isValidQualificationAreaId(db, empresaId, d.qualificacao_area_id)))
+    throw new ApiError('Área da qualificação inválida ou inativa para esta empresa', 400);
 
   const insertCols = [
     'empresa_id',
@@ -2141,7 +2146,11 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
     setores: cursoSetores,
   };
   if (finalQualificacaoTipoId) {
-    await syncQualificacaoTipoFromCurso(db, { empresaId, cursoId: Number(id) });
+    await syncQualificacaoTipoFromCurso(db, {
+      empresaId,
+      cursoId: Number(id),
+      qualificacaoAreaId: d.qualificacao_area_id ?? null,
+    });
     await syncLmsCourseFromQualificacaoTipo(db, {
       empresaId,
       qualificacaoTipoId: Number(finalQualificacaoTipoId),
@@ -2175,6 +2184,7 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
       tipo_conteudo: d.tipo_conteudo,
       publicado: d.publicado,
       qualificacao_tipo_id: finalQualificacaoTipoId,
+      qualificacao_area_id: d.qualificacao_area_id ?? null,
       gerar_qualificacao_ao_concluir:
         finalQualificacaoTipoId != null ? 1 : d.gerar_qualificacao_ao_concluir,
       setor_ids: setorIds,
@@ -2225,6 +2235,8 @@ app.put('/:id', requirePermission('lms', 'editar', 'admin', 'manager'), requireO
     throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
 
   const d = parsed.data;
+  if (!(await isValidQualificationAreaId(db, empresaId, d.qualificacao_area_id)))
+    throw new ApiError('Área da qualificação inválida ou inativa para esta empresa', 400);
   const nextGerarQualificacao =
     d.gerar_qualificacao_ao_concluir ?? existing.gerar_qualificacao_ao_concluir;
   const nextQualificacaoTipoId =
@@ -2343,7 +2355,11 @@ app.put('/:id', requirePermission('lms', 'editar', 'admin', 'manager'), requireO
   }
 
   if (resolvedQualificacaoTipoId) {
-    await syncQualificacaoTipoFromCurso(db, { empresaId, cursoId });
+    await syncQualificacaoTipoFromCurso(db, {
+      empresaId,
+      cursoId,
+      qualificacaoAreaId: d.qualificacao_area_id ?? null,
+    });
     await syncLmsCourseFromQualificacaoTipo(db, {
       empresaId,
       qualificacaoTipoId: Number(resolvedQualificacaoTipoId),
@@ -2400,6 +2416,7 @@ app.put('/:id', requirePermission('lms', 'editar', 'admin', 'manager'), requireO
     newValues: {
       ...d,
       qualificacao_tipo_id: resolvedQualificacaoTipoId ?? null,
+      qualificacao_area_id: d.qualificacao_area_id ?? undefined,
       gerar_qualificacao_ao_concluir:
         resolvedQualificacaoTipoId != null ? 1 : nextGerarQualificacao,
       setor_ids: updateSetorIds ?? undefined,

@@ -31,10 +31,11 @@ describe('Qualificações > Modelos — validade persistence', () => {
     });
 
     it('filteredTipos uses tiposEfetivos, not raw tipos', () => {
-      // The useMemo for filteredTipos should return tiposEfetivos (when no search)
-      // and its dependency array should include tiposEfetivos
-      expect(source).toMatch(/return tiposEfetivos/);
-      expect(source).toMatch(/\[searchTipos,\s*tiposEfetivos\]/);
+      // A classificação por área pode pré-filtrar a lista, mas a fonte continua
+      // sendo tiposEfetivos (que incorpora as atualizações otimistas).
+      expect(source).toContain('filterUnclassifiedQualificationAreas');
+      expect(source).toMatch(/filterUnclassifiedQualificationAreas\(\s*tiposEfetivos/);
+      expect(source).toMatch(/\[modelosPrefs\.areaFilter,\s*searchTipos,\s*tiposEfetivos\]/);
     });
   });
 

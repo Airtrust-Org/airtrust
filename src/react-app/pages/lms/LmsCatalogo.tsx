@@ -63,6 +63,7 @@ import {
   useQualificacaoTipos,
 } from '@/react-app/hooks/useQualificacoesExt';
 import { uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
+import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
   getTypeMeta,
@@ -288,6 +289,7 @@ function buildInitialForm(initial?: Partial<LmsCurso>): CreateCursoDTO {
     carga_horaria_inicial_horas: initial?.carga_horaria_inicial_horas ?? null,
     carga_horaria_recorrente_horas: initial?.carga_horaria_recorrente_horas ?? null,
     qualificacao_tipo_id: initial?.qualificacao_tipo_id ?? null,
+    qualificacao_area_id: null,
     gerar_qualificacao_ao_concluir: initial?.gerar_qualificacao_ao_concluir ?? 0,
     scorm_mastery_score: initial?.scorm_mastery_score ?? 70,
     scorm_versao: initial?.scorm_versao ?? '1.2',
@@ -301,6 +303,8 @@ function validateForm(form: CreateCursoDTO) {
   if (!form.titulo?.trim()) e.titulo = 'Informe um título claro para o curso.';
   if (form.gerar_qualificacao_ao_concluir === 1 && !form.qualificacao_tipo_id)
     e.qualificacao_tipo_id = 'Selecione o tipo de qualificação.';
+  if (form.gerar_qualificacao_ao_concluir === 1 && !form.qualificacao_area_id)
+    e.qualificacao_area_id = 'Selecione a Área da Qualificação.';
   if ((form.scorm_mastery_score ?? 70) < 0 || (form.scorm_mastery_score ?? 70) > 100)
     e.scorm_mastery_score = 'Nota mínima entre 0 e 100.';
   return e;
@@ -672,7 +676,7 @@ function CourseDrawer({
   isSaving,
   uploadProgress,
   uploadStatus,
-  availableSetores,
+  availableAreas,
 }: {
   initial?: LmsCurso;
   onClose: () => void;
@@ -684,7 +688,7 @@ function CourseDrawer({
   isSaving: boolean;
   uploadProgress: number;
   uploadStatus: string;
-  availableSetores: { id: number; nome: string }[];
+  availableAreas: { id: number; nome: string; codigo?: string | null }[];
 }) {
   const { tipos: qualTipos } = useQualificacaoTipos(true, 500);
   const { data: latestCourse } = useLmsCurso(initial?.id ?? 0);
@@ -705,22 +709,15 @@ function CourseDrawer({
     [form.qualificacao_tipo_id, qualTipos],
   );
 
-  const prevQualTipoIdRef = React.useRef<number | null | undefined>(form.qualificacao_tipo_id);
   useEffect(() => {
-    const prev = prevQualTipoIdRef.current;
-    prevQualTipoIdRef.current = form.qualificacao_tipo_id;
-    if (prev === form.qualificacao_tipo_id) return;
-    if (!curTipo?.setores || curTipo.setores.length === 0) return;
-    const currentSetorIds = form.setor_ids ?? [];
-    if (currentSetorIds.length === 0) {
-      const suggested = curTipo.setores
-        .map((s) => s.id)
-        .filter((id) => availableSetores.some((a) => a.id === id));
-      if (suggested.length > 0) {
-        setForm((c) => ({ ...c, setor_ids: suggested }));
-      }
-    }
-  }, [form.qualificacao_tipo_id, curTipo, availableSetores]);
+    if (!curTipo) return;
+    const nextAreaId = curTipo.area_id ? Number(curTipo.area_id) : null;
+    setForm((current) =>
+      current.qualificacao_area_id === nextAreaId
+        ? current
+        : { ...current, qualificacao_area_id: nextAreaId },
+    );
+  }, [curTipo?.id, curTipo?.area_id]);
   const hasLegacy =
     form.gerar_qualificacao_ao_concluir === 1 && Boolean(curTipo) && !isEadTipo(curTipo!);
   const storedContentLabel = getStoredContentLabel(courseSnapshot);
@@ -948,44 +945,37 @@ function CourseDrawer({
                         <FieldError message={errors.scorm_mastery_score} />
                       </div>
                     </div>
-                    {availableSetores.length > 0 && (
+                    {availableAreas.length > 0 && (
                       <div className="space-y-2">
-                        <FieldLabel label="Setor" />
+                        <FieldLabel label="Área da Qualificação" />
                         <div className="flex flex-wrap gap-2">
-                          {availableSetores.map((s) => {
-                            const selected = (form.setor_ids ?? []).includes(s.id);
+                          {availableAreas.map((area) => {
+                            const selected = Number(form.qualificacao_area_id) === area.id;
                             return (
                               <button
-                                key={s.id}
+                                key={area.id}
                                 type="button"
                                 onClick={() =>
-                                  setForm((c) => {
-                                    const ids = c.setor_ids ?? [];
-                                    return {
-                                      ...c,
-                                      setor_ids: selected
-                                        ? ids.filter((id) => id !== s.id)
-                                        : [...ids, s.id],
-                                    };
-                                  })
+                                  setForm((current) => ({
+                                    ...current,
+                                    qualificacao_area_id: area.id,
+                                  }))
                                 }
-                                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold transition border ${
+                                className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition ${
                                   selected
-                                    ? 'border-blue-600 bg-blue-600 text-white'
-                                    : 'border-slate-300 bg-white text-slate-600 hover:border-blue-400 hover:text-blue-600'
+                                    ? getQualificationAreaBadgeClass(area.id, area.nome)
+                                    : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400'
                                 }`}
                               >
-                                {s.nome}
+                                {area.nome}
                               </button>
                             );
                           })}
                         </div>
-                        {curTipo?.setores && curTipo.setores.length > 0 && (
-                          <p className="text-xs text-slate-500">
-                            Sugestão da qualificação:{' '}
-                            {curTipo.setores.map((s) => s.nome).join(', ')}
-                          </p>
-                        )}
+                        <p className="text-xs text-slate-500">
+                          Esta classificação é compartilhada com o Modelo de Qualificação vinculado.
+                        </p>
+                        <FieldError message={errors.qualificacao_area_id} />
                       </div>
                     )}
                   </DrawerSection>
@@ -1678,6 +1668,11 @@ export default function LmsCatalogo() {
   const [sectorFilter, setSectorFilter] = useState('all');
   const { data: setoresData } = useApi<{ id: number; nome: string }[]>('/setores');
   const setores = setoresData ?? [];
+  const { data: areasData } = useApi<Array<{ id: number; nome: string; codigo?: string | null }>>(
+    '/qualificacoes/areas',
+    { enabled: canManage, requireAuth: true, staleTime: 60_000 },
+  );
+  const areas = areasData ?? [];
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<LmsCurso | undefined>();
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
@@ -2302,7 +2297,7 @@ export default function LmsCatalogo() {
           }
           uploadProgress={uploadProgress}
           uploadStatus={uploadStatus}
-          availableSetores={setores}
+          availableAreas={areas}
         />
       ) : null}
     </AppLayout>

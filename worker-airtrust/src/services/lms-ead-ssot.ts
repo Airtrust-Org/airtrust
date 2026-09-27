@@ -3,6 +3,23 @@ import { upsertImportedEdappCycle } from './lms-matricula-cycle';
 /** The sole functional classifier for LMS-backed qualifications. */
 export const CANONICAL_TRAINING_CATEGORY = 'EAD';
 
+export async function isValidQualificationAreaId(
+  db: D1Database,
+  empresaId: number,
+  areaId: number | null | undefined,
+): Promise<boolean> {
+  if (!areaId) return true;
+  const area = await db
+    .prepare(
+      `SELECT id FROM qualificacoes_areas
+        WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(areaId, empresaId)
+    .first<{ id: number }>();
+  return Boolean(area?.id);
+}
+
 type QualificacaoTipoEadRow = {
   id: number;
   empresa_id: number;
@@ -757,7 +774,7 @@ export async function syncAllEadCoursesFromQualificacoes(db: D1Database, empresa
 
 export async function syncQualificacaoTipoFromCurso(
   db: D1Database,
-  params: { empresaId: number; cursoId: number },
+  params: { empresaId: number; cursoId: number; qualificacaoAreaId?: number | null },
 ) {
   const curso = await db
     .prepare(
@@ -822,6 +839,8 @@ export async function syncQualificacaoTipoFromCurso(
     cargaRecorrente ?? cargaInicial ?? minutesToHours(curso.carga_horaria_minutos);
   const categoriaId = await resolveCanonicalEadCategoriaId(db, params.empresaId);
   const hasCategoriaId = await hasColumn(db, 'qualificacoes_tipos', 'categoria_id');
+  const hasAreaId = await hasColumn(db, 'qualificacoes_tipos', 'area_id');
+  const shouldUpdateArea = hasAreaId && params.qualificacaoAreaId != null;
 
   await db
     .prepare(
@@ -830,6 +849,7 @@ export async function syncQualificacaoTipoFromCurso(
               descricao = ?,
               categoria = ?,
               ${hasCategoriaId ? 'categoria_id = ?,' : ''}
+              ${shouldUpdateArea ? 'area_id = ?,' : ''}
               formato_id = NULL,
               conteudo_programatico = ?,
               observacoes = ?,
@@ -846,6 +866,7 @@ export async function syncQualificacaoTipoFromCurso(
       normalizeNullableText(curso.descricao),
       CANONICAL_TRAINING_CATEGORY,
       ...(hasCategoriaId ? [categoriaId] : []),
+      ...(shouldUpdateArea ? [params.qualificacaoAreaId] : []),
       normalizeNullableText(curso.conteudo_programatico),
       normalizeNullableText(curso.observacoes),
       cargaPadrao,
