@@ -1,0 +1,8 @@
+{
+  "changeId": "auth-profile-authority-sync-0514",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0514_auth_profile_authority_sync.sql",
+  "fileHash": "c3675d09aabb8f2e5fff8051d1d0f56cd7a67a725e4608786ccfce5d984bb4ea",
+  "planPath": "worker-airtrust/schema-v2/plans/auth-profile-authority-sync-0514.md",
+  "planHash": "e2cd97c2e52c3ceb3b6213dcf34c132088e820e64756bfc0e977079e8c2e3d11"
+}
