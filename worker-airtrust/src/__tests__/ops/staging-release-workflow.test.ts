@@ -535,6 +535,18 @@ describe('scripts/staging/seed-qa-examiner-training.mjs — guards', () => {
     expect(executable).toContain('QA-SETOR-EXA');
     expect(executable).toContain('setor_id');
   });
+
+  it('resets only the synthetic examiner tenant session calendar before reseeding', () => {
+    const source = readFileSync(
+      join(ROOT, 'scripts/staging/seed-qa-examiner-training.mjs'),
+      'utf8',
+    );
+    const executable = stripComments(source);
+    expect(executable).toContain('UPDATE simulador_agendamentos');
+    expect(executable).toContain("SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)} AND deleted_at IS NULL");
+    expect(executable).toContain('AND deleted_at IS NULL;');
+    expect(executable).not.toMatch(/DELETE FROM simulador_agendamentos/i);
+  });
 });
 
 describe('scripts/staging/apply-approved-migrations.sh — guards', () => {
