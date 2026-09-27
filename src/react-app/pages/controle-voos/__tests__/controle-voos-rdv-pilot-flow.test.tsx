@@ -390,7 +390,7 @@ describe('etapas persistidas — mapeamento e recuperação local', () => {
         pousos_diurnos: null,
         pousos_noturnos: null,
         pax: 6,
-        payload: null,
+        payload: 120,
       },
       undefined,
       '2026-09-21',
@@ -401,6 +401,12 @@ describe('etapas persistidas — mapeamento e recuperação local', () => {
     expect(calcHorasVoadas(draft.horario_decolagem, draft.horario_pouso)).toBe(0.75);
     expect(draft.numero_pousos).toBe('');
     expect(draft.pob).toBe('6');
+    const aggregate = aggregateTrechosToFormPatch([draft]);
+    expect(aggregate.horario_decolagem_real).toBe('2026-09-21T06:31');
+    expect(aggregate.horario_pouso_real).toBe('2026-09-21T07:16');
+    expect(aggregate.horas_voadas).toBe('0.75');
+    expect(aggregate.pob).toBe('6');
+    expect(aggregate.carga_kg).toBe('120');
   });
 
   it('mapeia etapa da API para draft e de volta sem perder ICAO/combustível', () => {
