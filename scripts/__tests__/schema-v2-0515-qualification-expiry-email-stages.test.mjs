@@ -79,3 +79,16 @@ test('Schema V2 builder accepts 0515 and appends exactly one ledger row', () => 
   assert.match(applied, /dias_antes = 45/);
   assert.match(applied, /dias_antes = 30/);
 });
+
+test('staging mirrors and governs 0515 through the recovery-point runner', () => {
+  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+  const migration = 'worker-airtrust/migrations/0515_qualification_expiry_email_stages.sql';
+  assert.equal(readFileSync(manifest.filePath, 'utf8'), readFileSync(migration, 'utf8'));
+
+  const outer = readFileSync('scripts/staging/apply-approved-migrations.sh', 'utf8');
+  const recovery = readFileSync('scripts/staging/apply-approved-migration-with-recovery-point.sh', 'utf8');
+  assert.match(outer, /0515_qualification_expiry_email_stages\.sql/);
+  assert.match(recovery, /0515_qualification_expiry_email_stages\.sql/);
+  assert.match(recovery, /validate-0515-postconditions\.sh/);
+  assert.equal(spawnSync('bash', ['-n', 'scripts/staging/validate-0515-postconditions.sh']).status, 0);
+});

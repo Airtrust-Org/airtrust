@@ -71,6 +71,40 @@ test('0516 adds tenant-configurable fields, corrects 30-day template, and create
   assert.equal(query(dbPath, `SELECT destinatarios FROM notificacoes_config WHERE tipo='EMAIL' AND dias_antes=30 AND urgencia='medium' LIMIT 1;`), '["legacy@example.com"]');
 });
 
+test('0516 seeds all four global pre-expiry stages when the config table starts empty', () => {
+  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+  const sql = readFileSync(manifest.filePath, 'utf8');
+  const dir = mkdtempSync(path.join(tmpdir(), 'airtrust-0516-empty-'));
+  const dbPath = path.join(dir, 'db.sqlite');
+  const setup = `
+    CREATE TABLE notificacoes_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tipo TEXT NOT NULL,
+      ativo INTEGER DEFAULT 1,
+      dias_antes INTEGER NOT NULL,
+      urgencia TEXT,
+      destinatarios TEXT,
+      template TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TEXT
+    );
+  `;
+  assert.equal(runSql(dbPath, setup).status, 0);
+  assert.equal(runSql(dbPath, sql).status, 0);
+  assert.equal(
+    query(
+      dbPath,
+      `SELECT GROUP_CONCAT(codigo, ',') FROM (SELECT codigo FROM notificacoes_config WHERE empresa_id IS NULL AND tipo='EMAIL' AND codigo IN ('QUALIFICACAO_45D','QUALIFICACAO_30D','QUALIFICACAO_15D','QUALIFICACAO_7D') ORDER BY dias_antes DESC);`,
+    ),
+    'QUALIFICACAO_45D,QUALIFICACAO_30D,QUALIFICACAO_15D,QUALIFICACAO_7D',
+  );
+  assert.equal(
+    query(dbPath, `SELECT COUNT(*) FROM notificacoes_config WHERE empresa_id IS NULL AND codigo='QUALIFICACAO_VENCIDA' AND frequencia='DAILY' AND intervalo_dias=1;`),
+    '1',
+  );
+});
+
 test('Schema V2 builder accepts 0516 and appends exactly one ledger row', () => {
   const out = path.join(mkdtempSync(path.join(tmpdir(), 'airtrust-0516-bundle-')), 'apply.sql');
   const result = buildReviewedSchemaApply({
@@ -85,4 +119,18 @@ test('Schema V2 builder accepts 0516 and appends exactly one ledger row', () => 
   assert.match(applied, /QUALIFICACAO_VENCIDA/);
   assert.match(applied, /ALTER TABLE notificacoes_config ADD COLUMN empresa_id/);
   assert.match(applied, /entrou no período de vencimento/);
+});
+
+test('staging mirrors 0516, enforces 0515 dependency, and validates postconditions', () => {
+  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+  const migration = 'worker-airtrust/migrations/0516_qualification_expired_daily_alerts.sql';
+  assert.equal(readFileSync(manifest.filePath, 'utf8'), readFileSync(migration, 'utf8'));
+
+  const outer = readFileSync('scripts/staging/apply-approved-migrations.sh', 'utf8');
+  const recovery = readFileSync('scripts/staging/apply-approved-migration-with-recovery-point.sh', 'utf8');
+  assert.match(outer, /0516_qualification_expired_daily_alerts\.sql/);
+  assert.match(recovery, /0516_qualification_expired_daily_alerts\.sql/);
+  assert.match(recovery, /0516 requires exactly one applied 0515 staging ledger row/);
+  assert.match(recovery, /validate-0516-postconditions\.sh/);
+  assert.equal(spawnSync('bash', ['-n', 'scripts/staging/validate-0516-postconditions.sh']).status, 0);
 });
