@@ -1,5 +1,5 @@
 import { loadFrmsActivityRows, type FrmsActivitySnapshotRow } from './activity-context';
-import { buildCanonicalOperationalSourceSql } from './frms-source-policy';
+import { loadPreferredOperationalJourneys } from './preferred-operational-source';
 import {
   sumLegalWorkCalendarMonth,
   sumLegalWorkRollingDays,
@@ -100,28 +100,19 @@ export async function loadLegalWorkMonth(
 ): Promise<LegalWorkMonthlyCrewSummary[]> {
   if (!Number.isInteger(empresaId) || empresaId <= 0) throw new Error('INVALID_TENANT');
   const { start, end, contextStart } = monthBounds(month);
-  const canonical = buildCanonicalOperationalSourceSql('j.origem');
-
-  const [journeyResult, activities] = await Promise.all([
-    db.prepare(
-      `SELECT CAST(j.tripulante_id AS INTEGER) AS tripulante_id,
-              j.data,
-              j.hora_apresentacao,
-              COALESCE(j.hora_termino, j.hora_corte_motor, j.hora_ultimo_pouso) AS hora_termino,
-              COALESCE(j.duracao_jornada_minutos, 0) AS duracao_jornada_minutos,
-              COALESCE(j.horas_voo_minutos, 0) AS horas_voo_minutos
-         FROM frms_jornada j
-         JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER)
-        WHERE f.empresa_id = ? AND f.deleted_at IS NULL
-          AND j.deleted_at IS NULL
-          AND j.data BETWEEN ? AND ?
-          AND ${canonical}
-        ORDER BY j.data, j.tripulante_id`,
-    ).bind(empresaId, contextStart, end).all<LegalJourneyRow>(),
+  const [preferredJourneys, activities] = await Promise.all([
+    loadPreferredOperationalJourneys(db, empresaId, contextStart, end),
     loadFrmsActivityRows(db, empresaId, contextStart, end),
   ]);
 
-  const journeys = journeyResult.results ?? [];
+  const journeys: LegalJourneyRow[] = preferredJourneys.map((row) => ({
+    tripulante_id: row.tripulante_id,
+    data: row.data,
+    hora_apresentacao: row.hora_apresentacao,
+    hora_termino: row.hora_termino,
+    duracao_jornada_minutos: row.duracao_jornada_minutos,
+    horas_voo_minutos: row.horas_voo_minutos,
+  }));
   const journeyMap = groupJourneys(journeys);
   const activityMap = groupActivities(activities);
   const candidateIds = [...new Set([...journeyMap.keys(), ...activityMap.keys()])].sort((a, b) => a - b);

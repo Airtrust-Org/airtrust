@@ -59,11 +59,16 @@ export interface ControleVoosOperationalRecord {
   tripulanteId: number;
   /** Função a bordo (PIC/SIC/COM/MEC/OUTRO), como registrada em `cv_voo_tripulantes.funcao`. */
   funcao: string;
+  /** Crew duty boundaries captured by Controle de Voos. */
+  horaApresentacao?: string | null;
+  horaDispensa?: string | null;
   /** Data operacional no formato YYYY-MM-DD. */
   dataOperacional: string;
   /** Horários locais normalizados HH:MM, sem inferir UTC quando o timezone não existe no schema. */
+  horaMotorLigado?: string | null;
   horaDecolagem: string | null;
   horaPouso: string | null;
+  horaMotorDesligado?: string | null;
   timezone: string | null;
   timezoneFonte: 'EXPLICITO' | 'INDISPONIVEL';
   vooId: number;
@@ -76,6 +81,8 @@ export interface ControleVoosOperationalRecord {
   cancelado: boolean;
   corrigido: boolean;
   minutosVoo: number;
+  minutosTotal?: number;
+  pousos?: number;
   /** `last_sync_at` do read-model — usado para detectar mudanças retroativas / idempotência. */
   atualizadoEm: string | null;
   /** Qualidade do dado conforme já computada pelo read-model (não recalculada aqui). */
@@ -136,7 +143,17 @@ function minutosEntre(horaInicio: string | null, horaFim: string | null): number
   const inicioMin = parse(horaInicio);
   const fimMin = parse(horaFim);
   if (inicioMin === null || fimMin === null) return 0;
-  return fimMin >= inicioMin ? fimMin - inicioMin : 0;
+  return fimMin >= inicioMin ? fimMin - inicioMin : 24 * 60 - inicioMin + fimMin;
+}
+
+function duracaoHhmmEmMinutos(value: string | null): number | null {
+  if (!value) return null;
+  const match = value.match(/^(\d{1,3}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
 }
 
 function mapJornadaItemToOperationalRecord(
@@ -156,9 +173,13 @@ function mapJornadaItemToOperationalRecord(
     origemDados: item.origem_dados,
     tripulanteId: item.tripulante_id,
     funcao: item.funcao,
+    horaApresentacao: item.horario_apresentacao,
+    horaDispensa: item.horario_dispensa,
     dataOperacional: item.data_operacional,
+    horaMotorLigado: item.engine_start,
     horaDecolagem: item.takeoff_time,
     horaPouso: item.landing_time,
+    horaMotorDesligado: item.engine_shutoff,
     timezone,
     timezoneFonte: timezone ? 'EXPLICITO' : 'INDISPONIVEL',
     vooId: item.voo_id,
@@ -172,7 +193,9 @@ function mapJornadaItemToOperationalRecord(
     statusOperacionalRaw: item.voo_status,
     cancelado: statusOperacional === 'CANCELADO',
     corrigido: statusOperacional === 'CORRIGIDO',
-    minutosVoo: minutosEntre(item.takeoff_time, item.landing_time),
+    minutosVoo: duracaoHhmmEmMinutos(item.tempo_navegacao) ?? minutosEntre(item.takeoff_time, item.landing_time),
+    minutosTotal: duracaoHhmmEmMinutos(item.tempo_total) ?? minutosEntre(item.engine_start, item.engine_shutoff),
+    pousos: Math.max(0, Number(item.pousos_diurnos ?? 0)) + Math.max(0, Number(item.pousos_noturnos ?? 0)),
     atualizadoEm: item.last_sync_at,
     qualidadeDado: item.qualidade_dado,
     estadoConflito: item.estado_conflito,

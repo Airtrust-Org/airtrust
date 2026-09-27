@@ -250,7 +250,8 @@ const toneClasses = {
  * Estado operacional do SIGVOOS dentro do FRMS.
  *
  * Usa apenas endpoints read-only já existentes. O backend continua sendo a
- * autoridade para cálculo/alertas e SIGVOOS continua sendo a fonte canônica.
+ * autoridade para cálculo/alertas. Controle de Voos é a fonte operacional primária;
+ * SIGVOOS permanece como fallback durante a transição operacional.
  */
 export default function FrmsSourcePolicyBanner({ compact = false }: { compact?: boolean }) {
   const {
@@ -313,7 +314,7 @@ export default function FrmsSourcePolicyBanner({ compact = false }: { compact?: 
           <p className={`${compact ? 'mt-0.5' : 'mt-1'} ${classes.detail}`}>{copy.message}</p>
           {!compact && health?.status !== 'UNAVAILABLE' && (
             <p className={`mt-1 text-xs ${classes.detail}`}>
-              Política FRMS: ausência de jornada SIGVOOS não significa automaticamente descanso ou folga.
+              Política FRMS: Controle de Voos é a fonte primária; SIGVOOS é usado como fallback quando o realizado ainda não estiver disponível.
             </p>
           )}
         </div>

@@ -101,6 +101,11 @@ export interface FrmsJornada {
   usado_no_frms_operacional?: boolean;
   usado_em_alertas?: boolean;
   usado_em_rolling?: boolean;
+  operational_data_source?:
+    | 'CONTROLE_VOOS'
+    | 'SIGVOOS'
+    | 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS'
+    | 'AUSENTE';
 }
 
 export interface FrmsFatorizacao {

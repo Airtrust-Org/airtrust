@@ -37,6 +37,7 @@ import {
 } from './decision-policy';
 import { classifyOperationalCrewRole } from './operational-crew';
 import { deriveFrmsOperationalDecision, type FrmsDecisaoOperacionalEstado } from './frms-operational-decision';
+import { loadPreferredOperationalJourneys, type FrmsOperationalDataSource } from './preferred-operational-source';
 
 
 
@@ -101,6 +102,7 @@ export interface FrmsOperationalSnapshotItem {
   wake_data_source: 'REAL' | 'ESTIMADO' | 'AUSENTE';
   jornada_data_source: 'REAL' | 'MANUAL' | 'ESTIMADO' | 'AUSENTE' | 'INCONSISTENTE';
   jornada_origem: Origem | null;
+  operational_data_source?: FrmsOperationalDataSource;
   snapshot_status: FrmsOperationalSnapshotStatus;
   fortnight_indicator: FrmsFortnightIndicator | null;
   recovery_credit_points?: number;
@@ -199,6 +201,7 @@ interface JornadaSnapshotRow {
   origem: string | null;
   has_operational_data: number;
   is_manual_empty: number;
+  operational_data_source?: FrmsOperationalDataSource;
 }
 
 interface CheckinSnapshotRow {
@@ -956,6 +959,7 @@ export function buildFrmsOperationalSnapshot(
       wake_data_source: wakeDataSource,
       jornada_data_source: jornadaDataSource,
       jornada_origem: jornadaOrigem,
+      operational_data_source: jornada?.operational_data_source ?? 'AUSENTE',
       snapshot_status: snapshotStatus,
       fortnight_indicator: null,
 
@@ -1099,7 +1103,7 @@ async function loadOperationalSnapshotRows(
   janelaFim: string,
 ): Promise<OperationalSnapshotRows> {
   const missionHistoryStart = addDaysIso(janelaInicio, -ACT_CDS_MAX_POST_MISSION_REST_DAYS);
-  const [escalasResult, jornadasResult, checkinsResult, effectivenessResult, activities, regulatoryRollingResult, missionPeriodsResult] = await Promise.all([
+  const [escalasResult, preferredJourneys, checkinsResult, effectivenessResult, activities, regulatoryRollingResult, missionPeriodsResult] = await Promise.all([
     db
       .prepare(
         `WITH escala_crew AS (
@@ -1139,41 +1143,7 @@ async function loadOperationalSnapshotRows(
       .bind(empresaId, janelaInicio, janelaFim, empresaId, janelaInicio, janelaFim)
       .all<ScaleSnapshotRow>(),
 
-    db
-      .prepare(
-        `SELECT
-           j.data AS data_operacional,
-           CAST(j.tripulante_id AS INTEGER) AS funcionario_id,
-           j.hora_apresentacao,
-           COALESCE(j.hora_termino, j.hora_corte_motor, j.hora_ultimo_pouso) AS hora_termino,
-           COALESCE(j.horas_voo_minutos, 0) AS horas_voo_minutos,
-           COALESCE(j.duracao_jornada_minutos, 0) AS duracao_jornada_minutos,
-           j.origem,
-           CASE
-             WHEN j.hora_apresentacao IS NOT NULL
-               OR COALESCE(j.horas_voo_minutos, 0) > 0
-               OR COALESCE(j.duracao_jornada_minutos, 0) > 0
-               OR j.hora_termino IS NOT NULL
-             THEN 1 ELSE 0
-           END AS has_operational_data,
-           CASE
-             WHEN UPPER(COALESCE(j.origem, 'MANUAL')) = 'MANUAL'
-              AND j.hora_apresentacao IS NULL
-              AND j.hora_termino IS NULL
-              AND COALESCE(j.horas_voo_minutos, 0) = 0
-              AND COALESCE(j.duracao_jornada_minutos, 0) = 0
-             THEN 1 ELSE 0
-           END AS is_manual_empty
-         FROM frms_jornada j
-         JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER)
-         WHERE j.deleted_at IS NULL
-           AND f.deleted_at IS NULL
-           AND f.empresa_id = ?
-           AND j.data >= ?
-           AND j.data <= ?`,
-      )
-      .bind(empresaId, janelaInicio, janelaFim)
-      .all<JornadaSnapshotRow>(),
+    loadPreferredOperationalJourneys(db, empresaId, janelaInicio, janelaFim),
 
     db
       .prepare(
@@ -1315,7 +1285,19 @@ async function loadOperationalSnapshotRows(
 
   return {
     escalas: escalasResult.results || [],
-    jornadas: jornadasResult.results || [],
+    jornadas: preferredJourneys.map((row) => ({
+      data_operacional: row.data,
+      funcionario_id: row.tripulante_id,
+      hora_apresentacao: row.hora_apresentacao,
+      hora_termino: row.hora_termino,
+      horas_voo_minutos: row.horas_voo_minutos,
+      duracao_jornada_minutos: row.duracao_jornada_minutos,
+      origem: row.operational_data_source === 'SIGVOOS' ? 'SIGVOOS' : null,
+      has_operational_data:
+        row.horas_voo_minutos > 0 || row.duracao_jornada_minutos > 0 || Boolean(row.hora_apresentacao || row.hora_termino) ? 1 : 0,
+      is_manual_empty: 0,
+      operational_data_source: row.operational_data_source,
+    })),
     checkins: checkinsResult.results || [],
     effectiveness: (effectivenessResult.results || []).map((row) => {
       let parsed: EffectivenessResult['componentes'] | null = null;
@@ -1751,7 +1733,7 @@ export async function listFrmsOperationalSnapshot(
       .filter((row) =>
         row.data_operacional === date &&
         asNumber(row.funcionario_id) === funcionarioId &&
-        String(row.origem ?? '').trim().toUpperCase() === 'SIGVOOS',
+        asNumber(row.has_operational_data) === 1,
       )
       .reduce((sum, row) => sum + Math.max(0, asNumber(row.duracao_jornada_minutos)), 0);
     regulatoryComplianceByKey[key] = evaluateRegulatoryCompliance({

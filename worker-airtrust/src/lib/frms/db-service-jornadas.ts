@@ -28,6 +28,7 @@ import {
   type FrmsIogpShadowCallerEnv,
 } from './frms-iogp-shadow-caller';
 import { resolveOperationalLoadForJornada } from './operational-load-resolver';
+import { loadPreferredOperationalJourneys } from './preferred-operational-source';
 import { computeFlightHoursDelta, resolveOperationalPolicyV2, type FrmsOperationalPolicyV2 } from './operational-policy-v2';
 import { canCalculateFrmsEffectivenessFromBoundary, loadFrmsDutyBoundaryConfig, resolveFrmsDutyBoundary, resolveFrmsEstimatedDutyBoundary } from './duty-boundary';
 // ────────────────────────────────────────────────────────
@@ -257,6 +258,32 @@ export async function recalcularPipeline(
   alertas: AlertaGerado[];
   bloqueado: boolean;
 }> {
+  const empresaId = await resolveTripulanteEmpresaId(db, jornada.tripulante_id);
+  try {
+    const preferred = (await loadPreferredOperationalJourneys(db, empresaId, jornada.data, jornada.data))
+      .find((row) => row.tripulante_id === Number(jornada.tripulante_id));
+    if (preferred) {
+      jornada = {
+        ...jornada,
+        hora_apresentacao: preferred.hora_apresentacao,
+        hora_termino: preferred.hora_termino,
+        horas_voo_minutos: preferred.horas_voo_minutos,
+        duracao_jornada_minutos: preferred.duracao_jornada_minutos,
+        hora_primeiro_acionamento: preferred.hora_primeiro_acionamento,
+        hora_primeira_decolagem: preferred.hora_primeira_decolagem,
+        hora_ultimo_pouso: preferred.hora_ultimo_pouso,
+        hora_corte_motor: preferred.hora_corte_motor,
+        operational_data_source: preferred.operational_data_source,
+      };
+    }
+  } catch (error) {
+    console.warn('[FRMS] preferred operational source unavailable; using persisted SIGVOOS fallback', {
+      jornadaId: jornada.id,
+      empresaId,
+      error: error instanceof Error ? error.message : String(error ?? ''),
+    });
+  }
+
   if (!shouldUseForOperationalFrms(jornada)) {
     const acumuloVazio: AcumuloRollingResult = {
       hv_7_dias_min: 0,
@@ -301,7 +328,6 @@ export async function recalcularPipeline(
     return { fatorizacao, acumulo: acumuloVazio, alertas: [], bloqueado: false };
   }
 
-  const empresaId = await resolveTripulanteEmpresaId(db, jornada.tripulante_id);
   const operationalContext = await resolveFrmsOperationalContext(db, {
     empresaId,
     referenceAt: jornada.data,
@@ -437,7 +463,7 @@ export async function recalcularPipeline(
   }
 
   // 1. Buscar histórico para fatorização (repouso anterior)
-  const historico = await buscarHistoricoJornadas(db, jornada.tripulante_id, jornada.data, 365);
+  const historico = await buscarHistoricoJornadas(db, jornada.tripulante_id, jornada.data, 365, empresaId);
 
   // 2. Calcular repouso anterior
   const acumulo = calcAcumuloRolling({
@@ -933,7 +959,8 @@ export async function recalcularAcumuloRolling(
   dataRef: string,
   limites: LimitesMap,
 ): Promise<AcumuloRollingResult> {
-  const historico = await buscarHistoricoJornadas(db, tripulanteId, dataRef, 365);
+  const empresaId = await resolveTripulanteEmpresaId(db, tripulanteId);
+  const historico = await buscarHistoricoJornadas(db, tripulanteId, dataRef, 365, empresaId);
   const acumulo = calcAcumuloRolling({
     tripulanteId,
     dataReferencia: dataRef,

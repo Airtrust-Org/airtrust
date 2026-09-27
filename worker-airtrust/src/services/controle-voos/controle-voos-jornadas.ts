@@ -31,6 +31,8 @@ export interface ControleVoosJornadaItem {
   nome: string | null;
   funcao: string;
   funcao_origem: string | null;
+  horario_apresentacao: string | null;
+  horario_dispensa: string | null;
   aeronave: string | null;
   origem_icao: string | null;
   destino_icao: string | null;
@@ -83,6 +85,8 @@ type JornadaRow = {
   nome: string | null;
   funcao: string;
   funcao_origem: string | null;
+  horario_apresentacao: string | null;
+  horario_dispensa: string | null;
   aeronave: string | null;
   origem_icao: string | null;
   destino_icao: string | null;
@@ -140,7 +144,9 @@ function normalizeTime(value: unknown): string | null {
   if (value == null) return null;
   const text = String(value).trim();
   if (!text) return null;
-  const hhmm = text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  const hhmm =
+    text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
+    ?? text.match(/(?:T|\s)(\d{1,2}):(\d{2})(?::\d{2})?/);
   if (!hhmm) return null;
   return `${String(Number(hhmm[1])).padStart(2, '0')}:${hhmm[2]}`;
 }
@@ -258,6 +264,8 @@ function mapRow(row: JornadaRow): ControleVoosJornadaItem {
     nome: row.nome,
     funcao: row.funcao,
     funcao_origem: row.funcao_origem,
+    horario_apresentacao: normalizeTime(row.horario_apresentacao),
+    horario_dispensa: normalizeTime(row.horario_dispensa),
     aeronave: row.aeronave,
     origem_icao: row.origem_icao,
     destino_icao: row.destino_icao,
@@ -305,6 +313,8 @@ export async function listControleVoosJornadas(
         f.nome AS nome,
         t.funcao AS funcao,
         t.funcao_origem AS funcao_origem,
+        t.horario_apresentacao AS horario_apresentacao,
+        t.horario_dispensa AS horario_dispensa,
         COALESCE(v.prefixo, v.sigvoos_flight_number) AS aeronave,
         COALESCE(e.origem_icao, ao.codigo_icao, ao.codigo) AS origem_icao,
         COALESCE(e.destino_icao, ad.codigo_icao, ad.codigo) AS destino_icao,

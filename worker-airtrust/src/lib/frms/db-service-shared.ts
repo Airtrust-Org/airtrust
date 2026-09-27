@@ -4,6 +4,7 @@
  */
 
 import type { FrmsJornada } from './types';
+import { loadPreferredOperationalJourneys } from './preferred-operational-source';
 
 export function generateId(): string {
   return crypto.randomUUID();
@@ -57,6 +58,7 @@ export async function buscarHistoricoJornadas(
   tripulanteId: number | string,
   dataReferencia: string,
   diasAtras: number = 365,
+  empresaId?: number,
 ): Promise<FrmsJornada[]> {
   const dataInicio = dateOffset(dataReferencia, -diasAtras);
   const rows = await db
@@ -67,5 +69,64 @@ export async function buscarHistoricoJornadas(
     )
     .bind(String(tripulanteId), dataInicio, dataReferencia)
     .all<FrmsJornada>();
-  return rows.results || [];
+  const base = rows.results || [];
+  if (!empresaId) return base;
+
+  try {
+    const preferred = (await loadPreferredOperationalJourneys(db, empresaId, dataInicio, dataReferencia))
+      .filter((row) => row.tripulante_id === Number(tripulanteId));
+    const preferredByDate = new Map(preferred.map((row) => [row.data, row]));
+    const byDate = new Map<string, FrmsJornada>();
+
+    for (const row of base) {
+      const resolved = preferredByDate.get(row.data);
+      byDate.set(row.data, resolved ? {
+        ...row,
+        hora_apresentacao: resolved.hora_apresentacao,
+        hora_termino: resolved.hora_termino,
+        horas_voo_minutos: resolved.horas_voo_minutos,
+        duracao_jornada_minutos: resolved.duracao_jornada_minutos,
+        hora_primeiro_acionamento: resolved.hora_primeiro_acionamento,
+        hora_primeira_decolagem: resolved.hora_primeira_decolagem,
+        hora_ultimo_pouso: resolved.hora_ultimo_pouso,
+        hora_corte_motor: resolved.hora_corte_motor,
+        operational_data_source: resolved.operational_data_source,
+      } : row);
+    }
+
+    for (const resolved of preferred) {
+      if (byDate.has(resolved.data)) continue;
+      byDate.set(resolved.data, {
+        id: `operational-${resolved.tripulante_id}-${resolved.data}`,
+        tripulante_id: resolved.tripulante_id,
+        empresa_id: empresaId,
+        data: resolved.data,
+        status: 'ES',
+        hora_apresentacao: resolved.hora_apresentacao,
+        hora_termino: resolved.hora_termino,
+        duracao_jornada_minutos: resolved.duracao_jornada_minutos,
+        horas_voo_minutos: resolved.horas_voo_minutos,
+        hora_primeiro_acionamento: resolved.hora_primeiro_acionamento,
+        hora_primeira_decolagem: resolved.hora_primeira_decolagem,
+        hora_ultimo_pouso: resolved.hora_ultimo_pouso,
+        hora_corte_motor: resolved.hora_corte_motor,
+        repouso_plataforma_inicio: null,
+        repouso_plataforma_fim: null,
+        repouso_plataforma_valido: 0,
+        observacao: null,
+        registrado_por: 'CONTROLE_VOOS_RUNTIME',
+        origem: 'SIGVOOS',
+        created_at: '', updated_at: '', deleted_at: null,
+        tripulacao_aumentada: 0, classe_cabine: null, local_base: null,
+        operational_data_source: resolved.operational_data_source,
+      });
+    }
+    return [...byDate.values()].sort((a, b) => a.data.localeCompare(b.data));
+  } catch (error) {
+    console.warn('[FRMS] preferred operational history unavailable; using persisted SIGVOOS fallback', {
+      tripulanteId, empresaId, dataInicio, dataReferencia,
+      error: error instanceof Error ? error.message : String(error ?? ''),
+    });
+    return base;
+  }
 }
