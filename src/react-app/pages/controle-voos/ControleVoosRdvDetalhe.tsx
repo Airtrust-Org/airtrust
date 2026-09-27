@@ -80,6 +80,13 @@ function FieldError({ message }: { message?: string }) {
   return <p className="text-[11px] text-red-600 dark:text-red-400">{message}</p>;
 }
 
+function formatLocalDateTimeInput(value: string | null | undefined) {
+  if (!value) return '—';
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!match) return formatDateTime(value);
+  return `${match[3]}/${match[2]}/${match[1]}, ${match[4]}:${match[5]}`;
+}
+
 export default function ControleVoosRdvDetalhe() {
   const { id } = useParams<{ id: string }>();
   const [step, setStep] = useState<RdvPilotStepId>('identificacao');
@@ -92,6 +99,8 @@ export default function ControleVoosRdvDetalhe() {
   const [coordenacaoJustificativa, setCoordenacaoJustificativa] = useState('');
   const [programacaoEditOpen, setProgramacaoEditOpen] = useState(false);
   const hydratedKeyRef = useRef<string | null>(null);
+  const coordenacaoEditRef = useRef<HTMLElement | null>(null);
+  const coordenacaoJustificativaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const {
     data: voo,
@@ -390,6 +399,14 @@ export default function ControleVoosRdvDetalhe() {
     if (prev) setStep(prev.id);
   }
 
+  function handleRequestCoordinationEdit() {
+    if (justificativaCoordenacaoValida) setStep('trechos');
+    coordenacaoEditRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!justificativaCoordenacaoValida) {
+      window.requestAnimationFrame(() => coordenacaoJustificativaRef.current?.focus());
+    }
+  }
+
   return (
     <AppLayout>
       <div className="w-full">
@@ -426,20 +443,36 @@ export default function ControleVoosRdvDetalhe() {
           </ControleVoosPageHeader>
 
           {isCoordenacaoRevisando && (
-            <section className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20">
+            <section
+              ref={coordenacaoEditRef}
+              id="correcao-coordenacao"
+              className="mb-4 scroll-mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20"
+            >
               <div className="flex flex-col gap-3">
                 <div>
                   <h2 className="text-sm font-semibold text-amber-950 dark:text-amber-100">
-                    Correção pela Coordenação
+                    Revisão da Coordenação — correção antes da aprovação
                   </h2>
                   <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
-                    Informe uma justificativa para habilitar correções no RDV e nas etapas. Cada
-                    alteração é versionada e registrada no histórico antes da aprovação.
+                    Você pode corrigir o RDV recebido sem devolver ao piloto. Informe uma justificativa
+                    para habilitar a edição dos campos e dos trechos; cada alteração fica versionada no histórico.
                   </p>
+                </div>
+                <div className="grid gap-2 text-xs sm:grid-cols-3">
+                  <div className="rounded-lg bg-white/70 px-3 py-2 text-amber-900 dark:bg-slate-950/30 dark:text-amber-100">
+                    <strong>1.</strong> Informe a justificativa abaixo.
+                  </div>
+                  <div className="rounded-lg bg-white/70 px-3 py-2 text-amber-900 dark:bg-slate-950/30 dark:text-amber-100">
+                    <strong>2.</strong> Edite Tripulação, Trechos, Abastecimentos e Observações nos próprios passos.
+                  </div>
+                  <div className="rounded-lg bg-white/70 px-3 py-2 text-amber-900 dark:bg-slate-950/30 dark:text-amber-100">
+                    <strong>3.</strong> Aguarde “Salvo” e depois use Aprovar.
+                  </div>
                 </div>
                 <label className="text-xs font-medium text-amber-950 dark:text-amber-100">
                   Justificativa das correções
                   <textarea
+                    ref={coordenacaoJustificativaRef}
                     rows={2}
                     value={coordenacaoJustificativa}
                     onChange={(event) => setCoordenacaoJustificativa(event.target.value)}
@@ -448,35 +481,36 @@ export default function ControleVoosRdvDetalhe() {
                   />
                 </label>
                 <div className="flex flex-wrap items-center gap-3 text-xs">
-                  <span className={justificativaCoordenacaoValida ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-800 dark:text-amber-200'}>
+                  <span className={justificativaCoordenacaoValida ? 'font-semibold text-emerald-700 dark:text-emerald-300' : 'text-amber-800 dark:text-amber-200'}>
                     {justificativaCoordenacaoValida
-                      ? 'Edição auditada habilitada.'
-                      : 'Os campos permanecem somente leitura até informar a justificativa.'}
+                      ? 'Modo de correção ativo: os campos do RDV e dos trechos estão editáveis.'
+                      : 'Sem justificativa, os dados permanecem em modo somente leitura.'}
                   </span>
                   <button
                     type="button"
+                    onClick={() => setStep('tripulacao')}
+                    className="font-semibold text-blue-700 hover:underline dark:text-blue-300"
+                  >
+                    Gerenciar tripulação
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStep('trechos')}
+                    className="font-semibold text-blue-700 hover:underline dark:text-blue-300"
+                  >
+                    Corrigir trechos e horários
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setProgramacaoEditOpen(true)}
-                    className="inline-flex items-center gap-1 font-semibold text-blue-700 hover:underline dark:text-blue-300"
+                    className="inline-flex items-center gap-1 font-semibold text-slate-700 hover:underline dark:text-slate-300"
                   >
                     <Pencil className="h-3.5 w-3.5" />
-                    Corrigir programação e aeronave
+                    Editar programação original / aeronave
                   </button>
-                  <span className="text-amber-800 dark:text-amber-200">
-                    Rota e etapas: edite abaixo · Tripulação: gerencie nesta revisão.
-                  </span>
                 </div>
               </div>
             </section>
-          )}
-
-          {isCoordenacaoRevisando && (
-            <div className="mb-4">
-              <ControleVoosTripulacaoCard
-                vooId={voo.id}
-                aeronaveId={voo.aeronave_id}
-                rdvVersion={rdv?.versao}
-              />
-            </div>
           )}
 
           {rdv?.motivo_devolucao &&
@@ -582,7 +616,16 @@ export default function ControleVoosRdvDetalhe() {
                 </section>
               )}
 
-              {step === 'tripulacao' && (
+              {step === 'tripulacao' && isCoordenacaoRevisando && (
+                <ControleVoosTripulacaoCard
+                  vooId={voo.id}
+                  aeronaveId={voo.aeronave_id}
+                  rdvVersion={rdv?.versao}
+                  editable={editable}
+                />
+              )}
+
+              {step === 'tripulacao' && !isCoordenacaoRevisando && (
                 <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                   <h2 className="mb-1 flex items-center gap-2 text-base font-semibold text-slate-800 dark:text-slate-100">
                     <Users className="h-4 w-4 text-blue-500" /> Tripulação
@@ -662,6 +705,58 @@ export default function ControleVoosRdvDetalhe() {
                       </button>
                     )}
                   </div>
+                  {isCoordenacao && rdv && (
+                    <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900 dark:bg-blue-950/20">
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            Dados recebidos do piloto
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Resumo canônico do RDV. Os cartões abaixo detalham cada trecho.
+                          </p>
+                        </div>
+                        {!editable && isCoordenacaoRevisando && (
+                          <button
+                            type="button"
+                            onClick={handleRequestCoordinationEdit}
+                            className="rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:bg-slate-950 dark:text-blue-300"
+                          >
+                            Habilitar correção
+                          </button>
+                        )}
+                      </div>
+                      <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                        <div>
+                          <dt className="text-xs text-slate-500">Decolagem real</dt>
+                          <dd className="font-mono font-medium">{formatLocalDateTimeInput(form.horario_decolagem_real)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-slate-500">Pouso real</dt>
+                          <dd className="font-mono font-medium">{formatLocalDateTimeInput(form.horario_pouso_real)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-slate-500">Horas voadas</dt>
+                          <dd className="font-medium">{formatHours(parseNumber(form.horas_voadas))}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-slate-500">Pousos / ciclos</dt>
+                          <dd className="font-medium">{form.numero_pousos || 'Não informado'} / {form.ciclos || 'Não informado'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-slate-500">POB</dt>
+                          <dd className="font-medium">{form.pob || 'Não informado'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-slate-500">Carga</dt>
+                          <dd className="font-medium">{form.carga_kg ? `${form.carga_kg} kg` : 'Não informada'}</dd>
+                        </div>
+                      </dl>
+                      <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+                        Campo vazio no trecho significa que o piloto não informou aquele dado. Em modo de correção, a Coordenação pode preenchê-lo antes da aprovação.
+                      </p>
+                    </div>
+                  )}
                   {(etapasState.versionConflict || versionConflict) && (
                     <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
                       Conflito de versão nos trechos.{' '}
@@ -1029,7 +1124,19 @@ export default function ControleVoosRdvDetalhe() {
                     </button>
                   )}
 
-                  {!editable && (
+                  {!editable && isCoordenacaoRevisando && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+                      <p>Para corrigir os dados recebidos, informe a justificativa no painel de revisão.</p>
+                      <button
+                        type="button"
+                        onClick={handleRequestCoordinationEdit}
+                        className="mt-2 font-semibold text-blue-700 hover:underline dark:text-blue-300"
+                      >
+                        Habilitar correção do RDV
+                      </button>
+                    </div>
+                  )}
+                  {!editable && !isCoordenacaoRevisando && (
                     <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
                       Preenchimento bloqueado neste status do fluxo.
                     </p>
@@ -1038,7 +1145,12 @@ export default function ControleVoosRdvDetalhe() {
               </div>
 
               {isCoordenacao && rdv && id && (
-                <ControleVoosRdvWorkflowPanel vooId={id} rdv={rdv} isCoordenacao={isCoordenacao} />
+                <ControleVoosRdvWorkflowPanel
+                  vooId={id}
+                  rdv={rdv}
+                  isCoordenacao={isCoordenacao}
+                  onEditRdv={isCoordenacaoRevisando ? handleRequestCoordinationEdit : undefined}
+                />
               )}
 
               <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">

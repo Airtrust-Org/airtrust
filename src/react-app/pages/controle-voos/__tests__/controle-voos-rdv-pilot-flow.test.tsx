@@ -377,6 +377,32 @@ describe('etapas persistidas — mapeamento e recuperação local', () => {
     sessionStorage.clear();
   });
 
+  it('exibe horários HH:mm legados com a data do RDV e não inventa pousos ausentes', () => {
+    const draft = draftFromEtapa(
+      {
+        id: 15,
+        origem_icao: 'SBME',
+        destino_icao: '9PUF',
+        horario_decolagem: '06:31',
+        horario_pouso: '07:16',
+        combustivel_inicio: 2300,
+        combustivel_fim: 1300,
+        pousos_diurnos: null,
+        pousos_noturnos: null,
+        pax: 6,
+        payload: null,
+      },
+      undefined,
+      '2026-09-21',
+    );
+
+    expect(draft.horario_decolagem).toBe('2026-09-21T06:31');
+    expect(draft.horario_pouso).toBe('2026-09-21T07:16');
+    expect(calcHorasVoadas(draft.horario_decolagem, draft.horario_pouso)).toBe(0.75);
+    expect(draft.numero_pousos).toBe('');
+    expect(draft.pob).toBe('6');
+  });
+
   it('mapeia etapa da API para draft e de volta sem perder ICAO/combustível', () => {
     const draft = draftFromEtapa({
       id: 11,

@@ -30,10 +30,12 @@ export default function ControleVoosTripulacaoCard({
   vooId,
   aeronaveId,
   rdvVersion,
+  editable = true,
 }: {
   vooId: number;
   aeronaveId: number | null;
   rdvVersion?: number;
+  editable?: boolean;
 }) {
   const { data: tripulantes = [], isLoading } = useTripulantes(vooId);
   const criar = useCriarTripulante();
@@ -102,9 +104,16 @@ export default function ControleVoosTripulacaoCard({
 
   return (
     <div id="tripulacao" className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Tripulação</h2>
-        <button type="button" onClick={openAdd} disabled={!aeronaveId || loadingEligible} className="inline-flex items-center gap-1 rounded-lg bg-cyan-700 px-3 py-2 text-xs font-medium text-white disabled:opacity-50">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Tripulação</h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {editable
+              ? 'A Coordenação pode adicionar ou trocar tripulantes antes de aprovar o RDV.'
+              : 'Informe a justificativa da revisão para habilitar inclusão ou troca de tripulantes.'}
+          </p>
+        </div>
+        <button type="button" onClick={openAdd} disabled={!editable || !aeronaveId || loadingEligible} className="inline-flex items-center gap-1 rounded-lg bg-cyan-700 px-3 py-2 text-xs font-medium text-white disabled:opacity-50">
           <Plus className="h-3.5 w-3.5" /> {tripulantes.length ? 'Adicionar tripulante' : 'Cadastrar tripulação'}
         </button>
       </div>
@@ -118,7 +127,7 @@ export default function ControleVoosTripulacaoCard({
                 <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{item.funcionario_nome || `Funcionário ${item.funcionario_id}`}</p>
                 <p className="text-xs text-slate-500">{item.funcao}{item.funcionario_codigo_anac ? ` · ANAC ${item.funcionario_codigo_anac}` : ''}</p>
               </div>
-              <button type="button" onClick={() => openReplace(item)} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium dark:border-slate-600">
+              <button type="button" onClick={() => openReplace(item)} disabled={!editable} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600">
                 <RefreshCw className="h-3.5 w-3.5" /> Trocar
               </button>
             </div>

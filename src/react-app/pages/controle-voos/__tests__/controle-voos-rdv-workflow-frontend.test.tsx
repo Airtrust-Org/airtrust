@@ -236,6 +236,24 @@ describe('ControleVoosRdvWorkflowPanel', () => {
     expect(button).toBeDisabled();
   });
 
+  it('coordenacao: em revisão expõe ação clara para corrigir dados antes de aprovar', async () => {
+    getMock.mockImplementation(async () => apiOk([]));
+    const onEditRdv = vi.fn();
+
+    renderWithClient(
+      <ControleVoosRdvWorkflowPanel
+        vooId="601"
+        rdv={buildRdv({ workflow_status: 'em_revisao' })}
+        isCoordenacao={true}
+        onEditRdv={onEditRdv}
+      />,
+    );
+
+    const button = await screen.findByRole('button', { name: 'Corrigir dados antes de aprovar' });
+    fireEvent.click(button);
+    expect(onEditRdv).toHaveBeenCalledTimes(1);
+  });
+
   it('coordenacao: em revisao mostra Aprovar e Devolver; devolver exige justificativa', async () => {
     getMock.mockImplementation(async () => apiOk([]));
 
