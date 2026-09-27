@@ -30,6 +30,18 @@ describe('FRMS REDEMET same-run convergence contract', () => {
     expect(body).not.toContain('runFrmsIogpShadowForJornada');
   });
 
+  it('requires maintenance reprocess routes to propagate env and tenant into the observer', () => {
+    const source = read('src/routes/frms.ts');
+    const routeStart = source.indexOf("'/reprocessar/:tripulante_id'");
+    const routeEnd = source.indexOf('/**\n * GET /api/frms/ultimo-mes', routeStart);
+    const body = source.slice(routeStart, routeEnd);
+
+    expect(routeStart).toBeGreaterThan(0);
+    expect(body).toContain('env: c.env');
+    expect(body).toContain('empresaId,');
+    expect(body).toContain('reprocessarTripulanteCompleto(c.env.DB, tripulanteId, LIMITES_DEFAULT, {');
+  });
+
   it('keeps the observer call outside the canonical function so the second pass cannot loop', () => {
     const source = read('src/lib/frms/db-service-jornadas.ts');
     const reprocessStart = source.indexOf('export async function reprocessarTripulanteCompleto(');

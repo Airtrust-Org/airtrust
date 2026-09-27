@@ -158,7 +158,11 @@ describe('P0-FRMS-001/002 — routes pass tenant empresaId to global FRMS helper
     expect(response.status).toBe(200);
     // The reprocessing runs inside c.executionCtx.waitUntil.
     await Promise.all(waitUntilPromises);
-    expect(reprocessarTodosTripulantesMock).toHaveBeenCalledWith(expect.anything(), 2);
+    expect(reprocessarTodosTripulantesMock).toHaveBeenCalledWith(
+      expect.anything(),
+      2,
+      expect.objectContaining({ ENVIRONMENT: 'test' }),
+    );
   });
 
   it('POST /reprocessar refuses to run without a valid tenant context (fail-closed)', async () => {

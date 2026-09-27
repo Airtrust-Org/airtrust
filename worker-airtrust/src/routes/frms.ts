@@ -2219,7 +2219,7 @@ frmsRoutes.post(
     c.executionCtx.waitUntil(
       (async () => {
         try {
-          const result = await reprocessarTodosTripulantes(c.env.DB, empresaId);
+          const result = await reprocessarTodosTripulantes(c.env.DB, empresaId, c.env);
           await recordMaintenanceAudit(c, {
             action: 'FRMS_REPROCESS_ALL',
             module: 'frms',
@@ -2304,10 +2304,22 @@ frmsRoutes.post(
     const denied = await assertTripulanteEmpresa(c, String(tripulanteId));
     if (denied) return denied;
 
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      return c.json(
+        { success: false, error: 'Contexto de empresa inválido', code: 'INVALID_TENANT_CONTEXT' },
+        403,
+      );
+    }
+
     const operationId = crypto.randomUUID();
     const startedAt = Date.now();
-    // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
-    const count = await reprocessarTripulanteCompleto(c.env.DB, tripulanteId, LIMITES_DEFAULT);
+    // The governed reprocess route must carry env + tenant so IOGP/REDEMET
+    // evidence is materialized together with the canonical recalculation.
+    const count = await reprocessarTripulanteCompleto(c.env.DB, tripulanteId, LIMITES_DEFAULT, {
+      env: c.env,
+      empresaId,
+    });
     await recordMaintenanceAudit(c, {
       action: 'FRMS_REPROCESS_TRIPULANTE',
       module: 'frms',
@@ -3704,7 +3716,10 @@ frmsRoutes.post(
     const tripId = String(parsed.data.tripulante_id);
     // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
     c.executionCtx.waitUntil(
-      reprocessarTripulanteCompleto(c.env.DB, Number(tripId), LIMITES_DEFAULT),
+      reprocessarTripulanteCompleto(c.env.DB, Number(tripId), LIMITES_DEFAULT, {
+        env: c.env,
+        empresaId: getEmpresaIdSafe(c) ?? null,
+      }),
     );
     return c.json({ success: true, data: escala }, 201);
   }),
@@ -3754,7 +3769,10 @@ frmsRoutes.put(
     await auditFrms(c, 'frms_escala', 'UPDATE', id, { depois: parsed.data });
     // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
     c.executionCtx.waitUntil(
-      reprocessarTripulanteCompleto(c.env.DB, Number(escala.tripulante_id), LIMITES_DEFAULT),
+      reprocessarTripulanteCompleto(c.env.DB, Number(escala.tripulante_id), LIMITES_DEFAULT, {
+        env: c.env,
+        empresaId: getEmpresaIdSafe(c) ?? null,
+      }),
     );
     return c.json({ success: true, data: escala });
   }),
@@ -3786,7 +3804,10 @@ frmsRoutes.delete(
     await auditFrms(c, 'frms_escala', 'DELETE', id);
     // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
     c.executionCtx.waitUntil(
-      reprocessarTripulanteCompleto(c.env.DB, Number(escalaDel.tripulante_id), LIMITES_DEFAULT),
+      reprocessarTripulanteCompleto(c.env.DB, Number(escalaDel.tripulante_id), LIMITES_DEFAULT, {
+        env: c.env,
+        empresaId: getEmpresaIdSafe(c) ?? null,
+      }),
     );
     return c.json({ success: true });
   }),

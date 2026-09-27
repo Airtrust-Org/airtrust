@@ -1217,7 +1217,7 @@ async function runSigvoosFrmsDailySync(
         // reprocessarTripulanteCompleto's limites parameter is inert (recalcularPipeline self-resolves).
         for (const tripId of tripulanteIds) {
           try {
-            await reprocessarTripulanteCompleto(db, tripId, LIMITES_DEFAULT);
+            await reprocessarTripulanteCompleto(db, tripId, LIMITES_DEFAULT, { env, empresaId });
           } catch (e) {
             console.warn(
               `[SIGVOOS_CRON] Falha ao reprocessar tripulante ${tripId}:`,
