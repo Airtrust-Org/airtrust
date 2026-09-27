@@ -231,11 +231,25 @@ describe('regulatory profile state', () => {
     expect(regulatoryProfileIsReady({ profileCode: 'ANAC_BASIC' })).toBe(false);
   });
 
-  it('is ready only with profile and documentary reference', () => {
+  it('requires profile, documentary reference and a SHA-256 source hash', () => {
     expect(
       regulatoryProfileIsReady({
         profileCode: 'ANAC_BASIC',
-        documentedReference: 'MGO/GRF accepted by ANAC — current controlled revision',
+        documentedReference: 'Controlled regulatory source manifest',
+      }),
+    ).toBe(false);
+    expect(
+      regulatoryProfileIsReady({
+        profileCode: 'ANAC_BASIC',
+        documentedReference: 'Controlled regulatory source manifest',
+        sourceDocumentHash: 'not-a-sha256',
+      }),
+    ).toBe(false);
+    expect(
+      regulatoryProfileIsReady({
+        profileCode: 'ANAC_BASIC',
+        documentedReference: 'Controlled regulatory source manifest',
+        sourceDocumentHash: 'a'.repeat(64),
       }),
     ).toBe(true);
   });

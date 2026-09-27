@@ -363,9 +363,15 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
+<<<<<<< HEAD
     "last_reconciled_at": "2026-09-27",
     "last_reconciled_against": "0513 qualification areas schema prepared; remote apply pending",
     "schema_v2_digest": "f42e25f8b7b3e927ac6e9f4b1a0c3bac31a648f6b3a6df93cc3a7edab7655ee6",
+=======
+    "last_reconciled_at": "2026-09-23",
+    "last_reconciled_against": "0511 FRMS duty-boundary configuration schema prepared; remote apply pending",
+    "schema_v2_digest": "f4fcdb3bba3418ee0aed675441521f7c19173a25034721b5d3c23a630e19ae60",
+>>>>>>> origin/main
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1059,6 +1065,7 @@
       "note": "0511 is reviewed and prepared only. It adds two additive tenant-scoped FRMS configuration columns and does not rewrite historical journey/check-in/effectiveness data. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     },
     {
+<<<<<<< HEAD
       "change_file": "0513_qualification_areas.sql",
       "change_id": "qualification-areas-0513",
       "sha256": "7334b72075970d480ff6faeb6171e4a75a53ab33be5c598a0061811519c83431",
@@ -1071,6 +1078,17 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "qualification-areas-0513.json",
       "note": "0513 is reviewed and prepared only. It adds the tenant-scoped qualification-area catalog, an additive area_id on qualification models, tenant guards and a conservative Costa do Sol legacy classification backfill. It does not alter Training Compliance applicability or delete legacy model-sector links. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+=======
+      "change_file": "0512_frms_regulatory_evidence_location_catalog.sql",
+      "change_id": "frms-regulatory-evidence-location-catalog-0512",
+      "sha256": "907b634a980717cd1897cfa9e0ab2e52cf7b25cd997a0b8e1d0e8a9cb6d94e81",
+      "targets": [],
+      "domain": "tenant-scoped FRMS documentary regulatory evidence and minimal operational location/weather catalogue",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "frms-regulatory-evidence-location-catalog-0512.json",
+      "note": "0512 is a reviewed data-only governance change (no DDL targets). It attaches a hashed regulatory-source manifest to tenant 6 without inferring RBAC 117 Appendix B/C, and seeds only SBME plus six observed offshore helidecks with explicit timezone/weather policy. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+>>>>>>> origin/main
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",

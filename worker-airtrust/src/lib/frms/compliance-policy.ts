@@ -662,7 +662,12 @@ export function regulatoryProfileHasDocumentedAppendix(
   return appendices.some((appendix) => documented.has(appendix));
 }
 
-/** Fail closed: without the active documented profile, final regulatory compliance is unknown. */
+/** Fail closed: without an active profile tied to hashed documentary evidence, final regulatory compliance is unknown. */
 export function regulatoryProfileIsReady(state: RegulatoryProfileState): boolean {
-  return Boolean(state.profileCode && state.documentedReference?.trim());
+  const hash = state.sourceDocumentHash?.trim() ?? '';
+  return Boolean(
+    state.profileCode &&
+    state.documentedReference?.trim() &&
+    /^[a-f0-9]{64}$/i.test(hash)
+  );
 }
