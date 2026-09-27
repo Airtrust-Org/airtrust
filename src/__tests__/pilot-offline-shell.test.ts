@@ -24,6 +24,7 @@ const pilotSw = read('public/pilot/pilot-sw.js');
 const swManager = read('src/lib/sw-manager.tsx');
 const killSwitch = read('public/sw.js');
 const rootIndex = read('index.html');
+const controleVoosVooDetalhe = read('src/react-app/pages/controle-voos/ControleVoosVooDetalhe.tsx');
 
 describe('Pilot Offline shell', () => {
   it('mantem os scripts estaticos do Pilot App sintaticamente validos como ESM moderno', () => {
@@ -175,7 +176,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v31'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v32'");
     expect(pilotSw).not.toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
@@ -229,6 +230,30 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain('containsForbiddenPackageKey(packageData)');
     expect(pilotApp).toContain("await vault.putJson(\n      'flight_packages'");
     expect(pilotVault).toContain('async listJson(storeName)');
+  });
+
+  it('copia documentos vigentes para o vault cifrado sem bloquear o voo quando faltam ou falham', () => {
+    expect(pilotVault).toContain("payload_type: 'bytes-v1'");
+    expect(pilotVault).toContain('async putBytes(storeName, id, bytes, localRevision)');
+    expect(pilotVault).toContain('async getBytes(storeName, id)');
+    expect(pilotApp).toContain('cacheFlightDocumentsForOffline');
+    expect(pilotApp).toContain("await vault.putBytes('attachments', cacheKey, bytes, 1)");
+    expect(pilotApp).toContain("await vault.getBytes('attachments', cacheKey)");
+    expect(pilotApp).toContain("await sha256Hex(persisted.bytes)");
+    expect(pilotApp).toContain("cache_error: 'CACHE_FAILED'");
+    expect(pilotApp).toContain('A ausência de documentos não bloqueia o voo.');
+    expect(pilotWorkspace).toContain('Ainda não recebido pela Coordenação.');
+    expect(pilotWorkspace).toContain('Não bloqueia o voo');
+    expect(pilotWorkspace).toContain('Disponível offline neste tablet');
+  });
+
+  it('da à Coordenação uma preparação para saída simples com anexos substituíveis e histórico', () => {
+    expect(controleVoosVooDetalhe).toContain('Preparação para saída');
+    expect(controleVoosVooDetalhe).toContain('a ausência deles nunca bloqueia o voo');
+    expect(controleVoosVooDetalhe).toContain('Planejamento de voo atualizado');
+    expect(controleVoosVooDetalhe).toContain("current ? 'Substituir' : 'Anexar'");
+    expect(controleVoosVooDetalhe).toContain('Histórico de documentos');
+    expect(controleVoosVooDetalhe).toContain('os pilotos verão o aviso para atualizar o pacote offline');
   });
 
   it('so confirma consulta offline depois do write cifrado e do read-back', () => {

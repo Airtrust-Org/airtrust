@@ -379,6 +379,75 @@ export class PilotVault {
     await transactionDone(transaction);
   }
 
+  async encryptBytesRecord(storeName, id, bytes, localRevision) {
+    this.assertStore(storeName);
+    this.assertUnlocked();
+
+    const plaintext = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+    if (plaintext.byteLength === 0) {
+      throw new Error('Anexo offline vazio.');
+    }
+    const iv = randomBytes(12);
+    const ciphertext = new Uint8Array(
+      await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv, additionalData: recordAad(storeName, id) },
+        this.masterKey,
+        plaintext,
+      ),
+    );
+
+    return {
+      id,
+      cipher_version: 1,
+      payload_type: 'bytes-v1',
+      iv: bytesToBase64(iv),
+      ciphertext_bytes: ciphertext,
+      local_revision: Number(localRevision || 0),
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  async putBytes(storeName, id, bytes, localRevision) {
+    const record = await this.encryptBytesRecord(storeName, id, bytes, localRevision);
+    const transaction = this.database.transaction(storeName, 'readwrite');
+    transaction.objectStore(storeName).put(record);
+    await transactionDone(transaction);
+  }
+
+  async getBytes(storeName, id) {
+    this.assertStore(storeName);
+    this.assertUnlocked();
+
+    const transaction = this.database.transaction(storeName, 'readonly');
+    const record = await requestResult(transaction.objectStore(storeName).get(id));
+    await transactionDone(transaction);
+    if (!record) return null;
+    if (record.payload_type !== 'bytes-v1' || !record.ciphertext_bytes) {
+      throw new Error('Anexo offline incompatível com esta versão do Pilot App.');
+    }
+
+    const ciphertext =
+      record.ciphertext_bytes instanceof Uint8Array
+        ? record.ciphertext_bytes
+        : new Uint8Array(record.ciphertext_bytes);
+    const plaintext = await crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: base64ToBytes(record.iv),
+        additionalData: recordAad(storeName, record.id),
+      },
+      this.masterKey,
+      ciphertext,
+    );
+
+    return {
+      id: record.id,
+      bytes: new Uint8Array(plaintext),
+      localRevision: Number(record.local_revision || 0),
+      updatedAt: record.updated_at || null,
+    };
+  }
+
   async decryptRecord(storeName, record) {
     const plaintext = await crypto.subtle.decrypt(
       {

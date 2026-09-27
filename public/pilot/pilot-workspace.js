@@ -231,27 +231,60 @@ function renderPlanning(panel, packageData, workspace, actions = {}) {
   panel.append(section);
 
   const documents = Array.isArray(planning.documentos) ? planning.documentos : [];
-  if (documents.length > 0) {
-    const docsSection = el('section', { className: 'pilot-workspace-section' });
-    docsSection.append(el('h3', { text: 'Documentos enviados pela Coordenação' }));
-    const docsList = el('div', { className: 'pilot-workspace-list' });
-    for (const document of documents) {
-      const card = el('div', { className: 'pilot-workspace-row-card' });
+  const documentAvailability = actions.documentAvailability || {};
+  const currentDocuments = [...documents]
+    .sort((left, right) => Number(right?.id || 0) - Number(left?.id || 0))
+    .reduce((map, document) => {
+      const type = String(document?.type || '').toUpperCase();
+      if ((type === 'WEATHER_REPORT' || type === 'PLANO_VOO') && !map.has(type)) {
+        map.set(type, document);
+      }
+      return map;
+    }, new Map());
+  const docsSection = el('section', { className: 'pilot-workspace-section' });
+  docsSection.append(el('h3', { text: 'Documentos do voo' }));
+  appendNotice(
+    docsSection,
+    'Weather Report e planejamento atualizado acompanham o pacote quando disponíveis. A ausência de qualquer um deles não bloqueia o voo.',
+    'info',
+  );
+  const docsList = el('div', { className: 'pilot-workspace-list' });
+  for (const definition of [
+    { type: 'WEATHER_REPORT', label: 'Weather Report' },
+    { type: 'PLANO_VOO', label: 'Planejamento de voo atualizado' },
+  ]) {
+    const document = currentDocuments.get(definition.type);
+    const state = document ? documentAvailability[String(document.id)] : null;
+    const availableOffline = Boolean(state?.available_offline);
+    const card = el('div', { className: 'pilot-workspace-row-card' });
+    card.append(el('strong', { text: definition.label }));
+    if (!document) {
       card.append(
-        el('strong', { text: text(document.label, document.type) }),
+        el('span', { text: 'Ainda não recebido pela Coordenação.' }),
+        el('span', { className: 'pilot-workspace-state attention', text: 'Não bloqueia o voo' }),
+      );
+    } else {
+      card.append(
         el('span', { text: text(document.file_name) }),
+        el('span', {
+          className: 'pilot-workspace-state ' + (availableOffline ? 'ok' : 'attention'),
+          text: availableOffline ? 'Disponível offline neste tablet' : 'Não disponível offline neste tablet — não bloqueia o voo',
+        }),
       );
       if (typeof actions.openFlightDocument === 'function') {
-        const button = el('button', { className: 'secondary', text: 'Abrir documento' });
+        const button = el('button', {
+          className: 'secondary',
+          text: availableOffline ? 'Abrir documento offline' : 'Abrir documento',
+        });
         button.type = 'button';
         button.addEventListener('click', () => actions.openFlightDocument(document.id));
         card.append(button);
       }
-      docsList.append(card);
     }
-    docsSection.append(docsList);
-    panel.append(docsSection);
+    docsList.append(card);
   }
+  docsSection.append(docsList);
+  panel.append(docsSection);
 
   if (planning.observacoes) {
     const obs = el('section', { className: 'pilot-workspace-section' });
@@ -423,6 +456,15 @@ function renderDossier(panel, workspace, actions = {}) {
   }
   const list = el('div', { className: 'pilot-workspace-list' });
   for (const entry of entries) {
+    const localDocumentState = entry.document_event_id
+      ? actions.documentAvailability?.[String(entry.document_event_id)]
+      : null;
+    const availableOffline = entry.document_event_id
+      ? Boolean(localDocumentState?.available_offline)
+      : Boolean(entry.available_offline);
+    const integrityState = availableOffline && entry.document_event_id
+      ? 'ENCRYPTED_LOCAL_COPY'
+      : entry.integrity_state;
     const card = el('article', { className: 'pilot-workspace-row-card dossier' });
     const top = el('div', { className: 'pilot-workspace-card-head' });
     top.append(
@@ -430,8 +472,8 @@ function renderDossier(panel, workspace, actions = {}) {
       el('span', {
         className:
           'pilot-workspace-state ' +
-          (entry.available_offline ? 'ok' : 'attention'),
-        text: entry.available_offline ? 'Offline: sim' : 'Offline: não',
+          (availableOffline ? 'ok' : 'attention'),
+        text: availableOffline ? 'Offline: sim' : 'Offline: não',
       }),
     );
     card.append(top);
@@ -439,7 +481,7 @@ function renderDossier(panel, workspace, actions = {}) {
       ['Categoria', entry.category],
       ['Fonte', entry.source],
       ['Atualizado em', formatDateTime(entry.updated_at)],
-      ['Integridade', entry.integrity_state],
+      ['Integridade', integrityState],
       ['Versão', entry.version],
     ]);
     if (entry.document_event_id && typeof actions.openFlightDocument === 'function') {
