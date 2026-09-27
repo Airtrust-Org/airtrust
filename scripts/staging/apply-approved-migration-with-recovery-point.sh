@@ -46,7 +46,7 @@ APPROVED_MIGRATIONS=(
   "0509_controle_voos_flight_plan.sql"
   "0510_controle_voos_petrobras_rve_export.sql"
   "0511_frms_duty_boundary_config.sql"
-  "0512_qualification_areas.sql"
+  "0513_qualification_areas.sql"
 )
 
 apply=false
@@ -219,8 +219,8 @@ validate_postconditions() {
     0511_frms_duty_boundary_config.sql)
       bash scripts/staging/validate-0511-postconditions.sh --target="$db_name"
       ;;
-    0512_qualification_areas.sql)
-      bash scripts/staging/validate-0512-postconditions.sh --target="$db_name"
+    0513_qualification_areas.sql)
+      bash scripts/staging/validate-0513-postconditions.sh --target="$db_name"
       ;;
   esac
 }

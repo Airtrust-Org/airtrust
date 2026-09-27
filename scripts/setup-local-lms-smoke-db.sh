@@ -55,9 +55,9 @@ LMS_MIGRATIONS=(
   "$WORKER_DIR/migrations/0465_lms_scorm_package_quality_gate_v1.sql"
   "$WORKER_DIR/migrations/0469_lms_completion_pendencias_snapshots.sql"
   "$WORKER_DIR/migrations/0470_certificado_validacao_hash_index.sql"
-  # 0512 is additive but changes qualificacoes_tipos, a CI bootstrap-critical table.
+  # 0513 is additive but changes qualificacoes_tipos, a CI bootstrap-critical table.
   # Keep the local smoke schema aligned with the governed qualification-area contract.
-  "$WORKER_DIR/migrations/0512_qualification_areas.sql"
+  "$WORKER_DIR/migrations/0513_qualification_areas.sql"
 )
 
 error() {

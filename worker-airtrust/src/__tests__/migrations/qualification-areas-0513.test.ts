@@ -6,13 +6,13 @@ import { execSql, querySql } from '../helpers/sqlite-batch-runner';
 
 const ROOT = join(__dirname, '../../../..');
 const migration = readFileSync(
-  join(ROOT, 'worker-airtrust/schema-v2/changes/0512_qualification_areas.sql'),
+  join(ROOT, 'worker-airtrust/schema-v2/changes/0513_qualification_areas.sql'),
   'utf8',
 );
 const tempDirs: string[] = [];
 
 function createDatabase() {
-  const dir = mkdtempSync(join(tmpdir(), 'airtrust-qualification-areas-0512-'));
+  const dir = mkdtempSync(join(tmpdir(), 'airtrust-qualification-areas-0513-'));
   tempDirs.push(dir);
   const dbPath = join(dir, 'test.sqlite');
   const setup = execSql(dbPath, `
@@ -57,7 +57,7 @@ afterEach(() => {
   while (tempDirs.length) rmSync(tempDirs.pop()!, { recursive: true, force: true });
 });
 
-describe('0512 qualification areas', () => {
+describe('0513 qualification areas', () => {
   it('creates the four approved areas and migrates only unambiguous legacy classification', () => {
     const dbPath = createDatabase();
     const result = execSql(dbPath, migration);

@@ -1,10 +1,10 @@
--- 0512_qualification_areas.sql
+-- 0513_qualification_areas.sql
 -- Separates qualification classification area from employee organizational sector.
 -- Training compliance remains the canonical source for who must hold each qualification.
 -- source_reference: user-approved AirTrust qualification-classification decision (2026-09-26): Operações, Manutenção, QSMS and Segurança Operacional; Compliance remains applicability SSOT.
 -- operational_decision: migrate only deterministic legacy model-sector classifications; ambiguous or unmapped models remain unclassified for manual review.
 -- dry_run_required: true
--- rollback_plan_required: worker-airtrust/schema-v2/plans/qualification-areas-0512.md
+-- rollback_plan_required: worker-airtrust/schema-v2/plans/qualification-areas-0513.md
 
 CREATE TABLE IF NOT EXISTS qualificacoes_areas (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
