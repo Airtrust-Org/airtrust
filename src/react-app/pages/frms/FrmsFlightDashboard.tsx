@@ -267,8 +267,14 @@ function DetailDrawer({
             ) : (
               <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Dados essenciais disponíveis para a decisão.</p>
             )}
-            {item.jornada_origem ? (
-              <p className="mt-1 text-xs text-slate-500">Origem da jornada: {item.jornada_origem}</p>
+            {item.operational_data_source && item.operational_data_source !== 'AUSENTE' ? (
+              <p className="mt-1 text-xs text-slate-500">
+                Fonte dos dados de voo: {item.operational_data_source === 'CONTROLE_VOOS'
+                  ? 'Controle de Voos'
+                  : item.operational_data_source === 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS'
+                    ? 'Controle de Voos + fallback SIGVOOS'
+                    : 'SIGVOOS (fallback)'}
+              </p>
             ) : null}
           </section>
 

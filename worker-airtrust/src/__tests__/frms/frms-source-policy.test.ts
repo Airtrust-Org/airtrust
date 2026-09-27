@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildCanonicalOperationalSourceSql,
+  FRMS_OPERATIONAL_SOURCE_PRIORITY,
   resolveFrmsSourceStatus,
   shouldUseForOperationalAlerts,
   shouldUseForOperationalFrms,
@@ -8,6 +9,11 @@ import {
 } from '../../lib/frms/frms-source-policy';
 
 describe('frms source policy', () => {
+  it('prioriza Controle de Voos e mantém SIGVOOS como fallback operacional', () => {
+    expect(FRMS_OPERATIONAL_SOURCE_PRIORITY).toEqual(['CONTROLE_VOOS', 'SIGVOOS']);
+    expect(shouldUseForOperationalFrms({ origem: 'MANUAL', operational_data_source: 'CONTROLE_VOOS' })).toBe(true);
+  });
+
   it('usa SIGVOOS como unica fonte operacional canonica', () => {
     const decision = resolveFrmsSourceStatus({ origem: 'SIGVOOS' });
 

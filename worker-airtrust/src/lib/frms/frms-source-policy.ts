@@ -2,8 +2,12 @@ type FrmsSourceRow = {
   origem?: string | null;
   fonte_original?: string | null;
   fonte_canonica?: string | null;
+  operational_data_source?: string | null;
 };
 
+export const FRMS_OPERATIONAL_SOURCE_PRIORITY = ['CONTROLE_VOOS', 'SIGVOOS'] as const;
+
+/** Legacy persisted marker; runtime operational reads use the priority resolver above. */
 export const FRMS_CANONICAL_OPERATIONAL_SOURCE = 'SIGVOOS' as const;
 
 export type FrmsSourceStatus =
@@ -100,6 +104,8 @@ export function resolveFrmsSourceStatus(
 }
 
 export function shouldUseForOperationalFrms(row: FrmsSourceRow): boolean {
+  const operationalSource = normalizeSource(row.operational_data_source);
+  if (operationalSource === 'CONTROLE_VOOS' || operationalSource === 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS') return true;
   return isCanonicalFrmsOperationalSource(row.fonte_original ?? row.origem);
 }
 

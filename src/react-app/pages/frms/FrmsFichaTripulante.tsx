@@ -762,6 +762,13 @@ export default function FrmsFichaTripulante() {
                 <p>Check-in: <strong>{todayFortnightSnapshotItem?.checkin_status || 'AUSENTE'}{todayFortnightSnapshotItem?.checkin_horario ? ` às ${todayFortnightSnapshotItem.checkin_horario.slice(0, 5)}` : ''}</strong></p>
                 <p>Fonte sono/despertar: <strong>{formatSnapshotSource(todayFortnightSnapshotItem?.sleep_data_source)} / {formatSnapshotSource(todayFortnightSnapshotItem?.wake_data_source)}</strong></p>
                 <p>Fonte jornada: <strong>{formatSnapshotSource(todayFortnightSnapshotItem?.jornada_data_source)}</strong></p>
+                <p>Fonte dos dados de voo: <strong>{todayFortnightSnapshotItem?.operational_data_source === 'CONTROLE_VOOS'
+                  ? 'Controle de Voos'
+                  : todayFortnightSnapshotItem?.operational_data_source === 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS'
+                    ? 'Controle de Voos + fallback SIGVOOS'
+                    : todayFortnightSnapshotItem?.operational_data_source === 'SIGVOOS'
+                      ? 'SIGVOOS (fallback)'
+                      : 'sem dado operacional'}</strong></p>
                 <p>Atividade FRMS: <strong>{todayFortnightSnapshotItem?.atividade_principal || 'sem atividade registrada'}</strong></p>
                 <p>Regra: <strong>HV real separado; simulador entra apenas como HV equivalente FRMS para fadiga</strong></p>
                 <p className="pt-1 text-sky-800">
