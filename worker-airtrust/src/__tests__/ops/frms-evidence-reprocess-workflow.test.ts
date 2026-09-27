@@ -33,6 +33,11 @@ describe('Production FRMS evidence reprocess workflow', () => {
   it('uses D1 only for read-only inventory/postvalidation and proves snapshot coverage', () => {
     expect(workflow).toContain('FRMS_SNAPSHOT_COVERAGE_MISMATCH');
     expect(workflow).toContain('FRMS_SNAPSHOT_PROFILE_MISMATCH');
+    expect(workflow).toContain('ROW_NUMBER() OVER (');
+    expect(workflow).toContain('PARTITION BY a.jornada_id');
+    expect(workflow).toContain("'$.missingData'");
+    expect(workflow).toContain("md.value='REGULATORY_PROFILE'");
+    expect(workflow).not.toContain("a.evidence_hash LIKE '%REGULATORY_PROFILE%'");
     expect(workflow).toContain('direct D1 mutation executed by workflow: no');
     expect(workflow).not.toMatch(/wrangler d1 execute[^\n]*--file/);
     expect(workflow).not.toMatch(/\b(?:INSERT|UPDATE|DELETE)\b[^\n]*frms_jornada_avaliacoes/i);
