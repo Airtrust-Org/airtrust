@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-27",
     "last_reconciled_against": "0513 qualification areas schema prepared after 0512 FRMS regulatory evidence catalogue; remote applies pending",
-    "schema_v2_digest": "e9d4035bcfc20d7213603a630ba87790b6701f0336180c613c327daad85a07f6",
+    "schema_v2_digest": "5ac2eba81e907dc346aad8af69b9ae88bad4491bcc2f4bd0241c4ac7bd16f454",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1082,6 +1082,19 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "qualification-areas-0513.json",
       "note": "0513 is reviewed and prepared only. It adds the tenant-scoped qualification-area catalog, an additive area_id on qualification models, tenant guards and a conservative Costa do Sol legacy classification backfill. It does not alter Training Compliance applicability or delete legacy model-sector links. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0514_auth_profile_authority_sync.sql",
+      "change_id": "auth-profile-authority-sync-0514",
+      "sha256": "c3675d09aabb8f2e5fff8051d1d0f56cd7a67a725e4608786ccfce5d984bb4ea",
+      "targets": [
+        "usuarios_empresas"
+      ],
+      "domain": "tenant membership compatibility role to explicit multi-profile authority synchronization",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "auth-profile-authority-sync-0514.json",
+      "note": "0514 is reviewed and prepared only. It generically backfills legacy/default tenant roles that lack an equivalent explicit profile and adds additive INSERT/role-update triggers to preserve that invariant for future membership writes. It contains no user-specific grants, deletes or role normalization. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",
