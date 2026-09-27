@@ -76,6 +76,17 @@ WHERE NOT EXISTS (SELECT 1 FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)} AND
 UPDATE empresas SET nome = ${e(EMPRESA_NOME)}, ativo = 1, deleted_at = NULL, updated_at = datetime('now')
 WHERE codigo = ${e(EMPRESA_CODIGO)};
 
+-- RESET DE AGENDA QA: o smoke cria sessões sintéticas e execuções anteriores podem
+-- ocupar todos os candidatos futuros. Como este tenant é dedicado exclusivamente
+-- ao fixture qa_examiner_training, o reseed restaura deterministicamente a agenda
+-- por soft delete, sem tocar qualquer outro tenant e sem hard-delete de histórico.
+UPDATE simulador_agendamentos
+SET deleted_at = datetime('now'), updated_at = datetime('now')
+WHERE empresa_id = (
+  SELECT id FROM empresas WHERE codigo = ${e(EMPRESA_CODIGO)} AND deleted_at IS NULL
+)
+  AND deleted_at IS NULL;
+
 -- SETOR QA sintético para satisfazer o trigger trg_funcionarios_setor_required_insert.
 INSERT INTO setores (codigo, nome, descricao, responsavel, ativo, created_at, updated_at, deleted_at, empresa_id)
 SELECT ${e(SETOR_CODIGO)}, ${e(SETOR_NOME)}, 'Setor sintético para fixture QA de staging.', ${e(ADMIN_NOME)}, 1, datetime('now'), datetime('now'), NULL, emp.id
