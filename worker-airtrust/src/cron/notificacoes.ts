@@ -16,6 +16,7 @@ import {
 } from '../utils/whatsapp-templates';
 import { createStructuredConsole } from '../utils/logger';
 import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
+import { getSetorGestoresBySetor } from '../services/setores-gestores';
 import {
   CANCELLED_STATUS_VALUES,
   QUALIFICACAO_STATUS,
@@ -39,6 +40,7 @@ interface QualificacaoParaNotificar {
   funcionario_nome: string;
   funcionario_email: string;
   funcionario_telefone: string;
+  funcionario_setor_id: number | null;
   qualificacao_codigo: string;
   qualificacao_nome: string;
   categoria: string;
@@ -181,6 +183,7 @@ export function buildQualificacoesParaNotificarQuery(): string {
       f.nome as funcionario_nome,
       f.email as funcionario_email,
       f.telefone as funcionario_telefone,
+      f.setor_id as funcionario_setor_id,
       COALESCE(qh.qualificacao_codigo, qt.codigo) as qualificacao_codigo,
       qt.nome as qualificacao_nome,
       COALESCE(qh.categoria, qt.categoria) as categoria,
@@ -359,6 +362,16 @@ function parseDestinatarios(destinatariosRaw: string | null): string[] {
   return [String(destinatariosRaw).trim()].filter(Boolean);
 }
 
+export function normalizeEmailRecipients(values: string[]): string[] {
+  return [
+    ...new Set(
+      values
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+}
+
 function buildStatusVencimento(diasAteVencimento: number): string {
   if (diasAteVencimento < 0) {
     return `Vencida ha ${Math.abs(diasAteVencimento)} dias`;
@@ -425,14 +438,34 @@ async function enviarNotificacao(
 
     // Enviar notificação
     if (tipoCanal === 'EMAIL') {
-      if (destinatarios.length === 0 && qualificacao.funcionario_email) {
-        destinatarios = [qualificacao.funcionario_email];
+      const destinatariosDinamicos: string[] = [];
+      if (qualificacao.funcionario_email) {
+        destinatariosDinamicos.push(qualificacao.funcionario_email);
       }
+
+      if (qualificacao.funcionario_setor_id) {
+        const gestores = await getSetorGestoresBySetor(
+          env.DB,
+          empresaId,
+          qualificacao.funcionario_setor_id,
+          true,
+        );
+        destinatariosDinamicos.push(
+          ...gestores.map((gestor) => gestor.gestor_email).filter(Boolean),
+        );
+      }
+
+      // Destinatarios fixos historicos nunca devem substituir funcionario/gestor.
+      // Permanecem apenas como fallback se o cadastro nao resolver destinatarios dinamicos.
+      destinatarios = normalizeEmailRecipients(
+        destinatariosDinamicos.length > 0 ? destinatariosDinamicos : destinatarios,
+      );
 
       if (destinatarios.length === 0) {
         log.warn('[NOTIFICACOES] Sem destinatarios de email', {
           funcionario: qualificacao.funcionario_nome,
           qualificacaoHistoricoId: qualificacao.id,
+          setorId: qualificacao.funcionario_setor_id,
         });
         return false;
       }
