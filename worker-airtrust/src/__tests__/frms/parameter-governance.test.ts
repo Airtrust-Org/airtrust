@@ -6,6 +6,7 @@ import {
   nextRecalcStatus,
   processRecalcRunInChunks,
   resolveEffectiveRevision,
+  resolveFrmsRegulatoryProfileEvidence,
   staleStateForRevision,
   type FrmsConfigParameter,
   type FrmsConfigRevision,
@@ -38,6 +39,29 @@ describe('FRMS parameter governance V2', () => {
       1, FRMS_OFFSHORE_PROFILE, '2026-08-21',
     );
     expect(chosen.id).toBe('tenant-a');
+  });
+
+  it('resolves documentary regulatory evidence with tenant/date scoping', async () => {
+    const all = async () => ({ results: [{
+      regulatory_profile_id: 'rp-6',
+      profile_code: 'HELICOPTER_OFFSHORE',
+      service_category: 'OFFSHORE_HELICOPTER',
+      approval_reference: 'AIRTRUST_FRMS_REGULATORY_SOURCE_MANIFEST_2026-09-27',
+      regulatory_policy_version: 'LEGACY_MODEL_V2',
+      limits_json: '{"rbac117_appendices":[]}',
+      source_document_hash: 'a'.repeat(64),
+    }] });
+    const bind = (...values: unknown[]) => ({ all, first: async () => null, run: async () => ({}), values });
+    const prepare = () => ({ bind });
+    const evidence = await resolveFrmsRegulatoryProfileEvidence({ prepare } as never, { empresaId: 6, referenceAt: '2026-09-27' });
+    expect(evidence).toMatchObject({ empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', regulatoryProfileId: 'rp-6' });
+    expect(evidence.sourceDocumentHash).toBe('a'.repeat(64));
+  });
+
+  it('fails closed when regulatory profile assignment is absent', async () => {
+    const prepare = () => ({ bind: () => ({ all: async () => ({ results: [] }), first: async () => null, run: async () => ({}) }) });
+    await expect(resolveFrmsRegulatoryProfileEvidence({ prepare } as never, { empresaId: 6, referenceAt: '2026-09-27' }))
+      .rejects.toMatchObject({ code: 'FRMS_CONTEXT_UNAVAILABLE' });
   });
 
   it('does not fall back from HELICOPTER_OFFSHORE to a generic/fixed-wing profile', () => {

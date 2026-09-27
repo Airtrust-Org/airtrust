@@ -43,6 +43,8 @@ import { mapEffectivenessNivelToBiologicalLevel } from './frms-iogp-biological-a
 import { persistFrmsJornadaAvaliacao } from './frms-jornada-avaliacoes-repository';
 import { RedemetClient } from './redemet-weather';
 import type { FrmsLocationCatalogEntry } from './location-catalog';
+import { regulatoryProfileIsReady } from './compliance-policy';
+import { FrmsParameterResolutionError, resolveFrmsRegulatoryProfileEvidence } from './parameter-governance';
 
 /** Shape that the pipeline result (from recalcularPipeline) provides. */
 export interface FrmsCanonicalPipelineResult {
@@ -128,9 +130,10 @@ async function fetchSigvoosLegsForJornada(
           AND v.empresa_id = t.empresa_id
           AND v.deleted_at IS NULL
          INNER JOIN cv_voo_etapas e
-           ON e.id = t.etapa_id
+           ON e.voo_id = v.id
           AND e.empresa_id = t.empresa_id
           AND e.deleted_at IS NULL
+          AND (t.etapa_id IS NULL OR e.id = t.etapa_id)
          LEFT JOIN cv_aeroportos ao
            ON ao.id = v.origem_id AND ao.empresa_id = v.empresa_id AND ao.deleted_at IS NULL
          LEFT JOIN cv_aeroportos ad
@@ -323,6 +326,35 @@ export async function runFrmsIogpShadowForJornada(
   // ── REDEMET client (null if not configured — shadow still runs, no weather) ─
   const redemetClient = buildRedemetClientFromEnv(env);
 
+  // ── Regulatory evidence from the same governed profile resolver ───────────
+  let regulatoryProfileReady = false;
+  let regulatoryProfileId: string | null = null;
+  let regulatoryProfileCode: string | null = null;
+  let regulatoryProfileReference: string | null = null;
+  let regulatoryProfileSourceDocumentHash: string | null = null;
+  try {
+    const profile = await resolveFrmsRegulatoryProfileEvidence(db, {
+      empresaId,
+      referenceAt: jornada.data,
+    });
+    regulatoryProfileReady = regulatoryProfileIsReady({
+      profileCode: profile.profileCode,
+      documentedReference: profile.approvalReference,
+      sourceDocumentHash: profile.sourceDocumentHash,
+      limitsJson: profile.limitsJson,
+    });
+    regulatoryProfileId = profile.regulatoryProfileId;
+    regulatoryProfileCode = profile.profileCode;
+    regulatoryProfileReference = profile.approvalReference;
+    regulatoryProfileSourceDocumentHash = profile.sourceDocumentHash;
+  } catch (error) {
+    if (!(error instanceof FrmsParameterResolutionError)) throw error;
+    // Missing/ambiguous governed profile is itself evidence of an incomplete
+    // regulatory state. Persist the shadow result as UNKNOWN instead of
+    // fabricating applicability or discarding all other evidence.
+    console.warn('[FRMS] IOGP shadow regulatory profile unavailable', { code: error.code });
+  }
+
   // ── Run shadow/evidence pipeline ──────────────────────────────────────────
   const result = await runFrmsIogpShadowPipeline({
     env,
@@ -336,9 +368,11 @@ export async function runFrmsIogpShadowForJornada(
     tenantOperationalTimezoneIana: null, // resolved per-location from catalog
     redemetClient,
     complianceEvaluations,
-    regulatoryProfileReady: false, // Phase 1 shadow: profile not yet DB-linked
-    regulatoryProfileCode: null,
-    regulatoryProfileReference: null,
+    regulatoryProfileReady,
+    regulatoryProfileId,
+    regulatoryProfileCode,
+    regulatoryProfileReference,
+    regulatoryProfileSourceDocumentHash,
     biologicalLevel,
   });
 

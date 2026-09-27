@@ -75,8 +75,10 @@ describe('FRMS IOGP shadow pipeline — end to end', () => {
       redemetClient: client,
       complianceEvaluations: [],
       regulatoryProfileReady: true,
+      regulatoryProfileId: 'profile-anac-basic',
       regulatoryProfileCode: 'ANAC_BASIC',
       regulatoryProfileReference: 'ref',
+      regulatoryProfileSourceDocumentHash: 'a'.repeat(64),
       biologicalLevel: 'NORMAL',
     });
 
@@ -106,8 +108,10 @@ describe('FRMS IOGP shadow pipeline — end to end', () => {
       redemetClient: client,
       complianceEvaluations: [{ status: 'COMPLIANT', actualMin: 100, resolved: null }],
       regulatoryProfileReady: true,
+      regulatoryProfileId: 'profile-anac-basic',
       regulatoryProfileCode: 'ANAC_BASIC',
       regulatoryProfileReference: 'MGO accepted by ANAC',
+      regulatoryProfileSourceDocumentHash: 'a'.repeat(64),
       biologicalLevel: 'NORMAL',
     });
 
@@ -151,6 +155,7 @@ describe('FRMS IOGP shadow pipeline — end to end', () => {
     // Shadow snapshot is a pure, standalone audit artifact — nothing here
     // mutates or reads the canonical decision-policy module.
     expect(result.snapshot.schemaVersion).toBe(1);
+    expect(result.snapshot.evaluationVersion).toBe('shadow-v2');
   });
 
   it('uses the location-catalog timezone for REDEMET even when tenant fallback is null', async () => {
@@ -178,8 +183,10 @@ describe('FRMS IOGP shadow pipeline — end to end', () => {
       redemetClient: client,
       complianceEvaluations: [{ status: 'COMPLIANT', actualMin: 100, resolved: null }],
       regulatoryProfileReady: true,
+      regulatoryProfileId: 'profile-anac-basic',
       regulatoryProfileCode: 'ANAC_BASIC',
       regulatoryProfileReference: 'ref',
+      regulatoryProfileSourceDocumentHash: 'a'.repeat(64),
       biologicalLevel: 'NORMAL',
     });
 
@@ -207,8 +214,10 @@ describe('FRMS IOGP shadow pipeline — end to end', () => {
       redemetClient: client,
       complianceEvaluations: [],
       regulatoryProfileReady: false,
+      regulatoryProfileId: null,
       regulatoryProfileCode: null,
       regulatoryProfileReference: null,
+      regulatoryProfileSourceDocumentHash: null,
       biologicalLevel: 'NORMAL',
     });
 

@@ -97,8 +97,10 @@ export interface FrmsIogpShadowPipelineInput {
   /** Resolved upstream by the existing ANAC/IOGP/operator accrual pipeline — not recomputed here. */
   complianceEvaluations: ComplianceEvaluation[];
   regulatoryProfileReady: boolean;
+  regulatoryProfileId: string | null;
   regulatoryProfileCode: string | null;
   regulatoryProfileReference: string | null;
+  regulatoryProfileSourceDocumentHash: string | null;
   biologicalLevel: 'NORMAL' | 'ELEVATED' | 'HIGH' | 'CRITICAL' | 'UNKNOWN';
 }
 
@@ -345,13 +347,15 @@ export async function runFrmsIogpShadowPipeline(
   if (!input.regulatoryProfileReady) missingData.push('REGULATORY_PROFILE');
 
   const snapshot = buildFrmsIogpEvaluationSnapshot({
-    evaluationVersion: 'shadow-v1',
+    evaluationVersion: 'shadow-v2',
     empresaId: input.tenantId,
     tripulanteId: input.tripulanteId,
     jornadaId: input.jornadaId,
     dataOperacional: input.dataOperacional,
+    regulatoryProfileId: input.regulatoryProfileId,
     regulatoryProfileCode: input.regulatoryProfileCode,
     regulatoryProfileReference: input.regulatoryProfileReference,
+    regulatoryProfileSourceDocumentHash: input.regulatoryProfileSourceDocumentHash,
     compliance: input.complianceEvaluations,
     biological: {
       level: input.biologicalLevel,
