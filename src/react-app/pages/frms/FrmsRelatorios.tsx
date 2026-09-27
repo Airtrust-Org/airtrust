@@ -26,6 +26,30 @@ function toDateKeyLocal(date: Date): string {
 
 type TipoRelatorio = 'compliance' | 'mapa-fadiga' | 'alertas-historico';
 
+
+interface FrmsReportRow {
+  tripulante_id?: string | number;
+  nome?: string | null;
+  nome_tripulante?: string | null;
+  dias_avaliados?: number;
+  dias_conformes?: number;
+  dias_violacao?: number;
+  dias_nao_avaliados?: number;
+  dias_mitigacao?: number;
+  dias_atencao?: number;
+  fontes_normativas?: string[];
+  pct_7d?: number;
+  pct_mes?: number;
+  pct_365d?: number;
+  nivel_max?: string | null;
+  repouso_suficiente?: number;
+  created_at?: string | null;
+  nivel?: string | null;
+  tipo_limite?: string | null;
+  mensagem?: string | null;
+  resolvido_em?: string | null;
+}
+
 const TIPOS: { key: TipoRelatorio; label: string; desc: string; icon: typeof BarChart3 }[] = [
   {
     key: 'compliance',
@@ -87,7 +111,7 @@ export default function FrmsRelatorios() {
     return `/api/frms/relatorios/alertas-historico?data_inicio=${periodoInicio}&data_fim=${periodoFim}`;
   }, [mesReferencia, periodoFim, periodoInicio, tipo]);
 
-  const { data, loading } = useApi<any>(endpoint, { requireAuth: true });
+  const { data, loading } = useApi<FrmsReportRow[]>(endpoint, { requireAuth: true });
 
   const reportPeriodLabel =
     tipo === 'compliance'
@@ -142,7 +166,7 @@ export default function FrmsRelatorios() {
     if (tipo === 'compliance' && Array.isArray(data)) {
       csvContent = 'Tripulante,Dias avaliados,Conformes,Violações,Não avaliados,Mitigação,Atenção,Fontes normativas\n';
       for (const row of data) {
-        const fontes = Array.isArray(row.fontes_normativas) ? row.fontes_normativas.join(' | ').replaceAll('"', '""') : '';
+        const fontes = Array.isArray(row.fontes_normativas) ? row.fontes_normativas.join(' | ').split('\"').join('\"\"') : '';
         csvContent += `${row.nome || row.tripulante_id},${row.dias_avaliados ?? 0},${row.dias_conformes ?? 0},${row.dias_violacao ?? 0},${row.dias_nao_avaliados ?? 0},${row.dias_mitigacao ?? 0},${row.dias_atencao ?? 0},"${fontes}"\n`;
       }
     } else if (tipo === 'mapa-fadiga' && Array.isArray(data)) {
@@ -290,7 +314,7 @@ export default function FrmsRelatorios() {
   );
 }
 
-function ComplianceTable({ data }: { data: any[] }) {
+function ComplianceTable({ data }: { data: FrmsReportRow[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
@@ -306,7 +330,7 @@ function ComplianceTable({ data }: { data: any[] }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
-          {data.map((r: any, i: number) => (
+          {data.map((r, i) => (
             <tr key={i} className="hover:bg-gray-50/50" title={Array.isArray(r.fontes_normativas) ? r.fontes_normativas.join('\n') : undefined}>
               <td className="px-4 py-2.5 font-medium text-gray-700">{r.nome || `#${r.tripulante_id}`}</td>
               <td className="px-4 py-2.5 text-center text-gray-600">{r.dias_avaliados ?? 0}</td>
@@ -334,7 +358,7 @@ function ComplianceTable({ data }: { data: any[] }) {
   );
 }
 
-function MapaFadigaTable({ data }: { data: any[] }) {
+function MapaFadigaTable({ data }: { data: FrmsReportRow[] }) {
   return (
     <table className="w-full text-left text-sm">
       <thead>
@@ -348,7 +372,7 @@ function MapaFadigaTable({ data }: { data: any[] }) {
         </tr>
       </thead>
       <tbody className="divide-y divide-gray-50">
-        {data.map((r: any, i: number) => {
+        {data.map((r, i) => {
           const nivelColor =
             r.nivel_max === 'VIOLACAO'
               ? 'bg-red-200 text-red-900'
@@ -385,7 +409,7 @@ function MapaFadigaTable({ data }: { data: any[] }) {
   );
 }
 
-function AlertasHistoricoTable({ data }: { data: any[] }) {
+function AlertasHistoricoTable({ data }: { data: FrmsReportRow[] }) {
   return (
     <table className="w-full text-left text-sm">
       <thead>
@@ -399,7 +423,7 @@ function AlertasHistoricoTable({ data }: { data: any[] }) {
         </tr>
       </thead>
       <tbody className="divide-y divide-gray-50">
-        {data.map((r: any, i: number) => (
+        {data.map((r, i) => (
           <tr key={i} className="hover:bg-gray-50/50">
             <td className="px-4 py-2.5 tabular-nums text-gray-600">{r.created_at ? r.created_at.slice(0, 10) : '—'}</td>
             <td className="px-4 py-2.5 text-gray-700">{r.nome_tripulante ?? `#${r.tripulante_id}`}</td>
@@ -408,7 +432,7 @@ function AlertasHistoricoTable({ data }: { data: any[] }) {
                 {r.nivel}
               </span>
             </td>
-            <td className="px-4 py-2.5 text-xs text-gray-500">{TIPO_LIMITE_LABEL[r.tipo_limite] ?? r.tipo_limite}</td>
+            <td className="px-4 py-2.5 text-xs text-gray-500">{r.tipo_limite ? (TIPO_LIMITE_LABEL[r.tipo_limite] ?? r.tipo_limite) : '—'}</td>
             <td className="max-w-xs truncate px-4 py-2.5 text-gray-700">{r.mensagem}</td>
             <td className="px-4 py-2.5 text-center">
               {r.resolvido_em ? (
