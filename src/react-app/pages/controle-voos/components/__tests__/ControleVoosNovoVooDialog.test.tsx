@@ -69,6 +69,25 @@ async function chooseCommon() {
 describe('ControleVoosNovoVooDialog operational model', () => {
   beforeEach(() => { vi.clearAllMocks(); mockBase(); });
 
+  it('fecha o dialog sem quebrar a ordem de hooks do React', async () => {
+    const onClose = vi.fn();
+    const onCreated = vi.fn();
+    const { rerender } = render(
+      <MemoryRouter>
+        <ControleVoosNovoVooDialog open mode="coordenacao" onClose={onClose} onCreated={onCreated} />
+      </MemoryRouter>,
+    );
+    await waitReady();
+
+    expect(() =>
+      rerender(
+        <MemoryRouter>
+          <ControleVoosNovoVooDialog open={false} mode="coordenacao" onClose={onClose} onCreated={onCreated} />
+        </MemoryRouter>,
+      ),
+    ).not.toThrow();
+  });
+
   it('piloto carrega pontos aeronáuticos e resolve busca por ICAO', async () => {
     renderDialog('pilot'); await waitReady(); await chooseCommon();
     expect(getMock).toHaveBeenCalledWith('/controle-voos/catalogos/aeroportos');

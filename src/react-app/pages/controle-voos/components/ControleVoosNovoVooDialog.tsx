@@ -359,10 +359,8 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     }));
   };
 
-  const selectedAircraft = useMemo(
-    () => aeronaves.find((item) => String(item.id) === form.aeronave_id) ?? null,
-    [aeronaves, form.aeronave_id],
-  );
+  const selectedAircraft =
+    aeronaves.find((item) => String(item.id) === form.aeronave_id) ?? null;
   const basicWeightForPlanLb =
     selectedAircraft?.peso_vazio == null
       ? null
