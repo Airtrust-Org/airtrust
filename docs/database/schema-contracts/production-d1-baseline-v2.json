@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-27",
-    "last_reconciled_against": "0513 qualification areas schema prepared after 0512 FRMS regulatory evidence catalogue; remote applies pending",
-    "schema_v2_digest": "5ac2eba81e907dc346aad8af69b9ae88bad4491bcc2f4bd0241c4ac7bd16f454",
+    "last_reconciled_against": "0515 qualification expiry email stages prepared after 0514 auth profile authority sync; remote applies pending",
+    "schema_v2_digest": "40993d8e2ddfa5ee70c37dccbfeab996990cc220d3d50ffda7df8653f74a0901",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1095,6 +1095,17 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "auth-profile-authority-sync-0514.json",
       "note": "0514 is reviewed and prepared only. It generically backfills legacy/default tenant roles that lack an equivalent explicit profile and adds additive INSERT/role-update triggers to preserve that invariant for future membership writes. It contains no user-specific grants, deletes or role normalization. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0515_qualification_expiry_email_stages.sql",
+      "change_id": "qualification-expiry-email-stages-0515",
+      "sha256": "07ec0d2e14a0c8e3a06ca3b03b4a46410f509f9fd781f661a6bc13244840b08f",
+      "targets": [],
+      "domain": "global qualification-expiry email stage configuration for 45-day advance warning and 30-day expiry-window entry",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "qualification-expiry-email-stages-0515.json",
+      "note": "0515 is reviewed and prepared only. It activates or creates the global EMAIL/low/45d and EMAIL/medium/30d stages without changing tenant-scoped notification history or other channels. Runtime delivery resolves employee plus active sector manager recipients and stage-level deduplication. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",

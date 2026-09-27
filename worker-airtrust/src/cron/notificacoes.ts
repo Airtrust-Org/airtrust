@@ -16,6 +16,7 @@ import {
 } from '../utils/whatsapp-templates';
 import { createStructuredConsole } from '../utils/logger';
 import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
+import { getSetorGestoresBySetor } from '../services/setores-gestores';
 import {
   CANCELLED_STATUS_VALUES,
   QUALIFICACAO_STATUS,
@@ -39,6 +40,7 @@ interface QualificacaoParaNotificar {
   funcionario_nome: string;
   funcionario_email: string;
   funcionario_telefone: string;
+  funcionario_setor_id: number | null;
   qualificacao_codigo: string;
   qualificacao_nome: string;
   categoria: string;
@@ -181,6 +183,7 @@ export function buildQualificacoesParaNotificarQuery(): string {
       f.nome as funcionario_nome,
       f.email as funcionario_email,
       f.telefone as funcionario_telefone,
+      f.setor_id as funcionario_setor_id,
       COALESCE(qh.qualificacao_codigo, qt.codigo) as qualificacao_codigo,
       qt.nome as qualificacao_nome,
       COALESCE(qh.categoria, qt.categoria) as categoria,
@@ -245,24 +248,30 @@ async function processarConfiguracao(
   let erros = 0;
   const whatsAppTemplateCache = new Map<string, WhatsAppTemplateRecord | null>();
 
-  const { results: notificacoesRecentes } = await env.DB.prepare(
+  const tipoCanal = normalizeTipoCanal(config.tipo);
+  const dedupWindowSql =
+    tipoCanal === 'EMAIL' ? '' : "AND enviado_em >= datetime('now', '-1 day')";
+  const { results: notificacoesAnteriores } = await env.DB.prepare(
     `
-      SELECT qualificacao_historico_id
+      SELECT qualificacao_historico_id, destinatario
       FROM notificacoes_log
       WHERE empresa_id = ?
         AND config_id = ?
         AND status = 'enviada'
-        AND enviado_em >= datetime('now', '-1 day')
+        ${dedupWindowSql}
     `,
   )
     .bind(empresaId, config.id)
-    .all<{ qualificacao_historico_id: number }>();
+    .all<{ qualificacao_historico_id: number; destinatario: string | null }>();
 
-  const qualificacoesJaNotificadas = new Set(
-    (notificacoesRecentes || [])
-      .map((item) => Number(item.qualificacao_historico_id || 0))
-      .filter((value) => value > 0),
-  );
+  const notificacoesPorQualificacao = new Map<number, string[]>();
+  for (const item of notificacoesAnteriores || []) {
+    const qualificacaoId = Number(item.qualificacao_historico_id || 0);
+    if (qualificacaoId <= 0) continue;
+    const atuais = notificacoesPorQualificacao.get(qualificacaoId) || [];
+    atuais.push(String(item.destinatario || ''));
+    notificacoesPorQualificacao.set(qualificacaoId, atuais);
+  }
 
   log.log('[NOTIFICACOES] Qualificacoes encontradas para analise', {
     total: qualificacoes.length,
@@ -278,12 +287,28 @@ async function processarConfiguracao(
       continue;
     }
 
-    if (qualificacoesJaNotificadas.has(Number(qualificacao.id))) {
-      log.log('[NOTIFICACOES] Qualificacao ja notificada nas ultimas 24h', {
+    const entregasAnteriores = notificacoesPorQualificacao.get(Number(qualificacao.id)) || [];
+    const funcionarioEmail = String(qualificacao.funcionario_email || '').trim().toLowerCase();
+    const emailJaEntregueAoFuncionario =
+      tipoCanal === 'EMAIL' && funcionarioEmail
+        ? entregasAnteriores.some((destinatario) =>
+            normalizeLoggedEmailRecipients(destinatario).includes(funcionarioEmail),
+          )
+        : false;
+    const etapaJaEntregue =
+      tipoCanal === 'EMAIL'
+        ? funcionarioEmail
+          ? emailJaEntregueAoFuncionario
+          : entregasAnteriores.length > 0
+        : entregasAnteriores.length > 0;
+
+    if (etapaJaEntregue) {
+      log.log('[NOTIFICACOES] Etapa de alerta ja entregue', {
         configId: config.id,
         qualificacaoHistoricoId: qualificacao.id,
         funcionario: qualificacao.funcionario_nome,
         qualificacao: qualificacao.qualificacao_nome,
+        tipoCanal,
       });
       continue;
     }
@@ -301,7 +326,6 @@ async function processarConfiguracao(
     );
 
     if (sucesso) {
-      qualificacoesJaNotificadas.add(Number(qualificacao.id));
       enviadas++;
     } else {
       erros++;
@@ -357,6 +381,20 @@ function parseDestinatarios(destinatariosRaw: string | null): string[] {
   }
 
   return [String(destinatariosRaw).trim()].filter(Boolean);
+}
+
+export function normalizeEmailRecipients(values: string[]): string[] {
+  return [
+    ...new Set(
+      values
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function normalizeLoggedEmailRecipients(value: string): string[] {
+  return normalizeEmailRecipients(String(value || '').split(','));
 }
 
 function buildStatusVencimento(diasAteVencimento: number): string {
@@ -425,14 +463,42 @@ async function enviarNotificacao(
 
     // Enviar notificação
     if (tipoCanal === 'EMAIL') {
-      if (destinatarios.length === 0 && qualificacao.funcionario_email) {
-        destinatarios = [qualificacao.funcionario_email];
+      const destinatariosDinamicos: string[] = [];
+      if (qualificacao.funcionario_email) {
+        destinatariosDinamicos.push(qualificacao.funcionario_email);
       }
+
+      if (qualificacao.funcionario_setor_id) {
+        try {
+          const gestores = await getSetorGestoresBySetor(
+            env.DB,
+            empresaId,
+            qualificacao.funcionario_setor_id,
+            true,
+          );
+          destinatariosDinamicos.push(
+            ...gestores.map((gestor) => gestor.gestor_email).filter(Boolean),
+          );
+        } catch (gestorError) {
+          log.warn('[NOTIFICACOES] Falha ao resolver gestores; mantendo envio ao funcionario', {
+            qualificacaoHistoricoId: qualificacao.id,
+            setorId: qualificacao.funcionario_setor_id,
+            erro: gestorError instanceof Error ? gestorError.message : String(gestorError),
+          });
+        }
+      }
+
+      // Destinatarios fixos historicos nunca devem substituir funcionario/gestor.
+      // Permanecem apenas como fallback se o cadastro nao resolver destinatarios dinamicos.
+      destinatarios = normalizeEmailRecipients(
+        destinatariosDinamicos.length > 0 ? destinatariosDinamicos : destinatarios,
+      );
 
       if (destinatarios.length === 0) {
         log.warn('[NOTIFICACOES] Sem destinatarios de email', {
           funcionario: qualificacao.funcionario_nome,
           qualificacaoHistoricoId: qualificacao.id,
+          setorId: qualificacao.funcionario_setor_id,
         });
         return false;
       }
