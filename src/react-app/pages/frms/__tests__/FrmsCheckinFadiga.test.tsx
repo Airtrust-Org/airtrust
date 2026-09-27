@@ -48,6 +48,13 @@ vi.mock('@/react-app/hooks/usePermissions', () => ({
   usePermissions: () => usePermissionsMock(),
 }));
 
+vi.mock('@/react-app/hooks/useAuth', () => ({
+  useAuth: () => ({
+    user: { id: 101, email: 'tripulante@example.test', nome: 'Tripulante Teste', role: 'INSTRUTOR' },
+    empresaAtualId: 6,
+  }),
+}));
+
 vi.mock('@/react-app/hooks/useFadigaCheckin', async () => {
   const actual = await vi.importActual<typeof import('@/react-app/hooks/useFadigaCheckin')>(
     '@/react-app/hooks/useFadigaCheckin',
@@ -348,6 +355,7 @@ describe('FrmsCheckinFadiga UI', () => {
     useFadigaPainelMock.mockReset();
     usePermissionsMock.mockReset();
     submitPending = false;
+    window.sessionStorage.clear();
     mutateAsyncMock.mockResolvedValue({ data: { requires_frat_review: 0 } });
     readinessMutateAsyncMock.mockResolvedValue({
       assessmentId: 'readiness-1',
@@ -986,5 +994,68 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Equipe' }));
 
     expect(await screen.findByText('Nenhum tripulante vinculado à quinzena nesta data.')).toBeInTheDocument();
+  });
+
+  it('restaura o rascunho do check-in após remount sem perder respostas já preenchidas', async () => {
+    const now = new Date();
+    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const key = `airtrust:frms-checkin-draft:101:6:${date}`;
+    window.sessionStorage.setItem(key, JSON.stringify({
+      version: 1,
+      sonoOpcao: 'h8',
+      presentationTime: '06:30',
+      wakeTime: '05:30',
+      qualidadeSono: 4,
+      kssScore: 3,
+      fitForDutyChoice: 'sim',
+      medsUlt12h: null,
+      alcoolUlt12h: null,
+      observacao: 'Rascunho preservado',
+      aceiteTermos: true,
+      aceitePrivacidade: true,
+      vigilanceResult: null,
+      vigilanceInProgress: false,
+    }));
+
+    render(<FrmsCheckinFadiga />);
+
+    expect(screen.getByRole('radio', { name: '8 horas ou mais' })).toBeChecked();
+    expect(screen.getByLabelText('Hora de apresentação')).toHaveValue('06:30');
+    expect(screen.getByLabelText('Hora em que acordou')).toHaveValue('05:30');
+    expect(screen.getByLabelText('Qualidade 4 - Boa')).toBeChecked();
+    expect(screen.getByLabelText('KSS 3: Alerta')).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i })).toBeChecked();
+  });
+
+  it('preserva o formulário e exige apenas reiniciar o PVT quando houve recarga no meio do teste', () => {
+    const now = new Date();
+    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const key = `airtrust:frms-checkin-draft:101:6:${date}`;
+    window.sessionStorage.setItem(key, JSON.stringify({
+      version: 1,
+      sonoOpcao: 'h7',
+      presentationTime: '07:00',
+      wakeTime: '05:45',
+      qualidadeSono: 3,
+      kssScore: 4,
+      fitForDutyChoice: 'sim',
+      medsUlt12h: null,
+      alcoolUlt12h: null,
+      observacao: '',
+      aceiteTermos: false,
+      aceitePrivacidade: false,
+      vigilanceResult: null,
+      vigilanceInProgress: true,
+    }));
+
+    render(<FrmsCheckinFadiga />);
+
+    const interruptedWarning = screen.getByText(/A página foi interrompida durante o teste objetivo/i);
+    expect(interruptedWarning).toHaveTextContent(/respostas do check-in foram preservadas/i);
+    expect(interruptedWarning).toHaveTextContent(/reinicie apenas o PVT-B/i);
+    expect(screen.getByRole('radio', { name: 'Entre 7 e 8 horas' })).toBeChecked();
+    expect(screen.getByLabelText('Hora de apresentação')).toHaveValue('07:00');
+    expect(screen.getByLabelText('Hora em que acordou')).toHaveValue('05:45');
   });
 });
