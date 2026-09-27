@@ -1,4 +1,5 @@
 import type { Env } from '../types';
+import { getModuleAlertSettings, renderAlertTemplate } from '../services/module-alert-settings';
 
 export async function frmsFadigaReminder(env: Env): Promise<{ notificacoes: number }> {
   const db = env.DB;
@@ -16,6 +17,8 @@ export async function frmsFadigaReminder(env: Env): Promise<{ notificacoes: numb
 
   for (const row of empresas.results || []) {
     const empresaId = Number(row.empresa_id);
+    const settings = (await getModuleAlertSettings(db, empresaId)).frms_checkin_reminder;
+    if (!settings.enabled) continue;
 
     const jaExiste = await db
       .prepare(
@@ -60,14 +63,16 @@ export async function frmsFadigaReminder(env: Env): Promise<{ notificacoes: numb
       .map((f) => `${f.nome} (#${f.id})`)
       .join('; ');
 
+    const vars = { total: semCheckin.results.length, data: hoje, resumo: preview };
     await db
       .prepare(
         `INSERT INTO notificacoes_sistema
          (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
-         VALUES ('FRMS_CHECKIN_REMINDER', 'MEDIA', 'Check-in de fadiga pendente', ?, 'frms', ?, ?, datetime('now'), datetime('now'))`,
+         VALUES ('FRMS_CHECKIN_REMINDER', 'MEDIA', ?, ?, 'frms', ?, ?, datetime('now'), datetime('now'))`,
       )
       .bind(
-        `${semCheckin.results.length} tripulante(s) sem check-in de fadiga em ${hoje}. ${preview}`,
+        renderAlertTemplate(settings.title_template, vars),
+        renderAlertTemplate(settings.message_template, vars),
         JSON.stringify({
           empresa_id: empresaId,
           data_checkin: hoje,

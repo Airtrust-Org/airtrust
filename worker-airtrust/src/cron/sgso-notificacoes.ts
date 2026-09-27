@@ -1,4 +1,5 @@
 import type { Env } from '../types';
+import { getModuleAlertSettings, renderAlertTemplate } from '../services/module-alert-settings';
 
 type SgsoQueueRow = {
   id: number;
@@ -80,18 +81,38 @@ function buildNotificationContent(row: SgsoQueueRow): NotificationContent {
         titulo: 'Tendencia SGSO detectada',
         mensagem: `Protocolo ${numeroProtocolo} sinalizou tendencia ${trendSignal} e exige acompanhamento.`,
       };
-    case 'RELPREV_SLA_TRIAGEM':
+    case 'RELPREV_SLA_TRIAGEM_PREVIA': {
+      const horasAlerta = Number(payload.horas_alerta_previa || 4);
+      return {
+        tipo: 'sgso_sla_triagem_previa',
+        titulo: 'SLA de triagem próximo do vencimento',
+        mensagem: `Protocolo ${numeroProtocolo} entra no limite de triagem em até ${horasAlerta}h. Priorize a triagem.`,
+      };
+    }
+    case 'RELPREV_SLA_TRIAGEM': {
+      const horasPrazo = Number(payload.horas_prazo || 24);
       return {
         tipo: 'sgso_sla_triagem',
         titulo: 'SLA de triagem vencido',
-        mensagem: `Protocolo ${numeroProtocolo} ultrapassou o prazo de triagem (> 24h). Triagem imediata necessaria.`,
+        mensagem: `Protocolo ${numeroProtocolo} ultrapassou o prazo de triagem (> ${horasPrazo}h). Triagem imediata necessária.`,
       };
-    case 'RELPREV_SLA_INVESTIGACAO':
+    }
+    case 'RELPREV_SLA_INVESTIGACAO_PREVIA': {
+      const horasAlerta = Number(payload.horas_alerta_previa || 12);
+      return {
+        tipo: 'sgso_sla_investigacao_previa',
+        titulo: 'SLA de investigação próximo do vencimento',
+        mensagem: `Protocolo ${numeroProtocolo} entra no limite de investigação em até ${horasAlerta}h. Priorize a investigação.`,
+      };
+    }
+    case 'RELPREV_SLA_INVESTIGACAO': {
+      const horasPrazo = Number(payload.horas_prazo || 72);
       return {
         tipo: 'sgso_sla_investigacao',
-        titulo: 'SLA de investigacao vencido',
-        mensagem: `Protocolo ${numeroProtocolo} ultrapassou o prazo de investigacao (> 72h). Acao do gestor operacional necessaria.`,
+        titulo: 'SLA de investigação vencido',
+        mensagem: `Protocolo ${numeroProtocolo} ultrapassou o prazo de investigação (> ${horasPrazo}h). Ação do gestor operacional necessária.`,
       };
+    }
     case 'BARREIRAS_DEGRADADAS_ALERTA':
       return {
         tipo: 'sgso_barreiras_degradadas',
@@ -267,18 +288,125 @@ export async function enqueueSlaAlerts(env: Env): Promise<{
   alertasTriagem: number;
   alertasInvestigacao: number;
   alertasBarreiras: number;
+  alertasTriagemPrevios: number;
+  alertasInvestigacaoPrevios: number;
 }> {
   const db = env.DB;
   const nowTs = new Date().toISOString();
   let alertasTriagem = 0;
   let alertasInvestigacao = 0;
   let alertasBarreiras = 0;
+  let alertasTriagemPrevios = 0;
+  let alertasInvestigacaoPrevios = 0;
 
-  // 1. SLA triagem vencido (ABERTO > 24h sem triagem iniciada)
+  // Pré-alerta: usa horas_alerta_previa já configuradas por empresa.
+  const triagemPrevios = await db
+    .prepare(
+      `SELECT r.id AS relato_id, r.empresa_id, r.numero_protocolo,
+              sc.horas_alerta_previa
+         FROM sgso_relatos r
+         JOIN sgso_sla_config sc
+           ON sc.empresa_id = r.empresa_id AND sc.fase = 'TRIAGEM' AND sc.ativo = 1
+        WHERE r.deleted_at IS NULL
+          AND r.status = 'ABERTO'
+          AND r.sla_triagem_prazo IS NOT NULL
+          AND sc.horas_alerta_previa > 0
+          AND r.sla_triagem_prazo >= ?
+          AND r.sla_triagem_prazo <= datetime(?, '+' || sc.horas_alerta_previa || ' hours')
+          AND NOT EXISTS (
+            SELECT 1 FROM sgso_relato_notificacoes n
+             WHERE n.relato_id = r.id
+               AND n.template_codigo = 'RELPREV_SLA_TRIAGEM_PREVIA'
+               AND n.status IN ('PENDENTE', 'ENVIADA')
+          )`,
+    )
+    .bind(nowTs, nowTs)
+    .all<{
+      relato_id: string;
+      empresa_id: number;
+      numero_protocolo: string;
+      horas_alerta_previa: number;
+    }>();
+
+  for (const row of triagemPrevios.results ?? []) {
+    await db
+      .prepare(
+        `INSERT INTO sgso_relato_notificacoes
+         (relato_id, empresa_id, template_codigo, canal, destino_tipo, status, payload_json, created_at)
+         VALUES (?, ?, 'RELPREV_SLA_TRIAGEM_PREVIA', 'INAPP', 'GSO', 'PENDENTE', ?, ?)`,
+      )
+      .bind(
+        row.relato_id,
+        row.empresa_id,
+        JSON.stringify({
+          numero_protocolo: row.numero_protocolo,
+          horas_alerta_previa: row.horas_alerta_previa,
+        }),
+        nowTs,
+      )
+      .run();
+    alertasTriagemPrevios += 1;
+  }
+
+  const investigacaoPrevios = await db
+    .prepare(
+      `SELECT r.id AS relato_id, r.empresa_id, r.numero_protocolo,
+              sc.horas_alerta_previa
+         FROM sgso_relatos r
+         JOIN sgso_sla_config sc
+           ON sc.empresa_id = r.empresa_id AND sc.fase = 'INVESTIGACAO' AND sc.ativo = 1
+        WHERE r.deleted_at IS NULL
+          AND r.status IN ('EM_TRIAGEM', 'EM_INVESTIGACAO')
+          AND r.sla_investigacao_prazo IS NOT NULL
+          AND sc.horas_alerta_previa > 0
+          AND r.sla_investigacao_prazo >= ?
+          AND r.sla_investigacao_prazo <= datetime(?, '+' || sc.horas_alerta_previa || ' hours')
+          AND NOT EXISTS (
+            SELECT 1 FROM sgso_relato_notificacoes n
+             WHERE n.relato_id = r.id
+               AND n.template_codigo = 'RELPREV_SLA_INVESTIGACAO_PREVIA'
+               AND n.status IN ('PENDENTE', 'ENVIADA')
+          )`,
+    )
+    .bind(nowTs, nowTs)
+    .all<{
+      relato_id: string;
+      empresa_id: number;
+      numero_protocolo: string;
+      horas_alerta_previa: number;
+    }>();
+
+  for (const row of investigacaoPrevios.results ?? []) {
+    for (const destino of ['GSO', 'GESTOR_OPERACIONAL'] as const) {
+      await db
+        .prepare(
+          `INSERT INTO sgso_relato_notificacoes
+           (relato_id, empresa_id, template_codigo, canal, destino_tipo, status, payload_json, created_at)
+           VALUES (?, ?, 'RELPREV_SLA_INVESTIGACAO_PREVIA', 'INAPP', ?, 'PENDENTE', ?, ?)`,
+        )
+        .bind(
+          row.relato_id,
+          row.empresa_id,
+          destino,
+          JSON.stringify({
+            numero_protocolo: row.numero_protocolo,
+            horas_alerta_previa: row.horas_alerta_previa,
+          }),
+          nowTs,
+        )
+        .run();
+    }
+    alertasInvestigacaoPrevios += 1;
+  }
+
+  // 1. SLA triagem vencido.
   const relatosSlaTriagem = await db
     .prepare(
-      `SELECT r.id AS relato_id, r.empresa_id, r.numero_protocolo
+      `SELECT r.id AS relato_id, r.empresa_id, r.numero_protocolo,
+              COALESCE(sc.horas_prazo, 24) AS horas_prazo
        FROM sgso_relatos r
+       LEFT JOIN sgso_sla_config sc
+         ON sc.empresa_id = r.empresa_id AND sc.fase = 'TRIAGEM' AND sc.ativo = 1
        WHERE r.deleted_at IS NULL
          AND r.status = 'ABERTO'
          AND r.sla_triagem_prazo IS NOT NULL
@@ -291,7 +419,12 @@ export async function enqueueSlaAlerts(env: Env): Promise<{
          )`,
     )
     .bind(nowTs)
-    .all<{ relato_id: string; empresa_id: number; numero_protocolo: string }>();
+    .all<{
+      relato_id: string;
+      empresa_id: number;
+      numero_protocolo: string;
+      horas_prazo: number;
+    }>();
 
   for (const row of relatosSlaTriagem.results ?? []) {
     await db
@@ -303,7 +436,7 @@ export async function enqueueSlaAlerts(env: Env): Promise<{
       .bind(
         row.relato_id,
         row.empresa_id,
-        JSON.stringify({ numero_protocolo: row.numero_protocolo }),
+        JSON.stringify({ numero_protocolo: row.numero_protocolo, horas_prazo: row.horas_prazo }),
         nowTs,
       )
       .run();
@@ -318,8 +451,11 @@ export async function enqueueSlaAlerts(env: Env): Promise<{
   // 2. SLA investiga\u00e7\u00e3o vencido (EM_TRIAGEM/EM_INVESTIGACAO > prazo)
   const relatosSlaInv = await db
     .prepare(
-      `SELECT r.id AS relato_id, r.empresa_id, r.numero_protocolo
+      `SELECT r.id AS relato_id, r.empresa_id, r.numero_protocolo,
+              COALESCE(sc.horas_prazo, 72) AS horas_prazo
        FROM sgso_relatos r
+       LEFT JOIN sgso_sla_config sc
+         ON sc.empresa_id = r.empresa_id AND sc.fase = 'INVESTIGACAO' AND sc.ativo = 1
        WHERE r.deleted_at IS NULL
          AND r.status IN ('EM_TRIAGEM', 'EM_INVESTIGACAO')
          AND r.sla_investigacao_prazo IS NOT NULL
@@ -332,7 +468,12 @@ export async function enqueueSlaAlerts(env: Env): Promise<{
          )`,
     )
     .bind(nowTs)
-    .all<{ relato_id: string; empresa_id: number; numero_protocolo: string }>();
+    .all<{
+      relato_id: string;
+      empresa_id: number;
+      numero_protocolo: string;
+      horas_prazo: number;
+    }>();
 
   for (const row of relatosSlaInv.results ?? []) {
     // GSO + GESTOR_OPERACIONAL ambos recebem
@@ -347,7 +488,7 @@ export async function enqueueSlaAlerts(env: Env): Promise<{
           row.relato_id,
           row.empresa_id,
           destino,
-          JSON.stringify({ numero_protocolo: row.numero_protocolo }),
+          JSON.stringify({ numero_protocolo: row.numero_protocolo, horas_prazo: row.horas_prazo }),
           nowTs,
         )
         .run();
@@ -361,50 +502,73 @@ export async function enqueueSlaAlerts(env: Env): Promise<{
     alertasInvestigacao += 1;
   }
 
-  // 3. Barreiras degradadas/inoperantes por empresa, sem alerta recente (> 48h)
-  const barreiras = await db
+  // 3. Barreiras degradadas/inoperantes: limiar e repetição configuráveis por empresa.
+  const empresasBarreiras = await db
     .prepare(
-      `SELECT b.empresa_id, COUNT(*) AS total
-       FROM sgso_bowtie_barreiras b
-       WHERE b.deleted_at IS NULL
-         AND b.status_saude IN ('DEGRADADA', 'INOPERANTE')
-         AND b.updated_at < datetime('now', '-48 hours')
-       GROUP BY b.empresa_id`,
+      `SELECT DISTINCT empresa_id
+         FROM sgso_bowtie_barreiras
+        WHERE deleted_at IS NULL AND status_saude IN ('DEGRADADA', 'INOPERANTE')`,
     )
-    .all<{ empresa_id: number; total: number }>();
+    .all<{ empresa_id: number }>();
 
-  for (const bRow of barreiras.results ?? []) {
-    // Precisa de um relato_id para usar a tabela de notificacoes; usamos um registro virtual via id ficticio
-    // Para barreiras sem relato, notificamos via notificacoes_sistema em vez de sgso_relato_notificacoes
+  for (const empresa of empresasBarreiras.results ?? []) {
+    const empresaId = Number(empresa.empresa_id);
+    const settings = (await getModuleAlertSettings(db, empresaId)).sgso_barriers;
+    if (!settings.enabled) continue;
+
+    const row = await db
+      .prepare(
+        `SELECT COUNT(*) AS total
+           FROM sgso_bowtie_barreiras
+          WHERE empresa_id = ?
+            AND deleted_at IS NULL
+            AND status_saude IN ('DEGRADADA', 'INOPERANTE')
+            AND updated_at < datetime('now', '-' || ? || ' hours')`,
+      )
+      .bind(empresaId, settings.stale_hours)
+      .first<{ total: number }>();
+    const total = Number(row?.total || 0);
+    if (total <= 0) continue;
+
     const jaNotificado = await db
       .prepare(
         `SELECT 1 FROM notificacoes_sistema
-         WHERE tipo = 'ALERTA_SGSO_BARREIRAS'
-           AND created_at > datetime('now', '-24 hours')
-           AND dados LIKE '%"empresa_id":' || ? || '%'
-         LIMIT 1`,
+          WHERE tipo = 'ALERTA_SGSO_BARREIRAS'
+            AND empresa_id = ?
+            AND created_at > datetime('now', '-' || ? || ' hours')
+          LIMIT 1`,
       )
-      .bind(bRow.empresa_id)
+      .bind(empresaId, settings.repeat_hours)
       .first<{ 1: number }>();
+    if (jaNotificado) continue;
 
-    if (!jaNotificado) {
-      await db
-        .prepare(
-          `INSERT INTO notificacoes_sistema
-           (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
-           VALUES ('ALERTA_SGSO_BARREIRAS', 'ALTA',
-                   'Barreiras de seguranca degradadas',
-                   ?, 'sgso', ?, ?, datetime('now'), datetime('now'))`,
-        )
-        .bind(
-          `${bRow.total} barreira(s) DEGRADADA/INOPERANTE sem atualiza\u00e7\u00e3o h\u00e1 mais de 48h (empresa ${bRow.empresa_id})`,
-          JSON.stringify({ empresa_id: bRow.empresa_id, count: bRow.total }),
-          bRow.empresa_id,
-        )
-        .run();
-      alertasBarreiras += 1;
-    }
+    const vars = { total, stale_hours: settings.stale_hours, repeat_hours: settings.repeat_hours };
+    await db
+      .prepare(
+        `INSERT INTO notificacoes_sistema
+         (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
+         VALUES ('ALERTA_SGSO_BARREIRAS', 'ALTA', ?, ?, 'sgso', ?, ?, datetime('now'), datetime('now'))`,
+      )
+      .bind(
+        renderAlertTemplate(settings.title_template, vars),
+        renderAlertTemplate(settings.message_template, vars),
+        JSON.stringify({
+          empresa_id: empresaId,
+          count: total,
+          stale_hours: settings.stale_hours,
+          repeat_hours: settings.repeat_hours,
+        }),
+        empresaId,
+      )
+      .run();
+    alertasBarreiras += 1;
   }
 
-  return { alertasTriagem, alertasInvestigacao, alertasBarreiras };
+  return {
+    alertasTriagem,
+    alertasInvestigacao,
+    alertasBarreiras,
+    alertasTriagemPrevios,
+    alertasInvestigacaoPrevios,
+  };
 }

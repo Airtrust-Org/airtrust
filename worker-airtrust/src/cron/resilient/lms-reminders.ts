@@ -6,6 +6,7 @@ import {
   markCronJobItemSucceeded,
   recoverStaleCronJobItems,
 } from '../job-state';
+import { getModuleAlertSettings, renderAlertTemplate } from '../../services/module-alert-settings';
 import { runCronJobWithLease, type CronJobLogger } from './job-runner';
 
 const JOB_NAME = 'lms-reminders';
@@ -58,7 +59,9 @@ function parsePayload(value: string | null): ReminderPayload | null {
       funcionarioId <= 0 ||
       !Number.isInteger(empresaId) ||
       empresaId <= 0 ||
-      ![1, 7].includes(diasRestantes) ||
+      !Number.isInteger(diasRestantes) ||
+      diasRestantes < 0 ||
+      diasRestantes > 365 ||
       typeof parsed.titulo !== 'string' ||
       typeof parsed.data_expiracao !== 'string' ||
       typeof parsed.operational_date !== 'string'
@@ -79,9 +82,14 @@ function parsePayload(value: string | null): ReminderPayload | null {
   }
 }
 
+function notificationType(daysRemaining: number): string {
+  return daysRemaining === 1
+    ? 'lms_prazo_conclusao_1_dia'
+    : `lms_prazo_conclusao_${daysRemaining}_dias`;
+}
+
 function notificationId(payload: ReminderPayload): string {
-  const type =
-    payload.dias_restantes === 1 ? 'lms_prazo_conclusao_1_dia' : 'lms_prazo_conclusao_7_dias';
+  const type = notificationType(payload.dias_restantes);
   return [
     'lms',
     type,
@@ -91,6 +99,39 @@ function notificationId(payload: ReminderPayload): string {
     payload.id,
     payload.operational_date,
   ].join(':');
+}
+
+export function isLmsReminderDue(
+  settings: Awaited<ReturnType<typeof getModuleAlertSettings>>['lms_completion'],
+  daysRemaining: number,
+): boolean {
+  return settings.enabled && settings.thresholds.includes(daysRemaining);
+}
+
+export function buildLmsReminderContent(
+  settings: Awaited<ReturnType<typeof getModuleAlertSettings>>['lms_completion'],
+  payload: Pick<ReminderPayload, 'titulo' | 'data_expiracao' | 'dias_restantes'>,
+): { title: string; message: string } {
+  const formattedExpiration = new Date(`${payload.data_expiracao}T12:00:00Z`).toLocaleDateString(
+    'pt-BR',
+    { timeZone: 'UTC' },
+  );
+  const statusPrazo =
+    payload.dias_restantes === 0
+      ? 'Vence hoje'
+      : payload.dias_restantes === 1
+        ? 'Vence em 1 dia'
+        : `Vence em ${payload.dias_restantes} dias`;
+  const variables = {
+    treinamento: payload.titulo,
+    data_limite: formattedExpiration,
+    dias: payload.dias_restantes,
+    status_prazo: statusPrazo,
+  };
+  return {
+    title: renderAlertTemplate(settings.title_template, variables),
+    message: renderAlertTemplate(settings.message_template, variables),
+  };
 }
 
 export function buildLmsReminderDiscoveryQuery(): string {
@@ -115,7 +156,7 @@ export function buildLmsReminderDiscoveryQuery(): string {
          WHERE m.deleted_at IS NULL
            AND m.status IN ('NAO_INICIADO', 'EM_ANDAMENTO')
            AND m.data_expiracao IS NOT NULL
-           AND CAST(julianday(date(m.data_expiracao)) - julianday(date('now')) AS INTEGER) IN (1, 7)
+           AND CAST(julianday(date(m.data_expiracao)) - julianday(date('now')) AS INTEGER) BETWEEN 0 AND 365
            AND m.id > ?
          ORDER BY m.id ASC
          LIMIT ?`;
@@ -152,7 +193,18 @@ export async function runLmsReminderJob(db: D1Database, logger: CronJobLogger, n
           .all<ReminderRow>();
         const rows = discovered.results || [];
 
+        const settingsByTenant = new Map<
+          number,
+          Awaited<ReturnType<typeof getModuleAlertSettings>>['lms_completion']
+        >();
         for (const row of rows) {
+          let settings = settingsByTenant.get(row.empresa_id);
+          if (!settings) {
+            settings = (await getModuleAlertSettings(db, row.empresa_id)).lms_completion;
+            settingsByTenant.set(row.empresa_id, settings);
+          }
+          if (!isLmsReminderDue(settings, row.dias_restantes)) continue;
+
           await enqueueCronJobItem(db, {
             jobName: JOB_NAME,
             scopeKey: SCOPE_KEY,
@@ -205,17 +257,19 @@ export async function runLmsReminderJob(db: D1Database, logger: CronJobLogger, n
         }
 
         try {
-          const type =
-            payload.dias_restantes === 1
-              ? 'lms_prazo_conclusao_1_dia'
-              : 'lms_prazo_conclusao_7_dias';
-          const title =
-            payload.dias_restantes === 1
-              ? 'Prazo do treinamento vence amanhã'
-              : 'Prazo do treinamento vence em 7 dias';
-          const formattedExpiration = new Date(
-            `${payload.data_expiracao}T12:00:00Z`,
-          ).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+          const settings = (await getModuleAlertSettings(db, payload.empresa_id)).lms_completion;
+          if (!isLmsReminderDue(settings, payload.dias_restantes)) {
+            await markCronJobItemSucceeded(db, {
+              jobName: JOB_NAME,
+              scopeKey: SCOPE_KEY,
+              itemKey: item.item_key,
+              stage: 'CONFIG_SKIPPED',
+            });
+            processed++;
+            continue;
+          }
+          const type = notificationType(payload.dias_restantes);
+          const { title, message } = buildLmsReminderContent(settings, payload);
 
           await db
             .prepare(
@@ -230,7 +284,7 @@ export async function runLmsReminderJob(db: D1Database, logger: CronJobLogger, n
               payload.empresa_id,
               type,
               title,
-              `Conclua o treinamento ${payload.titulo} até ${formattedExpiration}.`,
+              message,
               String(payload.id),
               new Date().toISOString(),
             )

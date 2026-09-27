@@ -5,6 +5,8 @@ import { enviarEmailAlert } from './notificacoes';
 import { alertasDiariosHandler } from './alertasDiarios';
 import { frmsDailyCheck } from './frms-daily-check';
 import { frmsFadigaReminder } from './frms-fadiga-reminder';
+import { processLmsCompletionReminders } from './lms-completion-reminders';
+import { processLicenseAlerts } from './license-alerts';
 import { processarNotificacoesSgso, enqueueSlaAlerts } from './sgso-notificacoes';
 import { createStructuredConsole } from '../utils/logger';
 import { processarEventosParaModulo } from '../shared/handlers';
@@ -27,6 +29,7 @@ import {
 } from '../lib/frms/controle-voos-shadow-comparator';
 import { isControleVoosShadowModeEnabledForEmpresa } from '../lib/frms/controle-voos-shadow-flag';
 import { cleanupExpiredRefreshTokens } from '../services/auth-refresh-token';
+import { getModuleAlertSettings, renderAlertTemplate } from '../services/module-alert-settings';
 
 function buildDailyNotificationId(parts: Array<string | number>) {
   return [...parts, new Date().toISOString().slice(0, 10)].join(':');
@@ -272,72 +275,10 @@ export async function runScheduledJobs(
 
   if (event.cron === '0 8 * * *') {
     try {
-      const lembretes = await env.DB.prepare(
-        `SELECT
-           m.id,
-           m.funcionario_id,
-           m.empresa_id,
-           c.titulo,
-           m.data_expiracao,
-           CAST(julianday(date(m.data_expiracao)) - julianday(date('now')) AS INTEGER) AS dias_restantes
-         FROM lms_matriculas m
-         JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id AND c.deleted_at IS NULL
-         JOIN funcionarios f
-           ON f.id = m.funcionario_id
-          AND f.empresa_id = m.empresa_id
-          AND f.deleted_at IS NULL
-          AND COALESCE(f.ativo, 1) = 1
-          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-         WHERE m.deleted_at IS NULL
-           AND m.status IN ('NAO_INICIADO', 'EM_ANDAMENTO')
-           AND m.data_expiracao IS NOT NULL
-           AND CAST(julianday(date(m.data_expiracao)) - julianday(date('now')) AS INTEGER) IN (1, 7)`,
-      ).all<{
-        id: number;
-        funcionario_id: number;
-        empresa_id: number;
-        titulo: string;
-        data_expiracao: string;
-        dias_restantes: number;
-      }>();
-
-      for (const lembrete of lembretes.results || []) {
-        const tipo =
-          lembrete.dias_restantes === 1
-            ? 'lms_prazo_conclusao_1_dia'
-            : 'lms_prazo_conclusao_7_dias';
-        const titulo =
-          lembrete.dias_restantes === 1
-            ? 'Prazo do treinamento vence amanhã'
-            : 'Prazo do treinamento vence em 7 dias';
-        const mensagem = `Conclua o treinamento ${lembrete.titulo} até ${new Date(`${lembrete.data_expiracao}T12:00:00`).toLocaleDateString('pt-BR')}.`;
-
-        await env.DB.prepare(
-          `INSERT OR IGNORE INTO notificacoes_inapp (
-             id, funcionario_id, empresa_id, tipo, titulo, mensagem, referencia_id, referencia_tipo, created_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'lms_matricula', ?)`,
-        )
-          .bind(
-            buildDailyNotificationId([
-              'lms',
-              tipo,
-              lembrete.empresa_id,
-              lembrete.funcionario_id,
-              'lms_matricula',
-              lembrete.id,
-            ]),
-            String(lembrete.funcionario_id),
-            lembrete.empresa_id,
-            tipo,
-            titulo,
-            mensagem,
-            String(lembrete.id),
-            new Date().toISOString(),
-          )
-          .run();
-      }
-
-      console.log(`[CRON] ✅ LMS lembretes processados: ${(lembretes.results || []).length}`);
+      const reminderResult = await processLmsCompletionReminders(env);
+      console.log(
+        `[CRON] ✅ LMS lembretes: ${reminderResult.avaliados} avaliados, ${reminderResult.criados} criados`,
+      );
     } catch (lmsReminderErr) {
       console.error('[CRON] ❌ Erro ao gerar lembretes LMS:', lmsReminderErr);
     }
@@ -740,6 +681,17 @@ export async function runScheduledJobs(
       console.error('[CRON] ❌ Erro ao processar notificações:', notifErr);
     }
 
+    if (event.cron === '0 8 * * *') {
+      try {
+        const licenseResult = await processLicenseAlerts(env);
+        console.log(
+          `[CRON] ✅ Licenças: ${licenseResult.avaliadas} avaliadas, ${licenseResult.enviadas} alertas enviados, ${licenseResult.erros} erros`,
+        );
+      } catch (licenseErr) {
+        console.error('[CRON] ❌ Erro ao processar alertas de licenças:', licenseErr);
+      }
+    }
+
     // Compliance de treinamentos: avaliação horária com deduplicação por ciclo/estágio.
     // O cron principal pode executar em intervalos menores; limitar aos primeiros 10 min
     // de cada hora reduz custo sem perder a régua de cobrança.
@@ -768,7 +720,7 @@ export async function runScheduledJobs(
       console.log('[CRON] ⏱️ Verificando violações de SLA SGSO...');
       const slaResult = await enqueueSlaAlerts(env);
       console.log(
-        `[CRON] ✅ SLA SGSO: ${slaResult.alertasTriagem} alertas triagem, ${slaResult.alertasInvestigacao} alertas investigação, ${slaResult.alertasBarreiras} alertas barreiras`,
+        `[CRON] ✅ SLA SGSO: ${slaResult.alertasTriagemPrevios} pré-alertas triagem, ${slaResult.alertasTriagem} vencidos triagem, ${slaResult.alertasInvestigacaoPrevios} pré-alertas investigação, ${slaResult.alertasInvestigacao} vencidos investigação, ${slaResult.alertasBarreiras} alertas barreiras`,
       );
     } catch (slaErr) {
       console.error('[CRON] ❌ Erro ao verificar SLAs SGSO:', slaErr);
@@ -895,98 +847,105 @@ export async function runScheduledJobs(
     }
 
     const diaSemanaHoje = new Date().getUTCDay();
-    if (diaSemanaHoje === 1) {
-      try {
-        console.log('[CRON] 📅 Alerta semanal de qualificações ≤90 dias...');
-        const vencExpr = getQualificacoesVencimentoExpr();
-        const qualifs90 = await env.DB.prepare(
+    try {
+      const companies = await env.DB.prepare(
+        `SELECT id FROM empresas WHERE ativo = 1 AND deleted_at IS NULL ORDER BY id`,
+      ).all<{ id: number }>();
+      let totalWeekly = 0;
+      const vencExpr = getQualificacoesVencimentoExpr();
+
+      for (const company of companies.results || []) {
+        const empresaId = Number(company.id);
+        const settings = (await getModuleAlertSettings(env.DB, empresaId)).weekly_qualifications;
+        if (!settings.enabled || settings.weekday_utc !== diaSemanaHoje) continue;
+
+        const qualifs = await env.DB.prepare(
           `SELECT
-                f.empresa_id AS empresa_id,
                 f.nome AS funcionario_nome,
                 COALESCE(qh.qualificacao_codigo, qt.codigo) AS codigo,
                 qt.nome AS qualificacao_nome,
                 qt.categoria,
                 ${vencExpr} AS validade_fim,
-                CAST(
-                  JULIANDAY(${vencExpr}) - JULIANDAY('now') AS INTEGER
-                ) AS dias_restantes
+                CAST(JULIANDAY(${vencExpr}) - JULIANDAY('now') AS INTEGER) AS dias_restantes
              FROM qualificacoes_historico qh
-             JOIN funcionarios f ON f.id = qh.funcionario_id AND f.empresa_id = qh.empresa_id AND f.deleted_at IS NULL AND COALESCE(f.ativo, 1) = 1
-             LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.empresa_id = qh.empresa_id AND qt.deleted_at IS NULL
+             JOIN funcionarios f ON f.id = qh.funcionario_id AND f.empresa_id = qh.empresa_id
+              AND f.deleted_at IS NULL AND COALESCE(f.ativo, 1) = 1
+             LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
+              AND qt.empresa_id = qh.empresa_id AND qt.deleted_at IS NULL
              WHERE qh.deleted_at IS NULL
+               AND qh.empresa_id = ?
                AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
-               AND CAST(
-                 JULIANDAY(${vencExpr}) - JULIANDAY('now') AS INTEGER
-               ) BETWEEN 1 AND 90
+               AND CAST(JULIANDAY(${vencExpr}) - JULIANDAY('now') AS INTEGER) BETWEEN 1 AND ?
                AND qh.id IN (
                  SELECT MAX(sub.id) FROM qualificacoes_historico sub
-                 WHERE sub.deleted_at IS NULL
+                 WHERE sub.deleted_at IS NULL AND sub.empresa_id = ?
                  GROUP BY sub.empresa_id, sub.funcionario_id, COALESCE(sub.qualificacao_codigo, sub.qualificacao_id)
                )
-             ORDER BY f.empresa_id ASC, dias_restantes ASC`,
-        ).all<{
-          empresa_id: number | null;
-          funcionario_nome: string;
-          codigo: string;
-          qualificacao_nome: string;
-          categoria: string;
-          validade_fim: string;
-          dias_restantes: number;
-        }>();
+             ORDER BY dias_restantes ASC`,
+        )
+          .bind(empresaId, settings.horizon_days, empresaId)
+          .all<{
+            funcionario_nome: string;
+            codigo: string;
+            qualificacao_nome: string;
+            categoria: string;
+            validade_fim: string;
+            dias_restantes: number;
+          }>();
 
-        const items = qualifs90.results || [];
-        if (items.length > 0) {
-          // Contains employee names/PII — must be scoped per tenant, never a
-          // single cross-tenant record. Group by empresa_id and emit one
-          // notification per affected tenant, each with only that tenant's data.
-          const porEmpresa = new Map<number, typeof items>();
-          for (const item of items) {
-            if (item.empresa_id == null) continue;
-            const lista = porEmpresa.get(item.empresa_id) || [];
-            lista.push(item);
-            porEmpresa.set(item.empresa_id, lista);
-          }
+        const items = qualifs.results || [];
+        if (items.length === 0) continue;
+        const criticalLimit = Math.min(settings.critical_days, settings.horizon_days);
+        const alertLimit = Math.max(
+          criticalLimit,
+          Math.min(settings.alert_days, settings.horizon_days),
+        );
+        const criticos = items.filter((item) => item.dias_restantes <= criticalLimit);
+        const alertas = items.filter(
+          (item) => item.dias_restantes > criticalLimit && item.dias_restantes <= alertLimit,
+        );
+        const avisos = items.filter((item) => item.dias_restantes > alertLimit);
+        const linhas = items
+          .slice(0, 50)
+          .map(
+            (item) =>
+              `• ${item.funcionario_nome} — ${item.codigo} (${item.qualificacao_nome || ''}) — ${item.dias_restantes}d`,
+          )
+          .join('\n');
+        const vars = {
+          total: items.length,
+          criticos: criticos.length,
+          alertas: alertas.length,
+          avisos: avisos.length,
+          horizon_days: settings.horizon_days,
+          critical_days: criticalLimit,
+          alert_days: alertLimit,
+          linhas,
+        };
 
-          for (const [empresaId, empresaItems] of porEmpresa) {
-            const criticos = empresaItems.filter((item) => item.dias_restantes <= 30);
-            const alertas = empresaItems.filter(
-              (item) => item.dias_restantes > 30 && item.dias_restantes <= 60,
-            );
-            const avisos = empresaItems.filter((item) => item.dias_restantes > 60);
-            const linhas = empresaItems
-              .slice(0, 50)
-              .map(
-                (item) =>
-                  `• ${item.funcionario_nome} — ${item.codigo} (${item.qualificacao_nome || ''}) — ${item.dias_restantes}d`,
-              )
-              .join('\n');
-
-            await env.DB.prepare(
-              `INSERT INTO notificacoes_sistema (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
-                 VALUES ('ALERTA_SEMANAL_QUALIFICACOES', 'ALTA',
-                   'Resumo semanal: qualificações expirando em ≤90 dias',
-                   ?, 'qualificacoes',
-                   ?, ?, datetime('now'), datetime('now'))`,
-            )
-              .bind(
-                `${empresaItems.length} qualificações expiram nos próximos 90 dias (${criticos.length} críticas ≤30d, ${alertas.length} alerta ≤60d, ${avisos.length} aviso ≤90d).\n\n${linhas}`,
-                JSON.stringify({
-                  total: empresaItems.length,
-                  criticos: criticos.length,
-                  alertas: alertas.length,
-                  avisos: avisos.length,
-                }),
-                empresaId,
-              )
-              .run();
-          }
-          console.log(`[CRON] ✅ Alerta semanal: ${items.length} qualificações ≤90d`);
-        } else {
-          console.log('[CRON] ✅ Alerta semanal: nenhuma qualificação ≤90d');
-        }
-      } catch (weeklyErr) {
-        console.error('[CRON] ❌ Erro no alerta semanal qualificações:', weeklyErr);
+        await env.DB.prepare(
+          `INSERT INTO notificacoes_sistema
+             (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
+             VALUES ('ALERTA_SEMANAL_QUALIFICACOES', 'ALTA', ?, ?, 'qualificacoes', ?, ?, datetime('now'), datetime('now'))`,
+        )
+          .bind(
+            renderAlertTemplate(settings.title_template, vars),
+            renderAlertTemplate(settings.message_template, vars),
+            JSON.stringify({
+              total: items.length,
+              criticos: criticos.length,
+              alertas: alertas.length,
+              avisos: avisos.length,
+              horizon_days: settings.horizon_days,
+            }),
+            empresaId,
+          )
+          .run();
+        totalWeekly += items.length;
       }
+      if (totalWeekly > 0) console.log(`[CRON] ✅ Resumos semanais: ${totalWeekly} qualificações`);
+    } catch (weeklyErr) {
+      console.error('[CRON] ❌ Erro no alerta semanal qualificações:', weeklyErr);
     }
   } catch (error) {
     console.error('[CRON] Erro ao executar job agendado:', error);

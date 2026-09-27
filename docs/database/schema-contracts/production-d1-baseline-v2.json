@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-27",
-    "last_reconciled_against": "0515 qualification expiry email stages prepared after 0514 auth profile authority sync; remote applies pending",
-    "schema_v2_digest": "40993d8e2ddfa5ee70c37dccbfeab996990cc220d3d50ffda7df8653f74a0901",
+    "last_reconciled_against": "0516 tenant-configurable qualification alerts and expired daily notifications prepared after 0515; remote apply pending",
+    "schema_v2_digest": "bdd753e959724558f1a337b37acdac0cad129912ba0bd2794ae9fbeaf716a8fe",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1106,6 +1106,19 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "qualification-expiry-email-stages-0515.json",
       "note": "0515 is reviewed and prepared only. It activates or creates the global EMAIL/low/45d and EMAIL/medium/30d stages without changing tenant-scoped notification history or other channels. Runtime delivery resolves employee plus active sector manager recipients and stage-level deduplication. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0516_qualification_expired_daily_alerts.sql",
+      "change_id": "qualification-expired-daily-alerts-0516",
+      "sha256": "67e6e07fb9b0aed379b7adc1de3eb5127bfb916f7afd669d02669912dcb06005",
+      "targets": [
+        "notificacoes_config"
+      ],
+      "domain": "tenant-configurable qualification notification stages with editable subjects/templates/frequency plus recurring expired-qualification alerts",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "qualification-expired-daily-alerts-0516.json",
+      "note": "0516 is reviewed and prepared only. It extends notificacoes_config with tenant override identity, editable subject and frequency fields; preserves global rows as defaults; corrects the 30-day default text; and adds a daily expired-qualification stage. Runtime delivery remains tenant-scoped and resolves employee plus active sector managers. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",

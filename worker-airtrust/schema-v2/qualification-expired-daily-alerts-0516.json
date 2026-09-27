@@ -1,0 +1,8 @@
+{
+  "changeId": "qualification-expired-daily-alerts-0516",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0516_qualification_expired_daily_alerts.sql",
+  "fileHash": "67e6e07fb9b0aed379b7adc1de3eb5127bfb916f7afd669d02669912dcb06005",
+  "planPath": "worker-airtrust/schema-v2/plans/qualification-expired-daily-alerts-0516.md",
+  "planHash": "b49a1aa99b46220fe07abb3e7e96b37761c4935cc5cb18b830eeffaf59671a0f"
+}

@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useState } from 'react';
 import {
+  Bell,
   BookOpen,
   Database,
   FileText,
@@ -23,6 +24,10 @@ const Cadastros = lazyWithRetry(
   'ConfiguracoesCadastrosTab',
 );
 const BackupPage = lazyWithRetry(() => import('./Configuracoes/Backup'), 'ConfiguracoesBackupTab');
+const AlertasNotificacoes = lazyWithRetry(
+  () => import('./Configuracoes/AlertasNotificacoes'),
+  'ConfiguracoesAlertasNotificacoesTab',
+);
 const SigvoosIntegration = lazyWithRetry(
   () => import('../components/integracoes/SigvoosIntegration'),
   'ConfiguracoesSigvoosIntegrationTab',
@@ -72,7 +77,8 @@ type ConfigTab =
   | 'sistema'
   | 'usuarios'
   | 'setores-gestores'
-  | 'matriz-treinamento';
+  | 'matriz-treinamento'
+  | 'alertas';
 
 function tabClass(active: boolean) {
   return `flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-all sm:px-5 ${
@@ -123,7 +129,7 @@ export default function Configuracoes() {
       return;
     }
     if (
-      ['importacao', 'integracoes', 'sistema', 'setores-gestores'].includes(requested) &&
+      ['importacao', 'integracoes', 'sistema', 'setores-gestores', 'alertas'].includes(requested) &&
       canManageOperationalSettings
     ) {
       setActiveTab(requested);
@@ -151,7 +157,7 @@ export default function Configuracoes() {
       return;
     }
     if (
-      ['importacao', 'integracoes', 'sistema', 'setores-gestores'].includes(activeTab) &&
+      ['importacao', 'integracoes', 'sistema', 'setores-gestores', 'alertas'].includes(activeTab) &&
       !canManageOperationalSettings
     ) {
       setActiveTab('cadastros');
@@ -180,7 +186,11 @@ export default function Configuracoes() {
           <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--at-text-subtle)]">
             Configuração da organização
           </h2>
-          <div className="flex overflow-x-auto" role="tablist" aria-label="Configuração da organização">
+          <div
+            className="flex overflow-x-auto"
+            role="tablist"
+            aria-label="Configuração da organização"
+          >
             <button
               type="button"
               onClick={() => setActiveTab('cadastros')}
@@ -221,6 +231,19 @@ export default function Configuracoes() {
             {canManageOperationalSettings && (
               <button
                 type="button"
+                onClick={() => setActiveTab('alertas')}
+                className={tabClass(activeTab === 'alertas')}
+                aria-selected={activeTab === 'alertas'}
+                role="tab"
+              >
+                <Bell className="h-4 w-4" />
+                Alertas e Notificações
+              </button>
+            )}
+
+            {canManageOperationalSettings && (
+              <button
+                type="button"
                 onClick={() => setActiveTab('integracoes')}
                 className={tabClass(activeTab === 'integracoes')}
                 aria-selected={activeTab === 'integracoes'}
@@ -251,7 +274,11 @@ export default function Configuracoes() {
             <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--at-text-subtle)]">
               Administração e manutenção
             </h2>
-            <div className="flex overflow-x-auto" role="tablist" aria-label="Administração e manutenção">
+            <div
+              className="flex overflow-x-auto"
+              role="tablist"
+              aria-label="Administração e manutenção"
+            >
               {canAccessCompanyManagement && (
                 <button
                   type="button"
@@ -341,6 +368,12 @@ export default function Configuracoes() {
       {canManageOperationalSettings && activeTab === 'importacao' && (
         <Suspense fallback={tabFallback}>
           <ImportacaoPage />
+        </Suspense>
+      )}
+
+      {canManageOperationalSettings && activeTab === 'alertas' && (
+        <Suspense fallback={tabFallback}>
+          <AlertasNotificacoes />
         </Suspense>
       )}
 
