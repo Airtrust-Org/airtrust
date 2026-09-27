@@ -23,7 +23,7 @@ export interface LegalWorkMonthlyCrewSummary {
   incomplete_reasons: string[];
   incomplete_reasons_by_date: Record<string, string[]>;
   trabalho_por_data_min: Record<string, number>;
-  /** Inclui até 20 dias anteriores ao mês para rolling 7d/14d e missão ACT 21d. */
+  /** Inclui até 40 dias anteriores ao mês para rolling 7d/14d e missão + folga pós-missão ACT. */
   trabalho_contexto_por_data_min: Record<string, number>;
 }
 
@@ -50,7 +50,7 @@ function monthBounds(month: string): { start: string; end: string; contextStart:
   const start = `${month}-01`;
   const nextMonthMs = Date.UTC(year, monthNumber, 1);
   const end = new Date(nextMonthMs - 86400000).toISOString().slice(0, 10);
-  return { start, end, contextStart: ymd(parseDay(start) - 20) };
+  return { start, end, contextStart: ymd(parseDay(start) - 40) };
 }
 
 function eachDay(start: string, end: string): string[] {

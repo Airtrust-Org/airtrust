@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildFrmsOperationalSnapshot,
   calculateMorningEffectivenessProjection,
+  deriveCostaDoSolMissionEvidenceForDate,
   type BuildOperationalSnapshotInput,
   type FrmsOperationalSnapshotItem,
   listFrmsOperationalSnapshot,
@@ -176,6 +177,76 @@ const FUNCIONARIO_10 = {
   base: 'SBJR',
   aeronave: 'AW139',
 };
+
+describe('Costa do Sol post-mission evidence derivation', () => {
+  const mission = [{
+    funcionario_id: 10,
+    data_inicio_embarque: '2026-09-01',
+    data_fim_embarque: '2026-09-17',
+  }];
+  const workByDate = Object.fromEntries(
+    isoRange('2026-09-01', '2026-09-17').map((date) => [date, 60]),
+  );
+  const summary = {
+    tripulante_id: 10, nome: 'Tripulante Dez', guerra: 'DEZ', funcao: 'PILOTO',
+    trabalho_status: 'COMPLETE' as const, trabalho_mes_min: 17 * 60, trabalho_mes_conhecido_min: 17 * 60,
+    trabalho_7d_max_min: 7 * 60, trabalho_14d_max_min: 14 * 60, voo_mes_min: 0,
+    jornada_registrada_mes_min: 17 * 60, dias_com_jornada: 17, incomplete_reasons: [],
+    incomplete_reasons_by_date: {}, trabalho_por_data_min: workByDate,
+    trabalho_contexto_por_data_min: workByDate,
+  };
+
+  it('deriva 15 dias de folga após 17 dias efetivos e detecta retorno um dia cedo', () => {
+    const evidence = deriveCostaDoSolMissionEvidenceForDate(summary, mission, 10, '2026-10-02', true);
+    expect(evidence).toMatchObject({
+      inMission: false,
+      effectiveWorkDaysAtOperation: 17,
+      postMissionRequiredOffDays: 15,
+      postMissionCompletedOffDays: 14,
+      postMissionDutyOnDate: true,
+      postMissionRestEvidenceComplete: true,
+    });
+  });
+
+  it('reconhece a folga completa no dia seguinte', () => {
+    const evidence = deriveCostaDoSolMissionEvidenceForDate(summary, mission, 10, '2026-10-03', true);
+    expect(evidence).toMatchObject({
+      postMissionRequiredOffDays: 15,
+      postMissionCompletedOffDays: 15,
+    });
+  });
+
+  it('não transforma trabalho antecipado em folga apenas porque a data avançou', () => {
+    const withEarlyDuty = {
+      ...summary,
+      trabalho_contexto_por_data_min: { ...workByDate, '2026-10-02': 60 },
+    };
+    const evidence = deriveCostaDoSolMissionEvidenceForDate(withEarlyDuty, mission, 10, '2026-10-03', true);
+    expect(evidence).toMatchObject({
+      postMissionRequiredOffDays: 15,
+      postMissionCompletedOffDays: 14,
+    });
+  });
+
+  it('falha fechado quando existe atividade sem período operacional resolvível', () => {
+    const evidence = deriveCostaDoSolMissionEvidenceForDate(summary, [], 10, '2026-10-03', true);
+    expect(evidence).toMatchObject({
+      inMission: false,
+      postMissionDutyOnDate: true,
+      postMissionRestEvidenceComplete: false,
+    });
+    expect(evidence?.incompleteReasons).toContain('ACT_CDS_MISSION_PERIOD_EVIDENCE_MISSING');
+  });
+
+  it('prioriza alocação formal quando mais de um período cobre a mesma data', () => {
+    const periods = [
+      { funcionario_id: 10, data_inicio_embarque: '2026-09-01', data_fim_embarque: '2026-09-15', source_priority: 2, source_kind: 'BASE_FORTNIGHT' as const },
+      { funcionario_id: 10, data_inicio_embarque: '2026-09-10', data_fim_embarque: '2026-09-24', source_priority: 1, source_kind: 'ALLOCATION' as const },
+    ];
+    const evidence = deriveCostaDoSolMissionEvidenceForDate(summary, periods, 10, '2026-09-12', true);
+    expect(evidence?.missionDay).toBe(3);
+  });
+});
 
 describe('morning effectiveness projection', () => {
   it('calcula efetividade na apresentação a partir de check-in completo sem inventar jornada futura', () => {

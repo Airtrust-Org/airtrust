@@ -68,6 +68,6 @@ describe('FRMS legal work service', () => {
     const journeyQuery = queries.find((query) => query.sql.includes('FROM frms_jornada j'));
     expect(journeyQuery?.sql).toContain("UPPER(COALESCE(j.origem, '')) = 'SIGVOOS'");
     expect(journeyQuery?.binds[0]).toBe(42);
-    expect(activityRowsMock).toHaveBeenCalledWith(db, 42, '2026-08-12', '2026-09-30');
+    expect(activityRowsMock).toHaveBeenCalledWith(db, 42, '2026-07-23', '2026-09-30');
   });
 });
