@@ -37,9 +37,9 @@ describe('FRMS REDEMET same-run convergence contract', () => {
     const body = source.slice(routeStart, routeEnd);
 
     expect(routeStart).toBeGreaterThan(0);
-    expect(body).toContain('env: c.env');
-    expect(body).toContain('empresaId,');
-    expect(body).toContain('reprocessarTripulanteCompleto(c.env.DB, tripulanteId, LIMITES_DEFAULT, {');
+    expect(body).toContain('{ env: c.env, empresaId }');
+    expect(body).toContain('reprocessarTripulanteCompleto(');
+    expect(body).toContain('c.env.DB, tripulanteId, LIMITES_DEFAULT, { env: c.env, empresaId }');
   });
 
   it('keeps the observer call outside the canonical function so the second pass cannot loop', () => {

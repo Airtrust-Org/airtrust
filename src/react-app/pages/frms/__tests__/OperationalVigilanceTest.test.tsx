@@ -220,6 +220,23 @@ describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
     expect(completed!.summary.protocolVersion).toBe('airtrust-pvtb-v2');
   });
 
+  it('reports the running lifecycle so the check-in can block unload while PVT is active', () => {
+    const onRunningChange = vi.fn();
+    render(
+      <OperationalVigilanceTest
+        durationMs={30_000}
+        onComplete={vi.fn()}
+        onRunningChange={onRunningChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /iniciar teste/i }));
+    expect(onRunningChange).toHaveBeenLastCalledWith(true);
+
+    fireEvent(window, new Event('blur'));
+    expect(onRunningChange).toHaveBeenLastCalledWith(false);
+  });
+
   it('invalidates an active test when the window loses focus and never emits partial data', () => {
     const onComplete = vi.fn();
     render(<OperationalVigilanceTest durationMs={30_000} onComplete={onComplete} />);

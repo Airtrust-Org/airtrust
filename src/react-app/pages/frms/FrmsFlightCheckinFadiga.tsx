@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -509,11 +509,22 @@ export default function FrmsFlightCheckinFadiga() {
   const [aceitePrivacidade, setAceitePrivacidade] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [vigilanceResult, setVigilanceResult] = useState<OperationalVigilanceResult | null>(null);
+  const [vigilanceRunning, setVigilanceRunning] = useState(false);
 
   const { data: existente, refetch } = useCheckinHoje();
   const submitMutation = useSubmitCheckin();
   const { data: readinessBaseline } = useReadinessBaseline(today);
   const { data: readinessToday } = useReadinessToday(today);
+
+  useEffect(() => {
+    if (!vigilanceRunning) return;
+    const protect = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', protect);
+    return () => window.removeEventListener('beforeunload', protect);
+  }, [vigilanceRunning]);
 
   const canSubmit = isFadigaCheckinSubmitReady({
     sonoOpcao,
@@ -960,7 +971,13 @@ export default function FrmsFlightCheckinFadiga() {
                     </Button>
                   </div>
                 ) : (
-                  <OperationalVigilanceTest onComplete={setVigilanceResult} />
+                  <OperationalVigilanceTest
+                    onComplete={(result) => {
+                      setVigilanceResult(result);
+                      setVigilanceRunning(false);
+                    }}
+                    onRunningChange={setVigilanceRunning}
+                  />
                 )}
               </FormCard>
 
