@@ -15,5 +15,5 @@ export interface QualificacoesPrefs {
 export interface QualificacoesModelosPrefs {
   searchTerm: string;
   categoriaFilter: string;
-  setorFilter: string[];
+  areaFilter: string;
 }

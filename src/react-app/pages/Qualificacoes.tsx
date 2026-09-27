@@ -167,8 +167,6 @@ export default function Qualificacoes() {
     setCategoriaFilter,
     setorFilter,
     setSetorFilter,
-    categoriasSetorFilter,
-    setCategoriasSetorFilter,
     statusFiltro,
     setStatusFiltro,
     getDefaultHistoricoStatusSet,
@@ -313,7 +311,7 @@ export default function Qualificacoes() {
     () => ({
       searchTerm: '',
       categoriaFilter: '',
-      setorFilter: [],
+      areaFilter: '',
     }),
     [],
   );
@@ -333,6 +331,9 @@ export default function Qualificacoes() {
     codigo?: string | null;
     categoria?: string | null;
     categoria_id?: number | null;
+    area_id?: number | null;
+    area_codigo?: string | null;
+    area_nome?: string | null;
     validade?: number | null;
     observacoes?: string | null;
     ativo?: boolean | number;
@@ -356,6 +357,14 @@ export default function Qualificacoes() {
     nome: string;
     descricao?: string | null;
     cor?: string | null;
+  };
+
+  type AreaQualificacao = {
+    id?: number;
+    codigo?: string | null;
+    nome: string;
+    descricao?: string | null;
+    ativo?: boolean | number;
   };
 
   const [editingQualificacao, setEditingQualificacao] = useState<HistoricoItem | null>(null);
@@ -429,7 +438,10 @@ export default function Qualificacoes() {
       activeTab === 'tipos' && modelosPrefs.categoriaFilter
         ? parseInt(modelosPrefs.categoriaFilter, 10) || undefined
         : undefined,
-    setorIds: activeTab === 'tipos' ? modelosPrefs.setorFilter : undefined,
+    areaId:
+      activeTab === 'tipos' && modelosPrefs.areaFilter
+        ? parseInt(modelosPrefs.areaFilter, 10) || undefined
+        : undefined,
     search: activeTab === 'tipos' ? searchTipos : undefined,
   });
 
@@ -466,6 +478,11 @@ export default function Qualificacoes() {
   const [editingCategoria, setEditingCategoria] = useState<Categoria | null>(null);
   const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
   const [novaCategoriaDesc, setNovaCategoriaDesc] = useState('');
+  const [areas, setAreas] = useState<AreaQualificacao[]>([]);
+  const [showAreaModal, setShowAreaModal] = useState(false);
+  const [editingArea, setEditingArea] = useState<AreaQualificacao | null>(null);
+  const [novaAreaNome, setNovaAreaNome] = useState('');
+  const [novaAreaDesc, setNovaAreaDesc] = useState('');
 
   const getTipoTreinamentoDisplay = (value?: string | null, validadeMeses?: number | null) => {
     const tipo = String(value || '')
@@ -514,12 +531,7 @@ export default function Qualificacoes() {
   const { data: setoresTiposData } = useApi<{ data?: Array<{ id: number; nome: string }> }>(
     '/setores',
     {
-      enabled:
-        activeTab === 'tipos' ||
-        activeTab === 'historico' ||
-        activeTab === 'planejados' ||
-        activeTab === 'categorias' ||
-        showTipoModal,
+      enabled: activeTab === 'historico' || activeTab === 'planejados',
       requireAuth: true,
       bypassGetCache: true,
     },
@@ -542,6 +554,11 @@ export default function Qualificacoes() {
     [setoresTipos],
   );
 
+  const areaOptionsTipos = useMemo(
+    () => areas.filter((area) => area.ativo !== false && area.ativo !== 0).map((area) => ({ value: String(area.id || ''), label: area.nome })),
+    [areas],
+  );
+
   // Sector options for historico/planejados (same data source, separate const for clarity)
   const setorOptionsHistorico = setorOptionsTipos;
 
@@ -559,29 +576,12 @@ export default function Qualificacoes() {
     }
   }, [setorFilter, setorOptionsHistorico, setSetorFilter, setPage]);
 
-  useEffect(() => {
-    if (!modelosPrefsReady) return;
-    if (setoresTipos.length !== 1) return;
-    const onlySetorId = String(setoresTipos[0].id);
-    if (modelosPrefs.setorFilter.length === 1 && modelosPrefs.setorFilter[0] === onlySetorId)
-      return;
-    setModelosPrefs((prev) => ({ ...prev, setorFilter: [onlySetorId] }));
-  }, [modelosPrefs.setorFilter, modelosPrefsReady, setModelosPrefs, setoresTipos]);
-
   // Auto-select single sector for historico/planejados when user has only one available
   useEffect(() => {
     if (setoresTipos.length !== 1) return;
     const onlySetorId = String(setoresTipos[0].id);
     if (setorFilter.length === 1 && setorFilter[0] === onlySetorId) return;
     setSetorFilter([onlySetorId]);
-  }, [setoresTipos]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-select single sector for categorias tab
-  useEffect(() => {
-    if (setoresTipos.length !== 1) return;
-    const onlySetorId = String(setoresTipos[0].id);
-    if (categoriasSetorFilter.length === 1 && categoriasSetorFilter[0] === onlySetorId) return;
-    setCategoriasSetorFilter([onlySetorId]);
   }, [setoresTipos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const funcionariosAtivos = useMemo(
@@ -768,22 +768,23 @@ export default function Qualificacoes() {
   // Usar useApi para carregar tipos com autenticação automática
   // Removido uso direto de useApi para tipos (substituído por hook dedicado)
 
-  // Usar useApi para carregar categorias — URL dinâmica por setor
-  const categoriasApiUrl = useMemo(() => {
-    if (categoriasSetorFilter.length === 0) return '/categorias';
-    return `/categorias?setor_ids=${categoriasSetorFilter.join(',')}`;
-  }, [categoriasSetorFilter]);
-
+  // Categorias e áreas são classificações do modelo, independentes do setor organizacional.
   const {
     data: categoriasData,
     error: categoriasError,
-  } = useApi(categoriasApiUrl, {
+  } = useApi('/categorias', {
     enabled:
       activeTab === 'historico' ||
       activeTab === 'tipos' ||
       activeTab === 'categorias' ||
       showTipoModal ||
       showCategoriaModal,
+    requireAuth: true,
+    staleTime: 60_000,
+  });
+
+  const { data: areasData, error: areasError } = useApi('/qualificacoes/areas', {
+    enabled: activeTab === 'tipos' || activeTab === 'categorias' || showTipoModal || showAreaModal,
     requireAuth: true,
     staleTime: 60_000,
   });
@@ -800,6 +801,15 @@ export default function Qualificacoes() {
       setCategorias(cats as Categoria[]);
     }
   }, [categoriasData]);
+
+  useEffect(() => {
+    if (areasData) {
+      const rows = Array.isArray(areasData)
+        ? areasData
+        : (areasData as { data?: AreaQualificacao[] })?.data || [];
+      setAreas((rows as AreaQualificacao[]).slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')));
+    }
+  }, [areasData]);
 
   const normalizeTipoCodigo = (value?: string | null) =>
     (value ?? '').toString().trim().toUpperCase();
@@ -2216,8 +2226,9 @@ export default function Qualificacoes() {
                     carga_horaria_recorrente: null,
                     vencimento_fim_mes: 0,
                     is_check: 0,
+                    area_id: modelosPrefs.areaFilter ? Number(modelosPrefs.areaFilter) : null,
                     setores: [],
-                    setor_ids: modelosPrefs.setorFilter.map((value) => Number(value)),
+                    setor_ids: [],
                   });
                   setShowTipoModal(true);
                 }}
@@ -2237,18 +2248,31 @@ export default function Qualificacoes() {
                 <Plus className="w-4 h-4" /> Nova turma
               </button>
             )}
-            {activeTab === 'categorias' && (
-              <button
-                onClick={async () => {
-                  setEditingCategoria(null);
-                  setNovaCategoriaNome('');
-                  setNovaCategoriaDesc('');
-                  setShowCategoriaModal(true);
-                }}
-                className="flex items-center gap-1.5 rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" /> Nova Categoria
-              </button>
+            {activeTab === 'categorias' && canManageTipos && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setEditingArea(null);
+                    setNovaAreaNome('');
+                    setNovaAreaDesc('');
+                    setShowAreaModal(true);
+                  }}
+                  className="flex items-center gap-1.5 rounded-md border border-primary-600 bg-white px-3 py-1.5 text-sm font-medium text-primary-700 hover:bg-primary-50 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> Nova Área
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingCategoria(null);
+                    setNovaCategoriaNome('');
+                    setNovaCategoriaDesc('');
+                    setShowCategoriaModal(true);
+                  }}
+                  className="flex items-center gap-1.5 rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> Nova Categoria
+                </button>
+              </div>
             )}
           </div>
 
@@ -2299,25 +2323,21 @@ export default function Qualificacoes() {
                       </option>
                     ))}
                 </select>
-                {setoresTipos.length === 1 ? (
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
-                    {setoresTipos[0].nome}
-                  </div>
-                ) : (
-                  <MultiSelect
-                    options={setorOptionsTipos}
-                    selected={modelosPrefs.setorFilter}
-                    onChange={(selected) =>
-                      setModelosPrefs((prev) => ({ ...prev, setorFilter: selected }))
-                    }
-                    placeholder="Todos os setores"
-                    allLabel="Todos os setores"
-                    className="min-w-[220px]"
-                  />
-                )}
-                {(searchTipos.trim() ||
-                  modelosPrefs.setorFilter.length > 0 ||
-                  modelosPrefs.categoriaFilter) && (
+                <select
+                  value={modelosPrefs.areaFilter}
+                  onChange={(e) =>
+                    setModelosPrefs((prev) => ({ ...prev, areaFilter: e.target.value }))
+                  }
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
+                >
+                  <option value="">Área da Qualificação</option>
+                  {areaOptionsTipos.map((area) => (
+                    <option key={area.value} value={area.value}>
+                      {area.label}
+                    </option>
+                  ))}
+                </select>
+                {(searchTipos.trim() || modelosPrefs.areaFilter || modelosPrefs.categoriaFilter) && (
                   <button
                     type="button"
                     onClick={() => {
@@ -2325,39 +2345,12 @@ export default function Qualificacoes() {
                       setModelosPrefs((prev) => ({
                         ...prev,
                         categoriaFilter: '',
-                        setorFilter: [],
+                        areaFilter: '',
                       }));
                     }}
                     className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
                   >
                     Limpar filtros
-                  </button>
-                )}
-              </>
-            )}
-            {activeTab === 'categorias' && (
-              <>
-                {setoresTipos.length === 1 ? (
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
-                    {setoresTipos[0].nome}
-                  </div>
-                ) : setoresTipos.length > 1 ? (
-                  <MultiSelect
-                    options={setorOptionsTipos}
-                    selected={categoriasSetorFilter}
-                    onChange={setCategoriasSetorFilter}
-                    placeholder="Todos os setores"
-                    allLabel="Todos os setores"
-                    className="min-w-[180px]"
-                  />
-                ) : null}
-                {categoriasSetorFilter.length > 0 && setoresTipos.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setCategoriasSetorFilter([])}
-                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    Limpar filtro
                   </button>
                 )}
               </>
@@ -2784,6 +2777,11 @@ export default function Qualificacoes() {
                                     categoria_id:
                                       (row as { categoria_id?: number | null }).categoria_id ??
                                       null,
+                                    area_id: (row as { area_id?: number | null }).area_id ?? null,
+                                    area_codigo:
+                                      (row as { area_codigo?: string | null }).area_codigo ?? null,
+                                    area_nome:
+                                      (row as { area_nome?: string | null }).area_nome ?? null,
                                     validade: row.validade ?? null,
                                     observacoes: row.observacoes ?? null,
                                     ativo: row.ativo ?? 1,
@@ -2949,41 +2947,19 @@ export default function Qualificacoes() {
                       },
                     },
                     {
-                      id: 'setores',
-                      label: 'Setores',
-                      accessor: (row) => row.setores || [],
+                      id: 'area',
+                      label: 'Área',
+                      accessor: (row) => (row as { area_nome?: string | null }).area_nome || '',
                       sortable: false,
                       visible: true,
-                      render: (value, row) => {
-                        const setores = Array.isArray(value)
-                          ? (value as Array<{ id: number; nome: string }>)
-                          : [];
-
-                        if (
-                          setores.length === 0 ||
-                          (row as { is_transversal?: boolean }).is_transversal
-                        ) {
-                          return (
-                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                              Transversal
-                            </span>
-                          );
-                        }
-
-                        if (setores.length === 1) {
-                          return (
-                            <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
-                              {setores[0].nome}
-                            </span>
-                          );
-                        }
-
-                        return (
+                      render: (value) =>
+                        value ? (
                           <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
-                            {setores.length} setores
+                            {String(value)}
                           </span>
-                        );
-                      },
+                        ) : (
+                          <span className="text-xs text-amber-700">Não classificada</span>
+                        ),
                     },
                     {
                       id: 'validade',
@@ -3053,9 +3029,66 @@ export default function Qualificacoes() {
               <div className="mx-4 mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 flex items-start gap-2 text-sm text-blue-800">
                 <Info size={16} className="mt-0.5 flex-shrink-0" />
                 <span>
-                  <strong>Modelos</strong> (tipos de qualificação) permanece como aba principal
-                  própria. A classificação funcional é feita exclusivamente por Categoria.
+                  Os <strong>Modelos</strong> são classificados por <strong>Categoria</strong> (natureza)
+                  e <strong>Área da Qualificação</strong> (domínio). Setor, função e funcionário
+                  definem aplicabilidade no Compliance, não a classificação do modelo.
                 </span>
+              </div>
+              <div className="mx-4 mb-6">
+                <div className="mb-2">
+                  <h3 className="text-sm font-semibold text-slate-900">Áreas da Qualificação</h3>
+                  <p className="text-xs text-slate-500">
+                    Domínio da qualificação, independente do setor organizacional do funcionário.
+                  </p>
+                </div>
+                {areasError && (
+                  <div className="mb-3 rounded-md border border-danger-300 bg-danger-50 p-3 text-sm text-danger-700">
+                    Erro ao carregar áreas da qualificação: {areasError}
+                  </div>
+                )}
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <table className="w-full">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-24">Ações</th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Área</th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-48">Código</th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Descrição</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 bg-white">
+                      {areas.map((area) => (
+                        <tr key={area.id ?? area.nome} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <button
+                              onClick={() => {
+                                setEditingArea(area);
+                                setNovaAreaNome(area.nome);
+                                setNovaAreaDesc(area.descricao || '');
+                                setShowAreaModal(true);
+                              }}
+                              className={historicoActionButtonClass}
+                              title="Editar área"
+                            >
+                              <Pencil className="w-4 h-4 text-indigo-600" />
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 font-medium text-slate-900">{area.nome}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600">{area.codigo || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600">{area.descricao || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {areas.length === 0 && !areasError && (
+                  <div className="py-5 text-center text-sm text-slate-500">Nenhuma área cadastrada.</div>
+                )}
+              </div>
+
+              <div className="mx-4 mb-2">
+                <h3 className="text-sm font-semibold text-slate-900">Categorias</h3>
+                <p className="text-xs text-slate-500">Natureza ou tipo da qualificação.</p>
               </div>
               {categoriasError && (
                 <div className="mx-4 mb-4 rounded-md border border-danger-300 bg-danger-50 p-4 flex gap-3">
@@ -3304,6 +3337,96 @@ export default function Qualificacoes() {
           )}
         </div>
       </div>
+
+      {/* Modal de Área da Qualificação */}
+      <Modal
+        isOpen={showAreaModal}
+        onClose={() => {
+          setShowAreaModal(false);
+          setEditingArea(null);
+          setNovaAreaNome('');
+          setNovaAreaDesc('');
+        }}
+        title={editingArea ? 'Editar Área da Qualificação' : 'Nova Área da Qualificação'}
+        size="md"
+      >
+        <div className="space-y-4">
+          <FormField label="Nome" required>
+            <TextInput
+              placeholder="Ex: Operações"
+              value={novaAreaNome}
+              onChange={(e) => setNovaAreaNome(e.target.value)}
+              autoFocus
+            />
+          </FormField>
+          <FormField label="Descrição">
+            <TextArea
+              rows={3}
+              placeholder="Descrição opcional da área..."
+              value={novaAreaDesc}
+              onChange={(e) => setNovaAreaDesc(e.target.value)}
+            />
+          </FormField>
+          <div className="flex items-center justify-between gap-3 pt-4 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={() => {
+                setShowAreaModal(false);
+                setEditingArea(null);
+                setNovaAreaNome('');
+                setNovaAreaDesc('');
+              }}
+              className="px-6 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!novaAreaNome.trim()) {
+                  showToast.error('Nome é obrigatório');
+                  return;
+                }
+                try {
+                  const method = editingArea ? 'PUT' : 'POST';
+                  const url = editingArea
+                    ? `${API_BASE_URL}/qualificacoes/areas/${editingArea.id}`
+                    : `${API_BASE_URL}/qualificacoes/areas`;
+                  const response = await fetchWithAuth(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      nome: novaAreaNome.trim(),
+                      descricao: novaAreaDesc.trim() || null,
+                    }),
+                  });
+                  if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    showToast.error(errorData.error || 'Erro ao salvar área da qualificação');
+                    return;
+                  }
+                  const refresh = await fetchWithAuth(`${API_BASE_URL}/qualificacoes/areas`, {});
+                  if (refresh.ok) {
+                    const data = await refresh.json();
+                    setAreas((data.data || []).slice().sort((a: AreaQualificacao, b: AreaQualificacao) => a.nome.localeCompare(b.nome, 'pt-BR')));
+                  }
+                  setShowAreaModal(false);
+                  setEditingArea(null);
+                  setNovaAreaNome('');
+                  setNovaAreaDesc('');
+                  showToast.success(editingArea ? 'Área atualizada.' : 'Área criada.');
+                } catch {
+                  showToast.error('Erro ao salvar área da qualificação');
+                }
+              }}
+              className="px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors shadow-sm flex items-center gap-2"
+            >
+              <Check className="w-4 h-4" />
+              {editingArea ? 'Atualizar' : 'Criar'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Modal de Categoria */}
       <Modal
@@ -4307,6 +4430,11 @@ export default function Qualificacoes() {
                 return;
               }
 
+              if (!editingTipo.area_id || Number(editingTipo.area_id) <= 0) {
+                showToast.error('Área da Qualificação é obrigatória');
+                return;
+              }
+
               const codigoNormalizado = normalizeTipoCodigo(editingTipo.codigo);
 
               const duplicateTipo = tipos.find((tipo) => {
@@ -4367,7 +4495,6 @@ export default function Qualificacoes() {
 
                 // Construir payload
                 let payload: Record<string, unknown> = {};
-                let setoresMudaram = false;
 
                 if (isEdit) {
                   const originalTipo = tipos.find((t) => String(t.id) === String(editingTipo.id));
@@ -4379,15 +4506,7 @@ export default function Qualificacoes() {
                     },
                   );
 
-                  // Verifica se houve mudança nos setores
-                  const originalSetores = (originalTipo?.setores || [])
-                    .map((s: { id: number }) => Number(s.id))
-                    .sort()
-                    .join(',');
-                  const draftSetores = (editingTipo.setor_ids || []).map(Number).sort().join(',');
-                  setoresMudaram = originalSetores !== draftSetores;
-
-                  if (!diffPayload && !setoresMudaram) {
+                  if (!diffPayload) {
                     showToast.info('Nenhuma alteração para salvar.');
                     setSavingTipo(false);
                     if (saveTimeoutId !== null) clearTimeout(saveTimeoutId);
@@ -4396,7 +4515,7 @@ export default function Qualificacoes() {
                     return;
                   }
 
-                  payload = diffPayload || {}; // Pode ser vazio se apenas os setores mudaram
+                  payload = diffPayload;
                 } else {
                   payload = {
                     ...buildTipoPayload(editingTipo),
@@ -4444,28 +4563,6 @@ export default function Qualificacoes() {
                     return;
                   }
 
-                  const setoresResponse = await fetchWithAuth(
-                    `${apiUrl}/qualificacoes/tipos/${savedTipoId}/setores`,
-                    {
-                      method: 'PUT',
-                      headers: {
-                        'Content-Type': 'application/json',
-                      },
-                      body: JSON.stringify({
-                        setor_ids: (editingTipo.setor_ids || [])
-                          .map((value) => Number(value))
-                          .filter((value) => Number.isInteger(value) && value > 0),
-                      }),
-                      signal: abortController.signal,
-                    },
-                  );
-
-                  if (!setoresResponse.ok) {
-                    const setorErr = await setoresResponse.json().catch(() => null);
-                    showToast.error(setorErr?.error || 'Erro ao salvar setores do modelo');
-                    return;
-                  }
-
                   getTipoRelatedCachePatterns().forEach((pattern) =>
                     clearApiCacheByPattern(pattern),
                   );
@@ -4495,6 +4592,13 @@ export default function Qualificacoes() {
                   if (editingTipo.categoria?.trim()) {
                     optimisticUpdate.categoria = editingTipo.categoria.trim();
                   }
+                  optimisticUpdate.area_id = editingTipo.area_id ?? null;
+                  const areaSelecionada = areas.find(
+                    (area) => Number(area.id) === Number(editingTipo.area_id),
+                  );
+                  optimisticUpdate.area_nome = areaSelecionada?.nome ?? editingTipo.area_nome ?? null;
+                  optimisticUpdate.area_codigo =
+                    areaSelecionada?.codigo ?? editingTipo.area_codigo ?? null;
                   setTipoUpdates((prev) => ({ ...prev, [tipoIdStr]: optimisticUpdate }));
 
                   setShowTipoModal(false);
@@ -4641,33 +4745,32 @@ export default function Qualificacoes() {
           </FormField>
 
           <div className="md:col-span-2">
-            <FormField label="Setores">
-              {setorOptionsTipos.length <= 1 ? (
-                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                  {setorOptionsTipos[0]?.label || 'Transversal'}
-                </div>
-              ) : (
-                <MultiSelect
-                  options={setorOptionsTipos}
-                  selected={(editingTipo?.setor_ids || []).map((id) => String(id))}
-                  onChange={(selected) =>
-                    setEditingTipo((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            setor_ids: selected
-                              .map((value) => Number(value))
-                              .filter((value) => Number.isInteger(value) && value > 0),
-                          }
-                        : prev,
-                    )
-                  }
-                  placeholder="Transversal"
-                  allLabel="Transversal"
-                />
-              )}
+            <FormField label="Área da Qualificação" required>
+              <Select
+                value={editingTipo?.area_id ? String(editingTipo.area_id) : ''}
+                onChange={(e) => {
+                  const selectedId = Number((e.target as HTMLSelectElement).value || 0);
+                  const selectedArea = areas.find((area) => Number(area.id) === selectedId);
+                  setEditingTipo((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          area_id: selectedId > 0 ? selectedId : null,
+                          area_nome: selectedArea?.nome ?? null,
+                          area_codigo: selectedArea?.codigo ?? null,
+                        }
+                      : prev,
+                  );
+                }}
+                options={[
+                  { value: '', label: '-- Selecione uma área --' },
+                  ...areaOptionsTipos.map((area) => ({ value: area.value, label: area.label })),
+                ]}
+              />
               <p className="mt-1 text-xs text-slate-500">
-                Sem setor vinculado, o modelo fica transversal.
+                Classifica a qual domínio esta qualificação pertence. Não define quem precisa
+                realizá-la; a aplicabilidade por setor, função ou funcionário é configurada no
+                Compliance abaixo.
               </p>
             </FormField>
           </div>

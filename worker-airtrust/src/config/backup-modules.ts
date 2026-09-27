@@ -26,6 +26,7 @@ export const BACKUP_MODULES = {
     tabelas_principais: ['qualificacoes_tipos', 'qualificacoes_historico', 'licencas'],
     tabelas_relacionadas: [
       'qualificacoes_categorias',
+      'qualificacoes_areas',
       'alertas_reforco',
       'certificados',
       'certificado_anexos',

@@ -4,6 +4,7 @@ export type TipoSaveDraft = {
   /** Display-only legacy field. Never sent as functional identity. */
   categoria?: string | null;
   categoria_id?: number | string | null;
+  area_id?: number | string | null;
   conteudo_programatico?: string | null;
   carga_horaria_inicial?: number | string | null;
   carga_horaria_recorrente?: number | string | null;
@@ -36,10 +37,16 @@ export function buildTipoPayload(editingTipo: TipoSaveDraft): Record<string, unk
     throw new Error('Selecione uma categoria válida');
   }
 
+  const areaId = Number(editingTipo.area_id || 0);
+  if (!Number.isInteger(areaId) || areaId <= 0) {
+    throw new Error('Selecione uma área da qualificação válida');
+  }
+
   const payload: Record<string, unknown> = {
     nome: editingTipo.nome?.trim() || '',
     codigo: editingTipo.codigo?.trim() || '',
     categoria_id: categoriaId,
+    area_id: areaId,
     conteudo_programatico: editingTipo.conteudo_programatico?.trim() || null,
     carga_horaria_inicial:
       editingTipo.carga_horaria_inicial != null ? Number(editingTipo.carga_horaria_inicial) : null,

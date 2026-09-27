@@ -1,0 +1,8 @@
+{
+  "changeId": "qualification-areas-0512",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0512_qualification_areas.sql",
+  "fileHash": "5bd314c75c59380e3090aae948ea0d0482e0b469ba926b6c257828a1536f19ad",
+  "planPath": "worker-airtrust/schema-v2/plans/qualification-areas-0512.md",
+  "planHash": "46b4985b33f54a9627d05ee5e288285dd6b44d66ce93af6b956699940dfcfa8d"
+}
