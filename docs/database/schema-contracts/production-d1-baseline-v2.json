@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-27",
     "last_reconciled_against": "0516 tenant-configurable qualification alerts and expired daily notifications prepared after 0515; remote apply pending",
-    "schema_v2_digest": "bdd753e959724558f1a337b37acdac0cad129912ba0bd2794ae9fbeaf716a8fe",
+    "schema_v2_digest": "4f8d08bb1ae0d99c9a82f05532f66db5546dde8a94fe43e6da7587769d1ee667",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1110,7 +1110,7 @@
     {
       "change_file": "0516_qualification_expired_daily_alerts.sql",
       "change_id": "qualification-expired-daily-alerts-0516",
-      "sha256": "67e6e07fb9b0aed379b7adc1de3eb5127bfb916f7afd669d02669912dcb06005",
+      "sha256": "9090059d1be859668791d5028cee359611159fa58b85f79a04ea547445fd4fc8",
       "targets": [
         "notificacoes_config"
       ],
