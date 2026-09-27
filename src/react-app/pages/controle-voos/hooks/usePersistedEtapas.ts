@@ -77,8 +77,9 @@ export function usePersistedEtapas({
 
   const serverEtapas = data?.etapas;
   const serverVersao = rdv?.versao ?? data?.versao ?? null;
+  const dataVoo = rdv?.data_voo ?? null;
   const serverEtapasKey = serverEtapas
-    ? serverEtapas.map((e) => `${e.id}:${e.updated_at ?? e.numero_etapa}`).join('|')
+    ? `${serverEtapas.map((e) => `${e.id}:${e.updated_at ?? e.numero_etapa}`).join('|')}|${dataVoo ?? ''}`
     : '';
 
   const hydrateFromServer = useCallback(
@@ -87,7 +88,7 @@ export function usePersistedEtapas({
         return;
       }
       const next = etapas.length
-        ? etapas.map((e) => draftFromEtapa(e))
+        ? etapas.map((e) => draftFromEtapa(e, undefined, dataVoo))
         : editable
           ? [emptyTrecho(origemIcao, destinoIcao)]
           : [];
@@ -122,7 +123,7 @@ export function usePersistedEtapas({
         }
       }
     },
-    [editable, origemIcao, destinoIcao, vooId],
+    [dataVoo, editable, origemIcao, destinoIcao, vooId],
   );
 
   useEffect(() => {
@@ -195,7 +196,7 @@ export function usePersistedEtapas({
           markStatus(item.localId, 'salvo');
           setDrafts((prev) =>
             prev.map((d) =>
-              d.localId === item.localId ? draftFromEtapa(result.data, d.localId) : d,
+              d.localId === item.localId ? draftFromEtapa(result.data, d.localId, dataVoo) : d,
             ),
           );
           if (vooId) clearEtapaPendingRecovery(vooId);
@@ -237,7 +238,7 @@ export function usePersistedEtapas({
       if (result.meta.versao != null) setKnownVersao(result.meta.versao);
       setDrafts((prev) =>
         prev.map((d) =>
-          d.localId === temp.localId ? draftFromEtapa(result.data, temp.localId) : d,
+          d.localId === temp.localId ? draftFromEtapa(result.data, temp.localId, dataVoo) : d,
         ),
       );
       markStatus(temp.localId, 'salvo');
@@ -265,7 +266,7 @@ export function usePersistedEtapas({
       setDrafts((prev) => {
         const idx = prev.findIndex((d) => d.localId === localId);
         const copy = [...prev];
-        copy.splice(idx + 1, 0, draftFromEtapa(result.data));
+        copy.splice(idx + 1, 0, draftFromEtapa(result.data, undefined, dataVoo));
         return copy;
       });
     } catch (err) {
@@ -317,7 +318,7 @@ export function usePersistedEtapas({
       ...editContext,
     });
     if (result.meta.versao != null) setKnownVersao(result.meta.versao);
-    setDrafts(result.data.map((e) => draftFromEtapa(e)));
+    setDrafts(result.data.map((e) => draftFromEtapa(e, undefined, dataVoo)));
   };
 
   const reloadFromServer = async () => {

@@ -78,9 +78,14 @@ export function normalizeRdvNumero(value: string) {
   return value.trim().toUpperCase();
 }
 
-export function toInputDateTime(value: string | null | undefined) {
+export function toInputDateTime(value: string | null | undefined, fallbackDate?: string | null) {
   if (!value) return '';
-  const parsed = new Date(value);
+  const trimmed = value.trim();
+  const timeOnly = trimmed.match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+  if (timeOnly && fallbackDate && /^\d{4}-\d{2}-\d{2}$/.test(fallbackDate)) {
+    return `${fallbackDate}T${timeOnly[1]}:${timeOnly[2]}`;
+  }
+  const parsed = new Date(trimmed);
   if (Number.isNaN(parsed.getTime())) return '';
   return new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60_000)
     .toISOString()
@@ -229,18 +234,20 @@ export function draftFromEtapa(
     payload: number | null;
   },
   localId?: string,
+  fallbackDate?: string | null,
 ): RdvTrechoDraft {
   const pousos = (etapa.pousos_diurnos ?? 0) + (etapa.pousos_noturnos ?? 0);
+  const pousosInformados = etapa.pousos_diurnos != null || etapa.pousos_noturnos != null;
   return {
     localId: localId || `e-${etapa.id}`,
     id: etapa.id,
     origem: etapa.origem_icao || '',
     destino: etapa.destino_icao || '',
-    horario_decolagem: toInputDateTime(etapa.horario_decolagem),
-    horario_pouso: toInputDateTime(etapa.horario_pouso),
+    horario_decolagem: toInputDateTime(etapa.horario_decolagem, fallbackDate),
+    horario_pouso: toInputDateTime(etapa.horario_pouso, fallbackDate),
     combustivel_decolagem: toInputNumber(etapa.combustivel_inicio),
     combustivel_pouso: toInputNumber(etapa.combustivel_fim),
-    numero_pousos: toInputNumber(pousos || null) || '0',
+    numero_pousos: pousosInformados ? String(pousos) : '',
     pob: toInputNumber(etapa.pax),
     carga_kg: toInputNumber(etapa.payload),
     saveStatus: 'salvo',

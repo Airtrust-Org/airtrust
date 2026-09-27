@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, X } from 'lucide-react';
+import { FileText, Plus, X } from 'lucide-react';
 import { apiClient } from '@/react-app/services/apiClient';
 import type { CvAeroporto, CvTipoVoo, CvVoo } from '@/react-app/hooks/useControleVoos';
 
@@ -159,14 +159,13 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
   const [error, setError] = useState<string | null>(null);
   const [notifyCrewWhatsapp, setNotifyCrewWhatsapp] = useState(false);
   const [notifyCrewEmail, setNotifyCrewEmail] = useState(false);
+  const [planningPdf, setPlanningPdf] = useState<File | null>(null);
   const [form, setForm] = useState({
     aeronave_id: '',
     prefixo: '',
     data_programacao: toLocalInput(now).slice(0, 10),
     numero_voo: '',
     numero_db: '',
-    petrobras_equipamento: '',
-    petrobras_atendimento: '',
     contrato_id: '',
     tipo_voo_id: '',
     funcao_bordo_id: '',
@@ -195,6 +194,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     setError(null);
     setNotifyCrewWhatsapp(false);
     setNotifyCrewEmail(false);
+    setPlanningPdf(null);
     setRouteIds(['', '', '']);
     setRouteQueries(['', '', '']);
     setReturnToOrigin(true);
@@ -417,10 +417,6 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
         data_programacao: form.data_programacao,
         numero_voo: form.numero_voo.trim() || null,
         ...(mode === 'pilot' ? { numero_db: form.numero_db.trim() || null } : {}),
-        ...(mode === 'coordenacao' ? {
-          petrobras_equipamento: form.petrobras_equipamento.trim() || null,
-          petrobras_atendimento: form.petrobras_atendimento.trim() || null,
-        } : {}),
         contrato_id: Number(form.contrato_id),
         tipo_voo_id: Number(form.tipo_voo_id),
         rota_ids: routeIds.map(Number),
@@ -448,13 +444,34 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
       const endpoint = mode === 'pilot' ? '/controle-voos/voos/meus/criar' : '/controle-voos/voos';
       const response = await apiClient.post<unknown>(endpoint, body);
       const created = extract<CvVoo>(response);
-      onCreated(created);
       const notificationErrors: string[] = [];
+
+      if (mode === 'coordenacao' && planningPdf) {
+        try {
+          const uploadForm = new FormData();
+          uploadForm.set('tipo', 'PLANO_VOO');
+          uploadForm.set('file', planningPdf);
+          const uploadResponse = await apiClient(`/controle-voos/voos/${created.id}/documentos`, {
+            method: 'POST',
+            body: uploadForm,
+          });
+          if (!uploadResponse.success) {
+            throw new Error(uploadResponse.error || 'Falha ao anexar planejamento prévio');
+          }
+        } catch (uploadError) {
+          onCreated(created);
+          setError(`Voo criado, mas o planejamento prévio não foi anexado: ${uploadError instanceof Error ? uploadError.message : 'falha no upload'}`);
+          return;
+        }
+      }
+      onCreated(created);
       const notificationRequests: Array<Promise<void>> = [];
       if (mode === 'coordenacao' && notifyCrewWhatsapp) {
         notificationRequests.push(
           apiClient.post(`/controle-voos/voos/${created.id}/whatsapp`, {})
-            .then(() => undefined)
+            .then((sendResponse) => {
+              if (!sendResponse.success) throw new Error(sendResponse.error || 'falha no envio');
+            })
             .catch((sendError) => {
               notificationErrors.push(`WhatsApp: ${sendError instanceof Error ? sendError.message : 'falha no envio'}`);
             }),
@@ -463,7 +480,9 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
       if (mode === 'coordenacao' && notifyCrewEmail) {
         notificationRequests.push(
           apiClient.post(`/controle-voos/voos/${created.id}/email`, {})
-            .then(() => undefined)
+            .then((sendResponse) => {
+              if (!sendResponse.success) throw new Error(sendResponse.error || 'falha no envio');
+            })
             .catch((sendError) => {
               notificationErrors.push(`e-mail: ${sendError instanceof Error ? sendError.message : 'falha no envio'}`);
             }),
@@ -513,10 +532,6 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
 
         <form onSubmit={submit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <label className="text-sm">Número do voo<input className={fieldClass} value={form.numero_voo} onChange={(e) => set('numero_voo', e.target.value)} placeholder={mode === 'pilot' ? 'Preencha se a Coordenação não informou' : 'Número operacional do voo'} /></label>
-          {mode === 'coordenacao' && (<>
-            <label className="text-sm">Equipamento Petrobras<input className={fieldClass} value={form.petrobras_equipamento} onChange={(e) => set('petrobras_equipamento', e.target.value)} placeholder="Ex.: 30131647" /></label>
-            <label className="text-sm">Atendimento Petrobras<input className={fieldClass} value={form.petrobras_atendimento} onChange={(e) => set('petrobras_atendimento', e.target.value)} placeholder="Ex.: 509573593" /></label>
-          </>)}
           {mode === 'pilot' && (
             <label className="text-sm">Relatório de voo<input className={fieldClass} value={form.numero_db} onChange={(e) => set('numero_db', e.target.value)} placeholder="Número do relatório de voo" /></label>
           )}
@@ -677,6 +692,47 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
               </label>
             </>
           )}
+          {mode === 'coordenacao' && (
+            <div className="md:col-span-2 rounded-xl border border-cyan-200 bg-cyan-50/60 p-3 dark:border-cyan-900 dark:bg-cyan-950/20">
+              <div className="flex items-start gap-3">
+                <FileText className="mt-0.5 h-5 w-5 shrink-0 text-cyan-700 dark:text-cyan-300" />
+                <div className="min-w-0 flex-1">
+                  <label className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+                    Planejamento prévio do voo (PDF)
+                    <input
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      className="mt-2 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-cyan-700 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white dark:text-slate-300"
+                      onChange={(event) => {
+                        const file = event.currentTarget.files?.[0] || null;
+                        if (!file) {
+                          setPlanningPdf(null);
+                          return;
+                        }
+                        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+                        if (!isPdf) {
+                          setPlanningPdf(null);
+                          setError('O planejamento prévio deve ser enviado em PDF.');
+                          event.currentTarget.value = '';
+                          return;
+                        }
+                        if (file.size <= 0 || file.size > 15 * 1024 * 1024) {
+                          setPlanningPdf(null);
+                          setError('O PDF do planejamento prévio deve ter até 15 MB.');
+                          event.currentTarget.value = '';
+                          return;
+                        }
+                        setError(null);
+                        setPlanningPdf(file);
+                      }}
+                    />
+                  </label>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Opcional. Se anexado, o PDF fica vinculado ao voo e acompanha os envios por WhatsApp e e-mail.</p>
+                  {planningPdf && <p className="mt-1 truncate text-xs font-medium text-cyan-800 dark:text-cyan-200">Selecionado: {planningPdf.name}</p>}
+                </div>
+              </div>
+            </div>
+          )}
           <label className="text-sm md:col-span-2">Observações<textarea className={fieldClass} rows={3} value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} /></label>
 
           {mode === 'coordenacao' && (
@@ -692,7 +748,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
                   E-mail
                 </label>
               </div>
-              <p className="mt-2 text-xs text-slate-500">Selecione um ou os dois canais. O envio aos tripulantes ocorre depois da criação do voo.</p>
+              <p className="mt-2 text-xs text-slate-500">Selecione um ou os dois canais. Se houver planejamento prévio em PDF, ele acompanha a comunicação aos tripulantes.</p>
             </div>
           )}
           {error && <div className="md:col-span-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">{error}</div>}

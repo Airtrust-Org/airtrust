@@ -1,6 +1,10 @@
 import type { Env } from '../types';
 import { normalizeWhatsAppPhone } from './whatsapp';
 
+export type WhatsAppMediaSendOptions = {
+  mediaUrl: string;
+};
+
 export type WhatsAppTemplateSendOptions = {
   contentSid: string;
   contentVariables: Record<string, string>;
@@ -15,6 +19,7 @@ export async function sendWhatsAppMessage(
   mensagem: string,
   statusCallbackUrl?: string,
   templateOptions?: WhatsAppTemplateSendOptions,
+  mediaOptions?: WhatsAppMediaSendOptions,
 ): Promise<{
   provider: 'generic' | 'twilio';
   destination: string;
@@ -100,7 +105,14 @@ export async function sendWhatsAppMessage(
     };
   }
 
-  if (env.WHATSAPP_API_URL && env.WHATSAPP_API_TOKEN) {
+  const canUseTwilioMedia = Boolean(
+    mediaOptions?.mediaUrl &&
+    env.TWILIO_ACCOUNT_SID &&
+    env.TWILIO_AUTH_TOKEN &&
+    env.TWILIO_WHATSAPP_FROM,
+  );
+
+  if (env.WHATSAPP_API_URL && env.WHATSAPP_API_TOKEN && !canUseTwilioMedia) {
     const response = await fetch(env.WHATSAPP_API_URL, {
       method: 'POST',
       headers: {
@@ -109,7 +121,9 @@ export async function sendWhatsAppMessage(
       },
       body: JSON.stringify({
         to: telefoneDestino.e164,
-        message: mensagem,
+        message: mediaOptions?.mediaUrl
+          ? `${mensagem}\n\nPlanejamento prévio (PDF): ${mediaOptions.mediaUrl}`
+          : mensagem,
       }),
     });
 
@@ -141,6 +155,9 @@ export async function sendWhatsAppMessage(
     To: telefoneDestino.whatsapp,
     Body: mensagem,
   });
+  if (mediaOptions?.mediaUrl) {
+    requestBody.set('MediaUrl', mediaOptions.mediaUrl);
+  }
 
   if (statusCallbackUrl) {
     requestBody.set('StatusCallback', statusCallbackUrl);

@@ -9,6 +9,7 @@ import {
   Ban,
   FileDown,
   History,
+  Pencil,
 } from 'lucide-react';
 import {
   useRdvAlertas,
@@ -146,10 +147,12 @@ export default function ControleVoosRdvWorkflowPanel({
   vooId,
   rdv,
   isCoordenacao,
+  onEditRdv,
 }: {
   vooId: string;
   rdv: CvRdv | null | undefined;
   isCoordenacao: boolean;
+  onEditRdv?: () => void;
 }) {
   const [prompt, setPrompt] = useState<'devolver' | 'reabrir' | 'cancelar' | null>(null);
   const [showHistorico, setShowHistorico] = useState(false);
@@ -277,6 +280,11 @@ export default function ControleVoosRdvWorkflowPanel({
 
         {isCoordenacao && rdv.workflow_status === 'em_revisao' && (
           <>
+            {onEditRdv && (
+              <ActionButton icon={Pencil} tone="neutral" onClick={onEditRdv}>
+                Corrigir dados antes de aprovar
+              </ActionButton>
+            )}
             <ActionButton
               icon={CheckCircle2}
               loading={aprovar.isPending}
