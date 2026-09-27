@@ -3,8 +3,14 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ControleVoosNovoVooDialog from '../ControleVoosNovoVooDialog';
 
-const { getMock, postMock } = vi.hoisted(() => ({ getMock: vi.fn(), postMock: vi.fn() }));
-vi.mock('@/react-app/services/apiClient', () => ({ apiClient: { get: getMock, post: postMock } }));
+const { getMock, postMock, requestMock } = vi.hoisted(() => ({
+  getMock: vi.fn(),
+  postMock: vi.fn(),
+  requestMock: vi.fn(),
+}));
+vi.mock('@/react-app/services/apiClient', () => ({
+  apiClient: Object.assign((...args: unknown[]) => requestMock(...args), { get: getMock, post: postMock }),
+}));
 
 const aeroportos = [
   { id: 1, codigo: 'SBME', codigo_icao: 'SBME', nome: 'Macaé', tipo: 'aeroporto' },
@@ -67,7 +73,7 @@ async function chooseCommon() {
 }
 
 describe('ControleVoosNovoVooDialog operational model', () => {
-  beforeEach(() => { vi.clearAllMocks(); mockBase(); });
+  beforeEach(() => { vi.clearAllMocks(); requestMock.mockResolvedValue({ success: true, data: {} }); mockBase(); });
 
   it('fecha o dialog sem quebrar a ordem de hooks do React', async () => {
     const onClose = vi.fn();
@@ -101,6 +107,20 @@ describe('ControleVoosNovoVooDialog operational model', () => {
     expect(screen.queryByText(/Petrobras/i)).toBeNull();
     expect(within(screen.getByLabelText('Contrato')).getByRole('option', { name: 'Contrato 001' })).toBeInTheDocument();
     expect(within(screen.getByLabelText('Minha função a bordo')).getByRole('option', { name: 'Examinador' })).toBeInTheDocument();
+  });
+
+  it('Coordenação não exibe nem envia os campos Equipamento Petrobras e Atendimento Petrobras', async () => {
+    postMock.mockResolvedValue({ success: true, data: { id: 88 } });
+    renderDialog('coordenacao'); await waitReady(); await chooseCommon();
+    expect(screen.queryByText('Equipamento Petrobras')).toBeNull();
+    expect(screen.queryByText('Atendimento Petrobras')).toBeNull();
+    await waitFor(() => expect(screen.getByLabelText('Tripulante — posto PIC')).not.toBeDisabled());
+    fireEvent.change(screen.getByLabelText('Tripulante — posto PIC'), { target: { value: '101' } });
+    fireEvent.change(screen.getByLabelText('Tripulante — posto SIC'), { target: { value: '102' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar voo' }));
+    await waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
+    expect(postMock.mock.calls[0][1]).not.toHaveProperty('petrobras_equipamento');
+    expect(postMock.mock.calls[0][1]).not.toHaveProperty('petrobras_atendimento');
   });
 
   it('cria voo do piloto com IDs operacionais e função a bordo cadastrável', async () => {
@@ -165,6 +185,44 @@ describe('ControleVoosNovoVooDialog operational model', () => {
 
     fireEvent.change(screen.getByLabelText('Peso dos passageiros (kg)'), { target: { value: '100' } });
     expect(screen.getByLabelText('Peso dos passageiros (lb)')).toHaveValue(220.462);
+  });
+
+  it('anexa o planejamento prévio em PDF antes de enviar WhatsApp e e-mail', async () => {
+    const order: string[] = [];
+    postMock.mockImplementation((url: string) => {
+      order.push(url);
+      if (url === '/controle-voos/voos') return Promise.resolve({ success: true, data: { id: 88 } });
+      return Promise.resolve({ success: true, data: { sent: 2, failed: 0 } });
+    });
+    requestMock.mockImplementation((url: string, options?: RequestInit) => {
+      order.push(url);
+      const form = options?.body as FormData;
+      expect(form.get('tipo')).toBe('PLANO_VOO');
+      const uploaded = form.get('file') as File;
+      expect(uploaded.name).toBe('planejamento-previo.pdf');
+      expect(uploaded.type).toBe('application/pdf');
+      return Promise.resolve({ success: true, data: { type: 'PLANO_VOO' } });
+    });
+
+    renderDialog('coordenacao'); await waitReady(); await chooseCommon();
+    await waitFor(() => expect(screen.getByLabelText('Tripulante — posto PIC')).not.toBeDisabled());
+    fireEvent.change(screen.getByLabelText('Tripulante — posto PIC'), { target: { value: '101' } });
+    fireEvent.change(screen.getByLabelText('Tripulante — posto SIC'), { target: { value: '102' } });
+    const pdf = new File(['%PDF-1.7 teste'], 'planejamento-previo.pdf', { type: 'application/pdf' });
+    fireEvent.change(screen.getByLabelText(/Planejamento prévio do voo/), { target: { files: [pdf] } });
+    expect(screen.getByText(/Selecionado: planejamento-previo.pdf/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('WhatsApp'));
+    fireEvent.click(screen.getByLabelText('E-mail'));
+    fireEvent.click(screen.getByRole('button', { name: 'Criar voo' }));
+
+    await waitFor(() => expect(postMock).toHaveBeenCalledTimes(3));
+    expect(requestMock).toHaveBeenCalledTimes(1);
+    expect(order).toEqual([
+      '/controle-voos/voos',
+      '/controle-voos/voos/88/documentos',
+      '/controle-voos/voos/88/whatsapp',
+      '/controle-voos/voos/88/email',
+    ]);
   });
 
   it('Coordenação pode enviar a programação aos tripulantes por WhatsApp e e-mail juntos', async () => {
