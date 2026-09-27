@@ -32,6 +32,7 @@ describe('tipoSaveFeedback', () => {
         codigo: ' as350-b2 ',
         categoria: 'MANUTENCAO',
         categoria_id: 17,
+        area_id: 4,
         conteudo_programatico: ' Conteudo ',
         carga_horaria_inicial: '8',
         carga_horaria_recorrente: 4,
@@ -45,6 +46,7 @@ describe('tipoSaveFeedback', () => {
       nome: 'AS350 B2',
       codigo: 'as350-b2',
       categoria_id: 17,
+      area_id: 4,
       conteudo_programatico: 'Conteudo',
       carga_horaria_inicial: 8,
       carga_horaria_recorrente: 4,
@@ -61,9 +63,21 @@ describe('tipoSaveFeedback', () => {
       buildTipoPayload({
         nome: 'Curso legado',
         categoria: 'EAD',
+        area_id: 10,
         validade: 12,
       }),
     ).toThrow('Selecione uma categoria válida');
+  });
+
+
+  it('rejeita payload sem área da qualificação', () => {
+    expect(() =>
+      buildTipoPayload({
+        nome: 'Modelo sem área',
+        categoria_id: 1,
+        validade: 12,
+      }),
+    ).toThrow('Selecione uma área da qualificação válida');
   });
 
   it('exibe contagem de historicos recalculados e ignorados ao editar', () => {
@@ -94,6 +108,7 @@ describe('tipoSaveFeedback', () => {
       const payload = buildTipoPayload({
         nome: 'Curso X',
         categoria_id: 1,
+        area_id: 10,
         validade: null,
       });
       expect(Object.prototype.hasOwnProperty.call(payload, 'validade')).toBe(true);
@@ -104,6 +119,7 @@ describe('tipoSaveFeedback', () => {
       const payload = buildTipoPayload({
         nome: 'Curso Y',
         categoria_id: 1,
+        area_id: 10,
         validade: 0,
       });
       expect(payload.validade).toBeNull();
@@ -113,13 +129,14 @@ describe('tipoSaveFeedback', () => {
       const payload = buildTipoPayload({
         nome: 'MGM',
         categoria_id: 1,
+        area_id: 10,
         validade: 24,
       });
       expect(payload.validade).toBe(24);
     });
 
     it('inclui validade mesmo quando undefined (null por default)', () => {
-      const payload = buildTipoPayload({ nome: 'X', categoria_id: 1 });
+      const payload = buildTipoPayload({ nome: 'X', categoria_id: 1, area_id: 10 });
       expect(Object.prototype.hasOwnProperty.call(payload, 'validade')).toBe(true);
       expect(payload.validade).toBeNull();
     });

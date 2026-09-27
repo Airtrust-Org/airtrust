@@ -122,6 +122,9 @@ type TipoQualificacaoRow = {
   categoria?: string | null;
   categoria_id?: number | null;
   categoria_cor?: string | null;
+  area_id?: number | null;
+  area_codigo?: string | null;
+  area_nome?: string | null;
   /** Deprecated read compatibility; never written by this route. */
   formato_id?: number | null;
   formato_codigo?: string | null;
@@ -156,6 +159,7 @@ type TiposColumnsSupport = {
   hasClasseRequisito: boolean;
   hasCategoriaId: boolean;
   hasDominioOverride: boolean;
+  hasAreaId: boolean;
 };
 
 function deriveModeloTipo(validade: number | null | undefined, categoria?: string | null): string {
@@ -208,6 +212,7 @@ async function loadQualificacoesTiposColumnsSupport(db: D1Database): Promise<Tip
         hasClasseRequisito: hasColumn('classe_requisito'),
         hasCategoriaId: hasColumn('categoria_id'),
         hasDominioOverride: hasColumn('dominio_codigo'),
+        hasAreaId: hasColumn('area_id'),
       };
     })();
     qualificacoesTiposColumnsSupportCache.set(db, cached);
@@ -231,6 +236,7 @@ const createTipoSchema = z
     codigo: z.string().min(1, 'Código obrigatório'),
     categoria: z.string().min(1, 'Categoria obrigatória').optional(),
     categoria_id: z.number().int().positive('Categoria inválida').optional(),
+    area_id: z.number().int().positive('Área da qualificação inválida').optional().nullable(),
     descricao: z.string().optional(),
     conteudo_programatico: z.string().nullable().optional(),
     carga_horaria_inicial: z.number().nullable().optional(),
@@ -254,6 +260,7 @@ const updateTipoSchema = z.object({
   codigo: z.string().min(1).optional().nullable(),
   categoria: z.string().min(1).optional().nullable(),
   categoria_id: z.number().int().positive('Categoria inválida').optional().nullable(),
+  area_id: z.number().int().positive('Área da qualificação inválida').optional().nullable(),
   descricao: z.string().optional().nullable(),
   conteudo_programatico: z.string().optional().nullable(),
   carga_horaria_inicial: z.number().nullable().optional(),
@@ -503,6 +510,29 @@ function buildCategoriaJoin(hasCategoriaId: boolean): string {
    AND qc.ativo = 1`;
 }
 
+function buildAreaJoin(hasAreaId: boolean): string {
+  if (!hasAreaId) return '';
+  return `LEFT JOIN qualificacoes_areas qa
+    ON qa.id = qt.area_id
+   AND qa.empresa_id = qt.empresa_id
+   AND qa.deleted_at IS NULL`;
+}
+
+async function resolveAreaQualificacao(
+  db: D1Database,
+  empresaId: number,
+  areaId?: number | null,
+): Promise<{ id: number; codigo: string; nome: string } | null> {
+  if (!areaId) return null;
+  return db
+    .prepare(
+      `SELECT id, codigo, nome FROM qualificacoes_areas
+        WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL LIMIT 1`,
+    )
+    .bind(areaId, empresaId)
+    .first<{ id: number; codigo: string; nome: string }>();
+}
+
 async function resolveCategoriaCanonica(
   db: D1Database,
   empresaId: number,
@@ -694,6 +724,8 @@ router.get(
     const categoria = String(c.req.query('categoria') || '').trim();
     const categoriaIdRaw = parseInt(c.req.query('categoria_id') || '', 10);
     const categoriaId = Number.isFinite(categoriaIdRaw) && categoriaIdRaw > 0 ? categoriaIdRaw : 0;
+    const areaIdRaw = parseInt(c.req.query('area_id') || '', 10);
+    const areaId = Number.isFinite(areaIdRaw) && areaIdRaw > 0 ? areaIdRaw : 0;
     const search = String(c.req.query('search') || '').trim();
     // Teto uniforme de 500: a contagem de histórico agora é uma agregação
     // GROUP BY única (buildHistoricoCountJoin), não mais uma subconsulta por
@@ -754,16 +786,30 @@ router.get(
       bindings.push(categoria);
     }
 
+    if (areaId > 0) {
+      if (!columnsSupport.hasAreaId) {
+        return c.json({ success: false, error: 'Classificação por área ainda não disponível' }, 503);
+      }
+      conditions.push('qt.area_id = ?');
+      bindings.push(areaId);
+    }
+
     if (search) {
-      conditions.push('(qt.nome LIKE ? OR qt.codigo LIKE ? OR qt.categoria LIKE ?)');
       const like = `%${search}%`;
-      bindings.push(like, like, like);
+      if (columnsSupport.hasAreaId) {
+        conditions.push('(qt.nome LIKE ? OR qt.codigo LIKE ? OR qt.categoria LIKE ? OR qa.nome LIKE ?)');
+        bindings.push(like, like, like, like);
+      } else {
+        conditions.push('(qt.nome LIKE ? OR qt.codigo LIKE ? OR qt.categoria LIKE ?)');
+        bindings.push(like, like, like);
+      }
     }
 
     const { results } = await db
       .prepare(
         `SELECT qt.id, qt.tipo, qt.codigo, qt.nome, qt.descricao, qt.categoria,
         qc.id as categoria_id, qc.cor as categoria_cor,
+        ${columnsSupport.hasAreaId ? 'qt.area_id, qa.codigo as area_codigo, qa.nome as area_nome' : 'NULL as area_id, NULL as area_codigo, NULL as area_nome'},
         ${columnsSupport.hasFormatoId ? 'qt.formato_id, qf.codigo as formato_codigo, qf.nome as formato_nome, qf.cor as formato_cor' : 'NULL as formato_id, NULL as formato_codigo, NULL as formato_nome, NULL as formato_cor'},
         ${columnsSupport.hasClasseRequisito ? 'qt.classe_requisito' : 'NULL as classe_requisito'},
         qt.carga_horaria, ${
@@ -783,6 +829,7 @@ router.get(
         ${buildSetoresAggregationSelect(hasQualificacoesTiposSetores)}
         FROM qualificacoes_tipos qt
         ${buildCategoriaJoin(columnsSupport.hasCategoriaId)}
+        ${buildAreaJoin(columnsSupport.hasAreaId)}
         ${buildFormatoJoin(columnsSupport.hasFormatoId)}
         ${buildHistoricoCountJoin()}
         ${buildSetoresAggregationJoin(hasQualificacoesTiposSetores)}
@@ -818,6 +865,7 @@ router.get(
       .prepare(
         `SELECT qt.id, qt.tipo, qt.codigo, qt.nome, qt.descricao, qt.categoria,
         qc.id as categoria_id, qc.cor as categoria_cor,
+        ${columnsSupport.hasAreaId ? 'qt.area_id, qa.codigo as area_codigo, qa.nome as area_nome' : 'NULL as area_id, NULL as area_codigo, NULL as area_nome'},
         ${columnsSupport.hasFormatoId ? 'qt.formato_id, qf.codigo as formato_codigo, qf.nome as formato_nome, qf.cor as formato_cor' : 'NULL as formato_id, NULL as formato_codigo, NULL as formato_nome, NULL as formato_cor'},
         ${columnsSupport.hasClasseRequisito ? 'qt.classe_requisito' : 'NULL as classe_requisito'},
         qt.carga_horaria, ${
@@ -836,6 +884,7 @@ router.get(
         ${buildSetoresAggregationSelect(hasQualificacoesTiposSetores)}
         FROM qualificacoes_tipos qt
         ${buildCategoriaJoin(columnsSupport.hasCategoriaId)}
+        ${buildAreaJoin(columnsSupport.hasAreaId)}
         ${buildFormatoJoin(columnsSupport.hasFormatoId)}
         ${buildSetoresAggregationJoin(hasQualificacoesTiposSetores)}
         WHERE qt.id = ? AND qt.deleted_at IS NULL AND qt.empresa_id = ? AND ${setorScope.clause}
@@ -950,6 +999,15 @@ router.post(
       return c.json({ success: false, error: 'Categoria canônica não encontrada ou inativa' }, 404);
     }
     const categoria = categoriaCanonica.nome;
+    const areaCanonica = columnsSupport.hasAreaId
+      ? await resolveAreaQualificacao(db, empresaId, data.area_id)
+      : null;
+    if (columnsSupport.hasAreaId && !areaCanonica) {
+      return c.json(
+        { success: false, error: 'Área da qualificação é obrigatória e deve estar ativa' },
+        400,
+      );
+    }
 
     // Bloqueador 4: resolve the domain from the payload's own categoria
     // (already validated above) instead of pinning creation to a fixed
@@ -1044,6 +1102,10 @@ router.post(
     if (columnsSupport.hasCategoriaId) {
       insertCols.push('categoria_id');
       insertBinds.push(categoriaCanonica.id);
+    }
+    if (columnsSupport.hasAreaId) {
+      insertCols.push('area_id');
+      insertBinds.push(areaCanonica!.id);
     }
     // formato_id foi depreciado, não gravamos mais no banco.
     if (columnsSupport.hasClasseRequisito) {
@@ -1155,6 +1217,7 @@ router.post(
                 qt.descricao,
                 qt.categoria,
                 ${columnsSupport.hasCategoriaId ? 'qt.categoria_id,' : 'NULL AS categoria_id,'}
+                ${columnsSupport.hasAreaId ? 'qt.area_id,' : 'NULL AS area_id,'}
                 ${
                   columnsSupport.hasFormatoId
                     ? 'qt.formato_id, qf.codigo AS formato_codigo, qf.nome AS formato_nome, qf.cor AS formato_cor,'
@@ -1267,6 +1330,7 @@ router.put(
                 qt.nome,
                 qt.categoria,
                 ${columnsSupport.hasCategoriaId ? 'qt.categoria_id' : 'NULL as categoria_id'},
+                ${columnsSupport.hasAreaId ? 'qt.area_id' : 'NULL as area_id'},
                 qt.validade,
                 qt.vencimento_fim_mes,
                 qt.descricao,
@@ -1288,6 +1352,7 @@ router.put(
       .first()) as
       | (TipoAnteriorRow & {
           categoria_id: number | null;
+          area_id: number | null;
           descricao: string | null;
           observacoes: string | null;
           ativo: number | null;
@@ -1397,6 +1462,19 @@ router.put(
           updateParts.push('categoria_id = ?');
           binds.push(categoriaCanonica.id);
         }
+      }
+    }
+    if (data.area_id !== undefined) {
+      if (!columnsSupport.hasAreaId) {
+        return c.json({ success: false, error: 'Classificação por área ainda não disponível' }, 503);
+      }
+      const areaCanonica = await resolveAreaQualificacao(db, empresaId, data.area_id);
+      if (!areaCanonica) {
+        return c.json({ success: false, error: 'Área da qualificação não encontrada ou inativa' }, 404);
+      }
+      if (Number(rowAtual.area_id || 0) !== areaCanonica.id) {
+        updateParts.push('area_id = ?');
+        binds.push(areaCanonica.id);
       }
     }
     if (data.descricao !== undefined) {

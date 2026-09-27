@@ -121,8 +121,8 @@ describe('migration governance', () => {
     // 0508 adds governed daily training-compliance snapshots.
     // 0509 adds the governed structured Controle de Voos flight-plan schema.
     // 0510 adds the governed Petrobras RVE daily-export identifiers.
-    // 0511 adds tenant-scoped FRMS duty-boundary configuration.
-    const expectedLatest = 511;
+    // 0513 adds tenant-scoped qualification areas and qualificacoes_tipos.area_id.
+    const expectedLatest = 513;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

@@ -61,6 +61,7 @@ import qualificacoesCertificadosRoutes from './routes/qualificacoes-certificados
 import qualificacoesCertificadosAdminRoutes from './routes/qualificacoes-certificados-admin';
 import validacaoCertificadosRoutes from './routes/certificados/validacao';
 import categoriasRoutes from './routes/categorias';
+import qualificacoesAreasRoutes from './routes/qualificacoes-areas';
 import dashboardRoutes from './routes/dashboard';
 import { authRoutes } from './routes/auth';
 import { lookup } from './routes/lookup';
@@ -607,6 +608,7 @@ app.route('/api/qualificacoes/reclass', qualificacoesReclassRoutes);
  * DELETE /api/categorias/:id
  */
 app.route('/api/categorias', categoriasRoutes);
+app.route('/api/qualificacoes/areas', qualificacoesAreasRoutes);
 
 /**
  * Rotas de Habilitações (tabela com campos completos: renovações, timezone, etc)

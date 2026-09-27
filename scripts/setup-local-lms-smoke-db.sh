@@ -55,6 +55,9 @@ LMS_MIGRATIONS=(
   "$WORKER_DIR/migrations/0465_lms_scorm_package_quality_gate_v1.sql"
   "$WORKER_DIR/migrations/0469_lms_completion_pendencias_snapshots.sql"
   "$WORKER_DIR/migrations/0470_certificado_validacao_hash_index.sql"
+  # 0513 is additive but changes qualificacoes_tipos, a CI bootstrap-critical table.
+  # Keep the local smoke schema aligned with the governed qualification-area contract.
+  "$WORKER_DIR/migrations/0513_qualification_areas.sql"
 )
 
 error() {
@@ -297,7 +300,7 @@ for migration_file in "${LMS_MIGRATIONS[@]}"; do
   require_migration_recorded "$(basename "$migration_file")"
 done
 
-for table_name in token_blocklist audit_logs lms_cursos lms_matriculas lms_progresso_scorm qualificacoes_tipos_setores lms_cursos_setores lms_scorm_package_versions lms_scorm_package_audit_log lms_completion_diagnostics_snapshots; do
+for table_name in token_blocklist audit_logs lms_cursos lms_matriculas lms_progresso_scorm qualificacoes_tipos_setores qualificacoes_areas lms_cursos_setores lms_scorm_package_versions lms_scorm_package_audit_log lms_completion_diagnostics_snapshots; do
   require_sqlite_table "$table_name"
 done
 
@@ -311,6 +314,7 @@ require_sqlite_column "lms_cursos" "conteudo_arquivo_nome"
 require_sqlite_column "lms_cursos" "h5p_conteudo_id"
 require_sqlite_column "lms_matriculas" "ultimo_slide"
 require_sqlite_column "qualificacoes_historico" "validacao_hash"
+require_sqlite_column "qualificacoes_tipos" "area_id"
 
 printf 'setup:lms:local: applying synthetic LMS smoke seed\n'
 sqlite3 "$SQLITE_FILE" < "$SEED_FILE"

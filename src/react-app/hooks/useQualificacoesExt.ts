@@ -82,6 +82,10 @@ export interface QualificacaoTipoDTO {
   nome: string;
   codigo?: string | null;
   categoria?: string | null;
+  categoria_id?: number | null;
+  area_id?: number | null;
+  area_codigo?: string | null;
+  area_nome?: string | null;
   descricao?: string | null;
   conteudo_programatico?: string | null;
   carga_horaria?: number | null;
@@ -378,6 +382,7 @@ export function useQualificacaoTipos(
   filters?: {
     categoria?: string;
     categoriaId?: number;
+    areaId?: number;
     setorIds?: string[];
     search?: string;
   },
@@ -387,6 +392,9 @@ export function useQualificacaoTipos(
     query.set('categoria_id', String(filters.categoriaId));
   } else if (filters?.categoria?.trim()) {
     query.set('categoria', filters.categoria.trim());
+  }
+  if (filters?.areaId && filters.areaId > 0) {
+    query.set('area_id', String(filters.areaId));
   }
   if (filters?.setorIds?.length) {
     query.set('setor_ids', filters.setorIds.join(','));

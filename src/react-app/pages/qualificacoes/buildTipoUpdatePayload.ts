@@ -20,6 +20,7 @@ export function buildTipoUpdatePayload(
     { key: 'codigo', norm: normalizeString },
     // categoria is display-only; categoria_id is the sole functional identity.
     { key: 'categoria_id', norm: normalizeNumber },
+    { key: 'area_id', norm: normalizeNumber },
     { key: 'validade', norm: normalizeNumber },
     { key: 'vencimento_fim_mes', norm: (v: unknown) => (v ? 1 : 0) },
     { key: 'carga_horaria_inicial', norm: normalizeNumber },
