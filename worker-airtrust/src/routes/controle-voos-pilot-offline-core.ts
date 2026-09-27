@@ -574,7 +574,7 @@ pilotOffline.get(
       ...entry,
       tem_anexo: Boolean(anexo_r2_key),
     }));
-    const documentos = (documentsResult.results || []).flatMap((row) => {
+    const documentHistory = (documentsResult.results || []).flatMap((row) => {
       try {
         const metadata = JSON.parse(String(row.metadata_json || '{}')) as Record<string, unknown>;
         const type = String(metadata.document_type || '').toUpperCase();
@@ -592,6 +592,10 @@ pilotOffline.get(
       } catch {
         return [];
       }
+    });
+    const documentos = (['WEATHER_REPORT', 'PLANO_VOO'] as const).flatMap((type) => {
+      const current = documentHistory.find((document) => document.type === type);
+      return current ? [current] : [];
     });
     const generatedAt = new Date().toISOString();
     const [workspace, edbShadow, routePresentationMap] = await Promise.all([

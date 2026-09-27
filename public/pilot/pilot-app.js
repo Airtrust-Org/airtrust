@@ -748,19 +748,200 @@ async function authenticatedBlob(path, options = {}) {
   return response.blob();
 }
 
-async function openFlightDocument(documentEventId) {
-  const flightId = activePackageData()?.voo?.id;
-  if (!flightId || !documentEventId) return;
+function flightDocumentLabel(type) {
+  return type === 'WEATHER_REPORT' ? 'Weather Report' : 'Planejamento de voo atualizado';
+}
+
+function currentFlightDocuments(packageData) {
+  const documents = Array.isArray(packageData?.workspace?.planning?.documentos)
+    ? packageData.workspace.planning.documentos
+    : [];
+  const sorted = [...documents].sort((left, right) => Number(right?.id || 0) - Number(left?.id || 0));
+  return ['WEATHER_REPORT', 'PLANO_VOO'].flatMap((type) => {
+    const current = sorted.find((document) => String(document?.type || '').toUpperCase() === type);
+    return current ? [current] : [];
+  });
+}
+
+function flightDocumentCacheKey(flightId, documentEventId) {
+  return 'flight:' + String(flightId) + ':document:' + String(documentEventId);
+}
+
+async function sha256Hex(bytes) {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+function documentAvailabilityMap(record) {
+  const states = Array.isArray(record?.value?.offline_documents) ? record.value.offline_documents : [];
+  return Object.fromEntries(states.map((state) => [String(state.id), state]));
+}
+
+async function verifyCachedFlightDocument(state, document) {
+  if (!state?.available_offline || !state?.cache_key) return null;
+  const cached = await vault.getBytes('attachments', state.cache_key);
+  if (!cached?.bytes?.byteLength) return null;
+  if (Number(document?.size || 0) > 0 && cached.bytes.byteLength !== Number(document.size)) return null;
+  const expectedHash = String(document?.content_hash || '').trim().toLowerCase();
+  if (expectedHash && (await sha256Hex(cached.bytes)) !== expectedHash) return null;
+  return cached;
+}
+
+async function cacheFlightDocumentForOffline(flightId, document, existingRecord, options = {}) {
+  const cacheKey = flightDocumentCacheKey(flightId, document.id);
+  const priorStates = Array.isArray(existingRecord?.value?.offline_documents)
+    ? existingRecord.value.offline_documents
+    : [];
+  const prior = priorStates.find(
+    (state) =>
+      Number(state?.id) === Number(document.id) &&
+      String(state?.content_hash || '') === String(document?.content_hash || ''),
+  );
+
   try {
+    const reusable = await verifyCachedFlightDocument(prior, document);
+    if (reusable) {
+      return { ...prior, available_offline: true, cache_key: cacheKey };
+    }
+  } catch {}
+
+  try {
+    const blob = await authenticatedBlob(
+      '/controle-voos/voos/' + encodeURIComponent(String(flightId)) + '/documentos/' + encodeURIComponent(String(document.id)),
+      options,
+    );
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    if (Number(document?.size || 0) > 0 && bytes.byteLength !== Number(document.size)) {
+      throw new Error('Tamanho do documento diverge do registro da Coordenação.');
+    }
+    const digest = await sha256Hex(bytes);
+    const expectedHash = String(document?.content_hash || '').trim().toLowerCase();
+    if (expectedHash && digest !== expectedHash) {
+      throw new Error('Integridade do documento não confere.');
+    }
+
+    await vault.putBytes('attachments', cacheKey, bytes, 1);
+    const persisted = await vault.getBytes('attachments', cacheKey);
+    if (!persisted?.bytes?.byteLength || persisted.bytes.byteLength !== bytes.byteLength) {
+      throw new Error('Falha ao confirmar a cópia local cifrada do documento.');
+    }
+    if (expectedHash && (await sha256Hex(persisted.bytes)) !== expectedHash) {
+      throw new Error('Falha na verificação local do documento.');
+    }
+
+    return {
+      id: Number(document.id),
+      type: String(document.type),
+      label: String(document.label || flightDocumentLabel(document.type)),
+      file_name: String(document.file_name || 'documento'),
+      content_type: String(document.content_type || blob.type || 'application/pdf'),
+      size: bytes.byteLength,
+      content_hash: expectedHash || digest,
+      cache_key: cacheKey,
+      available_offline: true,
+      cached_at: new Date().toISOString(),
+      cache_error: null,
+    };
+  } catch {
+    return {
+      id: Number(document.id),
+      type: String(document.type),
+      label: String(document.label || flightDocumentLabel(document.type)),
+      file_name: String(document.file_name || 'documento'),
+      content_type: String(document.content_type || 'application/pdf'),
+      size: Number(document.size || 0),
+      content_hash: String(document.content_hash || ''),
+      cache_key: cacheKey,
+      available_offline: false,
+      cached_at: null,
+      cache_error: 'CACHE_FAILED',
+    };
+  }
+}
+
+async function cacheFlightDocumentsForOffline(flightId, packageData, existingRecord, options = {}) {
+  const documents = currentFlightDocuments(packageData);
+  return Promise.all(
+    documents.map((document) =>
+      cacheFlightDocumentForOffline(flightId, document, existingRecord, options),
+    ),
+  );
+}
+
+function changedFlightDocumentLabels(previousPackage, nextPackage) {
+  const previous = currentFlightDocuments(previousPackage);
+  const next = currentFlightDocuments(nextPackage);
+  return next
+    .filter((document) => {
+      const prior = previous.find((candidate) => candidate.type === document.type);
+      if (!prior) return true;
+      return (
+        Number(prior.id) !== Number(document.id) ||
+        String(prior.content_hash || '') !== String(document.content_hash || '')
+      );
+    })
+    .map((document) => flightDocumentLabel(document.type));
+}
+
+function offlineDocumentPreparationSummary(states) {
+  const byType = new Map(states.map((state) => [String(state.type), state]));
+  return ['WEATHER_REPORT', 'PLANO_VOO']
+    .map((type) => {
+      const state = byType.get(type);
+      if (!state) return flightDocumentLabel(type) + ': ainda não recebido pela Coordenação';
+      return state.available_offline
+        ? flightDocumentLabel(type) + ': disponível offline'
+        : flightDocumentLabel(type) + ': não pôde ser salvo offline';
+    })
+    .join(' · ');
+}
+
+function openFlightDocumentBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener,noreferrer');
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+async function openFlightDocument(documentEventId) {
+  const packageData = activePackageData();
+  const flightId = packageData?.voo?.id;
+  if (!flightId || !documentEventId) return;
+  const document = currentFlightDocuments(packageData).find(
+    (candidate) => Number(candidate.id) === Number(documentEventId),
+  );
+  const state = documentAvailabilityMap(activePackageRecord)[String(documentEventId)] || null;
+
+  try {
+    if (document && state?.available_offline) {
+      const cached = await verifyCachedFlightDocument(state, document);
+      if (cached) {
+        openFlightDocumentBlob(
+          new Blob([cached.bytes], { type: document.content_type || state.content_type || 'application/pdf' }),
+        );
+        return;
+      }
+    }
+
+    if (!navigator.onLine) {
+      setSessionMessage(
+        (document?.label || 'Documento') +
+          ' não estava disponível neste tablet quando o voo foi preparado. Isso não bloqueia o voo.',
+        'attention',
+      );
+      return;
+    }
+
     const blob = await authenticatedBlob(
       '/controle-voos/voos/' + encodeURIComponent(String(flightId)) + '/documentos/' + encodeURIComponent(String(documentEventId)),
       { allowDuringFlight: true },
     );
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank', 'noopener,noreferrer');
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    openFlightDocumentBlob(blob);
   } catch (error) {
-    setSessionMessage(error instanceof Error ? error.message : 'Falha ao abrir documento.', 'error', error instanceof PilotOnlineRequestError && error.status === 401);
+    setSessionMessage(
+      error instanceof Error ? error.message : 'Falha ao abrir documento.',
+      'error',
+      error instanceof PilotOnlineRequestError && error.status === 401,
+    );
   }
 }
 
@@ -1157,6 +1338,15 @@ async function prepareFlightPackage(flightId, options = {}) {
 
     const recordId = 'flight:' + flightId;
     const existing = await vault.getJson('flight_packages', recordId);
+    const documentChanges = existing
+      ? changedFlightDocumentLabels(existing.value?.package, packageData)
+      : [];
+    const offlineDocuments = await cacheFlightDocumentsForOffline(
+      flightId,
+      packageData,
+      existing,
+      options,
+    );
     const nextRevision = Number(existing?.localRevision || 0) + 1;
     const preparedAt = new Date().toISOString();
 
@@ -1164,9 +1354,10 @@ async function prepareFlightPackage(flightId, options = {}) {
       'flight_packages',
       recordId,
       {
-        schema_version: 1,
+        schema_version: 2,
         prepared_at: preparedAt,
         package: packageData,
+        offline_documents: offlineDocuments,
       },
       nextRevision,
     );
@@ -1182,8 +1373,14 @@ async function prepareFlightPackage(flightId, options = {}) {
       throw new Error('Falha na verificação local do pacote recém-gravado.');
     }
 
+    const updateNotice = documentChanges.length > 0
+      ? 'Atualização da Coordenação recebida: ' + documentChanges.join(' e ') + '. '
+      : '';
     setSessionMessage(
-      'Voo preparado neste tablet. Você pode continuar mesmo se a conexão cair.',
+      updateNotice +
+        'Voo preparado neste tablet. ' +
+        offlineDocumentPreparationSummary(offlineDocuments) +
+        '. A ausência de documentos não bloqueia o voo.',
       'ok',
     );
     await loadCachedPackages();
@@ -4420,7 +4617,10 @@ function openPackageRecord(record, initialWorkspaceTab = 'summary') {
     formatTimestamp(record.value.prepared_at) +
     ' · consulta read-only';
   flightDetail.replaceChildren();
-  renderPilotWorkspace(pilotWorkspaceView, packageData, initialWorkspaceTab, { openFlightDocument });
+  renderPilotWorkspace(pilotWorkspaceView, packageData, initialWorkspaceTab, {
+    openFlightDocument,
+    documentAvailability: documentAvailabilityMap(record),
+  });
 
   appendInfoGrid(flightDetail, [
     ['Status do voo', voo.status],
