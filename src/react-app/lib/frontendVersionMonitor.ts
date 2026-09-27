@@ -3,10 +3,10 @@ import {
   readServedFrontendVersionFromDocument,
 } from '@/react-app/config/deployment';
 import { hardRefreshApp } from '@/react-app/lib/hardRefresh';
+import { isReloadProtectedInteractivePath } from '@/react-app/lib/reloadProtection';
 
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
 const LMS_PLAYER_PATH = /^\/lms\/player\//;
-const FRMS_CHECKIN_PATH = /^\/frms\/(?:checkin|fadiga-checkin)(?:\/|$)/;
 
 type MonitorWindow = Pick<Window, 'addEventListener' | 'removeEventListener' | 'setInterval' | 'clearInterval' | 'location'>;
 type MonitorDocument = Pick<Document, 'visibilityState' | 'addEventListener' | 'removeEventListener' | 'querySelector'>;
@@ -21,7 +21,7 @@ interface FrontendVersionMonitorDeps {
 }
 
 function shouldSkipAutomaticRefresh(pathname: string): boolean {
-  return LMS_PLAYER_PATH.test(pathname) || FRMS_CHECKIN_PATH.test(pathname);
+  return LMS_PLAYER_PATH.test(pathname) || isReloadProtectedInteractivePath(pathname);
 }
 
 export function installFrontendVersionMonitor(deps: FrontendVersionMonitorDeps = {}): () => void {
