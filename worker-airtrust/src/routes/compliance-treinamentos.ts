@@ -18,6 +18,11 @@ import {
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
 } from '../services/employee-sector-access';
+import {
+  normalizeAircraftModel,
+  parseLegacyAircraftModels,
+  resolveEmployeeAircraftModels,
+} from '../services/training-compliance-aircraft';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -131,14 +136,6 @@ function normalizeEnum<T extends readonly string[]>(
   return (allowed as readonly string[]).includes(normalized) ? (normalized as T[number]) : fallback;
 }
 
-export function normalizeAircraftModel(value: unknown): string | null {
-  const normalized = String(value ?? '')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .toUpperCase();
-  return normalized || null;
-}
-
 function specificity(scope: Scope): number {
   if (scope === 'FUNCIONARIO') return 50;
   if (scope === 'SETOR_FUNCAO') return 40;
@@ -204,6 +201,7 @@ async function loadEmployees(db: D1Database, empresaId: number): Promise<Employe
               ${cols.has('telefone') ? 'f.telefone' : 'NULL'} AS telefone,
               ${hasSetorId ? 'f.setor_id' : 'NULL'} AS setor_id,
               ${hasFuncaoId ? 'f.funcao_id' : 'NULL'} AS funcao_id,
+              ${cols.has('aeronave') ? 'f.aeronave' : 'NULL'} AS aeronave_legacy,
               s.nome AS setor_nome,
               fn.nome AS funcao_nome
          FROM funcionarios f
@@ -216,12 +214,17 @@ async function loadEmployees(db: D1Database, empresaId: number): Promise<Employe
         ORDER BY f.nome ASC`,
     )
     .bind(empresaId)
-    .all<Omit<Employee, 'aeronaves_modelos'>>();
+    .all<Omit<Employee, 'aeronaves_modelos'> & { aeronave_legacy: string | null }>();
 
-  const employees: Employee[] = (results || []).map((row) => ({
-    ...row,
-    aeronaves_modelos: [],
-  }));
+  const legacyAircraftByEmployee = new Map<number, string[]>();
+  const employees: Employee[] = (results || []).map((row) => {
+    legacyAircraftByEmployee.set(Number(row.id), parseLegacyAircraftModels(row.aeronave_legacy));
+    const { aeronave_legacy: _legacyAircraft, ...employee } = row;
+    return {
+      ...employee,
+      aeronaves_modelos: [],
+    };
+  });
   if (!(await tableExists(db, 'funcionarios_aeronaves')) || !(await tableExists(db, 'aeronaves'))) {
     return employees;
   }
@@ -259,7 +262,12 @@ async function loadEmployees(db: D1Database, empresaId: number): Promise<Employe
     if (!employee || !model || employee.aeronaves_modelos.includes(model)) continue;
     employee.aeronaves_modelos.push(model);
   }
-  for (const employee of employees) employee.aeronaves_modelos.sort((a, b) => a.localeCompare(b));
+  for (const employee of employees) {
+    employee.aeronaves_modelos = resolveEmployeeAircraftModels(
+      employee.aeronaves_modelos,
+      legacyAircraftByEmployee.get(employee.id)?.join(' / ') || null,
+    );
+  }
   return employees;
 }
 
