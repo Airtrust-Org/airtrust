@@ -151,7 +151,7 @@ export interface FrmsOperationalSnapshotItem {
   operational_data_source?: 'CONTROLE_VOOS' | 'SIGVOOS' | 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS' | 'AUSENTE';
   snapshot_status: FrmsOperationalSnapshotStatus;
   fortnight_indicator: FrmsFortnightIndicator | null;
-  recovery_credit_points?: number;
+  recovery_credit_points?: number | null;
   recovery_state?: string | null;
   recovery_activity_type?: string | null;
 
