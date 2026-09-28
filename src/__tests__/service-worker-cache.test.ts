@@ -54,6 +54,30 @@ describe('service worker cache guard', () => {
     expect(indexHtmlSource).toContain('window.location.replace(currentUrl.toString());');
   });
 
+  it('recupera bootstrap branco em qualquer rota sem apagar a sessao autenticada', () => {
+    const bootStart = indexHtmlSource.indexOf("const BOOT_RECOVERY_KEY = 'airtrust-app-boot-recovery-v1';");
+    const bootEnd = indexHtmlSource.indexOf('</script>', bootStart);
+    const bootSource = indexHtmlSource.slice(bootStart, bootEnd);
+
+    expect(bootStart).toBeGreaterThanOrEqual(0);
+    expect(bootSource).toContain("const BOOT_RECOVERY_PARAM = 'airtrust_boot_recovery';");
+    expect(bootSource).toContain('const BOOT_TIMEOUT_MS = 7000;');
+    expect(bootSource).toContain('BOOT_ERROR_PATTERN');
+    expect(bootSource).toContain("window.addEventListener(\n          'error'");
+    expect(bootSource).toContain("window.addEventListener('unhandledrejection'");
+    expect(bootSource).toContain('root.childElementCount === 0');
+    expect(bootSource).toContain('isCriticalAssetTarget(event.target)');
+    expect(bootSource).toContain('window.location.origin');
+    expect(bootSource).toContain("!name.startsWith('airtrust-pilot-')");
+    expect(bootSource).toContain("!new URL(registration.scope).pathname.startsWith('/pilot/')");
+    expect(bootSource).toContain('nextUrl.searchParams.set(BOOT_RECOVERY_PARAM, buildVersion);');
+    expect(bootSource).toContain("title.textContent = 'O AirTrust não conseguiu iniciar';");
+    expect(bootSource).toContain("button.textContent = 'Recarregar AirTrust';");
+    expect(bootSource).not.toContain('airtrust_token');
+    expect(bootSource).not.toContain('airtrust_refresh_token');
+    expect(bootSource).not.toContain('airtrust_user');
+  });
+
   it('versiona URLs de assets por release para escapar de cache HTML envenenado', () => {
     expect(viteConfigSource).toContain('const BUILD_ASSET_TAG =');
     expect(viteConfigSource).toContain('assets/[name]-${BUILD_ASSET_TAG}-[hash].js');
