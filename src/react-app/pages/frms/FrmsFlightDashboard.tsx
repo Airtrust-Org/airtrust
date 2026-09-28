@@ -346,6 +346,7 @@ export default function FrmsFlightDashboard() {
   );
 
   const firstLoad = snapshot.loading && snapshot.data.length === 0 && !snapshot.lastUpdatedAt;
+  const snapshotUnavailable = Boolean(snapshot.error && snapshot.data.length === 0);
 
   return (
     <AppLayout>
@@ -401,13 +402,21 @@ export default function FrmsFlightDashboard() {
         </div>
 
         <section className="grid gap-3 sm:grid-cols-3" aria-label="Resumo operacional">
-          <MetricCard label="Atenção" value={counts.BLOQUEIO} helper="situações que requerem atenção antes da decisão operacional" loading={firstLoad} />
-          <MetricCard label="Avaliar" value={counts.DECISAO} helper="situações que merecem análise ou ação da coordenação" loading={firstLoad} />
-          <MetricCard label="Verificar" value={counts.CONFIRMAR} helper="informações pendentes, estimadas ou que precisam ser confirmadas" loading={firstLoad} />
+          <MetricCard label="Atenção" value={counts.BLOQUEIO} helper="situações que requerem atenção antes da decisão operacional" loading={firstLoad || snapshotUnavailable} />
+          <MetricCard label="Avaliar" value={counts.DECISAO} helper="situações que merecem análise ou ação da coordenação" loading={firstLoad || snapshotUnavailable} />
+          <MetricCard label="Verificar" value={counts.CONFIRMAR} helper="informações pendentes, estimadas ou que precisam ser confirmadas" loading={firstLoad || snapshotUnavailable} />
         </section>
         <p className="text-sm text-slate-500">
-          <span className="font-semibold text-slate-700 dark:text-slate-200">{firstLoad ? '—' : counts.NORMAL}</span>{' '}
-          pessoa(s) sem pendência no recorte atual.
+          {snapshotUnavailable ? (
+            <span className="font-semibold text-amber-700 dark:text-amber-300">
+              Situação operacional indisponível — não interpretar como zero pendências.
+            </span>
+          ) : (
+            <>
+              <span className="font-semibold text-slate-700 dark:text-slate-200">{firstLoad ? '—' : counts.NORMAL}</span>{' '}
+              pessoa(s) sem pendência no recorte atual.
+            </>
+          )}
         </p>
 
         {snapshot.unauthorized ? (

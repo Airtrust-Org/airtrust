@@ -305,6 +305,24 @@ describe('FrmsDashboard simplificado', () => {
     expect(drawer.queryByRole('link', { name: 'Abrir FRAT' })).not.toBeInTheDocument();
   });
 
+  it('não apresenta zeros como situação válida quando o snapshot inicial falha', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(
+      state({
+        data: [],
+        summary: null,
+        error: 'Erro interno do servidor',
+        lastUpdatedAt: null,
+      }),
+    );
+
+    renderDashboard('/frms?data=2026-09-27');
+
+    expect(screen.getByText(/Situação operacional indisponível — não interpretar como zero pendências/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Situação FRMS indisponível/i })).toBeInTheDocument();
+    expect(screen.queryByText(/0 pessoa\(s\) sem pendência/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
+  });
+
   it('mantém o último estado válido visível quando a atualização falha', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(state({ error: 'falha de rede' }));
 
