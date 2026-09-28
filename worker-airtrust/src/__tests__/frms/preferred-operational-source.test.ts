@@ -30,17 +30,33 @@ const sig: LegacySigvoosOperationalJourney = {
 describe('FRMS preferred operational source', () => {
   it('prefere Controle de Voos sem somar novamente SIGVOOS', () => {
     const [row] = resolvePreferredOperationalJourneys([cv()], [sig]);
-    expect(row).toMatchObject({ operational_data_source: 'CONTROLE_VOOS', hora_apresentacao: '07:00', hora_termino: '12:30', horas_voo_minutos: 120, duracao_jornada_minutos: 330 });
+    expect(row).toMatchObject({
+      operational_data_source: 'CONTROLE_VOOS',
+      hora_apresentacao: '07:00', // acionamento 07:30 - 30 min
+      hora_termino: '10:45', // corte 10:15 + 30 min
+      horas_voo_minutos: 120,
+      duracao_jornada_minutos: 225,
+    });
   });
 
   it('usa SIGVOOS como fallback quando não há dado interno no Controle de Voos', () => {
     const [row] = resolvePreferredOperationalJourneys([], [sig]);
-    expect(row).toMatchObject({ operational_data_source: 'SIGVOOS', horas_voo_minutos: 150 });
+    expect(row).toMatchObject({
+      operational_data_source: 'SIGVOOS',
+      hora_apresentacao: '06:40',
+      hora_termino: '13:20',
+      horas_voo_minutos: 150,
+    });
   });
 
   it('faz fallback por campo sem apagar valores já preenchidos no Controle de Voos', () => {
     const [row] = resolvePreferredOperationalJourneys([cv({ horaDispensa: null, horaMotorDesligado: null, horaPouso: null, minutosVoo: 0, minutosTotal: 0 })], [sig]);
-    expect(row).toMatchObject({ operational_data_source: 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS', hora_apresentacao: '07:00', hora_termino: '13:00', horas_voo_minutos: 150 });
+    expect(row).toMatchObject({
+      operational_data_source: 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS',
+      hora_apresentacao: '07:00',
+      hora_termino: '13:20',
+      horas_voo_minutos: 150,
+    });
   });
 
   it('trata linha SIGVOOS importada no Controle de Voos como fallback, não como primária', () => {

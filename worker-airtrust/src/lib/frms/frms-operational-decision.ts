@@ -104,6 +104,40 @@ const ALERT_PRIORIDADE: FrmsOperationalSnapshotAlertCode[] = [
   'SONO_ESTIMADO',         // dado estimado, menor confiança
 ];
 
+const COMPLIANCE_REASON_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  ROLLING_REGULATORY_EVIDENCE_MISSING:
+    'Histórico móvel de voo e jornada ainda incompleto para a avaliação regulatória',
+  CALENDAR_YEAR_FLIGHT_EVIDENCE_MISSING:
+    'Horas de voo do ano-calendário ainda incompletas para a avaliação regulatória',
+  REST_EVIDENCE_UNKNOWN:
+    'Evidência de repouso anterior ainda insuficiente para a avaliação regulatória',
+  WORK_TIME_EVIDENCE_MISSING:
+    'Histórico de jornada e trabalho ainda incompleto para a avaliação regulatória',
+  ACT_CDS_MISSION_DAY_EVIDENCE_MISSING:
+    'Dia do período operacional ainda não pôde ser confirmado',
+  ACT_CDS_MISSION_PERIOD_EVIDENCE_MISSING:
+    'Período operacional ainda não pôde ser confirmado',
+  ACT_CDS_EFFECTIVE_DAYS_AT_LOCATION_EVIDENCE_INCOMPLETE:
+    'Dias efetivos no local ainda não estão completamente confirmados',
+  ACT_CDS_POST_MISSION_REST_EVIDENCE_INCOMPLETE:
+    'Repouso após o período operacional ainda não está completamente confirmado',
+  SIGVOOS_EXTERNAL_EVIDENCE_PENDING:
+    'Evidência externa de voo ainda está pendente de confirmação',
+  HELICOPTER_LIMITS_NOT_APPLICABLE_TO_PROFILE:
+    'Limites específicos de helicóptero não se aplicam ao perfil regulatório configurado',
+});
+
+function humanizeComplianceReason(reason: string): string {
+  const normalized = String(reason || '').trim();
+  if (!normalized) return 'Evidência regulatória incompleta';
+  const mapped = COMPLIANCE_REASON_LABELS[normalized];
+  if (mapped) return mapped;
+  // Motivos já produzidos em linguagem humana são preservados. Códigos técnicos
+  // desconhecidos nunca vazam para a fila operacional.
+  if (!/^[A-Z][A-Z0-9_]{2,}$/.test(normalized)) return normalized;
+  return 'Evidência regulatória incompleta — revisar dados de origem';
+}
+
 const MOTIVO_POR_ALERTA: Record<FrmsOperationalSnapshotAlertCode, string> = {
   CHECKIN_CRITICO: 'Check-in indica fadiga crítica',
   EFETIVIDADE_BAIXA: 'Efetividade cognitiva reduzida',
@@ -187,10 +221,11 @@ export function deriveFrmsOperationalDecision(
   // 3. Perfil existe, mas a evidência normativa obrigatória está incompleta.
   if (input.compliance_avaliavel === false) {
     const reasons = input.compliance_unknown_reasons?.filter(Boolean) ?? [];
+    const displayReasons = [...new Set(reasons.map(humanizeComplianceReason))];
     return {
       estado_operacional: 'NAO_AVALIADO',
-      motivos_principais: reasons.length
-        ? reasons.slice(0, 3)
+      motivos_principais: displayReasons.length
+        ? displayReasons.slice(0, 3)
         : ['Evidência normativa insuficiente para concluir compliance'],
       acao_recomendada: 'COMPLETAR_INFORMACAO_NECESSARIA',
       acao_recomendada_texto: ACAO_TEXTO_POR_ESTADO.NAO_AVALIADO,

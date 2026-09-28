@@ -143,7 +143,7 @@ type FlightSummary = {
   sectorCount: number;
   landingCount: number;
   canonicalFlightMinutes: number;
-  source: 'SIGVOOS' | 'NONE_FOUND';
+  source: 'CONTROLE_VOOS' | 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS' | 'SIGVOOS' | 'NONE_FOUND';
 };
 
 function nowSql(): string {
@@ -220,17 +220,22 @@ async function getFlightSummary(
 ): Promise<FlightSummary> {
   let sectorCount = 0;
   let landingCount = 0;
+  let nativeControleVoosCount = 0;
+  let importedSigvoosCount = 0;
   try {
     const cv = await db
       .prepare(
         `SELECT
            COUNT(*) AS sector_count,
-           COALESCE(SUM(pousos_diurnos + pousos_noturnos), 0) AS landing_count
+           COALESCE(SUM(pousos_diurnos + pousos_noturnos), 0) AS landing_count,
+           COALESCE(SUM(CASE WHEN UPPER(COALESCE(origem_dados,'')) = 'SIGVOOS' THEN 0 ELSE 1 END), 0) AS native_count,
+           COALESCE(SUM(CASE WHEN UPPER(COALESCE(origem_dados,'')) = 'SIGVOOS' THEN 1 ELSE 0 END), 0) AS imported_count
          FROM (
            SELECT DISTINCT
              e.id,
              COALESCE(e.pousos_diurnos, 0) AS pousos_diurnos,
-             COALESCE(e.pousos_noturnos, 0) AS pousos_noturnos
+             COALESCE(e.pousos_noturnos, 0) AS pousos_noturnos,
+             e.origem_dados AS origem_dados
            FROM cv_voo_tripulantes t
            JOIN cv_voos v
              ON v.id = t.voo_id
@@ -247,9 +252,11 @@ async function getFlightSummary(
          )`,
       )
       .bind(empresaId, funcionarioId, referenceDate)
-      .first<{ sector_count: number; landing_count: number }>();
+      .first<{ sector_count: number; landing_count: number; native_count: number; imported_count: number }>();
     sectorCount = Number(cv?.sector_count || 0);
     landingCount = Number(cv?.landing_count || 0);
+    nativeControleVoosCount = Number(cv?.native_count || 0);
+    importedSigvoosCount = Number(cv?.imported_count || 0);
   } catch {
     // Older environments may not have CV tables. Canonical jornada check below still applies.
   }
@@ -273,13 +280,15 @@ async function getFlightSummary(
   }
 
   const detected = sectorCount > 0 || canonicalFlightMinutes > 0;
-  return {
-    detected,
-    sectorCount,
-    landingCount,
-    canonicalFlightMinutes,
-    source: detected ? 'SIGVOOS' : 'NONE_FOUND',
-  };
+  const source: FlightSummary['source'] =
+    nativeControleVoosCount > 0
+      ? importedSigvoosCount > 0 || canonicalFlightMinutes > 0
+        ? 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS'
+        : 'CONTROLE_VOOS'
+      : importedSigvoosCount > 0 || canonicalFlightMinutes > 0
+        ? 'SIGVOOS'
+        : 'NONE_FOUND';
+  return { detected, sectorCount, landingCount, canonicalFlightMinutes, source };
 }
 
 async function countPriorQualifyingNights(
@@ -601,7 +610,7 @@ router.get('/context', async (c) => {
       requires_activity_classification: !flight.detected && !activity,
       activity,
       assessment,
-      prompt_reason: flight.detected ? 'FLIGHT_DETECTED' : 'NO_FLIGHT_FOUND_IN_SIGVOOS',
+      prompt_reason: flight.detected ? 'FLIGHT_DETECTED' : 'NO_FLIGHT_FOUND_IN_OPERATIONAL_SOURCES',
     },
   });
 });
@@ -624,7 +633,7 @@ router.post('/activity', async (c) => {
       {
         success: false,
         error: 'flight_detected_for_reference_date',
-        message: 'SIGVOOS possui atividade de voo nesta data; a classificação de dia sem voo foi rejeitada.',
+        message: 'As fontes operacionais possuem atividade de voo nesta data; a classificação de dia sem voo foi rejeitada.',
         flight,
       },
       409,
@@ -635,7 +644,7 @@ router.post('/activity', async (c) => {
       {
         success: false,
         error: 'source_gap_not_applicable',
-        message: 'O voo já está presente no SIGVOOS; não há discrepância de fonte para registrar.',
+        message: 'O voo já está presente nas fontes operacionais; não há discrepância de fonte para registrar.',
         flight,
       },
       409,

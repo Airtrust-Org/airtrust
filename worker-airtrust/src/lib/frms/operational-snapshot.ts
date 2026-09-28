@@ -178,6 +178,8 @@ export interface BuildOperationalSnapshotInput {
     checkins: CheckinSnapshotRow[];
     effectiveness: EffectivenessSnapshotRow[];
     activities?: FrmsActivitySnapshotRow[];
+    /** Presença diária na quinzena/período operacional, mesmo sem atividade no dia. */
+    roster?: Array<{ data_operacional: string; funcionario_id: number }>;
     funcionarios: FuncionarioSnapshotRow[];
   };
   filters?: FrmsOperationalSnapshotFilters;
@@ -740,6 +742,9 @@ export function buildFrmsOperationalSnapshot(
     ...checkinMap.keys(),
     ...effectivenessMap.keys(),
     ...activityMap.keys(),
+    ...(input.rows.roster ?? []).map(
+      (row) => `${row.data_operacional}::${asNumber(row.funcionario_id)}`,
+    ),
   ]);
 
   const items: FrmsOperationalSnapshotItem[] = [];
@@ -1242,7 +1247,13 @@ async function loadOperationalSnapshotRows(
                   1 AS source_priority,
                   'ALLOCATION' AS source_kind
              FROM escala_alocacoes ea
-             JOIN funcionarios f ON f.id = ea.funcionario_id AND f.empresa_id = ? AND f.deleted_at IS NULL
+             JOIN funcionarios f
+               ON f.id = ea.funcionario_id
+              AND f.empresa_id = ?
+              AND f.deleted_at IS NULL
+              AND COALESCE(f.ativo, 1) = 1
+              AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+              AND UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE')
              LEFT JOIN escalas_quinzenas eq ON eq.id = ea.quinzena_id AND eq.empresa_id = f.empresa_id AND eq.deleted_at IS NULL
             WHERE ea.deleted_at IS NULL
               AND LOWER(COALESCE(ea.status, '')) <> 'cancelado'
@@ -1261,11 +1272,20 @@ async function loadOperationalSnapshotRows(
                 WHEN 'segunda' THEN 2 WHEN '2' THEN 2 WHEN '2q' THEN 2 WHEN 'q2' THEN 2
                 WHEN '2ª' THEN 2 WHEN '2a' THEN 2 WHEN 'segunda quinzena' THEN 2 ELSE 0 END
             WHERE f.empresa_id = ? AND f.deleted_at IS NULL
+              AND COALESCE(f.ativo, 1) = 1
+              AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+              AND UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE')
               AND eq.data_inicio <= ? AND eq.data_fim >= ?
            UNION ALL
            SELECT CAST(fq.tripulante_id AS INTEGER), fq.data_inicio_embarque, fq.data_fim_embarque, 3, 'FRMS_LEGACY'
              FROM frms_escala_quinzenal fq
-             JOIN funcionarios f ON f.id = CAST(fq.tripulante_id AS INTEGER) AND f.empresa_id = ? AND f.deleted_at IS NULL
+             JOIN funcionarios f
+               ON f.id = CAST(fq.tripulante_id AS INTEGER)
+              AND f.empresa_id = ?
+              AND f.deleted_at IS NULL
+              AND COALESCE(f.ativo, 1) = 1
+              AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+              AND UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE')
             WHERE fq.deleted_at IS NULL
               AND fq.status_ciclo IN ('ATIVO','ENCERRADO')
               AND fq.data_inicio_embarque <= ? AND fq.data_fim_embarque >= ?
@@ -1549,7 +1569,31 @@ export function deriveCostaDoSolMissionEvidenceForDate(
   };
 }
 
-function collectOperationalKeys(rows: OperationalSnapshotRows): string[] {
+function buildMissionRosterRows(
+  missionPeriods: readonly MissionPeriodRow[],
+  start: string,
+  end: string,
+): Array<{ data_operacional: string; funcionario_id: number }> {
+  const byKey = new Map<string, { data_operacional: string; funcionario_id: number }>();
+  for (const period of missionPeriods) {
+    const funcionarioId = asNumber(period.funcionario_id);
+    if (funcionarioId <= 0) continue;
+    const rangeStart = maxIso(start, period.data_inicio_embarque);
+    const rangeEnd = minIso(end, period.data_fim_embarque);
+    if (rangeStart > rangeEnd) continue;
+    for (let date = rangeStart; date <= rangeEnd; date = addDaysIso(date, 1)) {
+      const key = `${date}::${funcionarioId}`;
+      byKey.set(key, { data_operacional: date, funcionario_id: funcionarioId });
+    }
+  }
+  return [...byKey.values()];
+}
+
+function collectOperationalKeys(
+  rows: OperationalSnapshotRows,
+  start?: string,
+  end?: string,
+): string[] {
   const keys = new Set<string>();
   const add = (date: string, funcionarioId: number) => keys.add(`${date}::${funcionarioId}`);
   for (const row of rows.escalas) add(row.data_operacional, asNumber(row.funcionario_id));
@@ -1557,6 +1601,11 @@ function collectOperationalKeys(rows: OperationalSnapshotRows): string[] {
   for (const row of rows.checkins) add(row.data_operacional, asNumber(row.funcionario_id));
   for (const row of rows.effectiveness) add(row.data_operacional, asNumber(row.funcionario_id));
   for (const row of rows.activities) add(row.data_operacional, asNumber(row.funcionario_id));
+  if (start && end) {
+    for (const row of buildMissionRosterRows(rows.missionPeriods, start, end)) {
+      add(row.data_operacional, row.funcionario_id);
+    }
+  }
   return [...keys];
 }
 
@@ -1630,6 +1679,8 @@ export async function listFrmsOperationalSnapshot(
   for (const row of requestedRows.effectiveness)
     requestedKeys.add(`${row.data_operacional}::${asNumber(row.funcionario_id)}`);
   for (const row of requestedRows.activities)
+    requestedKeys.add(`${row.data_operacional}::${asNumber(row.funcionario_id)}`);
+  for (const row of buildMissionRosterRows(requestedRows.missionPeriods, requestedStart, requestedEnd))
     requestedKeys.add(`${row.data_operacional}::${asNumber(row.funcionario_id)}`);
 
   // Âncoras resolvidas (dia/total) para os dias solicitados — reaproveitadas depois
@@ -1717,7 +1768,13 @@ export async function listFrmsOperationalSnapshot(
     ]),
   );
   const regulatoryComplianceByKey: Record<string, RegulatoryComplianceResult> = {};
-  for (const key of collectOperationalKeys(contextRows)) {
+  const complianceKeys = new Set(collectOperationalKeys(contextRows));
+  // Presença da quinzena só precisa ser sintetizada na janela solicitada; o
+  // histórico continua vindo de evidências reais (voo/jornada/check-in/atividade).
+  for (const row of buildMissionRosterRows(contextRows.missionPeriods, requestedStart, requestedEnd)) {
+    complianceKeys.add(`${row.data_operacional}::${row.funcionario_id}`);
+  }
+  for (const key of complianceKeys) {
     const [date, funcionarioRaw] = key.split('::');
     const funcionarioId = Number(funcionarioRaw);
     const legalSummary = legalByMonthCrew.get(date.slice(0, 7))?.get(funcionarioId) ?? null;
@@ -1838,6 +1895,7 @@ export async function listFrmsOperationalSnapshot(
       checkins: contextRows.checkins,
       effectiveness: contextRows.effectiveness,
       activities: contextRows.activities,
+      roster: buildMissionRosterRows(contextRows.missionPeriods, requestedStart, requestedEnd),
       funcionarios,
     },
     filters: scopedFuncionarioId != null ? { funcionario_id: scopedFuncionarioId } : undefined,

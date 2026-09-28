@@ -57,6 +57,14 @@ function clockMinutes(value: string | null): number | null {
   return h * 60 + m;
 }
 
+function shiftClock(value: string | null | undefined, deltaMinutes: number): string | null {
+  const normalized = normalizeTime(value);
+  const minutes = clockMinutes(normalized);
+  if (minutes == null) return null;
+  const shifted = ((minutes + deltaMinutes) % 1440 + 1440) % 1440;
+  return `${String(Math.floor(shifted / 60)).padStart(2, '0')}:${String(shifted % 60).padStart(2, '0')}`;
+}
+
 function boundaryDuration(start: string | null, end: string | null): number {
   const a = clockMinutes(start);
   const b = clockMinutes(end);
@@ -103,12 +111,17 @@ function aggregateCv(records: readonly ControleVoosOperationalRecord[]): LegacyS
   const usable = records.filter(usableRecord);
   if (usable.length === 0) return null;
   const first = usable[0];
-  const hora_apresentacao = earliest(usable.map((r) => r.horaApresentacao ?? r.horaMotorLigado ?? r.horaDecolagem));
-  const hora_termino = latest(usable.map((r) => r.horaDispensa ?? r.horaMotorDesligado ?? r.horaPouso), hora_apresentacao);
   const hora_primeiro_acionamento = earliest(usable.map((r) => r.horaMotorLigado));
   const hora_primeira_decolagem = earliest(usable.map((r) => r.horaDecolagem));
+  const boundaryAnchor = hora_primeiro_acionamento ?? earliest(usable.map((r) => r.horaApresentacao ?? r.horaDecolagem));
+  const hora_corte_motor = latest(usable.map((r) => r.horaMotorDesligado), boundaryAnchor);
+  const hora_apresentacao =
+    shiftClock(hora_primeiro_acionamento, -30) ??
+    earliest(usable.map((r) => r.horaApresentacao ?? r.horaDecolagem));
+  const hora_termino =
+    shiftClock(hora_corte_motor, 30) ??
+    latest(usable.map((r) => r.horaDispensa ?? r.horaPouso), hora_apresentacao);
   const hora_ultimo_pouso = latest(usable.map((r) => r.horaPouso), hora_apresentacao);
-  const hora_corte_motor = latest(usable.map((r) => r.horaMotorDesligado), hora_apresentacao);
   const horas_voo_minutos = usable.reduce((sum, r) => sum + Math.max(0, Number(r.minutosVoo || 0)), 0);
   const totalMin = usable.reduce((sum, r) => sum + Math.max(0, Number(r.minutosTotal || 0)), 0);
   const duracao_jornada_minutos = boundaryDuration(hora_apresentacao, hora_termino) || totalMin;
@@ -148,8 +161,11 @@ function groupSigvoos(rows: readonly LegacySigvoosOperationalJourney[]) {
   }
   const out = new Map<string, LegacySigvoosOperationalJourney>();
   for (const [key, items] of grouped) {
-    const start = earliest(items.map((r) => r.hora_apresentacao));
-    const end = latest(items.map((r) => r.hora_termino), start);
+    const firstEngineStart = earliest(items.map((r) => r.hora_primeiro_acionamento ?? null));
+    const rawStart = earliest(items.map((r) => r.hora_apresentacao));
+    const cutoff = latest(items.map((r) => r.hora_corte_motor ?? null), firstEngineStart ?? rawStart);
+    const start = shiftClock(firstEngineStart, -30) ?? rawStart;
+    const end = shiftClock(cutoff, 30) ?? latest(items.map((r) => r.hora_termino), start);
     out.set(key, {
       data: String(items[0].data),
       tripulante_id: Number(items[0].tripulante_id),

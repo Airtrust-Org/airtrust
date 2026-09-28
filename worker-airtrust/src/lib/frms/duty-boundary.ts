@@ -1,3 +1,5 @@
+export const CANONICAL_FLIGHT_BOUNDARY_MARGIN_MINUTES = 30;
+
 export interface FrmsDutyBoundaryConfig {
   postFlightCutoffMinutes: number;
   noFlightDutyEndTime: string;
@@ -5,6 +7,8 @@ export interface FrmsDutyBoundaryConfig {
 
 export interface FrmsDutyBoundaryInput {
   presentationTime: string | null;
+  /** Primeiro acionamento real do dia; em voo define a apresentação operacional em D-30 min. */
+  firstEngineStartTime?: string | null;
   hasFlight: boolean;
   lastCutoffTime: string | null;
   config: FrmsDutyBoundaryConfig;
@@ -15,7 +19,13 @@ export interface FrmsDutyBoundaryResult {
   dutyEndTime: string | null;
   durationMinutes: number | null;
   complete: boolean;
-  reason: 'OK' | 'MISSING_PRESENTATION' | 'MISSING_LAST_CUTOFF' | 'INVALID_CONFIG';
+  reason:
+    | 'OK'
+    | 'MISSING_PRESENTATION'
+    | 'MISSING_FIRST_ENGINE_START'
+    | 'MISSING_LAST_CUTOFF'
+    | 'NO_FLIGHT_REQUIRES_REPORTED_ACTIVITY'
+    | 'INVALID_CONFIG';
 }
 
 function parseClock(value: string | null | undefined): number | null {
@@ -42,55 +52,57 @@ export function durationBetweenClocks(start: string, end: string): number | null
 }
 
 export function resolveFrmsDutyBoundary(input: FrmsDutyBoundaryInput): FrmsDutyBoundaryResult {
-  const presentation = parseClock(input.presentationTime);
-  if (presentation == null) {
-    return {
-      presentationTime: null,
-      dutyEndTime: null,
-      durationMinutes: null,
-      complete: false,
-      reason: 'MISSING_PRESENTATION',
-    };
-  }
-
-  if (
-    !Number.isFinite(input.config.postFlightCutoffMinutes) ||
-    input.config.postFlightCutoffMinutes < 0 ||
-    parseClock(input.config.noFlightDutyEndTime) == null
-  ) {
+  // A margem operacional é canônica e não pode variar por configuração legada:
+  // acionamento -30 min / corte +30 min.
+  // Dia sem voo não recebe uma janela sintética. A jornada/atividade real é
+  // declarada no check-in do dia seguinte e entra pelo fluxo de Recovery Activity.
+  if (!input.hasFlight) {
     return {
       presentationTime: input.presentationTime,
       dutyEndTime: null,
       durationMinutes: null,
       complete: false,
-      reason: 'INVALID_CONFIG',
+      reason: 'NO_FLIGHT_REQUIRES_REPORTED_ACTIVITY',
     };
   }
 
-  let dutyEndTime: string | null;
-  if (input.hasFlight) {
-    if (parseClock(input.lastCutoffTime) == null) {
-      return {
-        presentationTime: input.presentationTime,
-        dutyEndTime: null,
-        durationMinutes: null,
-        complete: false,
-        reason: 'MISSING_LAST_CUTOFF',
-      };
-    }
-    dutyEndTime = addMinutesToClock(input.lastCutoffTime!, input.config.postFlightCutoffMinutes);
-  } else {
-    dutyEndTime = input.config.noFlightDutyEndTime;
+  if (parseClock(input.firstEngineStartTime) == null) {
+    return {
+      presentationTime: null,
+      dutyEndTime: null,
+      durationMinutes: null,
+      complete: false,
+      reason: 'MISSING_FIRST_ENGINE_START',
+    };
+  }
+  if (parseClock(input.lastCutoffTime) == null) {
+    return {
+      presentationTime: null,
+      dutyEndTime: null,
+      durationMinutes: null,
+      complete: false,
+      reason: 'MISSING_LAST_CUTOFF',
+    };
   }
 
+  const presentationTime = addMinutesToClock(
+    input.firstEngineStartTime!,
+    -CANONICAL_FLIGHT_BOUNDARY_MARGIN_MINUTES,
+  );
+  const dutyEndTime = addMinutesToClock(
+    input.lastCutoffTime!,
+    CANONICAL_FLIGHT_BOUNDARY_MARGIN_MINUTES,
+  );
   const durationMinutes =
-    dutyEndTime == null ? null : durationBetweenClocks(input.presentationTime!, dutyEndTime);
+    presentationTime && dutyEndTime ? durationBetweenClocks(presentationTime, dutyEndTime) : null;
+
   return {
-    presentationTime: input.presentationTime,
+    presentationTime,
     dutyEndTime,
     durationMinutes,
-    complete: dutyEndTime != null && durationMinutes != null,
-    reason: dutyEndTime != null && durationMinutes != null ? 'OK' : 'INVALID_CONFIG',
+    complete: presentationTime != null && dutyEndTime != null && durationMinutes != null,
+    reason:
+      presentationTime != null && dutyEndTime != null && durationMinutes != null ? 'OK' : 'INVALID_CONFIG',
   };
 }
 

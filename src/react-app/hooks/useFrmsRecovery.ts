@@ -28,7 +28,7 @@ export interface RecoveryContextData {
   requires_activity_classification: boolean;
   activity: Record<string, unknown> | null;
   assessment: Record<string, unknown> | null;
-  prompt_reason?: 'FLIGHT_DETECTED' | 'NO_FLIGHT_FOUND_IN_SIGVOOS';
+  prompt_reason?: 'FLIGHT_DETECTED' | 'NO_FLIGHT_FOUND_IN_OPERATIONAL_SOURCES';
 }
 
 export interface RecoveryActivitySegmentInput {

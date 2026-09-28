@@ -80,6 +80,13 @@ function displayName(item: FrmsOperationalSnapshotItem): string {
   return item.nome_guerra?.trim() || item.nome?.trim() || `Tripulante #${item.tripulante_id}`;
 }
 
+function operationalSourceLabel(source: FrmsOperationalSnapshotItem['operational_data_source']): string {
+  if (source === 'CONTROLE_VOOS') return 'Controle de Voos';
+  if (source === 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS') return 'Controle de Voos + fallback SIGVOOS';
+  if (source === 'SIGVOOS') return 'SIGVOOS (fallback)';
+  return 'sem dado de voo';
+}
+
 function confidenceGaps(item: FrmsOperationalSnapshotItem): string[] {
   const gaps: string[] = [];
 
@@ -269,11 +276,7 @@ function DetailDrawer({
             )}
             {item.operational_data_source && item.operational_data_source !== 'AUSENTE' ? (
               <p className="mt-1 text-xs text-slate-500">
-                Fonte dos dados de voo: {item.operational_data_source === 'CONTROLE_VOOS'
-                  ? 'Controle de Voos'
-                  : item.operational_data_source === 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS'
-                    ? 'Controle de Voos + fallback SIGVOOS'
-                    : 'SIGVOOS (fallback)'}
+                Fonte dos dados de voo: {operationalSourceLabel(item.operational_data_source)}
               </p>
             ) : null}
           </section>
@@ -479,6 +482,7 @@ export default function FrmsFlightDashboard() {
                     <div className="text-xs text-slate-500">
                       <div>{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'}</div>
                       <div className="mt-1">Confiança {confidence.toLowerCase()}</div>
+                      <div className="mt-1">Fonte: {operationalSourceLabel(item.operational_data_source)}</div>
                     </div>
                     <ChevronRight className="hidden h-4 w-4 text-slate-400 lg:block" />
                   </button>

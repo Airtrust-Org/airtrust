@@ -23,6 +23,7 @@ import {
   toneByFortnightStatus,
 } from '../fortnightOperationalLabels';
 import { buildFortnightTimeline } from '../fortnightOperationalTimeline';
+import { formatRecoveryCredit, formatRecoveryState } from '../frmsPresentation';
 
 const TIMELINE_STATUS_LABELS: Record<string, string> = {
   OK: 'Ok',
@@ -271,13 +272,13 @@ function FortnightTimelinePanel({
                         ) : '—'}
                       </td>
                       <td className="px-2 py-2">
-                        {day.recovery_credit_points > 0 ? (
+                        {day.recovery_credit_points != null ? (
                           <>
-                            <div className="font-semibold text-emerald-700">+{day.recovery_credit_points.toFixed(1)} pt</div>
-                            <div className="text-[11px] text-slate-500">{activity || day.recovery_state || 'Recuperação'}</div>
+                            <div className="font-semibold text-emerald-700">{formatRecoveryCredit(day.recovery_credit_points)}</div>
+                            <div className="text-[11px] text-slate-500">{activity || formatRecoveryState(day.recovery_state) || 'Recuperação avaliada'}</div>
                           </>
                         ) : (
-                          <div className="text-slate-500">{activity || day.recovery_state || '—'}</div>
+                          <div className="text-slate-500">{activity || formatRecoveryState(day.recovery_state) || '—'}</div>
                         )}
                       </td>
                       <td className="px-2 py-2">
