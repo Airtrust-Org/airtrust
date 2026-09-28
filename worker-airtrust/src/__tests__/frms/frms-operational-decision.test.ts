@@ -140,4 +140,21 @@ describe('FRMS decisão operacional — compliance obrigatório', () => {
     expect(result.estado_operacional).toBe('NAO_AVALIADO');
     expect(result.motivos_principais).toEqual(['Acumulado legal mensal indisponível']);
   });
+
+  it('não expõe códigos internos de compliance na decisão operacional', () => {
+    const result = deriveFrmsOperationalDecision({
+      snapshot_status: 'OK', alertas: [], tem_violacao_normativa: false,
+      perfil_regulatorio_configurado: true, compliance_avaliavel: false,
+      compliance_unknown_reasons: [
+        'ROLLING_REGULATORY_EVIDENCE_MISSING',
+        'WORK_TIME_EVIDENCE_MISSING',
+      ],
+    });
+    expect(result.estado_operacional).toBe('NAO_AVALIADO');
+    expect(result.motivos_principais).toEqual([
+      'Histórico móvel de voo e jornada ainda incompleto para a avaliação regulatória',
+      'Histórico de jornada e trabalho ainda incompleto para a avaliação regulatória',
+    ]);
+    expect(result.motivos_principais.join(' ')).not.toMatch(/[A-Z]{3,}_[A-Z0-9_]+/);
+  });
 });

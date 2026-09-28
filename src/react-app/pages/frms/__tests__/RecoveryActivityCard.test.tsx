@@ -37,7 +37,7 @@ function baseContext(overrides: Partial<RecoveryContextData> = {}): RecoveryCont
     requires_activity_classification: true,
     activity: null,
     assessment: null,
-    prompt_reason: 'NO_FLIGHT_FOUND_IN_SIGVOOS',
+    prompt_reason: 'NO_FLIGHT_FOUND_IN_OPERATIONAL_SOURCES',
     ...overrides,
   };
 }
@@ -59,7 +59,7 @@ describe('RecoveryActivityCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('renders nothing when SIGVOOS already has a flight for the previous day', () => {
+  it('renders nothing when an operational source already has a flight for the previous day', () => {
     contextValue = {
       data: baseContext({ flight: { ...baseContext().flight, detected: true, source: 'SIGVOOS' } }),
       isLoading: false,
@@ -70,9 +70,12 @@ describe('RecoveryActivityCard', () => {
     expect(clearPendingMock).toHaveBeenCalledWith('2026-06-04');
   });
 
-  it('asks for the previous-day activity when SIGVOOS has no flight, including the source-gap option', () => {
+  it('asks for the previous-day activity when operational sources have no flight, including the source-gap option', () => {
     render(<RecoveryActivityCard today="2026-06-05" />);
     expect(screen.getByText('Atividade de ontem')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Controle de Voos nem no fallback SIGVOOS/i),
+    ).toBeInTheDocument();
     expect(screen.getByText('Folga / descanso')).toBeInTheDocument();
     expect(screen.getByText('Standby em hotel ou residência')).toBeInTheDocument();
     expect(screen.getByText('Standby na base / aeroporto')).toBeInTheDocument();

@@ -7,9 +7,38 @@ import { diasNoMes, calcAcumuloMensal } from './calculos';
 import { dateOffset } from './db-service-shared';
 import { buildCanonicalOperationalSourceSql } from './frms-source-policy';
 import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
+import {
+  loadPreferredOperationalJourneys,
+  type PreferredOperationalJourney,
+} from './preferred-operational-source';
 
 const CANONICAL_JORNADA_SOURCE_SQL = buildCanonicalOperationalSourceSql('origem');
 const CANONICAL_JOINED_JORNADA_SOURCE_SQL = buildCanonicalOperationalSourceSql('j.origem');
+
+type MonthlyOperationalJourney = Pick<FrmsJornada, 'status' | 'duracao_jornada_minutos' | 'horas_voo_minutos'> & { data: string };
+
+/**
+ * Overlay de leitura: Controle de Voos é a fonte operacional primária; o
+ * SIGVOOS persistido permanece como fallback e também fornece o status FRMS
+ * quando já existe uma jornada materializada para a data.
+ */
+export function mergeMonthlyOperationalJourneys(
+  persisted: readonly MonthlyOperationalJourney[],
+  preferred: readonly PreferredOperationalJourney[],
+): MonthlyOperationalJourney[] {
+  const byDate = new Map<string, MonthlyOperationalJourney>();
+  for (const row of persisted) byDate.set(row.data, { ...row });
+  for (const row of preferred) {
+    const existing = byDate.get(row.data);
+    byDate.set(row.data, {
+      data: row.data,
+      status: existing?.status ?? 'ES',
+      duracao_jornada_minutos: row.duracao_jornada_minutos,
+      horas_voo_minutos: row.horas_voo_minutos,
+    });
+  }
+  return [...byDate.values()].sort((a, b) => a.data.localeCompare(b.data));
+}
 
 export async function buscarAcumuloTripulante(
   db: D1Database,
@@ -90,9 +119,9 @@ export async function buscarAcumuloTripulante(
     if (ultimaJ?.mes) mesConsulta = ultimaJ.mes;
   }
 
-  const jornadas = await db
+  const jornadasPersistidas = await db
     .prepare(
-      `SELECT status, duracao_jornada_minutos, horas_voo_minutos
+      `SELECT data, status, duracao_jornada_minutos, horas_voo_minutos
        FROM frms_jornada
        WHERE tripulante_id = ?
          AND data LIKE ? || '%'
@@ -100,7 +129,24 @@ export async function buscarAcumuloTripulante(
          AND ${CANONICAL_JORNADA_SOURCE_SQL}`,
     )
     .bind(tripulanteId, mesConsulta)
-    .all<Pick<FrmsJornada, 'status' | 'duracao_jornada_minutos' | 'horas_voo_minutos'>>();
+    .all<MonthlyOperationalJourney>();
+
+  let jornadasMensais: MonthlyOperationalJourney[] = jornadasPersistidas.results || [];
+  try {
+    const [yearText, monthText] = mesConsulta.split('-');
+    const year = Number(yearText);
+    const monthNumber = Number(monthText);
+    const monthStart = `${mesConsulta}-01`;
+    const monthEnd = `${mesConsulta}-${String(new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()).padStart(2, '0')}`;
+    const preferred = (await loadPreferredOperationalJourneys(db, empresaId, monthStart, monthEnd))
+      .filter((row) => row.tripulante_id === Number(tripulanteId));
+    jornadasMensais = mergeMonthlyOperationalJourneys(jornadasMensais, preferred);
+  } catch (error) {
+    console.warn('[FRMS] preferred source unavailable for monthly accumulation; using persisted SIGVOOS fallback', {
+      empresaId, tripulanteId, mesConsulta,
+      error: error instanceof Error ? error.message : String(error ?? ''),
+    });
+  }
 
   const fatorizacoes = await db
     .prepare(
@@ -116,7 +162,7 @@ export async function buscarAcumuloTripulante(
     .all<{ total_fatorizado_jornada: number; total_fatorizado_hv: number }>();
 
   const mensal = calcAcumuloMensal({
-    jornadas: jornadas.results || [],
+    jornadas: jornadasMensais,
     fatorizacoes: fatorizacoes.results || [],
   });
 

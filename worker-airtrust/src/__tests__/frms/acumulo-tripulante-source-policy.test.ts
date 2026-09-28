@@ -127,7 +127,7 @@ function createDbFixture(input: {
             };
           }
 
-          if (query.includes('SELECT status, duracao_jornada_minutos, horas_voo_minutos')) {
+          if (query.includes('SELECT data, status, duracao_jornada_minutos, horas_voo_minutos')) {
             const mes = String(args[1] ?? '');
             return {
               results: input.jornadaRows.filter(
@@ -203,7 +203,7 @@ function createDbFixture(input: {
 }
 
 describe('buscarAcumuloTripulante source policy', () => {
-  it('ignora FIRA e MANUAL no bloco mensal, preservando apenas SIGVOOS operacional', async () => {
+  it('ignora FIRA e MANUAL e usa SIGVOOS somente como fallback quando Controle de Voos não tem dado', async () => {
     const { db, statements } = createDbFixture({
       jornadaRows: [
         {

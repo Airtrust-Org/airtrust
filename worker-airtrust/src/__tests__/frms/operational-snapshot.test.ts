@@ -55,6 +55,22 @@ afterEach(() => {
 });
 
 
+describe('active fortnight daily roster', () => {
+  it('mantém visível o tripulante da quinzena mesmo sem voo, jornada ou check-in no dia', () => {
+    const input = createBaseInput();
+    input.rows.roster = [{ data_operacional: '2026-09-28', funcionario_id: 11 }];
+
+    const result = buildFrmsOperationalSnapshot(input);
+    const item = getByKey(result.items, '2026-09-28', 11);
+
+    expect(item).toBeTruthy();
+    expect(item?.nome_guerra).toBe('ONZE');
+    expect(item?.escalado).toBe(false);
+    expect(item?.teve_jornada).toBe(false);
+    expect(item?.jornada_data_source).toBe('AUSENTE');
+  });
+});
+
 describe('effectiveness threshold governance', () => {
   it('usa EFFECTIV_VERMELHO_MAX da revisão efetiva em vez de limiar fixo', () => {
     const input = createBaseInput();
@@ -84,6 +100,7 @@ interface SnapshotDbData {
   checkins?: Array<Record<string, unknown>>;
   effectiveness?: Array<Record<string, unknown>>;
   funcionarios?: Array<Record<string, unknown>>;
+  missionPeriods?: Array<Record<string, unknown>>;
 }
 
 /**
@@ -97,6 +114,7 @@ function makeSnapshotDb(data: SnapshotDbData) {
     if (sql.includes('FROM frms_fadiga_checkin')) return data.checkins ?? [];
     if (sql.includes('escala_voo_diaria')) return data.escalas ?? [];
     if (sql.includes('FROM frms_jornada')) return data.jornadas ?? [];
+    if (sql.includes('BASE_FORTNIGHT') && sql.includes('source_kind')) return data.missionPeriods ?? [];
     if (sql.includes('FROM funcionarios')) return data.funcionarios ?? [];
     return [];
   };
@@ -107,6 +125,9 @@ function makeSnapshotDb(data: SnapshotDbData) {
         if (args.length > 100) throw new Error('D1_ERROR: too many SQL variables: SQLITE_ERROR');
         return { all: async () => {
           const rows = rowsFor(sql);
+          if (sql.includes('BASE_FORTNIGHT') && sql.includes('source_kind')) {
+            return { results: rows };
+          }
           if (sql.includes('FROM funcionarios')) {
             const requestedIds = new Set(args.slice(1).map(Number));
             return { results: rows.filter((row) => requestedIds.has(Number(row.id))) };
@@ -201,6 +222,33 @@ describe('D1 bind budget do snapshot operacional', () => {
       empresaId: 77, dataInicio: '2026-09-28', dataFim: '2026-09-28',
     });
     expect(result.items).toHaveLength(120);
+  });
+});
+
+describe('active fortnight roster in listFrmsOperationalSnapshot', () => {
+  it('gera a linha diária a partir da quinzena mesmo sem evento operacional', async () => {
+    mockFrmsOperationalContext();
+    vi.spyOn(jornadasModule, 'calcularDiaDoCiclo').mockResolvedValue({ dia: 3, total: 15 } as never);
+    const db = makeSnapshotDb({
+      funcionarios: [FUNCIONARIO_10],
+      missionPeriods: [{
+        funcionario_id: 10,
+        data_inicio_embarque: '2026-09-16',
+        data_fim_embarque: '2026-09-30',
+        source_priority: 2,
+        source_kind: 'BASE_FORTNIGHT',
+      }],
+    });
+
+    const result = await listFrmsOperationalSnapshot(db, {
+      empresaId: 77, dataInicio: '2026-09-28', dataFim: '2026-09-28',
+    });
+
+    const item = getByKey(result.items, '2026-09-28', 10);
+    expect(item).toBeTruthy();
+    expect(item?.nome_guerra).toBe('DEZ');
+    expect(item?.teve_jornada).toBe(false);
+    expect(item?.jornada_data_source).toBe('AUSENTE');
   });
 });
 
@@ -1136,6 +1184,10 @@ describe('operational snapshot — mandatory compliance wiring', () => {
     const item = getByKey(buildFrmsOperationalSnapshot(input).items, '2026-09-26', 10);
     expect(item?.compliance_status).toBe('UNKNOWN');
     expect(item?.estado_operacional).toBe('NAO_AVALIADO');
-    expect(item?.motivos_principais).toContain('WORK_TIME_EVIDENCE_MISSING');
+    expect(item?.compliance_unknown_reasons).toContain('WORK_TIME_EVIDENCE_MISSING');
+    expect(item?.motivos_principais).toContain(
+      'Histórico de jornada e trabalho ainda incompleto para a avaliação regulatória',
+    );
+    expect(item?.motivos_principais.join(' ')).not.toContain('WORK_TIME_EVIDENCE_MISSING');
   });
 });

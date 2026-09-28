@@ -34,16 +34,20 @@ import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperational
 import { FortnightConsolidatedPanel } from './components/FortnightOperationalIndicator';
 import { FrmsSignalGrid } from './components/FrmsOperationalSignals';
 import { formatRecoveryActivityType } from './fortnightOperationalLabels';
+import {
+  formatCheckinStatus,
+  formatFrmsActivity,
+  formatOptionalMinutesCompact,
+  formatRecoveryCredit,
+  formatRecoveryState,
+  formatSnapshotSource,
+} from './frmsPresentation';
 import { localTodayIso, resolveCalendarFortnightRange, resolveFrmsOperationalDate } from './frmsOperationalDate';
 
 const FrmsEffectivenessTimeline = lazy(() => import('./components/FrmsEffectivenessTimeline'));
 
 function formatMin(min: number | null | undefined): string {
-  if (!min) return '00h00';
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  const hh = String(h).padStart(2, '0');
-  return `${hh}h${String(m).padStart(2, '0')}`;
+  return formatOptionalMinutesCompact(min);
 }
 
 function getMonthRange(mes: string): { dataInicio: string; dataFim: string } | null {
@@ -194,14 +198,6 @@ const DAILY_BALANCE_ALERT_LABELS: Record<string, string> = {
   DADO_INCONSISTENTE: 'Dado inconsistente',
 };
 
-function formatSnapshotSource(value: string | null | undefined): string {
-  if (!value || value === 'AUSENTE') return 'ausente';
-  if (value === 'REAL') return 'confirmado';
-  if (value === 'MANUAL') return 'manual';
-  if (value === 'ESTIMADO') return 'estimado';
-  if (value === 'INCONSISTENTE') return 'inconsistente';
-  return value.toLowerCase();
-}
 
 function getCurrentMonthKeyLocal(): string {
   const now = new Date();
@@ -687,23 +683,23 @@ export default function FrmsFichaTripulante() {
           <div className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Recuperação</p>
             <p className="mt-2 text-lg font-bold text-emerald-700">
-              +{Number(todayFortnightSnapshotItem?.recovery_credit_points ?? 0).toFixed(1)} pt
+              {formatRecoveryCredit(todayFortnightSnapshotItem?.recovery_credit_points)}
             </p>
             <p className="mt-1 text-xs text-slate-600">
               {formatRecoveryActivityType(todayFortnightSnapshotItem?.recovery_activity_type) ||
-                todayFortnightSnapshotItem?.recovery_state ||
-                'Sem crédito registrado'}
+                formatRecoveryState(todayFortnightSnapshotItem?.recovery_state) ||
+                'Sem recuperação registrada'}
             </p>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">HV mês calendário</p>
             <p className="mt-2 text-lg font-bold text-slate-900">
-              {formatMin(rolling?.hv_mes_calendario_min ?? 0)}
+              {formatMin(rolling?.hv_mes_calendario_min)}
             </p>
             <p className="mt-1 text-xs text-slate-600">
               de {Number(limites?.HV_MES_HORAS ?? 90)}h ·{' '}
-              {(rolling?.pct_limite_mes_calendario ?? 0).toFixed(1)}%
+              {rolling?.pct_limite_mes_calendario == null ? '—' : `${rolling.pct_limite_mes_calendario.toFixed(1)}%`}
             </p>
           </div>
         </section>
@@ -727,10 +723,10 @@ export default function FrmsFichaTripulante() {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800">Carga observada</p>
               <div className="mt-2 space-y-1 text-xs text-slate-700">
                 <p>Atividade: <strong>{todayFortnightSnapshotItem?.teve_atividade_frms ? formatMin(todayFortnightSnapshotItem.atividade_frms_minutos ?? todayFortnightSnapshotItem.duracao_jornada_minutos) : 'sem atividade confirmada'}</strong></p>
-                <p>HV real: <strong>{formatMin(todayFortnightSnapshotItem?.horas_voo_minutos ?? 0)}</strong></p>
-                <p>Simulador: <strong>{formatMin(todayFortnightSnapshotItem?.simulador_minutos ?? 0)}</strong></p>
-                <p>Treinamento: <strong>{formatMin(todayFortnightSnapshotItem?.treinamento_minutos ?? 0)}</strong></p>
-                <p>Tipo de atividade: <strong>{todayFortnightSnapshotItem?.atividade_principal || 'não informada'}</strong></p>
+                <p>HV real: <strong>{formatMin(todayFortnightSnapshotItem?.teve_jornada ? todayFortnightSnapshotItem.horas_voo_minutos : null)}</strong></p>
+                <p>Simulador: <strong>{todayFortnightSnapshotItem?.simulador_minutos == null ? '—' : formatMin(todayFortnightSnapshotItem.simulador_minutos)}</strong></p>
+                <p>Treinamento: <strong>{todayFortnightSnapshotItem?.treinamento_minutos == null ? '—' : formatMin(todayFortnightSnapshotItem.treinamento_minutos)}</strong></p>
+                <p>Tipo de atividade: <strong>{formatFrmsActivity(todayFortnightSnapshotItem?.atividade_principal)}</strong></p>
                 {todayFortnightSnapshotItem?.atividade_rotulos?.length ? (
                   <p>Registro: <strong>{todayFortnightSnapshotItem.atividade_rotulos.join(' · ')}</strong></p>
                 ) : null}
@@ -750,8 +746,8 @@ export default function FrmsFichaTripulante() {
               <div className="mt-2 space-y-1 text-xs text-slate-700">
                 <p>Sono/repouso: <strong>{todayFortnightSnapshotItem?.horas_sono == null ? 'não informado' : `${Number(todayFortnightSnapshotItem.horas_sono).toFixed(1)} h`}</strong></p>
                 <p>KSS: <strong>{todayFortnightSnapshotItem?.kss_score ?? 'não informado'}</strong></p>
-                <p>Crédito aplicado: <strong className="text-emerald-800">+{Number(todayFortnightSnapshotItem?.recovery_credit_points ?? 0).toFixed(1)} pt</strong></p>
-                <p>Atividade: <strong>{formatRecoveryActivityType(todayFortnightSnapshotItem?.recovery_activity_type) || todayFortnightSnapshotItem?.recovery_state || 'sem recuperação registrada'}</strong></p>
+                <p>Crédito aplicado: <strong className="text-emerald-800">{formatRecoveryCredit(todayFortnightSnapshotItem?.recovery_credit_points)}</strong></p>
+                <p>Atividade: <strong>{formatRecoveryActivityType(todayFortnightSnapshotItem?.recovery_activity_type) || formatRecoveryState(todayFortnightSnapshotItem?.recovery_state) || 'sem recuperação registrada'}</strong></p>
               </div>
             </div>
 
@@ -759,7 +755,7 @@ export default function FrmsFichaTripulante() {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-800">Resultado e rastreabilidade</p>
               <div className="mt-2 space-y-1 text-xs text-slate-700">
                 <p>Efetividade: <strong>{todayFortnightSnapshotItem?.effectiveness_pct == null ? 'indisponível' : `${Number(todayFortnightSnapshotItem.effectiveness_pct).toFixed(1)}%`}</strong></p>
-                <p>Check-in: <strong>{todayFortnightSnapshotItem?.checkin_status || 'AUSENTE'}{todayFortnightSnapshotItem?.checkin_horario ? ` às ${todayFortnightSnapshotItem.checkin_horario.slice(0, 5)}` : ''}</strong></p>
+                <p>Check-in: <strong>{formatCheckinStatus(todayFortnightSnapshotItem?.checkin_status)}{todayFortnightSnapshotItem?.checkin_horario ? ` às ${todayFortnightSnapshotItem.checkin_horario.slice(0, 5)}` : ''}</strong></p>
                 <p>Fonte sono/despertar: <strong>{formatSnapshotSource(todayFortnightSnapshotItem?.sleep_data_source)} / {formatSnapshotSource(todayFortnightSnapshotItem?.wake_data_source)}</strong></p>
                 <p>Fonte jornada: <strong>{formatSnapshotSource(todayFortnightSnapshotItem?.jornada_data_source)}</strong></p>
                 <p>Fonte dos dados de voo: <strong>{todayFortnightSnapshotItem?.operational_data_source === 'CONTROLE_VOOS'
@@ -769,7 +765,7 @@ export default function FrmsFichaTripulante() {
                     : todayFortnightSnapshotItem?.operational_data_source === 'SIGVOOS'
                       ? 'SIGVOOS (fallback)'
                       : 'sem dado operacional'}</strong></p>
-                <p>Atividade FRMS: <strong>{todayFortnightSnapshotItem?.atividade_principal || 'sem atividade registrada'}</strong></p>
+                <p>Atividade FRMS: <strong>{formatFrmsActivity(todayFortnightSnapshotItem?.atividade_principal)}</strong></p>
                 <p>Regra: <strong>HV real separado; simulador entra apenas como HV equivalente FRMS para fadiga</strong></p>
                 <p className="pt-1 text-sky-800">
                   {todayFortnightSnapshotItem?.acao_recomendada_texto || 'Complete os dados obrigatórios para liberar a avaliação.'}

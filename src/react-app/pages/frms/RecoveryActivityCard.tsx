@@ -162,7 +162,7 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
       <div className="mb-3">
         <h2 className="text-sm font-semibold text-slate-900">Atividade de ontem</h2>
         <p className="mt-1 text-xs text-slate-600">
-          Não encontramos atividade de voo no SIGVOOS em {referenceDate}. Como foi sua condição operacional?
+          Não encontramos atividade de voo no Controle de Voos nem no fallback SIGVOOS em {referenceDate}. Como foi sua condição operacional?
         </p>
       </div>
 

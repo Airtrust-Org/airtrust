@@ -105,6 +105,20 @@ async function resolveOwnFuncionarioId(
   return byFuncionario?.id ?? null;
 }
 
+function normalizeSnapshotItemForApi<T extends {
+  recovery_credit_points?: number | null;
+  recovery_state?: string | null;
+  recovery_activity_type?: string | null;
+}>(item: T): T & { recovery_credit_points: number | null } {
+  const hasRecoveryEvidence = Boolean(
+    item.recovery_state?.trim() || item.recovery_activity_type?.trim(),
+  );
+  return {
+    ...item,
+    recovery_credit_points: hasRecoveryEvidence ? Number(item.recovery_credit_points ?? 0) : null,
+  };
+}
+
 router.get('/operational-snapshot', async (c) => {
   const parsed = QuerySchema.safeParse({
     data_inicio: c.req.query('data_inicio'),
@@ -164,7 +178,7 @@ router.get('/operational-snapshot', async (c) => {
 
     return c.json({
       success: true,
-      data: result.items,
+      data: result.items.map(normalizeSnapshotItemForApi),
       summary: result.summary,
       meta: {
         scope: hasTeamScope ? 'team' : 'self',

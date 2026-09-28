@@ -13,9 +13,10 @@ describe('FRMS duty boundary', () => {
     noFlightDutyEndTime: '17:00',
   };
 
-  it('encerra jornada de voo 30 minutos após o último corte configurado', () => {
+  it('usa acionamento -30 min e corte +30 min em dia com voo', () => {
     const result = resolveFrmsDutyBoundary({
       presentationTime: '08:00',
+      firstEngineStartTime: '08:20',
       hasFlight: true,
       lastCutoffTime: '14:20',
       config,
@@ -23,25 +24,27 @@ describe('FRMS duty boundary', () => {
 
     expect(result).toMatchObject({
       complete: true,
+      presentationTime: '07:50',
       dutyEndTime: '14:50',
-      durationMinutes: 410,
+      durationMinutes: 420,
       reason: 'OK',
     });
   });
 
-  it('usa encerramento configurado para jornada sem voo', () => {
+  it('não fabrica jornada sem voo; aguarda atividade real informada no dia seguinte', () => {
     const result = resolveFrmsDutyBoundary({
       presentationTime: '08:00',
+      firstEngineStartTime: null,
       hasFlight: false,
       lastCutoffTime: null,
       config,
     });
 
     expect(result).toMatchObject({
-      complete: true,
-      dutyEndTime: '17:00',
-      durationMinutes: 540,
-      reason: 'OK',
+      complete: false,
+      dutyEndTime: null,
+      durationMinutes: null,
+      reason: 'NO_FLIGHT_REQUIRES_REPORTED_ACTIVITY',
     });
   });
 
@@ -54,15 +57,17 @@ describe('FRMS duty boundary', () => {
     expect(
       resolveFrmsDutyBoundary({
         presentationTime: null,
+        firstEngineStartTime: null,
         hasFlight: true,
         lastCutoffTime: '14:20',
         config,
       }).reason,
-    ).toBe('MISSING_PRESENTATION');
+    ).toBe('MISSING_FIRST_ENGINE_START');
 
     expect(
       resolveFrmsDutyBoundary({
         presentationTime: '08:00',
+        firstEngineStartTime: '08:20',
         hasFlight: true,
         lastCutoffTime: null,
         config,
@@ -70,15 +75,16 @@ describe('FRMS duty boundary', () => {
     ).toBe('MISSING_LAST_CUTOFF');
   });
 
-  it('rejeita configuração operacional inválida', () => {
+  it('não permite que configuração legada altere a margem canônica de 30 minutos', () => {
     expect(
       resolveFrmsDutyBoundary({
-        presentationTime: '08:00',
-        hasFlight: false,
-        lastCutoffTime: null,
-        config: { postFlightCutoffMinutes: -1, noFlightDutyEndTime: '17:00' },
-      }).reason,
-    ).toBe('INVALID_CONFIG');
+        presentationTime: '09:00',
+        firstEngineStartTime: '08:20',
+        hasFlight: true,
+        lastCutoffTime: '14:20',
+        config: { postFlightCutoffMinutes: 5, noFlightDutyEndTime: '16:00' },
+      }),
+    ).toMatchObject({ presentationTime: '07:50', dutyEndTime: '14:50', durationMinutes: 420 });
   });
   it('preserva a janela histórica como estimada quando não há check-in', () => {
     expect(resolveFrmsEstimatedDutyBoundary({
