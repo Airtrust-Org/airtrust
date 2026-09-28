@@ -76,7 +76,7 @@ function statusOperacionalLabel(value: unknown): string {
   return STATUS_OPERACIONAL_LABEL[key] || key;
 }
 
-type SonoOpcao = 'menos4' | 'h4' | 'h5' | 'h6' | 'h7' | 'h8';
+type SonoOpcao = 'h4' | 'h5' | 'h6' | 'h7' | 'h8';
 
 type EscalaSeveridade = 'melhor' | 'boa' | 'intermediaria' | 'atencao' | 'critica';
 
@@ -86,11 +86,10 @@ const SONO_OPCOES: {
   horas: number;
   severidade: EscalaSeveridade;
 }[] = [
-  { key: 'menos4', label: 'Menos de 4 horas', horas: 3.5, severidade: 'critica' },
-  { key: 'h4', label: 'Entre 4 e 5 horas', horas: 4, severidade: 'critica' },
-  { key: 'h5', label: 'Entre 5 e 6 horas', horas: 5, severidade: 'critica' },
-  { key: 'h6', label: 'Entre 6 e 7 horas', horas: 6, severidade: 'atencao' },
-  { key: 'h7', label: 'Entre 7 e 8 horas', horas: 7, severidade: 'intermediaria' },
+  { key: 'h4', label: '4 horas ou menos', horas: 4, severidade: 'critica' },
+  { key: 'h5', label: '5 horas', horas: 5, severidade: 'critica' },
+  { key: 'h6', label: '6 horas', horas: 6, severidade: 'atencao' },
+  { key: 'h7', label: '7 horas', horas: 7, severidade: 'intermediaria' },
   { key: 'h8', label: '8 horas ou mais', horas: 8, severidade: 'melhor' },
 ];
 
@@ -810,13 +809,13 @@ export default function FrmsFlightCheckinFadiga() {
             <RecoveryActivityCard today={today} />
 
             <div className="space-y-3">
-              <FormCard label="Bloco 1 - Sono" hint="Informe seu descanso mais recente.">
+              <FormCard label="Bloco 1 - Repouso absoluto" hint="Informe seu descanso mais recente.">
                 <div className="space-y-4">
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-slate-700">
                       Repouso absoluto nas últimas 24h
                     </legend>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
                       {SONO_OPCOES.map((op) => {
                         const selected = sonoOpcao === op.key;
                         return (
