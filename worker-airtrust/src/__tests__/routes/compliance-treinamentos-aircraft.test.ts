@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { resolvedRules, ruleApplies } from '../../routes/compliance-treinamentos';
 import {
   normalizeAircraftModel,
-  resolvedRules,
-  ruleApplies,
-} from '../../routes/compliance-treinamentos';
+  parseLegacyAircraftModels,
+  resolveEmployeeAircraftModels,
+} from '../../services/training-compliance-aircraft';
 
 function employee(models: string[]) {
   return {
@@ -60,6 +61,17 @@ describe('training compliance aircraft applicability', () => {
     expect(normalizeAircraftModel('s  76')).toBe('S 76');
     expect(normalizeAircraftModel('')).toBeNull();
     expect(normalizeAircraftModel(null)).toBeNull();
+  });
+
+  it('parses the legacy employee aircraft field as a fallback roster', () => {
+    expect(parseLegacyAircraftModels('AW139 / SK76')).toEqual(['AW139', 'SK76']);
+    expect(parseLegacyAircraftModels(' aw139;AW139 ')).toEqual(['AW139']);
+    expect(parseLegacyAircraftModels(null)).toEqual([]);
+  });
+
+  it('keeps canonical aircraft assignments authoritative over the legacy fallback', () => {
+    expect(resolveEmployeeAircraftModels(['AW139'], 'SK76')).toEqual(['AW139']);
+    expect(resolveEmployeeAircraftModels([], 'AW139 / SK76')).toEqual(['AW139', 'SK76']);
   });
 
   it('keeps generic rules applicable and rejects rules for aircraft the employee does not fly', () => {
