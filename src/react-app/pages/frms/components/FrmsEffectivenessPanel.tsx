@@ -68,6 +68,10 @@ function fmtPoints(points: number): string {
   return points.toFixed(1).replace('.', ',');
 }
 
+function metarConditionLabel(condition: 'VMC' | 'IMC' | 'INDETERMINATE'): string {
+  return condition === 'INDETERMINATE' ? 'Indeterminada' : condition;
+}
+
 // ── Component bar for decomposition ──
 function ComponentBar({ label, value, color }: { label: string; value: number; color: string }) {
   const pct = Math.max(0, Math.min(100, Math.abs(value) * 100));
@@ -285,9 +289,9 @@ export default function FrmsEffectivenessPanel({
               {(operationalLoad.imc_legs ?? []).map((leg) => (
                 <div key={leg.legId} className="mt-1 rounded border border-slate-200 bg-white px-2 py-1">
                   <p className="font-medium text-slate-600">Etapa {leg.legId}</p>
-                  <p>Saída: {leg.departure.condition} · {fmtPoints(leg.departureDelta)} · {leg.departureStationIcao ?? 'estação indisponível'} · {leg.departureObservedAtUtc ?? 'horário indisponível'}</p>
+                  <p>Saída: {metarConditionLabel(leg.departure.condition)} · {fmtPoints(leg.departureDelta)} · {leg.departureStationIcao ?? 'estação indisponível'} · {leg.departureObservedAtUtc ?? 'horário indisponível'}</p>
                   {leg.departureRawMetar && <p className="break-all font-mono text-[9px] text-slate-400">METAR: {leg.departureRawMetar}</p>}
-                  <p>Chegada: {leg.arrival.condition} · {fmtPoints(leg.arrivalDelta)} · {leg.arrivalStationIcao ?? 'estação indisponível'} · {leg.arrivalObservedAtUtc ?? 'horário indisponível'}</p>
+                  <p>Chegada: {metarConditionLabel(leg.arrival.condition)} · {fmtPoints(leg.arrivalDelta)} · {leg.arrivalStationIcao ?? 'estação indisponível'} · {leg.arrivalObservedAtUtc ?? 'horário indisponível'}</p>
                   {leg.arrivalRawMetar && <p className="break-all font-mono text-[9px] text-slate-400">METAR: {leg.arrivalRawMetar}</p>}
                 </div>
               ))}
