@@ -80,6 +80,7 @@ import { syncHorasVooFromFrmsJornada } from '../shared/handlers/horasVooFromFrms
 import { recalcularPipeline } from '../lib/frms/db-service-jornadas';
 import { buildCanonicalOperationalSourceSql } from '../lib/frms/frms-source-policy';
 import { buildFrmsDayCheckinExplanationState, buildFrmsJustificationCheckinState, maskFrmsEffectivenessRead } from '../lib/frms/day-explanation-checkin';
+import { buildFrmsCaseResolutionNotes } from '../lib/frms/case-resolution';
 import { buildFrmsEffectivenessComparison, buildFrmsSimulationComparison, COMPLETE_FRMS_CHECKIN_EXISTS_SQL, maskFrmsTimelineRows } from '../lib/frms/effectiveness-read-policy';
 import { getSigvoosConfig } from '../services/sigvoos-frms';
 import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../services/employee-sector-access';
@@ -3642,28 +3643,13 @@ frmsRoutes.put(
     if (denied) return denied;
 
     const userId = String(c.get('userId') || 'system');
-    const body = await c.req.json().catch(() => null);
-    const parsed = z.object({
-      responsavel: z.string().trim().min(2).max(120),
-      prazo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      acao_mitigacao: z.string().trim().min(10).max(1000),
-      justificativa: z.string().trim().min(10).max(1000),
-      evidencia_referencia: z.string().trim().max(500).optional().nullable(),
-      avaliacao_eficacia: z.string().trim().min(10).max(1000),
-    }).safeParse(body);
-    if (!parsed.success) {
-      return c.json({
-        success: false,
-        error: 'A resolução exige responsável, prazo, mitigação, justificativa e avaliação de eficácia.',
-        code: 'FRMS_CASE_RESOLUTION_INCOMPLETE',
-      }, 400);
+    const notasResolucao = buildFrmsCaseResolutionNotes(
+      await c.req.json().catch(() => null),
+      userId,
+    );
+    if (!notasResolucao) {
+      return c.json({ success: false, error: 'A resolução exige responsável, prazo, mitigação, justificativa e avaliação de eficácia.', code: 'FRMS_CASE_RESOLUTION_INCOMPLETE' }, 400);
     }
-    const notasResolucao = JSON.stringify({
-      schema: 'FRMS_CASE_RESOLUTION_V1',
-      ...parsed.data,
-      fechado_por: userId,
-      fechado_em: new Date().toISOString(),
-    });
     await marcarAlertaResolvido(c.env.DB, id, userId, notasResolucao);
     return c.json({ success: true });
   }),
