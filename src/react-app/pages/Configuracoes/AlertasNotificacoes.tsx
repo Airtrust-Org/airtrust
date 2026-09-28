@@ -389,7 +389,7 @@ export default function AlertasNotificacoes() {
 
       <Card
         title="Qualificações"
-        description="E-mail ao funcionário e gestores do setor. Os marcos são faixas configuráveis; vencidas podem repetir pela frequência escolhida."
+        description="Funcionário recebe as próprias qualificações em 30/15/7 dias e após o vencimento. Gestores recebem somente qualificações CHECK do próprio setor em 45/30/15/7 dias; vencidas não são enviadas ao gestor."
       >
         <div className="space-y-4">
           {qualifications.map((row, index) => (
