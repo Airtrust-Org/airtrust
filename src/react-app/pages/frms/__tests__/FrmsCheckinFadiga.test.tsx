@@ -413,13 +413,12 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.getByText('Dormi muito bem; acordei descansado e recuperado.')).toBeInTheDocument();
   });
 
-  it('renderiza as seis faixas de sono alinhadas aos degraus do cálculo', () => {
+  it('renderiza as cinco opções de sono definidas para o check-in', () => {
     render(<FrmsCheckinFadiga />);
 
     const sonoFieldset = screen.getAllByText('Repouso absoluto nas últimas 24h')[1]?.closest('fieldset');
     expect(sonoFieldset).toBeTruthy();
     expect(within(sonoFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).value)).toEqual([
-      'menos4',
       'h4',
       'h5',
       'h6',
@@ -427,11 +426,10 @@ describe('FrmsCheckinFadiga UI', () => {
       'h8',
     ]);
     expect(within(sonoFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual([
-      'Menos de 4 horas',
-      'Entre 4 e 5 horas',
-      'Entre 5 e 6 horas',
-      'Entre 6 e 7 horas',
-      'Entre 7 e 8 horas',
+      '4 horas ou menos',
+      '5 horas',
+      '6 horas',
+      '7 horas',
       '8 horas ou mais',
     ]);
 
@@ -463,7 +461,7 @@ describe('FrmsCheckinFadiga UI', () => {
       screen.getByLabelText('KSS 9: Extremamente sonolento, com grande esforço para permanecer acordado'),
     ).toBeInTheDocument();
 
-    expect(within(sonoFieldset as HTMLElement).getAllByRole('radio')).toHaveLength(6);
+    expect(within(sonoFieldset as HTMLElement).getAllByRole('radio')).toHaveLength(5);
   });
 
   it('mantem a ordem semântica original da pergunta de aptidão, sem tratar coordenação como escala ordinal', () => {
@@ -489,7 +487,7 @@ describe('FrmsCheckinFadiga UI', () => {
 
     render(<FrmsCheckinFadiga />);
 
-    expect(screen.getByRole('radio', { name: 'Menos de 4 horas' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '4 horas ou menos' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: '8 horas ou mais' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmar Check-in Diário' })).toHaveClass('w-full');
   });
@@ -561,11 +559,10 @@ describe('FrmsCheckinFadiga UI', () => {
     const submitButton = screen.getByRole('button', { name: 'Confirmar Check-in Diário' });
 
     const casos = [
-      ['Menos de 4 horas', 3.5],
-      ['Entre 4 e 5 horas', 4],
-      ['Entre 5 e 6 horas', 5],
-      ['Entre 6 e 7 horas', 6],
-      ['Entre 7 e 8 horas', 7],
+      ['4 horas ou menos', 4],
+      ['5 horas', 5],
+      ['6 horas', 6],
+      ['7 horas', 7],
       ['8 horas ou mais', 8],
     ] as const;
 
@@ -669,7 +666,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('mantem observacao obrigatoria para resposta nao apto', () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Entre 5 e 6 horas' }));
+    fireEvent.click(screen.getByRole('radio', { name: '5 horas' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
     fireEvent.click(screen.getByLabelText('Qualidade 3 - Regular'));
@@ -1054,7 +1051,7 @@ describe('FrmsCheckinFadiga UI', () => {
     const interruptedWarning = screen.getByText(/A página foi interrompida durante o teste objetivo/i);
     expect(interruptedWarning).toHaveTextContent(/respostas do check-in foram preservadas/i);
     expect(interruptedWarning).toHaveTextContent(/reinicie apenas o PVT-B/i);
-    expect(screen.getByRole('radio', { name: 'Entre 7 e 8 horas' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: '7 horas' })).toBeChecked();
     expect(screen.getByLabelText('Hora de apresentação')).toHaveValue('07:00');
     expect(screen.getByLabelText('Hora em que acordou')).toHaveValue('05:45');
   });
