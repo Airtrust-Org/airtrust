@@ -25,6 +25,14 @@ type Config = {
 
 type PreviousLog = { qualificacao_historico_id: number; destinatario: string | null };
 
+type QualificationOptions = {
+  isCheck?: number;
+  qualificationType?: string | null;
+  category?: string;
+  employeeEmail?: string;
+  sectorId?: number | null;
+};
+
 function isoDateIn(days: number): string {
   const date = new Date();
   date.setUTCHours(0, 0, 0, 0);
@@ -72,12 +80,14 @@ function createDb(options?: {
   daysToExpiry?: number;
   configs?: Config[];
   previousLogs?: PreviousLog[];
+  qualification?: QualificationOptions;
 }) {
   const insertedLogs: Array<{ query: string; args: unknown[] }> = [];
   const queries: string[] = [];
   const configs = options?.configs ?? [emailConfig(1, 7, 'critical')];
   const daysToExpiry = options?.daysToExpiry ?? 2;
   const previousLogs = options?.previousLogs ?? [];
+  const qualification = options?.qualification ?? {};
 
   const db = {
     prepare: vi.fn((query: string) => {
@@ -95,12 +105,14 @@ function createDb(options?: {
                 funcionario_id: 77,
                 funcionario_cpf: '00000000000',
                 funcionario_nome: 'Funcionario Teste',
-                funcionario_email: 'funcionario@example.com',
+                funcionario_email: qualification.employeeEmail ?? 'funcionario@example.com',
                 funcionario_telefone: '',
-                funcionario_setor_id: 12,
+                funcionario_setor_id: qualification.sectorId === undefined ? 12 : qualification.sectorId,
                 qualificacao_codigo: 'QUAL-OPERACIONAL',
                 qualificacao_nome: 'Qualificacao Operacional',
-                categoria: 'OPERACIONAL',
+                qualificacao_tipo: qualification.qualificationType ?? 'TREINAMENTO',
+                categoria: qualification.category ?? 'OPERACIONAL',
+                is_check: qualification.isCheck ?? 0,
                 data_vencimento: isoDateIn(daysToExpiry),
               },
             ],
@@ -168,82 +180,139 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
     vi.clearAllMocks();
   });
 
-  it('envia o marco de 45 dias ao funcionario e gestor do setor', async () => {
+  it('aos 45 dias envia CHECK somente aos gestores do setor', async () => {
+    const { db, insertedLogs } = createDb({
+      daysToExpiry: 45,
+      configs: [emailConfig(45, 45, 'low')],
+      qualification: { isCheck: 1 },
+    });
+    vi.mocked(getSetorGestoresBySetor).mockResolvedValue([
+      { gestor_email: 'GESTOR.OPERACOES@example.com' },
+    ] as never);
+    const fetchMock = mockBrevoSuccess();
+
+    const summary = await processarNotificacoes(createEnv(db));
+
+    expect(summary.enviadas).toBe(1);
+    expect(recipientsFrom(fetchMock)).toEqual([{ email: 'gestor.operacoes@example.com' }]);
+    expect(insertedLogs[0]?.args[5]).toBe('gestor.operacoes@example.com');
+    expect(getSetorGestoresBySetor).toHaveBeenCalledWith(db, 6, 12, true);
+  });
+
+  it('aos 45 dias não envia qualificação não-CHECK nem ao funcionário nem ao gestor', async () => {
     const { db } = createDb({ daysToExpiry: 45, configs: [emailConfig(45, 45, 'low')] });
     vi.mocked(getSetorGestoresBySetor).mockResolvedValue([
-      { gestor_email: 'GESTOR.OPERACOES@example.com' },
-    ] as never);
-    const fetchMock = mockBrevoSuccess();
-
-    const summary = await processarNotificacoes(createEnv(db));
-
-    expect(summary.enviadas).toBe(1);
-    expect(recipientsFrom(fetchMock)).toEqual([
-      { email: 'funcionario@example.com' },
-      { email: 'gestor.operacoes@example.com' },
-    ]);
-  });
-
-  it('envia o marco de entrada em vencimento aos 30 dias', async () => {
-    const { db } = createDb({ daysToExpiry: 30, configs: [emailConfig(30, 30, 'medium')] });
-    vi.mocked(getSetorGestoresBySetor).mockResolvedValue([
       { gestor_email: 'gestor.operacoes@example.com' },
     ] as never);
     const fetchMock = mockBrevoSuccess();
 
     const summary = await processarNotificacoes(createEnv(db));
 
-    expect(summary.enviadas).toBe(1);
-    expect(recipientsFrom(fetchMock)).toEqual([
-      { email: 'funcionario@example.com' },
-      { email: 'gestor.operacoes@example.com' },
-    ]);
+    expect(summary.enviadas).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getSetorGestoresBySetor).not.toHaveBeenCalled();
   });
 
-  it('usa os dias configurados como faixas, sem depender de urgencia hardcoded', async () => {
-    const stages = [
-      emailConfig(60, 60, 'legacy-low'),
-      emailConfig(30, 30, 'legacy-medium'),
-      emailConfig(10, 10, 'legacy-high'),
-      emailConfig(3, 3, 'legacy-critical'),
-    ];
-    const { db } = createDb({ daysToExpiry: 9, configs: stages });
-    vi.mocked(getSetorGestoresBySetor).mockResolvedValue([] as never);
-    const fetchMock = mockBrevoSuccess();
-
-    const summary = await processarNotificacoes(createEnv(db));
-
-    expect(summary.enviadas).toBe(1);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('destinatario fixo legado nao substitui funcionario e gestor', async () => {
-    const { db, insertedLogs } = createDb();
-    vi.mocked(getSetorGestoresBySetor).mockResolvedValue([
-      { gestor_email: 'GESTOR.OPERACOES@example.com' },
-      { gestor_email: 'gestor.operacoes@example.com' },
-    ] as never);
-    const fetchMock = mockBrevoSuccess();
-
-    const summary = await processarNotificacoes(createEnv(db));
-
-    expect(summary.enviadas).toBe(1);
-    expect(recipientsFrom(fetchMock)).not.toContainEqual({ email: 'compliance@airtrust.com' });
-    expect(insertedLogs[0]?.args[5]).toBe('funcionario@example.com, gestor.operacoes@example.com');
-  });
-
-  it('nao repete diariamente a mesma etapa se o funcionario ja recebeu', async () => {
-    const { db } = createDb({
-      daysToExpiry: 44,
-      configs: [emailConfig(45, 45, 'low')],
-      previousLogs: [
-        {
-          qualificacao_historico_id: 901,
-          destinatario: 'funcionario@example.com, gestor@example.com',
-        },
-      ],
+  it.each([
+    [30, 'medium'],
+    [15, 'high'],
+    [7, 'critical'],
+  ])('aos %i dias envia qualquer categoria somente ao próprio funcionário', async (days, urgency) => {
+    const { db, insertedLogs } = createDb({
+      daysToExpiry: days,
+      configs: [emailConfig(days, days, urgency)],
     });
-    vi.mocked(getSetorGestoresBySetor).mockResolvedValue([] as never);
+    vi.mocked(getSetorGestoresBySetor).mockResolvedValue([
+      { gestor_email: 'gestor.operacoes@example.com' },
+    ] as never);
+    const fetchMock = mockBrevoSuccess();
+
+    const summary = await processarNotificacoes(createEnv(db));
+
+    expect(summary.enviadas).toBe(1);
+    expect(recipientsFrom(fetchMock)).toEqual([{ email: 'funcionario@example.com' }]);
+    expect(insertedLogs[0]?.args[5]).toBe('funcionario@example.com');
+    expect(getSetorGestoresBySetor).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [30, 'medium'],
+    [15, 'high'],
+    [7, 'critical'],
+  ])('aos %i dias envia CHECK ao funcionário e aos gestores do setor', async (days, urgency) => {
+    const { db } = createDb({
+      daysToExpiry: days,
+      configs: [emailConfig(days, days, urgency)],
+      qualification: { isCheck: 1 },
+    });
+    vi.mocked(getSetorGestoresBySetor).mockResolvedValue([
+      { gestor_email: 'GESTOR.OPERACOES@example.com' },
+      { gestor_email: 'gestor.operacoes@example.com' },
+    ] as never);
+    const fetchMock = mockBrevoSuccess();
+
+    const summary = await processarNotificacoes(createEnv(db));
+
+    expect(summary.enviadas).toBe(1);
+    expect(recipientsFrom(fetchMock)).toEqual([
+      { email: 'funcionario@example.com' },
+      { email: 'gestor.operacoes@example.com' },
+    ]);
+    expect(getSetorGestoresBySetor).toHaveBeenCalledWith(db, 6, 12, true);
+  });
+
+  it('reconhece CHECK também pelo tipo legado', async () => {
+    const { db } = createDb({
+      daysToExpiry: 45,
+      configs: [emailConfig(45, 45, 'low')],
+      qualification: { isCheck: 0, qualificationType: 'check' },
+    });
+    vi.mocked(getSetorGestoresBySetor).mockResolvedValue([
+      { gestor_email: 'gestor.operacoes@example.com' },
+    ] as never);
+    const fetchMock = mockBrevoSuccess();
+
+    await processarNotificacoes(createEnv(db));
+
+    expect(recipientsFrom(fetchMock)).toEqual([{ email: 'gestor.operacoes@example.com' }]);
+  });
+
+  it('reconhece CHECK também pela categoria legada', async () => {
+    const { db } = createDb({
+      daysToExpiry: 45,
+      configs: [emailConfig(45, 45, 'low')],
+      qualification: { isCheck: 0, qualificationType: 'TREINAMENTO', category: ' CHECK ' },
+    });
+    vi.mocked(getSetorGestoresBySetor).mockResolvedValue([
+      { gestor_email: 'gestor.operacoes@example.com' },
+    ] as never);
+    const fetchMock = mockBrevoSuccess();
+
+    await processarNotificacoes(createEnv(db));
+
+    expect(recipientsFrom(fetchMock)).toEqual([{ email: 'gestor.operacoes@example.com' }]);
+  });
+
+  it('não envia estágio fora da régua 45/30/15/7, mesmo se estiver configurado', async () => {
+    const { db } = createDb({
+      daysToExpiry: 10,
+      configs: [emailConfig(10, 10, 'custom')],
+      qualification: { isCheck: 1 },
+    });
+    vi.mocked(getSetorGestoresBySetor).mockResolvedValue([
+      { gestor_email: 'gestor.operacoes@example.com' },
+    ] as never);
+    const fetchMock = mockBrevoSuccess();
+
+    const summary = await processarNotificacoes(createEnv(db));
+
+    expect(summary.enviadas).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getSetorGestoresBySetor).not.toHaveBeenCalled();
+  });
+
+  it('destinatário fixo legado não recebe qualificação fora da política', async () => {
+    const { db } = createDb({ daysToExpiry: 45, configs: [emailConfig(45, 45, 'low')] });
     const fetchMock = mockBrevoSuccess();
 
     const summary = await processarNotificacoes(createEnv(db));
@@ -252,11 +321,53 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('reenvia uma etapa antiga que foi entregue apenas ao destinatario fixo legado', async () => {
+  it('não repete etapa quando o destinatário previsto já recebeu', async () => {
+    const { db } = createDb({
+      daysToExpiry: 30,
+      configs: [emailConfig(30, 30, 'medium')],
+      previousLogs: [
+        {
+          qualificacao_historico_id: 901,
+          destinatario: 'funcionario@example.com',
+        },
+      ],
+    });
+    const fetchMock = mockBrevoSuccess();
+
+    const summary = await processarNotificacoes(createEnv(db));
+
+    expect(summary.enviadas).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('em CHECK reenvia somente ao gestor que ainda não recebeu a etapa', async () => {
+    const { db, insertedLogs } = createDb({
+      daysToExpiry: 30,
+      configs: [emailConfig(30, 30, 'medium')],
+      qualification: { isCheck: 1 },
+      previousLogs: [
+        {
+          qualificacao_historico_id: 901,
+          destinatario: 'funcionario@example.com',
+        },
+      ],
+    });
+    vi.mocked(getSetorGestoresBySetor).mockResolvedValue([
+      { gestor_email: 'gestor.operacoes@example.com' },
+    ] as never);
+    const fetchMock = mockBrevoSuccess();
+
+    const summary = await processarNotificacoes(createEnv(db));
+
+    expect(summary.enviadas).toBe(1);
+    expect(recipientsFrom(fetchMock)).toEqual([{ email: 'gestor.operacoes@example.com' }]);
+    expect(insertedLogs[0]?.args[5]).toBe('gestor.operacoes@example.com');
+  });
+
+  it('reenvia uma etapa válida que antes foi entregue apenas ao destinatário fixo legado', async () => {
     const { db } = createDb({
       previousLogs: [{ qualificacao_historico_id: 901, destinatario: 'compliance@airtrust.com' }],
     });
-    vi.mocked(getSetorGestoresBySetor).mockResolvedValue([] as never);
     const fetchMock = mockBrevoSuccess();
 
     const summary = await processarNotificacoes(createEnv(db));
@@ -265,8 +376,12 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
     expect(recipientsFrom(fetchMock)).toEqual([{ email: 'funcionario@example.com' }]);
   });
 
-  it('envia diariamente qualificacao vencida ao funcionario e gestor com mensagem explicita', async () => {
-    const { db, queries } = createDb({ daysToExpiry: -3, configs: [expiredEmailConfig()] });
+  it('envia diariamente qualificação vencida somente ao próprio funcionário', async () => {
+    const { db, queries } = createDb({
+      daysToExpiry: -3,
+      configs: [expiredEmailConfig()],
+      qualification: { isCheck: 1 },
+    });
     vi.mocked(getSetorGestoresBySetor).mockResolvedValue([
       { gestor_email: 'gestor.operacoes@example.com' },
     ] as never);
@@ -275,10 +390,8 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
     const summary = await processarNotificacoes(createEnv(db));
 
     expect(summary.enviadas).toBe(1);
-    expect(recipientsFrom(fetchMock)).toEqual([
-      { email: 'funcionario@example.com' },
-      { email: 'gestor.operacoes@example.com' },
-    ]);
+    expect(recipientsFrom(fetchMock)).toEqual([{ email: 'funcionario@example.com' }]);
+    expect(getSetorGestoresBySetor).not.toHaveBeenCalled();
     const body = requestBodyFrom(fetchMock);
     expect(body.subject).toBe('🚨 Qualificação vencida: Qualificacao Operacional — há 3 dias');
     expect(body.textContent).toContain('está vencida há 3 dias');
@@ -286,18 +399,17 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
     expect(queries.some((query) => query.includes("date(enviado_em) = date('now')"))).toBe(true);
   });
 
-  it('nao repete alerta de qualificacao vencida no mesmo dia', async () => {
+  it('não repete alerta de qualificação vencida no mesmo dia', async () => {
     const { db } = createDb({
       daysToExpiry: -4,
       configs: [expiredEmailConfig()],
       previousLogs: [
         {
           qualificacao_historico_id: 901,
-          destinatario: 'funcionario@example.com, gestor@example.com',
+          destinatario: 'funcionario@example.com',
         },
       ],
     });
-    vi.mocked(getSetorGestoresBySetor).mockResolvedValue([] as never);
     const fetchMock = mockBrevoSuccess();
 
     const summary = await processarNotificacoes(createEnv(db));
@@ -306,9 +418,8 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('nao usa o estagio vencido antes da data de vencimento', async () => {
+  it('não usa o estágio vencido antes da data de vencimento', async () => {
     const { db } = createDb({ daysToExpiry: 0, configs: [expiredEmailConfig()] });
-    vi.mocked(getSetorGestoresBySetor).mockResolvedValue([] as never);
     const fetchMock = mockBrevoSuccess();
 
     const summary = await processarNotificacoes(createEnv(db));
@@ -317,8 +428,12 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('mantem o envio ao funcionario quando a resolucao do gestor falha', async () => {
-    const { db, insertedLogs } = createDb();
+  it('mantém envio ao funcionário de CHECK quando a resolução do gestor falha', async () => {
+    const { db, insertedLogs } = createDb({
+      daysToExpiry: 7,
+      configs: [emailConfig(7, 7, 'critical')],
+      qualification: { isCheck: 1 },
+    });
     vi.mocked(getSetorGestoresBySetor).mockRejectedValueOnce(
       new Error('manager lookup unavailable'),
     );
