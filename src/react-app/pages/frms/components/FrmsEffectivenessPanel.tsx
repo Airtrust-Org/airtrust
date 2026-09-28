@@ -96,13 +96,13 @@ function landingsEvidenceLine(operationalLoad: OperationalLoadDetail): string {
     operationalLoad.landings_evidence_quality === 'INCOMPLETE' ||
     operationalLoad.data_quality === 'SIGVOOS_UNAVAILABLE'
   ) {
-    return '• pousos: SIGVOOS indisponível (sem penalidade; evidência incompleta)';
+    return '• pousos: fonte operacional indisponível (sem penalidade; evidência incompleta)';
   }
   if (
     operationalLoad.landings_evidence_quality === 'CONFIRMED_ZERO' ||
     operationalLoad.weather_evidence_quality === 'NOT_APPLICABLE'
   ) {
-    return '• 0 pousos: ausência de voo confirmada pelo SIGVOOS';
+    return '• 0 pousos: ausência de voo confirmada pela fonte operacional';
   }
   return `• ${operationalLoad.landings_count} ${
     operationalLoad.landings_count === 1 ? 'pouso' : 'pousos'
@@ -210,7 +210,7 @@ export default function FrmsEffectivenessPanel({
             : dataSource === 'PROJETADA_APRESENTACAO'
               ? 'projeção da manhã — check-in + horário de apresentação; carga futura ainda não incorporada'
               : dataSource === 'ESTIMADO'
-                ? 'histórica estimada — janela operacional derivada do SIGVOOS'
+                ? 'histórica estimada — janela operacional derivada de evidência disponível'
                 : dataSource === 'MANUAL'
                   ? 'manual — janela informada'
                   : 'não confirmada'}.
@@ -294,7 +294,7 @@ export default function FrmsEffectivenessPanel({
               {operationalLoad.data_quality !== 'COMPLETE' && (
                 <p className="mt-0.5 font-medium text-amber-700">
                   {operationalLoad.data_quality === 'SIGVOOS_UNAVAILABLE'
-                    ? 'SIGVOOS indisponível — carga de pousos não presumida.'
+                    ? 'Fonte operacional indisponível — carga de pousos não presumida.'
                     : 'Evidência meteorológica incompleta — nenhuma temperatura foi presumida.'}
                 </p>
               )}

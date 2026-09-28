@@ -788,7 +788,7 @@ export default function FrmsFichaTripulante() {
           <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
             <div className="flex items-center gap-3">
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
-                Jornadas de voo / SIGVOOS
+                Jornadas de voo / fonte operacional
               </h3>
               <span className="text-[11px] font-normal normal-case tracking-normal text-slate-500">
                 Atividades sem voo aparecem no contexto operacional do período acima.

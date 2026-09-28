@@ -44,7 +44,7 @@ const DATA_QUALITY_LABELS: Record<string, string> = {
   PARTIAL: 'Parcial', PARCIAL: 'Parcial', ESTIMATED: 'Estimada', ESTIMADO: 'Estimada',
   MISSING: 'Ausente', AUSENTE: 'Ausente',
   OBSERVED: 'Observada', CONFIRMED_ZERO: 'Zero confirmado', NOT_APPLICABLE: 'Não aplicável',
-  SIGVOOS_UNAVAILABLE: 'Fallback SIGVOOS indisponível',
+  SIGVOOS_UNAVAILABLE: 'Dados operacionais indisponíveis',
 };
 export function formatDataQuality(value: string | null | undefined): string {
   if (!value) return 'Não informada';
