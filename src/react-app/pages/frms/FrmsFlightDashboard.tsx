@@ -25,6 +25,7 @@ import {
   operationalConfidence,
   type FrmsDecisionBucket,
 } from './frmsOperationalDecision';
+import { formatFrmsReason, formatSnapshotSource } from './frmsPresentation';
 
 const BUCKET_STYLE: Record<
   FrmsDecisionBucket,
@@ -141,25 +142,25 @@ function DetailDrawer({
 }) {
   const bucket = classifyOperationalItem(item);
   const confidence = operationalConfidence(item);
-  const reasons = item.motivos_principais?.filter(Boolean) || [];
+  const reasons = (item.motivos_principais?.filter(Boolean) || []).map(formatFrmsReason);
   const gaps = confidenceGaps(item);
   const date = item.data_operacional;
   const sourceFacts = [
     {
       label: 'Escala',
-      value: item.escala_source,
+      value: formatSnapshotSource(item.escala_source),
       missing: item.escala_source === 'AUSENTE',
       missingLabel: 'ausente',
     },
     {
       label: 'Jornada',
-      value: item.jornada_data_source,
+      value: formatSnapshotSource(item.jornada_data_source),
       missing: item.jornada_data_source === 'AUSENTE',
       missingLabel: 'ausente',
     },
     {
       label: 'Sono',
-      value: item.sleep_data_source,
+      value: formatSnapshotSource(item.sleep_data_source),
       missing: item.sleep_data_source === 'AUSENTE',
       missingLabel: 'ausente',
     },
@@ -459,7 +460,7 @@ export default function FrmsFlightDashboard() {
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
               {queue.map(({ item, bucket }) => {
                 const confidence = operationalConfidence(item);
-                const reason = item.motivos_principais?.[0] ||
+                const reason = item.motivos_principais?.[0] ? formatFrmsReason(item.motivos_principais[0]) :
                   (bucket === 'NORMAL' ? 'Sem pendência operacional identificada.' : 'Revisão operacional necessária.');
 
                 return (

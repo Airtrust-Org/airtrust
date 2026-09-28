@@ -21,6 +21,7 @@ import { useFrmsJornadasEffectiveness } from '@/react-app/hooks/useFrms';
 import type { FrmsEffectivenessJornadaRow } from '@/react-app/hooks/useFrms';
 import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { getEffectivenessHex, getEffectivenessLabel, type ConfigLimites } from '../frmsUtils';
+import { formatDataQuality } from '../frmsPresentation';
 
 type ViewMode = 'effectiveness' | 'workload' | 'operational' | 'recovery';
 
@@ -139,14 +140,14 @@ function CustomTooltip({
       </div>
       {point.hora_apresentacao && (
         <p className="mt-2 text-slate-500">
-          Janela {point.jornada_boundary_source === 'REAL' ? 'informada/confirmada' : point.jornada_boundary_source === 'ESTIMADO' ? 'estimada pelo SIGVOOS' : 'não classificada'}: {point.hora_apresentacao.slice(0, 5)}–{point.hora_termino?.slice(0, 5) || 'em andamento'}
+          Janela {point.jornada_boundary_source === 'REAL' ? 'informada/confirmada' : point.jornada_boundary_source === 'ESTIMADO' ? 'estimada' : 'não classificada'}: {point.hora_apresentacao.slice(0, 5)}–{point.hora_termino?.slice(0, 5) || 'em andamento'}
         </p>
       )}
       {point.effectiveness_source?.startsWith('PROJETADA') ? (
         <p className="mt-1 text-blue-700">Efetividade projetada para a decisão pré-voo.</p>
       ) : null}
       {point.operational_load_data_quality && point.operational_load_data_quality !== 'COMPLETE' && (
-        <p className="mt-1 text-amber-700">Carga operacional: {point.operational_load_data_quality}</p>
+        <p className="mt-1 text-amber-700">Carga operacional: {formatDataQuality(point.operational_load_data_quality)}</p>
       )}
     </div>
   );

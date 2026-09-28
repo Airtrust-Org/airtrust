@@ -633,7 +633,7 @@ describe('frms operational snapshot builder', () => {
     expect(item?.fatorizacao_status).toBe('AUSENTE');
   });
 
-  it('7) apresentação do check-in prevalece sobre escala/jornada e ausência de check-in não gera fallback', () => {
+  it('7) jornada operacional realizada prevalece na janela exibida; check-in continua obrigatório para efetividade', () => {
     const input = createBaseInput();
 
     input.rows.escalas.push({
@@ -679,7 +679,7 @@ describe('frms operational snapshot builder', () => {
     const result = buildFrmsOperationalSnapshot(input);
     const item = getByKey(result.items, '2026-05-30', 10);
 
-    expect(item?.hora_apresentacao).toBe('09:00');
+    expect(item?.hora_apresentacao).toBe('06:15');
     expect(item?.hora_acordar).toBe('07:15');
     expect(item?.horas_sono).toBe(7.5);
     expect(item?.effectiveness_pct).toBe(94);
@@ -703,7 +703,7 @@ describe('frms operational snapshot builder', () => {
       effectiveness_nivel: 'VERDE',
     });
     const missingItem = getByKey(buildFrmsOperationalSnapshot(missing).items, '2026-05-31', 10);
-    expect(missingItem?.hora_apresentacao).toBeNull();
+    expect(missingItem?.hora_apresentacao).toBe('06:00');
     expect(missingItem?.hora_acordar).toBeNull();
     expect(missingItem?.horas_sono).toBeNull();
     expect(missingItem?.effectiveness_pct).toBeNull();

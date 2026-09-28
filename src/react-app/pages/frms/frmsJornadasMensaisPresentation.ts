@@ -11,7 +11,7 @@ export interface JornadaMensalPresentation {
   operationalHvLabel: string;
   operationalJourneyLabel: string;
   auxiliarySourceLabel: string | null;
-  boundarySourceLabel: 'Jornada real' | 'Janela SIGVOOS estimada' | 'Sem término confirmado';
+  boundarySourceLabel: 'Jornada real' | 'Janela estimada' | 'Sem término confirmado';
   boundarySourceClass: string;
 }
 
@@ -23,21 +23,21 @@ function formatPct(value?: number | null): string {
 export function integridadeLabel(codigo?: string | null): string {
   switch (codigo) {
     case 'FONTE_NAO_CANONICA':
-      return 'Fonte nao canonica';
+      return 'Fonte auxiliar';
     case 'PENDENTE_SIGVOOS':
-      return 'Pendente SIGVOOS';
+      return 'Dados de voo pendentes';
     case 'FIRA_NAO_OPERACIONAL':
-      return 'FIRA nao operacional';
+      return 'FIRA (fonte auxiliar)';
     case 'JORNADA_ZERO_COM_HV':
       return 'Jornada zero com HV';
     case 'JORNADA_AUSENTE_COM_HV':
       return 'Jornada ausente com HV';
     case 'HORARIO_INCOMPLETO_COM_HV':
-      return 'Horario incompleto com HV';
+      return 'Horário incompleto com HV';
     case 'HV_MAIOR_QUE_JORNADA':
       return 'HV maior que jornada';
     default:
-      return 'Inconsistencia critica';
+      return 'Inconsistência crítica';
   }
 }
 
@@ -51,15 +51,15 @@ function formatOperationalMinutes(value?: number | null): string {
 function sourceLabel(status?: string | null): string {
   switch (status) {
     case 'CANONICAL_SIGVOOS':
-      return 'SIGVOOS';
+      return 'SIGVOOS (fallback)';
     case 'PENDENTE_SIGVOOS':
-      return 'Pendente SIGVOOS';
+      return 'Dados de voo pendentes';
     case 'FIRA_NAO_OPERACIONAL':
-      return 'FIRA nao operacional';
+      return 'FIRA (fonte auxiliar)';
     case 'FONTE_NAO_CANONICA':
-      return 'Fonte nao canonica';
+      return 'Fonte auxiliar';
     default:
-      return status || 'Pendente SIGVOOS';
+      return status ? 'Fonte em validação' : 'Dados de voo pendentes';
   }
 }
 
@@ -120,7 +120,7 @@ export function buildJornadaMensalPresentation(
       jornada.jornada_boundary_source === 'REAL'
         ? 'Jornada real'
         : jornada.jornada_boundary_source === 'ESTIMADO'
-          ? 'Janela SIGVOOS estimada'
+          ? 'Janela estimada'
           : 'Sem término confirmado',
     boundarySourceClass:
       jornada.jornada_boundary_source === 'REAL'

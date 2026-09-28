@@ -147,13 +147,15 @@ describe('FRMS decisão operacional — compliance obrigatório', () => {
       perfil_regulatorio_configurado: true, compliance_avaliavel: false,
       compliance_unknown_reasons: [
         'ROLLING_REGULATORY_EVIDENCE_MISSING',
-        'WORK_TIME_EVIDENCE_MISSING',
+        'ACTIVITY_INTERVAL_MISSING',
+        'ACTIVITY_REALIZATION_UNCONFIRMED',
       ],
     });
     expect(result.estado_operacional).toBe('NAO_AVALIADO');
     expect(result.motivos_principais).toEqual([
       'Histórico móvel de voo e jornada ainda incompleto para a avaliação regulatória',
-      'Histórico de jornada e trabalho ainda incompleto para a avaliação regulatória',
+      'Horário de início ou fim da atividade ainda não foi informado',
+      'Realização da atividade ainda não foi confirmada',
     ]);
     expect(result.motivos_principais.join(' ')).not.toMatch(/[A-Z]{3,}_[A-Z0-9_]+/);
   });
