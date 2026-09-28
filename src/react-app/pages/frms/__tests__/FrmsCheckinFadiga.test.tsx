@@ -411,6 +411,8 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.getByLabelText('Qualidade 2 - Ruim')).toBeInTheDocument();
     expect(screen.getByLabelText('Qualidade 1 - Péssima')).toBeInTheDocument();
     expect(screen.getByText('Dormi muito bem; acordei descansado e recuperado.')).toBeInTheDocument();
+    expect(screen.getByText('Bloco 1 - Repouso absoluto')).toBeInTheDocument();
+    expect(screen.queryByText('Bloco 1 - Sono')).not.toBeInTheDocument();
   });
 
   it('renderiza as cinco opções de sono definidas para o check-in', () => {

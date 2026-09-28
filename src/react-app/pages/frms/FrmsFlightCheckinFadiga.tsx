@@ -809,7 +809,7 @@ export default function FrmsFlightCheckinFadiga() {
             <RecoveryActivityCard today={today} />
 
             <div className="space-y-3">
-              <FormCard label="Bloco 1 - Sono" hint="Informe seu descanso mais recente.">
+              <FormCard label="Bloco 1 - Repouso absoluto" hint="Informe seu descanso mais recente.">
                 <div className="space-y-4">
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-slate-700">
