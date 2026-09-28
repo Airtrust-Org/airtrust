@@ -248,7 +248,8 @@ export async function loadPreferredOperationalJourneys(
 ): Promise<PreferredOperationalJourney[]> {
   if (!Number.isInteger(empresaId) || empresaId <= 0) throw new Error('INVALID_TENANT');
   const canonical = buildCanonicalOperationalSourceSql('j.origem');
-  const legacy = await db.prepare(
+
+  const legacyPromise = db.prepare(
     `SELECT CAST(j.tripulante_id AS INTEGER) AS tripulante_id,
             j.data,
             j.hora_apresentacao,
@@ -265,19 +266,37 @@ export async function loadPreferredOperationalJourneys(
         AND j.data BETWEEN ? AND ? AND ${canonical}`,
   ).bind(empresaId, from, to).all<LegacySigvoosOperationalJourney>();
 
-  try {
-    const cvRecords = await fetchControleVoosOperationalRecords(db, empresaId, from, to);
-    return resolvePreferredOperationalJourneys(cvRecords, legacy.results ?? []);
-  } catch (error) {
-    // Transitional safety invariant: Controle de Voos is preferred, never required
-    // for historical continuity. If its read-model is unavailable, SIGVOOS remains
-    // the explicit fallback rather than producing an empty operational history.
+  const [legacyResult, cvResult] = await Promise.allSettled([
+    legacyPromise,
+    fetchControleVoosOperationalRecords(db, empresaId, from, to),
+  ]);
+
+  if (legacyResult.status === 'rejected') {
+    console.warn('[FRMS] SIGVOOS fallback unavailable; using Controle de Voos only', {
+      empresaId,
+      from,
+      to,
+      error: legacyResult.reason instanceof Error
+        ? legacyResult.reason.message
+        : String(legacyResult.reason ?? ''),
+    });
+  }
+  if (cvResult.status === 'rejected') {
     console.warn('[FRMS] Controle de Voos unavailable; using SIGVOOS fallback', {
       empresaId,
       from,
       to,
-      error: error instanceof Error ? error.message : String(error ?? ''),
+      error: cvResult.reason instanceof Error
+        ? cvResult.reason.message
+        : String(cvResult.reason ?? ''),
     });
-    return resolvePreferredOperationalJourneys([], legacy.results ?? []);
   }
+
+  if (legacyResult.status === 'rejected' && cvResult.status === 'rejected') {
+    throw new Error('FRMS_OPERATIONAL_SOURCES_UNAVAILABLE');
+  }
+
+  const legacyRows = legacyResult.status === 'fulfilled' ? legacyResult.value.results ?? [] : [];
+  const cvRecords = cvResult.status === 'fulfilled' ? cvResult.value : [];
+  return resolvePreferredOperationalJourneys(cvRecords, legacyRows);
 }
