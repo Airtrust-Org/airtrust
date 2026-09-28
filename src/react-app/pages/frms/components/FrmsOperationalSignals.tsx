@@ -16,6 +16,7 @@ import {
   type FrmsReadinessAdapter,
   type FrmsSignalTone,
 } from '../frmsOperationalSignals';
+import type { FrmsDecisionBucket } from '../frmsOperationalDecision';
 
 const TONE_TEXT: Record<FrmsSignalTone, string> = {
   ok: 'normal',
@@ -40,6 +41,9 @@ const TONE_CHIP: Record<FrmsSignalTone, string> = {
   unknown:
     'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
 };
+
+const AUXILIARY_CHIP =
+  'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200';
 
 const TONE_ICON: Record<FrmsSignalTone, typeof CheckCircle2> = {
   ok: CheckCircle2,
@@ -104,10 +108,13 @@ export function useOperationalSignals(
 export function FrmsSignalChips({
   item,
   readinessAdapter,
+  decisionBucket,
   className = '',
 }: {
   item: FrmsOperationalSnapshotItem;
   readinessAdapter?: FrmsReadinessAdapter;
+  /** Métrica positiva é apenas informativa quando a fila já requer uma ação. */
+  decisionBucket?: FrmsDecisionBucket;
   className?: string;
 }) {
   const signals = useOperationalSignals(item, readinessAdapter);
@@ -117,19 +124,29 @@ export function FrmsSignalChips({
       className={`flex flex-wrap gap-1.5 ${className}`}
       aria-label="Sinais operacionais do dia"
     >
-      {signals.map((signal) => (
-        <li key={signal.key}>
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-semibold ${TONE_CHIP[signal.tone]}`}
-            title={signal.detail ? `${signal.label}: ${signal.value} — ${signal.detail}` : ariaLabel(signal)}
-            aria-label={ariaLabel(signal)}
-          >
-            <span className={`h-1.5 w-1.5 flex-none rounded-full ${TONE_DOT[signal.tone]}`} aria-hidden="true" />
-            <span className="text-slate-500 dark:text-slate-400">{signal.label}</span>
-            <span>{signal.value}</span>
-          </span>
-        </li>
-      ))}
+      {signals.map((signal) => {
+        const isAuxiliaryPositive = decisionBucket != null && decisionBucket !== 'NORMAL' && signal.tone === 'ok';
+        const description = isAuxiliaryPositive
+          ? `${ariaLabel(signal)} — sinal auxiliar; a decisão operacional requer ${decisionBucket === 'CONFIRMAR' ? 'verificação de dados' : 'avaliação'}.`
+          : ariaLabel(signal);
+        const title = isAuxiliaryPositive
+          ? description
+          : signal.detail ? `${signal.label}: ${signal.value} — ${signal.detail}` : description;
+
+        return (
+          <li key={signal.key}>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-semibold ${isAuxiliaryPositive ? AUXILIARY_CHIP : TONE_CHIP[signal.tone]}`}
+              title={title}
+              aria-label={description}
+            >
+              <span className={`h-1.5 w-1.5 flex-none rounded-full ${isAuxiliaryPositive ? 'bg-slate-400' : TONE_DOT[signal.tone]}`} aria-hidden="true" />
+              <span className="text-slate-500 dark:text-slate-400">{signal.label}</span>
+              <span>{signal.value}</span>
+            </span>
+          </li>
+        );
+      })}
     </ul>
   );
 }

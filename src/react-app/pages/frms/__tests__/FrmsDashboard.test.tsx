@@ -267,7 +267,10 @@ describe('FrmsDashboard simplificado', () => {
     const chips = within(list);
     expect(chips.getByLabelText('Check-in diário: Não realizada — crítico')).toBeInTheDocument();
     expect(chips.getByLabelText('Risco do período: Dados incompletos — sem dado')).toBeInTheDocument();
-    expect(chips.getByLabelText('Efetividade: 92,0% — normal')).toBeInTheDocument();
+    const effectiveness = chips.getByLabelText(
+      'Efetividade: 92,0% — normal — sinal auxiliar; a decisão operacional requer avaliação.',
+    );
+    expect(effectiveness).toHaveClass('bg-slate-50');
     expect(chips.getByLabelText('Prontidão: Não avaliado — sem dado')).toBeInTheDocument();
   });
 
