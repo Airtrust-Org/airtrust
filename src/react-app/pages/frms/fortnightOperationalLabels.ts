@@ -70,7 +70,7 @@ export function formatRecoveryActivityType(value: string | null | undefined): st
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  REAL: 'Real',
+  REAL: 'Confirmado',
   ESTIMADO: 'Estimado',
   AUSENTE: 'Ausente',
   INCONSISTENTE: 'Inconsistente',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatCheckinStatus, formatDataQuality, formatFrmsActivity, formatOptionalMinutesCompact,
-  formatRecoveryCredit, formatRecoveryState, formatSnapshotSource,
+  formatFrmsReason, formatRecoveryCredit, formatRecoveryState, formatSnapshotSource,
 } from '../frmsPresentation';
 
 describe('FRMS presentation helpers', () => {
@@ -21,5 +21,10 @@ describe('FRMS presentation helpers', () => {
     expect(formatRecoveryState('PARTIAL')).toBe('Recuperação parcial');
     expect(formatDataQuality('INCOMPLETE')).toBe('Incompleta');
     expect(formatSnapshotSource('REAL')).toBe('Confirmado');
+    expect(formatFrmsReason('ROLLING_REGULATORY_EVIDENCE_MISSING')).toContain('Histórico móvel');
+    expect(formatFrmsReason('ACTIVITY_INTERVAL_MISSING')).toContain('Horário de início ou fim da atividade');
+    expect(formatFrmsReason('ACTIVITY_REALIZATION_UNCONFIRMED')).toContain('Realização da atividade');
+    expect(formatFrmsReason('SOME_NEW_INTERNAL_CODE')).toBe('Informação operacional incompleta — revisar dados de origem');
+    expect(formatFrmsReason('Mensagem já apresentada ao usuário')).toBe('Mensagem já apresentada ao usuário');
   });
 });

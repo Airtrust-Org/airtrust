@@ -38,6 +38,10 @@ import {
 import { classifyOperationalCrewRole } from './operational-crew';
 import { deriveFrmsOperationalDecision, type FrmsDecisaoOperacionalEstado } from './frms-operational-decision';
 import { loadPreferredOperationalJourneys, type FrmsOperationalDataSource } from './preferred-operational-source';
+import { buildMissionRosterRows, normalizeMissionPeriods, type MissionPeriodRow } from './mission-periods';
+import { addDaysIso, maxIso, minIso } from './iso-date';
+
+export type { MissionPeriodRow } from './mission-periods';
 import { collectByBindChunks } from '../../utils/d1-bind-chunks';
 
 
@@ -613,31 +617,6 @@ function compareSnapshotItems(
   return a.funcionario_id - b.funcionario_id;
 }
 
-function parseIsoDate(iso: string): Date {
-  const [year, month, day] = iso.split('-').map(Number);
-  return new Date(Date.UTC(year, (month || 1) - 1, day || 1));
-}
-
-function formatIsoDate(date: Date): string {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function addDaysIso(iso: string, days: number): string {
-  const date = parseIsoDate(iso);
-  date.setUTCDate(date.getUTCDate() + days);
-  return formatIsoDate(date);
-}
-
-function minIso(a: string, b: string): string {
-  return a <= b ? a : b;
-}
-
-function maxIso(a: string, b: string): string {
-  return a >= b ? a : b;
-}
 
 /** Dias de contexto anteriores necessários para o rolling de 168h (7 dias, incluindo a âncora). */
 const ROLLING_168H_CONTEXT_LEAD_DAYS = 6;
@@ -769,13 +748,18 @@ export function buildFrmsOperationalSnapshot(
     const activitySummary = summarizeFrmsActivities(activities, teveJornada);
     const teveAtividadeFrms = teveJornada || activities.length > 0;
 
-    // A apresentação declarada no check-in diário é a fonte canônica para o FRMS.
-    // Escala/SIGVOOS continuam sendo evidência operacional, mas não substituem o dado
-    // subjetivo obrigatório quando ele estiver ausente.
-    const horaApresentacao = normalizeText(checkin?.hora_apresentacao);
+    // A jornada realizada vem da evidência operacional: em dia com voo, o pipeline
+    // já normalizou primeiro acionamento -30 min e último corte +30 min. O check-in
+    // continua sendo evidência subjetiva de readiness/sono e não sobrescreve a
+    // janela operacional realizada. Em dia sem voo, a atividade real informada em
+    // D+1 pode fornecer a janela do dia anterior.
+    const checkinPresentationTime = normalizeText(checkin?.hora_apresentacao);
+    const horaApresentacao =
+      (teveJornada ? normalizeText(jornada?.hora_apresentacao) : null) ??
+      normalizeText(activitySummary.start_time) ??
+      checkinPresentationTime;
     const horaTermino =
       (teveJornada ? normalizeText(jornada?.hora_termino) : null) ??
-      normalizeText(escala?.hora_termino) ??
       normalizeText(activitySummary.end_time);
 
     const horasVooMinutos = teveJornada ? asNumber(jornada?.horas_voo_minutos) : 0;
@@ -814,7 +798,7 @@ export function buildFrmsOperationalSnapshot(
 
     const completeDailyCheckin =
       Boolean(checkin) &&
-      Boolean(horaApresentacao) &&
+      Boolean(checkinPresentationTime) &&
       sleepDataSource === 'REAL' &&
       wakeDataSource === 'REAL';
 
@@ -1076,14 +1060,6 @@ async function loadRecoveryCreditRows(
   }
 }
 
-export interface MissionPeriodRow {
-  funcionario_id: number;
-  data_inicio_embarque: string;
-  data_fim_embarque: string;
-  source_priority?: number;
-  source_kind?: 'ALLOCATION' | 'BASE_FORTNIGHT' | 'FRMS_LEGACY';
-}
-
 const ACT_CDS_MAX_POST_MISSION_REST_DAYS = 15;
 
 interface OperationalSnapshotRows {
@@ -1253,7 +1229,10 @@ async function loadOperationalSnapshotRows(
               AND f.deleted_at IS NULL
               AND COALESCE(f.ativo, 1) = 1
               AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-              AND UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE')
+              AND (
+                UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE','PIC','SIC','TRIPULANTE')
+                OR UPPER(COALESCE(f.cargo, '')) IN ('PILOTO','COPILOTO','COMANDANTE','PIC','SIC','TRIPULANTE')
+              )
              LEFT JOIN escalas_quinzenas eq ON eq.id = ea.quinzena_id AND eq.empresa_id = f.empresa_id AND eq.deleted_at IS NULL
             WHERE ea.deleted_at IS NULL
               AND LOWER(COALESCE(ea.status, '')) <> 'cancelado'
@@ -1274,7 +1253,10 @@ async function loadOperationalSnapshotRows(
             WHERE f.empresa_id = ? AND f.deleted_at IS NULL
               AND COALESCE(f.ativo, 1) = 1
               AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-              AND UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE')
+              AND (
+                UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE','PIC','SIC','TRIPULANTE')
+                OR UPPER(COALESCE(f.cargo, '')) IN ('PILOTO','COPILOTO','COMANDANTE','PIC','SIC','TRIPULANTE')
+              )
               AND eq.data_inicio <= ? AND eq.data_fim >= ?
            UNION ALL
            SELECT CAST(fq.tripulante_id AS INTEGER), fq.data_inicio_embarque, fq.data_fim_embarque, 3, 'FRMS_LEGACY'
@@ -1285,7 +1267,10 @@ async function loadOperationalSnapshotRows(
               AND f.deleted_at IS NULL
               AND COALESCE(f.ativo, 1) = 1
               AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-              AND UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE')
+              AND (
+                UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE','PIC','SIC','TRIPULANTE')
+                OR UPPER(COALESCE(f.cargo, '')) IN ('PILOTO','COPILOTO','COMANDANTE','PIC','SIC','TRIPULANTE')
+              )
             WHERE fq.deleted_at IS NULL
               AND fq.status_ciclo IN ('ATIVO','ENCERRADO')
               AND fq.data_inicio_embarque <= ? AND fq.data_fim_embarque >= ?
@@ -1335,31 +1320,6 @@ async function loadOperationalSnapshotRows(
     regulatoryRolling: regulatoryRollingResult.results || [],
     missionPeriods: normalizeMissionPeriods(missionPeriodsResult.results || []),
   };
-}
-
-function normalizeMissionPeriods(rows: readonly MissionPeriodRow[]): MissionPeriodRow[] {
-  const byRange = new Map<string, MissionPeriodRow>();
-  for (const row of rows) {
-    const funcionarioId = Number(row.funcionario_id);
-    if (!Number.isInteger(funcionarioId) || funcionarioId <= 0) continue;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.data_inicio_embarque) || !/^\d{4}-\d{2}-\d{2}$/.test(row.data_fim_embarque)) continue;
-    if (row.data_inicio_embarque > row.data_fim_embarque) continue;
-    const normalized: MissionPeriodRow = {
-      ...row,
-      funcionario_id: funcionarioId,
-      source_priority: Number.isFinite(Number(row.source_priority)) ? Number(row.source_priority) : 99,
-    };
-    const key = `${funcionarioId}::${row.data_inicio_embarque}::${row.data_fim_embarque}`;
-    const current = byRange.get(key);
-    if (!current || Number(normalized.source_priority) < Number(current.source_priority ?? 99)) {
-      byRange.set(key, normalized);
-    }
-  }
-  return [...byRange.values()].sort((a, b) =>
-    a.funcionario_id - b.funcionario_id ||
-    a.data_inicio_embarque.localeCompare(b.data_inicio_embarque) ||
-    Number(a.source_priority ?? 99) - Number(b.source_priority ?? 99),
-  );
 }
 
 function collectCandidateIds(rows: OperationalSnapshotRows): number[] {
@@ -1567,26 +1527,6 @@ export function deriveCostaDoSolMissionEvidenceForDate(
     postMissionDutyOnDate: dutyOnDate && (previousPeriod != null || currentPeriod == null),
     postMissionRestEvidenceComplete,
   };
-}
-
-function buildMissionRosterRows(
-  missionPeriods: readonly MissionPeriodRow[],
-  start: string,
-  end: string,
-): Array<{ data_operacional: string; funcionario_id: number }> {
-  const byKey = new Map<string, { data_operacional: string; funcionario_id: number }>();
-  for (const period of missionPeriods) {
-    const funcionarioId = asNumber(period.funcionario_id);
-    if (funcionarioId <= 0) continue;
-    const rangeStart = maxIso(start, period.data_inicio_embarque);
-    const rangeEnd = minIso(end, period.data_fim_embarque);
-    if (rangeStart > rangeEnd) continue;
-    for (let date = rangeStart; date <= rangeEnd; date = addDaysIso(date, 1)) {
-      const key = `${date}::${funcionarioId}`;
-      byKey.set(key, { data_operacional: date, funcionario_id: funcionarioId });
-    }
-  }
-  return [...byKey.values()];
 }
 
 function collectOperationalKeys(

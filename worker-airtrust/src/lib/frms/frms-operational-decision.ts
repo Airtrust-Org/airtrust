@@ -125,6 +125,18 @@ const COMPLIANCE_REASON_LABELS: Readonly<Record<string, string>> = Object.freeze
     'Evidência externa de voo ainda está pendente de confirmação',
   HELICOPTER_LIMITS_NOT_APPLICABLE_TO_PROFILE:
     'Limites específicos de helicóptero não se aplicam ao perfil regulatório configurado',
+  ACTIVITY_INTERVAL_MISSING:
+    'Horário de início ou fim da atividade ainda não foi informado',
+  ACTIVITY_REALIZATION_UNCONFIRMED:
+    'Realização da atividade ainda não foi confirmada',
+  ACTIVITY_LEGAL_FACTOR_MISSING:
+    'Regra de contabilização da atividade ainda não pôde ser confirmada',
+  DUTY_INTERVAL_MISSING:
+    'Horário de início ou fim da jornada ainda não foi informado',
+  MISSION_WORK_CONTEXT_INCOMPLETE:
+    'Histórico do período operacional ainda está incompleto',
+  POST_MISSION_WORK_CONTEXT_INCOMPLETE:
+    'Histórico de trabalho após o período operacional ainda está incompleto',
 });
 
 function humanizeComplianceReason(reason: string): string {

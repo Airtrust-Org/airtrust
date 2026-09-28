@@ -104,12 +104,6 @@ const LARGE_FILE_LINE_CAPS = {
   // the GET /:id/pdf proposal report endpoint (Fase G). Extraction remains
   // a follow-up.
   'routes/simuladores-planejamento.ts': 2186,
-  // Cap raised 2026-09-28: counted 2043. The operational snapshot now
-  // materializes every crew member assigned to the fortnight, retains the
-  // Controle de Voos primary / SIGVOOS fallback provenance, and applies the
-  // explicit duty-boundary evidence without silently dropping inactive crew.
-  // Keep further growth behind extracted read-model helpers.
-  'lib/frms/operational-snapshot.ts': 2043,
 } as const;
 
 const SQL_PREPARE_CAPS = {

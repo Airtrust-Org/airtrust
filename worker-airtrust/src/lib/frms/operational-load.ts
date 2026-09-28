@@ -83,7 +83,7 @@ export function computeOperationalLoadV2(input: OperationalLoadV2Input): Operati
 export function describeOperationalLoadV2(result: OperationalLoadV2Result): { title: string; lines: string[] } {
   const fmt = (points: number) => points.toFixed(1).replace('.', ',');
   const lines: string[] = [];
-  if (result.landings_evidence_quality === 'INCOMPLETE') lines.push('Pousos: SIGVOOS indisponível (sem penalidade).');
+  if (result.landings_evidence_quality === 'INCOMPLETE') lines.push('Pousos: fonte operacional indisponível (sem penalidade).');
   else if (result.landings_evidence_quality === 'CONFIRMED_ZERO') lines.push('Pousos: ausência de voo confirmada.');
   else lines.push(`Pousos: ${result.landings_count} → ${fmt(result.operational_load_landings_delta)} ponto(s).`);
   if (result.weather_evidence_quality === 'OBSERVED' && result.temperature_max_c != null) {

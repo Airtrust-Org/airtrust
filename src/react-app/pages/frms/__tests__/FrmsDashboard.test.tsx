@@ -228,6 +228,23 @@ describe('FrmsDashboard simplificado', () => {
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(4);
   });
 
+  it('mantém na fila o tripulante da quinzena mesmo sem voo ou jornada no dia', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(
+      state({
+        data: [item({
+          nome: 'Tripulante Sem Voo', nome_guerra: 'Sem Voo', escalado: false, teve_jornada: false,
+          escala_source: 'AUSENTE', jornada_data_source: 'AUSENTE', fatorizacao_status: 'AUSENTE',
+          effectiveness_pct: null, checkin_status: 'NAO_APLICAVEL', alertas: [],
+        })],
+      }),
+    );
+
+    renderDashboard();
+
+    expect(screen.getByRole('button', { name: /Sem Voo/i })).toBeInTheDocument();
+    expect(screen.getAllByText('Verificar').length).toBeGreaterThan(0);
+  });
+
   it('rebaixa sem pendência e mantém o resumo superior só com métricas de ação', () => {
     renderDashboard();
 
@@ -276,6 +293,33 @@ describe('FrmsDashboard simplificado', () => {
     const drawer = within(screen.getByRole('dialog'));
     expect(drawer.getByText(/Falta: sem jornada/i)).toBeInTheDocument();
     expect(drawer.getByText('Jornada: ausente')).toBeInTheDocument();
+  });
+
+  it('não exibe códigos internos nem enums de fonte em inglês na operação', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(
+      state({
+        data: [item({
+          snapshot_status: 'INCOMPLETO', estado_operacional: 'NAO_AVALIADO', fatorizacao_status: 'AUSENTE',
+          motivos_principais: [
+            'ROLLING_REGULATORY_EVIDENCE_MISSING',
+            'ACTIVITY_INTERVAL_MISSING',
+            'ACTIVITY_REALIZATION_UNCONFIRMED',
+          ],
+        })],
+      }),
+    );
+
+    renderDashboard();
+
+    expect(screen.queryByText('ROLLING_REGULATORY_EVIDENCE_MISSING')).not.toBeInTheDocument();
+    expect(screen.getByText(/Histórico móvel de voo e jornada/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Max/i }));
+    const drawer = within(screen.getByRole('dialog'));
+    expect(drawer.queryByText('ACTIVITY_INTERVAL_MISSING')).not.toBeInTheDocument();
+    expect(drawer.getByText(/Horário de início ou fim da atividade/i)).toBeInTheDocument();
+    expect(drawer.getByText(/Realização da atividade ainda não foi confirmada/i)).toBeInTheDocument();
+    expect(drawer.getByText('Jornada: Confirmado')).toBeInTheDocument();
+    expect(drawer.getByText('Sono: Confirmado')).toBeInTheDocument();
   });
 
   it('abre o detalhe no mesmo contexto e marca consultas externas como secundárias', () => {

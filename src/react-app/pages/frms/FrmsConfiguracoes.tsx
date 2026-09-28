@@ -379,6 +379,11 @@ const PROVENANCE_TYPES = [
   { value: 'APPROVED_OPERATIONAL_POLICY', label: 'Política operacional aprovada para uso no modelo' },
 ] as const;
 
+function provenanceTypeLabel(value: string | null | undefined): string {
+  if (!value) return 'Não informada';
+  return PROVENANCE_TYPES.find((type) => type.value === value)?.label ?? 'Outra proveniência registrada';
+}
+
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -597,7 +602,7 @@ export default function FrmsConfiguracoes() {
               <span><strong>Revisão:</strong> {data.revision.revision_number} ({data.revision.id})</span>
               <span><strong>Modelo/política:</strong> {data.model_version}</span>
               <span><strong>Vigência:</strong> {data.effective_from}{data.effective_to ? ` a ${data.effective_to}` : ' em diante'}</span>
-              <span><strong>Proveniência:</strong> {data.revision.source_type}</span>
+              <span><strong>Proveniência:</strong> {provenanceTypeLabel(data.revision.source_type)}</span>
             </div>
             <p className="mt-2 text-xs text-slate-600">
               Esta tela usa a revisão efetiva do tenant autenticado. Não há seleção de empresa pelo cliente nem fallback para valores globais.
@@ -722,7 +727,7 @@ export default function FrmsConfiguracoes() {
                   <option value="">Selecione uma revisão histórica</option>
                   {(history ?? []).map((revision) => (
                     <option key={revision.id} value={revision.id}>
-                      #{revision.revision_number} · {revision.policy_version} · {revision.source_type} · {revision.effective_from}
+                      #{revision.revision_number} · {revision.policy_version} · {provenanceTypeLabel(revision.source_type)} · {revision.effective_from}
                     </option>
                   ))}
                 </select>

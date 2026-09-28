@@ -20,6 +20,20 @@ const EMPTY: FormState = {
   code: '', operational_class: 'AERODROME', name: '', timezone_iana: '',
   weather_source_kind: 'NONE', redemet_station_icao: '', latitude: '', longitude: '', source_reference: '',
 };
+
+const OPERATIONAL_CLASS_LABELS: Record<FrmsLocationCatalogRow['operational_class'], string> = {
+  AERODROME: 'Aeródromo',
+  HELIDECK: 'Helideck',
+  PLATFORM: 'Plataforma',
+  OTHER: 'Outro',
+};
+
+const WEATHER_SOURCE_LABELS: Record<FrmsLocationCatalogRow['weather_source_kind'], string> = {
+  NONE: 'Sem fonte meteorológica',
+  REDEMET: 'REDEMET',
+  HELIDECK_FEED: 'Feed do helideck',
+  MANUAL_MEASURED: 'Medição manual',
+};
 function formFrom(row: FrmsLocationCatalogRow): FormState {
   return {
     code: row.code,
@@ -134,7 +148,7 @@ export default function FrmsLocationCatalogCard() {
             <button key={row.id} type="button" onClick={() => setSelected(row.code)}
               className={`block w-full border-b border-slate-100 px-3 py-2 text-left text-xs last:border-0 ${selected === row.code ? 'bg-sky-100 text-sky-950' : 'hover:bg-slate-50'}`}>
               <span className="font-semibold">{row.code}</span>{row.name ? ` · ${row.name}` : ''}
-              <span className="mt-0.5 block text-[11px] text-slate-500">{row.operational_class} · {row.weather_source_kind}</span>
+              <span className="mt-0.5 block text-[11px] text-slate-500">{OPERATIONAL_CLASS_LABELS[row.operational_class]} · {WEATHER_SOURCE_LABELS[row.weather_source_kind]}</span>
             </button>
           ))}
         </div>

@@ -43,6 +43,8 @@ const DATA_QUALITY_LABELS: Record<string, string> = {
   COMPLETE: 'Completa', COMPLETO: 'Completa', INCOMPLETE: 'Incompleta', INCOMPLETO: 'Incompleta',
   PARTIAL: 'Parcial', PARCIAL: 'Parcial', ESTIMATED: 'Estimada', ESTIMADO: 'Estimada',
   MISSING: 'Ausente', AUSENTE: 'Ausente',
+  OBSERVED: 'Observada', CONFIRMED_ZERO: 'Zero confirmado', NOT_APPLICABLE: 'Não aplicável',
+  SIGVOOS_UNAVAILABLE: 'Dados operacionais indisponíveis',
 };
 export function formatDataQuality(value: string | null | undefined): string {
   if (!value) return 'Não informada';
@@ -53,6 +55,9 @@ export function formatSnapshotSource(value: string | null | undefined): string {
   if (!value || value === 'AUSENTE') return 'Ausente';
   if (value === 'REAL') return 'Confirmado';
   if (value === 'MANUAL') return 'Manual';
+  if (value === 'EVD') return 'Escala publicada';
+  if (value === 'SIGVOOS') return 'SIGVOOS (fallback)';
+  if (value === 'CONTROLE_VOOS') return 'Controle de Voos';
   if (value === 'ESTIMADO') return 'Estimado';
   if (value === 'INCONSISTENTE') return 'Inconsistente';
   return humanizeCode(value);
@@ -62,4 +67,34 @@ function humanizeCode(value: string): string {
   const normalized = value.trim().replace(/_/g, ' ').toLocaleLowerCase('pt-BR');
   if (!normalized) return 'Não informado';
   return normalized.charAt(0).toLocaleUpperCase('pt-BR') + normalized.slice(1);
+}
+
+const FRMS_REASON_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  ROLLING_REGULATORY_EVIDENCE_MISSING: 'Histórico móvel de voo e jornada ainda incompleto para a avaliação regulatória',
+  CALENDAR_YEAR_FLIGHT_EVIDENCE_MISSING: 'Horas de voo do ano-calendário ainda incompletas para a avaliação regulatória',
+  REST_EVIDENCE_UNKNOWN: 'Evidência de repouso anterior ainda insuficiente para a avaliação regulatória',
+  WORK_TIME_EVIDENCE_MISSING: 'Histórico de jornada e trabalho ainda incompleto para a avaliação regulatória',
+  ACT_CDS_MISSION_DAY_EVIDENCE_MISSING: 'Dia do período operacional ainda não pôde ser confirmado',
+  ACT_CDS_MISSION_PERIOD_EVIDENCE_MISSING: 'Período operacional ainda não pôde ser confirmado',
+  ACT_CDS_EFFECTIVE_DAYS_AT_LOCATION_EVIDENCE_INCOMPLETE: 'Dias efetivos no local ainda não estão completamente confirmados',
+  ACT_CDS_POST_MISSION_REST_EVIDENCE_INCOMPLETE: 'Repouso após o período operacional ainda não está completamente confirmado',
+  SIGVOOS_EXTERNAL_EVIDENCE_PENDING: 'Evidência externa de voo ainda está pendente de confirmação',
+  HELICOPTER_LIMITS_NOT_APPLICABLE_TO_PROFILE: 'Limites específicos de helicóptero não se aplicam ao perfil regulatório configurado',
+  ACTIVITY_INTERVAL_MISSING: 'Horário de início ou fim da atividade ainda não foi informado',
+  ACTIVITY_REALIZATION_UNCONFIRMED: 'Realização da atividade ainda não foi confirmada',
+  ACTIVITY_LEGAL_FACTOR_MISSING: 'Regra de contabilização da atividade ainda não pôde ser confirmada',
+  DUTY_INTERVAL_MISSING: 'Horário de início ou fim da jornada ainda não foi informado',
+  MISSION_WORK_CONTEXT_INCOMPLETE: 'Histórico do período operacional ainda está incompleto',
+  POST_MISSION_WORK_CONTEXT_INCOMPLETE: 'Histórico de trabalho após o período operacional ainda está incompleto',
+});
+
+export function formatFrmsReason(value: string | null | undefined): string {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return 'Informação operacional incompleta';
+  const mapped = FRMS_REASON_LABELS[normalized];
+  if (mapped) return mapped;
+  if (/^[A-Z][A-Z0-9_]{2,}$/.test(normalized)) {
+    return 'Informação operacional incompleta — revisar dados de origem';
+  }
+  return normalized;
 }

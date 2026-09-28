@@ -55,7 +55,7 @@ describe('frms jornadas mensais presentation', () => {
     expect(presentation.integrityMessage).toContain('excedem');
   });
 
-  it('distingue jornada real de janela estimada pelo SIGVOOS', () => {
+  it('distingue jornada real de janela estimada sem atribuir a fonte errada', () => {
     const real = buildJornadaMensalPresentation({
       pct_jornada_diaria: null,
       pct_voo_diaria: null,
@@ -74,7 +74,7 @@ describe('frms jornadas mensais presentation', () => {
     });
 
     expect(real.boundarySourceLabel).toBe('Jornada real');
-    expect(estimated.boundarySourceLabel).toBe('Janela SIGVOOS estimada');
+    expect(estimated.boundarySourceLabel).toBe('Janela estimada');
   });
 
   it('exibe FIRA como auditoria pendente sem HV operacional validada', () => {
@@ -91,7 +91,7 @@ describe('frms jornadas mensais presentation', () => {
       horas_voo_minutos: 1537,
     });
 
-    expect(presentation.sourceLabel).toBe('Pendente SIGVOOS');
+    expect(presentation.sourceLabel).toBe('Dados de voo pendentes');
     expect(presentation.operationalHvLabel).toBe('—');
     expect(presentation.operationalJourneyLabel).toBe('—');
     expect(presentation.auxiliarySourceLabel).toBe('FIRA: 25h37');

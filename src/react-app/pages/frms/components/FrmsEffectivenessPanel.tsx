@@ -68,6 +68,10 @@ function fmtPoints(points: number): string {
   return points.toFixed(1).replace('.', ',');
 }
 
+function metarConditionLabel(condition: 'VMC' | 'IMC' | 'INDETERMINATE'): string {
+  return condition === 'INDETERMINATE' ? 'Indeterminada' : condition;
+}
+
 // ── Component bar for decomposition ──
 function ComponentBar({ label, value, color }: { label: string; value: number; color: string }) {
   const pct = Math.max(0, Math.min(100, Math.abs(value) * 100));
@@ -96,13 +100,13 @@ function landingsEvidenceLine(operationalLoad: OperationalLoadDetail): string {
     operationalLoad.landings_evidence_quality === 'INCOMPLETE' ||
     operationalLoad.data_quality === 'SIGVOOS_UNAVAILABLE'
   ) {
-    return '• pousos: SIGVOOS indisponível (sem penalidade; evidência incompleta)';
+    return '• pousos: fonte operacional indisponível (sem penalidade; evidência incompleta)';
   }
   if (
     operationalLoad.landings_evidence_quality === 'CONFIRMED_ZERO' ||
     operationalLoad.weather_evidence_quality === 'NOT_APPLICABLE'
   ) {
-    return '• 0 pousos: ausência de voo confirmada pelo SIGVOOS';
+    return '• 0 pousos: ausência de voo confirmada pela fonte operacional';
   }
   return `• ${operationalLoad.landings_count} ${
     operationalLoad.landings_count === 1 ? 'pouso' : 'pousos'
@@ -210,7 +214,7 @@ export default function FrmsEffectivenessPanel({
             : dataSource === 'PROJETADA_APRESENTACAO'
               ? 'projeção da manhã — check-in + horário de apresentação; carga futura ainda não incorporada'
               : dataSource === 'ESTIMADO'
-                ? 'histórica estimada — janela operacional derivada do SIGVOOS'
+                ? 'histórica estimada — janela operacional derivada de evidência disponível'
                 : dataSource === 'MANUAL'
                   ? 'manual — janela informada'
                   : 'não confirmada'}.
@@ -285,16 +289,16 @@ export default function FrmsEffectivenessPanel({
               {(operationalLoad.imc_legs ?? []).map((leg) => (
                 <div key={leg.legId} className="mt-1 rounded border border-slate-200 bg-white px-2 py-1">
                   <p className="font-medium text-slate-600">Etapa {leg.legId}</p>
-                  <p>Saída: {leg.departure.condition} · {fmtPoints(leg.departureDelta)} · {leg.departureStationIcao ?? 'estação indisponível'} · {leg.departureObservedAtUtc ?? 'horário indisponível'}</p>
+                  <p>Saída: {metarConditionLabel(leg.departure.condition)} · {fmtPoints(leg.departureDelta)} · {leg.departureStationIcao ?? 'estação indisponível'} · {leg.departureObservedAtUtc ?? 'horário indisponível'}</p>
                   {leg.departureRawMetar && <p className="break-all font-mono text-[9px] text-slate-400">METAR: {leg.departureRawMetar}</p>}
-                  <p>Chegada: {leg.arrival.condition} · {fmtPoints(leg.arrivalDelta)} · {leg.arrivalStationIcao ?? 'estação indisponível'} · {leg.arrivalObservedAtUtc ?? 'horário indisponível'}</p>
+                  <p>Chegada: {metarConditionLabel(leg.arrival.condition)} · {fmtPoints(leg.arrivalDelta)} · {leg.arrivalStationIcao ?? 'estação indisponível'} · {leg.arrivalObservedAtUtc ?? 'horário indisponível'}</p>
                   {leg.arrivalRawMetar && <p className="break-all font-mono text-[9px] text-slate-400">METAR: {leg.arrivalRawMetar}</p>}
                 </div>
               ))}
               {operationalLoad.data_quality !== 'COMPLETE' && (
                 <p className="mt-0.5 font-medium text-amber-700">
                   {operationalLoad.data_quality === 'SIGVOOS_UNAVAILABLE'
-                    ? 'SIGVOOS indisponível — carga de pousos não presumida.'
+                    ? 'Fonte operacional indisponível — carga de pousos não presumida.'
                     : 'Evidência meteorológica incompleta — nenhuma temperatura foi presumida.'}
                 </p>
               )}
