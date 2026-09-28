@@ -50,6 +50,7 @@ export interface FiraLinhPreview {
 }
 
 export interface FiraImportacaoPreview {
+  empresa_id?: number;
   importacao_id: string;
   tripulante_encontrado: boolean;
   tripulante_id: string | null;
@@ -66,6 +67,13 @@ export interface FiraImportacaoPreview {
   divergencia_totais: boolean;
   avisos: string[];
   erros: string[];
+  associacao_metodo?: 'CANAC_UNICO' | 'REVISAO_MANUAL' | 'NAO_ASSOCIADO';
+  associacao_identificador?: string | null;
+  associacao_candidatos?: number;
+  associacao_sugestoes_nome?: Array<{ id: string; nome: string }>;
+  associacao_revisada_por?: string | null;
+  associacao_revisada_em?: string | null;
+  associacao_justificativa?: string | null;
 }
 
 export interface FiraImportacaoConfirmarInput {
@@ -254,111 +262,63 @@ export async function processarUploadFira(
   // Ex: '095168-1' / '95.168-1' / '951681' → '951681'
   const normCanac = (v: string) => (v || '').replace(/\D/g, '').replace(/^0+/, '') || '0';
   const canacNormalizado = normCanac(cabecalho.canac);
+  const canacRecebidoValido = /\d/.test(cabecalho.canac || '') && canacNormalizado !== '0';
 
-  const empresaIdNum = Number(empresaId) || null;
-  const colunaCanacNormExpr = `IFNULL(NULLIF(LTRIM(REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(${colunaCanac}, ''), '-', ''), '.', ''), '/', ''), ' ', ''), '0'), ''), '0')`;
-
-  const canacBase =
-    canacNormalizado.length > 1 ? canacNormalizado.slice(0, canacNormalizado.length - 1) : '';
+  const empresaIdNum = Number(empresaId);
+  if (!Number.isInteger(empresaIdNum) || empresaIdNum <= 0) {
+    throw new Error('Contexto de empresa inválido');
+  }
 
   const normDbCanac = (v: string) => (v || '').replace(/\D/g, '').replace(/^0+/, '') || '0';
 
-  // 1) Busca candidatos na empresa atual (ou todos, quando empresaId não informado)
+  // Associação automática é permitida somente por CANAC completo normalizado,
+  // único e dentro do tenant ativo. Nunca buscar funcionários globalmente.
   const candidatosEmpresa = await db
     .prepare(
       `SELECT id, nome, ${colunaCanac} as canac_db
        FROM funcionarios
        WHERE deleted_at IS NULL
-         AND (? IS NULL OR empresa_id = ?)
+         AND empresa_id = ?
          AND ${colunaCanac} IS NOT NULL
        LIMIT 2000`,
     )
-    .bind(empresaIdNum, empresaIdNum)
+    .bind(empresaIdNum)
     .all<{ id: string; nome: string; canac_db: string }>();
 
-  let tripRow = (candidatosEmpresa.results || []).find(
-    (c) => normDbCanac(c.canac_db) === canacNormalizado,
-  ) as { id: string; nome: string; canac_db: string } | undefined;
-
-  // 2) Fallback por ANAC base (sem dígito verificador)
-  if (!tripRow && canacBase) {
-    tripRow = (candidatosEmpresa.results || []).find((c) => {
-      const n = normDbCanac(c.canac_db);
-      return n.length > 1 && n.slice(0, n.length - 1) === canacBase;
-    }) as { id: string; nome: string; canac_db: string } | undefined;
-  }
-
-  // 3) Fallback global (fora da empresa)
-  if (!tripRow) {
-    const candidatosGlobais = await db
-      .prepare(
-        `SELECT id, nome, ${colunaCanac} as canac_db
-         FROM funcionarios
-         WHERE deleted_at IS NULL
-           AND ${colunaCanac} IS NOT NULL
-         LIMIT 5000`,
+  const candidatosCanac = canacRecebidoValido
+    ? (candidatosEmpresa.results || []).filter(
+        (c) => normDbCanac(c.canac_db) === canacNormalizado,
       )
-      .all<{ id: string; nome: string; canac_db: string }>();
+    : [];
+  const tripRow = candidatosCanac.length === 1 ? candidatosCanac[0] : undefined;
 
-    tripRow = (candidatosGlobais.results || []).find(
-      (c) => normDbCanac(c.canac_db) === canacNormalizado,
-    ) as { id: string; nome: string; canac_db: string } | undefined;
-
-    if (!tripRow && canacBase) {
-      tripRow = (candidatosGlobais.results || []).find((c) => {
-        const n = normDbCanac(c.canac_db);
-        return n.length > 1 && n.slice(0, n.length - 1) === canacBase;
-      }) as { id: string; nome: string; canac_db: string } | undefined;
-    }
-  }
-
-  // 4) Fallback: busca por nome completo quando CANAC não bate
-  //    Normaliza nome da FIRA e do banco (sem acentos, uppercase, espaços simples)
-  if (!tripRow && cabecalho.nome && cabecalho.nome.length >= 4) {
-    const normNome = (n: string) =>
-      (n || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toUpperCase()
-        .replace(/\s+/g, ' ')
-        .trim();
-
-    const nomeFira = normNome(cabecalho.nome);
-    if (nomeFira.length >= 4) {
-      const candidatosPorNome = await db
-        .prepare(
-          `SELECT id, nome FROM funcionarios
-           WHERE deleted_at IS NULL
-             AND (? IS NULL OR empresa_id = ?)
-           LIMIT 5000`,
-        )
-        .bind(empresaIdNum, empresaIdNum)
-        .all<{ id: string; nome: string }>();
-
-      // Match exato por nome normalizado
-      const palavrasFira = nomeFira.split(' ').filter((p) => p.length >= 2);
-      tripRow = (candidatosPorNome.results || []).find((c) => {
-        const nomeDb = normNome(c.nome);
-        return nomeDb === nomeFira;
-      }) as { id: string; nome: string; canac_db: string } | undefined;
-
-      // Match parcial: pelo menos 3 palavras em comum (primeiro e último nome obrigatórios)
-      if (!tripRow && palavrasFira.length >= 2) {
-        const primeiro = palavrasFira[0];
-        const ultimo = palavrasFira[palavrasFira.length - 1];
-        tripRow = (candidatosPorNome.results || []).find((c) => {
+  // Nome serve somente como sugestão para revisão humana dentro do mesmo tenant.
+  // Nunca preenche tripulante_id automaticamente.
+  const normNome = (n: string) =>
+    (n || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+  const nomeFira = normNome(cabecalho.nome || '');
+  const palavrasFira = nomeFira.split(' ').filter((palavra) => palavra.length >= 2);
+  const sugestoesNome = !tripRow && nomeFira.length >= 4
+    ? (candidatosEmpresa.results || [])
+        .filter((c) => {
           const nomeDb = normNome(c.nome);
-          const palavrasDb = nomeDb.split(' ').filter((p) => p.length >= 2);
-          const coincidencias = palavrasFira.filter((p) => palavrasDb.includes(p));
-          const temPrimeiro = palavrasDb.includes(primeiro);
-          const temUltimo = palavrasDb.includes(ultimo);
-          return (
-            temPrimeiro && temUltimo && coincidencias.length >= Math.min(3, palavrasFira.length)
-          );
-        }) as { id: string; nome: string; canac_db: string } | undefined;
-      }
-    }
-  }
+          if (nomeDb === nomeFira) return true;
+          const palavrasDb = nomeDb.split(' ').filter((palavra) => palavra.length >= 2);
+          if (palavrasFira.length < 2) return false;
+          const primeiro = palavrasFira[0];
+          const ultimo = palavrasFira[palavrasFira.length - 1];
+          const coincidencias = palavrasFira.filter((palavra) => palavrasDb.includes(palavra));
+          return palavrasDb.includes(primeiro) && palavrasDb.includes(ultimo) &&
+            coincidencias.length >= Math.min(3, palavrasFira.length);
+        })
+        .slice(0, 5)
+        .map((c) => ({ id: String(c.id), nome: c.nome }))
+    : [];
 
   const tripulanteId = tripRow ? String(tripRow.id) : null;
   const tripulanteNomeSistema = tripRow?.nome ?? null;
@@ -511,6 +471,7 @@ export async function processarUploadFira(
   const importacaoId = generateId();
   const timestamp = novoTimestamp;
   const preview: FiraImportacaoPreview = {
+    empresa_id: empresaIdNum,
     importacao_id: importacaoId,
     tripulante_encontrado: !!tripulanteId,
     tripulante_id: tripulanteId,
@@ -527,6 +488,13 @@ export async function processarUploadFira(
     divergencia_totais: divergencia,
     avisos: parseErros,
     erros: [],
+    associacao_metodo: tripulanteId ? 'CANAC_UNICO' : 'NAO_ASSOCIADO',
+    associacao_identificador: cabecalho.canac || null,
+    associacao_candidatos: candidatosCanac.length > 0 ? candidatosCanac.length : sugestoesNome.length,
+    associacao_sugestoes_nome: sugestoesNome,
+    associacao_revisada_por: null,
+    associacao_revisada_em: null,
+    associacao_justificativa: null,
   };
 
   await db
@@ -719,6 +687,7 @@ export async function confirmarImportacaoFira(
   limites: LimitesMap,
   empresaId?: number,
 ): Promise<FiraImportacaoResultado> {
+  const tenantEmpresaId = requireFiraEmpresaId(empresaId);
   // 1. Buscar importação
   const importacao = await db
     .prepare(
@@ -726,9 +695,14 @@ export async function confirmarImportacaoFira(
          FROM frms_importacao_fira f
          LEFT JOIN funcionarios p ON p.id = CAST(f.tripulante_id AS INTEGER)
          LEFT JOIN funcionarios op ON op.id = CAST(f.importado_por AS INTEGER)
-        WHERE f.id = ? AND f.deleted_at IS NULL AND (? IS NULL OR p.empresa_id = ? OR op.empresa_id = ? OR (f.tripulante_id IS NULL AND (f.importado_por IS NULL OR op.id IS NULL)))`,
+        WHERE f.id = ? AND f.deleted_at IS NULL
+          AND (
+            CAST(json_extract(f.preview_json, '$.empresa_id') AS INTEGER) = ?
+            OR p.empresa_id = ?
+            OR op.empresa_id = ?
+          )`,
     )
-    .bind(importacaoId, empresaId ?? null, empresaId ?? null, empresaId ?? null)
+    .bind(importacaoId, tenantEmpresaId, tenantEmpresaId, tenantEmpresaId)
     .first<{
       id: string;
       tripulante_id: string | null;
@@ -1112,9 +1086,9 @@ export async function buscarHistoricoFira(
 
   if (query.empresa_id !== undefined) {
     conds.push(
-      '(p.empresa_id = ? OR op.empresa_id = ? OR (f.tripulante_id IS NULL AND (f.importado_por IS NULL OR op.id IS NULL)))',
+      `(CAST(json_extract(f.preview_json, '$.empresa_id') AS INTEGER) = ? OR p.empresa_id = ? OR op.empresa_id = ?)`,
     );
-    bindings.push(query.empresa_id, query.empresa_id);
+    bindings.push(query.empresa_id, query.empresa_id, query.empresa_id);
   }
 
   if (query.tripulante_id) {
@@ -1201,11 +1175,12 @@ export async function buscarImportacaoFiraById(
       WHERE f.id = ?
         AND f.deleted_at IS NULL
         AND (
-          (f.tripulante_id IS NOT NULL AND p.empresa_id = ?)
-          OR (f.tripulante_id IS NULL AND op.empresa_id = ?)
+          CAST(json_extract(f.preview_json, '$.empresa_id') AS INTEGER) = ?
+          OR p.empresa_id = ?
+          OR op.empresa_id = ?
         )`,
     )
-    .bind(importacaoId, tenantEmpresaId, tenantEmpresaId)
+    .bind(importacaoId, tenantEmpresaId, tenantEmpresaId, tenantEmpresaId)
     .first();
 
   return row ?? null;
@@ -1229,17 +1204,18 @@ export async function deletarImportacaoFira(
         WHERE f.id = ?
           AND f.deleted_at IS NULL
           AND (
-            (f.tripulante_id IS NOT NULL AND EXISTS (
+            CAST(json_extract(f.preview_json, '$.empresa_id') AS INTEGER) = ?
+            OR EXISTS (
               SELECT 1 FROM funcionarios p
                WHERE p.id = CAST(f.tripulante_id AS INTEGER) AND p.empresa_id = ?
-            ))
-            OR (f.tripulante_id IS NULL AND EXISTS (
+            )
+            OR EXISTS (
               SELECT 1 FROM funcionarios op
                WHERE op.id = CAST(f.importado_por AS INTEGER) AND op.empresa_id = ?
-            ))
+            )
           )`,
     )
-    .bind(importacaoId, tenantEmpresaId, tenantEmpresaId)
+    .bind(importacaoId, tenantEmpresaId, tenantEmpresaId, tenantEmpresaId)
     .first<{ status: string; total_dias_importados: number }>();
 
   if (!row) throw new Error('Importação não encontrada');
@@ -1257,19 +1233,20 @@ export async function deletarImportacaoFira(
         WHERE id = ?
           AND deleted_at IS NULL
           AND (
-            (frms_importacao_fira.tripulante_id IS NOT NULL AND EXISTS (
+            CAST(json_extract(frms_importacao_fira.preview_json, '$.empresa_id') AS INTEGER) = ?
+            OR EXISTS (
               SELECT 1 FROM funcionarios p
                WHERE p.id = CAST(frms_importacao_fira.tripulante_id AS INTEGER)
                  AND p.empresa_id = ?
-            ))
-            OR (frms_importacao_fira.tripulante_id IS NULL AND EXISTS (
+            )
+            OR EXISTS (
               SELECT 1 FROM funcionarios op
                WHERE op.id = CAST(frms_importacao_fira.importado_por AS INTEGER)
                  AND op.empresa_id = ?
-            ))
+            )
           )`,
     )
-    .bind(timestamp, timestamp, importacaoId, tenantEmpresaId, tenantEmpresaId)
+    .bind(timestamp, timestamp, importacaoId, tenantEmpresaId, tenantEmpresaId, tenantEmpresaId)
     .run();
 
   if (Number(deleted.meta?.changes ?? 0) !== 1) {
@@ -1294,6 +1271,8 @@ export async function vincularTripulanteFira(
   importacaoId: string,
   tripulanteId: string,
   empresaId: number,
+  revisorId = 'system',
+  justificativa = 'Vínculo manual confirmado na revisão da importação FIRA.',
 ): Promise<void> {
   const tenantEmpresaId = requireFiraEmpresaId(empresaId);
   const importacao = await buscarImportacaoFiraById(db, importacaoId, tenantEmpresaId);
@@ -1319,19 +1298,20 @@ export async function vincularTripulanteFira(
         WHERE id = ?
           AND deleted_at IS NULL
           AND (
-            (frms_importacao_fira.tripulante_id IS NOT NULL AND EXISTS (
+            CAST(json_extract(frms_importacao_fira.preview_json, '$.empresa_id') AS INTEGER) = ?
+            OR EXISTS (
               SELECT 1 FROM funcionarios p
                WHERE p.id = CAST(frms_importacao_fira.tripulante_id AS INTEGER)
                  AND p.empresa_id = ?
-            ))
-            OR (frms_importacao_fira.tripulante_id IS NULL AND EXISTS (
+            )
+            OR EXISTS (
               SELECT 1 FROM funcionarios op
                WHERE op.id = CAST(frms_importacao_fira.importado_por AS INTEGER)
                  AND op.empresa_id = ?
-            ))
+            )
           )`,
     )
-    .bind(tripulanteId, timestamp, importacaoId, tenantEmpresaId, tenantEmpresaId)
+    .bind(tripulanteId, timestamp, importacaoId, tenantEmpresaId, tenantEmpresaId, tenantEmpresaId)
     .run();
 
   if (Number(updated.meta?.changes ?? 0) !== 1) {
@@ -1354,11 +1334,15 @@ export async function vincularTripulanteFira(
     const preview: FiraImportacaoPreview = JSON.parse(row.preview_json);
     preview.tripulante_id = tripulanteId;
     preview.tripulante_encontrado = true;
+    preview.associacao_metodo = 'REVISAO_MANUAL';
+    preview.associacao_revisada_por = revisorId;
+    preview.associacao_revisada_em = timestamp;
+    preview.associacao_justificativa = justificativa.trim();
 
-    // Buscar nome
+    // Buscar nome somente dentro do tenant ativo.
     const pessoa = await db
-      .prepare(`SELECT nome FROM funcionarios WHERE id = ? AND deleted_at IS NULL`)
-      .bind(tripulanteId)
+      .prepare(`SELECT nome FROM funcionarios WHERE id = ? AND deleted_at IS NULL AND empresa_id = ?`)
+      .bind(tripulanteId, tenantEmpresaId)
       .first<{ nome: string }>();
     if (pessoa) preview.tripulante_nome_sistema = pessoa.nome;
 

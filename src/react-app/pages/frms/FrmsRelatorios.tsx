@@ -50,6 +50,44 @@ interface FrmsReportRow {
   resolvido_em?: string | null;
 }
 
+interface FrmsReportMeta {
+  generated_at: string;
+  tenant_id: number;
+  period: string;
+  source: string;
+  policy_version: string;
+  revision_id: string;
+  profile_code: string;
+  model_version: string;
+  source_type: string;
+  source_reference: string | null;
+  effective_from: string;
+  effective_to: string | null;
+  limitations: string[];
+}
+
+interface FrmsReportEnvelope {
+  success?: boolean;
+  data: FrmsReportRow[];
+  total?: number;
+  meta?: FrmsReportMeta;
+}
+
+export function csvCell(value: unknown): string {
+  let text = value == null ? '' : String(value);
+  if (/^[=+@-]/.test(text.trimStart())) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 const TIPOS: { key: TipoRelatorio; label: string; desc: string; icon: typeof BarChart3 }[] = [
   {
     key: 'compliance',
@@ -111,7 +149,11 @@ export default function FrmsRelatorios() {
     return `/api/frms/relatorios/alertas-historico?data_inicio=${periodoInicio}&data_fim=${periodoFim}`;
   }, [mesReferencia, periodoFim, periodoInicio, tipo]);
 
-  const { data, loading } = useApi<FrmsReportRow[]>(endpoint, { requireAuth: true });
+  const { data: rawData, loading, error, refetch } = useApi<FrmsReportRow[] | FrmsReportEnvelope>(endpoint, { requireAuth: true });
+  const data = Array.isArray(rawData) ? rawData : rawData?.data ?? null;
+  const reportMeta = rawData && !Array.isArray(rawData) ? rawData.meta ?? null : null;
+  const invalidResponse = rawData != null && !Array.isArray(rawData) && !Array.isArray(rawData.data);
+  const reportError = error || (invalidResponse ? 'Resposta inválida recebida do serviço de relatórios.' : null);
 
   const reportPeriodLabel =
     tipo === 'compliance'
@@ -121,10 +163,23 @@ export default function FrmsRelatorios() {
         : `Período: ${periodoInicio} a ${periodoFim}`;
 
   const handleExportPDF = () => {
-    if (!data || (Array.isArray(data) && data.length === 0)) return;
+    if (!data || data.length === 0 || !reportMeta) return;
     const tipoLabel = TIPOS.find((t) => t.key === tipo)?.label ?? tipo;
     const reportEl = document.getElementById('frms-report-content');
-    if (!reportEl) return;
+    if (!reportEl || reportError) return;
+    const metadataHtml = reportMeta
+      ? [
+          ['Tenant', reportMeta.tenant_id],
+          ['Versão da política', reportMeta.policy_version],
+          ['Revisão', reportMeta.revision_id],
+          ['Perfil', reportMeta.profile_code],
+          ['Fonte', reportMeta.source],
+          ['Referência', reportMeta.source_reference || 'não informada'],
+          ['Limitações', reportMeta.limitations.join(' | ')],
+        ]
+          .map(([label, value]) => `<div><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</div>`)
+          .join('')
+      : '<div><strong>Metadados de governança:</strong> indisponíveis nesta resposta.</div>';
 
     const printWin = window.open('', '_blank', 'width=1000,height=700');
     if (!printWin) return;
@@ -137,7 +192,8 @@ export default function FrmsRelatorios() {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; color: #111; padding: 32px; }
     h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
-    p.subtitle { font-size: 11px; color: #666; margin-bottom: 20px; }
+    p.subtitle { font-size: 11px; color: #666; margin-bottom: 10px; }
+    .meta { font-size: 10px; color: #555; border: 1px solid #e5e7eb; padding: 10px; margin-bottom: 18px; line-height: 1.5; }
     table { width: 100%; border-collapse: collapse; }
     thead tr { background: #f3f4f6; }
     th { padding: 8px 12px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
@@ -147,7 +203,8 @@ export default function FrmsRelatorios() {
 </head>
 <body>
   <h1>FRMS — Relatório ${tipoLabel}</h1>
-  <p class="subtitle">${reportPeriodLabel} — Gerado em ${new Date().toLocaleString('pt-BR')}</p>
+  <p class="subtitle">${escapeHtml(reportPeriodLabel)} — Gerado em ${escapeHtml(reportMeta?.generated_at ?? new Date().toISOString())}</p>
+  <div class="meta">${metadataHtml}</div>
   ${reportEl.innerHTML}
 </body>
 </html>`);
@@ -160,30 +217,63 @@ export default function FrmsRelatorios() {
   };
 
   const handleExportCSV = () => {
-    if (!data) return;
+    if (!data || data.length === 0 || reportError || !reportMeta) return;
 
-    let csvContent = '';
-    if (tipo === 'compliance' && Array.isArray(data)) {
-      csvContent = 'Tripulante,Dias avaliados,Conformes,Violações,Não avaliados,Mitigação,Atenção,Fontes normativas\n';
+    const metadataRows = [
+      ['Relatório FRMS', TIPOS.find((item) => item.key === tipo)?.label ?? tipo],
+      ['Período', reportMeta?.period ?? reportPeriodLabel],
+      ['Gerado em', reportMeta?.generated_at ?? new Date().toISOString()],
+      ['Tenant', reportMeta?.tenant_id ?? 'não informado'],
+      ['Versão da política', reportMeta?.policy_version ?? 'não informada'],
+      ['Revisão', reportMeta?.revision_id ?? 'não informada'],
+      ['Perfil', reportMeta?.profile_code ?? 'não informado'],
+      ['Fonte', reportMeta?.source ?? 'não informada'],
+      ['Referência da fonte', reportMeta?.source_reference ?? 'não informada'],
+      ['Limitações', reportMeta?.limitations?.join(' | ') ?? 'Metadados de limitações indisponíveis'],
+    ];
+    let csvContent = metadataRows.map((row) => row.map(csvCell).join(',')).join('\n') + '\n\n';
+
+    if (tipo === 'compliance') {
+      csvContent += ['Tripulante', 'Dias avaliados', 'Conformes', 'Violações', 'Não avaliados', 'Mitigação', 'Atenção', 'Fontes normativas'].map(csvCell).join(',') + '\n';
       for (const row of data) {
-        const fontes = Array.isArray(row.fontes_normativas) ? row.fontes_normativas.join(' | ').split('\"').join('\"\"') : '';
-        csvContent += `${row.nome || row.tripulante_id},${row.dias_avaliados ?? 0},${row.dias_conformes ?? 0},${row.dias_violacao ?? 0},${row.dias_nao_avaliados ?? 0},${row.dias_mitigacao ?? 0},${row.dias_atencao ?? 0},"${fontes}"\n`;
+        csvContent += [
+          row.nome || row.tripulante_id,
+          row.dias_avaliados ?? 0,
+          row.dias_conformes ?? 0,
+          row.dias_violacao ?? 0,
+          row.dias_nao_avaliados ?? 0,
+          row.dias_mitigacao ?? 0,
+          row.dias_atencao ?? 0,
+          Array.isArray(row.fontes_normativas) ? row.fontes_normativas.join(' | ') : '',
+        ].map(csvCell).join(',') + '\n';
       }
-    } else if (tipo === 'mapa-fadiga' && Array.isArray(data)) {
-      csvContent = 'Tripulante,HV 7d%,HV Mês%,HV 365d%,Nível Max,Repouso OK\n';
+    } else if (tipo === 'mapa-fadiga') {
+      csvContent += ['Tripulante', 'HV 7d%', 'HV Mês%', 'HV 365d%', 'Nível Max', 'Repouso OK'].map(csvCell).join(',') + '\n';
       for (const row of data) {
-        csvContent += `${row.nome || row.tripulante_id},${row.pct_7d ?? ''},${row.pct_mes ?? ''},${row.pct_365d ?? ''},${row.nivel_max ?? ''},${row.repouso_suficiente ? 'Sim' : 'Não'}\n`;
+        csvContent += [
+          row.nome || row.tripulante_id,
+          row.pct_7d ?? '',
+          row.pct_mes ?? '',
+          row.pct_365d ?? '',
+          row.nivel_max ?? '',
+          row.repouso_suficiente ? 'Sim' : 'Não',
+        ].map(csvCell).join(',') + '\n';
       }
-    } else if (tipo === 'alertas-historico' && Array.isArray(data)) {
-      csvContent = 'Data,Tripulante,Nível,Tipo Limite,Mensagem,Resolvido\n';
+    } else {
+      csvContent += ['Data', 'Tripulante', 'Nível', 'Tipo Limite', 'Mensagem', 'Resolvido'].map(csvCell).join(',') + '\n';
       for (const row of data) {
-        const dataStr = row.created_at ? row.created_at.slice(0, 10) : '';
-        csvContent += `${dataStr},${row.tripulante_id},${row.nivel},${row.tipo_limite},"${row.mensagem}",${row.resolvido_em ? 'Sim' : 'Não'}\n`;
+        csvContent += [
+          row.created_at ? row.created_at.slice(0, 10) : '',
+          row.nome_tripulante || row.tripulante_id,
+          row.nivel,
+          row.tipo_limite,
+          row.mensagem,
+          row.resolvido_em ? 'Sim' : 'Não',
+        ].map(csvCell).join(',') + '\n';
       }
     }
 
-    if (!csvContent) return;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -211,14 +301,14 @@ export default function FrmsRelatorios() {
           </div>
           <button
             onClick={handleExportCSV}
-            disabled={!data}
+            disabled={loading || !!reportError || !reportMeta || !data || data.length === 0}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
             <Download className="h-4 w-4" /> CSV
           </button>
           <button
             onClick={handleExportPDF}
-            disabled={!data || (Array.isArray(data) && data.length === 0)}
+            disabled={loading || !!reportError || !reportMeta || !data || data.length === 0}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
             <Printer className="h-4 w-4" /> PDF
@@ -291,12 +381,34 @@ export default function FrmsRelatorios() {
           )}
         </div>
 
-        <p className="text-xs text-slate-500">{reportPeriodLabel}</p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+          <span>{reportPeriodLabel}</span>
+          {reportMeta ? (
+            <span>
+              Política {reportMeta.policy_version} · revisão {reportMeta.revision_id} · fonte {reportMeta.source}
+            </span>
+          ) : null}
+        </div>
 
         <div id="frms-report-content" className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-          {loading ? (
+          {reportError ? (
+            <div className="flex flex-col items-center gap-3 p-10 text-center">
+              <AlertTriangle className="h-8 w-8 text-amber-500" />
+              <div>
+                <p className="font-semibold text-slate-800">Não foi possível gerar este relatório</p>
+                <p className="mt-1 text-sm text-slate-500">{reportError}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          ) : loading ? (
             <div className="p-12 text-center text-gray-400">Carregando relatório...</div>
-          ) : !data || (Array.isArray(data) && data.length === 0) ? (
+          ) : !data || data.length === 0 ? (
             <div className="flex flex-col items-center gap-2 p-12 text-center text-gray-400">
               <FileText className="h-8 w-8" />
               Nenhum dado encontrado para o recorte deste relatório

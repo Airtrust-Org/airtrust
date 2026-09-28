@@ -282,6 +282,7 @@ export default function FrmsImportacaoFira() {
   const [observacao, setObservacao] = useState('');
   const [confirmando, setConfirmando] = useState(false);
   const [vinculando, setVinculando] = useState(false);
+  const [justificativaVinculo, setJustificativaVinculo] = useState('');
   const [comparativoFontes, setComparativoFontes] = useState<FrmsFonteComparativoResponse | null>(
     null,
   );
@@ -324,6 +325,7 @@ export default function FrmsImportacaoFira() {
     setTripulanteId(prev.tripulante_id);
     setComparativoFontes(null);
     setFontePosImportacao('');
+    setJustificativaVinculo('');
 
     const sel: Record<number, boolean> = {};
     const sub: Record<number, boolean> = {};
@@ -655,17 +657,31 @@ export default function FrmsImportacaoFira() {
 
   const handleVincularTripulante = async (id: number, nome: string) => {
     if (!preview) return;
+    const justificativa = justificativaVinculo.trim();
+    if (justificativa.length < 10) {
+      toast.error('Informe uma justificativa de revisão com pelo menos 10 caracteres.');
+      return;
+    }
     setVinculando(true);
     try {
       await mutate(`/api/frms/importacao/fira/${preview.importacao_id}/vincular-tripulante`, {
         method: 'PATCH',
-        body: JSON.stringify({ tripulante_id: String(id) }),
+        body: JSON.stringify({ tripulante_id: String(id), justificativa }),
       });
       setTripulanteId(String(id));
       setPreview((p) =>
-        p ? { ...p, tripulante_id: String(id), tripulante_nome_sistema: nome } : p,
-      );
-      toast.success(`Tripulante ${nome} vinculado`);
+        p
+          ? {
+              ...p,
+              tripulante_id: String(id),
+              tripulante_encontrado: true,
+              tripulante_nome_sistema: nome,
+              associacao_metodo: 'REVISAO_MANUAL',
+              associacao_revisada_em: new Date().toISOString(),
+              associacao_justificativa: justificativa,
+            }
+          : p,
+      );      toast.success(`Tripulante ${nome} vinculado após revisão manual`);
     } catch {
       toast.error('Erro ao vincular tripulante');
     } finally {
@@ -1084,19 +1100,57 @@ export default function FrmsImportacaoFira() {
 
               {/* Vincular tripulante */}
               {!preview.tripulante_encontrado && !tripulanteId && (
-                <TripulanteSelector
-                  onSelect={(id, nome) => {
-                    if (!vinculando) handleVincularTripulante(id, nome);
-                  }}
-                />
-              )}
-
-              {!preview.tripulante_encontrado && tripulanteId && (
-                <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-                  <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  Tripulante vinculado: <strong>{preview.tripulante_nome_sistema}</strong>
+                <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="text-sm text-amber-900">
+                    <p className="font-semibold">Revisão humana obrigatória</p>
+                    <p className="mt-1 text-xs">
+                      O sistema não encontrou um CANAC único e válido dentro desta empresa. Nome não cria vínculo automático.
+                      {typeof preview.associacao_candidatos === 'number'
+                        ? ` Candidatos encontrados: ${preview.associacao_candidatos}.`
+                        : ''}
+                    </p>
+                    {preview.associacao_sugestoes_nome?.length ? (
+                      <p className="mt-1 text-xs">
+                        Sugestões por nome para conferência: {preview.associacao_sugestoes_nome.map((item) => item.nome).join(', ')}.
+                      </p>
+                    ) : null}
+                  </div>
+                  <label className="block text-sm font-medium text-amber-950">
+                    Justificativa da associação manual
+                    <textarea
+                      value={justificativaVinculo}
+                      onChange={(event) => setJustificativaVinculo(event.target.value)}
+                      rows={3}
+                      maxLength={1000}
+                      placeholder="Ex.: conferido CANAC no documento e cadastro do tripulante; vínculo validado pelo revisor."
+                      className="mt-2 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+                    />
+                  </label>
+                  <TripulanteSelector
+                    onSelect={(id, nome) => {
+                      if (!vinculando) handleVincularTripulante(id, nome);
+                    }}
+                  />
                 </div>
               )}
+
+              {preview.associacao_metodo === 'CANAC_UNICO' && preview.tripulante_encontrado ? (
+                <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  Associação automática por CANAC único dentro desta empresa: <strong>{preview.tripulante_nome_sistema}</strong>
+                </div>
+              ) : null}
+
+              {preview.associacao_metodo === 'REVISAO_MANUAL' && tripulanteId ? (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                  <p className="flex items-center gap-2 font-semibold">
+                    <CheckCircle2 className="h-4 w-4" /> Associação revisada manualmente: {preview.tripulante_nome_sistema}
+                  </p>
+                  {preview.associacao_justificativa ? (
+                    <p className="mt-1 text-xs">Justificativa: {preview.associacao_justificativa}</p>
+                  ) : null}
+                </div>
+              ) : null}
 
               {/* Legenda */}
               <div className="flex flex-wrap gap-3 text-xs text-gray-500">

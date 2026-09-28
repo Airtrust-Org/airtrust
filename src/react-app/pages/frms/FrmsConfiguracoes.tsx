@@ -410,6 +410,7 @@ export default function FrmsConfiguracoes() {
   const [sourceReference, setSourceReference] = useState('');
   const [policyVersion, setPolicyVersion] = useState('');
   const [effectiveFrom, setEffectiveFrom] = useState(todayIsoDate);
+  const [effectiveTo, setEffectiveTo] = useState('');
   const [restoreRevisionId, setRestoreRevisionId] = useState('');
 
   useEffect(() => {
@@ -441,6 +442,7 @@ export default function FrmsConfiguracoes() {
           source_reference: sourceReference.trim(),
           policy_version: policyVersion.trim(),
           effective_from: effectiveFrom,
+          effective_to: effectiveTo || null,
           reason: reason.trim(),
           parameters: Object.entries(values).map(([key, value]) => ({ key, value })),
         }),
@@ -455,7 +457,7 @@ export default function FrmsConfiguracoes() {
     } finally {
       setSaving(false);
     }
-  }, [values, mutate, reason, sourceType, sourceReference, policyVersion, effectiveFrom, refetch, refetchHistory]);
+  }, [values, mutate, reason, sourceType, sourceReference, policyVersion, effectiveFrom, effectiveTo, refetch, refetchHistory]);
 
   const handleRestore = useCallback(async () => {
     if (!restoreRevisionId) {
@@ -603,10 +605,25 @@ export default function FrmsConfiguracoes() {
               <span><strong>Modelo/política:</strong> {data.model_version}</span>
               <span><strong>Vigência:</strong> {data.effective_from}{data.effective_to ? ` a ${data.effective_to}` : ' em diante'}</span>
               <span><strong>Proveniência:</strong> {provenanceTypeLabel(data.revision.source_type)}</span>
+              <span><strong>Aprovação do perfil:</strong> {data.regulatory_evidence.approval_reference || 'não comprovada'}</span>
+              <span><strong>Política regulatória:</strong> {data.regulatory_evidence.policy_version || 'não comprovada'}</span>
             </div>
-            <p className="mt-2 text-xs text-slate-600">
-              Esta tela usa a revisão efetiva do tenant autenticado. Não há seleção de empresa pelo cliente nem fallback para valores globais.
-            </p>
+            <div className="mt-2 space-y-1 text-xs text-slate-600">
+              <p>Esta tela usa a revisão efetiva do tenant autenticado. Não há seleção de empresa pelo cliente nem fallback para valores globais.</p>
+              <p>
+                <strong>Fonte da revisão:</strong>{' '}
+                {/^https?:\/\//i.test(data.revision.source_reference || '') ? (
+                  <a href={data.revision.source_reference || '#'} target="_blank" rel="noreferrer" className="font-semibold text-primary underline">
+                    {data.revision.source_reference}
+                  </a>
+                ) : (
+                  data.revision.source_reference || 'não informada'
+                )}
+              </p>
+              {data.regulatory_evidence.source_document_hash ? (
+                <p><strong>Hash da evidência normativa:</strong> <span className="font-mono">{data.regulatory_evidence.source_document_hash}</span></p>
+              ) : null}
+            </div>
           </section>
         ) : null}
 
@@ -653,6 +670,17 @@ export default function FrmsConfiguracoes() {
                 onChange={(event) => setEffectiveFrom(event.target.value)}
                 className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
               />
+            </label>
+            <label className="text-xs font-medium text-slate-700">
+              Revisão / expiração
+              <input
+                type="date"
+                min={effectiveFrom}
+                value={effectiveTo}
+                onChange={(event) => setEffectiveTo(event.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+              />
+              <span className="mt-1 block font-normal text-slate-500">Opcional; use para exigir revisão periódica desta política.</span>
             </label>
           </div>
           <label className="mt-3 block text-xs font-medium text-slate-700">

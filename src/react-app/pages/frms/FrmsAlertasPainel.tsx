@@ -47,6 +47,43 @@ function resolvedAt(value: string | null): string | null {
   return parsed.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+interface FrmsCaseResolutionForm {
+  responsavel: string;
+  prazo: string;
+  acao_mitigacao: string;
+  justificativa: string;
+  evidencia_referencia: string;
+  avaliacao_eficacia: string;
+}
+
+const EMPTY_RESOLUTION_FORM: FrmsCaseResolutionForm = {
+  responsavel: '',
+  prazo: '',
+  acao_mitigacao: '',
+  justificativa: '',
+  evidencia_referencia: '',
+  avaliacao_eficacia: '',
+};
+
+function parseResolutionRecord(value: string | null): (FrmsCaseResolutionForm & { schema?: string }) | null {
+  if (!value || !value.trim().startsWith('{')) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<FrmsCaseResolutionForm> & { schema?: string };
+    if (parsed.schema !== 'FRMS_CASE_RESOLUTION_V1') return null;
+    return {
+      responsavel: String(parsed.responsavel || ''),
+      prazo: String(parsed.prazo || ''),
+      acao_mitigacao: String(parsed.acao_mitigacao || ''),
+      justificativa: String(parsed.justificativa || ''),
+      evidencia_referencia: String(parsed.evidencia_referencia || ''),
+      avaliacao_eficacia: String(parsed.avaliacao_eficacia || ''),
+      schema: parsed.schema,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function FrmsAlertasPainel() {
   const [searchParams] = useSearchParams();
   const nivelParam = searchParams.get('nivel') || '';
@@ -56,7 +93,7 @@ export default function FrmsAlertasPainel() {
   );
   const [status, setStatus] = useState<'ativos' | 'resolvidos' | 'todos'>('ativos');
   const [resolveTarget, setResolveTarget] = useState<FrmsAlertaRow | null>(null);
-  const [resolutionNote, setResolutionNote] = useState('');
+  const [resolutionForm, setResolutionForm] = useState<FrmsCaseResolutionForm>(EMPTY_RESOLUTION_FORM);
   const [resolving, setResolving] = useState(false);
   const { mutate } = useFrmsMutation();
 
@@ -100,20 +137,40 @@ export default function FrmsAlertasPainel() {
 
   const openResolution = useCallback((item: FrmsAlertaRow) => {
     setResolveTarget(item);
-    setResolutionNote('');
+    setResolutionForm(EMPTY_RESOLUTION_FORM);
   }, []);
 
   const closeResolution = useCallback(() => {
     if (resolving) return;
     setResolveTarget(null);
-    setResolutionNote('');
+    setResolutionForm(EMPTY_RESOLUTION_FORM);
   }, [resolving]);
+
+  const updateResolutionField = useCallback(
+    (field: keyof FrmsCaseResolutionForm, value: string) => {
+      setResolutionForm((current) => ({ ...current, [field]: value }));
+    },
+    [],
+  );
 
   const resolveCase = useCallback(async () => {
     if (!resolveTarget) return;
-    const note = resolutionNote.trim();
-    if (!note) {
-      toast.error('Informe o motivo ou a ação tomada antes de resolver o caso.');
+    const payload = {
+      responsavel: resolutionForm.responsavel.trim(),
+      prazo: resolutionForm.prazo,
+      acao_mitigacao: resolutionForm.acao_mitigacao.trim(),
+      justificativa: resolutionForm.justificativa.trim(),
+      evidencia_referencia: resolutionForm.evidencia_referencia.trim() || null,
+      avaliacao_eficacia: resolutionForm.avaliacao_eficacia.trim(),
+    };
+    const completo =
+      payload.responsavel.length >= 2 &&
+      /^\d{4}-\d{2}-\d{2}$/.test(payload.prazo) &&
+      payload.acao_mitigacao.length >= 10 &&
+      payload.justificativa.length >= 10 &&
+      payload.avaliacao_eficacia.length >= 10;
+    if (!completo) {
+      toast.error('Preencha responsável, prazo, mitigação, justificativa e avaliação de eficácia.');
       return;
     }
 
@@ -121,18 +178,18 @@ export default function FrmsAlertasPainel() {
     try {
       await mutate(`/api/frms/alertas/${resolveTarget.id}/resolver`, {
         method: 'PUT',
-        body: JSON.stringify({ notas_resolucao: note }),
+        body: JSON.stringify(payload),
       });
-      toast.success('Caso resolvido com registro da decisão.');
+      toast.success('Caso resolvido com trilha de mitigação e eficácia.');
       setResolveTarget(null);
-      setResolutionNote('');
+      setResolutionForm(EMPTY_RESOLUTION_FORM);
       await refetch();
     } catch {
       toast.error('Não foi possível resolver o caso.');
     } finally {
       setResolving(false);
     }
-  }, [mutate, refetch, resolutionNote, resolveTarget]);
+  }, [mutate, refetch, resolutionForm, resolveTarget]);
 
   return (
     <AppLayout>
@@ -240,6 +297,7 @@ export default function FrmsAlertasPainel() {
                 const name = item.nome_tripulante || `Tripulante #${item.tripulante_id}`;
                 const levelClass = NIVEL_STYLE[item.nivel] || NIVEL_STYLE.AVISO;
                 const resolutionDate = resolvedAt(item.resolvido_em);
+                const resolutionRecord = parseResolutionRecord(item.notas_resolucao);
                 return (
                   <article key={item.id} className="p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
@@ -260,7 +318,18 @@ export default function FrmsAlertasPainel() {
                                 resolutionDate ? ` em ${resolutionDate}` : ''
                               }.`}
                             </p>
-                            {item.notas_resolucao ? (
+                            {resolutionRecord ? (
+                              <dl className="mt-2 grid gap-1 sm:grid-cols-2">
+                                <div><dt className="font-semibold">Responsável</dt><dd>{resolutionRecord.responsavel}</dd></div>
+                                <div><dt className="font-semibold">Prazo</dt><dd>{resolutionRecord.prazo}</dd></div>
+                                <div className="sm:col-span-2"><dt className="font-semibold">Mitigação</dt><dd>{resolutionRecord.acao_mitigacao}</dd></div>
+                                <div className="sm:col-span-2"><dt className="font-semibold">Justificativa</dt><dd>{resolutionRecord.justificativa}</dd></div>
+                                {resolutionRecord.evidencia_referencia ? (
+                                  <div className="sm:col-span-2"><dt className="font-semibold">Evidência / referência</dt><dd>{resolutionRecord.evidencia_referencia}</dd></div>
+                                ) : null}
+                                <div className="sm:col-span-2"><dt className="font-semibold">Avaliação de eficácia</dt><dd>{resolutionRecord.avaliacao_eficacia}</dd></div>
+                              </dl>
+                            ) : item.notas_resolucao ? (
                               <p className="mt-1">Registro: {item.notas_resolucao}</p>
                             ) : null}
                           </div>
@@ -322,19 +391,77 @@ export default function FrmsAlertasPainel() {
               </button>
             </div>
 
-            <label className="mt-5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
-              Motivo ou ação tomada
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200">
+                Responsável pelo tratamento
+                <input
+                  autoFocus
+                  value={resolutionForm.responsavel}
+                  onChange={(event) => updateResolutionField('responsavel', event.target.value)}
+                  maxLength={120}
+                  placeholder="Nome, função ou equipe responsável"
+                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200">
+                Prazo
+                <input
+                  type="date"
+                  value={resolutionForm.prazo}
+                  onChange={(event) => updateResolutionField('prazo', event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                />
+              </label>
+            </div>
+
+            <label className="mt-4 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+              Mitigação aplicada
               <textarea
-                autoFocus
-                value={resolutionNote}
-                onChange={(event) => setResolutionNote(event.target.value)}
-                rows={4}
+                value={resolutionForm.acao_mitigacao}
+                onChange={(event) => updateResolutionField('acao_mitigacao', event.target.value)}
+                rows={3}
                 maxLength={1000}
-                placeholder="Ex.: jornada confirmada com a coordenação; tripulante substituído; limite reavaliado com dado corrigido."
+                placeholder="Descreva a ação de mitigação efetivamente aplicada."
                 className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </label>
-            <p className="mt-1 text-xs text-slate-500">Este registro fica associado ao fechamento do caso.</p>
+
+            <label className="mt-4 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+              Justificativa da decisão
+              <textarea
+                value={resolutionForm.justificativa}
+                onChange={(event) => updateResolutionField('justificativa', event.target.value)}
+                rows={3}
+                maxLength={1000}
+                placeholder="Explique por que o caso pode ser encerrado após a mitigação."
+                className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+            </label>
+            <label className="mt-4 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+              Evidência ou referência
+              <input
+                value={resolutionForm.evidencia_referencia}
+                onChange={(event) => updateResolutionField('evidencia_referencia', event.target.value)}
+                maxLength={500}
+                placeholder="Opcional: ocorrência, FRAT, documento, protocolo ou outra referência."
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+            </label>
+
+            <label className="mt-4 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+              Avaliação de eficácia
+              <textarea
+                value={resolutionForm.avaliacao_eficacia}
+                onChange={(event) => updateResolutionField('avaliacao_eficacia', event.target.value)}
+                rows={3}
+                maxLength={1000}
+                placeholder="Registre como foi verificado que a mitigação tratou o risco."
+                className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+            </label>
+            <p className="mt-2 text-xs text-slate-500">
+              “Visto” registra ciência. O encerramento exige mitigação e avaliação de eficácia, preservadas na trilha de auditoria.
+            </p>
 
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button type="button" onClick={closeResolution} disabled={resolving} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900">
@@ -343,7 +470,14 @@ export default function FrmsAlertasPainel() {
               <button
                 type="button"
                 onClick={() => void resolveCase()}
-                disabled={resolving || !resolutionNote.trim()}
+                disabled={
+                  resolving ||
+                  resolutionForm.responsavel.trim().length < 2 ||
+                  !/^\d{4}-\d{2}-\d{2}$/.test(resolutionForm.prazo) ||
+                  resolutionForm.acao_mitigacao.trim().length < 10 ||
+                  resolutionForm.justificativa.trim().length < 10 ||
+                  resolutionForm.avaliacao_eficacia.trim().length < 10
+                }
                 className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900"
               >
                 {resolving ? 'Resolvendo…' : 'Confirmar e resolver'}

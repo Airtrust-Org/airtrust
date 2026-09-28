@@ -255,6 +255,28 @@ async function resolveMaintenanceManagerScope(
   };
 }
 
+function isSyntheticFrmsProductionFixture(row: Record<string, unknown>): boolean {
+  const normalize = (value: unknown) =>
+    String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toUpperCase();
+  const haystack = [row.funcionario_nome, row.nome, row.nome_guerra, row.cargo, row.funcao]
+    .map(normalize)
+    .filter(Boolean)
+    .join(' | ');
+  if (!haystack) return false;
+  return (
+    /(^|[^A-Z0-9])QA([^A-Z0-9]|$)/.test(haystack) ||
+    haystack.includes('FICTICIO') ||
+    haystack.includes('FIXTURE') ||
+    haystack.includes('SYNTHETIC') ||
+    haystack.includes('DADO DE TESTE') ||
+    haystack.includes('TEST DATA')
+  );
+}
+
 function setSessionRoleCookie(c: Context, role: string): void {
   const isProduction = (c.env as Env).ENVIRONMENT === 'production';
   const domain = isProduction ? '; Domain=.airtrust.online' : '';
@@ -378,9 +400,14 @@ router.get('/frms-maintenance-team', async (c) => {
     .bind(date, date, empresaId, ...maintenanceScope.setorIds)
     .all<Record<string, unknown>>();
 
-  const items = (rows.results || []).filter(
+  const maintenanceItems = (rows.results || []).filter(
     (row) => resolveFrmsWorkforceProfile(row.cargo, row.funcao) === 'maintenance',
   );
+  const production = c.env.ENVIRONMENT === 'production';
+  const items = production
+    ? maintenanceItems.filter((row) => !isSyntheticFrmsProductionFixture(row))
+    : maintenanceItems;
+  const hiddenSyntheticFixtures = maintenanceItems.length - items.length;
 
   return c.json({
     success: true,
@@ -391,6 +418,7 @@ router.get('/frms-maintenance-team', async (c) => {
         scope: 'maintenance',
         setor_ids: maintenanceScope.setorIds,
         access_source: maintenanceScope.source,
+        hidden_synthetic_fixtures: hiddenSyntheticFixtures,
       },
     },
   });

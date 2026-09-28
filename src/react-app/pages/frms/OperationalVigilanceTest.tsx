@@ -343,7 +343,16 @@ export default function OperationalVigilanceTest({
           </p>
         </div>
         <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-          Mantenha a tela ativa e evite conversar ou alternar de aplicativo durante o teste.
+          <p className="font-semibold text-slate-800">Protocolo AirTrust {PVTB_V2_PROTOCOL.version}</p>
+          <p className="mt-1 text-xs leading-5">
+            Janela de amostragem: {Math.round(PVTB_V2_PROTOCOL.defaultDurationMs / 1000)} s · lapso: ≥ {PVTB_V2_PROTOCOL.lapseThresholdMs} ms ·
+            antecipação: &lt; {PVTB_V2_PROTOCOL.falseStartThresholdMs} ms · resposta ausente: lapso de {PVTB_V2_PROTOCOL.responseWindowMs / 1000} s.
+            O backend revalida tempos e sequência; o baseline individual usa somente sessões do mesmo protocolo.
+          </p>
+          <p className="mt-2 text-xs leading-5">
+            Use navegador moderno com toque ou clique e mantenha esta aba em primeiro plano. Trocar de aba, ocultar a janela ou interromper a medição invalida a sessão.
+            Esta é uma implementação independente AirTrust do paradigma PVT-B e não corresponde a um software externo específico.
+          </p>
         </div>
         <p className="text-xs leading-5 text-slate-500">
           Referência científica: Psychomotor Vigilance Task (PVT) —{' '}

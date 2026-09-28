@@ -1,5 +1,5 @@
 import { Suspense, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import { usePermissions } from './hooks/usePermissions';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -107,6 +107,14 @@ function LegacyPastaVirtualRedirect() {
   });
   return <Navigate to={path || '/funcionarios'} replace />;
 }
+function LegacyFrmsOperationalRedirect() {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  params.set('origem', 'controle-operacional-legado');
+  const query = params.toString();
+  return <Navigate to={'/frms' + (query ? '?' + query : '')} replace />;
+}
+
 const CrudModelos = lazyWithRetry(
   () => import('./pages/simuladores/cadastros/modelos'),
   'CrudModelos',
@@ -972,7 +980,7 @@ export default function App() {
                     />
                     <Route
                       path="/frms/controle-operacional"
-                      element={<Navigate to="/frms" replace />}
+                      element={<LegacyFrmsOperationalRedirect />}
                     />
                     {/* SIGVOOS já é integração ativa e canônica em Configurações.
                         O atalho FRMS aponta para o destino real. */}

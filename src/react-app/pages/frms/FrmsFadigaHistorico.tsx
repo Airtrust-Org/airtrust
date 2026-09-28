@@ -20,6 +20,26 @@ function statusOperacionalLabel(value: unknown): string {
   return STATUS_OPERACIONAL_LABEL[key] || key;
 }
 
+
+function auditSafeOperationalStatus(row: FrmsFadigaCheckinRow): string {
+  if (!row.data_source || row.data_source === 'missing_checkin' || row.data_source === 'default_estimate') {
+    return 'Não avaliável — revisão necessária';
+  }
+  if (row.computed_risk_level === 'not_submitted' || row.computed_risk_level === 'incomplete_checkin') {
+    return 'Não avaliável — check-in incompleto';
+  }
+  if (row.requires_operational_review === 1) {
+    return 'Revisão operacional necessária';
+  }
+  return statusOperacionalLabel(row.status_operacional);
+}
+
+function fratStatusLabel(row: FrmsFadigaCheckinRow): string {
+  if (row.associado_frat_avaliacao_id) return 'Vinculado';
+  if (row.requires_frat_review === 1) return 'Revisão FRAT requerida';
+  return 'Não requerido';
+}
+
 function getTodayLocalKey(): string {
   const now = new Date();
   const year = now.getFullYear();
@@ -64,7 +84,6 @@ export default function FrmsFadigaHistorico() {
   const hoje = getTodayLocalKey();
   const [inicio, setInicio] = useState(`${hoje.slice(0, 8)}01`);
   const [fim, setFim] = useState(hoje);
-  const [funcionarioId, setFuncionarioId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
   const filtros = useMemo(() => {
@@ -73,10 +92,9 @@ export default function FrmsFadigaHistorico() {
       data_fim: fim,
       limit: '200',
     };
-    if (funcionarioId.trim()) base.funcionario_id = funcionarioId.trim();
     if (searchTerm.trim()) base.search = searchTerm.trim();
     return base;
-  }, [fim, funcionarioId, inicio, searchTerm]);
+  }, [fim, inicio, searchTerm]);
 
   const { data, loading, refetch } = useFrmsFadigaHistorico(filtros);
   const dataAsRecord =
@@ -135,23 +153,14 @@ export default function FrmsFadigaHistorico() {
                 className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
               />
             </label>
-            <label className="text-sm text-slate-600 md:col-span-1">
-              Funcionário ID
-              <input
-                value={funcionarioId}
-                onChange={(e) => setFuncionarioId(e.target.value)}
-                placeholder="Ex.: 123"
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-              />
-            </label>
-            <label className="text-sm text-slate-600 md:col-span-1">
-              Buscar nome/ID
+            <label className="text-sm text-slate-600 md:col-span-2">
+              Tripulante
               <div className="relative mt-1">
                 <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Tripulante"
+                  placeholder="Buscar por nome ou identificador"
                   className="w-full rounded-xl border border-slate-200 py-2 pl-8 pr-3"
                 />
               </div>
@@ -188,7 +197,7 @@ export default function FrmsFadigaHistorico() {
                     <th className="px-2 py-2">KSS</th>
                     <th className="px-2 py-2">Sono</th>
                     <th className="px-2 py-2">Qualidade do sono</th>
-                    <th className="px-2 py-2">Score</th>
+                    <th className="px-2 py-2" title="Índice composto de triagem: 0–100; valores maiores representam maior risco estimado de fadiga. Não é decisão isolada de aptidão.">Índice composto (0–100)</th>
                     <th className="px-2 py-2">Nível de alerta informado</th>
                     <th className="px-2 py-2">Status</th>
                     <th className="px-2 py-2">Fonte do dado</th>
@@ -218,7 +227,7 @@ export default function FrmsFadigaHistorico() {
                       </td>
                       <td className="px-2 py-2 font-semibold">{row.score_fadiga}</td>
                       <td className="px-2 py-2">{row.nivel_fadiga}</td>
-                      <td className="px-2 py-2">{statusOperacionalLabel(row.status_operacional)}</td>
+                      <td className="px-2 py-2">{auditSafeOperationalStatus(row)}</td>
                       <td className="px-2 py-2">
                         <span
                           title={sourceMeta.help}
@@ -228,7 +237,7 @@ export default function FrmsFadigaHistorico() {
                         </span>
                       </td>
                       <td className="px-2 py-2">
-                        {row.associado_frat_avaliacao_id ? 'Vinculado' : 'Pendente'}
+                        {fratStatusLabel(row)}
                       </td>
                     </tr>
                     );

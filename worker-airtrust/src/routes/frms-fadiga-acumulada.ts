@@ -13,7 +13,8 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { calcularEvolucaoFadigaAcumulada } from '../lib/frms/fadiga-acumulada-legal';
-import { buildCanonicalOperationalSourceSql } from '../lib/frms/frms-source-policy';
+import { buildCanonicalOperationalSourceSql, FRMS_OPERATIONAL_SOURCE_PRIORITY } from '../lib/frms/frms-source-policy';
+import { loadPreferredOperationalJourneys } from '../lib/frms/preferred-operational-source';
 import { loadLegalWorkMonth } from '../lib/frms/legal-work-service';
 import { asOperationalLimitesMap, resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
 import { costaDoSolAct2025_2027Applies, regulatoryProfileHasDocumentedAppendix } from '../lib/frms/compliance-policy';
@@ -145,8 +146,79 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
 
   try {
     const { context, limits, thresholds, rbacBcApplicable, costaDoSolActApplicable } = await resolveRouteContext(db, empresaId, mes);
-    const legalRows = await loadLegalWorkMonth(db, empresaId, mes);
+    const monthEnd = lastDayOfMonth(mes);
+    const [legalRows, preferredJourneys] = await Promise.all([
+      loadLegalWorkMonth(db, empresaId, mes),
+      loadPreferredOperationalJourneys(db, empresaId, `${mes}-01`, monthEnd),
+    ]);
+    const [rawSourcesSettled, firaImportSettled] = await Promise.allSettled([
+      db
+        .prepare(
+          `SELECT UPPER(COALESCE(NULLIF(TRIM(j.origem), ''), 'SEM_ORIGEM')) AS origem,
+                  COUNT(*) AS total
+             FROM frms_jornada j
+             JOIN funcionarios f
+               ON f.id = CAST(j.tripulante_id AS INTEGER)
+              AND f.deleted_at IS NULL
+              AND f.empresa_id = ?
+            WHERE j.tripulante_id = ?
+              AND j.data BETWEEN ? AND ?
+              AND j.deleted_at IS NULL
+            GROUP BY UPPER(COALESCE(NULLIF(TRIM(j.origem), ''), 'SEM_ORIGEM'))
+            ORDER BY origem`,
+        )
+        .bind(empresaId, tripulanteId, `${mes}-01`, monthEnd)
+        .all<{ origem: string; total: number }>(),
+      db
+        .prepare(
+          `SELECT COUNT(*) AS total
+             FROM frms_importacao_fira fira
+             LEFT JOIN funcionarios p ON p.id = CAST(fira.tripulante_id AS INTEGER)
+             LEFT JOIN funcionarios op ON op.id = CAST(fira.importado_por AS INTEGER)
+            WHERE fira.deleted_at IS NULL
+              AND fira.ano = ?
+              AND fira.mes = ?
+              AND fira.tripulante_id = ?
+              AND (
+                CAST(json_extract(fira.preview_json, '$.empresa_id') AS INTEGER) = ?
+                OR p.empresa_id = ?
+                OR op.empresa_id = ?
+              )`,
+        )
+        .bind(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), tripulanteId, empresaId, empresaId, empresaId)
+        .first<{ total: number }>(),
+    ]);
     const legal = legalRows.find((row) => row.tripulante_id === Number(tripulanteId)) ?? null;
+    const preferredForTrip = preferredJourneys.filter(
+      (row) => row.tripulante_id === Number(tripulanteId),
+    );
+    const selectedBySource = preferredForTrip.reduce<Record<string, number>>((acc, row) => {
+      acc[row.operational_data_source] = (acc[row.operational_data_source] ?? 0) + 1;
+      return acc;
+    }, {});
+    const recordedBySource = rawSourcesSettled.status === 'fulfilled'
+      ? Object.fromEntries(
+          (rawSourcesSettled.value.results || []).map((row) => [row.origem, Number(row.total) || 0]),
+        )
+      : {};
+    const firaImportCount = firaImportSettled.status === 'fulfilled'
+      ? Number(firaImportSettled.value?.total ?? 0)
+      : 0;
+    const reconciliationNotes: string[] = [
+      'Controle de Voos é a fonte operacional preferencial quando há registro utilizável; SIGVOOS atua como fallback operacional.',
+      'FIRA é fonte documental/de reconciliação e não é somada diretamente ao cálculo operacional para evitar dupla contagem.',
+    ];
+    if (rawSourcesSettled.status === 'rejected') {
+      reconciliationNotes.push('A contagem auxiliar de jornadas por origem não pôde ser carregada; o cálculo principal não foi interrompido.');
+    }
+    if (firaImportSettled.status === 'rejected') {
+      reconciliationNotes.push('A contagem auxiliar de importações FIRA não pôde ser carregada; o cálculo principal não foi interrompido.');
+    }
+    if (firaImportCount > 0 && preferredForTrip.length === 0) {
+      reconciliationNotes.push(
+        'Há FIRA no período, mas nenhuma jornada operacional elegível foi selecionada. Isso é uma lacuna de fonte operacional, não ausência de documento FIRA.',
+      );
+    }
 
     // Detalhe diário da jornada de voo permanece para auditoria operacional; não é o acumulado legal de trabalho.
     const jornadas = await db
@@ -295,6 +367,21 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
               valores_brutos: ultimo?.valores_brutos,
             }
           : null,
+        source_reconciliation: {
+          operational_priority: [...FRMS_OPERATIONAL_SOURCE_PRIORITY],
+          selected_operational_records: preferredForTrip.length,
+          selected_by_source: selectedBySource,
+          recorded_jornadas_by_source: recordedBySource,
+          fira_importacoes_periodo: firaImportCount,
+          notes: reconciliationNotes,
+          period_semantics: {
+            mes_calendario: `${mes}-01..${monthEnd}`,
+            rolling_7d: 'janela móvel de 7 dias até a data de referência, inclusive',
+            rolling_28d: 'janela móvel de 28 dias até a data de referência, inclusive',
+            rolling_365d: 'janela móvel de 365 dias até a data de referência, inclusive',
+            data_operacional: 'data operacional persistida no registro; horários são exibidos sem conversão silenciosa de fuso',
+          },
+        },
         evolucao,
       },
     });

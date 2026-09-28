@@ -630,6 +630,12 @@ export function sanitizeSigvoosConfig(config: SigvoosConfig): SanitizedSigvoosCo
   };
 }
 
+export {
+  resolveSigvoosOperationalStatus,
+  type SigvoosOperationalStatus,
+  type SigvoosOperationalStatusResult,
+} from './sigvoos-operational-status';
+
 function normalizeEmpresaId(value?: number | null): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
     return null;

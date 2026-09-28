@@ -19,6 +19,36 @@ import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { SettingsSectionIntro } from '../components/SettingsSectionIntro';
 
 type SigvoosStatus = 'PROCESSANDO' | 'SUCESSO' | 'ERRO' | string;
+type SigvoosOperationalStatus =
+  | 'not_configured'
+  | 'inactive'
+  | 'healthy'
+  | 'stale'
+  | 'partial'
+  | 'failed'
+  | 'awaiting_window';
+
+interface SigvoosHealth {
+  status: SigvoosOperationalStatus;
+  configured: boolean;
+  usable_for_frms: boolean;
+  reason: string;
+  last_sync_at: string | null;
+  pending_count: number;
+  auto_sync_enabled: boolean;
+  auto_sync_hora_utc: number;
+}
+
+const SIGVOOS_HEALTH_LABEL: Record<SigvoosOperationalStatus, string> = {
+  not_configured: 'Não configurado',
+  inactive: 'Inativo',
+  healthy: 'Saudável',
+  stale: 'Desatualizado',
+  partial: 'Parcial — requer revisão',
+  failed: 'Falha',
+  awaiting_window: 'Configurado — aguardando janela',
+};
+
 
 interface SigvoosConfig {
   username: string;
@@ -258,7 +288,7 @@ export default function IntegracoesEdApp() {
   const [mappingTarget, setMappingTarget] = useState<SigvoosUnmappedTripulante | null>(null);
   const [selectedFuncionarioId, setSelectedFuncionarioId] = useState('');
   const [savingMapping, setSavingMapping] = useState(false);
-  const [providerReady, setProviderReady] = useState<boolean | null>(null);
+  const [providerHealth, setProviderHealth] = useState<SigvoosHealth | null>(null);
   const { data: funcionariosAtivos = [] } = useFuncionariosAtivos();
 
   const token = getAccessToken() || '';
@@ -297,7 +327,7 @@ export default function IntegracoesEdApp() {
       setTo(today);
     }
 
-    setProviderReady(Boolean(pingData?.success));
+    setProviderHealth(pingData?.success && pingData?.data ? (pingData.data as SigvoosHealth) : null);
   }, [token]);
 
   const fetchHistorico = useCallback(async () => {
@@ -607,8 +637,13 @@ export default function IntegracoesEdApp() {
           </p>
           <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
             <Server className="h-4 w-4" />
-            {providerReady ? 'Conectado' : 'Indisponivel'}
+            {providerHealth ? SIGVOOS_HEALTH_LABEL[providerHealth.status] : 'Status indisponível'}
           </p>
+          {providerHealth ? (
+            <p className="mt-1 text-xs text-slate-500" title={providerHealth.reason}>
+              {providerHealth.reason}
+            </p>
+          ) : null}
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Execucoes</p>

@@ -8,6 +8,7 @@ import {
   type FrmsMaintenanceTeamItem,
 } from '@/react-app/hooks/useFrmsOperationalAccess';
 import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
+import { shouldExposeFrmsPerson } from './frmsProductionVisibility';
 import {
   classifyMaintenanceItem,
   maintenanceActionText,
@@ -92,7 +93,16 @@ export default function FrmsMaintenanceDashboard() {
   const canManage = access.data?.can_manage_maintenance === true;
   const canOpenOwnMaintenanceCheckin = access.data?.frms_profile === 'maintenance';
   const team = useFrmsMaintenanceTeam(date, canManage);
-  const items = team.data?.items || [];
+  const items = useMemo(
+    () => (team.data?.items || []).filter((item) =>
+      shouldExposeFrmsPerson({
+        nome: item.funcionario_nome,
+        cargo: item.cargo,
+        funcao: item.funcao,
+      }),
+    ),
+    [team.data?.items],
+  );
 
   const counts = useMemo(
     () =>

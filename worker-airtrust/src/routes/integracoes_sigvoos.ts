@@ -21,6 +21,7 @@ import {
   listSigvoosUnmappedTripulantes,
   mapearSigvoosPendenciaERreprocessar,
   reprocessarPreviewsSigvoosSemTripulante,
+  resolveSigvoosOperationalStatus,
   sanitizeSigvoosConfig,
   syncSigvoosForFrms,
   upsertSigvoosManualMapping,
@@ -398,7 +399,25 @@ function resolveAuthenticatedEmpresaId(c: Context<{ Bindings: Env; Variables: Pa
 }
 
 sigvoosRouter.get('/ping', async (c) => {
-  return c.json({ success: true, data: { provider: 'sigvoos', status: 'ready' } });
+  const empresaId = resolveAuthenticatedEmpresaId(c);
+  if (!empresaId) {
+    return c.json({ success: false, error: 'Tenant context ausente.', code: 'SIGVOOS_TENANT_REQUIRED' }, 403);
+  }
+  const config = sanitizeSigvoosConfig(await getSigvoosConfig(c.env.DB, empresaId, undefined, c.env));
+  const [eventos, pendencias] = await Promise.all([
+    listSigvoosEventos(c.env.DB, empresaId, 1),
+    listSigvoosPendencias(c.env.DB, empresaId, 200),
+  ]);
+  const operational = resolveSigvoosOperationalStatus(config, eventos[0] ?? null, pendencias.length);
+  return c.json({
+    success: true,
+    data: {
+      provider: 'sigvoos',
+      ...operational,
+      auto_sync_enabled: config.auto_sync_enabled,
+      auto_sync_hora_utc: config.auto_sync_hora_utc,
+    },
+  });
 });
 
 sigvoosRouter.get('/config', async (c) => {

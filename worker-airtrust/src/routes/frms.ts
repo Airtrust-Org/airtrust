@@ -80,6 +80,7 @@ import { syncHorasVooFromFrmsJornada } from '../shared/handlers/horasVooFromFrms
 import { recalcularPipeline } from '../lib/frms/db-service-jornadas';
 import { buildCanonicalOperationalSourceSql } from '../lib/frms/frms-source-policy';
 import { buildFrmsDayCheckinExplanationState, buildFrmsJustificationCheckinState, maskFrmsEffectivenessRead } from '../lib/frms/day-explanation-checkin';
+import { buildFrmsCaseResolutionNotes } from '../lib/frms/case-resolution';
 import { buildFrmsEffectivenessComparison, buildFrmsSimulationComparison, COMPLETE_FRMS_CHECKIN_EXISTS_SQL, maskFrmsTimelineRows } from '../lib/frms/effectiveness-read-policy';
 import { getSigvoosConfig } from '../services/sigvoos-frms';
 import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../services/employee-sector-access';
@@ -3642,15 +3643,12 @@ frmsRoutes.put(
     if (denied) return denied;
 
     const userId = String(c.get('userId') || 'system');
-    // Aceita corpo opcional com notas de resolução
-    let notasResolucao: string | null = null;
-    try {
-      const body = await c.req.json();
-      if (typeof body?.notas_resolucao === 'string') {
-        notasResolucao = body.notas_resolucao || null;
-      }
-    } catch {
-      // Corpo vazio é permitido — retrocompatível
+    const notasResolucao = buildFrmsCaseResolutionNotes(
+      await c.req.json().catch(() => null),
+      userId,
+    );
+    if (!notasResolucao) {
+      return c.json({ success: false, error: 'A resolução exige responsável, prazo, mitigação, justificativa e avaliação de eficácia.', code: 'FRMS_CASE_RESOLUTION_INCOMPLETE' }, 400);
     }
     await marcarAlertaResolvido(c.env.DB, id, userId, notasResolucao);
     return c.json({ success: true });
