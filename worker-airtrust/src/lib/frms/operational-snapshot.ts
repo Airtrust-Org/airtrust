@@ -38,6 +38,7 @@ import {
 import { classifyOperationalCrewRole } from './operational-crew';
 import { deriveFrmsOperationalDecision, type FrmsDecisaoOperacionalEstado } from './frms-operational-decision';
 import { loadPreferredOperationalJourneys, type FrmsOperationalDataSource } from './preferred-operational-source';
+import { collectByBindChunks } from '../../utils/d1-bind-chunks';
 
 
 
@@ -1359,26 +1360,29 @@ async function loadOperationalFuncionarios(
   ids: number[],
 ): Promise<FuncionarioSnapshotRow[]> {
   if (ids.length === 0) return [];
-  const placeholders = buildPlaceholders(ids.length);
-  const result = await db
-    .prepare(
-      `SELECT
-         id,
-         nome,
-         guerra AS nome_guerra,
-         funcao,
-         cargo,
-         base,
-         aeronave
-       FROM funcionarios
-       WHERE deleted_at IS NULL
-         AND empresa_id = ?
-         AND id IN (${placeholders})`,
-    )
-    .bind(empresaId, ...ids)
-    .all<FuncionarioSnapshotRow>();
 
-  return result.results || [];
+  return collectByBindChunks(ids, 1, async (chunk) => {
+    const placeholders = buildPlaceholders(chunk.length);
+    const result = await db
+      .prepare(
+        `SELECT
+           id,
+           nome,
+           guerra AS nome_guerra,
+           funcao,
+           cargo,
+           base,
+           aeronave
+         FROM funcionarios
+         WHERE deleted_at IS NULL
+           AND empresa_id = ?
+           AND id IN (${placeholders})`,
+      )
+      .bind(empresaId, ...chunk)
+      .all<FuncionarioSnapshotRow>();
+
+    return result.results || [];
+  });
 }
 
 function monthsInRange(start: string, end: string): string[] {
