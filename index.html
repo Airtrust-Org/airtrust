@@ -124,6 +124,195 @@
         void recoverLogin().catch(() => {});
       })();
     </script>
+    <script>
+      (() => {
+        const BOOT_RECOVERY_KEY = 'airtrust-app-boot-recovery-v1';
+        const BOOT_RECOVERY_PARAM = 'airtrust_boot_recovery';
+        const BOOT_RECOVERY_TS_PARAM = 'airtrust_boot_ts';
+        const BOOT_TIMEOUT_MS = 7000;
+        const BOOT_ERROR_PATTERN =
+          /Failed to (?:fetch|load).*module|Importing a module script failed|Loading chunk|ChunkLoadError|dynamically imported module|CSS chunk load failed/i;
+        const buildVersion =
+          document.querySelector('meta[name="build-version"]')?.getAttribute('content') || 'unknown';
+        const recoveryToken = `${buildVersion}:${window.location.pathname}`;
+        let recoveryStarted = false;
+
+        const safeSessionGet = (key) => {
+          try {
+            return window.sessionStorage.getItem(key);
+          } catch {
+            return null;
+          }
+        };
+
+        const safeSessionSet = (key, value) => {
+          try {
+            window.sessionStorage.setItem(key, value);
+          } catch {
+            // Storage bloqueado: a recuperação ainda pode seguir sem deduplicação persistente.
+          }
+        };
+
+        const safeSessionRemove = (key) => {
+          try {
+            window.sessionStorage.removeItem(key);
+          } catch {
+            // Best effort.
+          }
+        };
+
+        const cleanupLegacyRuntime = async () => {
+          try {
+            const cacheNames =
+              'caches' in window && typeof caches.keys === 'function' ? await caches.keys() : [];
+            const legacyCaches = cacheNames.filter(
+              (name) => name.startsWith('airtrust-') && !name.startsWith('airtrust-pilot-'),
+            );
+            await Promise.all(legacyCaches.map((name) => caches.delete(name)));
+          } catch {
+            // Best effort.
+          }
+
+          try {
+            if ('serviceWorker' in navigator) {
+              const registrations = await navigator.serviceWorker.getRegistrations();
+              const legacyRegistrations = registrations.filter((registration) => {
+                try {
+                  return !new URL(registration.scope).pathname.startsWith('/pilot/');
+                } catch {
+                  return true;
+                }
+              });
+              await Promise.all(
+                legacyRegistrations.map((registration) => registration.unregister().catch(() => false)),
+              );
+            }
+          } catch {
+            // Best effort.
+          }
+        };
+
+        const showBootFailure = () => {
+          const root = document.getElementById('root');
+          if (root?.childElementCount) return;
+          if (document.getElementById('airtrust-boot-fallback')) return;
+
+          const mountFallback = () => {
+            if (!document.body || document.getElementById('airtrust-boot-fallback')) return;
+
+            const shell = document.createElement('main');
+            shell.id = 'airtrust-boot-fallback';
+            shell.setAttribute('role', 'alert');
+            shell.style.cssText =
+              'min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;padding:24px;color:#0f172a;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;';
+
+            const card = document.createElement('section');
+            card.style.cssText =
+              'width:min(440px,100%);background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:24px;box-shadow:0 12px 32px rgba(15,23,42,.08);text-align:center;';
+
+            const title = document.createElement('h1');
+            title.textContent = 'O AirTrust não conseguiu iniciar';
+            title.style.cssText = 'font-size:20px;line-height:1.3;margin:0 0 10px;font-weight:700;';
+
+            const text = document.createElement('p');
+            text.textContent =
+              'A página foi atualizada, mas os arquivos da aplicação não carregaram corretamente. Tente recarregar novamente.';
+            text.style.cssText = 'font-size:14px;line-height:1.5;color:#475569;margin:0 0 18px;';
+
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = 'Recarregar AirTrust';
+            button.style.cssText =
+              'border:0;border-radius:10px;background:#12356a;color:#fff;padding:11px 18px;font:600 14px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer;';
+            button.addEventListener('click', () => {
+              safeSessionRemove(BOOT_RECOVERY_KEY);
+              window.location.reload();
+            });
+
+            card.append(title, text, button);
+            shell.appendChild(card);
+            document.body.appendChild(shell);
+          };
+
+          if (document.body) {
+            mountFallback();
+          } else {
+            window.addEventListener('DOMContentLoaded', mountFallback, { once: true });
+          }
+        };
+
+        const recoverBootFailure = async () => {
+          const root = document.getElementById('root');
+          if (root?.childElementCount) {
+            safeSessionRemove(BOOT_RECOVERY_KEY);
+            return;
+          }
+          if (recoveryStarted) return;
+          recoveryStarted = true;
+
+          if (safeSessionGet(BOOT_RECOVERY_KEY) === recoveryToken) {
+            showBootFailure();
+            return;
+          }
+
+          safeSessionSet(BOOT_RECOVERY_KEY, recoveryToken);
+          await cleanupLegacyRuntime();
+
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.set(BOOT_RECOVERY_PARAM, buildVersion);
+          nextUrl.searchParams.set(BOOT_RECOVERY_TS_PARAM, String(Date.now()));
+          window.location.replace(nextUrl.toString());
+        };
+
+        const isCriticalAssetTarget = (target) => {
+          if (target instanceof HTMLScriptElement && target.src) {
+            return new URL(target.src, window.location.href).origin === window.location.origin;
+          }
+          if (target instanceof HTMLLinkElement && target.rel === 'stylesheet' && target.href) {
+            return new URL(target.href, window.location.href).origin === window.location.origin;
+          }
+          return false;
+        };
+
+        const visibleUrl = new URL(window.location.href);
+        if (
+          visibleUrl.searchParams.has(BOOT_RECOVERY_PARAM) ||
+          visibleUrl.searchParams.has(BOOT_RECOVERY_TS_PARAM)
+        ) {
+          visibleUrl.searchParams.delete(BOOT_RECOVERY_PARAM);
+          visibleUrl.searchParams.delete(BOOT_RECOVERY_TS_PARAM);
+          window.history.replaceState(window.history.state, document.title, visibleUrl.toString());
+        }
+
+        window.addEventListener(
+          'error',
+          (event) => {
+            const message = event.message || event.error?.message || '';
+            if (isCriticalAssetTarget(event.target) || BOOT_ERROR_PATTERN.test(message)) {
+              void recoverBootFailure();
+            }
+          },
+          true,
+        );
+
+        window.addEventListener('unhandledrejection', (event) => {
+          const reason = event.reason;
+          const message = reason instanceof Error ? reason.message : String(reason || '');
+          if (BOOT_ERROR_PATTERN.test(message)) {
+            void recoverBootFailure();
+          }
+        });
+
+        window.setTimeout(() => {
+          const root = document.getElementById('root');
+          if (!root || root.childElementCount === 0) {
+            void recoverBootFailure();
+            return;
+          }
+          safeSessionRemove(BOOT_RECOVERY_KEY);
+        }, BOOT_TIMEOUT_MS);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
