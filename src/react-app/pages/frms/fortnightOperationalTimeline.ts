@@ -23,7 +23,7 @@ export interface FortnightTimelineDay {
   hora_termino: string | null;
   horas_sono: number | null;
   kss_score: number | null;
-  recovery_credit_points: number;
+  recovery_credit_points: number | null;
   recovery_state: string | null;
   recovery_activity_type: string | null;
   acao_recomendada_texto: string | null;
@@ -248,7 +248,8 @@ export function buildFortnightTimeline(
       hora_termino: item?.hora_termino ?? null,
       horas_sono: item?.horas_sono ?? null,
       kss_score: item?.kss_score ?? null,
-      recovery_credit_points: Number(item?.recovery_credit_points ?? 0),
+      recovery_credit_points:
+        item?.recovery_credit_points == null ? null : Number(item.recovery_credit_points),
       recovery_state: item?.recovery_state ?? null,
       recovery_activity_type: item?.recovery_activity_type ?? null,
       acao_recomendada_texto: item?.acao_recomendada_texto ?? null,
