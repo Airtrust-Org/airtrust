@@ -109,6 +109,22 @@ interface EvolucaoItem {
   };
 }
 
+interface SourceReconciliation {
+  operational_priority: string[];
+  selected_operational_records: number;
+  selected_by_source: Record<string, number>;
+  recorded_jornadas_by_source: Record<string, number>;
+  fira_importacoes_periodo: number;
+  notes: string[];
+  period_semantics: {
+    mes_calendario: string;
+    rolling_7d: string;
+    rolling_28d: string;
+    rolling_365d: string;
+    data_operacional: string;
+  };
+}
+
 interface IndividualResponse {
   success: boolean;
   data: {
@@ -121,6 +137,7 @@ interface IndividualResponse {
       pct_voo: number;
       alerta: string;
     } | null;
+    source_reconciliation?: SourceReconciliation;
     evolucao: EvolucaoItem[];
   };
 }
@@ -226,6 +243,7 @@ export default function FrmsFadigaAcumulada() {
     expandedTrip ? `/api/frms/fadiga-acumulada?mes=${mes}&tripulante_id=${expandedTrip}` : null,
   );
   const evolucao = individualRaw?.data?.evolucao || [];
+  const sourceReconciliation = individualRaw?.data?.source_reconciliation;
 
   const sorted = useMemo(() => {
     return [...frota].sort((a, b) => {
@@ -408,9 +426,61 @@ export default function FrmsFadigaAcumulada() {
                   </div>
                 </button>
 
-                {/* Expanded detail: daily evolution */}
-                {expandedTrip === t.tripulante_id && evolucao.length > 0 && (
-                  <div className="mt-1 ml-4 mr-4 rounded-lg border border-slate-200 bg-white overflow-x-auto dark:border-slate-700 dark:bg-slate-900">
+                {/* Expanded detail: source reconciliation + daily evolution */}
+                {expandedTrip === t.tripulante_id && (
+                  <div className="mt-1 ml-4 mr-4 space-y-3">
+                    {sourceReconciliation ? (
+                      <section className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-xs text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="font-bold">Reconciliação de fontes</p>
+                          <span className="font-mono">
+                            {sourceReconciliation.selected_operational_records} registro(s) operacional(is) selecionado(s)
+                          </span>
+                        </div>
+                        <div className="mt-2 grid gap-2 md:grid-cols-3">
+                          <div>
+                            <span className="font-semibold">Prioridade:</span>{' '}
+                            {sourceReconciliation.operational_priority.join(' → ')}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Selecionados:</span>{' '}
+                            {Object.entries(sourceReconciliation.selected_by_source).length
+                              ? Object.entries(sourceReconciliation.selected_by_source)
+                                  .map(([source, total]) => `${source}: ${total}`)
+                                  .join(' · ')
+                              : 'nenhum'}
+                          </div>
+                          <div>
+                            <span className="font-semibold">FIRA no período:</span>{' '}
+                            {sourceReconciliation.fira_importacoes_periodo}
+                          </div>
+                        </div>
+                        <p className="mt-2">
+                          <span className="font-semibold">Jornadas registradas por origem:</span>{' '}
+                          {Object.entries(sourceReconciliation.recorded_jornadas_by_source).length
+                            ? Object.entries(sourceReconciliation.recorded_jornadas_by_source)
+                                .map(([source, total]) => `${source}: ${total}`)
+                                .join(' · ')
+                            : 'nenhuma'}
+                        </p>
+                        <ul className="mt-2 list-disc space-y-1 pl-5">
+                          {sourceReconciliation.notes.map((note) => <li key={note}>{note}</li>)}
+                        </ul>
+                        <details className="mt-3">
+                          <summary className="cursor-pointer font-semibold">Semântica das janelas e datas</summary>
+                          <div className="mt-2 space-y-1 text-blue-900/80 dark:text-blue-100/80">
+                            <p><strong>Mês:</strong> {sourceReconciliation.period_semantics.mes_calendario}</p>
+                            <p><strong>7 dias:</strong> {sourceReconciliation.period_semantics.rolling_7d}</p>
+                            <p><strong>28 dias:</strong> {sourceReconciliation.period_semantics.rolling_28d}</p>
+                            <p><strong>365 dias:</strong> {sourceReconciliation.period_semantics.rolling_365d}</p>
+                            <p><strong>Data operacional:</strong> {sourceReconciliation.period_semantics.data_operacional}</p>
+                          </div>
+                        </details>
+                      </section>
+                    ) : null}
+
+                    {evolucao.length > 0 ? (
+                    <div className="rounded-lg border border-slate-200 bg-white overflow-x-auto dark:border-slate-700 dark:bg-slate-900">
                     <table className="w-full min-w-[920px] text-xs">
                       <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-300">
                         <tr>
@@ -485,6 +555,12 @@ export default function FrmsFadigaAcumulada() {
                         ))}
                       </tbody>
                     </table>
+                    </div>
+                    ) : (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                        Não há evolução operacional elegível neste período. Consulte a reconciliação de fontes acima; a existência de FIRA, isoladamente, não cria uma jornada operacional para o acumulado.
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

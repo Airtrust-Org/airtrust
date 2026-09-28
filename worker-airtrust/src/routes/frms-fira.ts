@@ -416,14 +416,30 @@ firaRoutes.patch(
     const importacaoId = c.req.param('importacaoId') ?? '';
     const empresaId = getFiraEmpresaId(c);
     if (!empresaId) return invalidFiraTenantResponse(c);
-    const body = await c.req.json<{ tripulante_id: string }>();
-    if (!body.tripulante_id) {
-      return c.json({ success: false, error: 'tripulante_id obrigatório' }, 400);
+    const body = await c.req.json<{ tripulante_id?: string; justificativa?: string }>();
+    const parsed = z.object({
+      tripulante_id: z.string().trim().min(1),
+      justificativa: z.string().trim().min(10).max(1000),
+    }).safeParse(body);
+    if (!parsed.success) {
+      return c.json({
+        success: false,
+        error: 'Tripulante e justificativa de revisão (mínimo 10 caracteres) são obrigatórios.',
+        code: 'FIRA_ASSOCIATION_REVIEW_REQUIRED',
+      }, 400);
     }
-    const denied = await assertTripulanteEmpresa(c, String(body.tripulante_id));
+    const denied = await assertTripulanteEmpresa(c, parsed.data.tripulante_id);
     if (denied) return denied;
 
-    await vincularTripulanteFira(c.env.DB, importacaoId, String(body.tripulante_id), empresaId);
+    const revisorId = String(c.get('userId') || 'system');
+    await vincularTripulanteFira(
+      c.env.DB,
+      importacaoId,
+      parsed.data.tripulante_id,
+      empresaId,
+      revisorId,
+      parsed.data.justificativa,
+    );
     const updated = await buscarImportacaoFiraById(c.env.DB, importacaoId, empresaId);
     return c.json({ success: true, data: updated });
   }),

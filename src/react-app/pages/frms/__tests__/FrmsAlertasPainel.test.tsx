@@ -87,7 +87,7 @@ describe('FrmsAlertasPainel', () => {
     expect(screen.queryByText('CRÍTICO')).not.toBeInTheDocument();
   });
 
-  it('exige registro e confirmação antes de resolver um caso', async () => {
+  it('exige governança completa antes de resolver um caso', async () => {
     renderPage();
 
     fireEvent.click(screen.getByRole('button', { name: 'Resolver' }));
@@ -97,8 +97,23 @@ describe('FrmsAlertasPainel', () => {
     expect(confirmButton).toBeDisabled();
     expect(mutateMock).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByLabelText('Motivo ou ação tomada'), {
+    fireEvent.change(screen.getByLabelText('Responsável pelo tratamento'), {
+      target: { value: 'Coordenação de Operações' },
+    });
+    fireEvent.change(screen.getByLabelText('Prazo'), {
+      target: { value: '2026-09-30' },
+    });
+    fireEvent.change(screen.getByLabelText('Mitigação aplicada'), {
       target: { value: 'Tripulante substituído e jornada reconfirmada pela coordenação.' },
+    });
+    fireEvent.change(screen.getByLabelText('Justificativa da decisão'), {
+      target: { value: 'A jornada foi replanejada e os limites foram novamente verificados.' },
+    });
+    fireEvent.change(screen.getByLabelText('Evidência ou referência'), {
+      target: { value: 'FRAT-2026-091' },
+    });
+    fireEvent.change(screen.getByLabelText('Avaliação de eficácia'), {
+      target: { value: 'A nova tripulação operou dentro dos limites e sem novo alerta.' },
     });
     expect(confirmButton).toBeEnabled();
 
@@ -108,13 +123,17 @@ describe('FrmsAlertasPainel', () => {
       expect(mutateMock).toHaveBeenCalledWith('/api/frms/alertas/case-1/resolver', {
         method: 'PUT',
         body: JSON.stringify({
-          notas_resolucao: 'Tripulante substituído e jornada reconfirmada pela coordenação.',
+          responsavel: 'Coordenação de Operações',
+          prazo: '2026-09-30',
+          acao_mitigacao: 'Tripulante substituído e jornada reconfirmada pela coordenação.',
+          justificativa: 'A jornada foi replanejada e os limites foram novamente verificados.',
+          evidencia_referencia: 'FRAT-2026-091',
+          avaliacao_eficacia: 'A nova tripulação operou dentro dos limites e sem novo alerta.',
         }),
       });
     });
     expect(refetchMock).toHaveBeenCalled();
   });
-
   it('mostra a trilha de auditoria de casos já resolvidos', () => {
     mockCases([
       caseRow({

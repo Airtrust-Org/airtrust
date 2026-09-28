@@ -14,6 +14,7 @@ export interface FiraLinhPreview {
 }
 
 export interface FiraImportacaoPreview {
+  empresa_id?: number;
   importacao_id: string;
   tripulante_encontrado: boolean;
   tripulante_id: string | null;
@@ -30,6 +31,13 @@ export interface FiraImportacaoPreview {
   divergencia_totais: boolean;
   avisos: string[];
   erros: string[];
+  associacao_metodo?: 'CANAC_UNICO' | 'REVISAO_MANUAL' | 'NAO_ASSOCIADO';
+  associacao_identificador?: string | null;
+  associacao_candidatos?: number;
+  associacao_sugestoes_nome?: Array<{ id: string; nome: string }>;
+  associacao_revisada_por?: string | null;
+  associacao_revisada_em?: string | null;
+  associacao_justificativa?: string | null;
 }
 
 export interface FiraImportacaoResultado {

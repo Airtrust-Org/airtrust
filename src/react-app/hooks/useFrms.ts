@@ -638,6 +638,12 @@ export interface FrmsGovernedConfiguracoes {
   revision: FrmsGovernedConfigRevision;
   profile_code: string;
   regulatory_profile_id: string;
+  regulatory_evidence: {
+    service_category: string | null;
+    approval_reference: string | null;
+    policy_version: string | null;
+    source_document_hash: string | null;
+  };
   model_version: string;
   effective_from: string;
   effective_to: string | null;

@@ -295,7 +295,13 @@ export default function FrmsHistoricoFira() {
                         </p>
                         <p className="text-xs text-gray-400">{row.nome_fira}</p>
                       </td>
-                      <td className="py-3 font-mono text-xs text-gray-600">{row.canac}</td>
+                      <td className="py-3 text-xs text-gray-600">
+                        {row.canac && row.canac !== 'SEM_CANAC' ? (
+                          <span className="font-mono">{row.canac}</span>
+                        ) : (
+                          <span className="font-medium text-amber-700">CANAC não comprovado — revisão necessária</span>
+                        )}
+                      </td>
                       <td className="py-3 text-gray-600">
                         {MESES[row.mes]} / {row.ano}
                       </td>
@@ -320,7 +326,9 @@ export default function FrmsHistoricoFira() {
                         )}
                       </td>
                       <td className="py-3 max-w-[120px] truncate text-xs text-gray-500">
-                        {row.operador_nome ?? '—'}
+                        {row.operador_nome ?? (
+                          <span className="font-medium text-amber-700">Operador não comprovado (legado)</span>
+                        )}
                       </td>
                       <td className="py-3 text-xs text-gray-500">
                         {formatDate(row.importado_em ?? row.created_at)}

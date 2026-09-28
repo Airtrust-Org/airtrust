@@ -310,6 +310,8 @@ function DetailDrawer({
 export default function FrmsFlightDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedDate = searchParams.get('data');
+  const requestedFuncionarioId = searchParams.get('funcionario_id');
+  const legacyControlRoute = searchParams.get('origem') === 'controle-operacional-legado';
   const date = isOperationalDate(requestedDate) ? requestedDate : localTodayIso();
   const [selected, setSelected] = useState<FrmsOperationalSnapshotItem | null>(null);
 
@@ -336,6 +338,14 @@ export default function FrmsFlightDashboard() {
         return String(a.item.hora_apresentacao || '99:99').localeCompare(String(b.item.hora_apresentacao || '99:99'));
       });
   }, [snapshot.data]);
+
+  useEffect(() => {
+    if (!requestedFuncionarioId || selected || snapshot.data.length === 0) return;
+    const match = snapshot.data.find(
+      (item) => String(item.tripulante_id) === String(requestedFuncionarioId),
+    );
+    if (match) setSelected(match);
+  }, [requestedFuncionarioId, selected, snapshot.data]);
 
   const counts = useMemo(
     () =>
@@ -391,6 +401,12 @@ export default function FrmsFlightDashboard() {
             </button>
           </div>
         </header>
+
+        {legacyControlRoute ? (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
+            Controle Operacional foi consolidado nesta tela de Operação FRMS. Os filtros de data e tripulante da rota anterior foram preservados.
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-900/60">
           <span>Fonte: snapshot operacional único</span>

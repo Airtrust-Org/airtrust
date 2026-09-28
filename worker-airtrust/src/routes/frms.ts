@@ -3642,16 +3642,28 @@ frmsRoutes.put(
     if (denied) return denied;
 
     const userId = String(c.get('userId') || 'system');
-    // Aceita corpo opcional com notas de resolução
-    let notasResolucao: string | null = null;
-    try {
-      const body = await c.req.json();
-      if (typeof body?.notas_resolucao === 'string') {
-        notasResolucao = body.notas_resolucao || null;
-      }
-    } catch {
-      // Corpo vazio é permitido — retrocompatível
+    const body = await c.req.json().catch(() => null);
+    const parsed = z.object({
+      responsavel: z.string().trim().min(2).max(120),
+      prazo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      acao_mitigacao: z.string().trim().min(10).max(1000),
+      justificativa: z.string().trim().min(10).max(1000),
+      evidencia_referencia: z.string().trim().max(500).optional().nullable(),
+      avaliacao_eficacia: z.string().trim().min(10).max(1000),
+    }).safeParse(body);
+    if (!parsed.success) {
+      return c.json({
+        success: false,
+        error: 'A resolução exige responsável, prazo, mitigação, justificativa e avaliação de eficácia.',
+        code: 'FRMS_CASE_RESOLUTION_INCOMPLETE',
+      }, 400);
     }
+    const notasResolucao = JSON.stringify({
+      schema: 'FRMS_CASE_RESOLUTION_V1',
+      ...parsed.data,
+      fechado_por: userId,
+      fechado_em: new Date().toISOString(),
+    });
     await marcarAlertaResolvido(c.env.DB, id, userId, notasResolucao);
     return c.json({ success: true });
   }),

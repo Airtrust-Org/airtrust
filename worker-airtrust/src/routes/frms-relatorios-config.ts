@@ -17,6 +17,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
+import { resolveFrmsRegulatoryProfileEvidence } from '../lib/frms/parameter-governance';
 import { requireRole } from '../middleware/rbac';
 import {
   relatorioIndividual,
@@ -77,6 +78,34 @@ function frmsConfigurationUnavailable(c: FrmsAppContext, error: unknown) {
   );
 }
 
+
+async function buildFrmsReportMeta(
+  db: D1Database,
+  empresaId: number,
+  period: string,
+  source: string,
+) {
+  const effective = await loadEffectiveFrmsConfiguration(db, empresaId, isoDateToday());
+  return {
+    generated_at: new Date().toISOString(),
+    tenant_id: empresaId,
+    period,
+    source,
+    policy_version: effective.revision.policy_version,
+    revision_id: effective.revision.id,
+    profile_code: effective.profileCode,
+    model_version: effective.modelVersion,
+    source_type: effective.revision.source_type,
+    source_reference: effective.revision.source_reference,
+    effective_from: effective.revision.effective_from,
+    effective_to: effective.revision.effective_to,
+    limitations: [
+      'Relatório de suporte ao FRMS; não constitui diagnóstico médico nem decisão automática de aptidão.',
+      'Resultados dependem da completude, atualidade e proveniência dos dados operacionais disponíveis.',
+    ],
+  };
+}
+
 function sameParameterKeys(
   expected: readonly { parameter_key: string; numeric_value: number | null }[],
   submitted: readonly { key: string; value: number }[],
@@ -118,9 +147,16 @@ frmsRelatoriosConfig.get(
   '/relatorios/compliance',
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({ success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' }, 403);
     const mes = c.req.query('mes') || new Date().toISOString().slice(0, 7);
+    let meta;
+    try {
+      meta = await buildFrmsReportMeta(c.env.DB, empresaId, mes, 'FRMS_COMPLIANCE');
+    } catch (error) {
+      return frmsConfigurationUnavailable(c, error);
+    }
     const result = await relatorioCompliance(c.env.DB, mes, empresaId);
-    return c.json({ success: true, data: result });
+    return c.json({ success: true, data: result, meta });
   }),
 );
 
@@ -136,8 +172,14 @@ frmsRelatoriosConfig.get(
     }
     c.header('Cache-Control', 'private, max-age=3600');
     c.header('Vary', 'Authorization');
+    let meta;
+    try {
+      meta = await buildFrmsReportMeta(c.env.DB, empresaId, 'rolling/current', 'FRMS_MAPA_FADIGA');
+    } catch (error) {
+      return frmsConfigurationUnavailable(c, error);
+    }
     const result = await relatorioMapaFadiga(c.env.DB, empresaId);
-    return c.json({ success: true, data: result });
+    return c.json({ success: true, data: result, meta });
   }),
 );
 
@@ -149,16 +191,26 @@ frmsRelatoriosConfig.get(
   '/relatorios/alertas-historico',
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({ success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' }, 403);
+    const dataInicio = c.req.query('data_inicio') ?? undefined;
+    const dataFim = c.req.query('data_fim') ?? undefined;
+    let meta;
+    try {
+      meta = await buildFrmsReportMeta(
+        c.env.DB,
+        empresaId,
+        (dataInicio || 'inicio') + '..' + (dataFim || 'fim'),
+        'FRMS_ALERTAS_HISTORICO',
+      );
+    } catch (error) {
+      return frmsConfigurationUnavailable(c, error);
+    }
     const result = await buscarAlertas(
       c.env.DB,
-      {
-        data_inicio: c.req.query('data_inicio') ?? undefined,
-        data_fim: c.req.query('data_fim') ?? undefined,
-        limit: 500,
-      },
+      { data_inicio: dataInicio, data_fim: dataFim, limit: 500 },
       empresaId,
     );
-    return c.json({ success: true, data: result.alertas, total: result.total });
+    return c.json({ success: true, data: result.alertas, total: result.total, meta });
   }),
 );
 
@@ -238,13 +290,23 @@ frmsRelatoriosConfig.get(
     const empresaId = getEmpresaIdSafe(c);
     if (!empresaId) return frmsConfigurationUnavailable(c, new Error('tenant context absent'));
     try {
-      const effective = await loadEffectiveFrmsConfiguration(c.env.DB, empresaId, isoDateToday());
+      const referenceAt = isoDateToday();
+      const [effective, regulatoryEvidence] = await Promise.all([
+        loadEffectiveFrmsConfiguration(c.env.DB, empresaId, referenceAt),
+        resolveFrmsRegulatoryProfileEvidence(c.env.DB, { empresaId, referenceAt }),
+      ]);
       return c.json({
         success: true,
         data: {
           revision: effective.revision,
           profile_code: effective.profileCode,
           regulatory_profile_id: effective.regulatoryProfileId,
+          regulatory_evidence: {
+            service_category: regulatoryEvidence.serviceCategory,
+            approval_reference: regulatoryEvidence.approvalReference,
+            policy_version: regulatoryEvidence.policyVersion,
+            source_document_hash: regulatoryEvidence.sourceDocumentHash,
+          },
           model_version: effective.modelVersion,
           effective_from: effective.revision.effective_from,
           effective_to: effective.revision.effective_to,
