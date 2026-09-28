@@ -103,11 +103,13 @@ function makeSnapshotDb(data: SnapshotDbData) {
 
   return {
     prepare: vi.fn((sql: string) => ({
-      bind: vi.fn((...args: unknown[]) => ({
-        all: async () => {
+      bind: vi.fn((...args: unknown[]) => {
+        if (args.length > 100) throw new Error('D1_ERROR: too many SQL variables: SQLITE_ERROR');
+        return { all: async () => {
           const rows = rowsFor(sql);
           if (sql.includes('FROM funcionarios')) {
-            return { results: rows };
+            const requestedIds = new Set(args.slice(1).map(Number));
+            return { results: rows.filter((row) => requestedIds.has(Number(row.id))) };
           }
           const janelaInicio = String(args[1]);
           const janelaFim = String(args[2]);
@@ -117,8 +119,8 @@ function makeSnapshotDb(data: SnapshotDbData) {
               return dia >= janelaInicio && dia <= janelaFim;
             }),
           };
-        },
-      })),
+        } };
+      }),
     })),
   } as never;
 }
@@ -177,6 +179,30 @@ const FUNCIONARIO_10 = {
   base: 'SBJR',
   aeronave: 'AW139',
 };
+
+describe('D1 bind budget do snapshot operacional', () => {
+  it('carrega mais de 100 tripulantes em chunks sem exceder o limite de binds do D1', async () => {
+    mockFrmsOperationalContext();
+    vi.spyOn(jornadasModule, 'calcularDiaDoCiclo').mockResolvedValue(null);
+    const funcionarios = Array.from({ length: 120 }, (_, index) => ({
+      id: index + 1,
+      nome: `Tripulante ${index + 1}`,
+      nome_guerra: `T${index + 1}`,
+      funcao: 'PILOTO', cargo: 'COMANDANTE', base: 'SBJR', aeronave: 'AW139',
+    }));
+    const checkins = funcionarios.map((funcionario) => ({
+      data_operacional: '2026-09-28', funcionario_id: funcionario.id,
+      hora_checkin: '06:00', hora_apresentacao: '07:00', kss_score: 3,
+      horas_sono: 8, qualidade_sono: 4, wake_time: '05:30', score_fadiga: 10,
+      nivel_fadiga: 'VERDE', status_operacional: 'APTO', computed_risk_level: 'normal',
+    }));
+    const db = makeSnapshotDb({ funcionarios, checkins });
+    const result = await listFrmsOperationalSnapshot(db, {
+      empresaId: 77, dataInicio: '2026-09-28', dataFim: '2026-09-28',
+    });
+    expect(result.items).toHaveLength(120);
+  });
+});
 
 describe('Costa do Sol post-mission evidence derivation', () => {
   const mission = [{
