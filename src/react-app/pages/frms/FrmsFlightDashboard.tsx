@@ -491,7 +491,7 @@ export default function FrmsFlightDashboard() {
                       <p className="truncate font-bold text-slate-950 dark:text-white">{displayName(item)}</p>
                       <p className="truncate text-xs text-slate-500">{[item.funcao, item.base, item.aeronave].filter(Boolean).join(' · ') || 'Função/base não informadas'}</p>
                     </div>
-                    <FrmsSignalChips item={item} />
+                    <FrmsSignalChips item={item} decisionBucket={bucket} />
                     <div className="min-w-0">
                       <p className="line-clamp-2 text-sm font-medium text-slate-700 dark:text-slate-200">{reason}</p>
                       <p className="mt-1 text-xs text-slate-500">{item.acao_recomendada_texto || 'Abrir o caso para avaliar.'}</p>
