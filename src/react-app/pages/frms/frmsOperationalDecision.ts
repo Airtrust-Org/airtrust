@@ -51,6 +51,23 @@ export function hasIncompleteOperationalData(item: FrmsOperationalSnapshotItem):
   );
 }
 
+export function hasResolvedFortnightMembership(item: FrmsOperationalSnapshotItem): boolean {
+  const indicator = item.fortnight_indicator;
+  if (!indicator?.periodo_inicio || !indicator.periodo_fim) return false;
+  return (
+    item.data_operacional >= indicator.periodo_inicio &&
+    item.data_operacional <= indicator.periodo_fim
+  );
+}
+
+export function isOutsideFortnightOperationalExtension(item: FrmsOperationalSnapshotItem): boolean {
+  // `null` mantém compatibilidade com snapshots antigos que ainda não carregavam
+  // o indicador quinzenal. O backend atual usa um indicador INCOMPLETO com período
+  // nulo quando tentou resolver a quinzena e não conseguiu.
+  if (item.fortnight_indicator == null || hasResolvedFortnightMembership(item)) return false;
+  return item.escalado || item.teve_jornada || item.teve_atividade_frms === true;
+}
+
 export function classifyOperationalItem(item: FrmsOperationalSnapshotItem): FrmsDecisionBucket {
   if (item.estado_operacional === 'CRITICO_VIOLACAO' || item.snapshot_status === 'CRITICO') {
     return 'BLOQUEIO';
@@ -68,6 +85,10 @@ export function classifyOperationalItem(item: FrmsOperationalSnapshotItem): Frms
     return 'DECISAO';
   }
 
+  // Atividade real/programada fora da quinzena não deve ser aceita silenciosamente.
+  // Ela permanece na fila para a coordenação confirmar se é extensão operacional.
+  if (isOutsideFortnightOperationalExtension(item)) return 'CONFIRMAR';
+
   if (hasIncompleteOperationalData(item) || item.alertas.includes('CHECKIN_PENDENTE')) {
     return 'CONFIRMAR';
   }
@@ -76,11 +97,15 @@ export function classifyOperationalItem(item: FrmsOperationalSnapshotItem): Frms
 }
 
 export function trustedEffectiveness(item: FrmsOperationalSnapshotItem): number | null {
+  const isProjected =
+    item.effectiveness_source === 'PROJETADA_APRESENTACAO' ||
+    item.effectiveness_source === 'PROJETADA_ATIVIDADE';
+
   if (
     item.fatorizacao_status === 'AUSENTE' ||
     item.snapshot_status === 'INCOMPLETO' ||
-    item.jornada_data_source === 'AUSENTE' ||
-    item.jornada_data_source === 'INCONSISTENTE' ||
+    (!isProjected &&
+      (item.jornada_data_source === 'AUSENTE' || item.jornada_data_source === 'INCONSISTENTE')) ||
     item.effectiveness_pct == null ||
     !Number.isFinite(item.effectiveness_pct)
   ) {
@@ -91,7 +116,7 @@ export function trustedEffectiveness(item: FrmsOperationalSnapshotItem): number 
 }
 
 export function operationalConfidence(item: FrmsOperationalSnapshotItem): FrmsDataConfidence {
-  if (hasIncompleteOperationalData(item)) return 'BAIXA';
+  if (isOutsideFortnightOperationalExtension(item) || hasIncompleteOperationalData(item)) return 'BAIXA';
 
   const estimated =
     item.sleep_data_source === 'ESTIMADO' ||
@@ -104,6 +129,17 @@ export function operationalConfidence(item: FrmsOperationalSnapshotItem): FrmsDa
 }
 
 export function isOperationallyRelevant(item: FrmsOperationalSnapshotItem): boolean {
+  if (hasResolvedFortnightMembership(item)) return true;
+  if (isOutsideFortnightOperationalExtension(item)) return true;
+
+  if (item.fortnight_indicator != null) {
+    // Check-in isolado fora da quinzena é preservado como evidência, mas não cria
+    // presença na fila operacional. A fila só acompanha a quinzena ativa ou uma
+    // atividade operacional que precise ser confirmada como extensão.
+    return false;
+  }
+
+  // Compatibilidade com snapshots antigos sem indicador quinzenal.
   return (
     requiresOperationalDecision(item) ||
     item.alertas.length > 0 ||

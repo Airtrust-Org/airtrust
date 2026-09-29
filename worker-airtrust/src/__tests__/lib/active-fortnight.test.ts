@@ -18,19 +18,49 @@ describe('active fortnight helpers', () => {
     expect(parseFuncionarioQuinzena(input)).toBe(expected);
   });
 
+  it('prioriza a quinzena ligada à alocação ativa mesmo sem depender do campo funcionarios.quinzena', async () => {
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        bind: () => ({
+          first: async () =>
+            sql.includes('FROM escala_alocacoes')
+              ? {
+                  numero: 2,
+                  data_inicio: '2026-09-16',
+                  data_fim: '2026-09-30',
+                }
+              : null,
+          all: async () => ({ results: [] }),
+        }),
+      })),
+    } as any;
+
+    const range = await resolveFuncionarioActiveFortnightForDate(db, '10', '2026-09-29');
+
+    expect(range).toEqual({
+      numero: 2,
+      data_inicio: '2026-09-16',
+      data_fim: '2026-09-30',
+    });
+    expect(db.prepare).toHaveBeenCalledTimes(1);
+  });
+
   it('detecta data dentro da quinzena ativa derivada do funcionario', async () => {
     const db = {
-      prepare: vi.fn(() => ({
+      prepare: vi.fn((sql: string) => ({
         bind: () => ({
+          first: async () => null,
           all: async () => ({
-            results: [
-              {
-                funcionario_quinzena: 'Q2',
-                numero: 2,
-                data_inicio: '2026-06-16',
-                data_fim: '2026-06-30',
-              },
-            ],
+            results: sql.includes('FROM funcionarios')
+              ? [
+                  {
+                    funcionario_quinzena: 'Q2',
+                    numero: 2,
+                    data_inicio: '2026-06-16',
+                    data_fim: '2026-06-30',
+                  },
+                ]
+              : [],
           }),
         }),
       })),
@@ -51,6 +81,7 @@ describe('active fortnight helpers', () => {
     const db = {
       prepare: vi.fn(() => ({
         bind: () => ({
+          first: async () => null,
           all: async () => ({ results: [] }),
         }),
       })),
