@@ -76,6 +76,19 @@ function statusOperacionalLabel(value: unknown): string {
   return STATUS_OPERACIONAL_LABEL[key] || key;
 }
 
+function statusEquipeLabel(row: Record<string, unknown>): string {
+  switch (row.status) {
+    case 'no_duty':
+      return 'Sem jornada prevista na data';
+    case 'not_submitted':
+      return 'Check-in pendente — confirmar antes da jornada';
+    case 'incomplete_checkin':
+      return 'Check-in incompleto — solicitar complemento';
+    default:
+      return statusOperacionalLabel(row.status_operacional);
+  }
+}
+
 type SonoOpcao = 'h4' | 'h5' | 'h6' | 'h7' | 'h8';
 
 type EscalaSeveridade = 'melhor' | 'boa' | 'intermediaria' | 'atencao' | 'critica';
@@ -355,7 +368,7 @@ function PainelGestorTab() {
                   <th className="px-4 py-3 text-left font-medium text-slate-500">KSS</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-500">Score</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-500">Nível de alerta</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-500">Status Op.</th>
+                  <th className="px-4 py-3 text-left font-medium text-slate-500">Situação na data</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -375,7 +388,7 @@ function PainelGestorTab() {
                     </td>
                     <td className="px-4 py-3">{badgeNivel(String(r.nivel_fadiga ?? ''))}</td>
                     <td className="px-4 py-3 text-slate-600">
-                      {r.status === 'no_duty' ? 'Sem dados FRMS' : statusOperacionalLabel(r.status_operacional)}
+                      {statusEquipeLabel(r)}
                     </td>
                   </tr>
                 ))}
