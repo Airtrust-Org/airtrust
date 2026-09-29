@@ -87,7 +87,23 @@ echo "Exportando $db_name (remote) para $out_file ..."
 # Pass the absolute output path through unchanged. Prefixing it with ../ while
 # running Wrangler from worker-airtrust turns /tmp/... into ..//tmp/... and
 # makes Wrangler fail after successfully creating the remote D1 export.
-( cd worker-airtrust && npx wrangler d1 export "$db_name" --remote --output "$out_file" )
+#
+# Wrangler 4.130.0 can occasionally finish the download and then exit 1 from
+# Undici with `assert(!this.paused)`. Treat only that exact post-download bug
+# as recoverable, and only when Wrangler also confirms the exact output path
+# was downloaded successfully. All other non-zero exits remain fail-closed.
+wrangler_log="$(mktemp -t airtrust-staging-backup-wrangler.XXXXXXXX)"
+trap 'rm -f "$wrangler_log"' EXIT
+wrangler_status=0
+( cd worker-airtrust && npx wrangler d1 export "$db_name" --remote --output "$out_file" ) >"$wrangler_log" 2>&1 || wrangler_status=$?
+if [[ "$wrangler_status" -ne 0 ]]; then
+  if [[ -s "$out_file" ]] &&      grep -Fq 'AssertionError [ERR_ASSERTION]' "$wrangler_log" &&      grep -Fq 'assert(!this.paused)' "$wrangler_log" &&      grep -Fq "Downloaded to $out_file successfully!" "$wrangler_log"; then
+    echo "WARN: Wrangler reported the known Undici post-download assertion; downloaded backup will be validated before acceptance." >&2
+  else
+    echo "ERROR: Wrangler D1 export failed before a verifiable successful download." >&2
+    exit "$wrangler_status"
+  fi
+fi
 
 if [[ ! -s "$out_file" ]]; then
   echo "ERROR: backup vazio ou não gerado ($out_file). Abortando — não confiar neste backup." >&2
