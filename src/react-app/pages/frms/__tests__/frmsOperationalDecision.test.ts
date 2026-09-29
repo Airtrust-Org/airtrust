@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import {
   classifyOperationalItem,
+  isOperationallyRelevant,
   operationalConfidence,
   resolveOperationalDataMoment,
   trustedEffectiveness,
@@ -108,6 +109,22 @@ describe('frmsOperationalDecision', () => {
     ).toBeNull();
   });
 
+  it('mantém a efetividade projetada visível antes do fechamento da jornada', () => {
+    expect(
+      trustedEffectiveness(
+        item({
+          effectiveness_pct: 89.4,
+          effectiveness_source: 'PROJETADA_APRESENTACAO',
+          fatorizacao_status: 'PROJETADA',
+          jornada_data_source: 'AUSENTE',
+          jornada_origem: null,
+          teve_jornada: false,
+          snapshot_status: 'ATENCAO',
+        }),
+      ),
+    ).toBe(89.4);
+  });
+
   it('preserva zero legítimo quando houve cálculo com dados completos', () => {
     expect(trustedEffectiveness(item({ effectiveness_pct: 0 }))).toBe(0);
   });
@@ -139,6 +156,62 @@ describe('frmsOperationalDecision', () => {
         }),
       ),
     ).toBe('NORMAL');
+  });
+
+  it('mantém na fila o tripulante que pertence à quinzena mesmo sem atividade no dia', () => {
+    const rosterOnly = item({
+      operacao_requer_decisao: false,
+      escalado: false,
+      teve_jornada: false,
+      jornada_data_source: 'AUSENTE',
+      fatorizacao_status: 'AUSENTE',
+      effectiveness_pct: null,
+      checkin_status: 'NAO_APLICAVEL',
+      estado_operacional: 'NORMAL',
+      alertas: [],
+      fortnight_indicator: {
+        periodo_inicio: '2026-08-16',
+        periodo_fim: '2026-08-30',
+        dia_periodo: 12,
+        total_dias_periodo: 15,
+        dias_consecutivos_com_jornada: 0,
+        dias_com_checkin_pendente: 0,
+        dias_com_dado_estimado: 0,
+        duty_time_periodo_min: 0,
+        duty_time_168h_min: 0,
+        horas_voo_periodo_min: 0,
+        horas_voo_168h_min: 0,
+        atividade_frms_periodo_min: 0,
+        horas_voo_frms_periodo_min: 0,
+        simulador_periodo_min: 0,
+        treinamento_periodo_min: 0,
+        dias_atividade_periodo: 0,
+        dias_consecutivos_com_atividade: 0,
+        jornadas_periodo: 0,
+        apresentacoes_antes_0600: 0,
+        apresentacoes_antes_0700: 0,
+        menor_descanso_entre_jornadas_min: null,
+        setores_periodo: null,
+        sit_periods_estimados: null,
+        fonte_periodo: 'DERIVADO',
+        freshness_dado: 'COMPLETO',
+        status_quinzena: 'OK',
+        score_acumulado: 0,
+        tendencia: 'ESTAVEL',
+        atenuadores_aplicados: [],
+        agravantes_aplicados: [],
+        natureza_dado: 'ACUMULADO_LEGAL',
+        explicacao_operacional: 'Sem agravantes no período.',
+        mitigacao_recomendada: 'SEM_ACAO',
+        decisao: 'INFORMA',
+        limite_referencia: null,
+        alertas_quinzena: [],
+        limitation_notes: [],
+      },
+    });
+
+    expect(isOperationallyRelevant(rosterOnly)).toBe(true);
+    expect(classifyOperationalItem(rosterOnly)).toBe('NORMAL');
   });
 
   it('separa o dia em aberto da pendência retrospectiva sem tornar o alerta verde', () => {
