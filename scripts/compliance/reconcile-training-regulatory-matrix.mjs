@@ -14,7 +14,11 @@ if (env === 'production' && apply && !process.env.AIRTRUST_PRODUCTION_RECONCILIA
   throw new Error('produção recusada: autorização específica ausente');
 }
 
-const target = 'airtrust-db';
+const TARGETS = Object.freeze({
+  staging: 'airtrust-db-staging-baseline-20260701',
+  production: 'airtrust-db',
+});
+const target = TARGETS[env];
 const workerDir = new URL('../../worker-airtrust/', import.meta.url).pathname;
 const q = (s) => `'${String(s).replaceAll("'", "''")}'`;
 const model = (code) =>
@@ -293,6 +297,7 @@ const sql = statements.join(';\n') + ';\n';
 const hash = createHash('sha256').update(sql).digest('hex');
 console.log(`RECONCILIATION_SHA256=${hash}`);
 console.log(`ENV=${env}`);
+console.log(`TARGET_DATABASE=${target}`);
 console.log(`MODE=${apply ? 'APPLY' : 'DRY_RUN'}`);
 console.log(`STATEMENTS=${statements.length}`);
 if (!apply) {

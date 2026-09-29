@@ -14,6 +14,14 @@ describe('training regulatory reconciliation', () => {
     expect(source).toContain('AIRTRUST_PRODUCTION_RECONCILIATION_AUTH');
   });
 
+  it('resolve staging para o D1 explícito de staging, nunca para o nome de produção', () => {
+    expect(source).toContain("staging: 'airtrust-db-staging-baseline-20260701'");
+    expect(source).toContain("production: 'airtrust-db'");
+    expect(source).toContain('const target = TARGETS[env]');
+    expect(source).toContain('TARGET_DATABASE=${target}');
+    expect(source).not.toContain("const target = 'airtrust-db'");
+  });
+
   it('não cria matrícula e converte regras históricas em condição/designação', () => {
     expect(source).not.toContain('INSERT INTO lms_matriculas');
     expect(source).toContain("condition: 'ARSO'");
