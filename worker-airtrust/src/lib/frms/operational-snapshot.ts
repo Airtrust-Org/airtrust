@@ -72,6 +72,8 @@ export interface FrmsOperationalSnapshotItem {
   aeronave: string | null;
 
   escalado: boolean;
+  /** Há atividade/declaração operacional no dia; presença na quinzena não basta. */
+  operacao_requer_decisao?: boolean;
   escala_source: 'SIGVOOS' | 'MANUAL' | 'EVD' | 'AUSENTE';
   hora_apresentacao: string | null;
   hora_termino: string | null;
@@ -754,6 +756,14 @@ export function buildFrmsOperationalSnapshot(
     // janela operacional realizada. Em dia sem voo, a atividade real informada em
     // D+1 pode fornecer a janela do dia anterior.
     const checkinPresentationTime = normalizeText(checkin?.hora_apresentacao);
+    // Check-in com apresentação declarada é uma intenção operacional que ainda
+    // precisa ser confirmada na escala/jornada. Um tripulante que só aparece na
+    // quinzena, sem nenhum evento do dia, não deve entrar na fila de decisão.
+    const operacaoRequerDecisao =
+      escalado ||
+      teveAtividadeFrms ||
+      Boolean(checkinPresentationTime) ||
+      isCriticalCheckin(checkin);
     const horaApresentacao =
       (teveJornada ? normalizeText(jornada?.hora_apresentacao) : null) ??
       normalizeText(activitySummary.start_time) ??
@@ -901,6 +911,7 @@ export function buildFrmsOperationalSnapshot(
         normalizeText(funcionario?.aeronave),
 
       escalado,
+      operacao_requer_decisao: operacaoRequerDecisao,
       escala_source: escalado
         ? 'EVD'
         : jornadaOrigem === 'SIGVOOS'
@@ -980,6 +991,7 @@ export function buildFrmsOperationalSnapshot(
       alertas: alertasUnicos,
       tem_violacao_normativa: compliance?.status === 'VIOLATION',
       perfil_regulatorio_configurado: input.regulatoryProfileConfigured ?? true,
+      operacao_requer_decisao: operacaoRequerDecisao,
       compliance_avaliavel: complianceStrict ? compliance?.status !== 'UNKNOWN' : true,
       violacoes_normativas: compliance?.violations.map((violation) => violation.message) ?? [],
       compliance_unknown_reasons: compliance?.unknownReasons ?? [],
@@ -1709,11 +1721,6 @@ export async function listFrmsOperationalSnapshot(
   );
   const regulatoryComplianceByKey: Record<string, RegulatoryComplianceResult> = {};
   const complianceKeys = new Set(collectOperationalKeys(contextRows));
-  // Presença da quinzena só precisa ser sintetizada na janela solicitada; o
-  // histórico continua vindo de evidências reais (voo/jornada/check-in/atividade).
-  for (const row of buildMissionRosterRows(contextRows.missionPeriods, requestedStart, requestedEnd)) {
-    complianceKeys.add(`${row.data_operacional}::${row.funcionario_id}`);
-  }
   for (const key of complianceKeys) {
     const [date, funcionarioRaw] = key.split('::');
     const funcionarioId = Number(funcionarioRaw);

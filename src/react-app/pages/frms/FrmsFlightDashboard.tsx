@@ -142,6 +142,10 @@ function DetailDrawer({
 }) {
   const bucket = classifyOperationalItem(item);
   const confidence = operationalConfidence(item);
+  const jornadaDeclaradaNoCheckin =
+    item.jornada_data_source === 'AUSENTE' &&
+    item.checkin_status === 'RECEBIDO' &&
+    Boolean(item.hora_apresentacao);
   const reasons = (item.motivos_principais?.filter(Boolean) || []).map(formatFrmsReason);
   const gaps = confidenceGaps(item);
   const decisionIsLimited = confidence === 'BAIXA';
@@ -234,11 +238,16 @@ function DetailDrawer({
           <section className="grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
               <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                <Clock3 className="h-4 w-4" /> Jornada
+                <Clock3 className="h-4 w-4" /> {jornadaDeclaradaNoCheckin ? 'Horário declarado' : 'Jornada'}
               </div>
               <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
                 {item.hora_apresentacao || '—'} → {item.hora_termino || '—'}
               </p>
+              {jornadaDeclaradaNoCheckin ? (
+                <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
+                  Informado no check-in; a escala e a jornada ainda precisam ser confirmadas.
+                </p>
+              ) : null}
             </div>
             <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
               <div className="text-xs font-semibold text-slate-500">Sono</div>
