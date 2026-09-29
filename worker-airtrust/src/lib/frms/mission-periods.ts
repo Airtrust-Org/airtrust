@@ -56,3 +56,18 @@ export function buildMissionRosterRows(
   }
   return [...byKey.values()];
 }
+
+export function buildActiveFortnightRosterRows(
+  missionPeriods: readonly MissionPeriodRow[],
+  start: string,
+  end: string,
+): Array<{ data_operacional: string; funcionario_id: number }> {
+  // `FRMS_LEGACY` continua disponível para histórico/compliance, mas não prova
+  // pertencimento à quinzena operacional atual. Só as fontes vigentes de escala
+  // (alocação ou quinzena-base) podem materializar alguém no roster do dia.
+  return buildMissionRosterRows(
+    missionPeriods.filter((period) => period.source_kind !== 'FRMS_LEGACY'),
+    start,
+    end,
+  );
+}

@@ -144,7 +144,7 @@ jobs:
           grep -Fx "BASE_RECONCILIATION_SHA256=$INPUT_BASE_SHA256" "$out" >/dev/null
           grep -Fx "TARGET_DATABASE=$STAGING_D1_NAME" "$out" >/dev/null
           grep -Fx 'MODE=DRY_RUN' "$out" >/dev/null
-          grep -Fx 'STATEMENTS=48' "$out" >/dev/null
+          grep -Fx 'STATEMENTS=65' "$out" >/dev/null
           hash="$(sed -n 's/^RECONCILIATION_SHA256=//p' "$out" | head -n1)"
           [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || { echo FINAL_HASH_INVALID >&2; exit 1; }
           echo "reconciliation_sha256=$hash" >> "$GITHUB_OUTPUT"

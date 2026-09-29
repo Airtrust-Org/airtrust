@@ -27,6 +27,50 @@ export async function resolveFuncionarioActiveFortnightForDate(
   funcionarioId: string | number,
   dataReferencia: string,
 ): Promise<ActiveFortnightRange | null> {
+  const allocation = await db
+    .prepare(
+      `SELECT
+         eq.numero,
+         COALESCE(eq.data_inicio, ea.data_inicio) AS data_inicio,
+         COALESCE(eq.data_fim, ea.data_fim) AS data_fim
+       FROM escala_alocacoes ea
+       JOIN funcionarios f
+         ON f.id = ea.funcionario_id
+        AND f.deleted_at IS NULL
+       JOIN escalas_quinzenas eq
+         ON eq.id = ea.quinzena_id
+        AND eq.empresa_id = f.empresa_id
+        AND eq.deleted_at IS NULL
+       WHERE CAST(ea.funcionario_id AS TEXT) = ?
+         AND ea.deleted_at IS NULL
+         AND LOWER(COALESCE(ea.status, '')) <> 'cancelado'
+         AND COALESCE(eq.data_inicio, ea.data_inicio) <= ?
+         AND COALESCE(eq.data_fim, ea.data_fim) >= ?
+       ORDER BY
+         CASE WHEN ea.aeronave_id IS NOT NULL THEN 0 ELSE 1 END,
+         ea.created_at DESC
+       LIMIT 1`,
+    )
+    .bind(String(funcionarioId), dataReferencia, dataReferencia)
+    .first<{
+      numero: number | null;
+      data_inicio: string | null;
+      data_fim: string | null;
+    }>();
+
+  if (
+    allocation &&
+    (allocation.numero === 1 || allocation.numero === 2) &&
+    allocation.data_inicio &&
+    allocation.data_fim
+  ) {
+    return {
+      numero: allocation.numero,
+      data_inicio: allocation.data_inicio,
+      data_fim: allocation.data_fim,
+    };
+  }
+
   const quinzenasResult = await db
     .prepare(
       `SELECT

@@ -37,7 +37,17 @@ describe('training regulatory reconciliation v2', () => {
     expect(output).toMatch(/RECONCILIATION_SHA256=[0-9a-f]{64}/);
     expect(output).toContain('TARGET_DATABASE=airtrust-db-staging-baseline-20260701');
     expect(output).toContain('MODE=DRY_RUN');
-    expect(output).toContain('STATEMENTS=48');
+    expect(output).toContain('STATEMENTS=65');
+    expect(output).toContain("'D1','AVSEC','Teórico',24,4");
+    expect(output).toContain("'NR-35 - Trabalho em Altura','EAD',24,8");
+    expect(output).toContain("UPPER('TREINAMENTO_OPERACIONAL')");
+    const sql = output.split('STATEMENTS=65\n')[1];
+    expect(sql).toBeTruthy();
+    const modelInserts = sql.split(';\n').filter((statement) => statement.startsWith('INSERT INTO qualificacoes_tipos ('));
+    expect(modelInserts).toHaveLength(22);
+    expect(modelInserts.every((statement) => statement.includes('categoria_id'))).toBe(true);
+    expect(validatorSource).toContain('staging-qualification-category');
+    expect(validatorSource).toContain('reconciled-model-category-bindings');
     expect(output).toContain("'PTAP_TRIPULANTE_VOO','Tripulante de voo PTAP','ATIVIDADE'");
     expect(output).not.toContain("UPPER('TRI')");
     expect(output).not.toContain('INSERT INTO lms_matriculas');
