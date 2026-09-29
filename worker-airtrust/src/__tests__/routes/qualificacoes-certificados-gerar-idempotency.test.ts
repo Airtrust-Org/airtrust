@@ -19,14 +19,12 @@ import type { Env } from '../../types';
 const generateCertMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../../middleware/auth', () => ({
-  auth:
-    () =>
-    async (c: any, next: () => Promise<void>) => {
-      c.set('userId', Number(c.req.header('x-test-user-id') || 10));
-      c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 6));
-      c.set('userRole', c.req.header('x-test-role') || 'admin');
-      await next();
-    },
+  auth: () => async (c: any, next: () => Promise<void>) => {
+    c.set('userId', Number(c.req.header('x-test-user-id') || 10));
+    c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 6));
+    c.set('userRole', c.req.header('x-test-role') || 'admin');
+    await next();
+  },
 }));
 
 vi.mock('../../middleware/tenant', async (importOriginal) => {
@@ -103,8 +101,15 @@ function makeDbWithHistorico(opts: {
   empresaId: number;
   certificadoArquivoId: number | null;
   docDeleted?: boolean;
+  docDescription?: string | null;
 }) {
-  const { historicoId, empresaId, certificadoArquivoId, docDeleted = false } = opts;
+  const {
+    historicoId,
+    empresaId,
+    certificadoArquivoId,
+    docDeleted = false,
+    docDescription = 'Certificado automático gerado em 2026-09-01T00:00:00.000Z',
+  } = opts;
   const prepareMock = vi.fn((query: string) => {
     const bindFn = (...args: unknown[]) => ({
       run: vi.fn().mockResolvedValue({ meta: { changes: 1, last_row_id: 999 } }),
@@ -123,7 +128,16 @@ function makeDbWithHistorico(opts: {
         // existing doc check
         if (query.includes('FROM documentos') && query.includes('deleted_at IS NULL')) {
           if (args[0] === certificadoArquivoId) {
-            return docDeleted ? null : { id: certificadoArquivoId, uuid: 'ex-uuid', r2_key: 'certificados/empresa-6/funcionario-1/historico-100/ex-uuid.pdf', tamanho: 5000 };
+            return docDeleted
+              ? null
+              : {
+                  id: certificadoArquivoId,
+                  uuid: 'ex-uuid',
+                  funcionario_id: 1,
+                  r2_key: 'certificados/empresa-6/funcionario-1/historico-100/ex-uuid.pdf',
+                  tamanho: 5000,
+                  descricao: docDescription,
+                };
           }
           return null;
         }
@@ -204,7 +218,7 @@ describe('POST /historico/:id/certificados/gerar', () => {
     });
 
     expect(res.status).toBe(200);
-    const json = await res.json() as any;
+    const json = (await res.json()) as any;
     expect(json.success).toBe(true);
     expect(json.estado).toBe('EXISTS');
     expect(json.data.id).toBe(50);
@@ -240,7 +254,7 @@ describe('POST /historico/:id/certificados/gerar', () => {
     });
 
     expect(res.status).toBe(201);
-    const json = await res.json() as any;
+    const json = (await res.json()) as any;
     expect(json.success).toBe(true);
     expect(json.estado).toBe('CREATED');
     expect(json.data.id).toBe(200);
@@ -258,7 +272,7 @@ describe('POST /historico/:id/certificados/gerar', () => {
     });
 
     expect(res.status).toBe(201);
-    const json = await res.json() as any;
+    const json = (await res.json()) as any;
     expect(json.success).toBe(true);
     expect(json.estado).toBe('REGENERATED');
     expect(json.data.id).toBe(200);
@@ -266,10 +280,35 @@ describe('POST /historico/:id/certificados/gerar', () => {
 
     // Verifica que prepare foi chamado com UPDATE documentos SET deleted_at
     const prepareCalls = (db.prepare as ReturnType<typeof vi.fn>).mock.calls as string[][];
-    const softDeleteCall = prepareCalls.find(([q]) =>
-      typeof q === 'string' && q.includes('UPDATE documentos') && q.includes('deleted_at'),
+    const softDeleteCall = prepareCalls.find(
+      ([q]) => typeof q === 'string' && q.includes('UPDATE documentos') && q.includes('deleted_at'),
     );
     expect(softDeleteCall).toBeDefined();
+  });
+
+  it('preserva PDF anexado pelo usuário ao regenerar certificado', async () => {
+    const db = makeDbWithHistorico({
+      historicoId: 100,
+      empresaId: 6,
+      certificadoArquivoId: 50,
+      docDescription: 'Extrato ANAC anexado pelo usuário',
+    });
+    const app = makeApp(db);
+
+    const res = await app.request('/historico/100/certificados/gerar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force_regenerate: true }),
+    });
+
+    expect(res.status).toBe(201);
+    expect(generateCertMock).toHaveBeenCalledOnce();
+
+    const prepareCalls = (db.prepare as ReturnType<typeof vi.fn>).mock.calls as string[][];
+    const softDeleteCall = prepareCalls.find(
+      ([q]) => typeof q === 'string' && q.includes('UPDATE documentos') && q.includes('deleted_at'),
+    );
+    expect(softDeleteCall).toBeUndefined();
   });
 
   it('regenera quando doc existente está soft-deleted (órfão)', async () => {
@@ -288,7 +327,7 @@ describe('POST /historico/:id/certificados/gerar', () => {
     });
 
     expect(res.status).toBe(201);
-    const json = await res.json() as any;
+    const json = (await res.json()) as any;
     expect(json.estado).toBe('CREATED');
     expect(generateCertMock).toHaveBeenCalledOnce();
   });
