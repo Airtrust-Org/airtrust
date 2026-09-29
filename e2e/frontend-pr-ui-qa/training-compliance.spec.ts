@@ -185,12 +185,10 @@ test('training compliance intelligent staging flow is live and read-only', async
     }
   }
 
-  const policyP = waitApi(page, '/api/compliance-treinamentos/configuracao-alertas');
   await page.getByRole('button', { name: 'Automação', exact: true }).click();
-  const policy = await policyP.then(payload);
-  expect(typeof policy.data.enabled).toBe('boolean');
-  expect(Array.isArray(policy.data.due_day_thresholds)).toBe(true);
-  await expect(page.getByRole('heading', { name: 'Régua automática de cobrança' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Alertas automáticos centralizados' })).toBeVisible();
+  await expect(page.getByText(/usam exclusivamente a régua de qualificações/i)).toBeVisible();
+  await expect(page.getByText(/processamento diário às 05:00/i)).toBeVisible();
 
   await page.getByRole('button', { name: 'Por treinamento', exact: true }).click();
   const trainingSelector = page
