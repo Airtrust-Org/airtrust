@@ -296,6 +296,8 @@ describe('FrmsDashboard simplificado', () => {
     const drawer = within(screen.getByRole('dialog'));
     expect(drawer.getByText(/Falta: sem jornada/i)).toBeInTheDocument();
     expect(drawer.getByText('Jornada: ausente')).toBeInTheDocument();
+    expect(drawer.getByText('Decisão não confirmada')).toBeInTheDocument();
+    expect(drawer.getByText(/Não confirmar aptidão, liberação ou ausência de restrição/i)).toBeInTheDocument();
   });
 
   it('não exibe códigos internos nem enums de fonte em inglês na operação', () => {
@@ -346,7 +348,7 @@ describe('FrmsDashboard simplificado', () => {
     expect(drawer.getByRole('link', { name: 'Abrir histórico (outra tela)' })).toHaveAttribute(
       'href', '/frms/tripulante/30?origem=operacao&data=2026-08-27',
     );
-    expect(drawer.getByRole('link', { name: 'Abrir casos (outra tela)' })).toHaveAttribute(
+    expect(drawer.getByRole('link', { name: 'Abrir caso para registrar tratamento (outra tela)' })).toHaveAttribute(
       'href', '/frms/alertas?tripulante_id=30',
     );
     expect(drawer.queryByRole('link', { name: 'Abrir FRAT' })).not.toBeInTheDocument();

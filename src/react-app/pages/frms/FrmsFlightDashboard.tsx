@@ -144,6 +144,7 @@ function DetailDrawer({
   const confidence = operationalConfidence(item);
   const reasons = (item.motivos_principais?.filter(Boolean) || []).map(formatFrmsReason);
   const gaps = confidenceGaps(item);
+  const decisionIsLimited = confidence === 'BAIXA';
   const date = item.data_operacional;
   const sourceFacts = [
     {
@@ -195,7 +196,9 @@ function DetailDrawer({
           </section>
 
           <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Por que exige atenção</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              {decisionIsLimited ? 'Pendências que limitam a decisão' : 'Por que exige atenção'}
+            </h3>
             {reasons.length > 0 ? (
               <ul className="mt-3 space-y-2 text-sm text-slate-800 dark:text-slate-200">
                 {reasons.slice(0, 5).map((reason) => (
@@ -218,6 +221,14 @@ function DetailDrawer({
               {item.acao_recomendada_texto ||
                 (bucket === 'NORMAL' ? 'Nenhuma ação imediata.' : 'Revisar o caso antes da decisão operacional.')}
             </p>
+            {decisionIsLimited ? (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                <p className="font-bold">Decisão não confirmada</p>
+                <p className="mt-1">
+                  Não confirmar aptidão, liberação ou ausência de restrição com este registro. Primeiro confirme na origem os itens listados acima; depois registre o tratamento no caso, quando aplicável.
+                </p>
+              </div>
+            ) : null}
           </section>
 
           <section className="grid grid-cols-2 gap-3">
@@ -268,13 +279,18 @@ function DetailDrawer({
                 </span>
               ))}
             </div>
+            {decisionIsLimited ? (
+              <p className="mt-3 text-sm font-medium text-amber-800 dark:text-amber-200">
+                Dados insuficientes para confirmar a decisão. Indicadores favoráveis acima são auxiliares e não liberam esta condição.
+              </p>
+            ) : null}
             {gaps.length > 0 ? (
               <p className="mt-3 text-sm font-medium text-amber-800 dark:text-amber-200">
                 Falta: {gaps.join(' · ')}
               </p>
-            ) : (
+            ) : !decisionIsLimited ? (
               <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Dados essenciais disponíveis para a decisão.</p>
-            )}
+            ) : null}
             {item.operational_data_source && item.operational_data_source !== 'AUSENTE' ? (
               <p className="mt-1 text-xs text-slate-500">
                 Fonte dos dados de voo: {operationalSourceLabel(item.operational_data_source)}
@@ -297,7 +313,7 @@ function DetailDrawer({
                 to={`/frms/alertas?tripulante_id=${item.tripulante_id}`}
                 className="rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900"
               >
-                Abrir casos (outra tela)
+                Abrir caso para registrar tratamento (outra tela)
               </Link>
             </div>
           </div>
