@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Production-only governed wrapper for the reviewed Training Compliance regulatory reconciliation.
-// Reuses the reviewed 47-statement base matrix, replaces the invalid TRI sector inference with
-// explicit PTAP tripulante applicability, preserves history, and never auto-enrolls.
+// source_reference: PRG-SGI-005 Rev05; FORM-SGI-037 Rev03; PRG-OPS-003 Rev05; PRG-SSO-006 Rev01; PRG-SSO-005 Rev10; RBAC 110/120/175; NRs aplicáveis
+// operational_decision: production-only governed reconciliation; replace invalid TRI sector inference with explicit PTAP tripulante applicability, preserve history, and never auto-enroll.
+// dry_run_required: true; apply requires a successful reviewed dry-run on the exact same main SHA and exact reconciliation hash.
+// rollback_plan_required: verified production D1 backup plus D1 Time Travel recovery point immediately before apply.
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
