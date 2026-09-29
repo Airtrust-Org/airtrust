@@ -24,6 +24,11 @@ import {
   TRAINING_ALERT_DAILY_CRON,
 } from '../services/training-alert-policy';
 import {
+  inferTrainingAlertStageCode,
+  trainingAlertAudience,
+  TRAINING_ALERT_DAILY_CRON,
+} from '../services/training-alert-policy';
+import {
   CANCELLED_STATUS_VALUES,
   QUALIFICACAO_STATUS,
   sqlStatusNotEqualsAny,

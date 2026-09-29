@@ -39,7 +39,6 @@ describe('resilient scheduled router', () => {
     expect(tenMinute).toEqual({
       useResilientJobs: true,
       runDailyAlerts: false,
-      runLmsReminders: true,
       runEadRenewal: true,
       runDailyFrms: false,
       runSigvoosFrms: true,
@@ -105,7 +104,9 @@ describe('resilient scheduled router', () => {
     expect(router).toContain('Schema resiliente ausente; usando handler legado');
     expect(router).toContain('logCronHealthSnapshot(env.DB, logger, now)');
     expect(router).toContain('runDomainEventDispatchJob(env.DB, logger)');
-    expect(router).toContain("await runStep('lms-reminders'");
+    expect(router).toContain("await runStep('training-compliance-snapshots'");
+    expect(router).toContain("await runStep('training-alerts'");
+    expect(router).not.toContain("await runStep('lms-reminders'");
     expect(router).toContain("await runStep('sigvoos-frms'");
     expect(router).toContain("await runStep('domain-events'");
     expect(router).toContain("await runStep('cron-health'");
@@ -148,6 +149,7 @@ describe('bounded cron discovery', () => {
 
     const sql = compactSql(buildLmsReminderDiscoveryQuery());
     expect(sql).toContain('BETWEEN 0 AND 365');
+    expect(sql).toContain("NOT LIKE 'Matrícula automática: renovação de qualificação EAD%'");
     expect(sql).not.toContain('IN (1, 7)');
   });
 

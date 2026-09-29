@@ -8,6 +8,10 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('../../cron/notificacoes', () => ({
   processarNotificacoes: vi.fn().mockResolvedValue(undefined),
   enviarEmailAlert: vi.fn().mockResolvedValue(undefined),
+  TRAINING_ALERT_DAILY_CRON: '0 8 * * *',
+}));
+vi.mock('../../cron/training-compliance-notifications', () => ({
+  refreshTrainingComplianceSnapshots: vi.fn().mockResolvedValue({ empresas: 0, gravados: 0, falhas: 0 }),
 }));
 vi.mock('../../cron/alertasDiarios', () => ({
   alertasDiariosHandler: vi.fn().mockResolvedValue(undefined),
