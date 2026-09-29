@@ -10,6 +10,33 @@ import {
 } from '../services/employee-sector-access';
 
 const app = new Hono<{ Bindings: Env }>();
+
+type EmployeeCatalogRow = {
+  id: number;
+  nome: string;
+  setor_id: number | null;
+  setor_nome: string | null;
+  funcao_id: number | null;
+  funcao_nome: string | null;
+};
+
+type ConditionAssignmentRow = {
+  id: number;
+  funcionario_id: number;
+  funcionario_nome: string;
+  setor_id: number | null;
+  condicao_id: number;
+  condicao_codigo: string;
+  condicao_nome: string;
+  tipo: string;
+  data_inicio: string | null;
+  data_fim: string | null;
+  origem: string | null;
+  referencia_normativa: string | null;
+  justificativa: string | null;
+  created_at: string;
+  updated_at: string;
+};
 const CONDITION_TYPES = [
   'EXPOSICAO_RISCO',
   'ATIVIDADE',
@@ -55,10 +82,10 @@ app.get('/condicoes/catalogos', requireRole('admin', 'manager'), async (c) => {
         AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO' ORDER BY f.nome`,
       )
       .bind(empresaId)
-      .all(),
+      .all<EmployeeCatalogRow>(),
   ]);
   const visibleEmployees = (employees.results || []).filter(
-    (row: any) =>
+    (row) =>
       access.mode === 'all' ||
       (access.mode === 'self' && Number(row.id) === access.funcionarioId) ||
       (access.mode === 'restricted' &&
@@ -97,9 +124,9 @@ app.get('/condicoes/atribuicoes', requireRole('admin', 'manager'), async (c) => 
     WHERE a.empresa_id=? AND a.ativo=1 AND a.deleted_at IS NULL${extra} ORDER BY c.nome,f.nome`,
     )
     .bind(...params)
-    .all();
+    .all<ConditionAssignmentRow>();
   const visible = (results || []).filter(
-    (row: any) =>
+    (row) =>
       access.mode === 'all' ||
       (access.mode === 'self' && Number(row.funcionario_id) === access.funcionarioId) ||
       (access.mode === 'restricted' &&

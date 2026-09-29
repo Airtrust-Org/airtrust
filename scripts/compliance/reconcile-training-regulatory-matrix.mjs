@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// source_reference: PRG-SGI-005 Rev05; FORM-SGI-037 Rev03; PRG-OPS-003 Rev05; PRG-SSO-006 Rev01; PRG-SSO-005 Rev10; RBAC 110/120/175; NRs aplicáveis
+// operational_decision: substituir inferência histórica/cargo genérico por requisito vigente baseado em função documentada, exposição, atividade ou designação; preservar histórico; nunca matricular automaticamente nesta reconciliação
+// dry_run_required: true
+// rollback_plan_required: worker-airtrust/schema-v2/plans/training-compliance-conditions-0517.md
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
