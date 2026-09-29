@@ -37,7 +37,9 @@ describe('training regulatory reconciliation v2', () => {
     expect(output).toMatch(/RECONCILIATION_SHA256=[0-9a-f]{64}/);
     expect(output).toContain('TARGET_DATABASE=airtrust-db-staging-baseline-20260701');
     expect(output).toContain('MODE=DRY_RUN');
-    expect(output).toContain('STATEMENTS=48');
+    expect(output).toContain('STATEMENTS=65');
+    expect(output).toContain("'D1','AVSEC','Teórico',24,4");
+    expect(output).toContain("'NR-35 - Trabalho em Altura','EAD',24,8");
     expect(output).toContain("'PTAP_TRIPULANTE_VOO','Tripulante de voo PTAP','ATIVIDADE'");
     expect(output).not.toContain("UPPER('TRI')");
     expect(output).not.toContain('INSERT INTO lms_matriculas');
