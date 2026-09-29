@@ -6,12 +6,13 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { STAGING_PREREQUISITE_MODELS } from './training-regulatory-staging-prerequisites.mjs';
 
 const STAGING_DB = 'airtrust-db-staging-baseline-20260701';
 const BASE_SHA256 = '38f5912b3f4890a3c3acc956c8192d5cacfe259394fd6037571dc5889ea2bc75';
 const STAGING_AUTH = 'AIRTRUST_STAGING_TRAINING_COMPLIANCE_RECONCILIATION';
 const BASE_STATEMENTS = 47;
-const FINAL_STATEMENTS = 48;
+const FINAL_STATEMENTS = BASE_STATEMENTS + 1 + STAGING_PREREQUISITE_MODELS.length;
 
 const args = new Set(process.argv.slice(2));
 const apply = args.has('--apply');
@@ -43,6 +44,12 @@ const staleIndexes = baseStatements
   .filter(({ statement }) => statement.includes('escopo,setor_id') && statement.includes("'PTAP_TRIPULANTE_VOO'") && statement.includes("UPPER('TRI')"));
 if (staleIndexes.length !== 1) throw new Error(`PTAP_STALE_SECTOR_RULE_COUNT:${staleIndexes.length}`);
 
+const sqlQuote = (value) => `'${String(value).replaceAll("'", "''")}'`;
+const prerequisiteModelStatements = STAGING_PREREQUISITE_MODELS.map(({ code, name, category, validity, hours, areaCode }) => {
+  const areaId = `(SELECT id FROM qualificacoes_areas WHERE empresa_id=6 AND UPPER(codigo)=UPPER(${sqlQuote(areaCode)}) AND deleted_at IS NULL LIMIT 1)`;
+  return `INSERT INTO qualificacoes_tipos (empresa_id,codigo,nome,categoria,validade,carga_horaria,area_id,ativo,is_check,created_at,updated_at) SELECT 6,${sqlQuote(code)},${sqlQuote(name)},${sqlQuote(category)},${Number(validity)},${Number(hours)},${areaId},1,0,datetime('now'),datetime('now') WHERE ${areaId} IS NOT NULL AND NOT EXISTS (SELECT 1 FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)=UPPER(${sqlQuote(code)}) AND deleted_at IS NULL)`;
+});
+
 const ensureTripulanteCondition =
   "INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa) SELECT id,'PTAP_TRIPULANTE_VOO','Tripulante de voo PTAP','ATIVIDADE','Tripulante de voo abrangido pelo perfil de competência previsto no PTAP','PRG-OPS-003 Rev05; RBAC 175; IS 175-007F' FROM empresas WHERE id=6";
 const tripulanteRequirement =
@@ -50,6 +57,7 @@ const tripulanteRequirement =
 
 const finalStatements = [...baseStatements];
 finalStatements.splice(staleIndexes[0].index, 1, ensureTripulanteCondition, tripulanteRequirement);
+finalStatements.unshift(...prerequisiteModelStatements);
 if (finalStatements.length !== FINAL_STATEMENTS) throw new Error(`FINAL_STATEMENT_COUNT_MISMATCH:${finalStatements.length}`);
 const finalSql = `${finalStatements.join(';\n')};\n`;
 if (finalSql.includes("UPPER('TRI')")) throw new Error('INVALID_TRIPULANTE_SECTOR_RULE_REMAINS');
