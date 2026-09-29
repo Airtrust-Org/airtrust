@@ -68,7 +68,7 @@ const NAVIGATION_ITEMS = [
       {
         id: 'lms-dashboard',
         label: 'Dashboard LMS',
-        path: '/lms/dashboard',
+        path: '/lms',
       },
     ],
   },

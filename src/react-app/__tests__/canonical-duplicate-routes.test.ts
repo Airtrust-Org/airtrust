@@ -19,6 +19,7 @@ describe('canonical duplicate routes', () => {
       '/mro/dashboard': '/mro',
       '/controle-voos/dashboard': '/controle-voos',
       '/escalas/evd': '/escalas/diaria',
+      '/lms/dashboard': '/lms',
     });
   });
 

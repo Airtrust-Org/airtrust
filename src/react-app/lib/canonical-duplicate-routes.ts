@@ -8,6 +8,7 @@ export const CANONICAL_DUPLICATE_ROUTE_TARGETS = {
   '/mro/dashboard': '/mro',
   '/controle-voos/dashboard': '/controle-voos',
   '/escalas/evd': '/escalas/diaria',
+  '/lms/dashboard': '/lms',
 } as const;
 
 export type DuplicateRouteAlias = keyof typeof CANONICAL_DUPLICATE_ROUTE_TARGETS;

@@ -1091,11 +1091,7 @@ export default function App() {
                     />
                     <Route
                       path="/lms/dashboard"
-                      element={
-                        <ProtectedRoute>
-                          <LmsEntryRouter />
-                        </ProtectedRoute>
-                      }
+                      element={<Navigate to={CANONICAL_DUPLICATE_ROUTE_TARGETS['/lms/dashboard']} replace />}
                     />
                     <Route
                       path="/lms/admin"
