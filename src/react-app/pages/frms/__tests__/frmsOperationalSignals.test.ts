@@ -235,7 +235,7 @@ describe('resolveReadinessSignal', () => {
       value: 'Revisão operacional',
     });
     expect(resolveReadinessSignal(item(), adapterFor('baseline_building'))).toMatchObject({
-      tone: 'unknown',
+      tone: 'info',
       value: 'Baseline em formação',
     });
   });

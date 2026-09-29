@@ -135,7 +135,7 @@ describe('FrmsSignalGrid', () => {
 
     render(<FrmsSignalGrid item={item()} />);
     expect(
-      screen.getByLabelText('Prontidão: Baseline em formação — sem dado'),
+      screen.getByLabelText('Prontidão: Baseline em formação — informativo'),
     ).toBeInTheDocument();
     expect(screen.getByText('3 sessões válidas no baseline')).toBeInTheDocument();
   });
@@ -159,7 +159,7 @@ describe('FrmsSignalGrid', () => {
 
     render(<FrmsSignalGrid item={item()} />);
     expect(
-      screen.getByLabelText('Prontidão: Baseline em formação — sem dado'),
+      screen.getByLabelText('Prontidão: Baseline em formação — informativo'),
     ).toBeInTheDocument();
     expect(
       screen.getByText('0 sessões válidas no baseline · resultado objetivo deste dia não foi persistido'),

@@ -22,7 +22,7 @@
 import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { trustedEffectiveness } from './frmsOperationalDecision';
 
-export type FrmsSignalTone = 'ok' | 'warning' | 'critical' | 'unknown';
+export type FrmsSignalTone = 'ok' | 'info' | 'warning' | 'critical' | 'unknown';
 
 export type FrmsOperationalSignalKey =
   | 'daily-fatigue'
@@ -214,7 +214,7 @@ export function resolveReadinessSignal(
       return {
         ...base,
         value: 'Baseline em formação',
-        tone: 'unknown',
+        tone: 'info',
         detail: resolution.detail,
       };
     case null:
