@@ -18,6 +18,7 @@ function item(overrides: Partial<FrmsOperationalSnapshotItem> = {}): FrmsOperati
     base: 'SBJR',
     aeronave: 'AW139',
     escalado: true,
+    operacao_requer_decisao: true,
     escala_source: 'SIGVOOS',
     hora_apresentacao: '08:00',
     hora_termino: '17:00',
@@ -121,5 +122,21 @@ describe('frmsOperationalDecision', () => {
         }),
       ),
     ).toBe('BAIXA');
+  });
+
+  it('não trata ausência de jornada como pendência quando não há atividade prevista', () => {
+    expect(
+      classifyOperationalItem(
+        item({
+          operacao_requer_decisao: false,
+          escalado: false,
+          teve_jornada: false,
+          jornada_data_source: 'AUSENTE',
+          fatorizacao_status: 'AUSENTE',
+          effectiveness_pct: null,
+          estado_operacional: 'NORMAL',
+        }),
+      ),
+    ).toBe('NORMAL');
   });
 });

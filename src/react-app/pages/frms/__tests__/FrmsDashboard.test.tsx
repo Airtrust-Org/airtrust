@@ -55,6 +55,7 @@ function item(overrides: Partial<FrmsOperationalSnapshotItem> = {}): FrmsOperati
     base: 'SBJR',
     aeronave: 'AW139',
     escalado: true,
+    operacao_requer_decisao: true,
     escala_source: 'SIGVOOS',
     hora_apresentacao: '08:00',
     hora_termino: '17:00',
@@ -228,11 +229,12 @@ describe('FrmsDashboard simplificado', () => {
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(4);
   });
 
-  it('mantém na fila o tripulante da quinzena mesmo sem voo ou jornada no dia', () => {
+  it('não coloca na fila o tripulante da quinzena quando não há atividade no dia', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(
       state({
         data: [item({
           nome: 'Tripulante Sem Voo', nome_guerra: 'Sem Voo', escalado: false, teve_jornada: false,
+          operacao_requer_decisao: false, estado_operacional: 'NORMAL',
           escala_source: 'AUSENTE', jornada_data_source: 'AUSENTE', fatorizacao_status: 'AUSENTE',
           effectiveness_pct: null, checkin_status: 'NAO_APLICAVEL', alertas: [],
         })],
@@ -241,8 +243,8 @@ describe('FrmsDashboard simplificado', () => {
 
     renderDashboard();
 
-    expect(screen.getByRole('button', { name: /Sem Voo/i })).toBeInTheDocument();
-    expect(screen.getAllByText('Verificar').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /Sem Voo/i })).not.toBeInTheDocument();
+    expect(screen.getByText('Nenhuma pendência operacional no recorte')).toBeInTheDocument();
   });
 
   it('rebaixa sem pendência e mantém o resumo superior só com métricas de ação', () => {
@@ -327,6 +329,30 @@ describe('FrmsDashboard simplificado', () => {
     expect(drawer.getByText(/Realização da atividade ainda não foi confirmada/i)).toBeInTheDocument();
     expect(drawer.getByText('Jornada: Confirmado')).toBeInTheDocument();
     expect(drawer.getByText('Sono: Confirmado')).toBeInTheDocument();
+  });
+
+  it('distingue horário declarado no check-in de jornada confirmada', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(
+      state({
+        data: [item({
+          escalado: false,
+          operacao_requer_decisao: true,
+          jornada_data_source: 'AUSENTE',
+          hora_apresentacao: '18:00',
+          hora_termino: null,
+          fatorizacao_status: 'AUSENTE',
+          effectiveness_pct: null,
+          estado_operacional: 'NAO_AVALIADO',
+          motivos_principais: ['Horário de início ou fim da atividade ainda não foi informado'],
+        })],
+      }),
+    );
+
+    renderDashboard();
+    fireEvent.click(screen.getByRole('button', { name: /Max/i }));
+    const drawer = within(screen.getByRole('dialog'));
+    expect(drawer.getByText('Horário declarado')).toBeInTheDocument();
+    expect(drawer.getByText(/Informado no check-in; a escala e a jornada ainda precisam ser confirmadas/i)).toBeInTheDocument();
   });
 
   it('abre o detalhe no mesmo contexto e marca consultas externas como secundárias', () => {

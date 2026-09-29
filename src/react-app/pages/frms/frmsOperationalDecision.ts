@@ -3,7 +3,18 @@ import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOpera
 export type FrmsDecisionBucket = 'BLOQUEIO' | 'DECISAO' | 'CONFIRMAR' | 'NORMAL';
 export type FrmsDataConfidence = 'ALTA' | 'MEDIA' | 'BAIXA';
 
+function requiresOperationalDecision(item: FrmsOperationalSnapshotItem): boolean {
+  // Compatibilidade com snapshots anteriores enquanto a API nova se propaga.
+  return item.operacao_requer_decisao ?? (
+    item.escalado ||
+    item.teve_jornada ||
+    item.teve_atividade_frms === true ||
+    Boolean(item.hora_apresentacao)
+  );
+}
+
 export function hasIncompleteOperationalData(item: FrmsOperationalSnapshotItem): boolean {
+  if (!requiresOperationalDecision(item)) return false;
   return (
     item.snapshot_status === 'INCOMPLETO' ||
     item.estado_operacional === 'NAO_AVALIADO' ||
@@ -71,10 +82,9 @@ export function operationalConfidence(item: FrmsOperationalSnapshotItem): FrmsDa
 
 export function isOperationallyRelevant(item: FrmsOperationalSnapshotItem): boolean {
   return (
-    item.escalado ||
-    item.teve_jornada ||
+    requiresOperationalDecision(item) ||
     item.alertas.length > 0 ||
-    classifyOperationalItem(item) !== 'NORMAL'
+    item.estado_operacional === 'CRITICO_VIOLACAO'
   );
 }
 

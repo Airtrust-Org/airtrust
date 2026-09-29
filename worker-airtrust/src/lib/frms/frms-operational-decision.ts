@@ -61,6 +61,11 @@ export interface FrmsDecisaoOperacionalResult {
 // ── Input necessário para derivar decisão ────────────────────────
 
 export interface FrmsDecisaoOperacionalInput {
+  /**
+   * Há atividade, escala, jornada ou declaração de atividade que exija uma
+   * decisão para este dia. A simples presença no período/quinzena não basta.
+   */
+  operacao_requer_decisao?: boolean;
   /** Estado biológico/operacional do snapshot existente */
   snapshot_status: FrmsOperationalSnapshotStatus;
   /** Alertas identificados pelo snapshot */
@@ -214,6 +219,21 @@ export function deriveFrmsOperationalDecision(
       ),
       acao_recomendada: 'NAO_RECOMENDAR_OPERACAO_ESCALAR_GESTAO',
       acao_recomendada_texto: ACAO_TEXTO_POR_ESTADO.CRITICO_VIOLACAO,
+      dados_complementares_ausentes: complementaresAusentes,
+    };
+  }
+
+  // A quinzena identifica quem deve ser acompanhado no período, mas não prova
+  // que haja operação naquele dia. Sem escala, jornada, atividade ou declaração
+  // de atividade, não há uma decisão de despacho a bloquear nem dados diários a
+  // cobrar. Mantemos a vigilância histórica sem transformar folga/ausência de
+  // programação em uma falsa pendência operacional.
+  if (input.operacao_requer_decisao === false) {
+    return {
+      estado_operacional: 'NORMAL',
+      motivos_principais: [],
+      acao_recomendada: 'MANTER_ESCALA',
+      acao_recomendada_texto: 'Sem atividade operacional prevista para a data.',
       dados_complementares_ausentes: complementaresAusentes,
     };
   }
