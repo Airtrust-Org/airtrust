@@ -34,6 +34,8 @@ import {
   trainingComplianceRuleApplies,
   trainingComplianceRulePriority,
   hydrateTrainingComplianceConditions,
+  trainingComplianceEvidenceMeetsRequiredModality,
+  normalizeTrainingComplianceRequiredModality,
   type TrainingComplianceScope,
 } from '../services/training-compliance-rule-engine';
 
@@ -534,21 +536,6 @@ function latestEvidence(
   return lms.data_realizacao > history.data_realizacao ? lms : history;
 }
 
-function evidenceMeetsRequiredModality(rule: Rule, evidence: Evidence | undefined): boolean {
-  if (!rule.modalidade_requerida) return true;
-  if (!evidence) return false;
-  const actual = String(evidence.modalidade || '')
-    .trim()
-    .toUpperCase();
-  const required = String(rule.modalidade_requerida || '')
-    .trim()
-    .toUpperCase();
-  if (!actual) return false;
-  if (required === 'HIBRIDO') return actual === 'HIBRIDO';
-  if (required === 'PRATICO') return actual === 'PRATICO' || actual === 'PRÁTICO';
-  return actual === required;
-}
-
 function computeRequirement(
   rule: Rule,
   history: Evidence | undefined,
@@ -556,7 +543,7 @@ function computeRequirement(
 ) {
   const today = new Date().toISOString().slice(0, 10);
   const candidateEvidence = latestEvidence(history, lms?.latestCompleted);
-  const evidence = evidenceMeetsRequiredModality(rule, candidateEvidence)
+  const evidence = trainingComplianceEvidenceMeetsRequiredModality(rule.modalidade_requerida, candidateEvidence?.modalidade)
     ? candidateEvidence
     : undefined;
   const modalityMismatch = Boolean(candidateEvidence && !evidence && rule.modalidade_requerida);
@@ -588,7 +575,7 @@ function computeRequirement(
   } else if (
     !modalityMismatch &&
     currentLms &&
-    evidenceMeetsRequiredModality(rule, currentLms) &&
+    trainingComplianceEvidenceMeetsRequiredModality(rule.modalidade_requerida, currentLms.modalidade) &&
     String(currentLms.lms_status || '').toUpperCase() === 'EM_ANDAMENTO'
   ) {
     status_compliance = 'EM_ANDAMENTO';
@@ -928,20 +915,7 @@ async function validateRuleReferences(
     perfil_competencia: payload.perfil_competencia
       ? String(payload.perfil_competencia).trim()
       : null,
-    modalidade_requerida: [
-      'EAD',
-      'PRESENCIAL',
-      'PRATICO',
-      'HIBRIDO',
-      'DOCUMENTAL',
-      'OUTRA',
-    ].includes(
-      String(payload.modalidade_requerida || '')
-        .trim()
-        .toUpperCase(),
-    )
-      ? String(payload.modalidade_requerida).trim().toUpperCase()
-      : null,
+    modalidade_requerida: normalizeTrainingComplianceRequiredModality(payload.modalidade_requerida),
     fundamento_tipo: payload.fundamento_tipo ? String(payload.fundamento_tipo).trim() : null,
     fundamento_documento: payload.fundamento_documento
       ? String(payload.fundamento_documento).trim()

@@ -165,7 +165,7 @@ export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
   const f = options?.employeeAlias || 'f';
   const qualification = options?.qualificationExpr || 'qt.id';
   const empresa = options?.empresaExpr || `${f}.empresa_id`;
-  const auto = options?.requireAutoEnrollment ? ` AND COALESCE(${tr}.auto_matricular_ead,0)=1` : '';
+  const auto = options?.requireAutoEnrollment ? ` AND COALESCE(${tr}.auto_matricular_ead, 0) = 1` : '';
   return `COALESCE((SELECT CASE WHEN ${tr}.obrigatoriedade='OBRIGATORIA'${auto} THEN 1 ELSE 0 END
     FROM treinamento_requisitos ${tr}
    WHERE ${tr}.empresa_id=${empresa} AND ${tr}.qualificacao_tipo_id=${qualification}
@@ -174,4 +174,31 @@ export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
      AND (${tr}.vigencia_fim IS NULL OR date(${tr}.vigencia_fim)>=date('now'))
      AND ${trainingComplianceRuleApplicabilitySql(tr, f)}
    ORDER BY ${trainingComplianceRulePrioritySql(tr)} DESC, ${tr}.id DESC LIMIT 1),0)=1`;
+}
+
+export function trainingComplianceEvidenceMeetsRequiredModality(
+  requiredModality: string | null | undefined,
+  evidenceModality: string | null | undefined,
+): boolean {
+  if (!requiredModality) return true;
+  const actual = String(evidenceModality || '').trim().toUpperCase();
+  const required = String(requiredModality).trim().toUpperCase();
+  if (!actual) return false;
+  if (required === 'HIBRIDO') return actual === 'HIBRIDO';
+  if (required === 'PRATICO') return actual === 'PRATICO' || actual === 'PRÁTICO';
+  return actual === required;
+}
+
+const TRAINING_COMPLIANCE_MODALITIES = new Set([
+  'EAD',
+  'PRESENCIAL',
+  'PRATICO',
+  'HIBRIDO',
+  'DOCUMENTAL',
+  'OUTRA',
+]);
+
+export function normalizeTrainingComplianceRequiredModality(value: unknown): string | null {
+  const normalized = String(value || '').trim().toUpperCase();
+  return TRAINING_COMPLIANCE_MODALITIES.has(normalized) ? normalized : null;
 }

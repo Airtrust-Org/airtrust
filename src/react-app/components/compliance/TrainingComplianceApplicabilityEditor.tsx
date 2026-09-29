@@ -82,6 +82,15 @@ const scopeOptions: Array<{ value: Scope; label: string }> = [
   { value: 'FUNCIONARIO', label: 'Funcionário específico' },
 ];
 
+function isTripulacaoSector(setor?: { codigo?: string | null; nome: string } | null) {
+  if (!setor) return false;
+  const canonical = `${setor.codigo || ''} ${setor.nome}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+  return canonical.includes('TRIPUL');
+}
+
 function scopeLabel(rule: Rule) {
   const aircraft = rule.aeronave_modelo ? ` · ${rule.aeronave_modelo}` : '';
   if (rule.escopo === 'EMPRESA') return `Toda a empresa${aircraft}`;
@@ -164,6 +173,8 @@ export function TrainingComplianceApplicabilityEditor({
 
   const sectors = catalogs.data?.setores || [];
   const functions = catalogs.data?.funcoes || [];
+  const selectedSector = sectors.find((item) => item.id === setorId) || null;
+  const tripulacaoSelected = isTripulacaoSector(selectedSector);
   const allowedFunctionIds = useMemo(() => {
     if (!setorId || scope !== 'SETOR_FUNCAO') return null;
     return new Set(
@@ -185,6 +196,9 @@ export function TrainingComplianceApplicabilityEditor({
   useEffect(() => {
     if (funcaoId && allowedFunctionIds && !allowedFunctionIds.has(funcaoId)) setFuncaoId(null);
   }, [allowedFunctionIds, funcaoId]);
+  useEffect(() => {
+    if (!tripulacaoSelected) setAeronaveModelo('');
+  }, [tripulacaoSelected]);
 
   const invalidate = async () => {
     await Promise.all([
@@ -215,7 +229,8 @@ export function TrainingComplianceApplicabilityEditor({
           setor_id: setorId,
           funcao_id: funcaoId,
           funcionario_id: funcionarioId,
-          aeronave_modelo: aircraftScopeReady ? aeronaveModelo || null : null,
+          aeronave_modelo:
+            tripulacaoSelected && aircraftScopeReady ? aeronaveModelo || null : null,
           condicao_id: conditionalScopeReady ? condicaoId : null,
           justificativa: justificativa.trim() || null,
           perfil_competencia: perfilCompetencia.trim() || null,
@@ -398,7 +413,7 @@ export function TrainingComplianceApplicabilityEditor({
             </select>
           </label>
         ) : null}
-        {aircraftScopeReady ? (
+        {tripulacaoSelected && aircraftScopeReady ? (
           <label className="text-xs font-medium text-slate-600">
             Modelo de aeronave
             <select
