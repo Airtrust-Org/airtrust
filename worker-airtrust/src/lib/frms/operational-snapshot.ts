@@ -38,7 +38,7 @@ import {
 import { classifyOperationalCrewRole } from './operational-crew';
 import { deriveFrmsOperationalDecision, type FrmsDecisaoOperacionalEstado } from './frms-operational-decision';
 import { loadPreferredOperationalJourneys, type FrmsOperationalDataSource } from './preferred-operational-source';
-import { buildMissionRosterRows, normalizeMissionPeriods, type MissionPeriodRow } from './mission-periods';
+import { buildActiveFortnightRosterRows, buildMissionRosterRows, normalizeMissionPeriods, type MissionPeriodRow } from './mission-periods';
 import { addDaysIso, maxIso, minIso } from './iso-date';
 
 export type { MissionPeriodRow } from './mission-periods';
@@ -1632,7 +1632,7 @@ export async function listFrmsOperationalSnapshot(
     requestedKeys.add(`${row.data_operacional}::${asNumber(row.funcionario_id)}`);
   for (const row of requestedRows.activities)
     requestedKeys.add(`${row.data_operacional}::${asNumber(row.funcionario_id)}`);
-  for (const row of buildMissionRosterRows(requestedRows.missionPeriods, requestedStart, requestedEnd))
+  for (const row of buildActiveFortnightRosterRows(requestedRows.missionPeriods, requestedStart, requestedEnd))
     requestedKeys.add(`${row.data_operacional}::${asNumber(row.funcionario_id)}`);
 
   // Âncoras resolvidas (dia/total) para os dias solicitados — reaproveitadas depois
@@ -1842,7 +1842,7 @@ export async function listFrmsOperationalSnapshot(
       checkins: contextRows.checkins,
       effectiveness: contextRows.effectiveness,
       activities: contextRows.activities,
-      roster: buildMissionRosterRows(contextRows.missionPeriods, requestedStart, requestedEnd),
+      roster: buildActiveFortnightRosterRows(contextRows.missionPeriods, requestedStart, requestedEnd),
       funcionarios,
     },
     filters: scopedFuncionarioId != null ? { funcionario_id: scopedFuncionarioId } : undefined,

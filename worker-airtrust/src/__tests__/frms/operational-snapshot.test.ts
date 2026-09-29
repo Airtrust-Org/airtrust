@@ -254,6 +254,48 @@ describe('active fortnight roster in listFrmsOperationalSnapshot', () => {
     expect(item?.operacao_requer_decisao).toBe(false);
     expect(item?.estado_operacional).toBe('NORMAL');
   });
+
+  it('aceita alocação vigente como pertencimento explícito à quinzena', async () => {
+    mockFrmsOperationalContext();
+    vi.spyOn(jornadasModule, 'calcularDiaDoCiclo').mockResolvedValue({ dia: 14, total: 15 } as never);
+    const db = makeSnapshotDb({
+      funcionarios: [FUNCIONARIO_10],
+      missionPeriods: [{
+        funcionario_id: 10,
+        data_inicio_embarque: '2026-09-16',
+        data_fim_embarque: '2026-09-30',
+        source_priority: 1,
+        source_kind: 'ALLOCATION',
+      }],
+    });
+
+    const result = await listFrmsOperationalSnapshot(db, {
+      empresaId: 77, dataInicio: '2026-09-29', dataFim: '2026-09-29',
+    });
+
+    expect(getByKey(result.items, '2026-09-29', 10)).toBeTruthy();
+  });
+
+  it('não usa período FRMS legado sozinho para colocar tripulante na quinzena atual', async () => {
+    mockFrmsOperationalContext();
+    vi.spyOn(jornadasModule, 'calcularDiaDoCiclo').mockResolvedValue(null);
+    const db = makeSnapshotDb({
+      funcionarios: [FUNCIONARIO_10],
+      missionPeriods: [{
+        funcionario_id: 10,
+        data_inicio_embarque: '2026-09-16',
+        data_fim_embarque: '2026-09-30',
+        source_priority: 3,
+        source_kind: 'FRMS_LEGACY',
+      }],
+    });
+
+    const result = await listFrmsOperationalSnapshot(db, {
+      empresaId: 77, dataInicio: '2026-09-29', dataFim: '2026-09-29',
+    });
+
+    expect(result.items).toHaveLength(0);
+  });
 });
 
 describe('Costa do Sol post-mission evidence derivation', () => {
