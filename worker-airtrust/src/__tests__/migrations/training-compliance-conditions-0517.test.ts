@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -99,4 +100,20 @@ describe('0517 training compliance conditions', () => {
     const duplicate = execSql(db, `INSERT INTO treinamento_requisitos(empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,origem,condicao_id,perfil_competencia) VALUES(6,100,'EMPRESA','RECOMENDADA','EMPRESA',${arso},' perfil_a ');`);
     expect(duplicate.code).not.toBe(0);
   });
+
+  it('keeps 0517 on both staging allowlists and validates staging postconditions', () => {
+    const outer = read('scripts/staging/apply-approved-migrations.sh');
+    const recovery = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
+    const validator = read('scripts/staging/validate-0517-postconditions.sh');
+    expect(outer).toContain('0517_training_compliance_conditions.sql');
+    expect(recovery).toContain('0517_training_compliance_conditions.sql');
+    expect(recovery).toContain('validate-0517-postconditions.sh');
+    expect(validator).toContain('migration-ledger-0517');
+    expect(validator).toContain('requirement-audit-columns');
+    expect(validator).toContain('costa-do-sol-condition-catalog');
+    expect(validator).toContain('no-inferred-employee-assignments');
+    expect(spawnSync('bash', ['-n', 'scripts/staging/apply-approved-migration-with-recovery-point.sh'], { cwd: ROOT }).status).toBe(0);
+    expect(spawnSync('bash', ['-n', 'scripts/staging/validate-0517-postconditions.sh'], { cwd: ROOT }).status).toBe(0);
+  });
+
 });

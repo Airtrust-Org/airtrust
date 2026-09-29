@@ -49,6 +49,7 @@ APPROVED_MIGRATIONS=(
   "0513_qualification_areas.sql"
   "0515_qualification_expiry_email_stages.sql"
   "0516_qualification_expired_daily_alerts.sql"
+  "0517_training_compliance_conditions.sql"
 )
 
 apply=false
@@ -229,6 +230,9 @@ validate_postconditions() {
       ;;
     0516_qualification_expired_daily_alerts.sql)
       bash scripts/staging/validate-0516-postconditions.sh --target="$db_name"
+      ;;
+    0517_training_compliance_conditions.sql)
+      bash scripts/staging/validate-0517-postconditions.sh --target="$db_name"
       ;;
   esac
 }
