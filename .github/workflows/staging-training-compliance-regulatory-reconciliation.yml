@@ -1,0 +1,220 @@
+name: Staging Training Compliance Regulatory Reconciliation
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_STAGING_TRAINING_COMPLIANCE_RECONCILIATION to continue'
+        required: true
+        type: string
+      pr_number:
+        description: 'Merged same-repository PR whose merge commit is the current main SHA'
+        required: true
+        type: string
+      release_sha:
+        description: 'Exact current main SHA containing the reviewed reconciliation executor'
+        required: true
+        type: string
+      expected_deployed_sha:
+        description: 'Exact Worker SHA already deployed to staging and compatible with the reconciliation'
+        required: true
+        type: string
+      expected_base_sha256:
+        description: 'Reviewed base reconciliation hash'
+        required: true
+        type: string
+
+concurrency:
+  group: staging-training-compliance-regulatory-reconciliation
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+env:
+  NODE_VERSION: '24'
+  CONFIRMATION_PHRASE: AIRTRUST_STAGING_TRAINING_COMPLIANCE_RECONCILIATION
+  EXPECTED_BASE_SHA256: 38f5912b3f4890a3c3acc956c8192d5cacfe259394fd6037571dc5889ea2bc75
+  STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+  STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+
+jobs:
+  guard:
+    name: Regulatory Reconciliation Guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Validate reviewed current-main release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
+          INPUT_BASE_SHA256: ${{ inputs.expected_base_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_ONLY >&2; exit 1; }
+          [[ "$CONFIRMATION" == "$CONFIRMATION_PHRASE" ]] || { echo CONFIRMATION_REJECTED >&2; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo RELEASE_SHA_INVALID >&2; exit 1; }
+          [[ "$EXPECTED_DEPLOYED_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo DEPLOYED_SHA_INVALID >&2; exit 1; }
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo PR_NUMBER_INVALID >&2; exit 1; }
+          [[ "$INPUT_BASE_SHA256" == "$EXPECTED_BASE_SHA256" ]] || { echo BASE_HASH_MISMATCH >&2; exit 1; }
+          export GITHUB_REPOSITORY PR_NUMBER RELEASE_SHA GITHUB_TOKEN
+          node <<'NODE'
+          (async()=>{
+            const api='https://api.github.com';
+            const headers={authorization:`Bearer ${process.env.GITHUB_TOKEN}`,accept:'application/vnd.github+json','x-github-api-version':'2022-11-28'};
+            const get=async(path)=>{const r=await fetch(`${api}${path}`,{headers});if(!r.ok)throw new Error(`${path}:HTTP_${r.status}`);return r.json();};
+            const pr=await get(`/repos/${process.env.GITHUB_REPOSITORY}/pulls/${process.env.PR_NUMBER}`);
+            if(pr.base?.ref!=='main') throw new Error('PR_BASE_NOT_MAIN');
+            if(pr.head?.repo?.full_name!==process.env.GITHUB_REPOSITORY || pr.head?.repo?.fork) throw new Error('PR_FROM_FORK_REJECTED');
+            if(pr.merged!==true) throw new Error('PR_NOT_MERGED');
+            if(String(pr.merge_commit_sha||'').toLowerCase()!==process.env.RELEASE_SHA.toLowerCase()) throw new Error('MERGED_PR_SHA_MISMATCH');
+            const main=await get(`/repos/${process.env.GITHUB_REPOSITORY}/git/refs/heads/main`);
+            if(String(main.object?.sha||'').toLowerCase()!==process.env.RELEASE_SHA.toLowerCase()) throw new Error('RELEASE_SHA_NOT_CURRENT_MAIN');
+          })().catch((error)=>{console.error(error.message);process.exit(1);});
+          NODE
+          git cat-file -e "$RELEASE_SHA^{commit}"
+          git cat-file -e "$EXPECTED_DEPLOYED_SHA^{commit}"
+          git merge-base --is-ancestor "$EXPECTED_DEPLOYED_SHA" "$RELEASE_SHA"
+      - name: Verify eight canonical release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Verify deployed staging Worker provenance
+        env:
+          EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const expected=process.env.EXPECTED_DEPLOYED_SHA.toLowerCase();
+          const r=await fetch(`${process.env.STAGING_API_BASE_URL}/api/version`);
+          if(!r.ok) throw new Error(`VERSION_HTTP_${r.status}`);
+          const j=await r.json();
+          const actual=String(j?.data?.sourceSha||j?.sourceSha||'').toLowerCase();
+          if(actual!==expected) throw new Error(`STAGING_WORKER_SHA_MISMATCH:${actual||'missing'}`);
+          console.log(`STAGING_WORKER_PROVENANCE_OK=${expected}`);
+          NODE
+
+  preflight:
+    name: Read-Only Reconciliation Preflight
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: staging
+    outputs:
+      reconciliation_sha256: ${{ steps.dryrun.outputs.reconciliation_sha256 }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm --prefix worker-airtrust ci
+      - name: Validate live schema and regulatory prerequisites
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          bash scripts/staging/validate-0517-postconditions.sh --target="$STAGING_D1_NAME"
+          node scripts/staging/validate-training-regulatory-reconciliation.mjs --mode=pre
+      - name: Generate and pin final reconciliation hash
+        id: dryrun
+        env:
+          INPUT_BASE_SHA256: ${{ inputs.expected_base_sha256 }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/training-regulatory-reconciliation-dry-run.txt"
+          node scripts/compliance/reconcile-training-regulatory-matrix-v2.mjs --env=staging > "$out"
+          grep -Fx "BASE_RECONCILIATION_SHA256=$INPUT_BASE_SHA256" "$out" >/dev/null
+          grep -Fx "TARGET_DATABASE=$STAGING_D1_NAME" "$out" >/dev/null
+          grep -Fx 'MODE=DRY_RUN' "$out" >/dev/null
+          grep -Fx 'STATEMENTS=48' "$out" >/dev/null
+          hash="$(sed -n 's/^RECONCILIATION_SHA256=//p' "$out" | head -n1)"
+          [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || { echo FINAL_HASH_INVALID >&2; exit 1; }
+          echo "reconciliation_sha256=$hash" >> "$GITHUB_OUTPUT"
+          echo "RECONCILIATION_SHA256=$hash"
+
+  apply:
+    name: Apply Governed Staging Reconciliation
+    needs: [guard, preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm --prefix worker-airtrust ci
+      - name: Capture verified backup and D1 Time Travel recovery point
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CONFIRM_STAGING_BACKUP: AIRTRUST_STAGING_BACKUP
+        run: |
+          set -euo pipefail
+          bash scripts/staging/backup-d1-staging.sh --apply --out-dir="$RUNNER_TEMP/staging-backups"
+          recovery="$RUNNER_TEMP/d1-time-travel-recovery.json"
+          recovery_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          (cd worker-airtrust && npx wrangler d1 time-travel info "$STAGING_D1_NAME" --timestamp="$recovery_timestamp" --json > "$recovery")
+          test -s "$recovery"
+          node - "$recovery" <<'NODE'
+          const fs=require('node:fs');
+          const data=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(!/bookmark/i.test(JSON.stringify(data))) throw new Error('TIME_TRAVEL_BOOKMARK_NOT_CONFIRMED');
+          console.log('TIME_TRAVEL_RECOVERY_POINT=CONFIRMED');
+          NODE
+      - name: Apply exact reviewed reconciliation to staging only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AIRTRUST_STAGING_RECONCILIATION_AUTH: AIRTRUST_STAGING_TRAINING_COMPLIANCE_RECONCILIATION
+          RECONCILIATION_SHA256: ${{ needs.preflight.outputs.reconciliation_sha256 }}
+        run: |
+          set -euo pipefail
+          node scripts/compliance/reconcile-training-regulatory-matrix-v2.mjs \
+            --apply --env=staging --expected-sha256="$RECONCILIATION_SHA256"
+      - name: Validate reconciliation postconditions
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/staging/validate-training-regulatory-reconciliation.mjs --mode=post
+
+  summary:
+    name: Regulatory Reconciliation Summary
+    needs: [guard, preflight, apply]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish result
+        run: |
+          {
+            echo '## Staging Training Compliance Regulatory Reconciliation'
+            echo ''
+            echo '- release SHA: `${{ inputs.release_sha }}`'
+            echo '- deployed staging SHA: `${{ inputs.expected_deployed_sha }}`'
+            echo '- base reconciliation SHA-256: `${{ inputs.expected_base_sha256 }}`'
+            echo '- final reconciliation SHA-256: `${{ needs.preflight.outputs.reconciliation_sha256 }}`'
+            echo '- preflight: `${{ needs.preflight.result }}`'
+            echo '- governed apply + postconditions: `${{ needs.apply.result }}`'
+            echo '- production action: `none`'
+          } >> "$GITHUB_STEP_SUMMARY"
+          [[ '${{ needs.guard.result }}' == success && '${{ needs.preflight.result }}' == success && '${{ needs.apply.result }}' == success ]]
