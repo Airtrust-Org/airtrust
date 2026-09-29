@@ -24,9 +24,11 @@ const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth(), requireRole('admin'));
 
 type DeduplicateGroupRow = {
-  funcionario_cpf: string | null;
+  funcionario_id: number;
+  qualificacao_chave: string;
+  qualificacao_id: number | null;
   qualificacao_codigo: string | null;
-  data_vencimento: string | null;
+  data_conclusao_dia: string;
   total: number;
 };
 
@@ -37,9 +39,11 @@ type DeduplicateRecordRow = {
 };
 
 type DeduplicateCandidateGroup = {
-  funcionario_cpf: string | null;
+  funcionario_id: number;
+  qualificacao_chave: string;
+  qualificacao_id: number | null;
   qualificacao_codigo: string | null;
-  data_vencimento: string | null;
+  data_conclusao_dia: string;
   total: number;
   manter_id: number;
   remover_ids: number[];
@@ -79,33 +83,45 @@ function resolveEmpresaIdOrThrow(c: Context): number {
 // Exported so horas-voo-simulador-schema.test.ts's sibling for this endpoint
 // (deduplicate-schema.test.ts) can run the literal query against a real sqlite3
 // process instead of a string-matching D1 mock.
+const QUALIFICACAO_IDENTITY_SQL = `COALESCE(
+          NULLIF(UPPER(TRIM(qualificacao_codigo)), ''),
+          NULLIF(UPPER(TRIM(codigo)), ''),
+          CASE
+            WHEN qualificacao_id IS NOT NULL THEN 'ID:' || CAST(qualificacao_id AS TEXT)
+            ELSE NULL
+          END
+        )`;
+
 export const DEDUPLICATE_GROUP_QUERY_SQL = `
       SELECT
-        funcionario_cpf,
-        qualificacao_codigo,
-        data_vencimento,
+        funcionario_id,
+        ${QUALIFICACAO_IDENTITY_SQL} AS qualificacao_chave,
+        MIN(qualificacao_id) AS qualificacao_id,
+        MAX(COALESCE(NULLIF(UPPER(TRIM(qualificacao_codigo)), ''), NULLIF(UPPER(TRIM(codigo)), ''))) AS qualificacao_codigo,
+        date(data_conclusao) AS data_conclusao_dia,
         COUNT(*) as total
       FROM qualificacoes_historico
       WHERE deleted_at IS NULL
         AND empresa_id = ?
-      GROUP BY funcionario_cpf, qualificacao_codigo, data_vencimento
+        AND data_conclusao IS NOT NULL
+        AND ${QUALIFICACAO_IDENTITY_SQL} IS NOT NULL
+      GROUP BY
+        funcionario_id,
+        ${QUALIFICACAO_IDENTITY_SQL},
+        date(data_conclusao)
       HAVING COUNT(*) > 1
-      ORDER BY funcionario_cpf, qualificacao_codigo
+      ORDER BY funcionario_id, qualificacao_chave, data_conclusao_dia
     `;
 
 export const DEDUPLICATE_RECORDS_QUERY_SQL = `
       SELECT id, data_conclusao, created_at
       FROM qualificacoes_historico
       WHERE empresa_id = ?
-        AND funcionario_cpf = ?
-        AND qualificacao_codigo = ?
-        AND (
-          data_vencimento = ?
-          OR (data_vencimento IS NULL AND ? IS NULL)
-        )
+        AND funcionario_id = ?
+        AND ${QUALIFICACAO_IDENTITY_SQL} = ?
+        AND date(data_conclusao) = ?
         AND deleted_at IS NULL
       ORDER BY
-        data_conclusao DESC NULLS LAST,
         created_at DESC,
         id DESC
     `;
@@ -133,9 +149,11 @@ async function listDuplicateGroups(
     .all<DeduplicateGroupRow>();
 
   return (results || []).map((row) => ({
-    funcionario_cpf: row.funcionario_cpf ?? null,
+    funcionario_id: Number(row.funcionario_id),
+    qualificacao_chave: String(row.qualificacao_chave || ''),
+    qualificacao_id: row.qualificacao_id == null ? null : Number(row.qualificacao_id),
     qualificacao_codigo: row.qualificacao_codigo ?? null,
-    data_vencimento: row.data_vencimento ?? null,
+    data_conclusao_dia: String(row.data_conclusao_dia || ''),
     total: Number(row.total || 0),
   }));
 }
@@ -147,13 +165,7 @@ async function listGroupRecords(
 ): Promise<DeduplicateRecordRow[]> {
   const { results } = await db
     .prepare(DEDUPLICATE_RECORDS_QUERY_SQL)
-    .bind(
-      empresaId,
-      group.funcionario_cpf,
-      group.qualificacao_codigo,
-      group.data_vencimento,
-      group.data_vencimento,
-    )
+    .bind(empresaId, group.funcionario_id, group.qualificacao_chave, group.data_conclusao_dia)
     .all<DeduplicateRecordRow>();
 
   return (results || []).map((row) => ({
@@ -183,9 +195,11 @@ async function buildDeduplicateCandidates(
     if (!Number.isFinite(keepId) || keepId <= 0 || removeIds.length === 0) continue;
 
     candidates.push({
-      funcionario_cpf: group.funcionario_cpf,
+      funcionario_id: group.funcionario_id,
+      qualificacao_chave: group.qualificacao_chave,
+      qualificacao_id: group.qualificacao_id,
       qualificacao_codigo: group.qualificacao_codigo,
-      data_vencimento: group.data_vencimento,
+      data_conclusao_dia: group.data_conclusao_dia,
       total: group.total,
       manter_id: keepId,
       remover_ids: removeIds,
@@ -238,8 +252,8 @@ function buildDeduplicateRenovacaoDeSelfNullSql(idCount: number): string {
  * linha ativa (um ponteiro semanticamente órfão: leitores canônicos que
  * ignoram linhas deletadas passariam a tratar o sucessor como se seu
  * predecessor não existisse). Repointa para manter_id (o sobrevivente do
- * mesmo grupo de duplicatas — mesmo funcionário+código+vencimento, logo a
- * mesma conclusão real); se o próprio manter_id apontava para um dos
+ * mesmo grupo de duplicatas — mesmo funcionário+qualificação+data de conclusão,
+ * logo a mesma realização real); se o próprio manter_id apontava para um dos
  * removidos do seu grupo, zera (não há mais um predecessor real dentro do
  * grupo de duplicatas para apontar). Tudo no mesmo batch atômico do delete.
  */
