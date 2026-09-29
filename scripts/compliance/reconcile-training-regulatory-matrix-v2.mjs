@@ -78,7 +78,7 @@ if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID) {
 }
 const workerDir = fileURLToPath(new URL('../../worker-airtrust/', import.meta.url));
 execFileSync(
-  '../node_modules/.bin/wrangler',
+  './node_modules/.bin/wrangler',
   ['d1', 'execute', STAGING_DB, '--env', 'staging', '--remote', '--command', finalSql],
   { cwd: workerDir, stdio: 'inherit', env: process.env },
 );

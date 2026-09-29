@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 
 const scriptPath = resolve(process.cwd(), '../scripts/compliance/reconcile-training-regulatory-matrix-v2.mjs');
 const source = readFileSync(scriptPath, 'utf8');
+const validatorPath = resolve(process.cwd(), '../scripts/staging/validate-training-regulatory-reconciliation.mjs');
+const validatorSource = readFileSync(validatorPath, 'utf8');
 
 function dryRun() {
   return execFileSync(process.execPath, [scriptPath, '--env=staging'], {
@@ -20,6 +22,13 @@ describe('training regulatory reconciliation v2', () => {
     expect(source).toContain('EXPECTED_RECONCILIATION_SHA256_MISMATCH');
     expect(source).toContain('V2_RECONCILIATION_STAGING_ONLY');
     expect(source).not.toContain("production: 'airtrust-db'");
+  });
+
+  it('usa o Wrangler instalado em worker-airtrust no executor e no validator', () => {
+    expect(source).toContain("'./node_modules/.bin/wrangler'");
+    expect(source).not.toContain("'../node_modules/.bin/wrangler'");
+    expect(validatorSource).toContain("'./node_modules/.bin/wrangler'");
+    expect(validatorSource).not.toContain("'../node_modules/.bin/wrangler'");
   });
 
   it('substitui SETOR TRI por condição PTAP explícita sem matrícula automática', () => {
