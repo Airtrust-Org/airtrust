@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { safeFadigaVisibleErrorMessage } from '../useFadigaCheckin';
+import { safeFadigaVisibleErrorMessage, TEAM_PANEL_TIMEOUT_MESSAGE } from '../useFadigaCheckin';
 
 describe('flight fatigue visible errors', () => {
   it('never exposes technical backend details to the visible error message', () => {
@@ -16,5 +16,10 @@ describe('flight fatigue visible errors', () => {
       expect(message).not.toContain('no such column');
       expect(message).toMatch(/^Não foi possível/);
     }
+  });
+
+  it('mantém um timeout operacional compreensível sem detalhe técnico', () => {
+    expect(TEAM_PANEL_TIMEOUT_MESSAGE).toMatch(/demorou além do esperado/i);
+    expect(TEAM_PANEL_TIMEOUT_MESSAGE).not.toMatch(/SQLITE|worker\.ts|stack/i);
   });
 });

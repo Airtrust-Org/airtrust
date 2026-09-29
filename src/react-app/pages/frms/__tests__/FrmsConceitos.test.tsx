@@ -40,4 +40,12 @@ describe('FrmsConceitos', () => {
     expect(screen.getByText(/KSS não entra na fórmula de effectiveness atual/i)).toBeInTheDocument();
     expect(screen.getAllByText(/proxy local/i).length).toBeGreaterThan(0);
   });
+
+  it('explica a ação e a evidência esperadas da coordenação', () => {
+    render(<FrmsConceitos />);
+
+    expect(screen.getByText('O que a coordenação faz com esta leitura')).toBeInTheDocument();
+    expect(screen.getByText(/Não confirmar aptidão, liberação ou ausência de restrição/i)).toBeInTheDocument();
+    expect(screen.getByText(/responsável, prazo, mitigação, evidência/i)).toBeInTheDocument();
+  });
 });

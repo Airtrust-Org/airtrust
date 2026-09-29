@@ -164,6 +164,42 @@ export default function FrmsConceitos() {
 
         <Section>
           <div className="mb-4 flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100">
+              <AlertTriangle className="h-4 w-4 text-amber-700" />
+            </div>
+            <h2 className="text-lg font-bold text-slate-900">O que a coordenação faz com esta leitura</h2>
+          </div>
+          <p className="mb-4 text-sm text-slate-600">
+            O FRMS prioriza uma revisão humana. A ação vem da causa exibida e da política da empresa;
+            nenhum indicador favorável, isoladamente, libera a condição operacional.
+          </p>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+              <p className="font-bold">1. Dados incompletos ou confiança baixa</p>
+              <p className="mt-2">
+                Não confirmar aptidão, liberação ou ausência de restrição. Confira na origem os horários,
+                a jornada, o repouso e a realização da atividade que o painel apontar como pendentes.
+              </p>
+            </div>
+            <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-950">
+              <p className="font-bold">2. Avaliar, atenção ou crítico</p>
+              <p className="mt-2">
+                Leia os motivos principais, aplique a política operacional vigente e defina a medida
+                proporcional — por exemplo, confirmar a escala, reavaliar repouso ou escalar a decisão.
+              </p>
+            </div>
+            <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
+              <p className="font-bold">3. Provar o tratamento</p>
+              <p className="mt-2">
+                Quando houver caso FRMS aplicável, registre responsável, prazo, mitigação, evidência e
+                verificação de eficácia. A conclusão só é defensável com a decisão e seu tratamento rastreáveis.
+              </p>
+            </div>
+          </div>
+        </Section>
+
+        <Section>
+          <div className="mb-4 flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-100">
               <Shield className="h-4 w-4 text-red-600" />
             </div>

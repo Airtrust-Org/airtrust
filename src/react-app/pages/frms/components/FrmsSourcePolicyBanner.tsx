@@ -159,13 +159,13 @@ function buildBannerCopy(health: SigvoosOperationalHealth): {
   switch (health.status) {
     case 'HEALTHY':
       return {
-        title: 'SIGVOOS conectado',
+        title: 'Dados SIGVOOS disponíveis',
         message: `Fonte operacional canônica ativa · Última sincronização: ${lastSync} · Dados até ${lastDay}${importsLabel}.`,
         tone: 'green',
       };
     case 'WAITING_WINDOW':
       return {
-        title: 'SIGVOOS conectado · aguardando janela',
+        title: 'Dados SIGVOOS disponíveis · aguardando janela',
         message: `Última sincronização: ${lastSync} · Dados até ${lastDay} · Próxima janela automática: ${String(
           health.autoSyncHourUtc,
         ).padStart(2, '0')}:00 UTC.`,

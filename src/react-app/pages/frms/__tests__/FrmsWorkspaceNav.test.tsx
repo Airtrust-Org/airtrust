@@ -62,10 +62,12 @@ describe('FrmsWorkspaceNav', () => {
       'Manutenção',
       'Casos',
       'Administração',
+      'Como funciona',
       'Check-in de fadiga',
     ]);
     expect(within(nav).getByRole('link', { name: 'Operações' })).toHaveAttribute('href', '/frms?area=operacoes');
     expect(within(nav).getByRole('link', { name: 'Manutenção' })).toHaveAttribute('href', '/frms?area=manutencao');
+    expect(within(nav).getByRole('link', { name: /como funciona/i })).toHaveAttribute('href', '/frms/conceitos');
     expect(within(nav).getByRole('link', { name: /check-in de fadiga/i })).toHaveAttribute('href', '/frms/checkin');
     expect(screen.queryByRole('navigation', { name: 'Administração FRMS' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('sigvoos-health')).not.toBeInTheDocument();
