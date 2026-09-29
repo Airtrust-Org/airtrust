@@ -2,6 +2,7 @@
 // Read-only validator for the governed Training Compliance regulatory reconciliation.
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { STAGING_PREREQUISITE_MODELS } from '../compliance/training-regulatory-staging-prerequisites.mjs';
 
 const STAGING_DB = 'airtrust-db-staging-baseline-20260701';
 const args = new Set(process.argv.slice(2));
@@ -41,22 +42,39 @@ const conditionCodes = [
   'LOSA_OBSERVADOR','GATEKEEPER','AVSEC_ATENDIMENTO_PASSAGEIRO','AVSEC_OPERACOES_SOLO',
   'AVSEC_CARGA_AEREA','PTAP_RAMPA_DG_DESIGNADO',
 ];
-const modelCodes = [
-  'NR06','NR-11','NR-20','NR-26','NR-35','PPSP','PPSP_SUP','FDM-EAD','FOD','LOSA','GATEKEEPER',
-  'D2','JUST_CULTURE','STOP_WORK','PRE','D1','D4',
-];
+const modelCodes = STAGING_PREREQUISITE_MODELS.map(({ code }) => code);
 const quoted = (values) => values.map((value) => `'${value.replaceAll("'", "''")}'`).join(',');
+const prerequisiteValues = STAGING_PREREQUISITE_MODELS
+  .map(({ code, name, category, validity, hours, areaCode }) =>
+    `('${code.replaceAll("'", "''")}','${name.replaceAll("'", "''")}','${category.replaceAll("'", "''")}',${Number(validity)},${Number(hours)},'${areaCode.replaceAll("'", "''")}')`,
+  )
+  .join(',');
+const prerequisiteConflictSql = `WITH expected(codigo,nome,categoria,validade,carga_horaria,area_codigo) AS (VALUES ${prerequisiteValues})
+  SELECT COUNT(*) count
+  FROM qualificacoes_tipos qt
+  JOIN expected e ON UPPER(qt.codigo)=UPPER(e.codigo)
+  LEFT JOIN qualificacoes_areas qa ON qa.id=qt.area_id AND qa.empresa_id=qt.empresa_id
+  WHERE qt.empresa_id=6 AND qt.deleted_at IS NULL AND (
+    qt.nome<>e.nome OR qt.categoria<>e.categoria OR COALESCE(qt.validade,-1)<>e.validade OR
+    COALESCE(qt.carga_horaria,-1)<>e.carga_horaria OR UPPER(COALESCE(qa.codigo,''))<>UPPER(e.area_codigo) OR
+    COALESCE(qt.ativo,0)<>1 OR COALESCE(qt.is_check,0)<>0
+  )`;
 
 if (mode === 'pre') {
   assertCount('ledger-0517', 1, "SELECT COUNT(*) count FROM d1_migrations WHERE name='0517_training_compliance_conditions.sql'");
   assertCount('required-condition-catalog', 19, `SELECT COUNT(*) count FROM compliance_condicoes WHERE empresa_id=6 AND UPPER(codigo) IN (${quoted(conditionCodes)}) AND ativo=1 AND deleted_at IS NULL`);
-  assertCount('required-existing-models', 17, `SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo) IN (${quoted(modelCodes)}) AND deleted_at IS NULL`);
+  const existingPrerequisites = queryCount(`SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo) IN (${quoted(modelCodes)}) AND deleted_at IS NULL`);
+  if (existingPrerequisites > STAGING_PREREQUISITE_MODELS.length) throw new Error(`prerequisite-model-count:maximum=${STAGING_PREREQUISITE_MODELS.length}:actual=${existingPrerequisites}`);
+  console.log(`VALIDATION_OK=prerequisite-models-present:${existingPrerequisites}`);
+  assertCount('prerequisite-model-metadata-conflicts', 0, prerequisiteConflictSql);
   assertCount('required-ptap-functions', 3, "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND UPPER(codigo) IN ('ORG_COORD_VOO','ORG_AG_ATEND','ORG_AG_RAMPA') AND ativo=1 AND deleted_at IS NULL");
-  assertCount('qsms-area', 1, "SELECT COUNT(*) count FROM qualificacoes_areas WHERE empresa_id=6 AND UPPER(codigo)='QSMS' AND deleted_at IS NULL");
+  assertCount('required-qualification-areas', 3, "SELECT COUNT(*) count FROM qualificacoes_areas WHERE empresa_id=6 AND UPPER(codigo) IN ('QSMS','OPERACOES','SEGURANCA_OPERACIONAL') AND ativo=1 AND deleted_at IS NULL");
   console.log('TRAINING_REGULATORY_RECONCILIATION_PREFLIGHT=PASS');
   process.exit(0);
 }
 
+assertCount('prerequisite-models-created', STAGING_PREREQUISITE_MODELS.length, `SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo) IN (${quoted(modelCodes)}) AND ativo=1 AND deleted_at IS NULL`);
+assertCount('prerequisite-model-metadata-conflicts', 0, prerequisiteConflictSql);
 assertCount('ptap-tripulante-condition', 1, "SELECT COUNT(*) count FROM compliance_condicoes WHERE empresa_id=6 AND UPPER(codigo)='PTAP_TRIPULANTE_VOO' AND ativo=1 AND deleted_at IS NULL");
 assertCount('no-inferred-ptap-employee-assignments', 0, "SELECT COUNT(*) count FROM funcionarios_compliance_condicoes fcc JOIN compliance_condicoes cc ON cc.id=fcc.condicao_id WHERE fcc.empresa_id=6 AND UPPER(cc.codigo)='PTAP_TRIPULANTE_VOO' AND fcc.ativo=1 AND fcc.deleted_at IS NULL");
 assertCount('controlled-models-created', 5, "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo) IN ('NR-05','NR-12','BRIGADA_INCENDIO','PRIMEIROS_SOCORROS','COD_ETICA') AND ativo=1 AND deleted_at IS NULL");
