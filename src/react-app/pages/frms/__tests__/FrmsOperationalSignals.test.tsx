@@ -70,6 +70,23 @@ describe('FrmsSignalChips', () => {
     expect(chips.getByLabelText('Prontidão: Resultado não registrado — sem dado')).toBeInTheDocument();
   });
 
+  it('mantém verde todo sinal positivo apurado mesmo quando a fila exige decisão', () => {
+    render(
+      <FrmsSignalChips
+        item={item()}
+        decisionBucket="DECISAO"
+        readinessAdapter={() => 'preserved'}
+      />,
+    );
+
+    const chips = within(screen.getByLabelText('Sinais operacionais do dia'));
+    const positiveSuffix = 'sinal positivo já apurado; a decisão operacional ainda requer avaliação dos demais sinais.';
+    expect(chips.getByLabelText(`Check-in diário: Realizada — normal — ${positiveSuffix}`)).toHaveClass('bg-emerald-50');
+    expect(chips.getByLabelText(`Efetividade: 92,0% — normal — ${positiveSuffix}`)).toHaveClass('bg-emerald-50');
+    expect(chips.getByLabelText(`Prontidão: Preservada — normal — ${positiveSuffix}`)).toHaveClass('bg-emerald-50');
+    expect(chips.getByLabelText('Risco do período: Dados incompletos — sem dado')).toHaveClass('bg-slate-50');
+  });
+
   it('usa automaticamente a prontidão persistida do mesmo tripulante e dia', () => {
     readinessState.rows = [
       {
@@ -117,9 +134,9 @@ describe('FrmsSignalGrid', () => {
     ];
 
     render(<FrmsSignalGrid item={item()} />);
-    expect(
-      screen.getByLabelText('Prontidão: Baseline em formação — sem dado'),
-    ).toBeInTheDocument();
+    const baseline = screen.getByLabelText('Prontidão: Baseline em formação — informativo');
+    expect(baseline).toHaveClass('bg-sky-50');
+    expect(baseline).not.toHaveClass('bg-slate-50');
     expect(screen.getByText('3 sessões válidas no baseline')).toBeInTheDocument();
   });
 
@@ -142,7 +159,7 @@ describe('FrmsSignalGrid', () => {
 
     render(<FrmsSignalGrid item={item()} />);
     expect(
-      screen.getByLabelText('Prontidão: Baseline em formação — sem dado'),
+      screen.getByLabelText('Prontidão: Baseline em formação — informativo'),
     ).toBeInTheDocument();
     expect(
       screen.getByText('0 sessões válidas no baseline · resultado objetivo deste dia não foi persistido'),

@@ -7,7 +7,7 @@
  * Regra de acessibilidade: a cor nunca é o único canal. Todo sinal traz
  * rótulo textual, marcador (bolinha CSS) e `aria-label` explícito com o tom.
  */
-import { AlertTriangle, CheckCircle2, CircleHelp, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CircleHelp, Clock3, ShieldAlert } from 'lucide-react';
 import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { useReadinessTeam } from '@/react-app/hooks/useOperationalReadiness';
 import {
@@ -20,6 +20,7 @@ import type { FrmsDecisionBucket } from '../frmsOperationalDecision';
 
 const TONE_TEXT: Record<FrmsSignalTone, string> = {
   ok: 'normal',
+  info: 'informativo',
   warning: 'atenção',
   critical: 'crítico',
   unknown: 'sem dado',
@@ -27,6 +28,7 @@ const TONE_TEXT: Record<FrmsSignalTone, string> = {
 
 const TONE_DOT: Record<FrmsSignalTone, string> = {
   ok: 'bg-emerald-500',
+  info: 'bg-sky-500',
   warning: 'bg-amber-400',
   critical: 'bg-red-500',
   unknown: 'bg-slate-400',
@@ -34,6 +36,7 @@ const TONE_DOT: Record<FrmsSignalTone, string> = {
 
 const TONE_CHIP: Record<FrmsSignalTone, string> = {
   ok: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200',
+  info: 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200',
   warning:
     'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200',
   critical:
@@ -42,11 +45,9 @@ const TONE_CHIP: Record<FrmsSignalTone, string> = {
     'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
 };
 
-const AUXILIARY_CHIP =
-  'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200';
-
 const TONE_ICON: Record<FrmsSignalTone, typeof CheckCircle2> = {
   ok: CheckCircle2,
+  info: Clock3,
   warning: AlertTriangle,
   critical: ShieldAlert,
   unknown: CircleHelp,
@@ -113,7 +114,7 @@ export function FrmsSignalChips({
 }: {
   item: FrmsOperationalSnapshotItem;
   readinessAdapter?: FrmsReadinessAdapter;
-  /** Métrica positiva é apenas informativa quando a fila já requer uma ação. */
+  /** A decisão da fila não rebaixa visualmente um sinal positivo já apurado. */
   decisionBucket?: FrmsDecisionBucket;
   className?: string;
 }) {
@@ -125,22 +126,23 @@ export function FrmsSignalChips({
       aria-label="Sinais operacionais do dia"
     >
       {signals.map((signal) => {
-        const isAuxiliaryPositive = decisionBucket != null && decisionBucket !== 'NORMAL' && signal.tone === 'ok';
-        const description = isAuxiliaryPositive
-          ? `${ariaLabel(signal)} — sinal auxiliar; a decisão operacional requer ${decisionBucket === 'CONFIRMAR' ? 'verificação de dados' : 'avaliação'}.`
+        const isPositiveWithPendingDecision =
+          decisionBucket != null && decisionBucket !== 'NORMAL' && signal.tone === 'ok';
+        const description = isPositiveWithPendingDecision
+          ? `${ariaLabel(signal)} — sinal positivo já apurado; a decisão operacional ainda requer ${decisionBucket === 'CONFIRMAR' ? 'verificação dos dados pendentes' : 'avaliação dos demais sinais'}.`
           : ariaLabel(signal);
-        const title = isAuxiliaryPositive
-          ? description
-          : signal.detail ? `${signal.label}: ${signal.value} — ${signal.detail}` : description;
+        const title = signal.detail
+          ? `${signal.label}: ${signal.value} — ${signal.detail}`
+          : description;
 
         return (
           <li key={signal.key}>
             <span
-              className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-semibold ${isAuxiliaryPositive ? AUXILIARY_CHIP : TONE_CHIP[signal.tone]}`}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-semibold ${TONE_CHIP[signal.tone]}`}
               title={title}
               aria-label={description}
             >
-              <span className={`h-1.5 w-1.5 flex-none rounded-full ${isAuxiliaryPositive ? 'bg-slate-400' : TONE_DOT[signal.tone]}`} aria-hidden="true" />
+              <span className={`h-1.5 w-1.5 flex-none rounded-full ${TONE_DOT[signal.tone]}`} aria-hidden="true" />
               <span className="text-slate-500 dark:text-slate-400">{signal.label}</span>
               <span>{signal.value}</span>
             </span>
