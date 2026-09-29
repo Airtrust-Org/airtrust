@@ -358,9 +358,10 @@ export default function FrmsAlertasPainel() {
                           <button
                             type="button"
                             onClick={() => openResolution(item)}
+                            title="Registrar responsável, prazo, mitigação, evidência e avaliação de eficácia antes de resolver"
                             className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900"
                           >
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Resolver
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Registrar tratamento
                           </button>
                         ) : null}
                       </div>

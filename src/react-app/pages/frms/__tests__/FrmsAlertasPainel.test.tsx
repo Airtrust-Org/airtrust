@@ -90,7 +90,7 @@ describe('FrmsAlertasPainel', () => {
   it('exige governança completa antes de resolver um caso', async () => {
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Resolver' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar tratamento' }));
 
     const confirmButton = screen.getByRole('button', { name: 'Confirmar e resolver' });
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -148,6 +148,6 @@ describe('FrmsAlertasPainel', () => {
 
     expect(screen.getByText(/Resolvido por coordenacao@airtrust.online/i)).toBeInTheDocument();
     expect(screen.getByText(/Registro: Jornada corrigida após validação com a escala/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Resolver' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Registrar tratamento' })).not.toBeInTheDocument();
   });
 });
