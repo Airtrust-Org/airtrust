@@ -68,6 +68,8 @@ describe('active fortnight daily roster', () => {
     expect(item?.escalado).toBe(false);
     expect(item?.teve_jornada).toBe(false);
     expect(item?.jornada_data_source).toBe('AUSENTE');
+    expect(item?.operacao_requer_decisao).toBe(false);
+    expect(item?.estado_operacional).toBe('NORMAL');
   });
 });
 
@@ -249,6 +251,8 @@ describe('active fortnight roster in listFrmsOperationalSnapshot', () => {
     expect(item?.nome_guerra).toBe('DEZ');
     expect(item?.teve_jornada).toBe(false);
     expect(item?.jornada_data_source).toBe('AUSENTE');
+    expect(item?.operacao_requer_decisao).toBe(false);
+    expect(item?.estado_operacional).toBe('NORMAL');
   });
 });
 

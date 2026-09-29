@@ -100,6 +100,8 @@ export interface FrmsOperationalSnapshotItem {
   aeronave: string | null;
 
   escalado: boolean;
+  /** Indica se existe operação ou declaração de atividade que exige decisão no dia. */
+  operacao_requer_decisao?: boolean;
   escala_source: 'SIGVOOS' | 'MANUAL' | 'EVD' | 'AUSENTE';
   hora_apresentacao: string | null;
   hora_termino: string | null;

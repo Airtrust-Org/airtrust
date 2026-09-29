@@ -75,6 +75,17 @@ describe('frms-operational-decision', () => {
       expect(result.motivos_principais).toContain('Perfil regulatório do tenant não configurado');
     });
 
+    it('não transforma presença na quinzena em pendência quando não há operação no dia', () => {
+      const result = deriveFrmsOperationalDecision({
+        ...DEFAULT_INPUT,
+        perfil_regulatorio_configurado: false,
+        compliance_avaliavel: false,
+        operacao_requer_decisao: false,
+      });
+      expect(result.estado_operacional).toBe('NORMAL');
+      expect(result.acao_recomendada_texto).toBe('Sem atividade operacional prevista para a data.');
+    });
+
     it('dados complementares ausentes NÃO geram NAO_AVALIADO global', () => {
       const result = deriveFrmsOperationalDecision({
         ...DEFAULT_INPUT,
