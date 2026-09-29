@@ -2,6 +2,12 @@ import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOpera
 
 export type FrmsDecisionBucket = 'BLOQUEIO' | 'DECISAO' | 'CONFIRMAR' | 'NORMAL';
 export type FrmsDataConfidence = 'ALTA' | 'MEDIA' | 'BAIXA';
+export type FrmsOperationalDataMoment =
+  | 'SEM_OPERACAO'
+  | 'PROGRAMADO'
+  | 'DIA_EM_ABERTO'
+  | 'FECHAMENTO_RETROSPECTIVO_PENDENTE'
+  | 'CONSOLIDADO';
 
 function requiresOperationalDecision(item: FrmsOperationalSnapshotItem): boolean {
   // Compatibilidade com snapshots anteriores enquanto a API nova se propaga.
@@ -11,6 +17,23 @@ function requiresOperationalDecision(item: FrmsOperationalSnapshotItem): boolean
     item.teve_atividade_frms === true ||
     Boolean(item.hora_apresentacao)
   );
+}
+
+/**
+ * O check-in apoia a decisão pré-missão, enquanto a jornada realizada só é
+ * confirmada depois da operação. Em dia sem voo, a atividade é declarada no
+ * check-in seguinte. Isto classifica o momento da coleta para a apresentação;
+ * nunca reduz alertas ou altera a decisão canônica do backend.
+ */
+export function resolveOperationalDataMoment(
+  item: FrmsOperationalSnapshotItem,
+  todayIso: string,
+): FrmsOperationalDataMoment {
+  if (!requiresOperationalDecision(item)) return 'SEM_OPERACAO';
+  if (item.teve_jornada || item.teve_atividade_frms === true) return 'CONSOLIDADO';
+  if (item.data_operacional > todayIso) return 'PROGRAMADO';
+  if (item.data_operacional === todayIso) return 'DIA_EM_ABERTO';
+  return 'FECHAMENTO_RETROSPECTIVO_PENDENTE';
 }
 
 export function hasIncompleteOperationalData(item: FrmsOperationalSnapshotItem): boolean {
