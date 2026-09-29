@@ -962,6 +962,51 @@ describe('FrmsCheckinFadiga UI', () => {
     });
   });
 
+  it('na aba Equipe distingue jornada ausente de check-in pendente e indica o próximo passo', async () => {
+    usePermissionsMock.mockReturnValue({ isAdmin: false, isGestor: true, role: 'GESTOR' });
+    useFadigaPainelMock.mockReturnValue({
+      data: [
+        {
+          id: 'daily-fatigue-no-duty',
+          funcionario_id: 101,
+          funcionario_nome: 'Sem Jornada',
+          data: '2026-06-05',
+          status: 'no_duty',
+          data_source: 'not_applicable',
+          kss_score: null,
+          score_fadiga: null,
+          nivel_fadiga: null,
+          status_operacional: null,
+        },
+        {
+          id: 'daily-fatigue-missing-checkin',
+          funcionario_id: 102,
+          funcionario_nome: 'Check-in Pendente',
+          data: '2026-06-05',
+          status: 'not_submitted',
+          data_source: 'missing_checkin',
+          kss_score: null,
+          score_fadiga: null,
+          nivel_fadiga: null,
+          status_operacional: null,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+
+    render(<FrmsCheckinFadiga />);
+    fireEvent.click(screen.getByRole('button', { name: 'Equipe' }));
+
+    expect(await screen.findByText('Situação na data')).toBeInTheDocument();
+    expect(screen.getByText('Sem jornada prevista na data')).toBeInTheDocument();
+    expect(screen.getByText('Check-in pendente — confirmar antes da jornada')).toBeInTheDocument();
+    expect(screen.queryByText('Sem dados FRMS')).not.toBeInTheDocument();
+  });
+
   it('na aba Equipe mostra erro claro e nao converte falha em lista vazia', async () => {
     const refetchPainel = vi.fn();
     usePermissionsMock.mockReturnValue({ isAdmin: false, isGestor: true, role: 'GESTOR' });
