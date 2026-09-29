@@ -76,11 +76,15 @@ export function classifyOperationalItem(item: FrmsOperationalSnapshotItem): Frms
 }
 
 export function trustedEffectiveness(item: FrmsOperationalSnapshotItem): number | null {
+  const isProjected =
+    item.effectiveness_source === 'PROJETADA_APRESENTACAO' ||
+    item.effectiveness_source === 'PROJETADA_ATIVIDADE';
+
   if (
     item.fatorizacao_status === 'AUSENTE' ||
     item.snapshot_status === 'INCOMPLETO' ||
-    item.jornada_data_source === 'AUSENTE' ||
-    item.jornada_data_source === 'INCONSISTENTE' ||
+    (!isProjected &&
+      (item.jornada_data_source === 'AUSENTE' || item.jornada_data_source === 'INCONSISTENTE')) ||
     item.effectiveness_pct == null ||
     !Number.isFinite(item.effectiveness_pct)
   ) {
@@ -105,6 +109,7 @@ export function operationalConfidence(item: FrmsOperationalSnapshotItem): FrmsDa
 
 export function isOperationallyRelevant(item: FrmsOperationalSnapshotItem): boolean {
   return (
+    item.fortnight_indicator != null ||
     requiresOperationalDecision(item) ||
     item.alertas.length > 0 ||
     item.estado_operacional === 'CRITICO_VIOLACAO'
