@@ -1,19 +1,16 @@
 import type { Env } from '../types';
-import { processarNotificacoes } from './notificacoes';
-import { processTrainingComplianceNotifications } from './training-compliance-notifications';
+import { processarNotificacoes, TRAINING_ALERT_DAILY_CRON } from './notificacoes';
+import { refreshTrainingComplianceSnapshots } from './training-compliance-notifications';
 import { enviarEmailAlert } from './notificacoes';
 import { alertasDiariosHandler } from './alertasDiarios';
 import { frmsDailyCheck } from './frms-daily-check';
 import { frmsFadigaReminder } from './frms-fadiga-reminder';
-import { processLmsCompletionReminders } from './lms-completion-reminders';
 import { processLicenseAlerts } from './license-alerts';
 import { processarNotificacoesSgso, enqueueSlaAlerts } from './sgso-notificacoes';
 import { createStructuredConsole } from '../utils/logger';
 import { processarEventosParaModulo } from '../shared/handlers';
 import { CANCELLED_STATUS_VALUES, sqlStatusNotEqualsAny } from '../lib/status/status-codes';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
-import { sendEmail } from '../lib/email';
-import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
 import { ensureMatriculaCycle } from '../services/lms-matricula-cycle';
 import {
   getSigvoosConfig,
@@ -30,10 +27,6 @@ import {
 import { isControleVoosShadowModeEnabledForEmpresa } from '../lib/frms/controle-voos-shadow-flag';
 import { cleanupExpiredRefreshTokens } from '../services/auth-refresh-token';
 import { getModuleAlertSettings, renderAlertTemplate } from '../services/module-alert-settings';
-
-function buildDailyNotificationId(parts: Array<string | number>) {
-  return [...parts, new Date().toISOString().slice(0, 10)].join(':');
-}
 
 function isMatriculaUniqueConstraintError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error ?? '');
@@ -273,16 +266,7 @@ export async function runScheduledJobs(
     ctx.waitUntil(runSigvoosFrmsDailySync(env.DB, console, env));
   }
 
-  if (event.cron === '0 8 * * *') {
-    try {
-      const reminderResult = await processLmsCompletionReminders(env);
-      console.log(
-        `[CRON] ✅ LMS lembretes: ${reminderResult.avaliados} avaliados, ${reminderResult.criados} criados`,
-      );
-    } catch (lmsReminderErr) {
-      console.error('[CRON] ❌ Erro ao gerar lembretes LMS:', lmsReminderErr);
-    }
-  }
+
 
   // ── Bloco 4: Qualificação EAD vencida/vencendo → matrícula LMS automática ──
   // Alinha a automação com o mesmo conceito de status do módulo de qualificações:
@@ -352,76 +336,8 @@ export async function runScheduledJobs(
             throw error;
           }
 
-          // Notificar o funcionário via inapp
-          await env.DB.prepare(
-            `INSERT OR IGNORE INTO notificacoes_inapp (
-               id, funcionario_id, empresa_id, tipo, titulo, mensagem, referencia_id, referencia_tipo, created_at
-             ) VALUES (?, ?, ?, 'lms_renovacao_automatica',
-               'Treinamento de renovação disponível',
-               'Sua qualificação EAD vence em breve. Você foi matriculado automaticamente em: ' || ?,
-               ?, 'lms_matricula', ?)`,
-          )
-            .bind(
-              buildDailyNotificationId([
-                'lms',
-                'lms_renovacao_automatica',
-                row.empresa_id,
-                row.funcionario_id,
-                'lms_matricula',
-                matriculaId,
-              ]),
-              String(row.funcionario_id),
-              row.empresa_id,
-              row.curso_titulo,
-              String(matriculaId),
-              new Date().toISOString(),
-            )
-            .run();
-
-          // Enviar email de notificação ao funcionário (fire-and-forget)
-          try {
-            const func = await env.DB.prepare(
-              `SELECT nome, email FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
-            )
-              .bind(row.funcionario_id, row.empresa_id)
-              .first<{ nome: string; email: string | null }>();
-
-            if (func?.email) {
-              const cursoUrl =
-                (await resolveTrainingAccessUrl(env, env.DB, {
-                  empresaId: row.empresa_id,
-                  funcionarioId: row.funcionario_id,
-                  cursoId: row.curso_id,
-                })) ||
-                `${String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '')}/lms/cursos/${row.curso_id}`;
-              const nomeAluno = func.nome || `Funcionário ${row.funcionario_id}`;
-
-              await sendEmail(env, {
-                to: [{ email: func.email, name: nomeAluno }],
-                subject: `Treinamento disponível: ${row.curso_titulo}`,
-                textContent: [
-                  `Olá ${nomeAluno},`,
-                  '',
-                  `Sua qualificação EAD vence em breve. Você foi matriculado automaticamente no curso: ${row.curso_titulo}`,
-                  '',
-                  `Acesse: ${cursoUrl}`,
-                  '',
-                  'Este e-mail foi enviado automaticamente pela plataforma AirTrust.',
-                ].join('\n'),
-                htmlContent: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
-                  <p>Olá <strong>${nomeAluno}</strong>,</p>
-                  <p>Sua qualificação EAD vence em breve. Você foi matriculado automaticamente no curso:</p>
-                  <div style="background:#f0f9ff;border-left:4px solid #3b82f6;padding:12px 16px;margin:12px 0;border-radius:4px">
-                    <p style="font-size:16px;font-weight:600;margin:0;color:#1e3a5f">${row.curso_titulo}</p>
-                  </div>
-                  <p style="margin:24px 0"><a href="${cursoUrl}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block">Acessar curso</a></p>
-                  <p style="color:#6b7280;font-size:12px;margin-top:24px">Este e-mail foi enviado automaticamente pela plataforma AirTrust.</p>
-                </div>`,
-              });
-            }
-          } catch (emailErr) {
-            console.warn('[CRON] ⚠️ Falha ao enviar email de renovação EAD:', emailErr);
-          }
+          // A matrícula automática não comunica o funcionário.
+          // Toda comunicação de vencimento é responsabilidade da régua canônica diária.
 
           matriculasCriadas++;
         } catch (err) {
@@ -673,12 +589,25 @@ export async function runScheduledJobs(
       console.warn('[PURGE] Erro geral na rotina de limpeza:', (purgeGlobalErr as Error).message);
     }
 
-    try {
-      console.log('[CRON] 🔔 Iniciando processamento de notificações...');
-      await processarNotificacoes(env);
-      console.log('[CRON] ✅ Notificações processadas com sucesso');
-    } catch (notifErr) {
-      console.error('[CRON] ❌ Erro ao processar notificações:', notifErr);
+    if (event.cron === TRAINING_ALERT_DAILY_CRON) {
+      try {
+        const snapshotResult = await refreshTrainingComplianceSnapshots(env);
+        console.log(
+          `[CRON] ✅ Compliance snapshots: ${snapshotResult.gravados} gravados, ${snapshotResult.falhas} falhas`,
+        );
+      } catch (snapshotErr) {
+        console.error('[CRON] ❌ Erro ao atualizar snapshots de compliance:', snapshotErr);
+      }
+    }
+
+    if (event.cron === TRAINING_ALERT_DAILY_CRON) {
+      try {
+        console.log('[CRON] 🔔 Iniciando régua canônica de alertas de treinamento...');
+        await processarNotificacoes(env);
+        console.log('[CRON] ✅ Régua canônica de treinamento processada com sucesso');
+      } catch (notifErr) {
+        console.error('[CRON] ❌ Erro ao processar régua canônica de treinamento:', notifErr);
+      }
     }
 
     if (event.cron === '0 8 * * *') {
@@ -692,19 +621,7 @@ export async function runScheduledJobs(
       }
     }
 
-    // Compliance de treinamentos: avaliação horária com deduplicação por ciclo/estágio.
-    // O cron principal pode executar em intervalos menores; limitar aos primeiros 10 min
-    // de cada hora reduz custo sem perder a régua de cobrança.
-    if (new Date().getUTCMinutes() < 10) {
-      try {
-        const complianceResult = await processTrainingComplianceNotifications(env);
-        console.log(
-          `[CRON] ✅ Compliance treinamentos: ${complianceResult.avaliadas} pendências avaliadas, ${complianceResult.enviadas} avisos enviados, ${complianceResult.gestores} gestores avisados, ${complianceResult.falhas} falhas`,
-        );
-      } catch (complianceErr) {
-        console.error('[CRON] ❌ Erro na régua de compliance de treinamentos:', complianceErr);
-      }
-    }
+    // Alertas automáticos de treinamento são processados exclusivamente pela régua canônica acima.
 
     try {
       console.log('[CRON] 🛡️ Iniciando processamento de notificações SGSO...');

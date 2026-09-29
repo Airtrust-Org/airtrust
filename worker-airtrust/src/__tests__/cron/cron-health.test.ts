@@ -16,7 +16,7 @@ function compactSql(sql: string): string {
 describe('cron resilience health', () => {
   it('consulta somente campos operacionais agregados e aplica limite', () => {
     const sql = compactSql(buildCronHealthQuery());
-    expect(sql).toContain("s.job_name IN ( 'lms-reminders', 'ead-renewal'");
+    expect(sql).toContain("s.job_name IN ( 'ead-renewal'");
     expect(sql).toContain("i.status = 'FAILED' AND i.attempts >= ?");
     expect(sql).toContain('domain-events-dispatch');
     expect(sql).toContain('LIMIT ?');

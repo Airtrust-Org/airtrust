@@ -19,20 +19,6 @@ type QualificationAlert = {
   origem: 'empresa' | 'padrao';
 };
 
-type CompliancePolicy = {
-  enabled: boolean;
-  email: boolean;
-  whatsapp: boolean;
-  due_day_thresholds: number[];
-  never_done_every_days: number;
-  notify_manager_on_overdue: boolean;
-  manager_overdue_thresholds: number[];
-  email_subject_template: string;
-  email_message_template: string;
-  manager_subject_template: string;
-  manager_message_template: string;
-};
-
 type ModuleAlertSettings = {
   lms_completion: {
     enabled: boolean;
@@ -174,7 +160,6 @@ export default function AlertasNotificacoes() {
   const [saving, setSaving] = useState<string | null>(null);
   const [qualifications, setQualifications] = useState<QualificationAlert[]>([]);
   const [modules, setModules] = useState<ModuleAlertSettings | null>(null);
-  const [compliance, setCompliance] = useState<CompliancePolicy | null>(null);
   const [sgsoSlas, setSgsoSlas] = useState<SgsoSla[]>([]);
   const [sigvoosFailureEmail, setSigvoosFailureEmail] = useState('');
   const [convocation, setConvocation] = useState<ConvocationConfig | null>(null);
@@ -186,7 +171,6 @@ export default function AlertasNotificacoes() {
       const [
         qualificationData,
         moduleData,
-        complianceData,
         slaData,
         sigvoosData,
         convocationData,
@@ -194,7 +178,6 @@ export default function AlertasNotificacoes() {
       ] = await Promise.all([
         readData<QualificationAlert[]>('/api/notificacoes/configuracoes-qualificacoes'),
         readData<ModuleAlertSettings>('/api/notificacoes/configuracoes-modulos'),
-        readData<CompliancePolicy>('/api/compliance-treinamentos/configuracao-alertas'),
         readData<SgsoSla[]>('/api/notificacoes/configuracoes-sgso-sla'),
         readData<SigvoosConfig>('/api/integracoes/sigvoos/config'),
         readData<ConvocationConfig>('/api/notificacoes/convocacoes/config'),
@@ -202,7 +185,6 @@ export default function AlertasNotificacoes() {
       ]);
       setQualifications(qualificationData || []);
       setModules(moduleData);
-      setCompliance(complianceData);
       setSgsoSlas(slaData || []);
       setSigvoosFailureEmail(String(sigvoosData?.notificar_falha_email || ''));
       setConvocation(convocationData);
@@ -282,25 +264,6 @@ export default function AlertasNotificacoes() {
     }
   }
 
-  async function saveCompliance() {
-    if (!compliance) return;
-    setSaving('compliance');
-    try {
-      const updated = await readData<CompliancePolicy>(
-        '/api/compliance-treinamentos/configuracao-alertas',
-        {
-          method: 'PUT',
-          body: JSON.stringify(compliance),
-        },
-      );
-      setCompliance(updated);
-      toast.success('Régua de compliance atualizada.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Falha ao salvar compliance');
-    } finally {
-      setSaving(null);
-    }
-  }
 
   async function saveSgso() {
     setSaving('sgso');
@@ -361,7 +324,7 @@ export default function AlertasNotificacoes() {
     }
   }
 
-  if (loading || !modules || !compliance) {
+  if (loading || !modules) {
     return <div className="min-h-64 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />;
   }
 
@@ -389,7 +352,7 @@ export default function AlertasNotificacoes() {
 
       <Card
         title="Qualificações"
-        description="Funcionário recebe as próprias qualificações em 30/15/7 dias e após o vencimento. Gestores recebem somente qualificações CHECK do próprio setor em 45/30/15/7 dias; vencidas não são enviadas ao gestor."
+        description="Régua única de treinamento. Funcionário recebe e-mail + WhatsApp em 30/15/7 dias e e-mail após o vencimento. Gestores recebem somente CHECK do próprio setor por e-mail em 45/30/15/7 dias. Alterar 30/15/7 sincroniza e-mail e WhatsApp no mesmo estágio."
       >
         <div className="space-y-4">
           {qualifications.map((row, index) => (
@@ -553,140 +516,20 @@ export default function AlertasNotificacoes() {
       </Card>
 
       <Card
-        title="Compliance de treinamentos"
-        description="Cobrança automática de treinamento obrigatório, inclusive escalonamento ao gestor do setor."
+        title="Régua única de treinamentos"
+        description="Compliance e renovação EAD não mantêm mais réguas automáticas paralelas."
       >
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <Toggle
-            checked={compliance.enabled}
-            disabled={!canEdit}
-            label="Régua ativa"
-            onChange={(value) => setCompliance({ ...compliance, enabled: value })}
-          />
-          <Toggle
-            checked={compliance.email}
-            disabled={!canEdit}
-            label="E-mail"
-            onChange={(value) => setCompliance({ ...compliance, email: value })}
-          />
-          <Toggle
-            checked={compliance.whatsapp}
-            disabled={!canEdit}
-            label="WhatsApp aprovado"
-            onChange={(value) => setCompliance({ ...compliance, whatsapp: value })}
-          />
-          <Toggle
-            checked={compliance.notify_manager_on_overdue}
-            disabled={!canEdit}
-            label="Escalonar gestor"
-            onChange={(value) => setCompliance({ ...compliance, notify_manager_on_overdue: value })}
-          />
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
+          <p>
+            Todos os alertas automáticos de treinamento usam exclusivamente os estágios de
+            qualificações acima e são processados diariamente às 05:00 (horário de Brasília).
+          </p>
+          <p className="mt-2">
+            A renovação EAD pode criar ou reabrir a matrícula em segundo plano, sem enviar mensagem
+            própria. O módulo de Compliance continua disponível para acompanhamento e cobranças
+            manuais, sem uma segunda régua automática de comunicação.
+          </p>
         </div>
-        <div className="mt-3 grid gap-3 md:grid-cols-3">
-          <label className="text-xs font-medium text-slate-600">
-            Estágios (dias)
-            <input
-              className={fieldClass}
-              disabled={!canEdit}
-              value={compliance.due_day_thresholds.join(', ')}
-              onChange={(e) =>
-                setCompliance({
-                  ...compliance,
-                  due_day_thresholds: parseNumberList(e.target.value, true),
-                })
-              }
-            />
-          </label>
-          <label className="text-xs font-medium text-slate-600">
-            Nunca realizou: repetir a cada
-            <input
-              className={fieldClass}
-              type="number"
-              min={1}
-              max={90}
-              disabled={!canEdit}
-              value={compliance.never_done_every_days}
-              onChange={(e) =>
-                setCompliance({ ...compliance, never_done_every_days: Number(e.target.value) })
-              }
-            />
-          </label>
-          <label className="text-xs font-medium text-slate-600">
-            Gestor após vencimento
-            <input
-              className={fieldClass}
-              disabled={!canEdit}
-              value={compliance.manager_overdue_thresholds.join(', ')}
-              onChange={(e) =>
-                setCompliance({
-                  ...compliance,
-                  manager_overdue_thresholds: parseNumberList(e.target.value, true),
-                })
-              }
-            />
-          </label>
-        </div>
-        <div className="mt-3 grid gap-3 lg:grid-cols-2">
-          <label className="text-xs font-medium text-slate-600">
-            Assunto ao funcionário
-            <input
-              className={fieldClass}
-              disabled={!canEdit}
-              value={compliance.email_subject_template}
-              onChange={(e) =>
-                setCompliance({ ...compliance, email_subject_template: e.target.value })
-              }
-            />
-          </label>
-          <label className="text-xs font-medium text-slate-600">
-            Mensagem ao funcionário
-            <textarea
-              className={textareaClass}
-              disabled={!canEdit}
-              value={compliance.email_message_template}
-              onChange={(e) =>
-                setCompliance({ ...compliance, email_message_template: e.target.value })
-              }
-            />
-          </label>
-          <label className="text-xs font-medium text-slate-600">
-            Assunto ao gestor
-            <input
-              className={fieldClass}
-              disabled={!canEdit}
-              value={compliance.manager_subject_template}
-              onChange={(e) =>
-                setCompliance({ ...compliance, manager_subject_template: e.target.value })
-              }
-            />
-          </label>
-          <label className="text-xs font-medium text-slate-600">
-            Mensagem ao gestor
-            <textarea
-              className={textareaClass}
-              disabled={!canEdit}
-              value={compliance.manager_message_template}
-              onChange={(e) =>
-                setCompliance({ ...compliance, manager_message_template: e.target.value })
-              }
-            />
-          </label>
-        </div>
-        <p className="mt-2 text-[11px] text-slate-500">
-          WhatsApp usa templates aprovados pelo provedor; editar livremente o texto aqui não
-          substituiria a aprovação externa.
-        </p>
-        {canEdit ? (
-          <Button
-            className="mt-3"
-            size="sm"
-            isLoading={saving === 'compliance'}
-            leftIcon={<Save className="h-4 w-4" />}
-            onClick={() => void saveCompliance()}
-          >
-            Salvar compliance
-          </Button>
-        ) : null}
       </Card>
 
       <Card
@@ -694,68 +537,6 @@ export default function AlertasNotificacoes() {
         description="Defaults atuais foram preservados; alterações abaixo passam a valer sem novo deploy."
       >
         <div className="grid gap-4 xl:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <div className="flex justify-between gap-2">
-              <strong className="text-sm">LMS / EAD</strong>
-              <Toggle
-                checked={modules.lms_completion.enabled}
-                disabled={!canEdit}
-                label="Ativo"
-                onChange={(value) =>
-                  setModules({
-                    ...modules,
-                    lms_completion: { ...modules.lms_completion, enabled: value },
-                  })
-                }
-              />
-            </div>
-            <label className="mt-2 block text-xs font-medium text-slate-600">
-              Dias para conclusão
-              <input
-                className={fieldClass}
-                disabled={!canEdit}
-                value={modules.lms_completion.thresholds.join(', ')}
-                onChange={(e) =>
-                  setModules({
-                    ...modules,
-                    lms_completion: {
-                      ...modules.lms_completion,
-                      thresholds: parseNumberList(e.target.value),
-                    },
-                  })
-                }
-              />
-            </label>
-            <label className="mt-2 block text-xs font-medium text-slate-600">
-              Título
-              <input
-                className={fieldClass}
-                disabled={!canEdit}
-                value={modules.lms_completion.title_template}
-                onChange={(e) =>
-                  setModules({
-                    ...modules,
-                    lms_completion: { ...modules.lms_completion, title_template: e.target.value },
-                  })
-                }
-              />
-            </label>
-            <label className="mt-2 block text-xs font-medium text-slate-600">
-              Mensagem
-              <textarea
-                className={textareaClass}
-                disabled={!canEdit}
-                value={modules.lms_completion.message_template}
-                onChange={(e) =>
-                  setModules({
-                    ...modules,
-                    lms_completion: { ...modules.lms_completion, message_template: e.target.value },
-                  })
-                }
-              />
-            </label>
-          </div>
-
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
             <div className="flex justify-between gap-2">
               <strong className="text-sm">Licenças</strong>

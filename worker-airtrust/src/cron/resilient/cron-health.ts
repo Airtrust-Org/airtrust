@@ -61,7 +61,6 @@ export function buildCronHealthQuery(): string {
               ) AS rn
             FROM cron_job_runs r
             WHERE r.job_name IN (
-              'lms-reminders',
               'ead-renewal',
               'sigvoos-dispatch',
               'sigvoos-ingest',
@@ -108,7 +107,6 @@ export function buildCronHealthQuery(): string {
             ON p.job_name = s.job_name
            AND p.scope_key = s.scope_key
          WHERE s.job_name IN (
-           'lms-reminders',
            'ead-renewal',
            'sigvoos-dispatch',
            'sigvoos-ingest',
@@ -143,7 +141,6 @@ function ageMinutes(value: string | null, now: Date): number | null {
 }
 
 export function expectedJobIntervalMinutes(jobName: string, pendingItems: number): number {
-  if (jobName === 'lms-reminders') return 36 * 60;
   if (jobName === 'sigvoos-ingest') return pendingItems > 0 ? 30 : 36 * 60;
   if (jobName === 'frms-reprocess') return pendingItems > 0 ? 30 : 36 * 60;
   return 30;

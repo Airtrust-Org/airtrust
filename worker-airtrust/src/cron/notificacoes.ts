@@ -18,6 +18,11 @@ import { createStructuredConsole } from '../utils/logger';
 import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
 import { getSetorGestoresBySetor } from '../services/setores-gestores';
 import {
+  inferTrainingAlertStageCode,
+  trainingAlertAudience,
+  TRAINING_ALERT_DAILY_CRON,
+} from '../services/training-alert-policy';
+import {
   CANCELLED_STATUS_VALUES,
   QUALIFICACAO_STATUS,
   sqlStatusNotEqualsAny,
@@ -56,6 +61,8 @@ interface QualificacaoParaNotificar {
 
 type WhatsAppTemplateRecord = Awaited<ReturnType<typeof getLocalWhatsAppTemplateRecord>>;
 
+export { TRAINING_ALERT_DAILY_CRON };
+
 export interface ProcessamentoNotificacoesResumo {
   configsProcessadas: number;
   enviadas: number;
@@ -68,8 +75,9 @@ function getNotificacoesConsole(env: Env) {
 }
 
 /**
- * Cron job para enviar notificações de qualificações expirando
- * Executar diariamente às 8h
+ * Autoridade única para alertas automáticos de vencimento de treinamentos/qualificações.
+ * O scheduler chama este processador somente em TRAINING_ALERT_DAILY_CRON (08:00 UTC / 05:00 BRT).
+ * Jobs de matrícula/renovação EAD não devem emitir alertas paralelos.
  */
 export async function processarNotificacoes(env: Env): Promise<ProcessamentoNotificacoesResumo> {
   const log = getNotificacoesConsole(env);
@@ -162,6 +170,8 @@ export async function processarNotificacoes(env: Env): Promise<ProcessamentoNoti
 }
 
 function configEffectiveKey(config: NotificacaoConfig): string {
+  const stageCode = inferTrainingAlertStageCode(config);
+  if (stageCode) return `${normalizeTipoCanal(config.tipo)}:${stageCode}`;
   const codigo = String(config.codigo || '')
     .trim()
     .toUpperCase();
@@ -503,36 +513,6 @@ function buildStatusVencimento(diasAteVencimento: number): string {
   return `Vence em ${diasAteVencimento} dias`;
 }
 
-const EMPLOYEE_EMAIL_STAGE_CODES = new Set([
-  'QUALIFICACAO_30D',
-  'QUALIFICACAO_15D',
-  'QUALIFICACAO_7D',
-]);
-const MANAGER_EMAIL_STAGE_CODES = new Set([
-  'QUALIFICACAO_45D',
-  'QUALIFICACAO_30D',
-  'QUALIFICACAO_15D',
-  'QUALIFICACAO_7D',
-]);
-const EMPLOYEE_EMAIL_STAGE_DAYS = new Set([30, 15, 7]);
-const MANAGER_EMAIL_STAGE_DAYS = new Set([45, 30, 15, 7]);
-
-function normalizedQualificationStageCode(config: NotificacaoConfig): string {
-  return String(config.codigo || '')
-    .trim()
-    .toUpperCase();
-}
-
-function matchesQualificationStage(
-  config: NotificacaoConfig,
-  codes: Set<string>,
-  legacyDays: Set<number>,
-): boolean {
-  const code = normalizedQualificationStageCode(config);
-  if (code) return codes.has(code);
-  return legacyDays.has(Number(config.dias_antes));
-}
-
 function isCheckQualificacao(qualificacao: QualificacaoParaNotificar): boolean {
   if (Number(qualificacao.is_check || 0) === 1) return true;
 
@@ -549,20 +529,10 @@ function getEmailAudiencePolicy(
   config: NotificacaoConfig,
   qualificacao: QualificacaoParaNotificar,
 ): { funcionario: boolean; gestores: boolean } {
-  if (isExpiredConfig(config)) {
-    return { funcionario: true, gestores: false };
-  }
-
-  return {
-    funcionario: matchesQualificationStage(
-      config,
-      EMPLOYEE_EMAIL_STAGE_CODES,
-      EMPLOYEE_EMAIL_STAGE_DAYS,
-    ),
-    gestores:
-      isCheckQualificacao(qualificacao) &&
-      matchesQualificationStage(config, MANAGER_EMAIL_STAGE_CODES, MANAGER_EMAIL_STAGE_DAYS),
-  };
+  return trainingAlertAudience(
+    inferTrainingAlertStageCode(config),
+    isCheckQualificacao(qualificacao),
+  );
 }
 
 async function resolveQualificationEmailRecipients(
