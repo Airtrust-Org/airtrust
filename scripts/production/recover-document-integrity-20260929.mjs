@@ -255,30 +255,6 @@ const cleanupDocSql = idsSql(before.extraDocIds);
 const protectedPvSql = idsSql(before.protectedPvIds);
 
 runWrangler(
-  `INSERT INTO audit_logs (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at)
-   SELECT NULL,'DOCUMENT_INTEGRITY_RESTORE_20260929','documentos',d.id,
-          '{"deleted":true}',
-          '{"deleted":false,"reason":"verified_r2_supporting_document_recovery"}',
-          ${EMPRESA_ID},datetime('now')
-     FROM documentos d
-    WHERE d.empresa_id=${EMPRESA_ID} AND d.id IN (${RESTORE_IDS_SQL}) AND d.deleted_at IS NOT NULL`,
-  'audit_restore',
-);
-
-if (before.extraDocIds.length) {
-  runWrangler(
-    `INSERT INTO audit_logs (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at)
-     SELECT NULL,'DOCUMENT_INTEGRITY_RETIRE_AUTO_DUPLICATE_20260929','documentos',d.id,
-            '{"deleted":false}',
-            '{"deleted":true,"reason":"non_current_airtrust_generated_certificate"}',
-            ${EMPRESA_ID},datetime('now')
-       FROM documentos d
-      WHERE d.empresa_id=${EMPRESA_ID} AND d.id IN (${cleanupDocSql}) AND d.deleted_at IS NULL`,
-    'audit_auto_docs',
-  );
-}
-
-runWrangler(
   `UPDATE documentos AS d
       SET deleted_at=NULL, updated_at=datetime('now')
     WHERE empresa_id=${EMPRESA_ID}
@@ -345,6 +321,66 @@ if (after.extraDocIds.length !== 0) fail(`POST_EXTRA_AUTO_DOCS_REMAIN_${after.ex
 if (after.allCleanupPvIds.length !== 0) fail(`POST_STALE_AUTO_FOLDER_ROWS_REMAIN_${after.allCleanupPvIds.length}`);
 if (after.missingIds.length !== KNOWN_MISSING_R2_DOC_IDS.length) fail('POST_KNOWN_MISSING_SET_CHANGED');
 
+// Earlier pre-fix runs may have immutable attempt rows under the legacy action names.
+// Success evidence uses distinct action names and is emitted only after all data postconditions pass.
+runWrangler(
+  `INSERT INTO audit_logs (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at)
+   SELECT NULL,'DOCUMENT_INTEGRITY_RESTORE_SUCCESS_20260929','documentos',d.id,
+          '{"deleted":true}',
+          '{"deleted":false,"reason":"verified_r2_supporting_document_recovery"}',
+          ${EMPRESA_ID},datetime('now')
+     FROM documentos d
+    WHERE d.empresa_id=${EMPRESA_ID}
+      AND d.id IN (${RESTORE_IDS_SQL})
+      AND d.deleted_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM audit_logs al
+         WHERE al.empresa_id=${EMPRESA_ID}
+           AND al.action='DOCUMENT_INTEGRITY_RESTORE_SUCCESS_20260929'
+           AND al.entity_type='documentos'
+           AND al.entity_id=d.id
+      )`,
+  'audit_restore_success',
+);
+
+if (before.extraDocIds.length) {
+  runWrangler(
+    `INSERT INTO audit_logs (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at)
+     SELECT NULL,'DOCUMENT_INTEGRITY_RETIRE_AUTO_DUPLICATE_SUCCESS_20260929','documentos',d.id,
+            '{"deleted":false}',
+            '{"deleted":true,"reason":"non_current_airtrust_generated_certificate"}',
+            ${EMPRESA_ID},datetime('now')
+       FROM documentos d
+      WHERE d.empresa_id=${EMPRESA_ID}
+        AND d.id IN (${cleanupDocSql})
+        AND d.deleted_at IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM audit_logs al
+           WHERE al.empresa_id=${EMPRESA_ID}
+             AND al.action='DOCUMENT_INTEGRITY_RETIRE_AUTO_DUPLICATE_SUCCESS_20260929'
+             AND al.entity_type='documentos'
+             AND al.entity_id=d.id
+        )`,
+    'audit_auto_docs_success',
+  );
+}
+
+const successAudit = select(
+  `SELECT action,COUNT(*) AS n
+     FROM audit_logs
+    WHERE empresa_id=${EMPRESA_ID}
+      AND action IN ('DOCUMENT_INTEGRITY_RESTORE_SUCCESS_20260929','DOCUMENT_INTEGRITY_RETIRE_AUTO_DUPLICATE_SUCCESS_20260929')
+    GROUP BY action`,
+  'post_success_audit',
+);
+const auditCounts = new Map(successAudit.map((row) => [String(row.action), Number(row.n || 0)]));
+if ((auditCounts.get('DOCUMENT_INTEGRITY_RESTORE_SUCCESS_20260929') || 0) !== RESTORE_DOC_IDS.length) {
+  fail('POST_RESTORE_AUDIT_COUNT_MISMATCH');
+}
+if ((auditCounts.get('DOCUMENT_INTEGRITY_RETIRE_AUTO_DUPLICATE_SUCCESS_20260929') || 0) !== before.extraDocIds.length) {
+  fail('POST_RETIRE_AUDIT_COUNT_MISMATCH');
+}
+
 Object.assign(summary, {
   mutation_executed: true,
   postconditions_verified: true,
@@ -352,5 +388,6 @@ Object.assign(summary, {
   post_extra_auto_documents: after.extraDocIds.length,
   post_stale_or_extra_auto_folder_rows: after.allCleanupPvIds.length,
   post_broken_current_certificate_links: after.brokenCurrentCount,
+  success_audit_records: RESTORE_DOC_IDS.length + before.extraDocIds.length,
 });
 process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);

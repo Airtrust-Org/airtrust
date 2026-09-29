@@ -41,6 +41,19 @@ test('restore UPDATE declares the documentos alias used by the supporting-docume
   assert.match(script, /process\.stderr\.write\(result\.stdout \|\| ''\)/);
 });
 
+test('success audit is written only after document postconditions and is idempotent', () => {
+  const postconditionIndex = script.indexOf("POST_KNOWN_MISSING_SET_CHANGED");
+  const auditIndex = script.indexOf("DOCUMENT_INTEGRITY_RESTORE_SUCCESS_20260929");
+  assert.ok(postconditionIndex > -1);
+  assert.ok(auditIndex > postconditionIndex);
+  assert.match(script, /DOCUMENT_INTEGRITY_RETIRE_AUTO_DUPLICATE_SUCCESS_20260929/);
+  assert.match(script, /NOT EXISTS \(\s*SELECT 1 FROM audit_logs al/);
+  assert.match(script, /POST_RESTORE_AUDIT_COUNT_MISMATCH/);
+  assert.match(script, /POST_RETIRE_AUDIT_COUNT_MISMATCH/);
+  assert.doesNotMatch(script, /'DOCUMENT_INTEGRITY_RESTORE_20260929'/);
+  assert.doesNotMatch(script, /'DOCUMENT_INTEGRITY_RETIRE_AUTO_DUPLICATE_20260929'/);
+});
+
 test('production workflow requires exact SHA, release gates, reviewed dry-run and recovery point', () => {
   assert.match(workflow, /EXPECTED_SHA_MISMATCH/);
   assert.match(workflow, /verify-release-gates\.mjs/);
@@ -48,4 +61,5 @@ test('production workflow requires exact SHA, release gates, reviewed dry-run an
   assert.match(workflow, /d1 time-travel info airtrust-db --env production/);
   assert.match(workflow, /environment: production/);
   assert.match(workflow, /cancel-in-progress: false/);
+  assert.match(workflow, /success_audit_records/);
 });
