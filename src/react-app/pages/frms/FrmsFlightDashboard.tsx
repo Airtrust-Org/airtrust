@@ -462,12 +462,22 @@ export default function FrmsFlightDashboard() {
         ) : null}
 
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
             <div>
               <h2 className="font-bold text-slate-950 dark:text-white">Fila de decisão</h2>
-              <p className="text-xs text-slate-500">Ordenada por gravidade e horário de apresentação.</p>
+              <p className="text-xs text-slate-500">
+                Ordenada por gravidade e horário de apresentação. Abra o registro para ver motivo, dados de origem e ação esperada.
+              </p>
             </div>
-            {!firstLoad ? <span className="text-xs font-semibold text-slate-500">{queue.length} pessoa(s)</span> : null}
+            <div className="flex items-center gap-3">
+              <Link
+                to="/frms/conceitos"
+                className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
+              >
+                Como interpretar
+              </Link>
+              {!firstLoad ? <span className="text-xs font-semibold text-slate-500">{queue.length} pessoa(s)</span> : null}
+            </div>
           </div>
 
           {firstLoad ? (
@@ -510,7 +520,7 @@ export default function FrmsFlightDashboard() {
                     <FrmsSignalChips item={item} decisionBucket={bucket} />
                     <div className="min-w-0">
                       <p className="line-clamp-2 text-sm font-medium text-slate-700 dark:text-slate-200">{reason}</p>
-                      <p className="mt-1 text-xs text-slate-500">{item.acao_recomendada_texto || 'Abrir o caso para avaliar.'}</p>
+                      <p className="mt-1 text-xs text-slate-500">{item.acao_recomendada_texto || 'Abrir o registro para avaliar.'}</p>
                     </div>
                     <div className="text-xs text-slate-500">
                       <div>{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'}</div>

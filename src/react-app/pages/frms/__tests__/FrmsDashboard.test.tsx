@@ -254,6 +254,8 @@ describe('FrmsDashboard simplificado', () => {
     expect(summary.getByText('Verificar')).toBeInTheDocument();
     expect(summary.queryByText('Sem pendência')).not.toBeInTheDocument();
     expect(screen.getByText(/pessoa\(s\) sem pendência no recorte atual/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Como interpretar' })).toHaveAttribute('href', '/frms/conceitos');
+    expect(screen.getByText(/Abra o registro para ver motivo, dados de origem e ação esperada/i)).toBeInTheDocument();
   });
 
   it('mostra os quatro sinais operacionais em cada linha da fila', () => {
