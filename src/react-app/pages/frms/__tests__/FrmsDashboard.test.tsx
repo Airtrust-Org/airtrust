@@ -87,6 +87,22 @@ function item(overrides: Partial<FrmsOperationalSnapshotItem> = {}): FrmsOperati
   };
 }
 
+function unresolvedFortnight(): NonNullable<FrmsOperationalSnapshotItem['fortnight_indicator']> {
+  return {
+    periodo_inicio: null, periodo_fim: null, dia_periodo: null, total_dias_periodo: null,
+    dias_consecutivos_com_jornada: null, dias_com_checkin_pendente: null, dias_com_dado_estimado: null,
+    duty_time_periodo_min: null, duty_time_168h_min: null, horas_voo_periodo_min: null, horas_voo_168h_min: null,
+    atividade_frms_periodo_min: null, horas_voo_frms_periodo_min: null, simulador_periodo_min: null, treinamento_periodo_min: null,
+    dias_atividade_periodo: null, dias_consecutivos_com_atividade: null, jornadas_periodo: null,
+    apresentacoes_antes_0600: null, apresentacoes_antes_0700: null, menor_descanso_entre_jornadas_min: null,
+    setores_periodo: null, sit_periods_estimados: null, fonte_periodo: 'AUSENTE', freshness_dado: 'AUSENTE',
+    status_quinzena: 'INCOMPLETO', score_acumulado: null, tendencia: 'INDETERMINADA',
+    atenuadores_aplicados: [], agravantes_aplicados: [], natureza_dado: 'PROJECAO',
+    explicacao_operacional: 'Período não resolvido.', mitigacao_recomendada: 'AGUARDAR_SIGVOOS',
+    decisao: 'ALERTA', limite_referencia: null, alertas_quinzena: ['PERIODO_QUINZENA_AUSENTE'], limitation_notes: [],
+  };
+}
+
 function state(overrides: Record<string, unknown> = {}) {
   return {
     data: [item()],
@@ -245,6 +261,50 @@ describe('FrmsDashboard simplificado', () => {
 
     expect(screen.queryByRole('button', { name: /Sem Voo/i })).not.toBeInTheDocument();
     expect(screen.getByText('Nenhuma pendência operacional no recorte')).toBeInTheDocument();
+  });
+
+  it('não exibe tripulante fora da quinzena quando existe somente check-in', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(
+      state({
+        data: [item({
+          nome: 'Neri Fora da Quinzena', nome_guerra: 'Neri',
+          escalado: false, teve_jornada: false, teve_atividade_frms: false,
+          operacao_requer_decisao: true, escala_source: 'AUSENTE', jornada_data_source: 'AUSENTE',
+          fatorizacao_status: 'PROJETADA', effectiveness_source: 'PROJETADA_APRESENTACAO',
+          effectiveness_pct: 86, checkin_status: 'RECEBIDO', snapshot_status: 'ATENCAO',
+          estado_operacional: 'ATENCAO', alertas: ['CHECKIN_CRITICO'],
+          fortnight_indicator: unresolvedFortnight(),
+        })],
+      }),
+    );
+
+    renderDashboard();
+
+    expect(screen.queryByRole('button', { name: /Neri/i })).not.toBeInTheDocument();
+    expect(screen.getByText('Nenhuma pendência operacional no recorte')).toBeInTheDocument();
+  });
+
+  it('expõe atividade fora da quinzena como extensão operacional a confirmar', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(
+      state({
+        data: [item({
+          nome: 'Tripulante em Extensão', nome_guerra: 'Extensão',
+          escalado: false, teve_jornada: true, teve_atividade_frms: true,
+          operacao_requer_decisao: true, jornada_data_source: 'REAL',
+          snapshot_status: 'OK', estado_operacional: 'NORMAL', alertas: [],
+          fortnight_indicator: unresolvedFortnight(),
+        })],
+      }),
+    );
+
+    renderDashboard();
+
+    expect(screen.getByText(/Atividade fora da quinzena ativa — confirmar se é extensão operacional/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Extensão/i }));
+    const drawer = within(screen.getByRole('dialog'));
+    expect(drawer.getByText('Fora da quinzena ativa')).toBeInTheDocument();
+    expect(drawer.getByText(/Esta atividade é uma extensão operacional autorizada/i)).toBeInTheDocument();
+    expect(drawer.getByText(/Um check-in isolado é armazenado, mas não coloca o tripulante nesta fila/i)).toBeInTheDocument();
   });
 
   it('rebaixa sem pendência e mantém o resumo superior só com métricas de ação', () => {

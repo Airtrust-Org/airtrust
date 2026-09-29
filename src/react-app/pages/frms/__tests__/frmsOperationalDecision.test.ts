@@ -214,6 +214,52 @@ describe('frmsOperationalDecision', () => {
     expect(classifyOperationalItem(rosterOnly)).toBe('NORMAL');
   });
 
+  it('não coloca na fila check-in isolado quando a quinzena não foi resolvida', () => {
+    const checkinOnly = item({
+      escalado: false,
+      teve_jornada: false,
+      teve_atividade_frms: false,
+      operacao_requer_decisao: true,
+      escala_source: 'AUSENTE',
+      jornada_data_source: 'AUSENTE',
+      fatorizacao_status: 'PROJETADA',
+      effectiveness_source: 'PROJETADA_APRESENTACAO',
+      effectiveness_pct: 87,
+      snapshot_status: 'ATENCAO',
+      estado_operacional: 'ATENCAO',
+      alertas: ['CHECKIN_CRITICO'],
+      fortnight_indicator: {
+        periodo_inicio: null,
+        periodo_fim: null,
+        status_quinzena: 'INCOMPLETO',
+      } as FrmsOperationalSnapshotItem['fortnight_indicator'],
+    });
+
+    expect(isOperationallyRelevant(checkinOnly)).toBe(false);
+  });
+
+  it('mantém atividade operacional sem quinzena na fila como extensão a confirmar', () => {
+    const extension = item({
+      escalado: false,
+      teve_jornada: true,
+      teve_atividade_frms: true,
+      operacao_requer_decisao: true,
+      jornada_data_source: 'REAL',
+      snapshot_status: 'OK',
+      estado_operacional: 'NORMAL',
+      alertas: [],
+      fortnight_indicator: {
+        periodo_inicio: null,
+        periodo_fim: null,
+        status_quinzena: 'INCOMPLETO',
+      } as FrmsOperationalSnapshotItem['fortnight_indicator'],
+    });
+
+    expect(isOperationallyRelevant(extension)).toBe(true);
+    expect(classifyOperationalItem(extension)).toBe('CONFIRMAR');
+    expect(operationalConfidence(extension)).toBe('BAIXA');
+  });
+
   it('separa o dia em aberto da pendência retrospectiva sem tornar o alerta verde', () => {
     const openDay = item({
       data_operacional: '2026-08-27',

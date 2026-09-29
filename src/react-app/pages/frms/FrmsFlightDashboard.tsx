@@ -22,6 +22,7 @@ import {
   bucketPriority,
   classifyOperationalItem,
   isOperationallyRelevant,
+  isOutsideFortnightOperationalExtension,
   operationalConfidence,
   resolveOperationalDataMoment,
   type FrmsDecisionBucket,
@@ -184,6 +185,7 @@ function DetailDrawer({
   const dataMoment = resolveOperationalDataMoment(item, todayIso);
   const momentCopy = dataMomentCopy(dataMoment);
   const dayIsOpen = dataMoment === 'DIA_EM_ABERTO';
+  const outsideFortnightExtension = isOutsideFortnightOperationalExtension(item);
   const jornadaDeclaradaNoCheckin =
     item.jornada_data_source === 'AUSENTE' &&
     item.checkin_status === 'RECEBIDO' &&
@@ -236,6 +238,18 @@ function DetailDrawer({
         </div>
 
         <div className="space-y-5 p-5">
+          {outsideFortnightExtension ? (
+            <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+              <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                <AlertTriangle className="h-4 w-4" /> Fora da quinzena ativa
+              </h3>
+              <p className="mt-2 font-bold">Esta atividade é uma extensão operacional autorizada?</p>
+              <p className="mt-1 leading-relaxed">
+                O tripulante não está vinculado à quinzena desta data, mas existe escala, jornada ou atividade operacional. Confirme com a coordenação se houve extensão de trabalho; caso contrário, corrija a origem operacional. Um check-in isolado é armazenado, mas não coloca o tripulante nesta fila.
+              </p>
+            </section>
+          ) : null}
+
           {momentCopy ? (
             <section className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-sm text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
               <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-blue-800 dark:text-blue-200">
@@ -277,10 +291,12 @@ function DetailDrawer({
           <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
             <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Ação operacional</h3>
             <p className="mt-2 text-base font-semibold text-slate-950 dark:text-white">
-              {dayIsOpen && bucket === 'CONFIRMAR'
-                ? 'Confirmar escala e condição pré-missão; fechar a jornada após a atividade.'
-                : item.acao_recomendada_texto ||
-                (bucket === 'NORMAL' ? 'Nenhuma ação imediata.' : 'Revisar o caso antes da decisão operacional.')}
+              {outsideFortnightExtension
+                ? 'Confirmar se a atividade é uma extensão autorizada da quinzena; se não for, corrigir a escala ou a jornada de origem.'
+                : dayIsOpen && bucket === 'CONFIRMAR'
+                  ? 'Confirmar escala e condição pré-missão; fechar a jornada após a atividade.'
+                  : item.acao_recomendada_texto ||
+                  (bucket === 'NORMAL' ? 'Nenhuma ação imediata.' : 'Revisar o caso antes da decisão operacional.')}
             </p>
             {dayIsOpen && decisionIsLimited ? (
               <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
@@ -461,7 +477,9 @@ export default function FrmsFlightDashboard() {
   useEffect(() => {
     if (!requestedFuncionarioId || selected || snapshot.data.length === 0) return;
     const match = snapshot.data.find(
-      (item) => String(item.tripulante_id) === String(requestedFuncionarioId),
+      (item) =>
+        String(item.tripulante_id) === String(requestedFuncionarioId) &&
+        isOperationallyRelevant(item),
     );
     if (match) setSelected(match);
   }, [requestedFuncionarioId, selected, snapshot.data]);
@@ -613,14 +631,19 @@ export default function FrmsFlightDashboard() {
               {queue.map(({ item, bucket }) => {
                 const confidence = operationalConfidence(item);
                 const dataMoment = resolveOperationalDataMoment(item, todayIso);
+                const outsideFortnightExtension = isOutsideFortnightOperationalExtension(item);
                 const isOpenDayConfirmation = dataMoment === 'DIA_EM_ABERTO' && bucket === 'CONFIRMAR';
-                const reason = isOpenDayConfirmation
-                  ? 'Dia em acompanhamento — jornada real será confirmada após a operação.'
-                  : item.motivos_principais?.[0] ? formatFrmsReason(item.motivos_principais[0]) :
-                    (bucket === 'NORMAL' ? 'Sem pendência operacional identificada.' : 'Revisão operacional necessária.');
-                const actionText = isOpenDayConfirmation
-                  ? 'Confirmar escala e check-in antes da missão; fechar jornada após a atividade.'
-                  : item.acao_recomendada_texto || 'Abrir o registro para avaliar.';
+                const reason = outsideFortnightExtension
+                  ? 'Atividade fora da quinzena ativa — confirmar se é extensão operacional.'
+                  : isOpenDayConfirmation
+                    ? 'Dia em acompanhamento — jornada real será confirmada após a operação.'
+                    : item.motivos_principais?.[0] ? formatFrmsReason(item.motivos_principais[0]) :
+                      (bucket === 'NORMAL' ? 'Sem pendência operacional identificada.' : 'Revisão operacional necessária.');
+                const actionText = outsideFortnightExtension
+                  ? 'Confirmar extensão com a coordenação ou corrigir a escala/jornada de origem.'
+                  : isOpenDayConfirmation
+                    ? 'Confirmar escala e check-in antes da missão; fechar jornada após a atividade.'
+                    : item.acao_recomendada_texto || 'Abrir o registro para avaliar.';
 
                 return (
                   <button
