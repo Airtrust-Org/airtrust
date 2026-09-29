@@ -71,7 +71,6 @@ const BASELINE_ERROR_COUNTS: Record<string, number> = {
   'src/react-app/pages/Certificacoes.tsx': 1,
   'src/react-app/pages/Configuracoes/Backup.tsx': 2,
   'src/react-app/pages/Configuracoes/Importacao.tsx': 1,
-  'src/react-app/pages/Configuracoes/Usuarios.tsx': 1,
   'src/react-app/pages/DashboardNew.tsx': 4,
   'src/react-app/pages/FichaFuncionarioPage.tsx': 3,
   'src/react-app/pages/Funcionarios.tsx': 1,

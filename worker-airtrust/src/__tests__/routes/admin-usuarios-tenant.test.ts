@@ -271,6 +271,8 @@ function createDb(opts: TestDbOpts = {}): D1Database {
           }
           if (s.includes('from usuarios u') && s.includes('inner join usuarios_empresas')) {
             if (!targetExists) return { results: [] as T[] };
+            const bounds = (stmt as D1PreparedStatement & { _binds?: unknown[] })._binds || [];
+            const listedEmpresaId = Number(bounds[0] || targetEmpresaId);
             return {
               results: [
                 {
@@ -281,8 +283,8 @@ function createDb(opts: TestDbOpts = {}): D1Database {
                   active: 1,
                   funcionario_id: null,
                   funcionario_nome: null,
-                  empresa_id: targetEmpresaId,
-                  empresa_nome: `Empresa ${targetEmpresaId}`,
+                  empresa_id: listedEmpresaId,
+                  empresa_nome: `Empresa ${listedEmpresaId}`,
                   is_primary: 1,
                   created_at: '2024-01-01',
                   last_login: null,
@@ -407,6 +409,23 @@ async function adminRequest(
 }
 
 // ===== TESTS: Cross-tenant scenarios =====
+
+describe('admin-usuarios canonical tenant list', () => {
+  it('platform admin sees the selected tenant once instead of memberships from every company', async () => {
+    const response = await adminRequest('GET', '', {
+      callerId: 99,
+      callerRole: 'ADMINISTRADOR',
+      callerEmpresaId: 1,
+      isPlatformAdmin: true,
+      db: createDb({ targetExists: true, targetEmpresaId: 2 }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { data: Array<{ empresa_id: number }> };
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].empresa_id).toBe(1);
+  });
+});
 
 describe('admin-usuarios tenant isolation (BUG-002)', () => {
   // ────────────────────────────────────────────

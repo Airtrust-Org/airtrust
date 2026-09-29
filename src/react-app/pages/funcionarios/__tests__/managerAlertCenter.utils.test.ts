@@ -109,10 +109,10 @@ describe('managerAlertCenter.utils', () => {
   });
 
   it('sanitiza links externos para fallback interno', () => {
-    expect(sanitizeInternalHref('https://externo.exemplo', '/lms/dashboard')).toBe(
-      '/lms/dashboard',
+    expect(sanitizeInternalHref('https://externo.exemplo', '/lms')).toBe(
+      '/lms',
     );
-    expect(sanitizeInternalHref('/sgso/frat', '/lms/dashboard')).toBe('/sgso/frat');
-    expect(sanitizeInternalHref('/\\evil.example', '/lms/dashboard')).toBe('/lms/dashboard');
+    expect(sanitizeInternalHref('/sgso/frat', '/lms')).toBe('/sgso/frat');
+    expect(sanitizeInternalHref('/\\evil.example', '/lms')).toBe('/lms');
   });
 });

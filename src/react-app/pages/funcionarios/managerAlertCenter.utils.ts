@@ -246,7 +246,7 @@ export function buildManagerAlerts({
             ? 'Reconciliar jornada, escala e fatorização antes de seguir com a operação.'
             : 'Revisar vínculos entre escala publicada, EVD e jornada FRMS.',
         actionLabel: 'Revisar escala',
-        href: '/escalas/evd',
+        href: '/escalas/diaria',
         module: 'ESCALAS',
         freshness: `Snapshot operacional · ${todayLabel}`,
         count: escalaRisco,
@@ -318,7 +318,7 @@ export function buildManagerAlerts({
         title: `${pluralize(lmsAlerts.length, 'pendência')} de LMS obrigatória${lmsAlerts.length === 1 ? '' : 's'}`,
         description: 'Acompanhar cursos obrigatórios não concluídos antes que virem bloqueio operacional.',
         actionLabel: 'Ver detalhe',
-        href: sanitizeInternalHref(lmsAlerts[0]?.urlAcao, '/lms/dashboard'),
+        href: sanitizeInternalHref(lmsAlerts[0]?.urlAcao, '/lms'),
         module: 'LMS',
         freshness: `Compliance LMS · ${todayLabel}`,
         count: lmsAlerts.length,

@@ -58,7 +58,7 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
         {
           id: 'lms-dashboard',
           label: 'Dashboard',
-          path: '/lms/dashboard',
+          path: '/lms',
         },
         {
           id: 'lms-admin',

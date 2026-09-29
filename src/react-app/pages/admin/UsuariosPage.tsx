@@ -316,7 +316,17 @@ async function apiFetch(path: string, init?: RequestInit) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function UsuariosPage() {
+type UsuariosPageFrameProps = {
+  embedded: boolean;
+  children: React.ReactNode;
+};
+
+function UsuariosPageFrame({ embedded, children }: UsuariosPageFrameProps) {
+  if (embedded) return <>{children}</>;
+  return <AppLayout>{children}</AppLayout>;
+}
+
+export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate();
   const { isAdmin, isGestor, can } = usePermissions();
   const { user, empresaAtualId } = useAuth();
@@ -324,7 +334,7 @@ export default function UsuariosPage() {
   // Verificar acesso
   if (!isAdmin && !isGestor && !can('admin.usuarios')) {
     return (
-      <AppLayout>
+      <UsuariosPageFrame embedded={embedded}>
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
           <AlertTriangle className="h-12 w-12 text-amber-500" />
           <h2 className="text-xl font-semibold text-slate-900">Acesso Restrito</h2>
@@ -333,7 +343,7 @@ export default function UsuariosPage() {
             Voltar
           </button>
         </div>
-      </AppLayout>
+      </UsuariosPageFrame>
     );
   }
 
@@ -441,17 +451,19 @@ export default function UsuariosPage() {
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <AppLayout>
+    <UsuariosPageFrame embedded={embedded}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/configuracoes')}
-              className="p-2 rounded-lg hover:bg-slate-100 transition"
-            >
-              <ArrowLeft className="h-5 w-5 text-slate-600" />
-            </button>
+            {!embedded && (
+              <button
+                onClick={() => navigate('/configuracoes')}
+                className="p-2 rounded-lg hover:bg-slate-100 transition"
+              >
+                <ArrowLeft className="h-5 w-5 text-slate-600" />
+              </button>
+            )}
             <div>
               <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                 <Users className="h-5 w-5 text-primary" />
@@ -715,8 +727,12 @@ export default function UsuariosPage() {
           onSuccess={() => setModalResetSenha(null)}
         />
       )}
-    </AppLayout>
+    </UsuariosPageFrame>
   );
+}
+
+export default function UsuariosPage() {
+  return <UsuariosAdminContent />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -756,9 +772,7 @@ function SetoresGerenciadosField({
   }, []);
 
   const toggle = (id: number) => {
-    onChange(
-      selectedIds.includes(id) ? selectedIds.filter((s) => s !== id) : [...selectedIds, id],
-    );
+    onChange(selectedIds.includes(id) ? selectedIds.filter((s) => s !== id) : [...selectedIds, id]);
   };
 
   return (
@@ -795,9 +809,7 @@ function SetoresGerenciadosField({
         </div>
       )}
       {showError && selectedIds.length === 0 && (
-        <p className="text-xs text-red-500 mt-1">
-          Selecione ao menos um setor para o gestor.
-        </p>
+        <p className="text-xs text-red-500 mt-1">Selecione ao menos um setor para o gestor.</p>
       )}
     </div>
   );
@@ -1681,7 +1693,11 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
       }));
 
       // Persist locally (always works, no backend required)
-      savePerfisScoped(empresaAtualId, user?.id, payload.map((p) => ({ value: p.value, permissoes: p.permissoes })));
+      savePerfisScoped(
+        empresaAtualId,
+        user?.id,
+        payload.map((p) => ({ value: p.value, permissoes: p.permissoes })),
+      );
 
       // Attempt to also sync with API silently
       apiFetch('/admin/perfis', {

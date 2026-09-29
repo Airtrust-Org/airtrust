@@ -14,11 +14,16 @@ describe('admin usuarios P0 security boundaries', () => {
     expect(legacy).toBeGreaterThan(hardened);
   });
 
-  it('uses persisted platform access instead of tenant ADMIN role for global listing', () => {
-    expect(source).toContain('const platformAdmin = await hasPlatformAdminAccess(db, callerId)');
-    expect(source).not.toContain(
-      "const isGlobalAdmin = callerRole === 'ADMINISTRADOR' || callerRole === 'ADMIN'",
+  it('keeps the normal user list tenant-scoped even for persisted platform administrators', () => {
+    const listing = source.slice(
+      source.indexOf("protectedAdminUsuariosRoutes.get('/',"),
+      source.indexOf("protectedAdminUsuariosRoutes.delete('/:id'"),
     );
+    expect(listing).toContain('ue.empresa_id = ?');
+    expect(listing).toContain('uep.empresa_id = ue.empresa_id');
+    expect(listing).toContain('f.empresa_id = ue.empresa_id');
+    expect(listing).not.toContain('if (platformAdmin)');
+    expect(listing).not.toContain('COALESCE(ue.role, u.perfil)');
   });
 
   it('fails closed when platform access cannot resolve an unambiguous target company', () => {
