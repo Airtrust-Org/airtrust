@@ -34,6 +34,13 @@ test('repair never deletes R2 objects and uses only reversible D1 soft-delete/re
   assert.match(script, /SET deleted_at=COALESCE\(deleted_at,datetime\('now'\)\)/);
 });
 
+
+test('restore UPDATE declares the documentos alias used by the supporting-document filter', () => {
+  assert.match(script, /UPDATE documentos AS d\s+SET deleted_at=NULL/);
+  assert.match(script, /lower\(COALESCE\(d\.descricao,''\)\)/);
+  assert.match(script, /process\.stderr\.write\(result\.stdout \|\| ''\)/);
+});
+
 test('production workflow requires exact SHA, release gates, reviewed dry-run and recovery point', () => {
   assert.match(workflow, /EXPECTED_SHA_MISMATCH/);
   assert.match(workflow, /verify-release-gates\.mjs/);

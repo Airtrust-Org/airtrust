@@ -51,6 +51,7 @@ function runWrangler(sql, label) {
   if (result.status !== 0) {
     console.error(`D1_OPERATION_FAILED:${label}:exit=${result.status ?? 'null'}`);
     process.stderr.write(result.stderr || '');
+    process.stderr.write(result.stdout || '');
     fail('D1_OPERATION_FAILED');
   }
   let parsed;
@@ -278,7 +279,7 @@ if (before.extraDocIds.length) {
 }
 
 runWrangler(
-  `UPDATE documentos
+  `UPDATE documentos AS d
       SET deleted_at=NULL, updated_at=datetime('now')
     WHERE empresa_id=${EMPRESA_ID}
       AND id IN (${RESTORE_IDS_SQL})
