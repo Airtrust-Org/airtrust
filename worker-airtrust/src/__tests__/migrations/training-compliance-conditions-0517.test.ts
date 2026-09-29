@@ -67,6 +67,11 @@ describe('0517 training compliance conditions', () => {
     expect(manifest.planHash).toBe(sha256(plan));
   });
 
+  it('keeps the condition catalog compatible with the D1 compound-select ceiling', () => {
+    expect(migration).not.toContain('UNION ALL SELECT');
+    expect((migration.match(/INSERT OR IGNORE INTO compliance_condicoes/g) ?? []).length).toBe(24);
+  });
+
   it('adds conditions, audited requirement metadata and Costa do Sol catalog without assignments', () => {
     const db = createDatabase();
     const applied = execSql(db, migration);
