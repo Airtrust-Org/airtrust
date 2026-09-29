@@ -10,11 +10,16 @@ const args = new Set(process.argv.slice(2));
 const apply = args.has('--apply');
 const env = [...args].find((arg) => arg.startsWith('--env='))?.split('=')[1] || 'staging';
 if (!['staging', 'production'].includes(env)) throw new Error(`env inválido: ${env}`);
+if (env === 'staging' && apply && process.env.AIRTRUST_STAGING_RECONCILIATION_AUTH !== 'AIRTRUST_STAGING_RECONCILIATION') {
+  throw new Error('staging recusado: autorização específica ausente');
+}
 if (env === 'production' && apply && !process.env.AIRTRUST_PRODUCTION_RECONCILIATION_AUTH) {
   throw new Error('produção recusada: autorização específica ausente');
 }
 
-const target = 'airtrust-db';
+// Always resolve the D1 through the environment-scoped binding. Passing the
+// production database name directly can bypass --env staging resolution.
+const target = 'DB';
 const workerDir = new URL('../../worker-airtrust/', import.meta.url).pathname;
 const q = (s) => `'${String(s).replaceAll("'", "''")}'`;
 const model = (code) =>

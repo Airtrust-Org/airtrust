@@ -8,10 +8,19 @@ const source = readFileSync(
 );
 
 describe('training regulatory reconciliation', () => {
-  it('é dry-run por padrão e bloqueia apply de produção sem autorização específica', () => {
+  it('é dry-run por padrão e exige autorização explícita para writes remotos', () => {
     expect(source).toContain("const apply = args.has('--apply')");
+    expect(source).toContain("env === 'staging' && apply");
+    expect(source).toContain('AIRTRUST_STAGING_RECONCILIATION_AUTH');
+    expect(source).toContain('AIRTRUST_STAGING_RECONCILIATION');
     expect(source).toContain("env === 'production' && apply");
     expect(source).toContain('AIRTRUST_PRODUCTION_RECONCILIATION_AUTH');
+  });
+
+  it('resolve o D1 exclusivamente pelo binding do ambiente', () => {
+    expect(source).toContain("const target = 'DB'");
+    expect(source).not.toContain("const target = 'airtrust-db'");
+    expect(source).toContain("['d1', 'execute', target, '--env', env, '--remote', '--command', sql]");
   });
 
   it('não cria matrícula e converte regras históricas em condição/designação', () => {
