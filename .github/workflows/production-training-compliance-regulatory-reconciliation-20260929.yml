@@ -1,0 +1,244 @@
+name: Production Training Compliance Regulatory Reconciliation 20260929
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA reviewed for this production reconciliation
+        required: true
+        type: string
+      mode:
+        description: dry-run is read-only; apply executes the reviewed reconciliation
+        required: true
+        type: choice
+        options: [dry-run, apply]
+        default: dry-run
+      confirmation:
+        description: Exact confirmation required by the selected mode
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        description: Required for apply; successful dry-run run on this same SHA
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-training-compliance-regulatory-reconciliation-20260929
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  BASE_RECONCILIATION_SHA256: 38f5912b3f4890a3c3acc956c8192d5cacfe259394fd6037571dc5889ea2bc75
+  PRODUCTION_D1_NAME: airtrust-db
+
+jobs:
+  d1_reconcile:
+    name: Governed Production D1 Training Compliance Reconciliation
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_REF_REQUIRED >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_SHA_INVALID >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo EXPECTED_SHA_MISMATCH >&2; exit 1; }
+          if [[ "$MODE" == dry-run ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_DRYRUN_TRAINING_COMPLIANCE_RECONCILIATION ]] || { echo DRYRUN_CONFIRMATION_REQUIRED >&2; exit 1; }
+          elif [[ "$MODE" == apply ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_APPLY_TRAINING_COMPLIANCE_RECONCILIATION ]] || { echo APPLY_CONFIRMATION_REQUIRED >&2; exit 1; }
+          else
+            echo INVALID_MODE >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install root dependencies
+        run: npm ci
+      - name: Install worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Verify eight canonical release gates on exact SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Require production D1 credential
+        env:
+          D1_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$D1_TOKEN" ]] || { echo PRODUCTION_D1_TOKEN_MISSING >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo CLOUDFLARE_ACCOUNT_ID_MISSING >&2; exit 1; }
+
+      - name: Validate production prerequisites for reviewed dry-run
+        if: ${{ inputs.mode == 'dry-run' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          bash scripts/schema-v2/validate-0517-production-preflight.sh --target="$PRODUCTION_D1_NAME"
+          node scripts/production/validate-training-regulatory-reconciliation-20260929.mjs --mode=dry-run
+
+      - name: Generate and pin reviewed reconciliation hash
+        id: dryrun
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/training-compliance-production-reconciliation.txt"
+          node scripts/production/reconcile-training-regulatory-matrix-20260929.mjs --env=production > "$out"
+          grep -Fx "BASE_RECONCILIATION_SHA256=$BASE_RECONCILIATION_SHA256" "$out" >/dev/null
+          grep -Fx "TARGET_DATABASE=$PRODUCTION_D1_NAME" "$out" >/dev/null
+          grep -Fx 'ENV=production' "$out" >/dev/null
+          grep -Fx 'MODE=DRY_RUN' "$out" >/dev/null
+          grep -Fx 'STATEMENTS=48' "$out" >/dev/null
+          hash="$(sed -n 's/^RECONCILIATION_SHA256=//p' "$out" | head -n1)"
+          [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || { echo FINAL_HASH_INVALID >&2; exit 1; }
+          echo "reconciliation_sha256=$hash" >> "$GITHUB_OUTPUT"
+          echo "RECONCILIATION_SHA256=$hash"
+          rm -f "$out"
+
+      - name: Write sanitized dry-run evidence
+        if: ${{ inputs.mode == 'dry-run' }}
+        shell: bash
+        env:
+          FINAL_SHA256: ${{ steps.dryrun.outputs.reconciliation_sha256 }}
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg mode dry-run \
+            --arg source_sha "$GITHUB_SHA" \
+            --arg target "$PRODUCTION_D1_NAME" \
+            --arg base_sha256 "$BASE_RECONCILIATION_SHA256" \
+            --arg reconciliation_sha256 "$FINAL_SHA256" \
+            '{mode:$mode,source_sha:$source_sha,target:$target,base_sha256:$base_sha256,reconciliation_sha256:$reconciliation_sha256,statements:48,mutation_executed:false,pii_emitted:false}' \
+            > "$RUNNER_TEMP/result.json"
+
+      - name: Upload reviewed dry-run evidence
+        if: ${{ inputs.mode == 'dry-run' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-training-compliance-regulatory-dry-run-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Verify reviewed dry-run predecessor
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_RUN: ${{ inputs.reviewed_dry_run_run_id }}
+          EXPECTED_SHA: ${{ github.sha }}
+          GENERATED_SHA256: ${{ steps.dryrun.outputs.reconciliation_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_RUN" =~ ^[1-9][0-9]*$ ]] || { echo REVIEWED_DRY_RUN_RUN_ID_REQUIRED >&2; exit 1; }
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN")"
+          [[ "$(jq -r .name <<<"$run_json")" == 'Production Training Compliance Regulatory Reconciliation 20260929' ]] || { echo REVIEWED_WORKFLOW_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .conclusion <<<"$run_json")" == success ]] || { echo REVIEWED_DRY_RUN_NOT_SUCCESSFUL >&2; exit 1; }
+          [[ "$(jq -r .head_sha <<<"$run_json")" == "$EXPECTED_SHA" ]] || { echo REVIEWED_DRY_RUN_SHA_MISMATCH >&2; exit 1; }
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "production-training-compliance-regulatory-dry-run-$EXPECTED_SHA" --dir "$RUNNER_TEMP/reviewed"
+          evidence="$RUNNER_TEMP/reviewed/result.json"
+          test -s "$evidence"
+          [[ "$(jq -r .source_sha "$evidence")" == "$EXPECTED_SHA" ]] || { echo REVIEWED_EVIDENCE_SHA_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .base_sha256 "$evidence")" == "$BASE_RECONCILIATION_SHA256" ]] || { echo REVIEWED_BASE_HASH_MISMATCH >&2; exit 1; }
+          reviewed_hash="$(jq -r .reconciliation_sha256 "$evidence")"
+          [[ "$reviewed_hash" == "$GENERATED_SHA256" ]] || { echo REVIEWED_FINAL_HASH_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .statements "$evidence")" == '48' ]] || { echo REVIEWED_STATEMENT_COUNT_MISMATCH >&2; exit 1; }
+          echo "REVIEWED_DRY_RUN_VERIFIED=$REVIEWED_RUN hash=${reviewed_hash:0:12}..." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate Schema V2 0517 and reconciliation preconditions
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          bash scripts/schema-v2/validate-0517-production-postconditions.sh --target="$PRODUCTION_D1_NAME"
+          node scripts/production/validate-training-regulatory-reconciliation-20260929.mjs --mode=pre
+
+      - name: Capture verified production D1 backup
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          node scripts/production/backup-production-d1-readonly.mjs --env production --out-dir "$RUNNER_TEMP/production-backup" > "$RUNNER_TEMP/backup-report.json"
+          jq -e '.ok == true and .restored_sqlite.integrity_check == "ok"' "$RUNNER_TEMP/backup-report.json" >/dev/null
+          echo 'PRODUCTION_D1_BACKUP_VERIFIED=YES' >> "$GITHUB_STEP_SUMMARY"
+          rm -rf "$RUNNER_TEMP/production-backup" "$RUNNER_TEMP/backup-report.json"
+
+      - name: Capture D1 Time Travel recovery point
+        if: ${{ inputs.mode == 'apply' }}
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ts="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx wrangler d1 time-travel info "$PRODUCTION_D1_NAME" --env production --timestamp="$ts" > "$RUNNER_TEMP/recovery.txt"
+          test -s "$RUNNER_TEMP/recovery.txt"
+          echo "TRAINING_COMPLIANCE_RECOVERY_TIMESTAMP_UTC=$ts" >> "$GITHUB_STEP_SUMMARY"
+          rm -f "$RUNNER_TEMP/recovery.txt"
+
+      - name: Apply exact reviewed production reconciliation
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AIRTRUST_PRODUCTION_RECONCILIATION_AUTH: AIRTRUST_PRODUCTION_APPLY_TRAINING_COMPLIANCE_RECONCILIATION
+          RECONCILIATION_SHA256: ${{ steps.dryrun.outputs.reconciliation_sha256 }}
+        run: |
+          set -euo pipefail
+          node scripts/production/reconcile-training-regulatory-matrix-20260929.mjs \
+            --apply --env=production --expected-sha256="$RECONCILIATION_SHA256"
+
+      - name: Validate production reconciliation postconditions
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/production/validate-training-regulatory-reconciliation-20260929.mjs --mode=post
+
+      - name: Publish sanitized summary
+        env:
+          MODE: ${{ inputs.mode }}
+          FINAL_SHA256: ${{ steps.dryrun.outputs.reconciliation_sha256 }}
+        run: |
+          {
+            echo '## Production Training Compliance Regulatory Reconciliation'
+            echo ''
+            echo "- source SHA: \`$GITHUB_SHA\`"
+            echo "- mode: \`$MODE\`"
+            echo "- base reconciliation SHA-256: \`$BASE_RECONCILIATION_SHA256\`"
+            echo "- final reconciliation SHA-256: \`$FINAL_SHA256\`"
+            echo '- statements: `48`'
+          } >> "$GITHUB_STEP_SUMMARY"
