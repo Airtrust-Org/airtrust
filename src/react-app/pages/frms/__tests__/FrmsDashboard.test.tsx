@@ -301,6 +301,7 @@ describe('FrmsDashboard simplificado', () => {
     const drawer = within(screen.getByRole('dialog'));
     expect(drawer.getByText(/Falta: sem jornada/i)).toBeInTheDocument();
     expect(drawer.getByText('Jornada: ausente')).toBeInTheDocument();
+    expect(drawer.getByText('Jornada: ausente')).toHaveClass('bg-slate-50');
     expect(drawer.getByText('Decisão não confirmada')).toBeInTheDocument();
     expect(drawer.getByText(/Não confirmar aptidão, liberação ou ausência de restrição/i)).toBeInTheDocument();
   });
@@ -330,6 +331,7 @@ describe('FrmsDashboard simplificado', () => {
     expect(drawer.getByText(/Realização da atividade ainda não foi confirmada/i)).toBeInTheDocument();
     expect(drawer.getByText('Jornada: Confirmado')).toBeInTheDocument();
     expect(drawer.getByText('Sono: Confirmado')).toBeInTheDocument();
+    expect(drawer.getByText('Sono: Confirmado')).toHaveClass('bg-emerald-50');
   });
 
   it('distingue horário declarado no check-in de jornada confirmada', () => {
