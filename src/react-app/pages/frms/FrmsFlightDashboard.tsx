@@ -225,7 +225,7 @@ function DetailDrawer({
               <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
                 <p className="font-bold">Decisão não confirmada</p>
                 <p className="mt-1">
-                  Não confirmar aptidão, liberação ou ausência de restrição com este registro. Primeiro confirme na origem os itens listados acima; depois registre o tratamento no caso, quando aplicável.
+                  Não confirmar aptidão, liberação ou ausência de restrição com este registro. Primeiro confirme na origem os itens listados acima. Se já houver um caso FRMS aplicável, registre nele o tratamento e a decisão.
                 </p>
               </div>
             ) : null}
@@ -313,7 +313,7 @@ function DetailDrawer({
                 to={`/frms/alertas?tripulante_id=${item.tripulante_id}`}
                 className="rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900"
               >
-                Abrir caso para registrar tratamento (outra tela)
+                Consultar casos relacionados (outra tela)
               </Link>
             </div>
           </div>
