@@ -2,6 +2,7 @@ import type { Env } from '../types';
 import {
   createTwilioContentTemplate,
   getTwilioContentTemplate,
+  getTwilioWhatsAppApproval,
   isTwilioContentTemplateCurrent,
   submitTwilioWhatsAppApproval,
 } from './twilio-content';
@@ -118,6 +119,47 @@ export function isWhatsAppTemplateApproved(status?: string | null): boolean {
   return normalized === 'approved';
 }
 
+export async function refreshLocalWhatsAppTemplateApproval(
+  env: Env,
+  db: D1Database,
+  templateKey: AlertWhatsAppTemplateKey,
+  existingRecord?: LocalWhatsAppTemplateRecord | null,
+): Promise<LocalWhatsAppTemplateRecord | null> {
+  const localRecord = existingRecord ?? (await getLocalWhatsAppTemplateRecord(db, templateKey));
+  if (!localRecord?.twilio_content_sid) return localRecord || null;
+
+  try {
+    const approval = await getTwilioWhatsAppApproval(env, localRecord.twilio_content_sid);
+    const approvalStatus = String(approval?.status || '').trim();
+    if (!approvalStatus) return localRecord;
+
+    const approvalError = approval?.rejection_reason || null;
+    const approvalPayloadJson = JSON.stringify({ whatsapp: approval });
+    await db
+      .prepare(
+        `UPDATE alertas_whatsapp_templates
+            SET approval_status = ?,
+                approval_error = ?,
+                approval_payload_json = ?,
+                last_synced_at = datetime('now'),
+                updated_at = datetime('now')
+          WHERE template_key = ?
+            AND deleted_at IS NULL`,
+      )
+      .bind(approvalStatus, approvalError, approvalPayloadJson, templateKey)
+      .run();
+
+    return {
+      ...localRecord,
+      approval_status: approvalStatus,
+      approval_error: approvalError,
+      approval_payload_json: approvalPayloadJson,
+    };
+  } catch {
+    return localRecord;
+  }
+}
+
 export async function syncWhatsAppTemplatesToTwilio(
   env: Env,
   db: D1Database,
@@ -168,20 +210,35 @@ export async function syncWhatsAppTemplatesToTwilio(
       }
     }
 
+    if (twilioContentSid) {
+      try {
+        const approval = await getTwilioWhatsAppApproval(env, twilioContentSid);
+        if (approval?.status) {
+          approvalStatus = approval.status;
+          approvalError = approval.rejection_reason || null;
+          approvalPayloadJson = JSON.stringify({ whatsapp: approval });
+        }
+      } catch {
+        // Keep the last known state; a transient provider read must not recreate a valid ContentSid.
+      }
+    }
+
     if (!twilioContentSid) {
       const createdTemplate = await createTwilioContentTemplate(env, template);
       twilioContentSid = createdTemplate.sid;
     }
 
-    try {
-      const approvalResponse = await submitTwilioWhatsAppApproval(env, twilioContentSid, template);
-      approvalStatus = approvalResponse.status || approvalStatus || 'submitted';
-      approvalError = approvalResponse.rejection_reason || null;
-      approvalPayloadJson = JSON.stringify(approvalResponse);
-    } catch (error) {
-      approvalStatus = approvalStatus || 'submission_error';
-      approvalError = error instanceof Error ? error.message : String(error);
-      approvalPayloadJson = JSON.stringify({ error: approvalError });
+    if (!approvalStatus) {
+      try {
+        const approvalResponse = await submitTwilioWhatsAppApproval(env, twilioContentSid, template);
+        approvalStatus = approvalResponse.status || 'submitted';
+        approvalError = approvalResponse.rejection_reason || null;
+        approvalPayloadJson = JSON.stringify(approvalResponse);
+      } catch (error) {
+        approvalStatus = 'submission_error';
+        approvalError = error instanceof Error ? error.message : String(error);
+        approvalPayloadJson = JSON.stringify({ error: approvalError });
+      }
     }
 
     await db

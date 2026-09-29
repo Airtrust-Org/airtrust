@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import {
   getLocalWhatsAppTemplateRecord,
   isWhatsAppTemplateApproved,
+  refreshLocalWhatsAppTemplateApproval,
   seedLocalWhatsAppTemplateCatalog,
 } from '../utils/alert-whatsapp-templates-store';
 import { normalizeWhatsAppPhone } from '../utils/whatsapp';
@@ -677,6 +678,19 @@ async function enviarNotificacao(
       }
 
       if (!isWhatsAppTemplateApproved(localTemplate.approval_status)) {
+        localTemplate = await refreshLocalWhatsAppTemplateApproval(
+          env,
+          env.DB,
+          templateKey,
+          localTemplate,
+        );
+        options?.whatsAppTemplateCache?.set(templateKey, localTemplate ?? null);
+      }
+
+      if (
+        !localTemplate?.twilio_content_sid ||
+        !isWhatsAppTemplateApproved(localTemplate.approval_status)
+      ) {
         throw new Error('WHATSAPP_TEMPLATE_NOT_APPROVED');
       }
 

@@ -29,6 +29,20 @@ type TwilioApprovalResponse = {
   message?: string;
 };
 
+export type TwilioWhatsAppApproval = {
+  type?: string;
+  name?: string;
+  category?: string;
+  content_type?: string;
+  status?: string;
+  rejection_reason?: string;
+};
+
+type TwilioApprovalFetchResponse = {
+  sid?: string;
+  whatsapp?: TwilioWhatsAppApproval | null;
+};
+
 function getTwilioAuthHeader(env: Env): string {
   if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN) {
     throw new Error('TWILIO_NOT_CONFIGURED');
@@ -84,6 +98,19 @@ export async function getTwilioContentTemplate(
   return twilioContentRequest<TwilioContentRecord>(env, `/v1/Content/${contentSid}`, {
     method: 'GET',
   });
+}
+
+export async function getTwilioWhatsAppApproval(
+  env: Env,
+  contentSid: string,
+): Promise<TwilioWhatsAppApproval | null> {
+  const response = await twilioContentRequest<TwilioApprovalFetchResponse>(
+    env,
+    `/v1/Content/${contentSid}/ApprovalRequests`,
+    { method: 'GET' },
+  );
+
+  return response.whatsapp || null;
 }
 
 export async function submitTwilioWhatsAppApproval(
