@@ -11,7 +11,8 @@ describe('employee detail IA contract', () => {
   it('keeps Ficha 360 as the canonical employee detail for current and legacy ficha URLs', () => {
     expect(app).toContain('path="/funcionarios/:id"');
     expect(app).toContain('path="/funcionarios/:id/ficha"');
-    expect(app.match(/<FichaFuncionarioPage \/>/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(app.match(/<FichaFuncionarioPage \/>/g)?.length).toBe(1);
+    expect(app).toContain('<LegacyFuncionarioRouteRedirect />');
   });
 
   it('turns the old profile into compatibility routing instead of a second employee UI', () => {
