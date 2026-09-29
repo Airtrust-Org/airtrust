@@ -23,6 +23,7 @@ import {
   classifyOperationalItem,
   isOperationallyRelevant,
   operationalConfidence,
+  resolveOperationalDataMoment,
   type FrmsDecisionBucket,
 } from './frmsOperationalDecision';
 import { formatFrmsReason, formatSnapshotSource } from './frmsPresentation';
@@ -88,17 +89,53 @@ function operationalSourceLabel(source: FrmsOperationalSnapshotItem['operational
   return 'sem dado de voo';
 }
 
-function confidenceGaps(item: FrmsOperationalSnapshotItem): string[] {
+function confidenceGaps(item: FrmsOperationalSnapshotItem, todayIso: string): string[] {
   const gaps: string[] = [];
+  const moment = resolveOperationalDataMoment(item, todayIso);
 
   if (item.escala_source === 'AUSENTE') gaps.push('sem escala canônica');
-  if (item.jornada_data_source === 'AUSENTE') gaps.push('sem jornada');
+  if (item.jornada_data_source === 'AUSENTE') {
+    gaps.push(moment === 'DIA_EM_ABERTO' ? 'jornada aguardando encerramento' : 'sem jornada');
+  }
   else if (/ESTIM/i.test(String(item.jornada_data_source))) gaps.push('jornada estimada');
   if (item.checkin_status !== 'RECEBIDO') gaps.push('sem check-in confirmado');
   if (item.sleep_data_source === 'AUSENTE') gaps.push('sem dado de sono');
   else if (/ESTIM/i.test(String(item.sleep_data_source))) gaps.push('sono estimado');
 
   return gaps;
+}
+
+function formatMinutes(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return `${(Math.max(0, value) / 60).toLocaleString('pt-BR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })} h`;
+}
+
+function dataMomentCopy(moment: ReturnType<typeof resolveOperationalDataMoment>): {
+  title: string;
+  text: string;
+} | null {
+  switch (moment) {
+    case 'DIA_EM_ABERTO':
+      return {
+        title: 'Dia em acompanhamento',
+        text: 'O check-in apoia a decisão pré-missão. A jornada realizada é confirmada após o encerramento; se não houver voo, a condição de hoje é declarada no próximo check-in.',
+      };
+    case 'PROGRAMADO':
+      return {
+        title: 'Atividade planejada',
+        text: 'A evidência realizada ainda não é esperada. No dia da operação, confirme o check-in; após o encerramento, a jornada ou atividade fecha o acumulado.',
+      };
+    case 'FECHAMENTO_RETROSPECTIVO_PENDENTE':
+      return {
+        title: 'Fechamento retrospectivo pendente',
+        text: 'A data já passou. Confirme a jornada na fonte de voo ou registre a atividade sem voo no check-in seguinte para fechar o acumulado.',
+      };
+    default:
+      return null;
+  }
 }
 
 function MetricCard({
@@ -136,18 +173,23 @@ function DecisionBadge({ bucket }: { bucket: FrmsDecisionBucket }) {
 function DetailDrawer({
   item,
   onClose,
+  todayIso,
 }: {
   item: FrmsOperationalSnapshotItem;
   onClose: () => void;
+  todayIso: string;
 }) {
   const bucket = classifyOperationalItem(item);
   const confidence = operationalConfidence(item);
+  const dataMoment = resolveOperationalDataMoment(item, todayIso);
+  const momentCopy = dataMomentCopy(dataMoment);
+  const dayIsOpen = dataMoment === 'DIA_EM_ABERTO';
   const jornadaDeclaradaNoCheckin =
     item.jornada_data_source === 'AUSENTE' &&
     item.checkin_status === 'RECEBIDO' &&
     Boolean(item.hora_apresentacao);
   const reasons = (item.motivos_principais?.filter(Boolean) || []).map(formatFrmsReason);
-  const gaps = confidenceGaps(item);
+  const gaps = confidenceGaps(item, todayIso);
   const decisionIsLimited = confidence === 'BAIXA';
   const date = item.data_operacional;
   const sourceFacts = [
@@ -161,7 +203,7 @@ function DetailDrawer({
       label: 'Jornada',
       value: formatSnapshotSource(item.jornada_data_source),
       missing: item.jornada_data_source === 'AUSENTE',
-      missingLabel: 'ausente',
+      missingLabel: dayIsOpen ? 'aguardando fechamento' : 'ausente',
     },
     {
       label: 'Sono',
@@ -194,6 +236,15 @@ function DetailDrawer({
         </div>
 
         <div className="space-y-5 p-5">
+          {momentCopy ? (
+            <section className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-sm text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
+              <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-blue-800 dark:text-blue-200">
+                <Clock3 className="h-4 w-4" /> {momentCopy.title}
+              </h3>
+              <p className="mt-2 leading-relaxed">{momentCopy.text}</p>
+            </section>
+          ) : null}
+
           <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
             <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Status operacional do dia</h3>
             <FrmsSignalGrid item={item} className="mt-3" />
@@ -201,7 +252,11 @@ function DetailDrawer({
 
           <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
             <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              {decisionIsLimited ? 'Pendências que limitam a decisão' : 'Por que exige atenção'}
+              {dayIsOpen && decisionIsLimited
+                ? 'Confirmações restantes para o fechamento'
+                : decisionIsLimited
+                  ? 'Pendências que limitam a decisão'
+                  : 'Por que exige atenção'}
             </h3>
             {reasons.length > 0 ? (
               <ul className="mt-3 space-y-2 text-sm text-slate-800 dark:text-slate-200">
@@ -222,10 +277,19 @@ function DetailDrawer({
           <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
             <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Ação operacional</h3>
             <p className="mt-2 text-base font-semibold text-slate-950 dark:text-white">
-              {item.acao_recomendada_texto ||
+              {dayIsOpen && bucket === 'CONFIRMAR'
+                ? 'Confirmar escala e condição pré-missão; fechar a jornada após a atividade.'
+                : item.acao_recomendada_texto ||
                 (bucket === 'NORMAL' ? 'Nenhuma ação imediata.' : 'Revisar o caso antes da decisão operacional.')}
             </p>
-            {decisionIsLimited ? (
+            {dayIsOpen && decisionIsLimited ? (
+              <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
+                <p className="font-bold">Sem liberação final baseada na jornada</p>
+                <p className="mt-1">
+                  A ausência de jornada realizada durante o dia é esperada. Antes da missão, confirme a escala e o check-in; após a atividade, confirme a jornada ou a atividade sem voo para atualizar o acumulado.
+                </p>
+              </div>
+            ) : decisionIsLimited ? (
               <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
                 <p className="font-bold">Decisão não confirmada</p>
                 <p className="mt-1">
@@ -256,6 +320,35 @@ function DetailDrawer({
               </p>
             </div>
           </section>
+
+          {item.fortnight_indicator ? (
+            <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Acumulado já registrado no período</h3>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                <div>
+                  <p className="text-xs text-slate-500">Voo</p>
+                  <p className="mt-1 font-semibold text-slate-900 dark:text-white">{formatMinutes(item.fortnight_indicator.horas_voo_periodo_min)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Atividade</p>
+                  <p className="mt-1 font-semibold text-slate-900 dark:text-white">{formatMinutes(item.fortnight_indicator.atividade_frms_periodo_min ?? item.fortnight_indicator.duty_time_periodo_min)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Dias ativos</p>
+                  <p className="mt-1 font-semibold text-slate-900 dark:text-white">{item.fortnight_indicator.dias_atividade_periodo ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Consecutivos</p>
+                  <p className="mt-1 font-semibold text-slate-900 dark:text-white">{item.fortnight_indicator.dias_consecutivos_com_atividade ?? '—'}</p>
+                </div>
+              </div>
+              {dayIsOpen ? (
+                <p className="mt-3 text-xs text-slate-500">
+                  A jornada em aberto deste dia ainda não entra nesses totais. Eles refletem somente atividade já registrada no período.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
 
           <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -338,6 +431,7 @@ export default function FrmsFlightDashboard() {
   const requestedFuncionarioId = searchParams.get('funcionario_id');
   const legacyControlRoute = searchParams.get('origem') === 'controle-operacional-legado';
   const date = isOperationalDate(requestedDate) ? requestedDate : localTodayIso();
+  const todayIso = localTodayIso();
   const [selected, setSelected] = useState<FrmsOperationalSnapshotItem | null>(null);
 
   useEffect(() => {
@@ -427,6 +521,13 @@ export default function FrmsFlightDashboard() {
           </div>
         </header>
 
+        {date === todayIso ? (
+          <div className="rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 text-sm text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
+            <span className="font-bold">Leitura do dia em curso.</span>{' '}
+            O check-in apoia a decisão antes da missão. A jornada realizada fecha depois da operação; em dia sem voo, a pessoa registra a atividade de hoje no próximo check-in. O acumulado usa somente atividade já registrada.
+          </div>
+        ) : null}
+
         {legacyControlRoute ? (
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
             Controle Operacional foi consolidado nesta tela de Operação FRMS. Os filtros de data e tripulante da rota anterior foram preservados.
@@ -511,8 +612,15 @@ export default function FrmsFlightDashboard() {
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
               {queue.map(({ item, bucket }) => {
                 const confidence = operationalConfidence(item);
-                const reason = item.motivos_principais?.[0] ? formatFrmsReason(item.motivos_principais[0]) :
-                  (bucket === 'NORMAL' ? 'Sem pendência operacional identificada.' : 'Revisão operacional necessária.');
+                const dataMoment = resolveOperationalDataMoment(item, todayIso);
+                const isOpenDayConfirmation = dataMoment === 'DIA_EM_ABERTO' && bucket === 'CONFIRMAR';
+                const reason = isOpenDayConfirmation
+                  ? 'Dia em acompanhamento — jornada real será confirmada após a operação.'
+                  : item.motivos_principais?.[0] ? formatFrmsReason(item.motivos_principais[0]) :
+                    (bucket === 'NORMAL' ? 'Sem pendência operacional identificada.' : 'Revisão operacional necessária.');
+                const actionText = isOpenDayConfirmation
+                  ? 'Confirmar escala e check-in antes da missão; fechar jornada após a atividade.'
+                  : item.acao_recomendada_texto || 'Abrir o registro para avaliar.';
 
                 return (
                   <button
@@ -529,7 +637,7 @@ export default function FrmsFlightDashboard() {
                     <FrmsSignalChips item={item} decisionBucket={bucket} />
                     <div className="min-w-0">
                       <p className="line-clamp-2 text-sm font-medium text-slate-700 dark:text-slate-200">{reason}</p>
-                      <p className="mt-1 text-xs text-slate-500">{item.acao_recomendada_texto || 'Abrir o registro para avaliar.'}</p>
+                      <p className="mt-1 text-xs text-slate-500">{actionText}</p>
                     </div>
                     <div className="text-xs text-slate-500">
                       <div>{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'}</div>
@@ -560,7 +668,7 @@ export default function FrmsFlightDashboard() {
         </div>
       </div>
 
-      {selected ? <DetailDrawer item={selected} onClose={() => setSelected(null)} /> : null}
+      {selected ? <DetailDrawer item={selected} onClose={() => setSelected(null)} todayIso={todayIso} /> : null}
     </AppLayout>
   );
 }
