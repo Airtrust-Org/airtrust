@@ -348,7 +348,7 @@ describe('FrmsDashboard simplificado', () => {
     expect(drawer.getByRole('link', { name: 'Abrir histórico (outra tela)' })).toHaveAttribute(
       'href', '/frms/tripulante/30?origem=operacao&data=2026-08-27',
     );
-    expect(drawer.getByRole('link', { name: 'Abrir caso para registrar tratamento (outra tela)' })).toHaveAttribute(
+    expect(drawer.getByRole('link', { name: 'Consultar casos relacionados (outra tela)' })).toHaveAttribute(
       'href', '/frms/alertas?tripulante_id=30',
     );
     expect(drawer.queryByRole('link', { name: 'Abrir FRAT' })).not.toBeInTheDocument();
