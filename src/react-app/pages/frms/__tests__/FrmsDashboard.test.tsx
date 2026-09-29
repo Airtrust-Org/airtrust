@@ -355,6 +355,57 @@ describe('FrmsDashboard simplificado', () => {
     expect(drawer.getByText(/Informado no check-in; a escala e a jornada ainda precisam ser confirmadas/i)).toBeInTheDocument();
   });
 
+  it('explica que a jornada do dia em curso fecha após a operação e mantém o acumulado separado', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-29T12:00:00Z'));
+    try {
+      useFrmsOperationalSnapshotMock.mockReturnValue(
+        state({
+          data: [item({
+            data_operacional: '2026-09-29',
+            escalado: false,
+            jornada_data_source: 'AUSENTE',
+            hora_apresentacao: '18:00',
+            hora_termino: null,
+            teve_jornada: false,
+            teve_atividade_frms: false,
+            fatorizacao_status: 'AUSENTE',
+            effectiveness_pct: null,
+            snapshot_status: 'INCOMPLETO',
+            estado_operacional: 'NAO_AVALIADO',
+            motivos_principais: ['Histórico móvel de voo e jornada ainda incompleto para a avaliação regulatória'],
+            fortnight_indicator: {
+              periodo_inicio: '2026-09-16', periodo_fim: '2026-09-30', dia_periodo: 14, total_dias_periodo: 15,
+              dias_consecutivos_com_jornada: 2, dias_com_checkin_pendente: 0, dias_com_dado_estimado: 0,
+              duty_time_periodo_min: 600, duty_time_168h_min: 300, horas_voo_periodo_min: 240,
+              horas_voo_168h_min: 120, atividade_frms_periodo_min: 720, dias_atividade_periodo: 2,
+              dias_consecutivos_com_atividade: 2, jornadas_periodo: 2, apresentacoes_antes_0600: 0,
+              apresentacoes_antes_0700: 0, menor_descanso_entre_jornadas_min: 720, setores_periodo: null,
+              sit_periods_estimados: null, fonte_periodo: 'REAL', freshness_dado: 'COMPLETO',
+              status_quinzena: 'OK', score_acumulado: 20, tendencia: 'ESTAVEL',
+              atenuadores_aplicados: [], agravantes_aplicados: [], natureza_dado: 'CHECKIN_SUBJETIVO',
+              explicacao_operacional: 'Acumulado registrado.', mitigacao_recomendada: 'SEM_ACAO',
+              decisao: 'INFORMA', limite_referencia: null, alertas_quinzena: [], limitation_notes: [],
+            },
+          })],
+        }),
+      );
+
+      renderDashboard('/frms?data=2026-09-29');
+      expect(screen.getByText(/Leitura do dia em curso/i)).toBeInTheDocument();
+      expect(screen.getByText(/jornada real será confirmada após a operação/i)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /Max/i }));
+      const drawer = within(screen.getByRole('dialog'));
+      expect(drawer.getByText('Dia em acompanhamento')).toBeInTheDocument();
+      expect(drawer.getByText('Acumulado já registrado no período')).toBeInTheDocument();
+      expect(drawer.getByText(/jornada aguardando encerramento/i)).toBeInTheDocument();
+      expect(drawer.getByText(/ainda não entra nesses totais/i)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('abre o detalhe no mesmo contexto e marca consultas externas como secundárias', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(
       state({

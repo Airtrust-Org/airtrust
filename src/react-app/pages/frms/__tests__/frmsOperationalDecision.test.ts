@@ -3,6 +3,7 @@ import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOpera
 import {
   classifyOperationalItem,
   operationalConfidence,
+  resolveOperationalDataMoment,
   trustedEffectiveness,
 } from '../frmsOperationalDecision';
 
@@ -138,5 +139,21 @@ describe('frmsOperationalDecision', () => {
         }),
       ),
     ).toBe('NORMAL');
+  });
+
+  it('separa o dia em aberto da pendência retrospectiva sem tornar o alerta verde', () => {
+    const openDay = item({
+      data_operacional: '2026-08-27',
+      teve_jornada: false,
+      teve_atividade_frms: false,
+      jornada_data_source: 'AUSENTE',
+      fatorizacao_status: 'AUSENTE',
+      snapshot_status: 'INCOMPLETO',
+      estado_operacional: 'NAO_AVALIADO',
+    });
+
+    expect(resolveOperationalDataMoment(openDay, '2026-08-27')).toBe('DIA_EM_ABERTO');
+    expect(resolveOperationalDataMoment(openDay, '2026-08-28')).toBe('FECHAMENTO_RETROSPECTIVO_PENDENTE');
+    expect(classifyOperationalItem(openDay)).toBe('CONFIRMAR');
   });
 });
