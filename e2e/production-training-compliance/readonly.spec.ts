@@ -77,33 +77,28 @@ async function login(page: Page) {
   expect(EMAIL).not.toBe('');
   expect(PASSWORD).not.toBe('');
   expect(EMAIL).not.toMatch(/staging\.airtrust\.invalid$/i);
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
+  await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
+  await page.waitForURL((url) => url.pathname.startsWith('/login'), { timeout: 45_000 });
   await assertProductionFrontendShaFromPage(page, EXPECTED_SHA.slice(0, 7), 'production-login');
   await page.locator('input[type="email"]').fill(EMAIL);
   await page.locator('input[type="password"]').fill(PASSWORD);
   await page.getByRole('button', { name: /entrar|sign in/i }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 45_000 });
-  await expect(page).not.toHaveURL(/\/login/);
+  await page.waitForURL((url) => url.pathname === '/treinamentos/compliance', { timeout: 45_000 });
+  await expect(page).toHaveURL(/\/treinamentos\/compliance$/);
 }
 
 test('production intelligent training compliance UI and APIs are coherent and read-only', async ({ page }) => {
   const guard = installProductionReadOnlyGuard(page);
-  await login(page);
-
   const capabilitiesP = waitApi(page, '/api/compliance-treinamentos/capabilities');
   const catalogsP = waitApi(page, '/api/compliance-treinamentos/catalogos');
   const summaryP = waitApi(page, '/api/compliance-treinamentos/resumo');
   const pendingsP = waitApi(page, '/api/compliance-treinamentos/pendencias');
-  await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
+  await login(page);
   await assertProductionFrontendShaFromPage(
     page,
     EXPECTED_SHA.slice(0, 7),
     'production-compliance',
   );
-  await expect(page.getByRole('heading', { name: 'Compliance de Treinamentos' })).toBeVisible();
-  await expect(page.getByRole('combobox').first()).toContainText('Todos os setores');
-  await expect(page.getByRole('combobox').nth(1)).toContainText('Todos os cargos');
-  await expect(page.getByRole('heading', { name: 'Central de pendências' })).toBeVisible();
 
   const [capabilities, catalogs, summary, pendings] = await Promise.all([
     capabilitiesP.then(payload),
@@ -111,6 +106,10 @@ test('production intelligent training compliance UI and APIs are coherent and re
     summaryP.then(payload),
     pendingsP.then(payload),
   ]);
+  await expect(page.getByRole('heading', { name: 'Compliance de Treinamentos' })).toBeVisible();
+  await expect(page.getByRole('combobox').first()).toContainText('Todos os setores');
+  await expect(page.getByRole('combobox').nth(1)).toContainText('Todos os cargos');
+  await expect(page.getByRole('heading', { name: 'Central de pendências' })).toBeVisible();
   expect(capabilities.data.schema_ready).toBe(true);
   expect(capabilities.data.reconciliation_ready).toBe(true);
   expect(capabilities.data.scopes).toEqual(
