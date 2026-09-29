@@ -1,6 +1,6 @@
 /**
  * Regression tests for SCORM asset resolution correctly honoring the
- * course's active/pinned package prefix (lms_cursos.scorm_package_r2_prefix)
+ * course's current active package prefix (lms_cursos.scorm_package_r2_prefix)
  * instead of falling back to an unordered R2 bucket listing across every
  * candidate a course has ever had.
  *
@@ -165,7 +165,7 @@ async function getAsset(path: string, env: Env) {
   );
 }
 
-describe('SCORM asset resolution — active/pinned candidate prefix (BUG 1 regression)', () => {
+describe('SCORM asset resolution — current active candidate prefix', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     verifyJWTMock.mockResolvedValue({
@@ -176,7 +176,7 @@ describe('SCORM asset resolution — active/pinned candidate prefix (BUG 1 regre
     });
   });
 
-  it('honors a matrícula-scoped package pin even after the course activates a newer package', async () => {
+  it('ignores a stale matrícula package pin for an in-progress enrollment after the course activates a newer package', async () => {
     verifyJWTMock.mockResolvedValue({
       empresa_id: EMPRESA_ID,
       funcionario_id: 42,
@@ -194,8 +194,8 @@ describe('SCORM asset resolution — active/pinned candidate prefix (BUG 1 regre
     const res = await getAsset(`/api/lms/scorm/assets/${EMPRESA_ID}/${CURSO_ID}/index.html`, env);
 
     expect(res.status).toBe(200);
-    expect(res.headers.get('X-LMS-Asset-Key')).toBe(`${SUPERSEDED_PREFIX}index.html`);
-    expect(res.headers.get('X-LMS-Asset-Key')).not.toContain('7503f97e-active');
+    expect(res.headers.get('X-LMS-Asset-Key')).toBe(`${ACTIVE_PREFIX}index.html`);
+    expect(res.headers.get('X-LMS-Asset-Key')).not.toContain('12f7d6fd-old');
   });
 
   it('ignores a stale matrícula package pin after the enrollment is completed', async () => {

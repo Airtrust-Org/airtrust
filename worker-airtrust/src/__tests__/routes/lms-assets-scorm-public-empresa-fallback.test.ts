@@ -190,14 +190,13 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
       expect(text).toContain('Empresa não identificada');
     });
 
-    it('pins an in-progress enrollment to the package active when it started', async () => {
+    it('uses the current active package for an in-progress enrollment after a course update', async () => {
       verifyJWTMock.mockResolvedValue({
         empresa_id: 6,
         funcionario_id: 42,
         role: 'admin',
         sub: '42',
       });
-      const historicalPrefix = 'lms/scorm/6/99/_candidates/historical-package/';
       const currentPrefix = 'lms/scorm/6/99/_candidates/current-package/';
       const db = createMockDb([
         [
@@ -209,14 +208,12 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
               empresa_id: 6,
               status: 'EM_ANDAMENTO',
               curso_id: 99,
-              data_inicio: '2026-09-14 14:46:16',
               ativo: 1,
               publicado: 1,
               scorm_package_r2_prefix: currentPrefix,
             }),
           },
         ],
-        ['FROM lms_scorm_package_versions', { first: () => ({ r2_prefix: historicalPrefix }) }],
       ]);
 
       const response = await createApp().fetch(
@@ -234,7 +231,7 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
         expect.objectContaining({
           asset_matricula_id: 77,
           asset_curso_id: 99,
-          asset_scorm_package_prefix: historicalPrefix,
+          asset_scorm_package_prefix: currentPrefix,
         }),
         'test-secret',
         expect.any(Number),
