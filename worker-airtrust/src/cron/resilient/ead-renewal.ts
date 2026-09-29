@@ -5,9 +5,6 @@ import {
   resetMatriculaForNewCycle,
 } from '../../services/lms-matricula-cycle';
 import { getQualificacoesVencimentoExpr } from '../../utils/qualificacoes-alerta-config';
-import { sendEmail } from '../../lib/email';
-import { resolveTrainingAccessUrl } from '../../utils/lms-training-link';
-import type { Env } from '../../types';
 import {
   enqueueCronJobItem,
   listRunnableCronJobItems,
@@ -268,94 +265,10 @@ async function ensureRenewalMatricula(
   }
 }
 
-async function ensureRenewalNotification(
-  db: D1Database,
-  payload: RenewalPayload,
-  matriculaId: number,
-): Promise<void> {
-  const notificationId = [
-    'lms',
-    'lms_renovacao_automatica',
-    payload.empresa_id,
-    payload.funcionario_id,
-    'lms_matricula',
-    matriculaId,
-    payload.qualificacao_historico_id,
-  ].join(':');
+// Renovação EAD cria/reabre a matrícula, mas não envia alerta próprio.
+// Alertas de vencimento são responsabilidade exclusiva da régua canônica diária.
 
-  await db
-    .prepare(
-      `INSERT OR IGNORE INTO notificacoes_inapp (
-         id, funcionario_id, empresa_id, tipo, titulo, mensagem,
-         referencia_id, referencia_tipo, created_at
-       ) VALUES (?, ?, ?, 'lms_renovacao_automatica',
-         'Treinamento de renovação disponível',
-         'Sua qualificação EAD vence em breve. Você foi matriculado automaticamente em: ' || ?,
-         ?, 'lms_matricula', ?)`,
-    )
-    .bind(
-      notificationId,
-      String(payload.funcionario_id),
-      payload.empresa_id,
-      payload.curso_titulo,
-      String(matriculaId),
-      new Date().toISOString(),
-    )
-    .run();
-}
-
-async function ensureRenewalEmail(
-  env: Env,
-  db: D1Database,
-  payload: RenewalPayload,
-): Promise<void> {
-  try {
-    const func = await db
-      .prepare(
-        `SELECT nome, email FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
-      )
-      .bind(payload.funcionario_id, payload.empresa_id)
-      .first<{ nome: string; email: string | null }>();
-
-    if (!func?.email) return;
-
-    const cursoUrl =
-      (await resolveTrainingAccessUrl(env, db, {
-        empresaId: payload.empresa_id,
-        funcionarioId: payload.funcionario_id,
-        cursoId: payload.curso_id,
-      })) ||
-      `${String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '')}/lms/cursos/${payload.curso_id}`;
-    const nomeAluno = func.nome || `Funcionário ${payload.funcionario_id}`;
-
-    await sendEmail(env, {
-      to: [{ email: func.email, name: nomeAluno }],
-      subject: `Treinamento disponível: ${payload.curso_titulo}`,
-      textContent: [
-        `Olá ${nomeAluno},`,
-        '',
-        `Sua qualificação EAD vence em breve. Você foi matriculado automaticamente no curso: ${payload.curso_titulo}`,
-        '',
-        `Acesse: ${cursoUrl}`,
-        '',
-        'Este e-mail foi enviado automaticamente pela plataforma AirTrust.',
-      ].join('\n'),
-      htmlContent: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
-        <p>Olá <strong>${nomeAluno}</strong>,</p>
-        <p>Sua qualificação EAD vence em breve. Você foi matriculado automaticamente no curso:</p>
-        <div style="background:#f0f9ff;border-left:4px solid #3b82f6;padding:12px 16px;margin:12px 0;border-radius:4px">
-          <p style="font-size:16px;font-weight:600;margin:0;color:#1e3a5f">${payload.curso_titulo}</p>
-        </div>
-        <p style="margin:24px 0"><a href="${cursoUrl}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block">Acessar curso</a></p>
-        <p style="color:#6b7280;font-size:12px;margin-top:24px">Este e-mail foi enviado automaticamente pela plataforma AirTrust.</p>
-      </div>`,
-    });
-  } catch (err) {
-    console.warn('[ead-renewal] Falha ao enviar email de renovação:', err);
-  }
-}
-
-export async function runEadRenewalJob(db: D1Database, env: Env, logger: CronJobLogger) {
+export async function runEadRenewalJob(db: D1Database, logger: CronJobLogger) {
   return runCronJobWithLease({
     db,
     jobName: JOB_NAME,
@@ -435,13 +348,11 @@ export async function runEadRenewalJob(db: D1Database, env: Env, logger: CronJob
 
         try {
           const result = await ensureRenewalMatricula(db, payload);
-          await ensureRenewalNotification(db, payload, result.matriculaId);
-          await ensureRenewalEmail(env, db, payload);
           await markCronJobItemSucceeded(db, {
             jobName: JOB_NAME,
             scopeKey: SCOPE_KEY,
             itemKey: item.item_key,
-            stage: 'MATRICULA_CYCLE_NOTIFICATION_READY',
+            stage: 'MATRICULA_CYCLE_READY',
           });
           processed++;
           if (result.created) created++;

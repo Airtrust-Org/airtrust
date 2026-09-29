@@ -35,30 +35,22 @@ describe('renovacao automatica LMS por qualificacao EAD', () => {
     expect(source).toContain('canReuseMatriculaCycle(existing)');
     expect(source).toContain('resetMatriculaForNewCycle(db');
     expect(source).toContain("origin: 'AUTO_RENOVACAO'");
-    expect(source).toContain('ensureRenewalNotification(db');
-    expect(source).toContain('MATRICULA_CYCLE_NOTIFICATION_READY');
+    expect(source).not.toContain('ensureRenewalNotification(db');
+    expect(source).toContain('MATRICULA_CYCLE_READY');
     expect(source).not.toContain('EXISTING_INACTIVE_PRESERVED');
     expect(source).toContain('EAD_RENEWAL_EXISTING_MATRICULA_NOT_REUSABLE');
   });
 
-  it('envia email focado da renovação somente após matrícula e notificação, sem tornar o job bloqueante', () => {
+  it('renovação EAD não envia email nem notificação paralela', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/cron/resilient/ead-renewal.ts'),
       'utf8',
     );
 
-    expect(source).toContain("import { sendEmail } from '../../lib/email';");
-    expect(source).toContain('async function ensureRenewalEmail(');
-    expect(source).toContain('await ensureRenewalNotification(db, payload, result.matriculaId);');
-    expect(source).toContain('await ensureRenewalEmail(env, db, payload);');
-    expect(
-      source.indexOf('await ensureRenewalNotification(db, payload, result.matriculaId);'),
-    ).toBeLessThan(source.indexOf('await ensureRenewalEmail(env, db, payload);'));
-    expect(source).toContain(
-      "console.warn('[ead-renewal] Falha ao enviar email de renovação:', err);",
-    );
-    expect(source).toContain('resolveTrainingAccessUrl(env, db, {');
-    expect(source).toContain('cursoId: payload.curso_id');
-    expect(source).toContain("`${String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\\\/$/, '')}/lms/cursos/${payload.curso_id}`");
+    expect(source).not.toContain("import { sendEmail } from '../../lib/email';");
+    expect(source).not.toContain('ensureRenewalEmail(');
+    expect(source).not.toContain('ensureRenewalNotification(');
+    expect(source).not.toContain('INSERT OR IGNORE INTO notificacoes_inapp');
+    expect(source).toContain('responsabilidade exclusiva da régua canônica diária');
   });
 });

@@ -72,16 +72,6 @@ type Communication = {
   gestor: boolean;
 };
 
-type NotificationPolicy = {
-  enabled: boolean;
-  email: boolean;
-  whatsapp: boolean;
-  due_day_thresholds: number[];
-  never_done_every_days: number;
-  notify_manager_on_overdue: boolean;
-  manager_overdue_thresholds: number[];
-};
-
 type ComplianceTrendPoint = {
   snapshot_date: string;
   setor_id: number;
@@ -659,60 +649,24 @@ function PendingFilters({
 }
 
 export function TrainingComplianceNotificationSettings() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const role = String(user?.role || '').toLowerCase();
-  const canEdit = role === 'admin' || role === 'administrador' || role.includes('super');
-  const policyQuery = useQuery({
-    queryKey: ['training-compliance', 'notification-policy'],
-    queryFn: async () => readJson<NotificationPolicy>(await fetchWithAuth('/api/compliance-treinamentos/configuracao-alertas')),
-  });
-  const [policy, setPolicy] = useState<NotificationPolicy | null>(null);
-  const [thresholds, setThresholds] = useState('30, 15, 7, 0, -7, -15, -30');
-  const [managerThresholds, setManagerThresholds] = useState('0, -7, -15, -30');
-
-  useEffect(() => {
-    if (!policyQuery.data) return;
-    setPolicy(policyQuery.data);
-    setThresholds(policyQuery.data.due_day_thresholds.join(', '));
-    setManagerThresholds(policyQuery.data.manager_overdue_thresholds.join(', '));
-  }, [policyQuery.data]);
-
-  const save = useMutation({
-    mutationFn: async () => {
-      if (!policy) throw new Error('Configuração ainda não carregada');
-      const parse = (value: string) => [...new Set(value.split(',').map((item) => Number(item.trim())).filter((value) => Number.isInteger(value)))];
-      return readJson<NotificationPolicy>(
-        await fetchWithAuth('/api/compliance-treinamentos/configuracao-alertas', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...policy, due_day_thresholds: parse(thresholds), manager_overdue_thresholds: parse(managerThresholds) }),
-        }),
-      );
-    },
-    onSuccess: (data) => {
-      setPolicy(data);
-      toast.success('Régua automática de compliance atualizada.');
-      void queryClient.invalidateQueries({ queryKey: ['training-compliance', 'notification-policy'] });
-    },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Falha ao salvar régua'),
-  });
-
-  if (!policy) return <div className="rounded-xl border border-slate-200 p-4 text-sm text-slate-500">Carregando régua de notificações...</div>;
-
   return (
     <section className="rounded-xl border border-blue-200 bg-blue-50/30 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div><h3 className="flex items-center gap-2 font-semibold text-slate-900"><Settings2 className="h-4 w-4 text-primary" /> Régua automática de cobrança</h3><p className="mt-1 text-xs text-slate-500">Opt-in: quando ativada pelo administrador, dispara lembretes por estágio e interrompe automaticamente quando o requisito volta a ficar conforme.</p></div>
-        <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" disabled={!canEdit} checked={policy.enabled} onChange={(event) => setPolicy({ ...policy, enabled: event.target.checked })} /> Ativa</label>
+      <div className="flex items-start gap-3">
+        <Settings2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <div>
+          <h3 className="font-semibold text-slate-900">Alertas automáticos centralizados</h3>
+          <p className="mt-1 text-sm text-slate-600">
+            O módulo de Compliance não mantém uma régua automática paralela. Os alertas de
+            treinamento usam exclusivamente a régua de qualificações: CHECK para gestores em
+            45/30/15/7 dias e funcionário em 30/15/7 dias, com processamento diário às 05:00
+            (horário de Brasília).
+          </p>
+          <p className="mt-2 text-xs text-slate-500">
+            As cobranças manuais desta tela continuam disponíveis e os snapshots diários de
+            compliance continuam sendo atualizados para relatórios e tendências.
+          </p>
+        </div>
       </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <label className="text-sm text-slate-700"><span className="mb-1 block text-xs font-semibold text-slate-500">Canais automáticos</span><span className="flex gap-4 rounded-lg border border-slate-200 bg-white px-3 py-2"><label className="flex items-center gap-1.5"><input type="checkbox" disabled={!canEdit} checked={policy.email} onChange={(event) => setPolicy({ ...policy, email: event.target.checked })} /> E-mail</label><label className="flex items-center gap-1.5"><input type="checkbox" disabled={!canEdit} checked={policy.whatsapp} onChange={(event) => setPolicy({ ...policy, whatsapp: event.target.checked })} /> WhatsApp</label></span></label>
-        <label className="text-sm text-slate-700"><span className="mb-1 block text-xs font-semibold text-slate-500">Dias / estágios</span><input disabled={!canEdit} value={thresholds} onChange={(event) => setThresholds(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2" /></label>
-        <label className="text-sm text-slate-700"><span className="mb-1 block text-xs font-semibold text-slate-500">Nunca realizou: repetir a cada</span><div className="flex items-center gap-2"><input type="number" min={1} max={90} disabled={!canEdit} value={policy.never_done_every_days} onChange={(event) => setPolicy({ ...policy, never_done_every_days: Math.max(1, Number(event.target.value) || 1) })} className="w-24 rounded-lg border border-slate-300 bg-white px-3 py-2" /><span>dias</span></div></label>
-        <label className="text-sm text-slate-700"><span className="mb-1 block text-xs font-semibold text-slate-500">Escalonar ao gestor</span><label className="mb-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"><input type="checkbox" disabled={!canEdit} checked={policy.notify_manager_on_overdue} onChange={(event) => setPolicy({ ...policy, notify_manager_on_overdue: event.target.checked })} /> Ativo</label><input disabled={!canEdit || !policy.notify_manager_on_overdue} value={managerThresholds} onChange={(event) => setManagerThresholds(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2" /></label>
-      </div>
-      <div className="mt-3 flex items-center justify-between gap-3"><p className="text-xs text-slate-500">Valores negativos representam dias após o vencimento. Ex.: -7 = vencido há 7 dias.</p>{canEdit ? <button type="button" disabled={save.isPending} onClick={() => save.mutate()} className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{save.isPending ? 'Salvando...' : 'Salvar régua'}</button> : <span className="text-xs text-slate-500">Somente administrador pode alterar.</span>}</div>
     </section>
   );
 }

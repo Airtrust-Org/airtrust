@@ -6,6 +6,7 @@ import { processarNotificacoes } from '../cron/notificacoes';
 import { createLogger, toError } from '../utils/logger';
 import type { Env } from '../types';
 import { getModuleAlertSettings, saveModuleAlertSettings } from '../services/module-alert-settings';
+import { getTrainingAlertStage } from '../services/training-alert-policy';
 import {
   appendEmployeeSectorFilter,
   getEmployeeSectorAccess,
@@ -529,9 +530,105 @@ app.put('/configuracoes-sgso-sla', auth(), requireRole('admin'), async (c) => {
   }
 });
 
+async function syncQualificationWhatsappStage(
+  db: D1Database,
+  params: {
+    empresaId: number;
+    codigo: string;
+    ativo: number;
+    diasAntes: number;
+    frequencia: string;
+    intervaloDias: number | null;
+  },
+): Promise<void> {
+  const stage = getTrainingAlertStage(params.codigo);
+  if (!stage?.employeeWhatsapp) return;
+
+  const base = await db
+    .prepare(
+      `SELECT id, urgencia, destinatarios, template, assunto_template
+         FROM notificacoes_config
+        WHERE empresa_id IS NULL
+          AND tipo = 'WHATSAPP'
+          AND deleted_at IS NULL
+          AND (
+            UPPER(COALESCE(codigo, '')) = ?
+            OR (codigo IS NULL AND (LOWER(COALESCE(urgencia, '')) = ? OR dias_antes = ?))
+          )
+        ORDER BY CASE WHEN UPPER(COALESCE(codigo, '')) = ? THEN 0 ELSE 1 END, id DESC
+        LIMIT 1`,
+    )
+    .bind(params.codigo, stage.urgency, stage.defaultDays, params.codigo)
+    .first<Record<string, unknown>>();
+  if (!base) return;
+
+  const existing = await db
+    .prepare(
+      `SELECT id
+         FROM notificacoes_config
+        WHERE empresa_id = ?
+          AND tipo = 'WHATSAPP'
+          AND deleted_at IS NULL
+          AND (
+            UPPER(COALESCE(codigo, '')) = ?
+            OR (codigo IS NULL AND LOWER(COALESCE(urgencia, '')) = ?)
+          )
+        ORDER BY id DESC LIMIT 1`,
+    )
+    .bind(params.empresaId, params.codigo, stage.urgency)
+    .first<{ id: number }>();
+
+  if (existing?.id) {
+    await db
+      .prepare(
+        `UPDATE notificacoes_config
+            SET ativo = ?, dias_antes = ?, urgencia = ?, destinatarios = ?, template = ?,
+                codigo = ?, assunto_template = ?, frequencia = ?, intervalo_dias = ?,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND empresa_id = ?`,
+      )
+      .bind(
+        params.ativo,
+        params.diasAntes,
+        stage.urgency,
+        base.destinatarios ?? null,
+        base.template ?? '',
+        params.codigo,
+        base.assunto_template ?? null,
+        params.frequencia,
+        params.intervaloDias,
+        existing.id,
+        params.empresaId,
+      )
+      .run();
+    return;
+  }
+
+  await db
+    .prepare(
+      `INSERT INTO notificacoes_config
+          (tipo, ativo, dias_antes, urgencia, destinatarios, template, empresa_id, codigo,
+           assunto_template, frequencia, intervalo_dias, created_at, updated_at)
+       VALUES ('WHATSAPP', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    )
+    .bind(
+      params.ativo,
+      params.diasAntes,
+      stage.urgency,
+      base.destinatarios ?? null,
+      base.template ?? '',
+      params.empresaId,
+      params.codigo,
+      base.assunto_template ?? null,
+      params.frequencia,
+      params.intervaloDias,
+    )
+    .run();
+}
+
 // =============================================
 // GET /api/notificacoes/configuracoes-qualificacoes
-// Régua efetiva de e-mail por empresa. Linhas globais são defaults; overrides são tenant-scoped.
+// Régua canônica por empresa. E-mail é a configuração visível; 30/15/7 sincronizam o mesmo estágio no WhatsApp.
 // =============================================
 app.get('/configuracoes-qualificacoes', auth(), requireRole('admin', 'manager'), async (c) => {
   try {
@@ -680,6 +777,15 @@ app.put('/configuracoes-qualificacoes/:codigo', auth(), requireRole('admin'), as
         .run();
     }
 
+    await syncQualificationWhatsappStage(c.env.DB, {
+      empresaId,
+      codigo,
+      ativo,
+      diasAntes,
+      frequencia,
+      intervaloDias,
+    });
+
     const updated = await c.env.DB.prepare(
       `SELECT id, tipo, ativo, dias_antes, urgencia, destinatarios, template,
                 empresa_id, codigo, assunto_template, frequencia, intervalo_dias,
@@ -716,6 +822,22 @@ app.delete('/configuracoes-qualificacoes/:codigo', auth(), requireRole('admin'),
     )
       .bind(empresaId, codigo)
       .run();
+    const stage = getTrainingAlertStage(codigo);
+    if (stage?.employeeWhatsapp) {
+      await c.env.DB.prepare(
+        `UPDATE notificacoes_config
+            SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+          WHERE empresa_id = ?
+            AND tipo = 'WHATSAPP'
+            AND deleted_at IS NULL
+            AND (
+              UPPER(COALESCE(codigo, '')) = ?
+              OR (codigo IS NULL AND LOWER(COALESCE(urgencia, '')) = ?)
+            )`,
+      )
+        .bind(empresaId, codigo, stage.urgency)
+        .run();
+    }
     return c.json({ success: true });
   } catch (error) {
     return notificacoesErrorResponse(

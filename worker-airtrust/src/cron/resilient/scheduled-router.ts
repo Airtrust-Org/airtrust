@@ -1,15 +1,16 @@
 import type { Env } from '../../types';
 import { createStructuredConsole } from '../../utils/logger';
 import { alertasDiariosHandler } from '../alertasDiarios';
+import { processarNotificacoes, TRAINING_ALERT_DAILY_CRON } from '../notificacoes';
+import { refreshTrainingComplianceSnapshots } from '../training-compliance-notifications';
 import { logCronHealthSnapshot } from './cron-health';
 import { runDailyFrmsOperations } from './daily-frms';
 import { runDomainEventDispatchJob } from './domain-events';
 import { runEadRenewalJob } from './ead-renewal';
-import { runLmsReminderJob } from './lms-reminders';
 import { runSigvoosFrmsJobs } from './sigvoos-frms';
 
 const TEN_MINUTE_CRON = '*/10 * * * *';
-const DAILY_UTC_CRON = '0 8 * * *';
+const DAILY_UTC_CRON = TRAINING_ALERT_DAILY_CRON;
 const LEGACY_DELEGATED_CRON = '__airtrust_resilient_delegated__';
 
 type LegacyScheduledHandler = (
@@ -21,7 +22,6 @@ type LegacyScheduledHandler = (
 export interface ResilientCronPlan {
   useResilientJobs: boolean;
   runDailyAlerts: boolean;
-  runLmsReminders: boolean;
   runEadRenewal: boolean;
   runDailyFrms: boolean;
   runSigvoosFrms: boolean;
@@ -30,13 +30,12 @@ export interface ResilientCronPlan {
   delegateLegacy: boolean;
 }
 
-export function getResilientCronPlan(cron: string, now = new Date()): ResilientCronPlan {
+export function getResilientCronPlan(cron: string, _now = new Date()): ResilientCronPlan {
   const isTenMinute = cron === TEN_MINUTE_CRON;
   const isDaily = cron === DAILY_UTC_CRON;
   return {
     useResilientJobs: isTenMinute || isDaily,
     runDailyAlerts: isDaily,
-    runLmsReminders: isDaily || (isTenMinute && now.getUTCHours() === 8),
     runEadRenewal: isTenMinute || isDaily,
     runDailyFrms: isDaily,
     runSigvoosFrms: isTenMinute,
@@ -127,9 +126,12 @@ export async function runResilientScheduledJobs(
   // Preserve the existing ordering. Isolation is sequential rather than
   // Promise.allSettled because SIGVOOS/domain-event/FRMS jobs can have
   // operational dependencies and must not be made concurrent by a reliability fix.
+  await runStep('training-compliance-snapshots', plan.runDailyAlerts, () =>
+    refreshTrainingComplianceSnapshots(env),
+  );
+  await runStep('training-alerts', plan.runDailyAlerts, () => processarNotificacoes(env));
   await runStep('daily-alerts', plan.runDailyAlerts, () => alertasDiariosHandler(event, env));
-  await runStep('lms-reminders', plan.runLmsReminders, () => runLmsReminderJob(env.DB, logger, now));
-  await runStep('ead-renewal', plan.runEadRenewal, () => runEadRenewalJob(env.DB, env, logger));
+  await runStep('ead-renewal', plan.runEadRenewal, () => runEadRenewalJob(env.DB, logger));
   await runStep('sigvoos-frms', plan.runSigvoosFrms, () =>
     runSigvoosFrmsJobs(env.DB, env, logger, now),
   );
