@@ -134,9 +134,9 @@ describe('FrmsSignalGrid', () => {
     ];
 
     render(<FrmsSignalGrid item={item()} />);
-    expect(
-      screen.getByLabelText('Prontidão: Baseline em formação — informativo'),
-    ).toBeInTheDocument();
+    const baseline = screen.getByLabelText('Prontidão: Baseline em formação — informativo');
+    expect(baseline).toHaveClass('bg-sky-50');
+    expect(baseline).not.toHaveClass('bg-slate-50');
     expect(screen.getByText('3 sessões válidas no baseline')).toBeInTheDocument();
   });
 
