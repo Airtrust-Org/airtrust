@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-09-27",
-    "last_reconciled_against": "0516 tenant-configurable qualification alerts and expired daily notifications prepared after 0515; remote apply pending",
-    "schema_v2_digest": "4f8d08bb1ae0d99c9a82f05532f66db5546dde8a94fe43e6da7587769d1ee667",
+    "last_reconciled_at": "2026-09-29",
+    "last_reconciled_against": "0517 Training Compliance conditions/applicability prepared after 0516; remote apply pending",
+    "schema_v2_digest": "c2fc7b1b2b44a8ccdfa91dd7b2789e41bd0e9e882bf77ed308ac60a8fde63774",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1119,6 +1119,21 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "qualification-expired-daily-alerts-0516.json",
       "note": "0516 is reviewed and prepared only. It extends notificacoes_config with tenant override identity, editable subject and frequency fields; preserves global rows as defaults; corrects the 30-day default text; and adds a daily expired-qualification stage. Runtime delivery remains tenant-scoped and resolves employee plus active sector managers. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0517_training_compliance_conditions.sql",
+      "change_id": "training-compliance-conditions-0517",
+      "sha256": "a039702b9f78664c2849fda428c923bee7b312135e0e307e0a8770bcfe59bf05",
+      "targets": [
+        "compliance_condicoes",
+        "funcionarios_compliance_condicoes",
+        "treinamento_requisitos"
+      ],
+      "domain": "Training Compliance risk/exposure/designation conditions, auditable applicability and evidence semantics",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-conditions-0517.json",
+      "note": "0517 is reviewed and prepared only. It adds tenant-scoped condition assignments and requirement applicability/evidence metadata, without deriving obligations from qualification history or creating LMS enrollments. Remote apply requires the governed Schema V2 workflow, staging validation, recovery point, ledger verification and exact-SHA production authorization."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",

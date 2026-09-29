@@ -18,6 +18,7 @@ import {
 import { createStructuredConsole } from '../utils/logger';
 import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
 import { getSetorGestoresBySetor } from '../services/setores-gestores';
+import { trainingComplianceEffectiveRequirementPredicateSql } from '../services/training-compliance-rule-engine';
 import {
   inferTrainingAlertStageCode,
   trainingAlertAudience,
@@ -265,6 +266,7 @@ export function buildQualificacoesParaNotificarQuery(): string {
       AND ${sqlStatusNotEqualsAny(qualificationStatusExpr, CANCELLED_STATUS_VALUES)}
       AND qh.empresa_id = ?
       AND f.empresa_id = ?
+      AND ${trainingComplianceEffectiveRequirementPredicateSql({ qualificationExpr: 'qt.id', empresaExpr: 'qh.empresa_id' })}
       AND qh.id IN (
         -- Apenas o registro mais recente de cada qualificação por funcionário
         SELECT MAX(id)

@@ -646,9 +646,7 @@ describe('training compliance engine', () => {
     `);
     const withOpenEnrollment = (await (await app.request('/reconciliacao')).json()) as any;
     expect(
-      withOpenEnrollment.data.gaps_matricula.find(
-        (item: any) => item.qualificacao_tipo_id === 101,
-      ),
+      withOpenEnrollment.data.gaps_matricula.find((item: any) => item.qualificacao_tipo_id === 101),
     ).toBeUndefined();
   });
 
@@ -842,4 +840,31 @@ describe('training compliance engine', () => {
     });
   });
 
+  it('não aceita EAD como evidência quando o requisito exige modalidade presencial', async () => {
+    sqlite.database.exec(`
+      ALTER TABLE treinamento_requisitos ADD COLUMN modalidade_requerida TEXT;
+      ALTER TABLE qualificacoes_historico ADD COLUMN formato_codigo TEXT;
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem, modalidade_requerida)
+      VALUES (1, 100, 'FUNCAO', 1, 'OBRIGATORIA', 'REGULATORIO', 'PRESENCIAL');
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at, formato_codigo)
+      VALUES (1000, 100, 'MNT-12', 'EAD', '2026-08-01', '2028-08-01',
+              'CONCLUIDA', 0, 1, '2026-08-01', '2026-08-01', 'EAD');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request('/funcionarios/1000');
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(body.data.nao_realizados).toBe(1);
+    expect(body.data.requisitos[0]).toMatchObject({
+      qualificacao_tipo_id: 100,
+      status_compliance: 'NAO_REALIZADO',
+      modalidade_requerida: 'PRESENCIAL',
+      evidencia_modalidade: 'EAD',
+      evidencia_modalidade_incompativel: true,
+    });
+  });
 });
