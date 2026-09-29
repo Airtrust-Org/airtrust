@@ -383,7 +383,7 @@ function DetailDrawer({
             </div>
             {decisionIsLimited ? (
               <p className="mt-3 text-sm font-medium text-amber-800 dark:text-amber-200">
-                Dados insuficientes para confirmar a decisão. Indicadores favoráveis acima são auxiliares e não liberam esta condição.
+                Dados insuficientes para confirmar a decisão. Sinais verdes indicam dados favoráveis já apurados, mas não substituem os dados que ainda estão pendentes.
               </p>
             ) : null}
             {gaps.length > 0 ? (
