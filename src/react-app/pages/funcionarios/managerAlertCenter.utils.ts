@@ -246,7 +246,7 @@ export function buildManagerAlerts({
             ? 'Reconciliar jornada, escala e fatorização antes de seguir com a operação.'
             : 'Revisar vínculos entre escala publicada, EVD e jornada FRMS.',
         actionLabel: 'Revisar escala',
-        href: '/escalas/evd',
+        href: '/escalas/diaria',
         module: 'ESCALAS',
         freshness: `Snapshot operacional · ${todayLabel}`,
         count: escalaRisco,

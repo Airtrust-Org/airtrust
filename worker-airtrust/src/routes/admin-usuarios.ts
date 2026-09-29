@@ -206,47 +206,15 @@ function normalizePermissions(input: PermissionInput[]): PermissionInput[] {
 }
 
 // GET /api/admin/usuarios
-// ADMIN/ADMINISTRADOR is a tenant role. Only persisted platform access may list
-// identities from every tenant.
+// The visible administration surface is always scoped to the active tenant,
+// including for persisted platform administrators. Cross-tenant operations
+// remain explicit on target-specific endpoints and must not duplicate one
+// identity once per company in the normal user list.
 protectedAdminUsuariosRoutes.get('/', async (c) => {
   const callerRole = getCallerRole(c);
   requireAdminOrGestor(callerRole, 'listar usuários');
-  const callerId = getCallerId(c);
   const { empresaId } = getTenantContext(c);
   const db = c.env.DB;
-  const platformAdmin = await hasPlatformAdminAccess(db, callerId);
-
-  if (platformAdmin) {
-    const result = await db
-      .prepare(
-        `SELECT
-           u.id,
-           u.email,
-           u.nome,
-           COALESCE(ue.role, u.perfil) AS perfil,
-           u.active,
-           u.funcionario_id,
-           f.nome AS funcionario_nome,
-           ue.empresa_id,
-           e.nome AS empresa_nome,
-           ue.is_primary,
-           u.created_at,
-           u.last_login,
-           (SELECT COUNT(*) FROM convites_usuarios cu
-            WHERE cu.usuario_id = u.id AND cu.empresa_id = ue.empresa_id
-              AND cu.used_at IS NULL AND datetime(cu.expires_at) > datetime('now'))
-             AS convite_pendente
-         FROM usuarios u
-         INNER JOIN usuarios_empresas ue ON ue.usuario_id = u.id
-         INNER JOIN empresas e ON e.id = ue.empresa_id AND e.deleted_at IS NULL
-         LEFT JOIN funcionarios f ON f.id = u.funcionario_id AND f.deleted_at IS NULL
-         WHERE u.deleted_at IS NULL
-         ORDER BY u.nome ASC`,
-      )
-      .all<UserListRow>();
-
-    return c.json({ success: true, data: result.results || [] });
-  }
 
   const result = await db
     .prepare(
@@ -254,7 +222,27 @@ protectedAdminUsuariosRoutes.get('/', async (c) => {
          u.id,
          u.email,
          u.nome,
-         COALESCE(ue.role, u.perfil) AS perfil,
+         COALESCE(
+           (SELECT uep.perfil
+              FROM usuarios_empresas_perfis uep
+             WHERE uep.usuario_id = u.id
+               AND uep.empresa_id = ue.empresa_id
+               AND uep.ativo = 1
+             ORDER BY CASE UPPER(uep.perfil)
+               WHEN 'ADMINISTRADOR' THEN 5
+               WHEN 'ADMIN' THEN 5
+               WHEN 'GESTOR' THEN 4
+               WHEN 'MANAGER' THEN 4
+               WHEN 'INSTRUTOR' THEN 3
+               WHEN 'INSTRUCTOR' THEN 3
+               WHEN 'ALUNO' THEN 2
+               WHEN 'STUDENT' THEN 2
+               ELSE 1
+             END DESC
+             LIMIT 1),
+           ue.role,
+           'ALUNO'
+         ) AS perfil,
          u.active,
          u.funcionario_id,
          f.nome AS funcionario_nome,
@@ -264,17 +252,20 @@ protectedAdminUsuariosRoutes.get('/', async (c) => {
          u.created_at,
          u.last_login,
          (SELECT COUNT(*) FROM convites_usuarios cu
-          WHERE cu.usuario_id = u.id AND cu.empresa_id = ?
+          WHERE cu.usuario_id = u.id AND cu.empresa_id = ue.empresa_id
             AND cu.used_at IS NULL AND datetime(cu.expires_at) > datetime('now'))
            AS convite_pendente
        FROM usuarios u
        INNER JOIN usuarios_empresas ue ON ue.usuario_id = u.id AND ue.empresa_id = ?
        INNER JOIN empresas e ON e.id = ue.empresa_id AND e.deleted_at IS NULL
-       LEFT JOIN funcionarios f ON f.id = u.funcionario_id AND f.deleted_at IS NULL
+       LEFT JOIN funcionarios f
+         ON f.id = u.funcionario_id
+        AND f.empresa_id = ue.empresa_id
+        AND f.deleted_at IS NULL
        WHERE u.deleted_at IS NULL
        ORDER BY u.nome ASC`,
     )
-    .bind(empresaId, empresaId)
+    .bind(empresaId)
     .all<UserListRow>();
 
   return c.json({ success: true, data: result.results || [] });

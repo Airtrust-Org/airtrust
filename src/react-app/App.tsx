@@ -20,6 +20,7 @@ import { syncRuntimeTranslation } from './i18n/runtimeTranslator';
 import { ThemeProvider } from './theme/ThemeProvider';
 import HomeRouter from './components/HomeRouter';
 import { resolveTrainingEntryPath } from './lib/training-entry';
+import { CANONICAL_DUPLICATE_ROUTE_TARGETS } from './lib/canonical-duplicate-routes';
 
 // 🚀 LAZY LOADING: Páginas principais (code splitting)
 const TrocarSenhaPage = lazyWithRetry(() => import('./pages/TrocarSenhaPage'), 'TrocarSenhaPage');
@@ -51,10 +52,6 @@ const FichaFuncionarioPage = lazyWithRetry(
 const PerfilFuncionario = lazyWithRetry(
   () => import('./pages/funcionarios/PerfilFuncionario'),
   'PerfilFuncionario',
-);
-const ImportacaoPageV2 = lazyWithRetry(
-  () => import('./pages/ImportacaoPageV2'),
-  'ImportacaoPageV2',
 );
 const Simuladores = lazyWithRetry(() => import('./pages/Simuladores'), 'Simuladores');
 const SimuladoresDashboard = lazyWithRetry(
@@ -149,13 +146,9 @@ const ConfiguracoesCadastros = lazyWithRetry(
 );
 const Configuracoes = lazyWithRetry(() => import('./pages/Configuracoes'), 'Configuracoes');
 const SistemaPage = lazyWithRetry(() => import('./pages/Sistema'), 'SistemaPage');
-const ConfiguracoesCadastrosGerais = lazyWithRetry(
-  () => import('./pages/Configuracoes/CadastrosPage'),
-  'ConfiguracoesCadastrosGerais',
-);
-const IntegracoesEdApp = lazyWithRetry(
-  () => import('./pages/Configuracoes/Integracoes/EdApp'),
-  'IntegracoesEdApp',
+const IntegracoesSigvoos = lazyWithRetry(
+  () => import('./pages/Configuracoes/Integracoes/Sigvoos'),
+  'IntegracoesSigvoos',
 );
 const ComplianceSettings = lazyWithRetry(
   () => import('./pages/ComplianceSettings').then((m) => ({ default: m.ComplianceSettings })),
@@ -170,7 +163,6 @@ const ValidarCertificado = lazyWithRetry(
   'ValidarCertificado',
 );
 const AceitarConvite = lazyWithRetry(() => import('./pages/AceitarConvite'), 'AceitarConvite');
-const AdminUsuarios = lazyWithRetry(() => import('./pages/admin/UsuariosPage'), 'AdminUsuarios');
 const AdminPermissoes = lazyWithRetry(
   () => import('./pages/admin/PermissoesPage'),
   'AdminPermissoes',
@@ -344,6 +336,12 @@ const RuntimeTranslationBridge = () => {
   return null;
 };
 
+function LegacyFuncionarioRouteRedirect() {
+  const { id } = useParams<{ id: string }>();
+  if (!id) return <Navigate to="/funcionarios" replace />;
+  return <Navigate to={`/funcionarios/${encodeURIComponent(id)}/ficha`} replace />;
+}
+
 function LmsEntryRouter() {
   const { user, isLoading } = useAuth();
   if (isLoading) return null;
@@ -403,7 +401,7 @@ export default function App() {
                         path="/admin/usuarios"
                         element={
                           <ProtectedRoute>
-                            <AdminUsuarios />
+                            <Navigate to={CANONICAL_DUPLICATE_ROUTE_TARGETS['/admin/usuarios']} replace />
                           </ProtectedRoute>
                         }
                       />
@@ -431,22 +429,8 @@ export default function App() {
                           </ProtectedRoute>
                         }
                       />
-                      <Route
-                        path="/home"
-                        element={
-                          <ProtectedRoute>
-                            <HomeRouter />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/dashboard"
-                        element={
-                          <ProtectedRoute>
-                            <HomeRouter />
-                          </ProtectedRoute>
-                        }
-                      />
+                      <Route path="/home" element={<Navigate to={CANONICAL_DUPLICATE_ROUTE_TARGETS['/home']} replace />} />
+                      <Route path="/dashboard" element={<Navigate to={CANONICAL_DUPLICATE_ROUTE_TARGETS['/dashboard']} replace />} />
                       <Route
                         path="/perfil/trocar-senha"
                         element={
@@ -551,7 +535,7 @@ export default function App() {
                       path="/funcionarios/:id"
                       element={
                         <ProtectedRoute requiredPermission="funcionarios.view">
-                          <FichaFuncionarioPage />
+                          <LegacyFuncionarioRouteRedirect />
                         </ProtectedRoute>
                       }
                     />
@@ -769,25 +753,17 @@ export default function App() {
                     />
                     <Route
                       path="/configuracoes/cadastros"
-                      element={
-                        <ProtectedRoute>
-                          <ConfiguracoesCadastrosGerais />
-                        </ProtectedRoute>
-                      }
+                      element={<Navigate to={CANONICAL_DUPLICATE_ROUTE_TARGETS['/configuracoes/cadastros']} replace />}
                     />
                     <Route
                       path="/configuracoes/integracoes/edapp"
-                      element={
-                        <ProtectedRoute>
-                          <IntegracoesEdApp />
-                        </ProtectedRoute>
-                      }
+                      element={<Navigate to={CANONICAL_DUPLICATE_ROUTE_TARGETS['/configuracoes/integracoes/edapp']} replace />}
                     />
                     <Route
                       path="/configuracoes/integracoes/sigvoos"
                       element={
                         <ProtectedRoute>
-                          <IntegracoesEdApp />
+                          <IntegracoesSigvoos />
                         </ProtectedRoute>
                       }
                     />
@@ -800,14 +776,9 @@ export default function App() {
                       }
                     />
                     {/* Treinamentos integrado em qualificações */}
-                    {/* Importação Inteligente */}
                     <Route
                       path="/importacao"
-                      element={
-                        <ProtectedRoute>
-                          <ImportacaoPageV2 />
-                        </ProtectedRoute>
-                      }
+                      element={<Navigate to={CANONICAL_DUPLICATE_ROUTE_TARGETS['/importacao']} replace />}
                     />
                     {/* Compat: redirecionar rota antiga para a nova */}
                     <Route
@@ -862,11 +833,7 @@ export default function App() {
                     />
                     <Route
                       path="/escalas/evd"
-                      element={
-                        <ProtectedRoute>
-                          <EvdPage />
-                        </ProtectedRoute>
-                      }
+                      element={<Navigate to={CANONICAL_DUPLICATE_ROUTE_TARGETS['/escalas/evd']} replace />}
                     />
 
                     {/* FRMS — Gestão de Fadiga e Jornada (protegido) */}
@@ -1035,7 +1002,7 @@ export default function App() {
 
                     {/* MRO — Manutenção de Aeronaves (Protótipo) */}
                     <Route path="/mro" element={<ProtectedRoute><MroDashboard /></ProtectedRoute>} />
-                    <Route path="/mro/dashboard" element={<ProtectedRoute><MroDashboard /></ProtectedRoute>} />
+                    <Route path="/mro/dashboard" element={<Navigate to={CANONICAL_DUPLICATE_ROUTE_TARGETS['/mro/dashboard']} replace />} />
                     <Route path="/mro/aeronaves" element={<ProtectedRoute><MroAeronaves /></ProtectedRoute>} />
                     <Route path="/mro/aeronaves/:id" element={<ProtectedRoute><MroAeronaveDetalhe /></ProtectedRoute>} />
                     <Route path="/mro/componentes" element={<ProtectedRoute><MroComponentes /></ProtectedRoute>} />
@@ -1047,7 +1014,7 @@ export default function App() {
 
                     {/* Controle de Voos — N1 operacional interno */}
                     <Route path="/controle-voos" element={<ProtectedRoute><ControleVoosDashboard /></ProtectedRoute>} />
-                    <Route path="/controle-voos/dashboard" element={<ProtectedRoute><ControleVoosDashboard /></ProtectedRoute>} />
+                    <Route path="/controle-voos/dashboard" element={<Navigate to={CANONICAL_DUPLICATE_ROUTE_TARGETS['/controle-voos/dashboard']} replace />} />
                     <Route path="/controle-voos/voos" element={<ProtectedRoute><ControleVoosVoos /></ProtectedRoute>} />
                     <Route path="/controle-voos/voos/:id" element={<ProtectedRoute><ControleVoosVooDetalhe /></ProtectedRoute>} />
                     <Route path="/controle-voos/rdv" element={<ProtectedRoute><ControleVoosRdv /></ProtectedRoute>} />

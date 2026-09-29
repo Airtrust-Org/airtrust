@@ -14,7 +14,6 @@ import {
 import { useSearchParams } from 'react-router-dom';
 import AppLayout from '../components/AppLayout';
 import PageHeader from '../components/PageHeader';
-import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { useLanguage } from '@/react-app/i18n/useLanguage';
@@ -60,7 +59,7 @@ const ImportacaoPage = lazyWithRetry(
   'ConfiguracoesImportacaoTab',
 );
 const UsuariosContent = lazyWithRetry(
-  () => import('./Configuracoes/Usuarios').then((m) => ({ default: m.UsuariosConfig })),
+  () => import('./admin/UsuariosPage').then((m) => ({ default: m.UsuariosAdminContent })),
   'ConfiguracoesUsuariosTab',
 );
 
@@ -90,7 +89,6 @@ function tabClass(active: boolean) {
 
 export default function Configuracoes() {
   const { t } = useLanguage();
-  const { empresaAtualId, empresas } = useAuth();
   const { isAdmin, isGestor } = usePermissions();
   const canAccessCompanyManagement = isAdmin;
   const canManageMatriz = isAdmin || isGestor;
@@ -391,14 +389,7 @@ export default function Configuracoes() {
 
       {canManageUsers && activeTab === 'usuarios' && (
         <Suspense fallback={tabFallback}>
-          <UsuariosContent
-            empresaId={empresaAtualId}
-            empresasDisponiveis={empresas.map((empresa) => ({
-              id: empresa.id,
-              nome: empresa.nome,
-              codigo: empresa.codigo,
-            }))}
-          />
+          <UsuariosContent embedded />
         </Suspense>
       )}
     </AppLayout>
