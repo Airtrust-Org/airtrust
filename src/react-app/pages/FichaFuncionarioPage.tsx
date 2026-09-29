@@ -184,6 +184,7 @@ interface Ficha360Data {
 
 interface MatrizRequisito {
   matriz_id: number;
+  qualificacao_tipo_id?: number | null;
   qualificacao_tipo_nome?: string | null;
   qualificacao_tipo_codigo?: string | null;
   obrigatoriedade?: string | null;
@@ -194,13 +195,7 @@ interface MatrizRequisito {
 }
 
 type FichaTab =
-  | 'resumo'
-  | 'qualificacoes'
-  | 'licencas'
-  | 'simulador'
-  | 'caderneta'
-  | 'pasta'
-  | 'auditoria';
+  'resumo' | 'qualificacoes' | 'licencas' | 'simulador' | 'caderneta' | 'pasta' | 'auditoria';
 
 // ============================================================
 // Constantes
@@ -226,6 +221,35 @@ function formatarDataHora(dataStr: string | null | undefined): string {
   } catch {
     return '-';
   }
+}
+
+function statusRegulatorioHistorico(registro: Qualificacao, requisitos: MatrizRequisito[]) {
+  const codigo = String(registro.codigo || '')
+    .trim()
+    .toUpperCase();
+  const requisito = requisitos.find(
+    (item) =>
+      (registro.tipo_qualificacao_id &&
+        Number(item.qualificacao_tipo_id) === Number(registro.tipo_qualificacao_id)) ||
+      (codigo &&
+        String(item.qualificacao_tipo_codigo || '')
+          .trim()
+          .toUpperCase() === codigo),
+  );
+  if (requisito) {
+    if (requisito.status === 'EM_DIA')
+      return { label: 'Atende requisito atual', cls: 'bg-green-100 text-green-700' };
+    if (requisito.status === 'VENCIDO')
+      return { label: 'Requisito atual — vencido', cls: 'bg-red-100 text-red-700' };
+    return { label: 'Requisito atual — pendente', cls: 'bg-amber-100 text-amber-800' };
+  }
+  const origem = String(registro.origem_tipo || '')
+    .trim()
+    .toUpperCase();
+  if (origem.includes('LEGAD') || origem.includes('EDAPP') || origem.includes('IMPORT')) {
+    return { label: 'Histórico legado — sem requisito atual', cls: 'bg-slate-100 text-slate-700' };
+  }
+  return { label: 'Treinamento adicional — sem requisito atual', cls: 'bg-blue-50 text-blue-700' };
 }
 
 function badgeCompliance(status: ComplianceStatus) {
@@ -1032,7 +1056,7 @@ export default function FichaFuncionarioPage() {
                   ))}
                   {ficha.licencas.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">
+                      <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">
                         Nenhuma licença formal cadastrada na tabela específica.
                       </td>
                     </tr>
@@ -1075,7 +1099,7 @@ export default function FichaFuncionarioPage() {
                   ))}
                   {licencasHistorico.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">
+                      <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-400">
                         Nenhuma habilitação encontrada no histórico de qualificações.
                       </td>
                     </tr>
@@ -1318,6 +1342,9 @@ export default function FichaFuncionarioPage() {
                     <th className="px-4 py-3 text-left font-medium text-gray-600">Realização</th>
                     <th className="px-4 py-3 text-left font-medium text-gray-600">Vencimento</th>
                     <th className="px-4 py-3 text-center font-medium text-gray-600">Status</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">
+                      Status regulatório
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1335,11 +1362,23 @@ export default function FichaFuncionarioPage() {
                       <td className="px-4 py-3 text-center">
                         {badgeStatusQualificacao(registro.data_vencimento)}
                       </td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const regulatory = statusRegulatorioHistorico(registro, requisitosFuncao);
+                          return (
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${regulatory.cls}`}
+                            >
+                              {regulatory.label}
+                            </span>
+                          );
+                        })()}
+                      </td>
                     </tr>
                   ))}
                   {treinamentosHistorico.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">
+                      <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-400">
                         Nenhum treinamento adicional encontrado no histórico operacional.
                       </td>
                     </tr>
@@ -1360,6 +1399,9 @@ export default function FichaFuncionarioPage() {
                     <th className="px-4 py-3 text-left font-medium text-gray-600">Código</th>
                     <th className="px-4 py-3 text-left font-medium text-gray-600">Realização</th>
                     <th className="px-4 py-3 text-left font-medium text-gray-600">Vencimento</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">
+                      Status regulatório
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1374,11 +1416,23 @@ export default function FichaFuncionarioPage() {
                       <td className="px-4 py-3 text-gray-700">
                         {formatarData(registro.data_vencimento)}
                       </td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const regulatory = statusRegulatorioHistorico(registro, requisitosFuncao);
+                          return (
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${regulatory.cls}`}
+                            >
+                              {regulatory.label}
+                            </span>
+                          );
+                        })()}
+                      </td>
                     </tr>
                   ))}
                   {qualificacoesHistorico.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">
+                      <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">
                         Nenhum item no histórico completo de qualificações.
                       </td>
                     </tr>

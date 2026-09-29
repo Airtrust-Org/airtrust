@@ -5,6 +5,7 @@ import { ApiError } from '../middleware/error-handler';
 import { getEmpresaId } from '../middleware/tenant';
 import type { Env } from '../types';
 import { createTrainingComplianceIntelligenceRoutes } from './compliance-treinamentos-intelligence';
+import conditionsRouter from './compliance-treinamentos-conditions';
 import {
   CANCELLED_STATUS_VALUES,
   PLANNED_QUALIFICATION_STATUS_VALUES,
@@ -19,15 +20,27 @@ import {
   type EmployeeSectorAccess,
 } from '../services/employee-sector-access';
 import {
+  insertTrainingComplianceRequirement,
+  updateTrainingComplianceRequirement,
+} from '../services/training-compliance-rule-write';
+import {
   normalizeAircraftModel,
   parseLegacyAircraftModels,
   resolveEmployeeAircraftModels,
 } from '../services/training-compliance-aircraft';
+import {
+  TRAINING_COMPLIANCE_SCOPES,
+  resolveTrainingComplianceRules,
+  trainingComplianceRuleApplies,
+  trainingComplianceRulePriority,
+  hydrateTrainingComplianceConditions,
+  type TrainingComplianceScope,
+} from '../services/training-compliance-rule-engine';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 
-const SCOPES = ['EMPRESA', 'SETOR', 'FUNCAO', 'SETOR_FUNCAO', 'FUNCIONARIO'] as const;
+const SCOPES = TRAINING_COMPLIANCE_SCOPES;
 const OBRIGATORIEDADES = ['OBRIGATORIA', 'RECOMENDADA', 'NAO_APLICA'] as const;
 const ORIGENS = [
   'REGULATORIO',
@@ -40,7 +53,7 @@ const ORIGENS = [
   'OUTRO',
 ] as const;
 
-type Scope = (typeof SCOPES)[number];
+type Scope = TrainingComplianceScope;
 type Obrigatoriedade = (typeof OBRIGATORIEDADES)[number];
 type Origem = (typeof ORIGENS)[number];
 type ComplianceStatus = 'CONFORME' | 'VENCENDO' | 'VENCIDO' | 'NAO_REALIZADO' | 'EM_ANDAMENTO';
@@ -57,6 +70,7 @@ type Employee = {
   funcao_id: number | null;
   funcao_nome: string | null;
   aeronaves_modelos: string[];
+  condicoes_ids: number[];
 };
 
 type Rule = {
@@ -74,6 +88,16 @@ type Rule = {
   funcionario_id: number | null;
   funcionario_nome: string | null;
   aeronave_modelo: string | null;
+  condicao_id: number | null;
+  condicao_codigo: string | null;
+  condicao_nome: string | null;
+  justificativa: string | null;
+  perfil_competencia: string | null;
+  modalidade_requerida: string | null;
+  fundamento_tipo: string | null;
+  fundamento_documento: string | null;
+  fundamento_item: string | null;
+  validade_fonte: 'MODELO' | 'EVIDENCIA';
   obrigatoriedade: Obrigatoriedade;
   nivel_requerido: number | null;
   critico_operacional: number;
@@ -98,6 +122,7 @@ type Evidence = {
   origem_id: number | null;
   origem_titulo: string | null;
   lms_status?: string | null;
+  modalidade?: string | null;
 };
 
 type LmsEvidenceState = {
@@ -136,53 +161,8 @@ function normalizeEnum<T extends readonly string[]>(
   return (allowed as readonly string[]).includes(normalized) ? (normalized as T[number]) : fallback;
 }
 
-function specificity(scope: Scope): number {
-  if (scope === 'FUNCIONARIO') return 50;
-  if (scope === 'SETOR_FUNCAO') return 40;
-  if (scope === 'FUNCAO') return 30;
-  if (scope === 'SETOR') return 20;
-  return 10;
-}
-
-function rulePriority(rule: Rule): number {
-  return specificity(rule.escopo) + (rule.aeronave_modelo ? 5 : 0);
-}
-
-export function ruleApplies(rule: Rule, employee: Employee): boolean {
-  if (rule.aeronave_modelo && !employee.aeronaves_modelos.includes(rule.aeronave_modelo)) {
-    return false;
-  }
-  if (rule.escopo === 'EMPRESA') return true;
-  if (rule.escopo === 'SETOR')
-    return Boolean(employee.setor_id && rule.setor_id === employee.setor_id);
-  if (rule.escopo === 'FUNCAO')
-    return Boolean(employee.funcao_id && rule.funcao_id === employee.funcao_id);
-  if (rule.escopo === 'SETOR_FUNCAO') {
-    return Boolean(
-      employee.setor_id &&
-      employee.funcao_id &&
-      rule.setor_id === employee.setor_id &&
-      rule.funcao_id === employee.funcao_id,
-    );
-  }
-  return rule.funcionario_id === employee.id;
-}
-
-export function resolvedRules(rules: Rule[], employee: Employee): Rule[] {
-  const byType = new Map<number, Rule>();
-  for (const rule of rules) {
-    if (!ruleApplies(rule, employee)) continue;
-    const previous = byType.get(rule.qualificacao_tipo_id);
-    if (
-      !previous ||
-      rulePriority(rule) > rulePriority(previous) ||
-      (rulePriority(rule) === rulePriority(previous) && rule.id > previous.id)
-    ) {
-      byType.set(rule.qualificacao_tipo_id, rule);
-    }
-  }
-  return Array.from(byType.values());
-}
+export const ruleApplies = trainingComplianceRuleApplies;
+export const resolvedRules = resolveTrainingComplianceRules;
 
 async function loadEmployees(db: D1Database, empresaId: number): Promise<Employee[]> {
   const cols = await columnSet(db, 'funcionarios');
@@ -223,14 +203,16 @@ async function loadEmployees(db: D1Database, empresaId: number): Promise<Employe
     return {
       ...employee,
       aeronaves_modelos: [],
+      condicoes_ids: [],
     };
   });
   if (!(await tableExists(db, 'funcionarios_aeronaves')) || !(await tableExists(db, 'aeronaves'))) {
-    return employees;
+    return hydrateTrainingComplianceConditions(db, empresaId, employees);
   }
   const faCols = await columnSet(db, 'funcionarios_aeronaves');
   const aircraftCols = await columnSet(db, 'aeronaves');
-  if (!aircraftCols.has('modelo')) return employees;
+  if (!aircraftCols.has('modelo'))
+    return hydrateTrainingComplianceConditions(db, empresaId, employees);
   const faDeletedExpr = faCols.has('deleted_at') ? 'AND fa.deleted_at IS NULL' : '';
   const faActiveExpr = faCols.has('ativo') ? 'AND COALESCE(fa.ativo,1)=1' : '';
   const faStartExpr = faCols.has('data_inicio')
@@ -268,11 +250,12 @@ async function loadEmployees(db: D1Database, empresaId: number): Promise<Employe
       legacyAircraftByEmployee.get(employee.id)?.join(' / ') || null,
     );
   }
-  return employees;
+  return hydrateTrainingComplianceConditions(db, empresaId, employees);
 }
 
 async function loadAircraftModelsCatalog(db: D1Database, empresaId: number) {
-  if (!(await tableExists(db, 'aeronaves'))) return [] as Array<{ modelo: string; aeronaves: number }>;
+  if (!(await tableExists(db, 'aeronaves')))
+    return [] as Array<{ modelo: string; aeronaves: number }>;
   const cols = await columnSet(db, 'aeronaves');
   if (!cols.has('modelo')) return [] as Array<{ modelo: string; aeronaves: number }>;
   const deletedExpr = cols.has('deleted_at') ? 'AND deleted_at IS NULL' : '';
@@ -287,7 +270,10 @@ async function loadAircraftModelsCatalog(db: D1Database, empresaId: number) {
     .bind(empresaId)
     .all<{ modelo: string; aeronaves: number }>();
   return (results || [])
-    .map((row) => ({ modelo: normalizeAircraftModel(row.modelo) || '', aeronaves: Number(row.aeronaves) }))
+    .map((row) => ({
+      modelo: normalizeAircraftModel(row.modelo) || '',
+      aeronaves: Number(row.aeronaves),
+    }))
     .filter((row) => Boolean(row.modelo));
 }
 
@@ -311,6 +297,8 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
                 m.funcao_id, fn.nome AS funcao_nome,
                 NULL AS funcionario_id, NULL AS funcionario_nome,
                 NULL AS aeronave_modelo,
+                NULL AS condicao_id, NULL AS condicao_codigo, NULL AS condicao_nome,
+                NULL AS justificativa, NULL AS perfil_competencia, NULL AS modalidade_requerida, NULL AS fundamento_tipo, NULL AS fundamento_documento, NULL AS fundamento_item, 'EVIDENCIA' AS validade_fonte,
                 m.obrigatoriedade, m.nivel_requerido, m.critico_operacional,
                 m.origem, NULL AS referencia_normativa, m.observacoes,
                 NULL AS vigencia_inicio, NULL AS vigencia_fim, NULL AS prazo_inicial_dias,
@@ -332,6 +320,18 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
 
   const ruleCols = await columnSet(db, 'treinamento_requisitos');
   const aircraftExpr = ruleCols.has('aeronave_modelo') ? 'tr.aeronave_modelo' : 'NULL';
+  const hasConditions =
+    ruleCols.has('condicao_id') && (await tableExists(db, 'compliance_condicoes'));
+  const conditionIdExpr = ruleCols.has('condicao_id') ? 'tr.condicao_id' : 'NULL';
+  const justificationExpr = ruleCols.has('justificativa') ? 'tr.justificativa' : 'NULL';
+  const profileExpr = ruleCols.has('perfil_competencia') ? 'tr.perfil_competencia' : 'NULL';
+  const modalityExpr = ruleCols.has('modalidade_requerida') ? 'tr.modalidade_requerida' : 'NULL';
+  const foundationTypeExpr = ruleCols.has('fundamento_tipo') ? 'tr.fundamento_tipo' : 'NULL';
+  const foundationDocumentExpr = ruleCols.has('fundamento_documento')
+    ? 'tr.fundamento_documento'
+    : 'NULL';
+  const foundationItemExpr = ruleCols.has('fundamento_item') ? 'tr.fundamento_item' : 'NULL';
+  const validitySourceExpr = ruleCols.has('validade_fonte') ? 'tr.validade_fonte' : "'EVIDENCIA'";
   const { results } = await db
     .prepare(
       `SELECT tr.id, tr.empresa_id, tr.qualificacao_tipo_id,
@@ -342,6 +342,16 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
               tr.funcao_id, fn.nome AS funcao_nome,
               tr.funcionario_id, fu.nome AS funcionario_nome,
               ${aircraftExpr} AS aeronave_modelo,
+              ${conditionIdExpr} AS condicao_id,
+              ${hasConditions ? 'cc.codigo' : 'NULL'} AS condicao_codigo,
+              ${hasConditions ? 'cc.nome' : 'NULL'} AS condicao_nome,
+              ${justificationExpr} AS justificativa,
+              ${profileExpr} AS perfil_competencia,
+              ${modalityExpr} AS modalidade_requerida,
+              ${foundationTypeExpr} AS fundamento_tipo,
+              ${foundationDocumentExpr} AS fundamento_documento,
+              ${foundationItemExpr} AS fundamento_item,
+              ${validitySourceExpr} AS validade_fonte,
               tr.obrigatoriedade, tr.nivel_requerido, tr.critico_operacional,
               tr.origem, tr.referencia_normativa, tr.observacoes,
               tr.vigencia_inicio, tr.vigencia_fim, tr.prazo_inicial_dias,
@@ -357,6 +367,7 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
            ON fn.id = tr.funcao_id AND fn.empresa_id = tr.empresa_id AND fn.deleted_at IS NULL
          LEFT JOIN funcionarios fu
            ON fu.id = tr.funcionario_id AND fu.empresa_id = tr.empresa_id AND fu.deleted_at IS NULL
+         ${hasConditions ? 'LEFT JOIN compliance_condicoes cc ON cc.id = tr.condicao_id AND cc.empresa_id = tr.empresa_id AND cc.deleted_at IS NULL' : ''}
         WHERE tr.empresa_id = ?
           AND tr.ativo = 1
           AND tr.deleted_at IS NULL
@@ -369,6 +380,8 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
   return (results || []).map((rule) => ({
     ...rule,
     aeronave_modelo: normalizeAircraftModel(rule.aeronave_modelo),
+    condicao_id: rule.condicao_id ? Number(rule.condicao_id) : null,
+    validade_fonte: rule.validade_fonte === 'MODELO' ? 'MODELO' : 'EVIDENCIA',
   }));
 }
 
@@ -407,12 +420,15 @@ async function loadQualificationEvidence(
       ? 'qh.created_at'
       : `qh.${dataCol}`;
   const vencSelect = vencCol ? `qh.${vencCol}` : 'NULL';
+  const modalitySelect = cols.has('formato_codigo')
+    ? `UPPER(TRIM(COALESCE(qh.formato_codigo,'')))`
+    : "''";
 
   const { results } = await db
     .prepare(
       `WITH ranked AS (
          SELECT qh.id, qh.funcionario_id, qh.${tipoCol} AS tipo_id,
-                qh.${dataCol} AS data_realizacao, ${vencSelect} AS data_vencimento,
+                qh.${dataCol} AS data_realizacao, ${vencSelect} AS data_vencimento, ${modalitySelect} AS modalidade,
                 ROW_NUMBER() OVER (
                   PARTITION BY qh.funcionario_id, qh.${tipoCol}
                   ORDER BY datetime(COALESCE(qh.${dataCol}, ${updatedExpr}, ${vencSelect})) DESC, qh.id DESC
@@ -424,7 +440,7 @@ async function loadQualificationEvidence(
             AND NOT (${sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES)})
             AND NOT (${sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES)})
        )
-       SELECT id, funcionario_id, tipo_id, data_realizacao, data_vencimento
+       SELECT id, funcionario_id, tipo_id, data_realizacao, data_vencimento, modalidade
          FROM ranked WHERE rn = 1`,
     )
     .bind(empresaId)
@@ -434,6 +450,7 @@ async function loadQualificationEvidence(
       tipo_id: number;
       data_realizacao: string | null;
       data_vencimento: string | null;
+      modalidade: string | null;
     }>();
 
   for (const row of results || []) {
@@ -445,6 +462,7 @@ async function loadQualificationEvidence(
       origem: 'QUALIFICACAO',
       origem_id: row.id,
       origem_titulo: null,
+      modalidade: row.modalidade || null,
     });
   }
   return map;
@@ -460,7 +478,7 @@ async function loadLmsEvidence(
   const { results } = await db
     .prepare(
       `SELECT m.id, m.funcionario_id, c.qualificacao_tipo_id AS tipo_id,
-              m.status, m.data_conclusao, m.updated_at, c.titulo
+              m.status, m.data_conclusao, m.updated_at, c.titulo, 'EAD' AS modalidade
          FROM lms_matriculas m
          JOIN lms_cursos c
            ON c.id = m.curso_id
@@ -480,6 +498,7 @@ async function loadLmsEvidence(
       status: string;
       data_conclusao: string | null;
       titulo: string | null;
+      modalidade: string | null;
     }>();
   for (const row of results || []) {
     const key = `${row.funcionario_id}:${row.tipo_id}`;
@@ -492,6 +511,7 @@ async function loadLmsEvidence(
       origem_id: row.id,
       origem_titulo: row.titulo,
       lms_status: row.status,
+      modalidade: row.modalidade || 'EAD',
     };
     const state = map.get(key) || { latest: undefined, latestCompleted: undefined };
     if (!state.latest) state.latest = evidence;
@@ -514,20 +534,39 @@ function latestEvidence(
   return lms.data_realizacao > history.data_realizacao ? lms : history;
 }
 
+function evidenceMeetsRequiredModality(rule: Rule, evidence: Evidence | undefined): boolean {
+  if (!rule.modalidade_requerida) return true;
+  if (!evidence) return false;
+  const actual = String(evidence.modalidade || '')
+    .trim()
+    .toUpperCase();
+  const required = String(rule.modalidade_requerida || '')
+    .trim()
+    .toUpperCase();
+  if (!actual) return false;
+  if (required === 'HIBRIDO') return actual === 'HIBRIDO';
+  if (required === 'PRATICO') return actual === 'PRATICO' || actual === 'PRÁTICO';
+  return actual === required;
+}
+
 function computeRequirement(
   rule: Rule,
   history: Evidence | undefined,
   lms: LmsEvidenceState | undefined,
 ) {
   const today = new Date().toISOString().slice(0, 10);
-  const evidence = latestEvidence(history, lms?.latestCompleted);
+  const candidateEvidence = latestEvidence(history, lms?.latestCompleted);
+  const evidence = evidenceMeetsRequiredModality(rule, candidateEvidence)
+    ? candidateEvidence
+    : undefined;
+  const modalityMismatch = Boolean(candidateEvidence && !evidence && rule.modalidade_requerida);
   const currentLms = lms?.latest;
   let status_compliance: ComplianceStatus = 'NAO_REALIZADO';
   let data_validade: string | null = null;
   let dias_para_vencer: number | null = null;
 
   if (evidence?.data_realizacao) {
-    if (evidence.data_vencimento) {
+    if (rule.validade_fonte === 'EVIDENCIA' && evidence.data_vencimento) {
       data_validade = evidence.data_vencimento.slice(0, 10);
     } else if (rule.validade_meses) {
       const base = new Date(`${evidence.data_realizacao.slice(0, 10)}T12:00:00Z`);
@@ -546,7 +585,12 @@ function computeRequirement(
             ? 'VENCENDO'
             : 'CONFORME';
     }
-  } else if (currentLms && String(currentLms.lms_status || '').toUpperCase() === 'EM_ANDAMENTO') {
+  } else if (
+    !modalityMismatch &&
+    currentLms &&
+    evidenceMeetsRequiredModality(rule, currentLms) &&
+    String(currentLms.lms_status || '').toUpperCase() === 'EM_ANDAMENTO'
+  ) {
     status_compliance = 'EM_ANDAMENTO';
   }
 
@@ -573,12 +617,24 @@ function computeRequirement(
     funcao_id: rule.funcao_id,
     funcao_nome: rule.funcao_nome,
     aeronave_modelo: rule.aeronave_modelo,
+    condicao_id: rule.condicao_id,
+    condicao_codigo: rule.condicao_codigo,
+    condicao_nome: rule.condicao_nome,
+    justificativa: rule.justificativa,
+    perfil_competencia: rule.perfil_competencia,
+    modalidade_requerida: rule.modalidade_requerida,
+    fundamento_tipo: rule.fundamento_tipo,
+    fundamento_documento: rule.fundamento_documento,
+    fundamento_item: rule.fundamento_item,
+    validade_fonte: rule.validade_fonte,
     ultima_data: evidence?.data_realizacao ?? null,
     data_validade,
     dias_para_vencer,
     status: status_legacy as 'EM_DIA' | 'VENCIDO' | 'EM_FALTA',
     status_compliance,
     evidencia_origem: evidence?.origem ?? null,
+    evidencia_modalidade: evidence?.modalidade ?? candidateEvidence?.modalidade ?? null,
+    evidencia_modalidade_incompativel: modalityMismatch,
     evidencia_id: evidence?.origem_id ?? null,
     curso_ead_titulo: currentLms?.origem_titulo ?? evidence?.origem_titulo ?? null,
     lms_status: currentLms?.lms_status ?? lms?.latestCompleted?.lms_status ?? null,
@@ -597,7 +653,11 @@ function filterEmployeesByAccess(employees: Employee[], access: EmployeeSectorAc
   );
 }
 
-export async function buildSnapshot(db: D1Database, empresaId: number, access: EmployeeSectorAccess) {
+export async function buildSnapshot(
+  db: D1Database,
+  empresaId: number,
+  access: EmployeeSectorAccess,
+) {
   const [allEmployees, rules, historyMap, lmsMap] = await Promise.all([
     loadEmployees(db, empresaId),
     loadRules(db, empresaId),
@@ -780,6 +840,7 @@ async function validateRuleReferences(
   const funcaoId = asPositiveInt(payload.funcao_id);
   const funcionarioId = asPositiveInt(payload.funcionario_id);
   const aeronaveModelo = normalizeAircraftModel(payload.aeronave_modelo);
+  const condicaoId = asPositiveInt(payload.condicao_id);
 
   if ((escopo === 'SETOR' || escopo === 'SETOR_FUNCAO') && !setorId)
     throw new ApiError('setor_id é obrigatório para o escopo selecionado', 400);
@@ -828,6 +889,17 @@ async function validateRuleReferences(
       .first();
     if (!funcionario) throw new ApiError('Funcionário inválido para a empresa atual', 400);
   }
+  if (condicaoId) {
+    if (!(await tableExists(db, 'compliance_condicoes')))
+      throw new ApiError('Schema de condições ainda não aplicado', 409);
+    const condition = await db
+      .prepare(
+        'SELECT id FROM compliance_condicoes WHERE id=? AND empresa_id=? AND ativo=1 AND deleted_at IS NULL',
+      )
+      .bind(condicaoId, empresaId)
+      .first();
+    if (!condition) throw new ApiError('Condição inválida para a empresa atual', 400);
+  }
   if (aeronaveModelo) {
     if (!(await tableExists(db, 'aeronaves'))) {
       throw new ApiError('Cadastro de aeronaves indisponível para validar o equipamento', 409);
@@ -851,6 +923,34 @@ async function validateRuleReferences(
     funcao_id: escopo === 'FUNCAO' || escopo === 'SETOR_FUNCAO' ? funcaoId : null,
     funcionario_id: escopo === 'FUNCIONARIO' ? funcionarioId : null,
     aeronave_modelo: aeronaveModelo,
+    condicao_id: condicaoId,
+    justificativa: payload.justificativa ? String(payload.justificativa).trim() : null,
+    perfil_competencia: payload.perfil_competencia
+      ? String(payload.perfil_competencia).trim()
+      : null,
+    modalidade_requerida: [
+      'EAD',
+      'PRESENCIAL',
+      'PRATICO',
+      'HIBRIDO',
+      'DOCUMENTAL',
+      'OUTRA',
+    ].includes(
+      String(payload.modalidade_requerida || '')
+        .trim()
+        .toUpperCase(),
+    )
+      ? String(payload.modalidade_requerida).trim().toUpperCase()
+      : null,
+    fundamento_tipo: payload.fundamento_tipo ? String(payload.fundamento_tipo).trim() : null,
+    fundamento_documento: payload.fundamento_documento
+      ? String(payload.fundamento_documento).trim()
+      : null,
+    fundamento_item: payload.fundamento_item ? String(payload.fundamento_item).trim() : null,
+    validade_fonte:
+      String(payload.validade_fonte || 'MODELO').toUpperCase() === 'EVIDENCIA'
+        ? ('EVIDENCIA' as const)
+        : ('MODELO' as const),
     obrigatoriedade: normalizeEnum(payload.obrigatoriedade, OBRIGATORIEDADES, 'OBRIGATORIA'),
     critico_operacional: payload.critico_operacional ? 1 : 0,
     origem: normalizeEnum(payload.origem, ORIGENS, 'REGULATORIO'),
@@ -900,21 +1000,33 @@ async function assertIndividualRuleWithinAccess(
   }
 }
 
-
-
 app.route('/', createTrainingComplianceIntelligenceRoutes({ buildSnapshot, tableExists }));
+app.route('/', conditionsRouter);
 
 app.get('/capabilities', async (c) => {
   const db = c.env.DB;
   const schemaReady = await tableExists(db, 'treinamento_requisitos');
-  const aircraftScopeReady = schemaReady
-    ? (await columnSet(db, 'treinamento_requisitos')).has('aeronave_modelo')
-    : false;
+  const requirementColumns = schemaReady
+    ? await columnSet(db, 'treinamento_requisitos')
+    : new Set<string>();
+  const aircraftScopeReady = requirementColumns.has('aeronave_modelo');
+  const conditionalScopeReady =
+    requirementColumns.has('condicao_id') &&
+    requirementColumns.has('justificativa') &&
+    requirementColumns.has('perfil_competencia') &&
+    requirementColumns.has('modalidade_requerida') &&
+    requirementColumns.has('fundamento_tipo') &&
+    requirementColumns.has('fundamento_documento') &&
+    requirementColumns.has('fundamento_item') &&
+    requirementColumns.has('validade_fonte') &&
+    (await tableExists(db, 'compliance_condicoes')) &&
+    (await tableExists(db, 'funcionarios_compliance_condicoes'));
   return c.json({
     success: true,
     data: {
       schema_ready: schemaReady,
       aircraft_scope_ready: aircraftScopeReady,
+      conditional_scope_ready: conditionalScopeReady,
       reconciliation_ready: await tableExists(db, 'treinamento_matricula_reconciliacoes'),
       scopes: SCOPES,
       obrigatoriedades: OBRIGATORIEDADES,
@@ -1050,7 +1162,9 @@ app.get('/regras', requireRole('admin', 'manager'), async (c) => {
     data,
     meta: {
       schema_ready: await tableExists(c.env.DB, 'treinamento_requisitos'),
-      aircraft_scope_ready: (await columnSet(c.env.DB, 'treinamento_requisitos')).has('aeronave_modelo'),
+      aircraft_scope_ready: (await columnSet(c.env.DB, 'treinamento_requisitos')).has(
+        'aeronave_modelo',
+      ),
     },
   });
 });
@@ -1069,56 +1183,7 @@ app.post('/regras', requireRole('admin', 'manager'), async (c) => {
   }
   const access = await getEmployeeSectorAccess(c, empresaId);
   await assertIndividualRuleWithinAccess(db, empresaId, access, data);
-  const result = aircraftScopeReady
-    ? await db
-        .prepare(
-          `INSERT INTO treinamento_requisitos
-          (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, funcionario_id, aeronave_modelo, obrigatoriedade, critico_operacional, origem, referencia_normativa, observacoes, vigencia_inicio, vigencia_fim, prazo_inicial_dias, auto_matricular_ead)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          empresaId,
-          data.qualificacao_tipo_id,
-          data.escopo,
-          data.setor_id,
-          data.funcao_id,
-          data.funcionario_id,
-          data.aeronave_modelo,
-          data.obrigatoriedade,
-          data.critico_operacional,
-          data.origem,
-          data.referencia_normativa,
-          data.observacoes,
-          data.vigencia_inicio,
-          data.vigencia_fim,
-          data.prazo_inicial_dias,
-          data.auto_matricular_ead,
-        )
-        .run()
-    : await db
-        .prepare(
-          `INSERT INTO treinamento_requisitos
-          (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, funcionario_id, obrigatoriedade, critico_operacional, origem, referencia_normativa, observacoes, vigencia_inicio, vigencia_fim, prazo_inicial_dias, auto_matricular_ead)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          empresaId,
-          data.qualificacao_tipo_id,
-          data.escopo,
-          data.setor_id,
-          data.funcao_id,
-          data.funcionario_id,
-          data.obrigatoriedade,
-          data.critico_operacional,
-          data.origem,
-          data.referencia_normativa,
-          data.observacoes,
-          data.vigencia_inicio,
-          data.vigencia_fim,
-          data.prazo_inicial_dias,
-          data.auto_matricular_ead,
-        )
-        .run();
+  const result = await insertTrainingComplianceRequirement(db, empresaId, data);
   const id = Number(result.meta.last_row_id);
   await registrarAuditoria({
     db,
@@ -1155,60 +1220,7 @@ app.put('/regras/:id', requireRole('admin', 'manager'), async (c) => {
   if (data.aeronave_modelo && !aircraftScopeReady) {
     throw new ApiError('Schema de compliance por aeronave ainda não aplicado', 409);
   }
-  if (aircraftScopeReady) {
-    await db
-      .prepare(
-        `UPDATE treinamento_requisitos SET
-        qualificacao_tipo_id=?, escopo=?, setor_id=?, funcao_id=?, funcionario_id=?, aeronave_modelo=?, obrigatoriedade=?, critico_operacional=?, origem=?, referencia_normativa=?, observacoes=?, vigencia_inicio=?, vigencia_fim=?, prazo_inicial_dias=?, auto_matricular_ead=?, updated_at=datetime('now')
-        WHERE id=? AND empresa_id=?`,
-      )
-      .bind(
-        data.qualificacao_tipo_id,
-        data.escopo,
-        data.setor_id,
-        data.funcao_id,
-        data.funcionario_id,
-        data.aeronave_modelo,
-        data.obrigatoriedade,
-        data.critico_operacional,
-        data.origem,
-        data.referencia_normativa,
-        data.observacoes,
-        data.vigencia_inicio,
-        data.vigencia_fim,
-        data.prazo_inicial_dias,
-        data.auto_matricular_ead,
-        id,
-        empresaId,
-      )
-      .run();
-  } else {
-    await db
-      .prepare(
-        `UPDATE treinamento_requisitos SET
-        qualificacao_tipo_id=?, escopo=?, setor_id=?, funcao_id=?, funcionario_id=?, obrigatoriedade=?, critico_operacional=?, origem=?, referencia_normativa=?, observacoes=?, vigencia_inicio=?, vigencia_fim=?, prazo_inicial_dias=?, auto_matricular_ead=?, updated_at=datetime('now')
-        WHERE id=? AND empresa_id=?`,
-      )
-      .bind(
-        data.qualificacao_tipo_id,
-        data.escopo,
-        data.setor_id,
-        data.funcao_id,
-        data.funcionario_id,
-        data.obrigatoriedade,
-        data.critico_operacional,
-        data.origem,
-        data.referencia_normativa,
-        data.observacoes,
-        data.vigencia_inicio,
-        data.vigencia_fim,
-        data.prazo_inicial_dias,
-        data.auto_matricular_ead,
-        id,
-        empresaId,
-      )
-      .run();
-  }
+  await updateTrainingComplianceRequirement(db, empresaId, id, data);
   await registrarAuditoria({
     db,
     tabela: 'treinamento_requisitos',
@@ -1252,7 +1264,6 @@ app.delete('/regras/:id', requireRole('admin', 'manager'), async (c) => {
   });
   return c.json({ success: true });
 });
-
 
 app.get('/funcionarios/:id', async (c) => {
   const empresaId = getEmpresaId(c);
@@ -1494,7 +1505,10 @@ app.get('/matriz-organizacao', requireRole('admin', 'manager'), async (c) => {
       (!aeronaveModelo || employee.aeronaves_modelos.includes(aeronaveModelo)),
   );
   const directScope: Scope = funcaoId ? 'SETOR_FUNCAO' : 'SETOR';
-  const directPriority = specificity(directScope) + (aeronaveModelo ? 5 : 0);
+  const directPriority =
+    directScope === 'SETOR_FUNCAO'
+      ? 40 + (aeronaveModelo ? 100 : 0)
+      : 20 + (aeronaveModelo ? 100 : 0);
   const data = (tiposResult.results || []).map((tipo) => {
     const candidates = rules
       .filter(
@@ -1502,7 +1516,10 @@ app.get('/matriz-organizacao', requireRole('admin', 'manager'), async (c) => {
           rule.qualificacao_tipo_id === Number(tipo.id) &&
           orgRuleApplies(rule, setorId, funcaoId, aeronaveModelo),
       )
-      .sort((a, b) => rulePriority(b) - rulePriority(a) || b.id - a.id);
+      .sort(
+        (a, b) =>
+          trainingComplianceRulePriority(b) - trainingComplianceRulePriority(a) || b.id - a.id,
+      );
     const effective = candidates[0] || null;
     const direct =
       rules.find(
@@ -1518,7 +1535,10 @@ app.get('/matriz-organizacao', requireRole('admin', 'manager'), async (c) => {
         .filter(
           (rule) => rule.qualificacao_tipo_id === Number(tipo.id) && ruleApplies(rule, employee),
         )
-        .sort((a, b) => rulePriority(b) - rulePriority(a) || b.id - a.id)[0];
+        .sort(
+          (a, b) =>
+            trainingComplianceRulePriority(b) - trainingComplianceRulePriority(a) || b.id - a.id,
+        )[0];
       const requirement =
         employeeEffective && employeeEffective.obrigatoriedade !== 'NAO_APLICA'
           ? computeRequirement(
@@ -1532,7 +1552,7 @@ app.get('/matriz-organizacao', requireRole('admin', 'manager'), async (c) => {
         effective: employeeEffective || null,
         requirement,
         overriddenByMoreSpecific: Boolean(
-          employeeEffective && rulePriority(employeeEffective) > directPriority,
+          employeeEffective && trainingComplianceRulePriority(employeeEffective) > directPriority,
         ),
       };
     });
@@ -1617,7 +1637,11 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
       .filter(
         (row) =>
           row.qualificacao_tipo_id !== null &&
-          !['CONCLUIDO', 'CONCLUIDA'].includes(String(row.status || '').trim().toUpperCase()),
+          !['CONCLUIDO', 'CONCLUIDA'].includes(
+            String(row.status || '')
+              .trim()
+              .toUpperCase(),
+          ),
       )
       .map((row) => `${row.funcionario_id}:${row.qualificacao_tipo_id}`),
   );

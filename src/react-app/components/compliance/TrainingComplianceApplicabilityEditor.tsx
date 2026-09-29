@@ -5,7 +5,7 @@ import { fetchWithAuth } from '@/react-app/config/api';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { showToast } from '@/react-app/utils/toast';
 
-type Scope = 'EMPRESA' | 'SETOR' | 'FUNCAO' | 'SETOR_FUNCAO';
+type Scope = 'EMPRESA' | 'SETOR' | 'FUNCAO' | 'SETOR_FUNCAO' | 'FUNCIONARIO';
 type Obrigatoriedade = 'OBRIGATORIA' | 'RECOMENDADA' | 'NAO_APLICA';
 
 type Rule = {
@@ -17,11 +17,42 @@ type Rule = {
   funcao_id: number | null;
   funcao_nome?: string | null;
   funcionario_id: number | null;
+  funcionario_nome?: string | null;
   aeronave_modelo?: string | null;
+  condicao_id?: number | null;
+  condicao_codigo?: string | null;
+  condicao_nome?: string | null;
+  justificativa?: string | null;
+  perfil_competencia?: string | null;
+  modalidade_requerida?:
+    'EAD' | 'PRESENCIAL' | 'PRATICO' | 'HIBRIDO' | 'DOCUMENTAL' | 'OUTRA' | null;
+  fundamento_tipo?: string | null;
+  fundamento_documento?: string | null;
+  fundamento_item?: string | null;
+  validade_fonte?: 'MODELO' | 'EVIDENCIA';
   obrigatoriedade: Obrigatoriedade;
   critico_operacional: number;
   origem: string;
   referencia_normativa?: string | null;
+};
+
+type ConditionCatalog = {
+  condicoes: Array<{
+    id: number;
+    codigo: string;
+    nome: string;
+    tipo: string;
+    descricao?: string | null;
+    referencia_normativa?: string | null;
+  }>;
+  funcionarios: Array<{
+    id: number;
+    nome: string;
+    setor_id: number | null;
+    setor_nome?: string | null;
+    funcao_id: number | null;
+    funcao_nome?: string | null;
+  }>;
 };
 
 type Catalogs = {
@@ -48,16 +79,8 @@ const scopeOptions: Array<{ value: Scope; label: string }> = [
   { value: 'SETOR', label: 'Todo o setor' },
   { value: 'FUNCAO', label: 'Cargo / função em qualquer setor' },
   { value: 'SETOR_FUNCAO', label: 'Setor + cargo / função' },
+  { value: 'FUNCIONARIO', label: 'Funcionário específico' },
 ];
-
-function isTripulacaoSector(setor?: { codigo?: string | null; nome: string } | null) {
-  if (!setor) return false;
-  const canonical = `${setor.codigo || ''} ${setor.nome}`
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase();
-  return canonical.includes('TRIPUL');
-}
 
 function scopeLabel(rule: Rule) {
   const aircraft = rule.aeronave_modelo ? ` · ${rule.aeronave_modelo}` : '';
@@ -67,7 +90,7 @@ function scopeLabel(rule: Rule) {
   if (rule.escopo === 'SETOR_FUNCAO') {
     return `${rule.setor_nome || 'Setor'} · ${rule.funcao_nome || 'Cargo'}${aircraft}`;
   }
-  return `Funcionário específico${aircraft}`;
+  return `${rule.funcionario_nome || 'Funcionário específico'}${aircraft}`;
 }
 
 export function TrainingComplianceApplicabilityEditor({
@@ -88,6 +111,15 @@ export function TrainingComplianceApplicabilityEditor({
   const [setorId, setSetorId] = useState<number | null>(null);
   const [funcaoId, setFuncaoId] = useState<number | null>(null);
   const [aeronaveModelo, setAeronaveModelo] = useState('');
+  const [funcionarioId, setFuncionarioId] = useState<number | null>(null);
+  const [condicaoId, setCondicaoId] = useState<number | null>(null);
+  const [justificativa, setJustificativa] = useState('');
+  const [perfilCompetencia, setPerfilCompetencia] = useState('');
+  const [modalidadeRequerida, setModalidadeRequerida] = useState('');
+  const [fundamentoTipo, setFundamentoTipo] = useState('');
+  const [fundamentoDocumento, setFundamentoDocumento] = useState('');
+  const [fundamentoItem, setFundamentoItem] = useState('');
+  const [validadeFonte, setValidadeFonte] = useState<'MODELO' | 'EVIDENCIA'>('MODELO');
   const [obrigatoriedade, setObrigatoriedade] = useState<Obrigatoriedade>('OBRIGATORIA');
   const [origem, setOrigem] = useState('REGULATORIO');
   const [critico, setCritico] = useState(false);
@@ -97,18 +129,29 @@ export function TrainingComplianceApplicabilityEditor({
   const capabilities = useQuery({
     queryKey: ['training-compliance', 'capabilities'],
     queryFn: async () =>
-      readJson<{ schema_ready: boolean; aircraft_scope_ready?: boolean }>(
-        await fetchWithAuth('/api/compliance-treinamentos/capabilities'),
-      ),
+      readJson<{
+        schema_ready: boolean;
+        aircraft_scope_ready?: boolean;
+        conditional_scope_ready?: boolean;
+      }>(await fetchWithAuth('/api/compliance-treinamentos/capabilities')),
   });
   const schemaReady = capabilities.data?.schema_ready === true;
   const aircraftScopeReady = capabilities.data?.aircraft_scope_ready === true;
+  const conditionalScopeReady = capabilities.data?.conditional_scope_ready === true;
 
   const catalogs = useQuery({
     queryKey: ['training-compliance', 'catalogs'],
     enabled: schemaReady && canEdit,
     queryFn: async () =>
       readJson<Catalogs>(await fetchWithAuth('/api/compliance-treinamentos/catalogos')),
+  });
+  const conditionCatalog = useQuery({
+    queryKey: ['training-compliance', 'condition-catalogs'],
+    enabled: schemaReady && conditionalScopeReady && canEdit,
+    queryFn: async () =>
+      readJson<ConditionCatalog>(
+        await fetchWithAuth('/api/compliance-treinamentos/condicoes/catalogos'),
+      ),
   });
   const rules = useQuery({
     queryKey: ['training-compliance', 'rules', tipoId],
@@ -121,8 +164,6 @@ export function TrainingComplianceApplicabilityEditor({
 
   const sectors = catalogs.data?.setores || [];
   const functions = catalogs.data?.funcoes || [];
-  const selectedSector = sectors.find((item) => item.id === setorId) || null;
-  const tripulacaoSelected = isTripulacaoSector(selectedSector);
   const allowedFunctionIds = useMemo(() => {
     if (!setorId || scope !== 'SETOR_FUNCAO') return null;
     return new Set(
@@ -139,13 +180,11 @@ export function TrainingComplianceApplicabilityEditor({
   useEffect(() => {
     if (scope !== 'SETOR' && scope !== 'SETOR_FUNCAO') setSetorId(null);
     if (scope !== 'FUNCAO' && scope !== 'SETOR_FUNCAO') setFuncaoId(null);
+    if (scope !== 'FUNCIONARIO') setFuncionarioId(null);
   }, [scope]);
   useEffect(() => {
     if (funcaoId && allowedFunctionIds && !allowedFunctionIds.has(funcaoId)) setFuncaoId(null);
   }, [allowedFunctionIds, funcaoId]);
-  useEffect(() => {
-    if (!tripulacaoSelected) setAeronaveModelo('');
-  }, [tripulacaoSelected]);
 
   const invalidate = async () => {
     await Promise.all([
@@ -166,6 +205,7 @@ export function TrainingComplianceApplicabilityEditor({
         throw new Error('Selecione o setor.');
       if ((scope === 'FUNCAO' || scope === 'SETOR_FUNCAO') && !funcaoId)
         throw new Error('Selecione o cargo/função.');
+      if (scope === 'FUNCIONARIO' && !funcionarioId) throw new Error('Selecione o funcionário.');
       const response = await fetchWithAuth('/api/compliance-treinamentos/regras', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -174,8 +214,16 @@ export function TrainingComplianceApplicabilityEditor({
           escopo: scope,
           setor_id: setorId,
           funcao_id: funcaoId,
-          aeronave_modelo:
-            tripulacaoSelected && aircraftScopeReady ? aeronaveModelo || null : null,
+          funcionario_id: funcionarioId,
+          aeronave_modelo: aircraftScopeReady ? aeronaveModelo || null : null,
+          condicao_id: conditionalScopeReady ? condicaoId : null,
+          justificativa: justificativa.trim() || null,
+          perfil_competencia: perfilCompetencia.trim() || null,
+          modalidade_requerida: modalidadeRequerida || null,
+          fundamento_tipo: fundamentoTipo.trim() || null,
+          fundamento_documento: fundamentoDocumento.trim() || null,
+          fundamento_item: fundamentoItem.trim() || null,
+          validade_fonte: validadeFonte,
           obrigatoriedade,
           critico_operacional: critico,
           origem,
@@ -187,6 +235,12 @@ export function TrainingComplianceApplicabilityEditor({
     onSuccess: async () => {
       showToast.success('Aplicabilidade de compliance atualizada.');
       setReferencia('');
+      setJustificativa('');
+      setPerfilCompetencia('');
+      setModalidadeRequerida('');
+      setFundamentoTipo('');
+      setFundamentoDocumento('');
+      setFundamentoItem('');
       await invalidate();
     },
     onError: (error) =>
@@ -324,7 +378,27 @@ export function TrainingComplianceApplicabilityEditor({
             </select>
           </label>
         )}
-        {tripulacaoSelected && aircraftScopeReady ? (
+        {scope === 'FUNCIONARIO' ? (
+          <label className="text-xs font-medium text-slate-600">
+            Funcionário
+            <select
+              value={funcionarioId ?? ''}
+              onChange={(event) =>
+                setFuncionarioId(event.target.value ? Number(event.target.value) : null)
+              }
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Selecione o funcionário</option>
+              {(conditionCatalog.data?.funcionarios || []).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.nome}
+                  {item.funcao_nome ? ` · ${item.funcao_nome}` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {aircraftScopeReady ? (
           <label className="text-xs font-medium text-slate-600">
             Modelo de aeronave
             <select
@@ -336,6 +410,25 @@ export function TrainingComplianceApplicabilityEditor({
               {(catalogs.data?.aeronaves_modelos || []).map((item) => (
                 <option key={item.modelo} value={item.modelo}>
                   {item.modelo}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {conditionalScopeReady ? (
+          <label className="text-xs font-medium text-slate-600">
+            Condição adicional
+            <select
+              value={condicaoId ?? ''}
+              onChange={(event) =>
+                setCondicaoId(event.target.value ? Number(event.target.value) : null)
+              }
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Nenhuma — somente escopo organizacional</option>
+              {(conditionCatalog.data?.condicoes || []).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.nome} · {item.tipo}
                 </option>
               ))}
             </select>
@@ -375,7 +468,9 @@ export function TrainingComplianceApplicabilityEditor({
             onClick={() => setShowDetails((value) => !value)}
             className="pb-2 text-xs font-semibold text-slate-500 hover:text-primary"
           >
-            {showDetails ? 'Ocultar referência e criticidade' : 'Adicionar referência e criticidade'}
+            {showDetails
+              ? 'Ocultar referência e criticidade'
+              : 'Adicionar referência e criticidade'}
           </button>
         </div>
         {showDetails ? (
@@ -388,6 +483,79 @@ export function TrainingComplianceApplicabilityEditor({
                 placeholder="Ex.: PTO Parte A, RBAC 135, requisito cliente"
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
+            </label>
+            <label className="text-xs font-medium text-slate-600 md:col-span-2">
+              Justificativa — por que este requisito se aplica?
+              <textarea
+                value={justificativa}
+                onChange={(event) => setJustificativa(event.target.value)}
+                rows={2}
+                placeholder="Ex.: empregado ARSO; obrigação prevista no RBAC 120 e no PPSP da empresa."
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="text-xs font-medium text-slate-600">
+              Perfil de competência / currículo
+              <input
+                value={perfilCompetencia}
+                onChange={(event) => setPerfilCompetencia(event.target.value)}
+                placeholder="Ex.: PTAP_TRIPULANTE"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="text-xs font-medium text-slate-600">
+              Modalidade requerida
+              <select
+                value={modalidadeRequerida}
+                onChange={(event) => setModalidadeRequerida(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">Conforme modelo/evidência</option>
+                <option value="EAD">EAD</option>
+                <option value="PRESENCIAL">Presencial</option>
+                <option value="PRATICO">Prático</option>
+                <option value="HIBRIDO">Híbrido</option>
+                <option value="DOCUMENTAL">Documental</option>
+                <option value="OUTRA">Outra</option>
+              </select>
+            </label>
+            <label className="text-xs font-medium text-slate-600">
+              Tipo de fundamento
+              <input
+                value={fundamentoTipo}
+                onChange={(event) => setFundamentoTipo(event.target.value)}
+                placeholder="Ex.: Regulatório, PTO, Programa interno"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="text-xs font-medium text-slate-600">
+              Documento / norma
+              <input
+                value={fundamentoDocumento}
+                onChange={(event) => setFundamentoDocumento(event.target.value)}
+                placeholder="Ex.: NR-35, RBAC 120, PRG-OPS-003"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="text-xs font-medium text-slate-600">
+              Revisão / item
+              <input
+                value={fundamentoItem}
+                onChange={(event) => setFundamentoItem(event.target.value)}
+                placeholder="Ex.: Rev.05, item 8.2"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="text-xs font-medium text-slate-600">
+              Fonte da validade
+              <select
+                value={validadeFonte}
+                onChange={(event) => setValidadeFonte(event.target.value as 'MODELO' | 'EVIDENCIA')}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="MODELO">Prazo do modelo</option>
+                <option value="EVIDENCIA">Data do documento/certificado</option>
+              </select>
             </label>
             <label className="inline-flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
               <input
@@ -448,6 +616,30 @@ export function TrainingComplianceApplicabilityEditor({
                   {rule.origem}
                   {rule.referencia_normativa ? ` · ${rule.referencia_normativa}` : ''}
                 </p>
+                {rule.condicao_nome ? (
+                  <p className="mt-1 text-xs font-medium text-indigo-700">
+                    Condição: {rule.condicao_nome}
+                  </p>
+                ) : null}
+                {rule.perfil_competencia ? (
+                  <p className="mt-1 text-xs text-slate-600">Perfil: {rule.perfil_competencia}</p>
+                ) : null}
+                {rule.modalidade_requerida ? (
+                  <p className="mt-1 text-xs text-slate-600">
+                    Modalidade: {rule.modalidade_requerida}
+                  </p>
+                ) : null}
+                {rule.fundamento_tipo || rule.fundamento_documento || rule.fundamento_item ? (
+                  <p className="mt-1 text-xs text-slate-600">
+                    Fundamento:{' '}
+                    {[rule.fundamento_tipo, rule.fundamento_documento, rule.fundamento_item]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                ) : null}
+                {rule.justificativa ? (
+                  <p className="mt-1 text-xs text-slate-600">Motivo: {rule.justificativa}</p>
+                ) : null}
               </div>
               <select
                 value={rule.obrigatoriedade}

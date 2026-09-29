@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import { TrainingComplianceApplicabilityEditor } from '@/react-app/components/compliance/TrainingComplianceApplicabilityEditor';
+import { TrainingComplianceConditionsEditor } from '@/react-app/components/compliance/TrainingComplianceConditionsEditor';
 import { TrainingComplianceOrganizationEditor } from '@/react-app/components/compliance/TrainingComplianceOrganizationEditor';
 import { TrainingEnrollmentReconciliation } from '@/react-app/components/compliance/TrainingEnrollmentReconciliation';
 import {
@@ -125,14 +126,17 @@ function buildFilter(setorId: number | null, funcaoId: number | null) {
   return query ? `?${query}` : '';
 }
 
-type ComplianceTab = 'pendencias' | 'treinamentos' | 'pessoas' | 'setores' | 'relatorios' | 'comunicacoes' | 'administracao';
+type ComplianceTab =
+  | 'pendencias'
+  | 'treinamentos'
+  | 'pessoas'
+  | 'setores'
+  | 'relatorios'
+  | 'comunicacoes'
+  | 'administracao';
 
 type ComplianceDrilldownStatus =
-  | 'CONFORME'
-  | 'VENCENDO'
-  | 'VENCIDO'
-  | 'NAO_REALIZADO'
-  | 'EM_ANDAMENTO';
+  'CONFORME' | 'VENCENDO' | 'VENCIDO' | 'NAO_REALIZADO' | 'EM_ANDAMENTO';
 
 function isComplianceTab(value: string | null): value is ComplianceTab {
   return (
@@ -231,8 +235,7 @@ function StatusBreakdown({
   naoRealizados: number;
   semConfiguracao?: number;
 }) {
-  const hasAttention =
-    emAndamento + vencendo + vencidos + naoRealizados + semConfiguracao > 0;
+  const hasAttention = emAndamento + vencendo + vencidos + naoRealizados + semConfiguracao > 0;
 
   if (!hasAttention) {
     return <span className="text-xs font-medium text-emerald-700">Sem pendências</span>;
@@ -269,7 +272,6 @@ function StatusBreakdown({
   );
 }
 
-
 export default function ComplianceTreinamentosPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [setorId, setSetorId] = useState<number | null>(null);
@@ -279,7 +281,7 @@ export default function ComplianceTreinamentosPage() {
     return isComplianceTab(requested) ? requested : 'pendencias';
   });
   const [configurationMode, setConfigurationMode] = useState<
-    'organizacao' | 'treinamento' | 'reconciliacao' | 'automacao'
+    'organizacao' | 'treinamento' | 'condicoes' | 'reconciliacao' | 'automacao'
   >('organizacao');
   const [expandedSectors, setExpandedSectors] = useState<Set<number | null>>(new Set());
   const [selectedTipoId, setSelectedTipoId] = useState<number | null>(null);
@@ -373,10 +375,7 @@ export default function ComplianceTreinamentosPage() {
     setSearchParams(nextParams, { replace: true });
   };
 
-  const openPeopleDrilldown = (
-    item: Training,
-    status?: ComplianceDrilldownStatus,
-  ) => {
+  const openPeopleDrilldown = (item: Training, status?: ComplianceDrilldownStatus) => {
     setDrilldown({
       qualificacao_tipo_id: item.qualificacao_tipo_id,
       qualificacao_nome: item.qualificacao_tipo_nome,
@@ -390,10 +389,7 @@ export default function ComplianceTreinamentosPage() {
     selectTab('pessoas', false);
   };
 
-  const summaryRealized = realizedCount(
-    summary.data?.conformes ?? 0,
-    summary.data?.vencendo ?? 0,
-  );
+  const summaryRealized = realizedCount(summary.data?.conformes ?? 0, summary.data?.vencendo ?? 0);
 
   const handleSetor = (value: string) => {
     const next = value ? Number(value) : null;
@@ -488,132 +484,136 @@ export default function ComplianceTreinamentosPage() {
 
         {schemaReady ? (
           <>
-            {(['pendencias', 'treinamentos', 'pessoas', 'setores', 'relatorios'] as ComplianceTab[]).includes(tab) ? (
+            {(
+              ['pendencias', 'treinamentos', 'pessoas', 'setores', 'relatorios'] as ComplianceTab[]
+            ).includes(tab) ? (
               <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)_minmax(260px,0.95fr)]">
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Compliance geral
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
-                      <span className="text-4xl font-bold tracking-tight text-slate-950">
-                        {summary.data?.compliance_pct == null
-                          ? '—'
-                          : `${summary.data.compliance_pct}%`}
-                      </span>
-                      <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                        <Users className="h-3.5 w-3.5" />
-                        {summary.data?.pessoas ?? 0} pessoas
-                      </span>
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Compliance geral
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
+                        <span className="text-4xl font-bold tracking-tight text-slate-950">
+                          {summary.data?.compliance_pct == null
+                            ? '—'
+                            : `${summary.data.compliance_pct}%`}
+                        </span>
+                        <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                          <Users className="h-3.5 w-3.5" />
+                          {summary.data?.pessoas ?? 0} pessoas
+                        </span>
+                      </div>
+                    </div>
+                    <div className="rounded-xl bg-emerald-50 p-2.5 text-emerald-700">
+                      <ShieldCheck className="h-5 w-5" />
                     </div>
                   </div>
-                  <div className="rounded-xl bg-emerald-50 p-2.5 text-emerald-700">
-                    <ShieldCheck className="h-5 w-5" />
+                  <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, summary.data?.compliance_pct ?? 0))}%`,
+                      }}
+                    />
                   </div>
-                </div>
-                <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-emerald-500 transition-all"
-                    style={{
-                      width: `${Math.min(100, Math.max(0, summary.data?.compliance_pct ?? 0))}%`,
-                    }}
-                  />
-                </div>
-                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-slate-500">
-                  <span>
-                    <strong className="font-semibold text-slate-700">
-                      {summary.data?.conformes ?? 0}
-                    </strong>{' '}
-                    de {summary.data?.requisitos_obrigatorios ?? 0} requisitos atendidos
-                  </span>
-                  <span className="whitespace-nowrap">janela: 30 dias</span>
-                </div>
-              </section>
+                  <div className="mt-2 flex items-center justify-between gap-3 text-xs text-slate-500">
+                    <span>
+                      <strong className="font-semibold text-slate-700">
+                        {summary.data?.conformes ?? 0}
+                      </strong>{' '}
+                      de {summary.data?.requisitos_obrigatorios ?? 0} requisitos atendidos
+                    </span>
+                    <span className="whitespace-nowrap">janela: 30 dias</span>
+                  </div>
+                </section>
 
-              <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-sm font-semibold text-slate-900">Situação dos requisitos</h2>
-                    <p className="text-xs text-slate-500">
-                      Clique em uma situação para ver as pessoas.
-                    </p>
+                <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-900">
+                        Situação dos requisitos
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        Clique em uma situação para ver as pessoas.
+                      </p>
+                    </div>
+                    <span className="hidden text-xs font-medium text-slate-400 sm:inline">
+                      {summary.data?.requisitos_obrigatorios ?? 0} no total
+                    </span>
                   </div>
-                  <span className="hidden text-xs font-medium text-slate-400 sm:inline">
-                    {summary.data?.requisitos_obrigatorios ?? 0} no total
-                  </span>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                  <StatusMetric
-                    label="Realizados"
-                    value={summaryRealized}
-                    icon={CheckCircle2}
-                    tone="success"
-                    onClick={() => openStatusDrilldown('CONFORME')}
-                  />
-                  <StatusMetric
-                    label="Em andamento"
-                    value={summary.data?.em_andamento ?? 0}
-                    icon={GraduationCap}
-                    tone="info"
-                    onClick={() => openStatusDrilldown('EM_ANDAMENTO')}
-                  />
-                  <StatusMetric
-                    label="Vencendo"
-                    value={summary.data?.vencendo ?? 0}
-                    icon={Clock3}
-                    tone="warning"
-                    onClick={() => openStatusDrilldown('VENCENDO')}
-                  />
-                  <StatusMetric
-                    label="Vencidos"
-                    value={summary.data?.vencidos ?? 0}
-                    icon={XCircle}
-                    tone="danger"
-                    onClick={() => openStatusDrilldown('VENCIDO')}
-                  />
-                  <StatusMetric
-                    label="Nunca fez"
-                    value={summary.data?.nao_realizados ?? 0}
-                    icon={AlertTriangle}
-                    tone="attention"
-                    onClick={() => openStatusDrilldown('NAO_REALIZADO')}
-                  />
-                </div>
-              </section>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                    <StatusMetric
+                      label="Realizados"
+                      value={summaryRealized}
+                      icon={CheckCircle2}
+                      tone="success"
+                      onClick={() => openStatusDrilldown('CONFORME')}
+                    />
+                    <StatusMetric
+                      label="Em andamento"
+                      value={summary.data?.em_andamento ?? 0}
+                      icon={GraduationCap}
+                      tone="info"
+                      onClick={() => openStatusDrilldown('EM_ANDAMENTO')}
+                    />
+                    <StatusMetric
+                      label="Vencendo"
+                      value={summary.data?.vencendo ?? 0}
+                      icon={Clock3}
+                      tone="warning"
+                      onClick={() => openStatusDrilldown('VENCENDO')}
+                    />
+                    <StatusMetric
+                      label="Vencidos"
+                      value={summary.data?.vencidos ?? 0}
+                      icon={XCircle}
+                      tone="danger"
+                      onClick={() => openStatusDrilldown('VENCIDO')}
+                    />
+                    <StatusMetric
+                      label="Nunca fez"
+                      value={summary.data?.nao_realizados ?? 0}
+                      icon={AlertTriangle}
+                      tone="attention"
+                      onClick={() => openStatusDrilldown('NAO_REALIZADO')}
+                    />
+                  </div>
+                </section>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setConfigurationMode('organizacao');
-                  selectTab('administracao');
-                }}
-                className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 text-left shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
-                      Configuração da matriz
-                    </p>
-                    <p className="mt-2 text-3xl font-bold tabular-nums text-slate-950">
-                      {summary.data?.pessoas_sem_configuracao ?? 0}
-                    </p>
-                    <p className="mt-1 text-sm font-medium text-slate-700">
-                      pessoas sem configuração
-                    </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfigurationMode('organizacao');
+                    selectTab('administracao');
+                  }}
+                  className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 text-left shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                        Configuração da matriz
+                      </p>
+                      <p className="mt-2 text-3xl font-bold tabular-nums text-slate-950">
+                        {summary.data?.pessoas_sem_configuracao ?? 0}
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">
+                        pessoas sem configuração
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-white/80 p-2.5 text-amber-700 shadow-sm">
+                      <AlertTriangle className="h-5 w-5" />
+                    </div>
                   </div>
-                  <div className="rounded-xl bg-white/80 p-2.5 text-amber-700 shadow-sm">
-                    <AlertTriangle className="h-5 w-5" />
-                  </div>
-                </div>
-                <p className="mt-4 text-xs leading-5 text-slate-600">
-                  {summary.data?.cargos_sem_matriz ?? 0} cargo(s) sem matriz ·{' '}
-                  {summary.data?.setores_sem_matriz ?? 0} setor(es) sem matriz
-                </p>
-                <span className="mt-4 inline-flex text-xs font-semibold text-amber-900">
-                  Revisar configuração →
-                </span>
-              </button>
+                  <p className="mt-4 text-xs leading-5 text-slate-600">
+                    {summary.data?.cargos_sem_matriz ?? 0} cargo(s) sem matriz ·{' '}
+                    {summary.data?.setores_sem_matriz ?? 0} setor(es) sem matriz
+                  </p>
+                  <span className="mt-4 inline-flex text-xs font-semibold text-amber-900">
+                    Revisar configuração →
+                  </span>
+                </button>
               </div>
             ) : null}
 
@@ -959,6 +959,13 @@ export default function ComplianceTreinamentosPage() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => setConfigurationMode('condicoes')}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium ${configurationMode === 'condicoes' ? 'bg-white text-primary shadow-sm' : 'text-slate-600'}`}
+                    >
+                      Exposição e designações
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setConfigurationMode('reconciliacao')}
                       className={`rounded-md px-3 py-1.5 text-sm font-medium ${configurationMode === 'reconciliacao' ? 'bg-white text-primary shadow-sm' : 'text-slate-600'}`}
                     >
@@ -974,6 +981,8 @@ export default function ComplianceTreinamentosPage() {
                   </div>
                   {configurationMode === 'organizacao' ? (
                     <TrainingComplianceOrganizationEditor />
+                  ) : configurationMode === 'condicoes' ? (
+                    <TrainingComplianceConditionsEditor />
                   ) : configurationMode === 'reconciliacao' ? (
                     <TrainingEnrollmentReconciliation setorId={setorId} funcaoId={funcaoId} />
                   ) : configurationMode === 'automacao' ? (
@@ -1017,7 +1026,6 @@ export default function ComplianceTreinamentosPage() {
                 </div>
               ) : null}
             </div>
-
           </>
         ) : null}
       </div>
