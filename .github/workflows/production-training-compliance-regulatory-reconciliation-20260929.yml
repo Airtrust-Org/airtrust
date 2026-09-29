@@ -38,8 +38,8 @@ env:
   PRODUCTION_D1_NAME: airtrust-db
 
 jobs:
-  reconcile:
-    name: Governed Production Training Compliance Reconciliation
+  d1_reconcile:
+    name: Governed Production D1 Training Compliance Reconciliation
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
