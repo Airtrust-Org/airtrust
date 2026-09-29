@@ -30,9 +30,11 @@ vi.mock('../../routes/escalas-shared', () => ({
 import deduplicateRoutes from '../../routes/deduplicate';
 
 type DedupGroup = {
-  funcionario_cpf: string | null;
+  funcionario_id: number;
+  qualificacao_chave: string;
+  qualificacao_id: number | null;
   qualificacao_codigo: string | null;
-  data_vencimento: string | null;
+  data_conclusao_dia: string;
   total: number;
 };
 
@@ -54,11 +56,11 @@ function asObject(value: unknown): Record<string, unknown> {
 }
 
 function buildGroupKey(group: {
-  funcionario_cpf: string | null;
-  qualificacao_codigo: string | null;
-  data_vencimento: string | null;
+  funcionario_id: number;
+  qualificacao_chave: string;
+  data_conclusao_dia: string;
 }): string {
-  return `${group.funcionario_cpf ?? 'NULL'}|${group.qualificacao_codigo ?? 'NULL'}|${group.data_vencimento ?? 'NULL'}`;
+  return `${group.funcionario_id}|${group.qualificacao_chave}|${group.data_conclusao_dia}`;
 }
 
 function createMockDb(dataByTenant: Record<number, TenantDataset>) {
@@ -82,16 +84,16 @@ function createMockDb(dataByTenant: Record<number, TenantDataset>) {
         const stmt = {
           all: async () => {
             calls.push({ query, args, method: 'all' });
-            if (query.includes('GROUP BY funcionario_cpf, qualificacao_codigo, data_vencimento')) {
+            if (query.includes('date(data_conclusao)') && query.includes('GROUP BY')) {
               const empresaId = Number(args[0]);
               return { results: dataByTenant[empresaId]?.groups ?? [] };
             }
             if (query.includes('SELECT id, data_conclusao, created_at')) {
               const empresaId = Number(args[0]);
               const key = buildGroupKey({
-                funcionario_cpf: (args[1] as string | null) ?? null,
-                qualificacao_codigo: (args[2] as string | null) ?? null,
-                data_vencimento: (args[3] as string | null) ?? null,
+                funcionario_id: Number(args[1]),
+                qualificacao_chave: String(args[2] ?? ''),
+                data_conclusao_dia: String(args[3] ?? ''),
               });
               return { results: dataByTenant[empresaId]?.recordsByKey[key] ?? [] };
             }
@@ -133,45 +135,39 @@ function createTestApp() {
 }
 
 function makeDataset(): Record<number, TenantDataset> {
+  const tenant1Group: DedupGroup = {
+    funcionario_id: 11,
+    qualificacao_chave: 'SIM',
+    qualificacao_id: 7,
+    qualificacao_codigo: 'SIM',
+    data_conclusao_dia: '2026-01-03',
+    total: 3,
+  };
+  const tenant2Group: DedupGroup = {
+    funcionario_id: 22,
+    qualificacao_chave: 'SIM',
+    qualificacao_id: 7,
+    qualificacao_codigo: 'SIM',
+    data_conclusao_dia: '2026-01-02',
+    total: 2,
+  };
   return {
     1: {
-      groups: [
-        {
-          funcionario_cpf: '11111111111',
-          qualificacao_codigo: 'SIM',
-          data_vencimento: '2026-12-31',
-          total: 3,
-        },
-      ],
+      groups: [tenant1Group],
       recordsByKey: {
-        [buildGroupKey({
-          funcionario_cpf: '11111111111',
-          qualificacao_codigo: 'SIM',
-          data_vencimento: '2026-12-31',
-        })]: [
-          { id: 101, data_conclusao: '2026-01-03', created_at: '2026-01-03T10:00:00Z' },
-          { id: 102, data_conclusao: '2026-01-02', created_at: '2026-01-02T10:00:00Z' },
-          { id: 103, data_conclusao: '2026-01-01', created_at: '2026-01-01T10:00:00Z' },
+        [buildGroupKey(tenant1Group)]: [
+          { id: 101, data_conclusao: '2026-01-03T08:00:00Z', created_at: '2026-01-03T10:00:00Z' },
+          { id: 102, data_conclusao: '2026-01-03T08:00:00Z', created_at: '2026-01-03T09:00:00Z' },
+          { id: 103, data_conclusao: '2026-01-03T08:00:00Z', created_at: '2026-01-03T08:30:00Z' },
         ],
       },
     },
     2: {
-      groups: [
-        {
-          funcionario_cpf: '22222222222',
-          qualificacao_codigo: 'SIM',
-          data_vencimento: '2026-12-31',
-          total: 2,
-        },
-      ],
+      groups: [tenant2Group],
       recordsByKey: {
-        [buildGroupKey({
-          funcionario_cpf: '22222222222',
-          qualificacao_codigo: 'SIM',
-          data_vencimento: '2026-12-31',
-        })]: [
-          { id: 201, data_conclusao: '2026-01-02', created_at: '2026-01-02T10:00:00Z' },
-          { id: 202, data_conclusao: '2026-01-01', created_at: '2026-01-01T10:00:00Z' },
+        [buildGroupKey(tenant2Group)]: [
+          { id: 201, data_conclusao: '2026-01-02T08:00:00Z', created_at: '2026-01-02T10:00:00Z' },
+          { id: 202, data_conclusao: '2026-01-02T08:00:00Z', created_at: '2026-01-02T09:00:00Z' },
         ],
       },
     },
@@ -289,14 +285,15 @@ describe('deduplicate route guards', () => {
     );
 
     expect(response.status).toBe(200);
-    const groupQuery = calls.find((call) =>
-      call.query.includes('GROUP BY funcionario_cpf, qualificacao_codigo, data_vencimento'),
+    const groupQuery = calls.find(
+      (call) => call.query.includes('date(data_conclusao)') && call.query.includes('GROUP BY'),
     );
     const recordsQuery = calls.find((call) =>
       call.query.includes('SELECT id, data_conclusao, created_at'),
     );
     const deleteQuery = calls.find(
-      (call) => call.query.includes('UPDATE qualificacoes_historico') && call.query.includes('id IN ('),
+      (call) =>
+        call.query.includes('UPDATE qualificacoes_historico') && call.query.includes('id IN ('),
     );
     const repointQuery = calls.find((call) => call.query.includes('renovacao_de = ?'));
 

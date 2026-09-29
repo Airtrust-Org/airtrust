@@ -85,8 +85,11 @@ const SCHEMA = `
 CREATE TABLE qualificacoes_historico (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   empresa_id INTEGER NOT NULL,
+  funcionario_id INTEGER,
   funcionario_cpf TEXT,
+  qualificacao_id INTEGER,
   qualificacao_codigo TEXT,
+  codigo TEXT,
   data_conclusao TEXT,
   data_vencimento TEXT,
   renovacao_de INTEGER,
@@ -129,27 +132,27 @@ afterEach(() => {
 describe('POST /deduplicate — não deixa renovacao_de órfão ao remover duplicatas', () => {
   it('A<-B (B duplicado): sucessor externo que aponta para B é repontado para o sobrevivente do grupo', async () => {
     // Grupo de duplicatas: dois registros CMA para o mesmo funcionário com
-    // o MESMO data_vencimento (near-duplicate real) — o mais recente
+    // a MESMA data_conclusao (duplicidade real) — o mais recente
     // (id 2, data_conclusao mais nova) sobrevive; o mais antigo (id 1) é
     // removido.
     sqlite
       .prepare(
-        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento)
-         VALUES (1, 1, '111', 'CMA', '2025-01-01', '2026-01-01')`,
+        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento)
+         VALUES (1, 1, 11, '111', 'CMA', '2025-01-01', '2026-01-01')`,
       )
       .run();
     sqlite
       .prepare(
-        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento)
-         VALUES (2, 1, '111', 'CMA', '2025-01-02', '2026-01-01')`,
+        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento)
+         VALUES (2, 1, 11, '111', 'CMA', '2025-01-01', '2026-01-01')`,
       )
       .run();
     // Um registro externo (a renovação seguinte) que aponta para o
     // duplicado mais antigo (id 1) como seu predecessor.
     sqlite
       .prepare(
-        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento, renovacao_de, status)
-         VALUES (3, 1, '111', 'CMA', '2026-06-01', '2027-06-01', 1, 'CONCLUIDA')`,
+        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento, renovacao_de, status)
+         VALUES (3, 1, 11, '111', 'CMA', '2026-06-01', '2027-06-01', 1, 'CONCLUIDA')`,
       )
       .run();
 
@@ -175,14 +178,14 @@ describe('POST /deduplicate — não deixa renovacao_de órfão ao remover dupli
     // duplicado do mesmo grupo, não um predecessor real externo).
     sqlite
       .prepare(
-        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento)
-         VALUES (1, 1, '111', 'CMA', '2025-01-01', '2026-01-01')`,
+        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento)
+         VALUES (1, 1, 11, '111', 'CMA', '2025-01-01', '2026-01-01')`,
       )
       .run();
     sqlite
       .prepare(
-        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento, renovacao_de)
-         VALUES (2, 1, '111', 'CMA', '2025-01-02', '2026-01-01', 1)`,
+        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento, renovacao_de)
+         VALUES (2, 1, 11, '111', 'CMA', '2025-01-01', '2026-01-01', 1)`,
       )
       .run();
 
@@ -196,30 +199,30 @@ describe('POST /deduplicate — não deixa renovacao_de órfão ao remover dupli
 
   it('A<-B<-C (B duplicado de A): remover B repontam C para o sobrevivente, cadeia permanece íntegra', async () => {
     // A = id 10 (predecessor real, grupo diferente). B = ids 20/21 são
-    // duplicatas entre si (mesmo vencimento); 21 sobrevive. C = id 30
+    // duplicatas entre si (mesma data de conclusão); 21 sobrevive. C = id 30
     // aponta para 20 (o duplicado que será removido).
     sqlite
       .prepare(
-        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento, status)
-         VALUES (10, 1, '222', 'CMA', '2023-01-01', '2024-01-01', 'RENOVADA')`,
+        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento, status)
+         VALUES (10, 1, 22, '222', 'CMA', '2023-01-01', '2024-01-01', 'RENOVADA')`,
       )
       .run();
     sqlite
       .prepare(
-        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento, renovacao_de, status)
-         VALUES (20, 1, '222', 'CMA', '2024-06-01', '2025-06-01', 10, 'RENOVADA')`,
+        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento, renovacao_de, status)
+         VALUES (20, 1, 22, '222', 'CMA', '2024-06-01', '2025-06-01', 10, 'RENOVADA')`,
       )
       .run();
     sqlite
       .prepare(
-        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento, renovacao_de, status)
-         VALUES (21, 1, '222', 'CMA', '2024-06-02', '2025-06-01', 10, 'RENOVADA')`,
+        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento, renovacao_de, status)
+         VALUES (21, 1, 22, '222', 'CMA', '2024-06-01', '2025-06-01', 10, 'RENOVADA')`,
       )
       .run();
     sqlite
       .prepare(
-        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento, renovacao_de, status)
-         VALUES (30, 1, '222', 'CMA', '2026-01-01', '2027-01-01', 20, 'CONCLUIDA')`,
+        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento, renovacao_de, status)
+         VALUES (30, 1, 22, '222', 'CMA', '2026-01-01', '2027-01-01', 20, 'CONCLUIDA')`,
       )
       .run();
 
@@ -242,22 +245,22 @@ describe('POST /deduplicate — não deixa renovacao_de órfão ao remover dupli
   it('tenant A/B: repoint nunca cruza tenants mesmo com cpf/código idênticos', async () => {
     sqlite
       .prepare(
-        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento)
-         VALUES (1, 1, '111', 'CMA', '2025-01-01', '2026-01-01')`,
+        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento)
+         VALUES (1, 1, 11, '111', 'CMA', '2025-01-01', '2026-01-01')`,
       )
       .run();
     sqlite
       .prepare(
-        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento)
-         VALUES (2, 1, '111', 'CMA', '2025-01-02', '2026-01-01')`,
+        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento)
+         VALUES (2, 1, 11, '111', 'CMA', '2025-01-01', '2026-01-01')`,
       )
       .run();
     // Mesmo cpf/código, tenant 2 — nunca deve ser tocado nem usado como
     // fonte de repoint.
     sqlite
       .prepare(
-        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento, renovacao_de)
-         VALUES (3, 2, '111', 'CMA', '2026-01-01', '2027-01-01', 1)`,
+        `INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_id, funcionario_cpf, qualificacao_codigo, data_conclusao, data_vencimento, renovacao_de)
+         VALUES (3, 2, 11, '111', 'CMA', '2026-01-01', '2027-01-01', 1)`,
       )
       .run();
 

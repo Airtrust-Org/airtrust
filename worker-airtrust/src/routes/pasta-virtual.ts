@@ -191,7 +191,14 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
         'pasta_virtual' as origem
       FROM pasta_virtual pv
       INNER JOIN funcionarios f ON pv.funcionario_id = f.id AND f.deleted_at IS NULL
-      WHERE pv.funcionario_id = ? AND pv.deleted_at IS NULL AND f.empresa_id = ?
+      LEFT JOIN documentos canonical_doc
+        ON canonical_doc.r2_key = ${pvR2KeyExpr}
+       AND canonical_doc.funcionario_id = pv.funcionario_id
+       AND canonical_doc.empresa_id = f.empresa_id
+      WHERE pv.funcionario_id = ?
+        AND pv.deleted_at IS NULL
+        AND f.empresa_id = ?
+        AND (canonical_doc.id IS NULL OR canonical_doc.deleted_at IS NULL)
       ORDER BY pv.created_at DESC
     `;
 
