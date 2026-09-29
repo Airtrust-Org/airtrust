@@ -120,28 +120,52 @@ BEGIN
 END;
 
 -- Initial condition catalog for Costa do Sol. Assignments are deliberately NOT inferred here.
+-- D1 production/staging enforces a low compound-SELECT term ceiling; keep each seed independent.
 INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
-SELECT id,'TRABALHO_ALTURA_AUTORIZADO','Trabalho em altura autorizado','EXPOSICAO_RISCO','Pessoa autorizada a executar atividade abrangida pela NR-35','NR-35' FROM empresas WHERE id=6
-UNION ALL SELECT id,'OPERADOR_EQUIP_MOVIMENTACAO','Operador de equipamento de movimentação','ATIVIDADE','Opera equipamento de transporte/movimentação abrangido pela NR-11','NR-11' FROM empresas WHERE id=6
-UNION ALL SELECT id,'USO_EPI_REQUER_TREINAMENTO','Uso de EPI que requer treinamento','EXPOSICAO_RISCO','Atividade exige EPI e treinamento/informação específicos','NR-06; PGR/LAPR' FROM empresas WHERE id=6
-UNION ALL SELECT id,'MANUSEIA_PRODUTO_QUIMICO','Manuseia produto químico','EXPOSICAO_RISCO','Utiliza, manuseia ou armazena produto químico abrangido pela NR-26','NR-26; PGR/LAPR' FROM empresas WHERE id=6
-UNION ALL SELECT id,'NR20_AREA_SEM_CONTATO','NR-20 — acesso sem contato direto','EXPOSICAO_RISCO','Entra em área abrangida pela NR-20 sem contato direto com o processo','NR-20' FROM empresas WHERE id=6
-UNION ALL SELECT id,'NR20_CONTATO_DIRETO','NR-20 — contato direto com processo','EXPOSICAO_RISCO','Executa atividade com contato direto em instalação abrangida pela NR-20','NR-20' FROM empresas WHERE id=6
-UNION ALL SELECT id,'ARSO','Empregado ARSO','DESIGNACAO','Exerce Atividade de Risco à Segurança Operacional','RBAC 120; PRG-SSO-005' FROM empresas WHERE id=6
-UNION ALL SELECT id,'SUPERVISOR_ARSO','Supervisor ARSO','DESIGNACAO','Supervisor formal de empregado(s) ARSO','RBAC 120; PRG-SSO-005' FROM empresas WHERE id=6
-UNION ALL SELECT id,'MEMBRO_CIPA','Membro da CIPA / representante NR-05','DESIGNACAO','Titular, suplente ou representante formalmente designado','NR-05' FROM empresas WHERE id=6
-UNION ALL SELECT id,'BRIGADISTA','Brigadista','DESIGNACAO','Integrante formal da brigada de emergência/incêndio','NR-23; legislação estadual/local; PAE/PAEL' FROM empresas WHERE id=6
-UNION ALL SELECT id,'SOCORRISTA_DESIGNADO','Socorrista designado','DESIGNACAO','Pessoa formalmente designada para primeiros socorros','PGR/PCMSO/PAE aplicáveis' FROM empresas WHERE id=6
-UNION ALL SELECT id,'GATEKEEPER','Gatekeeper FDM','DESIGNACAO','Gatekeeper formalmente designado no Programa FDM','MNL-SSO-002' FROM empresas WHERE id=6
-UNION ALL SELECT id,'FDM_EQUIPE','Equipe/Comitê FDM','DESIGNACAO','Pessoa com função formal no Programa/Comitê FDM','MNL-SSO-002' FROM empresas WHERE id=6
-UNION ALL SELECT id,'LOSA_OBSERVADOR','Observador/equipe LOSA','DESIGNACAO','Pessoa designada para observação/análise LOSA','Programa LOSA; PRG-SGI-005' FROM empresas WHERE id=6
-UNION ALL SELECT id,'INSTRUTOR_DESIGNADO','Instrutor designado','DESIGNACAO','Pessoa formalmente designada como instrutor','PTO/PTM aplicável' FROM empresas WHERE id=6
-UNION ALL SELECT id,'EXAMINADOR_DESIGNADO','Examinador designado','DESIGNACAO','Pessoa formalmente designada/credenciada como examinador','PTO/RBAC aplicável' FROM empresas WHERE id=6
-UNION ALL SELECT id,'OPERADOR_MAQUINA_NR12','Operador de máquina/equipamento NR-12','ATIVIDADE','Opera máquina ou equipamento abrangido pela NR-12 e requer capacitação específica','NR-12; PGR/LAPR' FROM empresas WHERE id=6
-UNION ALL SELECT id,'PTAP_RAMPA_DG_DESIGNADO','Agente de rampa DG designado','DESIGNACAO','Agente de rampa formalmente designado para tarefas adicionais de artigos perigosos previstas no PTAP','PRG-OPS-003 Rev.05; RBAC 175; IS 175-007F' FROM empresas WHERE id=6
-UNION ALL SELECT id,'AUDITOR_INTERNO_DESIGNADO','Auditor interno designado','DESIGNACAO','Pessoa designada para auditoria interna','ISO 9001/14001/45001; programa interno' FROM empresas WHERE id=6
-UNION ALL SELECT id,'AUDITOR_COMPORTAMENTAL_DESIGNADO','Auditor comportamental designado','DESIGNACAO','Pessoa designada para auditoria comportamental','PRC-SGI-017' FROM empresas WHERE id=6
-UNION ALL SELECT id,'EXPOSICAO_AIRSIDE','Atuação operacional em airside','ATIVIDADE','Atividade vigente em área operacional/airside que exige treinamento associado ao risco operacional','FORM-SGI-037; procedimento operacional aplicável' FROM empresas WHERE id=6
-UNION ALL SELECT id,'AVSEC_ATENDIMENTO_PASSAGEIRO','Atividade AVSEC de atendimento ao passageiro','CERTIFICACAO','Executa controles AVSEC relacionados ao atendimento/despacho de passageiros','PRG-SSO-006; RBAC 110' FROM empresas WHERE id=6
-UNION ALL SELECT id,'AVSEC_OPERACOES_SOLO','Atividade AVSEC de operações de solo','CERTIFICACAO','Executa controles AVSEC de solo no âmbito do operador aéreo','PRG-SSO-006; RBAC 110' FROM empresas WHERE id=6
-UNION ALL SELECT id,'AVSEC_CARGA_AEREA','Atividade AVSEC de carga aérea','CERTIFICACAO','Executa controles AVSEC relacionados à carga aérea','PRG-SSO-006; RBAC 110' FROM empresas WHERE id=6;
+SELECT id,'TRABALHO_ALTURA_AUTORIZADO','Trabalho em altura autorizado','EXPOSICAO_RISCO','Pessoa autorizada a executar atividade abrangida pela NR-35','NR-35' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'OPERADOR_EQUIP_MOVIMENTACAO','Operador de equipamento de movimentação','ATIVIDADE','Opera equipamento de transporte/movimentação abrangido pela NR-11','NR-11' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'USO_EPI_REQUER_TREINAMENTO','Uso de EPI que requer treinamento','EXPOSICAO_RISCO','Atividade exige EPI e treinamento/informação específicos','NR-06; PGR/LAPR' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'MANUSEIA_PRODUTO_QUIMICO','Manuseia produto químico','EXPOSICAO_RISCO','Utiliza, manuseia ou armazena produto químico abrangido pela NR-26','NR-26; PGR/LAPR' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'NR20_AREA_SEM_CONTATO','NR-20 — acesso sem contato direto','EXPOSICAO_RISCO','Entra em área abrangida pela NR-20 sem contato direto com o processo','NR-20' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'NR20_CONTATO_DIRETO','NR-20 — contato direto com processo','EXPOSICAO_RISCO','Executa atividade com contato direto em instalação abrangida pela NR-20','NR-20' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'ARSO','Empregado ARSO','DESIGNACAO','Exerce Atividade de Risco à Segurança Operacional','RBAC 120; PRG-SSO-005' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'SUPERVISOR_ARSO','Supervisor ARSO','DESIGNACAO','Supervisor formal de empregado(s) ARSO','RBAC 120; PRG-SSO-005' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'MEMBRO_CIPA','Membro da CIPA / representante NR-05','DESIGNACAO','Titular, suplente ou representante formalmente designado','NR-05' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'BRIGADISTA','Brigadista','DESIGNACAO','Integrante formal da brigada de emergência/incêndio','NR-23; legislação estadual/local; PAE/PAEL' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'SOCORRISTA_DESIGNADO','Socorrista designado','DESIGNACAO','Pessoa formalmente designada para primeiros socorros','PGR/PCMSO/PAE aplicáveis' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'GATEKEEPER','Gatekeeper FDM','DESIGNACAO','Gatekeeper formalmente designado no Programa FDM','MNL-SSO-002' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'FDM_EQUIPE','Equipe/Comitê FDM','DESIGNACAO','Pessoa com função formal no Programa/Comitê FDM','MNL-SSO-002' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'LOSA_OBSERVADOR','Observador/equipe LOSA','DESIGNACAO','Pessoa designada para observação/análise LOSA','Programa LOSA; PRG-SGI-005' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'INSTRUTOR_DESIGNADO','Instrutor designado','DESIGNACAO','Pessoa formalmente designada como instrutor','PTO/PTM aplicável' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'EXAMINADOR_DESIGNADO','Examinador designado','DESIGNACAO','Pessoa formalmente designada/credenciada como examinador','PTO/RBAC aplicável' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'OPERADOR_MAQUINA_NR12','Operador de máquina/equipamento NR-12','ATIVIDADE','Opera máquina ou equipamento abrangido pela NR-12 e requer capacitação específica','NR-12; PGR/LAPR' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'PTAP_RAMPA_DG_DESIGNADO','Agente de rampa DG designado','DESIGNACAO','Agente de rampa formalmente designado para tarefas adicionais de artigos perigosos previstas no PTAP','PRG-OPS-003 Rev.05; RBAC 175; IS 175-007F' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'AUDITOR_INTERNO_DESIGNADO','Auditor interno designado','DESIGNACAO','Pessoa designada para auditoria interna','ISO 9001/14001/45001; programa interno' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'AUDITOR_COMPORTAMENTAL_DESIGNADO','Auditor comportamental designado','DESIGNACAO','Pessoa designada para auditoria comportamental','PRC-SGI-017' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'EXPOSICAO_AIRSIDE','Atuação operacional em airside','ATIVIDADE','Atividade vigente em área operacional/airside que exige treinamento associado ao risco operacional','FORM-SGI-037; procedimento operacional aplicável' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'AVSEC_ATENDIMENTO_PASSAGEIRO','Atividade AVSEC de atendimento ao passageiro','CERTIFICACAO','Executa controles AVSEC relacionados ao atendimento/despacho de passageiros','PRG-SSO-006; RBAC 110' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'AVSEC_OPERACOES_SOLO','Atividade AVSEC de operações de solo','CERTIFICACAO','Executa controles AVSEC de solo no âmbito do operador aéreo','PRG-SSO-006; RBAC 110' FROM empresas WHERE id=6;
+INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa)
+SELECT id,'AVSEC_CARGA_AEREA','Atividade AVSEC de carga aérea','CERTIFICACAO','Executa controles AVSEC relacionados à carga aérea','PRG-SSO-006; RBAC 110' FROM empresas WHERE id=6;

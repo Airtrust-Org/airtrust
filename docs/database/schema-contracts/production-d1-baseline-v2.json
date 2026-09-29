@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-29",
-    "last_reconciled_against": "0517 Training Compliance conditions/applicability prepared after 0516; remote apply pending",
-    "schema_v2_digest": "c2fc7b1b2b44a8ccdfa91dd7b2789e41bd0e9e882bf77ed308ac60a8fde63774",
+    "last_reconciled_against": "0517 Training Compliance D1-compatible seed form; staging apply still pending",
+    "schema_v2_digest": "27306ce2d63cbc24cd1a1ef34343685f23a99f2b46a9ed22436220c6cc183fe9",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1123,7 +1123,7 @@
     {
       "change_file": "0517_training_compliance_conditions.sql",
       "change_id": "training-compliance-conditions-0517",
-      "sha256": "a039702b9f78664c2849fda428c923bee7b312135e0e307e0a8770bcfe59bf05",
+      "sha256": "7f963da6045707d23be7fca3fb171dda73aca87e6f8852555cbaefd05b4ac8fb",
       "targets": [
         "compliance_condicoes",
         "funcionarios_compliance_condicoes",
@@ -1133,7 +1133,7 @@
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "training-compliance-conditions-0517.json",
-      "note": "0517 is reviewed and prepared only. It adds tenant-scoped condition assignments and requirement applicability/evidence metadata, without deriving obligations from qualification history or creating LMS enrollments. Remote apply requires the governed Schema V2 workflow, staging validation, recovery point, ledger verification and exact-SHA production authorization."
+      "note": "0517 is reviewed and prepared only. The seed catalog is expressed as independent INSERT statements to stay within the D1 compound-SELECT ceiling; semantics remain unchanged. It adds tenant-scoped condition assignments and requirement applicability/evidence metadata, without deriving obligations from qualification history or creating LMS enrollments. Remote apply requires the governed Schema V2 workflow, staging validation, recovery point, ledger verification and exact-SHA production authorization."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",
