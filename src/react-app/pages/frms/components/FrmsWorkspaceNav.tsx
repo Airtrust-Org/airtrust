@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { HeartPulse } from 'lucide-react';
+import { BookOpen, HeartPulse } from 'lucide-react';
 import { useFrmsOperationalAccess } from '@/react-app/hooks/useFrmsOperationalAccess';
 import { canManageFrmsOperations } from '../frmsDashboardRouting';
 import FrmsSourcePolicyBanner from './FrmsSourcePolicyBanner';
@@ -74,6 +74,7 @@ export default function FrmsWorkspaceNav({
   const adminActive = isAdminPath(location.pathname);
   const checkinActive =
     location.pathname === '/frms/checkin' || location.pathname.startsWith('/frms/checkin/');
+  const conceptsActive = location.pathname === '/frms/conceitos' || location.pathname.startsWith('/frms/conceitos/');
   const area = new URLSearchParams(location.search).get('area');
   const operationsActive = location.pathname === '/frms' && area !== 'manutencao';
   const maintenanceActive = location.pathname === '/frms' && area === 'manutencao';
@@ -107,6 +108,10 @@ export default function FrmsWorkspaceNav({
         </NavLink>
         <NavLink to="/frms/configuracoes" className={primaryClass(adminActive)}>
           Administração
+        </NavLink>
+        <NavLink to="/frms/conceitos" className={primaryClass(conceptsActive)}>
+          <BookOpen className="mr-1 inline h-4 w-4" />
+          Como funciona
         </NavLink>
         {access.data?.can_checkin !== false ? (
           <NavLink to="/frms/checkin" className={checkinClass(checkinActive)}>

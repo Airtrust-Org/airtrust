@@ -254,6 +254,8 @@ describe('FrmsDashboard simplificado', () => {
     expect(summary.getByText('Verificar')).toBeInTheDocument();
     expect(summary.queryByText('Sem pendência')).not.toBeInTheDocument();
     expect(screen.getByText(/pessoa\(s\) sem pendência no recorte atual/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Como interpretar' })).toHaveAttribute('href', '/frms/conceitos');
+    expect(screen.getByText(/Abra o registro para ver motivo, dados de origem e ação esperada/i)).toBeInTheDocument();
   });
 
   it('mostra os quatro sinais operacionais em cada linha da fila', () => {
@@ -348,7 +350,7 @@ describe('FrmsDashboard simplificado', () => {
     expect(drawer.getByRole('link', { name: 'Abrir histórico (outra tela)' })).toHaveAttribute(
       'href', '/frms/tripulante/30?origem=operacao&data=2026-08-27',
     );
-    expect(drawer.getByRole('link', { name: 'Abrir caso para registrar tratamento (outra tela)' })).toHaveAttribute(
+    expect(drawer.getByRole('link', { name: 'Consultar casos relacionados (outra tela)' })).toHaveAttribute(
       'href', '/frms/alertas?tripulante_id=30',
     );
     expect(drawer.queryByRole('link', { name: 'Abrir FRAT' })).not.toBeInTheDocument();
