@@ -1,3 +1,7 @@
+// source_reference: incident inventory 2026-09-29 for tenant 6; 7 reviewed supporting-document rows retain verified R2 objects, 2 reviewed rows have missing primary/full-backup R2 objects, and only non-current AirTrust-generated certificates are cleanup candidates.
+// operational_decision: restore only the seven immutable reviewed supporting documents and retire only provably auto-generated non-current certificate rows/mirrors; preserve all manual/legacy documents and current certificate links.
+// dry_run_required: production apply requires a successful reviewed dry-run on the exact same SHA plus exact candidate count/hash.
+// rollback_plan_required: workflow captures a D1 Time Travel recovery point immediately before apply; all mutations are reversible soft-delete/undelete operations and no R2 object is deleted.
 // Production-only, tenant-scoped deterministic repair for the 2026-09-29
 // document-integrity incident. It never deletes R2 objects.
 //
