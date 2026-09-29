@@ -14,7 +14,7 @@ const workerDir = fileURLToPath(new URL('../../worker-airtrust/', import.meta.ur
 
 function queryCount(sql) {
   const raw = execFileSync(
-    '../node_modules/.bin/wrangler',
+    './node_modules/.bin/wrangler',
     ['d1', 'execute', STAGING_DB, '--env', 'staging', '--remote', '--json', '--command', sql],
     { cwd: workerDir, encoding: 'utf8', env: process.env },
   );
