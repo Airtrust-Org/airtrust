@@ -21,9 +21,19 @@ test('repair is tenant-scoped, additive, and preserves admin role/profile', () =
 });
 
 test('candidate identity includes target and exact missing sector', () => {
-  assert.match(script, /target:\$\{TARGET_USER_ID\}:assign-sector:\$\{sectorId\}/);
+  assert.match(script, /target:\$\{targetUserId\}:assign-sector:\$\{sectorId\}/);
   assert.match(script, /CANDIDATE_SET_CHANGED/);
   assert.match(script, /POST_MISSING_ACTIVE_ASSIGNMENTS/);
+});
+
+
+test('sanitized candidate hash can resolve exactly one reviewed admin without emitting an id', () => {
+  assert.match(script, /ADMIN_SECTOR_TARGET_CANDIDATE_HASH/);
+  assert.match(script, /eligible_admins_for_candidate_hash/);
+  assert.match(script, /TARGET_CANDIDATE_HASH_MATCH_COUNT_/);
+  assert.match(workflow, /target_candidate_hash:/);
+  assert.match(workflow, /TARGET_SELECTOR_AMBIGUOUS/);
+  assert.match(workflow, /ADMIN_SECTOR_TARGET_CANDIDATE_HASH/);
 });
 
 test('production workflow requires exact SHA, release gates, reviewed dry-run, and recovery point', () => {

@@ -8,8 +8,12 @@ on:
         required: true
         type: string
       target_user_id:
-        description: Reviewed internal user ID (not emitted by the repair summary)
-        required: true
+        description: Optional reviewed internal user ID; prefer target_candidate_hash to avoid carrying identifiers through dispatch
+        required: false
+        type: string
+      target_candidate_hash:
+        description: Optional reviewed sanitized candidate hash; resolves exactly one tenant admin without exposing an internal user ID
+        required: false
         type: string
       mode:
         description: dry-run is read-only; apply adds only missing active sector assignments
@@ -48,6 +52,7 @@ jobs:
         env:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
           TARGET_USER_ID: ${{ inputs.target_user_id }}
+          TARGET_CANDIDATE_HASH: ${{ inputs.target_candidate_hash }}
           MODE: ${{ inputs.mode }}
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
@@ -55,7 +60,14 @@ jobs:
           [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_REF_REQUIRED >&2; exit 1; }
           [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_SHA_INVALID >&2; exit 1; }
           [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo EXPECTED_SHA_MISMATCH >&2; exit 1; }
-          [[ "$TARGET_USER_ID" =~ ^[1-9][0-9]*$ ]] || { echo TARGET_USER_ID_INVALID >&2; exit 1; }
+          if [[ -n "$TARGET_USER_ID" && -n "$TARGET_CANDIDATE_HASH" ]]; then
+            echo TARGET_SELECTOR_AMBIGUOUS >&2
+            exit 1
+          elif [[ -n "$TARGET_USER_ID" ]]; then
+            [[ "$TARGET_USER_ID" =~ ^[1-9][0-9]*$ ]] || { echo TARGET_USER_ID_INVALID >&2; exit 1; }
+          else
+            [[ "$TARGET_CANDIDATE_HASH" =~ ^[0-9a-f]{64}$ ]] || { echo TARGET_CANDIDATE_HASH_INVALID >&2; exit 1; }
+          fi
           if [[ "$MODE" == dry-run ]]; then
             [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_DRYRUN_ADMIN_ALL_SECTOR_ACCESS_20260929 ]] || { echo DRYRUN_CONFIRMATION_REQUIRED >&2; exit 1; }
           elif [[ "$MODE" == apply ]]; then
@@ -136,6 +148,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           ADMIN_SECTOR_TARGET_USER_ID: ${{ inputs.target_user_id }}
+          ADMIN_SECTOR_TARGET_CANDIDATE_HASH: ${{ inputs.target_candidate_hash }}
           ADMIN_SECTOR_RECONCILIATION_MODE: ${{ inputs.mode }}
           ADMIN_SECTOR_RECONCILIATION_CONFIRMATION: ${{ inputs.confirmation }}
           ADMIN_SECTOR_PRODUCTION_DB_NAME: airtrust-db
