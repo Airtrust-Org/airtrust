@@ -13,6 +13,8 @@ const BASE_SHA256 = '38f5912b3f4890a3c3acc956c8192d5cacfe259394fd6037571dc5889ea
 const STAGING_AUTH = 'AIRTRUST_STAGING_TRAINING_COMPLIANCE_RECONCILIATION';
 const BASE_STATEMENTS = 47;
 const FINAL_STATEMENTS = BASE_STATEMENTS + 1 + STAGING_PREREQUISITE_MODELS.length;
+const STAGING_CATEGORY_CODE = 'TREINAMENTO_OPERACIONAL';
+const BASE_MODEL_INSERTS = 5;
 
 const args = new Set(process.argv.slice(2));
 const apply = args.has('--apply');
@@ -45,9 +47,20 @@ const staleIndexes = baseStatements
 if (staleIndexes.length !== 1) throw new Error(`PTAP_STALE_SECTOR_RULE_COUNT:${staleIndexes.length}`);
 
 const sqlQuote = (value) => `'${String(value).replaceAll("'", "''")}'`;
+const stagingCategoryId = `(SELECT id FROM qualificacoes_categorias WHERE empresa_id=6 AND UPPER(codigo)=UPPER(${sqlQuote(STAGING_CATEGORY_CODE)}) AND ativo=1 AND deleted_at IS NULL LIMIT 1)`;
+const qualificationInsertPrefix = 'INSERT INTO qualificacoes_tipos (empresa_id,codigo,nome,categoria,validade,carga_horaria,area_id,ativo,is_check,created_at,updated_at) SELECT 6,';
+const baseModelInsertCount = baseStatements.filter((statement) => statement.startsWith(qualificationInsertPrefix)).length;
+if (baseModelInsertCount !== BASE_MODEL_INSERTS) throw new Error(`BASE_MODEL_INSERT_COUNT_MISMATCH:${baseModelInsertCount}`);
+const stagingBaseStatements = baseStatements.map((statement) => {
+  if (!statement.startsWith(qualificationInsertPrefix)) return statement;
+  const withColumn = statement.replace('updated_at) SELECT 6,', 'updated_at,categoria_id) SELECT 6,');
+  const withCategory = withColumn.replace("datetime('now'),datetime('now') WHERE", `datetime('now'),datetime('now'),${stagingCategoryId} WHERE ${stagingCategoryId} IS NOT NULL AND`);
+  if (withCategory === statement || !withCategory.includes('categoria_id')) throw new Error('BASE_MODEL_CATEGORY_BINDING_TRANSFORM_FAILED');
+  return withCategory;
+});
 const prerequisiteModelStatements = STAGING_PREREQUISITE_MODELS.map(({ code, name, category, validity, hours, areaCode }) => {
   const areaId = `(SELECT id FROM qualificacoes_areas WHERE empresa_id=6 AND UPPER(codigo)=UPPER(${sqlQuote(areaCode)}) AND deleted_at IS NULL LIMIT 1)`;
-  return `INSERT INTO qualificacoes_tipos (empresa_id,codigo,nome,categoria,validade,carga_horaria,area_id,ativo,is_check,created_at,updated_at) SELECT 6,${sqlQuote(code)},${sqlQuote(name)},${sqlQuote(category)},${Number(validity)},${Number(hours)},${areaId},1,0,datetime('now'),datetime('now') WHERE ${areaId} IS NOT NULL AND NOT EXISTS (SELECT 1 FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)=UPPER(${sqlQuote(code)}) AND deleted_at IS NULL)`;
+  return `INSERT INTO qualificacoes_tipos (empresa_id,codigo,nome,categoria,validade,carga_horaria,area_id,ativo,is_check,created_at,updated_at,categoria_id) SELECT 6,${sqlQuote(code)},${sqlQuote(name)},${sqlQuote(category)},${Number(validity)},${Number(hours)},${areaId},1,0,datetime('now'),datetime('now'),${stagingCategoryId} WHERE ${areaId} IS NOT NULL AND ${stagingCategoryId} IS NOT NULL AND NOT EXISTS (SELECT 1 FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)=UPPER(${sqlQuote(code)}) AND deleted_at IS NULL)`;
 });
 
 const ensureTripulanteCondition =
@@ -55,12 +68,15 @@ const ensureTripulanteCondition =
 const tripulanteRequirement =
   "INSERT INTO treinamento_requisitos (empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,critico_operacional,origem,referencia_normativa,justificativa,perfil_competencia,modalidade_requerida,fundamento_tipo,fundamento_documento,fundamento_item,validade_fonte,auto_matricular_ead,ativo,condicao_id) SELECT 6,(SELECT id FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)=UPPER('D4') AND deleted_at IS NULL LIMIT 1),'EMPRESA','OBRIGATORIA',1,'REGULATORIO','PRG-OPS-003 Rev05; RBAC 175; IS 175-007F','Tripulante de voo abrangido pelo PTAP.','PTAP_TRIPULANTE_VOO',NULL,'Documento controlado','PRG-OPS-003 Rev05; RBAC 175; IS 175-007F',NULL,'EVIDENCIA',0,1,(SELECT id FROM compliance_condicoes WHERE empresa_id=6 AND UPPER(codigo)=UPPER('PTAP_TRIPULANTE_VOO') AND ativo=1 AND deleted_at IS NULL LIMIT 1) WHERE (SELECT id FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)=UPPER('D4') AND deleted_at IS NULL LIMIT 1) IS NOT NULL AND (SELECT id FROM compliance_condicoes WHERE empresa_id=6 AND UPPER(codigo)=UPPER('PTAP_TRIPULANTE_VOO') AND ativo=1 AND deleted_at IS NULL LIMIT 1) IS NOT NULL";
 
-const finalStatements = [...baseStatements];
+const finalStatements = [...stagingBaseStatements];
 finalStatements.splice(staleIndexes[0].index, 1, ensureTripulanteCondition, tripulanteRequirement);
 finalStatements.unshift(...prerequisiteModelStatements);
 if (finalStatements.length !== FINAL_STATEMENTS) throw new Error(`FINAL_STATEMENT_COUNT_MISMATCH:${finalStatements.length}`);
 const finalSql = `${finalStatements.join(';\n')};\n`;
 if (finalSql.includes("UPPER('TRI')")) throw new Error('INVALID_TRIPULANTE_SECTOR_RULE_REMAINS');
+const qualificationModelInserts = finalStatements.filter((statement) => statement.startsWith('INSERT INTO qualificacoes_tipos ('));
+if (qualificationModelInserts.length !== STAGING_PREREQUISITE_MODELS.length + BASE_MODEL_INSERTS) throw new Error(`QUALIFICATION_MODEL_INSERT_COUNT_MISMATCH:${qualificationModelInserts.length}`);
+if (qualificationModelInserts.some((statement) => !statement.includes('categoria_id') || !statement.includes(STAGING_CATEGORY_CODE))) throw new Error('QUALIFICATION_MODEL_CATEGORY_BINDING_MISSING');
 if (finalSql.includes('INSERT INTO lms_matriculas')) throw new Error('AUTO_ENROLL_WRITE_FORBIDDEN');
 if (/auto_matricular_ead\s*=\s*1/i.test(finalSql)) throw new Error('AUTO_ENROLL_ENABLE_FORBIDDEN');
 
