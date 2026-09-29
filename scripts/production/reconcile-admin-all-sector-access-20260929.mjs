@@ -20,9 +20,15 @@ if (!['dry-run', 'apply'].includes(mode)) fail('INVALID_MODE');
 if ((process.env.ADMIN_SECTOR_PRODUCTION_DB_NAME || DB_NAME) !== DB_NAME) fail('PRODUCTION_DB_TARGET_REJECTED');
 
 const rawTarget = String(process.env.ADMIN_SECTOR_TARGET_USER_ID || '').trim();
-if (!/^[1-9][0-9]*$/.test(rawTarget)) fail('TARGET_USER_ID_REQUIRED');
-const TARGET_USER_ID = Number(rawTarget);
-if (!Number.isSafeInteger(TARGET_USER_ID) || TARGET_USER_ID <= 0) fail('TARGET_USER_ID_INVALID');
+const rawTargetCandidateHash = String(process.env.ADMIN_SECTOR_TARGET_CANDIDATE_HASH || '').trim().toLowerCase();
+if (rawTarget && rawTargetCandidateHash) fail('TARGET_SELECTOR_AMBIGUOUS');
+if (!rawTarget && !rawTargetCandidateHash) fail('TARGET_SELECTOR_REQUIRED');
+if (rawTarget && !/^[1-9][0-9]*$/.test(rawTarget)) fail('TARGET_USER_ID_INVALID');
+if (rawTargetCandidateHash && !/^[0-9a-f]{64}$/.test(rawTargetCandidateHash)) fail('TARGET_CANDIDATE_HASH_INVALID');
+const explicitTargetUserId = rawTarget ? Number(rawTarget) : null;
+if (explicitTargetUserId !== null && (!Number.isSafeInteger(explicitTargetUserId) || explicitTargetUserId <= 0)) {
+  fail('TARGET_USER_ID_INVALID');
+}
 
 const confirmation = process.env.ADMIN_SECTOR_RECONCILIATION_CONFIRMATION || '';
 if (mode === 'dry-run' && confirmation !== DRY_CONFIRM) fail('DRYRUN_CONFIRMATION_REQUIRED');
@@ -71,30 +77,7 @@ function hashStrings(values) {
   return createHash('sha256').update([...values].sort().join('\n')).digest('hex');
 }
 
-function readState() {
-  const membership = select(
-    `SELECT lower(COALESCE(ue.role,'')) AS role
-       FROM usuarios u
-       JOIN usuarios_empresas ue ON ue.usuario_id=u.id AND ue.empresa_id=${EMPRESA_ID}
-      WHERE u.id=${TARGET_USER_ID}
-        AND u.deleted_at IS NULL
-      LIMIT 1`,
-    'target_membership',
-  );
-  if (membership.length !== 1) fail('TARGET_MEMBERSHIP_NOT_UNIQUE');
-  if (String(membership[0]?.role || '') !== 'admin') fail('TARGET_NOT_ADMIN');
-
-  const profile = select(
-    `SELECT COUNT(*) AS n
-       FROM usuarios_empresas_perfis
-      WHERE usuario_id=${TARGET_USER_ID}
-        AND empresa_id=${EMPRESA_ID}
-        AND ativo=1
-        AND upper(perfil)='ADMIN'`,
-    'target_admin_profile',
-  );
-  if (Number(profile[0]?.n || 0) !== 1) fail('TARGET_ADMIN_PROFILE_MISSING');
-
+function activeSectorIds() {
   const schemaReady = select(
     `SELECT COUNT(*) AS n FROM pragma_table_info('setores_gestores') WHERE name='usuario_id'`,
     'setores_gestores_schema',
@@ -113,25 +96,27 @@ function readState() {
   if (!activeSectors.length || activeSectors.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
     fail('ACTIVE_SECTOR_SET_INVALID');
   }
+  return activeSectors;
+}
 
+function assignmentState(targetUserId, activeSectors) {
   const assigned = select(
     `SELECT DISTINCT sg.setor_id AS id
        FROM setores_gestores sg
        JOIN setores s ON s.id=sg.setor_id AND s.empresa_id=sg.empresa_id
-      WHERE sg.usuario_id=${TARGET_USER_ID}
+      WHERE sg.usuario_id=${targetUserId}
         AND sg.empresa_id=${EMPRESA_ID}
         AND sg.ativo=1
         AND sg.deleted_at IS NULL
         AND s.ativo=1
         AND s.deleted_at IS NULL
       ORDER BY sg.setor_id`,
-    'active_assignments',
+    `active_assignments_${targetUserId}`,
   ).map((row) => Number(row.id));
 
   const assignedSet = new Set(assigned);
   const missing = activeSectors.filter((id) => !assignedSet.has(id));
-  const signatures = missing.map((sectorId) => `target:${TARGET_USER_ID}:assign-sector:${sectorId}`);
-
+  const signatures = missing.map((sectorId) => `target:${targetUserId}:assign-sector:${sectorId}`);
   return {
     activeSectors,
     assigned,
@@ -141,7 +126,64 @@ function readState() {
   };
 }
 
-const before = readState();
+function resolveTargetUserId(activeSectors) {
+  if (explicitTargetUserId !== null) return explicitTargetUserId;
+
+  const eligibleAdmins = select(
+    `SELECT DISTINCT u.id
+       FROM usuarios u
+       JOIN usuarios_empresas ue
+         ON ue.usuario_id=u.id
+        AND ue.empresa_id=${EMPRESA_ID}
+       JOIN usuarios_empresas_perfis up
+         ON up.usuario_id=u.id
+        AND up.empresa_id=${EMPRESA_ID}
+        AND up.ativo=1
+        AND upper(up.perfil)='ADMIN'
+      WHERE u.deleted_at IS NULL
+        AND lower(COALESCE(ue.role,''))='admin'
+      ORDER BY u.id`,
+    'eligible_admins_for_candidate_hash',
+  ).map((row) => Number(row.id));
+
+  const matches = eligibleAdmins.filter((targetUserId) => {
+    if (!Number.isSafeInteger(targetUserId) || targetUserId <= 0) return false;
+    const candidate = assignmentState(targetUserId, activeSectors);
+    return candidate.candidateCount > 0 && candidate.candidateHash === rawTargetCandidateHash;
+  });
+  if (matches.length !== 1) fail(`TARGET_CANDIDATE_HASH_MATCH_COUNT_${matches.length}`);
+  return matches[0];
+}
+
+function verifyTargetAdmin(targetUserId) {
+  const membership = select(
+    `SELECT lower(COALESCE(ue.role,'')) AS role
+       FROM usuarios u
+       JOIN usuarios_empresas ue ON ue.usuario_id=u.id AND ue.empresa_id=${EMPRESA_ID}
+      WHERE u.id=${targetUserId}
+        AND u.deleted_at IS NULL
+      LIMIT 1`,
+    'target_membership',
+  );
+  if (membership.length !== 1) fail('TARGET_MEMBERSHIP_NOT_UNIQUE');
+  if (String(membership[0]?.role || '') !== 'admin') fail('TARGET_NOT_ADMIN');
+
+  const profile = select(
+    `SELECT COUNT(*) AS n
+       FROM usuarios_empresas_perfis
+      WHERE usuario_id=${targetUserId}
+        AND empresa_id=${EMPRESA_ID}
+        AND ativo=1
+        AND upper(perfil)='ADMIN'`,
+    'target_admin_profile',
+  );
+  if (Number(profile[0]?.n || 0) !== 1) fail('TARGET_ADMIN_PROFILE_MISSING');
+}
+
+const activeSectors = activeSectorIds();
+const TARGET_USER_ID = resolveTargetUserId(activeSectors);
+verifyTargetAdmin(TARGET_USER_ID);
+const before = assignmentState(TARGET_USER_ID, activeSectors);
 const summary = {
   mode,
   source_sha: process.env.GITHUB_SHA || null,
@@ -209,7 +251,7 @@ runWrangler(
   'apply_missing_sector_assignments',
 );
 
-const after = readState();
+const after = assignmentState(TARGET_USER_ID, activeSectors);
 if (after.missing.length !== 0) fail(`POST_MISSING_ACTIVE_ASSIGNMENTS_${after.missing.length}`);
 if (after.assigned.length !== after.activeSectors.length) fail('POST_ACTIVE_ASSIGNMENT_COUNT_MISMATCH');
 
