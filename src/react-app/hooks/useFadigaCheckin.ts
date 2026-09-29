@@ -134,6 +134,9 @@ type DailyFatigueTeamPayload = {
 
 export type FadigaVisibleRequest = 'team-checkins-load' | 'daily-checkin-submit';
 
+const TEAM_PANEL_TIMEOUT_MS = 15_000;
+export const TEAM_PANEL_TIMEOUT_MESSAGE = 'A consulta dos check-ins da equipe demorou além do esperado. Tente novamente.';
+
 export function safeFadigaVisibleErrorMessage(
   request: FadigaVisibleRequest,
   _technicalDetail?: unknown,
@@ -235,6 +238,22 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return json.data as T;
 }
 
+async function fetchTeamPanelJson<T>(path: string): Promise<T> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), TEAM_PANEL_TIMEOUT_MS);
+
+  try {
+    return await fetchJson<T>(path, { signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(TEAM_PANEL_TIMEOUT_MESSAGE);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export function useCheckinHoje() {
   return useQuery({
     queryKey: ['fadiga-checkin-hoje'],
@@ -282,12 +301,15 @@ export function useFadigaPainel(data?: string) {
     queryFn: async () => {
       let normalized: FadigaPainelEquipeItem[];
       try {
-        const payload = await fetchJson<DailyFatigueTeamPayload>(
+        const payload = await fetchTeamPanelJson<DailyFatigueTeamPayload>(
           buildFadigaPainelRequestPath(normalizedDate),
         );
         normalized = normalizeFadigaPainelPayload(payload, normalizedDate);
       } catch (error) {
         console.error('[FRMS fadiga] Falha ao carregar check-ins da equipe', error);
+        if (error instanceof Error && error.message === TEAM_PANEL_TIMEOUT_MESSAGE) {
+          throw error;
+        }
         throw new Error(safeFadigaVisibleErrorMessage('team-checkins-load', error));
       }
 
