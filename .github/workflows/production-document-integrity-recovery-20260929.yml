@@ -33,8 +33,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  repair:
-    name: Governed Production Document Integrity Recovery
+  d1_repair:
+    name: Governed Production D1 Document Integrity Recovery
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 30
