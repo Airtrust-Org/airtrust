@@ -125,7 +125,7 @@ type Evidence = {
   origem_titulo: string | null;
   lms_status?: string | null;
   modalidade?: string | null;
-  // undefined = schema anterior a 0518 (compatibilidade de rollout); null = evidência sem perfil gravado.
+  // undefined = schema anterior a 0519 (compatibilidade de rollout); null = evidência sem perfil gravado.
   perfil_competencia?: string | null;
 };
 
@@ -1621,10 +1621,10 @@ app.get('/matriz-organizacao', requireRole('admin', 'manager'), async (c) => {
       em_andamento: preview.filter((item) => item.requirement?.status_compliance === 'EM_ANDAMENTO')
         .length,
       matriculados: selectedEmployees.filter((employee) =>
-        Boolean(lmsMap.get(`${employee.id}:${tipo.id}`)?.latest),
+        (lmsMap.get(`${employee.id}:${tipo.id}`)?.length ?? 0) > 0,
       ).length,
       sem_matricula: selectedEmployees.filter(
-        (employee) => !lmsMap.get(`${employee.id}:${tipo.id}`)?.latest,
+        (employee) => (lmsMap.get(`${employee.id}:${tipo.id}`)?.length ?? 0) === 0,
       ).length,
     };
     return {
