@@ -14,6 +14,7 @@ import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import {
   assertScopedHistoricoAccess,
+  canAdministerHistoricalDeletedEmployeeCertificates,
   getCertificadosStorageColumns,
   insertCertificadoNaPastaVirtual,
   backfillCertificadoAtualNaPastaVirtual,
@@ -125,7 +126,6 @@ app.post(
              INNER JOIN funcionarios f
                ON f.id = qh.funcionario_id
               AND f.empresa_id = ?
-              AND f.deleted_at IS NULL
             WHERE qh.id = ?
               AND qh.deleted_at IS NULL
             LIMIT 1`,
@@ -386,6 +386,9 @@ app.post(
         historicoId: id,
         empresaId,
         access,
+        allowDeletedFuncionario: canAdministerHistoricalDeletedEmployeeCertificates(
+          (c.get as (key: string) => unknown)('userRole'),
+        ),
       });
       const { historico, nomeFuncionario, codigo } = await resolveCertificadoContext(db, id);
       storageColumns = await getCertificadosStorageColumns(db);
@@ -648,7 +651,6 @@ app.post(
              INNER JOIN funcionarios f
                ON f.id = qh.funcionario_id
               AND f.empresa_id = ?
-              AND f.deleted_at IS NULL
              INNER JOIN documentos d
                ON d.id = qh.certificado_arquivo_id
               AND d.deleted_at IS NULL
