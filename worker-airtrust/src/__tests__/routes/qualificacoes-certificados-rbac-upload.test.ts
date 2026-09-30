@@ -561,10 +561,10 @@ async function request(
   );
 }
 
-function createPdfFile() {
+function createPdfFile(name = 'certificado.pdf') {
   const bytes = new Uint8Array(2048);
   bytes.set([0x25, 0x50, 0x44, 0x46, 0x2d]);
-  return new File([bytes], 'certificado.pdf', { type: 'application/pdf' });
+  return new File([bytes], name, { type: 'application/pdf' });
 }
 
 describe('qualificacoes certificados rbac e upload', () => {
@@ -726,6 +726,25 @@ describe('qualificacoes certificados rbac e upload', () => {
     expect(listResponse.status).toBe(200);
     expect(listBody.success).toBe(true);
     expect(listBody.data.some((row) => row.id === body.data.id)).toBe(true);
+  });
+
+  it('upload preserva exatamente o nome original do arquivo no documento e na pasta virtual', async () => {
+    const { env, documentos, pastaVirtual } = createMockEnv();
+    const form = new FormData();
+    const originalName = 'CRM Periódico — João da Silva (2026).pdf';
+    form.set('file', createPdfFile(originalName));
+
+    const response = await request(
+      '/api/certificados/historico/2001/certificados/upload',
+      env,
+      { method: 'POST', body: form },
+    );
+    const body = (await response.json()) as { success: boolean; data: { id: number } };
+
+    expect(response.status).toBe(201);
+    expect(body.success).toBe(true);
+    expect(documentos.find((row) => row.id === body.data.id)?.nome_arquivo).toBe(originalName);
+    expect(pastaVirtual.find((row) => row.documento_id === body.data.id)?.nome_arquivo).toBe(originalName);
   });
 
   it('upload fora do escopo retorna 403 sem gravar no R2', async () => {

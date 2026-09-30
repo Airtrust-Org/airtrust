@@ -11,7 +11,6 @@ import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { ApiError } from '../middleware/error-handler';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
-import { gerarNomeArquivoPadronizado } from '../utils/nomenclatura-padronizada';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import {
   assertScopedHistoricoAccess,
@@ -373,7 +372,7 @@ app.post(
         empresaId,
         access,
       });
-      const { historico, nomeFuncionario, cpf, codigo } = await resolveCertificadoContext(db, id);
+      const { historico, nomeFuncionario, codigo } = await resolveCertificadoContext(db, id);
       storageColumns = await getCertificadosStorageColumns(db);
       funcionarioId = scopedHistorico.funcionario_id;
       await backfillCertificadoAtualNaPastaVirtual(db, storageColumns, {
@@ -450,20 +449,16 @@ app.post(
 
       const uuid = crypto.randomUUID().substring(0, 8);
 
-      // Nome do arquivo (usado como metadado/display, não como path R2)
-      const nomeArquivo = gerarNomeArquivoPadronizado({
-        tipo: 'CERTIFICADO_QUALIFICACAO',
-        nomeFuncionario: nomeFuncionario,
-        cpf,
-        data: dataRealização,
-        codigo,
-        uuid,
-      });
+      // Upload manual preserva o nome original do arquivo como metadado/display.
+      // A chave R2 continua tenant-scoped e sem PII; a nomenclatura padronizada
+      // permanece exclusiva dos certificados gerados pelo AirTrust.
+      const nomeArquivoOriginal = String(file.name || '').trim();
+      const nomeArquivo = nomeArquivoOriginal.split(/[\\/]/).pop()?.trim() || 'certificado.pdf';
 
-      console.log('[UPLOAD CERT] Gerando certificado:', {
+      console.log('[UPLOAD CERT] Preservando nome original:', {
         historicoId: id,
         codigo,
-        nomeArquivoGerado: nomeArquivo,
+        nomeArquivo,
       });
 
       // R2 key tenant-scoped sem PII no path
