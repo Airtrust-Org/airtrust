@@ -359,7 +359,10 @@ app.post(
   '/historico/:id/certificados/upload',
   auth(),
   requirePermission('certificados', 'criar', 'admin', 'manager'),
-  requireOperacoesCertificado('create'),
+  // Upload manual anexa evidência a um histórico existente. A autorização
+  // continua tenant-scoped e limitada ao escopo do funcionário abaixo;
+  // área temática, aplicabilidade de Compliance e domínio operacional não
+  // podem ser usados para inferir quem pode possuir o treinamento.
   async (c) => {
     const db = c.env.DB;
     const bucket = c.env.BUCKET;
