@@ -102,7 +102,7 @@ const EVIDENCE_PROFILE_LABELS: Record<string, string> = {
 };
 
 function evidenceProfileLabel(profile: string): string {
-  return EVIDENCE_PROFILE_LABELS[profile] || profile.replaceAll('_', ' ');
+  return EVIDENCE_PROFILE_LABELS[profile] || profile.replace(/_/g, ' ');
 }
 
 export interface ModalCertificadoProps {
