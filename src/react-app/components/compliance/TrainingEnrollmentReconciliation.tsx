@@ -3,6 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Link2, UserPlus } from 'lucide-react';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
+import {
+  nextComplianceTableSort,
+  sortComplianceRows,
+  SortableComplianceTableHeader,
+  type TableSortState,
+} from '@/react-app/components/compliance/SortableComplianceTableHeader';
 
 type Reconciliation = {
   resumo: {
@@ -75,12 +81,22 @@ const situationLabels: Record<string, string> = {
 };
 
 type Props = { setorId: number | null; funcaoId: number | null };
+type GapSortKey = 'training' | 'people' | 'expired' | 'never' | 'course';
+type ReviewSortKey = 'person' | 'sector' | 'enrollment' | 'situation' | 'action';
 
 export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
   const queryClient = useQueryClient();
   const [courses, setCourses] = useState<Record<number, number>>({});
   const [actions, setActions] = useState<Record<number, string>>({});
   const [section, setSection] = useState<'gaps' | 'convites' | 'revisao'>('gaps');
+  const [gapSort, setGapSort] = useState<TableSortState<GapSortKey>>({
+    key: 'training',
+    direction: 'asc',
+  });
+  const [reviewSort, setReviewSort] = useState<TableSortState<ReviewSortKey>>({
+    key: 'person',
+    direction: 'asc',
+  });
   const params = useMemo(() => {
     const p = new URLSearchParams();
     if (setorId) p.set('setor_id', String(setorId));
@@ -134,9 +150,12 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricula_ids: matriculaIds }),
       });
-      return readJson<{ enviados: number; sem_email: number; falhas: number; nao_encontradas: number }>(
-        response,
-      );
+      return readJson<{
+        enviados: number;
+        sem_email: number;
+        falhas: number;
+        nao_encontradas: number;
+      }>(response);
     },
     onSuccess: (data) => {
       showToast.success(
@@ -213,6 +232,28 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
   });
 
   const data = reconciliation.data;
+  const sortedGaps = useMemo(
+    () =>
+      sortComplianceRows(data?.gaps_matricula || [], gapSort, (row, key) => {
+        if (key === 'training') return row.qualificacao_tipo_nome;
+        if (key === 'people') return row.pessoas;
+        if (key === 'expired') return row.vencidos;
+        if (key === 'never') return row.nunca_realizados;
+        return row.cursos_ead.map((course) => course.titulo).join(' ');
+      }),
+    [data?.gaps_matricula, gapSort],
+  );
+  const sortedReviews = useMemo(
+    () =>
+      sortComplianceRows(data?.matriculas_revisao || [], reviewSort, (row, key) => {
+        if (key === 'person') return row.funcionario_nome;
+        if (key === 'sector') return `${row.setor_nome || ''} ${row.funcao_nome || ''}`;
+        if (key === 'enrollment') return row.curso_titulo;
+        if (key === 'situation') return row.situacao;
+        return actions[row.matricula_id] || '';
+      }),
+    [actions, data?.matriculas_revisao, reviewSort],
+  );
   if (reconciliation.isLoading)
     return <div className="p-6 text-sm text-slate-500">Analisando matrículas e matriz...</div>;
   if (!data) return null;
@@ -220,8 +261,8 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
     <div className="space-y-4 p-4">
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4 lg:flex-row lg:items-center lg:justify-between">
         <p className="text-sm text-slate-600">
-          <strong className="text-slate-800">Matrícula não define obrigação.</strong>{' '}
-          Use esta área apenas para corrigir divergências entre a matriz e o LMS.
+          <strong className="text-slate-800">Matrícula não define obrigação.</strong> Use esta área
+          apenas para corrigir divergências entre a matriz e o LMS.
         </p>
         <span className="whitespace-nowrap text-xs font-medium text-emerald-700">
           {data.resumo.matriculas_alinhadas} matrícula(s) alinhada(s)
@@ -241,9 +282,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
             type="button"
             onClick={() => setSection(value)}
             className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${
-              section === value
-                ? 'bg-primary/10 text-primary'
-                : 'text-slate-600 hover:bg-slate-100'
+              section === value ? 'bg-primary/10 text-primary' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
             {label}
@@ -259,234 +298,309 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
       </div>
 
       {section === 'gaps' ? (
-      <section>
-        <h3 className="font-semibold text-slate-900">A matricular</h3>
-        <p className="mt-1 text-sm text-slate-500">
-          Requisitos sem matrícula correspondente. A matrícula é criada sem envio de e-mail.
-        </p>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-4 py-3 text-left">Treinamento</th>
-                <th className="px-3 py-3 text-right">Pessoas</th>
-                <th className="px-3 py-3 text-right">Vencidos</th>
-                <th className="px-3 py-3 text-right">Nunca fez</th>
-                <th className="px-3 py-3 text-left">Curso EAD</th>
-                <th className="px-3 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {data.gaps_matricula.map((gap) => (
-                <tr key={gap.qualificacao_tipo_id}>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-slate-800">{gap.qualificacao_tipo_nome}</div>
-                    <div className="text-xs text-slate-400">
-                      {gap.qualificacao_tipo_codigo || '—'}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 text-right">{gap.pessoas}</td>
-                  <td className="px-3 py-3 text-right text-red-700">{gap.vencidos}</td>
-                  <td className="px-3 py-3 text-right text-orange-700">{gap.nunca_realizados}</td>
-                  <td className="px-3 py-3">
-                    <select
-                      aria-label={`Curso EAD para ${gap.qualificacao_tipo_nome}`}
-                      value={
-                        courses[gap.qualificacao_tipo_id] ??
-                        (gap.cursos_ead.length === 1 ? gap.cursos_ead[0].id : '')
-                      }
-                      onChange={(e) =>
-                        setCourses((old) => ({
-                          ...old,
-                          [gap.qualificacao_tipo_id]: Number(e.target.value),
-                        }))
-                      }
-                      className="max-w-[280px] rounded-md border border-slate-300 px-2 py-1.5 text-xs leading-5 text-slate-700"
-                      disabled={!gap.cursos_ead.length}
-                    >
-                      {!gap.cursos_ead.length ? (
-                        <option value="">Sem EAD vinculado</option>
-                      ) : (
-                        <option value="">Selecione o curso</option>
-                      )}
-                      {gap.cursos_ead.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.titulo}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    <button
-                      type="button"
-                      aria-label="Matricular gaps (sem e-mail)"
-                      disabled={!gap.cursos_ead.length || enroll.isPending}
-                      onClick={() => enroll.mutate(gap)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
-                    >
-                      <UserPlus className="h-4 w-4" /> Matricular
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {!data.gaps_matricula.length ? (
+        <section>
+          <h3 className="font-semibold text-slate-900">A matricular</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Requisitos sem matrícula correspondente. A matrícula é criada sem envio de e-mail.
+          </p>
+          <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500">
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
-                    Nenhum gap de matrícula acionável.
-                  </td>
+                  <SortableComplianceTableHeader
+                    column="training"
+                    label="Treinamento"
+                    sort={gapSort}
+                    onSort={(key) => setGapSort((current) => nextComplianceTableSort(current, key))}
+                    className="px-4 py-3 text-left"
+                  />
+                  <SortableComplianceTableHeader
+                    column="people"
+                    label="Pessoas"
+                    sort={gapSort}
+                    onSort={(key) => setGapSort((current) => nextComplianceTableSort(current, key))}
+                    className="px-3 py-3 text-right"
+                  />
+                  <SortableComplianceTableHeader
+                    column="expired"
+                    label="Vencidos"
+                    sort={gapSort}
+                    onSort={(key) => setGapSort((current) => nextComplianceTableSort(current, key))}
+                    className="px-3 py-3 text-right"
+                  />
+                  <SortableComplianceTableHeader
+                    column="never"
+                    label="Nunca fez"
+                    sort={gapSort}
+                    onSort={(key) => setGapSort((current) => nextComplianceTableSort(current, key))}
+                    className="px-3 py-3 text-right"
+                  />
+                  <SortableComplianceTableHeader
+                    column="course"
+                    label="Curso EAD"
+                    sort={gapSort}
+                    onSort={(key) => setGapSort((current) => nextComplianceTableSort(current, key))}
+                  />
+                  <th className="px-3 py-3" />
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {sortedGaps.map((gap) => (
+                  <tr key={gap.qualificacao_tipo_id}>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-slate-800">{gap.qualificacao_tipo_nome}</div>
+                      <div className="text-xs text-slate-400">
+                        {gap.qualificacao_tipo_codigo || '—'}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-right">{gap.pessoas}</td>
+                    <td className="px-3 py-3 text-right text-red-700">{gap.vencidos}</td>
+                    <td className="px-3 py-3 text-right text-orange-700">{gap.nunca_realizados}</td>
+                    <td className="px-3 py-3">
+                      <select
+                        aria-label={`Curso EAD para ${gap.qualificacao_tipo_nome}`}
+                        value={
+                          courses[gap.qualificacao_tipo_id] ??
+                          (gap.cursos_ead.length === 1 ? gap.cursos_ead[0].id : '')
+                        }
+                        onChange={(e) =>
+                          setCourses((old) => ({
+                            ...old,
+                            [gap.qualificacao_tipo_id]: Number(e.target.value),
+                          }))
+                        }
+                        className="max-w-[280px] rounded-md border border-slate-300 px-2 py-1.5 text-xs leading-5 text-slate-700"
+                        disabled={!gap.cursos_ead.length}
+                      >
+                        {!gap.cursos_ead.length ? (
+                          <option value="">Sem EAD vinculado</option>
+                        ) : (
+                          <option value="">Selecione o curso</option>
+                        )}
+                        {gap.cursos_ead.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.titulo}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <button
+                        type="button"
+                        aria-label="Matricular gaps (sem e-mail)"
+                        disabled={!gap.cursos_ead.length || enroll.isPending}
+                        onClick={() => enroll.mutate(gap)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+                      >
+                        <UserPlus className="h-4 w-4" /> Matricular
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!data.gaps_matricula.length ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
+                      Nenhum gap de matrícula acionável.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
       ) : null}
 
       {section === 'convites' ? (
-      <section>
-        <h3 className="font-semibold text-slate-900">Convites de matrícula</h3>
-        <p className="mt-1 text-sm text-slate-500">
-          Matrículas já criadas que ainda não foram iniciadas.
-        </p>
-        <div className="mt-3 space-y-2">
-          {Array.from(
-            (data.convites_matricula || []).reduce((map, row) => {
-              const current = map.get(row.curso_id) || { titulo: row.curso_titulo, ids: [] as number[] };
-              current.ids.push(row.matricula_id);
-              map.set(row.curso_id, current);
-              return map;
-            }, new Map<number, { titulo: string; ids: number[] }>()),
-          ).map(([cursoId, group]) => (
-            <div key={cursoId} className="flex flex-col gap-2 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="font-medium text-slate-800">{group.titulo}</div>
-                <div className="text-xs text-slate-500">{group.ids.length} matrícula(s) ainda não iniciada(s)</div>
-              </div>
-              <button
-                type="button"
-                aria-label="Enviar/re-enviar convite por e-mail"
-                disabled={invite.isPending}
-                onClick={() => invite.mutate(group.ids)}
-                className="rounded-lg border border-primary px-3 py-2 text-xs font-semibold text-primary disabled:opacity-40"
+        <section>
+          <h3 className="font-semibold text-slate-900">Convites de matrícula</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Matrículas já criadas que ainda não foram iniciadas.
+          </p>
+          <div className="mt-3 space-y-2">
+            {Array.from(
+              (data.convites_matricula || []).reduce((map, row) => {
+                const current = map.get(row.curso_id) || {
+                  titulo: row.curso_titulo,
+                  ids: [] as number[],
+                };
+                current.ids.push(row.matricula_id);
+                map.set(row.curso_id, current);
+                return map;
+              }, new Map<number, { titulo: string; ids: number[] }>()),
+            ).map(([cursoId, group]) => (
+              <div
+                key={cursoId}
+                className="flex flex-col gap-2 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between"
               >
-                Enviar convite
-              </button>
-            </div>
-          ))}
-          {!data.convites_matricula?.length ? (
-            <div className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
-              Nenhuma matrícula não iniciada disponível para convite.
-            </div>
-          ) : null}
-        </div>
-      </section>
+                <div>
+                  <div className="font-medium text-slate-800">{group.titulo}</div>
+                  <div className="text-xs text-slate-500">
+                    {group.ids.length} matrícula(s) ainda não iniciada(s)
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Enviar/re-enviar convite por e-mail"
+                  disabled={invite.isPending}
+                  onClick={() => invite.mutate(group.ids)}
+                  className="rounded-lg border border-primary px-3 py-2 text-xs font-semibold text-primary disabled:opacity-40"
+                >
+                  Enviar convite
+                </button>
+              </div>
+            ))}
+            {!data.convites_matricula?.length ? (
+              <div className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
+                Nenhuma matrícula não iniciada disponível para convite.
+              </div>
+            ) : null}
+          </div>
+        </section>
       ) : null}
 
       {section === 'revisao' ? (
-      <section>
-        <h3 className="font-semibold text-slate-900">Revisar matrículas</h3>
-        <p className="mt-1 text-sm text-slate-500">
-          Vincule a matrícula à necessidade correta ou confirme que ela deve permanecer avulsa.
-        </p>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-4 py-3 text-left">Pessoa</th>
-                <th className="px-3 py-3 text-left">Setor / função</th>
-                <th className="px-3 py-3 text-left">Matrícula</th>
-                <th className="px-3 py-3 text-left">Situação</th>
-                <th className="px-3 py-3 text-left">Ação</th>
-                <th className="px-3 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {data.matriculas_revisao.map((row) => (
-                <tr key={row.matricula_id}>
-                  <td className="px-4 py-3 font-medium text-slate-800">{row.funcionario_nome}</td>
-                  <td className="px-3 py-3 text-slate-600">
-                    {row.setor_nome || 'Sem setor'}
-                    <div className="text-xs text-slate-400">{row.funcao_nome || 'Sem função'}</div>
-                  </td>
-                  <td className="px-3 py-3">
-                    <div>{row.curso_titulo}</div>
-                    <div className="text-xs text-slate-400">
-                      {row.qualificacao_tipo_nome || 'Sem modelo'} · {row.matricula_status}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3">
-                    <span
-                      className={`rounded px-2 py-1 text-xs font-medium ${row.situacao === 'MATRICULA_AVULSA_RECONCILIADA' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}
-                    >
-                      {situationLabels[row.situacao] || row.situacao}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3">
-                    <select
-                      value={actions[row.matricula_id] || ''}
-                      onChange={(e) =>
-                        setActions((old) => ({ ...old, [row.matricula_id]: e.target.value }))
-                      }
-                      className="rounded-md border border-slate-300 px-2 py-1.5"
-                    >
-                      <option value="">Selecione...</option>
-                      {row.situacao === 'MATRICULA_AVULSA_RECONCILIADA' ? (
-                        <option value="REABRIR">Reabrir revisão</option>
-                      ) : (
-                        <>
-                          {row.setor_id ? (
-                            <option value="VINCULAR_SETOR">Obrigatório para o setor</option>
-                          ) : null}
-                          {row.funcao_id ? (
-                            <option value="VINCULAR_FUNCAO">Obrigatório para a função</option>
-                          ) : null}
-                          {row.setor_id && row.funcao_id ? (
-                            <option value="VINCULAR_SETOR_FUNCAO">
-                              Obrigatório para setor + função
-                            </option>
-                          ) : null}
-                          {row.qualificacao_tipo_id ? (
-                            <option value="RECOMENDAR_PESSOA">
-                              Recomendado só para esta pessoa
-                            </option>
-                          ) : null}
-                          <option value="MANTER_AVULSA">Manter matrícula avulsa</option>
-                        </>
-                      )}
-                    </select>
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    <button
-                      type="button"
-                      disabled={!actions[row.matricula_id] || reconcile.isPending}
-                      onClick={() => reconcile.mutate(row)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-40"
-                    >
-                      <Link2 className="h-4 w-4" /> Aplicar
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {!data.matriculas_revisao.length ? (
+        <section>
+          <h3 className="font-semibold text-slate-900">Revisar matrículas</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Vincule a matrícula à necessidade correta ou confirme que ela deve permanecer avulsa.
+          </p>
+          <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500">
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-emerald-700">
-                    <span className="inline-flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4" /> Nenhuma matrícula pendente de revisão.
-                    </span>
-                  </td>
+                  <SortableComplianceTableHeader
+                    column="person"
+                    label="Pessoa"
+                    sort={reviewSort}
+                    onSort={(key) =>
+                      setReviewSort((current) => nextComplianceTableSort(current, key))
+                    }
+                    className="px-4 py-3 text-left"
+                  />
+                  <SortableComplianceTableHeader
+                    column="sector"
+                    label="Setor / função"
+                    sort={reviewSort}
+                    onSort={(key) =>
+                      setReviewSort((current) => nextComplianceTableSort(current, key))
+                    }
+                  />
+                  <SortableComplianceTableHeader
+                    column="enrollment"
+                    label="Matrícula"
+                    sort={reviewSort}
+                    onSort={(key) =>
+                      setReviewSort((current) => nextComplianceTableSort(current, key))
+                    }
+                  />
+                  <SortableComplianceTableHeader
+                    column="situation"
+                    label="Situação"
+                    sort={reviewSort}
+                    onSort={(key) =>
+                      setReviewSort((current) => nextComplianceTableSort(current, key))
+                    }
+                  />
+                  <SortableComplianceTableHeader
+                    column="action"
+                    label="Ação"
+                    sort={reviewSort}
+                    onSort={(key) =>
+                      setReviewSort((current) => nextComplianceTableSort(current, key))
+                    }
+                  />
+                  <th className="px-3 py-3" />
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-        {data.resumo.cursos_sem_modelo ? (
-          <div className="mt-3 flex gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-            <AlertTriangle className="h-4 w-4 shrink-0" /> {data.resumo.cursos_sem_modelo}{' '}
-            matrícula(s) usam curso sem modelo de qualificação e precisam ser vinculadas antes de
-            virar requisito.
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {sortedReviews.map((row) => (
+                  <tr key={row.matricula_id}>
+                    <td className="px-4 py-3 font-medium text-slate-800">{row.funcionario_nome}</td>
+                    <td className="px-3 py-3 text-slate-600">
+                      {row.setor_nome || 'Sem setor'}
+                      <div className="text-xs text-slate-400">
+                        {row.funcao_nome || 'Sem função'}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div>{row.curso_titulo}</div>
+                      <div className="text-xs text-slate-400">
+                        {row.qualificacao_tipo_nome || 'Sem modelo'} · {row.matricula_status}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span
+                        className={`rounded px-2 py-1 text-xs font-medium ${row.situacao === 'MATRICULA_AVULSA_RECONCILIADA' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}
+                      >
+                        {situationLabels[row.situacao] || row.situacao}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <select
+                        value={actions[row.matricula_id] || ''}
+                        onChange={(e) =>
+                          setActions((old) => ({ ...old, [row.matricula_id]: e.target.value }))
+                        }
+                        className="rounded-md border border-slate-300 px-2 py-1.5"
+                      >
+                        <option value="">Selecione...</option>
+                        {row.situacao === 'MATRICULA_AVULSA_RECONCILIADA' ? (
+                          <option value="REABRIR">Reabrir revisão</option>
+                        ) : (
+                          <>
+                            {row.setor_id ? (
+                              <option value="VINCULAR_SETOR">Obrigatório para o setor</option>
+                            ) : null}
+                            {row.funcao_id ? (
+                              <option value="VINCULAR_FUNCAO">Obrigatório para a função</option>
+                            ) : null}
+                            {row.setor_id && row.funcao_id ? (
+                              <option value="VINCULAR_SETOR_FUNCAO">
+                                Obrigatório para setor + função
+                              </option>
+                            ) : null}
+                            {row.qualificacao_tipo_id ? (
+                              <option value="RECOMENDAR_PESSOA">
+                                Recomendado só para esta pessoa
+                              </option>
+                            ) : null}
+                            <option value="MANTER_AVULSA">Manter matrícula avulsa</option>
+                          </>
+                        )}
+                      </select>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <button
+                        type="button"
+                        disabled={!actions[row.matricula_id] || reconcile.isPending}
+                        onClick={() => reconcile.mutate(row)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-40"
+                      >
+                        <Link2 className="h-4 w-4" /> Aplicar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!data.matriculas_revisao.length ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6 text-center text-emerald-700">
+                      <span className="inline-flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4" /> Nenhuma matrícula pendente de revisão.
+                      </span>
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
           </div>
-        ) : null}
-      </section>
+          {data.resumo.cursos_sem_modelo ? (
+            <div className="mt-3 flex gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+              <AlertTriangle className="h-4 w-4 shrink-0" /> {data.resumo.cursos_sem_modelo}{' '}
+              matrícula(s) usam curso sem modelo de qualificação e precisam ser vinculadas antes de
+              virar requisito.
+            </div>
+          ) : null}
+        </section>
       ) : null}
     </div>
   );

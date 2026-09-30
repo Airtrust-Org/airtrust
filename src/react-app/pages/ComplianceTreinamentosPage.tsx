@@ -16,6 +16,12 @@ import { TrainingComplianceConditionsEditor } from '@/react-app/components/compl
 import { TrainingComplianceOrganizationEditor } from '@/react-app/components/compliance/TrainingComplianceOrganizationEditor';
 import { TrainingEnrollmentReconciliation } from '@/react-app/components/compliance/TrainingEnrollmentReconciliation';
 import {
+  nextComplianceTableSort,
+  sortComplianceRows,
+  SortableComplianceTableHeader,
+  type TableSortState,
+} from '@/react-app/components/compliance/SortableComplianceTableHeader';
+import {
   TrainingComplianceIntelligence,
   TrainingComplianceNotificationSettings,
 } from '@/react-app/components/compliance/TrainingComplianceIntelligence';
@@ -137,6 +143,11 @@ type ComplianceTab =
 
 type ComplianceDrilldownStatus =
   'CONFORME' | 'VENCENDO' | 'VENCIDO' | 'NAO_REALIZADO' | 'EM_ANDAMENTO';
+
+type TrainingSortKey =
+  'name' | 'people' | 'compliance' | 'realized' | 'inProgress' | 'dueSoon' | 'expired' | 'never';
+type PersonSortKey = 'name' | 'sector' | 'requirements' | 'compliance' | 'realized' | 'status';
+type SectorSortKey = 'name' | 'people' | 'requirements' | 'compliance' | 'realized' | 'status';
 
 function isComplianceTab(value: string | null): value is ComplianceTab {
   return (
@@ -284,6 +295,18 @@ export default function ComplianceTreinamentosPage() {
     'organizacao' | 'treinamento' | 'condicoes' | 'reconciliacao' | 'automacao'
   >('organizacao');
   const [expandedSectors, setExpandedSectors] = useState<Set<number | null>>(new Set());
+  const [trainingSort, setTrainingSort] = useState<TableSortState<TrainingSortKey>>({
+    key: 'name',
+    direction: 'asc',
+  });
+  const [personSort, setPersonSort] = useState<TableSortState<PersonSortKey>>({
+    key: 'name',
+    direction: 'asc',
+  });
+  const [sectorSort, setSectorSort] = useState<TableSortState<SectorSortKey>>({
+    key: 'name',
+    direction: 'asc',
+  });
   const [selectedTipoId, setSelectedTipoId] = useState<number | null>(null);
   const [drilldown, setDrilldown] = useState<{
     qualificacao_tipo_id?: number;
@@ -353,6 +376,64 @@ export default function ComplianceTreinamentosPage() {
         ),
       ),
   });
+
+  const sortedTrainings = useMemo(
+    () =>
+      sortComplianceRows(trainings.data || [], trainingSort, (item, key) => {
+        if (key === 'name') return item.qualificacao_tipo_nome;
+        if (key === 'people') return item.pessoas;
+        if (key === 'compliance') return item.compliance_pct;
+        if (key === 'realized') return realizedCount(item.conformes, item.vencendo);
+        if (key === 'inProgress') return item.em_andamento;
+        if (key === 'dueSoon') return item.vencendo;
+        if (key === 'expired') return item.vencidos;
+        return item.nao_realizados;
+      }),
+    [trainingSort, trainings.data],
+  );
+  const sortedPeople = useMemo(
+    () =>
+      sortComplianceRows(people.data || [], personSort, (item, key) => {
+        if (key === 'name') return item.nome;
+        if (key === 'sector') return `${item.setor_nome || ''} ${item.funcao_nome || ''}`;
+        if (key === 'requirements') return item.configurado ? item.total_obrigatorios : null;
+        if (key === 'compliance') return item.configurado ? item.compliance_pct : null;
+        if (key === 'realized')
+          return item.configurado ? realizedCount(item.conformes, item.vencendo) : null;
+        return item.em_andamento + item.vencendo + item.vencidos + item.nao_realizados;
+      }),
+    [people.data, personSort],
+  );
+  const sortedSectors = useMemo(() => {
+    const valueFor = (
+      item: Pick<
+        SectorCompliance,
+        | 'setor_nome'
+        | 'pessoas'
+        | 'requisitos_obrigatorios'
+        | 'compliance_pct'
+        | 'conformes'
+        | 'vencendo'
+        | 'em_andamento'
+        | 'vencidos'
+        | 'nao_realizados'
+      >,
+      key: SectorSortKey,
+    ) => {
+      if (key === 'name') return item.setor_nome;
+      if (key === 'people') return item.pessoas;
+      if (key === 'requirements') return item.requisitos_obrigatorios;
+      if (key === 'compliance') return item.compliance_pct;
+      if (key === 'realized') return realizedCount(item.conformes, item.vencendo);
+      return item.em_andamento + item.vencendo + item.vencidos + item.nao_realizados;
+    };
+    return sortComplianceRows(sectors.data || [], sectorSort, valueFor).map((sector) => ({
+      ...sector,
+      cargos: sortComplianceRows(sector.cargos, sectorSort, (cargo, key) =>
+        valueFor({ ...cargo, setor_nome: cargo.funcao_nome }, key),
+      ),
+    }));
+  }, [sectorSort, sectors.data]);
 
   const functions = useMemo(() => {
     const all = catalogs.data?.funcoes || [];
@@ -665,18 +746,82 @@ export default function ComplianceTreinamentosPage() {
                   <table className="min-w-full text-sm">
                     <thead className="bg-slate-50 text-slate-500">
                       <tr>
-                        <th className="px-4 py-3 text-left">Treinamento</th>
-                        <th className="px-3 py-3 text-right">Pessoas</th>
-                        <th className="px-3 py-3 text-right">Compliance</th>
-                        <th className="px-3 py-3 text-right">Realizados</th>
-                        <th className="px-3 py-3 text-right">Em andamento</th>
-                        <th className="px-3 py-3 text-right">Vencendo</th>
-                        <th className="px-3 py-3 text-right">Vencidos</th>
-                        <th className="px-3 py-3 text-right">Nunca fez</th>
+                        <SortableComplianceTableHeader
+                          column="name"
+                          label="Treinamento"
+                          sort={trainingSort}
+                          onSort={(key) =>
+                            setTrainingSort((current) => nextComplianceTableSort(current, key))
+                          }
+                          className="px-4 py-3 text-left"
+                        />
+                        <SortableComplianceTableHeader
+                          column="people"
+                          label="Pessoas"
+                          sort={trainingSort}
+                          onSort={(key) =>
+                            setTrainingSort((current) => nextComplianceTableSort(current, key))
+                          }
+                          className="px-3 py-3 text-right"
+                        />
+                        <SortableComplianceTableHeader
+                          column="compliance"
+                          label="Compliance"
+                          sort={trainingSort}
+                          onSort={(key) =>
+                            setTrainingSort((current) => nextComplianceTableSort(current, key))
+                          }
+                          className="px-3 py-3 text-right"
+                        />
+                        <SortableComplianceTableHeader
+                          column="realized"
+                          label="Realizados"
+                          sort={trainingSort}
+                          onSort={(key) =>
+                            setTrainingSort((current) => nextComplianceTableSort(current, key))
+                          }
+                          className="px-3 py-3 text-right"
+                        />
+                        <SortableComplianceTableHeader
+                          column="inProgress"
+                          label="Em andamento"
+                          sort={trainingSort}
+                          onSort={(key) =>
+                            setTrainingSort((current) => nextComplianceTableSort(current, key))
+                          }
+                          className="px-3 py-3 text-right"
+                        />
+                        <SortableComplianceTableHeader
+                          column="dueSoon"
+                          label="Vencendo"
+                          sort={trainingSort}
+                          onSort={(key) =>
+                            setTrainingSort((current) => nextComplianceTableSort(current, key))
+                          }
+                          className="px-3 py-3 text-right"
+                        />
+                        <SortableComplianceTableHeader
+                          column="expired"
+                          label="Vencidos"
+                          sort={trainingSort}
+                          onSort={(key) =>
+                            setTrainingSort((current) => nextComplianceTableSort(current, key))
+                          }
+                          className="px-3 py-3 text-right"
+                        />
+                        <SortableComplianceTableHeader
+                          column="never"
+                          label="Nunca fez"
+                          sort={trainingSort}
+                          onSort={(key) =>
+                            setTrainingSort((current) => nextComplianceTableSort(current, key))
+                          }
+                          className="px-3 py-3 text-right"
+                        />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {(trainings.data || []).map((item) => (
+                      {sortedTrainings.map((item) => (
                         <tr key={item.qualificacao_tipo_id} className="hover:bg-slate-50">
                           <td className="px-4 py-3">
                             <button
@@ -785,16 +930,64 @@ export default function ComplianceTreinamentosPage() {
                     <table className="min-w-full text-sm">
                       <thead className="bg-slate-50 text-slate-500">
                         <tr>
-                          <th className="px-4 py-3 text-left">Pessoa</th>
-                          <th className="px-3 py-3 text-left">Setor / função</th>
-                          <th className="px-3 py-3 text-right">Requisitos</th>
-                          <th className="px-3 py-3 text-right">Compliance</th>
-                          <th className="px-3 py-3 text-right">Realizados</th>
-                          <th className="px-4 py-3 text-right">Situação</th>
+                          <SortableComplianceTableHeader
+                            column="name"
+                            label="Pessoa"
+                            sort={personSort}
+                            onSort={(key) =>
+                              setPersonSort((current) => nextComplianceTableSort(current, key))
+                            }
+                            className="px-4 py-3 text-left"
+                          />
+                          <SortableComplianceTableHeader
+                            column="sector"
+                            label="Setor / função"
+                            sort={personSort}
+                            onSort={(key) =>
+                              setPersonSort((current) => nextComplianceTableSort(current, key))
+                            }
+                            className="px-3 py-3 text-left"
+                          />
+                          <SortableComplianceTableHeader
+                            column="requirements"
+                            label="Requisitos"
+                            sort={personSort}
+                            onSort={(key) =>
+                              setPersonSort((current) => nextComplianceTableSort(current, key))
+                            }
+                            className="px-3 py-3 text-right"
+                          />
+                          <SortableComplianceTableHeader
+                            column="compliance"
+                            label="Compliance"
+                            sort={personSort}
+                            onSort={(key) =>
+                              setPersonSort((current) => nextComplianceTableSort(current, key))
+                            }
+                            className="px-3 py-3 text-right"
+                          />
+                          <SortableComplianceTableHeader
+                            column="realized"
+                            label="Realizados"
+                            sort={personSort}
+                            onSort={(key) =>
+                              setPersonSort((current) => nextComplianceTableSort(current, key))
+                            }
+                            className="px-3 py-3 text-right"
+                          />
+                          <SortableComplianceTableHeader
+                            column="status"
+                            label="Situação"
+                            sort={personSort}
+                            onSort={(key) =>
+                              setPersonSort((current) => nextComplianceTableSort(current, key))
+                            }
+                            className="px-4 py-3 text-right"
+                          />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {(people.data || []).map((item) => (
+                        {sortedPeople.map((item) => (
                           <tr key={item.id} className="hover:bg-slate-50">
                             <td className="px-4 py-3">
                               <Link
@@ -847,16 +1040,64 @@ export default function ComplianceTreinamentosPage() {
                   <table className="min-w-full text-sm">
                     <thead className="bg-slate-50 text-slate-500">
                       <tr>
-                        <th className="px-4 py-3 text-left">Setor / função</th>
-                        <th className="px-3 py-3 text-right">Pessoas</th>
-                        <th className="px-3 py-3 text-right">Requisitos</th>
-                        <th className="px-3 py-3 text-right">Compliance</th>
-                        <th className="px-3 py-3 text-right">Realizados</th>
-                        <th className="px-4 py-3 text-right">Situação</th>
+                        <SortableComplianceTableHeader
+                          column="name"
+                          label="Setor / função"
+                          sort={sectorSort}
+                          onSort={(key) =>
+                            setSectorSort((current) => nextComplianceTableSort(current, key))
+                          }
+                          className="px-4 py-3 text-left"
+                        />
+                        <SortableComplianceTableHeader
+                          column="people"
+                          label="Pessoas"
+                          sort={sectorSort}
+                          onSort={(key) =>
+                            setSectorSort((current) => nextComplianceTableSort(current, key))
+                          }
+                          className="px-3 py-3 text-right"
+                        />
+                        <SortableComplianceTableHeader
+                          column="requirements"
+                          label="Requisitos"
+                          sort={sectorSort}
+                          onSort={(key) =>
+                            setSectorSort((current) => nextComplianceTableSort(current, key))
+                          }
+                          className="px-3 py-3 text-right"
+                        />
+                        <SortableComplianceTableHeader
+                          column="compliance"
+                          label="Compliance"
+                          sort={sectorSort}
+                          onSort={(key) =>
+                            setSectorSort((current) => nextComplianceTableSort(current, key))
+                          }
+                          className="px-3 py-3 text-right"
+                        />
+                        <SortableComplianceTableHeader
+                          column="realized"
+                          label="Realizados"
+                          sort={sectorSort}
+                          onSort={(key) =>
+                            setSectorSort((current) => nextComplianceTableSort(current, key))
+                          }
+                          className="px-3 py-3 text-right"
+                        />
+                        <SortableComplianceTableHeader
+                          column="status"
+                          label="Situação"
+                          sort={sectorSort}
+                          onSort={(key) =>
+                            setSectorSort((current) => nextComplianceTableSort(current, key))
+                          }
+                          className="px-4 py-3 text-right"
+                        />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {(sectors.data || []).flatMap((sector) => {
+                      {sortedSectors.flatMap((sector) => {
                         const expanded = expandedSectors.has(sector.setor_id);
                         const rows = [
                           <tr
