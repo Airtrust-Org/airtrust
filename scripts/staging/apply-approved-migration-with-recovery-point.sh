@@ -318,6 +318,11 @@ if [[ "$migration_basename" == "0516_qualification_expired_daily_alerts.sql" && 
   echo "STAGING_DEPENDENCY_0515_OK=true"
 fi
 
+if [[ "$migration_basename" == "0521_training_compliance_designation_overrides.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0521-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0521_OK=true"
+fi
+
 if [[ "$migration_basename" == 0461_* || "$migration_basename" == 0462_* ]]; then
   node scripts/staging/preflight-0461-0462.mjs --migration="$migration_basename"
   echo "SPECIALIZED_PREFLIGHT_OK=true"

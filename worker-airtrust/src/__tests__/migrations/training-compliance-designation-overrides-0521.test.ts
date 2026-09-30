@@ -139,6 +139,7 @@ describe('0521 training compliance designation overrides', () => {
     );
     const recovery = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
     expect(recovery).toContain('0521_training_compliance_designation_overrides.sql');
+    expect(recovery).toContain('validate-0521-preflight.sh');
     expect(recovery).toContain('validate-0521-postconditions.sh');
     const workflow = read('.github/workflows/apply-schema-change-v2.yml');
     expect(workflow).toContain(
@@ -149,6 +150,7 @@ describe('0521 training compliance designation overrides', () => {
     for (const file of [
       'scripts/schema-v2/validate-0521-production-preflight.sh',
       'scripts/schema-v2/validate-0521-production-postconditions.sh',
+      'scripts/staging/validate-0521-preflight.sh',
       'scripts/staging/validate-0521-postconditions.sh',
     ])
       expect(spawnSync('bash', ['-n', file], { cwd: ROOT }).status).toBe(0);
