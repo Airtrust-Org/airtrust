@@ -19,11 +19,46 @@ async function columnExists(db: D1Database, table: string, column: string): Prom
   return (results || []).some((row) => row.name === column);
 }
 
+const QUALIFICATION_EVIDENCE_PROFILES_TABLE = 'qualificacoes_historico_perfis_competencia';
+
 export function normalizeTrainingComplianceEvidenceProfile(value: unknown): string | null {
   const normalized = String(value || '')
     .trim()
     .toUpperCase();
   return normalized || null;
+}
+
+export async function buildQualificationEvidenceProfileSql(
+  db: D1Database,
+  qualificationHistoryColumns: ReadonlySet<string>,
+): Promise<{ select: string; joins: string; available: boolean }> {
+  const hasScalarProfile = qualificationHistoryColumns.has('perfil_competencia');
+  const lmsProfileReady =
+    qualificationHistoryColumns.has('lms_matricula_id') &&
+    (await columnExists(db, 'lms_matriculas', 'perfil_competencia'));
+  const multiProfileReady = await tableExists(db, QUALIFICATION_EVIDENCE_PROFILES_TABLE);
+  const scalarSelect = hasScalarProfile
+    ? lmsProfileReady
+      ? 'COALESCE(qh.perfil_competencia, lm_profile.perfil_competencia)'
+      : 'qh.perfil_competencia'
+    : lmsProfileReady
+      ? 'lm_profile.perfil_competencia'
+      : 'NULL';
+  const joins = [
+    multiProfileReady
+      ? 'LEFT JOIN qualificacoes_historico_perfis_competencia qhp ON qhp.historico_id=qh.id AND qhp.empresa_id=f.empresa_id AND qhp.deleted_at IS NULL'
+      : '',
+    lmsProfileReady
+      ? 'LEFT JOIN lms_matriculas lm_profile ON lm_profile.id=qh.lms_matricula_id AND lm_profile.empresa_id=f.empresa_id AND lm_profile.deleted_at IS NULL'
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return {
+    select: multiProfileReady ? `COALESCE(qhp.perfil_competencia, ${scalarSelect})` : scalarSelect,
+    joins,
+    available: multiProfileReady || hasScalarProfile || lmsProfileReady,
+  };
 }
 export async function resolveEffectiveTrainingComplianceProfile(
   db: D1Database,
@@ -91,8 +126,6 @@ export async function listTrainingComplianceEvidenceProfilesForQualification(
     return [];
   }
 }
-
-const QUALIFICATION_EVIDENCE_PROFILES_TABLE = 'qualificacoes_historico_perfis_competencia';
 
 export async function qualificationEvidenceSupportsMultipleProfiles(
   db: D1Database,
