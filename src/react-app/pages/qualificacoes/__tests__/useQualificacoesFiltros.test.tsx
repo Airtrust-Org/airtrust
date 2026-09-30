@@ -112,4 +112,25 @@ describe('useQualificacoesFiltros', () => {
     ]);
     expect(tablePreferenceWriteSpy).not.toHaveBeenCalled();
   });
+
+  it('restaura e persiste a área de treinamento sem alterar o setor do funcionário', async () => {
+    vi.mocked(readUserPreference).mockReturnValue({
+      setorFilter: ['10'],
+      historicoAreaId: 17,
+    });
+
+    const { result } = renderHook(() => useQualificacoesFiltros(null), {
+      wrapper: createWrapper('/qualificacoes'),
+    });
+
+    expect(result.current.setorFilter).toEqual(['10']);
+    expect(result.current.historicoAreaId).toBe(17);
+
+    result.current.setHistoricoAreaId(23);
+
+    await waitFor(() => expect(result.current.historicoAreaId).toBe(23));
+    expect(tablePreferenceWriteSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ setorFilter: ['10'], historicoAreaId: 23 }),
+    );
+  });
 });

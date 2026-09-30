@@ -316,6 +316,7 @@ router.get(
     const employeeScope = await buildHistoricoEmployeeScopeCompat(db, access, 'f');
     const hasCategoriaEmpresaId = await hasTableColumn(db, 'qualificacoes_categorias', 'empresa_id');
     const hasCategoriaIdColumn = await hasTableColumn(db, 'qualificacoes_tipos', 'categoria_id');
+    const hasAreaIdColumn = await hasTableColumn(db, 'qualificacoes_tipos', 'area_id');
     const hasTipoDominioOverride = await hasTableColumn(
       db,
       'qualificacoes_tipos',
@@ -358,6 +359,7 @@ router.get(
       aeronave_id = '',
       categoria = '',
       categoria_id = '',
+      area_id = '',
       formato_id = '',
       setor_id = '',
       setor_ids = '',
@@ -470,6 +472,21 @@ router.get(
     if (Number.isFinite(categoriaIdNum) && categoriaIdNum > 0) {
       conditions.push('(qt.categoria_id = ? OR qc.id = ?)');
       params.push(categoriaIdNum, categoriaIdNum);
+    }
+    const areaIdNum = parseInt(area_id, 10);
+    if (Number.isFinite(areaIdNum) && areaIdNum > 0) {
+      if (!hasAreaIdColumn) {
+        conditions.push('1 = 0');
+      } else {
+        conditions.push(`qt.area_id = ? AND EXISTS (
+          SELECT 1 FROM qualificacoes_areas qa_filter
+          WHERE qa_filter.id = qt.area_id
+            AND qa_filter.empresa_id = ?
+            AND qa_filter.ativo = 1
+            AND qa_filter.deleted_at IS NULL
+        )`);
+        params.push(areaIdNum, tenantCtx.empresaId);
+      }
     }
     const formatoIdNum = parseInt(formato_id, 10);
     if (Number.isFinite(formatoIdNum) && formatoIdNum > 0) {
@@ -820,6 +837,7 @@ router.get(
       selectedStatuses.join(','),
       funcionario_id,
       tipo_id,
+      area_id,
       search,
     ]);
 

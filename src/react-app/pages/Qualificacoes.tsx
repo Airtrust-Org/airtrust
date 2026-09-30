@@ -179,6 +179,8 @@ export default function Qualificacoes() {
     usesHistoricoDataset,
     historicoCategoriaId,
     setHistoricoCategoriaId,
+    historicoAreaId,
+    setHistoricoAreaId,
     effectiveHistoricoStatusFiltro,
     isDefaultStatusFilter,
   } = useQualificacoesFiltros(highlightedHistoricoId);
@@ -209,6 +211,7 @@ export default function Qualificacoes() {
     highlightedHistoricoId || undefined,
     usesHistoricoDataset,
     historicoCategoriaId,
+    historicoAreaId,
   );
 
   const shouldLoadPlannedRelatedHistorico = useMemo(
@@ -754,7 +757,12 @@ export default function Qualificacoes() {
   });
 
   const { data: areasData, error: areasError } = useApi('/qualificacoes/areas', {
-    enabled: activeTab === 'tipos' || activeTab === 'categorias' || showTipoModal || showAreaModal,
+    enabled:
+      activeTab === 'historico' ||
+      activeTab === 'tipos' ||
+      activeTab === 'categorias' ||
+      showTipoModal ||
+      showAreaModal,
     requireAuth: true,
     staleTime: 60_000,
   });
@@ -790,6 +798,15 @@ export default function Qualificacoes() {
       return currentSignature === nextSignature ? current : nextAreas;
     });
   }, [areasData]);
+
+  const historicoAreaOptions = useMemo(
+    () =>
+      areas
+        .filter((area) => Number(area.ativo ?? 1) !== 0 && Number(area.id) > 0)
+        .map((area) => ({ id: Number(area.id), nome: area.nome }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+    [areas],
+  );
 
   const normalizeTipoCodigo = (value?: string | null) =>
     (value ?? '').toString().trim().toUpperCase();
@@ -1052,6 +1069,7 @@ export default function Qualificacoes() {
     debouncedSearch.trim() ||
     aeronaveFilter ||
     categoriaFilter ||
+    historicoAreaId ||
     setorFilter.length > 0 ||
     !isDefaultStatusFilter,
   );
@@ -2401,6 +2419,24 @@ export default function Qualificacoes() {
                         {cat.nome}
                       </option>
                     ))}
+                </select>
+                <select
+                  value={historicoAreaId ? String(historicoAreaId) : ''}
+                  onChange={(e) => {
+                    const nextAreaId = Number(e.target.value);
+                    setHistoricoAreaId(
+                      Number.isInteger(nextAreaId) && nextAreaId > 0 ? nextAreaId : null,
+                    );
+                    setPage(1);
+                  }}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-600 focus:outline-none bg-white cursor-pointer"
+                >
+                  <option value="">Área do treinamento</option>
+                  {historicoAreaOptions.map((area) => (
+                    <option key={area.id} value={area.id}>
+                      {area.nome}
+                    </option>
+                  ))}
                 </select>
                 {setorOptionsHistorico.length === 1 ? (
                   <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
