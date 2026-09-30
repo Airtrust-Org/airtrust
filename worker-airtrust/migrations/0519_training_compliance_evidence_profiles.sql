@@ -20,24 +20,24 @@ UPDATE qualificacoes_historico
 SET perfil_competencia='AVSEC_TRIPULANTE', updated_at=datetime('now')
 WHERE empresa_id=6 AND perfil_competencia IS NULL AND deleted_at IS NULL
   AND qualificacao_id=(SELECT id FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)='D1' AND deleted_at IS NULL LIMIT 1)
-  AND funcionario_id IN (SELECT f.id FROM funcionarios f JOIN funcoes fn ON fn.id=f.funcao_id AND fn.empresa_id=f.empresa_id
-    WHERE f.empresa_id=6 AND f.deleted_at IS NULL AND fn.deleted_at IS NULL AND UPPER(TRIM(fn.nome)) IN ('COMANDANTE','COPILOTO'));
+  AND funcionario_id IN (SELECT f.id FROM funcionarios f
+    WHERE f.empresa_id=6 AND f.deleted_at IS NULL AND UPPER(TRIM(COALESCE(f.funcao,''))) IN ('COMANDANTE','COPILOTO'));
 UPDATE qualificacoes_historico
 SET perfil_competencia='PTAP_TRIPULANTE_VOO', updated_at=datetime('now')
 WHERE empresa_id=6 AND perfil_competencia IS NULL AND deleted_at IS NULL
   AND qualificacao_id=(SELECT id FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)='D4' AND deleted_at IS NULL LIMIT 1)
-  AND funcionario_id IN (SELECT f.id FROM funcionarios f JOIN funcoes fn ON fn.id=f.funcao_id AND fn.empresa_id=f.empresa_id
-    WHERE f.empresa_id=6 AND f.deleted_at IS NULL AND fn.deleted_at IS NULL AND UPPER(TRIM(fn.nome)) IN ('COMANDANTE','COPILOTO'));
+  AND funcionario_id IN (SELECT f.id FROM funcionarios f
+    WHERE f.empresa_id=6 AND f.deleted_at IS NULL AND UPPER(TRIM(COALESCE(f.funcao,''))) IN ('COMANDANTE','COPILOTO'));
 
 -- Snapshot profiles for already-open D1/D4 enrollments where the role alone is unambiguous.
 UPDATE lms_matriculas SET perfil_competencia='AVSEC_TRIPULANTE', updated_at=datetime('now')
 WHERE empresa_id=6 AND perfil_competencia IS NULL AND deleted_at IS NULL
   AND curso_id IN (SELECT lc.id FROM lms_cursos lc JOIN qualificacoes_tipos qt ON qt.id=lc.qualificacao_tipo_id AND qt.empresa_id=lc.empresa_id WHERE lc.empresa_id=6 AND UPPER(qt.codigo)='D1')
-  AND funcionario_id IN (SELECT f.id FROM funcionarios f JOIN funcoes fn ON fn.id=f.funcao_id AND fn.empresa_id=f.empresa_id WHERE f.empresa_id=6 AND UPPER(TRIM(fn.nome)) IN ('COMANDANTE','COPILOTO'));
+  AND funcionario_id IN (SELECT f.id FROM funcionarios f WHERE f.empresa_id=6 AND f.deleted_at IS NULL AND UPPER(TRIM(COALESCE(f.funcao,''))) IN ('COMANDANTE','COPILOTO'));
 UPDATE lms_matriculas SET perfil_competencia='PTAP_TRIPULANTE_VOO', updated_at=datetime('now')
 WHERE empresa_id=6 AND perfil_competencia IS NULL AND deleted_at IS NULL
   AND curso_id IN (SELECT lc.id FROM lms_cursos lc JOIN qualificacoes_tipos qt ON qt.id=lc.qualificacao_tipo_id AND qt.empresa_id=lc.empresa_id WHERE lc.empresa_id=6 AND UPPER(qt.codigo)='D4')
-  AND funcionario_id IN (SELECT f.id FROM funcionarios f JOIN funcoes fn ON fn.id=f.funcao_id AND fn.empresa_id=f.empresa_id WHERE f.empresa_id=6 AND UPPER(TRIM(fn.nome)) IN ('COMANDANTE','COPILOTO'));
+  AND funcionario_id IN (SELECT f.id FROM funcionarios f WHERE f.empresa_id=6 AND f.deleted_at IS NULL AND UPPER(TRIM(COALESCE(f.funcao,''))) IN ('COMANDANTE','COPILOTO'));
 
 -- A qualification generated from LMS inherits the enrollment snapshot. A renewal inherits its predecessor.
 CREATE TRIGGER IF NOT EXISTS trg_qh_profile_from_evidence_source_0519

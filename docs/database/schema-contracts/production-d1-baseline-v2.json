@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-30",
     "last_reconciled_against": "0519 training compliance evidence profiles prepared; remote apply pending",
-    "schema_v2_digest": "33a0ed582976f077d732382a2ebeb56ec8a7552cd8396e154cb2a372990b21a4",
+    "schema_v2_digest": "f47b96916dc4e3662716f45e8bfa3447a005f848d51de5cfe53a8a71098f5846",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1161,7 +1161,7 @@
     {
       "change_file": "0519_training_compliance_evidence_profiles.sql",
       "change_id": "training-compliance-evidence-profiles-0519",
-      "sha256": "7cd0e2908ff846b9e577142907b82f7b518ce0568e74dbe471c9452810a8f168",
+      "sha256": "69b3b6f68792d9c75c0591c16d3bb4ffb9178793547c1c9fbda5ed2b5e3f87f2",
       "targets": [
         "lms_matriculas",
         "qualificacoes_historico"
