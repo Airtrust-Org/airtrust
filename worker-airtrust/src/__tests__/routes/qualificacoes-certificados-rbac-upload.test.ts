@@ -800,11 +800,29 @@ describe('qualificacoes certificados rbac e upload', () => {
     expect(documentos).toHaveLength(2);
   });
 
+  it('upload de qualificação perfilada exige confirmação explícita antes de gravar no R2', async () => {
+    const { env, bucket, documentos } = createMockEnv();
+    const form = new FormData();
+    form.set('file', createPdfFile('avsec-sem-perfil.pdf'));
+
+    const response = await request('/api/certificados/historico/2001/certificados/upload', env, {
+      method: 'POST',
+      body: form,
+    });
+    const body = (await response.json()) as { success: boolean; code?: string };
+
+    expect(response.status).toBe(400);
+    expect(body.code).toBe('EVIDENCE_PROFILE_REQUIRED');
+    expect(bucket.put).not.toHaveBeenCalled();
+    expect(documentos).toHaveLength(2);
+  });
+
   it('upload do gestor autorizado cria documento, pasta_virtual e vínculo principal visível', async () => {
     const { env, bucket, documentos, pastaVirtual, historicos, runs } = createMockEnv();
     const form = new FormData();
     form.set('file', createPdfFile());
     form.set('descricao', 'Certificado anexado no teste');
+    form.set('perfil_competencia', 'AVSEC_TRIPULANTE');
 
     const response = await request(
       '/api/certificados/historico/2001/certificados/upload',
@@ -869,6 +887,7 @@ describe('qualificacoes certificados rbac e upload', () => {
     const form = new FormData();
     const originalName = 'CRM Periódico — João da Silva (2026).pdf';
     form.set('file', createPdfFile(originalName));
+    form.set('perfil_competencia', 'AVSEC_TRIPULANTE');
 
     const response = await request('/api/certificados/historico/2001/certificados/upload', env, {
       method: 'POST',

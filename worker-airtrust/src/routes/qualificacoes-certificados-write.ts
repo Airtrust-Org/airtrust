@@ -28,7 +28,6 @@ import { requireOperationalAccess } from '../services/operational-domain-access'
 import {
   listTrainingComplianceEvidenceProfilesForQualification,
   normalizeTrainingComplianceEvidenceProfile,
-  resolveEffectiveTrainingComplianceProfile,
 } from '../services/training-compliance-evidence-profile';
 
 // Certificado é resolvido dinamicamente para OPERACOES por resourceType
@@ -400,12 +399,20 @@ app.post(
       const explicitProfile = normalizeTrainingComplianceEvidenceProfile(
         form.get('perfil_competencia'),
       );
-      const allowedProfiles = explicitProfile
-        ? await listTrainingComplianceEvidenceProfilesForQualification(db, {
-            empresaId,
-            qualificacaoTipoId: historico.qualificacao_tipo_id,
-          })
-        : [];
+      const allowedProfiles = await listTrainingComplianceEvidenceProfilesForQualification(db, {
+        empresaId,
+        qualificacaoTipoId: historico.qualificacao_tipo_id,
+      });
+      if (allowedProfiles.length > 0 && !explicitProfile) {
+        return c.json(
+          {
+            success: false,
+            error: 'Confirme o perfil de competência comprovado por este certificado',
+            code: 'EVIDENCE_PROFILE_REQUIRED',
+          },
+          400,
+        );
+      }
       if (explicitProfile && !allowedProfiles.includes(explicitProfile)) {
         return c.json(
           {
@@ -416,13 +423,7 @@ app.post(
           400,
         );
       }
-      const profileToPersist =
-        explicitProfile ||
-        (await resolveEffectiveTrainingComplianceProfile(db, {
-          empresaId,
-          funcionarioId: historico.funcionario_id,
-          qualificacaoTipoId: historico.qualificacao_tipo_id,
-        }));
+      const profileToPersist = explicitProfile;
 
       if (!file) {
         return c.json({ success: false, error: 'Campo "file" é obrigatório' }, 400);

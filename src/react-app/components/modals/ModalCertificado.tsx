@@ -205,7 +205,7 @@ export function ModalCertificado({
     return `PRESENCA-${matriculaPadded}-${codigoLimpo}-${year}${month}${day}-${uuid}.pdf`;
   };
 
-  const authHeader = () => {
+  const authHeader = (): Record<string, string> => {
     const token = getAccessToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
@@ -225,12 +225,11 @@ export function ModalCertificado({
   };
 
   const requestJson = useCallback(async <T,>(path: string, init?: RequestInit): Promise<T> => {
+    const headers = new Headers(authHeader());
+    new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
     const response = await apiFetch(path, {
       ...init,
-      headers: {
-        ...authHeader(),
-        ...(init?.headers || {}),
-      },
+      headers,
     });
 
     const contentType = response.headers.get('content-type') || '';
