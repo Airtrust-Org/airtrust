@@ -15,8 +15,8 @@ const email = String(process.env.PROD_EMAIL || '')
   .trim()
   .toLowerCase();
 const password = String(process.env.PROD_PASSWORD || '');
-const referenceQuery = String(process.env.REFERENCE_NAME || 'Ingrid').trim();
-const targetQueries = String(process.env.TARGET_NAMES || 'Giancarlo,Emily,Laila')
+const referenceQuery = String(process.env.REFERENCE_NAME || 'Yngrid').trim();
+const targetQueries = String(process.env.TARGET_NAMES || 'Giancarlo,Emyle,Layla')
   .split(',')
   .map((value) => value.trim())
   .filter(Boolean);
@@ -91,6 +91,22 @@ async function selectTenantIfNeeded(token, claims, tenantId) {
   return { token: nextToken, claims: nextClaims };
 }
 
+function identitiesFromLinks(links) {
+  const byUserId = new Map();
+  for (const link of links) {
+    const id = Number(link.usuario_id);
+    if (!(id > 0) || byUserId.has(id)) continue;
+    byUserId.set(id, {
+      id,
+      nome: link.gestor_nome,
+      funcionario_nome: link.funcionario_nome,
+      perfil: link.gestor_perfil,
+      active: 1,
+    });
+  }
+  return [...byUserId.values()];
+}
+
 async function resolveCommonTenant(loginToken, loginClaims) {
   const companiesPayload = await request('/api/auth/empresas', loginToken);
   assert(
@@ -105,9 +121,9 @@ async function resolveCommonTenant(loginToken, loginClaims) {
   const candidates = [];
   for (const tenantId of tenantIds) {
     const selected = await selectTenantIfNeeded(loginToken, loginClaims, tenantId);
-    const users = await request('/api/setores-gestores/usuarios-elegiveis/lista', selected.token);
-    assert(Array.isArray(users), `Lista de gestores elegíveis inválida no tenant ${tenantId}`);
-    const scopedUsers = users;
+    const links = await request('/api/setores-gestores', selected.token);
+    assert(Array.isArray(links), `Lista de vínculos setor-gestor inválida no tenant ${tenantId}`);
+    const scopedUsers = identitiesFromLinks(links);
 
     const referenceMatches = scopedUsers.filter((row) => matchesName(row, referenceQuery));
     const targetMatches = targetQueries.map((query) =>
@@ -128,6 +144,7 @@ async function resolveCommonTenant(loginToken, loginClaims) {
       token: selected.token,
       claims: selected.claims,
       users: scopedUsers,
+      links,
     });
   }
 
@@ -151,7 +168,7 @@ async function main() {
   );
 
   const tenant = await resolveCommonTenant(loginToken, loginClaims);
-  const { tenantId, token, claims, users: scopedUsers } = tenant;
+  const { tenantId, token, claims, users: scopedUsers, links } = tenant;
   assert(
     ['ADMIN', 'ADMINISTRADOR'].includes(String(claims?.role || '').toUpperCase()),
     'Sessão selecionada no tenant não possui perfil administrativo',
@@ -161,8 +178,10 @@ async function main() {
   const targets = targetQueries.map((query) => resolveUnique(scopedUsers, query, 'alvo'));
 
   assert(
-    String(reference.perfil || '').toUpperCase() === 'GESTOR',
-    'Ingrid não está com perfil GESTOR',
+    ['GESTOR', 'MANAGER', 'ADMIN', 'ADMINISTRADOR'].includes(
+      String(reference.perfil || '').toUpperCase(),
+    ),
+    'Ingrid não possui perfil compatível com a referência de escopo',
   );
   targets.forEach((target) =>
     assert(
@@ -171,7 +190,6 @@ async function main() {
     ),
   );
 
-  const links = await request('/api/setores-gestores', token);
   assert(Array.isArray(links), 'Lista de vínculos setor-gestor inválida');
   const byUser = (userId, source = links) =>
     source.filter((link) => Number(link.usuario_id) === Number(userId) && link.ativo !== false);

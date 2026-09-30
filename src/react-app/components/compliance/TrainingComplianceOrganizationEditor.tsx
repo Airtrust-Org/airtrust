@@ -3,6 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Building2 } from 'lucide-react';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
+import {
+  nextComplianceTableSort,
+  sortComplianceRows,
+  SortableComplianceTableHeader,
+  type TableSortState,
+} from '@/react-app/components/compliance/SortableComplianceTableHeader';
 
 type Catalogs = {
   setores: Array<{ id: number; codigo?: string | null; nome: string }>;
@@ -43,6 +49,8 @@ type MatrixRow = {
   };
 };
 
+type MatrixSortKey = 'training' | 'rule' | 'impact' | 'selection';
+
 async function readJson<T>(response: Response): Promise<T> {
   const json = (await response.json().catch(() => ({}))) as {
     success?: boolean;
@@ -74,6 +82,10 @@ export function TrainingComplianceOrganizationEditor() {
   const [setorId, setSetorId] = useState<number | null>(null);
   const [funcaoId, setFuncaoId] = useState<number | null>(null);
   const [aeronaveModelo, setAeronaveModelo] = useState<string>('');
+  const [sort, setSort] = useState<TableSortState<MatrixSortKey>>({
+    key: 'training',
+    direction: 'asc',
+  });
   const catalogs = useQuery({
     queryKey: ['training-compliance', 'catalogs'],
     queryFn: async () =>
@@ -155,6 +167,16 @@ export function TrainingComplianceOrganizationEditor() {
     onError: (error) =>
       showToast.error(error instanceof Error ? error.message : 'Erro ao atualizar matriz'),
   });
+  const sortedMatrix = useMemo(
+    () =>
+      sortComplianceRows(matrix.data || [], sort, (row, key) => {
+        if (key === 'training') return row.qualificacao_tipo_nome;
+        if (key === 'rule') return row.efetiva?.obrigatoriedade;
+        if (key === 'impact') return row.impacto.atingidas_neste_nivel;
+        return row.direta?.obrigatoriedade || 'HERDAR';
+      }),
+    [matrix.data, sort],
+  );
 
   return (
     <section className="space-y-4">
@@ -239,14 +261,35 @@ export function TrainingComplianceOrganizationEditor() {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
-                <th className="px-4 py-3 text-left">Treinamento</th>
-                <th className="px-3 py-3 text-left">Regra vigente</th>
-                <th className="px-3 py-3 text-left">Impacto</th>
-                <th className="px-3 py-3 text-left">Nesta seleção</th>
+                <SortableComplianceTableHeader
+                  column="training"
+                  label="Treinamento"
+                  sort={sort}
+                  onSort={(key) => setSort((current) => nextComplianceTableSort(current, key))}
+                  className="px-4 py-3 text-left"
+                />
+                <SortableComplianceTableHeader
+                  column="rule"
+                  label="Regra vigente"
+                  sort={sort}
+                  onSort={(key) => setSort((current) => nextComplianceTableSort(current, key))}
+                />
+                <SortableComplianceTableHeader
+                  column="impact"
+                  label="Impacto"
+                  sort={sort}
+                  onSort={(key) => setSort((current) => nextComplianceTableSort(current, key))}
+                />
+                <SortableComplianceTableHeader
+                  column="selection"
+                  label="Nesta seleção"
+                  sort={sort}
+                  onSort={(key) => setSort((current) => nextComplianceTableSort(current, key))}
+                />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {(matrix.data || []).map((row) => (
+              {sortedMatrix.map((row) => (
                 <tr key={row.qualificacao_tipo_id}>
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-800">{row.qualificacao_tipo_nome}</div>
