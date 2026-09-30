@@ -5,6 +5,7 @@ import { ApiError } from '../middleware/error-handler';
 import { getEmpresaId } from '../middleware/tenant';
 import type { Env } from '../types';
 import { createTrainingComplianceIntelligenceRoutes } from './compliance-treinamentos-intelligence';
+import { aggregateDistinctMandatoryRequirements, createTrainingComplianceRequirementRoutes } from './compliance-treinamentos-requirements';
 import conditionsRouter from './compliance-treinamentos-conditions';
 import {
   CANCELLED_STATUS_VALUES,
@@ -1038,6 +1039,7 @@ async function assertIndividualRuleWithinAccess(
 }
 
 app.route('/', createTrainingComplianceIntelligenceRoutes({ buildSnapshot, tableExists }));
+app.route('/', createTrainingComplianceRequirementRoutes({ buildSnapshot }));
 app.route('/', conditionsRouter);
 
 app.get('/capabilities', async (c) => {
@@ -1326,6 +1328,9 @@ app.get('/pessoas', requireRole('admin', 'manager'), async (c) => {
   const funcaoId = asPositiveInt(c.req.query('funcao_id'));
   const aeronaveModelo = normalizeAircraftModel(c.req.query('aeronave_modelo'));
   const qualificacaoTipoId = asPositiveInt(c.req.query('qualificacao_tipo_id'));
+  const rawConfigurado = String(c.req.query('configurado') || '').trim().toLowerCase();
+  const configurado = rawConfigurado === 'true' ? true : rawConfigurado === 'false' ? false : null;
+  if (rawConfigurado && configurado === null) throw new ApiError('Filtro configurado inválido', 400);
   const statusCompliance = String(c.req.query('status') || '')
     .trim()
     .toUpperCase();
@@ -1358,6 +1363,7 @@ app.get('/pessoas', requireRole('admin', 'manager'), async (c) => {
         (!setorId || person.setor_id === setorId) &&
         (!funcaoId || person.funcao_id === funcaoId) &&
         (!aeronaveModelo || person.aeronaves_modelos.includes(aeronaveModelo)) &&
+        (configurado === null || person.configurado === configurado) &&
         (!q || person.nome.toLowerCase().includes(q)) &&
         matchesRequirement
       );
@@ -1479,11 +1485,13 @@ app.get('/setores', requireRole('admin', 'manager'), async (c) => {
         setor_id: sector.setor_id,
         setor_nome: sector.setor_nome,
         ...aggregateCompliancePeople(sector.people),
+        requisitos_distintos: aggregateDistinctMandatoryRequirements(sector.people).length,
         cargos: Array.from(cargos.values())
           .map((cargo) => ({
             funcao_id: cargo.funcao_id,
             funcao_nome: cargo.funcao_nome,
             ...aggregateCompliancePeople(cargo.people),
+            requisitos_distintos: aggregateDistinctMandatoryRequirements(cargo.people).length,
           }))
           .sort((a, b) => a.funcao_nome.localeCompare(b.funcao_nome, 'pt-BR')),
       };
@@ -2042,6 +2050,7 @@ app.get('/resumo', requireRole('admin', 'manager'), async (c) => {
       cargos_sem_matriz: cargosSemMatriz,
       matriculas_sem_requisito: matriculasSemRequisito,
       requisitos_obrigatorios: totalObrigatorios,
+      requisitos_distintos: aggregateDistinctMandatoryRequirements(people).length,
       conformes,
       vencendo: people.reduce((sum, p) => sum + p.vencendo, 0),
       vencidos: people.reduce((sum, p) => sum + p.vencidos, 0),
