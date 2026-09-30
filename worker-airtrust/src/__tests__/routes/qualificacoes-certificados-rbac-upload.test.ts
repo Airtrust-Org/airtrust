@@ -138,6 +138,14 @@ function createMockEnv(options: { operationalRbacEnabled?: number } = {}) {
       deleted_at: null,
     },
     {
+      id: 103,
+      empresa_id: 6,
+      setor_id: 10,
+      nome: 'Ex Funcionário Histórico',
+      cpf: '11122233344',
+      deleted_at: '2026-06-15 12:00:00',
+    },
+    {
       id: 201,
       empresa_id: 7,
       setor_id: 10,
@@ -172,6 +180,19 @@ function createMockEnv(options: { operationalRbacEnabled?: number } = {}) {
       perfil_competencia: null,
       data_conclusao: '2026-02-15',
       data_vencimento: '2027-02-15',
+      deleted_at: null,
+    },
+    {
+      id: 2003,
+      funcionario_id: 103,
+      empresa_id: 6,
+      qualificacao_id: 301,
+      certificado_arquivo_id: null,
+      numero_certificado: null,
+      arquivo_url: null,
+      perfil_competencia: null,
+      data_conclusao: '2024-09-06',
+      data_vencimento: '2026-09-06',
       deleted_at: null,
     },
     {
@@ -263,8 +284,10 @@ function createMockEnv(options: { operationalRbacEnabled?: number } = {}) {
     delete: vi.fn(async () => undefined),
   };
 
-  function findFuncionario(id: number) {
-    return funcionarios.find((row) => row.id === id && !row.deleted_at) || null;
+  function findFuncionario(id: number, includeDeleted = false) {
+    return (
+      funcionarios.find((row) => row.id === id && (includeDeleted || !row.deleted_at)) || null
+    );
   }
 
   function findHistorico(id: number) {
@@ -320,7 +343,10 @@ function createMockEnv(options: { operationalRbacEnabled?: number } = {}) {
 
           if (query.includes('SELECT qh.id, qh.funcionario_id, f.empresa_id')) {
             const historico = findHistorico(Number(args[0]));
-            const funcionario = historico ? findFuncionario(historico.funcionario_id) : null;
+            const includeDeleted = !query.includes('f.deleted_at IS NULL');
+            const funcionario = historico
+              ? findFuncionario(historico.funcionario_id, includeDeleted)
+              : null;
             if (!historico || !funcionario || funcionario.empresa_id !== Number(args[1])) {
               return null;
             }
@@ -333,7 +359,10 @@ function createMockEnv(options: { operationalRbacEnabled?: number } = {}) {
 
           if (query.includes('qt.nome as qualificacao_nome')) {
             const historico = findHistorico(Number(args[0]));
-            const funcionario = historico ? findFuncionario(historico.funcionario_id) : null;
+            const includeDeleted = !query.includes('f.deleted_at IS NULL');
+            const funcionario = historico
+              ? findFuncionario(historico.funcionario_id, includeDeleted)
+              : null;
             if (!historico || !funcionario) {
               return null;
             }
@@ -367,7 +396,10 @@ function createMockEnv(options: { operationalRbacEnabled?: number } = {}) {
             const documentoId = Number(args[3]);
             const historico = findHistorico(historicoId);
             const documento = findDocumento(documentoId);
-            const funcionario = historico ? findFuncionario(historico.funcionario_id) : null;
+            const includeDeleted = !query.includes('f.deleted_at IS NULL');
+            const funcionario = historico
+              ? findFuncionario(historico.funcionario_id, includeDeleted)
+              : null;
 
             if (
               !historico ||
@@ -942,6 +974,63 @@ describe('qualificacoes certificados rbac e upload', () => {
 
     expect(response.status).toBe(201);
     expect(bucket.put).toHaveBeenCalledTimes(1);
+  });
+
+  it('admin anexa e lista certificado histórico de funcionário soft-deleted sem reativar cadastro', async () => {
+    const { env, bucket, documentos } = createMockEnv();
+    accessMock.mockResolvedValue({ mode: 'all', setorIds: [] });
+    assertFuncionarioInScopeMock.mockResolvedValue(undefined);
+    const form = new FormData();
+    form.set('file', createPdfFile('CRM-HISTORICO-EX-FUNCIONARIO.pdf'));
+    form.set('perfil_competencia', 'AVSEC_TRIPULANTE');
+
+    const uploadResponse = await request(
+      '/api/certificados/historico/2003/certificados/upload',
+      env,
+      { method: 'POST', body: form },
+      { 'x-test-role': 'admin' },
+    );
+    expect(uploadResponse.status).toBe(201);
+    expect(bucket.put).toHaveBeenCalledTimes(1);
+    expect(
+      documentos.some(
+        (row) => row.funcionario_id === 103 && row.nome_arquivo === 'CRM-HISTORICO-EX-FUNCIONARIO.pdf',
+      ),
+    ).toBe(true);
+
+    const listResponse = await request(
+      '/api/certificados/historico/2003/certificados',
+      env,
+      {},
+      { 'x-test-role': 'admin' },
+    );
+    const listBody = (await listResponse.json()) as {
+      success: boolean;
+      data: Array<{ nome_arquivo: string }>;
+    };
+    expect(listResponse.status).toBe(200);
+    expect(listBody.data.map((item) => item.nome_arquivo)).toContain(
+      'CRM-HISTORICO-EX-FUNCIONARIO.pdf',
+    );
+  });
+
+  it('gestor não acessa certificado histórico de funcionário soft-deleted', async () => {
+    const { env, bucket } = createMockEnv();
+    accessMock.mockResolvedValue({ mode: 'all', setorIds: [] });
+    assertFuncionarioInScopeMock.mockResolvedValue(undefined);
+    const form = new FormData();
+    form.set('file', createPdfFile('CRM-HISTORICO-BLOQUEADO.pdf'));
+    form.set('perfil_competencia', 'AVSEC_TRIPULANTE');
+
+    const response = await request(
+      '/api/certificados/historico/2003/certificados/upload',
+      env,
+      { method: 'POST', body: form },
+      { 'x-test-role': 'manager' },
+    );
+
+    expect(response.status).toBe(404);
+    expect(bucket.put).not.toHaveBeenCalled();
   });
 
   it('upload do gestor autorizado cria documento, pasta_virtual e vínculo principal visível', async () => {

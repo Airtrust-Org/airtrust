@@ -10,6 +10,7 @@ import {
 } from '../services/employee-sector-access';
 import {
   assertScopedHistoricoAccess,
+  canAdministerHistoricalDeletedEmployeeCertificates,
   listHistoricoCertificados,
   tableHasColumn,
   type Documento,
@@ -36,6 +37,7 @@ app.get('/historico/:id/certificados/perfil-competencia', auth(), async (c) => {
     historicoId,
     empresaId,
     access,
+    allowDeletedFuncionario: canAdministerHistoricalDeletedEmployeeCertificates((c.get as (key: string) => unknown)('userRole')),
   });
   const context = await resolveCertificadoContext(db, historicoId);
   const params = {
@@ -85,6 +87,9 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
       historicoId: id,
       empresaId,
       access,
+      allowDeletedFuncionario: canAdministerHistoricalDeletedEmployeeCertificates(
+        (c.get as (key: string) => unknown)('userRole'),
+      ),
     });
     const context = await resolveCertificadoContext(db, id);
 
@@ -194,6 +199,9 @@ app.delete('/historico/:id/certificados/:certId', auth(), requirePermission('cer
       historicoId,
       empresaId,
       access,
+      allowDeletedFuncionario: canAdministerHistoricalDeletedEmployeeCertificates(
+        (c.get as (key: string) => unknown)('userRole'),
+      ),
     });
     const context = await resolveCertificadoContext(db, historicoId);
     const certificados = await listHistoricoCertificados(db, {
