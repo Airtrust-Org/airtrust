@@ -125,11 +125,8 @@ type Evidence = {
   origem_titulo: string | null;
   lms_status?: string | null;
   modalidade?: string | null;
-};
-
-type LmsEvidenceState = {
-  latest: Evidence | undefined;
-  latestCompleted: Evidence | undefined;
+  // undefined = schema anterior a 0518 (compatibilidade de rollout); null = evidência sem perfil gravado.
+  perfil_competencia?: string | null;
 };
 
 async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
@@ -390,8 +387,8 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
 async function loadQualificationEvidence(
   db: D1Database,
   empresaId: number,
-): Promise<Map<string, Evidence>> {
-  const map = new Map<string, Evidence>();
+): Promise<Map<string, Evidence[]>> {
+  const map = new Map<string, Evidence[]>();
   if (!(await tableExists(db, 'qualificacoes_historico'))) return map;
   const cols = await columnSet(db, 'qualificacoes_historico');
   const tipoCol = cols.has('tipo_qualificacao_id')
@@ -425,25 +422,36 @@ async function loadQualificationEvidence(
   const modalitySelect = cols.has('formato_codigo')
     ? `UPPER(TRIM(COALESCE(qh.formato_codigo,'')))`
     : "''";
+  const hasProfile = cols.has('perfil_competencia');
+  const lmsProfileReady =
+    cols.has('lms_matricula_id') &&
+    (await tableExists(db, 'lms_matriculas')) &&
+    (await columnSet(db, 'lms_matriculas')).has('perfil_competencia');
+  const profileSelect = hasProfile
+    ? lmsProfileReady
+      ? 'COALESCE(qh.perfil_competencia, lm_profile.perfil_competencia)'
+      : 'qh.perfil_competencia'
+    : lmsProfileReady
+      ? 'lm_profile.perfil_competencia'
+      : 'NULL';
+  const lmsProfileJoin = lmsProfileReady
+    ? 'LEFT JOIN lms_matriculas lm_profile ON lm_profile.id=qh.lms_matricula_id AND lm_profile.empresa_id=f.empresa_id AND lm_profile.deleted_at IS NULL'
+    : '';
 
   const { results } = await db
     .prepare(
-      `WITH ranked AS (
-         SELECT qh.id, qh.funcionario_id, qh.${tipoCol} AS tipo_id,
-                qh.${dataCol} AS data_realizacao, ${vencSelect} AS data_vencimento, ${modalitySelect} AS modalidade,
-                ROW_NUMBER() OVER (
-                  PARTITION BY qh.funcionario_id, qh.${tipoCol}
-                  ORDER BY datetime(COALESCE(qh.${dataCol}, ${updatedExpr}, ${vencSelect})) DESC, qh.id DESC
-                ) AS rn
-           FROM qualificacoes_historico qh
-           JOIN funcionarios f ON f.id = qh.funcionario_id
-          WHERE ${empresaExpr}
-            ${deletedExpr}
-            AND NOT (${sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES)})
-            AND NOT (${sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES)})
-       )
-       SELECT id, funcionario_id, tipo_id, data_realizacao, data_vencimento, modalidade
-         FROM ranked WHERE rn = 1`,
+      `SELECT qh.id, qh.funcionario_id, qh.${tipoCol} AS tipo_id,
+              qh.${dataCol} AS data_realizacao, ${vencSelect} AS data_vencimento,
+              ${modalitySelect} AS modalidade, ${profileSelect} AS perfil_competencia
+         FROM qualificacoes_historico qh
+         JOIN funcionarios f ON f.id = qh.funcionario_id
+         ${lmsProfileJoin}
+        WHERE ${empresaExpr}
+          ${deletedExpr}
+          AND NOT (${sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES)})
+          AND NOT (${sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES)})
+        ORDER BY qh.funcionario_id, qh.${tipoCol},
+                 datetime(COALESCE(qh.${dataCol}, ${updatedExpr}, ${vencSelect})) DESC, qh.id DESC`,
     )
     .bind(empresaId)
     .all<{
@@ -453,10 +461,13 @@ async function loadQualificationEvidence(
       data_realizacao: string | null;
       data_vencimento: string | null;
       modalidade: string | null;
+      perfil_competencia: string | null;
     }>();
 
   for (const row of results || []) {
-    map.set(`${row.funcionario_id}:${row.tipo_id}`, {
+    const key = `${row.funcionario_id}:${row.tipo_id}`;
+    const bucket = map.get(key) || [];
+    bucket.push({
       funcionario_id: row.funcionario_id,
       tipo_id: row.tipo_id,
       data_realizacao: row.data_realizacao,
@@ -465,7 +476,9 @@ async function loadQualificationEvidence(
       origem_id: row.id,
       origem_titulo: null,
       modalidade: row.modalidade || null,
+      perfil_competencia: hasProfile ? row.perfil_competencia || null : undefined,
     });
+    map.set(key, bucket);
   }
   return map;
 }
@@ -473,14 +486,18 @@ async function loadQualificationEvidence(
 async function loadLmsEvidence(
   db: D1Database,
   empresaId: number,
-): Promise<Map<string, LmsEvidenceState>> {
-  const map = new Map<string, LmsEvidenceState>();
+): Promise<Map<string, Evidence[]>> {
+  const map = new Map<string, Evidence[]>();
   if (!(await tableExists(db, 'lms_matriculas')) || !(await tableExists(db, 'lms_cursos')))
     return map;
+  const matriculaCols = await columnSet(db, 'lms_matriculas');
+  const hasProfile = matriculaCols.has('perfil_competencia');
+  const profileSelect = hasProfile ? 'm.perfil_competencia' : 'NULL';
   const { results } = await db
     .prepare(
       `SELECT m.id, m.funcionario_id, c.qualificacao_tipo_id AS tipo_id,
-              m.status, m.data_conclusao, m.updated_at, c.titulo, 'EAD' AS modalidade
+              m.status, m.data_conclusao, m.updated_at, c.titulo, 'EAD' AS modalidade,
+              ${profileSelect} AS perfil_competencia
          FROM lms_matriculas m
          JOIN lms_cursos c
            ON c.id = m.curso_id
@@ -490,7 +507,8 @@ async function loadLmsEvidence(
           AND m.deleted_at IS NULL
           AND c.qualificacao_tipo_id IS NOT NULL
           AND UPPER(COALESCE(m.status, '')) <> 'CANCELADO'
-        ORDER BY datetime(COALESCE(m.data_conclusao, m.updated_at, m.created_at)) DESC, m.id DESC`,
+        ORDER BY m.funcionario_id, c.qualificacao_tipo_id,
+                 datetime(COALESCE(m.data_conclusao, m.updated_at, m.created_at)) DESC, m.id DESC`,
     )
     .bind(empresaId)
     .all<{
@@ -501,10 +519,12 @@ async function loadLmsEvidence(
       data_conclusao: string | null;
       titulo: string | null;
       modalidade: string | null;
+      perfil_competencia: string | null;
     }>();
   for (const row of results || []) {
     const key = `${row.funcionario_id}:${row.tipo_id}`;
-    const evidence: Evidence = {
+    const bucket = map.get(key) || [];
+    bucket.push({
       funcionario_id: row.funcionario_id,
       tipo_id: row.tipo_id,
       data_realizacao: row.data_conclusao,
@@ -514,13 +534,9 @@ async function loadLmsEvidence(
       origem_titulo: row.titulo,
       lms_status: row.status,
       modalidade: row.modalidade || 'EAD',
-    };
-    const state = map.get(key) || { latest: undefined, latestCompleted: undefined };
-    if (!state.latest) state.latest = evidence;
-    if (!state.latestCompleted && String(row.status || '').toUpperCase() === 'CONCLUIDO') {
-      state.latestCompleted = evidence;
-    }
-    map.set(key, state);
+      perfil_competencia: hasProfile ? row.perfil_competencia || null : undefined,
+    });
+    map.set(key, bucket);
   }
   return map;
 }
@@ -536,18 +552,69 @@ function latestEvidence(
   return lms.data_realizacao > history.data_realizacao ? lms : history;
 }
 
+function normalizeCompetencyProfile(value: unknown): string | null {
+  const normalized = String(value || '')
+    .trim()
+    .toUpperCase();
+  return normalized || null;
+}
+
+function evidenceMatchesCompetencyProfile(
+  requiredProfile: string | null | undefined,
+  evidence: Evidence,
+): boolean {
+  const required = normalizeCompetencyProfile(requiredProfile);
+  if (!required) return true;
+  // Compatibilidade transitória: antes da migration 0518 a coluna não existe.
+  // Depois de 0518, NULL significa evidência realmente não classificada e não
+  // pode satisfazer um requisito perfilado.
+  if (evidence.perfil_competencia === undefined) return true;
+  return normalizeCompetencyProfile(evidence.perfil_competencia) === required;
+}
+
+function newestEvidence(items: Evidence[]): Evidence | undefined {
+  return items[0];
+}
+
 function computeRequirement(
   rule: Rule,
-  history: Evidence | undefined,
-  lms: LmsEvidenceState | undefined,
+  historyItems: Evidence[] | undefined,
+  lmsItems: Evidence[] | undefined,
 ) {
   const today = new Date().toISOString().slice(0, 10);
-  const candidateEvidence = latestEvidence(history, lms?.latestCompleted);
-  const evidence = trainingComplianceEvidenceMeetsRequiredModality(rule.modalidade_requerida, candidateEvidence?.modalidade)
-    ? candidateEvidence
-    : undefined;
+  const allHistory = historyItems || [];
+  const allLms = lmsItems || [];
+  const historyForProfile = allHistory.filter((item) =>
+    evidenceMatchesCompetencyProfile(rule.perfil_competencia, item),
+  );
+  const lmsForProfile = allLms.filter((item) =>
+    evidenceMatchesCompetencyProfile(rule.perfil_competencia, item),
+  );
+  const completedLmsForProfile = lmsForProfile.filter(
+    (item) => String(item.lms_status || '').toUpperCase() === 'CONCLUIDO',
+  );
+  const compatibleHistory = historyForProfile.filter((item) =>
+    trainingComplianceEvidenceMeetsRequiredModality(rule.modalidade_requerida, item.modalidade),
+  );
+  const compatibleCompletedLms = completedLmsForProfile.filter((item) =>
+    trainingComplianceEvidenceMeetsRequiredModality(rule.modalidade_requerida, item.modalidade),
+  );
+  const candidateEvidence = latestEvidence(
+    newestEvidence(historyForProfile),
+    newestEvidence(completedLmsForProfile),
+  );
+  const evidence = latestEvidence(
+    newestEvidence(compatibleHistory),
+    newestEvidence(compatibleCompletedLms),
+  );
+  const profileMismatch = Boolean(
+    normalizeCompetencyProfile(rule.perfil_competencia) &&
+    (allHistory.length > 0 || allLms.length > 0) &&
+    historyForProfile.length === 0 &&
+    lmsForProfile.length === 0,
+  );
   const modalityMismatch = Boolean(candidateEvidence && !evidence && rule.modalidade_requerida);
-  const currentLms = lms?.latest;
+  const currentLms = newestEvidence(lmsForProfile);
   let status_compliance: ComplianceStatus = 'NAO_REALIZADO';
   let data_validade: string | null = null;
   let dias_para_vencer: number | null = null;
@@ -573,9 +640,13 @@ function computeRequirement(
             : 'CONFORME';
     }
   } else if (
+    !profileMismatch &&
     !modalityMismatch &&
     currentLms &&
-    trainingComplianceEvidenceMeetsRequiredModality(rule.modalidade_requerida, currentLms.modalidade) &&
+    trainingComplianceEvidenceMeetsRequiredModality(
+      rule.modalidade_requerida,
+      currentLms.modalidade,
+    ) &&
     String(currentLms.lms_status || '').toUpperCase() === 'EM_ANDAMENTO'
   ) {
     status_compliance = 'EM_ANDAMENTO';
@@ -620,11 +691,15 @@ function computeRequirement(
     status: status_legacy as 'EM_DIA' | 'VENCIDO' | 'EM_FALTA',
     status_compliance,
     evidencia_origem: evidence?.origem ?? null,
+    evidencia_perfil_competencia:
+      evidence?.perfil_competencia ?? candidateEvidence?.perfil_competencia ?? null,
+    evidencia_perfil_incompativel: profileMismatch,
     evidencia_modalidade: evidence?.modalidade ?? candidateEvidence?.modalidade ?? null,
     evidencia_modalidade_incompativel: modalityMismatch,
     evidencia_id: evidence?.origem_id ?? null,
     curso_ead_titulo: currentLms?.origem_titulo ?? evidence?.origem_titulo ?? null,
-    lms_status: currentLms?.lms_status ?? lms?.latestCompleted?.lms_status ?? null,
+    lms_status:
+      currentLms?.lms_status ?? newestEvidence(completedLmsForProfile)?.lms_status ?? null,
   };
 }
 
