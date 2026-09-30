@@ -107,6 +107,36 @@ function identitiesFromLinks(links) {
   return [...byUserId.values()];
 }
 
+function identitiesFromTenantUsers(users) {
+  return users
+    .map((user) => ({
+      id: Number(user.id),
+      nome: user.nome,
+      perfil: user.role || user.perfil,
+      active: 1,
+    }))
+    .filter((user) => user.id > 0);
+}
+
+function mergeIdentities(...identityLists) {
+  const byUserId = new Map();
+  for (const identities of identityLists) {
+    for (const identity of identities) {
+      if (!(Number(identity?.id) > 0)) continue;
+      const previous = byUserId.get(Number(identity.id)) || {};
+      byUserId.set(Number(identity.id), {
+        ...previous,
+        ...identity,
+        nome: identity.nome || previous.nome,
+        funcionario_nome: identity.funcionario_nome || previous.funcionario_nome,
+        perfil: identity.perfil || previous.perfil,
+        active: identity.active ?? previous.active ?? 1,
+      });
+    }
+  }
+  return [...byUserId.values()];
+}
+
 async function resolveCommonTenant(loginToken, loginClaims) {
   const companiesPayload = await request('/api/auth/empresas', loginToken);
   assert(
@@ -123,14 +153,22 @@ async function resolveCommonTenant(loginToken, loginClaims) {
     const selected = await selectTenantIfNeeded(loginToken, loginClaims, tenantId);
     const links = await request('/api/setores-gestores', selected.token);
     assert(Array.isArray(links), `Lista de vínculos setor-gestor inválida no tenant ${tenantId}`);
-    const scopedUsers = identitiesFromLinks(links);
+    const tenantUsers = await request(`/api/empresas/${tenantId}/usuarios`, selected.token);
+    assert(Array.isArray(tenantUsers), `Lista de usuários inválida no tenant ${tenantId}`);
+    // A pessoa a promover ainda pode não ter vínculo em setores_gestores. A lista
+    // canônica de usuários é a fonte para a identidade; os vínculos continuam
+    // sendo a fonte exclusiva do escopo setorial a espelhar.
+    const scopedUsers = mergeIdentities(
+      identitiesFromLinks(links),
+      identitiesFromTenantUsers(tenantUsers),
+    );
 
     const referenceMatches = scopedUsers.filter((row) => matchesName(row, referenceQuery));
     const targetMatches = targetQueries.map((query) =>
       scopedUsers.filter((row) => matchesName(row, query)),
     );
     console.log(
-      `TENANT_SCAN=${tenantId} reference=${activeNameMatches(scopedUsers, referenceQuery).length}/${referenceMatches.length} targets=${targetQueries
+      `TENANT_SCAN=${tenantId} users=${scopedUsers.length} reference=${activeNameMatches(scopedUsers, referenceQuery).length}/${referenceMatches.length} targets=${targetQueries
         .map((query, index) => `${query}:${activeNameMatches(scopedUsers, query).length}/${targetMatches[index].length}`)
         .join(',')}`,
     );
