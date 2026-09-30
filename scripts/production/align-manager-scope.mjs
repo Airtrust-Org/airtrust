@@ -16,7 +16,7 @@ const email = String(process.env.PROD_EMAIL || '')
   .toLowerCase();
 const password = String(process.env.PROD_PASSWORD || '');
 const referenceQuery = String(process.env.REFERENCE_NAME || 'Yngrid').trim();
-const targetQueries = String(process.env.TARGET_NAMES || 'Giancarlo,Emyle,Layla,Mirela Silva')
+const targetQueries = String(process.env.TARGET_NAMES || 'Giancarlo,Emyle,Layla,Mirela dos Santos Silva')
   .split(',')
   .map((value) => value.trim())
   .filter(Boolean);

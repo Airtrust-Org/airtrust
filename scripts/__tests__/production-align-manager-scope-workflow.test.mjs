@@ -8,7 +8,7 @@ test('production manager-scope workflow uses canonical production identity and p
   assert.match(workflow, /PROD_EMAIL: \$\{\{ secrets\.PROD_SMOKE_EMAIL \|\| secrets\.QA_EXAMINER_ADMIN_EMAIL \}\}/);
   assert.match(workflow, /PROD_PASSWORD: \$\{\{ secrets\.PROD_SMOKE_PASSWORD \|\| secrets\.QA_EXAMINER_ADMIN_PASSWORD \}\}/);
   assert.match(workflow, /REFERENCE_NAME: Yngrid/);
-  assert.match(workflow, /TARGET_NAMES: Giancarlo,Emyle,Layla,Mirela Silva/);
+  assert.match(workflow, /TARGET_NAMES: Giancarlo,Emyle,Layla,Mirela dos Santos Silva/);
 });
 
 test('manager-scope operation resolves people through the canonical tenant user list', () => {
