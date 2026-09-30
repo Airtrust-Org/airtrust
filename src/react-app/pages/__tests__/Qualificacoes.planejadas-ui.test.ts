@@ -384,7 +384,7 @@ describe('Qualificacoes — Planejadas history restore (PR #206)', () => {
   });
 
   it('filtro_padrao_historico_completo — default status filter represents all statuses', () => {
-    expect(qualificacoesSource).toContain('new Set(ALL_STATUS_VALUES)');
+    expect(qualificacoesSource).toMatch(/new Set(?:<string>)?\(ALL_STATUS_VALUES\)/);
     expect(qualificacoesSource).toContain('return isAllStatuses ? [] : [...statusFiltro]');
   });
 

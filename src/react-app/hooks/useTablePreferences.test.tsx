@@ -167,6 +167,27 @@ describe('useTablePreferences', () => {
     expect(requestMethods()).toEqual(['GET']);
   });
 
+  it('grava a preferência local imediatamente, antes do debounce remoto', async () => {
+    fetchWithAuthMock.mockImplementation((_url: string, options?: RequestInit) => {
+      if (options?.method === 'PUT') return Promise.resolve(response({ success: true }));
+      return Promise.resolve(response({ data: null }));
+    });
+
+    render(<Harness tick={1} />);
+    await waitFor(() => expect(screen.getByText('ready')).toBeInTheDocument());
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole('button', { name: 'alterar' }));
+
+    expect(localStorage.getItem(storageKey())).toContain('alterado pelo usuário');
+    expect(putCalls()).toHaveLength(0);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(putCalls()).toHaveLength(1);
+  });
+
   it('preserva o debounce de exatamente 300 ms para alteracoes do usuario', async () => {
     fetchWithAuthMock.mockImplementation((_url: string, options?: RequestInit) => {
       if (options?.method === 'PUT') {
@@ -200,7 +221,7 @@ describe('useTablePreferences', () => {
     });
   });
 
-  it('cancela o timer pendente e nao salva no tenant anterior ao trocar de empresa', async () => {
+  it('cancela o PUT pendente sem perder o fallback local do tenant anterior ao trocar de empresa', async () => {
     let getCount = 0;
     fetchWithAuthMock.mockImplementation((_url: string, options?: RequestInit) => {
       if (options?.method === 'PUT') {
@@ -237,7 +258,7 @@ describe('useTablePreferences', () => {
     await new Promise((resolve) => window.setTimeout(resolve, 350));
 
     expect(requestMethods()).toEqual(['GET', 'GET']);
-    expect(localStorage.getItem(storageKey(1, 10))).not.toContain('alterado pelo usuário');
+    expect(localStorage.getItem(storageKey(1, 10))).toContain('alterado pelo usuário');
     expect(localStorage.getItem(storageKey(2, 10))).toContain('empresa 2');
   });
 
