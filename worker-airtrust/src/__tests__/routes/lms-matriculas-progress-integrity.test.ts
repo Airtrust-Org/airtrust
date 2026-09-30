@@ -10,6 +10,7 @@ const {
   completeLmsMatriculaMock,
   logAuditMock,
   sendEmailMock,
+  stampLmsEnrollmentEvidenceProfileMock,
 } = vi.hoisted(() => ({
   ensureMatriculaCycleMock: vi.fn(),
   syncMatriculaCycleFromMatriculaMock: vi.fn(),
@@ -17,6 +18,7 @@ const {
   completeLmsMatriculaMock: vi.fn(),
   logAuditMock: vi.fn(),
   sendEmailMock: vi.fn(),
+  stampLmsEnrollmentEvidenceProfileMock: vi.fn(),
 }));
 
 vi.mock('../../middleware/auth', () => ({
@@ -78,6 +80,10 @@ vi.mock('../../utils/db', () => ({
 
 vi.mock('../../lib/email', () => ({
   sendEmail: sendEmailMock,
+}));
+
+vi.mock('../../services/training-compliance-evidence-profile', () => ({
+  stampLmsEnrollmentEvidenceProfile: stampLmsEnrollmentEvidenceProfileMock,
 }));
 
 import lmsMatriculasRoutes from '../../routes/lms-matriculas';
@@ -142,14 +148,15 @@ describe('lms matriculas progress integrity', () => {
     });
     logAuditMock.mockResolvedValue(undefined);
     sendEmailMock.mockResolvedValue(true);
+    stampLmsEnrollmentEvidenceProfileMock.mockResolvedValue(null);
   });
 
   it('preserva matrícula existente em vez de resetar o progresso no rematricular manual', async () => {
     const { db, calls } = createMockDb([
       [
-        'SELECT id, titulo FROM lms_cursos',
+        'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos',
         {
-          first: () => ({ id: 9, titulo: 'AW139' }),
+          first: () => ({ id: 9, titulo: 'AW139', qualificacao_tipo_id: null }),
         },
       ],
       [
