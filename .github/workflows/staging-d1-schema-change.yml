@@ -42,6 +42,7 @@ permissions:
   contents: read
   pull-requests: read
   checks: read
+  statuses: read
 
 env:
   NODE_VERSION: '24'
@@ -119,22 +120,21 @@ jobs:
               throw new Error('ACTOR_PERMISSION_INSUFFICIENT');
             }
 
-            const checks = await get(`/repos/${repo}/commits/${releaseSha}/check-runs?per_page=100`);
-            const ignored = new Set([
-              'Staging D1 Schema Change (Safe Recovery Point)',
-              'Reviewed Release Guard',
-              'Apply One Staging Schema Change',
-              'Record Schema Change Summary',
-            ]);
-            const relevant = (checks.check_runs || []).filter((check) => !ignored.has(check.name));
-            if (relevant.length === 0) throw new Error('RELEASE_CHECKS_NOT_GREEN');
-            const bad = relevant.find((check) => check.status !== 'completed' || check.conclusion !== 'success');
-            if (bad) throw new Error(`RELEASE_CHECKS_NOT_GREEN:${bad.name}`);
           })().catch((error) => {
             console.error(`Schema release guard failed: ${error.message}`);
             process.exit(1);
           });
           NODE
+
+      - name: Verify canonical release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          export RELEASE_SHA="${RELEASE_SHA,,}"
+          node scripts/ci/verify-release-gates.mjs
 
       - name: Publish trusted release SHA
         id: release
