@@ -148,7 +148,10 @@ export function DataTable<T extends { id?: string | number }>({
         const updatedColumns = ensureAtLeastOneVisibleColumn(
           initialColumns.map((col) => ({
             ...col,
-            visible: config.visibility?.[col.id] !== false,
+            visible:
+              config.visibility?.[col.id] === undefined
+                ? col.visible !== false
+                : config.visibility[col.id] !== false,
             width: widths[col.id] || col.width,
           })),
         );
@@ -157,13 +160,18 @@ export function DataTable<T extends { id?: string | number }>({
           setInternalPageSize(config.pageSize);
         }
 
-        // Apply saved column order if available
-        if (config.order && config.order.length === updatedColumns.length) {
-          const orderedColumns = ensureAtLeastOneVisibleColumn(
-            config.order
-              .map((id: string) => updatedColumns.find((col) => col.id === id))
-              .filter(Boolean) as Column<T>[],
-          );
+        // Apply saved column order when available. Existing preferences may not yet
+        // know about newly introduced columns, so preserve the known order and append
+        // only the new columns using their default definition order.
+        if (Array.isArray(config.order) && config.order.length > 0) {
+          const knownOrder = config.order
+            .map((id: string) => updatedColumns.find((col) => col.id === id))
+            .filter(Boolean) as Column<T>[];
+          const knownIds = new Set(knownOrder.map((col) => col.id));
+          const orderedColumns = ensureAtLeastOneVisibleColumn([
+            ...knownOrder,
+            ...updatedColumns.filter((col) => !knownIds.has(col.id)),
+          ]);
           setColumns(orderedColumns);
         } else {
           setColumns(updatedColumns);
@@ -496,14 +504,29 @@ export function DataTable<T extends { id?: string | number }>({
       {/* Column Configuration Panel */}
       {(columnConfigOpen ?? showColumnConfig) && (
         <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-slate-900">Configurar Colunas</h3>
-            <span className="text-xs text-slate-500">
-              <span className="material-symbols-outlined text-base align-middle">
-                drag_indicator
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">
+                <span className="material-symbols-outlined text-base align-middle">
+                  drag_indicator
+                </span>
+                Arraste para reordenar
               </span>
-              Arraste para reordenar
-            </span>
+              <button
+                type="button"
+                aria-label="Fechar configuração de colunas"
+                title="Fechar"
+                onClick={() =>
+                  columnConfigOpen === undefined
+                    ? setShowColumnConfig(false)
+                    : onColumnConfigOpenChange?.(false)
+                }
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-200 hover:text-slate-800"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             {columns.map((column) => (

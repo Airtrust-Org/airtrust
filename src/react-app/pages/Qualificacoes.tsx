@@ -1903,6 +1903,45 @@ export default function Qualificacoes() {
         },
       },
       {
+        id: 'cargo',
+        label: 'Cargo',
+        accessor: (row) => row.funcionario_cargo || '-',
+        sortable: false,
+        visible: false,
+        width: '150px',
+        render: (value) => (
+          <span className="line-clamp-2 whitespace-normal break-words text-sm font-normal text-slate-900">
+            {String(value ?? '-')}
+          </span>
+        ),
+      },
+      {
+        id: 'funcao',
+        label: 'Função',
+        accessor: (row) => row.funcionario_funcao || '-',
+        sortable: false,
+        visible: false,
+        width: '150px',
+        render: (value) => (
+          <span className="line-clamp-2 whitespace-normal break-words text-sm font-normal text-slate-900">
+            {String(value ?? '-')}
+          </span>
+        ),
+      },
+      {
+        id: 'setor',
+        label: 'Setor',
+        accessor: (row) => row.funcionario_setor || '-',
+        sortable: false,
+        visible: false,
+        width: '170px',
+        render: (value) => (
+          <span className="line-clamp-2 whitespace-normal break-words text-sm font-normal text-slate-900">
+            {String(value ?? '-')}
+          </span>
+        ),
+      },
+      {
         id: 'qualificacao',
         label: 'Qualificação',
         accessor: (row) =>
@@ -2503,7 +2542,10 @@ export default function Qualificacoes() {
             )}
             {activeTab === 'historico' && (
               <button
-                onClick={() => setColumnConfigOpen('historico')}
+                type="button"
+                onClick={() =>
+                  setColumnConfigOpen((current) => (current === 'historico' ? null : 'historico'))
+                }
                 className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 <Columns2 className="w-3.5 h-3.5" /> Colunas
