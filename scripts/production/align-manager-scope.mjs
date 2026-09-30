@@ -32,9 +32,11 @@ function normalize(value) {
 }
 
 function matchesName(row, query) {
-  const name = normalize(row.nome || row.funcionario_nome);
   const needle = normalize(query);
-  return name === needle || name.startsWith(`${needle} `) || name.split(' ').includes(needle);
+  const names = [row.nome, row.funcionario_nome].map(normalize).filter(Boolean);
+  return names.some(
+    (name) => name === needle || name.startsWith(`${needle} `) || name.split(' ').includes(needle),
+  );
 }
 
 function activeNameMatches(rows, query) {
