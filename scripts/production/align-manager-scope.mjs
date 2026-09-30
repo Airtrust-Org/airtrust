@@ -109,6 +109,16 @@ async function resolveCommonTenant(loginToken, loginClaims) {
     assert(Array.isArray(users), `Lista de usuários inválida no tenant ${tenantId}`);
     const scopedUsers = users.filter((row) => Number(row.empresa_id) === tenantId);
 
+    const referenceMatches = scopedUsers.filter((row) => matchesName(row, referenceQuery));
+    const targetMatches = targetQueries.map((query) =>
+      scopedUsers.filter((row) => matchesName(row, query)),
+    );
+    console.log(
+      `TENANT_SCAN=${tenantId} reference=${activeNameMatches(scopedUsers, referenceQuery).length}/${referenceMatches.length} targets=${targetQueries
+        .map((query, index) => `${query}:${activeNameMatches(scopedUsers, query).length}/${targetMatches[index].length}`)
+        .join(',')}`,
+    );
+
     const reference = resolveOptionalUnique(scopedUsers, referenceQuery, 'referência');
     const targets = targetQueries.map((query) => resolveOptionalUnique(scopedUsers, query, 'alvo'));
     if (!reference || targets.some((target) => target === null)) continue;
