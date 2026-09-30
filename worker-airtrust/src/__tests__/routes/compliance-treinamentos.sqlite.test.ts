@@ -108,6 +108,15 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
     );
 
     ALTER TABLE qualificacoes_historico ADD COLUMN perfil_competencia TEXT;
+    CREATE TABLE qualificacoes_historico_perfis_competencia (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      empresa_id INTEGER NOT NULL,
+      historico_id INTEGER NOT NULL,
+      perfil_competencia TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      deleted_at TEXT
+    );
 
     CREATE TABLE notificacoes_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -910,6 +919,42 @@ describe('training compliance engine', () => {
       ultima_data: '2026-08-01',
       evidencia_perfil_competencia: 'PTAP_TRIPULANTE_VOO',
       evidencia_perfil_incompativel: false,
+    });
+  });
+
+  it('aceita o mesmo histórico como evidência de dois perfis quando ambos estão explicitamente relacionados', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem, perfil_competencia)
+      VALUES
+        (1, 101, 'FUNCAO', 2, 'OBRIGATORIA', 'REGULATORIO', 'AVSEC_TRIPULANTE'),
+        (1, 101, 'FUNCAO', 2, 'OBRIGATORIA', 'REGULATORIO', 'AVSEC_OPERACOES_SOLO');
+      INSERT INTO qualificacoes_historico
+        (id, funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at, perfil_competencia)
+      VALUES (9001, 1002, 101, 'D1', 'OPERACOES', '2026-09-01', '2028-09-01',
+              'CONCLUIDA', 0, 1, '2026-09-01', '2026-09-01', 'AVSEC_TRIPULANTE');
+      INSERT INTO qualificacoes_historico_perfis_competencia
+        (empresa_id, historico_id, perfil_competencia)
+      VALUES
+        (1, 9001, 'AVSEC_TRIPULANTE'),
+        (1, 9001, 'AVSEC_OPERACOES_SOLO');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request('/funcionarios/1002');
+    const body = (await response.json()) as any;
+    const byProfile = new Map(
+      body.data.requisitos.map((item: any) => [item.perfil_competencia, item]),
+    );
+
+    expect(response.status).toBe(200);
+    expect(byProfile.get('AVSEC_TRIPULANTE')).toMatchObject({
+      status_compliance: 'CONFORME',
+      evidencia_perfil_competencia: 'AVSEC_TRIPULANTE',
+    });
+    expect(byProfile.get('AVSEC_OPERACOES_SOLO')).toMatchObject({
+      status_compliance: 'CONFORME',
+      evidencia_perfil_competencia: 'AVSEC_OPERACOES_SOLO',
     });
   });
 

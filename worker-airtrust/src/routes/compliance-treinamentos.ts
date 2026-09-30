@@ -38,6 +38,7 @@ import {
   normalizeTrainingComplianceRequiredModality,
   type TrainingComplianceScope,
 } from '../services/training-compliance-rule-engine';
+import { buildQualificationEvidenceProfileSql } from '../services/training-compliance-evidence-profile';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -422,30 +423,16 @@ async function loadQualificationEvidence(
   const modalitySelect = cols.has('formato_codigo')
     ? `UPPER(TRIM(COALESCE(qh.formato_codigo,'')))`
     : "''";
-  const hasProfile = cols.has('perfil_competencia');
-  const lmsProfileReady =
-    cols.has('lms_matricula_id') &&
-    (await tableExists(db, 'lms_matriculas')) &&
-    (await columnSet(db, 'lms_matriculas')).has('perfil_competencia');
-  const profileSelect = hasProfile
-    ? lmsProfileReady
-      ? 'COALESCE(qh.perfil_competencia, lm_profile.perfil_competencia)'
-      : 'qh.perfil_competencia'
-    : lmsProfileReady
-      ? 'lm_profile.perfil_competencia'
-      : 'NULL';
-  const lmsProfileJoin = lmsProfileReady
-    ? 'LEFT JOIN lms_matriculas lm_profile ON lm_profile.id=qh.lms_matricula_id AND lm_profile.empresa_id=f.empresa_id AND lm_profile.deleted_at IS NULL'
-    : '';
+  const profileSql = await buildQualificationEvidenceProfileSql(db, cols);
 
   const { results } = await db
     .prepare(
       `SELECT qh.id, qh.funcionario_id, qh.${tipoCol} AS tipo_id,
               qh.${dataCol} AS data_realizacao, ${vencSelect} AS data_vencimento,
-              ${modalitySelect} AS modalidade, ${profileSelect} AS perfil_competencia
+              ${modalitySelect} AS modalidade, ${profileSql.select} AS perfil_competencia
          FROM qualificacoes_historico qh
          JOIN funcionarios f ON f.id = qh.funcionario_id
-         ${lmsProfileJoin}
+         ${profileSql.joins}
         WHERE ${empresaExpr}
           ${deletedExpr}
           AND NOT (${sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES)})
@@ -476,7 +463,7 @@ async function loadQualificationEvidence(
       origem_id: row.id,
       origem_titulo: null,
       modalidade: row.modalidade || null,
-      perfil_competencia: hasProfile ? row.perfil_competencia || null : undefined,
+      perfil_competencia: profileSql.available ? row.perfil_competencia || null : undefined,
     });
     map.set(key, bucket);
   }
@@ -1620,8 +1607,8 @@ app.get('/matriz-organizacao', requireRole('admin', 'manager'), async (c) => {
       ).length,
       em_andamento: preview.filter((item) => item.requirement?.status_compliance === 'EM_ANDAMENTO')
         .length,
-      matriculados: selectedEmployees.filter((employee) =>
-        (lmsMap.get(`${employee.id}:${tipo.id}`)?.length ?? 0) > 0,
+      matriculados: selectedEmployees.filter(
+        (employee) => (lmsMap.get(`${employee.id}:${tipo.id}`)?.length ?? 0) > 0,
       ).length,
       sem_matricula: selectedEmployees.filter(
         (employee) => (lmsMap.get(`${employee.id}:${tipo.id}`)?.length ?? 0) === 0,

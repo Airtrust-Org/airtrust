@@ -124,8 +124,8 @@ describe('migration governance', () => {
     // 0513 adds tenant-scoped qualification areas and qualificacoes_tipos.area_id.
     // 0515 and 0516 are governed staging mirrors for qualification notification settings;
     // production remains governed by their Schema V2 change manifests.
-    // 0519 adds competency-profile lineage to LMS/qualification evidence for Compliance matching.
-    const expectedLatest = 519;
+    // 0519 adds scalar competency-profile lineage; 0520 normalizes multi-profile qualification evidence.
+    const expectedLatest = 520;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

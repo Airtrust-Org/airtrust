@@ -28,6 +28,8 @@ import { requireOperationalAccess } from '../services/operational-domain-access'
 import {
   listTrainingComplianceEvidenceProfilesForQualification,
   normalizeTrainingComplianceEvidenceProfile,
+  qualificationEvidenceSupportsMultipleProfiles,
+  replaceQualificationEvidenceProfiles,
 } from '../services/training-compliance-evidence-profile';
 
 // Certificado é resolvido dinamicamente para OPERACOES por resourceType
@@ -399,14 +401,18 @@ app.post(
       const file = form.get('file') as File | null;
       const descricao = (form.get('descricao') as string) || null;
       const dataRealizacaoStr = (form.get('data_realizacao') as string) || null;
-      const explicitProfile = normalizeTrainingComplianceEvidenceProfile(
+      const explicitProfiles = [
+        ...form.getAll('perfis_competencia'),
         form.get('perfil_competencia'),
-      );
+      ]
+        .map(normalizeTrainingComplianceEvidenceProfile)
+        .filter((value): value is string => Boolean(value));
+      const selectedProfiles = [...new Set(explicitProfiles)];
       const allowedProfiles = await listTrainingComplianceEvidenceProfilesForQualification(db, {
         empresaId,
         qualificacaoTipoId: historico.qualificacao_tipo_id,
       });
-      if (allowedProfiles.length > 0 && !explicitProfile) {
+      if (allowedProfiles.length > 0 && selectedProfiles.length === 0) {
         return c.json(
           {
             success: false,
@@ -416,7 +422,7 @@ app.post(
           400,
         );
       }
-      if (explicitProfile && !allowedProfiles.includes(explicitProfile)) {
+      if (selectedProfiles.some((profile) => !allowedProfiles.includes(profile))) {
         return c.json(
           {
             success: false,
@@ -426,7 +432,19 @@ app.post(
           400,
         );
       }
-      const profileToPersist = explicitProfile;
+      const multiProfileSupported = await qualificationEvidenceSupportsMultipleProfiles(db);
+      if (selectedProfiles.length > 1 && !multiProfileSupported) {
+        return c.json(
+          {
+            success: false,
+            error:
+              'O suporte a múltiplos perfis de evidência ainda não está disponível neste ambiente',
+            code: 'EVIDENCE_MULTI_PROFILE_SCHEMA_REQUIRED',
+          },
+          503,
+        );
+      }
+      const profileToPersist = selectedProfiles[0] || null;
 
       if (!file) {
         return c.json({ success: false, error: 'Campo "file" é obrigatório' }, 400);
@@ -589,47 +607,38 @@ app.post(
       const numeroCertificado = nomeArquivo.replace('.pdf', '');
       const updateResult = await db
         .prepare(
-          profileToPersist
-            ? `UPDATE qualificacoes_historico
-                 SET certificado_arquivo_id = ?,
-                     arquivo_url = ?,
-                     numero_certificado = ?,
-                     perfil_competencia = ?,
-                     updated_at = datetime('now')
-               WHERE id = ?
-                 AND empresa_id = ?
-                 AND deleted_at IS NULL`
-            : `UPDATE qualificacoes_historico
-                 SET certificado_arquivo_id = ?,
-                     arquivo_url = ?,
-                     numero_certificado = ?,
-                     updated_at = datetime('now')
-               WHERE id = ?
-                 AND empresa_id = ?
-                 AND deleted_at IS NULL`,
+          `UPDATE qualificacoes_historico
+             SET certificado_arquivo_id = ?,
+                 arquivo_url = ?,
+                 numero_certificado = ?,
+                 updated_at = datetime('now')
+           WHERE id = ?
+             AND empresa_id = ?
+             AND deleted_at IS NULL`,
         )
         .bind(
-          ...(profileToPersist
-            ? [
-                documentoId,
-                `/api/pasta-virtual/stream/${documentoId}`,
-                numeroCertificado,
-                profileToPersist,
-                id,
-                empresaId,
-              ]
-            : [
-                documentoId,
-                `/api/pasta-virtual/stream/${documentoId}`,
-                numeroCertificado,
-                id,
-                empresaId,
-              ]),
+          documentoId,
+          `/api/pasta-virtual/stream/${documentoId}`,
+          numeroCertificado,
+          id,
+          empresaId,
         )
         .run();
 
       if (Number(updateResult.meta.changes || 0) !== 1) {
         throw new Error('Falha ao vincular o certificado principal ao histórico do tenant');
+      }
+
+      if (selectedProfiles.length > 0) {
+        const persistedProfiles = await replaceQualificationEvidenceProfiles(db, {
+          empresaId,
+          historicoId: id,
+          funcionarioId: historico.funcionario_id,
+          profiles: selectedProfiles,
+        });
+        if (persistedProfiles.length !== selectedProfiles.length) {
+          throw new Error('Falha ao registrar os perfis comprovados pelo certificado');
+        }
       }
 
       const visibleAfterUpload = await db
@@ -673,6 +682,7 @@ app.post(
         uuid: string;
         r2_key: string;
         perfil_competencia: string | null;
+        perfis_competencia: string[];
       }> = {
         success: true,
         data: {
@@ -680,6 +690,7 @@ app.post(
           uuid,
           r2_key: r2Key,
           perfil_competencia: profileToPersist,
+          perfis_competencia: selectedProfiles,
         },
         message: 'Certificado anexado com sucesso',
       };
