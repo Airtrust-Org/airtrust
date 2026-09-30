@@ -10,3 +10,10 @@ test('production manager-scope workflow uses canonical production identity and p
   assert.match(workflow, /REFERENCE_NAME: Yngrid/);
   assert.match(workflow, /TARGET_NAMES: Giancarlo,Emyle,Layla,Mirela Silva/);
 });
+
+test('manager-scope operation resolves people through the canonical tenant user list', () => {
+  const script = readFileSync('scripts/production/align-manager-scope.mjs', 'utf8');
+  assert.match(script, /\/api\/empresas\/\$\{tenantId\}\/usuarios/);
+  assert.match(script, /identitiesFromTenantUsers/);
+  assert.match(script, /mergeIdentities/);
+});
