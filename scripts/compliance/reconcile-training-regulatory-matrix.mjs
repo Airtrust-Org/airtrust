@@ -62,6 +62,20 @@ const ensureModel = ({
   statements.push(
     `INSERT INTO qualificacoes_tipos (empresa_id,codigo,nome,categoria,validade,carga_horaria,area_id,ativo,is_check,created_at,updated_at) SELECT 6,${q(code)},${q(name)},${q(category)},${validity === null ? 'NULL' : Number(validity)},${hours === null ? 'NULL' : Number(hours)},${area(areaCode)},1,0,datetime('now'),datetime('now') WHERE NOT EXISTS (SELECT 1 FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)=UPPER(${q(code)}) AND deleted_at IS NULL)`,
   );
+const addFunctionRequirement = ({
+  code,
+  functionCode,
+  ref,
+  reason,
+  origin = 'REGULATORIO',
+  validity = 'EVIDENCIA',
+  modality = null,
+  profile = null,
+}) =>
+  statements.push(
+    `INSERT INTO treinamento_requisitos (empresa_id,qualificacao_tipo_id,escopo,funcao_id,obrigatoriedade,critico_operacional,origem,referencia_normativa,justificativa,perfil_competencia,modalidade_requerida,fundamento_tipo,fundamento_documento,validade_fonte,auto_matricular_ead,ativo) SELECT 6,${model(code)},'FUNCAO',${funcao(functionCode)},'OBRIGATORIA',1,${q(origin)},${q(ref)},${q(reason)},${profile ? q(profile) : 'NULL'},${modality ? q(modality) : 'NULL'},'Documento controlado',${q(ref)},${q(validity)},0,1 WHERE ${model(code)} IS NOT NULL AND ${funcao(functionCode)} IS NOT NULL`,
+  );
+
 const addFunctionProfile = ({
   code,
   functionCode,
@@ -116,11 +130,21 @@ for (const code of [
   'GATEKEEPER',
 ])
   deactivate(code);
+// Mecânicos e Auxiliares de Manutenção usam EPI como parte inerente da função na Costa do Sol.
+// A regra por função elimina designação pessoa a pessoa; a condição permanece para exceções fora desses cargos.
+for (const functionCode of ['MEC', 'ORG_AUX_MAN'])
+  addFunctionRequirement({
+    code: 'NR06',
+    functionCode,
+    ref: 'NR-06; PGR aplicável; FORM-SGI-037 Rev03',
+    reason:
+      'Aplicabilidade automática por função: uso rotineiro de EPI na atividade de manutenção. O conteúdo do treinamento deve observar o EPI efetivamente fornecido e os riscos da atividade.',
+  });
 addConditional({
   code: 'NR06',
   condition: 'USO_EPI_REQUER_TREINAMENTO',
-  ref: 'NR-06; FORM-SGI-037 Rev03',
-  reason: 'Aplica-se somente quando a atividade exige EPI e treinamento específico.',
+  ref: 'NR-06; PGR aplicável; FORM-SGI-037 Rev03',
+  reason: 'Exceção para outras funções em que o EPI fornecido e a atividade exijam treinamento.',
 });
 addConditional({
   code: 'NR-11',
@@ -128,6 +152,9 @@ addConditional({
   ref: 'NR-11; FORM-SGI-037 Rev03',
   reason: 'Aplica-se ao operador de equipamento de transporte/movimentação abrangido.',
 });
+// O modelo NR-20 atual representa somente o Curso de Iniciação. Não vincular
+// NR20_CONTATO_DIRETO a este modelo: contato direto exige classificação por atividade e classe
+// da instalação antes de selecionar Básico/Intermediário/Avançado/Específico.
 addConditional({
   code: 'NR-20',
   condition: 'NR20_AREA_SEM_CONTATO',
@@ -140,11 +167,21 @@ addConditional({
   ref: 'NR-26; FORM-SGI-037 Rev03',
   reason: 'Aplica-se a quem manuseia/utiliza produtos químicos na atividade.',
 });
+// Trabalho em altura integra a atividade normal de Mecânicos e Auxiliares de Manutenção.
+// A autorização operacional/SST continua sendo evidência separada; aqui a obrigação de capacitação é por função.
+for (const functionCode of ['MEC', 'ORG_AUX_MAN'])
+  addFunctionRequirement({
+    code: 'NR-35',
+    functionCode,
+    ref: 'NR-35; PGR aplicável; PRG-SGI-005 Rev05; FORM-SGI-037 Rev03',
+    reason: 'Aplicabilidade automática por função para a capacitação de trabalho em altura na manutenção.',
+    modality: 'PRESENCIAL',
+  });
 addConditional({
   code: 'NR-35',
   condition: 'TRABALHO_ALTURA_AUTORIZADO',
-  ref: 'NR-35; PRG-SGI-005 Rev05; FORM-SGI-037 Rev03',
-  reason: 'Aplica-se somente a trabalhador autorizado para trabalho em altura.',
+  ref: 'NR-35; PGR aplicável; PRG-SGI-005 Rev05; FORM-SGI-037 Rev03',
+  reason: 'Exceção para trabalhador de outra função formalmente autorizado a executar trabalho em altura.',
   modality: 'PRESENCIAL',
   validity: 'EVIDENCIA',
 });

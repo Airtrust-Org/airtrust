@@ -22,13 +22,23 @@ describe('training regulatory reconciliation', () => {
     expect(source).not.toContain("const target = 'airtrust-db'");
   });
 
-  it('não cria matrícula e converte regras históricas em condição/designação', () => {
+  it('não cria matrícula e usa função automática para exposições inerentes sem perder exceções individuais', () => {
     expect(source).not.toContain('INSERT INTO lms_matriculas');
     expect(source).toContain("condition: 'ARSO'");
     expect(source).toContain("condition: 'SUPERVISOR_ARSO'");
+    expect(source).toContain("for (const functionCode of ['MEC', 'ORG_AUX_MAN'])");
+    expect(source).toContain("code: 'NR06'");
+    expect(source).toContain("condition: 'USO_EPI_REQUER_TREINAMENTO'");
     expect(source).toContain("condition: 'TRABALHO_ALTURA_AUTORIZADO'");
     expect(source).toContain("condition: 'OPERADOR_EQUIP_MOVIMENTACAO'");
     expect(source).toContain("condition: 'MANUSEIA_PRODUTO_QUIMICO'");
+  });
+
+  it('mantém NR-20 Iniciação restrita a acesso sem contato e falha fechado para contato direto', () => {
+    expect(source).toContain("condition: 'NR20_AREA_SEM_CONTATO'");
+    expect(source).toContain('Não vincular');
+    expect(source).toContain('NR20_CONTATO_DIRETO');
+    expect(source).not.toMatch(/code:\s*'NR-20'[\s\S]{0,180}condition:\s*'NR20_CONTATO_DIRETO'/);
   });
 
   it('cria somente modelos ausentes controlados e preserva DGR/AVSEC por perfil', () => {
