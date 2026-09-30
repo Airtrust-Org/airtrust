@@ -10,6 +10,7 @@ export interface QualificacoesPrefs {
   statusFiltro?: string[];
   setorFilter?: string[];
   categoriasSetorFilter?: string[];
+  historicoAreaId?: number | null;
 }
 
 export interface QualificacoesModelosPrefs {

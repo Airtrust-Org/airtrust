@@ -60,6 +60,7 @@ export interface QualificacoesPrefs extends Record<string, unknown> {
   setorFilter?: string[];
   categoriasSetorFilter?: string[];
   historicoCategoriaId?: number | null;
+  historicoAreaId?: number | null;
 }
 
 export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
@@ -92,6 +93,11 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
         Number.isInteger(Number(legacyPrefs.historicoCategoriaId)) &&
         Number(legacyPrefs.historicoCategoriaId) > 0
           ? Number(legacyPrefs.historicoCategoriaId)
+          : null,
+      historicoAreaId:
+        Number.isInteger(Number(legacyPrefs.historicoAreaId)) &&
+        Number(legacyPrefs.historicoAreaId) > 0
+          ? Number(legacyPrefs.historicoAreaId)
           : null,
     }),
     [legacyPrefs],
@@ -148,6 +154,10 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
     Number.isInteger(Number(preferences.historicoCategoriaId)) &&
     Number(preferences.historicoCategoriaId) > 0
       ? Number(preferences.historicoCategoriaId)
+      : null;
+  const historicoAreaId =
+    Number.isInteger(Number(preferences.historicoAreaId)) && Number(preferences.historicoAreaId) > 0
+      ? Number(preferences.historicoAreaId)
       : null;
 
   const setActiveTab = useCallback(
@@ -257,6 +267,19 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
           Number.isInteger(Number(current.historicoCategoriaId)) &&
             Number(current.historicoCategoriaId) > 0
             ? Number(current.historicoCategoriaId)
+            : null,
+        ),
+      })),
+    [setPreferences],
+  );
+  const setHistoricoAreaId = useCallback(
+    (next: SetStateAction<number | null>) =>
+      setPreferences((current) => ({
+        ...current,
+        historicoAreaId: resolveState(
+          next,
+          Number.isInteger(Number(current.historicoAreaId)) && Number(current.historicoAreaId) > 0
+            ? Number(current.historicoAreaId)
             : null,
         ),
       })),
@@ -379,6 +402,8 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
     usesHistoricoDataset,
     historicoCategoriaId,
     setHistoricoCategoriaId,
+    historicoAreaId,
+    setHistoricoAreaId,
     effectiveHistoricoStatusFiltro,
     isDefaultStatusFilter,
     preferencesReady,
