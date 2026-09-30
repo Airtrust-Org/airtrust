@@ -34,6 +34,7 @@ type Rule = {
   critico_operacional: number;
   origem: string;
   referencia_normativa?: string | null;
+  impacto?: { abrangidas: number; prevalece_para: number };
 };
 
 type ConditionCatalog = {
@@ -350,14 +351,15 @@ export function TrainingComplianceApplicabilityEditor({
         <div>
           <h4 className="text-sm font-semibold text-slate-900">{title}</h4>
           <p className="text-xs text-slate-500">
-            Defina para quem este treinamento se aplica e com qual obrigatoriedade.
+            Defina inclusões e exclusões por empresa, setor, função/cargo, pessoa ou designação. A
+            regra mais específica prevalece.
           </p>
         </div>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <label className="text-xs font-medium text-slate-600">
-          Aplicação
+          Público da regra
           <select
             value={scope}
             onChange={(event) => setScope(event.target.value as Scope)}
@@ -449,7 +451,7 @@ export function TrainingComplianceApplicabilityEditor({
         ) : null}
         {conditionalScopeReady ? (
           <label className="text-xs font-medium text-slate-600">
-            Condição adicional
+            Condição / designação adicional
             <select
               value={condicaoId ?? ''}
               onChange={(event) =>
@@ -457,7 +459,7 @@ export function TrainingComplianceApplicabilityEditor({
               }
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
             >
-              <option value="">Nenhuma — somente escopo organizacional</option>
+              <option value="">Nenhuma — somente público organizacional</option>
               {(conditionCatalog.data?.condicoes || []).map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.nome} · {item.tipo}
@@ -467,15 +469,15 @@ export function TrainingComplianceApplicabilityEditor({
           </label>
         ) : null}
         <label className="text-xs font-medium text-slate-600">
-          Obrigatoriedade
+          Efeito da regra
           <select
             value={obrigatoriedade}
             onChange={(event) => setObrigatoriedade(event.target.value as Obrigatoriedade)}
             className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
           >
-            <option value="OBRIGATORIA">Obrigatório</option>
-            <option value="RECOMENDADA">Recomendado</option>
-            <option value="NAO_APLICA">Não se aplica (exceção)</option>
+            <option value="OBRIGATORIA">Incluir como obrigatório</option>
+            <option value="RECOMENDADA">Incluir como recomendado</option>
+            <option value="NAO_APLICA">Excluir / não se aplica</option>
           </select>
         </label>
         <label className="text-xs font-medium text-slate-600">
@@ -682,6 +684,12 @@ export function TrainingComplianceApplicabilityEditor({
                 {rule.justificativa ? (
                   <p className="mt-1 text-xs text-slate-600">Motivo: {rule.justificativa}</p>
                 ) : null}
+                {rule.impacto ? (
+                  <p className="mt-1 text-xs font-medium text-slate-600">
+                    Abrange {rule.impacto.abrangidas} pessoa(s) · prevalece para{' '}
+                    {rule.impacto.prevalece_para}
+                  </p>
+                ) : null}
               </div>
               <select
                 value={rule.obrigatoriedade}
@@ -691,9 +699,9 @@ export function TrainingComplianceApplicabilityEditor({
                 }
                 className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs disabled:bg-slate-100"
               >
-                <option value="OBRIGATORIA">Obrigatório</option>
-                <option value="RECOMENDADA">Recomendado</option>
-                <option value="NAO_APLICA">N/A</option>
+                <option value="OBRIGATORIA">Incluir · obrigatório</option>
+                <option value="RECOMENDADA">Incluir · recomendado</option>
+                <option value="NAO_APLICA">Excluir · não se aplica</option>
               </select>
               <button
                 type="button"

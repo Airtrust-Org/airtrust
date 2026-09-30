@@ -51,6 +51,7 @@ APPROVED_MIGRATIONS=(
   "0516_qualification_expired_daily_alerts.sql"
   "0517_training_compliance_conditions.sql"
   "0518_crm_qualification_consolidation.sql"
+  "0521_training_compliance_designation_overrides.sql"
 )
 
 apply=false
@@ -238,6 +239,9 @@ validate_postconditions() {
     0518_crm_qualification_consolidation.sql)
       bash scripts/staging/validate-0518-postconditions.sh --target="$db_name"
       ;;
+    0521_training_compliance_designation_overrides.sql)
+      bash scripts/staging/validate-0521-postconditions.sh --target="$db_name"
+      ;;
   esac
 }
 
@@ -312,6 +316,11 @@ if [[ "$migration_basename" == "0516_qualification_expired_daily_alerts.sql" && 
     exit 1
   fi
   echo "STAGING_DEPENDENCY_0515_OK=true"
+fi
+
+if [[ "$migration_basename" == "0521_training_compliance_designation_overrides.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0521-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0521_OK=true"
 fi
 
 if [[ "$migration_basename" == 0461_* || "$migration_basename" == 0462_* ]]; then
