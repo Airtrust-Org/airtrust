@@ -21,6 +21,7 @@ import { getSetorGestoresBySetor } from '../services/setores-gestores';
 import { trainingComplianceEffectiveRequirementPredicateSql } from '../services/training-compliance-rule-engine';
 import {
   inferTrainingAlertStageCode,
+  normalizeTrainingAlertFrequency,
   trainingAlertAudience,
   TRAINING_ALERT_DAILY_CRON,
 } from '../services/training-alert-policy';
@@ -411,21 +412,15 @@ async function processarConfiguracao(
   return { enviadas, erros };
 }
 
-function normalizeFrequency(value: string | null | undefined): 'ONCE' | 'DAILY' | 'EVERY_N_DAYS' {
-  const normalized = String(value || 'ONCE')
-    .trim()
-    .toUpperCase();
-  if (normalized === 'DAILY') return 'DAILY';
-  if (normalized === 'EVERY_N_DAYS') return 'EVERY_N_DAYS';
-  return 'ONCE';
-}
-
 function getDedupWindowSql(config: NotificacaoConfig): string {
-  const frequency = normalizeFrequency(config.frequencia);
-  if (frequency === 'DAILY') return "AND date(enviado_em) = date('now')";
-  if (frequency === 'EVERY_N_DAYS') {
-    const interval = Math.max(1, Math.min(365, Number(config.intervalo_dias) || 1));
-    return `AND enviado_em >= datetime('now', '-${interval} day')`;
+  const normalized = normalizeTrainingAlertFrequency(
+    inferTrainingAlertStageCode(config),
+    config.frequencia,
+    config.intervalo_dias,
+  );
+  if (normalized.frequency === 'DAILY') return "AND date(enviado_em) = date('now')";
+  if (normalized.frequency === 'EVERY_N_DAYS') {
+    return `AND enviado_em >= datetime('now', '-${normalized.intervalDays} day')`;
   }
   return '';
 }

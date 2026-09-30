@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getTrainingAlertStage,
   inferTrainingAlertStageCode,
+  normalizeTrainingAlertFrequency,
   trainingAlertAudience,
   TRAINING_ALERT_DAILY_CRON,
 } from '../../services/training-alert-policy';
@@ -30,6 +31,17 @@ describe('training alert canonical policy', () => {
       employeeWhatsapp: false,
       managerCheckEmail: false,
       expired: true,
+    });
+  });
+
+  it('força alerta vencido para uma única entrega mesmo com configuração legada DAILY', () => {
+    expect(normalizeTrainingAlertFrequency('QUALIFICACAO_VENCIDA', 'DAILY', 1)).toEqual({
+      frequency: 'ONCE',
+      intervalDays: null,
+    });
+    expect(normalizeTrainingAlertFrequency('QUALIFICACAO_30D', 'EVERY_N_DAYS', 5)).toEqual({
+      frequency: 'EVERY_N_DAYS',
+      intervalDays: 5,
     });
   });
 
