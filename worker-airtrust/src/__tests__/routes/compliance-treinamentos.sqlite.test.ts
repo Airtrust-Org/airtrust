@@ -608,12 +608,68 @@ describe('training compliance engine', () => {
       setor_nome: 'Manutenção',
       pessoas: 2,
       requisitos_obrigatorios: 2,
+      requisitos_distintos: 1,
       conformes: 1,
       nao_realizados: 1,
       compliance_pct: 50,
     });
     expect(manutencao.cargos).toEqual([
-      expect.objectContaining({ funcao_nome: 'Mecânico', pessoas: 2, compliance_pct: 50 }),
+      expect.objectContaining({
+        funcao_nome: 'Mecânico',
+        pessoas: 2,
+        requisitos_obrigatorios: 2,
+        requisitos_distintos: 1,
+        compliance_pct: 50,
+      }),
+    ]);
+  });
+
+  it('permite detalhar pessoas sem configuração de matriz', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 100, 'SETOR_FUNCAO', 10, 1, 'OBRIGATORIA', 'EMPRESA');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request('/pessoas?configurado=false');
+    const body = (await response.json()) as {
+      data: Array<{ id: number; configurado: boolean; funcao_nome: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.data.map((person) => person.id)).toEqual([1002]);
+    expect(body.data[0]).toMatchObject({ configurado: false, funcao_nome: 'Piloto' });
+  });
+
+  it('expõe requisitos distintos do cargo sem multiplicar pela quantidade de pessoas', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem, referencia_normativa)
+      VALUES (1, 100, 'SETOR_FUNCAO', 10, 1, 'OBRIGATORIA', 'REGULATORIO', 'RBAC 121');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request(
+      '/requisitos-aplicaveis?setor_id=10&funcao_id=1',
+    );
+    const body = (await response.json()) as {
+      meta: { pessoas: number; requisitos_distintos: number; obrigacoes_individuais: number };
+      data: Array<Record<string, unknown>>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.meta).toMatchObject({
+      pessoas: 2,
+      requisitos_distintos: 1,
+      obrigacoes_individuais: 2,
+    });
+    expect(body.data).toEqual([
+      expect.objectContaining({
+        qualificacao_tipo_id: 100,
+        pessoas: 2,
+        obrigacoes_individuais: 2,
+        referencias_normativas: ['RBAC 121'],
+        nao_realizados: 2,
+      }),
     ]);
   });
 
