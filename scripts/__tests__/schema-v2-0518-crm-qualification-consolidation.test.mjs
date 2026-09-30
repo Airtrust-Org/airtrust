@@ -29,7 +29,10 @@ test('0518 retires LOS and maintenance duplicate while preserving history eviden
   const m=JSON.parse(readFileSync(MANIFEST,'utf8')); const sql=readFileSync(m.filePath,'utf8');
   const db=path.join(mkdtempSync(path.join(tmpdir(),'airtrust-0518-')),'db.sqlite');
   const setup=`
-    CREATE TABLE qualificacoes_tipos(id INTEGER PRIMARY KEY,empresa_id INTEGER,codigo TEXT,nome TEXT,descricao TEXT,observacoes TEXT,categoria TEXT,carga_horaria REAL,carga_horaria_inicial REAL,carga_horaria_recorrente REAL,conteudo_programatico TEXT,validade INTEGER,ativo INTEGER,deleted_at TEXT,updated_at TEXT);
+    CREATE TABLE qualificacoes_tipos(id INTEGER PRIMARY KEY,empresa_id INTEGER,codigo TEXT,nome TEXT,descricao TEXT,observacoes TEXT,categoria TEXT,carga_horaria REAL,carga_horaria_inicial REAL,carga_horaria_recorrente REAL,conteudo_programatico TEXT,validade INTEGER,ativo INTEGER,deleted_at TEXT,updated_at TEXT,vencimento_fim_mes INTEGER DEFAULT 0,is_check INTEGER DEFAULT 0,formato_id INTEGER,categoria_id INTEGER,classe_requisito TEXT,dominio_codigo TEXT,area_id INTEGER,created_at TEXT);
+    CREATE TABLE qualificacoes_formatos(id INTEGER PRIMARY KEY,empresa_id INTEGER,codigo TEXT,ativo INTEGER,deleted_at TEXT);
+    CREATE TABLE qualificacoes_categorias(id INTEGER PRIMARY KEY,empresa_id INTEGER,codigo TEXT,ativo INTEGER,deleted_at TEXT);
+    CREATE TABLE qualificacoes_areas(id INTEGER PRIMARY KEY,empresa_id INTEGER,codigo TEXT,ativo INTEGER,deleted_at TEXT);
     CREATE TABLE setores(id INTEGER PRIMARY KEY,empresa_id INTEGER,codigo TEXT,ativo INTEGER,deleted_at TEXT);
     CREATE TABLE qualificacoes_tipos_setores(id INTEGER PRIMARY KEY AUTOINCREMENT,tipo_id INTEGER,setor_id INTEGER,empresa_id INTEGER,created_at TEXT,updated_at TEXT,deleted_at TEXT);
     CREATE UNIQUE INDEX idx_qts_unique_active ON qualificacoes_tipos_setores(tipo_id,setor_id,empresa_id) WHERE deleted_at IS NULL;
@@ -37,12 +40,15 @@ test('0518 retires LOS and maintenance duplicate while preserving history eviden
     CREATE TRIGGER trg_qh_tipo AFTER UPDATE OF qualificacao_id ON qualificacoes_historico BEGIN UPDATE qualificacoes_historico SET tipo=(SELECT nome FROM qualificacoes_tipos WHERE id=NEW.qualificacao_id) WHERE id=NEW.id; END;
     CREATE TABLE treinamento_requisitos(id INTEGER PRIMARY KEY,empresa_id INTEGER,qualificacao_tipo_id INTEGER,escopo TEXT,setor_id INTEGER,funcao_id INTEGER,funcionario_id INTEGER,obrigatoriedade TEXT,critico_operacional INTEGER,origem TEXT,observacoes TEXT,auto_matricular_ead INTEGER,ativo INTEGER,created_at TEXT,updated_at TEXT,deleted_at TEXT);
     CREATE TABLE treinamentos_planejados(id INTEGER PRIMARY KEY,empresa_id INTEGER,qualificacao_tipo_id INTEGER,titulo TEXT,updated_at TEXT);
-    INSERT INTO qualificacoes_tipos VALUES
+    INSERT INTO qualificacoes_tipos(id,empresa_id,codigo,nome,descricao,observacoes,categoria,carga_horaria,carga_horaria_inicial,carga_horaria_recorrente,conteudo_programatico,validade,ativo,deleted_at,updated_at) VALUES
       (24,6,'D3','CRM — Tripulantes',NULL,NULL,'Teórico',8,16,8,NULL,12,1,NULL,NULL),
       (99,6,'CRM-LOS-T','CRM em Ambiente LOS — Teórico',NULL,NULL,'Teórico',4,4,4,NULL,12,1,NULL,NULL),
       (100,6,'CRM-LOS-P','CRM em Ambiente LOS — Prático',NULL,NULL,'Prático',4,4,4,NULL,12,1,NULL,NULL),
       (136,6,'MNT_FATORES_HUMANOS_CRM','Fatores Humanos / CRM Manutenção',NULL,NULL,'Técnico',4,8,4,NULL,24,1,NULL,NULL),
       (187,6,'CRM_CORP','CRM — Corporativo',NULL,NULL,'Teórico',8,16,8,NULL,24,1,NULL,NULL);
+    INSERT INTO qualificacoes_formatos VALUES (1,6,'EAD',1,NULL),(3,6,'PRESENCIAL',1,NULL);
+    INSERT INTO qualificacoes_categorias VALUES (3,6,'TERICO',1,NULL),(13,6,'EAD',1,NULL);
+    INSERT INTO qualificacoes_areas VALUES (1,6,'OPERACOES',1,NULL),(4,6,'SEGURANCA_OPERACIONAL',1,NULL);
     INSERT INTO setores VALUES (10,6,'TRI',1,NULL),(11,6,'MAN',1,NULL),(14,6,'ADM',1,NULL),(31,6,'LOG',0,NULL);
     INSERT INTO qualificacoes_tipos_setores(tipo_id,setor_id,empresa_id) VALUES (99,10,6),(100,10,6),(136,11,6);
     INSERT INTO qualificacoes_historico VALUES
@@ -63,6 +69,9 @@ test('0518 retires LOS and maintenance duplicate while preserving history eviden
   assert.equal(runSql(db,setup).status,0);
   const applied=runSql(db,sql); assert.equal(applied.status,0,applied.stderr);
   assert.equal(query(db,"SELECT nome||'|'||validade||'|'||carga_horaria_inicial||'|'||carga_horaria_recorrente FROM qualificacoes_tipos WHERE codigo='CRM_CORP' AND deleted_at IS NULL"),'CRM Corporate|24|16.0|16.0');
+  assert.equal(query(db,"SELECT COUNT(*) FROM qualificacoes_tipos WHERE codigo='CRM_CORP' AND conteudo_programatico LIKE '%IS 00-010B item 5.3.2.2%' AND conteudo_programatico LIKE '%16 horas presenciais a cada 24 meses%'"),'1');
+  assert.equal(query(db,"SELECT nome||'|'||categoria||'|'||carga_horaria||'|'||carga_horaria_inicial||'|'||COALESCE(carga_horaria_recorrente,'NULL')||'|'||COALESCE(validade,'NULL')||'|'||formato_id||'|'||categoria_id||'|'||classe_requisito||'|'||dominio_codigo||'|'||area_id FROM qualificacoes_tipos WHERE codigo='CRM_DIR_RBAC119' AND deleted_at IS NULL"),'CRM para Gestores — Cargos de Direção Requeridos (RBAC 119)|EAD|4.0|4.0|NULL|NULL|1|13|TREINAMENTO|CORPORATIVO|4');
+  assert.equal(query(db,"SELECT COUNT(*) FROM treinamento_requisitos tr JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id WHERE qt.codigo='CRM_DIR_RBAC119' AND tr.ativo=1 AND tr.deleted_at IS NULL"),'0');
   assert.equal(query(db,"SELECT COUNT(*) FROM qualificacoes_tipos WHERE codigo IN ('CRM-LOS-T','CRM-LOS-P','MNT_FATORES_HUMANOS_CRM') AND deleted_at IS NULL"),'0');
   assert.equal(query(db,"SELECT COUNT(*) FROM qualificacoes_tipos WHERE codigo='D3' AND deleted_at IS NULL"),'1');
   assert.equal(query(db,'SELECT COUNT(*) FROM qualificacoes_historico WHERE qualificacao_id=136 AND deleted_at IS NULL'),'0');
@@ -77,6 +86,7 @@ test('0518 retires LOS and maintenance duplicate while preserving history eviden
   assert.equal(query(db,"SELECT COUNT(*) FROM treinamento_requisitos WHERE qualificacao_tipo_id=187 AND escopo='SETOR' AND setor_id=10 AND obrigatoriedade='NAO_APLICA' AND ativo=1 AND deleted_at IS NULL"),'1');
   assert.equal(query(db,"SELECT qualificacao_tipo_id||'|'||titulo FROM treinamentos_planejados WHERE id=25"),'187|CRM Corporate');
   assert.equal(query(db,'SELECT COUNT(*) FROM qualificacoes_tipos_setores WHERE tipo_id=187 AND deleted_at IS NULL'),'3');
+  assert.equal(query(db,"SELECT COUNT(*) FROM qualificacoes_tipos_setores qts JOIN qualificacoes_tipos qt ON qt.id=qts.tipo_id WHERE qt.codigo='CRM_DIR_RBAC119' AND qts.deleted_at IS NULL"),'3');
   assert.equal(query(db,'SELECT COUNT(*) FROM qualificacoes_tipos_setores WHERE tipo_id IN (99,100,136) AND deleted_at IS NULL'),'0');
 });
 

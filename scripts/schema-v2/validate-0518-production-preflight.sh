@@ -11,6 +11,10 @@ assert_count(){ local label="$1" expected="$2" sql="$3" count; count="$(query_co
 assert_count active-baseline 1 "SELECT COUNT(*) count FROM airtrust_schema_baselines_v2 WHERE baseline_id='$BASELINE_ID' AND status='ACTIVE';"
 assert_count unapplied-change 0 "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id='$CHANGE_ID';"
 for code in D3 CRM_CORP MNT_FATORES_HUMANOS_CRM CRM-LOS-T CRM-LOS-P; do assert_count "active-$code" 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='$code' AND ativo=1 AND deleted_at IS NULL;"; done
+assert_count crm-dir-rbac119-absent 0 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='CRM_DIR_RBAC119' AND deleted_at IS NULL;"
+assert_count ead-format 1 "SELECT COUNT(*) count FROM qualificacoes_formatos WHERE empresa_id=6 AND codigo='EAD' AND ativo=1 AND deleted_at IS NULL;"
+assert_count ead-category 1 "SELECT COUNT(*) count FROM qualificacoes_categorias WHERE empresa_id=6 AND codigo='EAD' AND ativo=1 AND deleted_at IS NULL;"
+assert_count safety-area 1 "SELECT COUNT(*) count FROM qualificacoes_areas WHERE empresa_id=6 AND codigo='SEGURANCA_OPERACIONAL' AND ativo=1 AND deleted_at IS NULL;"
 assert_count crm-corp-company-rule 1 "SELECT COUNT(*) count FROM treinamento_requisitos tr JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id WHERE tr.empresa_id=6 AND qt.codigo='CRM_CORP' AND tr.escopo='EMPRESA' AND tr.obrigatoriedade='OBRIGATORIA' AND tr.ativo=1 AND tr.deleted_at IS NULL;"
 assert_count crm-corp-tripulacao-override-absent 0 "SELECT COUNT(*) count FROM treinamento_requisitos tr JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id JOIN setores s ON s.id=tr.setor_id AND s.empresa_id=tr.empresa_id WHERE tr.empresa_id=6 AND qt.codigo='CRM_CORP' AND tr.escopo='SETOR' AND s.codigo='TRI' AND tr.ativo=1 AND tr.deleted_at IS NULL;"
 assert_count los-history-zero 0 "SELECT COUNT(*) count FROM qualificacoes_historico qh JOIN qualificacoes_tipos qt ON qt.id=qh.qualificacao_id WHERE qh.empresa_id=6 AND qt.empresa_id=6 AND qt.codigo IN ('CRM-LOS-T','CRM-LOS-P');"

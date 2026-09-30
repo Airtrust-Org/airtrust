@@ -9,18 +9,54 @@
 UPDATE qualificacoes_tipos
    SET nome = 'CRM Corporate',
        descricao = 'Corporate Resource Management para colaboradores não tripulantes, incluindo Manutenção.',
-       observacoes = 'CRM Corporate aplicável a colaboradores não tripulantes, incluindo Manutenção; ciclo de 24 meses. CRM de Tripulantes (D3) permanece separado.',
+       observacoes = 'CRM Corporate aplicável a colaboradores não tripulantes, incluindo Manutenção. Fase inicial: 16 horas-aula, admitindo até 8 horas em EaD nas condições da IS 00-010B item 5.3.2.2 e mantendo no mínimo 8 horas presenciais. Fase periódica: 16 horas presenciais a cada 24 meses, conforme IS 00-010B itens 5.3.4.1 e 5.3.4.2. O EaD não substitui a fase periódica presencial. CRM de Tripulantes (D3) permanece separado.',
        categoria = 'Teórico',
        carga_horaria = 16,
        carga_horaria_inicial = 16,
        carga_horaria_recorrente = 16,
-       conteudo_programatico = 'Evolução do CRM e modelos de fatores humanos; normas e diretrizes; Reason, SHELL e outros modelos aplicáveis; cultura organizacional e de segurança; erro humano; desempenho humano e limitações; comunicação; formação e manutenção de equipe; liderança e followership; consciência situacional; monitoramento, intervenção e tomada de decisão; TEM; automação e interface homem-tecnologia; gerenciamento da carga de trabalho; pressão, estresse, fadiga e vigilância; ambiente; procedimentos, informações, ferramentas e práticas; prevenção e gerenciamento de ameaças, erros e estados indesejados; interfaces entre Operações, Manutenção e demais áreas; Programa de Fatores Humanos da Costa do Sol; estudos de caso e aplicação ao ambiente de trabalho.',
+       conteudo_programatico = 'Evolução do CRM e modelos de fatores humanos; normas e diretrizes; Reason, SHELL e outros modelos aplicáveis; cultura organizacional e de segurança; erro humano; desempenho humano e limitações; comunicação; formação e manutenção de equipe; liderança e followership; consciência situacional; monitoramento, intervenção e tomada de decisão; TEM; automação e interface homem-tecnologia; gerenciamento da carga de trabalho; pressão, estresse, fadiga e vigilância; ambiente; procedimentos, informações, ferramentas e práticas; prevenção e gerenciamento de ameaças, erros e estados indesejados; interfaces entre Operações, Manutenção e demais áreas; Programa de Fatores Humanos da Costa do Sol; estudos de caso e aplicação ao ambiente de trabalho. Requisitos de realização: fase inicial com 16 horas-aula, podendo até 8 horas ser substituídas por EaD conforme IS 00-010B item 5.3.2.2, com no mínimo 8 horas presenciais; fase periódica com 16 horas presenciais a cada 24 meses, conforme IS 00-010B itens 5.3.4.1 e 5.3.4.2.',
        validade = 24,
        ativo = 1,
        updated_at = datetime('now')
  WHERE empresa_id = 6
    AND codigo = 'CRM_CORP'
    AND deleted_at IS NULL;
+
+-- Dedicated EaD model for the CRM required-management-role course in IS 00-010B 5.3.5.
+-- This creates the qualification model only; it does not create an LMS package, enrollment,
+-- automatic compliance obligation or recurring expiry. Applicability is limited to the
+-- management positions required by RBAC 119.65/119.69 and must be assigned explicitly later.
+INSERT INTO qualificacoes_tipos (
+  codigo,nome,descricao,categoria,carga_horaria,carga_horaria_inicial,carga_horaria_recorrente,
+  conteudo_programatico,validade,vencimento_fim_mes,observacoes,ativo,is_check,empresa_id,
+  formato_id,categoria_id,classe_requisito,dominio_codigo,area_id,created_at,updated_at
+)
+SELECT
+  'CRM_DIR_RBAC119',
+  'CRM para Gestores — Cargos de Direção Requeridos (RBAC 119)',
+  'Treinamento de CRM destinado aos ocupantes dos cargos de direção requeridos pelos RBAC 119.65 e 119.69, com enfoque estratégico e tático nas responsabilidades gerenciais relacionadas a fatores humanos e CRM.',
+  'EAD',
+  4,
+  4,
+  NULL,
+  'Evolução do CRM e modelos de fatores humanos; normas e diretrizes em fatores humanos; cultura organizacional e de segurança; erro humano, desempenho humano e limitações; processos de comunicação; formação e manutenção de equipe; liderança e trabalho em equipe; consciência situacional; monitoramento, intervenção e tomada de decisão; automação e interface homem-tecnologia; gerenciamento da carga de trabalho, pressão, estresse, fadiga e vigilância; efeitos do uso de álcool e outras drogas sobre o desempenho; responsabilidades estratégicas e táticas dos gestores na Política de Fatores Humanos/CRM, prevenção de condições latentes e gerenciamento de ameaças e erros. Modalidade: EaD, conforme IS 00-010B item 5.3.5.2; carga horária estimada: 4 horas, conforme item 5.3.5.4.',
+  NULL,
+  0,
+  'Aplicável somente aos ocupantes dos cargos de direção requeridos pelos RBAC 119.65 e 119.69. A IS 00-010B recomenda o treinamento quando um novo gestor passa a ocupar função requerida e permite sua realização em EaD a critério do operador, observadas as orientações pertinentes do item 5.3.1. O item 5.3.5 não estabelece periodicidade; por isso este modelo não possui vencimento automático nem obrigação de recorrência.',
+  1,
+  0,
+  6,
+  (SELECT id FROM qualificacoes_formatos WHERE empresa_id=6 AND codigo='EAD' AND ativo=1 AND deleted_at IS NULL LIMIT 1),
+  (SELECT id FROM qualificacoes_categorias WHERE empresa_id=6 AND codigo='EAD' AND ativo=1 AND deleted_at IS NULL LIMIT 1),
+  'TREINAMENTO',
+  'CORPORATIVO',
+  (SELECT id FROM qualificacoes_areas WHERE empresa_id=6 AND codigo='SEGURANCA_OPERACIONAL' AND ativo=1 AND deleted_at IS NULL LIMIT 1),
+  datetime('now'),
+  datetime('now')
+WHERE NOT EXISTS (
+  SELECT 1 FROM qualificacoes_tipos
+   WHERE empresa_id=6 AND codigo='CRM_DIR_RBAC119' AND deleted_at IS NULL
+);
 
 -- A company-wide qualification must be treated as multi-sector by the RBAC resolver,
 -- so qualification history/certificates continue resolving through each employee's own sector domain.
@@ -30,6 +66,21 @@ SELECT qt.id, s.id, 6, datetime('now'), datetime('now'), NULL
   JOIN setores s ON s.empresa_id=6 AND s.ativo=1 AND s.deleted_at IS NULL
  WHERE qt.empresa_id=6
    AND qt.codigo='CRM_CORP'
+   AND qt.deleted_at IS NULL
+   AND NOT EXISTS (
+     SELECT 1 FROM qualificacoes_tipos_setores qts
+      WHERE qts.empresa_id=6 AND qts.tipo_id=qt.id AND qts.setor_id=s.id AND qts.deleted_at IS NULL
+   );
+
+-- The management-role model may be assigned to RBAC 119 required roles in different sectors.
+-- Sector links provide RBAC/history visibility only; Training Compliance remains the SSOT for
+-- actual applicability and no automatic requirement is seeded by this change.
+INSERT INTO qualificacoes_tipos_setores(tipo_id,setor_id,empresa_id,created_at,updated_at,deleted_at)
+SELECT qt.id, s.id, 6, datetime('now'), datetime('now'), NULL
+  FROM qualificacoes_tipos qt
+  JOIN setores s ON s.empresa_id=6 AND s.ativo=1 AND s.deleted_at IS NULL
+ WHERE qt.empresa_id=6
+   AND qt.codigo='CRM_DIR_RBAC119'
    AND qt.deleted_at IS NULL
    AND NOT EXISTS (
      SELECT 1 FROM qualificacoes_tipos_setores qts
