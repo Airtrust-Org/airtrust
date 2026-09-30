@@ -19,8 +19,8 @@ on:
         description: 'Exact Worker SHA already deployed to staging and compatible with the reconciliation'
         required: true
         type: string
-      expected_base_sha256:
-        description: 'Reviewed base reconciliation hash'
+      expected_reconciliation_sha256:
+        description: 'Reviewed V3 reconciliation SHA-256 from dry-run of the exact release SHA'
         required: true
         type: string
 
@@ -37,7 +37,6 @@ permissions:
 env:
   NODE_VERSION: '24'
   CONFIRMATION_PHRASE: AIRTRUST_STAGING_TRAINING_COMPLIANCE_RECONCILIATION
-  EXPECTED_BASE_SHA256: 38f5912b3f4890a3c3acc956c8192d5cacfe259394fd6037571dc5889ea2bc75
   STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
   STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
 
@@ -61,7 +60,7 @@ jobs:
           PR_NUMBER: ${{ inputs.pr_number }}
           RELEASE_SHA: ${{ inputs.release_sha }}
           EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
-          INPUT_BASE_SHA256: ${{ inputs.expected_base_sha256 }}
+          INPUT_RECONCILIATION_SHA256: ${{ inputs.expected_reconciliation_sha256 }}
         run: |
           set -euo pipefail
           [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_ONLY >&2; exit 1; }
@@ -69,7 +68,7 @@ jobs:
           [[ "$RELEASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo RELEASE_SHA_INVALID >&2; exit 1; }
           [[ "$EXPECTED_DEPLOYED_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo DEPLOYED_SHA_INVALID >&2; exit 1; }
           [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo PR_NUMBER_INVALID >&2; exit 1; }
-          [[ "$INPUT_BASE_SHA256" == "$EXPECTED_BASE_SHA256" ]] || { echo BASE_HASH_MISMATCH >&2; exit 1; }
+          [[ "$INPUT_RECONCILIATION_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || { echo RECONCILIATION_HASH_INVALID >&2; exit 1; }
           export GITHUB_REPOSITORY PR_NUMBER RELEASE_SHA GITHUB_TOKEN
           node <<'NODE'
           (async()=>{
@@ -136,15 +135,14 @@ jobs:
       - name: Generate and pin final reconciliation hash
         id: dryrun
         env:
-          INPUT_BASE_SHA256: ${{ inputs.expected_base_sha256 }}
+          INPUT_RECONCILIATION_SHA256: ${{ inputs.expected_reconciliation_sha256 }}
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/training-regulatory-reconciliation-dry-run.txt"
-          node scripts/compliance/reconcile-training-regulatory-matrix-v2.mjs --env=staging > "$out"
-          grep -Fx "BASE_RECONCILIATION_SHA256=$INPUT_BASE_SHA256" "$out" >/dev/null
+          node scripts/compliance/reconcile-training-compliance-v3.mjs --env=staging > "$out"
+          grep -Fx "RECONCILIATION_SHA256=$INPUT_RECONCILIATION_SHA256" "$out" >/dev/null
           grep -Fx "TARGET_DATABASE=$STAGING_D1_NAME" "$out" >/dev/null
           grep -Fx 'MODE=DRY_RUN' "$out" >/dev/null
-          grep -Fx 'STATEMENTS=65' "$out" >/dev/null
           hash="$(sed -n 's/^RECONCILIATION_SHA256=//p' "$out" | head -n1)"
           [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || { echo FINAL_HASH_INVALID >&2; exit 1; }
           echo "reconciliation_sha256=$hash" >> "$GITHUB_OUTPUT"
@@ -192,11 +190,11 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          AIRTRUST_STAGING_RECONCILIATION_AUTH: AIRTRUST_STAGING_TRAINING_COMPLIANCE_RECONCILIATION
+          AIRTRUST_STAGING_RECONCILIATION_AUTH: AIRTRUST_STAGING_APPLY_TRAINING_COMPLIANCE_V3
           RECONCILIATION_SHA256: ${{ needs.preflight.outputs.reconciliation_sha256 }}
         run: |
           set -euo pipefail
-          node scripts/compliance/reconcile-training-regulatory-matrix-v2.mjs \
+          node scripts/compliance/reconcile-training-compliance-v3.mjs \
             --apply --env=staging --expected-sha256="$RECONCILIATION_SHA256"
       - name: Validate reconciliation postconditions
         env:
@@ -212,7 +210,7 @@ jobs:
     env:
       RELEASE_SHA: ${{ inputs.release_sha }}
       DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
-      BASE_SHA256: ${{ inputs.expected_base_sha256 }}
+      REVIEWED_SHA256: ${{ inputs.expected_reconciliation_sha256 }}
       FINAL_SHA256: ${{ needs.preflight.outputs.reconciliation_sha256 }}
       PREFLIGHT_RESULT: ${{ needs.preflight.result }}
       APPLY_RESULT: ${{ needs.apply.result }}
@@ -225,8 +223,8 @@ jobs:
             echo ''
             echo "- release SHA: \`$RELEASE_SHA\`"
             echo "- deployed staging SHA: \`$DEPLOYED_SHA\`"
-            echo "- base reconciliation SHA-256: \`$BASE_SHA256\`"
-            echo "- final reconciliation SHA-256: \`$FINAL_SHA256\`"
+            echo "- reviewed reconciliation SHA-256: \`$REVIEWED_SHA256\`"
+            echo "- executed reconciliation SHA-256: \`$FINAL_SHA256\`"
             echo "- preflight: \`$PREFLIGHT_RESULT\`"
             echo "- governed apply + postconditions: \`$APPLY_RESULT\`"
             echo '- production action: `none`'

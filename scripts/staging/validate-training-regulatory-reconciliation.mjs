@@ -66,6 +66,9 @@ const prerequisiteConflictSql = `WITH expected(codigo,nome,categoria,validade,ca
 
 if (mode === 'pre') {
   assertCount('ledger-0517', 1, "SELECT COUNT(*) count FROM d1_migrations WHERE name='0517_training_compliance_conditions.sql'");
+  assertCount('ledger-0519', 1, "SELECT COUNT(*) count FROM d1_migrations WHERE name='0519_training_compliance_evidence_profiles.sql'");
+  assertCount('qualification-profile-column', 1, "SELECT COUNT(*) count FROM pragma_table_info('qualificacoes_historico') WHERE name='perfil_competencia'");
+  assertCount('lms-profile-column', 1, "SELECT COUNT(*) count FROM pragma_table_info('lms_matriculas') WHERE name='perfil_competencia'");
   assertCount('required-condition-catalog', 19, `SELECT COUNT(*) count FROM compliance_condicoes WHERE empresa_id=6 AND UPPER(codigo) IN (${quoted(conditionCodes)}) AND ativo=1 AND deleted_at IS NULL`);
   const existingPrerequisites = queryCount(`SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo) IN (${quoted(modelCodes)}) AND deleted_at IS NULL`);
   if (existingPrerequisites > STAGING_PREREQUISITE_MODELS.length) throw new Error(`prerequisite-model-count:maximum=${STAGING_PREREQUISITE_MODELS.length}:actual=${existingPrerequisites}`);
@@ -88,6 +91,7 @@ assertCount('d4-function-profiles', 3, "SELECT COUNT(*) count FROM treinamento_r
 assertCount('d4-conditional-profiles', 2, "SELECT COUNT(*) count FROM treinamento_requisitos tr JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id JOIN compliance_condicoes cc ON cc.id=tr.condicao_id WHERE tr.empresa_id=6 AND UPPER(qt.codigo)='D4' AND tr.perfil_competencia IN ('PTAP_AGENTE_RAMPA_DG','PTAP_TRIPULANTE_VOO') AND UPPER(cc.codigo) IN ('PTAP_RAMPA_DG_DESIGNADO','PTAP_TRIPULANTE_VOO') AND tr.ativo=1 AND tr.deleted_at IS NULL");
 assertCount('no-stale-tripulante-sector-rule', 0, "SELECT COUNT(*) count FROM treinamento_requisitos tr JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id WHERE tr.empresa_id=6 AND UPPER(qt.codigo)='D4' AND tr.escopo='SETOR' AND tr.perfil_competencia='PTAP_TRIPULANTE_VOO' AND tr.ativo=1 AND tr.deleted_at IS NULL");
 assertCount('d1-avsec-profiles', 3, "SELECT COUNT(*) count FROM treinamento_requisitos tr JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id WHERE tr.empresa_id=6 AND UPPER(qt.codigo)='D1' AND tr.perfil_competencia IN ('AVSEC_ATENDIMENTO_PASSAGEIRO','AVSEC_OPERACOES_SOLO','AVSEC_CARGA_AEREA') AND tr.ativo=1 AND tr.deleted_at IS NULL");
+assertCount('avsec-awareness-corporate', 1, "SELECT COUNT(*) count FROM treinamento_requisitos tr JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id WHERE tr.empresa_id=6 AND UPPER(qt.codigo)='AVSEC_CONSC' AND tr.escopo='EMPRESA' AND tr.obrigatoriedade='OBRIGATORIA' AND tr.ativo=1 AND tr.deleted_at IS NULL");
 assertCount('codigo-etica-corporate-rule', 1, "SELECT COUNT(*) count FROM treinamento_requisitos tr JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id WHERE tr.empresa_id=6 AND UPPER(qt.codigo)='COD_ETICA' AND tr.escopo='EMPRESA' AND tr.ativo=1 AND tr.deleted_at IS NULL");
 assertCount('no-auto-enrollment-on-reconciled-profiles', 0, "SELECT COUNT(*) count FROM treinamento_requisitos WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND auto_matricular_ead=1 AND perfil_competencia IN ('PTAP_COORDENADOR_VOO','PTAP_ATENDIMENTO_BALCAO','PTAP_AGENTE_RAMPA','PTAP_AGENTE_RAMPA_DG','PTAP_TRIPULANTE_VOO','AVSEC_ATENDIMENTO_PASSAGEIRO','AVSEC_OPERACOES_SOLO','AVSEC_CARGA_AEREA')");
 console.log('TRAINING_REGULATORY_RECONCILIATION_POSTCONDITIONS=PASS');

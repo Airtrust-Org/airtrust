@@ -25,6 +25,10 @@ import {
   CertificateGenerationError,
 } from '../services/generate-certificate';
 import { requireOperationalAccess } from '../services/operational-domain-access';
+import {
+  listTrainingComplianceEvidenceProfilesForQualification,
+  normalizeTrainingComplianceEvidenceProfile,
+} from '../services/training-compliance-evidence-profile';
 
 // Certificado é resolvido dinamicamente para OPERACOES por resourceType
 // (via qualificacoes_historico → categoria.dominio_codigo) — see
@@ -136,7 +140,9 @@ app.post(
 
       const existingDocId = currentHistorico.certificado_arquivo_id ?? null;
       const storageColumns = existingDocId ? await getCertificadosStorageColumns(db) : null;
-      const existingDocWhereEmpresa = storageColumns?.documentosHasEmpresaId ? ' AND empresa_id = ?' : '';
+      const existingDocWhereEmpresa = storageColumns?.documentosHasEmpresaId
+        ? ' AND empresa_id = ?'
+        : '';
       const existingDoc = existingDocId
         ? await db
             .prepare(
@@ -146,7 +152,11 @@ app.post(
                   AND deleted_at IS NULL${existingDocWhereEmpresa}
                 LIMIT 1`,
             )
-            .bind(...(storageColumns?.documentosHasEmpresaId ? [existingDocId, empresaId] : [existingDocId]))
+            .bind(
+              ...(storageColumns?.documentosHasEmpresaId
+                ? [existingDocId, empresaId]
+                : [existingDocId]),
+            )
             .first<{
               id: number;
               uuid: string;
@@ -386,6 +396,34 @@ app.post(
       const file = form.get('file') as File | null;
       const descricao = (form.get('descricao') as string) || null;
       const dataRealizacaoStr = (form.get('data_realizacao') as string) || null;
+      const explicitProfile = normalizeTrainingComplianceEvidenceProfile(
+        form.get('perfil_competencia'),
+      );
+      const allowedProfiles = await listTrainingComplianceEvidenceProfilesForQualification(db, {
+        empresaId,
+        qualificacaoTipoId: historico.qualificacao_tipo_id,
+      });
+      if (allowedProfiles.length > 0 && !explicitProfile) {
+        return c.json(
+          {
+            success: false,
+            error: 'Confirme o perfil de competência comprovado por este certificado',
+            code: 'EVIDENCE_PROFILE_REQUIRED',
+          },
+          400,
+        );
+      }
+      if (explicitProfile && !allowedProfiles.includes(explicitProfile)) {
+        return c.json(
+          {
+            success: false,
+            error: 'Perfil de competência inválido para esta qualificação',
+            code: 'EVIDENCE_PROFILE_INVALID',
+          },
+          400,
+        );
+      }
+      const profileToPersist = explicitProfile;
 
       if (!file) {
         return c.json({ success: false, error: 'Campo "file" é obrigatório' }, 400);
@@ -548,21 +586,42 @@ app.post(
       const numeroCertificado = nomeArquivo.replace('.pdf', '');
       const updateResult = await db
         .prepare(
-          `UPDATE qualificacoes_historico
-           SET certificado_arquivo_id = ?,
-               arquivo_url = ?,
-               numero_certificado = ?,
-               updated_at = datetime('now')
-           WHERE id = ?
-             AND empresa_id = ?
-             AND deleted_at IS NULL`,
+          profileToPersist
+            ? `UPDATE qualificacoes_historico
+                 SET certificado_arquivo_id = ?,
+                     arquivo_url = ?,
+                     numero_certificado = ?,
+                     perfil_competencia = ?,
+                     updated_at = datetime('now')
+               WHERE id = ?
+                 AND empresa_id = ?
+                 AND deleted_at IS NULL`
+            : `UPDATE qualificacoes_historico
+                 SET certificado_arquivo_id = ?,
+                     arquivo_url = ?,
+                     numero_certificado = ?,
+                     updated_at = datetime('now')
+               WHERE id = ?
+                 AND empresa_id = ?
+                 AND deleted_at IS NULL`,
         )
         .bind(
-          documentoId,
-          `/api/pasta-virtual/stream/${documentoId}`,
-          numeroCertificado,
-          id,
-          empresaId,
+          ...(profileToPersist
+            ? [
+                documentoId,
+                `/api/pasta-virtual/stream/${documentoId}`,
+                numeroCertificado,
+                profileToPersist,
+                id,
+                empresaId,
+              ]
+            : [
+                documentoId,
+                `/api/pasta-virtual/stream/${documentoId}`,
+                numeroCertificado,
+                id,
+                empresaId,
+              ]),
         )
         .run();
 
@@ -606,12 +665,18 @@ app.post(
         ...ua2,
       });
 
-      const response: ApiResponse<{ id: number; uuid: string; r2_key: string }> = {
+      const response: ApiResponse<{
+        id: number;
+        uuid: string;
+        r2_key: string;
+        perfil_competencia: string | null;
+      }> = {
         success: true,
         data: {
           id: documentoId,
           uuid,
           r2_key: r2Key,
+          perfil_competencia: profileToPersist,
         },
         message: 'Certificado anexado com sucesso',
       };

@@ -65,7 +65,8 @@ const GERAR_CERTIFICADO_ERROR_MESSAGES: Record<string, string> = {
     'Falha ao gerar o PDF do certificado. Tente novamente em instantes.',
   CERTIFICATE_RESOURCE_DOMAIN_UNCLASSIFIED:
     'Esta qualificação ainda não possui um domínio operacional classificado. Solicite a um administrador que corrija a classificação antes de emitir o certificado.',
-  CERTIFICATE_ACCESS_DENIED: 'Você não tem permissão para emitir certificados para esta qualificação.',
+  CERTIFICATE_ACCESS_DENIED:
+    'Você não tem permissão para emitir certificados para esta qualificação.',
   CERTIFICATE_STORAGE_FAILED: 'Falha ao salvar o certificado no armazenamento. Tente novamente.',
   CERTIFICATE_PERSISTENCE_FAILED: 'Falha ao registrar o certificado gerado. Tente novamente.',
 };
@@ -79,6 +80,29 @@ function resolveGerarCertificadoMensagem(err: unknown): string {
     return err.message;
   }
   return err instanceof Error ? err.message : 'Erro desconhecido';
+}
+
+type EvidenceProfileContext = {
+  qualificacao_codigo: string;
+  perfil_exigido: string | null;
+  perfil_atual: string | null;
+  perfis_permitidos: string[];
+};
+
+const EVIDENCE_PROFILE_LABELS: Record<string, string> = {
+  AVSEC_TRIPULANTE: 'AVSEC — Tripulante',
+  AVSEC_ATENDIMENTO_PASSAGEIRO: 'AVSEC — Atendimento ao Passageiro',
+  AVSEC_OPERACOES_SOLO: 'AVSEC — Operações de Solo',
+  AVSEC_CARGA_AEREA: 'AVSEC — Carga Aérea',
+  PTAP_COORDENADOR_VOO: 'PTAP — Coordenador de Voo',
+  PTAP_ATENDIMENTO_BALCAO: 'PTAP — Atendimento de Balcão',
+  PTAP_AGENTE_RAMPA: 'PTAP — Agente de Rampa',
+  PTAP_AGENTE_RAMPA_DG: 'PTAP — Agente de Rampa / Artigos Perigosos',
+  PTAP_TRIPULANTE_VOO: 'PTAP — Tripulante de Voo',
+};
+
+function evidenceProfileLabel(profile: string): string {
+  return EVIDENCE_PROFILE_LABELS[profile] || profile.replace(/_/g, ' ');
 }
 
 export interface ModalCertificadoProps {
@@ -132,6 +156,9 @@ export function ModalCertificado({
   const [gerandoLista, setGerandoLista] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [descricao, setDescricao] = useState('');
+  const [evidenceProfileContext, setEvidenceProfileContext] =
+    useState<EvidenceProfileContext | null>(null);
+  const [selectedEvidenceProfile, setSelectedEvidenceProfile] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [showConfirmDelete, setShowConfirmDelete] = useState<{ id: number; nome: string } | null>(
     null,
@@ -178,7 +205,7 @@ export function ModalCertificado({
     return `PRESENCA-${matriculaPadded}-${codigoLimpo}-${year}${month}${day}-${uuid}.pdf`;
   };
 
-  const authHeader = () => {
+  const authHeader = (): Record<string, string> => {
     const token = getAccessToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
@@ -198,12 +225,11 @@ export function ModalCertificado({
   };
 
   const requestJson = useCallback(async <T,>(path: string, init?: RequestInit): Promise<T> => {
+    const headers = new Headers(authHeader());
+    new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
     const response = await apiFetch(path, {
       ...init,
-      headers: {
-        ...authHeader(),
-        ...(init?.headers || {}),
-      },
+      headers,
     });
 
     const contentType = response.headers.get('content-type') || '';
@@ -212,7 +238,8 @@ export function ModalCertificado({
       : await response.text().catch(() => '');
 
     if (!response.ok) {
-      const body = typeof payload === 'object' && payload ? (payload as Record<string, unknown>) : {};
+      const body =
+        typeof payload === 'object' && payload ? (payload as Record<string, unknown>) : {};
       const serverMessage =
         typeof body.error === 'string' && body.error.trim()
           ? body.error
@@ -227,6 +254,30 @@ export function ModalCertificado({
 
     return payload as T;
   }, []);
+
+  const carregarPerfilEvidencia = useCallback(async () => {
+    try {
+      const payload = await requestJson<{ success: boolean; data?: EvidenceProfileContext }>(
+        `/api/certificados/historico/${qualificacao.id}/certificados/perfil-competencia`,
+      );
+      const context = payload?.data;
+      if (!context || !Array.isArray(context.perfis_permitidos)) {
+        setEvidenceProfileContext(null);
+        setSelectedEvidenceProfile('');
+        return;
+      }
+      setEvidenceProfileContext(context);
+      const suggested =
+        context.perfil_exigido ||
+        context.perfil_atual ||
+        (context.perfis_permitidos.length === 1 ? context.perfis_permitidos[0] : '');
+      setSelectedEvidenceProfile(suggested || '');
+    } catch (error) {
+      console.warn('[ModalCertificado] Contexto de perfil de evidência indisponível:', error);
+      setEvidenceProfileContext(null);
+      setSelectedEvidenceProfile('');
+    }
+  }, [qualificacao.id, requestJson]);
 
   const notifyCertificadosChange = useCallback(
     async (temCertificados: boolean) => {
@@ -298,9 +349,10 @@ export function ModalCertificado({
 
   useEffect(() => {
     if (isOpen) {
-      carregarCertificados();
+      void carregarCertificados();
+      void carregarPerfilEvidencia();
     }
-  }, [isOpen, carregarCertificados]);
+  }, [isOpen, carregarCertificados, carregarPerfilEvidencia]);
 
   const handlePastaVirtual = () => {
     const pasta360Url = buildPasta360Url(qualificacao.funcionario_id, {
@@ -348,7 +400,11 @@ export function ModalCertificado({
       const msg = resolveGerarCertificadoMensagem(err);
       const code = err instanceof CertificadoApiError ? err.code : undefined;
       const requestId = err instanceof CertificadoApiError ? err.requestId : undefined;
-      console.error('[ModalCertificado] Erro ao gerar certificado:', { code, requestId, message: msg });
+      console.error('[ModalCertificado] Erro ao gerar certificado:', {
+        code,
+        requestId,
+        message: msg,
+      });
       toast.error(`❌ Erro: ${msg}`);
     } finally {
       setLoading(false);
@@ -418,11 +474,18 @@ export function ModalCertificado({
       toast.warning('❌ Selecione um arquivo');
       return;
     }
+    if (evidenceProfileContext?.perfis_permitidos.length && !selectedEvidenceProfile) {
+      toast.warning('Selecione o perfil/competência comprovado pelo certificado.');
+      return;
+    }
     setUploading(true);
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
       formData.append('descricao', descricao || selectedFile.name);
+      if (selectedEvidenceProfile) {
+        formData.append('perfil_competencia', selectedEvidenceProfile);
+      }
       await requestJson(`/api/certificados/historico/${qualificacao.id}/certificados/upload`, {
         method: 'POST',
         body: formData,
@@ -445,6 +508,7 @@ export function ModalCertificado({
       // Limpar seleção
       setSelectedFile(null);
       setDescricao('');
+      await carregarPerfilEvidencia();
 
       // Callback para atualizar lista externa (tabela principal)
       if (onUploadSuccess) {
@@ -463,7 +527,8 @@ export function ModalCertificado({
     }
   };
 
-  const resolveDocumentoId = (certificado: Certificado) => certificado.documento_id ?? certificado.id;
+  const resolveDocumentoId = (certificado: Certificado) =>
+    certificado.documento_id ?? certificado.id;
 
   const handlePreview = async (certificado: Certificado) => {
     try {
@@ -845,6 +910,45 @@ export function ModalCertificado({
               </label>
               {selectedFile && (
                 <>
+                  {evidenceProfileContext &&
+                    evidenceProfileContext.perfis_permitidos.length > 0 && (
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                        <label className="mb-2 block text-sm font-medium text-gray-700">
+                          Perfil/competência comprovado pelo certificado
+                        </label>
+                        <select
+                          value={selectedEvidenceProfile}
+                          onChange={(event) => setSelectedEvidenceProfile(event.target.value)}
+                          className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-primary/30"
+                        >
+                          <option value="">Selecione o perfil comprovado</option>
+                          {evidenceProfileContext.perfis_permitidos.map((profile) => (
+                            <option key={profile} value={profile}>
+                              {evidenceProfileLabel(profile)}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="mt-2 text-xs text-slate-600">
+                          O AirTrust sugere o perfil exigido pela função/atividade, mas o valor
+                          confirmado deve corresponder ao que o certificado realmente comprova. O
+                          PDF não é interpretado automaticamente.
+                        </p>
+                        {evidenceProfileContext.perfil_exigido && (
+                          <p className="mt-2 text-xs font-medium text-slate-700">
+                            Perfil exigido atualmente:{' '}
+                            {evidenceProfileLabel(evidenceProfileContext.perfil_exigido)}
+                          </p>
+                        )}
+                        {evidenceProfileContext.perfil_exigido &&
+                          selectedEvidenceProfile &&
+                          selectedEvidenceProfile !== evidenceProfileContext.perfil_exigido && (
+                            <p className="mt-2 text-xs font-medium text-amber-700">
+                              O perfil selecionado será registrado como evidência, mas não atende ao
+                              perfil atualmente exigido para esta pessoa.
+                            </p>
+                          )}
+                      </div>
+                    )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Descrição (opcional)

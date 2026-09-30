@@ -61,6 +61,52 @@ export async function resolveEffectiveTrainingComplianceProfile(
   }
 }
 
+export async function listTrainingComplianceEvidenceProfilesForQualification(
+  db: D1Database,
+  params: { empresaId: number; qualificacaoTipoId: number },
+): Promise<string[]> {
+  if (!(await columnExists(db, 'treinamento_requisitos', 'perfil_competencia'))) return [];
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT DISTINCT perfil_competencia
+           FROM treinamento_requisitos
+          WHERE empresa_id=? AND qualificacao_tipo_id=?
+            AND ativo=1 AND deleted_at IS NULL
+            AND perfil_competencia IS NOT NULL AND TRIM(perfil_competencia)<>''
+            AND (vigencia_inicio IS NULL OR date(vigencia_inicio)<=date('now'))
+            AND (vigencia_fim IS NULL OR date(vigencia_fim)>=date('now'))
+          ORDER BY perfil_competencia ASC`,
+      )
+      .bind(params.empresaId, params.qualificacaoTipoId)
+      .all<{ perfil_competencia: string }>();
+    return [
+      ...new Set(
+        (results || [])
+          .map((row) => normalizeTrainingComplianceEvidenceProfile(row.perfil_competencia))
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
+  } catch {
+    return [];
+  }
+}
+
+export async function readQualificationEvidenceProfile(
+  db: D1Database,
+  params: { empresaId: number; historicoId: number; funcionarioId: number },
+): Promise<string | null> {
+  if (!(await columnExists(db, 'qualificacoes_historico', 'perfil_competencia'))) return null;
+  const row = await db
+    .prepare(
+      `SELECT perfil_competencia FROM qualificacoes_historico
+        WHERE id=? AND empresa_id=? AND funcionario_id=? AND deleted_at IS NULL LIMIT 1`,
+    )
+    .bind(params.historicoId, params.empresaId, params.funcionarioId)
+    .first<{ perfil_competencia: string | null }>();
+  return normalizeTrainingComplianceEvidenceProfile(row?.perfil_competencia);
+}
+
 export async function stampQualificationEvidenceProfile(
   db: D1Database,
   params: {
