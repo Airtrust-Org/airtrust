@@ -21,10 +21,14 @@ describe('0520 training compliance evidence multi profiles', () => {
     const change = read('worker-airtrust/schema-v2/changes/0520_training_compliance_evidence_multi_profiles.sql');
     const productionWorkflow = read('.github/workflows/apply-schema-change-v2.yml');
     const stagingWorkflow = read('.github/workflows/staging-d1-schema-change.yml');
+    const recovery = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
     expect(change).toBe(migration);
     expect(productionWorkflow).toContain("inputs.change_id == 'training-compliance-evidence-multi-profiles-0520'");
     expect(productionWorkflow).toContain('validate-0520-production-preflight.sh');
     expect(productionWorkflow).toContain('validate-0520-production-postconditions.sh');
     expect(stagingWorkflow).toContain('0520_training_compliance_evidence_multi_profiles.sql');
+    expect(recovery).toContain('0520_training_compliance_evidence_multi_profiles.sql');
+    expect(recovery).toContain('validate-0520-preflight.sh');
+    expect(recovery).toContain('validate-0520-postconditions.sh');
   });
 });
