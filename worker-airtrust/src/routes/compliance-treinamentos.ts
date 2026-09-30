@@ -33,6 +33,7 @@ import {
   resolveTrainingComplianceRules,
   trainingComplianceRuleApplies,
   trainingComplianceRulePriority,
+  withTrainingComplianceRuleImpact,
   hydrateTrainingComplianceConditions,
   trainingComplianceEvidenceMeetsRequiredModality,
   normalizeTrainingComplianceRequiredModality,
@@ -1175,7 +1176,7 @@ app.get('/regras', requireRole('admin', 'manager'), async (c) => {
   const scopedFunctionIds = new Set(
     scopedEmployees.map((employee) => employee.funcao_id).filter((id): id is number => id !== null),
   );
-  const data = rules.filter((rule) => {
+  const visibleRules = rules.filter((rule) => {
     const visibleByAccess =
       access.mode === 'all' ||
       rule.escopo === 'EMPRESA' ||
@@ -1193,6 +1194,7 @@ app.get('/regras', requireRole('admin', 'manager'), async (c) => {
       (!escopo || rule.escopo === escopo)
     );
   });
+  const data = withTrainingComplianceRuleImpact(visibleRules, rules, scopedEmployees);
   return c.json({
     success: true,
     data,

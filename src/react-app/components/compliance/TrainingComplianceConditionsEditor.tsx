@@ -175,10 +175,13 @@ export function TrainingComplianceConditionsEditor() {
         <div className="flex items-start gap-2">
           <ShieldCheck className="mt-0.5 h-5 w-5 text-primary" />
           <div>
-            <h3 className="font-semibold text-slate-900">Exposição, atividade e designação</h3>
+            <h3 className="font-semibold text-slate-900">
+              Condições e designações de aplicabilidade
+            </h3>
             <p className="text-sm text-slate-500">
-              Use estas condições quando função e setor não bastam. A condição pode ter início e fim
-              e não altera o histórico já realizado.
+              Use quando setor e cargo não bastam: exposição, atividade, certificação ou designação
+              regulatória. Essas marcações podem incluir ou excluir a pessoa de qualquer requisito e
+              podem ter início e fim.
             </p>
           </div>
         </div>
@@ -263,13 +266,13 @@ export function TrainingComplianceConditionsEditor() {
             disabled={assign.isPending}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            <Plus className="h-4 w-4" /> Atribuir condição
+            <Plus className="h-4 w-4" /> Atribuir condição/designação
           </button>
         </div>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h3 className="font-semibold text-slate-900">Condições vigentes</h3>
+        <h3 className="font-semibold text-slate-900">Condições e designações vigentes</h3>
         <div className="mt-3 space-y-2">
           {(assignments.data || []).map((assignment) => (
             <div
@@ -309,7 +312,7 @@ export function TrainingComplianceConditionsEditor() {
 
       {isAdmin ? (
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="font-semibold text-slate-900">Nova condição</h3>
+          <h3 className="font-semibold text-slate-900">Nova condição ou designação</h3>
           <p className="mt-1 text-sm text-slate-500">
             Use somente quando a condição necessária ainda não existir no catálogo.
           </p>
