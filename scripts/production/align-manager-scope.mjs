@@ -105,9 +105,9 @@ async function resolveCommonTenant(loginToken, loginClaims) {
   const candidates = [];
   for (const tenantId of tenantIds) {
     const selected = await selectTenantIfNeeded(loginToken, loginClaims, tenantId);
-    const users = await request('/api/admin/usuarios', selected.token);
-    assert(Array.isArray(users), `Lista de usuários inválida no tenant ${tenantId}`);
-    const scopedUsers = users.filter((row) => Number(row.empresa_id) === tenantId);
+    const users = await request('/api/setores-gestores/usuarios-elegiveis/lista', selected.token);
+    assert(Array.isArray(users), `Lista de gestores elegíveis inválida no tenant ${tenantId}`);
+    const scopedUsers = users;
 
     const referenceMatches = scopedUsers.filter((row) => matchesName(row, referenceQuery));
     const targetMatches = targetQueries.map((query) =>
