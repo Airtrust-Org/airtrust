@@ -21,6 +21,7 @@ import {
   showPdfPreviewError,
 } from '@/react-app/utils/pdfPreview';
 import { buildPasta360Url } from '@/react-app/utils/pasta360';
+import { prepareCertificateUploadFile } from '@/react-app/utils/certificateUploadOptimization';
 
 /**
  * Erro de API tipado para as chamadas deste modal. `requestJson` popula
@@ -468,8 +469,9 @@ export function ModalCertificado({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.includes('pdf')) {
-      toast.warning('❌ Apenas arquivos PDF são permitidos');
+    const allowed = ['application/pdf', 'image/jpeg', 'image/jpg'].includes(file.type) || /\.(pdf|jpe?g)$/i.test(file.name);
+    if (!allowed) {
+      toast.warning('❌ Envie um arquivo PDF ou JPEG');
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -491,7 +493,8 @@ export function ModalCertificado({
     setUploading(true);
     try {
       const formData = new FormData();
-      formData.append('file', selectedFile);
+      const preparedUpload = await prepareCertificateUploadFile(selectedFile);
+      formData.append('file', preparedUpload.file);
       formData.append('descricao', descricao || selectedFile.name);
       for (const profile of selectedEvidenceProfiles) {
         formData.append('perfis_competencia', profile);
@@ -886,7 +889,7 @@ export function ModalCertificado({
                 <input
                   id="file-upload"
                   type="file"
-                  accept=".pdf"
+                  accept=".pdf,.jpg,.jpeg"
                   onChange={handleFileSelect}
                   className="hidden"
                 />

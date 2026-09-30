@@ -8,6 +8,7 @@ import { apiClient } from '@/react-app/services/apiClient';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { buildPasta360Url } from '@/react-app/utils/pasta360';
+import { prepareCertificateUploadFile } from '@/react-app/utils/certificateUploadOptimization';
 
 interface ModalCertificadosProps {
   isOpen: boolean;
@@ -128,7 +129,8 @@ export function ModalCertificados({
     try {
       const token = getAccessToken();
       const formData = new FormData();
-      formData.append('file', uploadFile);
+      const preparedUpload = await prepareCertificateUploadFile(uploadFile);
+      formData.append('file', preparedUpload.file);
       if (uploadDescricao) {
         formData.append('descricao', uploadDescricao);
       }
@@ -345,7 +347,7 @@ export function ModalCertificados({
             <div className="flex flex-col gap-2">
               <input
                 type="file"
-                accept="application/pdf"
+                accept=".pdf,.jpg,.jpeg,image/jpeg,application/pdf"
                 onChange={(e) => {
                   const file = e.target.files?.[0] || null;
                   setUploadFile(file);

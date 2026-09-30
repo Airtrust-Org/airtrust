@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { API_BASE_URL } from '@/react-app/config/api';
+import { prepareCertificateUploadFile } from '@/react-app/utils/certificateUploadOptimization';
 import { Upload, File, X, Check, AlertCircle } from 'lucide-react';
 
 interface CertificadoUploadProps {
@@ -26,8 +27,8 @@ export default function CertificadoUpload({
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
-    if (selectedFile.type !== 'application/pdf') {
-      setError('Apenas arquivos PDF são permitidos');
+    if (!['application/pdf', 'image/jpeg', 'image/jpg'].includes(selectedFile.type) && !/\.(pdf|jpe?g)$/i.test(selectedFile.name)) {
+      setError('Envie um arquivo PDF ou JPEG');
       return;
     }
 
@@ -71,7 +72,8 @@ export default function CertificadoUpload({
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      const preparedUpload = await prepareCertificateUploadFile(file);
+      formData.append('file', preparedUpload.file);
       formData.append('funcionarioId', funcionarioId.toString());
       formData.append('qualificacaoId', qualificacaoId.toString());
 
@@ -145,7 +147,7 @@ export default function CertificadoUpload({
             <input
               ref={fileInputRef}
               type="file"
-              accept="application/pdf"
+              accept=".pdf,.jpg,.jpeg,image/jpeg,application/pdf"
               onChange={handleFileSelect}
               className="hidden"
               id="file-upload"

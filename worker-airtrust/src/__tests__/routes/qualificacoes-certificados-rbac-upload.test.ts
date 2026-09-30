@@ -119,7 +119,7 @@ function createApp() {
   return app;
 }
 
-function createMockEnv() {
+function createMockEnv(options: { operationalRbacEnabled?: number } = {}) {
   const funcionarios: FuncionarioRow[] = [
     {
       id: 101,
@@ -315,7 +315,7 @@ function createMockEnv() {
 
           // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
           if (query.includes('FROM empresas WHERE id')) {
-            return { operational_domain_rbac_enabled: 0 };
+            return { operational_domain_rbac_enabled: options.operationalRbacEnabled ?? 0 };
           }
 
           if (query.includes('SELECT qh.id, qh.funcionario_id, f.empresa_id')) {
@@ -925,6 +925,23 @@ describe('qualificacoes certificados rbac e upload', () => {
     expect(body.code).toBe('EVIDENCE_PROFILE_REQUIRED');
     expect(bucket.put).not.toHaveBeenCalled();
     expect(documentos).toHaveLength(2);
+  });
+
+  it('upload manual permanece autorizado com RBAC operacional ativo sem depender do domínio da qualificação', async () => {
+    const { env, bucket } = createMockEnv({ operationalRbacEnabled: 1 });
+    accessMock.mockResolvedValue({ mode: 'all', setorIds: [] });
+    assertFuncionarioInScopeMock.mockResolvedValue(undefined);
+    const form = new FormData();
+    form.set('file', createPdfFile('CRM-CORP-EVIDENCIA.pdf'));
+    form.set('perfil_competencia', 'AVSEC_TRIPULANTE');
+
+    const response = await request('/api/certificados/historico/2001/certificados/upload', env, {
+      method: 'POST',
+      body: form,
+    });
+
+    expect(response.status).toBe(201);
+    expect(bucket.put).toHaveBeenCalledTimes(1);
   });
 
   it('upload do gestor autorizado cria documento, pasta_virtual e vínculo principal visível', async () => {

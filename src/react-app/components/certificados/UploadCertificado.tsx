@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { API_BASE_URL } from '@/react-app/config/api';
+import { prepareCertificateUploadFile } from '@/react-app/utils/certificateUploadOptimization';
 import { Upload, X, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -52,17 +53,10 @@ export default function UploadCertificado({ qualificacaoId, onSuccess, onClose }
   };
 
   const handleFile = (selectedFile: File) => {
-    const allowedTypes = [
-      'application/pdf',
-      'image/jpeg',
-      'image/png',
-      'image/jpg',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    ];
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg'];
 
-    if (!allowedTypes.includes(selectedFile.type)) {
-      toast.error('Tipo de arquivo não permitido. Envie PDF, JPG, PNG ou DOC/DOCX');
+    if (!allowedTypes.includes(selectedFile.type) && !/\.(pdf|jpe?g)$/i.test(selectedFile.name)) {
+      toast.error('Tipo de arquivo não permitido. Envie PDF ou JPEG');
       return;
     }
 
@@ -91,7 +85,8 @@ export default function UploadCertificado({ qualificacaoId, onSuccess, onClose }
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      const preparedUpload = await prepareCertificateUploadFile(file);
+      formData.append('file', preparedUpload.file);
       formData.append('qualificacaoId', qualificacaoId.toString());
 
       const progressInterval = setInterval(() => {
@@ -162,7 +157,7 @@ export default function UploadCertificado({ qualificacaoId, onSuccess, onClose }
             <input
               id="cert-input"
               type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+              accept=".pdf,.jpg,.jpeg"
               onChange={handleChange}
               className="hidden"
               disabled={uploading}

@@ -148,6 +148,7 @@ export function useQualificacoesHistorico(
   historicoId?: number,
   enabled: boolean = true,
   categoriaId?: number | null,
+  areaId?: number | null,
 ) {
   const [loadingExtra, setLoadingExtra] = useState(false);
   const safeLimit = Math.min(limit, 500); // Máximo 500 por página
@@ -168,6 +169,7 @@ export function useQualificacoesHistorico(
   }
   if (historicoId) endpoint += `&id=${historicoId}`;
   if (categoriaId) endpoint += `&categoria_id=${categoriaId}`;
+  if (areaId) endpoint += `&area_id=${areaId}`;
 
   const { data, loading, error, refetch } = useApi<ApiResponse>(endpoint, {
     enabled,
