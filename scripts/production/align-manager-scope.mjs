@@ -33,10 +33,15 @@ function normalize(value) {
 
 function matchesName(row, query) {
   const needle = normalize(query);
+  const queryTokens = needle.split(' ').filter(Boolean);
   const names = [row.nome, row.funcionario_nome].map(normalize).filter(Boolean);
-  return names.some(
-    (name) => name === needle || name.startsWith(`${needle} `) || name.split(' ').includes(needle),
-  );
+  return names.some((name) => {
+    if (name === needle || name.startsWith(`${needle} `) || name.split(' ').includes(needle)) {
+      return true;
+    }
+    const nameTokens = new Set(name.split(' ').filter(Boolean));
+    return queryTokens.length > 1 && queryTokens.every((token) => nameTokens.has(token));
+  });
 }
 
 function activeNameMatches(rows, query) {

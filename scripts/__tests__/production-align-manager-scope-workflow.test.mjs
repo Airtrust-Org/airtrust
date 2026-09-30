@@ -17,3 +17,12 @@ test('manager-scope operation resolves people through the canonical tenant user 
   assert.match(script, /identitiesFromTenantUsers/);
   assert.match(script, /mergeIdentities/);
 });
+
+
+test('manager-scope name resolution accepts non-contiguous requested name tokens and stays fail-closed', () => {
+  const script = readFileSync('scripts/production/align-manager-scope.mjs', 'utf8');
+  assert.match(script, /queryTokens = needle\.split\(' '\)\.filter\(Boolean\)/);
+  assert.match(script, /queryTokens\.every\(\(token\) => nameTokens\.has\(token\)\)/);
+  assert.match(script, /matches\.length === 1/);
+  assert.match(script, /matches\.length <= 1/);
+});
