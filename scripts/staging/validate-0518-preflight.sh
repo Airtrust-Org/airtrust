@@ -16,4 +16,6 @@ assert_count conflicting-ead-format 0 "SELECT COUNT(*) count FROM qualificacoes_
 assert_zero_or_one canonical-ead-format "SELECT COUNT(*) count FROM qualificacoes_formatos WHERE empresa_id=6 AND id=1 AND UPPER(TRIM(codigo))='EAD' AND UPPER(TRIM(nome))='EAD' AND ativo=1 AND deleted_at IS NULL;"
 assert_count competing-lms-category 0 "SELECT COUNT(*) count FROM qualificacoes_categorias WHERE empresa_id=6 AND COALESCE(lms_integrada,0)=1 AND ativo=1 AND deleted_at IS NULL AND id<>13;"
 assert_count safety-area 1 "SELECT COUNT(*) count FROM qualificacoes_areas WHERE empresa_id=6 AND codigo='SEGURANCA_OPERACIONAL' AND ativo=1 AND deleted_at IS NULL;"
+assert_count operational-category 1 "SELECT COUNT(*) count FROM qualificacoes_categorias WHERE empresa_id=6 AND codigo='TREINAMENTO_OPERACIONAL' AND ativo=1 AND deleted_at IS NULL;"
+assert_zero_or_one crm-corp-reference "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='CRM_CORP' AND ativo=1 AND deleted_at IS NULL;"
 echo CRM_QUALIFICATION_CONSOLIDATION_0518_STAGING_PREFLIGHT=PASS
