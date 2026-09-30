@@ -25,6 +25,7 @@ export type TrainingComplianceRuleShape = {
   funcionario_id: number | null;
   aeronave_modelo: string | null;
   condicao_id: number | null;
+  perfil_competencia?: string | null;
 };
 
 export function trainingComplianceRulePriority(rule: TrainingComplianceRuleShape): number {
@@ -64,23 +65,60 @@ export function trainingComplianceRuleApplies(
   return rule.funcionario_id === employee.id;
 }
 
+function normalizedRuleProfile(rule: TrainingComplianceRuleShape): string | null {
+  const profile = String(rule.perfil_competencia || '')
+    .trim()
+    .toUpperCase();
+  return profile || null;
+}
+
+function ruleOutranks<T extends TrainingComplianceRuleShape>(candidate: T, previous: T): boolean {
+  const candidatePriority = trainingComplianceRulePriority(candidate);
+  const previousPriority = trainingComplianceRulePriority(previous);
+  return (
+    candidatePriority > previousPriority ||
+    (candidatePriority === previousPriority && candidate.id > previous.id)
+  );
+}
+
 export function resolveTrainingComplianceRules<T extends TrainingComplianceRuleShape>(
   rules: T[],
   employee: TrainingComplianceEmployeeShape,
 ): T[] {
-  const byType = new Map<number, T>();
+  const byType = new Map<number, T[]>();
   for (const rule of rules) {
     if (!trainingComplianceRuleApplies(rule, employee)) continue;
-    const previous = byType.get(rule.qualificacao_tipo_id);
-    if (
-      !previous ||
-      trainingComplianceRulePriority(rule) > trainingComplianceRulePriority(previous) ||
-      (trainingComplianceRulePriority(rule) === trainingComplianceRulePriority(previous) &&
-        rule.id > previous.id)
-    )
-      byType.set(rule.qualificacao_tipo_id, rule);
+    const bucket = byType.get(rule.qualificacao_tipo_id) || [];
+    bucket.push(rule);
+    byType.set(rule.qualificacao_tipo_id, bucket);
   }
-  return [...byType.values()];
+
+  const resolved: T[] = [];
+  for (const bucket of byType.values()) {
+    let generic: T | null = null;
+    const byProfile = new Map<string, T>();
+    for (const rule of bucket) {
+      const profile = normalizedRuleProfile(rule);
+      if (!profile) {
+        if (!generic || ruleOutranks(rule, generic)) generic = rule;
+        continue;
+      }
+      const previous = byProfile.get(profile);
+      if (!previous || ruleOutranks(rule, previous)) byProfile.set(profile, rule);
+    }
+
+    if (byProfile.size === 0) {
+      if (generic) resolved.push(generic);
+      continue;
+    }
+
+    const profileWinners = [...byProfile.values()].filter(
+      (profileRule) => !generic || ruleOutranks(profileRule, generic),
+    );
+    if (profileWinners.length > 0) resolved.push(...profileWinners);
+    else if (generic) resolved.push(generic);
+  }
+  return resolved;
 }
 
 export function trainingComplianceRulePrioritySql(alias = 'tr'): string {
@@ -165,7 +203,9 @@ export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
   const f = options?.employeeAlias || 'f';
   const qualification = options?.qualificationExpr || 'qt.id';
   const empresa = options?.empresaExpr || `${f}.empresa_id`;
-  const auto = options?.requireAutoEnrollment ? ` AND COALESCE(${tr}.auto_matricular_ead, 0) = 1` : '';
+  const auto = options?.requireAutoEnrollment
+    ? ` AND COALESCE(${tr}.auto_matricular_ead, 0) = 1`
+    : '';
   return `COALESCE((SELECT CASE WHEN ${tr}.obrigatoriedade='OBRIGATORIA'${auto} THEN 1 ELSE 0 END
     FROM treinamento_requisitos ${tr}
    WHERE ${tr}.empresa_id=${empresa} AND ${tr}.qualificacao_tipo_id=${qualification}
@@ -181,7 +221,9 @@ export function trainingComplianceEvidenceMeetsRequiredModality(
   evidenceModality: string | null | undefined,
 ): boolean {
   if (!requiredModality) return true;
-  const actual = String(evidenceModality || '').trim().toUpperCase();
+  const actual = String(evidenceModality || '')
+    .trim()
+    .toUpperCase();
   const required = String(requiredModality).trim().toUpperCase();
   if (!actual) return false;
   if (required === 'HIBRIDO') return actual === 'HIBRIDO';
@@ -199,6 +241,8 @@ const TRAINING_COMPLIANCE_MODALITIES = new Set([
 ]);
 
 export function normalizeTrainingComplianceRequiredModality(value: unknown): string | null {
-  const normalized = String(value || '').trim().toUpperCase();
+  const normalized = String(value || '')
+    .trim()
+    .toUpperCase();
   return TRAINING_COMPLIANCE_MODALITIES.has(normalized) ? normalized : null;
 }

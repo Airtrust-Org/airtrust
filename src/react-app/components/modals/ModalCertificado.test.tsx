@@ -144,8 +144,8 @@ describe('ModalCertificado', () => {
     );
   });
 
-  it('sugere o perfil exigido e envia o perfil que o certificado realmente comprova', async () => {
-    let uploadedProfile: FormDataEntryValue | null = null;
+  it('sugere o perfil exigido e envia todos os perfis que o mesmo certificado comprova', async () => {
+    let uploadedProfiles: FormDataEntryValue[] = [];
     vi.mocked(apiFetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes('/perfil-competencia')) {
@@ -156,16 +156,21 @@ describe('ModalCertificado', () => {
               qualificacao_codigo: 'D1',
               perfil_exigido: 'AVSEC_TRIPULANTE',
               perfil_atual: null,
+              perfis_atuais: [],
               perfis_permitidos: ['AVSEC_OPERACOES_SOLO', 'AVSEC_TRIPULANTE'],
+              multiprofile_supported: true,
             },
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
       }
       if (url.includes('/certificados/upload')) {
-        uploadedProfile = (init?.body as FormData).get('perfil_competencia');
+        uploadedProfiles = (init?.body as FormData).getAll('perfis_competencia');
         return new Response(
-          JSON.stringify({ success: true, data: { id: 999, perfil_competencia: uploadedProfile } }),
+          JSON.stringify({
+            success: true,
+            data: { id: 999, perfis_competencia: uploadedProfiles },
+          }),
           { status: 201, headers: { 'Content-Type': 'application/json' } },
         );
       }
@@ -182,15 +187,17 @@ describe('ModalCertificado', () => {
       target: { files: [new File(['%PDF-test'], 'avsec.pdf', { type: 'application/pdf' })] },
     });
 
-    const profileSelect = await screen.findByRole('combobox');
-    expect(profileSelect).toHaveValue('AVSEC_TRIPULANTE');
-    fireEvent.change(profileSelect, { target: { value: 'AVSEC_OPERACOES_SOLO' } });
-    expect(
-      screen.getByText(/não atende ao perfil atualmente exigido para esta pessoa/i),
-    ).toBeInTheDocument();
+    const tripulante = await screen.findByRole('checkbox', { name: 'AVSEC — Tripulante' });
+    const solo = screen.getByRole('checkbox', { name: 'AVSEC — Operações de Solo' });
+    expect(tripulante).toBeChecked();
+    expect(solo).not.toBeChecked();
+    fireEvent.click(solo);
+    expect(solo).toBeChecked();
 
     fireEvent.click(screen.getByRole('button', { name: /anexar certificado/i }));
-    await waitFor(() => expect(uploadedProfile).toBe('AVSEC_OPERACOES_SOLO'));
+    await waitFor(() =>
+      expect(uploadedProfiles).toEqual(['AVSEC_TRIPULANTE', 'AVSEC_OPERACOES_SOLO']),
+    );
   });
 
   describe('Gerar Certificado — contrato de erro do backend', () => {

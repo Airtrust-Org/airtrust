@@ -423,17 +423,27 @@ async function loadQualificationEvidence(
     ? `UPPER(TRIM(COALESCE(qh.formato_codigo,'')))`
     : "''";
   const hasProfile = cols.has('perfil_competencia');
+  const qualificationMultiProfileReady = await tableExists(
+    db,
+    'qualificacoes_historico_perfis_competencia',
+  );
   const lmsProfileReady =
     cols.has('lms_matricula_id') &&
     (await tableExists(db, 'lms_matriculas')) &&
     (await columnSet(db, 'lms_matriculas')).has('perfil_competencia');
-  const profileSelect = hasProfile
+  const scalarProfileSelect = hasProfile
     ? lmsProfileReady
       ? 'COALESCE(qh.perfil_competencia, lm_profile.perfil_competencia)'
       : 'qh.perfil_competencia'
     : lmsProfileReady
       ? 'lm_profile.perfil_competencia'
       : 'NULL';
+  const profileSelect = qualificationMultiProfileReady
+    ? `COALESCE(qhp.perfil_competencia, ${scalarProfileSelect})`
+    : scalarProfileSelect;
+  const qualificationProfileJoin = qualificationMultiProfileReady
+    ? 'LEFT JOIN qualificacoes_historico_perfis_competencia qhp ON qhp.historico_id=qh.id AND qhp.empresa_id=f.empresa_id AND qhp.deleted_at IS NULL'
+    : '';
   const lmsProfileJoin = lmsProfileReady
     ? 'LEFT JOIN lms_matriculas lm_profile ON lm_profile.id=qh.lms_matricula_id AND lm_profile.empresa_id=f.empresa_id AND lm_profile.deleted_at IS NULL'
     : '';
@@ -445,6 +455,7 @@ async function loadQualificationEvidence(
               ${modalitySelect} AS modalidade, ${profileSelect} AS perfil_competencia
          FROM qualificacoes_historico qh
          JOIN funcionarios f ON f.id = qh.funcionario_id
+         ${qualificationProfileJoin}
          ${lmsProfileJoin}
         WHERE ${empresaExpr}
           ${deletedExpr}
@@ -476,7 +487,10 @@ async function loadQualificationEvidence(
       origem_id: row.id,
       origem_titulo: null,
       modalidade: row.modalidade || null,
-      perfil_competencia: hasProfile ? row.perfil_competencia || null : undefined,
+      perfil_competencia:
+        qualificationMultiProfileReady || hasProfile || lmsProfileReady
+          ? row.perfil_competencia || null
+          : undefined,
     });
     map.set(key, bucket);
   }
@@ -1620,8 +1634,8 @@ app.get('/matriz-organizacao', requireRole('admin', 'manager'), async (c) => {
       ).length,
       em_andamento: preview.filter((item) => item.requirement?.status_compliance === 'EM_ANDAMENTO')
         .length,
-      matriculados: selectedEmployees.filter((employee) =>
-        (lmsMap.get(`${employee.id}:${tipo.id}`)?.length ?? 0) > 0,
+      matriculados: selectedEmployees.filter(
+        (employee) => (lmsMap.get(`${employee.id}:${tipo.id}`)?.length ?? 0) > 0,
       ).length,
       sem_matricula: selectedEmployees.filter(
         (employee) => (lmsMap.get(`${employee.id}:${tipo.id}`)?.length ?? 0) === 0,

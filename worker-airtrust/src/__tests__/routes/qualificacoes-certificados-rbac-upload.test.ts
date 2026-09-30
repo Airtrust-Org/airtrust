@@ -189,6 +189,15 @@ function createMockEnv() {
     },
   ];
 
+  const evidenceProfiles: Array<{
+    id: number;
+    empresa_id: number;
+    historico_id: number;
+    perfil_competencia: string;
+    deleted_at: string | null;
+  }> = [];
+  let nextEvidenceProfileId = 7000;
+
   const documentos: DocumentoRow[] = [
     {
       id: 5001,
@@ -274,9 +283,12 @@ function createMockEnv() {
 
           if (query.includes("FROM sqlite_master WHERE type='table' AND name=?")) {
             const table = String(args[0] || '');
-            return ['treinamento_requisitos', 'funcionarios', 'qualificacoes_historico'].includes(
-              table,
-            )
+            return [
+              'treinamento_requisitos',
+              'funcionarios',
+              'qualificacoes_historico',
+              'qualificacoes_historico_perfis_competencia',
+            ].includes(table)
               ? { ok: 1 }
               : null;
           }
@@ -398,6 +410,28 @@ function createMockEnv() {
                       { perfil_competencia: 'AVSEC_OPERACOES_SOLO' },
                       { perfil_competencia: 'AVSEC_TRIPULANTE' },
                     ]
+                  : [],
+            };
+          }
+
+          if (query.includes('FROM qualificacoes_historico_perfis_competencia qhp')) {
+            const empresaId = Number(args[0]);
+            const historicoId = Number(args[1]);
+            const funcionarioId = Number(args[2]);
+            const historico = findHistorico(historicoId);
+            return {
+              results:
+                historico &&
+                historico.empresa_id === empresaId &&
+                historico.funcionario_id === funcionarioId
+                  ? evidenceProfiles
+                      .filter(
+                        (row) =>
+                          row.empresa_id === empresaId &&
+                          row.historico_id === historicoId &&
+                          !row.deleted_at,
+                      )
+                      .map((row) => ({ perfil_competencia: row.perfil_competencia }))
                   : [],
             };
           }
@@ -534,6 +568,46 @@ function createMockEnv() {
             return { meta: { changes: 1 } };
           }
 
+          if (
+            query.includes("SET perfil_competencia=?, updated_at=datetime('now')") &&
+            query.includes('UPDATE qualificacoes_historico')
+          ) {
+            const historico = historicos.find(
+              (row) =>
+                row.id === Number(args[1]) &&
+                row.empresa_id === Number(args[2]) &&
+                row.funcionario_id === Number(args[3]) &&
+                row.deleted_at === null,
+            );
+            if (!historico) return { meta: { changes: 0 } };
+            historico.perfil_competencia = args[0] == null ? null : String(args[0]);
+            return { meta: { changes: 1 } };
+          }
+
+          if (query.startsWith('UPDATE qualificacoes_historico_perfis_competencia')) {
+            for (const row of evidenceProfiles) {
+              if (
+                row.empresa_id === Number(args[0]) &&
+                row.historico_id === Number(args[1]) &&
+                row.deleted_at === null
+              ) {
+                row.deleted_at = '2026-06-17T12:00:00.000Z';
+              }
+            }
+            return { meta: { changes: 1 } };
+          }
+
+          if (query.startsWith('INSERT INTO qualificacoes_historico_perfis_competencia')) {
+            evidenceProfiles.push({
+              id: ++nextEvidenceProfileId,
+              empresa_id: Number(args[0]),
+              historico_id: Number(args[1]),
+              perfil_competencia: String(args[2]),
+              deleted_at: null,
+            });
+            return { meta: { changes: 1, last_row_id: nextEvidenceProfileId } };
+          }
+
           if (query.startsWith('UPDATE documentos')) {
             const documento = documentos.find(
               (row) =>
@@ -596,6 +670,9 @@ function createMockEnv() {
         run: () => bind().run(),
       };
     }),
+    batch: vi.fn(async (statements: Array<{ run: () => Promise<unknown> }>) =>
+      Promise.all(statements.map((statement) => statement.run())),
+    ),
   } as unknown as D1Database;
 
   return {
@@ -606,6 +683,7 @@ function createMockEnv() {
     documentos,
     pastaVirtual,
     historicos,
+    evidenceProfiles,
   };
 }
 
@@ -749,13 +827,17 @@ describe('qualificacoes certificados rbac e upload', () => {
       data: {
         perfil_exigido: string | null;
         perfil_atual: string | null;
+        perfis_atuais: string[];
         perfis_permitidos: string[];
+        multiprofile_supported: boolean;
       };
     };
 
     expect(response.status).toBe(200);
     expect(body.data.perfil_exigido).toBe('AVSEC_TRIPULANTE');
     expect(body.data.perfil_atual).toBeNull();
+    expect(body.data.perfis_atuais).toEqual([]);
+    expect(body.data.multiprofile_supported).toBe(true);
     expect(body.data.perfis_permitidos).toContain('AVSEC_OPERACOES_SOLO');
     expect(body.data.perfis_permitidos).toContain('AVSEC_TRIPULANTE');
   });
@@ -780,6 +862,34 @@ describe('qualificacoes certificados rbac e upload', () => {
     expect(historicos.find((row) => row.id === 2001)?.perfil_competencia).toBe(
       'AVSEC_OPERACOES_SOLO',
     );
+  });
+
+  it('upload registra múltiplos perfis comprovados pelo mesmo certificado sem duplicar o PDF', async () => {
+    const { env, evidenceProfiles, documentos } = createMockEnv();
+    const form = new FormData();
+    form.set('file', createPdfFile('avsec-multiplo.pdf'));
+    form.append('perfis_competencia', 'AVSEC_TRIPULANTE');
+    form.append('perfis_competencia', 'AVSEC_OPERACOES_SOLO');
+
+    const beforeDocuments = documentos.length;
+    const response = await request('/api/certificados/historico/2001/certificados/upload', env, {
+      method: 'POST',
+      body: form,
+    });
+    const body = (await response.json()) as {
+      success: boolean;
+      data: { perfis_competencia: string[] };
+    };
+
+    expect(response.status).toBe(201);
+    expect(body.data.perfis_competencia).toEqual(['AVSEC_TRIPULANTE', 'AVSEC_OPERACOES_SOLO']);
+    expect(documentos).toHaveLength(beforeDocuments + 1);
+    expect(env.DB.batch).toHaveBeenCalledTimes(1);
+    expect(
+      evidenceProfiles
+        .filter((row) => row.historico_id === 2001 && !row.deleted_at)
+        .map((row) => row.perfil_competencia),
+    ).toEqual(['AVSEC_TRIPULANTE', 'AVSEC_OPERACOES_SOLO']);
   });
 
   it('upload rejeita perfil que não pertence à qualificação antes de gravar no R2', async () => {
