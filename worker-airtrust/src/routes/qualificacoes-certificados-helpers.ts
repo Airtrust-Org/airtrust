@@ -287,7 +287,6 @@ export async function listHistoricoCertificados(
            FROM documentos d
            JOIN funcionarios fd
              ON fd.id = d.funcionario_id
-            AND fd.deleted_at IS NULL
             AND fd.empresa_id = ?
            LEFT JOIN pasta_virtual pv
              ON pv.certificacao_id = ?
@@ -366,12 +365,20 @@ export async function listHistoricoCertificados(
   return results || [];
 }
 
+export function canAdministerHistoricalDeletedEmployeeCertificates(role: unknown): boolean {
+  const normalized = String(role || '')
+    .trim()
+    .toLowerCase();
+  return normalized === 'admin' || normalized === 'administrador';
+}
+
 export async function assertScopedHistoricoAccess(
   db: D1Database,
   params: {
     historicoId: number;
     empresaId: number;
     access?: EmployeeSectorAccess | null;
+    allowDeletedFuncionario?: boolean;
   },
 ): Promise<ScopedHistoricoAccessRow> {
   const historico = await db
@@ -380,10 +387,10 @@ export async function assertScopedHistoricoAccess(
          FROM qualificacoes_historico qh
          INNER JOIN funcionarios f
            ON f.id = qh.funcionario_id
-          AND f.deleted_at IS NULL
         WHERE qh.id = ?
           AND qh.deleted_at IS NULL
           AND f.empresa_id = ?
+          ${params.allowDeletedFuncionario ? '' : 'AND f.deleted_at IS NULL'}
         LIMIT 1`,
     )
     .bind(params.historicoId, params.empresaId)
@@ -394,7 +401,11 @@ export async function assertScopedHistoricoAccess(
   }
 
   if (params.access) {
-    await assertFuncionarioInScope(db, params.empresaId, historico.funcionario_id, params.access);
+    const allowHistoricalAdminAccess =
+      params.allowDeletedFuncionario === true && params.access.mode === 'all';
+    if (!allowHistoricalAdminAccess) {
+      await assertFuncionarioInScope(db, params.empresaId, historico.funcionario_id, params.access);
+    }
   }
 
   return historico;
@@ -570,7 +581,7 @@ export async function resolveCertificadoContext(
         f.cpf as funcionario_cpf,
         f.nome as funcionario_nome
        FROM qualificacoes_historico qh
-       LEFT JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
+       LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
        LEFT JOIN qualificacoes_tipos qt
          ON qt.id = qh.qualificacao_id
         AND qt.deleted_at IS NULL
