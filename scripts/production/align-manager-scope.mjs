@@ -185,8 +185,8 @@ async function main() {
   );
   targets.forEach((target) =>
     assert(
-      String(target.perfil || '').toUpperCase() === 'GESTOR',
-      `${target.nome} não está com perfil GESTOR`,
+      ['GESTOR', 'MANAGER'].includes(String(target.perfil || '').toUpperCase()),
+      `${target.nome} não está com perfil de gestor`,
     ),
   );
 
