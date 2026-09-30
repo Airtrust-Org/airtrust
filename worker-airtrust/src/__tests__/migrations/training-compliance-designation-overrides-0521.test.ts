@@ -27,7 +27,7 @@ afterEach(() => {
   while (tempDirs.length) rmSync(tempDirs.pop()!, { recursive: true, force: true });
 });
 function createDatabase() {
-  const dir = mkdtempSync(join(tmpdir(), 'airtrust-training-overrides-0520-'));
+  const dir = mkdtempSync(join(tmpdir(), 'airtrust-training-overrides-0521-'));
   tempDirs.push(dir);
   const db = join(dir, 'test.sqlite');
   expect(
@@ -65,7 +65,7 @@ function createDatabase() {
   return db;
 }
 
-describe('0520 training compliance designation overrides', () => {
+describe('0521 training compliance designation overrides', () => {
   it('pins Schema V2 change, migration and plan hashes', () => {
     const change = read(changePath);
     const plan = read(planPath);
@@ -144,6 +144,8 @@ describe('0520 training compliance designation overrides', () => {
     expect(workflow).toContain(
       "inputs.change_id == 'training-compliance-designation-overrides-0521'",
     );
+    const stagingWorkflow = read('.github/workflows/staging-d1-schema-change.yml');
+    expect(stagingWorkflow).toContain('0521_training_compliance_designation_overrides.sql');
     for (const file of [
       'scripts/schema-v2/validate-0521-production-preflight.sh',
       'scripts/schema-v2/validate-0521-production-postconditions.sh',
