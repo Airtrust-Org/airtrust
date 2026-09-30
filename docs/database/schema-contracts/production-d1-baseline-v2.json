@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-30",
-    "last_reconciled_against": "0519 training compliance evidence profiles prepared; remote apply pending",
-    "schema_v2_digest": "f47b96916dc4e3662716f45e8bfa3447a005f848d51de5cfe53a8a71098f5846",
+    "last_reconciled_against": "0520 training compliance evidence multi profiles prepared; remote apply pending",
+    "schema_v2_digest": "67b47ed5cbfdd011e3fd07691d7ba99945e7176ee30b936ccfc69e2b0c82a9ea",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1171,6 +1171,19 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "training-compliance-evidence-profiles-0519.json",
       "note": "0519 is reviewed and prepared only. It records the competency profile on LMS enrollments and qualification history so DGR/AVSEC evidence is matched to the effective Compliance profile. It does not assert production application. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0520_training_compliance_evidence_multi_profiles.sql",
+      "change_id": "training-compliance-evidence-multi-profiles-0520",
+      "sha256": "7eea5dea60019a79e872d2e46ec7f3886241232f9388996766a3cce64705a184",
+      "targets": [
+        "qualificacoes_historico_perfis_competencia"
+      ],
+      "domain": "compliance / training evidence multi profiles",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-evidence-multi-profiles-0520.json",
+      "note": "0520 is reviewed and prepared only. It lets one qualification/certificate evidence row prove multiple allowed competency profiles through a tenant-scoped normalized relation, while retaining the 0519 scalar field as rollout compatibility. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     }
   ]
 }

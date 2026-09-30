@@ -18,7 +18,8 @@ import {
 import certificadosWriteRoutes from './qualificacoes-certificados-write';
 import {
   listTrainingComplianceEvidenceProfilesForQualification,
-  readQualificationEvidenceProfile,
+  qualificationEvidenceSupportsMultipleProfiles,
+  readQualificationEvidenceProfiles,
   resolveEffectiveTrainingComplianceProfile,
 } from '../services/training-compliance-evidence-profile';
 
@@ -42,9 +43,9 @@ app.get('/historico/:id/certificados/perfil-competencia', auth(), async (c) => {
     funcionarioId: scopedHistorico.funcionario_id,
     qualificacaoTipoId: context.historico.qualificacao_tipo_id,
   };
-  const [perfilExigido, perfilAtual, perfisPermitidos] = await Promise.all([
+  const [perfilExigido, perfisAtuais, perfisPermitidos, multiprofileSupported] = await Promise.all([
     resolveEffectiveTrainingComplianceProfile(db, params),
-    readQualificationEvidenceProfile(db, {
+    readQualificationEvidenceProfiles(db, {
       empresaId,
       historicoId,
       funcionarioId: scopedHistorico.funcionario_id,
@@ -53,6 +54,7 @@ app.get('/historico/:id/certificados/perfil-competencia', auth(), async (c) => {
       empresaId,
       qualificacaoTipoId: context.historico.qualificacao_tipo_id,
     }),
+    qualificationEvidenceSupportsMultipleProfiles(db),
   ]);
 
   return c.json({
@@ -60,8 +62,10 @@ app.get('/historico/:id/certificados/perfil-competencia', auth(), async (c) => {
     data: {
       qualificacao_codigo: context.codigo,
       perfil_exigido: perfilExigido,
-      perfil_atual: perfilAtual,
+      perfil_atual: perfisAtuais[0] || null,
+      perfis_atuais: perfisAtuais,
       perfis_permitidos: perfisPermitidos,
+      multiprofile_supported: multiprofileSupported,
     },
   });
 });

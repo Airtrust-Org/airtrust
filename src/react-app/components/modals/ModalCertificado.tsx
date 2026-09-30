@@ -87,7 +87,9 @@ type EvidenceProfileContext = {
   qualificacao_codigo: string;
   perfil_exigido: string | null;
   perfil_atual: string | null;
+  perfis_atuais?: string[];
   perfis_permitidos: string[];
+  multiprofile_supported?: boolean;
 };
 
 const EVIDENCE_PROFILE_LABELS: Record<string, string> = {
@@ -159,7 +161,7 @@ export function ModalCertificado({
   const [descricao, setDescricao] = useState('');
   const [evidenceProfileContext, setEvidenceProfileContext] =
     useState<EvidenceProfileContext | null>(null);
-  const [selectedEvidenceProfile, setSelectedEvidenceProfile] = useState('');
+  const [selectedEvidenceProfiles, setSelectedEvidenceProfiles] = useState<string[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showConfirmDelete, setShowConfirmDelete] = useState<{ id: number; nome: string } | null>(
     null,
@@ -264,19 +266,27 @@ export function ModalCertificado({
       const context = payload?.data;
       if (!context || !Array.isArray(context.perfis_permitidos)) {
         setEvidenceProfileContext(null);
-        setSelectedEvidenceProfile('');
+        setSelectedEvidenceProfiles([]);
         return;
       }
       setEvidenceProfileContext(context);
-      const suggested =
-        context.perfil_exigido ||
-        context.perfil_atual ||
-        (context.perfis_permitidos.length === 1 ? context.perfis_permitidos[0] : '');
-      setSelectedEvidenceProfile(suggested || '');
+      const currentProfiles = Array.isArray(context.perfis_atuais)
+        ? context.perfis_atuais.filter(Boolean)
+        : context.perfil_atual
+          ? [context.perfil_atual]
+          : [];
+      const suggested = context.perfil_exigido
+        ? [context.perfil_exigido]
+        : currentProfiles.length > 0
+          ? currentProfiles
+          : context.perfis_permitidos.length === 1
+            ? [context.perfis_permitidos[0]]
+            : [];
+      setSelectedEvidenceProfiles(suggested);
     } catch (error) {
       console.warn('[ModalCertificado] Contexto de perfil de evidência indisponível:', error);
       setEvidenceProfileContext(null);
-      setSelectedEvidenceProfile('');
+      setSelectedEvidenceProfiles([]);
     }
   }, [qualificacao.id, requestJson]);
 
@@ -476,7 +486,7 @@ export function ModalCertificado({
       toast.warning('❌ Selecione um arquivo');
       return;
     }
-    if (evidenceProfileContext?.perfis_permitidos.length && !selectedEvidenceProfile) {
+    if (evidenceProfileContext?.perfis_permitidos.length && selectedEvidenceProfiles.length === 0) {
       toast.warning('Selecione o perfil/competência comprovado pelo certificado.');
       return;
     }
@@ -486,8 +496,8 @@ export function ModalCertificado({
       const preparedUpload = await prepareCertificateUploadFile(selectedFile);
       formData.append('file', preparedUpload.file);
       formData.append('descricao', descricao || selectedFile.name);
-      if (selectedEvidenceProfile) {
-        formData.append('perfil_competencia', selectedEvidenceProfile);
+      for (const profile of selectedEvidenceProfiles) {
+        formData.append('perfis_competencia', profile);
       }
       await requestJson(`/api/certificados/historico/${qualificacao.id}/certificados/upload`, {
         method: 'POST',
@@ -919,22 +929,39 @@ export function ModalCertificado({
                         <label className="mb-2 block text-sm font-medium text-gray-700">
                           Perfil/competência comprovado pelo certificado
                         </label>
-                        <select
-                          value={selectedEvidenceProfile}
-                          onChange={(event) => setSelectedEvidenceProfile(event.target.value)}
-                          className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-primary/30"
-                        >
-                          <option value="">Selecione o perfil comprovado</option>
-                          {evidenceProfileContext.perfis_permitidos.map((profile) => (
-                            <option key={profile} value={profile}>
-                              {evidenceProfileLabel(profile)}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="space-y-2">
+                          {evidenceProfileContext.perfis_permitidos.map((profile) => {
+                            const checked = selectedEvidenceProfiles.includes(profile);
+                            const multi = Boolean(evidenceProfileContext.multiprofile_supported);
+                            return (
+                              <label
+                                key={profile}
+                                className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800"
+                              >
+                                <input
+                                  type={multi ? 'checkbox' : 'radio'}
+                                  name="perfil-competencia-certificado"
+                                  value={profile}
+                                  checked={checked}
+                                  onChange={() =>
+                                    setSelectedEvidenceProfiles((current) =>
+                                      multi
+                                        ? checked
+                                          ? current.filter((item) => item !== profile)
+                                          : [...current, profile]
+                                        : [profile],
+                                    )
+                                  }
+                                />
+                                {evidenceProfileLabel(profile)}
+                              </label>
+                            );
+                          })}
+                        </div>
                         <p className="mt-2 text-xs text-slate-600">
-                          O AirTrust sugere o perfil exigido pela função/atividade, mas o valor
-                          confirmado deve corresponder ao que o certificado realmente comprova. O
-                          PDF não é interpretado automaticamente.
+                          O AirTrust sugere o perfil exigido pela função/atividade, mas você deve
+                          confirmar todos os perfis que o certificado realmente comprova. O PDF não
+                          é interpretado automaticamente.
                         </p>
                         {evidenceProfileContext.perfil_exigido && (
                           <p className="mt-2 text-xs font-medium text-slate-700">
@@ -943,13 +970,21 @@ export function ModalCertificado({
                           </p>
                         )}
                         {evidenceProfileContext.perfil_exigido &&
-                          selectedEvidenceProfile &&
-                          selectedEvidenceProfile !== evidenceProfileContext.perfil_exigido && (
+                          selectedEvidenceProfiles.length > 0 &&
+                          !selectedEvidenceProfiles.includes(
+                            evidenceProfileContext.perfil_exigido,
+                          ) && (
                             <p className="mt-2 text-xs font-medium text-amber-700">
-                              O perfil selecionado será registrado como evidência, mas não atende ao
-                              perfil atualmente exigido para esta pessoa.
+                              Os perfis selecionados serão registrados como evidência, mas não
+                              atendem ao perfil atualmente exigido para esta pessoa.
                             </p>
                           )}
+                        {evidenceProfileContext.multiprofile_supported && (
+                          <p className="mt-2 text-xs text-slate-500">
+                            Se o mesmo certificado comprovar mais de uma competência, marque todas
+                            as que constarem no documento.
+                          </p>
+                        )}
                       </div>
                     )}
                   <div>

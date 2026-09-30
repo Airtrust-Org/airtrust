@@ -58,8 +58,9 @@ LMS_MIGRATIONS=(
   # 0513 is additive but changes qualificacoes_tipos, a CI bootstrap-critical table.
   # Keep the local smoke schema aligned with the governed qualification-area contract.
   "$WORKER_DIR/migrations/0513_qualification_areas.sql"
-  # 0519 adds competency-profile lineage to LMS enrollments and qualification evidence.
+  # 0519 adds scalar competency-profile lineage; 0520 normalizes multi-profile qualification evidence.
   "$WORKER_DIR/migrations/0519_training_compliance_evidence_profiles.sql"
+  "$WORKER_DIR/migrations/0520_training_compliance_evidence_multi_profiles.sql"
 )
 
 error() {

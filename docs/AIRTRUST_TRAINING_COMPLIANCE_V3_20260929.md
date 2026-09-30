@@ -68,6 +68,8 @@ A atribuição manual de uma qualificação não copia automaticamente o perfil 
 
 O PDF é evidência documental; o sistema não infere competência pelo nome do arquivo. Se o perfil comprovado divergir do perfil atualmente exigido, a evidência é preservada com seu perfil real e o Compliance permanece não atendido para o perfil exigido.
 
+A extensão Schema V2 `0520_training_compliance_evidence_multi_profiles` normaliza a relação entre um histórico/certificado e seus perfis comprovados. Assim, um único PDF pode comprovar mais de uma competência ativa da mesma qualificação (por exemplo, dois perfis AVSEC) sem duplicar o arquivo nem o histórico; cada requisito perfilado é avaliado separadamente contra essa relação. Antes da aplicação do 0520, o backend permanece fail-closed para tentativas de registrar mais de um perfil.
+
 ## Estado de implantação
 
 A implementação desta revisão foi preparada e testada em branch dedicada. Nenhuma mutação em produção faz parte desta etapa sem autorização explícita adicional para aplicação/deploy.

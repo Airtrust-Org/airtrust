@@ -19,11 +19,46 @@ async function columnExists(db: D1Database, table: string, column: string): Prom
   return (results || []).some((row) => row.name === column);
 }
 
+const QUALIFICATION_EVIDENCE_PROFILES_TABLE = 'qualificacoes_historico_perfis_competencia';
+
 export function normalizeTrainingComplianceEvidenceProfile(value: unknown): string | null {
   const normalized = String(value || '')
     .trim()
     .toUpperCase();
   return normalized || null;
+}
+
+export async function buildQualificationEvidenceProfileSql(
+  db: D1Database,
+  qualificationHistoryColumns: ReadonlySet<string>,
+): Promise<{ select: string; joins: string; available: boolean }> {
+  const hasScalarProfile = qualificationHistoryColumns.has('perfil_competencia');
+  const lmsProfileReady =
+    qualificationHistoryColumns.has('lms_matricula_id') &&
+    (await columnExists(db, 'lms_matriculas', 'perfil_competencia'));
+  const multiProfileReady = await tableExists(db, QUALIFICATION_EVIDENCE_PROFILES_TABLE);
+  const scalarSelect = hasScalarProfile
+    ? lmsProfileReady
+      ? 'COALESCE(qh.perfil_competencia, lm_profile.perfil_competencia)'
+      : 'qh.perfil_competencia'
+    : lmsProfileReady
+      ? 'lm_profile.perfil_competencia'
+      : 'NULL';
+  const joins = [
+    multiProfileReady
+      ? 'LEFT JOIN qualificacoes_historico_perfis_competencia qhp ON qhp.historico_id=qh.id AND qhp.empresa_id=f.empresa_id AND qhp.deleted_at IS NULL'
+      : '',
+    lmsProfileReady
+      ? 'LEFT JOIN lms_matriculas lm_profile ON lm_profile.id=qh.lms_matricula_id AND lm_profile.empresa_id=f.empresa_id AND lm_profile.deleted_at IS NULL'
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return {
+    select: multiProfileReady ? `COALESCE(qhp.perfil_competencia, ${scalarSelect})` : scalarSelect,
+    joins,
+    available: multiProfileReady || hasScalarProfile || lmsProfileReady,
+  };
 }
 export async function resolveEffectiveTrainingComplianceProfile(
   db: D1Database,
@@ -92,11 +127,41 @@ export async function listTrainingComplianceEvidenceProfilesForQualification(
   }
 }
 
-export async function readQualificationEvidenceProfile(
+export async function qualificationEvidenceSupportsMultipleProfiles(
+  db: D1Database,
+): Promise<boolean> {
+  return tableExists(db, QUALIFICATION_EVIDENCE_PROFILES_TABLE);
+}
+
+export async function readQualificationEvidenceProfiles(
   db: D1Database,
   params: { empresaId: number; historicoId: number; funcionarioId: number },
-): Promise<string | null> {
-  if (!(await columnExists(db, 'qualificacoes_historico', 'perfil_competencia'))) return null;
+): Promise<string[]> {
+  if (await qualificationEvidenceSupportsMultipleProfiles(db)) {
+    const { results } = await db
+      .prepare(
+        `SELECT qhp.perfil_competencia
+           FROM qualificacoes_historico_perfis_competencia qhp
+           JOIN qualificacoes_historico qh
+             ON qh.id=qhp.historico_id
+            AND qh.empresa_id=qhp.empresa_id
+            AND qh.deleted_at IS NULL
+          WHERE qhp.empresa_id=? AND qhp.historico_id=? AND qh.funcionario_id=?
+            AND qhp.deleted_at IS NULL
+          ORDER BY qhp.id ASC`,
+      )
+      .bind(params.empresaId, params.historicoId, params.funcionarioId)
+      .all<{ perfil_competencia: string }>();
+    const profiles = [
+      ...new Set(
+        (results || [])
+          .map((row) => normalizeTrainingComplianceEvidenceProfile(row.perfil_competencia))
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
+    if (profiles.length > 0) return profiles;
+  }
+  if (!(await columnExists(db, 'qualificacoes_historico', 'perfil_competencia'))) return [];
   const row = await db
     .prepare(
       `SELECT perfil_competencia FROM qualificacoes_historico
@@ -104,7 +169,67 @@ export async function readQualificationEvidenceProfile(
     )
     .bind(params.historicoId, params.empresaId, params.funcionarioId)
     .first<{ perfil_competencia: string | null }>();
-  return normalizeTrainingComplianceEvidenceProfile(row?.perfil_competencia);
+  const profile = normalizeTrainingComplianceEvidenceProfile(row?.perfil_competencia);
+  return profile ? [profile] : [];
+}
+
+export async function readQualificationEvidenceProfile(
+  db: D1Database,
+  params: { empresaId: number; historicoId: number; funcionarioId: number },
+): Promise<string | null> {
+  return (await readQualificationEvidenceProfiles(db, params))[0] || null;
+}
+
+export async function replaceQualificationEvidenceProfiles(
+  db: D1Database,
+  params: { empresaId: number; historicoId: number; funcionarioId: number; profiles: unknown[] },
+): Promise<string[]> {
+  const profiles = [
+    ...new Set(
+      params.profiles
+        .map(normalizeTrainingComplianceEvidenceProfile)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
+  if (!(await columnExists(db, 'qualificacoes_historico', 'perfil_competencia'))) return [];
+  const multiProfile = await qualificationEvidenceSupportsMultipleProfiles(db);
+  if (profiles.length > 1 && !multiProfile) {
+    throw new Error('EVIDENCE_MULTI_PROFILE_SCHEMA_REQUIRED');
+  }
+  const primaryProfile = profiles[0] || null;
+  const scalarUpdate = db
+    .prepare(
+      `UPDATE qualificacoes_historico
+          SET perfil_competencia=?, updated_at=datetime('now')
+        WHERE id=? AND empresa_id=? AND funcionario_id=? AND deleted_at IS NULL`,
+    )
+    .bind(primaryProfile, params.historicoId, params.empresaId, params.funcionarioId);
+  if (!multiProfile) {
+    const update = await scalarUpdate.run();
+    return Number(update.meta.changes || 0) === 1 ? profiles : [];
+  }
+
+  const statements = [
+    scalarUpdate,
+    db
+      .prepare(
+        `UPDATE qualificacoes_historico_perfis_competencia
+            SET deleted_at=datetime('now'), updated_at=datetime('now')
+          WHERE empresa_id=? AND historico_id=? AND deleted_at IS NULL`,
+      )
+      .bind(params.empresaId, params.historicoId),
+    ...profiles.map((profile) =>
+      db
+        .prepare(
+          `INSERT INTO qualificacoes_historico_perfis_competencia
+             (empresa_id,historico_id,perfil_competencia,created_at,updated_at)
+           VALUES (?,?,?,datetime('now'),datetime('now'))`,
+        )
+        .bind(params.empresaId, params.historicoId, profile),
+    ),
+  ];
+  const [update] = await db.batch(statements);
+  return Number(update?.meta.changes || 0) === 1 ? profiles : [];
 }
 
 export async function stampQualificationEvidenceProfile(
