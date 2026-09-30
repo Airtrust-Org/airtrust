@@ -15,7 +15,7 @@ const email = String(process.env.PROD_EMAIL || '')
   .trim()
   .toLowerCase();
 const password = String(process.env.PROD_PASSWORD || '');
-const referenceQuery = String(process.env.REFERENCE_NAME || 'Ingrid').trim();
+const referenceQuery = String(process.env.REFERENCE_NAME || 'Yngrid').trim();
 const targetQueries = String(process.env.TARGET_NAMES || 'Giancarlo,Emyle,Layla')
   .split(',')
   .map((value) => value.trim())
