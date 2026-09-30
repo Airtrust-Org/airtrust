@@ -61,12 +61,14 @@ describe('service worker cache guard', () => {
 
     expect(bootStart).toBeGreaterThanOrEqual(0);
     expect(bootSource).toContain("const BOOT_RECOVERY_PARAM = 'airtrust_boot_recovery';");
-    expect(bootSource).toContain('const BOOT_TIMEOUT_MS = 7000;');
+    expect(bootSource).toContain('const BOOT_TIMEOUT_MS = 15000;');
     expect(bootSource).toContain('BOOT_ERROR_PATTERN');
     expect(bootSource).toContain("window.addEventListener(\n          'error'");
     expect(bootSource).toContain("window.addEventListener('unhandledrejection'");
     expect(bootSource).toContain('root.childElementCount === 0');
     expect(bootSource).toContain('isCriticalAssetTarget(event.target)');
+    expect(bootSource).toContain("cache: 'reload'");
+    expect(bootSource).toContain('await refreshCriticalAssets();');
     expect(bootSource).toContain('window.location.origin');
     expect(bootSource).toContain("!name.startsWith('airtrust-pilot-')");
     expect(bootSource).toContain("!new URL(registration.scope).pathname.startsWith('/pilot/')");

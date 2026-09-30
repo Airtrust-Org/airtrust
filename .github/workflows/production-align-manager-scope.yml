@@ -38,6 +38,6 @@ jobs:
           # These are the unique canonical names persisted in production. The
           # corresponding display names requested are Ingrid, Emily, Laila and Mirela.
           REFERENCE_NAME: Yngrid
-          TARGET_NAMES: Giancarlo,Emyle,Layla,Mirela Silva
+          TARGET_NAMES: Giancarlo,Emyle,Layla,Mirela dos Santos Silva
           APPLY: ${{ inputs.apply }}
         run: node scripts/production/align-manager-scope.mjs

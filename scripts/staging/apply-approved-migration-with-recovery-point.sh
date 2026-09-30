@@ -51,6 +51,8 @@ APPROVED_MIGRATIONS=(
   "0516_qualification_expired_daily_alerts.sql"
   "0517_training_compliance_conditions.sql"
   "0518_crm_qualification_consolidation.sql"
+  "0519_training_compliance_evidence_profiles.sql"
+  "0520_training_compliance_evidence_multi_profiles.sql"
   "0521_training_compliance_designation_overrides.sql"
 )
 
@@ -239,6 +241,12 @@ validate_postconditions() {
     0518_crm_qualification_consolidation.sql)
       bash scripts/staging/validate-0518-postconditions.sh --target="$db_name"
       ;;
+    0519_training_compliance_evidence_profiles.sql)
+      bash scripts/staging/validate-0519-postconditions.sh --target="$db_name"
+      ;;
+    0520_training_compliance_evidence_multi_profiles.sql)
+      bash scripts/staging/validate-0520-postconditions.sh --target="$db_name"
+      ;;
     0521_training_compliance_designation_overrides.sql)
       bash scripts/staging/validate-0521-postconditions.sh --target="$db_name"
       ;;
@@ -316,6 +324,16 @@ if [[ "$migration_basename" == "0516_qualification_expired_daily_alerts.sql" && 
     exit 1
   fi
   echo "STAGING_DEPENDENCY_0515_OK=true"
+fi
+
+if [[ "$migration_basename" == "0519_training_compliance_evidence_profiles.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0519-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0519_OK=true"
+fi
+
+if [[ "$migration_basename" == "0520_training_compliance_evidence_multi_profiles.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0520-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0520_OK=true"
 fi
 
 if [[ "$migration_basename" == "0521_training_compliance_designation_overrides.sql" && "$ledger_count" == "0" ]]; then

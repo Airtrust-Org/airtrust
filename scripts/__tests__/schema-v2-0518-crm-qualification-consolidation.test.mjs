@@ -101,8 +101,10 @@ test('0518 is wired into staging and production governed paths', () => {
   const outer=readFileSync('scripts/staging/apply-approved-migrations.sh','utf8');
   const recovery=readFileSync('scripts/staging/apply-approved-migration-with-recovery-point.sh','utf8');
   const workflow=readFileSync('.github/workflows/apply-schema-change-v2.yml','utf8');
+  const stagingWorkflow=readFileSync('.github/workflows/staging-d1-schema-change.yml','utf8');
   assert.match(outer,/0518_crm_qualification_consolidation\.sql/);
   assert.match(recovery,/validate-0518-postconditions\.sh/);
   assert.match(workflow,/crm-qualification-consolidation-0518/);
+  assert.match(stagingWorkflow,/0518_crm_qualification_consolidation\.sql/);
   for (const file of ['scripts/schema-v2/validate-0518-production-preflight.sh','scripts/schema-v2/validate-0518-production-postconditions.sh','scripts/staging/validate-0518-postconditions.sh']) assert.equal(spawnSync('bash',['-n',file]).status,0);
 });

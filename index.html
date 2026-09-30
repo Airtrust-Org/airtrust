@@ -129,7 +129,7 @@
         const BOOT_RECOVERY_KEY = 'airtrust-app-boot-recovery-v1';
         const BOOT_RECOVERY_PARAM = 'airtrust_boot_recovery';
         const BOOT_RECOVERY_TS_PARAM = 'airtrust_boot_ts';
-        const BOOT_TIMEOUT_MS = 7000;
+        const BOOT_TIMEOUT_MS = 15000;
         const BOOT_ERROR_PATTERN =
           /Failed to (?:fetch|load).*module|Importing a module script failed|Loading chunk|ChunkLoadError|dynamically imported module|CSS chunk load failed/i;
         const buildVersion =
@@ -192,6 +192,36 @@
           }
         };
 
+        const refreshCriticalAssets = async () => {
+          try {
+            const assetUrls = [
+              ...new Set(
+                Array.from(
+                  document.querySelectorAll('script[src^="/assets/"],link[href^="/assets/"]'),
+                )
+                  .map((element) => element.getAttribute('src') || element.getAttribute('href'))
+                  .filter(Boolean)
+                  .map((value) => new URL(value, window.location.href).toString()),
+              ),
+            ];
+
+            await Promise.allSettled(
+              assetUrls.map(async (url) => {
+                const response = await fetch(url, {
+                  cache: 'reload',
+                  credentials: 'same-origin',
+                });
+                const contentType = response.headers.get('content-type') || '';
+                if (!response.ok || /text\/html/i.test(contentType)) {
+                  throw new Error(`Asset inválido durante recuperação: ${url}`);
+                }
+              }),
+            );
+          } catch {
+            // Best effort. O reload seguinte ainda buscará o HTML atual.
+          }
+        };
+
         const showBootFailure = () => {
           const root = document.getElementById('root');
           if (root?.childElementCount) return;
@@ -225,8 +255,16 @@
             button.style.cssText =
               'border:0;border-radius:10px;background:#12356a;color:#fff;padding:11px 18px;font:600 14px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer;';
             button.addEventListener('click', () => {
+              button.disabled = true;
               safeSessionRemove(BOOT_RECOVERY_KEY);
-              window.location.reload();
+              void (async () => {
+                await cleanupLegacyRuntime();
+                await refreshCriticalAssets();
+                const nextUrl = new URL(window.location.href);
+                nextUrl.searchParams.set(BOOT_RECOVERY_PARAM, buildVersion);
+                nextUrl.searchParams.set(BOOT_RECOVERY_TS_PARAM, String(Date.now()));
+                window.location.replace(nextUrl.toString());
+              })();
             });
 
             card.append(title, text, button);
@@ -257,6 +295,7 @@
 
           safeSessionSet(BOOT_RECOVERY_KEY, recoveryToken);
           await cleanupLegacyRuntime();
+          await refreshCriticalAssets();
 
           const nextUrl = new URL(window.location.href);
           nextUrl.searchParams.set(BOOT_RECOVERY_PARAM, buildVersion);

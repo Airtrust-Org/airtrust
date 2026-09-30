@@ -24,11 +24,11 @@ describe('Cloudflare Pages security contract', () => {
     expect(apiBlock).not.toContain('Cache-Control: public');
   });
 
-  it('invokes Pages Functions only for the fail-closed API surface', () => {
+  it('invokes Pages Functions only for fail-closed API and asset surfaces', () => {
     // Static application routes must remain outside the Pages Functions invocation path.
     expect(functionRoutes).toEqual({
       version: 1,
-      include: ['/api', '/api/*'],
+      include: ['/api', '/api/*', '/assets/*'],
       exclude: [],
     });
   });

@@ -20,9 +20,13 @@ describe('0519 training compliance evidence profiles', () => {
   it('wires governed staging and production validation for 0519', () => {
     const productionWorkflow = read('.github/workflows/apply-schema-change-v2.yml');
     const stagingWorkflow = read('.github/workflows/staging-d1-schema-change.yml');
+    const recovery = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
     expect(productionWorkflow).toContain("inputs.change_id == 'training-compliance-evidence-profiles-0519'");
     expect(productionWorkflow).toContain('validate-0519-production-preflight.sh');
     expect(productionWorkflow).toContain('validate-0519-production-postconditions.sh');
     expect(stagingWorkflow).toContain('0519_training_compliance_evidence_profiles.sql');
+    expect(recovery).toContain('0519_training_compliance_evidence_profiles.sql');
+    expect(recovery).toContain('validate-0519-preflight.sh');
+    expect(recovery).toContain('validate-0519-postconditions.sh');
   });
 });
