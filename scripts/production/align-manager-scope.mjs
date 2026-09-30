@@ -32,9 +32,11 @@ function normalize(value) {
 }
 
 function matchesName(row, query) {
-  const name = normalize(row.nome || row.funcionario_nome);
   const needle = normalize(query);
-  return name === needle || name.startsWith(`${needle} `) || name.split(' ').includes(needle);
+  const names = [row.nome, row.funcionario_nome].map(normalize).filter(Boolean);
+  return names.some(
+    (name) => name === needle || name.startsWith(`${needle} `) || name.split(' ').includes(needle),
+  );
 }
 
 function activeNameMatches(rows, query) {
@@ -103,9 +105,19 @@ async function resolveCommonTenant(loginToken, loginClaims) {
   const candidates = [];
   for (const tenantId of tenantIds) {
     const selected = await selectTenantIfNeeded(loginToken, loginClaims, tenantId);
-    const users = await request('/api/admin/usuarios', selected.token);
-    assert(Array.isArray(users), `Lista de usuários inválida no tenant ${tenantId}`);
-    const scopedUsers = users.filter((row) => Number(row.empresa_id) === tenantId);
+    const users = await request('/api/setores-gestores/usuarios-elegiveis/lista', selected.token);
+    assert(Array.isArray(users), `Lista de gestores elegíveis inválida no tenant ${tenantId}`);
+    const scopedUsers = users;
+
+    const referenceMatches = scopedUsers.filter((row) => matchesName(row, referenceQuery));
+    const targetMatches = targetQueries.map((query) =>
+      scopedUsers.filter((row) => matchesName(row, query)),
+    );
+    console.log(
+      `TENANT_SCAN=${tenantId} reference=${activeNameMatches(scopedUsers, referenceQuery).length}/${referenceMatches.length} targets=${targetQueries
+        .map((query, index) => `${query}:${activeNameMatches(scopedUsers, query).length}/${targetMatches[index].length}`)
+        .join(',')}`,
+    );
 
     const reference = resolveOptionalUnique(scopedUsers, referenceQuery, 'referência');
     const targets = targetQueries.map((query) => resolveOptionalUnique(scopedUsers, query, 'alvo'));
