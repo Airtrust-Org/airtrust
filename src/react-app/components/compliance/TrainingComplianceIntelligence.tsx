@@ -20,6 +20,12 @@ import { toast } from 'sonner';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import {
+  nextComplianceTableSort,
+  sortComplianceRows,
+  SortableComplianceTableHeader,
+  type TableSortState,
+} from '@/react-app/components/compliance/SortableComplianceTableHeader';
+import {
   buildComplianceNarrative,
   complianceStatusLabel,
   downloadTrainingCompliancePdf,
@@ -87,6 +93,9 @@ type ComplianceTrendPoint = {
   compliance_pct: number | null;
 };
 
+type PendingSortKey = 'person' | 'sector' | 'training' | 'status' | 'notices';
+type CommunicationSortKey = 'date' | 'person' | 'training' | 'channel' | 'destination' | 'result';
+
 async function readJson<T>(response: Response): Promise<T> {
   const json = (await response.json().catch(() => ({}))) as {
     success?: boolean;
@@ -97,7 +106,9 @@ async function readJson<T>(response: Response): Promise<T> {
   return json.data as T;
 }
 
-function rowKey(row: Pick<TrainingCompliancePendingRow, 'funcionario_id' | 'qualificacao_tipo_id'>) {
+function rowKey(
+  row: Pick<TrainingCompliancePendingRow, 'funcionario_id' | 'qualificacao_tipo_id'>,
+) {
   return `${row.funcionario_id}:${row.qualificacao_tipo_id}`;
 }
 
@@ -140,6 +151,14 @@ export function TrainingComplianceIntelligence({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [noticeChannels, setNoticeChannels] = useState({ email: true, whatsapp: true });
+  const [pendingSort, setPendingSort] = useState<TableSortState<PendingSortKey>>({
+    key: 'person',
+    direction: 'asc',
+  });
+  const [communicationSort, setCommunicationSort] = useState<TableSortState<CommunicationSortKey>>({
+    key: 'date',
+    direction: 'desc',
+  });
 
   const params = new URLSearchParams();
   if (setorId) params.set('setor_id', String(setorId));
@@ -156,7 +175,9 @@ export function TrainingComplianceIntelligence({
     queryKey: ['training-compliance', 'communications'],
     enabled: mode === 'comunicacoes',
     queryFn: async () =>
-      readJson<Communication[]>(await fetchWithAuth('/api/compliance-treinamentos/comunicacoes?limit=200')),
+      readJson<Communication[]>(
+        await fetchWithAuth('/api/compliance-treinamentos/comunicacoes?limit=200'),
+      ),
   });
 
   const trend = useQuery({
@@ -179,7 +200,10 @@ export function TrainingComplianceIntelligence({
       if (criticalOnly && !row.critico_operacional) return false;
       if (windowDays) {
         const days = Number(windowDays);
-        if (row.status_compliance !== 'NAO_REALIZADO' && (row.dias_para_vencer == null || row.dias_para_vencer > days)) {
+        if (
+          row.status_compliance !== 'NAO_REALIZADO' &&
+          (row.dias_para_vencer == null || row.dias_para_vencer > days)
+        ) {
           return false;
         }
       }
@@ -190,9 +214,37 @@ export function TrainingComplianceIntelligence({
         row.funcao_nome,
         row.qualificacao_tipo_nome,
         row.qualificacao_tipo_codigo,
-      ].some((value) => String(value || '').toLowerCase().includes(normalized));
+      ].some((value) =>
+        String(value || '')
+          .toLowerCase()
+          .includes(normalized),
+      );
     });
   }, [criticalOnly, pendings.data, search, status, windowDays]);
+
+  const sortedVisibleRows = useMemo(
+    () =>
+      sortComplianceRows(visibleRows, pendingSort, (row, key) => {
+        if (key === 'person') return row.funcionario_nome;
+        if (key === 'sector') return `${row.setor_nome || ''} ${row.funcao_nome || ''}`;
+        if (key === 'training') return row.qualificacao_tipo_nome || row.qualificacao_tipo_codigo;
+        if (key === 'status') return row.status_compliance;
+        return row.avisos_enviados;
+      }),
+    [pendingSort, visibleRows],
+  );
+  const sortedCommunications = useMemo(
+    () =>
+      sortComplianceRows(communications.data || [], communicationSort, (row, key) => {
+        if (key === 'date') return row.enviado_em ? new Date(row.enviado_em).getTime() : null;
+        if (key === 'person') return row.funcionario_nome;
+        if (key === 'training') return row.qualificacao_nome;
+        if (key === 'channel') return row.tipo;
+        if (key === 'destination') return row.destinatario;
+        return row.status_envio;
+      }),
+    [communicationSort, communications.data],
+  );
 
   useEffect(() => {
     const validKeys = new Set(visibleRows.map(rowKey));
@@ -239,7 +291,8 @@ export function TrainingComplianceIntelligence({
       setSelected(new Set());
       void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Falha ao enviar avisos'),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : 'Falha ao enviar avisos'),
   });
 
   const empresaNome = useMemo(() => {
@@ -273,8 +326,12 @@ export function TrainingComplianceIntelligence({
         }),
       );
     },
-    onSuccess: (result) => toast.success(`Relatório enviado para ${result.enviados} gestor(es) de ${result.setor_nome}.`),
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Falha ao enviar relatório'),
+    onSuccess: (result) =>
+      toast.success(
+        `Relatório enviado para ${result.enviados} gestor(es) de ${result.setor_nome}.`,
+      ),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : 'Falha ao enviar relatório'),
   });
 
   const reportSummary = useMemo<TrainingComplianceReportSummary>(
@@ -299,7 +356,8 @@ export function TrainingComplianceIntelligence({
       byPerson.set(row.funcionario_nome, (byPerson.get(row.funcionario_nome) || 0) + 1);
       bySector.set(sector, (bySector.get(sector) || 0) + 1);
     });
-    const top = (map: Map<string, number>) => [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const top = (map: Map<string, number>) =>
+      [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
     return { trainings: top(byTraining), people: top(byPerson), sectors: top(bySector) };
   }, [visibleRows]);
 
@@ -320,7 +378,9 @@ export function TrainingComplianceIntelligence({
             <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
               <History className="h-4 w-4 text-primary" /> Histórico de comunicações
             </h2>
-            <p className="mt-1 text-xs text-slate-500">Auditoria de cobranças enviadas aos funcionários e gestores.</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Auditoria de cobranças enviadas aos funcionários e gestores.
+            </p>
           </div>
           <button
             type="button"
@@ -334,35 +394,91 @@ export function TrainingComplianceIntelligence({
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
-                <th className="px-3 py-3 text-left">Data</th>
-                <th className="px-3 py-3 text-left">Pessoa</th>
-                <th className="px-3 py-3 text-left">Treinamento</th>
-                <th className="px-3 py-3 text-left">Canal</th>
-                <th className="px-3 py-3 text-left">Destino</th>
-                <th className="px-3 py-3 text-left">Resultado</th>
+                <SortableComplianceTableHeader
+                  column="date"
+                  label="Data"
+                  sort={communicationSort}
+                  onSort={(key) =>
+                    setCommunicationSort((current) => nextComplianceTableSort(current, key))
+                  }
+                />
+                <SortableComplianceTableHeader
+                  column="person"
+                  label="Pessoa"
+                  sort={communicationSort}
+                  onSort={(key) =>
+                    setCommunicationSort((current) => nextComplianceTableSort(current, key))
+                  }
+                />
+                <SortableComplianceTableHeader
+                  column="training"
+                  label="Treinamento"
+                  sort={communicationSort}
+                  onSort={(key) =>
+                    setCommunicationSort((current) => nextComplianceTableSort(current, key))
+                  }
+                />
+                <SortableComplianceTableHeader
+                  column="channel"
+                  label="Canal"
+                  sort={communicationSort}
+                  onSort={(key) =>
+                    setCommunicationSort((current) => nextComplianceTableSort(current, key))
+                  }
+                />
+                <SortableComplianceTableHeader
+                  column="destination"
+                  label="Destino"
+                  sort={communicationSort}
+                  onSort={(key) =>
+                    setCommunicationSort((current) => nextComplianceTableSort(current, key))
+                  }
+                />
+                <SortableComplianceTableHeader
+                  column="result"
+                  label="Resultado"
+                  sort={communicationSort}
+                  onSort={(key) =>
+                    setCommunicationSort((current) => nextComplianceTableSort(current, key))
+                  }
+                />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {(communications.data || []).map((row) => (
+              {sortedCommunications.map((row) => (
                 <tr key={row.id}>
                   <td className="px-3 py-3 text-slate-500">{formatDateTime(row.enviado_em)}</td>
                   <td className="px-3 py-3">
                     <div className="font-medium text-slate-900">{row.funcionario_nome || '—'}</div>
-                    <div className="text-xs text-slate-400">{row.gestor ? 'cópia/escalonamento ao gestor' : row.setor_nome || '—'}</div>
+                    <div className="text-xs text-slate-400">
+                      {row.gestor ? 'cópia/escalonamento ao gestor' : row.setor_nome || '—'}
+                    </div>
                   </td>
                   <td className="px-3 py-3 text-slate-700">{row.qualificacao_nome || '—'}</td>
-                  <td className="px-3 py-3 text-slate-600">{String(row.tipo || '').replace('_COMPLIANCE', '').replace('_GESTOR', '')}</td>
+                  <td className="px-3 py-3 text-slate-600">
+                    {String(row.tipo || '')
+                      .replace('_COMPLIANCE', '')
+                      .replace('_GESTOR', '')}
+                  </td>
                   <td className="px-3 py-3 text-slate-500">{row.destinatario || '—'}</td>
                   <td className="px-3 py-3">
-                    <span className={`rounded-full px-2 py-1 text-xs font-medium ${row.status_envio === 'enviada' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                    <span
+                      className={`rounded-full px-2 py-1 text-xs font-medium ${row.status_envio === 'enviada' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}
+                    >
                       {row.status_envio === 'enviada' ? 'Enviado' : 'Falha'}
                     </span>
-                    {row.erro ? <div className="mt-1 max-w-xs text-xs text-red-600">{row.erro}</div> : null}
+                    {row.erro ? (
+                      <div className="mt-1 max-w-xs text-xs text-red-600">{row.erro}</div>
+                    ) : null}
                   </td>
                 </tr>
               ))}
               {!communications.isLoading && !(communications.data || []).length ? (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-500">Nenhuma cobrança de compliance registrada.</td></tr>
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                    Nenhuma cobrança de compliance registrada.
+                  </td>
+                </tr>
               ) : null}
             </tbody>
           </table>
@@ -376,16 +492,28 @@ export function TrainingComplianceIntelligence({
       <div className="space-y-5 p-4">
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><Users className="h-4 w-4" /> Pessoas com pendência</div>
-            <div className="mt-2 text-3xl font-bold text-slate-950">{new Set(visibleRows.map((row) => row.funcionario_id)).size}</div>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <Users className="h-4 w-4" /> Pessoas com pendência
+            </div>
+            <div className="mt-2 text-3xl font-bold text-slate-950">
+              {new Set(visibleRows.map((row) => row.funcionario_id)).size}
+            </div>
           </div>
           <div className="rounded-xl border border-red-200 bg-red-50/50 p-4">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-red-700"><ShieldAlert className="h-4 w-4" /> Pendências críticas</div>
-            <div className="mt-2 text-3xl font-bold text-red-800">{visibleRows.filter((row) => row.critico_operacional).length}</div>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-red-700">
+              <ShieldAlert className="h-4 w-4" /> Pendências críticas
+            </div>
+            <div className="mt-2 text-3xl font-bold text-red-800">
+              {visibleRows.filter((row) => row.critico_operacional).length}
+            </div>
           </div>
           <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-700"><Bell className="h-4 w-4" /> Avisos já enviados</div>
-            <div className="mt-2 text-3xl font-bold text-amber-800">{visibleRows.reduce((sum, row) => sum + row.avisos_enviados, 0)}</div>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
+              <Bell className="h-4 w-4" /> Avisos já enviados
+            </div>
+            <div className="mt-2 text-3xl font-bold text-amber-800">
+              {visibleRows.reduce((sum, row) => sum + row.avisos_enviados, 0)}
+            </div>
           </div>
         </div>
 
@@ -393,13 +521,18 @@ export function TrainingComplianceIntelligence({
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="font-semibold text-slate-900">Evolução do compliance — 90 dias</h2>
-              <p className="mt-1 text-xs text-slate-500">Histórico real registrado diariamente para o mesmo escopo de setor/função selecionado.</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Histórico real registrado diariamente para o mesmo escopo de setor/função
+                selecionado.
+              </p>
             </div>
           </div>
           <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
             <ComplianceTrendChart data={trend.data || []} loading={trend.isLoading} />
             <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Pendências recorrentes</h3>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Pendências recorrentes
+              </h3>
               <div className="space-y-2">
                 {recurrentPendings.map((row) => (
                   <div key={rowKey(row)} className="rounded-lg bg-slate-50 px-3 py-2">
@@ -407,11 +540,16 @@ export function TrainingComplianceIntelligence({
                       <span className="font-medium text-slate-800">{row.funcionario_nome}</span>
                       <strong className="text-orange-700">{row.avisos_enviados} avisos</strong>
                     </div>
-                    <div className="mt-0.5 text-xs text-slate-500">{row.qualificacao_tipo_nome || row.qualificacao_tipo_codigo || 'Treinamento'} · {complianceStatusLabel(row)}</div>
+                    <div className="mt-0.5 text-xs text-slate-500">
+                      {row.qualificacao_tipo_nome || row.qualificacao_tipo_codigo || 'Treinamento'}{' '}
+                      · {complianceStatusLabel(row)}
+                    </div>
                   </div>
                 ))}
                 {!recurrentPendings.length ? (
-                  <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">Nenhuma pendência recorrente com duas ou mais cobranças.</p>
+                  <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                    Nenhuma pendência recorrente com duas ou mais cobranças.
+                  </p>
                 ) : null}
               </div>
             </div>
@@ -421,11 +559,19 @@ export function TrainingComplianceIntelligence({
         <section className="rounded-2xl border border-slate-200 bg-white p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="max-w-4xl">
-              <h2 className="flex items-center gap-2 font-semibold text-slate-900"><FileText className="h-4 w-4 text-primary" /> Relatório inteligente</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-700">{buildComplianceNarrative(reportSummary, visibleRows, reportContext)}</p>
+              <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+                <FileText className="h-4 w-4 text-primary" /> Relatório inteligente
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-700">
+                {buildComplianceNarrative(reportSummary, visibleRows, reportContext)}
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => void exportPdf(true)} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              <button
+                type="button"
+                onClick={() => void exportPdf(true)}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
                 <Download className="h-4 w-4" /> Exportar PDF
               </button>
               <button
@@ -435,49 +581,103 @@ export function TrainingComplianceIntelligence({
                 title={!setorId ? 'Selecione um setor para enviar ao gestor' : undefined}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Mail className="h-4 w-4" /> {sendManagerReport.isPending ? 'Enviando...' : 'Enviar ao gestor'}
+                <Mail className="h-4 w-4" />{' '}
+                {sendManagerReport.isPending ? 'Enviando...' : 'Enviar ao gestor'}
               </button>
             </div>
           </div>
           <div className="mt-5 grid gap-4 lg:grid-cols-3">
             <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Treinamentos com mais pendências</h3>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Treinamentos com mais pendências
+              </h3>
               <div className="space-y-2">
-                {aggregations.trainings.map(([name, count]) => <div key={name} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"><span>{name}</span><strong>{count}</strong></div>)}
-                {!aggregations.trainings.length ? <p className="text-sm text-emerald-700">Sem pendências.</p> : null}
+                {aggregations.trainings.map(([name, count]) => (
+                  <div
+                    key={name}
+                    className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"
+                  >
+                    <span>{name}</span>
+                    <strong>{count}</strong>
+                  </div>
+                ))}
+                {!aggregations.trainings.length ? (
+                  <p className="text-sm text-emerald-700">Sem pendências.</p>
+                ) : null}
               </div>
             </div>
             <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Setores que requerem atenção</h3>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Setores que requerem atenção
+              </h3>
               <div className="space-y-2">
-                {aggregations.sectors.map(([name, count]) => <div key={name} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"><span>{name}</span><strong>{count}</strong></div>)}
-                {!aggregations.sectors.length ? <p className="text-sm text-emerald-700">Sem pendências.</p> : null}
+                {aggregations.sectors.map(([name, count]) => (
+                  <div
+                    key={name}
+                    className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"
+                  >
+                    <span>{name}</span>
+                    <strong>{count}</strong>
+                  </div>
+                ))}
+                {!aggregations.sectors.length ? (
+                  <p className="text-sm text-emerald-700">Sem pendências.</p>
+                ) : null}
               </div>
             </div>
             <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Pessoas com mais pendências</h3>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Pessoas com mais pendências
+              </h3>
               <div className="space-y-2">
-                {aggregations.people.map(([name, count]) => <div key={name} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"><span>{name}</span><strong>{count}</strong></div>)}
-                {!aggregations.people.length ? <p className="text-sm text-emerald-700">Sem pendências.</p> : null}
+                {aggregations.people.map(([name, count]) => (
+                  <div
+                    key={name}
+                    className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"
+                  >
+                    <span>{name}</span>
+                    <strong>{count}</strong>
+                  </div>
+                ))}
+                {!aggregations.people.length ? (
+                  <p className="text-sm text-emerald-700">Sem pendências.</p>
+                ) : null}
               </div>
             </div>
           </div>
         </section>
 
-        <PendingFilters search={search} setSearch={setSearch} status={status} setStatus={setStatus} criticalOnly={criticalOnly} setCriticalOnly={setCriticalOnly} windowDays={windowDays} setWindowDays={setWindowDays} />
-        <p className="text-xs text-slate-500">O PDF e o envio ao gestor respeitam os filtros atualmente aplicados na tela.</p>
+        <PendingFilters
+          search={search}
+          setSearch={setSearch}
+          status={status}
+          setStatus={setStatus}
+          criticalOnly={criticalOnly}
+          setCriticalOnly={setCriticalOnly}
+          windowDays={windowDays}
+          setWindowDays={setWindowDays}
+        />
+        <p className="text-xs text-slate-500">
+          O PDF e o envio ao gestor respeitam os filtros atualmente aplicados na tela.
+        </p>
       </div>
     );
   }
 
-  const allVisibleSelected = visibleRows.length > 0 && visibleRows.every((row) => selected.has(rowKey(row)));
+  const allVisibleSelected =
+    visibleRows.length > 0 && visibleRows.every((row) => selected.has(rowKey(row)));
 
   return (
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900"><AlertTriangle className="h-4 w-4 text-orange-600" /> Central de pendências</h2>
-          <p className="mt-1 text-xs text-slate-500">Fila operacional para identificar, cobrar e acompanhar cada treinamento obrigatório pendente.</p>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <AlertTriangle className="h-4 w-4 text-orange-600" /> Central de pendências
+          </h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Fila operacional para identificar, cobrar e acompanhar cada treinamento obrigatório
+            pendente.
+          </p>
         </div>
         <button
           type="button"
@@ -489,73 +689,250 @@ export function TrainingComplianceIntelligence({
         </button>
       </div>
 
-      <PendingFilters search={search} setSearch={setSearch} status={status} setStatus={setStatus} criticalOnly={criticalOnly} setCriticalOnly={setCriticalOnly} windowDays={windowDays} setWindowDays={setWindowDays} />
+      <PendingFilters
+        search={search}
+        setSearch={setSearch}
+        status={status}
+        setStatus={setStatus}
+        criticalOnly={criticalOnly}
+        setCriticalOnly={setCriticalOnly}
+        windowDays={windowDays}
+        setWindowDays={setWindowDays}
+      />
 
       <div className="overflow-x-auto rounded-xl border border-slate-200">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
-              <th className="px-3 py-3 text-left"><input aria-label="Selecionar todas as pendências visíveis" type="checkbox" checked={allVisibleSelected} onChange={(event) => setSelected(event.target.checked ? new Set(visibleRows.map(rowKey)) : new Set())} /></th>
-              <th className="px-3 py-3 text-left">Funcionário</th>
-              <th className="px-3 py-3 text-left">Setor / função</th>
-              <th className="px-3 py-3 text-left">Treinamento</th>
-              <th className="px-3 py-3 text-left">Situação</th>
-              <th className="px-3 py-3 text-left">Cobrança</th>
+              <th className="px-3 py-3 text-left">
+                <input
+                  aria-label="Selecionar todas as pendências visíveis"
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={(event) =>
+                    setSelected(event.target.checked ? new Set(visibleRows.map(rowKey)) : new Set())
+                  }
+                />
+              </th>
+              <SortableComplianceTableHeader
+                column="person"
+                label="Funcionário"
+                sort={pendingSort}
+                onSort={(key) => setPendingSort((current) => nextComplianceTableSort(current, key))}
+              />
+              <SortableComplianceTableHeader
+                column="sector"
+                label="Setor / função"
+                sort={pendingSort}
+                onSort={(key) => setPendingSort((current) => nextComplianceTableSort(current, key))}
+              />
+              <SortableComplianceTableHeader
+                column="training"
+                label="Treinamento"
+                sort={pendingSort}
+                onSort={(key) => setPendingSort((current) => nextComplianceTableSort(current, key))}
+              />
+              <SortableComplianceTableHeader
+                column="status"
+                label="Situação"
+                sort={pendingSort}
+                onSort={(key) => setPendingSort((current) => nextComplianceTableSort(current, key))}
+              />
+              <SortableComplianceTableHeader
+                column="notices"
+                label="Cobrança"
+                sort={pendingSort}
+                onSort={(key) => setPendingSort((current) => nextComplianceTableSort(current, key))}
+              />
               <th className="px-3 py-3 text-right">Ação</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
-            {visibleRows.map((row) => {
+            {sortedVisibleRows.map((row) => {
               const key = rowKey(row);
               return (
                 <tr key={key} className={row.critico_operacional ? 'bg-red-50/20' : ''}>
-                  <td className="px-3 py-3"><input aria-label={`Selecionar ${row.funcionario_nome} — ${row.qualificacao_tipo_nome || 'treinamento'}`} type="checkbox" checked={selected.has(key)} onChange={(event) => setSelected((old) => { const next = new Set(old); if (event.target.checked) next.add(key); else next.delete(key); return next; })} /></td>
                   <td className="px-3 py-3">
-                    <div className="flex items-center gap-1.5 font-medium text-slate-900">{row.funcionario_nome}{row.critico_operacional ? <ShieldAlert className="h-3.5 w-3.5 text-red-600" /> : null}</div>
-                    <div className="mt-0.5 text-xs text-slate-400">{row.matricula || 'Sem matrícula'}</div>
+                    <input
+                      aria-label={`Selecionar ${row.funcionario_nome} — ${row.qualificacao_tipo_nome || 'treinamento'}`}
+                      type="checkbox"
+                      checked={selected.has(key)}
+                      onChange={(event) =>
+                        setSelected((old) => {
+                          const next = new Set(old);
+                          if (event.target.checked) next.add(key);
+                          else next.delete(key);
+                          return next;
+                        })
+                      }
+                    />
                   </td>
-                  <td className="px-3 py-3 text-slate-600"><div>{row.setor_nome || 'Sem setor'}</div><div className="text-xs text-slate-400">{row.funcao_nome || 'Sem função'}</div></td>
-                  <td className="px-3 py-3"><div className="font-medium text-slate-800">{row.qualificacao_tipo_nome || row.qualificacao_tipo_codigo || 'Treinamento'}</div>{row.referencia_normativa ? <div className="mt-0.5 text-xs text-slate-400">{row.referencia_normativa}</div> : null}</td>
-                  <td className="px-3 py-3"><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${statusBadge(row.status_compliance)}`}>{complianceStatusLabel(row)}</span></td>
                   <td className="px-3 py-3">
-                    <div className="text-xs text-slate-600">{row.avisos_enviados ? `${row.avisos_enviados} aviso(s)` : 'Nenhum aviso'}</div>
-                    <div className={`mt-0.5 text-xs ${row.ultimo_status_envio && row.ultimo_status_envio !== 'enviada' ? 'text-red-600' : 'text-slate-400'}`}>
+                    <div className="flex items-center gap-1.5 font-medium text-slate-900">
+                      {row.funcionario_nome}
+                      {row.critico_operacional ? (
+                        <ShieldAlert className="h-3.5 w-3.5 text-red-600" />
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 text-xs text-slate-400">
+                      {row.matricula || 'Sem matrícula'}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 text-slate-600">
+                    <div>{row.setor_nome || 'Sem setor'}</div>
+                    <div className="text-xs text-slate-400">{row.funcao_nome || 'Sem função'}</div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="font-medium text-slate-800">
+                      {row.qualificacao_tipo_nome || row.qualificacao_tipo_codigo || 'Treinamento'}
+                    </div>
+                    {row.referencia_normativa ? (
+                      <div className="mt-0.5 text-xs text-slate-400">
+                        {row.referencia_normativa}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-3">
+                    <span
+                      className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${statusBadge(row.status_compliance)}`}
+                    >
+                      {complianceStatusLabel(row)}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="text-xs text-slate-600">
+                      {row.avisos_enviados ? `${row.avisos_enviados} aviso(s)` : 'Nenhum aviso'}
+                    </div>
+                    <div
+                      className={`mt-0.5 text-xs ${row.ultimo_status_envio && row.ultimo_status_envio !== 'enviada' ? 'text-red-600' : 'text-slate-400'}`}
+                    >
                       {row.ultimo_aviso_em
                         ? `${row.ultimo_status_envio && row.ultimo_status_envio !== 'enviada' ? 'Última tentativa falhou · ' : ''}${formatDateTime(row.ultimo_aviso_em)}`
                         : 'Ainda não cobrado'}
                     </div>
-                    <div className="mt-1 flex gap-1">{row.tem_email ? <Mail className="h-3.5 w-3.5 text-slate-400" /> : null}{row.tem_whatsapp ? <MessageCircle className="h-3.5 w-3.5 text-slate-400" /> : null}</div>
+                    <div className="mt-1 flex gap-1">
+                      {row.tem_email ? <Mail className="h-3.5 w-3.5 text-slate-400" /> : null}
+                      {row.tem_whatsapp ? (
+                        <MessageCircle className="h-3.5 w-3.5 text-slate-400" />
+                      ) : null}
+                    </div>
                   </td>
-                  <td className="px-3 py-3 text-right"><button type="button" onClick={() => { setSelected(new Set([key])); setNoticeOpen(true); }} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">{row.avisos_enviados ? 'Reenviar aviso' : 'Enviar aviso'}</button></td>
+                  <td className="px-3 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelected(new Set([key]));
+                        setNoticeOpen(true);
+                      }}
+                      className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      {row.avisos_enviados ? 'Reenviar aviso' : 'Enviar aviso'}
+                    </button>
+                  </td>
                 </tr>
               );
             })}
-            {!pendings.isLoading && !visibleRows.length ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">Nenhuma pendência encontrada para os filtros atuais.</td></tr> : null}
+            {!pendings.isLoading && !visibleRows.length ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                  Nenhuma pendência encontrada para os filtros atuais.
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
 
       {noticeOpen ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 p-4" role="dialog" aria-modal="true">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
           <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-4">
-              <div><h3 className="font-semibold text-slate-900">Enviar cobrança de treinamento</h3><p className="mt-1 text-sm text-slate-500">Revise o alcance e escolha os canais.</p></div>
-              <button type="button" onClick={() => setNoticeOpen(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button>
+              <div>
+                <h3 className="font-semibold text-slate-900">Enviar cobrança de treinamento</h3>
+                <p className="mt-1 text-sm text-slate-500">Revise o alcance e escolha os canais.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNoticeOpen(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-sm">
-              <div><span className="text-slate-500">Selecionados</span><strong className="ml-2">{preview.data?.selecionados ?? selectedRows.length}</strong></div>
-              <div><span className="text-slate-500">Vencidos</span><strong className="ml-2 text-red-700">{preview.data?.vencidos ?? '—'}</strong></div>
-              <div><span className="text-slate-500">Com e-mail</span><strong className="ml-2">{preview.data?.com_email ?? '—'}</strong></div>
-              <div><span className="text-slate-500">Com WhatsApp</span><strong className="ml-2">{preview.data?.com_whatsapp ?? '—'}</strong></div>
+              <div>
+                <span className="text-slate-500">Selecionados</span>
+                <strong className="ml-2">
+                  {preview.data?.selecionados ?? selectedRows.length}
+                </strong>
+              </div>
+              <div>
+                <span className="text-slate-500">Vencidos</span>
+                <strong className="ml-2 text-red-700">{preview.data?.vencidos ?? '—'}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500">Com e-mail</span>
+                <strong className="ml-2">{preview.data?.com_email ?? '—'}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500">Com WhatsApp</span>
+                <strong className="ml-2">{preview.data?.com_whatsapp ?? '—'}</strong>
+              </div>
             </div>
             <div className="mt-4 space-y-2">
-              <label className="flex items-center gap-3 rounded-lg border border-slate-200 p-3"><input type="checkbox" checked={noticeChannels.email} onChange={(event) => setNoticeChannels((old) => ({ ...old, email: event.target.checked }))} /><Mail className="h-4 w-4 text-slate-500" /><span className="text-sm font-medium">E-mail</span></label>
-              <label className="flex items-center gap-3 rounded-lg border border-slate-200 p-3"><input type="checkbox" checked={noticeChannels.whatsapp} onChange={(event) => setNoticeChannels((old) => ({ ...old, whatsapp: event.target.checked }))} /><MessageCircle className="h-4 w-4 text-slate-500" /><span className="text-sm font-medium">WhatsApp</span></label>
+              <label className="flex items-center gap-3 rounded-lg border border-slate-200 p-3">
+                <input
+                  type="checkbox"
+                  checked={noticeChannels.email}
+                  onChange={(event) =>
+                    setNoticeChannels((old) => ({ ...old, email: event.target.checked }))
+                  }
+                />
+                <Mail className="h-4 w-4 text-slate-500" />
+                <span className="text-sm font-medium">E-mail</span>
+              </label>
+              <label className="flex items-center gap-3 rounded-lg border border-slate-200 p-3">
+                <input
+                  type="checkbox"
+                  checked={noticeChannels.whatsapp}
+                  onChange={(event) =>
+                    setNoticeChannels((old) => ({ ...old, whatsapp: event.target.checked }))
+                  }
+                />
+                <MessageCircle className="h-4 w-4 text-slate-500" />
+                <span className="text-sm font-medium">WhatsApp</span>
+              </label>
             </div>
-            {(preview.data?.sem_email || preview.data?.sem_whatsapp) ? <p className="mt-3 text-xs text-amber-700">Sem contato: {preview.data?.sem_email || 0} sem e-mail · {preview.data?.sem_whatsapp || 0} sem WhatsApp. Os demais canais válidos continuarão sendo enviados.</p> : null}
+            {preview.data?.sem_email || preview.data?.sem_whatsapp ? (
+              <p className="mt-3 text-xs text-amber-700">
+                Sem contato: {preview.data?.sem_email || 0} sem e-mail ·{' '}
+                {preview.data?.sem_whatsapp || 0} sem WhatsApp. Os demais canais válidos continuarão
+                sendo enviados.
+              </p>
+            ) : null}
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setNoticeOpen(false)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700">Cancelar</button>
-              <button type="button" disabled={sendNotices.isPending || (!noticeChannels.email && !noticeChannels.whatsapp)} onClick={() => sendNotices.mutate()} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"><Send className="h-4 w-4" />{sendNotices.isPending ? 'Enviando...' : 'Enviar cobrança'}</button>
+              <button
+                type="button"
+                onClick={() => setNoticeOpen(false)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={
+                  sendNotices.isPending || (!noticeChannels.email && !noticeChannels.whatsapp)
+                }
+                onClick={() => sendNotices.mutate()}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                <Send className="h-4 w-4" />
+                {sendNotices.isPending ? 'Enviando...' : 'Enviar cobrança'}
+              </button>
             </div>
           </div>
         </div>
@@ -564,13 +941,27 @@ export function TrainingComplianceIntelligence({
   );
 }
 
-function ComplianceTrendChart({ data, loading }: { data: ComplianceTrendPoint[]; loading: boolean }) {
+function ComplianceTrendChart({
+  data,
+  loading,
+}: {
+  data: ComplianceTrendPoint[];
+  loading: boolean;
+}) {
   if (loading) {
-    return <div className="flex min-h-52 items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-500">Carregando tendência...</div>;
+    return (
+      <div className="flex min-h-52 items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-500">
+        Carregando tendência...
+      </div>
+    );
   }
   const valid = data.filter((point) => point.compliance_pct != null);
   if (!valid.length) {
-    return <div className="flex min-h-52 items-center justify-center rounded-xl bg-slate-50 px-6 text-center text-sm text-slate-500">Ainda não há dados suficientes para a série histórica.</div>;
+    return (
+      <div className="flex min-h-52 items-center justify-center rounded-xl bg-slate-50 px-6 text-center text-sm text-slate-500">
+        Ainda não há dados suficientes para a série histórica.
+      </div>
+    );
   }
   const width = 640;
   const height = 210;
@@ -581,11 +972,14 @@ function ComplianceTrendChart({ data, loading }: { data: ComplianceTrendPoint[];
   const plotWidth = width - left - right;
   const plotHeight = height - top - bottom;
   const points = valid.map((point, index) => {
-    const x = left + (valid.length === 1 ? plotWidth / 2 : (index / (valid.length - 1)) * plotWidth);
+    const x =
+      left + (valid.length === 1 ? plotWidth / 2 : (index / (valid.length - 1)) * plotWidth);
     const y = top + (1 - Number(point.compliance_pct) / 100) * plotHeight;
     return { ...point, x, y };
   });
-  const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
+  const path = points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+    .join(' ');
   const first = valid[0].compliance_pct;
   const last = valid[valid.length - 1].compliance_pct;
   const delta = first == null || last == null ? null : Math.round((last - first) * 10) / 10;
@@ -593,20 +987,49 @@ function ComplianceTrendChart({ data, loading }: { data: ComplianceTrendPoint[];
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-3">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-        <span>{valid.length > 1 ? `${valid[0].snapshot_date.split('-').reverse().join('/')} → ${valid[valid.length - 1].snapshot_date.split('-').reverse().join('/')}` : 'Primeiro snapshot registrado hoje'}</span>
-        <span className="font-semibold text-slate-700">Atual: {last == null ? '—' : `${last}%`}{delta != null && valid.length > 1 ? ` · ${delta >= 0 ? '+' : ''}${delta} p.p.` : ''}</span>
+        <span>
+          {valid.length > 1
+            ? `${valid[0].snapshot_date.split('-').reverse().join('/')} → ${valid[valid.length - 1].snapshot_date.split('-').reverse().join('/')}`
+            : 'Primeiro snapshot registrado hoje'}
+        </span>
+        <span className="font-semibold text-slate-700">
+          Atual: {last == null ? '—' : `${last}%`}
+          {delta != null && valid.length > 1 ? ` · ${delta >= 0 ? '+' : ''}${delta} p.p.` : ''}
+        </span>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-52 w-full" role="img" aria-label="Evolução percentual do compliance de treinamentos">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-52 w-full"
+        role="img"
+        aria-label="Evolução percentual do compliance de treinamentos"
+      >
         {[0, 50, 100].map((value) => {
           const y = top + (1 - value / 100) * plotHeight;
           return (
             <g key={value}>
-              <line x1={left} x2={width - right} y1={y} y2={y} className="stroke-slate-200" strokeWidth="1" />
-              <text x={left - 6} y={y + 3} textAnchor="end" className="fill-slate-400 text-[10px]">{value}%</text>
+              <line
+                x1={left}
+                x2={width - right}
+                y1={y}
+                y2={y}
+                className="stroke-slate-200"
+                strokeWidth="1"
+              />
+              <text x={left - 6} y={y + 3} textAnchor="end" className="fill-slate-400 text-[10px]">
+                {value}%
+              </text>
             </g>
           );
         })}
-        {valid.length > 1 ? <path d={path} fill="none" stroke="currentColor" strokeWidth="3" className="text-primary" /> : null}
+        {valid.length > 1 ? (
+          <path
+            d={path}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            className="text-primary"
+          />
+        ) : null}
         {points.map((point) => (
           <g key={point.snapshot_date}>
             <circle cx={point.x} cy={point.y} r="4" fill="currentColor" className="text-primary" />
@@ -614,7 +1037,12 @@ function ComplianceTrendChart({ data, loading }: { data: ComplianceTrendPoint[];
           </g>
         ))}
       </svg>
-      {valid.length === 1 ? <p className="mt-1 text-center text-xs text-slate-500">A linha de evolução será formada automaticamente à medida que os snapshots diários forem registrados.</p> : null}
+      {valid.length === 1 ? (
+        <p className="mt-1 text-center text-xs text-slate-500">
+          A linha de evolução será formada automaticamente à medida que os snapshots diários forem
+          registrados.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -640,10 +1068,44 @@ function PendingFilters({
 }) {
   return (
     <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 md:grid-cols-[minmax(220px,1fr)_180px_150px_auto]">
-      <label className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar pessoa, setor ou treinamento" className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm" /></label>
-      <select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="TODAS">Todas as situações</option><option value="VENCIDO">Vencidos</option><option value="NAO_REALIZADO">Nunca realizou</option><option value="VENCENDO">Vencendo</option><option value="EM_ANDAMENTO">Em andamento</option></select>
-      <select value={windowDays} onChange={(event) => setWindowDays(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Todos os prazos</option><option value="7">Até 7 dias</option><option value="15">Até 15 dias</option><option value="30">Até 30 dias</option></select>
-      <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"><input type="checkbox" checked={criticalOnly} onChange={(event) => setCriticalOnly(event.target.checked)} /> Só críticos</label>
+      <label className="relative">
+        <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Buscar pessoa, setor ou treinamento"
+          className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm"
+        />
+      </label>
+      <select
+        value={status}
+        onChange={(event) => setStatus(event.target.value)}
+        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+      >
+        <option value="TODAS">Todas as situações</option>
+        <option value="VENCIDO">Vencidos</option>
+        <option value="NAO_REALIZADO">Nunca realizou</option>
+        <option value="VENCENDO">Vencendo</option>
+        <option value="EM_ANDAMENTO">Em andamento</option>
+      </select>
+      <select
+        value={windowDays}
+        onChange={(event) => setWindowDays(event.target.value)}
+        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+      >
+        <option value="">Todos os prazos</option>
+        <option value="7">Até 7 dias</option>
+        <option value="15">Até 15 dias</option>
+        <option value="30">Até 30 dias</option>
+      </select>
+      <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+        <input
+          type="checkbox"
+          checked={criticalOnly}
+          onChange={(event) => setCriticalOnly(event.target.checked)}
+        />{' '}
+        Só críticos
+      </label>
     </div>
   );
 }
