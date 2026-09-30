@@ -30,6 +30,28 @@ const cond = (code) =>
 const tripSector = `(SELECT id FROM setores WHERE empresa_id=6 AND (UPPER(TRIM(codigo))='TRI' OR UPPER(TRIM(nome))=UPPER('Tripulação')) AND COALESCE(ativo,1)=1 AND deleted_at IS NULL ORDER BY id LIMIT 1)`;
 const statements = [];
 
+const qualificationCategoryCode = env === 'staging' ? 'TREINAMENTO_OPERACIONAL' : 'TERICO';
+const qualificationCategoryName = env === 'staging' ? 'Treinamentos Operacionais' : 'Teórico';
+const qualificationCategoryId = `(SELECT id FROM qualificacoes_categorias WHERE empresa_id=6 AND UPPER(codigo)=UPPER(${q(qualificationCategoryCode)}) AND ativo=1 AND deleted_at IS NULL LIMIT 1)`;
+const qualificationFormatId =
+  env === 'staging'
+    ? 'NULL'
+    : `(SELECT id FROM qualificacoes_formatos WHERE empresa_id=6 AND UPPER(codigo)=UPPER('NAO_CLASSIFICADO') AND ativo=1 AND deleted_at IS NULL LIMIT 1)`;
+const qualificationAreaId = (code) =>
+  `(SELECT id FROM qualificacoes_areas WHERE empresa_id=6 AND UPPER(codigo)=UPPER(${q(code)}) AND ativo=1 AND deleted_at IS NULL LIMIT 1)`;
+
+function ensureQualificationModel({ code, name, description, areaCode = 'OPERACOES' }) {
+  const areaId = qualificationAreaId(areaCode);
+  statements.push(
+    `INSERT INTO qualificacoes_tipos (codigo,nome,descricao,categoria,carga_horaria,carga_horaria_inicial,carga_horaria_recorrente,conteudo_programatico,validade,vencimento_fim_mes,observacoes,ativo,is_check,empresa_id,formato_id,categoria_id,classe_requisito,dominio_codigo,area_id,created_at,updated_at) SELECT ${q(code)},${q(name)},${q(description)},${q(qualificationCategoryName)},NULL,NULL,NULL,NULL,NULL,0,${q('Validade vinculada à credencial aeroportuária permanente; não usar periodicidade fixa.')},1,0,6,${qualificationFormatId},${qualificationCategoryId},'TREINAMENTO',NULL,${areaId},datetime('now'),datetime('now') WHERE ${qualificationCategoryId} IS NOT NULL AND ${areaId} IS NOT NULL AND NOT EXISTS (SELECT 1 FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)=UPPER(${q(code)}) AND deleted_at IS NULL)`,
+  );
+}
+function ensureCondition({ code, name, type, description, reference }) {
+  statements.push(
+    `INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa) SELECT id,${q(code)},${q(name)},${q(type)},${q(description)},${q(reference)} FROM empresas WHERE id=6`,
+  );
+}
+
 const deactivate = (code) =>
   statements.push(
     `UPDATE treinamento_requisitos SET ativo=0,deleted_at=datetime('now'),updated_at=datetime('now') WHERE empresa_id=6 AND qualificacao_tipo_id=${model(code)} AND ativo=1 AND deleted_at IS NULL`,
@@ -105,6 +127,7 @@ function addDefaultNA(code) {
 // Excluem-se daqui os modelos tratados explicitamente abaixo.
 const explicitCodes = [
   'D1',
+  'AVSEC_CONSC',
   'D4',
   'CA-EBS',
   'LOFT',
@@ -281,18 +304,43 @@ statements.push(
   `UPDATE treinamento_requisitos SET ativo=1,deleted_at=NULL,updated_at=datetime('now'),fundamento_tipo='REGULATORIO_DIRETO',fundamento_documento='RBAC 120; PRG-SSO-005',justificativa='Exceção individual auditada da população ARSO.' WHERE id=(SELECT MAX(r.id) FROM treinamento_requisitos r JOIN funcionarios f ON f.id=r.funcionario_id AND f.empresa_id=6 LEFT JOIN funcoes ff ON ff.id=f.funcao_id AND ff.empresa_id=6 WHERE r.empresa_id=6 AND r.qualificacao_tipo_id=${model('PPSP')} AND r.escopo='FUNCIONARIO' AND UPPER(TRIM(COALESCE(ff.nome,f.cargo,'')))=UPPER('Auxiliar de Serviços Gerais') AND r.deleted_at IS NOT NULL)`,
 );
 
-// 4) Funções/designações especiais.
+// 4) FDM-EAD é familiarização/conhecimento geral para a população auditada; designação cobre exceções.
 deactivate('FDM-EAD');
 addDefaultNA('FDM-EAD');
+const fdmAwarenessFunctions = [
+  'Comandante',
+  'Copiloto',
+  'Mecânico',
+  'Auxiliar de Manutenção',
+  'Coordenador de Engenharia',
+  'Analista de CTM',
+  'Auxiliar de CTM',
+  'Gerente de Operações',
+  'Assistente de Segurança Operacional',
+  'Auxiliar de QSMS',
+  'Técnico de Segurança do Trabalho',
+];
+for (const name of fdmAwarenessFunctions)
+  addFunctionRule({
+    code: 'FDM-EAD',
+    functionName: name,
+    origin: 'SGSO',
+    foundation: 'PROGRAMA_APROVADO',
+    document: 'Matriz auditada Costa do Sol; MNL-SSO-002',
+    reason:
+      'População de familiarização/conhecimento geral do programa FDM/HFDM definida pela matriz auditada.',
+  });
 addConditionalRule({
   code: 'FDM-EAD',
   condition: 'FDM_EQUIPE',
   origin: 'SGSO',
   foundation: 'DESIGNACAO',
-  document: 'IOGP 690-2 §8C.2; MNL-SSO-002',
+  document: 'MNL-SSO-002',
   reason:
-    'Somente pessoa formalmente designada para função no programa FDM/HFDM necessita deste treinamento.',
+    'Exceção para integrante formal da equipe FDM/HFDM fora da população funcional já coberta pela matriz.',
 });
+
+// Funções/designações especiais.
 deactivate('GATEKEEPER');
 addDefaultNA('GATEKEEPER');
 addConditionalRule({
@@ -324,7 +372,35 @@ addConditionalRule({
   reason: 'Aplicável somente à função especial de supervisão prevista no PPSP.',
 });
 
-// 5) AVSEC: uma qualificação, perfis de competência; pilotos por cargo, demais atividades por condição.
+// 5) AVSEC: conscientização para credencial aeroportuária é requisito próprio; certificações por atividade permanecem adicionais.
+ensureQualificationModel({
+  code: 'AVSEC_CONSC',
+  name: 'Conscientização com AVSEC — Credencial Aeroportuária',
+  description:
+    'Atividade de conscientização AVSEC para pessoa que receberá credencial permanente com permissão de acesso às áreas operacionais do aeródromo.',
+  areaCode: 'OPERACOES',
+});
+ensureCondition({
+  code: 'AVSEC_CREDENCIAL_PERMANENTE',
+  name: 'Credencial permanente com acesso operacional',
+  type: 'OUTRO',
+  description:
+    'Pessoa que receberá ou possui credencial aeroportuária permanente com permissão de acesso às áreas operacionais do aeródromo.',
+  reference: 'RBAC 107.97; PAVSEC/PSA do aeródromo aplicável',
+});
+deactivate('AVSEC_CONSC');
+addDefaultNA('AVSEC_CONSC');
+addConditionalRule({
+  code: 'AVSEC_CONSC',
+  condition: 'AVSEC_CREDENCIAL_PERMANENTE',
+  origin: 'REGULATORIO',
+  foundation: 'REGULATORIO_DIRETO',
+  document: 'RBAC 107.97; PAVSEC/PSA do aeródromo aplicável',
+  reason:
+    'Obrigatória para credencial permanente com acesso às áreas operacionais. A validade acompanha a credencial e a conscientização deve ser refeita na renovação.',
+});
+
+// Certificações AVSEC: uma qualificação D1, com perfil por atividade; não substituem a regra de conscientização/credencial.
 deactivate('D1');
 addDefaultNA('D1');
 for (const name of ['Comandante', 'Copiloto'])
@@ -472,26 +548,25 @@ console.log(`MODE=${apply ? 'APPLY' : 'DRY_RUN'}`);
 console.log(`STATEMENTS=${statements.length}`);
 if (!apply) {
   console.log(sql);
-  process.exit(0);
+} else {
+  const expectedAuth =
+    env === 'production'
+      ? 'AIRTRUST_PRODUCTION_APPLY_TRAINING_COMPLIANCE_V3'
+      : 'AIRTRUST_STAGING_APPLY_TRAINING_COMPLIANCE_V3';
+  const authVar =
+    env === 'production'
+      ? 'AIRTRUST_PRODUCTION_RECONCILIATION_AUTH'
+      : 'AIRTRUST_STAGING_RECONCILIATION_AUTH';
+  if (process.env[authVar] !== expectedAuth)
+    throw new Error(`${env.toUpperCase()}_RECONCILIATION_AUTH_REQUIRED`);
+  if (!/^[0-9a-f]{64}$/i.test(expectedSha256) || expectedSha256.toLowerCase() !== hash)
+    throw new Error(`EXPECTED_RECONCILIATION_SHA256_MISMATCH:${expectedSha256 || 'missing'}`);
+  if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID)
+    throw new Error('CLOUDFLARE_CREDENTIALS_REQUIRED');
+  const workerDir = fileURLToPath(new URL('../../worker-airtrust/', import.meta.url));
+  execFileSync(
+    './node_modules/.bin/wrangler',
+    ['d1', 'execute', target, '--env', env, '--remote', '--command', sql],
+    { cwd: workerDir, stdio: 'inherit', env: process.env },
+  );
 }
-
-const expectedAuth =
-  env === 'production'
-    ? 'AIRTRUST_PRODUCTION_APPLY_TRAINING_COMPLIANCE_V3'
-    : 'AIRTRUST_STAGING_APPLY_TRAINING_COMPLIANCE_V3';
-const authVar =
-  env === 'production'
-    ? 'AIRTRUST_PRODUCTION_RECONCILIATION_AUTH'
-    : 'AIRTRUST_STAGING_RECONCILIATION_AUTH';
-if (process.env[authVar] !== expectedAuth)
-  throw new Error(`${env.toUpperCase()}_RECONCILIATION_AUTH_REQUIRED`);
-if (!/^[0-9a-f]{64}$/i.test(expectedSha256) || expectedSha256.toLowerCase() !== hash)
-  throw new Error(`EXPECTED_RECONCILIATION_SHA256_MISMATCH:${expectedSha256 || 'missing'}`);
-if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID)
-  throw new Error('CLOUDFLARE_CREDENTIALS_REQUIRED');
-const workerDir = fileURLToPath(new URL('../../worker-airtrust/', import.meta.url));
-execFileSync(
-  './node_modules/.bin/wrangler',
-  ['d1', 'execute', target, '--env', env, '--remote', '--command', sql],
-  { cwd: workerDir, stdio: 'inherit', env: process.env },
-);
