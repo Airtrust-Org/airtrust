@@ -181,6 +181,21 @@ describe('Qualificacoes.tsx Behavior', () => {
     expect(screen.getByText(/Incluir Qualificação/i)).toBeInTheDocument();
   });
 
+  it('permite configurar Cargo, Função e Setor e fechar o painel de colunas', async () => {
+    renderComponent();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Colunas/i }));
+
+    expect(screen.getByText('Cargo')).toBeInTheDocument();
+    expect(screen.getByText('Função')).toBeInTheDocument();
+    expect(screen.getByText('Setor')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar configuração de colunas' }));
+    await waitFor(() => {
+      expect(screen.queryByText('Configurar Colunas')).not.toBeInTheDocument();
+    });
+  });
+
   it('handles API error without crashing', async () => {
     fetchWithAuthMock.mockImplementationOnce(async () => {
       return { ok: false, status: 500, json: async () => ({ error: 'Internal Error' }) };

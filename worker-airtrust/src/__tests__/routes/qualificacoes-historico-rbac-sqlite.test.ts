@@ -86,7 +86,7 @@ describe('GET /qualificacoes/historico RBAC (SQLite Real)', () => {
       CREATE TABLE dominios_operacionais (codigo TEXT PRIMARY KEY, nome TEXT, ativo INTEGER DEFAULT 1);
       CREATE TABLE setores_gestores (id INTEGER PRIMARY KEY, empresa_id INTEGER, setor_id INTEGER, funcionario_id INTEGER, usuario_id INTEGER, gestor_id INTEGER, deleted_at TEXT, ativo INTEGER DEFAULT 1);
       CREATE TABLE usuarios (id INTEGER PRIMARY KEY, nome TEXT, codigo TEXT, plano TEXT, ativo INTEGER DEFAULT 1, email TEXT, perfil TEXT, tenant_id INTEGER, funcionario_id INTEGER, deleted_at TEXT);
-      CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER, nome TEXT, setor_id INTEGER, status TEXT, deleted_at TEXT, matricula TEXT, funcao TEXT, cpf TEXT, codigo_anac TEXT, nascimento TEXT, modelo_aeronave_id TEXT);
+      CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER, nome TEXT, setor_id INTEGER, setor TEXT, status TEXT, deleted_at TEXT, matricula TEXT, cargo TEXT, funcao TEXT, cpf TEXT, codigo_anac TEXT, nascimento TEXT, modelo_aeronave_id TEXT);
       CREATE TABLE qualificacoes_categorias (id INTEGER PRIMARY KEY, empresa_id INTEGER, nome TEXT, dominio_codigo TEXT, deleted_at TEXT, cor TEXT, ativo INTEGER DEFAULT 1);
       CREATE TABLE qualificacoes_tipos (id INTEGER PRIMARY KEY, empresa_id INTEGER, nome TEXT, categoria_id INTEGER, categoria TEXT, validade INTEGER, deleted_at TEXT, codigo TEXT, vencimento_fim_mes INTEGER);
       CREATE TABLE qualificacoes_historico (id INTEGER PRIMARY KEY, funcionario_id INTEGER, qualificacao_id INTEGER, categoria_id INTEGER, status TEXT, deleted_at TEXT, matricula TEXT, funcao TEXT, cpf TEXT, codigo_anac TEXT, nascimento TEXT, data_conclusao TEXT, data_vencimento TEXT, validade_meses INTEGER, categoria TEXT, renovacao_de INTEGER, renovada INTEGER, arquivo_url TEXT, certificado_arquivo_id INTEGER, tipo TEXT, qualificacao_codigo TEXT, updated_at TEXT, created_at TEXT, instrutor TEXT, numero_certificado TEXT, observacoes TEXT, tipo_treinamento TEXT, carga_horaria TEXT);
@@ -102,28 +102,28 @@ describe('GET /qualificacoes/historico RBAC (SQLite Real)', () => {
       INSERT INTO setores (id, empresa_id, nome, dominio_codigo) VALUES (9991, 999, 'Setor Operacoes', 'OPERACOES');
       INSERT INTO setores (id, empresa_id, nome, dominio_codigo) VALUES (9992, 999, 'Setor Manutencao', 'MANUTENCAO');
       
-      INSERT INTO funcionarios (id, empresa_id, nome, setor_id, status) VALUES 
-        (8881, 999, 'Func OP 1', 9991, 'ATIVO'),
-        (8882, 999, 'Func MAN 1', 9992, 'ATIVO'),
-        (8883, 999, 'Func OP 2', 9991, 'ATIVO');
+      INSERT INTO funcionarios (id, empresa_id, nome, setor_id, setor, cargo, funcao, status) VALUES
+        (8881, 999, 'Func OP 1', 9991, 'Setor Operacoes', 'Piloto', 'Comandante', 'ATIVO'),
+        (8882, 999, 'Func MAN 1', 9992, 'Setor Manutencao', 'Mecânico', 'Mecânico', 'ATIVO'),
+        (8883, 999, 'Func OP 2', 9991, 'Setor Operacoes', 'Piloto', 'Copiloto', 'ATIVO');
 
       INSERT INTO setores_gestores (empresa_id, setor_id, funcionario_id, usuario_id, ativo) VALUES (999, 9991, 8881, 7771, 1);
       INSERT INTO setores_gestores (empresa_id, setor_id, funcionario_id, usuario_id, ativo) VALUES (999, 9992, 8882, 7772, 1);
 
-      INSERT INTO usuarios (id, nome, email, perfil, tenant_id, funcionario_id) VALUES 
+      INSERT INTO usuarios (id, nome, email, perfil, tenant_id, funcionario_id) VALUES
         (7771, 'Gestor OP', 'gestor.op@test.com', 'GESTOR', 999, 8881),
         (7772, 'Gestor MAN', 'gestor.man@test.com', 'GESTOR', 999, 8882),
         (7773, 'Admin', 'admin@test.com', 'ADMIN', 999, NULL);
 
-      INSERT INTO qualificacoes_categorias (id, empresa_id, nome, dominio_codigo) VALUES 
+      INSERT INTO qualificacoes_categorias (id, empresa_id, nome, dominio_codigo) VALUES
         (6661, 999, 'Cat Operacoes', 'OPERACOES'),
         (6662, 999, 'Cat Manutencao', 'MANUTENCAO');
 
-      INSERT INTO qualificacoes_tipos (id, empresa_id, nome, categoria_id) VALUES 
+      INSERT INTO qualificacoes_tipos (id, empresa_id, nome, categoria_id) VALUES
         (5551, 999, 'Tipo OP', 6661),
         (5552, 999, 'Tipo MAN', 6662);
 
-      INSERT INTO qualificacoes_historico (id, funcionario_id, qualificacao_id, categoria_id, status) VALUES 
+      INSERT INTO qualificacoes_historico (id, funcionario_id, qualificacao_id, categoria_id, status) VALUES
         (4441, 8883, 5551, 6661, 'VALIDA'),
         (4442, 8882, 5552, 6662, 'VALIDA');
     `,
@@ -213,6 +213,11 @@ describe('GET /qualificacoes/historico RBAC (SQLite Real)', () => {
     expect(body.success).toBe(true);
     expect(body.data.length).toBe(1);
     expect(body.data[0].funcionario_id).toBe(8883);
+    expect(body.data[0]).toMatchObject({
+      funcionario_cargo: 'Piloto',
+      funcionario_funcao: 'Copiloto',
+      funcionario_setor: 'Setor Operacoes',
+    });
     expect(body.stats).toBeDefined();
     expect(body.stats.total).toBe(1);
   });

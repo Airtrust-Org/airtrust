@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { DataTable, type Column } from './DataTable';
 import { buildUserScopedStorageKey } from '../../react-app/utils/userPreferences';
@@ -49,6 +49,88 @@ describe('components/ui/DataTable', () => {
 
     expect(screen.getByText('Nome')).toBeInTheDocument();
     expect(screen.getByText('Tripulante Teste')).toBeInTheDocument();
+  });
+
+  it('fecha o painel de colunas em modo controlado', () => {
+    const onColumnConfigOpenChange = vi.fn();
+
+    render(
+      <DataTable
+        tableId="qualificacoes-historico-controlled"
+        data={[{ id: 1, nome: 'Tripulante Teste', codigo: 'CRM' }]}
+        columns={columns}
+        columnConfigOpen
+        onColumnConfigOpenChange={onColumnConfigOpenChange}
+        showInternalColumnConfigButton={false}
+        virtualizeRows={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar configuração de colunas' }));
+    expect(onColumnConfigOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('preserva a visibilidade padrão de coluna nova ausente da preferência salva', () => {
+    const tableId = 'qualificacoes-historico-new-column';
+    const storageKey = buildUserScopedStorageKey(`airtrust_datatable_${tableId}`);
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        visibility: { nome: true, codigo: true },
+        order: ['nome', 'codigo'],
+      }),
+    );
+
+    const columnsWithOptional: Column<TestRow>[] = [
+      ...columns,
+      { id: 'opcional', label: 'Opcional', accessor: () => '-', visible: false },
+    ];
+
+    render(
+      <DataTable
+        tableId={tableId}
+        data={[{ id: 1, nome: 'Tripulante Teste', codigo: 'CRM' }]}
+        columns={columnsWithOptional}
+        virtualizeRows={false}
+      />,
+    );
+
+    expect(screen.queryByRole('columnheader', { name: /Opcional/i })).not.toBeInTheDocument();
+  });
+
+  it('mantém a ordem salva e acrescenta colunas novas ao final', () => {
+    const tableId = 'qualificacoes-historico-order-migration';
+    const storageKey = buildUserScopedStorageKey(`airtrust_datatable_${tableId}`);
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        visibility: { nome: true, codigo: true },
+        order: ['codigo', 'nome'],
+      }),
+    );
+
+    const columnsWithNew: Column<TestRow>[] = [
+      ...columns,
+      { id: 'opcional', label: 'Opcional', accessor: () => '-', visible: false },
+    ];
+
+    render(
+      <DataTable
+        tableId={tableId}
+        data={[{ id: 1, nome: 'Tripulante Teste', codigo: 'CRM' }]}
+        columns={columnsWithNew}
+        columnConfigOpen
+        showInternalColumnConfigButton={false}
+        virtualizeRows={false}
+      />,
+    );
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes.map((checkbox) => checkbox.parentElement?.textContent)).toEqual([
+      'Codigo',
+      'Nome',
+      'Opcional',
+    ]);
   });
 
   it('desliga virtualizacao para tabelas paginadas pelo servidor', () => {
