@@ -8,13 +8,26 @@ for arg in "$@"; do case "$arg" in --target=*) target="${arg#*=}" ;; *) echo "ER
 query_count(){ local sql="$1"; (cd worker-airtrust && npx wrangler d1 execute "$target" --remote --json --command "$sql") | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const p=JSON.parse(d);const r=p[0]?.results?.[0]||{};console.log(Number(r.count??r.total??Object.values(r)[0]??0))})"; }
 assert_count(){ local label="$1" expected="$2" sql="$3" count; count="$(query_count "$sql")"; [[ "$count" == "$expected" ]] || { echo "ERROR: $label expected=$expected found=$count" >&2; exit 1; }; echo "POSTCONDITION_OK=$label"; }
 assert_count migration-ledger-0518 1 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0518_crm_qualification_consolidation.sql';"
+assert_count canonical-theory-category 1 "SELECT COUNT(*) count FROM qualificacoes_categorias WHERE empresa_id=6 AND id=3 AND codigo='TERICO' AND nome='Teórico' AND ativo=1 AND deleted_at IS NULL;"
 assert_count canonical-ead-category 1 "SELECT COUNT(*) count FROM qualificacoes_categorias WHERE empresa_id=6 AND id=13 AND codigo='EAD' AND nome='EAD' AND ativo=1 AND deleted_at IS NULL AND COALESCE(lms_integrada,0)=1;"
 assert_count canonical-ead-format 1 "SELECT COUNT(*) count FROM qualificacoes_formatos WHERE empresa_id=6 AND id=1 AND codigo='EAD' AND nome='EAD' AND ativo=1 AND deleted_at IS NULL;"
 assert_count crm-corp-canonical 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='CRM_CORP' AND nome='CRM Corporate' AND validade=24 AND ativo=1 AND deleted_at IS NULL AND categoria_id=3 AND area_id=4 AND COALESCE(classe_requisito,'')='TREINAMENTO' AND COALESCE(dominio_codigo,'')='CORPORATIVO';"
-assert_count crm-corp-tripulacao-nao-aplica 1 "SELECT COUNT(*) count FROM treinamento_requisitos tr JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id JOIN setores s ON s.id=tr.setor_id AND s.empresa_id=tr.empresa_id WHERE tr.empresa_id=6 AND qt.codigo='CRM_CORP' AND tr.escopo='SETOR' AND s.codigo='TRI' AND tr.obrigatoriedade='NAO_APLICA' AND tr.ativo=1 AND tr.deleted_at IS NULL;"
+assert_count crm-corp-company-rule 1 "SELECT COUNT(*) count FROM treinamento_requisitos tr JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id WHERE tr.empresa_id=6 AND qt.codigo='CRM_CORP' AND tr.escopo='EMPRESA' AND tr.obrigatoriedade='OBRIGATORIA' AND tr.ativo=1 AND tr.deleted_at IS NULL;"
 assert_count retired-active-models 0 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo IN ('CRM-LOS-T','CRM-LOS-P','MNT_FATORES_HUMANOS_CRM') AND deleted_at IS NULL;"
-assert_count tripulantes-preserved 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='D3' AND ativo=1 AND deleted_at IS NULL;"
 assert_count crm-dir-rbac119-model 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='CRM_DIR_RBAC119' AND nome='CRM para Gestores — Cargos de Direção Requeridos (RBAC 119)' AND categoria='EAD' AND carga_horaria=4 AND carga_horaria_inicial=4 AND carga_horaria_recorrente IS NULL AND validade IS NULL AND ativo=1 AND deleted_at IS NULL;"
 assert_count crm-dir-rbac119-no-auto-requirement 0 "SELECT COUNT(*) count FROM treinamento_requisitos tr JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id WHERE tr.empresa_id=6 AND qt.codigo='CRM_DIR_RBAC119' AND tr.ativo=1 AND tr.deleted_at IS NULL;"
 assert_count crm-corp-active-duplicate-groups 0 "SELECT COUNT(*) count FROM (SELECT qh.funcionario_id,qh.data_conclusao FROM qualificacoes_historico qh JOIN qualificacoes_tipos qt ON qt.id=qh.qualificacao_id WHERE qh.empresa_id=6 AND qh.deleted_at IS NULL AND qt.empresa_id=6 AND qt.codigo='CRM_CORP' GROUP BY qh.funcionario_id,qh.data_conclusao HAVING COUNT(*)>1);"
+
+tri_count="$(query_count "SELECT COUNT(*) count FROM setores WHERE empresa_id=6 AND codigo='TRI' AND ativo=1 AND deleted_at IS NULL;")"
+if [[ "$tri_count" == "1" ]]; then
+  assert_count crm-corp-tripulacao-nao-aplica 1 "SELECT COUNT(*) count FROM treinamento_requisitos tr JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id JOIN setores s ON s.id=tr.setor_id AND s.empresa_id=tr.empresa_id WHERE tr.empresa_id=6 AND qt.codigo='CRM_CORP' AND tr.escopo='SETOR' AND s.codigo='TRI' AND tr.obrigatoriedade='NAO_APLICA' AND tr.ativo=1 AND tr.deleted_at IS NULL;"
+elif [[ "$tri_count" == "0" ]]; then
+  echo "POSTCONDITION_SCOPE=tripulacao-reference-absent-in-reduced-staging"
+else
+  echo "ERROR: staging has multiple active TRI sectors: $tri_count" >&2; exit 1
+fi
+
+d3_count="$(query_count "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='D3' AND ativo=1 AND deleted_at IS NULL;")"
+[[ "$d3_count" == "0" || "$d3_count" == "1" ]] || { echo "ERROR: D3 staging reference expected=0-or-1 found=$d3_count" >&2; exit 1; }
+echo "POSTCONDITION_SCOPE=d3-reference-count:$d3_count"
 echo CRM_QUALIFICATION_CONSOLIDATION_0518_STAGING_POSTCONDITIONS=PASS

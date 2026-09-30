@@ -55,7 +55,23 @@ SELECT 'CRM_CORP','CRM — Corporate',1,0,6,NULL,3,
 WHERE NOT EXISTS (
   SELECT 1 FROM qualificacoes_tipos
    WHERE empresa_id=6 AND codigo='CRM_CORP' AND deleted_at IS NULL
-);`;
+);
+
+INSERT INTO treinamento_requisitos (
+  empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,critico_operacional,
+  origem,observacoes,auto_matricular_ead,ativo,created_at,updated_at
+)
+SELECT 6,qt.id,'EMPRESA','OBRIGATORIA',0,'EMPRESA',
+       'Referência staging: regra corporativa necessária para validar as exclusões condicionais de 0521.',
+       0,1,datetime('now'),datetime('now')
+  FROM qualificacoes_tipos qt
+ WHERE qt.empresa_id=6 AND qt.codigo='CRM_CORP' AND qt.ativo=1 AND qt.deleted_at IS NULL
+   AND NOT EXISTS (
+     SELECT 1 FROM treinamento_requisitos tr
+      WHERE tr.empresa_id=6 AND tr.qualificacao_tipo_id=qt.id
+        AND tr.escopo='EMPRESA' AND tr.obrigatoriedade='OBRIGATORIA'
+        AND tr.ativo=1 AND tr.deleted_at IS NULL
+   );`;
 
   return `${bootstrap}\n\n${migrationSql}`;
 }

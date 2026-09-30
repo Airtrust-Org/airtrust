@@ -22,6 +22,7 @@ test('0518 staging adapter bootstraps only canonical non-PII catalog prerequisit
   assert.match(adapted, /SELECT 1,'EAD','EAD'/);
   assert.match(adapted, /SELECT 'CRM_CORP','CRM — Corporate'/);
   assert.match(adapted, /'TREINAMENTO','CORPORATIVO',4/);
+  assert.match(adapted, /'EMPRESA','OBRIGATORIA'/);
   assert.ok(adapted.endsWith(canonical));
   assert.equal(readFileSync('worker-airtrust/schema-v2/changes/0518_crm_qualification_consolidation.sql', 'utf8'), canonical);
 });
@@ -58,6 +59,7 @@ test('0518 staging bootstrap satisfies the live 0457 category FK contract', () =
     INSERT INTO qualificacoes_categorias(id,nome,codigo,ativo,empresa_id,lms_integrada) VALUES(601,'Treinamentos Operacionais','TREINAMENTO_OPERACIONAL',1,6,0);
     CREATE TABLE qualificacoes_areas(id INTEGER PRIMARY KEY,codigo TEXT,empresa_id INTEGER,ativo INTEGER,deleted_at TEXT);
     INSERT INTO qualificacoes_areas(id,codigo,empresa_id,ativo) VALUES(4,'SEGURANCA_OPERACIONAL',6,1);
+    CREATE TABLE treinamento_requisitos(id INTEGER PRIMARY KEY AUTOINCREMENT,empresa_id INTEGER,qualificacao_tipo_id INTEGER,escopo TEXT,obrigatoriedade TEXT,critico_operacional INTEGER,origem TEXT,observacoes TEXT,auto_matricular_ead INTEGER,ativo INTEGER,created_at TEXT,updated_at TEXT,deleted_at TEXT);
     CREATE TRIGGER trg_qualification_type_category_fk_insert_0457 BEFORE INSERT ON qualificacoes_tipos WHEN NEW.deleted_at IS NULL BEGIN
       SELECT CASE WHEN NEW.categoria_id IS NULL OR NOT EXISTS (SELECT 1 FROM qualificacoes_categorias qc WHERE qc.id=NEW.categoria_id AND qc.empresa_id=NEW.empresa_id AND qc.ativo=1 AND qc.deleted_at IS NULL) THEN RAISE(ABORT,'QUALIFICATION_CATEGORY_INVALID') END;
     END;
@@ -73,6 +75,9 @@ test('0518 staging bootstrap satisfies the live 0457 category FK contract', () =
   const seeded = spawnSync('sqlite3', [db], { input: "SELECT codigo||'|'||categoria_id||'|'||COALESCE(formato_id,'NULL')||'|'||classe_requisito||'|'||dominio_codigo||'|'||area_id FROM qualificacoes_tipos WHERE codigo='CRM_CORP';", encoding: 'utf8' });
   assert.equal(seeded.status, 0, seeded.stderr);
   assert.equal(seeded.stdout.trim(), 'CRM_CORP|3|NULL|TREINAMENTO|CORPORATIVO|4');
+  const companyRule = spawnSync('sqlite3', [db], { input: "SELECT COUNT(*) FROM treinamento_requisitos WHERE empresa_id=6 AND escopo='EMPRESA' AND obrigatoriedade='OBRIGATORIA' AND ativo=1 AND deleted_at IS NULL;", encoding: 'utf8' });
+  assert.equal(companyRule.status, 0, companyRule.stderr);
+  assert.equal(companyRule.stdout.trim(), '1');
   const after = spawnSync('sqlite3', [db], { input: "INSERT INTO qualificacoes_tipos(empresa_id,codigo,nome,categoria,categoria_id,formato_id) VALUES(6,'CRM_DIR_RBAC119','Gestor','EAD',(SELECT id FROM qualificacoes_categorias WHERE empresa_id=6 AND codigo='EAD' AND ativo=1 AND deleted_at IS NULL LIMIT 1),(SELECT id FROM qualificacoes_formatos WHERE empresa_id=6 AND codigo='EAD' AND ativo=1 AND deleted_at IS NULL LIMIT 1)); SELECT categoria||'|'||categoria_id||'|'||formato_id FROM qualificacoes_tipos WHERE codigo='CRM_DIR_RBAC119';", encoding: 'utf8' });
   assert.equal(after.status, 0, after.stderr);
   assert.equal(after.stdout.trim(), 'EAD|13|1');
