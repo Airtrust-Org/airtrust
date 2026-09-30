@@ -30,19 +30,33 @@ function normalize(value) {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
 function matchesName(row, query) {
   const name = normalize(row.nome || row.funcionario_nome);
   const needle = normalize(query);
   return name === needle || name.startsWith(`${needle} `) || name.split(' ').includes(needle);
 }
 
+function activeNameMatches(rows, query) {
+  return rows.filter((row) => Number(row.active) !== 0 && matchesName(row, query));
+}
+
 function resolveUnique(rows, query, label) {
-  const matches = rows.filter((row) => Number(row.active) !== 0 && matchesName(row, query));
+  const matches = activeNameMatches(rows, query);
   assert(
     matches.length === 1,
     `${label} '${query}' deve identificar exatamente 1 usuário; encontrados=${matches.length}`,
   );
   return matches[0];
+}
+
+function resolveOptionalUnique(rows, query, label) {
+  const matches = activeNameMatches(rows, query);
+  assert(
+    matches.length <= 1,
+    `${label} '${query}' ficou ambíguo no tenant; encontrados=${matches.length}`,
+  );
+  return matches[0] ?? null;
 }
 
 async function request(path, token, init = {}) {
@@ -61,24 +75,6 @@ async function request(path, token, init = {}) {
   assert(response.json?.success !== false, `${path} retornou success=false`);
   return response.json?.data ?? response.json;
 }
-function findCommonTenant(rows) {
-  const tenantIds = [...new Set(rows.map((row) => Number(row.empresa_id)).filter((id) => id > 0))];
-  const valid = tenantIds.filter((tenantId) => {
-    const scoped = rows.filter((row) => Number(row.empresa_id) === tenantId);
-    try {
-      resolveUnique(scoped, referenceQuery, 'referência');
-      targetQueries.forEach((query) => resolveUnique(scoped, query, 'alvo'));
-      return true;
-    } catch {
-      return false;
-    }
-  });
-  assert(
-    valid.length === 1,
-    `Deve existir exatamente 1 tenant contendo referência e todos os alvos; encontrados=${valid.length}`,
-  );
-  return valid[0];
-}
 
 async function selectTenantIfNeeded(token, claims, tenantId) {
   if (Number(claims?.empresa_id) === tenantId) return { token, claims };
@@ -92,29 +88,63 @@ async function selectTenantIfNeeded(token, claims, tenantId) {
   assert(Number(nextClaims?.empresa_id) === tenantId, 'Token não confirmou tenant selecionado');
   return { token: nextToken, claims: nextClaims };
 }
+
+async function resolveCommonTenant(loginToken, loginClaims) {
+  const companiesPayload = await request('/api/auth/empresas', loginToken);
+  assert(
+    companiesPayload && Array.isArray(companiesPayload.empresas),
+    'Lista de empresas acessíveis inválida',
+  );
+  const tenantIds = [
+    ...new Set(companiesPayload.empresas.map((row) => Number(row.id)).filter((id) => id > 0)),
+  ];
+  assert(tenantIds.length > 0, 'Credencial administrativa sem empresas acessíveis');
+
+  const candidates = [];
+  for (const tenantId of tenantIds) {
+    const selected = await selectTenantIfNeeded(loginToken, loginClaims, tenantId);
+    const users = await request('/api/admin/usuarios', selected.token);
+    assert(Array.isArray(users), `Lista de usuários inválida no tenant ${tenantId}`);
+    const scopedUsers = users.filter((row) => Number(row.empresa_id) === tenantId);
+
+    const reference = resolveOptionalUnique(scopedUsers, referenceQuery, 'referência');
+    const targets = targetQueries.map((query) => resolveOptionalUnique(scopedUsers, query, 'alvo'));
+    if (!reference || targets.some((target) => target === null)) continue;
+
+    candidates.push({
+      tenantId,
+      token: selected.token,
+      claims: selected.claims,
+      users: scopedUsers,
+    });
+  }
+
+  assert(
+    candidates.length === 1,
+    `Deve existir exatamente 1 tenant contendo referência e todos os alvos; encontrados=${candidates.length}`,
+  );
+  return candidates[0];
+}
+
 async function main() {
   assert(email && password, 'Credenciais de produção ausentes');
   assert(targetQueries.length === 3, 'TARGET_NAMES deve conter exatamente 3 usuários');
 
   const loginPayload = await login(baseUrl, email, password);
-  let token = extractAccessToken(loginPayload);
-  let claims = decodeJwtPayload(token);
+  const loginToken = extractAccessToken(loginPayload);
+  const loginClaims = decodeJwtPayload(loginToken);
   assert(
-    ['ADMIN', 'ADMINISTRADOR'].includes(String(claims?.role || '').toUpperCase()),
+    ['ADMIN', 'ADMINISTRADOR'].includes(String(loginClaims?.role || '').toUpperCase()),
     'Credencial não possui perfil administrativo',
   );
 
-  let users = await request('/api/admin/usuarios', token);
-  assert(Array.isArray(users), 'Lista de usuários inválida');
-  const tenantId = findCommonTenant(users);
-
-  ({ token, claims } = await selectTenantIfNeeded(token, claims, tenantId));
+  const tenant = await resolveCommonTenant(loginToken, loginClaims);
+  const { tenantId, token, claims, users: scopedUsers } = tenant;
   assert(
     ['ADMIN', 'ADMINISTRADOR'].includes(String(claims?.role || '').toUpperCase()),
     'Sessão selecionada no tenant não possui perfil administrativo',
   );
-  users = await request('/api/admin/usuarios', token);
-  const scopedUsers = users.filter((row) => Number(row.empresa_id) === tenantId);
+
   const reference = resolveUnique(scopedUsers, referenceQuery, 'referência');
   const targets = targetQueries.map((query) => resolveUnique(scopedUsers, query, 'alvo'));
 
