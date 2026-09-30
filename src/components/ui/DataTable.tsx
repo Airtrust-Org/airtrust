@@ -2,6 +2,13 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { buildUserScopedStorageKey } from '../../react-app/utils/userPreferences';
 
+export interface DataTableColumnPreferences extends Record<string, unknown> {
+  visibility?: Record<string, boolean>;
+  order?: string[];
+  widths?: Record<string, string | undefined>;
+  pageSize?: number;
+}
+
 export interface Column<T> {
   id: string;
   label: string;
@@ -31,9 +38,7 @@ function ensureAtLeastOneVisibleColumn<T>(
   return columns.map((column, index) => ({
     ...column,
     visible:
-      preferredVisibleColumnId != null
-        ? column.id === preferredVisibleColumnId
-        : index === 0,
+      preferredVisibleColumnId != null ? column.id === preferredVisibleColumnId : index === 0,
   }));
 }
 
@@ -67,6 +72,8 @@ interface DataTableProps<T> {
   estimatedRowHeight?: number;
   maxTableHeight?: number;
   enableColumnWidthConfig?: boolean;
+  columnPreferences?: DataTableColumnPreferences | null;
+  onColumnPreferencesChange?: (preferences: DataTableColumnPreferences) => void;
 }
 
 export function DataTable<T extends { id?: string | number }>({
@@ -99,6 +106,8 @@ export function DataTable<T extends { id?: string | number }>({
   estimatedRowHeight = 52,
   maxTableHeight = 600,
   enableColumnWidthConfig = true,
+  columnPreferences,
+  onColumnPreferencesChange,
 }: DataTableProps<T>) {
   // localStorage key for this table (scoped by logged user)
   const storageKey = buildUserScopedStorageKey(`airtrust_datatable_${tableId}`);
@@ -184,7 +193,7 @@ export function DataTable<T extends { id?: string | number }>({
       setColumns(ensureAtLeastOneVisibleColumn(initialColumns));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tableId]); // Apenas tableId como dependência para evitar resetar config
+  }, [storageKey]); // Recarrega ao trocar usuário/escopo, sem misturar preferências
 
   // Keep column definitions fresh when parent render/accessor functions change,
   // while preserving the user's current order and visibility preferences.
@@ -217,31 +226,68 @@ export function DataTable<T extends { id?: string | number }>({
   }, [initialColumns]);
 
   // Save configuration to localStorage whenever columns change
-  const saveConfiguration = (updatedColumns: Column<T>[]) => {
+  const saveConfiguration = (updatedColumns: Column<T>[], pageSizeOverride?: number) => {
+    const config: DataTableColumnPreferences = {
+      visibility: updatedColumns.reduce(
+        (acc, col) => ({
+          ...acc,
+          [col.id]: col.visible !== false,
+        }),
+        {} as Record<string, boolean>,
+      ),
+      order: updatedColumns.map((col) => col.id),
+      widths: updatedColumns.reduce(
+        (acc, col) => ({
+          ...acc,
+          [col.id]: col.width,
+        }),
+        {} as Record<string, string | undefined>,
+      ),
+      pageSize: pageSizeOverride ?? pageSize ?? internalPageSize,
+    };
     try {
-      const config = {
-        visibility: updatedColumns.reduce(
-          (acc, col) => ({
-            ...acc,
-            [col.id]: col.visible !== false,
-          }),
-          {} as Record<string, boolean>,
-        ),
-        order: updatedColumns.map((col) => col.id),
-        widths: updatedColumns.reduce(
-          (acc, col) => ({
-            ...acc,
-            [col.id]: col.width,
-          }),
-          {} as Record<string, string | undefined>,
-        ),
-        pageSize: pageSize ?? internalPageSize,
-      };
       localStorage.setItem(storageKey, JSON.stringify(config));
     } catch (err) {
       console.warn('Failed to save table configuration:', err);
     }
+    onColumnPreferencesChange?.(config);
   };
+
+  useEffect(() => {
+    if (!columnPreferences) return;
+    const widths = columnPreferences.widths ?? {};
+    const configured = ensureAtLeastOneVisibleColumn(
+      initialColumns.map((col) => ({
+        ...col,
+        visible:
+          columnPreferences.visibility?.[col.id] === undefined
+            ? col.visible !== false
+            : columnPreferences.visibility[col.id] !== false,
+        width: widths[col.id] || col.width,
+      })),
+    );
+    if (Array.isArray(columnPreferences.order) && columnPreferences.order.length > 0) {
+      const knownOrder = columnPreferences.order
+        .map((id) => configured.find((col) => col.id === id))
+        .filter(Boolean) as Column<T>[];
+      const knownIds = new Set(knownOrder.map((col) => col.id));
+      setColumns(
+        ensureAtLeastOneVisibleColumn([
+          ...knownOrder,
+          ...configured.filter((col) => !knownIds.has(col.id)),
+        ]),
+      );
+    } else {
+      setColumns(configured);
+    }
+    if (
+      !pageSize &&
+      typeof columnPreferences.pageSize === 'number' &&
+      columnPreferences.pageSize > 0
+    ) {
+      setInternalPageSize(columnPreferences.pageSize);
+    }
+  }, [columnPreferences, pageSize]);
 
   // Filtrar colunas visíveis
   const visibleColumns = useMemo(() => {
@@ -714,19 +760,7 @@ export function DataTable<T extends { id?: string | number }>({
               const size = parseInt(e.target.value, 10) || pageSizeOptions[0] || 50;
               if (onPageSizeChange) onPageSizeChange(size);
               else setInternalPageSize(size);
-              localStorage.setItem(
-                storageKey,
-                JSON.stringify({
-                  ...(() => {
-                    try {
-                      return JSON.parse(localStorage.getItem(storageKey) || '{}');
-                    } catch {
-                      return {};
-                    }
-                  })(),
-                  pageSize: size,
-                }),
-              );
+              saveConfiguration(columns, size);
               // reset page to 1
               if (onPageChange) onPageChange(1);
               else setInternalPage(1);

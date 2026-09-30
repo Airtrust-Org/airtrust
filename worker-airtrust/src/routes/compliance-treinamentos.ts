@@ -1405,7 +1405,7 @@ app.get('/setores', requireRole('admin', 'manager'), async (c) => {
         const key = person.funcao_id;
         const current = cargos.get(key) || {
           funcao_id: key,
-          funcao_nome: person.funcao_nome || 'Sem cargo',
+          funcao_nome: person.funcao_nome || 'Sem função',
           people: [],
         };
         current.people.push(person);

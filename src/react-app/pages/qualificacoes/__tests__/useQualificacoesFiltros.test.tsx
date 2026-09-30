@@ -4,12 +4,21 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useQualificacoesFiltros } from '../hooks/useQualificacoesFiltros';
-import { readUserPreference, writeUserPreference } from '@/react-app/utils/userPreferences';
+import { readUserPreference } from '@/react-app/utils/userPreferences';
 
 vi.mock('@/react-app/utils/userPreferences', () => ({
   readUserPreference: vi.fn(),
-  writeUserPreference: vi.fn(),
 }));
+
+vi.mock('@/react-app/hooks/useTablePreferences', async () => {
+  const React = await vi.importActual<typeof import('react')>('react');
+  return {
+    useTablePreferences: <T extends Record<string, unknown>>(_key: string, defaultValue: T) => {
+      const [preferences, setPreferences] = React.useState<T>(defaultValue);
+      return { preferences, setPreferences, ready: true, resetPreferences: vi.fn() };
+    },
+  };
+});
 
 function createWrapper(initialEntry: string) {
   return function Wrapper({ children }: PropsWithChildren) {
@@ -38,7 +47,6 @@ describe('useQualificacoesFiltros', () => {
     ]);
     expect(result.current.isDefaultStatusFilter).toBe(true);
     expect(result.current.effectiveHistoricoStatusFiltro).toEqual([]);
-    expect(writeUserPreference).toHaveBeenCalled();
   });
 
   it('marca seleção explícita por URL como filtro ativo', async () => {

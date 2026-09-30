@@ -1,74 +1,251 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, type SetStateAction } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { readUserPreference, writeUserPreference } from '@/react-app/utils/userPreferences';
-import {
-  ALL_STATUS_VALUES,
-  QUALIFICACOES_PREFS_KEY,
-} from '../qualificacoes.constants';
+import { readUserPreference } from '@/react-app/utils/userPreferences';
+import { useTablePreferences } from '@/react-app/hooks/useTablePreferences';
+import { ALL_STATUS_VALUES, QUALIFICACOES_PREFS_KEY } from '../qualificacoes.constants';
 import { createDefaultQualificationHistoryStatusSet } from '@/react-app/lib/qualificationHistoryFilters';
 import type { SortConfig } from '@/react-app/utils/types';
 
 export const VALID_TABS = ['historico', 'planejados', 'tipos', 'categorias'] as const;
 export const VALID_PLANNED_VIEWS = ['lista', 'calendario', 'turmas'] as const;
 
+type QualificacoesTab = (typeof VALID_TABS)[number];
+type PlannedView = (typeof VALID_PLANNED_VIEWS)[number];
+
 function sanitizeHistoricoCategoriaFilter(value: string | undefined): string {
   const normalized = String(value ?? '').trim();
   return /^\d+$/.test(normalized) ? '' : normalized;
 }
 
-export interface QualificacoesPrefs {
+function normalizeStatuses(value: unknown): string[] {
+  if (!Array.isArray(value)) return [...createDefaultQualificationHistoryStatusSet()];
+  const valid = new Set<string>(ALL_STATUS_VALUES);
+  return Array.from(
+    new Set(
+      value
+        .map((item) =>
+          String(item || '')
+            .trim()
+            .toUpperCase(),
+        )
+        .filter((item) => valid.has(item)),
+    ),
+  );
+}
+
+function normalizeTab(value: unknown): QualificacoesTab {
+  if (value === 'turmas') return 'planejados';
+  return VALID_TABS.includes(value as QualificacoesTab) ? (value as QualificacoesTab) : 'historico';
+}
+
+function normalizePlannedView(tab: unknown, value: unknown): PlannedView {
+  if (tab === 'turmas') return 'turmas';
+  return VALID_PLANNED_VIEWS.includes(value as PlannedView) ? (value as PlannedView) : 'lista';
+}
+
+function resolveState<T>(next: SetStateAction<T>, current: T): T {
+  return typeof next === 'function' ? (next as (value: T) => T)(current) : next;
+}
+
+export interface QualificacoesPrefs extends Record<string, unknown> {
   activeTab?: string;
   plannedView?: string;
   limit?: number;
   searchTerm?: string;
-  sortColumn?: string;
-  sortDirection?: 'asc' | 'desc';
+  sortColumn?: string | null;
+  sortDirection?: 'asc' | 'desc' | null;
   aeronaveFilter?: string;
   categoriaFilter?: string;
   statusFiltro?: string[];
   setorFilter?: string[];
   categoriasSetorFilter?: string[];
+  historicoCategoriaId?: number | null;
 }
 
 export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
   const [searchParams] = useSearchParams();
 
-  const initialPrefs = useMemo(
+  // Migra a preferência local antiga como fallback inicial. A fonte permanente passa a ser
+  // usuario_preferencias, isolada por usuário + empresa via useTablePreferences.
+  const legacyPrefs = useMemo(
     () => readUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {}),
     [],
   );
+  const defaultPrefs = useMemo<QualificacoesPrefs>(
+    () => ({
+      activeTab: normalizeTab(legacyPrefs.activeTab),
+      plannedView: normalizePlannedView(legacyPrefs.activeTab, legacyPrefs.plannedView),
+      limit: Number(legacyPrefs.limit) > 0 ? Number(legacyPrefs.limit) : 50,
+      searchTerm: String(legacyPrefs.searchTerm || ''),
+      sortColumn: legacyPrefs.sortColumn ?? 'data_vencimento',
+      sortDirection: legacyPrefs.sortDirection ?? 'asc',
+      aeronaveFilter: String(legacyPrefs.aeronaveFilter || ''),
+      categoriaFilter: sanitizeHistoricoCategoriaFilter(legacyPrefs.categoriaFilter),
+      statusFiltro: normalizeStatuses(legacyPrefs.statusFiltro),
+      setorFilter: Array.isArray(legacyPrefs.setorFilter)
+        ? legacyPrefs.setorFilter.map(String)
+        : [],
+      categoriasSetorFilter: Array.isArray(legacyPrefs.categoriasSetorFilter)
+        ? legacyPrefs.categoriasSetorFilter.map(String)
+        : [],
+      historicoCategoriaId:
+        Number.isInteger(Number(legacyPrefs.historicoCategoriaId)) &&
+        Number(legacyPrefs.historicoCategoriaId) > 0
+          ? Number(legacyPrefs.historicoCategoriaId)
+          : null,
+    }),
+    [legacyPrefs],
+  );
+  const {
+    preferences,
+    setPreferences,
+    ready: preferencesReady,
+  } = useTablePreferences<QualificacoesPrefs>('table.qualificacoes.historico', defaultPrefs);
 
-  const rawStoredTab = initialPrefs.activeTab;
-  const rawStoredView = initialPrefs.plannedView;
+  const activeTab = normalizeTab(preferences.activeTab);
+  const plannedView = normalizePlannedView(preferences.activeTab, preferences.plannedView);
+  const limit = Number(preferences.limit) > 0 ? Number(preferences.limit) : 50;
+  const searchTerm = String(preferences.searchTerm || '');
+  const aeronaveFilter = String(preferences.aeronaveFilter || '');
+  const categoriaFilter = sanitizeHistoricoCategoriaFilter(preferences.categoriaFilter);
+  const setorFilter = Array.isArray(preferences.setorFilter)
+    ? preferences.setorFilter.map(String)
+    : [];
+  const categoriasSetorFilter = Array.isArray(preferences.categoriasSetorFilter)
+    ? preferences.categoriasSetorFilter.map(String)
+    : [];
+  const statusFiltro = useMemo(
+    () => new Set(normalizeStatuses(preferences.statusFiltro)),
+    [preferences.statusFiltro],
+  );
+  const sortConfig = useMemo<SortConfig>(
+    () => ({
+      column: preferences.sortColumn ?? 'data_vencimento',
+      direction: preferences.sortDirection ?? 'asc',
+    }),
+    [preferences.sortColumn, preferences.sortDirection],
+  );
+  const historicoCategoriaId =
+    Number.isInteger(Number(preferences.historicoCategoriaId)) &&
+    Number(preferences.historicoCategoriaId) > 0
+      ? Number(preferences.historicoCategoriaId)
+      : null;
 
-  const migratedTab: (typeof VALID_TABS)[number] =
-    rawStoredTab === 'turmas'
-      ? 'planejados'
-      : VALID_TABS.includes(rawStoredTab as (typeof VALID_TABS)[number])
-        ? (rawStoredTab as (typeof VALID_TABS)[number])
-        : 'historico';
+  const setActiveTab = useCallback(
+    (next: SetStateAction<QualificacoesTab>) =>
+      setPreferences((current) => ({
+        ...current,
+        activeTab: resolveState(next, normalizeTab(current.activeTab)),
+      })),
+    [setPreferences],
+  );
+  const setPlannedView = useCallback(
+    (next: SetStateAction<PlannedView>) =>
+      setPreferences((current) => ({
+        ...current,
+        plannedView: resolveState(
+          next,
+          normalizePlannedView(current.activeTab, current.plannedView),
+        ),
+      })),
+    [setPreferences],
+  );
+  const setLimit = useCallback(
+    (next: SetStateAction<number>) =>
+      setPreferences((current) => ({
+        ...current,
+        limit: resolveState(next, Number(current.limit) > 0 ? Number(current.limit) : 50),
+      })),
+    [setPreferences],
+  );
+  const setSearchTerm = useCallback(
+    (next: SetStateAction<string>) =>
+      setPreferences((current) => ({
+        ...current,
+        searchTerm: resolveState(next, String(current.searchTerm || '')),
+      })),
+    [setPreferences],
+  );
+  const setSortConfig = useCallback(
+    (next: SetStateAction<SortConfig>) =>
+      setPreferences((current) => {
+        const previous: SortConfig = {
+          column: current.sortColumn ?? 'data_vencimento',
+          direction: current.sortDirection ?? 'asc',
+        };
+        const resolved = resolveState(next, previous);
+        return { ...current, sortColumn: resolved.column, sortDirection: resolved.direction };
+      }),
+    [setPreferences],
+  );
+  const setAeronaveFilter = useCallback(
+    (next: SetStateAction<string>) =>
+      setPreferences((current) => ({
+        ...current,
+        aeronaveFilter: resolveState(next, String(current.aeronaveFilter || '')),
+      })),
+    [setPreferences],
+  );
+  const setCategoriaFilter = useCallback(
+    (next: SetStateAction<string>) =>
+      setPreferences((current) => ({
+        ...current,
+        categoriaFilter: sanitizeHistoricoCategoriaFilter(
+          resolveState(next, String(current.categoriaFilter || '')),
+        ),
+      })),
+    [setPreferences],
+  );
+  const setSetorFilter = useCallback(
+    (next: SetStateAction<string[]>) =>
+      setPreferences((current) => ({
+        ...current,
+        setorFilter: resolveState(
+          next,
+          Array.isArray(current.setorFilter) ? current.setorFilter.map(String) : [],
+        ).map(String),
+      })),
+    [setPreferences],
+  );
+  const setCategoriasSetorFilter = useCallback(
+    (next: SetStateAction<string[]>) =>
+      setPreferences((current) => ({
+        ...current,
+        categoriasSetorFilter: resolveState(
+          next,
+          Array.isArray(current.categoriasSetorFilter)
+            ? current.categoriasSetorFilter.map(String)
+            : [],
+        ).map(String),
+      })),
+    [setPreferences],
+  );
+  const setStatusFiltro = useCallback(
+    (next: SetStateAction<Set<string>>) =>
+      setPreferences((current) => {
+        const previous = new Set(normalizeStatuses(current.statusFiltro));
+        const resolved = resolveState(next, previous);
+        return { ...current, statusFiltro: normalizeStatuses([...resolved]) };
+      }),
+    [setPreferences],
+  );
+  const setHistoricoCategoriaId = useCallback(
+    (next: SetStateAction<number | null>) =>
+      setPreferences((current) => ({
+        ...current,
+        historicoCategoriaId: resolveState(
+          next,
+          Number.isInteger(Number(current.historicoCategoriaId)) &&
+            Number(current.historicoCategoriaId) > 0
+            ? Number(current.historicoCategoriaId)
+            : null,
+        ),
+      })),
+    [setPreferences],
+  );
 
-  const migratedPlannedView: (typeof VALID_PLANNED_VIEWS)[number] =
-    rawStoredTab === 'turmas'
-      ? 'turmas'
-      : VALID_PLANNED_VIEWS.includes(rawStoredView as (typeof VALID_PLANNED_VIEWS)[number])
-        ? (rawStoredView as (typeof VALID_PLANNED_VIEWS)[number])
-        : 'lista';
-
-  const [activeTab, setActiveTab] = useState<(typeof VALID_TABS)[number]>(migratedTab);
-  const [plannedView, setPlannedView] =
-    useState<(typeof VALID_PLANNED_VIEWS)[number]>(migratedPlannedView);
-  
-  const [limit, setLimit] = useState(initialPrefs.limit ?? 50);
   const [page, setPage] = useState(1);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-
-  const [sortConfig, setSortConfig] = useState<SortConfig>({
-    column: initialPrefs.sortColumn ?? 'data_vencimento',
-    direction: initialPrefs.sortDirection ?? 'asc',
-  });
-
+  const [debouncedSearch, setDebouncedSearch] = useState(searchTerm);
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchTerm);
@@ -77,36 +254,23 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  const [aeronaveFilter, setAeronaveFilter] = useState(initialPrefs.aeronaveFilter ?? '');
-  const [categoriaFilter, setCategoriaFilter] = useState(() =>
-    sanitizeHistoricoCategoriaFilter(initialPrefs.categoriaFilter),
-  );
-  const [setorFilter, setSetorFilter] = useState<string[]>(initialPrefs.setorFilter ?? []);
-  const [categoriasSetorFilter, setCategoriasSetorFilter] = useState<string[]>(
-    initialPrefs.categoriasSetorFilter ?? [],
-  );
-
-  const [statusFiltro, setStatusFiltro] = useState<Set<string>>(
-    createDefaultQualificationHistoryStatusSet,
-  );
-
   const getDefaultHistoricoStatusSet = useCallback(
     () => createDefaultQualificationHistoryStatusSet(),
     [],
   );
-
-  const applySingleStatusFromChip = useCallback((status: string) => {
-    setActiveTab('historico');
-    setPage(1);
-    setStatusFiltro(new Set([status]));
-  }, []);
-
+  const applySingleStatusFromChip = useCallback(
+    (status: string) => {
+      setActiveTab('historico');
+      setPage(1);
+      setStatusFiltro(new Set([status]));
+    },
+    [setActiveTab, setStatusFiltro],
+  );
   const resetStatusFromChip = useCallback(() => {
     setActiveTab('historico');
     setPage(1);
     setStatusFiltro(getDefaultHistoricoStatusSet());
-  }, [getDefaultHistoricoStatusSet]);
-
+  }, [getDefaultHistoricoStatusSet, setActiveTab, setStatusFiltro]);
   const isOnlyStatusSelected = useCallback(
     (status: string) => statusFiltro.size === 1 && statusFiltro.has(status),
     [statusFiltro],
@@ -116,39 +280,6 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
   const isPlanejadosTab = activeTab === 'planejados';
   const usesHistoricoDataset = isHistoricoTab;
 
-  const [historicoCategoriaId, setHistoricoCategoriaId] = useState<number | null>(null);
-
-  useEffect(() => {
-    writeUserPreference<QualificacoesPrefs>(QUALIFICACOES_PREFS_KEY, {
-      activeTab,
-      plannedView,
-      limit,
-      searchTerm,
-      sortColumn: sortConfig.column,
-      sortDirection: sortConfig.direction,
-      aeronaveFilter,
-      categoriaFilter,
-      statusFiltro: [...statusFiltro],
-      setorFilter,
-      categoriasSetorFilter,
-    });
-  }, [
-    activeTab,
-    plannedView,
-    limit,
-    searchTerm,
-    sortConfig.column,
-    sortConfig.direction,
-    aeronaveFilter,
-    categoriaFilter,
-    statusFiltro,
-    setorFilter,
-    categoriasSetorFilter,
-  ]);
-
-  // A visão padrão é histórico completo. Enviar os seis status como filtro
-  // transforma a consulta em "estado operacional" e pode excluir registros
-  // históricos antigos que não possuem lineage de renovação explícita.
   const effectiveHistoricoStatusFiltro = useMemo(() => {
     const isAllStatuses =
       statusFiltro.size === ALL_STATUS_VALUES.length &&
@@ -166,7 +297,7 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
     } else if (tabParam === 'planejados') {
       setActiveTab('planejados');
       if (viewParam === 'lista' || viewParam === 'calendario' || viewParam === 'turmas') {
-        setPlannedView(viewParam as any);
+        setPlannedView(viewParam);
       }
     }
 
@@ -188,13 +319,17 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
         planejada: ['PLANEJADA'],
         cancelada: ['CANCELADA'],
       };
-
       const statusValues = statusMap[statusParam.toLowerCase()];
-      if (statusValues) {
-        setStatusFiltro(new Set(statusValues));
-      }
+      if (statusValues) setStatusFiltro(new Set(statusValues));
     }
-  }, [highlightedHistoricoId, searchParams]);
+  }, [
+    highlightedHistoricoId,
+    searchParams,
+    setActiveTab,
+    setPlannedView,
+    setSearchTerm,
+    setStatusFiltro,
+  ]);
 
   const isDefaultStatusFilter = useMemo(() => {
     const defaultStatusFiltro = getDefaultHistoricoStatusSet();
@@ -240,5 +375,6 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
     setHistoricoCategoriaId,
     effectiveHistoricoStatusFiltro,
     isDefaultStatusFilter,
+    preferencesReady,
   };
 }

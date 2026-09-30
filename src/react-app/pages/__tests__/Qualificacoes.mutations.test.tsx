@@ -220,9 +220,9 @@ describe('Qualificacoes mutations — caracterização de contrato', () => {
       expect(srcFiltros).not.toMatch(/\bfetch\(/);
     });
 
-    it('useQualificacoesFiltros gerencia apenas useState/useEffect/localStorage', () => {
+    it('useQualificacoesFiltros mantém estado local e delega persistência ao hook de preferências', () => {
       expect(srcFiltros).toMatch(/useState/);
-      expect(srcFiltros).toMatch(/localStorage|writeUserPreference/);
+      expect(srcFiltros).toMatch(/useTablePreferences/);
     });
   });
 

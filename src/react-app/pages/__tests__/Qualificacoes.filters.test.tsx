@@ -192,28 +192,24 @@ describe('Qualificacoes - Filters and View State Characterization', () => {
     expect(mockUseQualificacoesHistorico).toHaveBeenCalled();
   });
 
-  it('5. restauração/persistência de preferências em localStorage', () => {
+  it('5. restaura preferências do usuário, inclusive os status escolhidos', () => {
     const prefs = {
-      activeTab: 'tipos',
+      activeTab: 'historico',
       limit: 200,
       aeronaveFilter: 'AW139',
       categoriaFilter: 'Treinamento X',
+      statusFiltro: ['VALIDA', 'VENCIDA', 'VENCENDO_30', 'PLANEJADA'],
     };
     vi.spyOn(userPreferences, 'readUserPreference').mockReturnValue(prefs);
-    const writeSpy = vi.spyOn(userPreferences, 'writeUserPreference');
 
     renderComponent();
-    
-    act(() => {
-      vi.advanceTimersByTime(100);
-    });
-    
-    expect(writeSpy).toHaveBeenCalledWith('qualificacoes_prefs_v1', expect.objectContaining({
-      activeTab: 'tipos',
-      limit: 200,
-      aeronaveFilter: 'AW139',
-      categoriaFilter: 'Treinamento X',
-    }));
+
+    const mainCalls = mockUseQualificacoesHistorico.mock.calls.filter((c: any) => c[1] !== 500);
+    const lastCall = mainCalls[mainCalls.length - 1];
+    expect(lastCall[1]).toBe(200);
+    expect(lastCall[7]).toBe('AW139');
+    expect(lastCall[8]).toBe('Treinamento X');
+    expect(lastCall[9]).toEqual(['VALIDA', 'VENCIDA', 'VENCENDO_30', 'PLANEJADA']);
   });
 
   it('não deixa categoria numérica legada dos Modelos vazar para o Histórico', async () => {
