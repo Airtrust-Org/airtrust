@@ -410,7 +410,7 @@ export default function AlertasNotificacoes() {
                   Frequência
                   <select
                     className={fieldClass}
-                    disabled={!canEdit}
+                    disabled={!canEdit || row.codigo === 'QUALIFICACAO_VENCIDA'}
                     value={row.frequencia || 'ONCE'}
                     onChange={(e) =>
                       setQualifications((current) =>
@@ -422,9 +422,17 @@ export default function AlertasNotificacoes() {
                       )
                     }
                   >
-                    <option value="ONCE">Uma vez por estágio</option>
-                    <option value="DAILY">Diariamente</option>
-                    <option value="EVERY_N_DAYS">A cada N dias</option>
+                    <option value="ONCE">
+                      {row.codigo === 'QUALIFICACAO_VENCIDA'
+                        ? 'Uma vez após o vencimento'
+                        : 'Uma vez por estágio'}
+                    </option>
+                    {row.codigo !== 'QUALIFICACAO_VENCIDA' ? (
+                      <>
+                        <option value="DAILY">Diariamente</option>
+                        <option value="EVERY_N_DAYS">A cada N dias</option>
+                      </>
+                    ) : null}
                   </select>
                 </label>
                 {row.frequencia === 'EVERY_N_DAYS' ? (

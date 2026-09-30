@@ -376,7 +376,7 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
     expect(recipientsFrom(fetchMock)).toEqual([{ email: 'funcionario@example.com' }]);
   });
 
-  it('envia diariamente qualificação vencida somente ao próprio funcionário', async () => {
+  it('envia qualificação vencida apenas uma vez mesmo se a configuração legada estiver DAILY', async () => {
     const { db, queries } = createDb({
       daysToExpiry: -3,
       configs: [expiredEmailConfig()],
@@ -396,10 +396,10 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
     expect(body.subject).toBe('🚨 Qualificação vencida: Qualificacao Operacional — há 3 dias');
     expect(body.textContent).toContain('está vencida há 3 dias');
     expect(body.textContent).toContain('Regularize imediatamente.');
-    expect(queries.some((query) => query.includes("date(enviado_em) = date('now')"))).toBe(true);
+    expect(queries.some((query) => query.includes("date(enviado_em) = date('now')"))).toBe(false);
   });
 
-  it('não repete alerta de qualificação vencida no mesmo dia', async () => {
+  it('não repete alerta de qualificação vencida quando já houve entrega anterior', async () => {
     const { db } = createDb({
       daysToExpiry: -4,
       configs: [expiredEmailConfig()],
