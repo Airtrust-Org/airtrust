@@ -1175,7 +1175,7 @@ app.get('/regras', requireRole('admin', 'manager'), async (c) => {
   const scopedFunctionIds = new Set(
     scopedEmployees.map((employee) => employee.funcao_id).filter((id): id is number => id !== null),
   );
-  const data = rules.filter((rule) => {
+  const visibleRules = rules.filter((rule) => {
     const visibleByAccess =
       access.mode === 'all' ||
       rule.escopo === 'EMPRESA' ||
@@ -1193,6 +1193,29 @@ app.get('/regras', requireRole('admin', 'manager'), async (c) => {
       (!escopo || rule.escopo === escopo)
     );
   });
+  const effectiveRuleIdsByEmployeeAndQualification = new Map<string, Set<number>>();
+  for (const employee of scopedEmployees) {
+    for (const effective of resolveTrainingComplianceRules(rules, employee)) {
+      const key = `${employee.id}:${effective.qualificacao_tipo_id}`;
+      const effectiveIds = effectiveRuleIdsByEmployeeAndQualification.get(key) || new Set<number>();
+      effectiveIds.add(effective.id);
+      effectiveRuleIdsByEmployeeAndQualification.set(key, effectiveIds);
+    }
+  }
+  const data = visibleRules.map((rule) => ({
+    ...rule,
+    impacto: {
+      abrangidas: scopedEmployees.filter((employee) =>
+        trainingComplianceRuleApplies(rule, employee),
+      ).length,
+      prevalece_para: scopedEmployees.filter(
+        (employee) =>
+          effectiveRuleIdsByEmployeeAndQualification
+            .get(`${employee.id}:${rule.qualificacao_tipo_id}`)
+            ?.has(rule.id) === true,
+      ).length,
+    },
+  }));
   return c.json({
     success: true,
     data,

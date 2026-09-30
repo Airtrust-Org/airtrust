@@ -51,6 +51,7 @@ APPROVED_MIGRATIONS=(
   "0516_qualification_expired_daily_alerts.sql"
   "0517_training_compliance_conditions.sql"
   "0518_crm_qualification_consolidation.sql"
+  "0521_training_compliance_designation_overrides.sql"
 )
 
 apply=false
@@ -237,6 +238,9 @@ validate_postconditions() {
       ;;
     0518_crm_qualification_consolidation.sql)
       bash scripts/staging/validate-0518-postconditions.sh --target="$db_name"
+      ;;
+    0521_training_compliance_designation_overrides.sql)
+      bash scripts/staging/validate-0521-postconditions.sh --target="$db_name"
       ;;
   esac
 }
