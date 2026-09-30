@@ -1,0 +1,8 @@
+{
+  "changeId": "auth-profile-orphan-cleanup-0522",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0522_auth_profile_orphan_cleanup.sql",
+  "fileHash": "086e7a0b098e74bfbfb656c4c972918c00cf3b4c7b3f3b986d81cea8d518dbc0",
+  "planPath": "worker-airtrust/schema-v2/plans/auth-profile-orphan-cleanup-0522.md",
+  "planHash": "e9d572865d77fd330b4fdf1791ca4876b5e4a4141b879ee47e0cca54b2e446d5"
+}
