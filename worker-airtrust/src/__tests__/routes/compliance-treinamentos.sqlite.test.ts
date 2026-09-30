@@ -532,6 +532,23 @@ describe('training compliance engine', () => {
     expect(body.data.nao_realizados).toBe(3);
     expect(body.data.setores.some((s: any) => s.setor_nome === 'Outro')).toBe(false);
   });
+  it('expõe impacto da regra e quantas pessoas ficam efetivamente sob cada override', async () => {
+    sqlite.database.exec(
+      "INSERT INTO treinamento_requisitos (id,empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,origem) VALUES (70,1,100,'EMPRESA','OBRIGATORIA','EMPRESA'); INSERT INTO treinamento_requisitos (id,empresa_id,qualificacao_tipo_id,escopo,funcao_id,obrigatoriedade,origem) VALUES (71,1,100,'FUNCAO',1,'NAO_APLICA','EMPRESA');",
+    );
+    const response = await createApp(sqlite.asD1()).request('/regras?qualificacao_tipo_id=100');
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    expect(body.data.find((rule: any) => rule.id === 70).impacto).toEqual({
+      abrangidas: 3,
+      prevalece_para: 1,
+    });
+    expect(body.data.find((rule: any) => rule.id === 71).impacto).toEqual({
+      abrangidas: 2,
+      prevalece_para: 2,
+    });
+  });
+
   it('restringe gestor às funções presentes nos setores sob sua gestão', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos

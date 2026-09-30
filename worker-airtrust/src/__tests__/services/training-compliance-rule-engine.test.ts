@@ -98,6 +98,20 @@ describe('training compliance rule engine', () => {
     ).toEqual([individualOverride]);
   });
 
+  it('lets a reusable designation exclusion override a broad company requirement', () => {
+    const company = { ...base, id: 11, escopo: 'EMPRESA' as const, obrigatoriedade: 'OBRIGATORIA' };
+    const designationExclusion = {
+      ...base,
+      id: 12,
+      escopo: 'EMPRESA' as const,
+      condicao_id: 55,
+      obrigatoriedade: 'NAO_APLICA',
+    };
+    expect(resolveTrainingComplianceRules([company, designationExclusion], employee)).toEqual([
+      designationExclusion,
+    ]);
+  });
+
   it('generates the same condition-aware predicate for renewal and expiry notification paths', () => {
     const sql = trainingComplianceEffectiveRequirementPredicateSql({ requireAutoEnrollment: true });
     expect(sql).toContain('funcionarios_compliance_condicoes');
