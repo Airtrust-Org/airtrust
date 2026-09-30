@@ -39,7 +39,6 @@ import {
   isG1SemQualificacaoCode,
   realizarG1SemPendente,
 } from '../../services/qualificacoes-g1-sem';
-import { ensureCertificateForQualification } from '../../services/ensure-certificate';
 import { requireOperationalAccess } from '../../services/operational-domain-access';
 import { reconcileQualificationLineageAtomic } from '../../services/qualification-history-atomic';
 
@@ -466,21 +465,6 @@ writeRouter.post(
         console.error('domain_event_error', error);
       }
 
-      // Auto-gerar certificado para renovação (erros não derrubam a request)
-      const novoHistoricoId = Number(insertResult.meta.last_row_id || 0);
-      if (novoHistoricoId) {
-        try {
-          const certResult = await ensureCertificateForQualification(
-            c.env,
-            novoHistoricoId,
-            tenantCtx.empresaId,
-          );
-          console.log(`[auto-cert/renew] historicoId=${novoHistoricoId} state=${certResult.state}`);
-        } catch (certErr) {
-          console.error(`[auto-cert/renew] ERROR historicoId=${novoHistoricoId}:`, certErr);
-        }
-      }
-
       return c.json({
         success: true,
         message: 'Qualificação renovada com sucesso',
@@ -890,22 +874,6 @@ Alternativamente, edite ou exclua o registro existente antes de criar um novo.`,
       });
     } catch (error) {
       console.error('domain_event_error', error);
-    }
-
-    // Auto-gerar certificado para qualificações concluídas (erros não derrubam a request)
-    if (statusFinal === QUALIFICACAO_STATUS.CONCLUIDA && createdHistoricoId) {
-      try {
-        const certResult = await ensureCertificateForQualification(
-          c.env,
-          createdHistoricoId,
-          tenantCtx.empresaId,
-        );
-        console.log(
-          `[auto-cert/create] historicoId=${createdHistoricoId} state=${certResult.state}`,
-        );
-      } catch (certErr) {
-        console.error(`[auto-cert/create] ERROR historicoId=${createdHistoricoId}:`, certErr);
-      }
     }
 
     return c.json({

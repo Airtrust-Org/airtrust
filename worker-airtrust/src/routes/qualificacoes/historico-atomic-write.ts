@@ -21,7 +21,6 @@ import {
   resolveCargaHorariaByTipo,
 } from './historico-helpers';
 import { assertQualificacaoAtribuicaoWithinOperationalScope } from '../../services/operational-domain-access';
-import { ensureCertificateForQualification } from '../../services/ensure-certificate';
 import {
   calculateQualificationExpiry,
   createQualificationHistoryAtomic,
@@ -318,7 +317,6 @@ async function processCreateComplementaryEffects(params: {
 }): Promise<string[]> {
   if (params.action === 'idempotent') return [];
 
-  const tenantCtx = getTenantContext(params.c);
   const auditUser = extrairUsuarioAuditoria(params.c);
   const effects: Record<string, () => Promise<unknown>> = {
     cache: () => invalidateMaterializedStats(params.c.env.DB),
@@ -352,11 +350,6 @@ async function processCreateComplementaryEffects(params: {
       ),
   };
 
-  if (params.status === 'CONCLUIDA') {
-    effects.certificate = () =>
-      ensureCertificateForQualification(params.c.env, params.historyId, tenantCtx.empresaId);
-  }
-
   const pending = await settleQualificationComplementaryEffects(effects);
   if (pending.length > 0) {
     console.error('[qualificacoes/atomic-write] complementary processing pending', {
@@ -379,7 +372,6 @@ async function processRenewComplementaryEffects(params: {
 }): Promise<string[]> {
   if (params.action === 'idempotent') return [];
 
-  const tenantCtx = getTenantContext(params.c);
   const auditUser = extrairUsuarioAuditoria(params.c);
   const pending = await settleQualificationComplementaryEffects({
     cache: () => invalidateMaterializedStats(params.c.env.DB),
@@ -408,12 +400,6 @@ async function processRenewComplementaryEffects(params: {
           data_conclusao: params.completionDate,
           data_vencimento: params.expiryDate,
         },
-      ),
-    certificate: () =>
-      ensureCertificateForQualification(
-        params.c.env,
-        params.successorHistoryId,
-        tenantCtx.empresaId,
       ),
   });
 
