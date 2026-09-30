@@ -326,6 +326,11 @@ if [[ "$migration_basename" == "0516_qualification_expired_daily_alerts.sql" && 
   echo "STAGING_DEPENDENCY_0515_OK=true"
 fi
 
+if [[ "$migration_basename" == "0518_crm_qualification_consolidation.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0518-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0518_OK=true"
+fi
+
 if [[ "$migration_basename" == "0519_training_compliance_evidence_profiles.sql" && "$ledger_count" == "0" ]]; then
   bash scripts/staging/validate-0519-preflight.sh --target="$db_name"
   echo "SPECIALIZED_PREFLIGHT_0519_OK=true"
@@ -334,6 +339,7 @@ fi
 if [[ "$migration_basename" == "0520_training_compliance_evidence_multi_profiles.sql" && "$ledger_count" == "0" ]]; then
   bash scripts/staging/validate-0520-preflight.sh --target="$db_name"
   echo "SPECIALIZED_PREFLIGHT_0520_OK=true"
+
 fi
 
 if [[ "$migration_basename" == "0521_training_compliance_designation_overrides.sql" && "$ledger_count" == "0" ]]; then
@@ -433,9 +439,11 @@ else
   node --input-type=module - "$migration_path" "$migration_basename" "$combined_sql" <<'NODE'
 import { readFileSync, writeFileSync } from 'node:fs';
 import { buildLedgerAppliedSql } from './worker-airtrust/scripts/lib/migration-remote-apply.mjs';
+import { adaptStagingMigrationSql } from './scripts/staging/staging-migration-adapters.mjs';
 
 const [migrationPath, migrationName, outputPath] = process.argv.slice(2);
-const migrationSql = readFileSync(migrationPath, 'utf8');
+const immutableMigrationSql = readFileSync(migrationPath, 'utf8');
+const migrationSql = adaptStagingMigrationSql({ migrationName, migrationSql: immutableMigrationSql });
 const combined = buildLedgerAppliedSql({ migrationSql, migrationName });
 writeFileSync(outputPath, combined, { encoding: 'utf8', mode: 0o600 });
 NODE
