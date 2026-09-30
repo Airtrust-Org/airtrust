@@ -62,6 +62,13 @@ describe('qualificacoes historico helper memoization', () => {
     expect(clauseAsc).not.toBe(clauseDesc);
   });
 
+  it('ordena Função e Setor em ambos os sentidos no histórico', () => {
+    expect(buildOrderByClause('funcao', 'ASC')).toBe("COALESCE(f.funcao, '') ASC");
+    expect(buildOrderByClause('funcao', 'DESC')).toBe("COALESCE(f.funcao, '') DESC");
+    expect(buildOrderByClause('setor', 'ASC')).toBe("COALESCE(f.setor, '') ASC");
+    expect(buildOrderByClause('setor', 'DESC')).toBe("COALESCE(f.setor, '') DESC");
+  });
+
   it('SORTABLE_COLUMNS.status identifica PLANEJADA por qh.status antes de data_conclusao', () => {
     const statusExpr = SORTABLE_COLUMNS['status'];
     // Must check status field before data_conclusao to catch records with data_conclusao set

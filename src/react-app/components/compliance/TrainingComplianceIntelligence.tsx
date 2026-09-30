@@ -393,7 +393,7 @@ export function TrainingComplianceIntelligence({
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="font-semibold text-slate-900">Evolução do compliance — 90 dias</h2>
-              <p className="mt-1 text-xs text-slate-500">Histórico real registrado diariamente para o mesmo escopo de setor/cargo selecionado.</p>
+              <p className="mt-1 text-xs text-slate-500">Histórico real registrado diariamente para o mesmo escopo de setor/função selecionado.</p>
             </div>
           </div>
           <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
@@ -497,7 +497,7 @@ export function TrainingComplianceIntelligence({
             <tr>
               <th className="px-3 py-3 text-left"><input aria-label="Selecionar todas as pendências visíveis" type="checkbox" checked={allVisibleSelected} onChange={(event) => setSelected(event.target.checked ? new Set(visibleRows.map(rowKey)) : new Set())} /></th>
               <th className="px-3 py-3 text-left">Funcionário</th>
-              <th className="px-3 py-3 text-left">Setor / cargo</th>
+              <th className="px-3 py-3 text-left">Setor / função</th>
               <th className="px-3 py-3 text-left">Treinamento</th>
               <th className="px-3 py-3 text-left">Situação</th>
               <th className="px-3 py-3 text-left">Cobrança</th>
@@ -514,7 +514,7 @@ export function TrainingComplianceIntelligence({
                     <div className="flex items-center gap-1.5 font-medium text-slate-900">{row.funcionario_nome}{row.critico_operacional ? <ShieldAlert className="h-3.5 w-3.5 text-red-600" /> : null}</div>
                     <div className="mt-0.5 text-xs text-slate-400">{row.matricula || 'Sem matrícula'}</div>
                   </td>
-                  <td className="px-3 py-3 text-slate-600"><div>{row.setor_nome || 'Sem setor'}</div><div className="text-xs text-slate-400">{row.funcao_nome || 'Sem cargo'}</div></td>
+                  <td className="px-3 py-3 text-slate-600"><div>{row.setor_nome || 'Sem setor'}</div><div className="text-xs text-slate-400">{row.funcao_nome || 'Sem função'}</div></td>
                   <td className="px-3 py-3"><div className="font-medium text-slate-800">{row.qualificacao_tipo_nome || row.qualificacao_tipo_codigo || 'Treinamento'}</div>{row.referencia_normativa ? <div className="mt-0.5 text-xs text-slate-400">{row.referencia_normativa}</div> : null}</td>
                   <td className="px-3 py-3"><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${statusBadge(row.status_compliance)}`}>{complianceStatusLabel(row)}</span></td>
                   <td className="px-3 py-3">

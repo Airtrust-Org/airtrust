@@ -433,14 +433,14 @@ export default function ComplianceTreinamentosPage() {
                 </select>
                 {tab !== 'setores' ? (
                   <select
-                    aria-label="Filtrar por cargo"
+                    aria-label="Filtrar por função"
                     value={funcaoId ?? ''}
                     onChange={(event) =>
                       setFuncaoId(event.target.value ? Number(event.target.value) : null)
                     }
                     className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                   >
-                    <option value="">Todos os cargos</option>
+                    <option value="">Todas as funções</option>
                     {functions.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.nome}
@@ -607,7 +607,7 @@ export default function ComplianceTreinamentosPage() {
                     </div>
                   </div>
                   <p className="mt-4 text-xs leading-5 text-slate-600">
-                    {summary.data?.cargos_sem_matriz ?? 0} cargo(s) sem matriz ·{' '}
+                    {summary.data?.cargos_sem_matriz ?? 0} funções sem matriz ·{' '}
                     {summary.data?.setores_sem_matriz ?? 0} setor(es) sem matriz
                   </p>
                   <span className="mt-4 inline-flex text-xs font-semibold text-amber-900">
@@ -786,7 +786,7 @@ export default function ComplianceTreinamentosPage() {
                       <thead className="bg-slate-50 text-slate-500">
                         <tr>
                           <th className="px-4 py-3 text-left">Pessoa</th>
-                          <th className="px-3 py-3 text-left">Setor / cargo</th>
+                          <th className="px-3 py-3 text-left">Setor / função</th>
                           <th className="px-3 py-3 text-right">Requisitos</th>
                           <th className="px-3 py-3 text-right">Compliance</th>
                           <th className="px-3 py-3 text-right">Realizados</th>
@@ -807,7 +807,7 @@ export default function ComplianceTreinamentosPage() {
                             <td className="px-3 py-3 text-slate-600">
                               <div>{item.setor_nome || 'Sem setor'}</div>
                               <div className="mt-0.5 text-xs text-slate-400">
-                                {item.funcao_nome || 'Sem cargo'}
+                                {item.funcao_nome || 'Sem função'}
                               </div>
                             </td>
                             <td className="px-3 py-3 text-right font-medium tabular-nums text-slate-700">
@@ -847,7 +847,7 @@ export default function ComplianceTreinamentosPage() {
                   <table className="min-w-full text-sm">
                     <thead className="bg-slate-50 text-slate-500">
                       <tr>
-                        <th className="px-4 py-3 text-left">Setor / cargo</th>
+                        <th className="px-4 py-3 text-left">Setor / função</th>
                         <th className="px-3 py-3 text-right">Pessoas</th>
                         <th className="px-3 py-3 text-right">Requisitos</th>
                         <th className="px-3 py-3 text-right">Compliance</th>

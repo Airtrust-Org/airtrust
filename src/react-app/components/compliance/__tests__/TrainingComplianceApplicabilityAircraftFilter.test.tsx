@@ -68,7 +68,7 @@ describe('TrainingComplianceApplicabilityEditor aircraft scope', () => {
     expect(screen.queryByLabelText('Modelo de aeronave')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
-    fireEvent.change(screen.getByLabelText('Cargo / função'), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText('Função'), { target: { value: '10' } });
 
     const aircraft = await screen.findByLabelText('Modelo de aeronave');
     expect(screen.getByRole('option', { name: 'AW139' })).toBeInTheDocument();

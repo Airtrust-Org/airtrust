@@ -393,7 +393,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
             <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th className="px-4 py-3 text-left">Pessoa</th>
-                <th className="px-3 py-3 text-left">Setor / cargo</th>
+                <th className="px-3 py-3 text-left">Setor / função</th>
                 <th className="px-3 py-3 text-left">Matrícula</th>
                 <th className="px-3 py-3 text-left">Situação</th>
                 <th className="px-3 py-3 text-left">Ação</th>
@@ -406,7 +406,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                   <td className="px-4 py-3 font-medium text-slate-800">{row.funcionario_nome}</td>
                   <td className="px-3 py-3 text-slate-600">
                     {row.setor_nome || 'Sem setor'}
-                    <div className="text-xs text-slate-400">{row.funcao_nome || 'Sem cargo'}</div>
+                    <div className="text-xs text-slate-400">{row.funcao_nome || 'Sem função'}</div>
                   </td>
                   <td className="px-3 py-3">
                     <div>{row.curso_titulo}</div>
@@ -438,11 +438,11 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                             <option value="VINCULAR_SETOR">Obrigatório para o setor</option>
                           ) : null}
                           {row.funcao_id ? (
-                            <option value="VINCULAR_FUNCAO">Obrigatório para o cargo</option>
+                            <option value="VINCULAR_FUNCAO">Obrigatório para a função</option>
                           ) : null}
                           {row.setor_id && row.funcao_id ? (
                             <option value="VINCULAR_SETOR_FUNCAO">
-                              Obrigatório para setor + cargo
+                              Obrigatório para setor + função
                             </option>
                           ) : null}
                           {row.qualificacao_tipo_id ? (

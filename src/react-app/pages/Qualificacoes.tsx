@@ -49,7 +49,7 @@ import { TrainingComplianceApplicabilityEditor } from '@/react-app/components/co
 import { useAeronavesConfig } from '@/react-app/hooks/useAeronavesConfig';
 import { API_BASE_URL, getAccessToken, fetchWithAuth } from '@/react-app/config/api';
 import { clearApiCacheByPattern, useApi } from '@/react-app/hooks/useApi';
-import { DataTable, Column, SortConfig } from '@/components/ui/DataTable';
+import { DataTable, Column, SortConfig, type DataTableColumnPreferences } from '@/components/ui/DataTable';
 import { RowActionsMenu, type RowAction } from '@/react-app/components/UI/RowActionsMenu';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import { Modal } from '@/components/ui/Modal';
@@ -104,7 +104,6 @@ import {
   getTipoRelatedCachePatterns,
   type TipoUpdateResponseData,
 } from '@/react-app/pages/qualificacoes/tipoSaveFeedback';
-import { readUserPreference, writeUserPreference } from '@/react-app/utils/userPreferences';
 import { normalizeQualificationHistorySectorFilter } from '@/react-app/lib/qualificationHistoryFilters';
 import {
   QUALIFICATION_AREA_UNCLASSIFIED_FILTER,
@@ -115,7 +114,6 @@ import {
 import {
   ALL_STATUS_VALUES,
   historicoActionButtonClass,
-  QUALIFICACOES_PREFS_KEY,
 } from './qualificacoes/qualificacoes.constants';
 import { useQualificacoesFiltros } from './qualificacoes/hooks/useQualificacoesFiltros';
 import { useQualificacoesMutations } from './qualificacoes/hooks/useQualificacoesMutations';
@@ -135,7 +133,6 @@ import { QualificacaoEmptyState } from './qualificacoes/components/QualificacaoE
 import { QualificacaoChip } from './qualificacoes/components/QualificacaoChip';
 import { QualificacaoAlert } from './qualificacoes/components/QualificacaoAlert';
 import type {
-  QualificacoesPrefs,
   QualificacoesModelosPrefs,
 } from './qualificacoes/qualificacoes.types';
 
@@ -327,6 +324,15 @@ export default function Qualificacoes() {
   } = useTablePreferences<QualificacoesModelosPrefs>(
     'table.qualificacoes.modelos',
     defaultModelosPrefs,
+  );
+  const defaultHistoricoColumnPrefs = useMemo<DataTableColumnPreferences>(() => ({}), []);
+  const {
+    preferences: historicoColumnPrefs,
+    setPreferences: setHistoricoColumnPrefs,
+    ready: historicoColumnPrefsReady,
+  } = useTablePreferences<DataTableColumnPreferences>(
+    'table.qualificacoes.historico.columns',
+    defaultHistoricoColumnPrefs,
   );
   // Tipos agora são fornecidos pelo hook dedicado useQualificacaoTipos
   type TipoQualificacao = {
@@ -1903,23 +1909,10 @@ export default function Qualificacoes() {
         },
       },
       {
-        id: 'cargo',
-        label: 'Cargo',
-        accessor: (row) => row.funcionario_cargo || '-',
-        sortable: false,
-        visible: false,
-        width: '150px',
-        render: (value) => (
-          <span className="line-clamp-2 whitespace-normal break-words text-sm font-normal text-slate-900">
-            {String(value ?? '-')}
-          </span>
-        ),
-      },
-      {
         id: 'funcao',
         label: 'Função',
         accessor: (row) => row.funcionario_funcao || '-',
-        sortable: false,
+        sortable: true,
         visible: false,
         width: '150px',
         render: (value) => (
@@ -1932,7 +1925,7 @@ export default function Qualificacoes() {
         id: 'setor',
         label: 'Setor',
         accessor: (row) => row.funcionario_setor || '-',
-        sortable: false,
+        sortable: true,
         visible: false,
         width: '170px',
         render: (value) => (
@@ -2745,6 +2738,8 @@ export default function Qualificacoes() {
               columnConfigOpen={columnConfigOpen === 'historico'}
               onColumnConfigOpenChange={(open) => setColumnConfigOpen(open ? 'historico' : null)}
               showInternalColumnConfigButton={false}
+              columnPreferences={historicoColumnPrefsReady && Object.keys(historicoColumnPrefs).length > 0 ? historicoColumnPrefs : null}
+              onColumnPreferencesChange={setHistoricoColumnPrefs}
               // Ordenação server-side
               sortConfig={sortConfig}
               onSortChange={(newSortConfig) => {
@@ -3327,10 +3322,6 @@ export default function Qualificacoes() {
                       aria-selected={isActive}
                       onClick={() => {
                         setPlannedView(view);
-                        writeUserPreference('qualificacoes_prefs_v1', {
-                          activeTab: 'planejados',
-                          plannedView: view,
-                        });
                       }}
                       className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 transition-colors ${
                         isActive

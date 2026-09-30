@@ -77,8 +77,8 @@ async function readJson<T>(response: Response): Promise<T> {
 const scopeOptions: Array<{ value: Scope; label: string }> = [
   { value: 'EMPRESA', label: 'Toda a empresa' },
   { value: 'SETOR', label: 'Todo o setor' },
-  { value: 'FUNCAO', label: 'Cargo / função em qualquer setor' },
-  { value: 'SETOR_FUNCAO', label: 'Setor + cargo / função' },
+  { value: 'FUNCAO', label: 'Função em qualquer setor' },
+  { value: 'SETOR_FUNCAO', label: 'Setor + função' },
   { value: 'FUNCIONARIO', label: 'Funcionário específico' },
 ];
 
@@ -95,9 +95,9 @@ function scopeLabel(rule: Rule) {
   const aircraft = rule.aeronave_modelo ? ` · ${rule.aeronave_modelo}` : '';
   if (rule.escopo === 'EMPRESA') return `Toda a empresa${aircraft}`;
   if (rule.escopo === 'SETOR') return `${rule.setor_nome || 'Setor'}${aircraft}`;
-  if (rule.escopo === 'FUNCAO') return `${rule.funcao_nome || 'Cargo / função'}${aircraft}`;
+  if (rule.escopo === 'FUNCAO') return `${rule.funcao_nome || 'Função'}${aircraft}`;
   if (rule.escopo === 'SETOR_FUNCAO') {
-    return `${rule.setor_nome || 'Setor'} · ${rule.funcao_nome || 'Cargo'}${aircraft}`;
+    return `${rule.setor_nome || 'Setor'} · ${rule.funcao_nome || 'Função'}${aircraft}`;
   }
   return `${rule.funcionario_nome || 'Funcionário específico'}${aircraft}`;
 }
@@ -218,7 +218,7 @@ export function TrainingComplianceApplicabilityEditor({
       if ((scope === 'SETOR' || scope === 'SETOR_FUNCAO') && !setorId)
         throw new Error('Selecione o setor.');
       if ((scope === 'FUNCAO' || scope === 'SETOR_FUNCAO') && !funcaoId)
-        throw new Error('Selecione o cargo/função.');
+        throw new Error('Selecione a função.');
       if (scope === 'FUNCIONARIO' && !funcionarioId) throw new Error('Selecione o funcionário.');
       const response = await fetchWithAuth('/api/compliance-treinamentos/regras', {
         method: 'POST',
@@ -229,8 +229,7 @@ export function TrainingComplianceApplicabilityEditor({
           setor_id: setorId,
           funcao_id: funcaoId,
           funcionario_id: funcionarioId,
-          aeronave_modelo:
-            tripulacaoSelected && aircraftScopeReady ? aeronaveModelo || null : null,
+          aeronave_modelo: tripulacaoSelected && aircraftScopeReady ? aeronaveModelo || null : null,
           condicao_id: conditionalScopeReady ? condicaoId : null,
           justificativa: justificativa.trim() || null,
           perfil_competencia: perfilCompetencia.trim() || null,
@@ -376,7 +375,7 @@ export function TrainingComplianceApplicabilityEditor({
         )}
         {(scope === 'FUNCAO' || scope === 'SETOR_FUNCAO') && (
           <label className="text-xs font-medium text-slate-600">
-            Cargo / função
+            Função
             <select
               value={funcaoId ?? ''}
               onChange={(event) =>
@@ -384,7 +383,7 @@ export function TrainingComplianceApplicabilityEditor({
               }
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
             >
-              <option value="">Selecione o cargo</option>
+              <option value="">Selecione a função</option>
               {visibleFunctions.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.nome}

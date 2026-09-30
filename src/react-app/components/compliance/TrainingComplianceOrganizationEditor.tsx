@@ -88,7 +88,8 @@ export function TrainingComplianceOrganizationEditor() {
     );
     return (catalogs.data?.funcoes || []).filter((f) => ids.has(f.id));
   }, [catalogs.data, setorId]);
-  const selectedSector = (catalogs.data?.setores || []).find((setor) => setor.id === setorId) || null;
+  const selectedSector =
+    (catalogs.data?.setores || []).find((setor) => setor.id === setorId) || null;
   const tripulacaoSelected = isTripulacaoSector(selectedSector);
   const matrix = useQuery({
     queryKey: ['training-compliance', 'org-matrix', setorId, funcaoId, aeronaveModelo],
@@ -187,7 +188,7 @@ export function TrainingComplianceOrganizationEditor() {
           </select>
         </label>
         <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Cargo / função
+          Função
           <select
             value={funcaoId ?? ''}
             disabled={!setorId}

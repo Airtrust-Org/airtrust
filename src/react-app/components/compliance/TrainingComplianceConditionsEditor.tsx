@@ -177,7 +177,7 @@ export function TrainingComplianceConditionsEditor() {
           <div>
             <h3 className="font-semibold text-slate-900">Exposição, atividade e designação</h3>
             <p className="text-sm text-slate-500">
-              Use estas condições quando cargo e setor não bastam. A condição pode ter início e fim
+              Use estas condições quando função e setor não bastam. A condição pode ter início e fim
               e não altera o histórico já realizado.
             </p>
           </div>

@@ -104,7 +104,7 @@ export async function generateTrainingCompliancePdf(
   const height = doc.internal.pageSize.getHeight();
   const margin = 10;
   const columns = [36, 30, 28, 49, 31, 24, 22, 30];
-  const headers = ['Funcionário', 'Setor', 'Cargo', 'Treinamento', 'Situação', 'Vencimento', 'Avisos', 'Último aviso'];
+  const headers = ['Funcionário', 'Setor', 'Função', 'Treinamento', 'Situação', 'Vencimento', 'Avisos', 'Último aviso'];
   const tableWidth = columns.reduce((sum, current) => sum + current, 0);
 
   const title = context.setorNome
@@ -120,7 +120,7 @@ export async function generateTrainingCompliancePdf(
     doc.text(`Empresa: ${context.empresaNome}`, margin, 19);
     doc.text(`Emitido por: ${context.usuarioNome}`, margin, 24);
     doc.text(`Emissão: ${generatedAt.toLocaleString('pt-BR')}`, margin, 29);
-    const filters = [context.setorNome ? `Setor: ${context.setorNome}` : null, context.funcaoNome ? `Cargo: ${context.funcaoNome}` : null]
+    const filters = [context.setorNome ? `Setor: ${context.setorNome}` : null, context.funcaoNome ? `Função: ${context.funcaoNome}` : null]
       .filter(Boolean)
       .join(' | ');
     doc.text(filters || 'Escopo: organização', margin, 34);
@@ -160,7 +160,7 @@ export async function generateTrainingCompliancePdf(
     const cells = [
       row.funcionario_nome,
       row.setor_nome || 'Sem setor',
-      row.funcao_nome || 'Sem cargo',
+      row.funcao_nome || 'Sem função',
       row.qualificacao_tipo_nome || row.qualificacao_tipo_codigo || 'Treinamento',
       complianceStatusLabel(row),
       dateBr(row.data_validade),

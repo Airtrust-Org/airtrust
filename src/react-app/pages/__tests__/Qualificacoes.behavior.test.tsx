@@ -181,12 +181,12 @@ describe('Qualificacoes.tsx Behavior', () => {
     expect(screen.getByText(/Incluir Qualificação/i)).toBeInTheDocument();
   });
 
-  it('permite configurar Cargo, Função e Setor e fechar o painel de colunas', async () => {
+  it('permite configurar Função e Setor, sem Cargo, e fechar o painel de colunas', async () => {
     renderComponent();
 
     fireEvent.click(await screen.findByRole('button', { name: /Colunas/i }));
 
-    expect(screen.getByText('Cargo')).toBeInTheDocument();
+    expect(screen.queryByText('Cargo')).not.toBeInTheDocument();
     expect(screen.getByText('Função')).toBeInTheDocument();
     expect(screen.getByText('Setor')).toBeInTheDocument();
 
