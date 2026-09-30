@@ -124,7 +124,7 @@ describe('migration governance', () => {
     // 0513 adds tenant-scoped qualification areas and qualificacoes_tipos.area_id.
     // 0515 and 0516 are governed staging mirrors for qualification notification settings;
     // production remains governed by their Schema V2 change manifests.
-    const expectedLatest = 517;
+    const expectedLatest = 518;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
