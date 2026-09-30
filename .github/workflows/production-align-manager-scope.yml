@@ -36,8 +36,8 @@ jobs:
           PROD_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
           PROD_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
           # These are the unique canonical names persisted in production. The
-          # corresponding display names requested are Ingrid, Emily and Laila.
+          # corresponding display names requested are Ingrid, Emily, Laila and Mirela.
           REFERENCE_NAME: Yngrid
-          TARGET_NAMES: Giancarlo,Emyle,Layla
+          TARGET_NAMES: Giancarlo,Emyle,Layla,Mirela Silva
           APPLY: ${{ inputs.apply }}
         run: node scripts/production/align-manager-scope.mjs

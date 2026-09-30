@@ -16,7 +16,7 @@ const email = String(process.env.PROD_EMAIL || '')
   .toLowerCase();
 const password = String(process.env.PROD_PASSWORD || '');
 const referenceQuery = String(process.env.REFERENCE_NAME || 'Yngrid').trim();
-const targetQueries = String(process.env.TARGET_NAMES || 'Giancarlo,Emyle,Layla')
+const targetQueries = String(process.env.TARGET_NAMES || 'Giancarlo,Emyle,Layla,Mirela Silva')
   .split(',')
   .map((value) => value.trim())
   .filter(Boolean);
@@ -222,7 +222,7 @@ async function promoteToManagerIfNeeded({ token, usuarioId, tenantId, apply }) {
 
 async function main() {
   assert(email && password, 'Credenciais de produção ausentes');
-  assert(targetQueries.length === 3, 'TARGET_NAMES deve conter exatamente 3 usuários');
+  assert(targetQueries.length === 4, 'TARGET_NAMES deve conter exatamente 4 usuários');
 
   const loginPayload = await login(baseUrl, email, password);
   const loginToken = extractAccessToken(loginPayload);
