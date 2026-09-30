@@ -1,3 +1,7 @@
+// source_reference: staging D1 0518 apply failure 2026-09-30 (QUALIFICATION_CATEGORY_INVALID) + production canonical EAD catalog read-only comparison
+// operational_decision: preserve immutable production Schema V2 0518 and bootstrap only its non-PII EAD catalog prerequisites in staging atomically
+// dry_run_required: true
+// rollback_plan_required: verified staging D1 backup + D1 Time Travel recovery point captured by apply-approved-migration-with-recovery-point.sh
 const CRM_0518_MIGRATION = '0518_crm_qualification_consolidation.sql';
 
 export function adaptStagingMigrationSql({ migrationName, migrationSql }) {
