@@ -37,6 +37,17 @@ vi.mock('@/react-app/services/pdf-lista-presenca', () => ({
   gerarPDFListaPresenca: vi.fn(),
 }));
 
+vi.mock('@/react-app/utils/certificateUploadOptimization', () => ({
+  prepareCertificateUploadFile: vi.fn(async (file: File) => ({
+    file,
+    optimized: false,
+    convertedToPdf: false,
+    preservedDigitalSignature: false,
+    originalSize: file.size,
+    finalSize: file.size,
+  })),
+}));
+
 function renderModal() {
   return render(
     <MemoryRouter>
