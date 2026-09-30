@@ -32,6 +32,14 @@ const enrollmentMiddleware = readFileSync(
 );
 const matriculasRoute = readFileSync(join(workerRoot, 'src/routes/lms-matriculas.ts'), 'utf8');
 const progressoRoute = readFileSync(join(workerRoot, 'src/routes/lms-progresso.ts'), 'utf8');
+const historicoWriteRoute = readFileSync(
+  join(workerRoot, 'src/routes/qualificacoes/historico-write.ts'),
+  'utf8',
+);
+const historicoAtomicWriteRoute = readFileSync(
+  join(workerRoot, 'src/routes/qualificacoes/historico-atomic-write.ts'),
+  'utf8',
+);
 const validationRoute = readFileSync(
   join(workerRoot, 'src/routes/certificados/validacao.ts'),
   'utf8',
@@ -76,10 +84,7 @@ describe('guard:lms-completion-single-entry-point', () => {
       expect(source).not.toMatch(/INSERT\s+INTO\s+qualificacoes_historico/i);
       expect(source).not.toContain('generateCertificateForHistorico');
     }
-    expect(matriculasRoute).toContain('ensureCertificateForQualification');
-    expect(matriculasRoute.indexOf('completeLmsMatricula')).toBeLessThan(
-      matriculasRoute.lastIndexOf('ensureCertificateForQualification'),
-    );
+    expect(matriculasRoute).not.toContain('ensureCertificateForQualification');
   });
 
   it('guards every completion-capable LMS surface with the same decision engine', () => {
@@ -155,6 +160,7 @@ describe('guard:lms-completion-single-entry-point', () => {
     const forbidden = [
       /INSERT\s+INTO\s+qualificacoes_historico/i,
       /generateCertificateForHistorico\s*\(/,
+      /ensureCertificateForQualification\s*\(/,
       /INSERT\s+INTO\s+documentos[\s\S]{0,200}certificado/i,
     ];
     for (const source of [
@@ -166,6 +172,16 @@ describe('guard:lms-completion-single-entry-point', () => {
       enrollmentMiddleware,
     ]) {
       for (const pattern of forbidden) expect(source).not.toMatch(pattern);
+    }
+  });
+
+  it('requires an explicit certificate-generation action after qualification creation', () => {
+    for (const source of [
+      matriculasRoute,
+      historicoWriteRoute,
+      historicoAtomicWriteRoute,
+    ]) {
+      expect(source).not.toContain('ensureCertificateForQualification');
     }
   });
 });
