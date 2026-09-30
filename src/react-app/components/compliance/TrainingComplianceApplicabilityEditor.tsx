@@ -91,8 +91,26 @@ function isTripulacaoSector(setor?: { codigo?: string | null; nome: string } | n
   return canonical.includes('TRIPUL');
 }
 
+const foundationTypeOptions = [
+  ['REGULATORIO_DIRETO', 'Regulatório — exigência direta'],
+  ['PROGRAMA_APROVADO', 'Programa aprovado (PTO/PTM/PTAP/PPSP/SGSO)'],
+  ['PETROBRAS_IOGP', 'Petrobras / IOGP'],
+  ['CONTRATUAL_CLIENTE', 'Contratual / cliente'],
+  ['DESIGNACAO', 'Designação / função especial'],
+  ['POLITICA_INTERNA', 'Política interna da empresa'],
+  ['APRIMORAMENTO_INTERNO', 'Aprimoramento interno — sem curso externo obrigatório'],
+  ['PADRAO_EXCLUSAO', 'Regra-base de não aplicabilidade'],
+  ['OUTRO', 'Outro'],
+] as const;
+
+function foundationLabel(value?: string | null) {
+  return foundationTypeOptions.find(([key]) => key === value)?.[1] || value || '';
+}
+
 function scopeLabel(rule: Rule) {
   const aircraft = rule.aeronave_modelo ? ` · ${rule.aeronave_modelo}` : '';
+  if (rule.escopo === 'EMPRESA' && rule.obrigatoriedade === 'NAO_APLICA')
+    return `Padrão: não aplicável aos demais funcionários${aircraft}`;
   if (rule.escopo === 'EMPRESA') return `Toda a empresa${aircraft}`;
   if (rule.escopo === 'SETOR') return `${rule.setor_nome || 'Setor'}${aircraft}`;
   if (rule.escopo === 'FUNCAO') return `${rule.funcao_nome || 'Função'}${aircraft}`;
@@ -535,12 +553,18 @@ export function TrainingComplianceApplicabilityEditor({
             </label>
             <label className="text-xs font-medium text-slate-600">
               Tipo de fundamento
-              <input
+              <select
                 value={fundamentoTipo}
                 onChange={(event) => setFundamentoTipo(event.target.value)}
-                placeholder="Ex.: Regulatório, PTO, Programa interno"
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">Selecione o fundamento</option>
+                {foundationTypeOptions.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="text-xs font-medium text-slate-600">
               Documento / norma
@@ -646,7 +670,11 @@ export function TrainingComplianceApplicabilityEditor({
                 {rule.fundamento_tipo || rule.fundamento_documento || rule.fundamento_item ? (
                   <p className="mt-1 text-xs text-slate-600">
                     Fundamento:{' '}
-                    {[rule.fundamento_tipo, rule.fundamento_documento, rule.fundamento_item]
+                    {[
+                      foundationLabel(rule.fundamento_tipo),
+                      rule.fundamento_documento,
+                      rule.fundamento_item,
+                    ]
                       .filter(Boolean)
                       .join(' · ')}
                   </p>
