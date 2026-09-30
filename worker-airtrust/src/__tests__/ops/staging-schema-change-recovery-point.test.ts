@@ -76,6 +76,10 @@ describe('safe staging D1 schema change', () => {
   it('keeps the reviewed open-PR anchor and green-check guard', () => {
     expect(workflow).toContain("if (pr.state === 'open')");
     expect(workflow).toContain('OPEN_PR_HEAD_MISMATCH');
+    expect(workflow).toContain('Checkout trusted guard source');
+    expect(workflow).toContain('uses: actions/checkout@v7');
+    expect(workflow).toContain('Checkout trusted workflow source');
+    expect(workflow).toContain('uses: actions/checkout@v7');
     expect(workflow).toContain('node scripts/ci/verify-release-gates.mjs');
     expect(workflow).toContain('statuses: read');
     expect(workflow).toContain('PR_FROM_FORK_REJECTED');

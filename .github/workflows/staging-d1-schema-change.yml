@@ -57,6 +57,9 @@ jobs:
     outputs:
       release_sha: ${{ steps.release.outputs.release_sha }}
     steps:
+      - name: Checkout trusted workflow source
+        uses: actions/checkout@v7
+
       - name: Validate dispatch and reviewed SHA
         shell: bash
         env:
@@ -125,6 +128,9 @@ jobs:
             process.exit(1);
           });
           NODE
+
+      - name: Checkout trusted guard source
+        uses: actions/checkout@v7
 
       - name: Verify canonical release gates
         env:
