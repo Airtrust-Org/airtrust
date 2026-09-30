@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-09-29",
-    "last_reconciled_against": "0517 Training Compliance D1-compatible seed form; staging apply still pending",
-    "schema_v2_digest": "27306ce2d63cbc24cd1a1ef34343685f23a99f2b46a9ed22436220c6cc183fe9",
+    "last_reconciled_at": "2026-09-30",
+    "last_reconciled_against": "0518 CRM qualification consolidation prepared; remote apply pending",
+    "schema_v2_digest": "fca4bc0f2f470e06c4f8f0bd87a20c6d88b5e13c58045cf2f2edf9498c0cdbe7",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1146,6 +1146,17 @@
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REPO_EXPECTED",
       "reviewed_manifest": null
+    },
+    {
+      "change_file": "0518_crm_qualification_consolidation.sql",
+      "change_id": "crm-qualification-consolidation-0518",
+      "sha256": "bae15256cc2383a0c4c7a697c5b6b1ca95f97b7de3f9ace07468e61570f6792b",
+      "targets": [],
+      "domain": "qualificacoes / CRM consolidation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "crm-qualification-consolidation-0518.json",
+      "note": "0518 is reviewed and prepared only. It consolidates Costa do Sol non-crew CRM records into CRM Corporate, retires unused LOS models by soft delete, preserves D3 for flight crew, and adds the Tripulacao NAO_APLICA override. It changes tenant data but does not assert new production schema. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     }
   ]
 }
