@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-30",
-    "last_reconciled_against": "0520 training compliance evidence multi profiles prepared; remote apply pending",
-    "schema_v2_digest": "67b47ed5cbfdd011e3fd07691d7ba99945e7176ee30b936ccfc69e2b0c82a9ea",
+    "last_reconciled_against": "0521 training compliance designation overrides prepared; remote apply pending",
+    "schema_v2_digest": "ad916d23ed30f753bb197d24effd6aa0de16d8378b4cca434094d0b41fd1b2ab",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1184,6 +1184,17 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "training-compliance-evidence-multi-profiles-0520.json",
       "note": "0520 is reviewed and prepared only. It lets one qualification/certificate evidence row prove multiple allowed competency profiles through a tenant-scoped normalized relation, while retaining the 0519 scalar field as rollout compatibility. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0521_training_compliance_designation_overrides.sql",
+      "change_id": "training-compliance-designation-overrides-0521",
+      "sha256": "882f9bcbef44823b6b78fc9ee03fa68e258957b3f6b0a00a2cae3651dd384eb6",
+      "targets": [],
+      "domain": "compliance / reusable designation inclusion-exclusion overrides for RBAC 119 CRM management roles",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-designation-overrides-0521.json",
+      "note": "0521 is reviewed and prepared only. It seeds five Costa do Sol RBAC 119 management-role designation definitions and condition-scoped Compliance rules that require the dedicated CRM_DIR_RBAC119 while excluding generic CRM Corporate for the same designated occupants. It is data-only, infers no employee assignment and creates no LMS enrollment. Remote apply requires the governed Schema V2 workflow, staging preflight/recovery point, ledger verification and exact-SHA production authorization."
     }
   ]
 }
