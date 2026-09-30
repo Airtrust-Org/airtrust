@@ -13,10 +13,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
-import { useAuth } from '@/react-app/hooks/useAuth';
+import { clearActiveSessionRole, useAuth } from '@/react-app/hooks/useAuth';
 import {
   readScopedPerfis,
   writeScopedPerfis,
+  clearAllScopedAuthStorage,
   clearLegacyPerfisCache,
 } from '@/react-app/utils/auth-storage';
 import {
@@ -42,13 +43,22 @@ import {
   LayoutGrid,
   Info,
   KeyRound,
+  LogIn,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import AppLayout from '@/react-app/components/AppLayout';
-import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import {
+  API_BASE_URL,
+  clearTokens,
+  getAccessToken,
+  removeAuthStorageValue,
+  setTokens,
+  writeAuthStorageValue,
+} from '@/react-app/config/api';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { httpClient } from '@/react-app/services/http-client';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -82,6 +92,22 @@ interface PermissaoOverride {
 }
 
 interface UsuarioAtualizado extends UsuarioRow {}
+
+interface ImpersonationResponse {
+  success: boolean;
+  data?: {
+    accessToken?: string;
+    user?: {
+      id: number;
+      email: string;
+      nome: string;
+      role: string;
+      permissions: string[];
+      funcionario_id: number | null;
+    };
+  };
+  error?: string;
+}
 
 const resetSenhaSchema = z
   .object({
@@ -424,6 +450,46 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
 
   // ─── Ações ───────────────────────────────────────────────────────────────────
 
+  const handleImpersonate = async (u: UsuarioRow) => {
+    if (!isAdmin || !user || Number(user.id) === Number(u.id)) return;
+
+    try {
+      const result = await httpClient.post<ImpersonationResponse>(
+        '/auth/impersonate',
+        { userId: u.id },
+        { retry: 0 },
+      );
+      const payload = result.data;
+
+      if (!result.success || !payload?.success) {
+        toast.error(result.error || payload?.error || 'Erro ao entrar como usuário');
+        return;
+      }
+
+      const accessToken = String(payload.data?.accessToken || '');
+      const impersonatedUser = payload.data?.user || null;
+      if (!accessToken || !impersonatedUser) {
+        toast.error('Resposta inválida ao entrar como usuário');
+        return;
+      }
+
+      clearActiveSessionRole();
+      clearTokens();
+      setTokens(accessToken);
+      clearAllScopedAuthStorage();
+      clearLegacyPerfisCache();
+      removeAuthStorageValue('airtrust_user');
+      removeAuthStorageValue('airtrust_refresh_token');
+      writeAuthStorageValue('airtrust_token', accessToken, false);
+      writeAuthStorageValue('airtrust_user', JSON.stringify(impersonatedUser), false);
+
+      toast.success(`Entrando como ${u.nome}`);
+      window.location.replace('/');
+    } catch {
+      toast.error('Erro ao entrar como usuário');
+    }
+  };
+
   const handleDesativar = async (u: UsuarioRow) => {
     if (!(await confirmDialog(`Desativar usuário "${u.nome}"?`))) return;
     // Remoção optimista: remove da lista imediatamente
@@ -452,7 +518,11 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
 
   return (
     <UsuariosPageFrame embedded={embedded}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <div
+        className={
+          embedded ? 'space-y-4' : 'mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6'
+        }
+      >
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -598,6 +668,17 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
+                        {/* Entrar como usuário (apenas admin; backend registra auditoria) */}
+                        {isAdmin && Number(user?.id) !== Number(u.id) && (
+                          <button
+                            onClick={() => handleImpersonate(u)}
+                            title="Entrar como este usuário"
+                            aria-label={`Entrar como ${u.nome}`}
+                            className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-emerald-600 transition"
+                          >
+                            <LogIn className="h-4 w-4" />
+                          </button>
+                        )}
                         {/* Redefinir Senha (apenas admin) */}
                         {isAdmin && (
                           <button
