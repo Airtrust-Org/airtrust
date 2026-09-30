@@ -45,6 +45,7 @@ import {
 import { buildAuditMetadata } from '../lib/audit/context';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 import { collectByBindChunks } from '../utils/d1-bind-chunks';
+import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
 import { createLogger, toError } from '../utils/logger';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 
@@ -102,12 +103,16 @@ async function logLmsMatriculaAudit(
       entityType: 'lms_matriculas',
       entityId: params.matriculaId,
       oldValues: params.oldValues,
-      newValues: params.newValues, empresaId: getEmpresaIdSafe(c),
+      newValues: params.newValues,
+      empresaId: getEmpresaIdSafe(c),
       ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined,
       userAgent: c.req.header('user-agent') ?? undefined,
     });
   } catch (error) {
-    createLogger(c, 'LmsMatriculas.audit').error('lms_matricula_audit_failed', toError(error), { matriculaId: params.matriculaId, action: params.action });
+    createLogger(c, 'LmsMatriculas.audit').error('lms_matricula_audit_failed', toError(error), {
+      matriculaId: params.matriculaId,
+      action: params.action,
+    });
   }
 }
 
@@ -281,27 +286,32 @@ function requiresServerValidatedNonScormEvidence(
   gerarQualificacaoAoConcluir: number | null | undefined,
 ): boolean {
   if (gerarQualificacaoAoConcluir !== 1) return false;
-  const type = String(tipoConteudo ?? 'scorm').trim().toLowerCase();
+  const type = String(tipoConteudo ?? 'scorm')
+    .trim()
+    .toLowerCase();
   return !['scorm', 'h5p'].includes(type);
 }
 
-function emitScormCommitTelemetry(c: Context, params: {
-  matriculaId: number;
-  cursoTitulo: string;
-  preferIncomingState: boolean;
-  previousLocation: { current: number; total: number | null } | null;
-  incomingLocation: { current: number; total: number | null } | null;
-  finalLocation: { current: number; total: number | null } | null;
-  previousSuspendData: string | null | undefined;
-  incomingSuspendData: string | null | undefined;
-  finalSuspendData: string | null | undefined;
-  decisions: {
-    blockedLocationRegression: boolean;
-    blockedEmptySuspendData: boolean;
-    blockedShorterSuspendData: boolean;
-    preservedLocationFromCurrent: boolean;
-  };
-}) {
+function emitScormCommitTelemetry(
+  c: Context,
+  params: {
+    matriculaId: number;
+    cursoTitulo: string;
+    preferIncomingState: boolean;
+    previousLocation: { current: number; total: number | null } | null;
+    incomingLocation: { current: number; total: number | null } | null;
+    finalLocation: { current: number; total: number | null } | null;
+    previousSuspendData: string | null | undefined;
+    incomingSuspendData: string | null | undefined;
+    finalSuspendData: string | null | undefined;
+    decisions: {
+      blockedLocationRegression: boolean;
+      blockedEmptySuspendData: boolean;
+      blockedShorterSuspendData: boolean;
+      preservedLocationFromCurrent: boolean;
+    };
+  },
+) {
   const blocked =
     params.decisions.blockedLocationRegression ||
     params.decisions.blockedEmptySuspendData ||
@@ -318,8 +328,11 @@ function emitScormCommitTelemetry(c: Context, params: {
     .join(',');
 
   createLogger(c, 'LmsMatriculas.scorm').info('lms_scorm_commit_telemetry', {
-    matriculaId: params.matriculaId, cursoTitulo: params.cursoTitulo, event,
-    decision: blocked ? 'blocked' : 'accepted', reason: reason || 'normal-merge',
+    matriculaId: params.matriculaId,
+    cursoTitulo: params.cursoTitulo,
+    event,
+    decision: blocked ? 'blocked' : 'accepted',
+    reason: reason || 'normal-merge',
     preferIncomingState: params.preferIncomingState,
     previousLocation: formatScormLocationTelemetry(params.previousLocation),
     incomingLocation: formatScormLocationTelemetry(params.incomingLocation),
@@ -587,24 +600,27 @@ app.get('/minhas', async (c) => {
 
 // ── Listar matrículas por curso (gestão) ─────────────────────────────────────
 
-app.get('/curso/:curso_id', requirePermission('lms', 'visualizar', 'admin', 'manager'), async (c) => {
-  const db = c.env.DB;
-  const empresaId = getEmpresaIdSafe(c);
-  const cursoId = Number(c.req.param('curso_id'));
-  const status = c.req.query('status');
-  const page = parsePositiveInt(c.req.query('page'), 1);
-  const limit = Math.min(parsePositiveInt(c.req.query('limit'), 50), 200);
-  const offset = (page - 1) * limit;
+app.get(
+  '/curso/:curso_id',
+  requirePermission('lms', 'visualizar', 'admin', 'manager'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaIdSafe(c);
+    const cursoId = Number(c.req.param('curso_id'));
+    const status = c.req.query('status');
+    const page = parsePositiveInt(c.req.query('page'), 1);
+    const limit = Math.min(parsePositiveInt(c.req.query('limit'), 50), 200);
+    const offset = (page - 1) * limit;
 
-  const access = await getEmployeeSectorAccess(c, empresaId);
-  if (access.mode === 'restricted') {
-    if (access.setorIds.length === 0) {
-      throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
-    }
-    const setorPlaceholders = access.setorIds.map(() => '?').join(',');
-    const sectorOk = await db
-      .prepare(
-        `SELECT 1 FROM lms_cursos lc
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    if (access.mode === 'restricted') {
+      if (access.setorIds.length === 0) {
+        throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
+      }
+      const setorPlaceholders = access.setorIds.map(() => '?').join(',');
+      const sectorOk = await db
+        .prepare(
+          `SELECT 1 FROM lms_cursos lc
          WHERE lc.id = ? AND lc.empresa_id = ?
            AND (
              EXISTS (SELECT 1 FROM lms_cursos_setores lcs WHERE lcs.curso_id = lc.id AND lcs.empresa_id = lc.empresa_id AND lcs.setor_id IN (${setorPlaceholders}) AND lcs.deleted_at IS NULL)
@@ -615,14 +631,14 @@ app.get('/curso/:curso_id', requirePermission('lms', 'visualizar', 'admin', 'man
              )
            )
          LIMIT 1`,
-      )
-      .bind(cursoId, empresaId, ...access.setorIds, ...access.setorIds)
-      .first();
-    if (!sectorOk) throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
-  }
+        )
+        .bind(cursoId, empresaId, ...access.setorIds, ...access.setorIds)
+        .first();
+      if (!sectorOk) throw new ApiError('Acesso negado: curso fora do seu escopo de setor', 403);
+    }
 
-  const funcionarioScope = employeeSectorSql(access, 'fx');
-  let where = `WHERE m.curso_id = ?
+    const funcionarioScope = employeeSectorSql(access, 'fx');
+    let where = `WHERE m.curso_id = ?
                  AND m.empresa_id = ?
                  AND m.deleted_at IS NULL
                  AND EXISTS (
@@ -635,20 +651,20 @@ app.get('/curso/:curso_id', requirePermission('lms', 'visualizar', 'admin', 'man
                       AND UPPER(COALESCE(NULLIF(TRIM(fx.status), ''), 'ATIVO')) = 'ATIVO'
                       AND ${funcionarioScope.clause}
                  )`;
-  const binds: (string | number)[] = [cursoId, empresaId, ...funcionarioScope.bindings];
-  if (status) {
-    where += ' AND m.status = ?';
-    binds.push(status);
-  }
+    const binds: (string | number)[] = [cursoId, empresaId, ...funcionarioScope.bindings];
+    if (status) {
+      where += ' AND m.status = ?';
+      binds.push(status);
+    }
 
-  const total = await db
-    .prepare(`SELECT COUNT(*) as n FROM lms_matriculas m ${where}`)
-    .bind(...binds)
-    .first<{ n: number }>();
+    const total = await db
+      .prepare(`SELECT COUNT(*) as n FROM lms_matriculas m ${where}`)
+      .bind(...binds)
+      .first<{ n: number }>();
 
-  const rows = await db
-    .prepare(
-      `
+    const rows = await db
+      .prepare(
+        `
       SELECT m.*, f.nome AS funcionario_nome, f.matricula AS funcionario_matricula
       FROM lms_matriculas m
       LEFT JOIN funcionarios f
@@ -661,30 +677,31 @@ app.get('/curso/:curso_id', requirePermission('lms', 'visualizar', 'admin', 'man
       ORDER BY m.data_matricula DESC
       LIMIT ? OFFSET ?
     `,
-    )
-    .bind(...binds, limit, offset)
-    .all<Record<string, unknown>>();
+      )
+      .bind(...binds, limit, offset)
+      .all<Record<string, unknown>>();
 
-  const data = (rows.results ?? []).map((row) => {
-    const effectiveProgress = resolveLmsEffectiveProgress({
-      status: row.status as string | null,
-      progressoBruto: row.progresso_pct as number | null,
+    const data = (rows.results ?? []).map((row) => {
+      const effectiveProgress = resolveLmsEffectiveProgress({
+        status: row.status as string | null,
+        progressoBruto: row.progresso_pct as number | null,
+      });
+      return {
+        ...row,
+        progresso_bruto: effectiveProgress.progresso_bruto,
+        progresso_efetivo: effectiveProgress.progresso_efetivo,
+        completion_state: effectiveProgress.completion_state,
+        completion_reason_code: effectiveProgress.completion_reason_code,
+      };
     });
-    return {
-      ...row,
-      progresso_bruto: effectiveProgress.progresso_bruto,
-      progresso_efetivo: effectiveProgress.progresso_efetivo,
-      completion_state: effectiveProgress.completion_state,
-      completion_reason_code: effectiveProgress.completion_reason_code,
-    };
-  });
 
-  return c.json({
-    success: true,
-    data,
-    pagination: { page, limit, total: total?.n ?? 0 },
-  });
-});
+    return c.json({
+      success: true,
+      data,
+      pagination: { page, limit, total: total?.n ?? 0 },
+    });
+  },
+);
 
 // ── Detalhe de matrícula ──────────────────────────────────────────────────────
 
@@ -852,7 +869,8 @@ app.post('/', async (c) => {
   if (!parsed.success)
     throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
 
-  const { funcionario_id, curso_id, data_expiracao, observacoes, enviar_convite_email } = parsed.data;
+  const { funcionario_id, curso_id, data_expiracao, observacoes, enviar_convite_email } =
+    parsed.data;
 
   if (!canManage) {
     if (!callerFuncionarioId) {
@@ -873,12 +891,12 @@ app.post('/', async (c) => {
 
   // Verificar se curso existe e está publicado/ativo
   const cursoQuery = canManage
-    ? 'SELECT id, titulo FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL'
-    : 'SELECT id, titulo FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND publicado = 1 AND deleted_at IS NULL';
+    ? 'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL'
+    : 'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND publicado = 1 AND deleted_at IS NULL';
   const curso = await db
     .prepare(cursoQuery)
     .bind(curso_id, empresaId)
-    .first<{ id: number; titulo: string }>();
+    .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null }>();
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
 
   const funcionario = await db
@@ -914,6 +932,12 @@ app.post('/', async (c) => {
         origin: 'MANUAL',
         empresaId,
       });
+      await stampLmsEnrollmentEvidenceProfile(db, {
+        empresaId,
+        matriculaId: existente.id,
+        funcionarioId: funcionario_id,
+        qualificacaoTipoId: curso.qualificacao_tipo_id,
+      });
       await createLmsInAppNotification(db, {
         funcionarioId: funcionario_id,
         empresaId,
@@ -942,7 +966,10 @@ app.post('/', async (c) => {
         matriculaId: existente.id,
         empresaId,
       });
-      return c.json({ success: true, data: reativada ?? { id: existente.id, reativada: true } }, 200);
+      return c.json(
+        { success: true, data: reativada ?? { id: existente.id, reativada: true } },
+        200,
+      );
     }
     await logLmsMatriculaAudit(db, c, {
       action: 'LMS_MATRICULA_PRESERVADA',
@@ -996,6 +1023,12 @@ app.post('/', async (c) => {
       .run();
 
     const matriculaId = Number(result.meta.last_row_id);
+    await stampLmsEnrollmentEvidenceProfile(db, {
+      empresaId,
+      matriculaId,
+      funcionarioId: funcionario_id,
+      qualificacaoTipoId: curso.qualificacao_tipo_id,
+    });
     const matricula = await db
       .prepare('SELECT * FROM lms_matriculas WHERE id = ? AND empresa_id = ?')
       .bind(matriculaId, empresaId)
@@ -1027,13 +1060,13 @@ app.post('/', async (c) => {
     });
     if (enviar_convite_email)
       await sendMatriculaEmail(c, c.env, db, {
-      funcionarioId: funcionario_id,
-      empresaId,
-      cursoId: curso_id,
-      cursoTitulo: curso.titulo,
-      dataExpiracao: data_expiracao ?? null,
-      isNovoCiclo: false,
-    });
+        funcionarioId: funcionario_id,
+        empresaId,
+        cursoId: curso_id,
+        cursoTitulo: curso.titulo,
+        dataExpiracao: data_expiracao ?? null,
+        isNovoCiclo: false,
+      });
     return c.json({ success: true, data: matricula }, 201);
   } catch (error) {
     if (!isMatriculaUniqueConstraintError(error)) {
@@ -1097,7 +1130,8 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
   if (!parsed.success)
     throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
 
-  const { funcionario_ids, curso_id, data_expiracao, observacoes, enviar_convite_email } = parsed.data;
+  const { funcionario_ids, curso_id, data_expiracao, observacoes, enviar_convite_email } =
+    parsed.data;
   const funcionarioIdsUnicos = [...new Set(funcionario_ids)];
 
   const curso = await db
@@ -1146,10 +1180,15 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
       .all<{ id: number; nome: string; setor_id: number | null }>();
     return rows.results || [];
   });
-  const allowedSetorIds = loteAccess.mode === 'restricted' ? new Set(loteAccess.setorIds.map(Number)) : null;
-  const funcionariosPorId = new Map(funcionarios
-    .filter((f) => !allowedSetorIds || (f.setor_id != null && allowedSetorIds.has(Number(f.setor_id))))
-    .map((f) => [Number(f.id), f]));
+  const allowedSetorIds =
+    loteAccess.mode === 'restricted' ? new Set(loteAccess.setorIds.map(Number)) : null;
+  const funcionariosPorId = new Map(
+    funcionarios
+      .filter(
+        (f) => !allowedSetorIds || (f.setor_id != null && allowedSetorIds.has(Number(f.setor_id))),
+      )
+      .map((f) => [Number(f.id), f]),
+  );
   const funcionariosInvalidos = funcionarioIdsUnicos.filter(
     (funcionarioId) => !funcionariosPorId.has(funcionarioId),
   );
@@ -1179,7 +1218,8 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
 
       if (existente) {
         const reativavel =
-          Boolean(existente.deleted_at) || String(existente.status || '').toUpperCase() === 'CANCELADO';
+          Boolean(existente.deleted_at) ||
+          String(existente.status || '').toUpperCase() === 'CANCELADO';
         if (!reativavel) {
           results.ignoradas++;
           continue;
@@ -1191,6 +1231,12 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           matriculadoPor: Number.isFinite(userId) && userId > 0 ? userId : null,
           origin: 'MANUAL',
           empresaId,
+        });
+        await stampLmsEnrollmentEvidenceProfile(db, {
+          empresaId,
+          matriculaId: existente.id,
+          funcionarioId,
+          qualificacaoTipoId: curso.qualificacao_tipo_id,
         });
         await createLmsInAppNotification(db, {
           funcionarioId,
@@ -1205,7 +1251,11 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           action: 'LMS_MATRICULA_REATIVADA',
           matriculaId: existente.id,
           oldValues: { status: existente.status, deleted_at: existente.deleted_at },
-          newValues: { curso_id, funcionario_id: funcionarioId, data_expiracao: data_expiracao ?? null },
+          newValues: {
+            curso_id,
+            funcionario_id: funcionarioId,
+            data_expiracao: data_expiracao ?? null,
+          },
         });
         if (enviar_convite_email)
           await sendMatriculaEmail(c, c.env, db, {
@@ -1238,6 +1288,12 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
         )
         .run();
       const matriculaId = Number(insertResult.meta.last_row_id);
+      await stampLmsEnrollmentEvidenceProfile(db, {
+        empresaId,
+        matriculaId,
+        funcionarioId,
+        qualificacaoTipoId: curso.qualificacao_tipo_id,
+      });
       await ensureMatriculaCycle(db, {
         matriculaId,
         origin: 'MANUAL',
@@ -1266,13 +1322,13 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
       });
       if (enviar_convite_email)
         await sendMatriculaEmail(c, c.env, db, {
-        funcionarioId,
-        empresaId,
-        cursoId: curso_id,
-        cursoTitulo: curso.titulo,
-        dataExpiracao: data_expiracao ?? null,
-        isNovoCiclo: false,
-      });
+          funcionarioId,
+          empresaId,
+          cursoId: curso_id,
+          cursoTitulo: curso.titulo,
+          dataExpiracao: data_expiracao ?? null,
+          isNovoCiclo: false,
+        });
 
       const matriculaCriada = await readMatriculaForCourseList(db, {
         matriculaId,
@@ -1736,7 +1792,9 @@ app.post('/scorm/commit', async (c) => {
       qualificationFailed = true;
       statusFinal = statusSemConclusao;
       dataConclusaoFinal = null;
-      createLogger(c, 'LmsMatriculas.scorm').error('lms_scorm_completion_rejected', toError(e), { matriculaId: d.matricula_id });
+      createLogger(c, 'LmsMatriculas.scorm').error('lms_scorm_completion_rejected', toError(e), {
+        matriculaId: d.matricula_id,
+      });
     }
 
     // tentativas/ultimo_slide/session-level fields não fazem parte do batch
@@ -1751,6 +1809,7 @@ app.post('/scorm/commit', async (c) => {
       )
       .bind(mergedLocation?.current ?? null, d.matricula_id, empresaId)
       .run();
+
   } else {
     // Sem transição para CONCLUIDO nesta chamada (progresso parcial ou
     // REPROVADO): mantém a atualização direta de matrícula, fora do serviço
@@ -2085,7 +2144,11 @@ app.post('/:id/finalizar', async (c) => {
     }
   } catch (error) {
     if (!(error instanceof LmsCompletionRejectedError)) throw error;
-    createLogger(c, 'LmsMatriculas.completion').error('lms_manual_completion_rejected', toError(error), { matriculaId });
+    createLogger(c, 'LmsMatriculas.completion').error(
+      'lms_manual_completion_rejected',
+      toError(error),
+      { matriculaId },
+    );
     await logLmsMatriculaAudit(db, c, {
       action: 'LMS_QUALIFICATION_COMPLETION_FAILED',
       matriculaId,
@@ -2271,7 +2334,9 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       });
 
       if (requiresExplicitScormCompletion(existing.tipo_conteudo, completionDiagnostic)) {
-        const administrativeReason = typeof observacoes === 'string' ? observacoes.trim() : '', governedAdministrativeCompletion = hasRole(c, 'admin') && administrativeReason.length >= 10;
+        const administrativeReason = typeof observacoes === 'string' ? observacoes.trim() : '',
+          governedAdministrativeCompletion =
+            hasRole(c, 'admin') && administrativeReason.length >= 10;
         if (!governedAdministrativeCompletion) {
           await logLmsMatriculaAudit(db, c, {
             action: 'SCORM_COMPLETION_REJECTED',
@@ -2362,7 +2427,11 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
         result.qualificacaoHistoricoId ?? existing.qualificacao_historico_id;
     } catch (error) {
       if (!(error instanceof LmsCompletionRejectedError)) throw error;
-      createLogger(c, 'LmsMatriculas.completion').error('lms_status_completion_rejected', toError(error), { matriculaId });
+      createLogger(c, 'LmsMatriculas.completion').error(
+        'lms_status_completion_rejected',
+        toError(error),
+        { matriculaId },
+      );
       await logLmsMatriculaAudit(db, c, {
         action: 'LMS_QUALIFICATION_COMPLETION_FAILED',
         matriculaId,
@@ -2393,6 +2462,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
         .bind(observacoes, matriculaId, empresaId)
         .run();
     }
+
 
   } else {
     await db

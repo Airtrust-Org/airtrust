@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-evidence-profiles-0519",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0519_training_compliance_evidence_profiles.sql",
+  "fileHash": "69b3b6f68792d9c75c0591c16d3bb4ffb9178793547c1c9fbda5ed2b5e3f87f2",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-evidence-profiles-0519.md",
+  "planHash": "df0cb18eb48107d891eae81b3ee2294fa40f283f9a0445b80d3c1ee7886382cc"
+}

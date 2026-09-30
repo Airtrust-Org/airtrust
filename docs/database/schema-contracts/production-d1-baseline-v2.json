@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-30",
-    "last_reconciled_against": "0518 CRM consolidation + RBAC119 EAD management model prepared; remote apply pending",
-    "schema_v2_digest": "48f4e4a44b9da336bae230fee429a5f05b1cfda2f32d0edfec925713d357acff",
+    "last_reconciled_against": "0519 training compliance evidence profiles prepared; remote apply pending",
+    "schema_v2_digest": "f47b96916dc4e3662716f45e8bfa3447a005f848d51de5cfe53a8a71098f5846",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1157,6 +1157,20 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "crm-qualification-consolidation-0518.json",
       "note": "0518 is reviewed and prepared only. It consolidates Costa do Sol non-crew CRM records into CRM Corporate, deduplicates same-employee/same-date history while preserving evidence, retires unused LOS/maintenance duplicate models by soft delete, preserves D3 for flight crew, records the CRM Corporate initial-EaD/periodic-presential rules, and creates the 4 h EAD CRM_DIR_RBAC119 qualification model without automatic Compliance assignment or expiry. It changes tenant data but does not assert new production schema. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0519_training_compliance_evidence_profiles.sql",
+      "change_id": "training-compliance-evidence-profiles-0519",
+      "sha256": "69b3b6f68792d9c75c0591c16d3bb4ffb9178793547c1c9fbda5ed2b5e3f87f2",
+      "targets": [
+        "lms_matriculas",
+        "qualificacoes_historico"
+      ],
+      "domain": "compliance / training evidence profiles",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-evidence-profiles-0519.json",
+      "note": "0519 is reviewed and prepared only. It records the competency profile on LMS enrollments and qualification history so DGR/AVSEC evidence is matched to the effective Compliance profile. It does not assert production application. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     }
   ]
 }

@@ -100,11 +100,14 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
       vigencia_fim TEXT,
       prazo_inicial_dias INTEGER,
       auto_matricular_ead INTEGER NOT NULL DEFAULT 0,
+      perfil_competencia TEXT,
       ativo INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       deleted_at TEXT
     );
+
+    ALTER TABLE qualificacoes_historico ADD COLUMN perfil_competencia TEXT;
 
     CREATE TABLE notificacoes_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,7 +139,8 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
       data_conclusao TEXT,
       created_at TEXT,
       updated_at TEXT,
-      deleted_at TEXT
+      deleted_at TEXT,
+      perfil_competencia TEXT
     );
     CREATE TABLE treinamento_matricula_reconciliacoes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -866,5 +870,63 @@ describe('training compliance engine', () => {
       evidencia_modalidade: 'EAD',
       evidencia_modalidade_incompativel: true,
     });
+  });
+
+  it('exige correspondência exata do perfil de competência para AVSEC/DGR', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem, perfil_competencia)
+      VALUES (1, 101, 'FUNCAO', 2, 'OBRIGATORIA', 'REGULATORIO', 'AVSEC_TRIPULANTE');
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at, perfil_competencia)
+      VALUES (1002, 101, 'D1', 'OPERACOES', '2026-09-01', '2028-09-01',
+              'CONCLUIDA', 0, 1, '2026-09-01', '2026-09-01', 'AVSEC_OPERACOES_SOLO');
+    `);
+    const response = await createApp(sqlite.asD1()).request('/funcionarios/1002');
+    const body = (await response.json()) as any;
+    expect(body.data.requisitos[0]).toMatchObject({
+      status_compliance: 'NAO_REALIZADO',
+      perfil_competencia: 'AVSEC_TRIPULANTE',
+      evidencia_perfil_incompativel: true,
+    });
+  });
+
+  it('usa a evidência mais recente do perfil correto, sem ser escondida por outro perfil mais novo', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem, perfil_competencia)
+      VALUES (1, 101, 'FUNCAO', 2, 'OBRIGATORIA', 'REGULATORIO', 'PTAP_TRIPULANTE_VOO');
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at, perfil_competencia) VALUES
+        (1002, 101, 'D4', 'OPERACOES', '2026-08-01', '2028-08-01', 'CONCLUIDA', 0, 1, '2026-08-01', '2026-08-01', 'PTAP_TRIPULANTE_VOO'),
+        (1002, 101, 'D4', 'OPERACOES', '2026-09-01', '2028-09-01', 'CONCLUIDA', 0, 1, '2026-09-01', '2026-09-01', 'PTAP_AGENTE_RAMPA');
+    `);
+    const response = await createApp(sqlite.asD1()).request('/funcionarios/1002');
+    const body = (await response.json()) as any;
+    expect(body.data.requisitos[0]).toMatchObject({
+      status_compliance: 'CONFORME',
+      ultima_data: '2026-08-01',
+      evidencia_perfil_competencia: 'PTAP_TRIPULANTE_VOO',
+      evidencia_perfil_incompativel: false,
+    });
+  });
+
+  it('não aceita evidência sem perfil quando o requisito é perfilado após 0519', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem, perfil_competencia)
+      VALUES (1, 101, 'FUNCAO', 2, 'OBRIGATORIA', 'REGULATORIO', 'PTAP_TRIPULANTE_VOO');
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at, perfil_competencia)
+      VALUES (1002, 101, 'D4', 'OPERACOES', '2026-09-01', '2028-09-01',
+              'CONCLUIDA', 0, 1, '2026-09-01', '2026-09-01', NULL);
+    `);
+    const response = await createApp(sqlite.asD1()).request('/funcionarios/1002');
+    const body = (await response.json()) as any;
+    expect(body.data.requisitos[0].status_compliance).toBe('NAO_REALIZADO');
+    expect(body.data.requisitos[0].evidencia_perfil_incompativel).toBe(true);
   });
 });

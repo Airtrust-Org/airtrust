@@ -57,7 +57,8 @@ const LARGE_FILE_LINE_CAPS = {
   // funcionarios/qualificacoes_historico joins across ~10 sites so a
   // corrupted cross-tenant curso_id/funcionario_id/qualificacao_id can no
   // longer leak another tenant's data or feed a completion write).
-  'routes/lms-matriculas.ts': 3565,
+  // Cap raised 2026-09-30: 0519 stamps competency-profile lineage on enrollment paths.
+  'routes/lms-matriculas.ts': 3602,
   // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
   // Cap raised 2026-08-22: counted 2048 (fix/frms-parameter-governance-recalc
   // — governed operational context wired into the check-in contexto-piloto
@@ -91,6 +92,9 @@ const LARGE_FILE_LINE_CAPS = {
   'routes/lms-assets.ts': 2730,
   // 2026-09-19: flight creation gained explicit identifiers and tenant-scoped operational catalogs.
   // Keep this cap tight; further growth should extract catalog/creation logic instead of raising it.
+  // 0519 adds profile-aware evidence selection and transitional schema compatibility.
+  // Keep this explicit until the Compliance router is split into smaller modules.
+  'routes/compliance-treinamentos.ts': 2070,
   'routes/controle-voos.ts': 2040,
   // Reliability remediation added atomic ficha writes and fail-closed PDF generation.
   // Extraction remains a follow-up and is not mixed into this incident closure.

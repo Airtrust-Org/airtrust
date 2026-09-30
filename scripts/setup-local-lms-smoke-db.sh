@@ -58,6 +58,8 @@ LMS_MIGRATIONS=(
   # 0513 is additive but changes qualificacoes_tipos, a CI bootstrap-critical table.
   # Keep the local smoke schema aligned with the governed qualification-area contract.
   "$WORKER_DIR/migrations/0513_qualification_areas.sql"
+  # 0519 adds competency-profile lineage to LMS enrollments and qualification evidence.
+  "$WORKER_DIR/migrations/0519_training_compliance_evidence_profiles.sql"
 )
 
 error() {
@@ -315,6 +317,8 @@ require_sqlite_column "lms_cursos" "h5p_conteudo_id"
 require_sqlite_column "lms_matriculas" "ultimo_slide"
 require_sqlite_column "qualificacoes_historico" "validacao_hash"
 require_sqlite_column "qualificacoes_tipos" "area_id"
+require_sqlite_column "qualificacoes_historico" "perfil_competencia"
+require_sqlite_column "lms_matriculas" "perfil_competencia"
 
 printf 'setup:lms:local: applying synthetic LMS smoke seed\n'
 sqlite3 "$SQLITE_FILE" < "$SEED_FILE"
