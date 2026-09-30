@@ -1,8 +1,8 @@
 # Cloudflare Pages SPA Redirects
-# Assets e service worker permanecem estáticos. A API usa exclusivamente o
+# Assets passam pela Function fail-closed para impedir fallback HTML em chunks.
+# O service worker permanece estático. A API usa exclusivamente o
 # domínio canônico configurado no frontend. O fail-closed de /api e /api/* é
 # implementado por Pages Functions, porque _redirects não suporta status 404.
-/assets/* /assets/:splat 200
 /sw.js /sw.js 200
 
 # SPA Fallback - todas as outras rotas vão para index.html
