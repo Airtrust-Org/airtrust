@@ -37,6 +37,7 @@ export type CertificadosStorageColumns = {
 export interface HistoricoRow {
   id: number;
   funcionario_id: number;
+  qualificacao_tipo_id: number;
   data_conclusao: string | null;
   data_vencimento: string | null;
   certificado_arquivo_id: number | null;
@@ -560,6 +561,7 @@ export async function resolveCertificadoContext(
       `SELECT
         qh.id,
         qh.funcionario_id,
+        qh.qualificacao_id as qualificacao_tipo_id,
         qh.data_conclusao,
         qh.data_vencimento,
         qh.certificado_arquivo_id,

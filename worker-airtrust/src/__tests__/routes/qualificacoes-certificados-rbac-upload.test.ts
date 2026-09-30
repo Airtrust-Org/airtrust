@@ -7,14 +7,12 @@ const accessMock = vi.hoisted(() => vi.fn());
 const assertFuncionarioInScopeMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../../middleware/auth', () => ({
-  auth:
-    () =>
-    async (c: any, next: () => Promise<void>) => {
-      c.set('userId', Number(c.req.header('x-test-user-id') || 10));
-      c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 6));
-      c.set('userRole', c.req.header('x-test-role') || 'admin');
-      await next();
-    },
+  auth: () => async (c: any, next: () => Promise<void>) => {
+    c.set('userId', Number(c.req.header('x-test-user-id') || 10));
+    c.set('empresaId', Number(c.req.header('x-test-empresa-id') || 6));
+    c.set('userRole', c.req.header('x-test-role') || 'admin');
+    await next();
+  },
 }));
 
 vi.mock('../../middleware/tenant', async (importOriginal) => {
@@ -26,7 +24,9 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
 });
 
 vi.mock('../../middleware/rbac', () => ({
-  requirePermission: () => async (_c: any, next: () => Promise<void>) => { await next(); },
+  requirePermission: () => async (_c: any, next: () => Promise<void>) => {
+    await next();
+  },
   requireRole:
     (...requiredRoles: string[]) =>
     async (c: any, next: () => Promise<void>) => {
@@ -80,6 +80,7 @@ type HistoricoRow = {
   certificado_arquivo_id: number | null;
   numero_certificado: string | null;
   arquivo_url: string | null;
+  perfil_competencia: string | null;
   data_conclusao: string | null;
   data_vencimento: string | null;
   deleted_at: string | null;
@@ -155,6 +156,7 @@ function createMockEnv() {
       certificado_arquivo_id: null,
       numero_certificado: null,
       arquivo_url: null,
+      perfil_competencia: null,
       data_conclusao: '2026-01-10',
       data_vencimento: '2027-01-10',
       deleted_at: null,
@@ -167,6 +169,7 @@ function createMockEnv() {
       certificado_arquivo_id: null,
       numero_certificado: null,
       arquivo_url: null,
+      perfil_competencia: null,
       data_conclusao: '2026-02-15',
       data_vencimento: '2027-02-15',
       deleted_at: null,
@@ -179,6 +182,7 @@ function createMockEnv() {
       certificado_arquivo_id: null,
       numero_certificado: null,
       arquivo_url: null,
+      perfil_competencia: null,
       data_conclusao: '2026-03-20',
       data_vencimento: '2027-03-20',
       deleted_at: null,
@@ -268,6 +272,35 @@ function createMockEnv() {
         first: async () => {
           calls.push({ query, args, method: 'first' });
 
+          if (query.includes("FROM sqlite_master WHERE type='table' AND name=?")) {
+            const table = String(args[0] || '');
+            return ['treinamento_requisitos', 'funcionarios', 'qualificacoes_historico'].includes(
+              table,
+            )
+              ? { ok: 1 }
+              : null;
+          }
+
+          if (query.includes('SELECT tr.perfil_competencia, tr.obrigatoriedade')) {
+            const qualificacaoTipoId = Number(args[0]);
+            const funcionarioId = Number(args[1]);
+            if (qualificacaoTipoId === 301 && funcionarioId === 101) {
+              return { perfil_competencia: 'AVSEC_TRIPULANTE', obrigatoriedade: 'OBRIGATORIA' };
+            }
+            return null;
+          }
+
+          if (query.includes('SELECT perfil_competencia FROM qualificacoes_historico')) {
+            const historico = findHistorico(Number(args[0]));
+            if (
+              !historico ||
+              historico.empresa_id !== Number(args[1]) ||
+              historico.funcionario_id !== Number(args[2])
+            )
+              return null;
+            return { perfil_competencia: historico.perfil_competencia };
+          }
+
           // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
           if (query.includes('FROM empresas WHERE id')) {
             return { operational_domain_rbac_enabled: 0 };
@@ -295,6 +328,7 @@ function createMockEnv() {
             return {
               id: historico.id,
               funcionario_id: historico.funcionario_id,
+              qualificacao_tipo_id: historico.qualificacao_id,
               data_conclusao: historico.data_conclusao,
               data_vencimento: historico.data_vencimento,
               certificado_arquivo_id: historico.certificado_arquivo_id,
@@ -342,9 +376,39 @@ function createMockEnv() {
         all: async () => {
           calls.push({ query, args, method: 'all' });
 
+          if (query.includes("PRAGMA table_info('treinamento_requisitos')")) {
+            return { results: [{ name: 'perfil_competencia' }] };
+          }
+
+          if (query.includes("PRAGMA table_info('qualificacoes_historico')")) {
+            return { results: [{ name: 'perfil_competencia' }] };
+          }
+
+          if (
+            query.includes('SELECT DISTINCT perfil_competencia') &&
+            query.includes('FROM treinamento_requisitos')
+          ) {
+            const qualificacaoTipoId = Number(args[1]);
+            return {
+              results:
+                qualificacaoTipoId === 301
+                  ? [
+                      { perfil_competencia: 'AVSEC_ATENDIMENTO_PASSAGEIRO' },
+                      { perfil_competencia: 'AVSEC_CARGA_AEREA' },
+                      { perfil_competencia: 'AVSEC_OPERACOES_SOLO' },
+                      { perfil_competencia: 'AVSEC_TRIPULANTE' },
+                    ]
+                  : [],
+            };
+          }
+
           if (query.includes('PRAGMA table_info(pasta_virtual)')) {
             return {
-              results: [{ name: 'documento_id' }, { name: 'certificacao_id' }, { name: 'empresa_id' }],
+              results: [
+                { name: 'documento_id' },
+                { name: 'certificacao_id' },
+                { name: 'empresa_id' },
+              ],
             };
           }
 
@@ -375,7 +439,8 @@ function createMockEnv() {
                     row.funcionario_id === doc.funcionario_id &&
                     row.caminho_arquivo === doc.r2_key,
                 );
-                const fromMainLink = doc.funcionario_id === funcionarioId && doc.id === documentoPrincipalId;
+                const fromMainLink =
+                  doc.funcionario_id === funcionarioId && doc.id === documentoPrincipalId;
                 return fromPastaVirtual || fromMainLink;
               })
               .sort((a, b) => b.id - a.id)
@@ -445,11 +510,17 @@ function createMockEnv() {
             return { meta: { changes: 1, last_row_id: nextPastaVirtualId } };
           }
 
-          if (query.includes('UPDATE qualificacoes_historico') && query.includes('SET certificado_arquivo_id = ?')) {
+          if (
+            query.includes('UPDATE qualificacoes_historico') &&
+            query.includes('SET certificado_arquivo_id = ?')
+          ) {
+            const hasProfile = query.includes('perfil_competencia = ?');
+            const historicoIdArg = hasProfile ? 4 : 3;
+            const empresaIdArg = hasProfile ? 5 : 4;
             const historico = historicos.find(
               (row) =>
-                row.id === Number(args[3]) &&
-                row.empresa_id === Number(args[4]) &&
+                row.id === Number(args[historicoIdArg]) &&
+                row.empresa_id === Number(args[empresaIdArg]) &&
                 row.deleted_at === null,
             );
             if (!historico) {
@@ -459,6 +530,7 @@ function createMockEnv() {
             historico.certificado_arquivo_id = Number(args[0]);
             historico.arquivo_url = String(args[1]);
             historico.numero_certificado = String(args[2]);
+            if (hasProfile) historico.perfil_competencia = String(args[3]);
             return { meta: { changes: 1 } };
           }
 
@@ -666,6 +738,68 @@ describe('qualificacoes certificados rbac e upload', () => {
     expect(body.code).toBe('FUNCIONARIO_OUT_OF_SCOPE');
   });
 
+  it('expõe perfil exigido e perfis permitidos para classificação da evidência', async () => {
+    const { env } = createMockEnv();
+    const response = await request(
+      '/api/certificados/historico/2001/certificados/perfil-competencia',
+      env,
+    );
+    const body = (await response.json()) as {
+      success: boolean;
+      data: {
+        perfil_exigido: string | null;
+        perfil_atual: string | null;
+        perfis_permitidos: string[];
+      };
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.data.perfil_exigido).toBe('AVSEC_TRIPULANTE');
+    expect(body.data.perfil_atual).toBeNull();
+    expect(body.data.perfis_permitidos).toContain('AVSEC_OPERACOES_SOLO');
+    expect(body.data.perfis_permitidos).toContain('AVSEC_TRIPULANTE');
+  });
+
+  it('upload registra explicitamente o perfil comprovado mesmo quando difere do perfil exigido', async () => {
+    const { env, historicos } = createMockEnv();
+    const form = new FormData();
+    form.set('file', createPdfFile('avsec-solo.pdf'));
+    form.set('perfil_competencia', 'AVSEC_OPERACOES_SOLO');
+
+    const response = await request('/api/certificados/historico/2001/certificados/upload', env, {
+      method: 'POST',
+      body: form,
+    });
+    const body = (await response.json()) as {
+      success: boolean;
+      data: { perfil_competencia: string | null };
+    };
+
+    expect(response.status).toBe(201);
+    expect(body.data.perfil_competencia).toBe('AVSEC_OPERACOES_SOLO');
+    expect(historicos.find((row) => row.id === 2001)?.perfil_competencia).toBe(
+      'AVSEC_OPERACOES_SOLO',
+    );
+  });
+
+  it('upload rejeita perfil que não pertence à qualificação antes de gravar no R2', async () => {
+    const { env, bucket, documentos } = createMockEnv();
+    const form = new FormData();
+    form.set('file', createPdfFile('avsec-invalido.pdf'));
+    form.set('perfil_competencia', 'AVSEC_PERFIL_INVENTADO');
+
+    const response = await request('/api/certificados/historico/2001/certificados/upload', env, {
+      method: 'POST',
+      body: form,
+    });
+    const body = (await response.json()) as { success: boolean; code?: string };
+
+    expect(response.status).toBe(400);
+    expect(body.code).toBe('EVIDENCE_PROFILE_INVALID');
+    expect(bucket.put).not.toHaveBeenCalled();
+    expect(documentos).toHaveLength(2);
+  });
+
   it('upload do gestor autorizado cria documento, pasta_virtual e vínculo principal visível', async () => {
     const { env, bucket, documentos, pastaVirtual, historicos, runs } = createMockEnv();
     const form = new FormData();
@@ -698,13 +832,15 @@ describe('qualificacoes certificados rbac e upload', () => {
     expect(documentos.some((row) => row.id === body.data.id && row.empresa_id === 6)).toBe(true);
     expect(
       pastaVirtual.some(
-        (row) => row.documento_id === body.data.id && row.certificacao_id === 2001 && row.empresa_id === 6,
+        (row) =>
+          row.documento_id === body.data.id && row.certificacao_id === 2001 && row.empresa_id === 6,
       ),
     ).toBe(true);
 
-    const updateQuery = runs.find((run) =>
-      run.query.includes('UPDATE qualificacoes_historico') &&
-      run.query.includes('SET certificado_arquivo_id = ?'),
+    const updateQuery = runs.find(
+      (run) =>
+        run.query.includes('UPDATE qualificacoes_historico') &&
+        run.query.includes('SET certificado_arquivo_id = ?'),
     )?.query;
     expect(updateQuery).toContain('empresa_id = ?');
     expect(updateQuery).toContain('deleted_at IS NULL');
@@ -734,17 +870,18 @@ describe('qualificacoes certificados rbac e upload', () => {
     const originalName = 'CRM Periódico — João da Silva (2026).pdf';
     form.set('file', createPdfFile(originalName));
 
-    const response = await request(
-      '/api/certificados/historico/2001/certificados/upload',
-      env,
-      { method: 'POST', body: form },
-    );
+    const response = await request('/api/certificados/historico/2001/certificados/upload', env, {
+      method: 'POST',
+      body: form,
+    });
     const body = (await response.json()) as { success: boolean; data: { id: number } };
 
     expect(response.status).toBe(201);
     expect(body.success).toBe(true);
     expect(documentos.find((row) => row.id === body.data.id)?.nome_arquivo).toBe(originalName);
-    expect(pastaVirtual.find((row) => row.documento_id === body.data.id)?.nome_arquivo).toBe(originalName);
+    expect(pastaVirtual.find((row) => row.documento_id === body.data.id)?.nome_arquivo).toBe(
+      originalName,
+    );
   });
 
   it('upload fora do escopo retorna 403 sem gravar no R2', async () => {
@@ -812,8 +949,9 @@ describe('qualificacoes certificados rbac e upload', () => {
     expect(deleteResponse.status).toBe(200);
     expect(documentos.find((row) => row.id === cert.documento_id)?.deleted_at).not.toBeNull();
     expect(
-      pastaVirtual.find((row) => row.documento_id === cert.documento_id && row.certificacao_id === 2001)
-        ?.deleted_at,
+      pastaVirtual.find(
+        (row) => row.documento_id === cert.documento_id && row.certificacao_id === 2001,
+      )?.deleted_at,
     ).not.toBeNull();
     expect(historicos.find((row) => row.id === 2001)?.certificado_arquivo_id).toBeNull();
     expect(bucket.get).not.toHaveBeenCalled();

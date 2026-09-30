@@ -58,13 +58,15 @@ O reconciliador `scripts/compliance/reconcile-training-compliance-v3.mjs`:
 - não apaga `qualificacoes_historico` nem evidências concluídas;
 - exige autorização explícita por ambiente e SHA-256 exato do SQL para `--apply`.
 
-## Limitação conhecida — perfis AVSEC/DGR
+## Evidência por perfil — AVSEC/DGR
 
-O esquema de requisito já armazena `perfil_competencia`, porém o motor atual de evidência de Compliance ainda resolve conclusão principalmente por `funcionario_id + qualificacao_tipo_id`.
+A migration Schema V2 `0519_training_compliance_evidence_profiles` persiste `perfil_competencia` no histórico de qualificação e na matrícula LMS. O motor de Compliance compara o perfil requerido pela regra com o perfil efetivamente comprovado pela evidência; um certificado de outro perfil não satisfaz o requisito apenas por pertencer ao mesmo modelo de qualificação.
 
-Consequência: a configuração V3 pode definir corretamente o perfil requerido, mas a etapa seguinte deve fazer a evidência/certificado registrar e validar o perfil concluído antes de considerar AVSEC/DGR totalmente fechados em auditoria por competência.
+No LMS, o perfil é herdado do requisito aplicável no momento da matrícula/conclusão. No upload manual, o AirTrust sugere o perfil exigido pela função/atividade, mas o operador confirma explicitamente o perfil que o certificado realmente comprova. O backend aceita apenas perfis ativos configurados para aquela qualificação e rejeita valores arbitrários antes de gravar o arquivo.
 
-Essa limitação é intencionalmente mantida fora desta primeira correção para evitar multiplicação artificial de cursos e será tratada em fase própria.
+A atribuição manual de uma qualificação não copia automaticamente o perfil exigido para a evidência: requisito e prova permanecem separados até a classificação explícita do certificado.
+
+O PDF é evidência documental; o sistema não infere competência pelo nome do arquivo. Se o perfil comprovado divergir do perfil atualmente exigido, a evidência é preservada com seu perfil real e o Compliance permanece não atendido para o perfil exigido.
 
 ## Estado de implantação
 

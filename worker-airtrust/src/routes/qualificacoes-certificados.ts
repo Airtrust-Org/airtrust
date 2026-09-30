@@ -16,8 +16,55 @@ import {
   resolveCertificadoContext,
 } from './qualificacoes-certificados-helpers';
 import certificadosWriteRoutes from './qualificacoes-certificados-write';
+import {
+  listTrainingComplianceEvidenceProfilesForQualification,
+  readQualificationEvidenceProfile,
+  resolveEffectiveTrainingComplianceProfile,
+} from '../services/training-compliance-evidence-profile';
 
 const app = new Hono<{ Bindings: Env }>();
+
+app.get('/historico/:id/certificados/perfil-competencia', auth(), async (c) => {
+  const db = c.env.DB;
+  const historicoId = parseInt(c.req.param('id'));
+  const empresaId = getEmpresaId(c);
+  if (isNaN(historicoId)) return c.json({ success: false, error: 'ID inválido' }, 400);
+
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const scopedHistorico = await assertScopedHistoricoAccess(db, {
+    historicoId,
+    empresaId,
+    access,
+  });
+  const context = await resolveCertificadoContext(db, historicoId);
+  const params = {
+    empresaId,
+    funcionarioId: scopedHistorico.funcionario_id,
+    qualificacaoTipoId: context.historico.qualificacao_tipo_id,
+  };
+  const [perfilExigido, perfilAtual, perfisPermitidos] = await Promise.all([
+    resolveEffectiveTrainingComplianceProfile(db, params),
+    readQualificationEvidenceProfile(db, {
+      empresaId,
+      historicoId,
+      funcionarioId: scopedHistorico.funcionario_id,
+    }),
+    listTrainingComplianceEvidenceProfilesForQualification(db, {
+      empresaId,
+      qualificacaoTipoId: context.historico.qualificacao_tipo_id,
+    }),
+  ]);
+
+  return c.json({
+    success: true,
+    data: {
+      qualificacao_codigo: context.codigo,
+      perfil_exigido: perfilExigido,
+      perfil_atual: perfilAtual,
+      perfis_permitidos: perfisPermitidos,
+    },
+  });
+});
 
 app.get('/historico/:id/certificados', auth(), async (c) => {
   const db = c.env.DB;

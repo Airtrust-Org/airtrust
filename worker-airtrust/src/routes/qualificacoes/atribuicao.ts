@@ -26,7 +26,6 @@ import {
   createQualificationHistoryAtomic,
   QualificationAtomicError,
 } from '../../services/qualification-history-atomic';
-import { stampQualificationEvidenceProfile } from '../../services/training-compliance-evidence-profile';
 
 // POST / (atribuir), POST /renovar, PUT/DELETE /renovacoes/:id all target a
 // qualificacoes_historico row that is either not created yet (atribuir) or
@@ -277,12 +276,9 @@ router.post(
       throw err;
     }
 
-    await stampQualificationEvidenceProfile(db, {
-      empresaId: tenantCtx.empresaId,
-      historicoId: created.id,
-      funcionarioId: data.funcionario_id,
-      qualificacaoTipoId: tipoId,
-    });
+    // Atribuição manual não transforma o perfil exigido pela função em evidência comprovada.
+    // Para qualificações perfiladas (ex.: D1/D4), o perfil permanece sem classificação
+    // até vir do LMS ou ser confirmado explicitamente no upload da evidência/certificado.
     await logAuditoria(db, 'qualificacoes_historico', String(created.id), 'ATRIBUIR');
 
     return c.json(
