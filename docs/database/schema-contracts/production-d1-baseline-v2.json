@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-30",
     "last_reconciled_against": "0521 training compliance designation overrides prepared; remote apply pending",
-    "schema_v2_digest": "ad916d23ed30f753bb197d24effd6aa0de16d8378b4cca434094d0b41fd1b2ab",
+    "schema_v2_digest": "9a28116a02d257a64a34a7bc3d70b4f24aafb27bd56a318ca34204fa14811a5e",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1195,6 +1195,20 @@
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "training-compliance-designation-overrides-0521.json",
       "note": "0521 is reviewed and prepared only. It seeds five Costa do Sol RBAC 119 management-role designation definitions and condition-scoped Compliance rules that require the dedicated CRM_DIR_RBAC119 while excluding generic CRM Corporate for the same designated occupants. It is data-only, infers no employee assignment and creates no LMS enrollment. Remote apply requires the governed Schema V2 workflow, staging preflight/recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0522_auth_profile_orphan_cleanup.sql",
+      "change_id": "auth-profile-orphan-cleanup-0522",
+      "sha256": "086e7a0b098e74bfbfb656c4c972918c00cf3b4c7b3f3b986d81cea8d518dbc0",
+      "targets": [
+        "usuarios_empresas"
+      ],
+      "domain": "tenant membership / explicit multi-profile authority orphan cleanup and delete synchronization",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "auth-profile-orphan-cleanup-0522.json",
+      "evidence": "worker-airtrust/schema-v2/plans/auth-profile-orphan-cleanup-0522.md",
+      "note": "0522 is reviewed and prepared only. It removes explicit tenant-profile rows whose matching (usuario_id, empresa_id) membership no longer exists and adds an AFTER DELETE trigger so future authorized membership removal cannot leave stale profile authority. It does not alter any existing membership, valid profile grant, user, token, sector assignment or training record. Remote apply requires staging validation, the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     }
   ]
 }

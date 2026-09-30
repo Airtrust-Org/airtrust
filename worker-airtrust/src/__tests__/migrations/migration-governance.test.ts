@@ -126,7 +126,8 @@ describe('migration governance', () => {
     // production remains governed by their Schema V2 change manifests.
     // 0519 adds scalar competency-profile lineage; 0520 normalizes multi-profile qualification evidence;
     // 0521 adds generic designation-based inclusion/exclusion overrides for training compliance.
-    const expectedLatest = 521;
+    // 0522 removes profile-authority rows without tenant membership and prevents recurrence on membership delete.
+    const expectedLatest = 522;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
