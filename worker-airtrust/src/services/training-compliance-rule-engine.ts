@@ -121,6 +121,32 @@ export function resolveTrainingComplianceRules<T extends TrainingComplianceRuleS
   return resolved;
 }
 
+export function withTrainingComplianceRuleImpact<T extends TrainingComplianceRuleShape>(
+  visibleRules: T[],
+  allRules: T[],
+  employees: TrainingComplianceEmployeeShape[],
+): Array<T & { impacto: { abrangidas: number; prevalece_para: number } }> {
+  const effectiveIds = new Map<string, Set<number>>();
+  for (const employee of employees) {
+    for (const effective of resolveTrainingComplianceRules(allRules, employee)) {
+      const key = `${employee.id}:${effective.qualificacao_tipo_id}`;
+      const ids = effectiveIds.get(key) || new Set<number>();
+      ids.add(effective.id);
+      effectiveIds.set(key, ids);
+    }
+  }
+  return visibleRules.map((rule) => ({
+    ...rule,
+    impacto: {
+      abrangidas: employees.filter((employee) => trainingComplianceRuleApplies(rule, employee))
+        .length,
+      prevalece_para: employees.filter((employee) =>
+        effectiveIds.get(`${employee.id}:${rule.qualificacao_tipo_id}`)?.has(rule.id),
+      ).length,
+    },
+  }));
+}
+
 export function trainingComplianceRulePrioritySql(alias = 'tr'): string {
   return `(CASE ${alias}.escopo WHEN 'FUNCIONARIO' THEN 5000 WHEN 'SETOR_FUNCAO' THEN 40 WHEN 'FUNCAO' THEN 30 WHEN 'SETOR' THEN 20 WHEN 'EMPRESA' THEN 10 ELSE 0 END + CASE WHEN ${alias}.condicao_id IS NOT NULL THEN 1000 ELSE 0 END + CASE WHEN NULLIF(TRIM(${alias}.aeronave_modelo),'') IS NOT NULL THEN 100 ELSE 0 END)`;
 }
