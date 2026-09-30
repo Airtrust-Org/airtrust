@@ -155,6 +155,71 @@ async function resolveCommonTenant(loginToken, loginClaims) {
   return candidates[0];
 }
 
+function isManagerRole(value) {
+  return ['GESTOR', 'MANAGER'].includes(String(value || '').trim().toUpperCase());
+}
+
+function isAdminRole(value) {
+  return ['ADMIN', 'ADMINISTRADOR'].includes(String(value || '').trim().toUpperCase());
+}
+
+async function getTenantAccess(token, usuarioId, tenantId) {
+  const payload = await request(`/api/empresas/usuarios/${Number(usuarioId)}/acessos`, token);
+  const acessos = Array.isArray(payload?.acessos) ? payload.acessos : [];
+  const tenantAccesses = acessos.filter((access) => Number(access?.empresa_id) === tenantId);
+  assert(
+    tenantAccesses.length === 1,
+    `Usuário ${usuarioId} deve ter exatamente um acesso no tenant ${tenantId}; encontrados=${tenantAccesses.length}`,
+  );
+  return { acessos, tenantAccess: tenantAccesses[0] };
+}
+
+async function promoteToManagerIfNeeded({ token, usuarioId, tenantId, apply }) {
+  const { acessos, tenantAccess } = await getTenantAccess(token, usuarioId, tenantId);
+  const explicitProfiles = Array.isArray(tenantAccess?.perfis) ? tenantAccess.perfis : [];
+  const currentRole = String(tenantAccess?.role || '').trim().toUpperCase();
+  const alreadyManager = isManagerRole(currentRole) || explicitProfiles.some(isManagerRole);
+
+  if (alreadyManager) return false;
+  assert(
+    !isAdminRole(currentRole) && !explicitProfiles.some(isAdminRole),
+    `Usuário ${usuarioId} possui perfil administrativo; recusa rebaixar para GESTOR`,
+  );
+
+  console.log(`PROMOTE=${usuarioId} from=${currentRole || '-'} to=GESTOR`);
+  if (!apply) return true;
+
+  await request(`/api/empresas/usuarios/${Number(usuarioId)}/acessos`, token, {
+    method: 'PUT',
+    body: JSON.stringify({
+      acessos: acessos.map((access) => {
+        if (Number(access?.empresa_id) !== tenantId) {
+          return {
+            empresaId: Number(access.empresa_id),
+            role: access.role,
+            perfis: Array.isArray(access.perfis) ? access.perfis : [],
+            modulosAtivos: Array.isArray(access.modulos_ativos) ? access.modulos_ativos : [],
+          };
+        }
+        return {
+          empresaId: tenantId,
+          role: 'manager',
+          perfis: ['manager'],
+          modulosAtivos: Array.isArray(access.modulos_ativos) ? access.modulos_ativos : [],
+        };
+      }),
+    }),
+  });
+
+  const refreshed = await getTenantAccess(token, usuarioId, tenantId);
+  assert(
+    isManagerRole(refreshed.tenantAccess?.role) ||
+      (Array.isArray(refreshed.tenantAccess?.perfis) && refreshed.tenantAccess.perfis.some(isManagerRole)),
+    `Usuário ${usuarioId} não ficou com perfil GESTOR`,
+  );
+  return true;
+}
+
 async function main() {
   assert(email && password, 'Credenciais de produção ausentes');
   assert(targetQueries.length === 3, 'TARGET_NAMES deve conter exatamente 3 usuários');
@@ -183,13 +248,6 @@ async function main() {
     ),
     'Ingrid não possui perfil compatível com a referência de escopo',
   );
-  targets.forEach((target) =>
-    assert(
-      String(target.perfil || '').toUpperCase() === 'GESTOR',
-      `${target.nome} não está com perfil GESTOR`,
-    ),
-  );
-
   assert(Array.isArray(links), 'Lista de vínculos setor-gestor inválida');
   const byUser = (userId, source = links) =>
     source.filter((link) => Number(link.usuario_id) === Number(userId) && link.ativo !== false);
@@ -204,6 +262,13 @@ async function main() {
   );
 
   for (const target of targets) {
+    await promoteToManagerIfNeeded({
+      token,
+      usuarioId: target.id,
+      tenantId,
+      apply,
+    });
+
     const currentLinks = byUser(target.id);
     const current = new Set(currentLinks.map((link) => Number(link.setor_id)));
     const missing = [...desired].filter((id) => !current.has(id));
@@ -241,6 +306,12 @@ async function main() {
   for (const target of targets) {
     const finalSet = new Set(byUser(target.id, finalLinks).map((link) => Number(link.setor_id)));
     if (apply) {
+      const { tenantAccess } = await getTenantAccess(token, target.id, tenantId);
+      assert(
+        isManagerRole(tenantAccess?.role) ||
+          (Array.isArray(tenantAccess?.perfis) && tenantAccess.perfis.some(isManagerRole)),
+        `${target.nome} não ficou com perfil GESTOR`,
+      );
       assert(
         finalSet.size === desired.size && [...desired].every((id) => finalSet.has(id)),
         `${target.nome} não ficou com o mesmo escopo setorial da Ingrid`,
