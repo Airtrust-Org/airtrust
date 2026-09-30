@@ -43,7 +43,6 @@ import {
   getEmployeeSectorAccess,
 } from '../services/employee-sector-access';
 import { buildAuditMetadata } from '../lib/audit/context';
-import { ensureCertificateForQualification } from '../services/ensure-certificate';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 import { collectByBindChunks } from '../utils/d1-bind-chunks';
 import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
@@ -1741,7 +1740,8 @@ app.post('/scorm/commit', async (c) => {
   }
 
   // GUARD: Se a matrícula já estava CONCLUÍDA antes deste commit SCORM, a
-  // qualificação e certificado já foram gerados — pular para evitar duplicatas.
+  // qualificação já foi gerada — pular para evitar duplicatas. O certificado
+  // é emitido exclusivamente pela ação manual de gerar certificado.
   const isNewCompletion =
     novoStatus === 'CONCLUIDO' && statusAnterior !== 'CONCLUIDO' && Boolean(dataConclusao);
 
@@ -1810,26 +1810,6 @@ app.post('/scorm/commit', async (c) => {
       .bind(mergedLocation?.current ?? null, d.matricula_id, empresaId)
       .run();
 
-    if (!qualificationFailed && qualificacaoGerada) {
-      try {
-        const historicoId = qualificacaoGerada.qualificacao_historico_id as number;
-        const certResult = await ensureCertificateForQualification(c.env, historicoId, empresaId, {
-          actorUserId: getCallerUserId(c),
-        });
-        createLogger(c, 'LmsMatriculas.certificate').info('lms_scorm_certificate_ensured', {
-          historicoId,
-          state: certResult.state,
-        });
-      } catch (certErr) {
-        createLogger(c, 'LmsMatriculas.certificate').error(
-          'lms_scorm_certificate_failed',
-          toError(certErr),
-          {
-            historicoId: qualificacaoGerada.qualificacao_historico_id,
-          },
-        );
-      }
-    }
   } else {
     // Sem transição para CONCLUIDO nesta chamada (progresso parcial ou
     // REPROVADO): mantém a atualização direta de matrícula, fora do serviço
@@ -2483,30 +2463,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
         .run();
     }
 
-    if (qualificacaoHistoricoId) {
-      try {
-        const certResult = await ensureCertificateForQualification(
-          c.env,
-          qualificacaoHistoricoId,
-          empresaId,
-          {
-            actorUserId: getCallerUserId(c) ?? undefined,
-          },
-        );
-        createLogger(c, 'LmsMatriculas.certificate').info('lms_status_certificate_ensured', {
-          historicoId: qualificacaoHistoricoId,
-          state: certResult.state,
-        });
-      } catch (certErr) {
-        createLogger(c, 'LmsMatriculas.certificate').error(
-          'lms_status_certificate_failed',
-          toError(certErr),
-          {
-            historicoId: qualificacaoHistoricoId,
-          },
-        );
-      }
-    }
+
   } else {
     await db
       .prepare(
