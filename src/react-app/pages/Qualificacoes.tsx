@@ -160,7 +160,6 @@ export default function Qualificacoes() {
     searchTerm,
     setSearchTerm,
     debouncedSearch,
-    setDebouncedSearch,
     sortConfig,
     setSortConfig,
     aeronaveFilter,
@@ -251,48 +250,8 @@ export default function Qualificacoes() {
 
   const historicoTotal = historicoMeta?.total ?? 0;
 
-  // 🔍 Aplicar filtros da URL ao montar componente
-  useEffect(() => {
-    const tabParam = searchParams.get('tab');
-    const viewParam = searchParams.get('view');
-
-    if (tabParam === 'turmas') {
-      // Legacy URL: /qualificacoes?tab=turmas → Planejados > Turmas subview
-      setActiveTab('planejados');
-      setPlannedView('turmas');
-    } else if (tabParam === 'planejados') {
-      setActiveTab('planejados');
-      if (viewParam === 'lista' || viewParam === 'calendario' || viewParam === 'turmas') {
-        setPlannedView(viewParam);
-      }
-    }
-
-    if (highlightedHistoricoId) {
-      setActiveTab('historico');
-      setPage(1);
-      setSearchTerm('');
-      setDebouncedSearch('');
-      setStatusFiltro(new Set(ALL_STATUS_VALUES));
-      return;
-    }
-
-    const statusParam = searchParams.get('status');
-    if (statusParam) {
-      // Mapear parâmetros da URL para valores do Set
-      const statusMap: Record<string, string[]> = {
-        vencida: ['VENCIDA'],
-        vencendo: ['VENCENDO_30'],
-        valida: ['VALIDA'],
-        planejada: ['PLANEJADA'],
-        cancelada: ['CANCELADA'],
-      };
-
-      const statusValues = statusMap[statusParam.toLowerCase()];
-      if (statusValues) {
-        setStatusFiltro(new Set(statusValues));
-      }
-    }
-  }, [highlightedHistoricoId, searchParams]);
+  // Filtros de URL/deep link são tratados por useQualificacoesFiltros sem sobrescrever
+  // as preferências persistentes do usuário.
 
   // Modal de alerta EAD
   const [alertaEADModal, setAlertaEADModal] = useState<{

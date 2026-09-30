@@ -102,10 +102,12 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
     ready: preferencesReady,
   } = useTablePreferences<QualificacoesPrefs>('table.qualificacoes.historico', defaultPrefs);
 
-  const activeTab = normalizeTab(preferences.activeTab);
+  const persistedActiveTab = normalizeTab(preferences.activeTab);
+  const activeTab = highlightedHistoricoId ? 'historico' : persistedActiveTab;
   const plannedView = normalizePlannedView(preferences.activeTab, preferences.plannedView);
   const limit = Number(preferences.limit) > 0 ? Number(preferences.limit) : 50;
-  const searchTerm = String(preferences.searchTerm || '');
+  const persistedSearchTerm = String(preferences.searchTerm || '');
+  const searchTerm = highlightedHistoricoId ? '' : persistedSearchTerm;
   const aeronaveFilter = String(preferences.aeronaveFilter || '');
   const categoriaFilter = sanitizeHistoricoCategoriaFilter(preferences.categoriaFilter);
   const setorFilter = Array.isArray(preferences.setorFilter)
@@ -114,10 +116,27 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
   const categoriasSetorFilter = Array.isArray(preferences.categoriasSetorFilter)
     ? preferences.categoriasSetorFilter.map(String)
     : [];
-  const statusFiltro = useMemo(
+  const persistedStatusFiltro = useMemo(
     () => new Set(normalizeStatuses(preferences.statusFiltro)),
     [preferences.statusFiltro],
   );
+  const statusParamValues = useMemo(() => {
+    const statusParam = searchParams.get('status');
+    if (!statusParam) return null;
+    const statusMap: Record<string, string[]> = {
+      vencida: ['VENCIDA'],
+      vencendo: ['VENCENDO_30'],
+      valida: ['VALIDA'],
+      planejada: ['PLANEJADA'],
+      cancelada: ['CANCELADA'],
+    };
+    return statusMap[statusParam.toLowerCase()] ?? null;
+  }, [searchParams]);
+  const statusFiltro = useMemo(() => {
+    if (highlightedHistoricoId) return new Set<string>(ALL_STATUS_VALUES);
+    if (statusParamValues) return new Set(statusParamValues);
+    return persistedStatusFiltro;
+  }, [highlightedHistoricoId, persistedStatusFiltro, statusParamValues]);
   const sortConfig = useMemo<SortConfig>(
     () => ({
       column: preferences.sortColumn ?? 'data_vencimento',
@@ -302,33 +321,20 @@ export function useQualificacoesFiltros(highlightedHistoricoId: number | null) {
     }
 
     if (highlightedHistoricoId) {
-      setActiveTab('historico');
       setPage(1);
-      setSearchTerm('');
-      setDebouncedSearch('');
-      setStatusFiltro(new Set(ALL_STATUS_VALUES));
       return;
     }
 
-    const statusParam = searchParams.get('status');
-    if (statusParam) {
-      const statusMap: Record<string, string[]> = {
-        vencida: ['VENCIDA'],
-        vencendo: ['VENCENDO_30'],
-        valida: ['VALIDA'],
-        planejada: ['PLANEJADA'],
-        cancelada: ['CANCELADA'],
-      };
-      const statusValues = statusMap[statusParam.toLowerCase()];
-      if (statusValues) setStatusFiltro(new Set(statusValues));
-    }
+    // `?status=...` é um recorte de navegação (dashboard/deep link), não uma
+    // alteração da preferência pessoal. O valor efetivo é derivado acima sem
+    // gravar em usuario_preferencias.
+    if (statusParamValues) setPage(1);
   }, [
     highlightedHistoricoId,
     searchParams,
     setActiveTab,
     setPlannedView,
-    setSearchTerm,
-    setStatusFiltro,
+    statusParamValues,
   ]);
 
   const isDefaultStatusFilter = useMemo(() => {

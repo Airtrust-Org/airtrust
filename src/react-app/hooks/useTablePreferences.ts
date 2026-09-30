@@ -168,6 +168,11 @@ export function useTablePreferences<T extends Record<string, unknown>>(
     const serializedPreferences = JSON.stringify(preferences);
     if (serializedPreferences === lastPersistedValueRef.current) return;
 
+    // Persistência local é imediata: recarregar/navegar logo após alterar um filtro
+    // não pode perder a preferência. O PUT remoto continua com debounce para evitar
+    // escrita de rede a cada tecla/interação.
+    writeLocalPreferences(localKey, preferences);
+
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current);
     }
@@ -183,8 +188,6 @@ export function useTablePreferences<T extends Record<string, unknown>>(
       ) {
         return;
       }
-
-      writeLocalPreferences(localKey, preferences);
 
       const saveRequest: SaveRequest = {
         context,
