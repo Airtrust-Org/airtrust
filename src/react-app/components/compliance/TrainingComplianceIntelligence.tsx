@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Bell,
-  CheckCircle2,
   Download,
   FileText,
   History,
@@ -151,6 +150,10 @@ export function TrainingComplianceIntelligence({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [noticeChannels, setNoticeChannels] = useState({ email: true, whatsapp: true });
+  const [reportDetail, setReportDetail] = useState<{
+    title: string;
+    rows: TrainingCompliancePendingRow[];
+  } | null>(null);
   const [pendingSort, setPendingSort] = useState<TableSortState<PendingSortKey>>({
     key: 'person',
     direction: 'asc',
@@ -491,31 +494,92 @@ export function TrainingComplianceIntelligence({
     return (
       <div className="space-y-5 p-4">
         <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <button
+            type="button"
+            onClick={() => setReportDetail({ title: 'Pessoas com pendência', rows: visibleRows })}
+            className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-slate-300 hover:bg-slate-100"
+          >
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <Users className="h-4 w-4" /> Pessoas com pendência
             </div>
             <div className="mt-2 text-3xl font-bold text-slate-950">
               {new Set(visibleRows.map((row) => row.funcionario_id)).size}
             </div>
-          </div>
-          <div className="rounded-xl border border-red-200 bg-red-50/50 p-4">
+            <div className="mt-1 text-xs text-slate-400">Clique para ver o que compõe o número</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setReportDetail({ title: 'Pendências críticas', rows: visibleRows.filter((row) => row.critico_operacional) })}
+            className="rounded-xl border border-red-200 bg-red-50/50 p-4 text-left transition hover:bg-red-50"
+          >
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-red-700">
               <ShieldAlert className="h-4 w-4" /> Pendências críticas
             </div>
             <div className="mt-2 text-3xl font-bold text-red-800">
               {visibleRows.filter((row) => row.critico_operacional).length}
             </div>
-          </div>
-          <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+            <div className="mt-1 text-xs text-red-500">Clique para ver o que compõe o número</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setReportDetail({ title: 'Pendências com avisos enviados', rows: visibleRows.filter((row) => row.avisos_enviados > 0) })}
+            className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-left transition hover:bg-amber-50"
+          >
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
               <Bell className="h-4 w-4" /> Avisos já enviados
             </div>
             <div className="mt-2 text-3xl font-bold text-amber-800">
               {visibleRows.reduce((sum, row) => sum + row.avisos_enviados, 0)}
             </div>
-          </div>
+            <div className="mt-1 text-xs text-amber-600">Clique para ver as pendências cobradas</div>
+          </button>
         </div>
+
+        {reportDetail ? (
+          <section className="rounded-2xl border border-blue-200 bg-blue-50/30 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="font-semibold text-slate-900">{reportDetail.title}</h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  {new Set(reportDetail.rows.map((row) => row.funcionario_id)).size}{' '}
+                  {new Set(reportDetail.rows.map((row) => row.funcionario_id)).size === 1 ? 'pessoa' : 'pessoas'} ·{' '}
+                  {reportDetail.rows.length}{' '}
+                  {reportDetail.rows.length === 1 ? 'obrigação individual' : 'obrigações individuais'} neste recorte.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReportDetail(null)}
+                aria-label="Fechar detalhamento do relatório"
+                className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-3 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+              {reportDetail.rows.map((row) => (
+                <div key={rowKey(row)} className="border-b border-slate-100 px-3 py-2 last:border-b-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium text-slate-900">{row.funcionario_nome}</span>
+                    <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${statusBadge(row.status_compliance)}`}>
+                      {complianceStatusLabel(row)}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-xs text-slate-600">
+                    {row.qualificacao_tipo_nome || row.qualificacao_tipo_codigo || 'Treinamento'} ·{' '}
+                    {row.setor_nome || 'Sem setor'} / {row.funcao_nome || 'Sem função'}
+                  </div>
+                  {row.referencia_normativa ? (
+                    <div className="mt-0.5 text-xs text-slate-400">{row.referencia_normativa}</div>
+                  ) : null}
+                </div>
+              ))}
+              {!reportDetail.rows.length ? (
+                <div className="px-3 py-6 text-center text-sm text-slate-500">Nenhum item neste recorte.</div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5">
           <div className="flex items-start justify-between gap-3">
@@ -593,13 +657,23 @@ export function TrainingComplianceIntelligence({
               </h3>
               <div className="space-y-2">
                 {aggregations.trainings.map(([name, count]) => (
-                  <div
+                  <button
+                    type="button"
                     key={name}
-                    className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"
+                    onClick={() =>
+                      setReportDetail({
+                        title: `Pendências · ${name}`,
+                        rows: visibleRows.filter(
+                          (row) =>
+                            (row.qualificacao_tipo_nome || row.qualificacao_tipo_codigo || 'Treinamento') === name,
+                        ),
+                      })
+                    }
+                    className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-left text-sm hover:bg-slate-100"
                   >
                     <span>{name}</span>
                     <strong>{count}</strong>
-                  </div>
+                  </button>
                 ))}
                 {!aggregations.trainings.length ? (
                   <p className="text-sm text-emerald-700">Sem pendências.</p>
@@ -612,13 +686,20 @@ export function TrainingComplianceIntelligence({
               </h3>
               <div className="space-y-2">
                 {aggregations.sectors.map(([name, count]) => (
-                  <div
+                  <button
+                    type="button"
                     key={name}
-                    className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"
+                    onClick={() =>
+                      setReportDetail({
+                        title: `Pendências · ${name}`,
+                        rows: visibleRows.filter((row) => (row.setor_nome || 'Sem setor') === name),
+                      })
+                    }
+                    className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-left text-sm hover:bg-slate-100"
                   >
                     <span>{name}</span>
                     <strong>{count}</strong>
-                  </div>
+                  </button>
                 ))}
                 {!aggregations.sectors.length ? (
                   <p className="text-sm text-emerald-700">Sem pendências.</p>
@@ -631,13 +712,20 @@ export function TrainingComplianceIntelligence({
               </h3>
               <div className="space-y-2">
                 {aggregations.people.map(([name, count]) => (
-                  <div
+                  <button
+                    type="button"
                     key={name}
-                    className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"
+                    onClick={() =>
+                      setReportDetail({
+                        title: `Pendências · ${name}`,
+                        rows: visibleRows.filter((row) => row.funcionario_nome === name),
+                      })
+                    }
+                    className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-left text-sm hover:bg-slate-100"
                   >
                     <span>{name}</span>
                     <strong>{count}</strong>
-                  </div>
+                  </button>
                 ))}
                 {!aggregations.people.length ? (
                   <p className="text-sm text-emerald-700">Sem pendências.</p>

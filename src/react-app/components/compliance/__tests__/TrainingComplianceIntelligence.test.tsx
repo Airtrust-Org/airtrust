@@ -112,5 +112,9 @@ describe('TrainingComplianceIntelligence', () => {
     expect(screen.getByText(/Atual: 80% · \+5 p\.p\./)).toBeInTheDocument();
     expect(screen.getByText('Pendências recorrentes')).toBeInTheDocument();
     expect(screen.getByText(/O setor Operações possui 1 colaborador/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Pessoas com pendência/i }));
+    expect(screen.getByText(/1 pessoa · 1 obrigação individual/)).toBeInTheDocument();
+    expect(screen.getAllByText('CRM').length).toBeGreaterThanOrEqual(1);
   });
 });
