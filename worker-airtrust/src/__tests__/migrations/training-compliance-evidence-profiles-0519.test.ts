@@ -16,4 +16,13 @@ describe('0519 training compliance evidence profiles', () => {
     expect(sql).not.toContain('INSERT INTO lms_matriculas');
     expect(sql).not.toMatch(/DELETE\s+FROM\s+qualificacoes_historico/i);
   });
+
+  it('wires governed staging and production validation for 0519', () => {
+    const productionWorkflow = read('.github/workflows/apply-schema-change-v2.yml');
+    const stagingWorkflow = read('.github/workflows/staging-d1-schema-change.yml');
+    expect(productionWorkflow).toContain("inputs.change_id == 'training-compliance-evidence-profiles-0519'");
+    expect(productionWorkflow).toContain('validate-0519-production-preflight.sh');
+    expect(productionWorkflow).toContain('validate-0519-production-postconditions.sh');
+    expect(stagingWorkflow).toContain('0519_training_compliance_evidence_profiles.sql');
+  });
 });
