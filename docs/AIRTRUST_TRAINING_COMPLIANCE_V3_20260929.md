@@ -27,26 +27,26 @@ Reconciliar o Compliance de Treinamentos da Costa do Sol com a matriz auditada d
 
 ## Regras reconciliadas
 
-| Requisito | Regra V3 |
-|---|---|
-| NR-06 | Toda a empresa por política interna/matriz auditada |
-| NR-11 | Mecânico + Auxiliar de Manutenção |
-| NR-20 | Mecânico + Auxiliar de Manutenção + Auxiliar de Suprimentos + Supervisor de Suprimentos; pacote atual de Iniciação permanece provisório até substituição pelo Intermediário adequado ao contato direto |
-| NR-26 | Mesma população auditada de Manutenção/Suprimentos |
-| NR-35 | Mecânico + Auxiliar de Manutenção; modalidade presencial |
-| FOD | População funcional auditada + exceção individual já auditada quando aplicável |
-| PPSP | População ARSO da matriz/PPSP + exceção individual auditada quando aplicável |
-| PPSP Supervisor | Somente designação específica |
-| FDM-EAD | Familiarização/conhecimento geral para a população ampla da matriz auditada (Tripulação, CTM, Manutenção, Segurança Operacional/QSMS e funções correlatas); `FDM_EQUIPE` permanece apenas como exceção para integrante formal fora da população já coberta |
-| Gatekeeper | Somente designação formal |
-| LOSA | Somente observador/equipe designada |
-| Conscientização AVSEC | Qualificação própria `AVSEC_CONSC`, obrigatória quando houver credencial permanente com permissão de acesso às áreas operacionais; validade acompanha a credencial. Escritório sem esse acesso não entra automaticamente |
-| AVSEC (D1) | Certificação adicional por atividade: uma qualificação com perfis; Comandante/Copiloto usam `AVSEC_TRIPULANTE` e os demais perfis dependem da atividade |
-| DGR (D4) | Uma qualificação; perfis funcionais no requisito: Tripulante, Coordenador de Voo, Atendimento, Rampa e Rampa DG |
-| CA-EBS | Mantido separado do HUET porque certificados HUET legados ainda válidos podem não incluir CA-EBS |
-| SOP AW139/S-76 | Mantido para pilotos aplicáveis como `APRIMORAMENTO_INTERNO`, não como curso separado nominalmente exigido por norma |
-| LOFT | Retirado como qualificação independente; permanece como componente do FSTD/CRM/OPC |
-| English Assessment | Requisito ativo retirado; modelo inativado. Histórico preservado |
+| Requisito             | Regra V3                                                                                                                                                                                                                                                                                      |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| NR-06                 | Toda a empresa por política interna/matriz auditada                                                                                                                                                                                                                                           |
+| NR-11                 | Mecânico + Auxiliar de Manutenção                                                                                                                                                                                                                                                             |
+| NR-20                 | Mecânico + Auxiliar de Manutenção + Auxiliar de Suprimentos + Supervisor de Suprimentos; pacote atual de Iniciação permanece provisório até substituição pelo Intermediário adequado ao contato direto                                                                                        |
+| NR-26                 | Mesma população auditada de Manutenção/Suprimentos                                                                                                                                                                                                                                            |
+| NR-35                 | Mecânico + Auxiliar de Manutenção; modalidade presencial                                                                                                                                                                                                                                      |
+| FOD                   | População funcional auditada + exceção individual já auditada quando aplicável                                                                                                                                                                                                                |
+| PPSP                  | População ARSO da matriz/PPSP + exceção individual auditada quando aplicável                                                                                                                                                                                                                  |
+| PPSP Supervisor       | Somente designação específica                                                                                                                                                                                                                                                                 |
+| FDM-EAD               | Familiarização/conhecimento geral para a população ampla da matriz auditada (Tripulação, CTM, Manutenção, Segurança Operacional/QSMS e funções correlatas); `FDM_EQUIPE` permanece apenas como exceção para integrante formal fora da população já coberta                                    |
+| Gatekeeper            | Somente designação formal                                                                                                                                                                                                                                                                     |
+| LOSA                  | Somente observador/equipe designada                                                                                                                                                                                                                                                           |
+| Conscientização AVSEC | Qualificação própria `AVSEC_CONSC`, requisito corporativo da Costa do Sol porque inclusive o pessoal do escritório do Rio precisa de credencial aeroportuária para acessar a unidade de Macaé. Para credencial permanente com acesso às áreas operacionais, a validade acompanha a credencial |
+| AVSEC (D1)            | Certificação adicional por atividade: uma qualificação com perfis; Comandante/Copiloto usam `AVSEC_TRIPULANTE` e os demais perfis dependem da atividade                                                                                                                                       |
+| DGR (D4)              | Uma qualificação; perfis funcionais no requisito: Tripulante, Coordenador de Voo, Atendimento, Rampa e Rampa DG                                                                                                                                                                               |
+| CA-EBS                | Mantido separado do HUET porque certificados HUET legados ainda válidos podem não incluir CA-EBS                                                                                                                                                                                              |
+| SOP AW139/S-76        | Mantido para pilotos aplicáveis como `APRIMORAMENTO_INTERNO`, não como curso separado nominalmente exigido por norma                                                                                                                                                                          |
+| LOFT                  | Retirado como qualificação independente; permanece como componente do FSTD/CRM/OPC                                                                                                                                                                                                            |
+| English Assessment    | Requisito ativo retirado; modelo inativado. Histórico preservado                                                                                                                                                                                                                              |
 
 ## Segurança de execução
 

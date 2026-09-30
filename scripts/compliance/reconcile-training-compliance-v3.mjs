@@ -46,12 +46,6 @@ function ensureQualificationModel({ code, name, description, areaCode = 'OPERACO
     `INSERT INTO qualificacoes_tipos (codigo,nome,descricao,categoria,carga_horaria,carga_horaria_inicial,carga_horaria_recorrente,conteudo_programatico,validade,vencimento_fim_mes,observacoes,ativo,is_check,empresa_id,formato_id,categoria_id,classe_requisito,dominio_codigo,area_id,created_at,updated_at) SELECT ${q(code)},${q(name)},${q(description)},${q(qualificationCategoryName)},NULL,NULL,NULL,NULL,NULL,0,${q('Validade vinculada à credencial aeroportuária permanente; não usar periodicidade fixa.')},1,0,6,${qualificationFormatId},${qualificationCategoryId},'TREINAMENTO',NULL,${areaId},datetime('now'),datetime('now') WHERE ${qualificationCategoryId} IS NOT NULL AND ${areaId} IS NOT NULL AND NOT EXISTS (SELECT 1 FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)=UPPER(${q(code)}) AND deleted_at IS NULL)`,
   );
 }
-function ensureCondition({ code, name, type, description, reference }) {
-  statements.push(
-    `INSERT OR IGNORE INTO compliance_condicoes(empresa_id,codigo,nome,tipo,descricao,referencia_normativa) SELECT id,${q(code)},${q(name)},${q(type)},${q(description)},${q(reference)} FROM empresas WHERE id=6`,
-  );
-}
-
 const deactivate = (code) =>
   statements.push(
     `UPDATE treinamento_requisitos SET ativo=0,deleted_at=datetime('now'),updated_at=datetime('now') WHERE empresa_id=6 AND qualificacao_tipo_id=${model(code)} AND ativo=1 AND deleted_at IS NULL`,
@@ -380,24 +374,14 @@ ensureQualificationModel({
     'Atividade de conscientização AVSEC para pessoa que receberá credencial permanente com permissão de acesso às áreas operacionais do aeródromo.',
   areaCode: 'OPERACOES',
 });
-ensureCondition({
-  code: 'AVSEC_CREDENCIAL_PERMANENTE',
-  name: 'Credencial permanente com acesso operacional',
-  type: 'OUTRO',
-  description:
-    'Pessoa que receberá ou possui credencial aeroportuária permanente com permissão de acesso às áreas operacionais do aeródromo.',
-  reference: 'RBAC 107.97; PAVSEC/PSA do aeródromo aplicável',
-});
 deactivate('AVSEC_CONSC');
-addDefaultNA('AVSEC_CONSC');
-addConditionalRule({
+addCompanyRule({
   code: 'AVSEC_CONSC',
-  condition: 'AVSEC_CREDENCIAL_PERMANENTE',
   origin: 'REGULATORIO',
   foundation: 'REGULATORIO_DIRETO',
-  document: 'RBAC 107.97; PAVSEC/PSA do aeródromo aplicável',
+  document: 'RBAC 107.97; PAVSEC/PSA do aeródromo aplicável; critério operacional Costa do Sol',
   reason:
-    'Obrigatória para credencial permanente com acesso às áreas operacionais. A validade acompanha a credencial e a conscientização deve ser refeita na renovação.',
+    'Requisito corporativo porque os empregados, inclusive os lotados no escritório do Rio, precisam de credencial aeroportuária para acessar a unidade de Macaé. Para credencial permanente com acesso às áreas operacionais, a validade da conscientização acompanha a credencial e a atividade deve ser refeita na renovação.',
 });
 
 // Certificações AVSEC: uma qualificação D1, com perfil por atividade; não substituem a regra de conscientização/credencial.

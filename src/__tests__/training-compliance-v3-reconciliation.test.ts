@@ -23,13 +23,14 @@ describe('training compliance V3 reconciliation', () => {
     expect(source).toContain("'PTAP_TRIPULANTE_VOO'");
   });
 
-  it('separates AVSEC awareness for permanent airport credentials from activity certifications', () => {
+  it('treats AVSEC awareness as a corporate requirement and keeps activity certifications separate', () => {
     expect(source).toContain("code: 'AVSEC_CONSC'");
-    expect(source).toContain("condition: 'AVSEC_CREDENCIAL_PERMANENTE'");
+    expect(source).toContain('inclusive os lotados no escritório do Rio');
     expect(source).toContain('RBAC 107.97');
-    expect(source).toContain('A validade acompanha a credencial');
+    expect(source).toContain('a validade da conscientização acompanha a credencial');
     expect(output).toContain('AVSEC_CONSC');
-    expect(output).toContain('AVSEC_CREDENCIAL_PERMANENTE');
+    expect(output).toContain("'EMPRESA','OBRIGATORIA'");
+    expect(output).not.toContain('AVSEC_CREDENCIAL_PERMANENTE');
     expect(output).not.toMatch(/AVSEC_CONSC[\s\S]{0,600}auto_matricular_ead\s*=\s*1/i);
   });
 
