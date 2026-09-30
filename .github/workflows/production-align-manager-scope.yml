@@ -33,8 +33,8 @@ jobs:
       - name: Align manager scope
         env:
           PROD_API_BASE_URL: https://api.airtrust.online
-          PROD_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || secrets.PROD_SMOKE_EMAIL }}
-          PROD_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD || secrets.PROD_SMOKE_PASSWORD }}
+          PROD_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
           REFERENCE_NAME: Ingrid
           TARGET_NAMES: Giancarlo,Emily,Laila
           APPLY: ${{ inputs.apply }}
