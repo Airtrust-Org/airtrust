@@ -6,7 +6,10 @@ import { processarNotificacoes } from '../cron/notificacoes';
 import { createLogger, toError } from '../utils/logger';
 import type { Env } from '../types';
 import { getModuleAlertSettings, saveModuleAlertSettings } from '../services/module-alert-settings';
-import { getTrainingAlertStage } from '../services/training-alert-policy';
+import {
+  getTrainingAlertStage,
+  normalizeTrainingAlertFrequency,
+} from '../services/training-alert-policy';
 import {
   appendEmployeeSectorFilter,
   getEmployeeSectorAccess,
@@ -653,8 +656,15 @@ app.get('/configuracoes-qualificacoes', auth(), requireRole('admin', 'manager'),
         .trim()
         .toUpperCase();
       if (!codigo) continue;
+      const normalizedFrequency = normalizeTrainingAlertFrequency(
+        codigo,
+        String(row.frequencia || 'ONCE'),
+        row.intervalo_dias == null ? null : Number(row.intervalo_dias),
+      );
       effective.set(codigo, {
         ...row,
+        frequencia: normalizedFrequency.frequency,
+        intervalo_dias: normalizedFrequency.intervalDays,
         origem: Number(row.empresa_id) === empresaId ? 'empresa' : 'padrao',
       });
     }
@@ -714,18 +724,19 @@ app.put('/configuracoes-qualificacoes/:codigo', auth(), requireRole('admin'), as
       return c.json({ success: false, error: 'Mensagem deve ter entre 1 e 5000 caracteres' }, 400);
     }
 
-    const frequencia = String(input.frequencia ?? base.frequencia ?? 'ONCE')
+    const requestedFrequency = String(input.frequencia ?? base.frequencia ?? 'ONCE')
       .trim()
       .toUpperCase();
-    if (!['ONCE', 'DAILY', 'EVERY_N_DAYS'].includes(frequencia)) {
+    if (!['ONCE', 'DAILY', 'EVERY_N_DAYS'].includes(requestedFrequency)) {
       return c.json({ success: false, error: 'Frequência inválida' }, 400);
     }
-    const intervaloDias =
-      frequencia === 'EVERY_N_DAYS'
-        ? Math.max(1, Math.min(365, Number(input.intervalo_dias ?? base.intervalo_dias ?? 1)))
-        : frequencia === 'DAILY'
-          ? 1
-          : null;
+    const normalizedFrequency = normalizeTrainingAlertFrequency(
+      codigo,
+      requestedFrequency,
+      Number(input.intervalo_dias ?? base.intervalo_dias ?? 1),
+    );
+    const frequencia = normalizedFrequency.frequency;
+    const intervaloDias = normalizedFrequency.intervalDays;
 
     const existing = await c.env.DB.prepare(
       `SELECT id FROM notificacoes_config

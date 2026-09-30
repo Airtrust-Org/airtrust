@@ -96,6 +96,29 @@ export function inferTrainingAlertStageCode(config: {
   return legacy?.code || null;
 }
 
+export type TrainingAlertFrequency = 'ONCE' | 'DAILY' | 'EVERY_N_DAYS';
+
+export function normalizeTrainingAlertFrequency(
+  stageCode: string | null | undefined,
+  frequency: string | null | undefined,
+  intervalDays: number | null | undefined,
+): { frequency: TrainingAlertFrequency; intervalDays: number | null } {
+  const stage = getTrainingAlertStage(stageCode);
+
+  // Incident 2026-09-30: a DAILY expired stage generated a fresh delivery
+  // for every expired qualification every day. Expired training alerts are
+  // therefore fail-safe ONCE, even when legacy/config data still says DAILY.
+  if (stage?.expired) return { frequency: 'ONCE', intervalDays: null };
+
+  const normalized = String(frequency || 'ONCE').trim().toUpperCase();
+  if (normalized === 'DAILY') return { frequency: 'DAILY', intervalDays: 1 };
+  if (normalized === 'EVERY_N_DAYS') {
+    const interval = Math.max(1, Math.min(365, Number(intervalDays) || 1));
+    return { frequency: 'EVERY_N_DAYS', intervalDays: interval };
+  }
+  return { frequency: 'ONCE', intervalDays: null };
+}
+
 export function trainingAlertAudience(
   stageCode: TrainingAlertStageCode | null,
   isCheck: boolean,
