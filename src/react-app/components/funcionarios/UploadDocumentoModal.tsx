@@ -14,6 +14,7 @@ interface UploadDocumentoModalProps {
   onSuccess: () => void;
   funcionarioId: number;
   tipoInicial?: TipoDocumento;
+  tiposPermitidos?: TipoDocumento[];
 }
 
 type OpcaoSubtipo = { value: string; label: string };
@@ -81,10 +82,11 @@ const SUBTIPOS: Partial<Record<TipoDocumento, OpcaoSubtipo[]>> = {
   ],
 };
 
-const SUBTIPO_LIVRE = new Set<TipoDocumento>(['CERTIFICADO_QUALIFICACAO', 'AVALIACAO_CQ']);
+const SUBTIPO_LIVRE = new Set<TipoDocumento>(['CERTIFICADO_QUALIFICACAO', 'AVALIACAO_CQ', 'FTV']);
 const DATA_OBRIGATORIA = new Set<TipoDocumento>([
   'CERTIFICADO_QUALIFICACAO',
   'AVALIACAO_CQ',
+  'FTV',
   'EXAME_MEDICO',
   'LICENCA_ANAC',
   'SIMULADOR',
@@ -96,6 +98,7 @@ const DATA_OBRIGATORIA = new Set<TipoDocumento>([
 const PREFIXOS: Record<TipoDocumento, string> = {
   CERTIFICADO_QUALIFICACAO: 'CERT',
   AVALIACAO_CQ: 'AVAL',
+  FTV: 'FTV',
   EXAME_MEDICO: 'EXAME',
   LICENCA_ANAC: 'LIC',
   SIMULADOR: 'SIM',
@@ -110,7 +113,8 @@ const PREFIXOS: Record<TipoDocumento, string> = {
 
 function subtipoLabel(tipo: TipoDocumento) {
   if (tipo === 'CERTIFICADO_QUALIFICACAO') return 'Código ou identificação do treinamento';
-  if (tipo === 'AVALIACAO_CQ') return 'Tipo/código da avaliação';
+  if (tipo === 'AVALIACAO_CQ') return 'Tipo/código da FAP ou check';
+  if (tipo === 'FTV') return 'Código/tipo da FTV';
   return 'Tipo específico';
 }
 
@@ -120,6 +124,7 @@ export default function UploadDocumentoModal({
   onSuccess,
   funcionarioId,
   tipoInicial,
+  tiposPermitidos,
 }: UploadDocumentoModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [tipoDocumento, setTipoDocumento] = useState<TipoDocumento>(
@@ -159,6 +164,9 @@ export default function UploadDocumentoModal({
     return { valido: true };
   };
 
+  const categoriasDisponiveis = tiposPermitidos?.length
+    ? PASTA_VIRTUAL_CATEGORIAS.filter((categoria) => tiposPermitidos.includes(categoria.tipo))
+    : PASTA_VIRTUAL_CATEGORIAS;
   const opcoesSubTipo = SUBTIPOS[tipoDocumento] || [];
   const usaSubtipoLivre = SUBTIPO_LIVRE.has(tipoDocumento);
   const subtipoObrigatorio = tipoDocumento !== 'OUTROS';
@@ -287,7 +295,7 @@ export default function UploadDocumentoModal({
               className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-950"
               disabled={uploading}
             >
-              {PASTA_VIRTUAL_CATEGORIAS.map((tipo) => (
+              {categoriasDisponiveis.map((tipo) => (
                 <option key={tipo.tipo} value={tipo.tipo}>
                   {tipo.titulo}
                 </option>
@@ -311,7 +319,9 @@ export default function UploadDocumentoModal({
                   placeholder={
                     tipoDocumento === 'CERTIFICADO_QUALIFICACAO'
                       ? 'Ex.: D2, E3, F1, INTRO_SGQ'
-                      : 'Ex.: FAP05.2-139, FAP14-139, OPC'
+                      : tipoDocumento === 'FTV'
+                        ? 'Ex.: FTV-A139-FFS, FTV-SK76-ANV'
+                        : 'Ex.: FAP05.2-139, FAP14-139, OPC'
                   }
                   className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-950"
                   disabled={uploading}

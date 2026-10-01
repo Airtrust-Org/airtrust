@@ -1,7 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PASTA_VIRTUAL_CATEGORIAS, PASTA_VIRTUAL_GRUPOS } from '@/react-app/config/pastaVirtual';
+import {
+  PASTA_VIRTUAL_CATEGORIAS,
+  PASTA_VIRTUAL_GRUPOS,
+  isTripulacaoVooFuncionario,
+} from '@/react-app/config/pastaVirtual';
 
 describe('Pasta Virtual taxonomy', () => {
   it('exposes the operational, regulatory, personal and fallback groups', () => {
@@ -20,6 +24,7 @@ describe('Pasta Virtual taxonomy', () => {
       expect.arrayContaining([
         'CERTIFICADO_QUALIFICACAO',
         'AVALIACAO_CQ',
+        'FTV',
         'EXAME_MEDICO',
         'LICENCA_ANAC',
         'SIMULADOR',
@@ -34,6 +39,20 @@ describe('Pasta Virtual taxonomy', () => {
     );
   });
 
+  it('shows flight-only document families only for commander and copilot roles', () => {
+    const flightOnly = PASTA_VIRTUAL_CATEGORIAS.filter(
+      (categoria) => categoria.somenteTripulacaoVoo,
+    ).map((categoria) => categoria.tipo);
+
+    expect(flightOnly).toEqual(
+      expect.arrayContaining(['AVALIACAO_CQ', 'FTV', 'SIMULADOR', 'EXPERIENCIA_HORAS']),
+    );
+    expect(isTripulacaoVooFuncionario('Comandante')).toBe(true);
+    expect(isTripulacaoVooFuncionario('Copiloto')).toBe(true);
+    expect(isTripulacaoVooFuncionario('Co-piloto')).toBe(true);
+    expect(isTripulacaoVooFuncionario('Piloto')).toBe(false);
+    expect(isTripulacaoVooFuncionario('Auxiliar de Manutenção')).toBe(false);
+  });
   it('keeps legacy backend labels mapped into the new canonical categories', () => {
     const qualificacoes = PASTA_VIRTUAL_CATEGORIAS.find(
       (categoria) => categoria.tipo === 'CERTIFICADO_QUALIFICACAO',
@@ -61,7 +80,7 @@ describe('Pasta Virtual taxonomy', () => {
     expect(source).toContain("if (tipoDocumento === 'CERTIFICADO_QUALIFICACAO') return file.name;");
   });
 
-  it('provides search, history and empty-category controls in the canonical view', () => {
+  it('keeps the canonical category structure visible for every employee', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/react-app/components/funcionarios/PastaVirtualCompleta.tsx'),
       'utf8',
@@ -69,7 +88,25 @@ describe('Pasta Virtual taxonomy', () => {
 
     expect(source).toContain('Buscar por documento ou categoria');
     expect(source).toContain('Mostrar histórico');
-    expect(source).toContain('Mostrar categorias vazias');
+    expect(source).not.toContain('Mostrar categorias vazias');
+    expect(source).toContain('return casaBusca;');
     expect(source).toContain('Adicionar documento');
+  });
+
+  it('guards flight training and flight log views for commander/copilot only', () => {
+    const fichaSource = readFileSync(
+      resolve(process.cwd(), 'src/react-app/pages/FichaFuncionarioPage.tsx'),
+      'utf8',
+    );
+    const pastaSource = readFileSync(
+      resolve(process.cwd(), 'src/react-app/pages/PastaVirtual.tsx'),
+      'utf8',
+    );
+
+    expect(fichaSource).toContain("isTripulacaoVoo && tab === 'simulador'");
+    expect(fichaSource).toContain("isTripulacaoVoo && tab === 'caderneta'");
+    expect(fichaSource).toContain('funcao={f.funcao}');
+    expect(pastaSource).toContain("isTripulacaoVoo && abaAtiva === 'desempenho'");
+    expect(pastaSource).toContain("isTripulacaoVoo && abaAtiva === 'caderneta'");
   });
 });

@@ -18,6 +18,7 @@ import Ficha360TreinamentoVooSection from '@/react-app/components/funcionarios/F
 import Ficha360OperationalContext from '@/react-app/components/funcionarios/Ficha360OperationalContext';
 import CadernetaHorasVoo from '@/react-app/pages/funcionarios/CadernetaHorasVoo';
 import { buildPasta360Url } from '@/react-app/utils/pasta360';
+import { isTripulacaoVooFuncionario } from '@/react-app/config/pastaVirtual';
 import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { FortnightConsolidatedPanel } from '@/react-app/pages/frms/components/FortnightOperationalIndicator';
 import {
@@ -465,6 +466,7 @@ export default function FichaFuncionarioPage() {
   const [error, setError] = useState('');
 
   const todayIso = useMemo(() => getTodayLocalIsoDate(), []);
+  const isTripulacaoVoo = isTripulacaoVooFuncionario(ficha?.funcionario?.funcao);
 
   const requestedFuncionarioId = Number(id);
   const {
@@ -492,6 +494,14 @@ export default function FichaFuncionarioPage() {
     const tabFromUrl = normalizeFichaTab(searchParams.get('tab'));
     setTab((current) => (current === tabFromUrl ? current : tabFromUrl));
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!ficha || isTripulacaoVoo || (tab !== 'simulador' && tab !== 'caderneta')) return;
+    setTab('resumo');
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('tab', 'resumo');
+    setSearchParams(nextParams, { replace: true });
+  }, [ficha, isTripulacaoVoo, searchParams, setSearchParams, tab]);
 
   const handleTabChange = (nextTab: FichaTab) => {
     setTab(nextTab);
@@ -730,22 +740,26 @@ export default function FichaFuncionarioPage() {
               <FileText className="h-4 w-4" />
               Licenças
             </button>
-            <button
-              type="button"
-              onClick={() => handleTabChange('simulador')}
-              className={tabButtonClass('simulador')}
-            >
-              <Activity className="h-4 w-4" />
-              Treinamento de Voo
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTabChange('caderneta')}
-              className={tabButtonClass('caderneta')}
-            >
-              <Plane className="h-4 w-4" />
-              Caderneta de Voo
-            </button>
+            {isTripulacaoVoo && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleTabChange('simulador')}
+                  className={tabButtonClass('simulador')}
+                >
+                  <Activity className="h-4 w-4" />
+                  Treinamento de Voo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTabChange('caderneta')}
+                  className={tabButtonClass('caderneta')}
+                >
+                  <Plane className="h-4 w-4" />
+                  Caderneta de Voo
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={() => handleTabChange('auditoria')}
@@ -1509,7 +1523,7 @@ export default function FichaFuncionarioPage() {
         )}
 
         {/* === ABA SIMULADOR === */}
-        {tab === 'simulador' && (
+        {isTripulacaoVoo && tab === 'simulador' && (
           <div className="space-y-4 rounded-lg bg-white p-6 shadow">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
@@ -1633,7 +1647,7 @@ export default function FichaFuncionarioPage() {
         )}
 
         {/* === ABA CADERNETA DE VOO === */}
-        {tab === 'caderneta' && (
+        {isTripulacaoVoo && tab === 'caderneta' && (
           <div className="rounded-lg bg-white p-6 shadow">
             <CadernetaHorasVoo
               funcionarioId={f.id}
@@ -1669,7 +1683,7 @@ export default function FichaFuncionarioPage() {
               </button>
             </div>
 
-            <PastaVirtualCompleta funcionarioId={f.id} />
+            <PastaVirtualCompleta funcionarioId={f.id} funcao={f.funcao} />
           </div>
         )}
 
