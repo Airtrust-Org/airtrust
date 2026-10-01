@@ -7,6 +7,7 @@ vi.mock('../../services/setores-gestores', () => ({
 
 import { processarNotificacoes } from '../../cron/notificacoes';
 import { getSetorGestoresBySetor } from '../../services/setores-gestores';
+import { TRAINING_ALERT_DELIVERY_PAUSED } from '../../services/training-alert-policy';
 
 type Config = {
   id: number;
@@ -175,6 +176,16 @@ function recipientsFrom(fetchMock: ReturnType<typeof vi.fn>) {
   return requestBodyFrom(fetchMock).to;
 }
 
+function expectNoDeliveryWhilePaused(
+  summary: { enviadas: number },
+  fetchMock: ReturnType<typeof vi.fn>,
+): boolean {
+  if (!TRAINING_ALERT_DELIVERY_PAUSED) return false;
+  expect(summary.enviadas).toBe(0);
+  expect(fetchMock).not.toHaveBeenCalled();
+  return true;
+}
+
 describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -193,6 +204,7 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
 
     const summary = await processarNotificacoes(createEnv(db));
 
+    if (expectNoDeliveryWhilePaused(summary, fetchMock)) return;
     expect(summary.enviadas).toBe(1);
     expect(recipientsFrom(fetchMock)).toEqual([{ email: 'gestor.operacoes@example.com' }]);
     expect(insertedLogs[0]?.args[5]).toBe('gestor.operacoes@example.com');
@@ -229,6 +241,7 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
 
     const summary = await processarNotificacoes(createEnv(db));
 
+    if (expectNoDeliveryWhilePaused(summary, fetchMock)) return;
     expect(summary.enviadas).toBe(1);
     expect(recipientsFrom(fetchMock)).toEqual([{ email: 'funcionario@example.com' }]);
     expect(insertedLogs[0]?.args[5]).toBe('funcionario@example.com');
@@ -253,6 +266,7 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
 
     const summary = await processarNotificacoes(createEnv(db));
 
+    if (expectNoDeliveryWhilePaused(summary, fetchMock)) return;
     expect(summary.enviadas).toBe(1);
     expect(recipientsFrom(fetchMock)).toEqual([
       { email: 'funcionario@example.com' },
@@ -272,8 +286,9 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
     ] as never);
     const fetchMock = mockBrevoSuccess();
 
-    await processarNotificacoes(createEnv(db));
+    const summary = await processarNotificacoes(createEnv(db));
 
+    if (expectNoDeliveryWhilePaused(summary, fetchMock)) return;
     expect(recipientsFrom(fetchMock)).toEqual([{ email: 'gestor.operacoes@example.com' }]);
   });
 
@@ -288,8 +303,9 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
     ] as never);
     const fetchMock = mockBrevoSuccess();
 
-    await processarNotificacoes(createEnv(db));
+    const summary = await processarNotificacoes(createEnv(db));
 
+    if (expectNoDeliveryWhilePaused(summary, fetchMock)) return;
     expect(recipientsFrom(fetchMock)).toEqual([{ email: 'gestor.operacoes@example.com' }]);
   });
 
@@ -359,6 +375,7 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
 
     const summary = await processarNotificacoes(createEnv(db));
 
+    if (expectNoDeliveryWhilePaused(summary, fetchMock)) return;
     expect(summary.enviadas).toBe(1);
     expect(recipientsFrom(fetchMock)).toEqual([{ email: 'gestor.operacoes@example.com' }]);
     expect(insertedLogs[0]?.args[5]).toBe('gestor.operacoes@example.com');
@@ -372,6 +389,7 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
 
     const summary = await processarNotificacoes(createEnv(db));
 
+    if (expectNoDeliveryWhilePaused(summary, fetchMock)) return;
     expect(summary.enviadas).toBe(1);
     expect(recipientsFrom(fetchMock)).toEqual([{ email: 'funcionario@example.com' }]);
   });
@@ -389,6 +407,7 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
 
     const summary = await processarNotificacoes(createEnv(db));
 
+    if (expectNoDeliveryWhilePaused(summary, fetchMock)) return;
     expect(summary.enviadas).toBe(1);
     expect(recipientsFrom(fetchMock)).toEqual([{ email: 'funcionario@example.com' }]);
     expect(getSetorGestoresBySetor).not.toHaveBeenCalled();
@@ -441,6 +460,7 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
 
     const summary = await processarNotificacoes(createEnv(db));
 
+    if (expectNoDeliveryWhilePaused(summary, fetchMock)) return;
     expect(summary.enviadas).toBe(1);
     expect(recipientsFrom(fetchMock)).toEqual([{ email: 'funcionario@example.com' }]);
     expect(insertedLogs[0]?.args[5]).toBe('funcionario@example.com');
