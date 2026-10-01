@@ -16,6 +16,7 @@ import { requirePermission } from '../../middleware/rbac';
 import { getTenantContext } from '../../middleware/tenant';
 import { ApiError, forbidden } from '../../middleware/error-handler';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../../utils/auditoria';
+import { getSchemaColumns, hasSchemaTable } from '../../utils/db-schema';
 import { z } from 'zod';
 import {
   buildHistoricoTipoSnapshot,
@@ -199,9 +200,8 @@ async function loadQualificacoesTiposColumnsSupport(db: D1Database): Promise<Tip
   let cached = qualificacoesTiposColumnsSupportCache.get(db);
   if (!cached) {
     cached = (async () => {
-      const info = await db.prepare("PRAGMA table_info('qualificacoes_tipos')").all();
-      const cols = (info.results || []) as Array<{ name?: string }>;
-      const hasColumn = (columnName: string) => cols.some((column) => column.name === columnName);
+      const cols = await getSchemaColumns(db, 'qualificacoes_tipos');
+      const hasColumn = (columnName: string) => cols.has(columnName);
 
       return {
         hasCargaInicial: hasColumn('carga_horaria_inicial'),
@@ -301,12 +301,8 @@ function safe(fn: (c: Context<{ Bindings: Env }>) => Promise<Response> | Respons
 
 async function logAuditoria(db: D1Database, entidade: string, entidade_id: string, acao: string) {
   try {
-    const auditTable = await db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='auditoria_avancada_v2' LIMIT 1",
-      )
-      .first();
-    if (auditTable) {
+    const auditTableExists = await hasSchemaTable(db, 'auditoria_avancada_v2');
+    if (auditTableExists) {
       await db
         .prepare(
           "INSERT INTO auditoria_avancada_v2 (tabela, registro_id, acao, origem) VALUES (?, ?, ?, 'api')",
@@ -319,23 +315,8 @@ async function logAuditoria(db: D1Database, entidade: string, entidade_id: strin
   }
 }
 
-const qualificacoesTiposSetoresTableCache = new WeakMap<D1Database, Promise<boolean>>();
-
 async function hasQualificacoesTiposSetoresTable(db: D1Database): Promise<boolean> {
-  let cached = qualificacoesTiposSetoresTableCache.get(db);
-  if (!cached) {
-    cached = (async () => {
-      const table = await db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores' LIMIT 1",
-        )
-        .first<{ name: string }>();
-      return Boolean(table?.name);
-    })();
-    qualificacoesTiposSetoresTableCache.set(db, cached);
-  }
-
-  return cached;
+  return hasSchemaTable(db, 'qualificacoes_tipos_setores');
 }
 
 function normalizeSetorIds(values: Array<string | number>): number[] {
