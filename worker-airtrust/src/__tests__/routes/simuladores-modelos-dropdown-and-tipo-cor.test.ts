@@ -36,7 +36,7 @@ function createDbMock() {
     prepare(query: string) {
       const sql = normalizeSql(query);
 
-      if (sql === 'PRAGMA table_info(modelos_sessao)') {
+      if (/^PRAGMA table_info\(['"]?modelos_sessao['"]?\)$/i.test(sql)) {
         return {
           async all() {
             return {
@@ -56,7 +56,7 @@ function createDbMock() {
         };
       }
 
-      if (sql === 'PRAGMA table_info(qualificacoes_tipos)' || sql === 'PRAGMA table_info(tipos_sessao)') {
+      if (/^PRAGMA table_info\(['"]?(qualificacoes_tipos|tipos_sessao)['"]?\)$/i.test(sql)) {
         return {
           async all() {
             return {
