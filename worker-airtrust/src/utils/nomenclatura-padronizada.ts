@@ -9,6 +9,7 @@
 export type TipoDocumento =
   | 'CERTIFICADO_QUALIFICACAO'
   | 'AVALIACAO_CQ'
+  | 'FTV'
   | 'EXAME_MEDICO'
   | 'DOCUMENTO_PESSOAL'
   | 'LICENCA'
@@ -36,6 +37,8 @@ export function normalizarTipoDocumento(value: unknown): TipoDocumento {
       return 'CERTIFICADO_QUALIFICACAO';
     case 'AVALIACAO_CQ':
       return 'AVALIACAO_CQ';
+    case 'FTV':
+      return 'FTV';
     case 'EXAME_MEDICO':
       return 'EXAME_MEDICO';
     case 'DOCUMENTO_PESSOAL':
@@ -116,6 +119,8 @@ export function gerarNomeArquivoPadronizado(params: NomeArquivoParams): string {
       return `CERT-${identificador}-${sanitizarSubtipo(codigo || subTipo, 'SEM_CODIGO')}-${dataStr}-${uuidShort}.pdf`;
     case 'AVALIACAO_CQ':
       return `AVAL-${subtipo}-${identificador}-${dataStr}-${uuidShort}.pdf`;
+    case 'FTV':
+      return `FTV-${subtipo}-${identificador}-${dataStr}-${uuidShort}.pdf`;
     case 'EXAME_MEDICO':
       return `EXAME-${sanitizarSubtipo(subTipo, 'ASO')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
     case 'DOCUMENTO_PESSOAL':
@@ -208,6 +213,7 @@ export function parseNomeArquivo(nomeArquivo: string): {
 
   const typeByPrefix: Record<string, TipoDocumento> = {
     AVAL: 'AVALIACAO_CQ',
+    FTV: 'FTV',
     EXAME: 'EXAME_MEDICO',
     DOC: 'DOCUMENTO_PESSOAL',
     LIC: 'LICENCA',

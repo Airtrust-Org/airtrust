@@ -29,6 +29,7 @@ import CadernetaHorasVoo from '@/react-app/pages/funcionarios/CadernetaHorasVoo'
 import AppLayout from '@/react-app/components/AppLayout';
 import { toast } from 'sonner';
 import { usePastaVirtual } from '@/react-app/hooks/usePastaVirtual';
+import { isTripulacaoVooFuncionario } from '@/react-app/config/pastaVirtual';
 
 // Helper para formatar datas com segurança
 const formatarData = (data: string | null | undefined): string => {
@@ -320,12 +321,8 @@ export default function PastaVirtual() {
 
   const espacoTotal = espacoTotalBytes / (1024 * 1024); // Converter bytes para MB
 
-  const perfilOperacional = `${String(funcionario.cargo || '').toLowerCase()} ${String(
-    funcionario.funcao || '',
-  ).toLowerCase()}`;
-  const showCadernetaTab =
-    Number(funcionario.is_instrutor || 0) === 1 ||
-    /comandante|copiloto|co-piloto|piloto|instrutor/.test(perfilOperacional);
+  const isTripulacaoVoo = isTripulacaoVooFuncionario(funcionario.funcao, funcionario.cargo);
+  const showCadernetaTab = isTripulacaoVoo;
 
   return (
     <AppLayout>
@@ -521,17 +518,19 @@ export default function PastaVirtual() {
               <span>Documentos</span>
             </button>
 
-            <button
-              onClick={() => setAbaAtiva('desempenho')}
-              className={`flex-1 px-6 py-4 font-medium transition flex items-center justify-center gap-2 ${
-                abaAtiva === 'desempenho'
-                  ? 'border-primary text-blue-600 dark:text-blue-300'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              <BarChart3 className="w-5 h-5" />
-              <span>Desempenho</span>
-            </button>
+            {isTripulacaoVoo && (
+              <button
+                onClick={() => setAbaAtiva('desempenho')}
+                className={`flex-1 px-6 py-4 font-medium transition flex items-center justify-center gap-2 ${
+                  abaAtiva === 'desempenho'
+                    ? 'border-primary text-blue-600 dark:text-blue-300'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <BarChart3 className="w-5 h-5" />
+                <span>Desempenho</span>
+              </button>
+            )}
 
             {showCadernetaTab && (
               <button
@@ -551,7 +550,11 @@ export default function PastaVirtual() {
 
         {/* Conteúdo da Aba Documentos */}
         {abaAtiva === 'documentos' && (
-          <PastaVirtualCompleta funcionarioId={parseInt(funcionarioId!)} />
+          <PastaVirtualCompleta
+            funcionarioId={parseInt(funcionarioId!)}
+            funcao={funcionario.funcao}
+            cargo={funcionario.cargo}
+          />
         )}
 
         {/* Conteúdo Antigo (Comentado)
@@ -661,7 +664,7 @@ export default function PastaVirtual() {
       )} */}
 
         {/* Conteúdo da Aba Desempenho */}
-        {abaAtiva === 'desempenho' && (
+        {isTripulacaoVoo && abaAtiva === 'desempenho' && (
           <div className="space-y-4">
             {loadingDesempenho ? (
               <Card>
@@ -924,7 +927,7 @@ export default function PastaVirtual() {
           </div>
         )}
 
-        {abaAtiva === 'caderneta' && showCadernetaTab && (
+        {isTripulacaoVoo && abaAtiva === 'caderneta' && (
           <CadernetaHorasVoo
             funcionarioId={parseInt(funcionarioId!)}
             funcionarioNome={funcionario.nome}

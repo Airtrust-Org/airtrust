@@ -23,11 +23,14 @@ import {
   PASTA_VIRTUAL_CATEGORIAS,
   PASTA_VIRTUAL_GRUPOS,
   pastaVirtualCategoriaPorTipo,
+  isTripulacaoVooFuncionario,
 } from '@/react-app/config/pastaVirtual';
 import UploadDocumentoModal from './UploadDocumentoModal';
 
 interface PastaVirtualCompletaProps {
   funcionarioId: number;
+  funcao?: string | null;
+  cargo?: string | null;
 }
 
 function formatFileSize(bytes: number): string {
@@ -59,7 +62,11 @@ function normalizarBusca(value: string) {
     .trim();
 }
 
-export default function PastaVirtualCompleta({ funcionarioId }: PastaVirtualCompletaProps) {
+export default function PastaVirtualCompleta({
+  funcionarioId,
+  funcao,
+  cargo,
+}: PastaVirtualCompletaProps) {
   const { categorias, loading, error, deleteDocumento, downloadDocumento, refetch } =
     usePastaVirtual(funcionarioId);
   const [categoriasExpandidas, setCategoriasExpandidas] = useState<Set<TipoDocumento>>(
@@ -75,7 +82,6 @@ export default function PastaVirtualCompleta({ funcionarioId }: PastaVirtualComp
   );
   const [busca, setBusca] = useState('');
   const [mostrarHistorico, setMostrarHistorico] = useState(false);
-  const [mostrarCategoriasVazias, setMostrarCategoriasVazias] = useState(false);
 
   const toggleCategoria = (tipo: TipoDocumento) => {
     setCategoriasExpandidas((prev) => {
@@ -131,9 +137,19 @@ export default function PastaVirtualCompleta({ funcionarioId }: PastaVirtualComp
     return cores[cor as keyof typeof cores] || cores.gray;
   };
 
+  const tripulacaoVoo = isTripulacaoVooFuncionario(funcao, cargo);
+  const categoriasPermitidas = useMemo(
+    () =>
+      categorias.filter((categoria) => {
+        const config = pastaVirtualCategoriaPorTipo[categoria.tipo];
+        return !config.somenteTripulacaoVoo || tripulacaoVoo;
+      }),
+    [categorias, tripulacaoVoo],
+  );
+
   const todosDocumentos = useMemo(
-    () => categorias.flatMap((categoria) => categoria.documentos),
-    [categorias],
+    () => categoriasPermitidas.flatMap((categoria) => categoria.documentos),
+    [categoriasPermitidas],
   );
   const documentosDisponiveis = todosDocumentos.filter(isPastaVirtualDocumentAvailable);
   const totalAtuais = documentosDisponiveis.filter(isCurrentVersion).length;
@@ -143,15 +159,13 @@ export default function PastaVirtualCompleta({ funcionarioId }: PastaVirtualComp
 
   const categoriaVisivel = (categoria: CategoriaPV) => {
     const config = pastaVirtualCategoriaPorTipo[categoria.tipo];
-    const disponiveis = categoria.documentos.filter(isPastaVirtualDocumentAvailable);
-    const temConteudo = disponiveis.length > 0 || categoria.documentos.length > disponiveis.length;
     const textoCategoria = normalizarBusca(`${config.titulo} ${config.descricao}`);
     const categoriaCasaBusca = !buscaNormalizada || textoCategoria.includes(buscaNormalizada);
     const documentoCasaBusca = categoria.documentos.some((doc) =>
       normalizarBusca(doc.nome).includes(buscaNormalizada),
     );
     const casaBusca = !buscaNormalizada || categoriaCasaBusca || documentoCasaBusca;
-    return casaBusca && (mostrarCategoriasVazias || temConteudo || Boolean(buscaNormalizada));
+    return casaBusca;
   };
 
   const renderCategoria = (categoria: CategoriaPV) => {
@@ -369,7 +383,7 @@ export default function PastaVirtualCompleta({ funcionarioId }: PastaVirtualComp
     .sort((a, b) => a.ordem - b.ordem)
     .map((grupo) => ({
       ...grupo,
-      categorias: categorias
+      categorias: categoriasPermitidas
         .filter((categoria) => pastaVirtualCategoriaPorTipo[categoria.tipo]?.grupo === grupo.id)
         .filter(categoriaVisivel)
         .sort(
@@ -430,12 +444,6 @@ export default function PastaVirtualCompleta({ funcionarioId }: PastaVirtualComp
               ? 'Ocultar histórico'
               : `Mostrar histórico${totalHistoricos ? ` (${totalHistoricos})` : ''}`}
           </button>
-          <button
-            onClick={() => setMostrarCategoriasVazias((value) => !value)}
-            className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${mostrarCategoriasVazias ? 'border-primary bg-primary/10 text-primary' : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'}`}
-          >
-            {mostrarCategoriasVazias ? 'Ocultar categorias vazias' : 'Mostrar categorias vazias'}
-          </button>
         </div>
       </div>
 
@@ -473,6 +481,7 @@ export default function PastaVirtualCompleta({ funcionarioId }: PastaVirtualComp
         onSuccess={() => refetch()}
         funcionarioId={funcionarioId}
         tipoInicial={tipoUploadSelecionado}
+        tiposPermitidos={categoriasPermitidas.map((categoria) => categoria.tipo)}
       />
 
       {showConfirmDelete && (

@@ -17,6 +17,7 @@ import type { ComponentType } from 'react';
 export type TipoDocumento =
   | 'CERTIFICADO_QUALIFICACAO'
   | 'AVALIACAO_CQ'
+  | 'FTV'
   | 'EXAME_MEDICO'
   | 'LICENCA_ANAC'
   | 'SIMULADOR'
@@ -40,6 +41,7 @@ export interface PastaVirtualCategoriaConfig {
   grupo: PastaVirtualGrupo;
   apiCategorias: string[];
   expandidoInicial?: boolean;
+  somenteTripulacaoVoo?: boolean;
 }
 
 export const PASTA_VIRTUAL_GRUPOS: Array<{
@@ -93,23 +95,37 @@ export const PASTA_VIRTUAL_CATEGORIAS: PastaVirtualCategoriaConfig[] = [
   },
   {
     tipo: 'AVALIACAO_CQ',
-    titulo: 'Avaliações, Checks e FAP',
-    descricao: 'FAP, OPC, LPC, IFR, FTV, checks e demais avaliações operacionais.',
+    titulo: 'FAPs e Checks',
+    descricao: 'FAPs, OPC, LPC, IFR e demais fichas de avaliação ou cheque operacional.',
     icone: ClipboardCheck,
     cor: 'purple',
     ordem: 2,
     grupo: 'OPERACIONAL',
-    apiCategorias: ['Avaliações e Checks'],
+    apiCategorias: ['FAPs e Checks', 'Avaliações e Checks'],
+    somenteTripulacaoVoo: true,
+  },
+  {
+    tipo: 'FTV',
+    titulo: 'FTV — Fichas de Treinamento de Voo',
+    descricao:
+      'Fichas de treinamento de voo, separadas dos certificados e das fichas de avaliação.',
+    icone: FileCheck,
+    cor: 'blue',
+    ordem: 3,
+    grupo: 'OPERACIONAL',
+    apiCategorias: ['Fichas de Treinamento de Voo'],
+    somenteTripulacaoVoo: true,
   },
   {
     tipo: 'SIMULADOR',
-    titulo: 'Simuladores e Treinamento de Voo',
-    descricao: 'Fichas e evidências de sessões de simulador ou treinamento de voo.',
+    titulo: 'Simuladores',
+    descricao: 'Evidências e registros de sessões realizadas em simulador.',
     icone: Plane,
     cor: 'cyan',
-    ordem: 3,
+    ordem: 4,
     grupo: 'OPERACIONAL',
     apiCategorias: ['Simuladores'],
+    somenteTripulacaoVoo: true,
   },
   {
     tipo: 'DESIGNACAO_OPERACIONAL',
@@ -117,7 +133,7 @@ export const PASTA_VIRTUAL_CATEGORIAS: PastaVirtualCategoriaConfig[] = [
     descricao: 'Designações de função, equipamento, PIC/SIC, instrutor e examinador.',
     icone: BadgeCheck,
     cor: 'orange',
-    ordem: 4,
+    ordem: 5,
     grupo: 'OPERACIONAL',
     apiCategorias: ['Designações Operacionais'],
   },
@@ -127,9 +143,10 @@ export const PASTA_VIRTUAL_CATEGORIAS: PastaVirtualCategoriaConfig[] = [
     descricao: 'Declarações de experiência, CIV, horas de voo e experiência recente.',
     icone: Clock,
     cor: 'green',
-    ordem: 5,
+    ordem: 6,
     grupo: 'OPERACIONAL',
     apiCategorias: ['Experiência e Horas de Voo'],
+    somenteTripulacaoVoo: true,
   },
   {
     tipo: 'INSTRUTOR_EXAMINADOR',
@@ -137,7 +154,7 @@ export const PASTA_VIRTUAL_CATEGORIAS: PastaVirtualCategoriaConfig[] = [
     descricao: 'Credenciamentos, cursos, termos e documentos de instrutor/examinador.',
     icone: GraduationCap,
     cor: 'purple',
-    ordem: 6,
+    ordem: 7,
     grupo: 'OPERACIONAL',
     apiCategorias: ['Instrutor e Examinador'],
   },
@@ -147,7 +164,7 @@ export const PASTA_VIRTUAL_CATEGORIAS: PastaVirtualCategoriaConfig[] = [
     descricao: 'ASO, CMA, toxicológico e demais documentos de aptidão médica.',
     icone: Heart,
     cor: 'red',
-    ordem: 7,
+    ordem: 8,
     grupo: 'REGULATORIO',
     apiCategorias: ['Exames Médicos (ASO, CMA)'],
   },
@@ -157,7 +174,7 @@ export const PASTA_VIRTUAL_CATEGORIAS: PastaVirtualCategoriaConfig[] = [
     descricao: 'Licenças, CHT, extratos de habilitações e comprovantes regulatórios.',
     icone: IdCard,
     cor: 'blue',
-    ordem: 8,
+    ordem: 9,
     grupo: 'REGULATORIO',
     apiCategorias: ['Licenças e Extratos ANAC', 'Licenças'],
   },
@@ -167,7 +184,7 @@ export const PASTA_VIRTUAL_CATEGORIAS: PastaVirtualCategoriaConfig[] = [
     descricao: 'Ficha de registro, contrato, admissão, desligamento e documentos do vínculo.',
     icone: Briefcase,
     cor: 'orange',
-    ordem: 9,
+    ordem: 10,
     grupo: 'PESSOAL',
     apiCategorias: ['Vínculo e Registro Funcional'],
   },
@@ -177,7 +194,7 @@ export const PASTA_VIRTUAL_CATEGORIAS: PastaVirtualCategoriaConfig[] = [
     descricao: 'RG, CPF, CNH, CTPS, passaporte e documentos pessoais correlatos.',
     icone: FileCheck,
     cor: 'green',
-    ordem: 10,
+    ordem: 11,
     grupo: 'PESSOAL',
     apiCategorias: ['Documentos Pessoais'],
   },
@@ -187,7 +204,7 @@ export const PASTA_VIRTUAL_CATEGORIAS: PastaVirtualCategoriaConfig[] = [
     descricao: 'Currículo, ficha profissional e documentos de histórico profissional.',
     icone: UserCheck,
     cor: 'cyan',
-    ordem: 11,
+    ordem: 12,
     grupo: 'PESSOAL',
     apiCategorias: ['Currículo Profissional'],
   },
@@ -197,7 +214,7 @@ export const PASTA_VIRTUAL_CATEGORIAS: PastaVirtualCategoriaConfig[] = [
     descricao: 'Somente para arquivos que realmente não se enquadram nas categorias acima.',
     icone: File,
     cor: 'gray',
-    ordem: 12,
+    ordem: 13,
     grupo: 'OUTROS',
     apiCategorias: ['Outros'],
   },
@@ -206,3 +223,18 @@ export const PASTA_VIRTUAL_CATEGORIAS: PastaVirtualCategoriaConfig[] = [
 export const pastaVirtualCategoriaPorTipo = Object.fromEntries(
   PASTA_VIRTUAL_CATEGORIAS.map((categoria) => [categoria.tipo, categoria]),
 ) as Record<TipoDocumento, PastaVirtualCategoriaConfig>;
+
+export function isTripulacaoVooFuncionario(...values: Array<string | null | undefined>): boolean {
+  const normalized = values
+    .map((value) =>
+      String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim(),
+    )
+    .filter(Boolean)
+    .join(' ');
+
+  return /(^|\b)(comandante|copiloto|co-piloto)(\b|$)/.test(normalized);
+}

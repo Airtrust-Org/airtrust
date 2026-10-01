@@ -27,7 +27,10 @@ describe('Pasta Virtual backend taxonomy', () => {
       'Treinamentos e Qualificações',
     );
     expect(inferirCategoriaDocumento('AVAL-FAP14_139-PILOTO-20261001-abcd1234.pdf')).toBe(
-      'Avaliações e Checks',
+      'FAPs e Checks',
+    );
+    expect(inferirCategoriaDocumento('FTV-A139_FFS-PILOTO-20261001-abcd1234.pdf')).toBe(
+      'Fichas de Treinamento de Voo',
     );
     expect(inferirCategoriaDocumento('VINC-CONTRATO-PILOTO-20261001-abcd1234.pdf')).toBe(
       'Vínculo e Registro Funcional',
@@ -61,9 +64,11 @@ describe('Pasta Virtual backend taxonomy', () => {
     expect(normalizarTipoDocumento('LICENCA_ANAC')).toBe('LICENCA');
     expect(normalizarTipoDocumento('CONTRATO')).toBe('VINCULO_FUNCIONAL');
     expect(normalizarTipoDocumento('CERTIFICADO_PROFISSIONAL')).toBe('CERTIFICADO_QUALIFICACAO');
+    expect(normalizarTipoDocumento('FTV')).toBe('FTV');
 
     const cases: Array<[TipoDocumento, string, string]> = [
       ['AVALIACAO_CQ', 'FAP14-139', 'AVAL-FAP14_139-PILOTO_TESTE-20261001-12345678.pdf'],
+      ['FTV', 'A139-FFS', 'FTV-A139_FFS-PILOTO_TESTE-20261001-12345678.pdf'],
       ['DESIGNACAO_OPERACIONAL', 'PIC', 'DESIG-PIC-PILOTO_TESTE-20261001-12345678.pdf'],
       [
         'EXPERIENCIA_HORAS',

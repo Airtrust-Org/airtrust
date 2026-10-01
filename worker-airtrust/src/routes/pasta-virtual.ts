@@ -89,7 +89,8 @@ interface CategorizedDocument {
 
 const PASTA_VIRTUAL_CATEGORIA = {
   QUALIFICACOES: 'Treinamentos e Qualificações',
-  AVALIACOES: 'Avaliações e Checks',
+  AVALIACOES: 'FAPs e Checks',
+  FTV: 'Fichas de Treinamento de Voo',
   EXAMES: 'Exames Médicos (ASO, CMA)',
   LICENCAS: 'Licenças e Extratos ANAC',
   SIMULADORES: 'Simuladores',
@@ -111,11 +112,12 @@ export function normalizarCategoriaLegada(categoria: string | null | undefined):
     Treinamento: PASTA_VIRTUAL_CATEGORIA.QUALIFICACOES,
     'Treinamentos e Qualificações': PASTA_VIRTUAL_CATEGORIA.QUALIFICACOES,
     'Avaliações e Checks': PASTA_VIRTUAL_CATEGORIA.AVALIACOES,
+    'FAPs e Checks': PASTA_VIRTUAL_CATEGORIA.AVALIACOES,
     'Exames Médicos (ASO, CMA)': PASTA_VIRTUAL_CATEGORIA.EXAMES,
     Licenças: PASTA_VIRTUAL_CATEGORIA.LICENCAS,
     'Licenças e Extratos ANAC': PASTA_VIRTUAL_CATEGORIA.LICENCAS,
     Simuladores: PASTA_VIRTUAL_CATEGORIA.SIMULADORES,
-    'Fichas de Treinamento de Voo': PASTA_VIRTUAL_CATEGORIA.SIMULADORES,
+    'Fichas de Treinamento de Voo': PASTA_VIRTUAL_CATEGORIA.FTV,
     'Designações Operacionais': PASTA_VIRTUAL_CATEGORIA.DESIGNACOES,
     'Experiência e Horas de Voo': PASTA_VIRTUAL_CATEGORIA.EXPERIENCIA,
     'Instrutor e Examinador': PASTA_VIRTUAL_CATEGORIA.INSTRUTOR_EXAMINADOR,
@@ -148,6 +150,7 @@ export function inferirCategoriaDocumento(
     return PASTA_VIRTUAL_CATEGORIA.QUALIFICACOES;
   }
   if (nomeUpper.startsWith('AVAL-')) return PASTA_VIRTUAL_CATEGORIA.AVALIACOES;
+  if (nomeUpper.startsWith('FTV-')) return PASTA_VIRTUAL_CATEGORIA.FTV;
   if (nomeUpper.startsWith('EXAME-')) return PASTA_VIRTUAL_CATEGORIA.EXAMES;
   if (nomeUpper.startsWith('LIC-')) return PASTA_VIRTUAL_CATEGORIA.LICENCAS;
   if (nomeUpper.startsWith('SIM-') || tipoUpper === 'SIMULADOR') {
