@@ -80,7 +80,7 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
         },
         {
           id: 'pasta-virtual',
-          label: 'Pasta 360',
+          label: 'Pasta Virtual',
           path: '/pasta-virtual',
         },
       ],
@@ -302,7 +302,8 @@ export const NAVIGATION_CONFIG: NavigationStructure = {
           label: 'RBAC Operacional do Gestor',
           path: '/admin/operational-domain-rbac',
           component: 'AdminOperationalDomainRbac',
-          description: 'Classificar setores/categorias/cursos por domínio e ativar a autonomia operacional do gestor',
+          description:
+            'Classificar setores/categorias/cursos por domínio e ativar a autonomia operacional do gestor',
           permissions_required: ['admin'],
         },
         {

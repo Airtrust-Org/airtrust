@@ -320,7 +320,9 @@ export function ModalCertificados({
                     historicoId,
                   });
                   if (!pasta360Url) {
-                    showToast.error('Não foi possível abrir a Pasta 360: funcionário inválido.');
+                    showToast.error(
+                      'Não foi possível abrir a Pasta Virtual: funcionário inválido.',
+                    );
                     return;
                   }
                   navigate(pasta360Url);
@@ -329,7 +331,7 @@ export function ModalCertificados({
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90"
               >
                 <FolderOpen className="w-4 h-4" />
-                <span>Pasta 360</span>
+                <span>Pasta Virtual</span>
               </button>
               <button
                 onClick={handleGerar}

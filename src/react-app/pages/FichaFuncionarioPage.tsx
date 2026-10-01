@@ -2,7 +2,7 @@
 // AIRTRUST - FASE 4: FICHA 360° DO FUNCIONÁRIO
 // ============================================================
 // Componente React de tela completa com todas as informações do funcionário:
-//  - Abas: Resumo, Qualificações, Licenças, Pasta 360, Auditoria
+//  - Abas: Resumo, Qualificações, Licenças, Pasta Virtual, Auditoria
 //  - Badge de status de compliance
 //  - Integração com APIs de ficha-360 e matriz de treinamento
 // ============================================================
@@ -402,7 +402,7 @@ function labelTabelaAuditoria(tabela: string) {
     licencas: 'Licenças',
     lms_matriculas: 'Treinamentos LMS',
     fichas_sessao: 'Fichas de treinamento de voo',
-    pasta_virtual: 'Pasta 360',
+    pasta_virtual: 'Pasta Virtual',
     documentos: 'Documentos',
   };
 
@@ -760,7 +760,7 @@ export default function FichaFuncionarioPage() {
               className={tabButtonClass('pasta')}
             >
               <FolderOpen className="h-4 w-4" />
-              Pasta 360
+              Pasta Virtual
             </button>
           </div>
         </div>
@@ -1648,7 +1648,7 @@ export default function FichaFuncionarioPage() {
           <div className="space-y-4 rounded-lg bg-white p-6 shadow">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <h3 className="text-base font-semibold text-gray-800">Pasta 360 Consolidada</h3>
+                <h3 className="text-base font-semibold text-gray-800">Pasta Virtual Consolidada</h3>
                 <p className="text-sm text-gray-600">
                   Todos os certificados e documentos do funcionário ficam acessíveis nesta aba sem
                   sair da ficha.
@@ -1665,7 +1665,7 @@ export default function FichaFuncionarioPage() {
                 }}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
-                Abrir Pasta 360
+                Abrir Pasta Virtual
               </button>
             </div>
 

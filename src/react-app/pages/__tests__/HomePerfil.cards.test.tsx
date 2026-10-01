@@ -40,7 +40,7 @@ import HomePerfil, { buildHomeAccessCards } from '../HomePerfil';
 describe('HomePerfil quick access cards', () => {
   const canAll = () => true;
 
-  it('limita o aluno da manutenção a fadiga, Pasta 360 e troca de senha', () => {
+  it('limita o aluno da manutenção a fadiga, Pasta Virtual e troca de senha', () => {
     const cards = buildHomeAccessCards({
       role: 'ALUNO',
       can: canAll,
@@ -50,7 +50,7 @@ describe('HomePerfil quick access cards', () => {
 
     expect(cards.map((card) => card.title)).toEqual([
       'Fadiga Diária',
-      'Minha Pasta 360',
+      'Minha Pasta Virtual',
       'Trocar Senha',
     ]);
     expect(cards.map((card) => card.title)).not.toContain('Minha Escala');
@@ -72,7 +72,7 @@ describe('HomePerfil quick access cards', () => {
     expect(cards.map((card) => card.title)).toContain('Minha Escala');
     expect(cards.map((card) => card.title)).toContain('Meus Voos');
     expect(cards.map((card) => card.title)).toContain('Conhecimento Ativo');
-    expect(cards.map((card) => card.title)).not.toContain('Minha Pasta 360');
+    expect(cards.map((card) => card.title)).not.toContain('Minha Pasta Virtual');
 
     const meusVoos = cards.find((card) => card.title === 'Meus Voos');
     const conhecimentoAtivo = cards.find((card) => card.title === 'Conhecimento Ativo');

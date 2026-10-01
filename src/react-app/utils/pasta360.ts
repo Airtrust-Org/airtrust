@@ -35,6 +35,6 @@ export function requirePasta360Url(
   context: Pasta360Context = {},
 ): string {
   const url = buildPasta360Url(funcionarioId, context);
-  if (!url) throw new Error('Funcionário inválido para abrir Pasta 360');
+  if (!url) throw new Error('Funcionário inválido para abrir Pasta Virtual');
   return url;
 }

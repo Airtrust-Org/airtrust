@@ -14,7 +14,7 @@ const flowFiles = [
 ];
 
 describe('pasta360 usage guards', () => {
-  it('usa Pasta 360 nos fluxos operacionais de qualificacoes, funcionario e certificados', () => {
+  it('usa Pasta Virtual nos fluxos operacionais de qualificacoes, funcionario e certificados', () => {
     for (const file of flowFiles) {
       const source = readFileSync(`${process.cwd()}/${file}`, 'utf8');
       if (file.endsWith('App.tsx')) {
