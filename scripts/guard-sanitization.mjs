@@ -73,7 +73,6 @@ const EXCLUDE = [
   // Scripts legacy com caminhos históricos (documentados como obsoletos)
   ':(exclude)scripts/disable-auth.sh',
   ':(exclude)scripts/setup-complete.sh',
-  ':(exclude)scripts/start-local-dev.sh',
   // Arquivo de output de terminal rastreado historicamente (não é script operacional)
   ':(exclude)typescript',
   // Walkthrough gerado por agente AI (contém caminhos de screenshots locais, sem dados sensiveis)
