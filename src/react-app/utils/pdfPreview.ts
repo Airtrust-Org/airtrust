@@ -31,84 +31,18 @@ async function renderSafariPdfPreview(
     throw new Error('A janela de visualização foi fechada');
   }
 
-  // Safari/WebKit can refuse top-level data: PDF navigation and can also leave
-  // authenticated blob: PDFs blank in the native viewer. Render the already-fetched
-  // bytes with PDF.js instead, keeping the document fully local to the preview tab.
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  const pdfjs = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as typeof import(
-    'pdfjs-dist/legacy/build/pdf.mjs'
-  );
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/legacy/build/pdf.worker.min.mjs',
-    import.meta.url,
-  ).toString();
+  // Safari accepts blob: PDF navigation when the Blob and navigation are both
+  // created inside the preview tab. Keeping this work in the child realm avoids
+  // the blank native iframe and cross-realm canvas issues seen with PDF.js.
+  const buffer = await blob.arrayBuffer();
+  await waitForPreviewRenderer(previewWindow);
 
-  const loadingTask = pdfjs.getDocument({
-    data: bytes,
-    isEvalSupported: false,
-    useWorkerFetch: false,
-  });
-  const pdf = await loadingTask.promise;
-
-  try {
-    if (previewWindow.closed) {
-      throw new Error('A janela de visualização foi fechada');
-    }
-
-    const document = previewWindow.document;
-    const loading = document.getElementById('loading');
-    const toolbar = document.getElementById('toolbar');
-    const download = document.getElementById('downloadLink') as HTMLAnchorElement | null;
-    const nativeViewer = document.getElementById('viewer');
-    const pages = document.getElementById('pdfPages');
-
-    if (!loading || !toolbar || !download || !pages) {
-      throw new Error('A janela de visualização do PDF não ficou pronta');
-    }
-
-    const childRealm = previewWindow as Window & typeof globalThis;
-    const downloadBlob = new childRealm.Blob([bytes], { type: blob.type || 'application/pdf' });
-    const downloadUrl = childRealm.URL.createObjectURL(downloadBlob);
-
-    loading.style.display = 'none';
-    toolbar.style.display = 'flex';
-    download.href = downloadUrl;
-    download.download = fileName || 'documento.pdf';
-    if (nativeViewer) nativeViewer.style.display = 'none';
-    pages.replaceChildren();
-    pages.style.display = 'block';
-
-    const maxPageWidth = Math.max(320, (previewWindow.innerWidth || 1024) - 48);
-
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-      const page = await pdf.getPage(pageNumber);
-      const naturalViewport = page.getViewport({ scale: 1 });
-      const scale = Math.min(2, Math.max(1, maxPageWidth / naturalViewport.width));
-      const viewport = page.getViewport({ scale });
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-
-      if (!context) {
-        page.cleanup();
-        throw new Error('Safari não disponibilizou o canvas para visualizar o PDF');
-      }
-
-      canvas.width = Math.ceil(viewport.width);
-      canvas.height = Math.ceil(viewport.height);
-      canvas.style.display = 'block';
-      canvas.style.maxWidth = '100%';
-      canvas.style.height = 'auto';
-      canvas.style.margin = '0 auto 16px';
-      canvas.style.background = '#fff';
-      canvas.style.boxShadow = '0 2px 10px rgba(0,0,0,0.28)';
-
-      pages.appendChild(canvas);
-      await page.render({ canvasContext: context, viewport }).promise;
-      page.cleanup();
-    }
-  } finally {
-    await pdf.destroy();
+  const renderer = previewWindow as PreviewRendererWindow;
+  if (typeof renderer.__openPdfNative !== 'function') {
+    throw new Error('A janela de visualização do PDF não ficou pronta');
   }
+
+  renderer.__openPdfNative(buffer, blob.type || 'application/pdf', fileName);
 }
 
 function triggerBlobDownload(blob: Blob, fileName: string): void {
@@ -231,6 +165,16 @@ function renderLoadingState(previewWindow: Window, title: string): void {
         window.__pdfError('Erro ao criar visualizacao: ' + e.message);
       }
     };
+    window.__openPdfNative = function(buffer, mimeType, fileName) {
+      try {
+        var blob = new Blob([buffer], { type: mimeType || 'application/pdf' });
+        var url = URL.createObjectURL(blob);
+        if (fileName) document.title = fileName;
+        window.location.href = url;
+      } catch (e) {
+        window.__pdfError('Erro ao abrir visualizacao nativa: ' + e.message);
+      }
+    };
     window.__pdfError = function(msg) {
       document.getElementById('loading').style.display = 'none';
       var box = document.getElementById('errorBox');
@@ -291,6 +235,7 @@ function renderErrorState(previewWindow: Window, title: string, message: string)
 type PreviewRendererWindow = Window & {
   __pdfError?: (message?: string) => void;
   __renderPdf?: (buffer: ArrayBuffer, mimeType: string, fileName: string) => void;
+  __openPdfNative?: (buffer: ArrayBuffer, mimeType: string, fileName: string) => void;
 };
 
 function hasPreviewRenderer(previewWindow: Window): previewWindow is PreviewRendererWindow {
