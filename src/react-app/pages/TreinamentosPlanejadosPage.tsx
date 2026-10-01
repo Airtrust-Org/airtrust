@@ -1457,21 +1457,28 @@ export default function TreinamentosPlanejadosPage({
     }
   }
 
-  async function excluirTreinamentoSelecionado() {
-    const treinamento = detalheQuery.data || treinamentoEditando;
-    if (!treinamento) return;
-    const ok = window.confirm(`Excluir o treinamento "${getEventoTitulo(treinamento)}"?`);
+  async function excluirTreinamentoPlanejado(
+    treinamento: TreinamentoPlanejado,
+    options: { fecharDetalhes?: boolean } = {},
+  ) {
+    const ok = window.confirm(
+      `Excluir a turma planejada "${getEventoTitulo(treinamento)}"? Esta ação cancela a turma e remove o planejamento relacionado.`,
+    );
     if (!ok) return;
 
     try {
       await excluirTreinamento.mutateAsync(treinamento.id);
-      toast.success('Treinamento planejado removido.');
-      fecharModalDetalhes();
+      toast.success('Turma planejada excluída.');
+      if (options.fecharDetalhes) fecharModalDetalhes();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : 'Nao foi possivel excluir o treinamento.',
-      );
+      toast.error(error instanceof Error ? error.message : 'Não foi possível excluir a turma planejada.');
     }
+  }
+
+  async function excluirTreinamentoSelecionado() {
+    const treinamento = detalheQuery.data || treinamentoEditando;
+    if (!treinamento) return;
+    await excluirTreinamentoPlanejado(treinamento, { fecharDetalhes: true });
   }
 
   async function atualizarPresencaDiaParticipante(
@@ -2241,15 +2248,30 @@ export default function TreinamentosPlanejadosPage({
                                   <Eye className="w-3.5 h-3.5" aria-hidden="true" />
                                 </button>
                                 {!item.read_only && canWriteTraining ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => abrirEditor(item)}
-                                    aria-label="Editar"
-                                    title="Editar"
-                                    className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-indigo-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
-                                  >
-                                    <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
-                                  </button>
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => abrirEditor(item)}
+                                      aria-label="Editar"
+                                      title="Editar"
+                                      className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-indigo-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
+                                    </button>
+                                    {!STATUS_ENCERRADOS.has(item.status) ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => void excluirTreinamentoPlanejado(item)}
+                                        aria-label="Excluir turma planejada"
+                                        title="Excluir turma"
+                                        disabled={excluindo}
+                                        data-testid={`treinamento-excluir-${item.id}`}
+                                        className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                                      </button>
+                                    ) : null}
+                                  </>
                                 ) : null}
                               </div>
                             </td>
@@ -3040,7 +3062,7 @@ export default function TreinamentosPlanejadosPage({
             if (canWriteTraining && !isEncerrada) {
               dropdownItems.push({
                 key: 'excluir',
-                label: 'Excluir',
+                label: 'Excluir turma',
                 icon: <Trash2 className="h-4 w-4" />,
                 onClick: excluirTreinamentoSelecionado,
                 danger: true,
