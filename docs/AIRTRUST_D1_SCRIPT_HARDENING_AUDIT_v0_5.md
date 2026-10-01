@@ -69,7 +69,6 @@ Scripts que usam `--remote` apenas para SELECT/diagnóstico:
 | `scripts/sync-prod-to-local.sh` | SELECT remoto → DELETE/INSERT local | Sim, local |
 | `scripts/sync-production-clean.sh` | Apenas `--local` | Sim, local |
 | `scripts/sync-production-to-local.sh` | Apenas `--local` | Sim, local |
-| `scripts/test-performance-diagnostic.sh` | SELECT diagnóstico | Não |
 | `scripts/validate-data-consistency.sh` | SELECT validação | Não |
 | `scripts/validate-schema-parity.py` | Python, diagnóstico | Não |
 
