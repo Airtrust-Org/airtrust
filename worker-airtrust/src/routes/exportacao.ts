@@ -208,7 +208,6 @@ app.get('/funcionarios', auth(), async (c) => {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="funcionarios_${timestamp}.xlsx"`,
-        'Access-Control-Allow-Origin': '*',
       },
     });
   } catch (error: unknown) {
@@ -523,7 +522,6 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="qualificacoes_${timestamp}.xlsx"`,
-        'Access-Control-Allow-Origin': '*',
       },
     });
   } catch (error: unknown) {
@@ -638,7 +636,6 @@ app.get('/qualificacoes-tipos', auth(), async (c) => {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="qualificacoes_tipos_${timestamp}.xlsx"`,
-        'Access-Control-Allow-Origin': '*',
       },
     });
   } catch (error: unknown) {
