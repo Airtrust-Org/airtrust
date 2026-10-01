@@ -6,6 +6,7 @@ import type { Env } from '../types';
 import { getEmpresaId } from '../middleware/tenant';
 import { CANCELLED_STATUS_VALUES, sqlStatusEqualsAny } from '../lib/status/status-codes';
 import { classificarStatusPorVencimento, diasEntreDatas } from '../lib/status/operational-status';
+import { getSchemaColumns } from '../utils/db-schema';
 
 const matrizTreinamento = new Hono<{ Bindings: Env }>();
 
@@ -482,8 +483,7 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
     const empresaId = getEmpresaId(c);
     const funcionarioId = Number(c.req.param('funcionario_id'));
     // Pega função atual do funcionário (compatível com schema legado: funcao textual)
-    const funcCols = await db.prepare(`PRAGMA table_info('funcionarios')`).all<{ name: string }>();
-    const funcColSet = new Set((funcCols.results || []).map((c) => String(c.name || '')));
+    const funcColSet = await getSchemaColumns(db, 'funcionarios');
     const hasFuncaoId = funcColSet.has('funcao_id');
     const hasFuncaoTexto = funcColSet.has('funcao');
 
@@ -536,10 +536,7 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
     // `validade_meses` foi adicionada a qualificacoes_tipos depois de tenants
     // legados já existentes. A matriz é somente leitura e pode calcular o
     // status por data_vencimento quando essa coluna ainda não existir.
-    const tipoCols = await db.prepare(`PRAGMA table_info('qualificacoes_tipos')`).all<{
-      name: string;
-    }>();
-    const tipoColSet = new Set((tipoCols.results || []).map((column) => String(column.name || '')));
+    const tipoColSet = await getSchemaColumns(db, 'qualificacoes_tipos');
     const validadeMesesExpr = tipoColSet.has('validade_meses')
       ? 'qt.validade_meses'
       : 'NULL AS validade_meses';
@@ -584,10 +581,7 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
     }
 
     // Última qualificação ativa por tipo para este funcionário
-    const histCols = await db.prepare(`PRAGMA table_info('qualificacoes_historico')`).all<{
-      name: string;
-    }>();
-    const histColSet = new Set((histCols.results || []).map((c) => String(c.name || '')));
+    const histColSet = await getSchemaColumns(db, 'qualificacoes_historico');
     const tipoCol = histColSet.has('tipo_qualificacao_id')
       ? 'tipo_qualificacao_id'
       : histColSet.has('qualificacao_id')
