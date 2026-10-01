@@ -1,3 +1,5 @@
+import { ApiError } from '../middleware/error-handler';
+
 export function isGovernedTrainingComplianceRequirement(row: Record<string, unknown>): boolean {
   const conditionId = Number(row.condicao_id);
   const origin = String(row.origem || '').trim().toUpperCase();
@@ -35,6 +37,20 @@ export type TrainingComplianceRequirementWrite = {
   prazo_inicial_dias: number | null;
   auto_matricular_ead: number;
 };
+
+function assertRequirementWriteSemantics(data: TrainingComplianceRequirementWrite): void {
+  if (
+    data.obrigatoriedade === 'NAO_APLICA' &&
+    data.escopo === 'EMPRESA' &&
+    !data.condicao_id &&
+    !data.aeronave_modelo
+  ) {
+    throw new ApiError(
+      'Exclusão global sem condição é redundante: sem regra aplicável o treinamento já não é obrigatório. Use “não se aplica” apenas como exceção explícita a uma regra mais ampla.',
+      400,
+    );
+  }
+}
 
 async function columns(db: D1Database) {
   const { results } = await db
@@ -79,6 +95,7 @@ export async function insertTrainingComplianceRequirement(
   empresaId: number,
   data: TrainingComplianceRequirementWrite,
 ) {
+  assertRequirementWriteSemantics(data);
   const cols = await columns(db);
   const pairs = entries(data, cols);
   const names = ['empresa_id', ...pairs.map(([k]) => k)];
@@ -96,6 +113,7 @@ export async function updateTrainingComplianceRequirement(
   id: number,
   data: TrainingComplianceRequirementWrite,
 ) {
+  assertRequirementWriteSemantics(data);
   const cols = await columns(db);
   const pairs = entries(data, cols);
   return db

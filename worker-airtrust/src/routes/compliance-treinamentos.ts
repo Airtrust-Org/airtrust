@@ -964,23 +964,6 @@ async function validateRuleReferences(
     if (!aircraft) throw new ApiError('Aeronave/equipamento inválido para a empresa atual', 400);
   }
 
-  const obrigatoriedade = normalizeEnum(
-    payload.obrigatoriedade,
-    OBRIGATORIEDADES,
-    'OBRIGATORIA',
-  );
-  if (
-    obrigatoriedade === 'NAO_APLICA' &&
-    escopo === 'EMPRESA' &&
-    !condicaoId &&
-    !aeronaveModelo
-  ) {
-    throw new ApiError(
-      'Exclusão global sem condição é redundante: sem regra aplicável o treinamento já não é obrigatório. Use “não se aplica” apenas como exceção explícita a uma regra mais ampla.',
-      400,
-    );
-  }
-
   return {
     qualificacao_tipo_id: qualificacaoTipoId,
     escopo,
@@ -1003,7 +986,7 @@ async function validateRuleReferences(
       String(payload.validade_fonte || 'MODELO').toUpperCase() === 'EVIDENCIA'
         ? ('EVIDENCIA' as const)
         : ('MODELO' as const),
-    obrigatoriedade,
+    obrigatoriedade: normalizeEnum(payload.obrigatoriedade, OBRIGATORIEDADES, 'OBRIGATORIA'),
     critico_operacional: payload.critico_operacional ? 1 : 0,
     origem: normalizeEnum(payload.origem, ORIGENS, 'REGULATORIO'),
     referencia_normativa: payload.referencia_normativa

@@ -126,6 +126,18 @@ describe('0524 training compliance requirement sanitization', () => {
     expect(querySql<{ total:number }>(db, `SELECT COUNT(*) total FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='AVSEC_CONSC' AND ativo=1 AND deleted_at IS NULL;`)[0].total).toBe(1);
   });
 
+  it('fails closed on the legacy reconciler instead of deriving obligations from history', () => {
+    const legacyPath = 'scripts/production/reconcile-training-compliance-requirements.py';
+    const legacy = read(legacyPath);
+    expect(legacy).not.toContain('qualificacoes_historico');
+    expect(legacy).not.toContain('DESIGNATED_FROM_HISTORY');
+    expect(legacy).not.toContain('MAINT_HISTORY_FUNCTION');
+    expect(legacy).toContain('Qualification history must never create a current Compliance obligation');
+    const blocked = spawnSync('python3', [legacyPath], { cwd: ROOT, encoding: 'utf8' });
+    expect(blocked.status).toBe(2);
+    expect(blocked.stderr).toContain('BLOCKED:');
+  });
+
   it('is wired through governed staging and production paths', () => {
     expect(read('scripts/staging/apply-approved-migrations.sh')).toContain('0524_training_compliance_requirement_sanitization.sql');
     const recovery = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
