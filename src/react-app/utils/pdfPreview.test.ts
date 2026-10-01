@@ -5,29 +5,10 @@ import {
   showPdfPreviewError,
 } from '@/react-app/utils/pdfPreview';
 
-const pdfJsMocks = vi.hoisted(() => {
-  const render = vi.fn(() => ({ promise: Promise.resolve() }));
-  const cleanup = vi.fn();
-  const destroy = vi.fn(async () => undefined);
-  const getPage = vi.fn(async () => ({
-    getViewport: ({ scale }: { scale: number }) => ({ width: 600 * scale, height: 800 * scale }),
-    render,
-    cleanup,
-  }));
-  const getDocument = vi.fn(() => ({
-    promise: Promise.resolve({ numPages: 1, getPage, destroy }),
-  }));
-  return { render, cleanup, destroy, getPage, getDocument };
-});
-
-vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
-  GlobalWorkerOptions: { workerSrc: '' },
-  getDocument: pdfJsMocks.getDocument,
-}));
-
 type FakePreviewWindow = Window & {
   __pdfError?: (message?: string) => void;
   __renderPdf?: (buffer: ArrayBuffer, mimeType: string, fileName: string) => void;
+  __openPdfNative?: (buffer: ArrayBuffer, mimeType: string, fileName: string) => void;
   __writtenHtml: string[];
 };
 
@@ -120,75 +101,37 @@ describe('pdfPreview', () => {
     expect(latestWrittenHtml(previewWindow)).toContain('Lista de Presença — CRM');
   });
 
-  it('no Safari renderiza o PDF autenticado com PDF.js em vez de navegar para data URL', async () => {
+  it('no Safari navega para blob PDF criado na própria aba de preview', async () => {
     const previewWindow = createFakePreviewWindow();
-    const loading = { style: { display: 'flex' } };
-    const toolbar = { style: { display: 'none' } };
-    const downloadLink = { style: {}, href: '', download: '' };
-    const viewer = { style: { display: 'block' } };
-    const pdfPages = {
-      style: { display: 'none' },
-      replaceChildren: vi.fn(),
-      appendChild: vi.fn(),
-    };
-    const canvas = {
-      width: 0,
-      height: 0,
-      style: {} as Record<string, string>,
-      getContext: vi.fn(() => ({})),
-    };
-    const elements: Record<string, unknown> = {
-      loading,
-      toolbar,
-      downloadLink,
-      viewer,
-      pdfPages,
-    };
-    const createObjectURL = vi.fn(() => 'blob:safari-rendered-pdf');
+    const renderPdf = vi.fn();
+    const openPdfNative = vi.fn();
+    previewWindow.__renderPdf = renderPdf;
+    previewWindow.__openPdfNative = openPdfNative;
+    previewWindow.__pdfError = vi.fn();
 
-    Object.assign(previewWindow.document, {
-      getElementById: vi.fn((id: string) => elements[id] || null),
-      createElement: vi.fn((tag: string) => (tag === 'canvas' ? canvas : null)),
-    });
-    Object.defineProperty(previewWindow, 'Blob', { configurable: true, value: Blob });
-    Object.defineProperty(previewWindow, 'URL', {
-      configurable: true,
-      value: { createObjectURL },
-    });
-    Object.defineProperty(previewWindow, 'innerWidth', { configurable: true, value: 1024 });
     Object.defineProperty(window.navigator, 'userAgent', {
       configurable: true,
       value:
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/26.0 Safari/605.1.15',
     });
-    const pdfBlob = {
-      type: 'application/pdf',
-      arrayBuffer: vi.fn(async () => Uint8Array.from([0x25, 0x50, 0x44, 0x46]).buffer),
-    } as unknown as Blob;
 
     await previewPdfBeforeDownload({
       fileName: 'CERTIFICADO.pdf',
       title: 'Certificado CRM_CORP',
       mimeType: 'application/pdf',
       existingWindow: previewWindow,
-      fetcher: async () =>
-        ({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/pdf' },
-          blob: async () => pdfBlob,
-        }) as unknown as Response,
+      fetcher: async () => createPdfResponse(),
     });
 
-    expect(pdfJsMocks.getDocument).toHaveBeenCalledTimes(1);
-    expect(pdfJsMocks.render).toHaveBeenCalledTimes(1);
-    expect(pdfPages.appendChild).toHaveBeenCalledWith(canvas);
-    expect(pdfPages.style.display).toBe('block');
-    expect(viewer.style.display).toBe('none');
-    expect(toolbar.style.display).toBe('flex');
-    expect(loading.style.display).toBe('none');
-    expect(downloadLink.href).toBe('blob:safari-rendered-pdf');
-    expect(downloadLink.download).toBe('CERTIFICADO.pdf');
+    expect(openPdfNative).toHaveBeenCalledTimes(1);
+    const [buffer, mimeType, fileName] = openPdfNative.mock.calls[0] ?? [];
+    expect(buffer).toBeInstanceOf(ArrayBuffer);
+    expect((buffer as ArrayBuffer).byteLength).toBe(3);
+    expect(mimeType).toBe('application/pdf');
+    expect(fileName).toBe('CERTIFICADO.pdf');
+    expect(renderPdf).not.toHaveBeenCalled();
+    expect(latestWrittenHtml(previewWindow)).toContain('window.__openPdfNative');
+    expect(latestWrittenHtml(previewWindow)).toContain('window.location.href = url');
   });
 
   it('mostra erro na janela e inicia download fallback quando o preview falha', async () => {
