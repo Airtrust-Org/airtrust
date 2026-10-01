@@ -55,6 +55,7 @@ APPROVED_MIGRATIONS=(
   "0520_training_compliance_evidence_multi_profiles.sql"
   "0521_training_compliance_designation_overrides.sql"
   "0522_auth_profile_orphan_cleanup.sql"
+  "0523_training_compliance_governed_designation_rules.sql"
 )
 
 apply=false
@@ -254,6 +255,9 @@ validate_postconditions() {
     0522_auth_profile_orphan_cleanup.sql)
       bash scripts/staging/validate-0522-postconditions.sh --target="$db_name"
       ;;
+    0523_training_compliance_governed_designation_rules.sql)
+      bash scripts/staging/validate-0523-postconditions.sh --target="$db_name"
+      ;;
   esac
 }
 
@@ -354,6 +358,11 @@ fi
 if [[ "$migration_basename" == "0522_auth_profile_orphan_cleanup.sql" && "$ledger_count" == "0" ]]; then
   bash scripts/staging/validate-0522-preflight.sh --target="$db_name"
   echo "SPECIALIZED_PREFLIGHT_0522_OK=true"
+fi
+
+if [[ "$migration_basename" == "0523_training_compliance_governed_designation_rules.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0523-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0523_OK=true"
 fi
 
 if [[ "$migration_basename" == 0461_* || "$migration_basename" == 0462_* ]]; then

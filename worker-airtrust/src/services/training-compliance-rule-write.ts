@@ -1,3 +1,15 @@
+export function isGovernedTrainingComplianceRequirement(row: Record<string, unknown>): boolean {
+  const conditionId = Number(row.condicao_id);
+  const origin = String(row.origem || '').trim().toUpperCase();
+  const foundation = String(row.fundamento_tipo || '').trim().toUpperCase();
+  return Boolean(
+    Number.isInteger(conditionId) &&
+      conditionId > 0 &&
+      origin === 'REGULATORIO' &&
+      (foundation === 'DESIGNACAO' || foundation === 'PADRAO_EXCLUSAO'),
+  );
+}
+
 export type TrainingComplianceRequirementWrite = {
   qualificacao_tipo_id: number;
   escopo: string;

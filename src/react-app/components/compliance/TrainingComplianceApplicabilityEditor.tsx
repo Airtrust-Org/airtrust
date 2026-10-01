@@ -92,6 +92,15 @@ function isTripulacaoSector(setor?: { codigo?: string | null; nome: string } | n
   return canonical.includes('TRIPUL');
 }
 
+function isGovernedDesignationRule(rule: Rule) {
+  const foundation = String(rule.fundamento_tipo || '').trim().toUpperCase();
+  return Boolean(
+    rule.condicao_id &&
+      String(rule.origem || '').trim().toUpperCase() === 'REGULATORIO' &&
+      (foundation === 'DESIGNACAO' || foundation === 'PADRAO_EXCLUSAO'),
+  );
+}
+
 const foundationTypeOptions = [
   ['REGULATORIO_DIRETO', 'Regulatório — exigência direta'],
   ['PROGRAMA_APROVADO', 'Programa aprovado (PTO/PTM/PTAP/PPSP/SGSO)'],
@@ -110,6 +119,7 @@ function foundationLabel(value?: string | null) {
 
 function scopeLabel(rule: Rule) {
   const aircraft = rule.aeronave_modelo ? ` · ${rule.aeronave_modelo}` : '';
+  if (rule.condicao_nome) return `Designação: ${rule.condicao_nome}${aircraft}`;
   if (rule.escopo === 'EMPRESA' && rule.obrigatoriedade === 'NAO_APLICA')
     return `Padrão: não aplicável aos demais funcionários${aircraft}`;
   if (rule.escopo === 'EMPRESA') return `Toda a empresa${aircraft}`;
@@ -633,6 +643,8 @@ export function TrainingComplianceApplicabilityEditor({
         ) : null}
         {(rules.data || []).map((rule) => {
           const globalBlocked = !isAdmin && (rule.escopo === 'EMPRESA' || rule.escopo === 'FUNCAO');
+          const governedDesignationRule = isGovernedDesignationRule(rule);
+          const editBlocked = globalBlocked || governedDesignationRule;
           return (
             <div
               key={rule.id}
@@ -646,7 +658,11 @@ export function TrainingComplianceApplicabilityEditor({
                       Crítico
                     </span>
                   ) : null}
-                  {globalBlocked ? (
+                  {governedDesignationRule ? (
+                    <span className="rounded bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+                      Regra governada
+                    </span>
+                  ) : globalBlocked ? (
                     <span className="rounded bg-slate-200 px-2 py-0.5 text-[11px] text-slate-600">
                       Regra global
                     </span>
@@ -659,6 +675,9 @@ export function TrainingComplianceApplicabilityEditor({
                 {rule.condicao_nome ? (
                   <p className="mt-1 text-xs font-medium text-indigo-700">
                     Condição: {rule.condicao_nome}
+                    {governedDesignationRule
+                      ? ' · ocupantes são gerenciados na área de designações'
+                      : ''}
                   </p>
                 ) : null}
                 {rule.perfil_competencia ? (
@@ -693,7 +712,7 @@ export function TrainingComplianceApplicabilityEditor({
               </div>
               <select
                 value={rule.obrigatoriedade}
-                disabled={globalBlocked || updateRule.isPending}
+                disabled={editBlocked || updateRule.isPending}
                 onChange={(event) =>
                   updateRule.mutate({ id: rule.id, patch: { obrigatoriedade: event.target.value } })
                 }
@@ -705,7 +724,7 @@ export function TrainingComplianceApplicabilityEditor({
               </select>
               <button
                 type="button"
-                disabled={globalBlocked || deleteRule.isPending}
+                disabled={editBlocked || deleteRule.isPending}
                 onClick={() => deleteRule.mutate(rule.id)}
                 className="inline-flex items-center justify-center rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
                 aria-label="Remover requisito"

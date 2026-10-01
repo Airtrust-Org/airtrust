@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-30",
-    "last_reconciled_against": "0521 training compliance designation overrides prepared; remote apply pending",
-    "schema_v2_digest": "9a28116a02d257a64a34a7bc3d70b4f24aafb27bd56a318ca34204fa14811a5e",
+    "last_reconciled_against": "0523 governed training designation rules prepared; remote apply pending",
+    "schema_v2_digest": "3130b21030076284bbe641be594ca04537d4fd7a26c96ea79ac3fd4efc4af897",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1209,6 +1209,18 @@
       "reviewed_manifest": "auth-profile-orphan-cleanup-0522.json",
       "evidence": "worker-airtrust/schema-v2/plans/auth-profile-orphan-cleanup-0522.md",
       "note": "0522 is reviewed and prepared only. It removes explicit tenant-profile rows whose matching (usuario_id, empresa_id) membership no longer exists and adds an AFTER DELETE trigger so future authorized membership removal cannot leave stale profile authority. It does not alter any existing membership, valid profile grant, user, token, sector assignment or training record. Remote apply requires staging validation, the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0523_training_compliance_governed_designation_rules.sql",
+      "change_id": "training-compliance-governed-designation-rules-0523",
+      "sha256": "473d3c2bff698c0882378aa64da4b803ff39e7a6c845e2eaf5ec45ad71823d25",
+      "targets": [],
+      "domain": "compliance / governed designation-based inclusion-exclusion rules",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-governed-designation-rules-0523.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-governed-designation-rules-0523.md",
+      "note": "0523 is a reviewed data-only forward repair. It restores the five RBAC 119 CRM Corporate designation exclusions after audited generic-API deletion, normalizes the designation rule metadata as regulatory/governed, and does not create or infer employee assignments. Remote apply requires staging validation, the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     }
   ]
 }

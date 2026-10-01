@@ -20,10 +20,7 @@ import {
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
 } from '../services/employee-sector-access';
-import {
-  insertTrainingComplianceRequirement,
-  updateTrainingComplianceRequirement,
-} from '../services/training-compliance-rule-write';
+import { insertTrainingComplianceRequirement, isGovernedTrainingComplianceRequirement, updateTrainingComplianceRequirement } from '../services/training-compliance-rule-write';
 import {
   normalizeAircraftModel,
   parseLegacyAircraftModels,
@@ -1248,6 +1245,7 @@ app.put('/regras/:id', requireRole('admin', 'manager'), async (c) => {
     .bind(id, empresaId)
     .first<Record<string, unknown>>();
   if (!existing) throw new ApiError('Regra não encontrada', 404);
+  if (isGovernedTrainingComplianceRequirement(existing)) throw new ApiError('Regra governada por designação regulatória; altere os ocupantes na área de designações.', 409);
   const patch = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const access = await getEmployeeSectorAccess(c, empresaId);
   const existingData = await validateRuleReferences(db, empresaId, existing);
@@ -1285,6 +1283,7 @@ app.delete('/regras/:id', requireRole('admin', 'manager'), async (c) => {
     .bind(id, empresaId)
     .first<Record<string, unknown>>();
   if (!existing) throw new ApiError('Regra não encontrada', 404);
+  if (isGovernedTrainingComplianceRequirement(existing)) throw new ApiError('Regra governada por designação regulatória; altere os ocupantes na área de designações.', 409);
   const access = await getEmployeeSectorAccess(c, empresaId);
   const existingData = await validateRuleReferences(db, empresaId, existing);
   await assertIndividualRuleWithinAccess(db, empresaId, access, existingData);
