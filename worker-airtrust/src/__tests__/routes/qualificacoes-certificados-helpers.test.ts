@@ -5,6 +5,7 @@ import {
   adaptTemplateHtmlForSinglePageA4,
   buildConteudoProgramaticoCertificadoHtml,
   buildQualMetaLineHtml,
+  insertCertificadoNaPastaVirtual,
   resolveCargaHorariaCertificado,
   resolveFuncionarioInstrutorNaEmpresa,
   resolveInstrutorCertificadoData,
@@ -52,6 +53,84 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
 }
 
 describe('qualificacoes-certificados-helpers', () => {
+  it('persiste evidência de check na categoria FAPs e Checks', async () => {
+    let capturedQuery = '';
+    let capturedArgs: unknown[] = [];
+    const db = {
+      prepare: vi.fn((query: string) => ({
+        bind: (...args: unknown[]) => ({
+          run: async () => {
+            capturedQuery = query;
+            capturedArgs = args;
+            return { success: true };
+          },
+        }),
+      })),
+    } as unknown as D1Database;
+
+    await insertCertificadoNaPastaVirtual(
+      db,
+      {
+        pastaVirtualHasDocumentoId: false,
+        pastaVirtualHasCertificacaoId: true,
+        pastaVirtualHasEmpresaId: true,
+        documentosHasEmpresaId: true,
+      },
+      {
+        funcionarioId: 5,
+        documentoId: 99,
+        historicoId: 123,
+        empresaId: 6,
+        r2Key: 'certificados/empresa-6/funcionario-5/historico-123/teste.pdf',
+        nomeArquivo: 'FAP14 original.pdf',
+        descricao: 'FAP 14',
+        isCheck: true,
+      },
+    );
+
+    expect(capturedQuery).toContain('INSERT INTO pasta_virtual');
+    expect(capturedArgs).toContain('AVALIACAO_CQ');
+    expect(capturedArgs).toContain('FAPs e Checks');
+    expect(capturedArgs).not.toContain('Certificados de Qualificação');
+  });
+
+  it('mantém certificado comum em Treinamentos e Qualificações', async () => {
+    let capturedArgs: unknown[] = [];
+    const db = {
+      prepare: vi.fn(() => ({
+        bind: (...args: unknown[]) => ({
+          run: async () => {
+            capturedArgs = args;
+            return { success: true };
+          },
+        }),
+      })),
+    } as unknown as D1Database;
+
+    await insertCertificadoNaPastaVirtual(
+      db,
+      {
+        pastaVirtualHasDocumentoId: false,
+        pastaVirtualHasCertificacaoId: true,
+        pastaVirtualHasEmpresaId: true,
+        documentosHasEmpresaId: true,
+      },
+      {
+        funcionarioId: 5,
+        documentoId: 100,
+        historicoId: 124,
+        empresaId: 6,
+        r2Key: 'certificados/empresa-6/funcionario-5/historico-124/teste.pdf',
+        nomeArquivo: 'D2 original.pdf',
+        descricao: 'SGSO',
+        isCheck: false,
+      },
+    );
+
+    expect(capturedArgs).toContain('CERTIFICADO');
+    expect(capturedArgs).toContain('Certificados de Qualificação');
+    expect(capturedArgs).not.toContain('FAPs e Checks');
+  });
   it('reaproveita o conteudo direto sem consultar fallback', async () => {
     const db = {
       prepare: vi.fn(() => {
@@ -394,7 +473,11 @@ describe('qualificacoes-certificados-helpers', () => {
 
     it('retorna string vazia quando nenhum segmento resolve', () => {
       expect(
-        buildQualMetaLineHtml({ cargaHoraria: null, categoriaCanonica: null, codigoQualificacao: null }),
+        buildQualMetaLineHtml({
+          cargaHoraria: null,
+          categoriaCanonica: null,
+          codigoQualificacao: null,
+        }),
       ).toBe('');
     });
   });

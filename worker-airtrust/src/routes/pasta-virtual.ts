@@ -134,7 +134,12 @@ export function inferirCategoriaDocumento(
   categoriaLegada?: string | null,
   tipoLegado?: string | null,
   r2Key?: string | null,
+  qualificacaoIsCheck?: boolean | number | null,
 ): string {
+  if (qualificacaoIsCheck === true || Number(qualificacaoIsCheck || 0) === 1) {
+    return PASTA_VIRTUAL_CATEGORIA.AVALIACOES;
+  }
+
   const categoriaNormalizada = normalizarCategoriaLegada(categoriaLegada);
   if (categoriaNormalizada) return categoriaNormalizada;
 
@@ -272,6 +277,19 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
         d.r2_key,
         d.created_at as dataUpload,
         d.descricao,
+        CASE WHEN EXISTS (
+          SELECT 1
+            FROM qualificacoes_historico qh_check
+            JOIN qualificacoes_tipos qt_check
+              ON qt_check.id = qh_check.qualificacao_id
+             AND qt_check.empresa_id = f.empresa_id
+             AND qt_check.deleted_at IS NULL
+           WHERE qh_check.certificado_arquivo_id = d.id
+             AND qh_check.funcionario_id = d.funcionario_id
+             AND qh_check.empresa_id = f.empresa_id
+             AND qh_check.deleted_at IS NULL
+             AND COALESCE(qt_check.is_check, 0) = 1
+        ) THEN 1 ELSE 0 END as qualificacao_is_check,
         'documentos' as origem
       FROM documentos d
       INNER JOIN funcionarios f ON d.funcionario_id = f.id AND f.deleted_at IS NULL
@@ -292,6 +310,19 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
         ${pvDescricaoExpr} as descricao,
         ${pvCategoriaExpr} as categoria,
         ${pvDocumentoIdExpr} as documento_id,
+        CASE WHEN EXISTS (
+          SELECT 1
+            FROM qualificacoes_historico qh_check
+            JOIN qualificacoes_tipos qt_check
+              ON qt_check.id = qh_check.qualificacao_id
+             AND qt_check.empresa_id = f.empresa_id
+             AND qt_check.deleted_at IS NULL
+           WHERE qh_check.id = pv.certificacao_id
+             AND qh_check.funcionario_id = pv.funcionario_id
+             AND qh_check.empresa_id = f.empresa_id
+             AND qh_check.deleted_at IS NULL
+             AND COALESCE(qt_check.is_check, 0) = 1
+        ) THEN 1 ELSE 0 END as qualificacao_is_check,
         'pasta_virtual' as origem
       FROM pasta_virtual pv
       INNER JOIN funcionarios f ON pv.funcionario_id = f.id AND f.deleted_at IS NULL
@@ -316,6 +347,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
         r2_key: string;
         dataUpload: string;
         descricao?: string;
+        qualificacao_is_check?: number;
         origem: string;
       }>(),
       db.prepare(queryPastaVirtual).bind(funcionarioId, empresaId).all<{
@@ -329,6 +361,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
         descricao?: string;
         categoria?: string;
         documento_id?: number | null;
+        qualificacao_is_check?: number;
         origem: string;
       }>(),
     ]);
@@ -341,6 +374,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
     const categorized: CategorizedDocs = {
       [PASTA_VIRTUAL_CATEGORIA.QUALIFICACOES]: [],
       [PASTA_VIRTUAL_CATEGORIA.AVALIACOES]: [],
+      [PASTA_VIRTUAL_CATEGORIA.FTV]: [],
       [PASTA_VIRTUAL_CATEGORIA.EXAMES]: [],
       [PASTA_VIRTUAL_CATEGORIA.LICENCAS]: [],
       [PASTA_VIRTUAL_CATEGORIA.SIMULADORES]: [],
@@ -361,7 +395,13 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
     // Processar documentos da tabela documentos primeiro. A classificação é
     // derivada de prefixos canônicos e mantém compatibilidade com nomes antigos.
     (docsResult.results || []).forEach((doc) => {
-      const categoria = inferirCategoriaDocumento(doc.nome_arquivo, null, doc.tipo, doc.r2_key);
+      const categoria = inferirCategoriaDocumento(
+        doc.nome_arquivo,
+        null,
+        doc.tipo,
+        doc.r2_key,
+        doc.qualificacao_is_check,
+      );
 
       filesMap.set(`documentos:${doc.id}`, {
         doc: {
@@ -388,6 +428,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
         doc.categoria,
         doc.tipo,
         doc.r2_key,
+        doc.qualificacao_is_check,
       );
 
       filesMap.set(`pasta_virtual:${doc.id}`, {

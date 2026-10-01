@@ -393,11 +393,13 @@ app.post(
       const { historico, nomeFuncionario, codigo } = await resolveCertificadoContext(db, id);
       storageColumns = await getCertificadosStorageColumns(db);
       funcionarioId = scopedHistorico.funcionario_id;
+      const isCheckQualification = Number(historico.qualificacao_is_check || 0) === 1;
       await backfillCertificadoAtualNaPastaVirtual(db, storageColumns, {
         historicoId: id,
         funcionarioId: historico.funcionario_id,
         certificadoArquivoId: historico.certificado_arquivo_id ?? null,
         empresaId,
+        isCheck: isCheckQualification,
       });
 
       const form = await c.req.formData();
@@ -604,6 +606,7 @@ app.post(
         r2Key,
         nomeArquivo,
         descricao: `Certificado ${codigo} - ${nomeFuncionario}`,
+        isCheck: isCheckQualification,
       });
       console.log('✅ [UPLOAD CERT] Certificado inserido na pasta_virtual');
 

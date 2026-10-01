@@ -43,6 +43,7 @@ export interface HistoricoRow {
   certificado_arquivo_id: number | null;
   qualificacao_nome: string | null;
   codigo: string | null;
+  qualificacao_is_check: number | null;
   funcionario_matricula: string | null;
 }
 
@@ -422,6 +423,7 @@ export async function insertCertificadoNaPastaVirtual(
     r2Key: string;
     nomeArquivo: string;
     descricao: string;
+    isCheck?: boolean | number | null;
   },
 ): Promise<void> {
   const columns = ['funcionario_id'];
@@ -456,9 +458,10 @@ export async function insertCertificadoNaPastaVirtual(
     'created_at',
   );
   values.push('?', '?', '?', '?', "datetime('now')", '?', "datetime('now')");
+  const isCheck = params.isCheck === true || Number(params.isCheck || 0) === 1;
   bindings.push(
-    'CERTIFICADO',
-    'Certificados de Qualificação',
+    isCheck ? 'AVALIACAO_CQ' : 'CERTIFICADO',
+    isCheck ? 'FAPs e Checks' : 'Certificados de Qualificação',
     params.r2Key,
     params.nomeArquivo,
     params.descricao,
@@ -478,6 +481,7 @@ export async function backfillCertificadoAtualNaPastaVirtual(
     funcionarioId: number;
     certificadoArquivoId: number | null;
     empresaId: number | null;
+    isCheck?: boolean | number | null;
   },
 ): Promise<void> {
   if (!storageColumns.pastaVirtualHasCertificacaoId || !params.certificadoArquivoId) {
@@ -493,8 +497,13 @@ export async function backfillCertificadoAtualNaPastaVirtual(
     return;
   }
 
-  const setParts = ['certificacao_id = ?'];
-  const bindings: Array<number | string | null> = [params.historicoId];
+  const isCheck = params.isCheck === true || Number(params.isCheck || 0) === 1;
+  const setParts = ['certificacao_id = ?', 'tipo_documento = ?', 'categoria = ?'];
+  const bindings: Array<number | string | null> = [
+    params.historicoId,
+    isCheck ? 'AVALIACAO_CQ' : 'CERTIFICADO',
+    isCheck ? 'FAPs e Checks' : 'Certificados de Qualificação',
+  ];
 
   if (storageColumns.pastaVirtualHasEmpresaId) {
     setParts.push('empresa_id = COALESCE(empresa_id, ?)');
@@ -578,6 +587,7 @@ export async function resolveCertificadoContext(
         qh.certificado_arquivo_id,
         qt.nome as qualificacao_nome,
         qt.codigo as codigo,
+        COALESCE(qt.is_check, 0) as qualificacao_is_check,
         f.cpf as funcionario_cpf,
         f.nome as funcionario_nome
        FROM qualificacoes_historico qh
