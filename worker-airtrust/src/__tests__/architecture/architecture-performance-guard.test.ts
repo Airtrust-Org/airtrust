@@ -139,6 +139,8 @@ const HIGH_SQL_LIMIT_CAPS = {
   'services/sigvoos-frms.ts': 5000,
 } as const;
 
+const DIRECT_SCHEMA_INTROSPECTION_CAPS = { pragmaTableInfo: 84, sqliteMaster: 37 } as const;
+
 const CRITICAL_SELECT_STAR_CAPS = {
   'routes/aeronaves.ts': 1,
   'routes/escalas-alocacoes.ts': 1,
@@ -200,8 +202,33 @@ function countSelectStar(source: string) {
   return source.match(/SELECT\s+\*/gi)?.length ?? 0;
 }
 
+function countDirectSchemaIntrospection(source: string) {
+  return {
+    pragmaTableInfo: source.match(/PRAGMA\s+table_info/gi)?.length ?? 0,
+    sqliteMaster: source.match(/sqlite_master/gi)?.length ?? 0,
+  };
+}
+
+
 describe('architecture and performance guardrails', () => {
   const runtimeFiles = listRuntimeSourceFiles(srcRoot);
+
+  it('does not increase direct schema-introspection debt outside the shared cache', () => {
+    const totals = runtimeFiles.reduce(
+      (acc, file) => {
+        const counts = countDirectSchemaIntrospection(readFileSync(file, 'utf8'));
+        acc.pragmaTableInfo += counts.pragmaTableInfo;
+        acc.sqliteMaster += counts.sqliteMaster;
+        return acc;
+      },
+      { pragmaTableInfo: 0, sqliteMaster: 0 },
+    );
+
+    expect(totals.pragmaTableInfo).toBeLessThanOrEqual(
+      DIRECT_SCHEMA_INTROSPECTION_CAPS.pragmaTableInfo,
+    );
+    expect(totals.sqliteMaster).toBeLessThanOrEqual(DIRECT_SCHEMA_INTROSPECTION_CAPS.sqliteMaster);
+  });
 
   it('keeps runtime god-file growth explicit for files above 2000 lines', () => {
     const offenders = runtimeFiles

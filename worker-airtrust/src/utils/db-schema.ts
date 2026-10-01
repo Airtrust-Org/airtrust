@@ -4,14 +4,15 @@
  * Problema auditado: probes de sqlite_master / PRAGMA table_info()
  * eram chamados em CADA request, adicionando queries desnecessárias.
  *
- * Solução: cache em memória do worker (válido por lifetime do worker — até
- * próximo deploy). O schema não muda sem deploy, então o cache é safe.
+ * Solução: cache em memória por binding D1. Requisições que reutilizam o mesmo
+ * binding evitam round-trips; bindings diferentes nunca compartilham metadados.
  */
 
 // ===== CACHE DE MÓDULO =====
-// Cada worker instance mantém seu próprio cache; ao reiniciar/deploy, o cache é zerado.
+// Cada worker instance mantém cache por objeto de binding; reset explícito é usado em testes.
 let _hasUsuariosEmpresas: boolean | null = null;
-const _tableExistenceCache = new Map<string, boolean>();
+let _tableExistenceCacheByDb = new WeakMap<D1Database, Map<string, boolean>>();
+let _schemaColumnsCacheByDb = new WeakMap<D1Database, Map<string, ReadonlySet<string>>>();
 
 interface UsuariosSchema {
   hasActive: boolean;
@@ -34,20 +35,55 @@ const USUARIOS_EMPRESAS_SQL =
  * O nome é bindado como valor, nunca interpolado como identificador SQL.
  * Resultado cacheado após a primeira chamada para o lifetime da instância.
  */
+function cacheForDb<T>(caches: WeakMap<D1Database, Map<string, T>>, db: D1Database): Map<string, T> {
+  let cache = caches.get(db);
+  if (!cache) {
+    cache = new Map<string, T>();
+    caches.set(db, cache);
+  }
+  return cache;
+}
+
 export async function hasSchemaTable(db: D1Database, tableName: string): Promise<boolean> {
   const normalizedTableName = String(tableName || '').trim().toLowerCase();
   if (!normalizedTableName) return false;
-
-  const cached = _tableExistenceCache.get(normalizedTableName);
+  const cache = cacheForDb(_tableExistenceCacheByDb, db);
+  const cached = cache.get(normalizedTableName);
   if (cached !== undefined) return cached;
-
   const result = await db
     .prepare("SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
     .bind(normalizedTableName)
     .first<{ found: number }>();
   const exists = Boolean(result?.found);
-  _tableExistenceCache.set(normalizedTableName, exists);
+  cache.set(normalizedTableName, exists);
   return exists;
+}
+
+export async function getSchemaColumns(
+  db: D1Database,
+  tableName: string,
+): Promise<ReadonlySet<string>> {
+  const normalizedTableName = String(tableName || '').trim().toLowerCase();
+  if (!normalizedTableName) return new Set<string>();
+  const cache = cacheForDb(_schemaColumnsCacheByDb, db);
+  const cached = cache.get(normalizedTableName);
+  if (cached) return cached;
+  const escaped = normalizedTableName.replaceAll("'", "''");
+  const { results } = await db
+    .prepare(`PRAGMA table_info('${escaped}')`)
+    .all<{ name: string }>();
+  const columns = new Set((results || []).map((row) => String(row.name || '')));
+  cache.set(normalizedTableName, columns);
+  return columns;
+}
+
+export async function hasSchemaColumn(
+  db: D1Database,
+  tableName: string,
+  columnName: string,
+): Promise<boolean> {
+  if (!(await hasSchemaTable(db, tableName))) return false;
+  return (await getSchemaColumns(db, tableName)).has(String(columnName || '').trim());
 }
 
 /**
@@ -107,7 +143,8 @@ export async function hasRefreshTokensAccessTokenJtiColumn(db: D1Database): Prom
  */
 export function resetSchemaCache(): void {
   _hasUsuariosEmpresas = null;
-  _tableExistenceCache.clear();
+  _tableExistenceCacheByDb = new WeakMap<D1Database, Map<string, boolean>>();
+  _schemaColumnsCacheByDb = new WeakMap<D1Database, Map<string, ReadonlySet<string>>>();
   _usuariosSchema = null;
   _hasRefreshTokensEmpresaId = null;
   _hasRefreshTokensAccessTokenJti = null;

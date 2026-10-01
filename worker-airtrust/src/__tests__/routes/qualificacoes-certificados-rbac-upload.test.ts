@@ -304,7 +304,7 @@ function createMockEnv(options: { operationalRbacEnabled?: number } = {}) {
         first: async () => {
           calls.push({ query, args, method: 'first' });
 
-          if (query.includes("FROM sqlite_master WHERE type='table' AND name=?")) {
+          if (query.includes('FROM sqlite_master') && /name\s*=\s*\?/i.test(query)) {
             const table = String(args[0] || '');
             return [
               'treinamento_requisitos',
@@ -312,7 +312,7 @@ function createMockEnv(options: { operationalRbacEnabled?: number } = {}) {
               'qualificacoes_historico',
               'qualificacoes_historico_perfis_competencia',
             ].includes(table)
-              ? { ok: 1 }
+              ? { ok: 1, found: 1 }
               : null;
           }
 
