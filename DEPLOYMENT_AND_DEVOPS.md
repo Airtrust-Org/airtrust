@@ -1,6 +1,6 @@
 # AirTrust — Deployment & DevOps
 
-> **Versão do documento:** 1.1 | **Data:** 2026-07-14 | **HEAD:** `6d4fe1e8d`
+> **Versão do documento:** 1.2 | **Atualizado:** 2026-10-01 | **Autoridade:** GitHub `Airtrust-Org/airtrust` / `main`
 >
 > ⚠️ **[DOCUMENTO INTERNO]** Este documento descreve a arquitetura de deploy.
 > Não é um manual operacional executável. Nenhum comando aqui autoriza deploy,
@@ -25,90 +25,31 @@
 
 ## 1. Visão Geral do Pipeline
 
-O deploy do AirTrust segue um pipeline de 4 estágios:
+O caminho rotineiro de release é governado por GitHub Actions. A CI oficial exige os oito gates
+`lint`, `build-content-gates`, `worker-typecheck`, `frontend-coverage`, `worker-tests-1`,
+`worker-tests-2`, `lms-smoke` e `public-e2e`. Merge e CI verde não equivalem a deploy.
 
-```
-[1. Pre-flight Checks] → [2. Build] → [3. Deploy Worker ou Deploy Pages] → [4. Validação]
+```text
+PR -> 8 gates -> merge em main -> staging autorizado -> validação real -> produção autorizada
 ```
 
-### Diagrama de deploy
-
-```mermaid
-graph TD
-    A[Push to main] --> B[preflight-clean-deploy.sh]
-    B --> |"Verifica branch, clean state, HEAD==origin/main"| C{npm run build}
-    C --> D[remove-duplicate-build-assets.sh]
-    D --> E[stamp-build-version.sh]
-    E --> I[deploy-worker-only.sh]
-    I --> J[wrangler pages deploy dist/client]
-    J --> K[Health check: GET /api/health]
-    K --> L[Pages check: GET main.airtrust.pages.dev]
-```
+- Staging: `.github/workflows/deploy-staging.yml`.
+- Produção: `.github/workflows/deploy-airtrust.yml`.
+- Schema de produção: `.github/workflows/apply-schema-change-v2.yml`.
+- Google Cloud Build é contingência quando GitHub Actions estiver indisponível ou defeituoso; não é bypass.
 
 ---
 
-## 2. Scripts de Deploy
+## 2. Entry points locais de deploy
 
-### 2.1 Deploy principal (`npm run deploy`)
+Os aliases locais de produção são mantidos somente como stubs fail-closed para compatibilidade:
+`npm run deploy`, `deploy:pages`, `deploy:worker`, `deploy:worker:only` e `deploy:all` não são
+rotas rotineiras de release. `deploy:worker:safe` também é bloqueado por padrão e só pode ser
+acionado pelo wrapper de emergência revisado, dentro de uma janela explicitamente autorizada.
 
-```bash
-npm run deploy
-# → generate-version.sh (APP_VERSION + APP_BUILD_TIME)
-# → npm run build
-# → npm run deploy:pages
-# → npm run deploy:worker:only
-```
-
-### 2.2 Deploy do Worker (`scripts/deploy-worker-only.sh`)
-
-**86 linhas** — Script principal de deploy do Worker:
-
-1. **Guarda contra APP_VERSION externo**: Bloqueia se `AIRTRUST_ALLOW_APP_VERSION_OVERRIDE != 1`
-2. **Gera DEPLOY_VERSION**: `git rev-parse --short HEAD` + UTC timestamp
-3. **Gera BUILD_TIME**: UTC ISO timestamp
-4. **Cria wrangler.toml temporário**: Node.js script que injeta `APP_VERSION` e `APP_BUILD_TIME`
-   no template `wrangler.deploy.toml`
-5. **Bloqueio de migrations históricas em produção**: o workflow `deploy-airtrust.yml`
-   falha explicitamente com `LEGACY_MIGRATION_RUNNER_DISABLED_USE_SCHEMA_V2` quando
-   `run_migrations=true`.
-6. **Deploy do Worker**: `wrangler deploy --env production`
-7. **Limpeza**: Remove o arquivo `.toml` temporário (trap EXIT)
-
-### 2.3 Deploy Safe (`scripts/deploy-worker-safe.sh`)
-
-**82 linhas** — Deploy sem migrations:
-
-- Requer branch == `main` e HEAD == `origin/main`
-- Mesmo processo de versionamento
-- **NÃO executa migrations**
-- Apenas: `wrangler deploy --env production`
-
-### 2.4 Pre-flight (`scripts/preflight-clean-deploy.sh`)
-
-**40 linhas** — Verificações pré-deploy:
-
-- Branch atual == `main`
-- Sem alterações unstaged ou staged (`git status --porcelain` vazio)
-- HEAD == `origin/main` (fetch do origin)
-- Lista arquivos não trackeados (warning não-bloqueante)
-
-### 2.5 Deploy do Frontend (`npm run deploy:pages`)
-
-```bash
-npm run deploy:pages
-# → preflight-clean-deploy.sh
-# → npm run build
-# → remove-duplicate-build-assets.sh
-# → stamp-build-version.sh dist/client/index.html
-# → wrangler pages deploy dist/client --project-name=airtrust --branch=production
-```
-
-### 2.6 Deploy completo (`npm run deploy:all`)
-
-```bash
-npm run deploy:all
-# → scripts/build-and-deploy.sh (combina build + deploy worker + deploy pages)
-```
+Para staging, o fluxo oficial continua sendo `deploy-staging.yml`. O script
+`scripts/deploy-staging-worker-safe.sh` é staging-only, exige confirmação explícita e não aplica
+migrations nem publica Pages.
 
 ---
 
@@ -119,7 +60,7 @@ npm run deploy:all
 | Ambiente | Worker Name | Domínio | D1 DB | R2 Bucket |
 |---|---|---|---|---|
 | **Produção** | `airtrust-api-production` | `api.airtrust.online` | `airtrust-db` | `airtrust-storage` |
-| **Staging** | `airtrust-api-staging` | `*.workers.dev` | `airtrust-db-staging` | `airtrust-storage-staging` |
+| **Staging** | `airtrust-api-staging` | `*.workers.dev` | `airtrust-db-staging-baseline-20260701` | `airtrust-storage-staging` |
 | **Development** | `airtrust-api-development` | `*.workers.dev` | `airtrust-db-dev` | `airtrust-storage-dev` |
 | **Local** | `airtrust-api` | `localhost:8787` | Local SQLite (Miniflare) | Local R2 (Miniflare) |
 
@@ -128,7 +69,7 @@ npm run deploy:all
 | Ambiente | Projeto | Branch | Domínio |
 |---|---|---|---|
 | **Produção** | `airtrust` | `production` | `airtrust.pages.dev` + domínio customizado |
-| **Staging** | `airtrust` | `main` (preview) | `*.airtrust.pages.dev` |
+| **Staging** | `airtrust` | `staging` (preview) | `*.airtrust.pages.dev` |
 
 ### 3.3 Configuração Wrangler
 
@@ -143,7 +84,7 @@ npm run deploy:all
 
 | Binding | Dev | Staging | Prod |
 |---|---|---|---|
-| `DB` (D1) | `airtrust-db-dev` | `airtrust-db-staging` | `airtrust-db` |
+| `DB` (D1) | `airtrust-db-dev` | `airtrust-db-staging-baseline-20260701` | `airtrust-db` |
 | `BUCKET` (R2) | `airtrust-storage-dev` | `airtrust-storage-staging` | `airtrust-storage` |
 | `AI` (Workers AI) | ✅ | ✅ | ✅ |
 
@@ -151,49 +92,37 @@ npm run deploy:all
 
 ## 4. CI/CD — GitHub Actions
 
-### 4.1 Workflows (9 arquivos em `.github/workflows/`)
+### 4.1 Workflows operacionais principais
 
-| Workflow | Trigger | Ações |
-|---|---|---|
-| **ci.yml** | PR, push | Build + lint + LMS smoke test |
-| **deploy-airtrust.yml** | Manual | Test → build → deploy worker/pages → validate |
-| **apply-schema-change-v2.yml** | Manual | Valida contrato → aplica 1 arquivo SQL V2 → registra ledger V2 |
-| **deploy-pages.yml** | Push to branches | Build + deploy Pages |
-| **lint.yml** | PR, push | ESLint + Prettier check |
-| **demo-data-prevention.yml** | PR to main/master/prod | Demo data check + lint + build + PR comment |
-| **pr-check.yml** | PR | Install + lint + build |
-| **test.yml** | Push, PR | Tests + coverage (30% threshold) + Codecov |
-| **auto-fix.yml** | PR | ESLint fix + Prettier → commit via bot |
-| **validate-secrets.yml** | Manual | Validates CLOUDFLARE_API_TOKEN |
+O diretório `.github/workflows/` contém fluxos operacionais e de validação. O número
+exato de arquivos pode variar; a proteção da `main` depende dos **oito gates diretos**
+abaixo, e não de um agregador legado:
 
-### 4.2 Deploy pipeline (deploy.yml)
+`lint`, `build-content-gates`, `worker-typecheck`, `frontend-coverage`,
+`worker-tests-1`, `worker-tests-2`, `lms-smoke` e `public-e2e`.
 
-```yaml
-jobs:
-  test-and-build:
-    # npm ci (root + worker)
-    # setup local DB + worker
-    # LMS smoke tests
-    # lint (continue-on-error)
-    # tests (continue-on-error)
-    # build
-    # upload artifacts
+| Workflow | Uso atual |
+|---|---|
+| **ci.yml** | Gates rápidos: `lint`, `build-content-gates`, `worker-typecheck` |
+| **heavy-ci.yml** | Gates pesados: cobertura frontend, testes Worker, LMS smoke e public E2E |
+| **pr-check.yml** | Validação complementar de PR |
+| **deploy-staging.yml** | Deploy governado de staging e smoke autorizado |
+| **deploy-airtrust.yml** | Deploy governado de produção; não executa migrations legadas |
+| **apply-schema-change-v2.yml** | Única rota governada para mudança de schema de produção via Schema V2 |
 
-  deploy-worker:
-    needs: test-and-build
-    # wrangler d1 migrations apply (production)
-    # wrangler deploy (via cloudflare/wrangler-action@v3)
+O antigo `deploy-pages.yml` foi aposentado. Pages é publicado somente pelos workflows
+governados de staging/produção aplicáveis ao release.
 
-  deploy-pages:
-    needs: [test-and-build, deploy-worker]
-    # download artifacts
-    # wrangler pages deploy (branch=production)
+### 4.2 Pipeline oficial
 
-  validate:
-    needs: [deploy-worker, deploy-pages]
-    # curl api.airtrust.online/api/health
-    # curl main.airtrust.pages.dev
-```
+1. PR contra `main` executa os oito gates obrigatórios.
+2. O merge só ocorre com a proteção da branch satisfeita, sem bypass.
+3. Staging é publicado pelo `deploy-staging.yml` para o SHA autorizado e validado no ambiente real.
+4. Produção exige autorização explícita para o SHA/artefato/escopo e usa `deploy-airtrust.yml`.
+5. Mudanças de schema usam separadamente `apply-schema-change-v2.yml`, com contrato, hashes,
+   recovery point/backup quando aplicável, ledger e pós-validação.
+
+Merge e CI verde, isoladamente, **não** significam deploy.
 
 ---
 
@@ -221,24 +150,12 @@ jobs:
 > 3. registrar a aplicação em `airtrust_schema_baselines_v2` ou `airtrust_schema_changes_v2`;
 > 4. revalidar o contrato.
 
-### 5.3 Wrangler config temporário
+### 5.3 Entry points locais
 
-O script `deploy-worker-only.sh` gera um arquivo `.toml` temporário via Node.js:
-
-```javascript
-// Gera wrangler.deploy.production.toml com placeholders substituídos
-const config = readTemplate('wrangler.deploy.toml');
-config.vars.APP_VERSION = process.env.APP_VERSION;
-config.vars.APP_BUILD_TIME = process.env.APP_BUILD_TIME;
-writeTempConfig(config);
-```
-
-O arquivo temporário é removido via `trap EXIT`:
-
-```bash
-TMP_WRANGLER=$(mktemp /tmp/wrangler.deploy.XXXXXX.toml)
-trap "rm -f $TMP_WRANGLER" EXIT
-```
+`scripts/deploy-worker-only.sh` é um stub **fail-closed**: o deploy local de produção
+está desabilitado e o script encerra orientando para `.github/workflows/deploy-airtrust.yml`.
+Ele não aplica migrations D1. Entry points locais históricos não devem ser reativados para
+contornar os workflows oficiais.
 
 ---
 
@@ -456,7 +373,7 @@ compatibility_flags = ["nodejs_compat"]
 |---|---|
 | **Dev** | `dev`, `dev:safe`, `dev:worker`, `dev:worker:local`, `start` |
 | **Build** | `prebuild`, `build`, `build:clean`, `preview` |
-| **Deploy** | `deploy`, `deploy:pages`, `deploy:worker`, `deploy:worker:only`, `deploy:worker:safe`, `deploy:all` |
+| **Deploy** | aliases locais de produção são fail-closed; releases usam `deploy-staging.yml` / `deploy-airtrust.yml`; `release:worker:local-emergency` é exceção governada |
 | **Test** | `test`, `test:run`, `test:worker`, `test:all`, `test:coverage`, `test:e2e`, `test:e2e:ui`, `test:e2e:headed`, `test:guard:sw-cache` |
 | **Guard** | `ops:guard`, `guard:auth-boundaries`, `guard:tracked-secrets`, `guard:empresa-default1`, `check:demo-data`, `lint:api-base`, `lint`, `validate:data-quality-sql` |
 | **DB** | `db:init`, `db:status`, `setup:dev`, `setup:local`, `setup:local:reset`, `sync:prod:local:safe`, `sync:prod:dev:safe` |

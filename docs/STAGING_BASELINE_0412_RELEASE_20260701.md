@@ -170,11 +170,11 @@ Gate da Tarefa 7: **PASS**.
     um secret `CLOUDFLARE_PAGES_API_TOKEN` no GitHub Actions, mas ele só é consumido pelo job
     `deploy-pages` de `.github/workflows/deploy-airtrust.yml`, que é hardcoded para produção
     (`PAGES_PROJECT_NAME=airtrust`, `PAGES_BRANCH=production`) e protegido por confirmação manual
-    explícita (`confirm_production = AIRTRUST_PRODUCTION`). Não existe hoje nenhum workflow ou modo
-    de deploy de Pages para staging no repositório — `deploy-pages.yml` é apenas um guard que falha
-    de propósito e redireciona para o mesmo workflow de produção. Usar esse secret para deploy de
-    staging exigiria disparar o workflow de produção, o que violaria a regra absoluta desta
-    execução ("não fazer deploy em produção").
+    explícita (`confirm_production = AIRTRUST_PRODUCTION`). **Nota histórica:** na data desta
+    execução ainda não existia um caminho governado de Pages para staging. **Atualização 2026-10-01:**
+    o workflow atual `.github/workflows/deploy-staging.yml` já publica Pages na branch preview
+    `staging`; `deploy-pages.yml` foi aposentado. Esta atualização não altera o resultado histórico
+    desta execução de 2026-07-01.
   - Apresentadas 3 opções ao usuário (não fazer nada agora / criar path de staging no workflow em
     PR separado / rodar o workflow de produção mesmo assim). **Decisão do usuário: não fazer nada
     agora.** Frontend staging permanece como gap arquitetural documentado, não implementado nesta

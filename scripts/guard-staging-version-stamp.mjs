@@ -48,6 +48,22 @@ if (!legacy.includes('BLOCKED') || legacy.includes('npx wrangler deploy --env st
   fail('legacy deploy-staging.sh must remain blocked and must not call wrangler deploy');
 }
 
+const legacyFull = readFileSync(join(ROOT, 'scripts/deploy-all.sh'), 'utf8');
+if (!legacyFull.includes('LOCAL_STAGING_DEPLOY_DISABLED_USE_GITHUB_ACTIONS') || legacyFull.includes('wrangler deploy --env staging')) {
+  fail('legacy deploy-all.sh must remain blocked and must not call wrangler deploy');
+}
+
+for (const forceScriptName of ['scripts/force-cloudflare-deploy.sh', 'scripts/force-redeploy-pages.sh']) {
+  const forceScript = readFileSync(join(ROOT, forceScriptName), 'utf8');
+  const forbiddenTokens = ['git ' + 'add', 'git ' + 'commit', 'git ' + 'push'];
+  if (
+    !forceScript.includes('LOCAL_PAGES_FORCE_REDEPLOY_DISABLED_USE_GITHUB_ACTIONS') ||
+    forbiddenTokens.some((token) => forceScript.includes(token))
+  ) {
+    fail(`${forceScriptName} must remain fail-closed and must not mutate or push git state`);
+  }
+}
+
 const systemRoutes = readFileSync(join(ROOT, 'worker-airtrust/src/services/release-metadata.ts'), 'utf8');
 if (!systemRoutes.includes("version = 'unversioned-remote'") && !systemRoutes.includes('version = "unversioned-remote"')) {
   fail('getReleaseMetadata must return unversioned-remote for unstamped staging/production');

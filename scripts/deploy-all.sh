@@ -1,41 +1,8 @@
-#!/bin/bash
-# deploy-all.sh - Deploy completo do AirTrust (API + Frontend)
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
-
-echo "🚀 DEPLOY COMPLETO DO AIRTRUST"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-# 1. Build do React
-echo "📦 1/3 Building React app..."
-npm run build
-echo "✅ React build complete"
-echo ""
-
-# 2. Deploy API Backend
-echo "🔧 2/3 Deploying API Backend..."
-cd worker-airtrust
-npx wrangler deploy --env staging
-cd ..
-echo "✅ API deployed"
-echo ""
-
-# 3. Frontend oficial é Cloudflare Pages; não há mais deploy do worker-frontend no fluxo padrão
-echo "🌐 3/3 Frontend oficial: Cloudflare Pages"
-echo "ℹ️  O worker-frontend foi retirado do fluxo de deploy ativo"
-echo ""
-
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "✅ DEPLOY COMPLETO!"
-echo ""
-echo "🌐 URLs:"
-echo "   Frontend: https://main.airtrust.pages.dev"
-echo "   API: https://airtrust-api-staging.airtrust.workers.dev"
-echo ""
-echo "⚡ ZERO CACHE - Updates instantâneos!"
-echo ""
-echo "📝 Próximos passos:"
-echo "   1. Acesse: https://airtrust-frontend-staging.workers.dev"
-echo "   2. Teste o sistema"
-echo "   3. Se OK, faça deploy production: ./scripts/deploy-production-full.sh"
+echo "LOCAL_STAGING_DEPLOY_DISABLED_USE_GITHUB_ACTIONS" >&2
+echo "❌ Legacy local full staging deploy is disabled." >&2
+echo "   Use the governed GitHub Actions workflow: .github/workflows/deploy-staging.yml" >&2
+echo "   The reviewed staging-only emergency/diagnostic entrypoints remain separately gated." >&2
+exit 1

@@ -1,6 +1,6 @@
 # AirTrust — Visão Geral da Arquitetura
 
-> **Versão do documento:** 1.0 | **Data:** 2026-06-12 | **HEAD:** `5be104893`
+> **Versão do documento:** 1.1 | **Atualizado:** 2026-10-01
 > **Plataforma:** Cloudflare Workers + D1 + R2 + Pages + AI + Browser Rendering
 > **Runtime:** Node.js v26 | **Wrangler:** 4.75 | **TypeScript:** 5.8.3
 
@@ -240,7 +240,7 @@ sequenceDiagram
 | Ambiente | Worker Name | Domínio | D1 Database | R2 Bucket |
 |---|---|---|---|---|
 | **Produção** | `airtrust-api-production` | `api.airtrust.online` | `airtrust-db` (WEUR) | `airtrust-storage` |
-| **Staging** | `airtrust-api-staging` | `*.workers.dev` | `airtrust-db-staging` | `airtrust-storage-staging` |
+| **Staging** | `airtrust-api-staging` | `*.workers.dev` | `airtrust-db-staging-baseline-20260701` | `airtrust-storage-staging` |
 | **Development** | `airtrust-api-development` | `*.workers.dev` | `airtrust-db-dev` | `airtrust-storage-dev` |
 | **Local** | `airtrust-api` (wrangler dev) | `localhost:8787` | Local SQLite (Miniflare) | Local R2 (Miniflare) |
 
@@ -388,25 +388,16 @@ npm run build
 # └── manifest.json
 ```
 
-### Deploy do Frontend
+### Deploy governado
 
-```bash
-npm run deploy:pages
-# → preflight-clean-deploy.sh
-# → npm run build
-# → stamp-build-version.sh dist/client/index.html
-# → wrangler pages deploy dist/client --project-name=airtrust --branch=production
-```
+Deploy não é executado por comandos locais de produção. Os entrypoints locais permanecem
+fail-closed para impedir publicação acidental. O fluxo atual é:
 
-### Deploy do Worker
+- staging: `.github/workflows/deploy-staging.yml` (Worker/Pages conforme inputs autorizados);
+- produção: `.github/workflows/deploy-airtrust.yml`;
+- schema de produção: `.github/workflows/apply-schema-change-v2.yml`.
 
-```bash
-npm run deploy:worker:only
-# → deploy-worker-only.sh
-#   Gera wrangler.deploy.<env>.toml com APP_VERSION e APP_BUILD_TIME
-#   Gate de migrations (dupla confirmação)
-#   wrangler deploy --env production
-```
+A produção exige autorização explícita para o SHA/artefato/escopo exato.
 
 ### Manual chunks
 

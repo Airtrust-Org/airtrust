@@ -1,71 +1,24 @@
-# AIRTRUST v0.4 — Runbook Oficial de Deploy Seguro (sem migration)
+# AIRTRUST v0.4 — Runbook histórico de deploy
 
-Este documento define o fluxo operacional padrão de deploy para produção sem mudanças de schema.
+> **APOSENTADO em 2026-10-01. NÃO USAR PARA EXECUÇÃO.**
+> Este arquivo é mantido apenas como referência histórica do modelo anterior de deploy local.
 
-## 1. Deploy padrão sem migration
-### Frontend
-- `npm run deploy:pages`
+O contrato operacional vigente está em `DEPLOYMENT_AND_DEVOPS.md`, nas instruções canônicas do
+projeto e nos workflows atuais da `.github/workflows/`.
 
-### Worker (oficial)
-- `npm run deploy:worker:safe`
+## Fluxo vigente
 
-O comando `deploy:worker:safe` é o padrão para rotina normal porque:
-- não executa migration;
-- não executa seed/sync/deduplicate/importação;
-- injeta `APP_VERSION` e `APP_BUILD_TIME` reais;
-- executa apenas `wrangler deploy --env production --config <tmp>`.
+- CI oficial: oito gates GitHub Actions (`lint`, `build-content-gates`, `worker-typecheck`,
+  `frontend-coverage`, `worker-tests-1`, `worker-tests-2`, `lms-smoke`, `public-e2e`).
+- Staging: `.github/workflows/deploy-staging.yml`.
+- Produção: `.github/workflows/deploy-airtrust.yml`, com autorização explícita do SHA/artefato/escopo.
+- Schema de produção: `.github/workflows/apply-schema-change-v2.yml`.
+- Google Cloud Build: contingência, nunca bypass de gates.
 
-## 2. Checklist pré-deploy obrigatório
-Executar e validar sucesso em todos:
-- `git status --short --untracked-files=all`
-- `git rev-parse HEAD origin/main` (deve estar alinhado)
-- `npx tsc -p worker-airtrust/tsconfig.json --noEmit`
-- `npx tsc --noEmit`
-- `npm run build`
-- `npm run lint`
-- `npm run test:worker`
+## Entry points locais
 
-## 3. Comandos proibidos no deploy comum
-Não rodar em deploy rotineiro sem migration autorizada:
-- qualquer `wrangler d1 migrations apply`
-- `npm run deploy:worker`
-- `npm run deploy:worker:only`
+Os aliases locais de produção (`deploy`, `deploy:pages`, `deploy:worker`, `deploy:worker:only`,
+`deploy:all`) são fail-closed. O wrapper local de Worker existe apenas para emergência explicitamente
+autorizada e validada; não é a rota rotineira.
 
-Esses comandos só podem ser usados em fase explicitamente autorizada para migration.
-
-## 4. Quando usar comandos com migration
-Somente quando TODOS os itens abaixo existirem:
-- plano de migration documentado;
-- backup validado;
-- janela operacional aprovada;
-- autorização explícita;
-- smoke pós-deploy definido e executável.
-
-## 5. Smoke pós-deploy read-only
-Executar sempre após deploy:
-- `bash scripts/smoke-production-readonly.sh`
-- `BASE=https://api.airtrust.online bash scripts/smoke-test-core.sh`
-- `bash scripts/smoke-tests.sh https://api.airtrust.online`
-
-## 6. Verificações de saúde e versão
-Conferir:
-- `GET /api/health`
-- `GET /api/version`
-
-Critério:
-- `version` e `builtAt` devem refletir o deploy atual (`APP_VERSION` e `APP_BUILD_TIME`).
-
-## 7. Nunca executar em deploy comum
-- sync SIGVOOS
-- deduplicate apply
-- importações
-- seeds
-- migrations
-
-## 8. Guardrail read-only recomendado
-Use a auditoria de scripts antes de deploy:
-- `bash scripts/validation/audit-deploy-scripts.sh`
-
-Objetivo:
-- listar scripts que contêm `migrations apply`;
-- validar que `deploy-worker-safe.sh` não contém comandos proibidos.
+Consulte sempre a `main` atual antes de qualquer release. Merge ou CI verde não significam deploy.
