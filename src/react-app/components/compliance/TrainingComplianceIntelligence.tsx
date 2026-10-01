@@ -3,8 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Bell,
-  Download,
-  FileText,
   History,
   Mail,
   MessageCircle,
@@ -16,7 +14,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchWithAuth } from '@/react-app/config/api';
-import { useAuth } from '@/react-app/hooks/useAuth';
 import {
   nextComplianceTableSort,
   sortComplianceRows,
@@ -24,19 +21,23 @@ import {
   type TableSortState,
 } from '@/react-app/components/compliance/SortableComplianceTableHeader';
 import {
-  buildComplianceNarrative,
   complianceStatusLabel,
-  downloadTrainingCompliancePdf,
-  generateTrainingCompliancePdf,
   type TrainingCompliancePendingRow,
-  type TrainingComplianceReportSummary,
 } from '@/react-app/services/training-compliance-report';
+import { TrainingComplianceReportBuilder } from '@/react-app/components/compliance/TrainingComplianceReportBuilder';
 
 type Mode = 'pendencias' | 'relatorios' | 'comunicacoes';
 
 type Catalogs = {
   setores: Array<{ id: number; nome: string }>;
   funcoes: Array<{ id: number; nome: string }>;
+  funcionarios?: Array<{
+    id: number;
+    nome: string;
+    matricula?: string | null;
+    setor_id?: number | null;
+    funcao_id?: number | null;
+  }>;
   setor_funcoes: Array<{ setor_id: number; funcao_id: number }>;
 };
 
@@ -132,18 +133,17 @@ export function TrainingComplianceIntelligence({
   setorId,
   funcaoId,
   catalogs,
+  trainingTypes = [],
   search,
-  summary,
 }: {
   mode: Mode;
   setorId: number | null;
   funcaoId: number | null;
   catalogs: Catalogs | undefined;
+  trainingTypes?: Array<{ id: string | number; nome: string; codigo?: string | null }>;
   search: string;
-  summary: TrainingComplianceReportSummary;
 }) {
   const queryClient = useQueryClient();
-  const { user, empresas, empresaAtualId } = useAuth();
   const [status, setStatus] = useState<string>('TODAS');
   const [criticalOnly, setCriticalOnly] = useState(false);
   const [windowDays, setWindowDays] = useState<string>('');
@@ -182,7 +182,9 @@ export function TrainingComplianceIntelligence({
       const communicationParams = new URLSearchParams({ limit: '200' });
       if (search.trim()) communicationParams.set('funcionario_q', search.trim());
       return readJson<Communication[]>(
-        await fetchWithAuth(`/api/compliance-treinamentos/comunicacoes?${communicationParams.toString()}`),
+        await fetchWithAuth(
+          `/api/compliance-treinamentos/comunicacoes?${communicationParams.toString()}`,
+        ),
       );
     },
   });
@@ -291,56 +293,6 @@ export function TrainingComplianceIntelligence({
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : 'Falha ao enviar avisos'),
   });
-
-  const empresaNome = useMemo(() => {
-    const current = empresas.find((item) => Number(item.id) === Number(empresaAtualId));
-    return current?.nome || 'Empresa atual';
-  }, [empresaAtualId, empresas]);
-  const userName = user?.nome || user?.email || 'Usuário autenticado';
-  const setorNome = catalogs?.setores.find((item) => item.id === setorId)?.nome || null;
-  const funcaoNome = catalogs?.funcoes.find((item) => item.id === funcaoId)?.nome || null;
-  const reportContext = { empresaNome, usuarioNome: userName, setorNome, funcaoNome };
-
-  const exportPdf = async (download: boolean) => {
-    const report = await generateTrainingCompliancePdf(visibleRows, reportSummary, reportContext);
-    if (download) downloadTrainingCompliancePdf(report.blob, report.filename);
-    return report;
-  };
-
-  const sendManagerReport = useMutation({
-    mutationFn: async () => {
-      if (!setorId) throw new Error('Selecione um setor para enviar o relatório ao gestor.');
-      const report = await exportPdf(false);
-      return readJson<{ enviados: number; setor_nome: string }>(
-        await fetchWithAuth('/api/compliance-treinamentos/relatorios/enviar-gestor', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            setor_id: setorId,
-            pdf_base64: report.base64,
-            arquivo_nome: report.filename,
-          }),
-        }),
-      );
-    },
-    onSuccess: (result) =>
-      toast.success(
-        `Relatório enviado para ${result.enviados} gestor(es) de ${result.setor_nome}.`,
-      ),
-    onError: (error) =>
-      toast.error(error instanceof Error ? error.message : 'Falha ao enviar relatório'),
-  });
-
-  const reportSummary = useMemo<TrainingComplianceReportSummary>(
-    () => ({
-      ...summary,
-      vencidos: visibleRows.filter((row) => row.status_compliance === 'VENCIDO').length,
-      nao_realizados: visibleRows.filter((row) => row.status_compliance === 'NAO_REALIZADO').length,
-      vencendo: visibleRows.filter((row) => row.status_compliance === 'VENCENDO').length,
-      em_andamento: visibleRows.filter((row) => row.status_compliance === 'EM_ANDAMENTO').length,
-    }),
-    [summary, visibleRows],
-  );
 
   const aggregations = useMemo(() => {
     const byTraining = new Map<string, number>();
@@ -503,7 +455,12 @@ export function TrainingComplianceIntelligence({
           </button>
           <button
             type="button"
-            onClick={() => setReportDetail({ title: 'Pendências críticas', rows: visibleRows.filter((row) => row.critico_operacional) })}
+            onClick={() =>
+              setReportDetail({
+                title: 'Pendências críticas',
+                rows: visibleRows.filter((row) => row.critico_operacional),
+              })
+            }
             className="rounded-xl border border-red-200 bg-red-50/50 p-4 text-left transition hover:bg-red-50"
           >
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-red-700">
@@ -516,7 +473,12 @@ export function TrainingComplianceIntelligence({
           </button>
           <button
             type="button"
-            onClick={() => setReportDetail({ title: 'Pendências com avisos enviados', rows: visibleRows.filter((row) => row.avisos_enviados > 0) })}
+            onClick={() =>
+              setReportDetail({
+                title: 'Pendências com avisos enviados',
+                rows: visibleRows.filter((row) => row.avisos_enviados > 0),
+              })
+            }
             className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-left transition hover:bg-amber-50"
           >
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
@@ -525,7 +487,9 @@ export function TrainingComplianceIntelligence({
             <div className="mt-2 text-3xl font-bold text-amber-800">
               {visibleRows.reduce((sum, row) => sum + row.avisos_enviados, 0)}
             </div>
-            <div className="mt-1 text-xs text-amber-600">Clique para ver as pendências cobradas</div>
+            <div className="mt-1 text-xs text-amber-600">
+              Clique para ver as pendências cobradas
+            </div>
           </button>
         </div>
 
@@ -536,9 +500,14 @@ export function TrainingComplianceIntelligence({
                 <h2 className="font-semibold text-slate-900">{reportDetail.title}</h2>
                 <p className="mt-1 text-xs text-slate-500">
                   {new Set(reportDetail.rows.map((row) => row.funcionario_id)).size}{' '}
-                  {new Set(reportDetail.rows.map((row) => row.funcionario_id)).size === 1 ? 'pessoa' : 'pessoas'} ·{' '}
-                  {reportDetail.rows.length}{' '}
-                  {reportDetail.rows.length === 1 ? 'obrigação individual' : 'obrigações individuais'} neste recorte.
+                  {new Set(reportDetail.rows.map((row) => row.funcionario_id)).size === 1
+                    ? 'pessoa'
+                    : 'pessoas'}{' '}
+                  · {reportDetail.rows.length}{' '}
+                  {reportDetail.rows.length === 1
+                    ? 'obrigação individual'
+                    : 'obrigações individuais'}{' '}
+                  neste recorte.
                 </p>
               </div>
               <button
@@ -552,10 +521,15 @@ export function TrainingComplianceIntelligence({
             </div>
             <div className="mt-3 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white">
               {reportDetail.rows.map((row) => (
-                <div key={rowKey(row)} className="border-b border-slate-100 px-3 py-2 last:border-b-0">
+                <div
+                  key={rowKey(row)}
+                  className="border-b border-slate-100 px-3 py-2 last:border-b-0"
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-medium text-slate-900">{row.funcionario_nome}</span>
-                    <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${statusBadge(row.status_compliance)}`}>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-xs font-medium ${statusBadge(row.status_compliance)}`}
+                    >
                       {complianceStatusLabel(row)}
                     </span>
                   </div>
@@ -569,7 +543,9 @@ export function TrainingComplianceIntelligence({
                 </div>
               ))}
               {!reportDetail.rows.length ? (
-                <div className="px-3 py-6 text-center text-sm text-slate-500">Nenhum item neste recorte.</div>
+                <div className="px-3 py-6 text-center text-sm text-slate-500">
+                  Nenhum item neste recorte.
+                </div>
               ) : null}
             </div>
           </section>
@@ -618,34 +594,12 @@ export function TrainingComplianceIntelligence({
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="max-w-4xl">
-              <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-                <FileText className="h-4 w-4 text-primary" /> Relatório inteligente
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-700">
-                {buildComplianceNarrative(reportSummary, visibleRows, reportContext)}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void exportPdf(true)}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                <Download className="h-4 w-4" /> Exportar PDF
-              </button>
-              <button
-                type="button"
-                disabled={!setorId || sendManagerReport.isPending}
-                onClick={() => sendManagerReport.mutate()}
-                title={!setorId ? 'Selecione um setor para enviar ao gestor' : undefined}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Mail className="h-4 w-4" />{' '}
-                {sendManagerReport.isPending ? 'Enviando...' : 'Enviar ao gestor'}
-              </button>
-            </div>
+          <div>
+            <h2 className="font-semibold text-slate-900">Visão rápida das pendências</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Destaques do recorte atual da tela. Use o gerador abaixo para relatórios completos e
+              combinações específicas.
+            </p>
           </div>
           <div className="mt-5 grid gap-4 lg:grid-cols-3">
             <div>
@@ -662,7 +616,9 @@ export function TrainingComplianceIntelligence({
                         title: `Pendências · ${name}`,
                         rows: visibleRows.filter(
                           (row) =>
-                            (row.qualificacao_tipo_nome || row.qualificacao_tipo_codigo || 'Treinamento') === name,
+                            (row.qualificacao_tipo_nome ||
+                              row.qualificacao_tipo_codigo ||
+                              'Treinamento') === name,
                         ),
                       })
                     }
@@ -732,17 +688,30 @@ export function TrainingComplianceIntelligence({
           </div>
         </section>
 
-        <PendingFilters
-          status={status}
-          setStatus={setStatus}
-          criticalOnly={criticalOnly}
-          setCriticalOnly={setCriticalOnly}
-          windowDays={windowDays}
-          setWindowDays={setWindowDays}
+        <TrainingComplianceReportBuilder
+          catalogs={catalogs}
+          trainingTypes={trainingTypes}
+          initialSectorId={setorId}
+          initialFunctionId={funcaoId}
         />
-        <p className="text-xs text-slate-500">
-          O PDF e o envio ao gestor respeitam os filtros atualmente aplicados na tela.
-        </p>
+
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Filtros da visão rápida
+          </p>
+          <PendingFilters
+            status={status}
+            setStatus={setStatus}
+            criticalOnly={criticalOnly}
+            setCriticalOnly={setCriticalOnly}
+            windowDays={windowDays}
+            setWindowDays={setWindowDays}
+          />
+          <p className="mt-2 text-xs text-slate-500">
+            Estes filtros afetam os indicadores, rankings e recorrências acima. O gerador de
+            relatórios possui filtros próprios.
+          </p>
+        </div>
       </div>
     );
   }

@@ -23,6 +23,15 @@ import {
   type EmployeeSectorAccess,
 } from '../services/employee-sector-access';
 import type { TrainingComplianceSnapshot } from './compliance-treinamentos';
+import {
+  buildTrainingComplianceReportRows,
+  getComplianceReportAutomationPolicy,
+  normalizeComplianceReportAutomationPolicy,
+  saveComplianceReportAutomationPolicy,
+  sendTrainingComplianceReportToSectorManagers,
+  type TrainingComplianceReportFilters,
+  type TrainingComplianceStatus,
+} from '../services/training-compliance-reports';
 
 type IntelligenceDeps = {
   buildSnapshot: (
@@ -68,7 +77,9 @@ export function createTrainingComplianceIntelligenceRoutes({
       setor_nome: person.setor_nome,
       qualificacao_tipo_id: requirement.qualificacao_tipo_id,
       qualificacao_nome:
-        requirement.qualificacao_tipo_nome || requirement.qualificacao_tipo_codigo || 'Treinamento obrigatório',
+        requirement.qualificacao_tipo_nome ||
+        requirement.qualificacao_tipo_codigo ||
+        'Treinamento obrigatório',
       status_compliance: requirement.status_compliance,
       data_validade: requirement.data_validade,
       dias_para_vencer: requirement.dias_para_vencer,
@@ -83,7 +94,9 @@ export function createTrainingComplianceIntelligenceRoutes({
     requested: RequestedComplianceTarget[],
   ): ComplianceNotificationTarget[] {
     const requestedKeys = new Set(
-      requested.map((item) => `${Number(item.funcionario_id)}:${Number(item.qualificacao_tipo_id)}`),
+      requested.map(
+        (item) => `${Number(item.funcionario_id)}:${Number(item.qualificacao_tipo_id)}`,
+      ),
     );
     const targets: ComplianceNotificationTarget[] = [];
     for (const person of snapshot.people) {
@@ -100,7 +113,12 @@ export function createTrainingComplianceIntelligenceRoutes({
   async function loadComplianceNotificationStats(db: D1Database, empresaId: number) {
     const map = new Map<
       string,
-      { count: number; last_at: string | null; last_channel: string | null; last_status: string | null }
+      {
+        count: number;
+        last_at: string | null;
+        last_channel: string | null;
+        last_status: string | null;
+      }
     >();
     if (!(await tableExists(db, 'notificacoes_log'))) return map;
     try {
@@ -198,6 +216,7 @@ export function createTrainingComplianceIntelligenceRoutes({
     const access = await getEmployeeSectorAccess(c, empresaId);
     const setorId = asPositiveInt(c.req.query('setor_id'));
     const funcaoId = asPositiveInt(c.req.query('funcao_id'));
+    const funcionarioId = asPositiveInt(c.req.query('funcionario_id'));
     const qualificacaoTipoId = asPositiveInt(c.req.query('qualificacao_tipo_id'));
     const q = normalizeSearchText(c.req.query('q'));
     const funcionarioQ = normalizeSearchText(c.req.query('funcionario_q'));
@@ -228,17 +247,22 @@ export function createTrainingComplianceIntelligenceRoutes({
         (person) =>
           (!setorId || person.setor_id === setorId) &&
           (!funcaoId || person.funcao_id === funcaoId) &&
+          (!funcionarioId || person.id === funcionarioId) &&
           (!funcionarioQ || normalizeSearchText(person.nome).includes(funcionarioQ)),
       )
       .flatMap((person) =>
         person.requisitos
           .filter((requirement) => requirement.obrigatoriedade === 'OBRIGATORIA')
           .filter((requirement) => statuses.has(requirement.status_compliance))
-          .filter((requirement) => !qualificacaoTipoId || requirement.qualificacao_tipo_id === qualificacaoTipoId)
+          .filter(
+            (requirement) =>
+              !qualificacaoTipoId || requirement.qualificacao_tipo_id === qualificacaoTipoId,
+          )
           .filter((requirement) => !critico || requirement.critico_operacional)
           .filter((requirement) => {
             if (ateDias == null || !Number.isFinite(ateDias)) return true;
-            if (requirement.dias_para_vencer == null) return requirement.status_compliance === 'NAO_REALIZADO';
+            if (requirement.dias_para_vencer == null)
+              return requirement.status_compliance === 'NAO_REALIZADO';
             return requirement.dias_para_vencer <= ateDias;
           })
           .filter((requirement) => {
@@ -281,8 +305,10 @@ export function createTrainingComplianceIntelligenceRoutes({
           }),
       )
       .sort((a, b) => {
-        if (Boolean(a.critico_operacional) !== Boolean(b.critico_operacional)) return a.critico_operacional ? -1 : 1;
-        const statusDiff = (statusPriority[a.status_compliance] ?? 99) - (statusPriority[b.status_compliance] ?? 99);
+        if (Boolean(a.critico_operacional) !== Boolean(b.critico_operacional))
+          return a.critico_operacional ? -1 : 1;
+        const statusDiff =
+          (statusPriority[a.status_compliance] ?? 99) - (statusPriority[b.status_compliance] ?? 99);
         if (statusDiff !== 0) return statusDiff;
         const daysA = a.dias_para_vencer ?? -9999;
         const daysB = b.dias_para_vencer ?? -9999;
@@ -306,12 +332,15 @@ export function createTrainingComplianceIntelligenceRoutes({
   app.post('/avisos/preview', requireRole('admin', 'manager'), async (c) => {
     const empresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
-    const payload = (await c.req.json().catch(() => ({}))) as { targets?: RequestedComplianceTarget[] };
+    const payload = (await c.req.json().catch(() => ({}))) as {
+      targets?: RequestedComplianceTarget[];
+    };
     const requested = Array.isArray(payload.targets) ? payload.targets.slice(0, 200) : [];
     if (!requested.length) throw new ApiError('Selecione ao menos uma pendência', 400);
     const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
     const targets = selectedComplianceTargets(empresaId, snapshot, requested);
-    if (!targets.length) throw new ApiError('Nenhuma pendência válida encontrada no seu escopo', 404);
+    if (!targets.length)
+      throw new ApiError('Nenhuma pendência válida encontrada no seu escopo', 404);
     return c.json({
       success: true,
       data: {
@@ -321,7 +350,8 @@ export function createTrainingComplianceIntelligenceRoutes({
         com_whatsapp: targets.filter((item) => Boolean(item.telefone)).length,
         sem_whatsapp: targets.filter((item) => !item.telefone).length,
         vencidos: targets.filter((item) => item.status_compliance === 'VENCIDO').length,
-        nunca_realizados: targets.filter((item) => item.status_compliance === 'NAO_REALIZADO').length,
+        nunca_realizados: targets.filter((item) => item.status_compliance === 'NAO_REALIZADO')
+          .length,
       },
     });
   });
@@ -339,17 +369,21 @@ export function createTrainingComplianceIntelligenceRoutes({
       email: payload.canais?.email === true,
       whatsapp: payload.canais?.whatsapp === true,
     };
-    if (!channels.email && !channels.whatsapp) throw new ApiError('Selecione e-mail e/ou WhatsApp', 400);
+    if (!channels.email && !channels.whatsapp)
+      throw new ApiError('Selecione e-mail e/ou WhatsApp', 400);
     const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
     const targets = selectedComplianceTargets(empresaId, snapshot, requested);
-    if (!targets.length) throw new ApiError('Nenhuma pendência válida encontrada no seu escopo', 404);
+    if (!targets.length)
+      throw new ApiError('Nenhuma pendência válida encontrada no seu escopo', 404);
     const triggerKey = `MANUAL_${new Date().toISOString().replace(/[:.]/g, '-')}`;
     const results: Awaited<ReturnType<typeof sendComplianceNotification>>[] = [];
     for (let index = 0; index < targets.length; index += 5) {
       const chunk = targets.slice(index, index + 5);
       results.push(
         ...(await Promise.all(
-          chunk.map((target) => sendComplianceNotification(c.env, c.env.DB, target, channels, triggerKey)),
+          chunk.map((target) =>
+            sendComplianceNotification(c.env, c.env.DB, target, channels, triggerKey),
+          ),
         )),
       );
     }
@@ -451,17 +485,17 @@ export function createTrainingComplianceIntelligenceRoutes({
     const q = normalizeSearchText(c.req.query('q'));
     const funcionarioQ = normalizeSearchText(c.req.query('funcionario_q'));
     const limit = Math.min(300, Math.max(1, Number(c.req.query('limit') || 100)));
-    if (!(await tableExists(c.env.DB, 'notificacoes_log'))) return c.json({ success: true, data: [] });
-    const rows = await c.env.DB
-      .prepare(
-        `SELECT id, tipo, destinatario, assunto, corpo, status, erro_mensagem,
+    if (!(await tableExists(c.env.DB, 'notificacoes_log')))
+      return c.json({ success: true, data: [] });
+    const rows = await c.env.DB.prepare(
+      `SELECT id, tipo, destinatario, assunto, corpo, status, erro_mensagem,
                 COALESCE(enviado_em, created_at) AS event_at
            FROM notificacoes_log
           WHERE empresa_id = ?
             AND (assunto LIKE '[COMPLIANCE_TREINAMENTO:%' OR assunto LIKE '[COMPLIANCE_GESTOR:%')
           ORDER BY COALESCE(enviado_em, created_at) DESC
           LIMIT ?`,
-      )
+    )
       .bind(empresaId, limit * 4)
       .all<{
         id: number;
@@ -517,6 +551,162 @@ export function createTrainingComplianceIntelligenceRoutes({
     return c.json({ success: true, data });
   });
 
+  app.get('/relatorios/automacao', requireRole('admin', 'manager'), async (c) => {
+    const empresaId = getEmpresaId(c);
+    const data = await getComplianceReportAutomationPolicy(c.env.DB, empresaId);
+    return c.json({ success: true, data });
+  });
+
+  app.put('/relatorios/automacao', requireRole('admin'), async (c) => {
+    const empresaId = getEmpresaId(c);
+    const payload = await c.req.json().catch(() => ({}));
+    const previous = await getComplianceReportAutomationPolicy(c.env.DB, empresaId);
+    const normalized = normalizeComplianceReportAutomationPolicy(payload);
+    if (normalized.enabled && !normalized.sector_ids.length) {
+      throw new ApiError('Selecione ao menos um setor antes de ativar o envio', 400);
+    }
+    if (normalized.sector_ids.length) {
+      const placeholders = normalized.sector_ids.map(() => '?').join(',');
+      const rows = await c.env.DB.prepare(
+        `SELECT id FROM setores
+            WHERE empresa_id = ? AND id IN (${placeholders})
+              AND deleted_at IS NULL AND COALESCE(ativo,1)=1`,
+      )
+        .bind(empresaId, ...normalized.sector_ids)
+        .all<{ id: number }>();
+      if ((rows.results || []).length !== normalized.sector_ids.length) {
+        throw new ApiError('Um ou mais setores da automacao sao invalidos', 400);
+      }
+    }
+    const data = await saveComplianceReportAutomationPolicy(c.env.DB, empresaId, normalized);
+    await registrarAuditoria({
+      db: c.env.DB,
+      tabela: 'compliance_relatorios_config',
+      acao: 'UPDATE',
+      registro_id: empresaId,
+      dados_anteriores: previous,
+      dados_novos: data,
+      ...extrairUsuarioAuditoria(c),
+    });
+    return c.json({ success: true, data });
+  });
+
+  app.post('/relatorios/enviar-gestores', requireRole('admin', 'manager'), async (c) => {
+    const empresaId = getEmpresaId(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const payload = (await c.req.json().catch(() => ({}))) as {
+      setor_ids?: unknown[];
+      filters?: Record<string, unknown>;
+    };
+    const setorIds = [
+      ...new Set(
+        (Array.isArray(payload.setor_ids) ? payload.setor_ids : [])
+          .map(asPositiveInt)
+          .filter((id): id is number => id !== null),
+      ),
+    ].slice(0, 50);
+    if (!setorIds.length) throw new ApiError('Selecione ao menos um setor', 400);
+    const allowed = filterRequestedSetorIdsByAccess(setorIds, access);
+    if (allowed.length !== setorIds.length)
+      throw new ApiError('Setor fora do escopo do gestor', 403);
+    const rawFilters = payload.filters || {};
+    const allowedStatuses = new Set<TrainingComplianceStatus>([
+      'CONFORME',
+      'VENCENDO',
+      'VENCIDO',
+      'NAO_REALIZADO',
+      'EM_ANDAMENTO',
+    ]);
+    const statuses = Array.isArray(rawFilters.statuses)
+      ? rawFilters.statuses
+          .map((item) => String(item).toUpperCase())
+          .filter((item): item is TrainingComplianceStatus =>
+            allowedStatuses.has(item as TrainingComplianceStatus),
+          )
+      : undefined;
+    const dueRaw = rawFilters.ate_dias;
+    const due = dueRaw === null || dueRaw === undefined || dueRaw === '' ? null : Number(dueRaw);
+    const filters: TrainingComplianceReportFilters = {
+      funcao_id: asPositiveInt(rawFilters.funcao_id),
+      funcionario_id: asPositiveInt(rawFilters.funcionario_id),
+      qualificacao_tipo_id: asPositiveInt(rawFilters.qualificacao_tipo_id),
+      statuses,
+      critico: rawFilters.critico === true,
+      ate_dias: Number.isFinite(due) ? Number(due) : null,
+    };
+    const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
+    const company = await c.env.DB.prepare(
+      'SELECT nome FROM empresas WHERE id = ? AND deleted_at IS NULL',
+    )
+      .bind(empresaId)
+      .first<{ nome: string }>();
+    const placeholders = setorIds.map(() => '?').join(',');
+    const sectors = await c.env.DB.prepare(
+      `SELECT id, nome FROM setores
+          WHERE empresa_id = ? AND id IN (${placeholders})
+            AND deleted_at IS NULL AND COALESCE(ativo,1)=1
+          ORDER BY nome`,
+    )
+      .bind(empresaId, ...setorIds)
+      .all<{ id: number; nome: string }>();
+    if ((sectors.results || []).length !== setorIds.length) {
+      throw new ApiError('Um ou mais setores nao foram encontrados', 404);
+    }
+    const details = [] as Array<{
+      setor_id: number;
+      setor_nome: string;
+      enviados: number;
+      erro: string | null;
+    }>;
+    for (const sector of sectors.results || []) {
+      const rows = buildTrainingComplianceReportRows(snapshot, {
+        ...filters,
+        setor_id: Number(sector.id),
+      });
+      const result = await sendTrainingComplianceReportToSectorManagers({
+        env: c.env,
+        db: c.env.DB,
+        empresaId,
+        empresaNome: company?.nome || 'Empresa',
+        setorId: Number(sector.id),
+        setorNome: sector.nome,
+        rows,
+      });
+      details.push({
+        setor_id: Number(sector.id),
+        setor_nome: sector.nome,
+        enviados: result.sent ? result.recipients : 0,
+        erro: result.error,
+      });
+    }
+    const sentSectors = details.filter((item) => !item.erro).length;
+    await registrarAuditoria({
+      db: c.env.DB,
+      tabela: 'compliance_relatorios',
+      acao: 'CONVOCACAO_EMAIL',
+      registro_id: `multi:${Date.now()}`,
+      dados_novos: {
+        empresa_id: empresaId,
+        setor_ids: setorIds,
+        filtros: filters,
+        setores_enviados: sentSectors,
+        setores_falha: details.length - sentSectors,
+      },
+      ...extrairUsuarioAuditoria(c),
+    });
+    if (!sentSectors)
+      throw new ApiError('Nao foi possivel enviar o relatorio a nenhum gestor', 502);
+    return c.json({
+      success: true,
+      data: {
+        setores: details.length,
+        setores_enviados: sentSectors,
+        destinatarios: details.reduce((sum, item) => sum + item.enviados, 0),
+        detalhes: details,
+      },
+    });
+  });
+
   app.post('/relatorios/enviar-gestor', requireRole('admin', 'manager'), async (c) => {
     const empresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
@@ -531,13 +721,15 @@ export function createTrainingComplianceIntelligenceRoutes({
       const allowed = filterRequestedSetorIdsByAccess([setorId], access);
       if (allowed.length !== 1) throw new ApiError('Setor fora do escopo do gestor', 403);
     }
-    const setor = await c.env.DB
-      .prepare('SELECT nome FROM setores WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL')
+    const setor = await c.env.DB.prepare(
+      'SELECT nome FROM setores WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+    )
       .bind(setorId, empresaId)
       .first<{ nome: string }>();
     if (!setor) throw new ApiError('Setor não encontrado', 404);
     const pdf = String(payload.pdf_base64 || '').replace(/^data:application\/pdf;base64,/, '');
-    if (!pdf || pdf.length > 9_500_000) throw new ApiError('PDF ausente ou acima do limite permitido', 400);
+    if (!pdf || pdf.length > 9_500_000)
+      throw new ApiError('PDF ausente ou acima do limite permitido', 400);
     try {
       const header = atob(pdf.slice(0, 16));
       if (!header.startsWith('%PDF')) throw new Error('invalid');
@@ -545,12 +737,18 @@ export function createTrainingComplianceIntelligenceRoutes({
       throw new ApiError('Arquivo PDF inválido', 400);
     }
     const managers = await getSetorGestoresBySetor(c.env.DB, empresaId, setorId, true);
-    const recipients = [...new Map(
-      managers
-        .filter((item) => String(item.gestor_email || '').includes('@'))
-        .map((item) => [String(item.gestor_email).trim().toLowerCase(), { email: String(item.gestor_email).trim(), name: item.gestor_nome }]),
-    ).values()];
-    if (!recipients.length) throw new ApiError('Nenhum gestor com e-mail válido está vinculado ao setor', 409);
+    const recipients = [
+      ...new Map(
+        managers
+          .filter((item) => String(item.gestor_email || '').includes('@'))
+          .map((item) => [
+            String(item.gestor_email).trim().toLowerCase(),
+            { email: String(item.gestor_email).trim(), name: item.gestor_nome },
+          ]),
+      ).values(),
+    ];
+    if (!recipients.length)
+      throw new ApiError('Nenhum gestor com e-mail válido está vinculado ao setor', 409);
     const fileName = String(payload.arquivo_nome || `compliance-${setor.nome}.pdf`)
       .replace(/[^a-zA-Z0-9._-]+/g, '-')
       .slice(0, 120);

@@ -39,6 +39,7 @@ describe('resilient scheduled router', () => {
     expect(tenMinute).toEqual({
       useResilientJobs: true,
       runDailyAlerts: false,
+      runComplianceReports: true,
       runEadRenewal: true,
       runDailyFrms: false,
       runSigvoosFrms: true,
@@ -49,6 +50,7 @@ describe('resilient scheduled router', () => {
 
     const daily = getResilientCronPlan('0 8 * * *', atEightUtc);
     expect(daily.runDailyAlerts).toBe(true);
+    expect(daily.runComplianceReports).toBe(true);
     expect(daily.runDailyFrms).toBe(true);
     expect(daily.runSigvoosFrms).toBe(false);
     expect(daily.runDomainEvents).toBe(false);
@@ -105,6 +107,7 @@ describe('resilient scheduled router', () => {
     expect(router).toContain('logCronHealthSnapshot(env.DB, logger, now)');
     expect(router).toContain('runDomainEventDispatchJob(env.DB, logger)');
     expect(router).toContain("await runStep('training-compliance-snapshots'");
+    expect(router).toContain("await runStep('training-compliance-reports'");
     expect(router).toContain("await runStep('training-alerts'");
     expect(router).not.toContain("await runStep('lms-reminders'");
     expect(router).toContain("await runStep('sigvoos-frms'");

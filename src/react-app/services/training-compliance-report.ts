@@ -40,17 +40,22 @@ export type TrainingComplianceReportContext = {
   usuarioNome: string;
   setorNome?: string | null;
   funcaoNome?: string | null;
+  funcionarioNome?: string | null;
+  treinamentoNome?: string | null;
+  statusScope?: string | null;
   generatedAt?: Date;
 };
 
 function safeFilePart(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase()
-    .slice(0, 70) || 'relatorio';
+  return (
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase()
+      .slice(0, 70) || 'relatorio'
+  );
 }
 
 function dateBr(value: string | null): string {
@@ -77,18 +82,32 @@ export function buildComplianceNarrative(
   rows: TrainingCompliancePendingRow[],
   context: TrainingComplianceReportContext,
 ): string {
-  const peopleWithPending = new Set(rows.map((row) => row.funcionario_id)).size;
-  const scope = context.setorNome ? `O setor ${context.setorNome}` : 'A organização';
+  const pendingRows = rows.filter((row) => row.status_compliance !== 'CONFORME');
+  const peopleWithPending = new Set(pendingRows.map((row) => row.funcionario_id)).size;
+  const scope = context.funcionarioNome
+    ? `O funcionário ${context.funcionarioNome}`
+    : context.setorNome
+      ? `O setor ${context.setorNome}`
+      : context.treinamentoNome
+        ? `O recorte do treinamento ${context.treinamentoNome}`
+        : 'A organização';
   if (rows.length === 0) {
-    return `${scope} não apresenta pendências de treinamento obrigatório nos filtros atuais.`;
+    return `${scope} não possui requisitos de treinamento obrigatório nos filtros atuais.`;
   }
-  const critical = rows.filter((row) => row.critico_operacional).length;
+  if (pendingRows.length === 0) {
+    return `${scope} não apresenta pendências de treinamento obrigatório nos filtros atuais. ${rows.length} requisito(s) realizado(s) constam no recorte.`;
+  }
+  const critical = pendingRows.filter((row) => row.critico_operacional).length;
   const parts = [
-    `${scope} possui ${peopleWithPending} colaborador(es) com ao menos uma pendência obrigatória.`,
+    `${scope} possui ${peopleWithPending} funcionário(s) com ao menos uma pendência obrigatória.`,
     `${summary.vencidos} requisito(s) estão vencidos e ${summary.nao_realizados} ainda não foram realizados.`,
   ];
-  if (summary.vencendo > 0) parts.push(`${summary.vencendo} requisito(s) estão próximos do vencimento.`);
-  if (critical > 0) parts.push(`${critical} pendência(s) estão marcadas como críticas para a operação.`);
+  if (summary.vencendo > 0)
+    parts.push(`${summary.vencendo} requisito(s) estão próximos do vencimento.`);
+  if (summary.em_andamento > 0)
+    parts.push(`${summary.em_andamento} requisito(s) estão em andamento.`);
+  if (critical > 0)
+    parts.push(`${critical} pendência(s) estão marcadas como críticas para a operação.`);
   return parts.join(' ');
 }
 
@@ -104,12 +123,25 @@ export async function generateTrainingCompliancePdf(
   const height = doc.internal.pageSize.getHeight();
   const margin = 10;
   const columns = [36, 30, 28, 49, 31, 24, 22, 30];
-  const headers = ['Funcionário', 'Setor', 'Função', 'Treinamento', 'Situação', 'Vencimento', 'Avisos', 'Último aviso'];
+  const headers = [
+    'Funcionário',
+    'Setor',
+    'Função',
+    'Treinamento',
+    'Situação',
+    'Vencimento',
+    'Avisos',
+    'Último aviso',
+  ];
   const tableWidth = columns.reduce((sum, current) => sum + current, 0);
 
-  const title = context.setorNome
-    ? `Compliance de Treinamentos — ${context.setorNome}`
-    : 'Compliance de Treinamentos — Relatório Executivo';
+  const title = context.funcionarioNome
+    ? `Compliance de Treinamentos — ${context.funcionarioNome}`
+    : context.setorNome
+      ? `Compliance de Treinamentos — ${context.setorNome}`
+      : context.treinamentoNome
+        ? `Compliance de Treinamentos — ${context.treinamentoNome}`
+        : 'Compliance de Treinamentos — Relatório Executivo';
 
   const drawHeader = () => {
     doc.setFont('helvetica', 'bold');
@@ -120,7 +152,13 @@ export async function generateTrainingCompliancePdf(
     doc.text(`Empresa: ${context.empresaNome}`, margin, 19);
     doc.text(`Emitido por: ${context.usuarioNome}`, margin, 24);
     doc.text(`Emissão: ${generatedAt.toLocaleString('pt-BR')}`, margin, 29);
-    const filters = [context.setorNome ? `Setor: ${context.setorNome}` : null, context.funcaoNome ? `Função: ${context.funcaoNome}` : null]
+    const filters = [
+      context.setorNome ? `Setor: ${context.setorNome}` : null,
+      context.funcaoNome ? `Função: ${context.funcaoNome}` : null,
+      context.funcionarioNome ? `Funcionário: ${context.funcionarioNome}` : null,
+      context.treinamentoNome ? `Treinamento: ${context.treinamentoNome}` : null,
+      context.statusScope ? `Situações: ${context.statusScope}` : null,
+    ]
       .filter(Boolean)
       .join(' | ');
     doc.text(filters || 'Escopo: organização', margin, 34);
@@ -134,7 +172,10 @@ export async function generateTrainingCompliancePdf(
     );
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.2);
-    const narrative = doc.splitTextToSize(buildComplianceNarrative(summary, rows, context), width - margin * 2);
+    const narrative = doc.splitTextToSize(
+      buildComplianceNarrative(summary, rows, context),
+      width - margin * 2,
+    );
     doc.text(narrative, margin, 46);
     return 48 + Math.max(1, narrative.length) * 4;
   };
@@ -167,7 +208,9 @@ export async function generateTrainingCompliancePdf(
       String(row.avisos_enviados || 0),
       row.ultimo_aviso_em ? new Date(row.ultimo_aviso_em).toLocaleString('pt-BR') : 'Nunca',
     ];
-    const wrapped = cells.map((cell, index) => doc.splitTextToSize(String(cell), columns[index] - 2.5));
+    const wrapped = cells.map((cell, index) =>
+      doc.splitTextToSize(String(cell), columns[index] - 2.5),
+    );
     const lines = Math.max(...wrapped.map((value) => value.length), 1);
     const rowHeight = Math.max(6, lines * 3.2 + 2);
     if (y + rowHeight > height - 14) {
@@ -188,7 +231,11 @@ export async function generateTrainingCompliancePdf(
 
   if (!rows.length) {
     doc.setFontSize(9);
-    doc.text('Nenhuma pendência de treinamento obrigatório encontrada para o filtro selecionado.', margin, y + 8);
+    doc.text(
+      'Nenhum requisito de treinamento obrigatório encontrado para o filtro selecionado.',
+      margin,
+      y + 8,
+    );
   }
 
   const pages = doc.getNumberOfPages();

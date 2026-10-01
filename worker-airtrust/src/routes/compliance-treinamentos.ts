@@ -1143,7 +1143,13 @@ app.get('/catalogos', requireRole('admin', 'manager'), async (c) => {
     data: {
       setores: sectors.results || [],
       funcoes: functionRows,
-      funcionarios: employees.map((employee) => ({ id: employee.id, nome: employee.nome })),
+      funcionarios: employees.map((employee) => ({
+        id: employee.id,
+        nome: employee.nome,
+        matricula: employee.matricula,
+        setor_id: employee.setor_id,
+        funcao_id: employee.funcao_id,
+      })),
       setor_funcoes: setorFuncoes,
       aeronaves_modelos: aircraftModels,
       access_mode: access.mode,

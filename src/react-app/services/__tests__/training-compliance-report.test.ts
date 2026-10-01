@@ -54,7 +54,7 @@ describe('training compliance intelligent report', () => {
       { empresaNome: 'Costa do Sol', usuarioNome: 'Administrador', setorNome: 'Operações' },
     );
 
-    expect(narrative).toContain('O setor Operações possui 2 colaborador(es)');
+    expect(narrative).toContain('O setor Operações possui 2 funcionário(s)');
     expect(narrative).toContain('5 requisito(s) estão vencidos');
     expect(narrative).toContain('2 ainda não foram realizados');
     expect(narrative).toContain('2 pendência(s) estão marcadas como críticas');

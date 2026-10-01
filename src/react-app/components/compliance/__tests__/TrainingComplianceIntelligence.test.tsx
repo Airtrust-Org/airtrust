@@ -9,7 +9,9 @@ const { fetchWithAuthMock, toastMock } = vi.hoisted(() => ({
   toastMock: { success: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock('@/react-app/config/api', () => ({ fetchWithAuth: (...args: unknown[]) => fetchWithAuthMock(...args) }));
+vi.mock('@/react-app/config/api', () => ({
+  fetchWithAuth: (...args: unknown[]) => fetchWithAuthMock(...args),
+}));
 vi.mock('@/react-app/hooks/useAuth', () => ({
   useAuth: () => ({
     user: { nome: 'Admin', role: 'admin' },
@@ -24,7 +26,9 @@ function ok(data: unknown) {
 }
 
 function renderWithClient(node: ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
   return render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
 }
 
@@ -61,18 +65,12 @@ const props = {
   catalogs: {
     setores: [{ id: 1, nome: 'Operações' }],
     funcoes: [{ id: 2, nome: 'Piloto' }],
+    funcionarios: [
+      { id: 10, nome: 'Pessoa Pendente', matricula: '0010', setor_id: 1, funcao_id: 2 },
+    ],
     setor_funcoes: [{ setor_id: 1, funcao_id: 2 }],
   },
-  summary: {
-    pessoas: 20,
-    requisitos_obrigatorios: 40,
-    conformes: 32,
-    vencendo: 2,
-    vencidos: 3,
-    nao_realizados: 3,
-    em_andamento: 0,
-    compliance_pct: 80,
-  },
+  trainingTypes: [{ id: 100, nome: 'CRM', codigo: 'CRM' }],
 };
 
 describe('TrainingComplianceIntelligence', () => {
@@ -81,7 +79,16 @@ describe('TrainingComplianceIntelligence', () => {
   it('shows actionable never-done pending items and previews resend channels', async () => {
     fetchWithAuthMock.mockImplementation(async (url: string) => {
       if (url.includes('/pendencias')) return ok([pending]);
-      if (url.includes('/avisos/preview')) return ok({ selecionados: 1, com_email: 1, sem_email: 0, com_whatsapp: 1, sem_whatsapp: 0, vencidos: 0, nunca_realizados: 1 });
+      if (url.includes('/avisos/preview'))
+        return ok({
+          selecionados: 1,
+          com_email: 1,
+          sem_email: 0,
+          com_whatsapp: 1,
+          sem_whatsapp: 0,
+          vencidos: 0,
+          nunca_realizados: 1,
+        });
       throw new Error(`unexpected ${url}`);
     });
 
@@ -92,7 +99,12 @@ describe('TrainingComplianceIntelligence', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Reenviar aviso' }));
     await screen.findByText('Enviar cobrança de treinamento');
-    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledWith('/api/compliance-treinamentos/avisos/preview', expect.anything()));
+    await waitFor(() =>
+      expect(fetchWithAuthMock).toHaveBeenCalledWith(
+        '/api/compliance-treinamentos/avisos/preview',
+        expect.anything(),
+      ),
+    );
     expect(screen.getByText('WhatsApp')).toBeInTheDocument();
     expect(screen.getByText('E-mail')).toBeInTheDocument();
   });
@@ -100,10 +112,50 @@ describe('TrainingComplianceIntelligence', () => {
   it('shows deterministic report trend and recurrent pending items', async () => {
     fetchWithAuthMock.mockImplementation(async (url: string) => {
       if (url.includes('/pendencias')) return ok([pending]);
-      if (url.includes('/tendencias')) return ok([
-        { snapshot_date: '2026-09-20', setor_id: 1, funcao_id: 0, pessoas: 20, pessoas_com_pendencia: 5, requisitos_obrigatorios: 40, conformes: 30, vencendo: 2, vencidos: 4, nao_realizados: 4, em_andamento: 0, compliance_pct: 75 },
-        { snapshot_date: '2026-09-21', setor_id: 1, funcao_id: 0, pessoas: 20, pessoas_com_pendencia: 4, requisitos_obrigatorios: 40, conformes: 32, vencendo: 2, vencidos: 3, nao_realizados: 3, em_andamento: 0, compliance_pct: 80 },
-      ]);
+      if (url.includes('/relatorios/automacao'))
+        return ok({
+          enabled: false,
+          frequency: 'WEEKLY',
+          weekday: 1,
+          day_of_month: 1,
+          time: '08:00',
+          timezone: 'America/Sao_Paulo',
+          sector_ids: [],
+          statuses: ['VENCIDO', 'NAO_REALIZADO', 'VENCENDO', 'EM_ANDAMENTO'],
+          critical_only: false,
+          due_within_days: null,
+        });
+      if (url.includes('/tendencias'))
+        return ok([
+          {
+            snapshot_date: '2026-09-20',
+            setor_id: 1,
+            funcao_id: 0,
+            pessoas: 20,
+            pessoas_com_pendencia: 5,
+            requisitos_obrigatorios: 40,
+            conformes: 30,
+            vencendo: 2,
+            vencidos: 4,
+            nao_realizados: 4,
+            em_andamento: 0,
+            compliance_pct: 75,
+          },
+          {
+            snapshot_date: '2026-09-21',
+            setor_id: 1,
+            funcao_id: 0,
+            pessoas: 20,
+            pessoas_com_pendencia: 4,
+            requisitos_obrigatorios: 40,
+            conformes: 32,
+            vencendo: 2,
+            vencidos: 3,
+            nao_realizados: 3,
+            em_andamento: 0,
+            compliance_pct: 80,
+          },
+        ]);
       throw new Error(`unexpected ${url}`);
     });
 
@@ -112,7 +164,8 @@ describe('TrainingComplianceIntelligence', () => {
     expect((await screen.findAllByText('Pessoa Pendente')).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/Atual: 80% · \+5 p\.p\./)).toBeInTheDocument();
     expect(screen.getByText('Pendências recorrentes')).toBeInTheDocument();
-    expect(screen.getByText(/O setor Operações possui 1 colaborador/)).toBeInTheDocument();
+    expect(screen.getByText(/O setor Operações possui 1 funcionário/)).toBeInTheDocument();
+    expect(screen.getByText('Gerador de relatórios')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Pessoas com pendência/i }));
     expect(screen.getByText(/1 pessoa · 1 obrigação individual/)).toBeInTheDocument();
