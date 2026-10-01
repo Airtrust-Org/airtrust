@@ -483,17 +483,9 @@ app.get('/admin/verificar-cf', auth(), requireRole('admin'), async (c) => {
     cloudflare: {
       CF_ACCOUNT_ID: {
         configurado: !!c.env.CF_ACCOUNT_ID,
-        tipo: typeof c.env.CF_ACCOUNT_ID,
-        comprimento: c.env.CF_ACCOUNT_ID?.length || 0,
-        valor_primeiros_10: c.env.CF_ACCOUNT_ID ? c.env.CF_ACCOUNT_ID.substring(0, 10) : 'null',
       },
       CF_BROWSER_API_TOKEN: {
         configurado: !!c.env.CF_BROWSER_API_TOKEN,
-        tipo: typeof c.env.CF_BROWSER_API_TOKEN,
-        comprimento: c.env.CF_BROWSER_API_TOKEN?.length || 0,
-        valor_primeiros_10: c.env.CF_BROWSER_API_TOKEN
-          ? c.env.CF_BROWSER_API_TOKEN.substring(0, 10)
-          : 'null',
       },
       browser_rendering_disponivel: !!(c.env.CF_ACCOUNT_ID && c.env.CF_BROWSER_API_TOKEN),
     },
