@@ -58,6 +58,15 @@ describe('Pasta Virtual backend taxonomy', () => {
         'funcionarios/10/certificados-upload/profissional/uuid.pdf',
       ),
     ).toBe('Treinamentos e Qualificações');
+    expect(
+      inferirCategoriaDocumento(
+        'FAP14 original.pdf',
+        'Certificados de Qualificação',
+        'CERTIFICADO',
+        'certificados/empresa-6/funcionario-10/historico-99/uuid.pdf',
+        1,
+      ),
+    ).toBe('FAPs e Checks');
   });
 
   it('normalizes UI aliases and generates category-specific filenames', () => {
