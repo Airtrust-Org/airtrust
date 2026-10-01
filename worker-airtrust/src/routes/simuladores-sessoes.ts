@@ -37,11 +37,13 @@ import {
   getFuncId,
   criarQualificacoesPlanejadas,
   instrutorEstaEntreParticipantes,
+  simuladoresHasEmpresaId,
 } from './simuladores-shared';
 import participantesRoutes from './simuladores-sessoes-participantes';
 import sessoesUpdateRoutes from './simuladores-sessoes-update';
 import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import { normalizeWhatsAppPhone } from '../utils/whatsapp';
+import { getSchemaColumns } from '../utils/db-schema';
 import { sendSimulatorSessionEmailNotifications } from '../services/simuladores-session-notifications';
 import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
 import {
@@ -203,8 +205,7 @@ function buildWhatsAppManualLink(telefone: string, mensagem?: string): string {
 async function getSimuladorAgendamentosSchema(
   db: D1Database,
 ): Promise<{ hasTipoDispositivo: boolean; hasAeronaveId: boolean; hasModoCompartilhado: boolean }> {
-  const colInfo = await db.prepare('PRAGMA table_info(simulador_agendamentos)').bind().all();
-  const colNames = new Set((colInfo.results || []).map((row: any) => row.name));
+  const colNames = await getSchemaColumns(db, 'simulador_agendamentos');
 
   return {
     hasTipoDispositivo: colNames.has('tipo_dispositivo'),
@@ -849,9 +850,8 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
     // O instrutor deve ter flag is_instrutor. O examinador deve ter flag
     // is_examinador ou is_checador. Isso previne que um examinador seja
     // acidentalmente designado como instrutor da ficha pedagógica.
-    const fCols = await c.env.DB.prepare("PRAGMA table_info('funcionarios')").all();
-    const fColSet = new Set((fCols.results || []).map((r: any) => r.name));
-    const hasIsInstrutor = fColSet.has('is_instrutor');
+    const funcionarioColumns = await getSchemaColumns(c.env.DB, 'funcionarios');
+    const hasIsInstrutor = funcionarioColumns.has('is_instrutor');
 
     if (hasIsInstrutor) {
       const instrutorRow = await c.env.DB.prepare(
@@ -879,16 +879,13 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
       // simuladores não possui empresa_id em produção (drift de schema já
       // tratado dinamicamente em simuladores-equipamentos.ts); detectar
       // a coluna em vez de assumir sua existência.
-      const simuladoresTableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
-      const simuladoresHasEmpresaId = (simuladoresTableInfo.results || []).some(
-        (row: any) => String(row.name || '') === 'empresa_id',
-      );
+      const hasSimuladoresEmpresaId = await simuladoresHasEmpresaId(c.env.DB);
       const simulador = await c.env.DB.prepare(
-        simuladoresHasEmpresaId
+        hasSimuladoresEmpresaId
           ? 'SELECT id FROM simuladores WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1'
           : 'SELECT id FROM simuladores WHERE id = ? AND deleted_at IS NULL LIMIT 1',
       )
-        .bind(...(simuladoresHasEmpresaId ? [simulador_id, empresaId] : [simulador_id]))
+        .bind(...(hasSimuladoresEmpresaId ? [simulador_id, empresaId] : [simulador_id]))
         .first<{ id: number }>();
 
       if (!simulador?.id) {
@@ -991,10 +988,9 @@ app.post('/sessoes', requireOperacoesSessao('create'), async (c) => {
 
     // Validar examinador (se informado)
     if (examinador_id) {
-      const fCols = await c.env.DB.prepare("PRAGMA table_info('funcionarios')").all();
-      const fColSet = new Set((fCols.results || []).map((r: any) => r.name));
-      const hasIsExaminador = fColSet.has('is_examinador');
-      const hasIsChecador = fColSet.has('is_checador');
+      const funcionarioColumns = await getSchemaColumns(c.env.DB, 'funcionarios');
+      const hasIsExaminador = funcionarioColumns.has('is_examinador');
+      const hasIsChecador = funcionarioColumns.has('is_checador');
       const examinadorFlagExpr =
         hasIsExaminador && hasIsChecador
           ? '(COALESCE(is_examinador, 0) = 1 OR COALESCE(is_checador, 0) = 1)'
