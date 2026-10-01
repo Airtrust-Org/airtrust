@@ -45,6 +45,18 @@ async function isFuncionarioInScope(
 
 const app = new Hono<AppEnv>();
 
+function certificateUploadKind(value: unknown): 'qualificacao' | 'profissional' | null {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (normalized === 'CERTIFICADO_QUALIFICACAO') return 'qualificacao';
+  if (normalized === 'CERTIFICADO_PROFISSIONAL' || normalized === 'CERTIFICADO') return 'profissional';
+  return null;
+}
+
+function originalUploadFilename(file: File, fallback: string): string {
+  const raw = String(file.name || '').trim();
+  return raw.split(/[\\/]/).pop()?.trim() || fallback;
+}
+
 interface Documento {
   id: number;
   uuid: string;
@@ -255,8 +267,14 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
       const nomeUpper = doc.nome_arquivo.toUpperCase();
       let categoria = 'Outros';
 
-      if (nomeUpper.startsWith('CERT-')) {
+      const r2KeyLower = String(doc.r2_key || '').toLowerCase();
+      if (
+        nomeUpper.startsWith('CERT-') ||
+        r2KeyLower.includes('/certificados-upload/qualificacao/')
+      ) {
         categoria = 'Certificados de Qualificação';
+      } else if (r2KeyLower.includes('/certificados-upload/profissional/')) {
+        categoria = 'Certificados Profissionais';
       } else if (nomeUpper.startsWith('EXAME-')) {
         categoria = 'Exames Médicos (ASO, CMA)';
       } else if (nomeUpper.startsWith('LIC-')) {
@@ -801,18 +819,26 @@ app.post('/upload', auth(), async (c) => {
     const nomeFuncionario = funcionario.nome || 'SEM_NOME';
 
     const uuid = crypto.randomUUID();
+    const tipoNormalizado = normalizarTipoDocumento(tipoDocumento);
+    const kindCertificado = certificateUploadKind(tipoDocumento);
     const nomeArquivoPadronizado = gerarNomeArquivoPadronizado({
-      tipo: normalizarTipoDocumento(tipoDocumento),
-      nomeFuncionario: nomeFuncionario, // Novo padrão
-      cpf: cpfLimpo, // Mantido para compatibilidade
-      data: dataRealizacao, // Usa data de realização da qualificação
-      codigo: subTipo || undefined, // Para CERTIFICADO_QUALIFICACAO
-      subTipo: subTipo || undefined, // Para outros tipos
+      tipo: tipoNormalizado,
+      nomeFuncionario: nomeFuncionario,
+      cpf: cpfLimpo,
+      data: dataRealizacao,
+      codigo: subTipo || undefined,
+      subTipo: subTipo || undefined,
       uuid,
     });
+    const nomeArquivoPersistido = kindCertificado
+      ? originalUploadFilename(file, 'certificado.pdf')
+      : nomeArquivoPadronizado;
 
-    // Gerar chave R2
-    const r2Key = gerarChaveR2(funcionarioId, nomeArquivoPadronizado);
+    // Certificados anexados preservam exatamente o nome original no D1/UI.
+    // A chave física continua única e não depende do nome fornecido pelo usuário.
+    const r2Key = kindCertificado
+      ? `funcionarios/${funcionarioId}/certificados-upload/${kindCertificado}/${uuid}.pdf`
+      : gerarChaveR2(funcionarioId, nomeArquivoPadronizado);
 
     // Converter File para Uint8Array (mantém PDF original em binário puro)
     const fileBuffer = await file.arrayBuffer();
@@ -837,8 +863,8 @@ app.post('/upload', auth(), async (c) => {
       },
       customMetadata: {
         funcionario_id: funcionarioIdStr,
-        original_name: file.name,
-        nome_padronizado: nomeArquivoPadronizado,
+        original_name: nomeArquivoPersistido,
+        nome_padronizado: nomeArquivoPersistido,
         tipo_documento: tipoDocumento,
         uploaded_at: new Date().toISOString(),
         file_size: fileSize.toString(),
@@ -883,7 +909,7 @@ app.post('/upload', auth(), async (c) => {
           .bind(
             uuid,
             funcionarioId,
-            nomeArquivoPadronizado,
+            nomeArquivoPersistido,
             fileType,
             fileSize,
             r2Key,
@@ -911,7 +937,7 @@ app.post('/upload', auth(), async (c) => {
           .bind(
             uuid,
             funcionarioId,
-            nomeArquivoPadronizado,
+            nomeArquivoPersistido,
             fileType,
             fileSize,
             r2Key,
@@ -947,7 +973,7 @@ app.post('/upload', auth(), async (c) => {
         acao: 'INSERT',
         registro_id: result.meta.last_row_id,
         usuario_id: userId,
-        dados_novos: { nome_arquivo: nomeArquivoPadronizado, tipo: fileType, r2_key: r2Key },
+        dados_novos: { nome_arquivo: nomeArquivoPersistido, tipo: fileType, r2_key: r2Key },
         ip_address: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
         user_agent: c.req.header('user-agent'),
       });

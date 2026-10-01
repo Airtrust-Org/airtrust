@@ -1739,9 +1739,8 @@ app.post('/scorm/commit', async (c) => {
     dataConclusao = new Date().toISOString().slice(0, 10);
   }
 
-  // GUARD: Se a matrícula já estava CONCLUÍDA antes deste commit SCORM, a
-  // qualificação já foi gerada — pular para evitar duplicatas. O certificado
-  // é emitido exclusivamente pela ação manual de gerar certificado.
+  // GUARD: conclusão já existente não repete qualificação/certificado. Em nova
+  // conclusão, certificado é manual salvo a exceção EAD do serviço canônico.
   const isNewCompletion =
     novoStatus === 'CONCLUIDO' && statusAnterior !== 'CONCLUIDO' && Boolean(dataConclusao);
 
@@ -1751,12 +1750,11 @@ app.post('/scorm/commit', async (c) => {
   let dataConclusaoFinal = dataConclusao;
 
   if (isNewCompletion) {
-    // Toda a persistência da conclusão (Histórico, vínculo, ciclo, matrícula,
-    // auditoria) é delegada ao serviço canônico — atômica via db.batch(). Ver
-    // worker-airtrust/src/services/lms-completion.ts.
+    // Persistência canônica/atômica da conclusão: services/lms-completion.ts.
     try {
       const result = await completeLmsMatricula({
         db,
+        env: c.env,
         empresaId,
         matriculaId: d.matricula_id,
         funcionarioId: matricula.funcionario_id,
@@ -2109,13 +2107,12 @@ app.post('/:id/finalizar', async (c) => {
 
   const dataConclusao = new Date().toISOString().slice(0, 10);
 
-  // Toda a persistência da conclusão é delegada ao serviço canônico —
-  // atômica via db.batch(). Se a qualificação exigida não puder ser
-  // garantida, o batch inteiro reverte e a matrícula permanece como estava.
+  // O serviço canônico garante a conclusão/qualificação de forma atômica.
   let qualificacaoGerada: Record<string, unknown> | null = null;
   try {
     const result = await completeLmsMatricula({
       db,
+      env: c.env,
       empresaId,
       matriculaId,
       funcionarioId: matricula.funcionario_id,
@@ -2398,11 +2395,11 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
   let qualificacaoHistoricoId = existing.qualificacao_historico_id;
 
   if (status === 'CONCLUIDO') {
-    // Toda a persistência da conclusão é delegada ao serviço canônico —
-    // atômica via db.batch(). Ver worker-airtrust/src/services/lms-completion.ts.
+    // Persistência canônica/atômica da conclusão: services/lms-completion.ts.
     try {
       const result = await completeLmsMatricula({
         db,
+        env: c.env,
         empresaId,
         matriculaId,
         funcionarioId: existing.funcionario_id,

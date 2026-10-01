@@ -362,6 +362,7 @@ app.post('/xapi/statements', async (c) => {
     try {
       const result = await completeLmsMatricula({
         db,
+        env: c.env,
         empresaId,
         matriculaId: stmt.matricula_id,
         funcionarioId: matricula.funcionario_id,

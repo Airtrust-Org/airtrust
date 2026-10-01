@@ -207,13 +207,14 @@ describe('pasta virtual employee scope', () => {
     expect(lookup?.bindings).toEqual([999, 6, 10]);
   });
 
-  it('permite upload para funcionário com CPF nulo sem erro 500', async () => {
-    const { db } = createDb();
+  it('preserva o nome original no upload de certificado e mantém a chave R2 interna única', async () => {
+    const { db, calls } = createDb();
     const pdfContent = new Uint8Array([
       ...[0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34], // %PDF-1.4
       ...new Array(1024).fill(0x30),
     ]);
-    const file = new File([pdfContent], 'documento.pdf', { type: 'application/pdf' });
+    const originalName = 'Certificado CRM Periódico — João (2026).pdf';
+    const file = new File([pdfContent], originalName, { type: 'application/pdf' });
     const formData = new FormData();
     formData.append('file', file);
     formData.append('funcionario_id', '10');
@@ -232,5 +233,14 @@ describe('pasta virtual employee scope', () => {
     const json = (await response.json()) as { success: boolean; data: { id: number } };
     expect(json.success).toBe(true);
     expect(json.data.id).toBe(42);
+
+    const insert = calls.find(
+      (call) => call.method === 'run' && call.query.includes('INSERT INTO documentos'),
+    );
+    expect(insert?.bindings[2]).toBe(originalName);
+    expect(String(insert?.bindings[5] || '')).toContain(
+      '/certificados-upload/qualificacao/',
+    );
+    expect(String(insert?.bindings[5] || '')).not.toContain(originalName);
   });
 });
