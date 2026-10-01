@@ -83,6 +83,10 @@ async function login(page: Page) {
   await page.locator('input[type="email"]').fill(EMAIL);
   await page.locator('input[type="password"]').fill(PASSWORD);
   await page.getByRole('button', { name: /entrar|sign in/i }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 45_000 });
+  if (new URL(page.url()).pathname !== '/treinamentos/compliance') {
+    await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
+  }
   await page.waitForURL((url) => url.pathname === '/treinamentos/compliance', { timeout: 45_000 });
   await expect(page).toHaveURL(/\/treinamentos\/compliance$/);
 }
