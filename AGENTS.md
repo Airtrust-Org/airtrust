@@ -11,10 +11,10 @@ unrelated worktree changes intact; never reset, clean, stash or `git add .`.
 
 - GitHub `Airtrust-Org/airtrust` and its `main` branch are the canonical code,
   branch, PR and merge authority.
-- GitHub Actions is the canonical workflow/check surface when healthy. GitHub Actions is the official CI. GitLab and CircleCI are deprecated and removed.
-- Google Cloud Build (GCB) is the official heavy-CI and governed backup
-  execution path. When GitHub Actions has an operational incident, use the
-  sanctioned GCB path without weakening required gates.
+- GitHub Actions is the primary/official CI and owns the full eight-gate release contract.
+  GitLab and CircleCI are deprecated/legacy and are not release paths.
+- Google Cloud Build (GCB) is contingency/fallback only when GitHub Actions is unavailable
+  or materially defective. It must never be used to bypass missing required gates.
 - Cloudflare is the staging and production runtime platform.
 - GitLab is historical/legacy only. It is not a current code, merge, CI or
   release authority.

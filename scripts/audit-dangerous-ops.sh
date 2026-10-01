@@ -35,6 +35,21 @@ if [[ -n "$commit_dirty_hits" ]]; then
   fail=1
 fi
 
+# ── Guard 1b: direct local Pages deploys are not a production release path ─
+
+local_pages_deploy_hits="$(
+  rg -n --regexp '\b(npx[[:space:]]+)?wrangler[[:space:]]+pages[[:space:]]+deploy\b' package.json scripts \
+    --glob '!scripts/staging/**' \
+    --glob '!scripts/__tests__/**' \
+    --glob '!scripts/audit-dangerous-ops.sh' 2>/dev/null | \
+    grep -v '^scripts/audit-observability-dr-readiness\.sh:' || true
+)"
+
+if [[ -n "$local_pages_deploy_hits" ]]; then
+  print_block "direct local Pages deploy found outside staging-only tooling; production Pages must use .github/workflows/deploy-airtrust.yml" "$local_pages_deploy_hits"
+  fail=1
+fi
+
 # ── Guard 2: git add . / git add -A in operational scripts ─────────────────
 
 git_add_dangerous="$(

@@ -11,13 +11,12 @@ AirTrust is a multi-tenant SaaS platform for aviation crew management (qualifica
 - GitHub `Airtrust-Org/airtrust` is the code authority for source, branches,
   pull requests, and merges. Its `main` branch is the canonical integration
   branch.
-- AirTrust CI uses eight required gates split across two executors:
-  - GitHub Actions owns the three fast gates: `lint`, `build-content-gates`,
-    and `worker-typecheck`.
-  - Google Cloud Build owns the five heavy gates: `frontend-coverage`,
-    `worker-tests-1`, `worker-tests-2`, `lms-smoke`, and `public-e2e`.
-  All eight must be green for the exact release SHA; GCB publishes the
-  `airtrust-gcb` status for its five-gate portion.
+- GitHub Actions is the primary/official CI and must produce all eight required gates:
+  `lint`, `build-content-gates`, `worker-typecheck`, `frontend-coverage`,
+  `worker-tests-1`, `worker-tests-2`, `lms-smoke`, and `public-e2e`.
+  Google Cloud Build is contingency/fallback only when GitHub Actions is unavailable or
+  materially defective; it never bypasses missing required gates. The legacy name
+  `airtrust-gcb` does not prove execution occurred in Google Cloud Build.
 - Cloudflare hosts staging and production.
 - GitLab is historical/legacy only after the 2026-08-24 repository cutover;
   do not open new development branches, merge requests, or release gates

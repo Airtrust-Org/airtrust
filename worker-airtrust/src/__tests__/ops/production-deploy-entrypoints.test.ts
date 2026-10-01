@@ -47,15 +47,24 @@ describe('production deploy entrypoint governance', () => {
     expect(source).toContain('scripts/deploy-worker-safe.sh');
   });
 
-  it('keeps npm production aliases chained to blocked or emergency-gated entrypoints', () => {
+  it('keeps npm production aliases chained to fail-closed or emergency-gated entrypoints', () => {
     const pkg = JSON.parse(readRepoFile('package.json')) as { scripts: Record<string, string> };
 
-    expect(pkg.scripts.deploy).toContain('deploy:pages');
-    expect(pkg.scripts['deploy:pages']).toContain('scripts/preflight-clean-deploy.sh');
-    expect(pkg.scripts['deploy:worker']).toContain('deploy:worker:only');
-    expect(pkg.scripts['deploy:worker:only']).toContain('scripts/deploy-worker-only.sh');
-    expect(pkg.scripts['deploy:worker:safe']).toContain('scripts/deploy-worker-safe.sh');
+    expect(pkg.scripts.deploy).toBe('bash scripts/build-and-deploy.sh');
+    expect(pkg.scripts['deploy:pages']).toBe('bash scripts/deploy-pages-only.sh');
+    expect(pkg.scripts['deploy:worker']).toBe('bash scripts/deploy-worker-only.sh');
+    expect(pkg.scripts['deploy:worker:only']).toBe('bash scripts/deploy-worker-only.sh');
+    expect(pkg.scripts['deploy:worker:safe']).toBe('bash scripts/deploy-worker-safe.sh');
     expect(pkg.scripts['deploy:all']).toContain('scripts/build-and-deploy.sh');
+  });
+
+  it('keeps the local Pages compatibility entrypoint fail-closed', () => {
+    const source = readRepoFile('scripts/deploy-pages-only.sh');
+
+    expect(source).toContain('LOCAL_PRODUCTION_PAGES_DEPLOY_DISABLED_USE_GITHUB_ACTIONS');
+    expect(source).toContain('.github/workflows/deploy-airtrust.yml');
+    expect(source).toMatch(/exit\s+1/);
+    expect(source).not.toMatch(/wrangler\s+pages\s+deploy/);
   });
 
   it('keeps the routine production release on the governed GitHub Actions path', () => {
