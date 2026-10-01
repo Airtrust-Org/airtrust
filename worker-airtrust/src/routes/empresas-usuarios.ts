@@ -344,8 +344,10 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
   let isNewUser = false;
 
   if (!user) {
-    // 2. Criar usuário se não existir
-    const tempPassword = Math.random().toString(36).slice(-8) + 'A1!';
+    // 2. Criar usuário se não existir. A senha provisória nunca é entregue ao
+    // usuário, mas ainda deve ser criptograficamente imprevisível até que o
+    // convite seja aceito e a senha definitiva seja criada.
+    const tempPassword = generateRefreshToken();
     const { hashPassword } = await import('../utils/security');
     const hash = await hashPassword(tempPassword);
 
