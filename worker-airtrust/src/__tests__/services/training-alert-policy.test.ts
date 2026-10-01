@@ -5,6 +5,8 @@ import {
   normalizeTrainingAlertFrequency,
   trainingAlertAudience,
   TRAINING_ALERT_DAILY_CRON,
+  TRAINING_ALERT_DELIVERY_PAUSED,
+  TRAINING_ALERT_STAGES,
 } from '../../services/training-alert-policy';
 
 describe('training alert canonical policy', () => {
@@ -12,26 +14,27 @@ describe('training alert canonical policy', () => {
     expect(TRAINING_ALERT_DAILY_CRON).toBe('0 8 * * *');
   });
 
-  it('mantém uma única régua 45/30/15/7/vencida com públicos explícitos', () => {
-    expect(getTrainingAlertStage('QUALIFICACAO_45D')).toMatchObject({
-      defaultDays: 45,
-      employeeEmail: false,
-      employeeWhatsapp: false,
+  it('preserva a régua configurada e pausa todos os canais efetivos durante o hold operacional', () => {
+    expect(TRAINING_ALERT_DELIVERY_PAUSED).toBe(true);
+    expect(TRAINING_ALERT_STAGES.find((stage) => stage.code === 'QUALIFICACAO_30D')).toMatchObject({
+      employeeEmail: true,
+      employeeWhatsapp: true,
       managerCheckEmail: true,
     });
-    for (const code of ['QUALIFICACAO_30D', 'QUALIFICACAO_15D', 'QUALIFICACAO_7D']) {
+
+    for (const code of [
+      'QUALIFICACAO_45D',
+      'QUALIFICACAO_30D',
+      'QUALIFICACAO_15D',
+      'QUALIFICACAO_7D',
+      'QUALIFICACAO_VENCIDA',
+    ]) {
       expect(getTrainingAlertStage(code)).toMatchObject({
-        employeeEmail: true,
-        employeeWhatsapp: true,
-        managerCheckEmail: true,
+        employeeEmail: false,
+        employeeWhatsapp: false,
+        managerCheckEmail: false,
       });
     }
-    expect(getTrainingAlertStage('QUALIFICACAO_VENCIDA')).toMatchObject({
-      employeeEmail: true,
-      employeeWhatsapp: false,
-      managerCheckEmail: false,
-      expired: true,
-    });
   });
 
   it('força alerta vencido para uma única entrega mesmo com configuração legada DAILY', () => {
@@ -45,17 +48,17 @@ describe('training alert canonical policy', () => {
     });
   });
 
-  it('normaliza WhatsApp legado para o mesmo estágio e resolve público CHECK', () => {
+  it('continua reconhecendo configuração legada sem liberar destinatários durante a pausa', () => {
     expect(
       inferTrainingAlertStageCode({ tipo: 'WHATSAPP', urgencia: 'medium', dias_antes: 30 }),
     ).toBe('QUALIFICACAO_30D');
     expect(trainingAlertAudience('QUALIFICACAO_30D', false)).toEqual({
-      funcionario: true,
+      funcionario: false,
       gestores: false,
     });
     expect(trainingAlertAudience('QUALIFICACAO_30D', true)).toEqual({
-      funcionario: true,
-      gestores: true,
+      funcionario: false,
+      gestores: false,
     });
   });
 });
