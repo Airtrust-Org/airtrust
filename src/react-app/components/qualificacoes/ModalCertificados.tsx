@@ -320,9 +320,7 @@ export function ModalCertificados({
                     historicoId,
                   });
                   if (!pasta360Url) {
-                    showToast.error(
-                      'Não foi possível abrir a Pasta Virtual: funcionário inválido.',
-                    );
+                    showToast.error('Não foi possível abrir a Pasta Virtual: funcionário inválido.');
                     return;
                   }
                   navigate(pasta360Url);

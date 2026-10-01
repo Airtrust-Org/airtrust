@@ -338,28 +338,16 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
               </p>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Setor
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-slate-700">
-                    {funcionarioContext.setor || '-'}
-                  </p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Setor</p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">{funcionarioContext.setor || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Funcao
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-slate-700">
-                    {funcionarioContext.funcao || '-'}
-                  </p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Funcao</p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">{funcionarioContext.funcao || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Cargo
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-slate-700">
-                    {funcionarioContext.cargo || '-'}
-                  </p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cargo</p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">{funcionarioContext.cargo || '-'}</p>
                 </div>
               </div>
             </section>
@@ -375,18 +363,14 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
                 className="group flex items-center gap-3 bg-white rounded-2xl border border-slate-200 p-4 text-left shadow-sm active:scale-[0.98] hover:shadow-md hover:border-primary/30 transition-all duration-150 animate-fade-in"
                 style={{ animationDelay: `${i * 50}ms` }}
               >
-                <div
-                  className={`w-11 h-11 sm:w-12 sm:h-12 shrink-0 rounded-xl flex items-center justify-center ${card.color} ${card.iconColor}`}
-                >
+                <div className={`w-11 h-11 sm:w-12 sm:h-12 shrink-0 rounded-xl flex items-center justify-center ${card.color} ${card.iconColor}`}>
                   {card.icon}
                 </div>
                 <div className="flex-1 min-w-0">
                   <h2 className="text-sm sm:text-base font-semibold text-slate-900 group-hover:text-primary transition-colors leading-tight">
                     {card.title}
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed line-clamp-2">
-                    {card.description}
-                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed line-clamp-2">{card.description}</p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
@@ -413,12 +397,8 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
                         <BellRing className="w-4 h-4" />
                         Notificações de fichas
                       </div>
-                      <h2 className="mt-2 text-base sm:text-lg font-semibold text-slate-900">
-                        O que ainda depende de você
-                      </h2>
-                      <p className="mt-1 text-xs sm:text-sm text-slate-500">
-                        Pendências e atualizações das suas fichas de treinamento de voo.
-                      </p>
+                      <h2 className="mt-2 text-base sm:text-lg font-semibold text-slate-900">O que ainda depende de você</h2>
+                      <p className="mt-1 text-xs sm:text-sm text-slate-500">Pendências e atualizações das suas fichas de treinamento de voo.</p>
                     </div>
                     {notificacoes.length > 0 && (
                       <button
@@ -441,9 +421,7 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
                     </div>
                   ) : notificacoes.length === 0 ? (
                     <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-6 text-center">
-                      <p className="text-sm text-slate-500">
-                        Nenhuma notificação de ficha pendente.
-                      </p>
+                      <p className="text-sm text-slate-500">Nenhuma notificação de ficha pendente.</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -459,24 +437,18 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-2">
-                                <h3 className="text-sm font-semibold text-slate-900 leading-snug">
-                                  {notificacao.titulo}
-                                </h3>
+                                <h3 className="text-sm font-semibold text-slate-900 leading-snug">{notificacao.titulo}</h3>
                                 <span className="text-xs font-medium text-slate-400 whitespace-nowrap mt-0.5 hidden sm:inline">
                                   {formatarData(notificacao.created_at)}
                                 </span>
                               </div>
-                              <p className="mt-1 text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-2">
-                                {notificacao.mensagem}
-                              </p>
+                              <p className="mt-1 text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-2">{notificacao.mensagem}</p>
                               <div className="mt-2 flex items-center justify-between gap-2">
                                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
                                   {notificacao.acao_primaria || 'Abrir'}
                                   <ChevronRight className="w-3.5 h-3.5" />
                                 </span>
-                                <span className="text-xs text-slate-400 sm:hidden">
-                                  {formatarData(notificacao.created_at)}
-                                </span>
+                                <span className="text-xs text-slate-400 sm:hidden">{formatarData(notificacao.created_at)}</span>
                               </div>
                             </div>
                           </div>

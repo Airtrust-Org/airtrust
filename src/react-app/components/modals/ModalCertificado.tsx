@@ -469,9 +469,7 @@ export function ModalCertificado({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const allowed =
-      ['application/pdf', 'image/jpeg', 'image/jpg'].includes(file.type) ||
-      /\.(pdf|jpe?g)$/i.test(file.name);
+    const allowed = ['application/pdf', 'image/jpeg', 'image/jpg'].includes(file.type) || /\.(pdf|jpe?g)$/i.test(file.name);
     if (!allowed) {
       toast.warning('❌ Envie um arquivo PDF ou JPEG');
       return;
