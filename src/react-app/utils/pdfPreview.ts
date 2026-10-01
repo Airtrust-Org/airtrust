@@ -31,6 +31,8 @@ function triggerBlobDownload(blob: Blob, fileName: string): void {
 
 function renderLoadingState(previewWindow: Window, title: string): void {
   previewWindow.document.open();
+  // The AirTrust CSP intentionally uses object-src 'none'. PDF blob previews therefore
+  // must use an iframe, which is allowed by frame-src blob:, instead of <object>/<embed>.
   previewWindow.document.write(`<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -78,7 +80,7 @@ function renderLoadingState(previewWindow: Window, title: string): void {
       font-size: 13px;
       font-weight: 600;
     }
-    #viewer, #viewerFallback {
+    #viewer {
       display: none;
       position: fixed;
       top: 48px;
@@ -103,9 +105,7 @@ function renderLoadingState(previewWindow: Window, title: string): void {
     <span id="toolbarTitle">${escapeHtml(title)}</span>
     <a id="downloadLink" href="#" download>Baixar PDF</a>
   </div>
-  <object id="viewer" type="application/pdf" title="${escapeHtml(title)}">
-    <iframe id="viewerFallback" title="${escapeHtml(title)}"></iframe>
-  </object>
+  <iframe id="viewer" title="${escapeHtml(title)}"></iframe>
   <div id="errorBox"></div>
   <script>
     // Called by the opener once PDF bytes are ready.
@@ -119,7 +119,6 @@ function renderLoadingState(previewWindow: Window, title: string): void {
         var blob = new Blob([buffer], { type: mimeType || 'application/pdf' });
         var url = URL.createObjectURL(blob);
         var viewer = document.getElementById('viewer');
-        var fallback = document.getElementById('viewerFallback');
         var loading = document.getElementById('loading');
         var toolbar = document.getElementById('toolbar');
         var download = document.getElementById('downloadLink');
@@ -127,10 +126,8 @@ function renderLoadingState(previewWindow: Window, title: string): void {
         toolbar.style.display = 'flex';
         download.href = url;
         download.download = fileName || 'documento.pdf';
-        viewer.data = url;
+        viewer.src = url;
         viewer.style.display = 'block';
-        fallback.src = url;
-        fallback.style.display = 'block';
       } catch (e) {
         window.__pdfError('Erro ao criar visualizacao: ' + e.message);
       }
@@ -269,7 +266,6 @@ export async function previewPdfBeforeDownload({
 }: PdfPreviewOptions): Promise<void> {
   const previewTitle = title || fileName || 'Visualizacao de PDF';
   const previewWindow = existingWindow ?? window.open('', '_blank');
-  let downloadedFallback = false;
   let pdfBlob: Blob | null = null;
 
   if (previewWindow) {
@@ -321,7 +317,6 @@ export async function previewPdfBeforeDownload({
     if (pdfBlob) {
       try {
         triggerBlobDownload(pdfBlob, fileName);
-        downloadedFallback = true;
         finalMessage = `${baseMessage}. O download foi iniciado automaticamente.`;
       } catch {
         // Mantém a mensagem original quando nem o fallback de download é possível.
