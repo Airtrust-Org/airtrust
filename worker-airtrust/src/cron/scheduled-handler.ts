@@ -1,6 +1,7 @@
 import type { Env } from '../types';
 import { processarNotificacoes, TRAINING_ALERT_DAILY_CRON } from './notificacoes';
 import { refreshTrainingComplianceSnapshots } from './training-compliance-notifications';
+import { processTrainingComplianceReportAutomation } from './training-compliance-reports';
 import { enviarEmailAlert } from './notificacoes';
 import { alertasDiariosHandler } from './alertasDiarios';
 import { frmsDailyCheck } from './frms-daily-check';
@@ -265,8 +266,6 @@ export async function runScheduledJobs(
   if (event.cron === '*/10 * * * *') {
     ctx.waitUntil(runSigvoosFrmsDailySync(env.DB, console, env));
   }
-
-
 
   // ── Bloco 4: Qualificação EAD vencida/vencendo → matrícula LMS automática ──
   // Alinha a automação com o mesmo conceito de status do módulo de qualificações:
@@ -587,6 +586,21 @@ export async function runScheduledJobs(
       }
     } catch (purgeGlobalErr) {
       console.warn('[PURGE] Erro geral na rotina de limpeza:', (purgeGlobalErr as Error).message);
+    }
+
+    if (event.cron === '*/10 * * * *' || event.cron === TRAINING_ALERT_DAILY_CRON) {
+      try {
+        const reportResult = await processTrainingComplianceReportAutomation(env);
+        console.log(
+          '[CRON] Compliance reports: ' +
+            reportResult.enviados +
+            ' enviados, ' +
+            reportResult.falhas +
+            ' falhas',
+        );
+      } catch (reportErr) {
+        console.error('[CRON] Erro ao processar relatorios automaticos de compliance:', reportErr);
+      }
     }
 
     if (event.cron === TRAINING_ALERT_DAILY_CRON) {

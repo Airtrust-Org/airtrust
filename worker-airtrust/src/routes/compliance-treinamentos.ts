@@ -5,7 +5,10 @@ import { ApiError } from '../middleware/error-handler';
 import { getEmpresaId } from '../middleware/tenant';
 import type { Env } from '../types';
 import { createTrainingComplianceIntelligenceRoutes } from './compliance-treinamentos-intelligence';
-import { aggregateDistinctMandatoryRequirements, createTrainingComplianceRequirementRoutes } from './compliance-treinamentos-requirements';
+import {
+  aggregateDistinctMandatoryRequirements,
+  createTrainingComplianceRequirementRoutes,
+} from './compliance-treinamentos-requirements';
 import conditionsRouter from './compliance-treinamentos-conditions';
 import {
   CANCELLED_STATUS_VALUES,
@@ -22,7 +25,11 @@ import {
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
 } from '../services/employee-sector-access';
-import { insertTrainingComplianceRequirement, isGovernedTrainingComplianceRequirement, updateTrainingComplianceRequirement } from '../services/training-compliance-rule-write';
+import {
+  insertTrainingComplianceRequirement,
+  isGovernedTrainingComplianceRequirement,
+  updateTrainingComplianceRequirement,
+} from '../services/training-compliance-rule-write';
 import {
   normalizeAircraftModel,
   parseLegacyAircraftModels,
@@ -1143,7 +1150,13 @@ app.get('/catalogos', requireRole('admin', 'manager'), async (c) => {
     data: {
       setores: sectors.results || [],
       funcoes: functionRows,
-      funcionarios: employees.map((employee) => ({ id: employee.id, nome: employee.nome })),
+      funcionarios: employees.map((employee) => ({
+        id: employee.id,
+        nome: employee.nome,
+        matricula: employee.matricula,
+        setor_id: employee.setor_id,
+        funcao_id: employee.funcao_id,
+      })),
       setor_funcoes: setorFuncoes,
       aeronaves_modelos: aircraftModels,
       access_mode: access.mode,
@@ -1235,7 +1248,11 @@ app.put('/regras/:id', requireRole('admin', 'manager'), async (c) => {
     .bind(id, empresaId)
     .first<Record<string, unknown>>();
   if (!existing) throw new ApiError('Regra não encontrada', 404);
-  if (isGovernedTrainingComplianceRequirement(existing)) throw new ApiError('Regra governada por designação regulatória; altere os ocupantes na área de designações.', 409);
+  if (isGovernedTrainingComplianceRequirement(existing))
+    throw new ApiError(
+      'Regra governada por designação regulatória; altere os ocupantes na área de designações.',
+      409,
+    );
   const patch = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const access = await getEmployeeSectorAccess(c, empresaId);
   const existingData = await validateRuleReferences(db, empresaId, existing);
@@ -1273,7 +1290,11 @@ app.delete('/regras/:id', requireRole('admin', 'manager'), async (c) => {
     .bind(id, empresaId)
     .first<Record<string, unknown>>();
   if (!existing) throw new ApiError('Regra não encontrada', 404);
-  if (isGovernedTrainingComplianceRequirement(existing)) throw new ApiError('Regra governada por designação regulatória; altere os ocupantes na área de designações.', 409);
+  if (isGovernedTrainingComplianceRequirement(existing))
+    throw new ApiError(
+      'Regra governada por designação regulatória; altere os ocupantes na área de designações.',
+      409,
+    );
   const access = await getEmployeeSectorAccess(c, empresaId);
   const existingData = await validateRuleReferences(db, empresaId, existing);
   await assertIndividualRuleWithinAccess(db, empresaId, access, existingData);
@@ -1317,9 +1338,12 @@ app.get('/pessoas', requireRole('admin', 'manager'), async (c) => {
   const funcaoId = asPositiveInt(c.req.query('funcao_id'));
   const aeronaveModelo = normalizeAircraftModel(c.req.query('aeronave_modelo'));
   const qualificacaoTipoId = asPositiveInt(c.req.query('qualificacao_tipo_id'));
-  const rawConfigurado = String(c.req.query('configurado') || '').trim().toLowerCase();
+  const rawConfigurado = String(c.req.query('configurado') || '')
+    .trim()
+    .toLowerCase();
   const configurado = rawConfigurado === 'true' ? true : rawConfigurado === 'false' ? false : null;
-  if (rawConfigurado && configurado === null) throw new ApiError('Filtro configurado inválido', 400);
+  if (rawConfigurado && configurado === null)
+    throw new ApiError('Filtro configurado inválido', 400);
   const statusCompliance = String(c.req.query('status') || '')
     .trim()
     .toUpperCase();
@@ -1438,7 +1462,9 @@ app.get('/setores', requireRole('admin', 'manager'), async (c) => {
   const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
   const requestedSetorId = asPositiveInt(c.req.query('setor_id'));
   const people = snapshot.people.filter(
-    (person) => (!requestedSetorId || person.setor_id === requestedSetorId) && matchesSearchText(person.nome, c.req.query('q')),
+    (person) =>
+      (!requestedSetorId || person.setor_id === requestedSetorId) &&
+      matchesSearchText(person.nome, c.req.query('q')),
   );
   const sectors = new Map<
     number | null,

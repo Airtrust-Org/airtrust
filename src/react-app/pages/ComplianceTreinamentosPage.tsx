@@ -152,12 +152,7 @@ type ComplianceTab =
   | 'administracao';
 
 type ComplianceDrilldownStatus =
-  | 'CONFORME'
-  | 'VENCENDO'
-  | 'VENCIDO'
-  | 'NAO_REALIZADO'
-  | 'EM_ANDAMENTO'
-  | 'SEM_CONFIGURACAO';
+  'CONFORME' | 'VENCENDO' | 'VENCIDO' | 'NAO_REALIZADO' | 'EM_ANDAMENTO' | 'SEM_CONFIGURACAO';
 
 type TrainingSortKey =
   'name' | 'people' | 'compliance' | 'realized' | 'inProgress' | 'dueSoon' | 'expired' | 'never';
@@ -265,7 +260,8 @@ function StatusBreakdown({
   onStatusClick?: (status: ComplianceDrilldownStatus) => void;
 }) {
   const hasAttention = emAndamento + vencendo + vencidos + naoRealizados + semConfiguracao > 0;
-  if (!hasAttention) return <span className="text-xs font-medium text-emerald-700">Sem pendências</span>;
+  if (!hasAttention)
+    return <span className="text-xs font-medium text-emerald-700">Sem pendências</span>;
 
   const items: Array<{
     status: ComplianceDrilldownStatus;
@@ -273,31 +269,56 @@ function StatusBreakdown({
     value: number;
     className: string;
   }> = [
-    { status: 'EM_ANDAMENTO', label: 'Em andamento', value: emAndamento, className: 'bg-blue-50 text-blue-700' },
-    { status: 'VENCENDO', label: 'Vencendo', value: vencendo, className: 'bg-amber-50 text-amber-700' },
+    {
+      status: 'EM_ANDAMENTO',
+      label: 'Em andamento',
+      value: emAndamento,
+      className: 'bg-blue-50 text-blue-700',
+    },
+    {
+      status: 'VENCENDO',
+      label: 'Vencendo',
+      value: vencendo,
+      className: 'bg-amber-50 text-amber-700',
+    },
     { status: 'VENCIDO', label: 'Vencidos', value: vencidos, className: 'bg-red-50 text-red-700' },
-    { status: 'NAO_REALIZADO', label: 'Nunca fez', value: naoRealizados, className: 'bg-orange-50 text-orange-700' },
-    { status: 'SEM_CONFIGURACAO', label: 'Sem configuração', value: semConfiguracao, className: 'bg-slate-100 text-slate-700' },
+    {
+      status: 'NAO_REALIZADO',
+      label: 'Nunca fez',
+      value: naoRealizados,
+      className: 'bg-orange-50 text-orange-700',
+    },
+    {
+      status: 'SEM_CONFIGURACAO',
+      label: 'Sem configuração',
+      value: semConfiguracao,
+      className: 'bg-slate-100 text-slate-700',
+    },
   ];
 
   return (
     <div className="flex flex-wrap justify-end gap-1.5">
-      {items.filter((item) => item.value > 0).map((item) =>
-        onStatusClick ? (
-          <button
-            key={item.status}
-            type="button"
-            onClick={() => onStatusClick(item.status)}
-            className={`rounded-full px-2 py-1 text-xs font-medium hover:ring-2 hover:ring-slate-200 ${item.className}`}
-          >
-            {item.label} {item.value}
-          </button>
-        ) : (
-          <span key={item.status} className={`rounded-full px-2 py-1 text-xs font-medium ${item.className}`}>
-            {item.label} {item.value}
-          </span>
-        ),
-      )}
+      {items
+        .filter((item) => item.value > 0)
+        .map((item) =>
+          onStatusClick ? (
+            <button
+              key={item.status}
+              type="button"
+              onClick={() => onStatusClick(item.status)}
+              className={`rounded-full px-2 py-1 text-xs font-medium hover:ring-2 hover:ring-slate-200 ${item.className}`}
+            >
+              {item.label} {item.value}
+            </button>
+          ) : (
+            <span
+              key={item.status}
+              className={`rounded-full px-2 py-1 text-xs font-medium ${item.className}`}
+            >
+              {item.label} {item.value}
+            </span>
+          ),
+        )}
     </div>
   );
 }
@@ -402,7 +423,9 @@ export default function ComplianceTreinamentosPage() {
     enabled: schemaReady && tab === 'setores',
     queryFn: async () =>
       readJson<SectorCompliance[]>(
-        await fetchWithAuth(`/api/compliance-treinamentos/setores${buildFilter(setorId, null, searchQuery)}`),
+        await fetchWithAuth(
+          `/api/compliance-treinamentos/setores${buildFilter(setorId, null, searchQuery)}`,
+        ),
       ),
   });
 
@@ -552,7 +575,9 @@ export default function ComplianceTreinamentosPage() {
           </div>
           {tab !== 'administracao' ? (
             <div className="flex min-w-[300px] flex-col gap-2">
-              <div className={`grid gap-2 ${tab === 'setores' ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
+              <div
+                className={`grid gap-2 ${tab === 'setores' ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}
+              >
                 <label className="relative min-w-[220px]">
                   <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                   <input
@@ -700,8 +725,10 @@ export default function ComplianceTreinamentosPage() {
                       <strong className="font-semibold text-slate-700">
                         {summary.data?.conformes ?? 0}
                       </strong>{' '}
-                      de {summary.data?.requisitos_obrigatorios ?? 0} obrigações individuais atendidas
-                      {' · '}{summary.data?.requisitos_distintos ?? 0} requisitos distintos
+                      de {summary.data?.requisitos_obrigatorios ?? 0} obrigações individuais
+                      atendidas
+                      {' · '}
+                      {summary.data?.requisitos_distintos ?? 0} requisitos distintos
                     </button>
                     <span className="whitespace-nowrap">janela: 30 dias</span>
                   </div>
@@ -825,17 +852,8 @@ export default function ComplianceTreinamentosPage() {
                   setorId={setorId}
                   funcaoId={funcaoId}
                   catalogs={catalogs.data}
+                  trainingTypes={tipos}
                   search={searchQuery}
-                  summary={{
-                    pessoas: summary.data?.pessoas ?? 0,
-                    requisitos_obrigatorios: summary.data?.requisitos_obrigatorios ?? 0,
-                    conformes: summary.data?.conformes ?? 0,
-                    vencendo: summary.data?.vencendo ?? 0,
-                    vencidos: summary.data?.vencidos ?? 0,
-                    nao_realizados: summary.data?.nao_realizados ?? 0,
-                    em_andamento: summary.data?.em_andamento ?? 0,
-                    compliance_pct: summary.data?.compliance_pct ?? null,
-                  }}
                 />
               ) : null}
 
@@ -1121,7 +1139,11 @@ export default function ComplianceTreinamentosPage() {
                               ) : (
                                 <button
                                   type="button"
-                                  onClick={() => openRequirements(`Requisitos de ${item.nome}`, { funcionario_id: item.id })}
+                                  onClick={() =>
+                                    openRequirements(`Requisitos de ${item.nome}`, {
+                                      funcionario_id: item.id,
+                                    })
+                                  }
                                   className="hover:text-primary hover:underline"
                                 >
                                   {item.total_obrigatorios}
@@ -1136,7 +1158,11 @@ export default function ComplianceTreinamentosPage() {
                               ) : (
                                 <button
                                   type="button"
-                                  onClick={() => openRequirements(`Requisitos de ${item.nome}`, { funcionario_id: item.id })}
+                                  onClick={() =>
+                                    openRequirements(`Requisitos de ${item.nome}`, {
+                                      funcionario_id: item.id,
+                                    })
+                                  }
                                   className="hover:text-primary hover:underline"
                                 >
                                   {item.compliance_pct}%
@@ -1149,7 +1175,12 @@ export default function ComplianceTreinamentosPage() {
                               ) : (
                                 <button
                                   type="button"
-                                  onClick={() => openRequirements(`Realizados de ${item.nome}`, { funcionario_id: item.id, status: 'CONFORME' })}
+                                  onClick={() =>
+                                    openRequirements(`Realizados de ${item.nome}`, {
+                                      funcionario_id: item.id,
+                                      status: 'CONFORME',
+                                    })
+                                  }
                                   className="hover:underline"
                                   disabled={!realizedCount(item.conformes, item.vencendo)}
                                 >
@@ -1170,10 +1201,13 @@ export default function ComplianceTreinamentosPage() {
                                     selectTab('administracao');
                                     return;
                                   }
-                                  openRequirements(`${drilldownStatusLabel(status)} · ${item.nome}`, {
-                                    funcionario_id: item.id,
-                                    status,
-                                  });
+                                  openRequirements(
+                                    `${drilldownStatusLabel(status)} · ${item.nome}`,
+                                    {
+                                      funcionario_id: item.id,
+                                      status,
+                                    },
+                                  );
                                 }}
                               />
                             </td>
@@ -1189,7 +1223,8 @@ export default function ComplianceTreinamentosPage() {
                 <div className="overflow-x-auto">
                   <div className="border-b border-slate-100 bg-blue-50/60 px-4 py-2 text-xs text-slate-600">
                     <strong>Requisitos</strong> = treinamentos distintos aplicáveis ao setor/cargo.{' '}
-                    <strong>Situação</strong> = obrigações individuais (pessoa × requisito). Todos os números podem ser clicados para detalhar.
+                    <strong>Situação</strong> = obrigações individuais (pessoa × requisito). Todos
+                    os números podem ser clicados para detalhar.
                   </div>
                   <table className="min-w-full text-sm">
                     <thead className="bg-slate-50 text-slate-500">
@@ -1275,14 +1310,22 @@ export default function ComplianceTreinamentosPage() {
                               </button>
                             </td>
                             <td className="px-3 py-3 text-right">
-                              <button type="button" onClick={() => openScopePeople(sector.setor_id, null)} className="font-medium text-primary hover:underline">
+                              <button
+                                type="button"
+                                onClick={() => openScopePeople(sector.setor_id, null)}
+                                className="font-medium text-primary hover:underline"
+                              >
                                 {sector.pessoas}
                               </button>
                             </td>
                             <td className="px-3 py-3 text-right">
                               <button
                                 type="button"
-                                onClick={() => openRequirements(`Requisitos de ${sector.setor_nome}`, { setor_id: sector.setor_id })}
+                                onClick={() =>
+                                  openRequirements(`Requisitos de ${sector.setor_nome}`, {
+                                    setor_id: sector.setor_id,
+                                  })
+                                }
                                 className="font-semibold text-primary hover:underline"
                               >
                                 {sector.requisitos_distintos}
@@ -1291,7 +1334,11 @@ export default function ComplianceTreinamentosPage() {
                             <td className="px-3 py-3 text-right font-semibold">
                               <button
                                 type="button"
-                                onClick={() => openRequirements(`Compliance de ${sector.setor_nome}`, { setor_id: sector.setor_id })}
+                                onClick={() =>
+                                  openRequirements(`Compliance de ${sector.setor_nome}`, {
+                                    setor_id: sector.setor_id,
+                                  })
+                                }
                                 className="hover:text-primary hover:underline"
                               >
                                 {sector.compliance_pct == null ? '—' : `${sector.compliance_pct}%`}
@@ -1300,7 +1347,12 @@ export default function ComplianceTreinamentosPage() {
                             <td className="px-3 py-3 text-right font-medium text-emerald-700">
                               <button
                                 type="button"
-                                onClick={() => openRequirements(`Realizados de ${sector.setor_nome}`, { setor_id: sector.setor_id, status: 'CONFORME' })}
+                                onClick={() =>
+                                  openRequirements(`Realizados de ${sector.setor_nome}`, {
+                                    setor_id: sector.setor_id,
+                                    status: 'CONFORME',
+                                  })
+                                }
                                 className="hover:underline"
                                 disabled={!realizedCount(sector.conformes, sector.vencendo)}
                               >
@@ -1319,10 +1371,13 @@ export default function ComplianceTreinamentosPage() {
                                     openScopePeople(sector.setor_id, null, status);
                                     return;
                                   }
-                                  openRequirements(`${drilldownStatusLabel(status)} · ${sector.setor_nome}`, {
-                                    setor_id: sector.setor_id,
-                                    status,
-                                  });
+                                  openRequirements(
+                                    `${drilldownStatusLabel(status)} · ${sector.setor_nome}`,
+                                    {
+                                      setor_id: sector.setor_id,
+                                      status,
+                                    },
+                                  );
                                 }}
                               />
                             </td>
@@ -1341,7 +1396,9 @@ export default function ComplianceTreinamentosPage() {
                                 <td className="px-3 py-2 text-right">
                                   <button
                                     type="button"
-                                    onClick={() => openScopePeople(sector.setor_id, cargo.funcao_id)}
+                                    onClick={() =>
+                                      openScopePeople(sector.setor_id, cargo.funcao_id)
+                                    }
                                     className="font-medium text-primary hover:underline"
                                   >
                                     {cargo.pessoas}
@@ -1350,7 +1407,12 @@ export default function ComplianceTreinamentosPage() {
                                 <td className="px-3 py-2 text-right">
                                   <button
                                     type="button"
-                                    onClick={() => openRequirements(`Requisitos de ${cargo.funcao_nome}`, { setor_id: sector.setor_id, funcao_id: cargo.funcao_id })}
+                                    onClick={() =>
+                                      openRequirements(`Requisitos de ${cargo.funcao_nome}`, {
+                                        setor_id: sector.setor_id,
+                                        funcao_id: cargo.funcao_id,
+                                      })
+                                    }
                                     className="font-semibold text-primary hover:underline"
                                   >
                                     {cargo.requisitos_distintos}
@@ -1359,16 +1421,29 @@ export default function ComplianceTreinamentosPage() {
                                 <td className="px-3 py-2 text-right font-medium">
                                   <button
                                     type="button"
-                                    onClick={() => openRequirements(`Compliance de ${cargo.funcao_nome}`, { setor_id: sector.setor_id, funcao_id: cargo.funcao_id })}
+                                    onClick={() =>
+                                      openRequirements(`Compliance de ${cargo.funcao_nome}`, {
+                                        setor_id: sector.setor_id,
+                                        funcao_id: cargo.funcao_id,
+                                      })
+                                    }
                                     className="hover:text-primary hover:underline"
                                   >
-                                    {cargo.compliance_pct == null ? '—' : `${cargo.compliance_pct}%`}
+                                    {cargo.compliance_pct == null
+                                      ? '—'
+                                      : `${cargo.compliance_pct}%`}
                                   </button>
                                 </td>
                                 <td className="px-3 py-2 text-right font-medium text-emerald-700">
                                   <button
                                     type="button"
-                                    onClick={() => openRequirements(`Realizados de ${cargo.funcao_nome}`, { setor_id: sector.setor_id, funcao_id: cargo.funcao_id, status: 'CONFORME' })}
+                                    onClick={() =>
+                                      openRequirements(`Realizados de ${cargo.funcao_nome}`, {
+                                        setor_id: sector.setor_id,
+                                        funcao_id: cargo.funcao_id,
+                                        status: 'CONFORME',
+                                      })
+                                    }
                                     className="hover:underline"
                                     disabled={!realizedCount(cargo.conformes, cargo.vencendo)}
                                   >
@@ -1387,11 +1462,14 @@ export default function ComplianceTreinamentosPage() {
                                         openScopePeople(sector.setor_id, cargo.funcao_id, status);
                                         return;
                                       }
-                                      openRequirements(`${drilldownStatusLabel(status)} · ${cargo.funcao_nome}`, {
-                                        setor_id: sector.setor_id,
-                                        funcao_id: cargo.funcao_id,
-                                        status,
-                                      });
+                                      openRequirements(
+                                        `${drilldownStatusLabel(status)} · ${cargo.funcao_nome}`,
+                                        {
+                                          setor_id: sector.setor_id,
+                                          funcao_id: cargo.funcao_id,
+                                          status,
+                                        },
+                                      );
                                     }}
                                   />
                                 </td>

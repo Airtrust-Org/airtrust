@@ -3,6 +3,7 @@ import { createStructuredConsole } from '../../utils/logger';
 import { alertasDiariosHandler } from '../alertasDiarios';
 import { processarNotificacoes, TRAINING_ALERT_DAILY_CRON } from '../notificacoes';
 import { refreshTrainingComplianceSnapshots } from '../training-compliance-notifications';
+import { processTrainingComplianceReportAutomation } from '../training-compliance-reports';
 import { logCronHealthSnapshot } from './cron-health';
 import { runDailyFrmsOperations } from './daily-frms';
 import { runDomainEventDispatchJob } from './domain-events';
@@ -22,6 +23,7 @@ type LegacyScheduledHandler = (
 export interface ResilientCronPlan {
   useResilientJobs: boolean;
   runDailyAlerts: boolean;
+  runComplianceReports: boolean;
   runEadRenewal: boolean;
   runDailyFrms: boolean;
   runSigvoosFrms: boolean;
@@ -36,6 +38,7 @@ export function getResilientCronPlan(cron: string, _now = new Date()): Resilient
   return {
     useResilientJobs: isTenMinute || isDaily,
     runDailyAlerts: isDaily,
+    runComplianceReports: isTenMinute || isDaily,
     runEadRenewal: isTenMinute || isDaily,
     runDailyFrms: isDaily,
     runSigvoosFrms: isTenMinute,
@@ -129,6 +132,9 @@ export async function runResilientScheduledJobs(
   await runStep('training-compliance-snapshots', plan.runDailyAlerts, () =>
     refreshTrainingComplianceSnapshots(env),
   );
+  await runStep('training-compliance-reports', plan.runComplianceReports, () =>
+    processTrainingComplianceReportAutomation(env, now),
+  );
   await runStep('training-alerts', plan.runDailyAlerts, () => processarNotificacoes(env));
   await runStep('daily-alerts', plan.runDailyAlerts, () => alertasDiariosHandler(event, env));
   await runStep('ead-renewal', plan.runEadRenewal, () => runEadRenewalJob(env.DB, logger));
@@ -139,12 +145,16 @@ export async function runResilientScheduledJobs(
     runDomainEventDispatchJob(env.DB, logger),
   );
   await runStep('daily-frms', plan.runDailyFrms, () => runDailyFrmsOperations(event, env, logger));
-  await runStep('cron-health', plan.runCronHealth, () => logCronHealthSnapshot(env.DB, logger, now));
+  await runStep('cron-health', plan.runCronHealth, () =>
+    logCronHealthSnapshot(env.DB, logger, now),
+  );
 
   if (plan.delegateLegacy) {
     // Keep daily generic maintenance, while neutralizing the functional blocks
     // already executed by the resilient router.
-    await runStep('legacy-delegated', true, () => legacyHandler(withDelegatedCron(event), env, ctx));
+    await runStep('legacy-delegated', true, () =>
+      legacyHandler(withDelegatedCron(event), env, ctx),
+    );
   }
 
   if (failures.length > 0) {
