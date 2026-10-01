@@ -192,9 +192,24 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
-      - run: |
+      - name: Install Playwright browser dependencies
+        timeout-minutes: 6
+        shell: bash
+        run: |
+          set -euo pipefail
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources 2>/dev/null || true
-          npx playwright install --with-deps chromium webkit
+          sudo tee /etc/apt/apt.conf.d/99airtrust-ci-network >/dev/null <<'EOF'
+          Acquire::Retries "3";
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          DPkg::Lock::Timeout "60";
+          EOF
+          timeout --signal=TERM 5m npx playwright install-deps chromium webkit
+      - name: Install Playwright browsers
+        timeout-minutes: 6
+        env:
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT: 120000
+        run: npx playwright install chromium webkit
       - name: Run public auth-boundary E2E with dev bypass disabled
         shell: bash
         run: |

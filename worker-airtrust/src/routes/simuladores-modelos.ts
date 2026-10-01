@@ -22,6 +22,7 @@ import {
 } from './simuladores-shared';
 import { requirePermission } from '../middleware/rbac';
 import { requireOperacoes } from './simuladores-modelos-rbac';
+import { getSchemaColumns, hasSchemaTable } from '../utils/db-schema';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -35,13 +36,7 @@ function getEmpresaIdFromRequest(c: Parameters<typeof getTenantContext>[0]): num
  * legacy schema; an unreadable schema is an operational error and must reach
  * the route handler rather than silently exposing legacy data.
  */
-async function optionalTableExists(db: D1Database, tableName: string): Promise<boolean> {
-  const row = await db
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
-    .bind(tableName)
-    .first<{ name: string }>();
-  return row?.name === tableName;
-}
+const optionalTableExists = hasSchemaTable;
 
 function validateObservacoesBatchInput(
   manobras: Array<{ observacoes?: unknown }>,
@@ -236,8 +231,8 @@ app.post('/tipos-sessao', requirePermission('simuladores', 'criar', 'admin', 'ma
       );
     }
     const { codigo, nome, descricao, cor } = parsed.data;
-    const tiposCols = await c.env.DB.prepare('PRAGMA table_info(tipos_sessao)').all();
-    const hasCorCol = (tiposCols.results || []).some((row: any) => String(row?.name || '') === 'cor');
+    const tiposCols = await getSchemaColumns(c.env.DB, 'tipos_sessao');
+    const hasCorCol = tiposCols.has('cor');
 
     // Verificar duplicidade
     const existe = await c.env.DB.prepare(
@@ -292,8 +287,8 @@ app.put('/tipos-sessao/:id', requirePermission('simuladores', 'editar', 'admin',
       );
     }
     const { codigo, nome, descricao, cor } = parsed.data;
-    const tiposCols = await c.env.DB.prepare('PRAGMA table_info(tipos_sessao)').all();
-    const hasCorCol = (tiposCols.results || []).some((row: any) => String(row?.name || '') === 'cor');
+    const tiposCols = await getSchemaColumns(c.env.DB, 'tipos_sessao');
+    const hasCorCol = tiposCols.has('cor');
 
     // Buscar dados anteriores
     const anterior = await c.env.DB.prepare(
@@ -392,11 +387,10 @@ app.delete('/tipos-sessao/:id', requirePermission('simuladores', 'deletar', 'adm
 
 async function normalizeModelosSessaoModeloAeronave(db: D1Database, empresaId: number) {
   try {
-    const col = await db.prepare('PRAGMA table_info(modelos_sessao)').all();
-    const columns = (col.results || []).map((r: any) => r.name);
-    const hasModeloAeronave = columns.includes('modelo_aeronave');
-    const hasCodigoAeronave = columns.includes('codigo_aeronave');
-    const hasTipoAeronave = columns.includes('tipo_aeronave');
+    const columns = await getSchemaColumns(db, 'modelos_sessao');
+    const hasModeloAeronave = columns.has('modelo_aeronave');
+    const hasCodigoAeronave = columns.has('codigo_aeronave');
+    const hasTipoAeronave = columns.has('tipo_aeronave');
 
     if (!hasModeloAeronave) return;
 
@@ -485,9 +479,8 @@ app.get('/modelos-sessao', async (c) => {
 
     await normalizeModelosSessaoModeloAeronave(c.env.DB, empresaId);
 
-    const col = await c.env.DB.prepare('PRAGMA table_info(modelos_sessao)').all();
-    const columns = (col.results || []).map((r: any) => r.name);
-    const hasQualificacaoTipoId = columns.includes('qualificacao_tipo_id');
+    const columns = await getSchemaColumns(c.env.DB, 'modelos_sessao');
+    const hasQualificacaoTipoId = columns.has('qualificacao_tipo_id');
     const hasVersioningTable = await optionalTableExists(c.env.DB, 'modelos_sessao_versionamento');
     const versioningJoin = hasVersioningTable
       ? 'INNER JOIN modelos_sessao_versionamento msv ON msv.modelo_id = ms.id AND msv.empresa_id = ms.empresa_id AND msv.is_current = 1'
@@ -496,9 +489,9 @@ app.get('/modelos-sessao', async (c) => {
       ? ', msv.codigo_canonico, msv.versao_matriz, msv.versao_numero, msv.efetivo_em, msv.efetivo_ate'
       : ', ms.codigo as codigo_canonico, NULL as versao_matriz, NULL as versao_numero, NULL as efetivo_em, NULL as efetivo_ate';
     const filtroModeloExpr = [
-      columns.includes('modelo_aeronave') ? 'ms.modelo_aeronave' : null,
-      columns.includes('codigo_aeronave') ? 'ms.codigo_aeronave' : null,
-      columns.includes('tipo_aeronave') ? 'ms.tipo_aeronave' : null,
+      columns.has('modelo_aeronave') ? 'ms.modelo_aeronave' : null,
+      columns.has('codigo_aeronave') ? 'ms.codigo_aeronave' : null,
+      columns.has('tipo_aeronave') ? 'ms.tipo_aeronave' : null,
     ]
       .filter(Boolean)
       .join(', ');
@@ -507,14 +500,10 @@ app.get('/modelos-sessao', async (c) => {
     // Tenant columns are security invariants, not optional compatibility hints.
     // If schema introspection fails or either column is absent, let the route fail
     // closed instead of silently dropping tenant predicates from the JOINs.
-    const qtCol = await c.env.DB.prepare('PRAGMA table_info(qualificacoes_tipos)').all();
-    const hasQualificacoesEmpresaId = (qtCol.results || []).some(
-      (r: { name?: unknown }) => String(r.name || '') === 'empresa_id',
-    );
-    const tsCol = await c.env.DB.prepare('PRAGMA table_info(tipos_sessao)').all();
-    const hasTiposEmpresaId = (tsCol.results || []).some(
-      (r: { name?: unknown }) => String(r.name || '') === 'empresa_id',
-    );
+    const qtColumns = await getSchemaColumns(c.env.DB, 'qualificacoes_tipos');
+    const hasQualificacoesEmpresaId = qtColumns.has('empresa_id');
+    const tsColumns = await getSchemaColumns(c.env.DB, 'tipos_sessao');
+    const hasTiposEmpresaId = tsColumns.has('empresa_id');
     if (!hasQualificacoesEmpresaId || !hasTiposEmpresaId) {
       throw new Error('SIMULADORES_TENANT_SCHEMA_REQUIRED');
     }
@@ -1011,8 +1000,8 @@ app.post('/modelos-sessao', requirePermission('simuladores', 'criar', 'admin', '
     }
 
     // Verificar se a coluna tipo já existe (adicionada pela migration 0363)
-    const colInfo = await c.env.DB.prepare('PRAGMA table_info(modelos_sessao)').all();
-    const hasTipoCol = (colInfo.results || []).some((r: any) => r.name === 'tipo');
+    const modeloColumns = await getSchemaColumns(c.env.DB, 'modelos_sessao');
+    const hasTipoCol = modeloColumns.has('tipo');
 
     // Inserir modelo
     const insertSql = hasTipoCol
@@ -1228,8 +1217,8 @@ app.post('/modelos-sessao/:id/clonar', requirePermission('simuladores', 'criar',
 
     const cloneNome = `${String(modeloOriginal.nome || 'Modelo').trim()} (Cópia)`;
 
-    const colInfoClone = await c.env.DB.prepare('PRAGMA table_info(modelos_sessao)').all();
-    const hasTipoColClone = (colInfoClone.results || []).some((r: any) => r.name === 'tipo');
+    const modeloColumns = await getSchemaColumns(c.env.DB, 'modelos_sessao');
+    const hasTipoColClone = modeloColumns.has('tipo');
 
     const cloneSql = hasTipoColClone
       ? `INSERT INTO modelos_sessao (
@@ -1774,8 +1763,8 @@ app.put('/modelos-sessao/:id', requirePermission('simuladores', 'editar', 'admin
     }
 
     // Verificar se a coluna tipo já existe (adicionada pela migration 0363)
-    const colInfoPut = await c.env.DB.prepare('PRAGMA table_info(modelos_sessao)').all();
-    const hasTipoColPut = (colInfoPut.results || []).some((r: any) => r.name === 'tipo');
+    const modeloColumns = await getSchemaColumns(c.env.DB, 'modelos_sessao');
+    const hasTipoColPut = modeloColumns.has('tipo');
 
     // Atualizar
     const updateSql = hasTipoColPut
