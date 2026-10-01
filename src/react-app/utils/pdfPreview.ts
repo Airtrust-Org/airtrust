@@ -22,30 +22,93 @@ function isSafariBrowser(): boolean {
   );
 }
 
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        resolve(reader.result);
-        return;
-      }
-      reject(new Error('Falha ao preparar PDF para o Safari'));
-    };
-    reader.onerror = () => reject(reader.error || new Error('Falha ao preparar PDF para o Safari'));
-    reader.readAsDataURL(blob);
-  });
-}
-
-async function renderSafariPdfPreview(previewWindow: Window, blob: Blob): Promise<void> {
-  const dataUrl = await blobToDataUrl(blob);
+async function renderSafariPdfPreview(
+  previewWindow: Window,
+  blob: Blob,
+  fileName: string,
+): Promise<void> {
   if (previewWindow.closed) {
     throw new Error('A janela de visualização foi fechada');
   }
-  // Safari's native PDF viewer can leave blob: PDFs blank even after iframe.onload.
-  // Navigating the already-open preview tab to a data: PDF uses the same native viewer
-  // with the authenticated bytes already fetched by AirTrust and renders reliably.
-  previewWindow.location.replace(dataUrl);
+
+  // Safari/WebKit can refuse top-level data: PDF navigation and can also leave
+  // authenticated blob: PDFs blank in the native viewer. Render the already-fetched
+  // bytes with PDF.js instead, keeping the document fully local to the preview tab.
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const pdfjs = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as typeof import(
+    'pdfjs-dist/legacy/build/pdf.mjs'
+  );
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/legacy/build/pdf.worker.min.mjs',
+    import.meta.url,
+  ).toString();
+
+  const loadingTask = pdfjs.getDocument({
+    data: bytes,
+    isEvalSupported: false,
+    useWorkerFetch: false,
+  });
+  const pdf = await loadingTask.promise;
+
+  try {
+    if (previewWindow.closed) {
+      throw new Error('A janela de visualização foi fechada');
+    }
+
+    const document = previewWindow.document;
+    const loading = document.getElementById('loading');
+    const toolbar = document.getElementById('toolbar');
+    const download = document.getElementById('downloadLink') as HTMLAnchorElement | null;
+    const nativeViewer = document.getElementById('viewer');
+    const pages = document.getElementById('pdfPages');
+
+    if (!loading || !toolbar || !download || !pages) {
+      throw new Error('A janela de visualização do PDF não ficou pronta');
+    }
+
+    const childRealm = previewWindow as Window & typeof globalThis;
+    const downloadBlob = new childRealm.Blob([bytes], { type: blob.type || 'application/pdf' });
+    const downloadUrl = childRealm.URL.createObjectURL(downloadBlob);
+
+    loading.style.display = 'none';
+    toolbar.style.display = 'flex';
+    download.href = downloadUrl;
+    download.download = fileName || 'documento.pdf';
+    if (nativeViewer) nativeViewer.style.display = 'none';
+    pages.replaceChildren();
+    pages.style.display = 'block';
+
+    const maxPageWidth = Math.max(320, (previewWindow.innerWidth || 1024) - 48);
+
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const naturalViewport = page.getViewport({ scale: 1 });
+      const scale = Math.min(2, Math.max(1, maxPageWidth / naturalViewport.width));
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+
+      if (!context) {
+        page.cleanup();
+        throw new Error('Safari não disponibilizou o canvas para visualizar o PDF');
+      }
+
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      canvas.style.display = 'block';
+      canvas.style.maxWidth = '100%';
+      canvas.style.height = 'auto';
+      canvas.style.margin = '0 auto 16px';
+      canvas.style.background = '#fff';
+      canvas.style.boxShadow = '0 2px 10px rgba(0,0,0,0.28)';
+
+      pages.appendChild(canvas);
+      await page.render({ canvasContext: context, viewport }).promise;
+      page.cleanup();
+    }
+  } finally {
+    await pdf.destroy();
+  }
 }
 
 function triggerBlobDownload(blob: Blob, fileName: string): void {
@@ -114,7 +177,7 @@ function renderLoadingState(previewWindow: Window, title: string): void {
       font-size: 13px;
       font-weight: 600;
     }
-    #viewer {
+    #viewer, #pdfPages {
       display: none;
       position: fixed;
       top: 48px;
@@ -124,6 +187,7 @@ function renderLoadingState(previewWindow: Window, title: string): void {
       border: none;
       background: #525659;
     }
+    #pdfPages { overflow: auto; padding: 16px; }
     #errorBox {
       display: none; padding: 24px; max-width: 520px; margin: auto;
       background: #fff; border-radius: 12px; color: #7c2d12;
@@ -140,6 +204,7 @@ function renderLoadingState(previewWindow: Window, title: string): void {
     <a id="downloadLink" href="#" download>Baixar PDF</a>
   </div>
   <iframe id="viewer" title="${escapeHtml(title)}"></iframe>
+  <div id="pdfPages" aria-label="Visualização do PDF"></div>
   <div id="errorBox"></div>
   <script>
     // Called by the opener once PDF bytes are ready.
@@ -326,7 +391,7 @@ export async function previewPdfBeforeDownload({
     }
 
     if (previewWindow && !previewWindow.closed && isSafariBrowser()) {
-      await renderSafariPdfPreview(previewWindow, blob);
+      await renderSafariPdfPreview(previewWindow, blob, fileName);
       return;
     }
 
