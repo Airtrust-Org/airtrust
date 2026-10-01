@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TrainingComplianceReportBuilder } from '../TrainingComplianceReportBuilder';
 
@@ -139,13 +139,15 @@ describe('TrainingComplianceReportBuilder', () => {
         expect.stringContaining('funcionario_id=100'),
       ),
     );
-    expect(fetchWithAuthMock).toHaveBeenCalledWith(expect.stringContaining('qualificacao_tipo_id=300'));
+    expect(fetchWithAuthMock).toHaveBeenCalledWith(
+      expect.stringContaining('qualificacao_tipo_id=300'),
+    );
     expect(fetchWithAuthMock).toHaveBeenCalledWith(expect.stringContaining('CONFORME'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Enviar ao gestor' }));
-    await screen.findByRole('dialog');
-    fireEvent.click(screen.getByLabelText('Manutenção'));
-    fireEvent.click(screen.getByRole('button', { name: /Enviar \(2\)/ }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByLabelText('Manutenção'));
+    fireEvent.click(within(dialog).getByRole('button', { name: /Enviar \(2\)/ }));
 
     await waitFor(() =>
       expect(fetchWithAuthMock).toHaveBeenCalledWith(
@@ -155,9 +157,8 @@ describe('TrainingComplianceReportBuilder', () => {
     );
     expect(toastMock.success).toHaveBeenCalledWith(expect.stringContaining('2 gestor'));
 
-    const operationLabels = screen.getAllByLabelText('Operações');
-    fireEvent.click(operationLabels[operationLabels.length - 1]);
-    const toggle = screen.getByRole('button', { name: '' });
+    fireEvent.click(screen.getByLabelText('Operações'));
+    const toggle = screen.getByRole('button', { pressed: false });
     fireEvent.click(toggle);
 
     await waitFor(() =>
