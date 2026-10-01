@@ -12,6 +12,7 @@ import {
   sendComplianceNotification,
   type ComplianceNotificationTarget,
 } from '../services/training-compliance-notifications';
+import { normalizeSearchText } from '../utils/text-search';
 import {
   buildDailyComplianceSnapshots,
   readTrainingComplianceTrend,
@@ -198,7 +199,8 @@ export function createTrainingComplianceIntelligenceRoutes({
     const setorId = asPositiveInt(c.req.query('setor_id'));
     const funcaoId = asPositiveInt(c.req.query('funcao_id'));
     const qualificacaoTipoId = asPositiveInt(c.req.query('qualificacao_tipo_id'));
-    const q = String(c.req.query('q') || '').trim().toLowerCase();
+    const q = normalizeSearchText(c.req.query('q'));
+    const funcionarioQ = normalizeSearchText(c.req.query('funcionario_q'));
     const critico = String(c.req.query('critico') || '').toLowerCase() === 'true';
     const ateDiasRaw = c.req.query('ate_dias');
     const ateDias = ateDiasRaw === undefined || ateDiasRaw === '' ? null : Number(ateDiasRaw);
@@ -222,7 +224,12 @@ export function createTrainingComplianceIntelligenceRoutes({
       CONFORME: 4,
     };
     const data = snapshot.people
-      .filter((person) => (!setorId || person.setor_id === setorId) && (!funcaoId || person.funcao_id === funcaoId))
+      .filter(
+        (person) =>
+          (!setorId || person.setor_id === setorId) &&
+          (!funcaoId || person.funcao_id === funcaoId) &&
+          (!funcionarioQ || normalizeSearchText(person.nome).includes(funcionarioQ)),
+      )
       .flatMap((person) =>
         person.requisitos
           .filter((requirement) => requirement.obrigatoriedade === 'OBRIGATORIA')
@@ -242,7 +249,7 @@ export function createTrainingComplianceIntelligenceRoutes({
               person.funcao_nome,
               requirement.qualificacao_tipo_nome,
               requirement.qualificacao_tipo_codigo,
-            ].some((value) => String(value || '').toLowerCase().includes(q));
+            ].some((value) => normalizeSearchText(value).includes(q));
           })
           .map((requirement) => {
             const stats = notificationStats.get(`${person.id}:${requirement.qualificacao_tipo_id}`);
@@ -440,7 +447,9 @@ export function createTrainingComplianceIntelligenceRoutes({
     const empresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
     const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
-    const allowedIds = new Set(snapshot.people.map((person) => person.id));
+    const peopleById = new Map(snapshot.people.map((person) => [person.id, person]));
+    const q = normalizeSearchText(c.req.query('q'));
+    const funcionarioQ = normalizeSearchText(c.req.query('funcionario_q'));
     const limit = Math.min(300, Math.max(1, Number(c.req.query('limit') || 100)));
     if (!(await tableExists(c.env.DB, 'notificacoes_log'))) return c.json({ success: true, data: [] });
     const rows = await c.env.DB
@@ -473,7 +482,21 @@ export function createTrainingComplianceIntelligenceRoutes({
         body = {};
       }
       const funcionarioId = Number(body.funcionario_id || 0);
-      if (!funcionarioId || !allowedIds.has(funcionarioId)) continue;
+      const person = peopleById.get(funcionarioId);
+      if (!funcionarioId || !person) continue;
+      if (funcionarioQ && !normalizeSearchText(person.nome).includes(funcionarioQ)) continue;
+      if (
+        q &&
+        ![
+          body.funcionario_nome,
+          body.setor_nome,
+          body.qualificacao_nome,
+          row.destinatario,
+          row.tipo,
+        ].some((value) => normalizeSearchText(value).includes(q))
+      ) {
+        continue;
+      }
       data.push({
         id: row.id,
         funcionario_id: funcionarioId,

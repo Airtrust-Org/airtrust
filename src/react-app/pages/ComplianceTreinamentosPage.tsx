@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Clock3,
   GraduationCap,
+  Search,
   ShieldCheck,
   Users,
   XCircle,
@@ -117,6 +118,7 @@ type SectorCompliance = {
 type Catalogs = {
   setores: Array<{ id: number; nome: string }>;
   funcoes: Array<{ id: number; nome: string }>;
+  funcionarios: Array<{ id: number; nome: string }>;
   setor_funcoes: Array<{ setor_id: number; funcao_id: number }>;
 };
 
@@ -131,10 +133,11 @@ async function readJson<T>(response: Response): Promise<T> {
   return json.data as T;
 }
 
-function buildFilter(setorId: number | null, funcaoId: number | null) {
+function buildFilter(setorId: number | null, funcaoId: number | null, search = '') {
   const params = new URLSearchParams();
   if (setorId) params.set('setor_id', String(setorId));
   if (funcaoId) params.set('funcao_id', String(funcaoId));
+  if (search.trim()) params.set('q', search.trim());
   const query = params.toString();
   return query ? `?${query}` : '';
 }
@@ -303,6 +306,8 @@ export default function ComplianceTreinamentosPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [setorId, setSetorId] = useState<number | null>(null);
   const [funcaoId, setFuncaoId] = useState<number | null>(null);
+  const [searchText, setSearchText] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [tab, setTab] = useState<ComplianceTab>(() => {
     const requested = searchParams.get('tab');
     return isComplianceTab(requested) ? requested : 'pendencias';
@@ -342,6 +347,11 @@ export default function ComplianceTreinamentosPage() {
     if (nextTab !== 'pessoas') setDrilldown(null);
   }, [searchParams]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearchQuery(searchText.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [searchText]);
+
   const capabilities = useQuery({
     queryKey: ['training-compliance', 'capabilities'],
     queryFn: async () =>
@@ -356,15 +366,15 @@ export default function ComplianceTreinamentosPage() {
     queryFn: async () =>
       readJson<Catalogs>(await fetchWithAuth('/api/compliance-treinamentos/catalogos')),
   });
-  const filter = buildFilter(setorId, funcaoId);
+  const filter = buildFilter(setorId, funcaoId, searchQuery);
   const summary = useQuery({
-    queryKey: ['training-compliance', 'summary', setorId, funcaoId],
+    queryKey: ['training-compliance', 'summary', setorId, funcaoId, searchQuery],
     enabled: schemaReady,
     queryFn: async () =>
       readJson<Summary>(await fetchWithAuth(`/api/compliance-treinamentos/resumo${filter}`)),
   });
   const people = useQuery({
-    queryKey: ['training-compliance', 'people', setorId, funcaoId, drilldown],
+    queryKey: ['training-compliance', 'people', setorId, funcaoId, searchQuery, drilldown],
     enabled: schemaReady && tab === 'pessoas',
     queryFn: async () => {
       const params = new URLSearchParams(filter.startsWith('?') ? filter.slice(1) : '');
@@ -380,7 +390,7 @@ export default function ComplianceTreinamentosPage() {
     },
   });
   const trainings = useQuery({
-    queryKey: ['training-compliance', 'trainings', setorId, funcaoId],
+    queryKey: ['training-compliance', 'trainings', setorId, funcaoId, searchQuery],
     enabled: schemaReady && tab === 'treinamentos',
     queryFn: async () =>
       readJson<Training[]>(
@@ -388,13 +398,11 @@ export default function ComplianceTreinamentosPage() {
       ),
   });
   const sectors = useQuery({
-    queryKey: ['training-compliance', 'sectors', setorId],
+    queryKey: ['training-compliance', 'sectors', setorId, searchQuery],
     enabled: schemaReady && tab === 'setores',
     queryFn: async () =>
       readJson<SectorCompliance[]>(
-        await fetchWithAuth(
-          `/api/compliance-treinamentos/setores${setorId ? `?setor_id=${setorId}` : ''}`,
-        ),
+        await fetchWithAuth(`/api/compliance-treinamentos/setores${buildFilter(setorId, null, searchQuery)}`),
       ),
   });
 
@@ -510,7 +518,10 @@ export default function ComplianceTreinamentosPage() {
   };
 
   const openRequirements = (title: string, filters: RequirementDrilldownFilters) => {
-    setRequirementDrilldown({ title, filters });
+    setRequirementDrilldown({
+      title,
+      filters: searchQuery ? { ...filters, q: searchQuery } : filters,
+    });
   };
 
   const summaryRealized = realizedCount(summary.data?.conformes ?? 0, summary.data?.vencendo ?? 0);
@@ -541,7 +552,24 @@ export default function ComplianceTreinamentosPage() {
           </div>
           {tab !== 'administracao' ? (
             <div className="flex min-w-[300px] flex-col gap-2">
-              <div className={`grid gap-2 ${tab === 'setores' ? '' : 'sm:grid-cols-2'}`}>
+              <div className={`grid gap-2 ${tab === 'setores' ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
+                <label className="relative min-w-[220px]">
+                  <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                  <input
+                    type="search"
+                    list="compliance-funcionarios"
+                    aria-label="Buscar funcionário no compliance"
+                    value={searchText}
+                    onChange={(event) => setSearchText(event.target.value)}
+                    placeholder="Buscar funcionário pelo nome"
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm"
+                  />
+                  <datalist id="compliance-funcionarios">
+                    {(catalogs.data?.funcionarios || []).map((item) => (
+                      <option key={item.id} value={item.nome} />
+                    ))}
+                  </datalist>
+                </label>
                 <select
                   aria-label="Filtrar por setor"
                   value={setorId ?? ''}
@@ -573,12 +601,14 @@ export default function ComplianceTreinamentosPage() {
                   </select>
                 ) : null}
               </div>
-              {setorId || funcaoId ? (
+              {setorId || funcaoId || searchText ? (
                 <button
                   type="button"
                   onClick={() => {
                     setSetorId(null);
                     setFuncaoId(null);
+                    setSearchText('');
+                    setSearchQuery('');
                   }}
                   className="self-end text-xs font-medium text-slate-500 hover:text-primary"
                 >
@@ -795,6 +825,7 @@ export default function ComplianceTreinamentosPage() {
                   setorId={setorId}
                   funcaoId={funcaoId}
                   catalogs={catalogs.data}
+                  search={searchQuery}
                   summary={{
                     pessoas: summary.data?.pessoas ?? 0,
                     requisitos_obrigatorios: summary.data?.requisitos_obrigatorios ?? 0,

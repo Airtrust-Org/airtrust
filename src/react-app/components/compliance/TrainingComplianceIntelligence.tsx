@@ -8,7 +8,6 @@ import {
   History,
   Mail,
   MessageCircle,
-  Search,
   Send,
   Settings2,
   ShieldAlert,
@@ -133,17 +132,18 @@ export function TrainingComplianceIntelligence({
   setorId,
   funcaoId,
   catalogs,
+  search,
   summary,
 }: {
   mode: Mode;
   setorId: number | null;
   funcaoId: number | null;
   catalogs: Catalogs | undefined;
+  search: string;
   summary: TrainingComplianceReportSummary;
 }) {
   const queryClient = useQueryClient();
   const { user, empresas, empresaAtualId } = useAuth();
-  const [search, setSearch] = useState('');
   const [status, setStatus] = useState<string>('TODAS');
   const [criticalOnly, setCriticalOnly] = useState(false);
   const [windowDays, setWindowDays] = useState<string>('');
@@ -166,21 +166,25 @@ export function TrainingComplianceIntelligence({
   const params = new URLSearchParams();
   if (setorId) params.set('setor_id', String(setorId));
   if (funcaoId) params.set('funcao_id', String(funcaoId));
+  if (search.trim()) params.set('funcionario_q', search.trim());
   const pendingUrl = `/api/compliance-treinamentos/pendencias${params.size ? `?${params.toString()}` : ''}`;
 
   const pendings = useQuery({
-    queryKey: ['training-compliance', 'intelligence-pendings', setorId, funcaoId],
+    queryKey: ['training-compliance', 'intelligence-pendings', setorId, funcaoId, search],
     enabled: mode === 'pendencias' || mode === 'relatorios',
     queryFn: async () => readJson<TrainingCompliancePendingRow[]>(await fetchWithAuth(pendingUrl)),
   });
 
   const communications = useQuery({
-    queryKey: ['training-compliance', 'communications'],
+    queryKey: ['training-compliance', 'communications', search],
     enabled: mode === 'comunicacoes',
-    queryFn: async () =>
-      readJson<Communication[]>(
-        await fetchWithAuth('/api/compliance-treinamentos/comunicacoes?limit=200'),
-      ),
+    queryFn: async () => {
+      const communicationParams = new URLSearchParams({ limit: '200' });
+      if (search.trim()) communicationParams.set('funcionario_q', search.trim());
+      return readJson<Communication[]>(
+        await fetchWithAuth(`/api/compliance-treinamentos/comunicacoes?${communicationParams.toString()}`),
+      );
+    },
   });
 
   const trend = useQuery({
@@ -196,34 +200,24 @@ export function TrainingComplianceIntelligence({
     },
   });
 
-  const visibleRows = useMemo(() => {
-    const normalized = search.trim().toLowerCase();
-    return (pendings.data || []).filter((row) => {
-      if (status !== 'TODAS' && row.status_compliance !== status) return false;
-      if (criticalOnly && !row.critico_operacional) return false;
-      if (windowDays) {
-        const days = Number(windowDays);
-        if (
-          row.status_compliance !== 'NAO_REALIZADO' &&
-          (row.dias_para_vencer == null || row.dias_para_vencer > days)
-        ) {
-          return false;
+  const visibleRows = useMemo(
+    () =>
+      (pendings.data || []).filter((row) => {
+        if (status !== 'TODAS' && row.status_compliance !== status) return false;
+        if (criticalOnly && !row.critico_operacional) return false;
+        if (windowDays) {
+          const days = Number(windowDays);
+          if (
+            row.status_compliance !== 'NAO_REALIZADO' &&
+            (row.dias_para_vencer == null || row.dias_para_vencer > days)
+          ) {
+            return false;
+          }
         }
-      }
-      if (!normalized) return true;
-      return [
-        row.funcionario_nome,
-        row.setor_nome,
-        row.funcao_nome,
-        row.qualificacao_tipo_nome,
-        row.qualificacao_tipo_codigo,
-      ].some((value) =>
-        String(value || '')
-          .toLowerCase()
-          .includes(normalized),
-      );
-    });
-  }, [criticalOnly, pendings.data, search, status, windowDays]);
+        return true;
+      }),
+    [criticalOnly, pendings.data, status, windowDays],
+  );
 
   const sortedVisibleRows = useMemo(
     () =>
@@ -588,6 +582,9 @@ export function TrainingComplianceIntelligence({
               <p className="mt-1 text-xs text-slate-500">
                 Histórico real registrado diariamente para o mesmo escopo de setor/função
                 selecionado.
+                {search.trim()
+                  ? ' A série histórica permanece agregada; o filtro por funcionário se aplica ao relatório e às pendências atuais.'
+                  : ''}
               </p>
             </div>
           </div>
@@ -736,8 +733,6 @@ export function TrainingComplianceIntelligence({
         </section>
 
         <PendingFilters
-          search={search}
-          setSearch={setSearch}
           status={status}
           setStatus={setStatus}
           criticalOnly={criticalOnly}
@@ -778,8 +773,6 @@ export function TrainingComplianceIntelligence({
       </div>
 
       <PendingFilters
-        search={search}
-        setSearch={setSearch}
         status={status}
         setStatus={setStatus}
         criticalOnly={criticalOnly}
@@ -1136,8 +1129,6 @@ function ComplianceTrendChart({
 }
 
 function PendingFilters({
-  search,
-  setSearch,
   status,
   setStatus,
   criticalOnly,
@@ -1145,8 +1136,6 @@ function PendingFilters({
   windowDays,
   setWindowDays,
 }: {
-  search: string;
-  setSearch: (value: string) => void;
   status: string;
   setStatus: (value: string) => void;
   criticalOnly: boolean;
@@ -1155,16 +1144,7 @@ function PendingFilters({
   setWindowDays: (value: string) => void;
 }) {
   return (
-    <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 md:grid-cols-[minmax(220px,1fr)_180px_150px_auto]">
-      <label className="relative">
-        <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Buscar pessoa, setor ou treinamento"
-          className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm"
-        />
-      </label>
+    <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-[180px_150px_auto]">
       <select
         value={status}
         onChange={(event) => setStatus(event.target.value)}

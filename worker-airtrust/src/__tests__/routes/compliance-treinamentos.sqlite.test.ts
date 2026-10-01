@@ -175,6 +175,61 @@ describe('training compliance engine', () => {
     patchComplianceSchema(sqlite);
   });
 
+  it('filtra todas as visões operacionais por nome do funcionário, ignorando acentos', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+    `);
+    const app = createApp(sqlite.asD1());
+
+    const peopleResponse = await app.request('/pessoas?q=operacoes');
+    const peopleBody = (await peopleResponse.json()) as any;
+    expect(peopleResponse.status).toBe(200);
+    expect(peopleBody.data.map((item: any) => item.id)).toEqual([1002]);
+
+    const summaryResponse = await app.request('/resumo?q=operacoes');
+    const summaryBody = (await summaryResponse.json()) as any;
+    expect(summaryResponse.status).toBe(200);
+    expect(summaryBody.data.pessoas).toBe(1);
+
+    const trainingsResponse = await app.request('/treinamentos?q=operacoes');
+    const trainingsBody = (await trainingsResponse.json()) as any;
+    expect(trainingsResponse.status).toBe(200);
+    expect(trainingsBody.data).toHaveLength(1);
+    expect(trainingsBody.data[0]).toMatchObject({ qualificacao_tipo_id: 100, pessoas: 1 });
+
+    const sectorsResponse = await app.request('/setores?q=operacoes');
+    const sectorsBody = (await sectorsResponse.json()) as any;
+    expect(sectorsResponse.status).toBe(200);
+    expect(sectorsBody.data).toHaveLength(1);
+    expect(sectorsBody.data[0]).toMatchObject({ setor_id: 11, setor_nome: 'Operações', pessoas: 1 });
+
+    const requirementsResponse = await app.request('/requisitos-aplicaveis?q=operacoes');
+    const requirementsBody = (await requirementsResponse.json()) as any;
+    expect(requirementsResponse.status).toBe(200);
+    expect(requirementsBody.meta.pessoas).toBe(1);
+
+    const pendingResponse = await app.request('/pendencias?funcionario_q=operacoes&status=NAO_REALIZADO');
+    const pendingBody = (await pendingResponse.json()) as any;
+    expect(pendingResponse.status).toBe(200);
+    expect(pendingBody.data.map((item: any) => item.funcionario_id)).toEqual([1002]);
+
+    sqlite.database.exec(`
+      INSERT INTO notificacoes_log
+        (empresa_id, funcionario_cpf, tipo, destinatario, assunto, corpo, status, enviado_em)
+      VALUES
+        (1, '113', 'EMAIL_COMPLIANCE', 'ops@example.com', '[COMPLIANCE_TREINAMENTO:100:OPS]',
+         '{"funcionario_id":1002,"funcionario_nome":"Operações","qualificacao_tipo_id":100}', 'enviada', '2026-09-30 10:00:00'),
+        (1, '111', 'EMAIL_COMPLIANCE', 'outro@example.com', '[COMPLIANCE_TREINAMENTO:100:OUTRO]',
+         '{"funcionario_id":1000,"funcionario_nome":"Antes dos 60","qualificacao_tipo_id":100}', 'enviada', '2026-09-30 11:00:00');
+    `);
+    const communicationsResponse = await app.request('/comunicacoes?funcionario_q=operacoes');
+    const communicationsBody = (await communicationsResponse.json()) as any;
+    expect(communicationsResponse.status).toBe(200);
+    expect(communicationsBody.data.map((item: any) => item.funcionario_id)).toEqual([1002]);
+  });
+
   it('nao trata pessoa sem regra aplicavel como 100% conforme', async () => {
     const app = createApp(sqlite.asD1());
     const personResponse = await app.request('/funcionarios/1002');
