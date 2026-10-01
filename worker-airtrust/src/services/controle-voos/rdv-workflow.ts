@@ -81,6 +81,38 @@ function defaultGrantForRole(capability: string, role: string): boolean {
   return false; // aprovar_comercial e quaisquer capabilities futuras: sem default, exige GRANT explícito
 }
 
+async function hasViewerStudentProfileOwnScopeFallback(
+  c: Context<{ Bindings: Env }>,
+): Promise<boolean> {
+  const userId = Number((c.get as (key: string) => unknown)('userId'));
+  const empresaId = Number((c.get as (key: string) => unknown)('empresaId'));
+  if (!Number.isInteger(userId) || userId <= 0) return false;
+  if (!Number.isInteger(empresaId) || empresaId <= 0) return false;
+
+  try {
+    const row = await c.env.DB.prepare(
+      `SELECT u.perfil
+         FROM usuarios u
+         JOIN usuarios_empresas ue
+           ON ue.usuario_id = u.id
+          AND ue.empresa_id = ?
+        WHERE u.id = ?
+          AND u.deleted_at IS NULL
+          AND LOWER(TRIM(COALESCE(ue.role, ''))) = 'viewer'
+        LIMIT 1`,
+    )
+      .bind(empresaId, userId)
+      .first<{ perfil: string | null }>();
+
+    const profile = String(row?.perfil || '').trim().toUpperCase();
+    return profile === 'ALUNO' || profile === 'STUDENT' || profile === 'MEMBER';
+  } catch {
+    // Fallback de compatibilidade: qualquer indisponibilidade mantém o acesso
+    // negado em vez de ampliar autorização ou quebrar rotas com 500.
+    return false;
+  }
+}
+
 /**
  * Resolve se o usuário autenticado tem a capability, com a mesma
  * precedência já usada pelo restante do backend: DENY explícito > GRANT
@@ -110,6 +142,19 @@ export async function hasRdvCapability(
     const coordinationOverride = await getUserPermissionOverride(c, 'controle_voos.edit');
     if (coordinationOverride === 'DENY') return false;
     if (coordinationOverride === 'GRANT') return true;
+  }
+
+  // Alguns usuários operacionais permanecem com membership tenant `viewer`
+  // enquanto o perfil canônico da identidade é ALUNO. Para capabilities
+  // estritamente próprias do piloto, esse par deve equivaler a `student`;
+  // nunca amplia escopo de Coordenação e o vínculo de tripulação continua
+  // obrigatório em `assertRdvSelfScope`.
+  if (
+    resolvedRole === 'viewer' &&
+    OWN_SCOPE_CAPABILITIES.has(capability) &&
+    (await hasViewerStudentProfileOwnScopeFallback(c))
+  ) {
+    return true;
   }
 
   return defaultGrantForRole(capability, resolvedRole);
