@@ -43,12 +43,12 @@ function createPaginationDb() {
 
   const db = {
     prepare: vi.fn((query: string) => {
-      if (query === 'PRAGMA table_info(simulador_agendamentos)') {
+      if (query === "PRAGMA table_info('simulador_agendamentos')") {
+        const result = { results: [{ name: 'tipo_dispositivo' }, { name: 'aeronave_id' }] };
         return {
+          all: async () => result,
           bind: (..._args: unknown[]) => ({
-            all: async () => ({
-              results: [{ name: 'tipo_dispositivo' }, { name: 'aeronave_id' }],
-            }),
+            all: async () => result,
             first: async () => null,
             run: async () => ({ meta: { changes: 0, last_row_id: 0 } }),
           }),
