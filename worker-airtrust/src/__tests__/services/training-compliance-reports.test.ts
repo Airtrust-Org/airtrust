@@ -86,6 +86,10 @@ const snapshot = {
 } as unknown as TrainingComplianceSnapshot;
 
 describe('training compliance reports', () => {
+  it('mantém segunda-feira como padrão semanal quando o dia ainda não foi configurado', () => {
+    expect(normalizeComplianceReportAutomationPolicy({}).weekday).toBe(1);
+  });
+
   it('normaliza a programação sem hardcode do dia/horário escolhido pelo usuário', () => {
     const normalized = normalizeComplianceReportAutomationPolicy({
       enabled: true,
