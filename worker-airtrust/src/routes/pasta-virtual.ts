@@ -46,9 +46,12 @@ async function isFuncionarioInScope(
 const app = new Hono<AppEnv>();
 
 function certificateUploadKind(value: unknown): 'qualificacao' | 'profissional' | null {
-  const normalized = String(value || '').trim().toUpperCase();
+  const normalized = String(value || '')
+    .trim()
+    .toUpperCase();
   if (normalized === 'CERTIFICADO_QUALIFICACAO') return 'qualificacao';
-  if (normalized === 'CERTIFICADO_PROFISSIONAL' || normalized === 'CERTIFICADO') return 'profissional';
+  if (normalized === 'CERTIFICADO_PROFISSIONAL' || normalized === 'CERTIFICADO')
+    return 'profissional';
   return null;
 }
 
@@ -377,7 +380,12 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
       // Skip only an explicit compatibility mirror of the canonical documentos row.
       if (doc.documento_id && canonicalDocumentoIds.has(Number(doc.documento_id))) return;
 
-      const categoria = inferirCategoriaDocumento(doc.nome_arquivo, doc.categoria, doc.tipo, doc.r2_key);
+      const categoria = inferirCategoriaDocumento(
+        doc.nome_arquivo,
+        doc.categoria,
+        doc.tipo,
+        doc.r2_key,
+      );
 
       filesMap.set(`pasta_virtual:${doc.id}`, {
         doc: {

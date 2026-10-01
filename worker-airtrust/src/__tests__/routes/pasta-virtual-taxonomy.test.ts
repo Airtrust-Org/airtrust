@@ -39,6 +39,22 @@ describe('Pasta Virtual backend taxonomy', () => {
     expect(inferirCategoriaDocumento('DOC-CNH-PILOTO-20261001-abcd1234.pdf')).toBe(
       'Documentos Pessoais',
     );
+    expect(
+      inferirCategoriaDocumento(
+        'certificado original.pdf',
+        null,
+        'application/pdf',
+        'funcionarios/10/certificados-upload/qualificacao/uuid.pdf',
+      ),
+    ).toBe('Treinamentos e Qualificações');
+    expect(
+      inferirCategoriaDocumento(
+        'curso externo.pdf',
+        null,
+        'application/pdf',
+        'funcionarios/10/certificados-upload/profissional/uuid.pdf',
+      ),
+    ).toBe('Treinamentos e Qualificações');
   });
 
   it('normalizes UI aliases and generates category-specific filenames', () => {

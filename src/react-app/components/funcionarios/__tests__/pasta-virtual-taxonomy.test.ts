@@ -52,6 +52,15 @@ describe('Pasta Virtual taxonomy', () => {
     expect(licencas?.apiCategorias).toEqual(expect.arrayContaining(['Licenças']));
   });
 
+  it('preserves the original filename for manually uploaded qualification certificates', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/react-app/components/funcionarios/UploadDocumentoModal.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain("if (tipoDocumento === 'CERTIFICADO_QUALIFICACAO') return file.name;");
+  });
+
   it('provides search, history and empty-category controls in the canonical view', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/react-app/components/funcionarios/PastaVirtualCompleta.tsx'),
