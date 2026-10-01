@@ -15,6 +15,7 @@ export type RequirementDrilldownFilters = {
   funcionario_id?: number | null;
   qualificacao_tipo_id?: number | null;
   status?: RequirementComplianceStatus | null;
+  q?: string | null;
 };
 
 type RequirementRow = {
@@ -67,6 +68,7 @@ function buildQuery(filters: RequirementDrilldownFilters) {
     params.set('qualificacao_tipo_id', String(filters.qualificacao_tipo_id));
   }
   if (filters.status) params.set('status', filters.status);
+  if (filters.q?.trim()) params.set('q', filters.q.trim());
   const query = params.toString();
   return `/api/compliance-treinamentos/requisitos-aplicaveis${query ? `?${query}` : ''}`;
 }

@@ -14,6 +14,7 @@ import {
 } from '../lib/status/status-codes';
 import { classificarStatusPorVencimento, diasEntreDatas } from '../lib/status/operational-status';
 import { extrairUsuarioAuditoria, registrarAuditoria } from '../utils/auditoria';
+import { matchesSearchText, normalizeSearchText } from '../utils/text-search';
 import {
   assertFuncionarioInScope,
   filterRequestedSetorIdsByAccess,
@@ -38,7 +39,6 @@ import {
   type TrainingComplianceScope,
 } from '../services/training-compliance-rule-engine';
 import { buildQualificationEvidenceProfileSql } from '../services/training-compliance-evidence-profile';
-
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 
@@ -1154,6 +1154,7 @@ app.get('/catalogos', requireRole('admin', 'manager'), async (c) => {
     data: {
       setores: sectors.results || [],
       funcoes: functionRows,
+      funcionarios: employees.map((employee) => ({ id: employee.id, nome: employee.nome })),
       setor_funcoes: setorFuncoes,
       aeronaves_modelos: aircraftModels,
       access_mode: access.mode,
@@ -1343,9 +1344,7 @@ app.get('/pessoas', requireRole('admin', 'manager'), async (c) => {
   if (statusCompliance && !allowedStatus.has(statusCompliance)) {
     throw new ApiError('Status de compliance inválido', 400);
   }
-  const q = String(c.req.query('q') || '')
-    .trim()
-    .toLowerCase();
+  const q = normalizeSearchText(c.req.query('q'));
   const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
   const data = snapshot.people
     .filter((person) => {
@@ -1363,7 +1362,7 @@ app.get('/pessoas', requireRole('admin', 'manager'), async (c) => {
         (!funcaoId || person.funcao_id === funcaoId) &&
         (!aeronaveModelo || person.aeronaves_modelos.includes(aeronaveModelo)) &&
         (configurado === null || person.configurado === configurado) &&
-        (!q || person.nome.toLowerCase().includes(q)) &&
+        (!q || normalizeSearchText(person.nome).includes(q)) &&
         matchesRequirement
       );
     })
@@ -1377,12 +1376,14 @@ app.get('/treinamentos', requireRole('admin', 'manager'), async (c) => {
   const setorId = asPositiveInt(c.req.query('setor_id'));
   const funcaoId = asPositiveInt(c.req.query('funcao_id'));
   const aeronaveModelo = normalizeAircraftModel(c.req.query('aeronave_modelo'));
+  const q = normalizeSearchText(c.req.query('q'));
   const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
   const people = snapshot.people.filter(
     (p) =>
       (!setorId || p.setor_id === setorId) &&
       (!funcaoId || p.funcao_id === funcaoId) &&
-      (!aeronaveModelo || p.aeronaves_modelos.includes(aeronaveModelo)),
+      (!aeronaveModelo || p.aeronaves_modelos.includes(aeronaveModelo)) &&
+      (!q || normalizeSearchText(p.nome).includes(q)),
   );
   const map = new Map<
     number,
@@ -1448,7 +1449,7 @@ app.get('/setores', requireRole('admin', 'manager'), async (c) => {
   const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
   const requestedSetorId = asPositiveInt(c.req.query('setor_id'));
   const people = snapshot.people.filter(
-    (person) => !requestedSetorId || person.setor_id === requestedSetorId,
+    (person) => (!requestedSetorId || person.setor_id === requestedSetorId) && matchesSearchText(person.nome, c.req.query('q')),
   );
   const sectors = new Map<
     number | null,
@@ -1967,12 +1968,14 @@ app.get('/resumo', requireRole('admin', 'manager'), async (c) => {
   const setorId = asPositiveInt(c.req.query('setor_id'));
   const funcaoId = asPositiveInt(c.req.query('funcao_id'));
   const aeronaveModelo = normalizeAircraftModel(c.req.query('aeronave_modelo'));
+  const q = normalizeSearchText(c.req.query('q'));
   const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
   const people = snapshot.people.filter(
     (p) =>
       (!setorId || p.setor_id === setorId) &&
       (!funcaoId || p.funcao_id === funcaoId) &&
-      (!aeronaveModelo || p.aeronaves_modelos.includes(aeronaveModelo)),
+      (!aeronaveModelo || p.aeronaves_modelos.includes(aeronaveModelo)) &&
+      (!q || normalizeSearchText(p.nome).includes(q)),
   );
   const totalObrigatorios = people.reduce((sum, p) => sum + p.total_obrigatorios, 0);
   const conformes = people.reduce((sum, p) => sum + p.conformes, 0);

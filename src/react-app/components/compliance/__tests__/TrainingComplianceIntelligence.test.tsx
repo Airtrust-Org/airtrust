@@ -57,6 +57,7 @@ const pending = {
 const props = {
   setorId: 1,
   funcaoId: null,
+  search: '',
   catalogs: {
     setores: [{ id: 1, nome: 'Operações' }],
     funcoes: [{ id: 2, nome: 'Piloto' }],

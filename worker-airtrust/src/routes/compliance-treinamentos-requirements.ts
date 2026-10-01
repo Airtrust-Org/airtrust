@@ -3,6 +3,7 @@ import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaId } from '../middleware/tenant';
 import type { Env } from '../types';
+import { normalizeSearchText } from '../utils/text-search';
 import {
   assertFuncionarioInScope,
   getEmployeeSectorAccess,
@@ -137,6 +138,7 @@ export function createTrainingComplianceRequirementRoutes({ buildSnapshot }: Req
     const funcaoId = asPositiveInt(c.req.query('funcao_id'));
     const funcionarioId = asPositiveInt(c.req.query('funcionario_id'));
     const qualificacaoTipoId = asPositiveInt(c.req.query('qualificacao_tipo_id'));
+    const q = normalizeSearchText(c.req.query('q'));
     const rawStatus = String(c.req.query('status') || '').trim().toUpperCase();
     const allowedStatus = new Set<ComplianceStatus>([
       'CONFORME',
@@ -156,7 +158,8 @@ export function createTrainingComplianceRequirementRoutes({ buildSnapshot }: Req
       (person) =>
         (!setorId || person.setor_id === setorId) &&
         (!funcaoId || person.funcao_id === funcaoId) &&
-        (!funcionarioId || person.id === funcionarioId),
+        (!funcionarioId || person.id === funcionarioId) &&
+        (!q || normalizeSearchText(person.nome).includes(q)),
     );
     const data = aggregateDistinctMandatoryRequirements(people, { qualificacaoTipoId, status });
     return c.json({
