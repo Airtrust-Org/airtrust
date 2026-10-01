@@ -971,6 +971,17 @@ jobs:
         run: |
           npm run staging:doctor
           npm run smoke:staging:auth
+      - name: Authenticated read-only performance baseline
+        if: ${{ inputs.run_full_smoke }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/staging/qa-critical-readonly-performance.mjs | tee "$RUNNER_TEMP/staging-performance-baseline.txt"
+          {
+            echo '## Staging read-only performance baseline'
+            echo ''
+            grep -E '^PERF_BASELINE(_TOTAL)? ' "$RUNNER_TEMP/staging-performance-baseline.txt"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Examiner-training smoke
         if: ${{ inputs.run_full_smoke }}
         run: node scripts/staging/smoke-examiner-training.mjs
