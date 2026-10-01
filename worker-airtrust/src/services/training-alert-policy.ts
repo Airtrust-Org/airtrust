@@ -1,5 +1,9 @@
 export const TRAINING_ALERT_DAILY_CRON = '0 8 * * *';
 
+// Temporary operational hold requested while training/compliance configuration is being corrected.
+// Keep the canonical alert stages intact so delivery can be re-enabled with a single guarded change.
+export const TRAINING_ALERT_DELIVERY_PAUSED = true;
+
 export type TrainingAlertStageCode =
   | 'QUALIFICACAO_45D'
   | 'QUALIFICACAO_30D'
@@ -72,7 +76,15 @@ export function getTrainingAlertStage(
   code: string | null | undefined,
 ): TrainingAlertStage | null {
   const normalized = String(code || '').trim().toUpperCase();
-  return TRAINING_ALERT_STAGES.find((stage) => stage.code === normalized) || null;
+  const stage = TRAINING_ALERT_STAGES.find((item) => item.code === normalized) || null;
+  if (!stage || !TRAINING_ALERT_DELIVERY_PAUSED) return stage;
+
+  return {
+    ...stage,
+    employeeEmail: false,
+    employeeWhatsapp: false,
+    managerCheckEmail: false,
+  };
 }
 
 export function inferTrainingAlertStageCode(config: {
