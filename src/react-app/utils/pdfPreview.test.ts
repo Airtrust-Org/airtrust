@@ -52,6 +52,7 @@ describe('pdfPreview', () => {
   const originalCreateObjectUrl = window.URL.createObjectURL;
   const originalRevokeObjectUrl = window.URL.revokeObjectURL;
   const originalClick = HTMLAnchorElement.prototype.click;
+  const originalUserAgent = window.navigator.userAgent;
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -62,6 +63,7 @@ describe('pdfPreview', () => {
     window.URL.createObjectURL = originalCreateObjectUrl;
     window.URL.revokeObjectURL = originalRevokeObjectUrl;
     HTMLAnchorElement.prototype.click = originalClick;
+    Object.defineProperty(window.navigator, 'userAgent', { configurable: true, value: originalUserAgent });
   });
 
   it('preenche a janela pre-aberta com loading imediato', () => {
@@ -96,6 +98,40 @@ describe('pdfPreview', () => {
     expect(renderPdf.mock.calls[0]?.[1]).toBe('application/pdf');
     expect(renderPdf.mock.calls[0]?.[2]).toBe('PRESENCA-00001-CRM-20260617-abcdefgh.pdf');
     expect(latestWrittenHtml(previewWindow)).toContain('Lista de Presença — CRM');
+  });
+
+  it('no Safari navega o PDF autenticado como data URL para evitar preview blob em branco', async () => {
+    const previewWindow = createFakePreviewWindow();
+    const replace = vi.fn();
+    Object.defineProperty(previewWindow, 'location', {
+      configurable: true,
+      value: { replace },
+    });
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/26.0 Safari/605.1.15',
+    });
+    const pdfBlob = new Blob([Uint8Array.from([0x25, 0x50, 0x44, 0x46])], {
+      type: 'application/pdf',
+    });
+
+    await previewPdfBeforeDownload({
+      fileName: 'CERTIFICADO.pdf',
+      title: 'Certificado CRM_CORP',
+      mimeType: 'application/pdf',
+      existingWindow: previewWindow,
+      fetcher: async () =>
+        ({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/pdf' },
+          blob: async () => pdfBlob,
+        }) as unknown as Response,
+    });
+
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(replace.mock.calls[0]?.[0]).toMatch(/^data:application\/pdf;base64,/);
   });
 
   it('mostra erro na janela e inicia download fallback quando o preview falha', async () => {
