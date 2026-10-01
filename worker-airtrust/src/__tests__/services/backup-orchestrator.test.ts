@@ -182,6 +182,21 @@ afterEach(() => {
 });
 
 describe('BackupOrchestrator integrity', () => {
+  it('gera UUID criptograficamente seguro para backup manual sem UUID fornecido', async () => {
+    const { orchestrator, state } = createOrchestrator();
+
+    await orchestrator.executarBackupManual({
+      tipo: 'MODULAR',
+      modulos: ['CONFIGURACOES'],
+      triggered_by: 'UNIT_TEST',
+    });
+
+    expect(state.controlUuids).toHaveLength(1);
+    expect(state.controlUuids[0]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+  });
+
   it('grava SHA-256 real do manifesto de artefatos no campo r2_checksum_sha256', async () => {
     const { orchestrator, state, r2 } = createOrchestrator();
 
