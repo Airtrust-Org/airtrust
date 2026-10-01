@@ -7,16 +7,14 @@ import {
   getComplianceReportAutomationPolicy,
   sendTrainingComplianceReportToSectorManagers,
 } from '../services/training-compliance-reports';
+import { getSchemaColumns } from '../utils/db-schema';
 
 const ALL_ACCESS: EmployeeSectorAccess = { mode: 'all', setorIds: [], funcionarioId: null };
 type ClaimState = { claimed: boolean; logId: number | null };
 
 async function hasAutomationLogSchema(db: D1Database): Promise<boolean> {
   try {
-    const columns = await db
-      .prepare("PRAGMA table_info('notificacoes_log')")
-      .all<{ name: string }>();
-    const names = new Set((columns.results || []).map((row) => String(row.name)));
+    const names = await getSchemaColumns(db, 'notificacoes_log');
     return (
       names.has('notification_key') && names.has('tentativas_envio') && names.has('updated_at')
     );
