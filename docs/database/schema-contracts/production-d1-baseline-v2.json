@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-09-30",
-    "last_reconciled_against": "0523 governed training designation rules prepared; remote apply pending",
-    "schema_v2_digest": "3130b21030076284bbe641be594ca04537d4fd7a26c96ea79ac3fd4efc4af897",
+    "last_reconciled_against": "0524 training compliance requirement sanitization prepared; remote apply pending",
+    "schema_v2_digest": "36a66417591c9685a59ed34cc69c2dfc953250f04c7a327c735e2daae21eef46",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1221,6 +1221,18 @@
       "reviewed_manifest": "training-compliance-governed-designation-rules-0523.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-governed-designation-rules-0523.md",
       "note": "0523 is a reviewed data-only forward repair. It restores the five RBAC 119 CRM Corporate designation exclusions after audited generic-API deletion, normalizes the designation rule metadata as regulatory/governed, and does not create or infer employee assignments. Remote apply requires staging validation, the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0524_training_compliance_requirement_sanitization.sql",
+      "change_id": "training-compliance-requirement-sanitization-0524",
+      "sha256": "41a10d012505e3963b7cfb19c43787f50ff4dfaa67bed95d25ad2c1c90b6c5d0",
+      "targets": [],
+      "domain": "training compliance / requirement sanitization and reviewed audience reconciliation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-requirement-sanitization-0524.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-requirement-sanitization-0524.md",
+      "note": "0524 is a reviewed data-only sanitation. It removes redundant generic N/A fallbacks and orphaned active rules, reconciles FDM and current AW139/S-76 maintenance audiences, adds corporate AVSEC awareness, and preserves histories, enrollments, employee-specific rules and specific governed exclusions. Remote apply requires staging validation, recovery point, ledger verification and exact-SHA production authorization."
     }
   ]
 }

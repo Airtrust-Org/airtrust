@@ -105,18 +105,7 @@ function addConditionalRule({
     `INSERT OR IGNORE INTO treinamento_requisitos (empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,critico_operacional,origem,referencia_normativa,justificativa,perfil_competencia,modalidade_requerida,fundamento_tipo,fundamento_documento,fundamento_item,validade_fonte,auto_matricular_ead,ativo,condicao_id) SELECT 6,${model(code)},'EMPRESA','OBRIGATORIA',${critical},${q(origin)},${q(document)},${q(reason)},${profile ? q(profile) : 'NULL'},${modality ? q(modality) : 'NULL'},${q(foundation)},${q(document)},${item ? q(item) : 'NULL'},'EVIDENCIA',0,1,${cond(condition)} WHERE ${model(code)} IS NOT NULL AND ${cond(condition)} IS NOT NULL`,
   );
 }
-function addDefaultNA(code) {
-  addCompanyRule({
-    code,
-    obligation: 'NAO_APLICA',
-    origin: 'EMPRESA',
-    foundation: 'PADRAO_EXCLUSAO',
-    document: 'Matriz auditada de treinamentos Costa do Sol — 2026-09-28',
-    reason:
-      'Regra-base: não aplicável aos demais funcionários; regras mais específicas prevalecem.',
-  });
-}
-
+// Ausência de regra já significa ausência de obrigação. NAO_APLICA é reservado a overrides específicos.
 // 1) PTO: substituir o escopo genérico Tripulação por cargos Comandante e Copiloto.
 // Excluem-se daqui os modelos tratados explicitamente abaixo.
 const explicitCodes = [
@@ -160,7 +149,6 @@ addCompanyRule({
 });
 
 deactivate('NR-11');
-addDefaultNA('NR-11');
 for (const name of ['Mecânico', 'Auxiliar de Manutenção'])
   addFunctionRule({
     code: 'NR-11',
@@ -173,7 +161,6 @@ for (const name of ['Mecânico', 'Auxiliar de Manutenção'])
   });
 
 deactivate('NR-20');
-addDefaultNA('NR-20');
 for (const name of [
   'Mecânico',
   'Auxiliar de Manutenção',
@@ -191,7 +178,6 @@ for (const name of [
   });
 
 deactivate('NR-26');
-addDefaultNA('NR-26');
 for (const name of [
   'Mecânico',
   'Auxiliar de Manutenção',
@@ -208,7 +194,6 @@ for (const name of [
   });
 
 deactivate('NR-35');
-addDefaultNA('NR-35');
 statements.push(
   `UPDATE qualificacoes_tipos SET categoria='Presencial',updated_at=datetime('now') WHERE empresa_id=6 AND UPPER(codigo)=UPPER('NR-35') AND deleted_at IS NULL`,
 );
@@ -247,7 +232,6 @@ const fodFunctions = [
   'Técnico de Segurança do Trabalho',
 ];
 deactivate('FOD');
-addDefaultNA('FOD');
 for (const name of fodFunctions)
   addFunctionRule({
     code: 'FOD',
@@ -284,7 +268,6 @@ const ppspFunctions = [
   'Técnico de Segurança do Trabalho',
 ];
 deactivate('PPSP');
-addDefaultNA('PPSP');
 for (const name of ppspFunctions)
   addFunctionRule({
     code: 'PPSP',
@@ -300,7 +283,6 @@ statements.push(
 
 // 4) FDM-EAD é familiarização/conhecimento geral para a população auditada; designação cobre exceções.
 deactivate('FDM-EAD');
-addDefaultNA('FDM-EAD');
 const fdmAwarenessFunctions = [
   'Comandante',
   'Copiloto',
@@ -338,7 +320,6 @@ addConditionalRule({
 
 // Funções/designações especiais.
 deactivate('GATEKEEPER');
-addDefaultNA('GATEKEEPER');
 addConditionalRule({
   code: 'GATEKEEPER',
   condition: 'GATEKEEPER',
@@ -348,7 +329,6 @@ addConditionalRule({
   reason: 'Aplicável somente ao Gatekeeper formalmente designado.',
 });
 deactivate('LOSA');
-addDefaultNA('LOSA');
 addConditionalRule({
   code: 'LOSA',
   condition: 'LOSA_OBSERVADOR',
@@ -358,7 +338,6 @@ addConditionalRule({
   reason: 'Aplicável somente a observador/equipe LOSA formalmente designado.',
 });
 deactivate('PPSP_SUP');
-addDefaultNA('PPSP_SUP');
 addConditionalRule({
   code: 'PPSP_SUP',
   condition: 'SUPERVISOR_ARSO',
@@ -388,7 +367,6 @@ addCompanyRule({
 
 // Certificações AVSEC: uma qualificação D1, com perfil por atividade; não substituem a regra de conscientização/credencial.
 deactivate('D1');
-addDefaultNA('D1');
 for (const name of ['Comandante', 'Copiloto'])
   addFunctionRule({
     code: 'D1',
@@ -429,7 +407,6 @@ addConditionalRule({
 
 // 6) DGR: uma única qualificação D4; requisito varia por perfil funcional, não por curso duplicado.
 deactivate('D4');
-addDefaultNA('D4');
 for (const [name, profile] of [
   ['Coordenador de Voo', 'PTAP_COORDENADOR_VOO'],
   ['Agente de Atendimento', 'PTAP_ATENDIMENTO_BALCAO'],
@@ -458,7 +435,6 @@ addConditionalRule({
 
 // 7) CA-EBS permanece separado de HUET porque há certificados HUET antigos ainda válidos sem CA-EBS.
 deactivate('CA-EBS');
-addDefaultNA('CA-EBS');
 for (const name of ['Comandante', 'Copiloto'])
   addFunctionRule({
     code: 'CA-EBS',
@@ -477,7 +453,6 @@ for (const [code, aircraft] of [
   ['SOP_S76', 'SK76'],
 ]) {
   deactivate(code);
-  addDefaultNA(code);
   for (const name of ['Comandante', 'Copiloto'])
     addFunctionRule({
       code,

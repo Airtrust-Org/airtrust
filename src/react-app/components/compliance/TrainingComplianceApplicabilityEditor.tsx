@@ -109,7 +109,7 @@ const foundationTypeOptions = [
   ['DESIGNACAO', 'Designação / função especial'],
   ['POLITICA_INTERNA', 'Política interna da empresa'],
   ['APRIMORAMENTO_INTERNO', 'Aprimoramento interno — sem curso externo obrigatório'],
-  ['PADRAO_EXCLUSAO', 'Regra-base de não aplicabilidade'],
+  ['PADRAO_EXCLUSAO', 'Exceção explícita de não aplicabilidade'],
   ['OUTRO', 'Outro'],
 ] as const;
 
@@ -121,7 +121,7 @@ function scopeLabel(rule: Rule) {
   const aircraft = rule.aeronave_modelo ? ` · ${rule.aeronave_modelo}` : '';
   if (rule.condicao_nome) return `Designação: ${rule.condicao_nome}${aircraft}`;
   if (rule.escopo === 'EMPRESA' && rule.obrigatoriedade === 'NAO_APLICA')
-    return `Padrão: não aplicável aos demais funcionários${aircraft}`;
+    return `Exceção explícita de não aplicabilidade${aircraft}`;
   if (rule.escopo === 'EMPRESA') return `Toda a empresa${aircraft}`;
   if (rule.escopo === 'SETOR') return `${rule.setor_nome || 'Setor'}${aircraft}`;
   if (rule.escopo === 'FUNCAO') return `${rule.funcao_nome || 'Função'}${aircraft}`;
@@ -487,8 +487,14 @@ export function TrainingComplianceApplicabilityEditor({
           >
             <option value="OBRIGATORIA">Incluir como obrigatório</option>
             <option value="RECOMENDADA">Incluir como recomendado</option>
-            <option value="NAO_APLICA">Excluir / não se aplica</option>
+            <option value="NAO_APLICA">Excluir / não se aplica (exceção)</option>
           </select>
+          {obrigatoriedade === 'NAO_APLICA' ? (
+            <span className="mt-1 block text-[11px] font-normal leading-4 text-amber-700">
+              Sem regra aplicável, o treinamento já não é obrigatório. Use esta opção somente para
+              criar uma exceção explícita a uma regra mais ampla.
+            </span>
+          ) : null}
         </label>
         <label className="text-xs font-medium text-slate-600">
           Origem
@@ -720,7 +726,7 @@ export function TrainingComplianceApplicabilityEditor({
               >
                 <option value="OBRIGATORIA">Incluir · obrigatório</option>
                 <option value="RECOMENDADA">Incluir · recomendado</option>
-                <option value="NAO_APLICA">Excluir · não se aplica</option>
+                <option value="NAO_APLICA">Excluir · não se aplica (exceção)</option>
               </select>
               <button
                 type="button"
