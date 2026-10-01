@@ -14,6 +14,40 @@ function isPdfFile(fileName: string, mimeType?: string | null): boolean {
   return normalizedMime.includes('application/pdf') || normalizedName.endsWith('.pdf');
 }
 
+function isSafariBrowser(): boolean {
+  const userAgent = window.navigator?.userAgent || '';
+  return (
+    /Safari\//.test(userAgent) &&
+    !/(Chrome|Chromium|CriOS|Edg|EdgiOS|FxiOS|OPR|Android)/.test(userAgent)
+  );
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error('Falha ao preparar PDF para o Safari'));
+    };
+    reader.onerror = () => reject(reader.error || new Error('Falha ao preparar PDF para o Safari'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function renderSafariPdfPreview(previewWindow: Window, blob: Blob): Promise<void> {
+  const dataUrl = await blobToDataUrl(blob);
+  if (previewWindow.closed) {
+    throw new Error('A janela de visualização foi fechada');
+  }
+  // Safari's native PDF viewer can leave blob: PDFs blank even after iframe.onload.
+  // Navigating the already-open preview tab to a data: PDF uses the same native viewer
+  // with the authenticated bytes already fetched by AirTrust and renders reliably.
+  previewWindow.location.replace(dataUrl);
+}
+
 function triggerBlobDownload(blob: Blob, fileName: string): void {
   const namedBlob =
     typeof File !== 'undefined'
@@ -291,10 +325,13 @@ export async function previewPdfBeforeDownload({
       return;
     }
 
-    // Convert blob to ArrayBuffer so we can pass raw bytes to __renderPdf.
-    // The blob URL creation and iframe rendering are done inside the preview
-    // window's own script context (see __renderPdf in renderLoadingState),
-    // avoiding every cross-window blob-ownership issue in Chrome/Brave.
+    if (previewWindow && !previewWindow.closed && isSafariBrowser()) {
+      await renderSafariPdfPreview(previewWindow, blob);
+      return;
+    }
+
+    // Other browsers keep the blob iframe flow, which avoids cross-window blob
+    // ownership issues while preserving the AirTrust toolbar.
     const arrayBuffer = await blob.arrayBuffer();
     const effectiveMime = blobMimeType || 'application/pdf';
 
