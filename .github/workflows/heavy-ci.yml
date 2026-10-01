@@ -1,8 +1,7 @@
 # Required heavy CI gates. Since the repository is public, the five heavy
 # gates run as independent GitHub-hosted jobs so they can execute in parallel.
-# The legacy `airtrust-gcb` aggregate check is retained temporarily only for
-# branch-protection compatibility while protection is migrated to the 8 direct
-# gate names. It does not replace any individual gate.
+# Branch protection requires the five heavy jobs directly; no aggregate
+# compatibility job is needed in the normal GitHub Actions path.
 name: CI (heavy gates)
 
 on:
@@ -233,31 +232,3 @@ jobs:
               --config=playwright.ci.config.ts \
               --project=webkit-ipad \
               e2e/ci/pilot-offline-persistence.spec.ts
-
-  airtrust-gcb:
-    name: airtrust-gcb
-    if: always()
-    needs:
-      - frontend-coverage
-      - worker-tests-1
-      - worker-tests-2
-      - lms-smoke
-      - public-e2e
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Assert all five heavy gates passed
-        env:
-          FRONTEND_COVERAGE: ${{ needs.frontend-coverage.result }}
-          WORKER_TESTS_1: ${{ needs.worker-tests-1.result }}
-          WORKER_TESTS_2: ${{ needs.worker-tests-2.result }}
-          LMS_SMOKE: ${{ needs.lms-smoke.result }}
-          PUBLIC_E2E: ${{ needs.public-e2e.result }}
-        run: |
-          set -euo pipefail
-          test "$FRONTEND_COVERAGE" = success
-          test "$WORKER_TESTS_1" = success
-          test "$WORKER_TESTS_2" = success
-          test "$LMS_SMOKE" = success
-          test "$PUBLIC_E2E" = success
-          echo "All five heavy gates passed on GitHub Actions."
