@@ -116,13 +116,22 @@ export function normalizeComplianceReportAutomationPolicy(
     : [];
   const dueRaw = input.due_within_days;
   const due = dueRaw === null || dueRaw === undefined || dueRaw === '' ? null : Number(dueRaw);
+  const weekdayRaw = Number(input.weekday);
   return {
     enabled: input.enabled === true,
     frequency:
       frequency === 'DAILY' || frequency === 'MONTHLY' || frequency === 'WEEKLY'
         ? frequency
         : DEFAULT_COMPLIANCE_REPORT_AUTOMATION.frequency,
-    weekday: Math.max(0, Math.min(6, Number(input.weekday) || 0)),
+    weekday: Math.max(
+      0,
+      Math.min(
+        6,
+        Number.isInteger(weekdayRaw)
+          ? weekdayRaw
+          : DEFAULT_COMPLIANCE_REPORT_AUTOMATION.weekday,
+      ),
+    ),
     day_of_month: Math.max(1, Math.min(28, Number(input.day_of_month) || 1)),
     time: normalizeTime(input.time),
     timezone: normalizeTimezone(input.timezone),
@@ -283,6 +292,15 @@ function pdfText(value: unknown): string {
     .replace(/[^\x20-\x7E\xA0-\xFF]/g, '');
 }
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function wrapText(font: PDFFont, text: string, size: number, maxWidth: number): string[] {
   const words = pdfText(text).split(/\s+/).filter(Boolean);
   if (!words.length) return ['-'];
@@ -311,7 +329,13 @@ function drawCellLines(
   lineHeight: number,
 ) {
   lines.forEach((line, index) => {
-    page.drawText(line, { x, y: y - index * lineHeight, size, font, color: rgb(0.12, 0.16, 0.23) });
+    page.drawText(line, {
+      x,
+      y: y - index * lineHeight,
+      size,
+      font,
+      color: rgb(0.12, 0.16, 0.23),
+    });
   });
 }
 
@@ -339,10 +363,6 @@ export async function generateTrainingComplianceReportPdf(params: {
     nunca: params.rows.filter((row) => row.status_compliance === 'NAO_REALIZADO').length,
     andamento: params.rows.filter((row) => row.status_compliance === 'EM_ANDAMENTO').length,
   };
-  const complianceNumerator = summary.conformes + summary.vencendo;
-  const compliancePct = summary.requisitos
-    ? Math.round((complianceNumerator / summary.requisitos) * 1000) / 10
-    : null;
 
   const addPage = (first: boolean) => {
     const page = doc.addPage(pageSize);
@@ -372,7 +392,7 @@ export async function generateTrainingComplianceReportPdf(params: {
       y -= 18;
       page.drawText(
         pdfText(
-          `Pessoas: ${summary.pessoas} | Requisitos no recorte: ${summary.requisitos} | Compliance: ${compliancePct == null ? '-' : `${compliancePct}%`} | Vencidos: ${summary.vencidos} | Nunca realizou: ${summary.nunca} | Vencendo: ${summary.vencendo} | Em andamento: ${summary.andamento}`,
+          `Pessoas: ${summary.pessoas} | Requisitos no recorte: ${summary.requisitos} | Realizados: ${summary.conformes} | Vencidos: ${summary.vencidos} | Nunca realizou: ${summary.nunca} | Vencendo: ${summary.vencendo} | Em andamento: ${summary.andamento}`,
         ),
         { x: margin, y, size: 8.2, font: bold },
       );
@@ -403,7 +423,9 @@ export async function generateTrainingComplianceReportPdf(params: {
       statusLabel(row),
       dateBr(row.data_validade),
     ];
-    const wrapped = cells.map((cell, index) => wrapText(regular, cell, 7.2, columns[index] - 8));
+    const wrapped = cells.map((cell, index) =>
+      wrapText(regular, cell, 7.2, columns[index] - 8),
+    );
     const lines = Math.max(1, ...wrapped.map((cell) => cell.length));
     const rowHeight = Math.max(18, lines * 9 + 5);
     if (current.y - rowHeight < 28) current = addPage(false);
@@ -486,11 +508,13 @@ export async function sendTrainingComplianceReportToSectorManagers(params: {
     empresaNome: params.empresaNome,
     setorNome: params.setorNome,
   });
+  const safeEmpresaNome = escapeHtml(params.empresaNome);
+  const safeSetorNome = escapeHtml(params.setorNome);
   const result = await sendEmailDetailed(params.env, {
     to: recipients,
     subject: `Relatorio de Compliance de Treinamentos - ${params.setorNome}`,
     textContent: `Segue o relatorio atualizado de treinamentos do setor ${params.setorNome}. O documento apresenta o recorte configurado no AirTrust para acompanhamento do gestor.`,
-    htmlContent: `<div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.55"><h2>Gerencia de Treinamento | Costa do Sol</h2><p>Segue o relatorio atualizado de treinamentos do setor <strong>${params.setorNome}</strong>.</p><p>O documento anexo apresenta o recorte configurado no AirTrust para acompanhamento e regularizacao quando aplicavel.</p></div>`,
+    htmlContent: `<div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.55"><h2>Gerencia de Treinamento | ${safeEmpresaNome}</h2><p>Segue o relatorio atualizado de treinamentos do setor <strong>${safeSetorNome}</strong>.</p><p>O documento anexo apresenta o recorte configurado no AirTrust para acompanhamento e regularizacao quando aplicavel.</p></div>`,
     attachments: [{ content: pdf.base64, name: pdf.filename }],
   });
   return {
