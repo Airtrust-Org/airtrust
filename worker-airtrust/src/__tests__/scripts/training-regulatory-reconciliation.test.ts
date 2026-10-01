@@ -8,10 +8,10 @@ const source = readFileSync(
 );
 
 describe('training regulatory reconciliation', () => {
-  it('é dry-run por padrão e bloqueia apply de produção sem autorização específica', () => {
+  it('é gerador/dry-run e bloqueia qualquer apply remoto direto', () => {
     expect(source).toContain("const apply = args.has('--apply')");
-    expect(source).toContain("env === 'production' && apply");
-    expect(source).toContain('AIRTRUST_PRODUCTION_RECONCILIATION_AUTH');
+    expect(source).toContain('DIRECT_APPLY_DISABLED_USE_GOVERNED_ENVIRONMENT_EXECUTOR');
+    expect(source).not.toContain("['d1', 'execute'");
   });
 
   it('resolve staging para o D1 explícito de staging, nunca para o nome de produção', () => {

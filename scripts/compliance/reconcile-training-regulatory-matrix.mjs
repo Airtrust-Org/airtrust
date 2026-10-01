@@ -4,14 +4,13 @@
 // dry_run_required: true
 // rollback_plan_required: worker-airtrust/schema-v2/plans/training-compliance-conditions-0517.md
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 
 const args = new Set(process.argv.slice(2));
 const apply = args.has('--apply');
 const env = [...args].find((arg) => arg.startsWith('--env='))?.split('=')[1] || 'staging';
 if (!['staging', 'production'].includes(env)) throw new Error(`env inválido: ${env}`);
-if (env === 'production' && apply && !process.env.AIRTRUST_PRODUCTION_RECONCILIATION_AUTH) {
-  throw new Error('produção recusada: autorização específica ausente');
+if (apply) {
+  throw new Error('DIRECT_APPLY_DISABLED_USE_GOVERNED_ENVIRONMENT_EXECUTOR');
 }
 
 const TARGETS = Object.freeze({
@@ -19,7 +18,6 @@ const TARGETS = Object.freeze({
   production: 'airtrust-db',
 });
 const target = TARGETS[env];
-const workerDir = new URL('../../worker-airtrust/', import.meta.url).pathname;
 const q = (s) => `'${String(s).replaceAll("'", "''")}'`;
 const model = (code) =>
   `(SELECT id FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)=UPPER(${q(code)}) AND deleted_at IS NULL LIMIT 1)`;
@@ -300,12 +298,4 @@ console.log(`ENV=${env}`);
 console.log(`TARGET_DATABASE=${target}`);
 console.log(`MODE=${apply ? 'APPLY' : 'DRY_RUN'}`);
 console.log(`STATEMENTS=${statements.length}`);
-if (!apply) {
-  console.log(sql);
-  process.exit(0);
-}
-execFileSync(
-  '../node_modules/.bin/wrangler',
-  ['d1', 'execute', target, '--env', env, '--remote', '--command', sql],
-  { cwd: workerDir, stdio: 'inherit' },
-);
+console.log(sql);

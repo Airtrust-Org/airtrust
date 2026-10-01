@@ -87,6 +87,11 @@ describe('frms-sigvoos-synthetic-sync runner — 5: dry-run => zero writes', () 
     expect(parseArgs([]).apply).toBe(false);
     expect(parseArgs(['--dry-run']).apply).toBe(false);
     expect(parseArgs(['--apply']).apply).toBe(true);
+    expect(runnerSource).toContain('CONFIRM_STAGING_FRMS_SIGVOOS_QA');
+    expect(runnerSource.indexOf('if (args.apply && process.env.CONFIRM_STAGING_FRMS_SIGVOOS_QA')).toBeLessThan(
+      runnerSource.indexOf('const db = makeD1(dbName)'),
+    );
+    expect(runnerSource).toContain('AIRTRUST_STAGING_FRMS_SIGVOOS_QA');
   });
 
   it('runner source only calls syncSigvoosForFrms inside the args.apply branch', () => {

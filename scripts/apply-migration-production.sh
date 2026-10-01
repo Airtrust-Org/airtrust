@@ -76,8 +76,9 @@ case "$migration_name" in
     exit 4
     ;;
   0443_simuladores_matriz_remediation_compensation.sql)
-    echo "ERROR: 0443 must be applied via its dedicated ledger-aware runner:" >&2
-    echo "  bash scripts/production/apply-simuladores-matriz-0443-remote-migration.sh $migration_name" >&2
+    echo "ERROR: 0443 legacy local runner is retired." >&2
+    echo "Production schema changes are allowed only through the governed Schema V2 workflow." >&2
+    echo "Use .github/workflows/apply-schema-change-v2.yml with an approved current change contract." >&2
     exit 4
     ;;
 esac

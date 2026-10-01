@@ -42,6 +42,10 @@ describe('training compliance V3 reconciliation', () => {
     expect(output).not.toMatch(/AVSEC_CONSC[\s\S]{0,600}auto_matricular_ead\s*=\s*1/i);
   });
 
+  it('refuses direct production apply outside the governed production workflow', () => {
+    expect(source).toContain('PRODUCTION_APPLY_REQUIRES_GOVERNED_PRODUCTION_WORKFLOW');
+  });
+
   it('runs the governed staging workflow with the V3 executor after schema 0519', () => {
     expect(stagingWorkflow).toContain('reconcile-training-compliance-v3.mjs');
     expect(stagingWorkflow).not.toContain('reconcile-training-regulatory-matrix-v2.mjs');

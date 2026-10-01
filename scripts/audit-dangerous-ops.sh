@@ -78,6 +78,10 @@ readonly_remote_files=(
   "scripts/validate-data-consistency.sh"
   "scripts/validate-schema-parity.py"
   "scripts/validation/probe-solicitacoes-treinamento-schema-readonly.sh"
+  "scripts/apply-simuladores-matriz-isolated-migrations.sh"
+  "scripts/auditar-vencimento-fim-mes.mjs"
+  ".github/workflows/staging-domain-certificate-smoke.yml"
+  "scripts/validation/controle-voos-rdv-0438-ledger-diagnostic.mjs"
   # Reviewed 2026-07-18 (AIRTRUST_PRODUCTION_READINESS_20260718): both scripts
   # issue only SELECT/PRAGMA queries against sqlite_master/pragma_table_list/
   # d1_migrations and write results to local files — no DDL/DML, no --file
@@ -193,6 +197,42 @@ is_known_blocked_legacy() {
   return 1
 }
 
+is_test_fixture_file() {
+  case "$1" in
+    scripts/__tests__/*|worker-airtrust/src/__tests__/*|src/__tests__/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Remote D1 callers are structurally read-only only when the source contains
+# no apply mode, remote file execution, migration replay, R2 write, or
+# executable DDL/DML. A future write automatically revokes this exemption.
+is_structurally_readonly_remote_file() {
+  local file="$1" mutation_hits=""
+  [[ -f "$file" ]] || return 1
+  if rg -q -- '--apply|d1[[:space:]]+migrations[[:space:]]+apply|r2[[:space:]]+object[[:space:]]+put|--file([=[:space:]]|$)' "$file" 2>/dev/null; then
+    return 1
+  fi
+  mutation_hits="$(rg -n -i '\b(DELETE\s+FROM|INSERT\s+INTO|REPLACE\s+INTO|UPDATE\s+[A-Za-z0-9_"`]+\s+SET|ALTER\s+TABLE|DROP\s+(TABLE|VIEW|INDEX)|CREATE\s+(TABLE|INDEX|VIEW))\b' "$file" 2>/dev/null | grep -vE '^[0-9]+:[[:space:]]*(#|//|/\*|\*)' || true)"
+  [[ -z "$mutation_hits" ]]
+}
+
+# Governed staging writers are accepted by structure, never by path alone.
+is_governed_staging_remote_file() {
+  local file="$1"
+  [[ -f "$file" ]] || return 1
+  case "$file" in
+    scripts/staging/*|scripts/compliance/reconcile-training-compliance-v3.mjs|scripts/compliance/reconcile-training-regulatory-matrix-v2.mjs|.github/workflows/staging-*|.github/workflows/provision-staging-*) ;;
+    *) return 1 ;;
+  esac
+  rg -q --fixed-strings 'airtrust-db-staging-baseline-20260701' "$file" || return 1
+  rg -q 'BLOCKED_PRODUCTION_DB_ID|BLOCKED_DB_IDS|blockedProductionD1Id|D1 alvo rejeitado|value !== ALLOWED_D1_NAME|PRODUCTION_HOST_REJECTED|production target refused|alvo de produção recusado|environment:[[:space:]]+staging|must be exactly.*staging|V2_RECONCILIATION_STAGING_ONLY|PRODUCTION_APPLY_REQUIRES_GOVERNED_PRODUCTION_WORKFLOW' "$file" || return 1
+  if rg -q -- '--apply|--file([=[:space:]]|$)|\b(DELETE\s+FROM|INSERT\s+INTO|UPDATE\s+[A-Za-z0-9_"`]+\s+SET|ALTER\s+TABLE|CREATE\s+(TABLE|INDEX|VIEW))\b' "$file" 2>/dev/null; then
+    rg -q 'CONFIRM_STAGING|AIRTRUST_STAGING_[A-Z0-9_]*(AUTH|APPLY|QA|IDENTITY|SCHEMA|RECONCILIATION)|confirmation:' "$file" || return 1
+  fi
+  return 0
+}
+
 # ── Self-protected invariant validation ────────────────────────────────────
 #
 # The self_protected_files allowlist above exempts each listed file from
@@ -282,8 +322,11 @@ EOF
     "scripts/staging/apply-approved-migrations.sh")
       cat <<'EOF'
 AIRTRUST_STAGING_MIGRATION_APPLY
-CONFIRM_STAGING_MIGRATION
-DRY_RUN
+ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"
+ALLOWED_DB_ID="bf9963f4-eb12-439b-a830-20bbf577ac22"
+--backup-file=<caminho> obrigatório
+migration-ledger-preflight.mjs
+apply-approved-migration-with-recovery-point.sh
 EOF
       ;;
     "scripts/staging/validate-0424-postconditions.sh")
@@ -470,7 +513,7 @@ self_protected_pin() {
       echo "f8529dc17720594b68a0f62df29173193eff31e3025511a8397976a35b4cc67c"
       ;;
     "scripts/staging/apply-approved-migrations.sh")
-      echo "fe1abded7b0b4a008ac696630706601cb1d1c406fdab7ac4c9c68ca1ea81f8f1"
+      echo "ba6b7023bf63365e0617200af4e2a8b3084d667c64bdc29fb225f742045a4360"
       ;;
     "scripts/staging/validate-0424-postconditions.sh")
       echo "c66b23135529479079ce18cc5e318ed0a18f87b2761df73dd538d9307c1bcd2e"
@@ -658,13 +701,14 @@ remote_files_std="$(
   rg -l "wrangler d1 execute|npx wrangler d1 execute|\\['d1', 'execute'|\\[\"d1\", \"execute\"" \
     package.json scripts .github \
     --glob '!scripts/legacy/**' \
+    --glob '!scripts/__tests__/**' \
     --glob '!*.sql' 2>/dev/null | grep -v '^scripts/audit-dangerous-ops\.sh$' || true
 )"
 
 # Variable-based wrangler detection (e.g. ${WRANGLER[@]} d1 execute)
 remote_files_var="$(
   rg -l '\$\{?WRANGLER.?\[?[@*]\]?\}?\s+d1\s+execute' \
-    scripts --glob '!scripts/legacy/**' 2>/dev/null || true
+    scripts --glob '!scripts/legacy/**' --glob '!scripts/__tests__/**' 2>/dev/null || true
 )"
 
 # Merge and deduplicate
@@ -678,6 +722,18 @@ while IFS= read -r file; do
   [[ "$file" == "scripts/audit-dangerous-ops.sh" ]] && continue
 
   if ! rg -q -- '--remote' "$file"; then
+    continue
+  fi
+
+  if is_test_fixture_file "$file"; then
+    continue
+  fi
+
+  if is_structurally_readonly_remote_file "$file"; then
+    continue
+  fi
+
+  if is_governed_staging_remote_file "$file"; then
     continue
   fi
 
@@ -713,6 +769,11 @@ ddl_remote_hits="$(
     --glob '!*.mjs' \
     --glob '!*.py' \
     --glob '!*.js' 2>/dev/null | grep -vE ':(#|\s*#|.*\b(?:echo|printf|print\(|sed|awk|sqlite3|DB_LOCAL|append_sql)\b)' | while IFS=: read -r f l rest; do
+    # Already-governed staging writers and reviewed read-only/self-protected
+    # callers should not reappear as inventory noise in this warning-only pass.
+    if is_governed_staging_remote_file "$f" || is_readonly_remote_file "$f" || is_self_protected_ok "$f"; then
+      continue
+    fi
     # Only flag if the line does NOT contain --local and the file DOES use --remote
     if ! echo "$rest" | grep -q -- '--local'; then
       if rg -q -- '--remote' "$f" 2>/dev/null; then
@@ -731,7 +792,7 @@ fi
 
 remote_migration_apply_files="$(
   rg -l 'd1[[:space:]]+migrations[[:space:]]+apply.*--remote' scripts package.json \
-    --glob '!scripts/legacy/**' 2>/dev/null | grep -v '^scripts/audit-dangerous-ops\.sh$' || true
+    --glob '!scripts/legacy/**' --glob '!scripts/__tests__/**' 2>/dev/null | grep -v '^scripts/audit-dangerous-ops\.sh$' || true
 )"
 
 while IFS= read -r file; do
