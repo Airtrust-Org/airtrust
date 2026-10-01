@@ -2,7 +2,7 @@
  * ensure-certificate.ts
  *
  * Serviço idempotente para garantir que uma qualificação tem certificado arquivado.
- * Chamado pelos hooks automáticos (LMS, histórico manual, renovação) e pelo backfill.
+ * Chamado pela exceção automática EAD do LMS e por fluxos explícitos/idempotentes de manutenção.
  *
  * Estados retornados:
  *   EXISTS  — já havia certificado vinculado, nenhuma ação tomada

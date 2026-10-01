@@ -3,7 +3,15 @@
  * A prova de atomicidade real (SQLite) está em lms-completion.rollback.test.ts;
  * aqui testamos apenas o fluxo de controle (outcomes, retry, rejeição).
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+const { ensureCertificateForQualificationMock } = vi.hoisted(() => ({
+  ensureCertificateForQualificationMock: vi.fn(),
+}));
+
+vi.mock('../../services/ensure-certificate', () => ({
+  ensureCertificateForQualification: ensureCertificateForQualificationMock,
+}));
+
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../../services/lms-completion';
 
 function makeFakeDb(options: {
@@ -93,6 +101,7 @@ function makeFakeDb(options: {
 function baseParams(db: D1Database, overrides: Record<string, unknown> = {}) {
   return {
     db,
+    env: {} as never,
     empresaId: 6,
     matriculaId: 1,
     funcionarioId: 77,
@@ -113,6 +122,11 @@ function baseParams(db: D1Database, overrides: Record<string, unknown> = {}) {
 }
 
 describe('completeLmsMatricula', () => {
+  beforeEach(() => {
+    ensureCertificateForQualificationMock.mockReset();
+    ensureCertificateForQualificationMock.mockResolvedValue({ state: 'CREATED', documentoId: 321 });
+  });
+
   it('curso sem qualificação exigida: outcome qualification_not_required, um único batch', async () => {
     const db = makeFakeDb({});
     const result = await completeLmsMatricula(
@@ -149,6 +163,49 @@ describe('completeLmsMatricula', () => {
 
     expect(result.outcome).toBe('qualification_reused');
     expect(result.qualificacaoHistoricoId).toBe(777);
+  });
+
+  it('gera certificado automaticamente quando a categoria canônica é EAD', async () => {
+    let lookupCount = 0;
+    const db = makeFakeDb({
+      historicoLookup: () => {
+        lookupCount += 1;
+        return lookupCount === 1 ? null : { id: 901 };
+      },
+    });
+
+    await completeLmsMatricula(baseParams(db) as never);
+
+    expect(ensureCertificateForQualificationMock).toHaveBeenCalledTimes(1);
+    expect(ensureCertificateForQualificationMock).toHaveBeenCalledWith(
+      expect.anything(),
+      901,
+      6,
+      { actorUserId: 42 },
+    );
+  });
+
+  it('não gera certificado automaticamente para outra categoria LMS integrada', async () => {
+    let lookupCount = 0;
+    const db = makeFakeDb({
+      categoryLookup: () => ({
+        id: 14,
+        empresa_id: 6,
+        nome: 'Treinamento Online',
+        codigo: 'ONLINE',
+        ativo: 1,
+        dominio_codigo: 'TREINAMENTOS',
+        lms_integrada: 1,
+      }),
+      historicoLookup: () => {
+        lookupCount += 1;
+        return lookupCount === 1 ? null : { id: 902 };
+      },
+    });
+
+    await completeLmsMatricula(baseParams(db) as never);
+
+    expect(ensureCertificateForQualificationMock).not.toHaveBeenCalled();
   });
 
   it('falha no batch (causa inesperada): lança LmsCompletionRejectedError, NUNCA retorna 200 com qualification_failed:true', async () => {

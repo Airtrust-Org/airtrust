@@ -210,9 +210,8 @@ export default function UploadDocumentoModal({
 
     switch (tipoDocumento) {
       case 'CERTIFICADO_QUALIFICACAO':
-        return subTipo
-          ? `CERT-${nomeFuncionario}-${subTipo}-${dataAtual}.pdf`
-          : `CERT-${nomeFuncionario}-[CODIGO]-${dataAtual}.pdf`;
+      case 'CERTIFICADO_PROFISSIONAL':
+        return file.name;
       case 'EXAME_MEDICO':
         return subTipo
           ? `EXAME-${subTipo}-${nomeFuncionario}-${dataAtual}.pdf`
@@ -335,15 +334,15 @@ export default function UploadDocumentoModal({
             </div>
           </div>
 
-          {/* Preview do Nome Padronizado */}
+          {/* Preview do nome persistido */}
           {file && validacao?.valido && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm font-medium text-blue-900 mb-1">Nome padronizado do arquivo:</p>
+              <p className="text-sm font-medium text-blue-900 mb-1">Nome do arquivo:</p>
               <code className="text-sm text-blue-700 font-mono break-all">
                 {getNomePadronizado()}
               </code>
               <p className="text-xs text-blue-600 mt-2">
-                ℹ️ O arquivo original será preservado. Apenas o nome será padronizado.
+                ℹ️ Certificados mantêm o nome original. Os demais documentos seguem a nomenclatura padronizada.
               </p>
             </div>
           )}

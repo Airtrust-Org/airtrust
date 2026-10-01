@@ -1,6 +1,8 @@
+import type { Env } from '../types';
 import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { requireActiveQualificationCategoryById } from './qualification-category-contract';
+import { ensureCertificateForQualification } from './ensure-certificate';
 
 export type LmsCompletionOutcome =
   | 'qualification_created'
@@ -30,6 +32,8 @@ export class LmsCompletionRejectedError extends Error {
 
 export interface CompleteLmsMatriculaParams {
   db: D1Database;
+  /** Runtime bindings usados somente pela exceção EAD de emissão automática. */
+  env?: Env;
   empresaId: number;
   matriculaId: number;
   funcionarioId: number;
@@ -65,6 +69,52 @@ type PreBatchState = {
 };
 
 const LMS_REUSABLE_STATUSES = new Set(['CONCLUIDA', 'PLANEJADA', 'PLANEJADO']);
+
+function isCanonicalEadCategory(category: { codigo?: string | null; nome?: string | null }): boolean {
+  const code = String(category.codigo || '').trim().toUpperCase();
+  const name = String(category.nome || '').trim().toUpperCase();
+  return code === 'EAD' || name === 'EAD' || name === 'TREINAMENTO EAD';
+}
+
+async function ensureEadCertificateAfterCompletion(
+  params: CompleteLmsMatriculaParams,
+  category: { codigo?: string | null; nome?: string | null },
+  historicoId: number,
+): Promise<void> {
+  if (!isCanonicalEadCategory(category)) return;
+
+  if (!params.env) {
+    console.error(
+      JSON.stringify({
+        event: 'LMS_EAD_CERTIFICATE_ENV_MISSING',
+        empresa_id: params.empresaId,
+        matricula_id: params.matriculaId,
+        qualificacao_historico_id: historicoId,
+      }),
+    );
+    return;
+  }
+
+  const result = await ensureCertificateForQualification(
+    params.env,
+    historicoId,
+    params.empresaId,
+    { actorUserId: params.actorUserId },
+  );
+
+  if (result.state === 'ERROR' || result.state === 'SKIPPED') {
+    console.error(
+      JSON.stringify({
+        event: 'LMS_EAD_CERTIFICATE_NOT_CREATED',
+        empresa_id: params.empresaId,
+        matricula_id: params.matriculaId,
+        qualificacao_historico_id: historicoId,
+        certificate_state: result.state,
+        reason: result.reason || result.error || null,
+      }),
+    );
+  }
+}
 
 function isConcurrentQualificationUniqueConstraint(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error || '');
@@ -683,6 +733,11 @@ export async function completeLmsMatricula(
           await db.batch(
             retryStatements.map((statement) => db.prepare(statement.sql).bind(...statement.args)),
           );
+          await ensureEadCertificateAfterCompletion(
+            canonicalParams,
+            category,
+            retryPre.existingHistoricoId,
+          );
           return {
             outcome: 'qualification_reused',
             qualificacaoHistoricoId: retryPre.existingHistoricoId,
@@ -730,6 +785,8 @@ export async function completeLmsMatricula(
       'LMS_QUALIFICATION_COMPLETION_FAILED',
     );
   }
+
+  await ensureEadCertificateAfterCompletion(canonicalParams, category, historico.id);
 
   return {
     outcome: wasReuse ? 'qualification_reused' : 'qualification_created',
