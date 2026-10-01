@@ -31,10 +31,14 @@ vi.mock('../../middleware/rbac', () => ({
   requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
-vi.mock('../../routes/simuladores-shared', () => ({
-  requireAdminForDelete: vi.fn(),
-  audit: auditMock,
-}));
+vi.mock('../../routes/simuladores-shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../routes/simuladores-shared')>();
+  return {
+    ...actual,
+    requireAdminForDelete: vi.fn(),
+    audit: auditMock,
+  };
+});
 
 import simuladoresEquipamentosRoutes from '../../routes/simuladores-equipamentos';
 
