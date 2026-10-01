@@ -1725,7 +1725,7 @@ async function registrarEventoSigvoosEmail(
   erro?: string,
 ): Promise<void> {
   const agora = new Date().toISOString();
-  const id = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const id = `evt_${Date.now()}_${crypto.randomUUID()}`;
 
   await db
     .prepare(

@@ -132,7 +132,7 @@ async function registrarEventoSigvoosFalha(
   mensagem: string,
   erro: Error | unknown,
 ): Promise<void> {
-  const id = `evt_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  const id = `evt_${Date.now()}_${crypto.randomUUID()}`;
   const agora = new Date().toISOString();
   const erroMsg = erro instanceof Error ? erro.message : String(erro);
 
