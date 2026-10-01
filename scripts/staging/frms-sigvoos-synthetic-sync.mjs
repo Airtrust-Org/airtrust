@@ -28,6 +28,7 @@ const ALLOWED_DB_NAME = 'airtrust-db-staging-baseline-20260701';
 const ALLOWED_DB_ID = 'bf9963f4-eb12-439b-a830-20bbf577ac22';
 const BLOCKED_DB_IDS = ['7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae', 'a72fb05b-0912-4ad9-9686-e7948c8b09eb'];
 const ALLOWED_EMPRESA_ID = 999006;
+const APPLY_CONFIRMATION = 'AIRTRUST_STAGING_FRMS_SIGVOOS_QA';
 const FIXTURE_ID = 'QA_FRMS_SIGVOOS_SYNC_20260823';
 const FIXTURE_CANAC = '999006'; // same synthetic CANAC set on funcionario id=1 by MR !84's FIRA runner
 
@@ -166,6 +167,9 @@ export function buildSyntheticSigvoosLegs({ ano, mes }) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const { dbName, dbId, empresaId } = assertGuards(args);
+  if (args.apply && process.env.CONFIRM_STAGING_FRMS_SIGVOOS_QA !== APPLY_CONFIRMATION) {
+    throw new Error(`ABORT: --apply requires CONFIRM_STAGING_FRMS_SIGVOOS_QA=${APPLY_CONFIRMATION}.`);
+  }
 
   console.log(JSON.stringify({
     guard: 'PASS', environment: args.environment ?? ALLOWED_ENV, dbName, dbId, empresaId,

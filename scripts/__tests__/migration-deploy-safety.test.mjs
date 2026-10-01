@@ -149,7 +149,8 @@ test('remote apply is accepted only in the exact governed wrapper', () => {
 test('deploy-worker-only contains no implicit migration application', () => {
   const source = fs.readFileSync(path.join(root, 'scripts', 'deploy-worker-only.sh'), 'utf8');
   assert.doesNotMatch(source, /d1\s+migrations\s+apply/);
-  assert.match(source, /never applies D1 migrations/i);
+  assert.match(source, /LOCAL_PRODUCTION_DEPLOY_DISABLED_USE_GITHUB_ACTIONS/);
+  assert.match(source, /\.github\/workflows\/deploy-airtrust\.yml/);
 });
 
 test('legacy 0091 remote executor is retired fail-closed', () => {

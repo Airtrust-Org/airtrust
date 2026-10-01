@@ -50,6 +50,11 @@ describe('frms-fira-canonical-qa runner — guards (staging-only, tenant-only, f
     expect(parseArgs([]).apply).toBe(false);
     expect(parseArgs(['--dry-run']).apply).toBe(false);
     expect(parseArgs(['--apply']).apply).toBe(true);
+    expect(runnerSource).toContain('CONFIRM_STAGING_FRMS_FIRA_QA');
+    expect(runnerSource.indexOf('if (args.apply && process.env.CONFIRM_STAGING_FRMS_FIRA_QA')).toBeLessThan(
+      runnerSource.indexOf('const db = makeD1(dbName)'),
+    );
+    expect(runnerSource).toContain('AIRTRUST_STAGING_FRMS_FIRA_QA');
   });
 });
 

@@ -213,24 +213,16 @@ para processamento no servidor — funciona corretamente e de forma atômica em
 100% dos testes, incluindo um teste de falha forçada (SQL propositalmente
 inválido) que confirmou zero estado parcial em caso de erro.
 
-### Correção
+### Correção histórica e estado atual
 
-`scripts/production/apply-simuladores-matriz-0443-remote-migration.sh`
-substitui `wrangler d1 migrations apply` por essa combinação comprovada:
-constrói o mesmo texto "migration + INSERT no ledger" (via
-`scripts/lib/migration-remote-apply.mjs`, a mesma função usada pelos testes),
-escreve num arquivo temporário isolado, e submete via
-`wrangler d1 execute --remote --file`. O `INSERT` no ledger faz parte da
-mesma unidade atômica da mudança de schema — nunca um passo manual separado.
-Mantém todos os gates do runner anterior (alvo de produção travado,
-`AIRTRUST_ALLOW_PROD_DB_WRITE`/`AIRTRUST_CONFIRM_PROD_DB_WRITE`, `main` limpa
-== `origin/main`, backup oficial validado por tamanho+SHA-256) e adiciona um
-gate de idempotência: se `0443` já estiver ledgerada, o script sai sem
-reenviar nada.
+A correção original usou um runner dedicado para 0443, construindo a unidade
+atômica "migration + INSERT no ledger" e submetendo-a pelo import remoto do D1.
+Esse runner foi aposentado após a consolidação da governança Schema V2 e não é
+mais um entrypoint operacional.
 
-`scripts/apply-migration-production.sh` (o caminho genérico de
-`d1 execute --remote --file` cru) agora recusa explicitamente 0443 pelo mesmo
-motivo que já recusava 0440/0441/0442: aquele caminho não inclui o `INSERT`
-no ledger, então nunca deve ser usado para estas migrations.
+`scripts/apply-migration-production.sh` continua recusando explicitamente 0443.
+Qualquer alteração de schema de produção deve seguir o contrato Schema V2 atual
+e o workflow governado `.github/workflows/apply-schema-change-v2.yml`, com SHA,
+hashes, recovery point, ledger e pós-validação correspondentes.
 
 Nem a migration 0443 nem 0440/0441/0442 foram alteradas.

@@ -14,6 +14,7 @@ const env = [...args].find((arg) => arg.startsWith('--env='))?.split('=')[1] || 
 const expectedSha256 =
   [...args].find((arg) => arg.startsWith('--expected-sha256='))?.split('=')[1] || '';
 if (!['staging', 'production'].includes(env)) throw new Error(`env inválido: ${env}`);
+if (apply && env === 'production') throw new Error('PRODUCTION_APPLY_REQUIRES_GOVERNED_PRODUCTION_WORKFLOW');
 
 const TARGETS = Object.freeze({
   staging: 'airtrust-db-staging-baseline-20260701',
