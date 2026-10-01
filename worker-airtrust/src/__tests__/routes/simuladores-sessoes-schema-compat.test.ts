@@ -36,7 +36,7 @@ function createCompatDb(opts: CompatDbOptions) {
     prepare: vi.fn((query: string) => {
       queries.push(query);
 
-      if (query === 'PRAGMA table_info(simulador_agendamentos)') {
+      if (query === "PRAGMA table_info('simulador_agendamentos')") {
         const results = [
           { name: 'id' },
           { name: 'simulador_id' },
@@ -58,6 +58,7 @@ function createCompatDb(opts: CompatDbOptions) {
         ];
 
         return {
+          all: async () => ({ results }),
           bind: (..._args: unknown[]) => ({
             all: async () => ({ results }),
             first: async (): Promise<null> => null,

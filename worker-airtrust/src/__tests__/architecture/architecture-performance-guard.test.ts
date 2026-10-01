@@ -139,7 +139,7 @@ const HIGH_SQL_LIMIT_CAPS = {
   'services/sigvoos-frms.ts': 5000,
 } as const;
 
-const DIRECT_SCHEMA_INTROSPECTION_CAPS = { pragmaTableInfo: 75, sqliteMaster: 36 } as const;
+const DIRECT_SCHEMA_INTROSPECTION_CAPS = { pragmaTableInfo: 67, sqliteMaster: 36 } as const;
 
 const CRITICAL_SELECT_STAR_CAPS = {
   'routes/aeronaves.ts': 1,
