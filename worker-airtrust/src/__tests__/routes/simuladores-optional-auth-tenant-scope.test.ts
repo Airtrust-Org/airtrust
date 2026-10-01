@@ -190,7 +190,7 @@ function createModelosDb() {
   return {
     prepare(query: string) {
       const sql = normalizeSql(query);
-      if (sql === 'PRAGMA table_info(modelos_sessao)') {
+      if (/^PRAGMA table_info\(['"]?modelos_sessao['"]?\)$/i.test(sql)) {
         return {
           async all() {
             return {
@@ -209,8 +209,8 @@ function createModelosDb() {
         };
       }
       if (
-        sql === 'PRAGMA table_info(qualificacoes_tipos)' ||
-        sql === 'PRAGMA table_info(tipos_sessao)'
+        /^PRAGMA table_info\(['"]?qualificacoes_tipos['"]?\)$/i.test(sql) ||
+        /^PRAGMA table_info\(['"]?tipos_sessao['"]?\)$/i.test(sql)
       ) {
         return {
           async all() {
