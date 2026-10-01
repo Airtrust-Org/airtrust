@@ -29,7 +29,7 @@ test('0518 staging adapter bootstraps only non-PII reference prerequisites missi
   assert.equal(readFileSync('worker-airtrust/schema-v2/changes/0518_crm_qualification_consolidation.sql', 'utf8'), canonical);
 });
 
-test('staging adapter is a no-op for every other migration', () => {
+test('staging adapter is a no-op for an unhandled migration', () => {
   const sql = 'SELECT 1;\n';
   assert.equal(adaptStagingMigrationSql({ migrationName: '0521_training_compliance_designation_overrides.sql', migrationSql: sql }), sql);
 });
