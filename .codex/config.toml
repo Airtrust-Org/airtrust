@@ -10,10 +10,11 @@ not stopping points. Resolve recoverable browser, staging QA, CLI and tool
 issues using sanctioned mechanisms. If one independent front is blocked,
 continue the others. Return early only for a genuine safety, authorization,
 data, tenant, branch-protection, migration, or technical blocker. Google
-Cloud Build is the official AirTrust CI. CircleCI is retired/legacy. Never use
-CircleCI as a fallback for current gates or releases. For CI-dependent work,
-resolve the current GCB project and configuration from origin/main before
-execution.
+GitHub Actions is the official AirTrust CI. Google Cloud Build is contingency
+only when GitHub Actions is materially unavailable or defective; it is never a
+bypass for required gates. CircleCI and GitLab are retired/legacy. For
+CI-dependent work, resolve the current workflows, release gates, SHA and
+branch protection from origin/main before execution.
 """
 
 [sandbox_workspace_write]
