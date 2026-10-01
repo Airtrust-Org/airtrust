@@ -18,7 +18,7 @@ type SimuladoresContext = Context<{ Bindings: Env }>;
 import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
-import { requireAdminForDelete, audit } from './simuladores-shared';
+import { requireAdminForDelete, audit, simuladoresHasEmpresaId } from './simuladores-shared';
 import { createLogger, toError } from '../utils/logger';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -247,11 +247,9 @@ app.get('/tipos-check', async (c) => {
 app.get('/', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
-    // Check if empresa_id column exists (may not be present in older DB schemas)
-    const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
-    const hasEmpresaId = (tableInfo.results || []).some(
-      (row: DbRow) => String(row.name || '') === 'empresa_id',
-    );
+    // Check if empresa_id column exists (may not be present in older DB schemas).
+    // The shared helper caches this per D1 binding to avoid a PRAGMA on every request.
+    const hasEmpresaId = await simuladoresHasEmpresaId(c.env.DB);
     const page = Math.max(parseInt(c.req.query('page') || '1', 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '100', 10) || 100, 1), 500);
     const offset = (page - 1) * limit;
@@ -360,10 +358,7 @@ app.post('/', requirePermission('simuladores', 'criar', 'admin', 'manager'), asy
         400,
       );
     }
-    const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
-    const hasEmpresaId = (tableInfo.results || []).some(
-      (row: Record<string, unknown>) => String(row.name || '') === 'empresa_id',
-    );
+    const hasEmpresaId = await simuladoresHasEmpresaId(c.env.DB);
     const insertSql = hasEmpresaId
       ? 'INSERT INTO simuladores(nome,modelo,tipo,fabricante,localizacao,status,observacoes,empresa_id)VALUES(?,?,?,?,?,?,?,?)'
       : 'INSERT INTO simuladores(nome,modelo,tipo,fabricante,localizacao,status,observacoes)VALUES(?,?,?,?,?,?,?)';
@@ -418,10 +413,7 @@ app.get('/:id', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
-    const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
-    const hasEmpresaId = (tableInfo.results || []).some(
-      (row: DbRow) => String(row.name || '') === 'empresa_id',
-    );
+    const hasEmpresaId = await simuladoresHasEmpresaId(c.env.DB);
     const s = await c.env.DB.prepare(
       hasEmpresaId
         ? 'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?'
@@ -446,6 +438,8 @@ app.put('/:id', requirePermission('simuladores', 'editar', 'admin', 'manager'), 
     const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
     const b = await c.req.json();
+    // PUT also needs the full column set for modelo_aeronave compatibility, so
+    // this remains the single direct schema probe in this module for now.
     const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
     const colunas = new Set(
       (tableInfo.results || []).map((row: Record<string, unknown>) => String(row.name || '')),
@@ -531,10 +525,7 @@ app.delete('/:id', requirePermission('simuladores', 'deletar', 'admin', 'manager
     if (denied) return denied;
 
     const id = c.req.param('id');
-    const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
-    const hasEmpresaId = (tableInfo.results || []).some(
-      (row: DbRow) => String(row.name || '') === 'empresa_id',
-    );
+    const hasEmpresaId = await simuladoresHasEmpresaId(c.env.DB);
     const a = await c.env.DB.prepare(
       hasEmpresaId
         ? 'SELECT * FROM simuladores WHERE id=? AND deleted_at IS NULL AND empresa_id = ?'
