@@ -84,4 +84,36 @@ describe('qualificacoes certificados admin debug guards', () => {
       },
     });
   });
+
+  it('nunca expõe valores ou fragmentos de credenciais Cloudflare no diagnóstico', async () => {
+    const accountId = 'account-id-sensitive-value';
+    const browserToken = 'browser-token-sensitive-value';
+    const response = await routes.request(
+      '/admin/verificar-cf',
+      { method: 'GET' },
+      {
+        DB: createDb(),
+        ENABLE_ADMIN_DEBUG_ROUTES: 'true',
+        CF_ACCOUNT_ID: accountId,
+        CF_BROWSER_API_TOKEN: browserToken,
+      } as unknown as Env,
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      success: true,
+      cloudflare: {
+        CF_ACCOUNT_ID: { configurado: true },
+        CF_BROWSER_API_TOKEN: { configurado: true },
+        browser_rendering_disponivel: true,
+      },
+    });
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain(accountId);
+    expect(serialized).not.toContain(browserToken);
+    expect(serialized).not.toContain(accountId.slice(0, 10));
+    expect(serialized).not.toContain(browserToken.slice(0, 10));
+    expect(serialized).not.toContain('valor_primeiros_10');
+  });
 });
