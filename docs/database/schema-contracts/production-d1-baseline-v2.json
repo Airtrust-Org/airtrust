@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-09-30",
-    "last_reconciled_against": "0524 training compliance requirement sanitization prepared; remote apply pending",
-    "schema_v2_digest": "36a66417591c9685a59ed34cc69c2dfc953250f04c7a327c735e2daae21eef46",
+    "last_reconciled_at": "2026-10-01",
+    "last_reconciled_against": "0525 organizational structure PJ normalization prepared; remote apply pending",
+    "schema_v2_digest": "d86436443d2d5ba51f737cf281c8841cffe6e26dde8dc67f529220512b7200ca",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1233,6 +1233,18 @@
       "reviewed_manifest": "training-compliance-requirement-sanitization-0524.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-requirement-sanitization-0524.md",
       "note": "0524 is a reviewed data-only sanitation. It removes redundant generic N/A fallbacks and orphaned active rules, reconciles FDM and current AW139/S-76 maintenance audiences, adds corporate AVSEC awareness, and preserves histories, enrollments, employee-specific rules and specific governed exclusions. Remote apply requires staging validation, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0525_organizational_structure_pj_normalization.sql",
+      "change_id": "organizational-structure-pj-normalization-0525",
+      "sha256": "87c98fa846cc3ef403a84a498642231bbbcb6d6ba717157f337515d495804a91",
+      "targets": [],
+      "domain": "organizational structure / bounded tenant-6 employee sector-function normalization",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "organizational-structure-pj-normalization-0525.json",
+      "evidence": "worker-airtrust/schema-v2/plans/organizational-structure-pj-normalization-0525.md",
+      "note": "0525 is a reviewed data-only organizational normalization. It creates only missing tenant-6 sectors/functions and sector-function mappings required by the reviewed 2026-09-28 source, normalizes 13 bounded active employee records by internal ID, clears only provisional TEMP-TRN matricula placeholders, versions no employee names, and changes no training history, RBAC or tenant membership. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     }
   ]
 }
