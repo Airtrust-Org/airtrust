@@ -15,6 +15,7 @@ import {
 import { classificarStatusPorVencimento, diasEntreDatas } from '../lib/status/operational-status';
 import { extrairUsuarioAuditoria, registrarAuditoria } from '../utils/auditoria';
 import { matchesSearchText, normalizeSearchText } from '../utils/text-search';
+import { getSchemaColumns, hasSchemaTable } from '../utils/db-schema';
 import {
   assertFuncionarioInScope,
   filterRequestedSetorIdsByAccess,
@@ -129,20 +130,8 @@ type Evidence = {
   perfil_competencia?: string | null;
 };
 
-async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
-  const row = await db
-    .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1")
-    .bind(tableName)
-    .first<{ ok: number }>();
-  return Boolean(row?.ok);
-}
-
-async function columnSet(db: D1Database, tableName: string): Promise<Set<string>> {
-  const { results } = await db
-    .prepare(`PRAGMA table_info('${tableName.replace(/'/g, "''")}')`)
-    .all<{ name: string }>();
-  return new Set((results || []).map((row) => String(row.name || '')));
-}
+const tableExists = hasSchemaTable;
+const columnSet = getSchemaColumns;
 
 function asPositiveInt(value: unknown): number | null {
   const parsed = Number(value);

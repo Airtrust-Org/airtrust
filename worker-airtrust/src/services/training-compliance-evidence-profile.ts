@@ -2,22 +2,10 @@ import {
   trainingComplianceRuleApplicabilitySql,
   trainingComplianceRulePrioritySql,
 } from './training-compliance-rule-engine';
+import { hasSchemaColumn, hasSchemaTable } from '../utils/db-schema';
 
-async function tableExists(db: D1Database, table: string): Promise<boolean> {
-  const row = await db
-    .prepare("SELECT 1 ok FROM sqlite_master WHERE type='table' AND name=? LIMIT 1")
-    .bind(table)
-    .first<{ ok: number }>();
-  return Boolean(row?.ok);
-}
-
-async function columnExists(db: D1Database, table: string, column: string): Promise<boolean> {
-  if (!(await tableExists(db, table))) return false;
-  const { results } = await db
-    .prepare(`PRAGMA table_info('${table.replaceAll("'", "''")}')`)
-    .all<{ name: string }>();
-  return (results || []).some((row) => row.name === column);
-}
+const tableExists = hasSchemaTable;
+const columnExists = hasSchemaColumn;
 
 const QUALIFICATION_EVIDENCE_PROFILES_TABLE = 'qualificacoes_historico_perfis_competencia';
 
