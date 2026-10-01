@@ -327,7 +327,7 @@ app.get('/', (c) => {
       compliance: '/api/funcionarios/:id/compliance',
       alertas: '/api/alertas/vencimentos',
     },
-    documentation: 'https://github.com/fp-daumas/airtrust-v1',
+    documentation: 'https://github.com/Airtrust-Org/airtrust',
   });
 });
 

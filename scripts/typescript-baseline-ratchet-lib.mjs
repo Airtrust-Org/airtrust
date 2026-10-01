@@ -10,7 +10,7 @@
 // callers do the `tsc` invocation and file I/O.
 // rollback_plan_required: delete this file, guard-typescript-baseline-ratchet.mjs,
 // the baseline JSON, and the `guard:typescript-baseline-ratchet` npm script /
-// CircleCI wiring to fully revert — no runtime footprint elsewhere.
+// GitHub Actions wiring to fully revert — no runtime footprint elsewhere.
 
 const DIAGNOSTIC_HEADER_RE = /^(.+?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.*)$/;
 

@@ -13,7 +13,7 @@
 // diagnostic regardless of the net count.
 // dry_run_required: read-only — runs `tsc --noEmit` and reads the baseline
 // JSON; never mutates the working tree.
-// rollback_plan_required: this script (and its CircleCI wiring) can be
+// rollback_plan_required: this script (and its GitHub Actions wiring) can be
 // removed and CI can revert to bare `npm run typecheck` without touching any
 // application behavior; it has no runtime footprint.
 
