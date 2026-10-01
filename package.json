@@ -182,5 +182,19 @@
     "guard:operational-auth-literals": "node scripts/guard-operational-auth-literals.mjs",
     "agent:context": "bash scripts/agent-context.sh",
     "agent:test-plan": "node scripts/agent-test-plan.mjs"
+  },
+  "overrides": {
+    "minimatch@3.1.5": {
+      "brace-expansion": "1.1.21"
+    },
+    "minimatch@5.1.9": {
+      "brace-expansion": "2.1.7"
+    },
+    "minimatch@9.0.9": {
+      "brace-expansion": "2.1.7"
+    },
+    "lodash": "4.18.1",
+    "tmp": "0.2.7",
+    "fflate": "0.8.3"
   }
 }
