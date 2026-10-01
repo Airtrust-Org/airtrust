@@ -341,15 +341,18 @@ function getLinhaOrdenacao(linha: LinhaAlocacaoGantt, quinzenas: QuinzenaEscala[
 function inferirNumeroQuinzenaSituacao(
   situacao: EscalaAlocacao,
   quinzenas: QuinzenaEscala[],
-): number | null {
+): 1 | 2 | null {
+  const normalizarNumero = (value: number | null | undefined): 1 | 2 | null =>
+    value === 1 || value === 2 ? value : null;
+
   const porId = quinzenas.find((item) => item.id === situacao.quinzena_id);
-  if (porId) return porId.numero;
+  if (porId) return normalizarNumero(porId.numero);
 
   const porPeriodo = quinzenas.find(
     (item) => situacao.data_inicio <= item.data_fim && situacao.data_fim >= item.data_inicio,
   );
 
-  return porPeriodo?.numero ?? null;
+  return normalizarNumero(porPeriodo?.numero);
 }
 
 function getSituacaoPrioridade(situacao: EscalaAlocacao): number {

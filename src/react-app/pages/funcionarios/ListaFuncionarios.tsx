@@ -245,7 +245,7 @@ export function ListaFuncionarios({
         origem: 'lista-funcionarios',
       });
       if (!pasta360Url) {
-        toast.error('Não foi possível abrir a Pasta 360: funcionário inválido.');
+        toast.error('Não foi possível abrir a Pasta Virtual: funcionário inválido.');
         return;
       }
       navigate(pasta360Url);

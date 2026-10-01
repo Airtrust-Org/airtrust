@@ -98,8 +98,8 @@ export interface EscalaPageCtxValue {
   setFiltroTripulante: (v: string | null) => void;
   filtroQuinzena: 'todas' | 'q1' | 'q2';
   setFiltroQuinzena: (v: 'todas' | 'q1' | 'q2') => void;
-  visaoGrade: string;
-  setVisaoGrade: (v: string) => void;
+  visaoGrade: 'aeronave' | 'tripulante';
+  setVisaoGrade: (v: 'aeronave' | 'tripulante') => void;
   highlightAlocacao: string | null;
   setHighlightAlocacao: (v: string | null) => void;
   visaoContinua: boolean;

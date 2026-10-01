@@ -219,7 +219,7 @@ export interface EscalaAlocacao {
   id: string;
   escala_id: string;
   funcao: 'PIC' | 'SIC' | 'PIC_CHK' | 'SIC_CHK' | 'INSTRUTOR' | 'FLEX' | null;
-  situacao_tipo?: 'FERIAS' | 'SIM' | 'CURSO' | 'MED' | 'AFT' | 'STB' | null;
+  situacao_tipo?: 'FOLGA' | 'FERIAS' | 'SIM' | 'CURSO' | 'MED' | 'AFT' | 'STB' | null;
   situacao_cor?: string | null;
   situacao_nome?: string | null;
   situacao_icone?: string | null;

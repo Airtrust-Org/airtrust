@@ -111,7 +111,7 @@ describe("ListaFuncionarios action buttons", () => {
     localStorage.clear();
   });
 
-  it("renders direct Editar button alongside Pasta 360 and More Actions", async () => {
+  it("renders direct Editar button alongside Pasta Virtual and More Actions", async () => {
     mockFuncionarioFetch();
 
     render(<ListaFuncionarios {...baseProps} termoBusca="" />);

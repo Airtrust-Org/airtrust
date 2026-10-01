@@ -96,7 +96,7 @@ export function buildHomeAccessCards(params: {
     if (funcionarioId) {
       cards.push({
         icon: <ClipboardList className="w-7 h-7" />,
-        title: 'Minha Pasta 360',
+        title: 'Minha Pasta Virtual',
         description: 'Consulte documentos, registros e histórico do seu cadastro.',
         route:
           buildPasta360Url(funcionarioId, {

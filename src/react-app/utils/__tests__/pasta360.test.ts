@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildPasta360Url, requirePasta360Url } from '../pasta360';
 
 describe('pasta360 url helpers', () => {
-  it('monta URL da Pasta 360 para qualificacoes preservando contexto', () => {
+  it('monta URL da Pasta Virtual para qualificacoes preservando contexto', () => {
     const url = buildPasta360Url(123, {
       tab: 'pasta',
       origem: 'qualificacoes',
@@ -17,7 +17,7 @@ describe('pasta360 url helpers', () => {
     expect(url).not.toContain('/pasta-virtual/');
   });
 
-  it('monta URL da Pasta 360 para icones de funcionario', () => {
+  it('monta URL da Pasta Virtual para icones de funcionario', () => {
     expect(buildPasta360Url('ABC-123', { tab: 'pasta' })).toBe(
       '/funcionarios/ABC-123/ficha?tab=pasta',
     );
@@ -31,6 +31,6 @@ describe('pasta360 url helpers', () => {
 
   it('falha de forma explicita quando funcionario e invalido', () => {
     expect(buildPasta360Url(null)).toBeNull();
-    expect(() => requirePasta360Url(null)).toThrow('Funcionário inválido para abrir Pasta 360');
+    expect(() => requirePasta360Url(null)).toThrow('Funcionário inválido para abrir Pasta Virtual');
   });
 });

@@ -77,7 +77,7 @@ export const ListaTab: React.FC<ListaTabProps> = ({ funcionarios = [], loading =
       origem: 'funcionarios-lista-tab',
     });
     if (!pasta360Url) {
-      toast.error('Não foi possível abrir a Pasta 360: funcionário inválido.');
+      toast.error('Não foi possível abrir a Pasta Virtual: funcionário inválido.');
       return;
     }
     navigate(pasta360Url);
@@ -369,7 +369,7 @@ export const ListaTab: React.FC<ListaTabProps> = ({ funcionarios = [], loading =
                           variant="ghost"
                           size="sm"
                           onClick={() => openPasta360(func.id)}
-                          title="Pasta 360"
+                          title="Pasta Virtual"
                         >
                           <FolderOpen size={16} className="text-blue-600" />
                         </Button>

@@ -6,7 +6,7 @@ function source(path: string) {
   return readFileSync(resolve(process.cwd(), path), 'utf8');
 }
 
-describe('Pasta 360 canonical document presentation', () => {
+describe('Pasta Virtual canonical document presentation', () => {
   it('preserves backend version lineage instead of flattening duplicate names', () => {
     const hook = source('src/react-app/hooks/usePastaVirtual.ts');
 

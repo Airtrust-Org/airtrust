@@ -46,9 +46,12 @@ async function isFuncionarioInScope(
 const app = new Hono<AppEnv>();
 
 function certificateUploadKind(value: unknown): 'qualificacao' | 'profissional' | null {
-  const normalized = String(value || '').trim().toUpperCase();
+  const normalized = String(value || '')
+    .trim()
+    .toUpperCase();
   if (normalized === 'CERTIFICADO_QUALIFICACAO') return 'qualificacao';
-  if (normalized === 'CERTIFICADO_PROFISSIONAL' || normalized === 'CERTIFICADO') return 'profissional';
+  if (normalized === 'CERTIFICADO_PROFISSIONAL' || normalized === 'CERTIFICADO')
+    return 'profissional';
   return null;
 }
 
@@ -84,18 +87,104 @@ interface CategorizedDocument {
   substituidoPorId?: number | null;
 }
 
+const PASTA_VIRTUAL_CATEGORIA = {
+  QUALIFICACOES: 'Treinamentos e Qualificações',
+  AVALIACOES: 'Avaliações e Checks',
+  EXAMES: 'Exames Médicos (ASO, CMA)',
+  LICENCAS: 'Licenças e Extratos ANAC',
+  SIMULADORES: 'Simuladores',
+  DESIGNACOES: 'Designações Operacionais',
+  EXPERIENCIA: 'Experiência e Horas de Voo',
+  INSTRUTOR_EXAMINADOR: 'Instrutor e Examinador',
+  VINCULO: 'Vínculo e Registro Funcional',
+  PESSOAIS: 'Documentos Pessoais',
+  CURRICULO: 'Currículo Profissional',
+  OUTROS: 'Outros',
+} as const;
+
+export function normalizarCategoriaLegada(categoria: string | null | undefined): string | null {
+  const value = String(categoria || '').trim();
+  if (!value) return null;
+  const aliases: Record<string, string> = {
+    'Certificados de Qualificação': PASTA_VIRTUAL_CATEGORIA.QUALIFICACOES,
+    'Certificados Profissionais': PASTA_VIRTUAL_CATEGORIA.QUALIFICACOES,
+    Treinamento: PASTA_VIRTUAL_CATEGORIA.QUALIFICACOES,
+    'Treinamentos e Qualificações': PASTA_VIRTUAL_CATEGORIA.QUALIFICACOES,
+    'Avaliações e Checks': PASTA_VIRTUAL_CATEGORIA.AVALIACOES,
+    'Exames Médicos (ASO, CMA)': PASTA_VIRTUAL_CATEGORIA.EXAMES,
+    Licenças: PASTA_VIRTUAL_CATEGORIA.LICENCAS,
+    'Licenças e Extratos ANAC': PASTA_VIRTUAL_CATEGORIA.LICENCAS,
+    Simuladores: PASTA_VIRTUAL_CATEGORIA.SIMULADORES,
+    'Fichas de Treinamento de Voo': PASTA_VIRTUAL_CATEGORIA.SIMULADORES,
+    'Designações Operacionais': PASTA_VIRTUAL_CATEGORIA.DESIGNACOES,
+    'Experiência e Horas de Voo': PASTA_VIRTUAL_CATEGORIA.EXPERIENCIA,
+    'Instrutor e Examinador': PASTA_VIRTUAL_CATEGORIA.INSTRUTOR_EXAMINADOR,
+    'Vínculo e Registro Funcional': PASTA_VIRTUAL_CATEGORIA.VINCULO,
+    'Documentos Pessoais': PASTA_VIRTUAL_CATEGORIA.PESSOAIS,
+    'Currículo Profissional': PASTA_VIRTUAL_CATEGORIA.CURRICULO,
+    Outros: PASTA_VIRTUAL_CATEGORIA.OUTROS,
+  };
+  return aliases[value] || null;
+}
+
+export function inferirCategoriaDocumento(
+  nomeArquivo: string | null | undefined,
+  categoriaLegada?: string | null,
+  tipoLegado?: string | null,
+  r2Key?: string | null,
+): string {
+  const categoriaNormalizada = normalizarCategoriaLegada(categoriaLegada);
+  if (categoriaNormalizada) return categoriaNormalizada;
+
+  const nomeUpper = String(nomeArquivo || '').toUpperCase();
+  const tipoUpper = String(tipoLegado || '').toUpperCase();
+  const r2KeyLower = String(r2Key || '').toLowerCase();
+  if (
+    nomeUpper.startsWith('CERT-') ||
+    nomeUpper.startsWith('TREIN-') ||
+    r2KeyLower.includes('/certificados-upload/qualificacao/') ||
+    r2KeyLower.includes('/certificados-upload/profissional/')
+  ) {
+    return PASTA_VIRTUAL_CATEGORIA.QUALIFICACOES;
+  }
+  if (nomeUpper.startsWith('AVAL-')) return PASTA_VIRTUAL_CATEGORIA.AVALIACOES;
+  if (nomeUpper.startsWith('EXAME-')) return PASTA_VIRTUAL_CATEGORIA.EXAMES;
+  if (nomeUpper.startsWith('LIC-')) return PASTA_VIRTUAL_CATEGORIA.LICENCAS;
+  if (nomeUpper.startsWith('SIM-') || tipoUpper === 'SIMULADOR') {
+    return PASTA_VIRTUAL_CATEGORIA.SIMULADORES;
+  }
+  if (nomeUpper.startsWith('DESIG-')) return PASTA_VIRTUAL_CATEGORIA.DESIGNACOES;
+  if (nomeUpper.startsWith('EXP-')) return PASTA_VIRTUAL_CATEGORIA.EXPERIENCIA;
+  if (nomeUpper.startsWith('INST-')) return PASTA_VIRTUAL_CATEGORIA.INSTRUTOR_EXAMINADOR;
+  if (nomeUpper.startsWith('VINC-')) return PASTA_VIRTUAL_CATEGORIA.VINCULO;
+  if (nomeUpper.startsWith('CURR-')) return PASTA_VIRTUAL_CATEGORIA.CURRICULO;
+  if (nomeUpper.startsWith('DOC-OUTROS-')) return PASTA_VIRTUAL_CATEGORIA.OUTROS;
+  if (nomeUpper.startsWith('DOC-')) return PASTA_VIRTUAL_CATEGORIA.PESSOAIS;
+  return PASTA_VIRTUAL_CATEGORIA.OUTROS;
+}
+
 function documentVersionKey(document: CategorizedDocument): string {
   const cleanName = String(document.nome || '')
     .replace(/\.pdf$/i, '')
     .toUpperCase();
   const parts = cleanName.split('-').filter(Boolean);
   const prefix = parts[0] || String(document.tipo || 'OUTROS').toUpperCase();
+  const r2KeyLower = String(document.url || '').toLowerCase();
 
+  if (
+    prefix !== 'CERT' &&
+    (r2KeyLower.includes('/certificados-upload/qualificacao/') ||
+      r2KeyLower.includes('/certificados-upload/profissional/'))
+  ) {
+    return `UNVERSIONED:${document.id}`;
+  }
   if (prefix === 'CERT') return `CERT:${parts[2] || 'SEM_CODIGO'}`;
-  if (['EXAME', 'DOC', 'LIC', 'TREIN'].includes(prefix)) {
+  if (
+    ['AVAL', 'EXAME', 'DOC', 'LIC', 'TREIN', 'VINC', 'DESIG', 'EXP', 'INST', 'CURR'].includes(
+      prefix,
+    )
+  ) {
     const subtype = parts[1] || String(document.tipo || 'OUTROS').toUpperCase();
-    // Generic/uncategorized documents are independent records, not renewals of
-    // one another merely because they share the fallback OUTROS label.
     if (subtype === 'OUTROS' || subtype === 'OUTRO') return `UNVERSIONED:${document.id}`;
     return `${prefix}:${subtype}`;
   }
@@ -247,14 +336,18 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
     }
 
     const categorized: CategorizedDocs = {
-      'Certificados de Qualificação': [],
-      'Exames Médicos (ASO, CMA)': [],
-      'Certificados Profissionais': [],
-      'Documentos Pessoais': [],
-      Simuladores: [],
-      Licenças: [],
-      Treinamento: [],
-      Outros: [],
+      [PASTA_VIRTUAL_CATEGORIA.QUALIFICACOES]: [],
+      [PASTA_VIRTUAL_CATEGORIA.AVALIACOES]: [],
+      [PASTA_VIRTUAL_CATEGORIA.EXAMES]: [],
+      [PASTA_VIRTUAL_CATEGORIA.LICENCAS]: [],
+      [PASTA_VIRTUAL_CATEGORIA.SIMULADORES]: [],
+      [PASTA_VIRTUAL_CATEGORIA.DESIGNACOES]: [],
+      [PASTA_VIRTUAL_CATEGORIA.EXPERIENCIA]: [],
+      [PASTA_VIRTUAL_CATEGORIA.INSTRUTOR_EXAMINADOR]: [],
+      [PASTA_VIRTUAL_CATEGORIA.VINCULO]: [],
+      [PASTA_VIRTUAL_CATEGORIA.PESSOAIS]: [],
+      [PASTA_VIRTUAL_CATEGORIA.CURRICULO]: [],
+      [PASTA_VIRTUAL_CATEGORIA.OUTROS]: [],
     };
 
     // Deduplicate only by canonical linkage/record identity. Generic filenames such as
@@ -262,32 +355,10 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
     const filesMap = new Map<string, { doc: CategorizedDocument; categoria: string }>();
     const canonicalDocumentoIds = new Set((docsResult.results || []).map((doc) => Number(doc.id)));
 
-    // Processar documentos da tabela documentos primeiro
+    // Processar documentos da tabela documentos primeiro. A classificação é
+    // derivada de prefixos canônicos e mantém compatibilidade com nomes antigos.
     (docsResult.results || []).forEach((doc) => {
-      const nomeUpper = doc.nome_arquivo.toUpperCase();
-      let categoria = 'Outros';
-
-      const r2KeyLower = String(doc.r2_key || '').toLowerCase();
-      if (
-        nomeUpper.startsWith('CERT-') ||
-        r2KeyLower.includes('/certificados-upload/qualificacao/')
-      ) {
-        categoria = 'Certificados de Qualificação';
-      } else if (r2KeyLower.includes('/certificados-upload/profissional/')) {
-        categoria = 'Certificados Profissionais';
-      } else if (nomeUpper.startsWith('EXAME-')) {
-        categoria = 'Exames Médicos (ASO, CMA)';
-      } else if (nomeUpper.startsWith('LIC-')) {
-        categoria = 'Licenças';
-      } else if (nomeUpper.startsWith('TREIN-')) {
-        categoria = 'Treinamento';
-      } else if (nomeUpper.startsWith('SIM-')) {
-        categoria = 'Simuladores';
-      } else if (nomeUpper.startsWith('DOC-OUTROS-')) {
-        categoria = 'Documentos Pessoais';
-      } else if (nomeUpper.startsWith('DOC-')) {
-        categoria = 'Documentos Pessoais';
-      }
+      const categoria = inferirCategoriaDocumento(doc.nome_arquivo, null, doc.tipo, doc.r2_key);
 
       filesMap.set(`documentos:${doc.id}`, {
         doc: {
@@ -304,22 +375,17 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
       });
     });
 
-    // Processar documentos da tabela pasta_virtual (apenas se não existirem em documentos)
+    // Processar documentos da tabela pasta_virtual (apenas se não existirem em documentos).
     (pvResult.results || []).forEach((doc) => {
       // Skip only an explicit compatibility mirror of the canonical documentos row.
       if (doc.documento_id && canonicalDocumentoIds.has(Number(doc.documento_id))) return;
 
-      // Usar categoria do registro ou inferir do nome
-      let categoria = doc.categoria || 'Outros';
-
-      if (!doc.categoria) {
-        const nomeUpper = (doc.nome_arquivo || '').toUpperCase();
-        if (nomeUpper.startsWith('SIM-') || doc.tipo === 'SIMULADOR') {
-          categoria = 'Simuladores';
-        } else if (nomeUpper.startsWith('CERT-')) {
-          categoria = 'Certificados de Qualificação';
-        }
-      }
+      const categoria = inferirCategoriaDocumento(
+        doc.nome_arquivo,
+        doc.categoria,
+        doc.tipo,
+        doc.r2_key,
+      );
 
       filesMap.set(`pasta_virtual:${doc.id}`, {
         doc: {
@@ -663,11 +729,7 @@ app.get('/', auth(), async (c) => {
 
   const access = await getEmployeeSectorAccess(c, empresaId);
   const employeeScope = employeeSectorSql(access, 'f');
-  const whereClauses: string[] = [
-    'd.deleted_at IS NULL',
-    'f.empresa_id = ?',
-    employeeScope.clause,
-  ];
+  const whereClauses: string[] = ['d.deleted_at IS NULL', 'f.empresa_id = ?', employeeScope.clause];
   const bindings: unknown[] = [empresaId, ...employeeScope.bindings];
 
   if (funcionarioId) {
@@ -866,6 +928,8 @@ app.post('/upload', auth(), async (c) => {
         original_name: nomeArquivoPersistido,
         nome_padronizado: nomeArquivoPersistido,
         tipo_documento: tipoDocumento,
+        sub_tipo: subTipo || '',
+        categoria_funcional: normalizarTipoDocumento(tipoDocumento),
         uploaded_at: new Date().toISOString(),
         file_size: fileSize.toString(),
         sha256_hash: hashHex,
@@ -993,7 +1057,10 @@ app.post('/upload', auth(), async (c) => {
         tipo_documento: tipoDocumento,
       });
 
-      if (String(tipoDocumento).toUpperCase() === 'CMA') {
+      if (
+        normalizarTipoDocumento(tipoDocumento) === 'EXAME_MEDICO' &&
+        String(subTipo || '').toUpperCase() === 'CMA'
+      ) {
         await publishDomainEvent(db, 'pasta_virtual', 'DOCUMENTO_CMA_DETECTADO', {
           empresa_id: empresaId,
           origem_modulo: 'pasta_virtual',

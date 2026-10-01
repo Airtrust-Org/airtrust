@@ -1,7 +1,11 @@
-import { useState, useRef } from 'react';
-import { X, Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { AlertCircle, CheckCircle, FileText, Upload, X } from 'lucide-react';
 import Button from '@/react-app/components/Button';
-import type { TipoDocumento } from '@/react-app/hooks/usePastaVirtual';
+import {
+  PASTA_VIRTUAL_CATEGORIAS,
+  pastaVirtualCategoriaPorTipo,
+  type TipoDocumento,
+} from '@/react-app/config/pastaVirtual';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 
 interface UploadDocumentoModalProps {
@@ -12,48 +16,103 @@ interface UploadDocumentoModalProps {
   tipoInicial?: TipoDocumento;
 }
 
-// Tipos de documento conforme nomenclatura padronizada
-const TIPOS_DOCUMENTO = [
-  { value: 'CERTIFICADO_QUALIFICACAO', label: 'Certificado de Qualificação ANAC' },
-  { value: 'EXAME_MEDICO', label: 'Exame Médico' },
-  { value: 'DOCUMENTO_PESSOAL', label: 'Documento Pessoal' },
-  { value: 'CERTIFICADO_PROFISSIONAL', label: 'Certificado Profissional' },
-  { value: 'CONTRATO', label: 'Contrato / Licença' },
-  { value: 'OUTROS', label: 'Outros Documentos' },
-] as const;
+type OpcaoSubtipo = { value: string; label: string };
 
-// Códigos ANAC para certificados de qualificação
-const CODIGOS_ANAC = [
-  { value: 'PP', label: 'PP - Piloto Privado' },
-  { value: 'PC', label: 'PC - Piloto Comercial' },
-  { value: 'PLA', label: 'PLA - Piloto de Linha Aérea' },
-  { value: 'IFR', label: 'IFR - Voo por Instrumentos' },
-  { value: 'INVA', label: 'INVA - Instrutor de Voo (Avião)' },
-  { value: 'INVH', label: 'INVH - Instrutor de Voo (Helicóptero)' },
-  { value: 'MLTE', label: 'MLTE - Multimotor Terrestre' },
-  { value: 'MHPA', label: 'MHPA - Habilitação de Tipo' },
-  { value: 'PAGA', label: 'PAGA - Piloto Agrícola' },
-  { value: 'CHE', label: 'CHE - Comissário de Voo' },
-];
+const SUBTIPOS: Partial<Record<TipoDocumento, OpcaoSubtipo[]>> = {
+  EXAME_MEDICO: [
+    { value: 'ASO', label: 'ASO - Atestado de Saúde Ocupacional' },
+    { value: 'CMA', label: 'CMA - Certificado Médico Aeronáutico' },
+    { value: 'TOXICOLOGICO', label: 'Exame toxicológico' },
+    { value: 'CCF', label: 'CCF - Certificado de Capacidade Física' },
+  ],
+  LICENCA_ANAC: [
+    { value: 'EXTRATO_ANAC', label: 'Extrato ANAC' },
+    { value: 'LICENCA', label: 'Licença' },
+    { value: 'CHT', label: 'CHT / Habilitações' },
+    { value: 'CHT_IFR', label: 'CHT - IFR' },
+    { value: 'CHT_TIPO', label: 'CHT - Tipo' },
+  ],
+  SIMULADOR: [
+    { value: 'FICHA_SESSAO', label: 'Ficha de sessão' },
+    { value: 'TREINAMENTO_VOO', label: 'Treinamento de voo' },
+    { value: 'RELATORIO_SIMULADOR', label: 'Relatório de simulador' },
+  ],
+  DESIGNACAO_OPERACIONAL: [
+    { value: 'PIC', label: 'Designação PIC' },
+    { value: 'SIC', label: 'Designação SIC' },
+    { value: 'EQUIPAMENTO', label: 'Designação de equipamento' },
+    { value: 'INSTRUTOR', label: 'Designação de instrutor' },
+    { value: 'EXAMINADOR', label: 'Designação de examinador' },
+    { value: 'FUNCAO', label: 'Outra designação de função' },
+  ],
+  EXPERIENCIA_HORAS: [
+    { value: 'DECLARACAO_HORAS', label: 'Declaração de horas de voo' },
+    { value: 'CIV', label: 'CIV / Caderneta Individual de Voo' },
+    { value: 'EXPERIENCIA_RECENTE', label: 'Experiência recente' },
+    { value: 'DECLARACAO_EXPERIENCIA', label: 'Declaração de experiência' },
+  ],
+  INSTRUTOR_EXAMINADOR: [
+    { value: 'CREDENCIAMENTO', label: 'Credenciamento' },
+    { value: 'CURSO', label: 'Curso / formação' },
+    { value: 'IOS', label: 'IOS / evidência de instrução' },
+    { value: 'TERMO', label: 'Termo / processo' },
+    { value: 'DESIGNACAO', label: 'Designação' },
+  ],
+  VINCULO_FUNCIONAL: [
+    { value: 'FICHA_REGISTRO', label: 'Ficha de registro' },
+    { value: 'CONTRATO', label: 'Contrato' },
+    { value: 'ADMISSAO', label: 'Admissão' },
+    { value: 'DESLIGAMENTO', label: 'Desligamento' },
+    { value: 'ALTERACAO_FUNCIONAL', label: 'Alteração funcional' },
+  ],
+  DOCUMENTO_PESSOAL: [
+    { value: 'RG', label: 'RG - Registro Geral' },
+    { value: 'CPF', label: 'CPF' },
+    { value: 'CNH', label: 'CNH' },
+    { value: 'CTPS', label: 'CTPS' },
+    { value: 'PASSAPORTE', label: 'Passaporte' },
+    { value: 'VISTO', label: 'Visto' },
+    { value: 'TITULO', label: 'Título de eleitor' },
+    { value: 'RESERVISTA', label: 'Certificado de reservista' },
+  ],
+  CURRICULO_PROFISSIONAL: [
+    { value: 'CURRICULO', label: 'Currículo profissional' },
+    { value: 'FICHA_PROFISSIONAL', label: 'Ficha profissional' },
+  ],
+};
 
-// Tipos de exame médico
-const TIPOS_EXAME = [
-  { value: 'ASO', label: 'ASO - Admissional/Periódico' },
-  { value: 'CCF', label: 'CCF - Certificado de Capacidade Física' },
-  { value: 'TOXICOLOGICO', label: 'Exame Toxicológico' },
-  { value: 'PCMSO', label: 'PCMSO - Programa de Controle Médico' },
-];
+const SUBTIPO_LIVRE = new Set<TipoDocumento>(['CERTIFICADO_QUALIFICACAO', 'AVALIACAO_CQ']);
+const DATA_OBRIGATORIA = new Set<TipoDocumento>([
+  'CERTIFICADO_QUALIFICACAO',
+  'AVALIACAO_CQ',
+  'EXAME_MEDICO',
+  'LICENCA_ANAC',
+  'SIMULADOR',
+  'DESIGNACAO_OPERACIONAL',
+  'EXPERIENCIA_HORAS',
+  'INSTRUTOR_EXAMINADOR',
+]);
 
-// Tipos de documento pessoal
-const TIPOS_DOC_PESSOAL = [
-  { value: 'RG', label: 'RG - Registro Geral' },
-  { value: 'CPF', label: 'CPF - Cadastro de Pessoa Física' },
-  { value: 'CNH', label: 'CNH - Carteira Nacional de Habilitação' },
-  { value: 'CTPS', label: 'CTPS - Carteira de Trabalho' },
-  { value: 'TITULO', label: 'Título de Eleitor' },
-  { value: 'PASSAPORTE', label: 'Passaporte' },
-  { value: 'RESERVISTA', label: 'Certificado de Reservista' },
-];
+const PREFIXOS: Record<TipoDocumento, string> = {
+  CERTIFICADO_QUALIFICACAO: 'CERT',
+  AVALIACAO_CQ: 'AVAL',
+  EXAME_MEDICO: 'EXAME',
+  LICENCA_ANAC: 'LIC',
+  SIMULADOR: 'SIM',
+  DESIGNACAO_OPERACIONAL: 'DESIG',
+  EXPERIENCIA_HORAS: 'EXP',
+  INSTRUTOR_EXAMINADOR: 'INST',
+  VINCULO_FUNCIONAL: 'VINC',
+  DOCUMENTO_PESSOAL: 'DOC',
+  CURRICULO_PROFISSIONAL: 'CURR',
+  OUTROS: 'DOC-OUTROS',
+};
+
+function subtipoLabel(tipo: TipoDocumento) {
+  if (tipo === 'CERTIFICADO_QUALIFICACAO') return 'Código ou identificação do treinamento';
+  if (tipo === 'AVALIACAO_CQ') return 'Tipo/código da avaliação';
+  return 'Tipo específico';
+}
 
 export default function UploadDocumentoModal({
   isOpen,
@@ -63,111 +122,105 @@ export default function UploadDocumentoModal({
   tipoInicial,
 }: UploadDocumentoModalProps) {
   const [file, setFile] = useState<File | null>(null);
-  const [tipoDocumento, setTipoDocumento] = useState<string>(
+  const [tipoDocumento, setTipoDocumento] = useState<TipoDocumento>(
     tipoInicial || 'CERTIFICADO_QUALIFICACAO',
   );
-  const [subTipo, setSubTipo] = useState<string>('');
+  const [subTipo, setSubTipo] = useState('');
   const [descricao, setDescricao] = useState('');
-  const [dataRealizacao, setDataRealizacao] = useState<string>(''); // Data de realização da qualificação
+  const [dataRealizacao, setDataRealizacao] = useState('');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validacao, setValidacao] = useState<{ valido: boolean; erro?: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Validação de PDF
+  useEffect(() => {
+    if (!isOpen) return;
+    setTipoDocumento(tipoInicial || 'CERTIFICADO_QUALIFICACAO');
+    setSubTipo('');
+    setDescricao('');
+    setDataRealizacao('');
+    setFile(null);
+    setError(null);
+    setValidacao(null);
+  }, [isOpen, tipoInicial]);
+
   const validarPDF = (arquivo: File): { valido: boolean; erro?: string } => {
-    // Extensão
     if (!arquivo.name.toLowerCase().endsWith('.pdf')) {
-      return { valido: false, erro: 'Arquivo deve ter extensão .pdf' };
+      return { valido: false, erro: 'O arquivo deve estar em PDF.' };
     }
-
-    // MIME type
     if (arquivo.type !== 'application/pdf') {
-      return { valido: false, erro: 'Arquivo deve ser do tipo application/pdf' };
+      return { valido: false, erro: 'O arquivo deve ser do tipo application/pdf.' };
     }
-
-    // Tamanho (1KB a 10MB)
-    const MIN_SIZE = 1024; // 1KB
-    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+    const MIN_SIZE = 1024;
+    const MAX_SIZE = 10 * 1024 * 1024;
     if (arquivo.size < MIN_SIZE || arquivo.size > MAX_SIZE) {
-      return { valido: false, erro: 'Arquivo deve ter entre 1KB e 10MB' };
+      return { valido: false, erro: 'O PDF deve ter entre 1 KB e 10 MB.' };
     }
-
     return { valido: true };
   };
 
+  const opcoesSubTipo = SUBTIPOS[tipoDocumento] || [];
+  const usaSubtipoLivre = SUBTIPO_LIVRE.has(tipoDocumento);
+  const subtipoObrigatorio = tipoDocumento !== 'OUTROS';
+  const dataObrigatoria = DATA_OBRIGATORIA.has(tipoDocumento);
+  const categoriaSelecionada = pastaVirtualCategoriaPorTipo[tipoDocumento];
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      const resultado = validarPDF(selectedFile);
-      setValidacao(resultado);
-
-      if (resultado.valido) {
-        setFile(selectedFile);
-        setError(null);
-      } else {
-        setFile(null);
-        setError(resultado.erro || 'Arquivo inválido');
-      }
+    if (!selectedFile) return;
+    const resultado = validarPDF(selectedFile);
+    setValidacao(resultado);
+    if (resultado.valido) {
+      setFile(selectedFile);
+      setError(null);
+    } else {
+      setFile(null);
+      setError(resultado.erro || 'Arquivo inválido');
     }
   };
 
   const handleUpload = async () => {
-    if (!file) {
-      setError('Selecione um arquivo PDF');
+    if (!file || !validacao?.valido) {
+      setError(validacao?.erro || 'Selecione um arquivo PDF válido.');
       return;
     }
-
-    if (!validacao?.valido) {
-      setError(validacao?.erro || 'Arquivo inválido');
+    if (subtipoObrigatorio && !subTipo.trim()) {
+      setError('Informe o tipo específico do documento para manter a pasta organizada.');
+      return;
+    }
+    if (dataObrigatoria && !dataRealizacao) {
+      setError('Informe a data do documento/realização para preservar o histórico corretamente.');
       return;
     }
 
     try {
       setUploading(true);
       setError(null);
-
       const formData = new FormData();
       formData.append('file', file);
       formData.append('funcionario_id', funcionarioId.toString());
       formData.append('tipo_documento', tipoDocumento);
-
-      if (subTipo) {
-        formData.append('sub_tipo', subTipo);
-      }
-
-      if (descricao) {
-        formData.append('descricao', descricao);
-      }
-
-      if (dataRealizacao) {
-        formData.append('data_realizacao', dataRealizacao);
-      }
+      if (subTipo.trim())
+        formData.append('sub_tipo', subTipo.trim().toUpperCase().replace(/\s+/g, '_'));
+      if (descricao.trim()) formData.append('descricao', descricao.trim());
+      if (dataRealizacao) formData.append('data_realizacao', dataRealizacao);
 
       const token = getAccessToken();
-      if (!token) {
-        throw new Error('Token não encontrado. Faça login novamente.');
-      }
+      if (!token) throw new Error('Token não encontrado. Faça login novamente.');
 
       const response = await fetch(`${API_BASE_URL}/pasta-virtual/upload`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-
       const data = await response.json();
-
-      if (!response.ok || !data.success) {
+      if (!response.ok || !data.success)
         throw new Error(data.error || 'Erro ao fazer upload do documento');
-      }
 
-      // Sucesso
       onSuccess();
       handleClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido ao fazer upload');
+      setError(err instanceof Error ? err.message : 'Erro desconhecido');
     } finally {
       setUploading(false);
     }
@@ -175,242 +228,232 @@ export default function UploadDocumentoModal({
 
   const handleClose = () => {
     setFile(null);
-    setTipoDocumento(tipoInicial || 'CERTIFICADO_QUALIFICACAO');
     setSubTipo('');
     setDescricao('');
+    setDataRealizacao('');
     setError(null);
     setValidacao(null);
     setUploading(false);
     onClose();
   };
 
-  // Determinar opções de subtipo baseado no tipo selecionado
-  const getOpcoesSubTipo = () => {
-    switch (tipoDocumento) {
-      case 'CERTIFICADO_QUALIFICACAO':
-        return CODIGOS_ANAC;
-      case 'EXAME_MEDICO':
-        return TIPOS_EXAME;
-      case 'DOCUMENTO_PESSOAL':
-        return TIPOS_DOC_PESSOAL;
-      default:
-        return [];
-    }
-  };
-
-  const opcoesSubTipo = getOpcoesSubTipo();
-  const mostraSubTipo = opcoesSubTipo.length > 0;
-
-  // Gerar preview do nome padronizado
   const getNomePadronizado = () => {
     if (!file) return '';
+    if (tipoDocumento === 'CERTIFICADO_QUALIFICACAO') return file.name;
 
-    const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
-    const nomeFuncionario = 'NOME_FUNCIONARIO'; // Placeholder - será preenchido pelo backend
-
-    switch (tipoDocumento) {
-      case 'CERTIFICADO_QUALIFICACAO':
-      case 'CERTIFICADO_PROFISSIONAL':
-        return file.name;
-      case 'EXAME_MEDICO':
-        return subTipo
-          ? `EXAME-${subTipo}-${nomeFuncionario}-${dataAtual}.pdf`
-          : `EXAME-[TIPO]-${nomeFuncionario}-${dataAtual}.pdf`;
-      default:
-        return `DOC-${tipoDocumento}-${nomeFuncionario}-${dataAtual}-[UUID].pdf`;
-    }
+    const data = (dataRealizacao || new Date().toISOString().split('T')[0]).replace(/-/g, '');
+    const tipo = subTipo.trim().toUpperCase().replace(/\s+/g, '_') || '[TIPO]';
+    if (tipoDocumento === 'OUTROS') return `DOC-OUTROS-NOME_FUNCIONARIO-${data}-[ID].pdf`;
+    return `${PREFIXOS[tipoDocumento]}-${tipo}-NOME_FUNCIONARIO-${data}-[ID].pdf`;
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white shadow-2xl dark:bg-slate-900">
+        <div className="flex items-center justify-between border-b border-slate-200 p-6 dark:border-slate-700">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-lg">
+            <div className="rounded-lg bg-primary/10 p-2">
               <Upload className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Upload de Documento</h2>
-              <p className="text-sm text-gray-500">Apenas arquivos PDF (1KB - 10MB)</p>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                Adicionar à Pasta Virtual
+              </h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">PDF entre 1 KB e 10 MB</p>
             </div>
           </div>
           <button
             onClick={handleClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition"
+            className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
             disabled={uploading}
           >
-            <X className="h-5 w-5 text-gray-500" />
+            <X className="h-5 w-5 text-slate-500" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Tipo de Documento */}
+        <div className="space-y-5 p-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tipo de Documento <span className="text-red-500">*</span>
+            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+              Categoria <span className="text-red-500">*</span>
             </label>
             <select
               value={tipoDocumento}
               onChange={(e) => {
-                setTipoDocumento(e.target.value);
-                setSubTipo(''); // Reset subtipo ao mudar tipo
+                setTipoDocumento(e.target.value as TipoDocumento);
+                setSubTipo('');
               }}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+              className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-950"
               disabled={uploading}
             >
-              {TIPOS_DOCUMENTO.map((tipo) => (
-                <option key={tipo.value} value={tipo.value}>
-                  {tipo.label}
+              {PASTA_VIRTUAL_CATEGORIAS.map((tipo) => (
+                <option key={tipo.tipo} value={tipo.tipo}>
+                  {tipo.titulo}
                 </option>
               ))}
             </select>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {categoriaSelecionada.descricao}
+            </p>
           </div>
 
-          {/* Subtipo (condicional) */}
-          {mostraSubTipo && (
+          {tipoDocumento !== 'OUTROS' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {tipoDocumento === 'CERTIFICADO_QUALIFICACAO' && 'Tipo de Licença'}
-                {tipoDocumento === 'EXAME_MEDICO' && 'Tipo de Exame'}
-                {tipoDocumento === 'DOCUMENTO_PESSOAL' && 'Tipo de Documento'}
-                {subTipo && <span className="text-red-500"> *</span>}
+              <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                {subtipoLabel(tipoDocumento)} <span className="text-red-500">*</span>
               </label>
-              <select
-                value={subTipo}
-                onChange={(e) => setSubTipo(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
-                disabled={uploading}
-              >
-                <option value="">Selecione...</option>
-                {opcoesSubTipo.map((opcao) => (
-                  <option key={opcao.value} value={opcao.value}>
-                    {opcao.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Arquivo */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Arquivo PDF <span className="text-red-500">*</span>
-            </label>
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition ${
-                file
-                  ? 'border-green-500 bg-green-50'
-                  : 'border-gray-300 hover:border-primary hover:bg-gray-50'
-              }`}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/pdf"
-                onChange={handleFileChange}
-                className="hidden"
-                disabled={uploading}
-              />
-
-              {file ? (
-                <div className="space-y-2">
-                  <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
-                  <p className="font-medium text-gray-900">{file.name}</p>
-                  <p className="text-sm text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
-                  {validacao?.valido && <p className="text-xs text-green-600">✓ Arquivo válido</p>}
-                </div>
+              {usaSubtipoLivre ? (
+                <input
+                  type="text"
+                  value={subTipo}
+                  onChange={(e) => setSubTipo(e.target.value)}
+                  placeholder={
+                    tipoDocumento === 'CERTIFICADO_QUALIFICACAO'
+                      ? 'Ex.: D2, E3, F1, INTRO_SGQ'
+                      : 'Ex.: FAP05.2-139, FAP14-139, OPC'
+                  }
+                  className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-950"
+                  disabled={uploading}
+                />
               ) : (
-                <div className="space-y-2">
-                  <FileText className="h-12 w-12 text-gray-400 mx-auto" />
-                  <p className="text-gray-600">Clique para selecionar um arquivo PDF</p>
-                  <p className="text-xs text-gray-400">Máximo 10MB</p>
-                </div>
+                <select
+                  value={subTipo}
+                  onChange={(e) => setSubTipo(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-950"
+                  disabled={uploading}
+                >
+                  <option value="">Selecione...</option>
+                  {opcoesSubTipo.map((opcao) => (
+                    <option key={opcao.value} value={opcao.value}>
+                      {opcao.label}
+                    </option>
+                  ))}
+                </select>
               )}
             </div>
-          </div>
-
-          {/* Preview do nome persistido */}
-          {file && validacao?.valido && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm font-medium text-blue-900 mb-1">Nome do arquivo:</p>
-              <code className="text-sm text-blue-700 font-mono break-all">
-                {getNomePadronizado()}
-              </code>
-              <p className="text-xs text-blue-600 mt-2">
-                ℹ️ Certificados mantêm o nome original. Os demais documentos seguem a nomenclatura padronizada.
-              </p>
-            </div>
           )}
 
-          {/* Data de Realização */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Data de Realização <span className="text-gray-500 font-normal">(opcional)</span>
+            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+              Data do documento / realização{' '}
+              {dataObrigatoria ? (
+                <span className="text-red-500">*</span>
+              ) : (
+                <span className="font-normal text-slate-400">(opcional)</span>
+              )}
             </label>
             <input
               type="date"
               value={dataRealizacao}
               onChange={(e) => setDataRealizacao(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+              className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-950"
               disabled={uploading}
             />
-            <p className="mt-1 text-xs text-gray-500">
-              Data em que a qualificação ou documento foi realizado/emitido. Se não informada, usa a
-              data atual.
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Use a data impressa/emitida no documento, não a data do upload.
             </p>
           </div>
 
-          {/* Descrição */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Descrição (opcional)
+            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+              Arquivo PDF <span className="text-red-500">*</span>
+            </label>
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className={`cursor-pointer rounded-lg border-2 border-dashed p-5 text-center transition ${file ? 'border-green-500 bg-green-50 dark:bg-green-950/20' : 'border-slate-300 hover:border-primary hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'}`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf,.pdf"
+                onChange={handleFileChange}
+                className="hidden"
+                disabled={uploading}
+              />
+              {file ? (
+                <div className="space-y-2">
+                  <CheckCircle className="mx-auto h-10 w-10 text-green-600" />
+                  <p className="break-all font-medium text-slate-900 dark:text-white">
+                    {file.name}
+                  </p>
+                  <p className="text-sm text-slate-500">{(file.size / 1024).toFixed(1)} KB</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <FileText className="mx-auto h-10 w-10 text-slate-400" />
+                  <p className="text-slate-600 dark:text-slate-300">Clique para selecionar o PDF</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {file && validacao?.valido && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/20">
+              <p className="mb-1 text-sm font-medium text-blue-900 dark:text-blue-200">
+                Padrão de organização
+              </p>
+              <code className="break-all text-xs text-blue-700 dark:text-blue-300">
+                {getNomePadronizado()}
+              </code>
+              <p className="mt-2 text-xs text-blue-600 dark:text-blue-400">
+                Certificados mantêm o nome original. Os demais documentos recebem nomenclatura
+                padronizada para facilitar organização e histórico.
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+              Descrição <span className="font-normal text-slate-400">(opcional)</span>
             </label>
             <textarea
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
-              placeholder="Adicione uma descrição ou observação sobre este documento..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary resize-none"
+              placeholder="Observação objetiva que ajude a identificar o documento..."
+              className="w-full resize-none rounded-lg border border-slate-300 px-4 py-2 focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-950"
               rows={3}
               disabled={uploading}
             />
           </div>
 
-          {/* Erro */}
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/20">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
               <div>
-                <p className="text-sm font-medium text-red-900">Erro no upload</p>
-                <p className="text-sm text-red-700">{error}</p>
+                <p className="text-sm font-medium text-red-900 dark:text-red-200">
+                  Não foi possível enviar
+                </p>
+                <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 p-6 dark:border-slate-700 dark:bg-slate-950/50">
           <Button variant="secondary" onClick={handleClose} disabled={uploading}>
             Cancelar
           </Button>
           <Button
             variant="primary"
             onClick={handleUpload}
-            disabled={!file || !validacao?.valido || uploading}
+            disabled={
+              !file ||
+              !validacao?.valido ||
+              (subtipoObrigatorio && !subTipo.trim()) ||
+              (dataObrigatoria && !dataRealizacao) ||
+              uploading
+            }
             className="min-w-[120px]"
           >
             {uploading ? (
               <>
-                <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 Enviando...
               </>
             ) : (
               <>
-                <Upload className="h-4 w-4 mr-2" />
+                <Upload className="mr-2 h-4 w-4" />
                 Enviar
               </>
             )}

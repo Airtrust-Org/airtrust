@@ -117,7 +117,7 @@ export default function TabelaFuncionarios({
                         onClick={() => openPasta360(f.id)}
                         className="flex items-center gap-1"
                       >
-                        <FolderOpen className="h-4 w-4" /> Pasta 360
+                        <FolderOpen className="h-4 w-4" /> Pasta Virtual
                       </Button>
                       <Button
                         size="sm"

@@ -372,7 +372,7 @@ export function ModalCertificado({
       historicoId: qualificacao.id,
     });
     if (!pasta360Url) {
-      toast.error('Não foi possível abrir a Pasta 360: funcionário inválido.');
+      toast.error('Não foi possível abrir a Pasta Virtual: funcionário inválido.');
       return;
     }
     navigate(pasta360Url);
@@ -754,13 +754,13 @@ export function ModalCertificado({
             <div
               className={`grid grid-cols-1 gap-3 ${instrutorNome ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'}`}
             >
-              {/* Pasta 360 */}
+              {/* Pasta Virtual */}
               <button
                 onClick={handlePastaVirtual}
                 className="px-4 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition flex items-center justify-center gap-2"
               >
                 <FolderOpen size={18} />
-                Pasta 360
+                Pasta Virtual
               </button>
 
               {/* Gerar Certificado */}
