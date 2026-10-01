@@ -191,7 +191,8 @@ def plan(state: dict) -> tuple[list[dict], dict]:
         rule = desired_rule(int(t["id"]), scope, **kwargs)
         desired[key_for(rule)] = {**rule, "codigo": code, "nome": t["nome"]}
 
-    # Every active type is explicit: mandatory company-wide or N/A baseline.
+    # Company-wide obligations are explicit. Absence of a matching rule already means
+    # "not required"; do not materialize generic NAO_APLICA fallback rows.
     for code, t in type_by_code.items():
         company_key = (int(t["id"]), "EMPRESA", 0, 0, 0, "")
         existing_company = existing_by_key.get(company_key)
@@ -200,9 +201,6 @@ def plan(state: dict) -> tuple[list[dict], dict]:
                 raise RuntimeError(f"company rule conflicts with mandatory policy for {code}")
             if not existing_company:
                 add(code, "EMPRESA", obligation="OBRIGATORIA", origin="EMPRESA")
-        elif existing_company is None:
-            add(code, "EMPRESA", obligation="NAO_APLICA", origin="EMPRESA",
-                observation=f"{BATCH_NOTE}; regra-base explícita N/A")
 
     # Non-tripulant corporate CRM: company mandatory, tripulation override N/A.
     add("CRM_CORP", "EMPRESA", obligation="OBRIGATORIA", origin="EMPRESA")

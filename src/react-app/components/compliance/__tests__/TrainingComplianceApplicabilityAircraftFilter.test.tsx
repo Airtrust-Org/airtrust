@@ -130,6 +130,16 @@ describe('TrainingComplianceApplicabilityEditor aircraft scope', () => {
     expect(within(normalRow).getByRole('button', { name: 'Remover requisito' })).not.toBeDisabled();
   });
 
+  it('explains that não se aplica is only an explicit exception', async () => {
+    renderEditor();
+    await screen.findByRole('option', { name: 'Tripulação' });
+    const label = screen.getByText('Efeito da regra').closest('label') as HTMLElement;
+    const effect = within(label).getByRole('combobox');
+    expect(within(effect).getByRole('option', { name: 'Excluir / não se aplica (exceção)' })).toBeInTheDocument();
+    fireEvent.change(effect, { target: { value: 'NAO_APLICA' } });
+    expect(screen.getByText(/Sem regra aplicável, o treinamento já não é obrigatório/)).toBeInTheDocument();
+  });
+
   it('keeps aircraft hidden for non-crew sectors', async () => {
     renderEditor();
 

@@ -682,6 +682,25 @@ describe('training compliance engine', () => {
     expect(rows[1].deleted_at).not.toBeNull();
   });
 
+  it('rejeita exclusão global redundante sem condição específica', async () => {
+    const response = await createApp(sqlite.asD1()).request('/regras', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        qualificacao_tipo_id: 100,
+        escopo: 'EMPRESA',
+        obrigatoriedade: 'NAO_APLICA',
+        origem: 'EMPRESA',
+      }),
+    });
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(400);
+    expect(body.error).toContain('Exclusão global sem condição é redundante');
+    expect(
+      sqlite.database.prepare("SELECT COUNT(*) total FROM treinamento_requisitos WHERE empresa_id=1 AND qualificacao_tipo_id=100 AND escopo='EMPRESA' AND obrigatoriedade='NAO_APLICA' AND ativo=1 AND deleted_at IS NULL").get(),
+    ).toMatchObject({ total: 0 });
+  });
+
   it('agrega compliance por setor e por cargo', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos

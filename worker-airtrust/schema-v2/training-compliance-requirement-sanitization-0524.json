@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-requirement-sanitization-0524",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0524_training_compliance_requirement_sanitization.sql",
+  "fileHash": "41a10d012505e3963b7cfb19c43787f50ff4dfaa67bed95d25ad2c1c90b6c5d0",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-requirement-sanitization-0524.md",
+  "planHash": "58663b3be86ba4cd909d27d190fca25720749b1c392b6e3a5b57d05d3bbda58c"
+}
