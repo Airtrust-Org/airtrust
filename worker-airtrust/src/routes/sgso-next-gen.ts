@@ -907,7 +907,7 @@ nextGen.post('/bowtie/cenarios', requireRole('admin', 'manager'), async (c) => {
           barreiraId,
           empresaId,
           cenarioId,
-          barreira.codigo ?? `BAR-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
+          barreira.codigo ?? `BAR-${Date.now()}-${barreiraId.replaceAll('-', '').slice(0, 4)}`,
           barreira.nome,
           barreira.descricao ?? null,
           barreira.tipo_barreira,
