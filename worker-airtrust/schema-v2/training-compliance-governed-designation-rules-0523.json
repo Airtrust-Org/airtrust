@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-governed-designation-rules-0523",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0523_training_compliance_governed_designation_rules.sql",
+  "fileHash": "473d3c2bff698c0882378aa64da4b803ff39e7a6c845e2eaf5ec45ad71823d25",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-governed-designation-rules-0523.md",
+  "planHash": "c8c0e661f023ddf9cc6bb467cff31a0226d0957116a02e3277ebc55297dc48fc"
+}

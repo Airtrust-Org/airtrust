@@ -588,6 +588,45 @@ describe('training compliance engine', () => {
     expect(row).toMatchObject({ escopo: 'FUNCAO', setor_id: null, funcao_id: 1 });
   });
 
+  it('protege regras regulatórias governadas por designação contra edição ou exclusão genérica', async () => {
+    sqlite.database.exec(`
+      CREATE TABLE compliance_condicoes (
+        id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, codigo TEXT NOT NULL,
+        nome TEXT NOT NULL, tipo TEXT NOT NULL, ativo INTEGER NOT NULL DEFAULT 1, deleted_at TEXT
+      );
+      ALTER TABLE treinamento_requisitos ADD COLUMN condicao_id INTEGER;
+      ALTER TABLE treinamento_requisitos ADD COLUMN fundamento_tipo TEXT;
+      INSERT INTO compliance_condicoes VALUES (55,1,'DESIGNACAO_TESTE','Designação de teste','DESIGNACAO',1,NULL);
+      INSERT INTO treinamento_requisitos
+        (id,empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,origem,condicao_id,fundamento_tipo)
+      VALUES
+        (95,1,100,'EMPRESA','NAO_APLICA','REGULATORIO',55,'PADRAO_EXCLUSAO'),
+        (96,1,101,'EMPRESA','NAO_APLICA','EMPRESA',55,'PADRAO_EXCLUSAO');
+    `);
+    const app = createApp(sqlite.asD1());
+
+    const update = await app.request('/regras/95', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ obrigatoriedade: 'OBRIGATORIA' }),
+    });
+    const remove = await app.request('/regras/95', { method: 'DELETE' });
+    expect(update.status).toBe(409);
+    expect(remove.status).toBe(409);
+    expect(await update.json()).toMatchObject({ error: expect.stringContaining('Regra governada') });
+    expect(await remove.json()).toMatchObject({ error: expect.stringContaining('Regra governada') });
+
+    const ordinaryRemove = await app.request('/regras/96', { method: 'DELETE' });
+    expect(ordinaryRemove.status).toBe(200);
+    const rows = sqlite.database
+      .prepare('SELECT id,ativo,deleted_at FROM treinamento_requisitos WHERE id IN (95,96) ORDER BY id')
+      .all() as Array<{ id: number; ativo: number; deleted_at: string | null }>;
+    expect(rows[0]).toMatchObject({ id: 95, ativo: 1, deleted_at: null });
+    expect(rows[1].id).toBe(96);
+    expect(rows[1].ativo).toBe(0);
+    expect(rows[1].deleted_at).not.toBeNull();
+  });
+
   it('agrega compliance por setor e por cargo', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos

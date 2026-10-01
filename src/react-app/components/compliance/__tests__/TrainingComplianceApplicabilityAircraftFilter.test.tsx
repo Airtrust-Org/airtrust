@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TrainingComplianceApplicabilityEditor } from '../TrainingComplianceApplicabilityEditor';
 
@@ -93,6 +93,41 @@ describe('TrainingComplianceApplicabilityEditor aircraft scope', () => {
       aeronave_modelo: 'SK76',
       obrigatoriedade: 'OBRIGATORIA',
     });
+  });
+
+  it('keeps governed designation rules visible but read-only in the generic editor', async () => {
+    fetchWithAuthMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/capabilities')) {
+        return ok({ schema_ready: true, aircraft_scope_ready: true, conditional_scope_ready: true });
+      }
+      if (url.includes('/condicoes/catalogos')) {
+        return ok({ condicoes: [{ id: 55, codigo: 'RBAC119_TESTE', nome: 'RBAC 119 — Teste', tipo: 'DESIGNACAO' }], funcionarios: [] });
+      }
+      if (url.endsWith('/catalogos')) {
+        return ok({ setores: [], funcoes: [], setor_funcoes: [], aeronaves_modelos: [], access_mode: 'all' });
+      }
+      if (url.includes('/regras?qualificacao_tipo_id=300')) {
+        return ok([
+          { id: 501, qualificacao_tipo_id: 300, escopo: 'EMPRESA', setor_id: null, funcao_id: null, funcionario_id: null, condicao_id: 55, condicao_nome: 'RBAC 119 — Teste', justificativa: 'Regra regulatória', fundamento_tipo: 'PADRAO_EXCLUSAO', obrigatoriedade: 'NAO_APLICA', critico_operacional: 0, origem: 'REGULATORIO' },
+          { id: 502, qualificacao_tipo_id: 300, escopo: 'EMPRESA', setor_id: null, funcao_id: null, funcionario_id: null, condicao_id: null, justificativa: null, fundamento_tipo: null, obrigatoriedade: 'OBRIGATORIA', critico_operacional: 0, origem: 'EMPRESA' },
+        ]);
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    renderEditor();
+    const badge = await screen.findByText('Regra governada');
+    const governedRow = badge.closest('div.flex.flex-col') as HTMLElement;
+    expect(governedRow).toBeTruthy();
+    expect(within(governedRow).getByRole('combobox')).toBeDisabled();
+    expect(within(governedRow).getByRole('button', { name: 'Remover requisito' })).toBeDisabled();
+    expect(screen.getByText(/ocupantes são gerenciados na área de designações/)).toBeInTheDocument();
+
+    const normalRuleText = screen
+      .getAllByText('Toda a empresa')
+      .find((element) => element.tagName === 'SPAN') as HTMLElement;
+    const normalRow = normalRuleText.closest('div.flex.flex-col') as HTMLElement;
+    expect(within(normalRow).getByRole('button', { name: 'Remover requisito' })).not.toBeDisabled();
   });
 
   it('keeps aircraft hidden for non-crew sectors', async () => {
