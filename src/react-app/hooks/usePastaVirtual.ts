@@ -1,14 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
-import { PASTA_VIRTUAL_CATEGORIAS } from '@/react-app/config/pastaVirtual';
+import { useCallback, useEffect, useState } from 'react';
+import { PASTA_VIRTUAL_CATEGORIAS, type TipoDocumento } from '@/react-app/config/pastaVirtual';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
 
-export type TipoDocumento =
-  | 'CERTIFICADO_QUALIFICACAO'
-  | 'DOCUMENTO_PESSOAL'
-  | 'EXAME_MEDICO'
-  | 'SIMULADOR'
-  | 'OUTROS';
+export type { TipoDocumento } from '@/react-app/config/pastaVirtual';
 
 export interface DocumentoPV {
   id: number;
@@ -40,12 +35,14 @@ interface UsePastaVirtualResult {
   downloadDocumento: (doc: DocumentoPV) => Promise<void>;
 }
 
-const CATEGORIA_BASE: Omit<CategoriaPV, 'documentos'>[] = PASTA_VIRTUAL_CATEGORIAS.map((c) => ({
-  tipo: c.tipo,
-  titulo: c.titulo,
-  cor: c.cor,
-  expandido: c.expandidoInicial ?? false,
-}));
+const CATEGORIA_BASE: Omit<CategoriaPV, 'documentos'>[] = PASTA_VIRTUAL_CATEGORIAS.map(
+  (categoria) => ({
+    tipo: categoria.tipo,
+    titulo: categoria.titulo,
+    cor: categoria.cor,
+    expandido: categoria.expandidoInicial ?? false,
+  }),
+);
 
 export function isPastaVirtualDocumentAvailable(doc: Pick<DocumentoPV, 'tamanho' | 'arquivo_url'>) {
   return Number(doc.tamanho) > 0 && Boolean(String(doc.arquivo_url || '').trim());
@@ -53,7 +50,7 @@ export function isPastaVirtualDocumentAvailable(doc: Pick<DocumentoPV, 'tamanho'
 
 export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirtualResult {
   const [categorias, setCategorias] = useState<CategoriaPV[]>(
-    CATEGORIA_BASE.map((c) => ({ ...c, documentos: [] })),
+    CATEGORIA_BASE.map((categoria) => ({ ...categoria, documentos: [] })),
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,30 +103,26 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
           substituidoPorId: d.substituidoPorId ?? null,
         }));
 
-      const categorizedDocs = categoryData.data || {};
-      const agrupado: Record<TipoDocumento, DocumentoPV[]> = {
-        CERTIFICADO_QUALIFICACAO: mapToDocumentoPV(
-          categorizedDocs['Certificados de Qualificação'] || [],
-          'CERTIFICADO_QUALIFICACAO',
-        ),
-        DOCUMENTO_PESSOAL: mapToDocumentoPV(
-          categorizedDocs['Documentos Pessoais'] || [],
-          'DOCUMENTO_PESSOAL',
-        ),
-        EXAME_MEDICO: mapToDocumentoPV(
-          categorizedDocs['Exames Médicos (ASO, CMA)'] || [],
-          'EXAME_MEDICO',
-        ),
-        SIMULADOR: mapToDocumentoPV(categorizedDocs['Simuladores'] || [], 'SIMULADOR'),
-        OUTROS: mapToDocumentoPV(categorizedDocs['Outros'] || [], 'OUTROS'),
-      };
+      const categorizedDocs: Record<string, DocumentoApi[]> = categoryData.data || {};
+      const agrupado = Object.fromEntries(
+        PASTA_VIRTUAL_CATEGORIAS.map((config) => {
+          const documentos = config.apiCategorias.flatMap(
+            (apiCategoria) => categorizedDocs[apiCategoria] || [],
+          );
+          return [config.tipo, mapToDocumentoPV(documentos, config.tipo)];
+        }),
+      ) as Record<TipoDocumento, DocumentoPV[]>;
 
       setCategorias((prev) =>
-        prev.map((c) => ({ ...c, documentos: agrupado[c.tipo] || [], expandido: c.expandido })),
+        prev.map((categoria) => ({
+          ...categoria,
+          documentos: agrupado[categoria.tipo] || [],
+          expandido: categoria.expandido,
+        })),
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar documentos');
-      setCategorias((prev) => prev.map((c) => ({ ...c, documentos: [] })));
+      setCategorias((prev) => prev.map((categoria) => ({ ...categoria, documentos: [] })));
     } finally {
       setLoading(false);
     }
