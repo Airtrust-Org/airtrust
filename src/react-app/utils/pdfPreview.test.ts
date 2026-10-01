@@ -74,6 +74,8 @@ describe('pdfPreview', () => {
     expect(latestWrittenHtml(previewWindow)).toContain('Lista de Presença — CRM');
     expect(latestWrittenHtml(previewWindow)).toContain('Baixar PDF');
     expect(latestWrittenHtml(previewWindow)).toContain('A preparar visualiza');
+    expect(latestWrittenHtml(previewWindow)).toContain('<iframe id="viewer"');
+    expect(latestWrittenHtml(previewWindow)).not.toContain('<object id="viewer"');
   });
 
   it('reutiliza a janela existente para renderizar o preview do PDF', async () => {
