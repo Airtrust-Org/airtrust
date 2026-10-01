@@ -49,6 +49,20 @@ describe('TreinamentosPlanejadosPage — filtro padrão de status', () => {
   });
 });
 
+describe('TreinamentosPlanejadosPage — exclusão de turma planejada', () => {
+  it('expõe a exclusão diretamente na coluna Ações para turmas editáveis e não encerradas', () => {
+    expect(pageSource).toContain('aria-label="Excluir turma planejada"');
+    expect(pageSource).toContain('data-testid={`treinamento-excluir-${item.id}`}');
+    expect(pageSource).toContain('!STATUS_ENCERRADOS.has(item.status)');
+    expect(pageSource).toContain('void excluirTreinamentoPlanejado(item)');
+  });
+
+  it('mantém confirmação explícita antes de excluir', () => {
+    expect(pageSource).toContain('Excluir a turma planejada');
+    expect(pageSource).toContain('Esta ação cancela a turma e remove o planejamento relacionado.');
+  });
+});
+
 describe('TreinamentosPlanejadosPage — lista de presença da turma', () => {
   it('declara estado para gerar lista de presença', () => {
     expect(pageSource).toContain('gerandoListaPresencaTurma');
