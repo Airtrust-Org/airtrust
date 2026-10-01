@@ -47,7 +47,7 @@ describe('read latency fan-out contracts', () => {
   it('memoiza introspecção de schema nas rotas quentes de qualificações', () => {
     expect(historicoWorker).toContain('historicoColumnSupportCache');
     expect(tiposWorker).toContain('qualificacoesTiposColumnsSupportCache');
-    expect(tiposWorker).toContain('qualificacoesTiposSetoresTableCache');
+    expect(tiposWorker).toContain("hasSchemaTable(db, 'qualificacoes_tipos_setores')");
     expect(certificadosWorker).toContain('certificadosStorageColumnsCache');
   });
 
