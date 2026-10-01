@@ -123,6 +123,12 @@ test('dry-run CLI prints the exact candidate list', () => {
   });
 });
 
+test('canonical lint executes the dangerous-operations guard', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  assert.equal(pkg.scripts['ops:guard'], 'bash scripts/audit-dangerous-ops.sh');
+  assert.match(pkg.scripts.lint, /npm run ops:guard/);
+});
+
 test('remote apply is accepted only in the exact governed wrapper', () => {
   withTempDir((directory) => {
     const allowed = 'scripts/production/apply-simuladores-matriz-remote-migration.sh';
