@@ -75,7 +75,6 @@ readonly_remote_files=(
   "scripts/sync-prod-to-local.sh"
   "scripts/sync-production-clean.sh"
   "scripts/sync-production-to-local.sh"
-  "scripts/test-performance-diagnostic.sh"
   "scripts/validate-data-consistency.sh"
   "scripts/validate-schema-parity.py"
   "scripts/validation/probe-solicitacoes-treinamento-schema-readonly.sh"

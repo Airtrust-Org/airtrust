@@ -74,7 +74,6 @@ const EXCLUDE = [
   ':(exclude)scripts/disable-auth.sh',
   ':(exclude)scripts/setup-complete.sh',
   ':(exclude)scripts/start-local-dev.sh',
-  ':(exclude)scripts/test-performance-diagnostic.sh',
   // Arquivo de output de terminal rastreado historicamente (não é script operacional)
   ':(exclude)typescript',
   // Walkthrough gerado por agente AI (contém caminhos de screenshots locais, sem dados sensiveis)
