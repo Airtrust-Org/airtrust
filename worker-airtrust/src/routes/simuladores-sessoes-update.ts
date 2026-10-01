@@ -39,6 +39,7 @@ import {
 } from './simuladores-shared';
 import { getTenantContext } from '../middleware/tenant';
 import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
+import { getSchemaColumns } from '../utils/db-schema';
 import {
   requireOperationalAccess,
   } from '../services/operational-domain-access';
@@ -112,9 +113,8 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
     // examinador/checador seja acidentalmente designado como instrutor da
     // ficha pedagógica do tripulante.
     if (b.instrutor_id !== undefined) {
-      const fColsAll = await c.env.DB.prepare("PRAGMA table_info('funcionarios')").all();
-      const fColSetAll = new Set((fColsAll.results || []).map((r: any) => r.name));
-      const hasIsInstrutor = fColSetAll.has('is_instrutor');
+      const funcionarioColumns = await getSchemaColumns(c.env.DB, 'funcionarios');
+      const hasIsInstrutor = funcionarioColumns.has('is_instrutor');
       const instrutorFlagExpr = hasIsInstrutor ? 'COALESCE(is_instrutor, 0)' : '1';
       const instrutorRow = await c.env.DB.prepare(
         `SELECT ${instrutorFlagExpr} as is_instrutor
@@ -191,10 +191,9 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
     if (shouldUpdateCheckFields) {
       // Validar examinador quando presente
       if (examinadorIdBodyRaw) {
-        const fCols = await c.env.DB.prepare("PRAGMA table_info('funcionarios')").all();
-        const fColSet = new Set((fCols.results || []).map((r: any) => r.name));
-        const hasIsExaminador = fColSet.has('is_examinador');
-        const hasIsChecador = fColSet.has('is_checador');
+        const funcionarioColumns = await getSchemaColumns(c.env.DB, 'funcionarios');
+        const hasIsExaminador = funcionarioColumns.has('is_examinador');
+        const hasIsChecador = funcionarioColumns.has('is_checador');
         const examinadorFlagExpr =
           hasIsExaminador && hasIsChecador
             ? '(COALESCE(is_examinador, 0) = 1 OR COALESCE(is_checador, 0) = 1)'
@@ -490,10 +489,9 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
     });
 
     // Verificar se as colunas tipo_dispositivo e aeronave_id existem (migration 0364)
-    const colInfoUpd = await c.env.DB.prepare('PRAGMA table_info(simulador_agendamentos)').all();
-    const colNomesUpd = new Set((colInfoUpd.results || []).map((r: any) => r.name));
-    const hasTipoDispositivoUpd = colNomesUpd.has('tipo_dispositivo');
-    const hasAeronaveIdUpd = colNomesUpd.has('aeronave_id');
+    const agendamentoColumns = await getSchemaColumns(c.env.DB, 'simulador_agendamentos');
+    const hasTipoDispositivoUpd = agendamentoColumns.has('tipo_dispositivo');
+    const hasAeronaveIdUpd = agendamentoColumns.has('aeronave_id');
 
     const updateFields = hasTipoDispositivoUpd && hasAeronaveIdUpd
       ? "UPDATE simulador_agendamentos SET simulador_id=?,aeronave_id=?,tipo_dispositivo=?,data=?,hora_inicio=?,hora_fim=?,duracao_minutos=?,instrutor_id=?,tipo_sessao=?,template_id=?,status=?,observacoes=?,nome=?,updated_at=datetime('now') WHERE id=? AND empresa_id = ?"
