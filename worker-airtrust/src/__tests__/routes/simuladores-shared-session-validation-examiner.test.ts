@@ -24,7 +24,7 @@ function buildDb(options: {
     prepare: vi.fn((query: string) => {
       // Direct .all() — used by simuladoresHasEmpresaId (PRAGMA without .bind())
       const directAll = async () => {
-        if (query.includes('PRAGMA table_info(simuladores)')) {
+        if (query.includes("PRAGMA table_info('simuladores')")) {
           return {
             results: hasEmpresaId
               ? [{ name: 'id' }, { name: 'nome' }, { name: 'modelo' }, { name: 'empresa_id' }, { name: 'deleted_at' }]

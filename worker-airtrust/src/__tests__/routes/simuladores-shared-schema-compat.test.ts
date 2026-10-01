@@ -74,7 +74,7 @@ function dbWithColumns(columns: string[]) {
       return {
         // Direct .all() (no .bind()) — used by PRAGMA queries
         all: async () => {
-          if (query.includes('PRAGMA table_info(simuladores)')) {
+          if (query.includes("PRAGMA table_info('simuladores')")) {
             return { results: pragmaResults };
           }
           return { results: [] };

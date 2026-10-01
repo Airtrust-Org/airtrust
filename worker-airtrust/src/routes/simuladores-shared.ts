@@ -16,6 +16,7 @@ import {
 } from '../lib/status/status-codes';
 import { replaceManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
 import { loadTrainingProgramByModel } from '../services/training-programs';
+import { getSchemaColumns } from '../utils/db-schema';
 
 // ── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -193,42 +194,16 @@ export async function listarTiposCheckPorIds(
  * The table may be global (no empresa_id) or tenant-scoped (with empresa_id).
  * Caches the result per D1Database instance to avoid repeated PRAGMA calls.
  */
-const simuladoresHasEmpresaIdCache = new WeakMap<D1Database, boolean>();
-
 export async function simuladoresHasEmpresaId(db: D1Database): Promise<boolean> {
-  const cached = simuladoresHasEmpresaIdCache.get(db);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const result = await db.prepare('PRAGMA table_info(simuladores)').all<{ name: string }>();
-
-  const has = (result.results || []).some((row) => String(row.name || '') === 'empresa_id');
-
-  simuladoresHasEmpresaIdCache.set(db, has);
-  return has;
+  return (await getSchemaColumns(db, 'simuladores')).has('empresa_id');
 }
 
 /**
  * Checks whether the fichas_sessao_manobras table has an empresa_id column.
  * Caches the result per D1Database instance.
  */
-const fichasSessaoManobrasHasEmpresaIdCache = new WeakMap<D1Database, boolean>();
-
 export async function fichasSessaoManobrasHasEmpresaId(db: D1Database): Promise<boolean> {
-  const cached = fichasSessaoManobrasHasEmpresaIdCache.get(db);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const result = await db
-    .prepare('PRAGMA table_info(fichas_sessao_manobras)')
-    .all<{ name: string }>();
-
-  const has = (result.results || []).some((row) => String(row.name || '') === 'empresa_id');
-
-  fichasSessaoManobrasHasEmpresaIdCache.set(db, has);
-  return has;
+  return (await getSchemaColumns(db, 'fichas_sessao_manobras')).has('empresa_id');
 }
 
 export async function getSimuladorModeloAeronave(

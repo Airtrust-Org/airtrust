@@ -171,10 +171,10 @@ function createFakeDb(state: FakeState, options?: FakeDbOptions) {
     prepare(query: string) {
       const prepared = {
         all: async () => {
-          if (query === 'PRAGMA table_info(fichas_sessao_manobras)') {
+          if (query === "PRAGMA table_info('fichas_sessao_manobras')") {
             return { results: [{ name: 'id' }, { name: 'ficha_id' }, { name: 'empresa_id' }] };
           }
-          if (query === 'PRAGMA table_info(simuladores)') {
+          if (query === "PRAGMA table_info('simuladores')") {
             // Mirrors production: no empresa_id column on this table.
             return { results: [{ name: 'id' }, { name: 'nome' }, { name: 'modelo' }, { name: 'deleted_at' }] };
           }
@@ -234,7 +234,7 @@ function createFakeDb(state: FakeState, options?: FakeDbOptions) {
           };
 
           const all = async (): Promise<{ results: unknown[] }> => {
-            if (query === 'PRAGMA table_info(fichas_sessao_manobras)') {
+            if (query === "PRAGMA table_info('fichas_sessao_manobras')") {
               return { results: [{ name: 'id' }, { name: 'ficha_id' }, { name: 'empresa_id' }] };
             }
 

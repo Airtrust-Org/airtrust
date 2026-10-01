@@ -111,7 +111,7 @@ function createDbForSharedRoutes(options?: {
     prepare: vi.fn((query: string) => {
       // Direct .all() — used by simuladoresHasEmpresaId (PRAGMA without .bind())
       const directAll = async () => {
-        if (query === 'PRAGMA table_info(simuladores)') {
+        if (query === "PRAGMA table_info('simuladores')") {
           // Default: simuladores IS tenant-scoped (has empresa_id)
           if (options?.simuladorForaTenant) {
             // Even when testing cross-tenant rejection, the column still exists
