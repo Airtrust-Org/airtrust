@@ -30,7 +30,7 @@ import {
   ensureModelosAeronaveModeloColumn,
   SORTABLE_COLUMNS,
   MODELO_AERONAVE_EXPR,
-  calcularDataVencimento,
+  resolveHistoricoReadExpiry,
   buildCategoriaResolutionJoinClause,
   categoriaCandidatosAtivosExpr,
 } from './historico-helpers';
@@ -736,21 +736,15 @@ router.get(
       }
 
       const vencimentoFimMes = Number(r.vencimento_fim_mes || 0) === 1 ? 1 : 0;
-      let dataVencimentoCalculada = r.data_vencimento;
-      if (codigoQualificacao === 'G1-SEM') {
-        dataVencimentoCalculada = r.data_vencimento;
-      } else if (r.data_realizacao && validadeMesesEfetiva != null && validadeMesesEfetiva > 0) {
-        try {
-          dataVencimentoCalculada = calcularDataVencimento({
-            dataConclusao: String(r.data_realizacao),
-            validadeMeses: validadeMesesEfetiva,
-            vencimentoFimMes,
-          });
-        } catch {
-          // Fallback seguro para não quebrar o endpoint inteiro por uma data legada inválida
-          dataVencimentoCalculada = r.data_vencimento;
-        }
-      }
+      // Histórico é evidência: vencimento explicitamente persistido prevalece.
+      // O cálculo é apenas fallback para registros legados sem data_vencimento.
+      const dataVencimentoCalculada = resolveHistoricoReadExpiry({
+        dataVencimento: r.data_vencimento,
+        dataConclusao: r.data_realizacao,
+        validadeMeses: validadeMesesEfetiva,
+        vencimentoFimMes,
+        codigoQualificacao,
+      });
 
       let derivedStatus: string;
       const dbStatus = normalizeQualificationStatusForCompatibility(r.qualificacao_status);
