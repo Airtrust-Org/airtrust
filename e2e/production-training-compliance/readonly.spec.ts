@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Response } from '@playwright/test';
+import { expect, test, type Page, type Response as PlaywrightResponse } from '@playwright/test';
 import { assertProductionFrontendShaFromPage } from '../lib/production-live-sha-guard.mjs';
 import { installProductionReadOnlyGuard } from '../lib/production-read-only-network-guard.mjs';
 
@@ -7,8 +7,9 @@ const EXPECTED_SHA = String(process.env.EXPECTED_PRODUCTION_SHA || '')
   .toLowerCase();
 const EMAIL = String(process.env.E2E_EMAIL || '').trim();
 const PASSWORD = String(process.env.E2E_PASSWORD || '');
+const PROD_API_BASE_URL = String(process.env.PROD_API_BASE_URL || 'https://api.airtrust.online').replace(/\/+$/, '');
 
-function waitApi(page: Page, path: string, query?: (url: URL) => boolean): Promise<Response> {
+function waitApi(page: Page, path: string, query?: (url: URL) => boolean): Promise<PlaywrightResponse> {
   return page.waitForResponse(
     (response) => {
       if (response.request().method() !== 'GET') return false;
@@ -23,7 +24,7 @@ function waitApi(page: Page, path: string, query?: (url: URL) => boolean): Promi
   );
 }
 
-async function payload(response: Response) {
+async function payload(response: PlaywrightResponse) {
   expect(response.ok(), `${response.url()} HTTP ${response.status()}`).toBeTruthy();
   const json = await response.json();
   expect(json?.success).toBe(true);
@@ -77,41 +78,106 @@ async function login(page: Page) {
   expect(EMAIL).not.toBe('');
   expect(PASSWORD).not.toBe('');
   expect(EMAIL).not.toMatch(/staging\.airtrust\.invalid$/i);
-  await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
-  await page.waitForURL((url) => url.pathname.startsWith('/login'), { timeout: 45_000 });
+
+  // This smoke validates Compliance, not the public login form. Bootstrap the
+  // authenticated browser session through the canonical production auth API so
+  // transient UI/profile-chooser timing cannot mask the actual Compliance result.
+  // The read-only network guard still observes the browser fetches and permits
+  // only the authentication POST plus read-only requests.
+  await page.goto('/login', { waitUntil: 'domcontentloaded' });
   await assertProductionFrontendShaFromPage(page, EXPECTED_SHA.slice(0, 7), 'production-login');
-  await page.locator('input[type="email"]').fill(EMAIL);
-  await page.locator('input[type="password"]').fill(PASSWORD);
-  await page.getByRole('button', { name: /entrar|sign in/i }).click();
 
-  const profileChooser = page.getByRole('heading', { name: 'Como você quer entrar?' });
-  await expect
-    .poll(
-      async () => {
-        if (!new URL(page.url()).pathname.startsWith('/login')) return 'authenticated';
-        if (await profileChooser.isVisible().catch(() => false)) return 'choose-profile';
-        return 'waiting';
-      },
-      { timeout: 45_000 },
-    )
-    .not.toBe('waiting');
+  const authResult = await page.evaluate(
+    async ({ apiBase, email, password }) => {
+      const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+      type LoginPayload = {
+        success?: boolean;
+        code?: unknown;
+        data?: { accessToken?: unknown; refreshToken?: unknown; user?: unknown };
+      };
+      let loginResponse: Response | null = null;
+      let loginJson: LoginPayload | null = null;
 
-  if (new URL(page.url()).pathname.startsWith('/login')) {
-    const adminProfile = page.getByRole('button', { name: /^Entrar como Administrador$/i });
-    const managerProfile = page.getByRole('button', { name: /^Entrar como Gestor$/i });
-    if ((await adminProfile.count()) > 0) {
-      await adminProfile.click();
-    } else if ((await managerProfile.count()) > 0) {
-      await managerProfile.click();
-    } else {
-      throw new Error('PRODUCTION_COMPLIANCE_PROFILE_NOT_AVAILABLE');
-    }
-    await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 45_000 });
-  }
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
+        loginResponse = await fetch(`${apiBase}/api/auth/login`, {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, senha: password }),
+        });
+        loginJson = (await loginResponse.json().catch(() => null)) as LoginPayload | null;
+        if (loginResponse.status !== 429) break;
+        const retryAfterSeconds = Number(loginResponse.headers.get('retry-after') || 0);
+        const delayMs = retryAfterSeconds > 0
+          ? retryAfterSeconds * 1000
+          : Math.min(1000 * 2 ** (attempt - 1), 8000);
+        await wait(delayMs);
+      }
 
-  if (new URL(page.url()).pathname !== '/treinamentos/compliance') {
-    await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
-  }
+      const accessToken = String(loginJson?.data?.accessToken || '');
+      const refreshToken = String(loginJson?.data?.refreshToken || '');
+      const user = loginJson?.data?.user;
+      if (
+        !loginResponse ||
+        loginResponse.status !== 200 ||
+        loginJson?.success !== true ||
+        accessToken.length < 20 ||
+        !user ||
+        typeof user !== 'object'
+      ) {
+        return {
+          ok: false,
+          stage: 'login',
+          status: loginResponse?.status ?? 0,
+          code: String(loginJson?.code || ''),
+        };
+      }
+
+      const profilesResponse = await fetch(
+        `${apiBase}/api/me/operational-access/session-profiles`,
+        {
+          method: 'GET',
+          headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` },
+        },
+      );
+      const profilesJson = await profilesResponse.json().catch(() => null);
+      if (profilesResponse.status !== 200 || profilesJson?.success !== true) {
+        return {
+          ok: false,
+          stage: 'session-profiles',
+          status: profilesResponse.status,
+          code: String(profilesJson?.code || ''),
+        };
+      }
+
+      localStorage.setItem('airtrust_persist_login_policy', '2');
+      localStorage.setItem('airtrust_persist_login', '1');
+      localStorage.setItem('airtrust_token', accessToken);
+      localStorage.setItem('airtrust_user', JSON.stringify(user));
+      if (refreshToken) {
+        localStorage.setItem('airtrust_refresh_token', refreshToken);
+      }
+      sessionStorage.removeItem('airtrust_token');
+      sessionStorage.removeItem('airtrust_user');
+      sessionStorage.removeItem('airtrust_refresh_token');
+      document.cookie = 'airtrust_session_role=; Max-Age=0; Path=/; SameSite=Lax';
+      document.cookie = 'airtrust_session_role=; Max-Age=0; Path=/; Domain=.airtrust.online; SameSite=Lax';
+
+      return {
+        ok: true,
+        stage: 'ready',
+        status: profilesResponse.status,
+        profileCount: Array.isArray(profilesJson?.data?.roles) ? profilesJson.data.roles.length : -1,
+      };
+    },
+    { apiBase: PROD_API_BASE_URL, email: EMAIL, password: PASSWORD },
+  );
+
+  expect(
+    authResult.ok,
+    `production auth bootstrap failed at ${authResult.stage} (HTTP ${authResult.status}${authResult.code ? `, ${authResult.code}` : ''})`,
+  ).toBe(true);
+
+  await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
   await page.waitForURL((url) => url.pathname === '/treinamentos/compliance', { timeout: 45_000 });
   await expect(page).toHaveURL(/\/treinamentos\/compliance$/);
 }
@@ -125,9 +191,9 @@ test('production intelligent training compliance UI and APIs are coherent and re
     'production-compliance',
   );
 
-  // Start the API observers only after authentication/profile selection and force a
-  // fresh authenticated mount. This avoids masking navigation/profile-selection
-  // issues as API timeouts while still proving the real Compliance UI issues the
+  // Start the API observers only after the authenticated bootstrap and force a
+  // fresh authenticated mount. This avoids masking session/bootstrap problems
+  // as API timeouts while still proving the real Compliance UI issues the
   // canonical read-only requests.
   const capabilitiesP = waitApi(page, '/api/compliance-treinamentos/capabilities');
   const catalogsP = waitApi(page, '/api/compliance-treinamentos/catalogos');
