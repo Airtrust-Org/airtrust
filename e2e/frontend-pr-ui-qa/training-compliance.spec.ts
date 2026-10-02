@@ -119,7 +119,7 @@ test('training compliance intelligent staging flow is live and read-only', async
   expect(people.data.length).toBe(qaTraining.pessoas);
   await expect(page.getByText(/^Pessoas de .* · NUNCA FEZ$/i)).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
-  await expect(page.getByRole('columnheader', { name: 'Setor / cargo' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Setor / função' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Requisitos' })).toBeVisible();
 
   const sectorsP = waitApi(page, '/api/compliance-treinamentos/setores');
@@ -128,7 +128,7 @@ test('training compliance intelligent staging flow is live and read-only', async
   expect(Array.isArray(sectors.data)).toBe(true);
   if (sectors.data.length > 0) {
     expect(Array.isArray(sectors.data[0].cargos)).toBe(true);
-    await expect(page.getByRole('columnheader', { name: 'Setor / cargo' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Setor / função' })).toBeVisible();
   }
 
   const trendP = waitApi(page, '/api/compliance-treinamentos/tendencias');
@@ -138,7 +138,7 @@ test('training compliance intelligent staging flow is live and read-only', async
   expect(trend.data.length).toBeGreaterThan(0);
   expect(trend.data.at(-1)?.snapshot_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   await expect(page.getByRole('heading', { name: 'Evolução do compliance — 90 dias' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Relatório inteligente' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Gerador de relatórios' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Exportar PDF' })).toBeVisible();
 
   const communicationsP = waitApi(page, '/api/compliance-treinamentos/comunicacoes');
