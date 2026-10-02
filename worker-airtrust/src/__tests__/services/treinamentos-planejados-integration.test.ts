@@ -111,9 +111,13 @@ function createMockDb(state: MockState): D1Database {
       const isDdl = ddlPrefixes.some((prefix) => trimmed.startsWith(prefix));
 
       const executeFirst = async (args: unknown[]) => {
-        if (query.includes("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")) {
+        if (
+          query.includes("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?") ||
+          query.includes("SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
+        ) {
           const tableName = String(args[0] || '');
-          return state.tables.has(tableName) ? { name: tableName } : null;
+          if (!state.tables.has(tableName)) return null;
+          return query.includes('SELECT 1 as found') ? { found: 1 } : { name: tableName };
         }
 
         if (query.includes('FROM treinamentos_planejados t')) {

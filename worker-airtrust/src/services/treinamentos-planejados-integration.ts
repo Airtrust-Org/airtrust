@@ -14,6 +14,7 @@ import {
 } from '../lib/status/status-codes';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { syncTreinamentoToEscalaEventos } from '../shared/syncEscalaEventosExternos';
+import { getSchemaColumns, hasSchemaTable } from '../utils/db-schema';
 
 type EventoContextRow = {
   id: number;
@@ -155,12 +156,7 @@ function shouldCompleteParticipante(participante: ParticipanteContextRow) {
 }
 
 async function tabelaExiste(db: D1Database, nomeTabela: string): Promise<boolean> {
-  const result = await db
-    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`)
-    .bind(nomeTabela)
-    .first<{ name: string }>();
-
-  return Boolean(result?.name);
+  return hasSchemaTable(db, nomeTabela);
 }
 
 async function tabelaTemColunas(
@@ -169,10 +165,7 @@ async function tabelaTemColunas(
   colunasObrigatorias: string[],
 ): Promise<boolean> {
   if (!(await tabelaExiste(db, nomeTabela))) return false;
-  const result = await db
-    .prepare(`PRAGMA table_info('${nomeTabela.replaceAll("'", "''")}')`)
-    .all<{ name: string }>();
-  const columns = new Set((result.results || []).map((row) => row.name));
+  const columns = await getSchemaColumns(db, nomeTabela);
   return colunasObrigatorias.every((column) => columns.has(column));
 }
 async function loadEventoContext(
