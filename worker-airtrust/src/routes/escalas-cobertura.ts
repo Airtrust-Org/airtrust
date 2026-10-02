@@ -17,6 +17,7 @@ import { getEmpresaIdSafe, getEscalaVerificada } from './escalas-shared';
 import { recalcularCoberturaAeronave } from './escalas-alocacoes';
 import { getHabilitacoesBatch } from '../shared/getTripulanteOperacional';
 import { collectByBindChunks } from '../utils/d1-bind-chunks';
+import { getSchemaColumns } from '../utils/db-schema';
 
 const cobertura = new Hono<{ Bindings: Env }>();
 
@@ -346,10 +347,8 @@ cobertura.get('/:id/cobertura/tripulantes', auth(), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
 
-  const funcionariosCols = await db
-    .prepare(`PRAGMA table_info(funcionarios)`)
-    .all<{ name: string }>();
-  const cols = (funcionariosCols.results || []).map((row) => String(row.name || '').toLowerCase());
+  const funcionariosCols = await getSchemaColumns(db, 'funcionarios');
+  const cols = [...funcionariosCols].map((name) => name.toLowerCase());
   const hasCargo = cols.includes('cargo');
   const hasFuncao = cols.includes('funcao');
   const hasStatus = cols.includes('status');
