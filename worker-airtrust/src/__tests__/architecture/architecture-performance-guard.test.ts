@@ -13,7 +13,7 @@ const LARGE_FILE_LINE_CAPS = {
   // — wired jornada create/update, batch APUS import, explicação-do-dia,
   // comparar-dias, and escala-futura validation to governed operational
   // context, replacing legacy carregarLimites fallbacks).
-  'routes/frms.ts': 3957,
+  'routes/frms.ts': 3385,
   // Cap raised 2026-08-23: counted 2912 (test/frms-synthetic-sigvoos-sync —
   // added SigvoosSyncClient/SigvoosSyncDeps interfaces and the minimal
   // dependency-injection point in syncSigvoosForFrms so a staging-only QA
