@@ -17,7 +17,7 @@ import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { registrarAuditoria } from '../utils/auditoria';
 import { normalizarTipoDocumento } from '../utils/nomenclatura-padronizada';
-import { hasSchemaTable } from '../utils/db-schema';
+import { getSchemaColumns, hasSchemaTable } from '../utils/db-schema';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { employeeSectorSql, getEmployeeSectorAccess } from '../services/employee-sector-access';
@@ -267,8 +267,7 @@ async function tableHasColumn(
   tableName: string,
   columnName: string,
 ): Promise<boolean> {
-  const columns = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
-  return (columns.results || []).some((column) => column.name === columnName);
+  return (await getSchemaColumns(db, tableName)).has(columnName);
 }
 
 /**
@@ -290,8 +289,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
   }
 
   try {
-    const pvCols = await db.prepare("PRAGMA table_info('pasta_virtual')").all<{ name: string }>();
-    const pvColumns = new Set((pvCols.results || []).map((col) => col.name));
+    const pvColumns = await getSchemaColumns(db, 'pasta_virtual');
     const pvTipoExpr = pvColumns.has('tipo_documento')
       ? 'pv.tipo_documento'
       : pvColumns.has('tipo')
