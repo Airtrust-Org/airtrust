@@ -12,10 +12,10 @@ function dbWithExplicit(rows: Array<{ funcionario_email: string }>, tablePresent
     prepare(sql: string) {
       return {
         first: async () =>
-          sql.includes('sqlite_master') ? (tablePresent ? { ok: 1 } : null) : null,
+          sql.includes('sqlite_master') ? (tablePresent ? { found: 1 } : null) : null,
         bind: () => ({
           first: async () =>
-            sql.includes('sqlite_master') ? (tablePresent ? { ok: 1 } : null) : null,
+            sql.includes('sqlite_master') ? (tablePresent ? { found: 1 } : null) : null,
           all: async () => ({
             results: rows.map((r, i) => ({
               id: i + 1,

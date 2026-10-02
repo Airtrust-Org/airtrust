@@ -1,3 +1,4 @@
+import { hasSchemaTable } from '../utils/db-schema';
 import { getSetorGestoresBySetor } from './setores-gestores';
 
 export type SetorResponsavelComplianceDetail = {
@@ -26,14 +27,7 @@ export type ResponsavelComplianceElegivel = {
 export class SetorResponsavelComplianceValidationError extends Error {}
 
 async function tableExists(db: D1Database): Promise<boolean> {
-  const row = await db
-    .prepare(
-      `SELECT 1 AS ok FROM sqlite_master
-       WHERE type = 'table' AND name = 'setores_responsaveis_compliance'
-       LIMIT 1`,
-    )
-    .first<{ ok: number }>();
-  return Number(row?.ok || 0) === 1;
+  return hasSchemaTable(db, 'setores_responsaveis_compliance');
 }
 
 async function assertSetorAtivoNoTenant(db: D1Database, empresaId: number, setorId: number) {
