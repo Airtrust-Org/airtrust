@@ -29,6 +29,9 @@ describe('Controle de Voos route precedence', () => {
     expect(source).toContain('t.empresa_id = v.empresa_id');
     expect(source).toContain('t.funcionario_id = ?');
     expect(source).toContain('enrichFlightsWithPresentation');
+    expect(source).toContain('COALESCE(rdv.versao, 0) AS rdv_versao');
+    expect(source).toContain('LEFT JOIN cv_rdv_operacional rdv');
+    expect(source).toContain("rdv.status <> 'cancelado'");
     expect(source).toContain("return c.json({ success: true, data: [], meta: { count: 0 } });");
 
     const presentationSource = readRepoFile('worker-airtrust/src/services/controle-voos/flight-presentation.ts');
