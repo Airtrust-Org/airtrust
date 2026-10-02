@@ -5,12 +5,12 @@ import { requireRole } from '../middleware/rbac';
 import type { Env } from '../types';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import { getEmpresaId } from '../middleware/tenant';
+import { getSchemaColumns } from '../utils/db-schema';
 
 const funcoes = new Hono<{ Bindings: Env }>();
 
 async function funcionariosHasFuncaoId(db: D1Database): Promise<boolean> {
-  const rows = await db.prepare("PRAGMA table_info('funcionarios')").all<{ name: string }>();
-  return (rows.results || []).some((row) => row.name === 'funcao_id');
+  return (await getSchemaColumns(db, 'funcionarios')).has('funcao_id');
 }
 
 type FuncaoPayload = {
