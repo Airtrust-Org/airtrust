@@ -25,7 +25,6 @@ import {
   buildMatriculaCompletionDiagnostic,
   buildScormCompletionDiagnostic,
   extractScormLocationFromCmiJson,
-  isTrustedScorm12Finish,
   mergeScormRuntimeState,
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
@@ -47,6 +46,18 @@ import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-co
 import { collectByBindChunks } from '../utils/d1-bind-chunks';
 import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
 import { createLogger, toError } from '../utils/logger';
+import {
+  clampPct,
+  extractProgressPctFromCmiJson,
+  formatScormLocationTelemetry,
+  isMatriculaUniqueConstraintError,
+  isScormFailed,
+  isScormSuccess,
+  parsePositiveInt,
+  requiresServerValidatedNonScormEvidence,
+  resolveScormScorePct,
+  summarizeScormTextPayload,
+} from '../services/lms-matricula-runtime-domain';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -254,44 +265,6 @@ const ScormCommitSchema = z.object({
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function parsePositiveInt(val: string | null | undefined, fallback: number) {
-  const n = parseInt(val ?? '', 10);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
-
-function isMatriculaUniqueConstraintError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error ?? '');
-  return message.includes('UNIQUE constraint failed') && message.includes('lms_matriculas');
-}
-
-function clampPct(value: number) {
-  return Math.min(100, Math.max(0, Math.round(value)));
-}
-
-function formatScormLocationTelemetry(marker: { current: number; total: number | null } | null) {
-  if (!marker) return null;
-  return marker.total != null ? `${marker.current}/${marker.total}` : String(marker.current);
-}
-
-function summarizeScormTextPayload(value: string | null | undefined) {
-  if (typeof value !== 'string') return { present: false, bytes: 0 };
-  return {
-    present: value.trim().length > 0,
-    bytes: value.length,
-  };
-}
-
-function requiresServerValidatedNonScormEvidence(
-  tipoConteudo: string | null | undefined,
-  gerarQualificacaoAoConcluir: number | null | undefined,
-): boolean {
-  if (gerarQualificacaoAoConcluir !== 1) return false;
-  const type = String(tipoConteudo ?? 'scorm')
-    .trim()
-    .toLowerCase();
-  return !['scorm', 'h5p'].includes(type);
-}
-
 function emitScormCommitTelemetry(
   c: Context,
   params: {
@@ -341,103 +314,6 @@ function emitScormCommitTelemetry(
     incomingSuspendData: summarizeScormTextPayload(params.incomingSuspendData),
     finalSuspendData: summarizeScormTextPayload(params.finalSuspendData),
   });
-}
-
-function extractProgressPctFromCmiJson(cmiJson: string | null | undefined): number | null {
-  if (!cmiJson) return null;
-  try {
-    const parsed = JSON.parse(cmiJson) as Record<string, unknown>;
-
-    // SCORM 2004 native progress_measure: range 0..1
-    const progressMeasure = Number(parsed['cmi.progress_measure']);
-    if (Number.isFinite(progressMeasure) && progressMeasure >= 0 && progressMeasure <= 1) {
-      return clampPct(progressMeasure * 100);
-    }
-
-    const locationRaw =
-      (parsed['cmi.location'] as string | undefined) ??
-      (parsed['cmi.core.lesson_location'] as string | undefined);
-    if (!locationRaw || typeof locationRaw !== 'string') return null;
-
-    // Common patterns: "10/76" or "10 of 76"
-    const slashMatch = locationRaw.match(/(\d+)\s*\/\s*(\d+)/);
-    if (slashMatch) {
-      const current = Number(slashMatch[1]);
-      const total = Number(slashMatch[2]);
-      if (Number.isFinite(current) && Number.isFinite(total) && total > 0) {
-        return clampPct((current / total) * 100);
-      }
-    }
-
-    const ofMatch = locationRaw.match(/(\d+)\s+of\s+(\d+)/i);
-    if (ofMatch) {
-      const current = Number(ofMatch[1]);
-      const total = Number(ofMatch[2]);
-      if (Number.isFinite(current) && Number.isFinite(total) && total > 0) {
-        return clampPct((current / total) * 100);
-      }
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function resolveScormScorePct(params: {
-  scoreRaw?: number | null;
-  scoreMax?: number | null;
-  scoreScaled?: number | null;
-}): number | null {
-  const scaled = params.scoreScaled == null ? null : Number(params.scoreScaled);
-  if (scaled != null && Number.isFinite(scaled) && scaled >= 0 && scaled <= 1) {
-    return clampPct(scaled * 100);
-  }
-
-  const raw = params.scoreRaw == null ? null : Number(params.scoreRaw);
-  const max = params.scoreMax == null ? null : Number(params.scoreMax);
-  if (raw != null && max != null && Number.isFinite(raw) && Number.isFinite(max) && max > 0) {
-    return clampPct((raw / max) * 100);
-  }
-
-  if (raw != null && Number.isFinite(raw) && raw >= 0) {
-    return clampPct(raw);
-  }
-
-  return null;
-}
-
-/** Verifica se o status SCORM indica conclusão com sucesso */
-function isScormSuccess(
-  data: z.infer<typeof ScormCommitSchema>,
-  options?: {
-    masteryScore?: number | null;
-    effectiveScorePct?: number | null;
-  },
-): boolean {
-  const ls = (data.lesson_status ?? '').toLowerCase();
-  const cs = (data.completion_status ?? '').toLowerCase();
-  const ss = (data.success_status ?? '').toLowerCase();
-  const masteryScore = Number(options?.masteryScore);
-  const hasMasteryScore = Number.isFinite(masteryScore) && masteryScore > 0;
-  const effectiveScorePct = Number(options?.effectiveScorePct);
-  const meetsMasteryScore =
-    !hasMasteryScore || (Number.isFinite(effectiveScorePct) && effectiveScorePct >= masteryScore);
-  if (isTrustedScorm12Finish(data)) return meetsMasteryScore;
-  // SCORM 1.2
-  if (ls === 'passed') return true;
-  if (ls === 'completed') return meetsMasteryScore;
-  // SCORM 2004
-  if (ss === 'passed') return cs !== 'incomplete';
-  if (cs === 'completed' && (ss === 'unknown' || !ss)) return meetsMasteryScore;
-  return false;
-}
-
-/** Verifica se o status indica falha */
-function isScormFailed(data: z.infer<typeof ScormCommitSchema>): boolean {
-  const ls = (data.lesson_status ?? '').toLowerCase();
-  const ss = (data.success_status ?? '').toLowerCase();
-  return ls === 'failed' || ss === 'failed';
 }
 
 // ── Treinamentos EAD enriquecidos (dashboard do aluno/instrutor) ─────────────
