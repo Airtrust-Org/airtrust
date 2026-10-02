@@ -214,6 +214,22 @@ export function calcularDataVencimento(params: {
   return dataBase.toISOString().slice(0, 10);
 }
 
+export function resolveHistoricoReadExpiry(params: {
+  dataVencimento?: string | null;
+  dataConclusao?: string | null;
+  validadeMeses?: number | null;
+  vencimentoFimMes?: number | null;
+  codigoQualificacao?: string | null;
+}): string | null {
+  if (params.dataVencimento) return params.dataVencimento;
+  if (String(params.codigoQualificacao || '').trim().toUpperCase() === 'G1-SEM') return null;
+  return calcularDataVencimento({
+    dataConclusao: params.dataConclusao,
+    validadeMeses: params.validadeMeses,
+    vencimentoFimMes: params.vencimentoFimMes,
+  });
+}
+
 export function resolveParametrosRenovacaoQualificacao(params: {
   codigoQualificacao?: string | null;
   dataConclusao: string;
