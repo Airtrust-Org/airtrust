@@ -111,21 +111,21 @@ describe('Pasta Virtual backend taxonomy', () => {
     expect(normalizarTipoDocumento('FTV')).toBe('FTV');
 
     const cases: Array<[TipoDocumento, string, string]> = [
-      ['AVALIACAO_CQ', 'FAP14-139', 'AVAL-FAP14_139-PILOTO_TESTE-20261001-12345678.pdf'],
-      ['FTV', 'A139-FFS', 'FTV-A139_FFS-PILOTO_TESTE-20261001-12345678.pdf'],
-      ['DESIGNACAO_OPERACIONAL', 'PIC', 'DESIG-PIC-PILOTO_TESTE-20261001-12345678.pdf'],
+      ['AVALIACAO_CQ', 'FAP14-139', 'Aval-FAP14_139-Piloto_Teste-20261001-12345678.pdf'],
+      ['FTV', 'A139-FFS', 'Ftv-A139_FFS-Piloto_Teste-20261001-12345678.pdf'],
+      ['DESIGNACAO_OPERACIONAL', 'PIC', 'Desig-PIC-Piloto_Teste-20261001-12345678.pdf'],
       [
         'EXPERIENCIA_HORAS',
         'DECLARACAO_HORAS',
-        'EXP-DECLARACAO_HORAS-PILOTO_TESTE-20261001-12345678.pdf',
+        'Exp-DECLARACAO_HORAS-Piloto_Teste-20261001-12345678.pdf',
       ],
       [
         'INSTRUTOR_EXAMINADOR',
         'CREDENCIAMENTO',
-        'INST-CREDENCIAMENTO-PILOTO_TESTE-20261001-12345678.pdf',
+        'Inst-CREDENCIAMENTO-Piloto_Teste-20261001-12345678.pdf',
       ],
-      ['VINCULO_FUNCIONAL', 'CONTRATO', 'VINC-CONTRATO-PILOTO_TESTE-20261001-12345678.pdf'],
-      ['CURRICULO_PROFISSIONAL', 'CURRICULO', 'CURR-CURRICULO-PILOTO_TESTE-20261001-12345678.pdf'],
+      ['VINCULO_FUNCIONAL', 'CONTRATO', 'Vinc-CONTRATO-Piloto_Teste-20261001-12345678.pdf'],
+      ['CURRICULO_PROFISSIONAL', 'CURRICULO', 'Curr-CURRICULO-Piloto_Teste-20261001-12345678.pdf'],
     ];
 
     cases.forEach(([tipo, subTipo, expected]) => {

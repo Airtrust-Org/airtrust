@@ -6,9 +6,12 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  Eye,
   FileText,
   History,
   Plus,
+  Sparkles,
+  Upload,
   Search,
   Trash2,
 } from 'lucide-react';
@@ -68,7 +71,7 @@ export default function PastaVirtualCompleta({
   funcao,
   cargo,
 }: PastaVirtualCompletaProps) {
-  const { categorias, loading, error, deleteDocumento, downloadDocumento, refetch } =
+  const { categorias, loading, error, deleteDocumento, previewDocumento, downloadDocumento, refetch } =
     usePastaVirtual(funcionarioId);
   const [categoriasExpandidas, setCategoriasExpandidas] = useState<Set<TipoDocumento>>(
     new Set(['CERTIFICADO_QUALIFICACAO']),
@@ -96,6 +99,14 @@ export default function PastaVirtualCompleta({
   const abrirUpload = (tipo: TipoDocumento = 'CERTIFICADO_QUALIFICACAO') => {
     setTipoUploadSelecionado(tipo);
     setModalUploadAberto(true);
+  };
+
+  const handlePreview = async (doc: DocumentoPV) => {
+    try {
+      await previewDocumento(doc);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Arquivo indisponível');
+    }
   };
 
   const handleDownload = async (doc: DocumentoPV) => {
@@ -287,6 +298,25 @@ export default function PastaVirtualCompleta({
                                   >
                                     {atual ? 'Versão atual' : 'Histórico'}
                                   </span>
+                                  <span
+                                    className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-300"
+                                    title={
+                                      doc.proveniencia === 'gerado'
+                                        ? 'Gerado pelo AirTrust'
+                                        : 'Documento enviado por upload'
+                                    }
+                                    aria-label={
+                                      doc.proveniencia === 'gerado'
+                                        ? 'Gerado pelo AirTrust'
+                                        : 'Documento enviado por upload'
+                                    }
+                                  >
+                                    {doc.proveniencia === 'gerado' ? (
+                                      <Sparkles className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <Upload className="h-3.5 w-3.5" />
+                                    )}
+                                  </span>
                                 </div>
                                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500 dark:text-slate-400">
                                   <span className="flex items-center gap-1">
@@ -299,9 +329,18 @@ export default function PastaVirtualCompleta({
                             </div>
                             <div className="flex items-center gap-2 self-end sm:self-auto">
                               <button
+                                onClick={() => handlePreview(doc)}
+                                className="rounded p-2 text-primary transition hover:bg-primary/10"
+                                title="Visualizar documento"
+                                aria-label={`Visualizar ${doc.nome}`}
+                              >
+                                <Eye className="h-5 w-5" />
+                              </button>
+                              <button
                                 onClick={() => handleDownload(doc)}
                                 className="rounded p-2 text-green-600 transition hover:bg-green-50 dark:hover:bg-green-950/30"
-                                title="Visualizar documento"
+                                title="Baixar documento"
+                                aria-label={`Baixar ${doc.nome}`}
                               >
                                 <Download className="h-5 w-5" />
                               </button>

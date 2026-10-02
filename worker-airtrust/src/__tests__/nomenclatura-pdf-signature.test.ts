@@ -64,7 +64,7 @@ describe('validarAssinaturaPDF', () => {
       codigo: 'PP',
       uuid: '12345678-abcd-ef01-2345-6789abcdef01',
     });
-    expect(nomeCert).toBe('CERT-QA_INSTRUTOR_EXAMINADOR-PP-20260909-12345678.pdf');
+    expect(nomeCert).toBe('Cert-Qa_Instrutor_Examinador-PP-20260909-12345678.pdf');
 
     const nomeOutro = gerarNomeArquivoPadronizado({
       tipo: 'OUTRO',
@@ -72,6 +72,6 @@ describe('validarAssinaturaPDF', () => {
       data: new Date(2026, 8, 9),
       uuid: '12345678-abcd-ef01-2345-6789abcdef01',
     });
-    expect(nomeOutro).toBe('DOC-OUTROS-QA_INSTRUTOR_EXAMINADOR-20260909-12345678.pdf');
+    expect(nomeOutro).toBe('Doc-Outros-Qa_Instrutor_Examinador-20260909-12345678.pdf');
   });
 });

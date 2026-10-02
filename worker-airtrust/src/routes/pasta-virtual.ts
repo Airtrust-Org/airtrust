@@ -56,6 +56,7 @@ function certificateUploadKind(value: unknown): 'qualificacao' | 'profissional' 
   return null;
 }
 
+
 function originalUploadFilename(file: File, fallback: string): string {
   const raw = String(file.name || '').trim();
   return raw.split(/[\\/]/).pop()?.trim() || fallback;
@@ -88,6 +89,7 @@ interface CategorizedDocument {
   substituidoPorId?: number | null;
   origem?: 'documentos' | 'pasta_virtual' | 'ficha_sessao';
   fichaId?: number | null;
+  proveniencia?: 'gerado' | 'upload';
 }
 
 const PASTA_VIRTUAL_CATEGORIA = {
@@ -216,6 +218,7 @@ export function buildFichaSessaoPastaVirtualDocument(
     status: 'Válido',
     origem: 'ficha_sessao',
     fichaId: ficha.id,
+    proveniencia: 'gerado',
   };
 }
 
@@ -504,6 +507,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
           dataUpload: doc.dataUpload,
           status: 'Válido',
           origem: 'documentos',
+          proveniencia: String(doc.r2_key || '').startsWith('certificados/empresa-') ? 'gerado' : 'upload',
         },
         categoria,
       });
@@ -536,6 +540,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
           dataUpload: doc.dataUpload || '',
           status: 'Válido',
           origem: 'pasta_virtual',
+          proveniencia: String(doc.r2_key || '').startsWith('certificados/empresa-') ? 'gerado' : 'upload',
         },
         categoria,
       });
@@ -1040,12 +1045,8 @@ app.post('/upload', auth(), async (c) => {
       subTipo: subTipo || undefined,
       uuid,
     });
-    const nomeArquivoPersistido = kindCertificado
-      ? originalUploadFilename(file, 'certificado.pdf')
-      : nomeArquivoPadronizado;
+    const nomeArquivoPersistido = nomeArquivoPadronizado;
 
-    // Certificados anexados preservam exatamente o nome original no D1/UI.
-    // A chave física continua única e não depende do nome fornecido pelo usuário.
     const r2Key = kindCertificado
       ? `funcionarios/${funcionarioId}/certificados-upload/${kindCertificado}/${uuid}.pdf`
       : gerarChaveR2(funcionarioId, nomeArquivoPadronizado);
@@ -1073,7 +1074,7 @@ app.post('/upload', auth(), async (c) => {
       },
       customMetadata: {
         funcionario_id: funcionarioIdStr,
-        original_name: nomeArquivoPersistido,
+        original_name: originalUploadFilename(file, nomeArquivoPersistido),
         nome_padronizado: nomeArquivoPersistido,
         tipo_documento: tipoDocumento,
         sub_tipo: subTipo || '',
