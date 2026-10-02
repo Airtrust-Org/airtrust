@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
+import { getSchemaColumns } from '../utils/db-schema';
 import {
   assertFuncionarioInScope,
   buildFuncionarioScopeWhere,
@@ -736,10 +737,7 @@ app.get('/rascunhos/:draftId/recursos', requireRole('admin', 'manager'), async (
 
   const access = await getEmployeeSectorAccess(c, empresaId);
   const scope = buildFuncionarioScopeWhere(access, 'f');
-  const columns = await c.env.DB.prepare("PRAGMA table_info('funcionarios')").all<{
-    name: string;
-  }>();
-  const hasInstructorFlag = new Set((columns.results || []).map((item) => item.name)).has(
+  const hasInstructorFlag = (await getSchemaColumns(c.env.DB, 'funcionarios')).has(
     'is_instrutor',
   );
   const instructors = await c.env.DB.prepare(
