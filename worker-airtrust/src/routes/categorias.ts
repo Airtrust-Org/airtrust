@@ -14,6 +14,7 @@ import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { generateColorFromName, slugify } from '../utils/colors';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
+import { getSchemaColumns } from '../utils/db-schema';
 import {
   assertQualificationCategoryCanBeDeactivated,
   resolveQualificationCategoryById,
@@ -57,10 +58,7 @@ type CategoryApi = {
 };
 
 async function loadCategoryColumns(db: D1Database): Promise<CategoryColumns> {
-  const info = await db
-    .prepare("PRAGMA table_info('qualificacoes_categorias')")
-    .all<{ name?: string }>();
-  const names = new Set((info.results || []).map((row) => String(row.name || '')));
+  const names = await getSchemaColumns(db, 'qualificacoes_categorias');
   return {
     dominioCodigo: names.has('dominio_codigo'),
     lmsIntegrada: names.has('lms_integrada'),

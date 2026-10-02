@@ -11,6 +11,7 @@ import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getEmpresaId } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
+import { getSchemaColumns } from '../utils/db-schema';
 
 type AppCtx = Context<{ Bindings: Env; Variables: { userId?: string } }>;
 
@@ -32,7 +33,10 @@ function sgsoErrorResponse(
   return c.json({ success: false, error: message, code }, status as any);
 }
 
-async function getTableColumns(db: D1Database, tableName: string): Promise<Set<string>> {
+async function getTableColumns(
+  db: D1Database,
+  tableName: string,
+): Promise<ReadonlySet<string>> {
   const ALLOWED_TABLES = new Set([
     'sgso_relatos',
     'sgso_relatos_historico_status',
@@ -44,8 +48,7 @@ async function getTableColumns(db: D1Database, tableName: string): Promise<Set<s
   if (!ALLOWED_TABLES.has(tableName)) {
     throw new Error(`Table not allowed: ${tableName}`);
   }
-  const pragma = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
-  return new Set((pragma.results || []).map((column) => String(column.name)));
+  return getSchemaColumns(db, tableName);
 }
 
 function evalOperador(valor: number, op: string, meta: number): boolean {

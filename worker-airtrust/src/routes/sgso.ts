@@ -25,6 +25,7 @@ import sgsoNextGenRoutes from './sgso-next-gen';
 import sgsoAuditoriasNcsRoutes from './sgso-auditorias-ncs';
 import type { Context } from 'hono';
 import { createLogger, toError } from '../utils/logger';
+import { getSchemaColumns } from '../utils/db-schema';
 
 type AppCtx = Context<{ Bindings: Env; Variables: { userId?: string } }>;
 
@@ -98,7 +99,10 @@ async function gerarProtocolo(db: D1Database, empresaId: number): Promise<string
   return `REL-${ano}-${num}`;
 }
 
-async function getTableColumns(db: D1Database, tableName: string): Promise<Set<string>> {
+async function getTableColumns(
+  db: D1Database,
+  tableName: string,
+): Promise<ReadonlySet<string>> {
   const ALLOWED_TABLES = new Set([
     'sgso_relatos',
     'sgso_relatos_historico_status',
@@ -110,8 +114,7 @@ async function getTableColumns(db: D1Database, tableName: string): Promise<Set<s
   if (!ALLOWED_TABLES.has(tableName)) {
     throw new Error(`Table not allowed: ${tableName}`);
   }
-  const pragma = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
-  return new Set((pragma.results || []).map((column) => String(column.name)));
+  return getSchemaColumns(db, tableName);
 }
 
 // ─────────────────────────────────────────────────────────────
