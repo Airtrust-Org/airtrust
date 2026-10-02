@@ -230,7 +230,7 @@ function createChunkingDb(options: MockOptions) {
       all: async () => executeAll(query, []),
       first: async () => {
         calls.push({ query, args: [], method: 'first' as const });
-        return query.includes('sqlite_master') ? { cnt: 1 } : null;
+        return query.includes('sqlite_master') ? { found: 1 } : null;
       },
       run: async () => {
         calls.push({ query, args: [], method: 'run' as const });
@@ -241,7 +241,7 @@ function createChunkingDb(options: MockOptions) {
         first: async () => {
           calls.push({ query, args, method: 'first' as const });
           if (args.length > 100) throw new Error(`statement exceeded bind limit: ${args.length}`);
-          return query.includes('sqlite_master') ? { cnt: 1 } : null;
+          return query.includes('sqlite_master') ? { found: 1 } : null;
         },
         run: async () => {
           calls.push({ query, args, method: 'run' as const });

@@ -39,7 +39,7 @@ const LARGE_FILE_LINE_CAPS = {
   // through planned-training create/update/list, so Initial/Periodic/Semiannual
   // workload and qualification-history provenance are explicit instead of inferred.
   // Program selection and curriculum resolution remain extracted in services/training-programs.ts.
-  'routes/treinamentos-planejados.ts': 4026,
+  'routes/treinamentos-planejados.ts': 3945,
   // Cap raised 2026-07-30: counted 3507 (hotfix/lms-compliance-final — all four
   // completion call sites (scorm/commit, xapi/statements, POST /:id/finalizar,
   // PATCH /:id/status) now delegate the entire completion write (Histórico,
@@ -121,7 +121,7 @@ const SQL_PREPARE_CAPS = {
   'routes/lms-cursos-legacy.ts': 55,
   // Acknowledged (stabilization 2026-06-06): unified planned training contract.
   // +10 prepare calls for schema introspection guards (migration-0390 compatibility).
-  'routes/treinamentos-planejados.ts': 56,
+  'routes/treinamentos-planejados.ts': 52,
   // Cap raised 2026-07-30 (hotfix/lms-compliance-final): +1 .prepare() for the
   // resolveLmsEffectiveProgress-enriched /minhas-ead and /curso/:id mapping
   // plus the observações UPDATE split out of the canonical completion path.
@@ -139,7 +139,7 @@ const HIGH_SQL_LIMIT_CAPS = {
   'services/sigvoos-frms.ts': 5000,
 } as const;
 
-const DIRECT_SCHEMA_INTROSPECTION_CAPS = { pragmaTableInfo: 32, sqliteMaster: 32 } as const;
+const DIRECT_SCHEMA_INTROSPECTION_CAPS = { pragmaTableInfo: 31, sqliteMaster: 31 } as const;
 
 const CRITICAL_SELECT_STAR_CAPS = {
   'routes/aeronaves.ts': 1,
