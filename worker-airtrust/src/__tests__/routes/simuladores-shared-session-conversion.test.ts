@@ -180,7 +180,7 @@ function createDbForConversion(options?: {
           return null;
         },
         all: async () => {
-          if (query === 'PRAGMA table_info(simulador_agendamentos)') {
+          if (query.includes('PRAGMA table_info') && query.includes('simulador_agendamentos')) {
             return {
               results: [
                 { name: 'id' },
@@ -379,7 +379,7 @@ function createDbForConversion(options?: {
       }),
       first: async () => null,
       all: async () => {
-        if (query === 'PRAGMA table_info(simulador_agendamentos)') {
+        if (query.includes('PRAGMA table_info') && query.includes('simulador_agendamentos')) {
           return {
             results: [
               { name: 'id' },

@@ -8,6 +8,7 @@ import {
 import type { NormalizedSharedSessionRequest } from './simuladores-shared-session-logic';
 import { overlaps } from './simuladores-shared-session-helpers';
 import { normalizeSpecialEventSessionCode } from '../../../src/shared/simuladores/special-event-sessions';
+import { getSchemaColumns } from '../utils/db-schema';
 
 export type ModeloSessaoMapRow = {
   id: number;
@@ -21,9 +22,10 @@ export type ModeloSessaoMapRow = {
   modelo_aeronave: string | null;
 };
 
-export async function getSimuladorAgendamentosColumns(db: D1Database): Promise<Set<string>> {
-  const tableInfo = await db.prepare('PRAGMA table_info(simulador_agendamentos)').all<{ name: string }>();
-  return new Set((tableInfo.results || []).map((row) => row.name));
+export async function getSimuladorAgendamentosColumns(
+  db: D1Database,
+): Promise<ReadonlySet<string>> {
+  return getSchemaColumns(db, 'simulador_agendamentos');
 }
 
 export async function loadModelosSessaoMap(
