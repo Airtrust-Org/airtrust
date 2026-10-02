@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { PASTA_VIRTUAL_CATEGORIAS, type TipoDocumento } from '@/react-app/config/pastaVirtual';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
+import { api } from '@/react-app/utils/api-client';
 
 export type { TipoDocumento } from '@/react-app/config/pastaVirtual';
 
@@ -16,6 +17,8 @@ export interface DocumentoPV {
   status: string;
   versaoAtual?: boolean;
   substituidoPorId?: number | null;
+  origem?: 'documentos' | 'pasta_virtual' | 'ficha_sessao';
+  ficha_id?: number | null;
 }
 
 export interface CategoriaPV {
@@ -44,7 +47,10 @@ const CATEGORIA_BASE: Omit<CategoriaPV, 'documentos'>[] = PASTA_VIRTUAL_CATEGORI
   }),
 );
 
-export function isPastaVirtualDocumentAvailable(doc: Pick<DocumentoPV, 'tamanho' | 'arquivo_url'>) {
+export function isPastaVirtualDocumentAvailable(
+  doc: Pick<DocumentoPV, 'tamanho' | 'arquivo_url' | 'origem'>,
+) {
+  if (doc.origem === 'ficha_sessao') return true;
   return Number(doc.tamanho) > 0 && Boolean(String(doc.arquivo_url || '').trim());
 }
 
@@ -87,6 +93,8 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
         tamanho: number;
         versaoAtual?: boolean;
         substituidoPorId?: number | null;
+        origem?: 'documentos' | 'pasta_virtual' | 'ficha_sessao';
+        fichaId?: number | null;
       }
 
       const mapToDocumentoPV = (docs: DocumentoApi[], tipo: TipoDocumento): DocumentoPV[] =>
@@ -101,6 +109,8 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
           status: d.status || 'Válido',
           versaoAtual: d.versaoAtual,
           substituidoPorId: d.substituidoPorId ?? null,
+          origem: d.origem,
+          ficha_id: d.fichaId ?? null,
         }));
 
       const categorizedDocs: Record<string, DocumentoApi[]> = categoryData.data || {};
@@ -165,9 +175,32 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
     }
 
     const token = getAccessToken();
-    const fetchConfig: RequestInit = {};
-    if (token) fetchConfig.headers = { Authorization: `Bearer ${token}` };
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
 
+    if (doc.origem === 'ficha_sessao') {
+      const fichaId = Number(doc.ficha_id || doc.id);
+      if (!Number.isFinite(fichaId) || fichaId <= 0) {
+        throw new Error('Ficha de treinamento inválida');
+      }
+      await previewPdfBeforeDownload({
+        fileName: doc.nome,
+        title: doc.nome,
+        fetcher: async () => {
+          const blob = await api.getBlob(`/simuladores/fichas/${fichaId}/pdf`, {
+            method: 'POST',
+            headers,
+          });
+          return new Response(blob, {
+            status: 200,
+            headers: { 'Content-Type': blob.type || 'application/pdf' },
+          });
+        },
+      });
+      return;
+    }
+
+    const fetchConfig: RequestInit = { headers };
     const endpoint = `${API_BASE_URL}/pasta-virtual/download/${doc.id}`;
     const res = await fetch(endpoint, fetchConfig);
     if (!res.ok) throw new Error('Erro ao baixar');

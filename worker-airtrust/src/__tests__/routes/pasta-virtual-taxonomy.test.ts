@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { inferirCategoriaDocumento, normalizarCategoriaLegada } from '../../routes/pasta-virtual';
+import {
+  buildFichaSessaoPastaVirtualDocument,
+  inferirCategoriaDocumento,
+  normalizarCategoriaLegada,
+} from '../../routes/pasta-virtual';
 import {
   gerarNomeArquivoPadronizado,
   normalizarTipoDocumento,
@@ -67,6 +71,29 @@ describe('Pasta Virtual backend taxonomy', () => {
         1,
       ),
     ).toBe('FAPs e Checks');
+  });
+
+  it('expõe FTV estruturada como fonte canônica sem criar cópia documental', () => {
+    const doc = buildFichaSessaoPastaVirtualDocument({
+      id: 91,
+      uuid: 'ficha-91',
+      tipo_sessao: 'SEM',
+      tipo_aeronave: 'AW139',
+      data_sessao: '2026-03-28',
+      status: 'APROVADO',
+      aprovado: 1,
+    });
+
+    expect(doc).toMatchObject({
+      id: 91,
+      nome: 'FTV-AW139-SEM-20260328-91.pdf',
+      tipo: 'FTV',
+      tamanho: -1,
+      url: '/simuladores/fichas/91/pdf',
+      dataUpload: '2026-03-28',
+      origem: 'ficha_sessao',
+      fichaId: 91,
+    });
   });
 
   it('normalizes UI aliases and generates category-specific filenames', () => {

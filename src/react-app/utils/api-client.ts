@@ -377,14 +377,15 @@ class ApiClient {
   /**
    * Get Blob for PDF/File download
    */
-  async getBlob(endpoint: string): Promise<Blob> {
+  async getBlob(endpoint: string, options: RequestInit = {}): Promise<Blob> {
     const url = endpoint.startsWith('http') ? endpoint : `${this.baseUrl}${endpoint}`;
     const token = getAccessToken();
+    const headers = new Headers(options.headers);
+    if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
 
     const response = await fetch(url, {
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      ...options,
+      headers,
     });
 
     if (!response.ok) {
