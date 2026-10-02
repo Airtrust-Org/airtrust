@@ -60,7 +60,7 @@ function createCompatDb(options: {
           }),
         };
       }
-      if (/PRAGMA\s+table_info\s*\(\s*lms_cursos\s*\)/i.test(query)) {
+      if (/PRAGMA\s+table_info\s*\(\s*['\"]?lms_cursos['\"]?\s*\)/i.test(query)) {
         if (options.failSchemaQuery) throw new Error('schema unavailable');
         return {
           all: async () => ({
