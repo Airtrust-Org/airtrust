@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaIdOptional } from './escalas-shared';
+import { getSchemaColumns } from '../utils/db-schema';
 
 const pilotos = new Hono<{ Bindings: Env }>();
 
@@ -17,10 +18,8 @@ pilotos.get('/', auth(), async (c) => {
   const empresaId = getEmpresaIdOptional(c);
   const { aeronave_id, modelo_id } = c.req.query();
 
-  const funcionariosCols = await db
-    .prepare(`PRAGMA table_info(funcionarios)`)
-    .all<{ name?: string }>();
-  const cols = (funcionariosCols.results || []).map((col) => String(col.name || '').toLowerCase());
+  const funcionariosCols = await getSchemaColumns(db, 'funcionarios');
+  const cols = [...funcionariosCols].map((name) => name.toLowerCase());
 
   const hasNome = cols.includes('nome');
   const hasNomeCompleto = cols.includes('nome_completo');
