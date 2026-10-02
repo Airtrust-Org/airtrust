@@ -2,7 +2,7 @@ import { expect, test, type Page, type Response as PlaywrightResponse } from '@p
 import { assertProductionFrontendShaFromPage } from '../lib/production-live-sha-guard.mjs';
 import { installProductionReadOnlyGuard } from '../lib/production-read-only-network-guard.mjs';
 
-const EXPECTED_SHA = String(process.env.EXPECTED_PRODUCTION_SHA || '')
+const EXPECTED_PAGES_SHA = String(process.env.EXPECTED_PAGES_SHA || '')
   .trim()
   .toLowerCase();
 const EMAIL = String(process.env.E2E_EMAIL || '').trim();
@@ -74,7 +74,7 @@ function assertSummary(data: any) {
 }
 
 async function login(page: Page) {
-  expect(EXPECTED_SHA).toMatch(/^[0-9a-f]{40}$/);
+  expect(EXPECTED_PAGES_SHA).toMatch(/^[0-9a-f]{40}$/);
   expect(EMAIL).not.toBe('');
   expect(PASSWORD).not.toBe('');
   expect(EMAIL).not.toMatch(/staging\.airtrust\.invalid$/i);
@@ -85,7 +85,7 @@ async function login(page: Page) {
   // The read-only network guard still observes the browser fetches and permits
   // only the authentication POST plus read-only requests.
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await assertProductionFrontendShaFromPage(page, EXPECTED_SHA.slice(0, 7), 'production-login');
+  await assertProductionFrontendShaFromPage(page, EXPECTED_PAGES_SHA.slice(0, 7), 'production-login');
 
   // Run the auth bootstrap from the runner, not from the SPA execution context.
   // The login page may navigate while its app initializes, which destroys page.evaluate.
@@ -201,7 +201,7 @@ test('production intelligent training compliance UI and APIs are coherent and re
   await expect(page).toHaveURL(/\/treinamentos\/compliance$/);
   await assertProductionFrontendShaFromPage(
     page,
-    EXPECTED_SHA.slice(0, 7),
+    EXPECTED_PAGES_SHA.slice(0, 7),
     'production-compliance',
   );
 

@@ -9,11 +9,14 @@ const workflow = fs.readFileSync(
 const spec = fs.readFileSync('e2e/production-training-compliance/readonly.spec.ts', 'utf8');
 const guard = fs.readFileSync('e2e/lib/production-read-only-network-guard.mjs', 'utf8');
 
-test('production compliance smoke is explicit, exact-SHA and production-environment scoped', () => {
+test('production compliance smoke is explicit, component-pinned and production-environment scoped', () => {
   assert.match(workflow, /AIRTRUST_PRODUCTION_TRAINING_COMPLIANCE_READONLY/);
-  assert.match(workflow, /expected_production_sha/);
+  assert.match(workflow, /expected_worker_sha/);
+  assert.match(workflow, /expected_pages_sha/);
   assert.match(workflow, /environment: production/);
   assert.match(workflow, /PRODUCTION_WORKER_SHA_MISMATCH/);
+  assert.match(workflow, /assertProductionFrontendShaFromOrigin/);
+  assert.match(spec, /EXPECTED_PAGES_SHA/);
   assert.match(workflow, /verify-release-gates\.mjs/);
   assert.match(workflow, /production-training-compliance\.config\.ts/);
 });
@@ -27,7 +30,7 @@ test('production compliance browser coverage is read-only and exercises canonica
   assert.match(spec, /\/api\/compliance-treinamentos\/tendencias/);
   assert.match(spec, /\/api\/compliance-treinamentos\/comunicacoes/);
   assert.match(spec, /Administração/);
-  assert.match(spec, /Régua automática de cobrança/);
+  assert.match(spec, /Alertas automáticos centralizados/);
   assert.match(spec, /guard\.assertClean\(\)/);
   assert.match(guard, /operational-post/);
   assert.match(guard, /mutation-method/);
