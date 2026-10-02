@@ -64,6 +64,14 @@ describe('Pasta Virtual backend taxonomy', () => {
     ).toBe('Treinamentos e Qualificações');
     expect(
       inferirCategoriaDocumento(
+        'Caio_C- EG (v.2026.11.03).pdf',
+        null,
+        'application/pdf',
+        'certificados/empresa-6/funcionario-5/historico-3218/uuid.pdf',
+      ),
+    ).toBe('Treinamentos e Qualificações');
+    expect(
+      inferirCategoriaDocumento(
         'FAP14 original.pdf',
         'Certificados de Qualificação',
         'CERTIFICADO',

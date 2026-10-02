@@ -152,6 +152,7 @@ export function inferirCategoriaDocumento(
   if (
     nomeUpper.startsWith('CERT-') ||
     nomeUpper.startsWith('TREIN-') ||
+    r2KeyLower.startsWith('certificados/') ||
     r2KeyLower.includes('/certificados-upload/qualificacao/') ||
     r2KeyLower.includes('/certificados-upload/profissional/')
   ) {
