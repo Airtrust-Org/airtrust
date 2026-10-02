@@ -140,6 +140,20 @@ describe('Pilot Offline shell', () => {
     expect(syncSuccessBlock).not.toContain('closeOperationalEditor();');
   });
 
+  it('avisa dentro do Pilot App quando a Coordenacao altera um voo ja preparado', () => {
+    expect(pilotIndex).toContain('id="flight-update-alert"');
+    expect(pilotIndex).toContain('Atualização da Coordenação disponível');
+    expect(pilotIndex).toContain('id="refresh-flight-update"');
+    expect(pilotApp).toContain('ACTIVE_FLIGHT_REVISION_CHECK_MS = 60_000');
+    expect(pilotApp).toContain("'/offline-revision'");
+    expect(pilotApp).toContain('Number(voo?.rdv_versao || 0)');
+    expect(pilotApp).toContain('async function checkActiveFlightRevision');
+    expect(pilotApp).toContain('async function refreshActiveFlightFromCoordination');
+    expect(pilotApp).toContain('async function rebaseOperationalDraftAfterCoordinationUpdate');
+    expect(pilotApp).toContain('Boolean(activeFlightUpdateAvailable)');
+    expect(pilotApp).toContain('conectado para atualizações');
+  });
+
   it('reconcilia automaticamente um rascunho ja transmitido quando o pacote servidor avanca', () => {
     expect(pilotApp).toContain('async function reconcileAcceptedDraftWithFreshPackage');
     expect(pilotApp).toContain("value.sync_state !== 'accepted_requires_refresh'");
@@ -176,7 +190,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v32'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v33'");
     expect(pilotSw).not.toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
@@ -373,7 +387,8 @@ describe('Pilot Offline shell', () => {
   it('mantem o voo travado offline ao perder ou recuperar sinal e so sincroniza por acao explicita', () => {
     expect(pilotVault).toContain("'active_sessions'");
     expect(pilotApp).toContain('offlineFlightLocked');
-    expect(pilotApp).toContain('Modo voo offline mantido. O sinal voltou, mas nenhuma conexão automática será feita.');
+    expect(pilotApp).toContain('Conexão disponível. O Pilot App verificará se a Coordenação atualizou este voo.');
+    expect(pilotApp).toContain('void checkActiveFlightRevision();');
     const onlineHandler = pilotApp.slice(
       pilotApp.indexOf("window.addEventListener('online'"),
       pilotApp.indexOf("window.addEventListener('offline'"),

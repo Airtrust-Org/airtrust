@@ -306,11 +306,17 @@ rdvWorkflow.get('/voos/meus', auth(), requireAnyRdvAccess(), async (c) => {
         v.id, v.empresa_id, v.prefixo, v.data_programacao, v.origem_id, v.destino_id,
         v.tipo_voo_id, v.natureza_voo_id, v.aeronave_id,
         v.numero_voo, v.numero_db, v.contrato_id, v.versao,
+        COALESCE(rdv.versao, 0) AS rdv_versao,
         v.horario_previsto_partida, v.horario_previsto_chegada,
         v.horario_real_partida, v.horario_real_chegada,
         v.status, v.observacoes, v.cancelado_motivo_id, v.alternado_destino_id,
         v.created_at, v.updated_at
       FROM cv_voos v
+      LEFT JOIN cv_rdv_operacional rdv
+        ON rdv.voo_id = v.id
+       AND rdv.empresa_id = v.empresa_id
+       AND rdv.deleted_at IS NULL
+       AND rdv.status <> 'cancelado'
       WHERE v.empresa_id = ?
         AND v.deleted_at IS NULL
         AND EXISTS (
