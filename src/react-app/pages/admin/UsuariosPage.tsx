@@ -518,11 +518,7 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
 
   return (
     <UsuariosPageFrame embedded={embedded}>
-      <div
-        className={
-          embedded ? 'space-y-4' : 'mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6'
-        }
-      >
+      <div className={embedded ? 'space-y-4' : 'mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6'}>
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -820,7 +816,7 @@ export default function UsuariosPage() {
 // Campo: Setores gerenciados (obrigatório quando perfil = GESTOR)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type SetorOpcao = { id: number; nome: string };
+type SetorOpcao = { id: number; nome: string; ativo: number | boolean };
 
 function SetoresGerenciadosField({
   selectedIds,
@@ -841,7 +837,10 @@ function SetoresGerenciadosField({
         const res = await apiFetch('/setores');
         const json = await res.json();
         if (!cancelled && json.success) {
-          setSetores(json.data || []);
+          const setoresAtivos = (json.data || []).filter(
+            (setor: SetorOpcao) => Number(setor.ativo) === 1,
+          );
+          setSetores(setoresAtivos);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -851,6 +850,15 @@ function SetoresGerenciadosField({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (setores.length === 0) return;
+    const idsAtivos = new Set(setores.map((setor) => setor.id));
+    const selecionadosValidos = selectedIds.filter((id) => idsAtivos.has(id));
+    if (selecionadosValidos.length !== selectedIds.length) {
+      onChange(selecionadosValidos);
+    }
+  }, [onChange, selectedIds, setores]);
 
   const toggle = (id: number) => {
     onChange(selectedIds.includes(id) ? selectedIds.filter((s) => s !== id) : [...selectedIds, id]);
