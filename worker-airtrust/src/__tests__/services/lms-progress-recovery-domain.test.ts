@@ -4,6 +4,7 @@ import {
   buildProgressRecoveryReference,
   buildProgressRecoverySnapshot,
   buildRecoveryDryRunDifferences,
+  evaluateProgressRecovery,
   extractLessonLocationValue,
   normalizeStatusToken,
   safeJsonParseObject,
@@ -79,4 +80,47 @@ describe('LMS progress recovery domain helpers', () => {
       { field: 'scorm.lesson_location', current: null, simulated: '25/100' },
     ]);
   });
+  it('evaluates recovery targets without changing the fail-closed blocker policy', () => {
+    const allowed = evaluateProgressRecovery({
+      enrollment: enrollment(),
+      targetLessonLocation: '60/100',
+      targetProgressPct: 60,
+    });
+    expect(allowed.blockers).toEqual([]);
+    expect(allowed.risks).toContain('CURRENT_SCORE_WILL_BE_PRESERVED');
+    expect(allowed.simulatedProgress).toBe(60);
+    expect(allowed.simulatedSlide).toBe(60);
+    expect(allowed.simulatedMatriculaStatus).toBe('EM_ANDAMENTO');
+
+    const blocked = evaluateProgressRecovery({
+      enrollment: enrollment({ status: 'CONCLUIDO', qualificacao_historico_id: 88, data_conclusao: '2026-10-02' }),
+      targetLessonLocation: '30/100',
+      targetProgressPct: 100,
+      targetLessonStatus: 'passed',
+      targetScoreRaw: 90,
+      targetMatriculaStatus: 'CONCLUIDO',
+    });
+    expect(blocked.blockers).toEqual(expect.arrayContaining([
+      'TERMINAL_STATUS',
+      'QUALIFICATION_ALREADY_LINKED',
+      'TARGET_PROGRESS_COMPLETION_NOT_ALLOWED',
+      'TARGET_LOCATION_REGRESSION',
+      'TARGET_LESSON_STATUS_COMPLETION_FORBIDDEN',
+      'TARGET_SCORE_CHANGE_FORBIDDEN',
+      'TARGET_MATRICULA_STATUS_COMPLETION_FORBIDDEN',
+      'DATA_CONCLUSAO_ALREADY_PRESENT',
+    ]));
+    expect(evaluateProgressRecovery({
+      enrollment: enrollment(),
+      targetLessonLocation: '30/100',
+      targetProgressPct: 30,
+    }).blockers).toContain('TARGET_PROGRESS_REGRESSION');
+
+    expect(() => evaluateProgressRecovery({
+      enrollment: enrollment(),
+      targetLessonLocation: 'invalid',
+      targetProgressPct: 50,
+    })).toThrow('target_lesson_location deve estar no formato n/total');
+  });
+
 });

@@ -1,4 +1,10 @@
-import { mergeScormRuntimeState } from './lms-progress-guardrails';
+import { ApiError } from '../middleware/error-handler';
+import { extractProgressPctFromCmiJson } from './lms-matricula-runtime-domain';
+import {
+  extractScormLocationFromCmiJson,
+  mergeScormRuntimeState,
+  parseScormLocationPair,
+} from './lms-progress-guardrails';
 
 export type ProgressRecoveryEnrollment = {
   id: number;
@@ -200,6 +206,156 @@ export function summarizeProgressRecoverySnapshot(snapshot: ProgressRecoveryStat
       suspend_data_present: Boolean(snapshot.scorm.suspend_data?.trim()),
     },
   };
+}
+
+export function evaluateProgressRecovery(params: {
+  enrollment: ProgressRecoveryEnrollment;
+  targetLessonLocation: string;
+  targetProgressPct: number;
+  targetLessonStatus?: string | null;
+  targetScoreRaw?: number;
+  targetMatriculaStatus?: string | null;
+}) {
+  const {
+    enrollment,
+    targetLessonLocation,
+    targetProgressPct,
+    targetLessonStatus,
+    targetScoreRaw,
+    targetMatriculaStatus,
+  } = params;
+  const targetLocation = parseScormLocationPair(targetLessonLocation);
+  if (!targetLocation) {
+    throw new ApiError('target_lesson_location deve estar no formato n/total', 400);
+  }
+
+  const currentProgress = Number(enrollment.progresso_pct ?? 0);
+  const currentSlide = Number(enrollment.ultimo_slide ?? 0);
+  const currentLessonLocation = extractLessonLocationValue(enrollment.cmi_json);
+  const currentLocationMarker = extractScormLocationFromCmiJson(enrollment.cmi_json);
+  const currentEffectiveProgress = Math.max(
+    currentProgress,
+    extractProgressPctFromCmiJson(enrollment.cmi_json) ?? 0,
+  );
+  const currentStrongSlide = Math.max(currentSlide, currentLocationMarker?.current ?? 0);
+
+  const blockers: string[] = [];
+  const risks: string[] = [];
+  const normalizedMatriculaStatus = normalizeStatusToken(enrollment.status);
+  const normalizedTargetLessonStatus = normalizeStatusToken(targetLessonStatus);
+  const normalizedTargetMatriculaStatus = normalizeStatusToken(targetMatriculaStatus);
+
+  if ((enrollment.tipo_conteudo ?? '').toLowerCase() !== 'scorm') {
+    blockers.push('NON_SCORM_COURSE');
+  }
+  if (['CONCLUIDO', 'REPROVADO', 'CANCELADO'].includes(normalizedMatriculaStatus)) {
+    blockers.push('TERMINAL_STATUS');
+  }
+  if (enrollment.qualificacao_historico_id) {
+    blockers.push('QUALIFICATION_ALREADY_LINKED');
+  }
+  if (targetProgressPct >= 100) {
+    blockers.push('TARGET_PROGRESS_COMPLETION_NOT_ALLOWED');
+  }
+  if (targetProgressPct < currentEffectiveProgress) {
+    blockers.push('TARGET_PROGRESS_REGRESSION');
+  }
+  if (targetLocation.current < currentStrongSlide) {
+    blockers.push('TARGET_LOCATION_REGRESSION');
+  }
+  if (normalizedTargetLessonStatus === 'PASSED' || normalizedTargetLessonStatus === 'COMPLETED') {
+    blockers.push('TARGET_LESSON_STATUS_COMPLETION_FORBIDDEN');
+  }
+  if (targetScoreRaw !== undefined) {
+    blockers.push('TARGET_SCORE_CHANGE_FORBIDDEN');
+  }
+  if (normalizedTargetMatriculaStatus === 'CONCLUIDO') {
+    blockers.push('TARGET_MATRICULA_STATUS_COMPLETION_FORBIDDEN');
+  }
+  if (enrollment.data_conclusao) {
+    blockers.push('DATA_CONCLUSAO_ALREADY_PRESENT');
+  }
+
+  if (currentLocationMarker?.total == null && currentLocationMarker?.current) {
+    risks.push('CURRENT_RUNTIME_USES_LEGACY_NUMERIC_LOCATION');
+  }
+  if (
+    currentLocationMarker?.total != null &&
+    currentLocationMarker.total !== targetLocation.total
+  ) {
+    risks.push('TARGET_TOTAL_DIFFERS_FROM_CURRENT_RUNTIME');
+  }
+  if (!enrollment.suspend_data?.trim()) {
+    risks.push('CURRENT_RUNTIME_HAS_NO_SUSPEND_DATA');
+  }
+  if (enrollment.score_raw != null || enrollment.score_scaled != null) {
+    risks.push('CURRENT_SCORE_WILL_BE_PRESERVED');
+  }
+  if (
+    normalizeStatusToken(enrollment.lesson_status) === 'PASSED' ||
+    normalizeStatusToken(enrollment.lesson_status) === 'COMPLETED' ||
+    normalizeStatusToken(enrollment.completion_status) === 'COMPLETED' ||
+    normalizeStatusToken(enrollment.success_status) === 'PASSED'
+  ) {
+    risks.push('CURRENT_SCORM_COMPLETION_EVIDENCE_PRESENT');
+  }
+
+  const simulatedProgress = Math.max(currentEffectiveProgress, targetProgressPct);
+  const simulatedSlide = Math.max(currentStrongSlide, targetLocation.current);
+  const simulatedMatriculaStatus =
+    normalizedMatriculaStatus === 'NAO_INICIADO' && (simulatedProgress > 0 || simulatedSlide > 0)
+      ? 'EM_ANDAMENTO'
+      : enrollment.status;
+  const simulatedLessonLocation =
+    targetLocation.current < currentStrongSlide
+      ? (currentLessonLocation ?? String(currentStrongSlide))
+      : targetLessonLocation;
+
+  const currentSnapshot = buildProgressRecoverySnapshot({
+    enrollment,
+    progressPct: currentEffectiveProgress,
+    slide: currentStrongSlide,
+    lessonLocation: currentLessonLocation,
+    matriculaStatus: enrollment.status,
+    cmiJson: enrollment.cmi_json,
+    suspendData: enrollment.suspend_data,
+  });
+  const simulatedSnapshot = buildProgressRecoverySnapshot({
+    enrollment,
+    progressPct: simulatedProgress,
+    slide: simulatedSlide,
+    lessonLocation: simulatedLessonLocation,
+    matriculaStatus: simulatedMatriculaStatus,
+    cmiJson: enrollment.cmi_json,
+    suspendData: enrollment.suspend_data,
+  });
+  const dryRunReference = buildProgressRecoveryReference(currentSnapshot);
+
+  return {
+    enrollment,
+    currentEffectiveProgress,
+    currentStrongSlide,
+    currentLessonLocation,
+    blockers,
+    risks,
+    simulatedProgress,
+    simulatedSlide,
+    simulatedMatriculaStatus,
+    simulatedLessonLocation,
+    differences: buildRecoveryDryRunDifferences({
+      currentStatus: enrollment.status,
+      currentProgress: currentEffectiveProgress,
+      currentSlide: currentStrongSlide,
+      currentLessonLocation,
+      simulatedStatus: simulatedMatriculaStatus,
+      simulatedProgress,
+      simulatedSlide,
+      simulatedLessonLocation,
+    }),
+    currentSnapshot,
+    simulatedSnapshot,
+    dryRunReference,
+  } satisfies ProgressRecoveryEvaluation;
 }
 
 export function buildAppliedScormState(params: {
