@@ -13,6 +13,7 @@ import {
 } from '../../services/lms-ead-ssot';
 import { getTenantContext } from '../../middleware/tenant';
 import { ApiError } from '../../middleware/error-handler';
+import { getSchemaColumns } from '../../utils/db-schema';
 
 const router = new Hono<{ Bindings: Env }>();
 router.use('*', auth());
@@ -35,10 +36,7 @@ function isJsonObject(value: unknown): value is JsonObject {
 }
 
 async function categoryHasColumn(db: D1Database, column: string): Promise<boolean> {
-  const info = await db
-    .prepare("PRAGMA table_info('qualificacoes_categorias')")
-    .all<{ name?: string }>();
-  return (info.results || []).some((row) => row.name === column);
+  return (await getSchemaColumns(db, 'qualificacoes_categorias')).has(column);
 }
 
 // D1 impõe um teto de variáveis ligadas por consulta (SQLITE_MAX_VARIABLE_NUMBER).
