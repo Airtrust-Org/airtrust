@@ -56,7 +56,6 @@ function certificateUploadKind(value: unknown): 'qualificacao' | 'profissional' 
   return null;
 }
 
-
 function originalUploadFilename(file: File, fallback: string): string {
   const raw = String(file.name || '').trim();
   return raw.split(/[\\/]/).pop()?.trim() || fallback;
@@ -507,7 +506,9 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
           dataUpload: doc.dataUpload,
           status: 'Válido',
           origem: 'documentos',
-          proveniencia: String(doc.r2_key || '').startsWith('certificados/empresa-') ? 'gerado' : 'upload',
+          proveniencia: String(doc.r2_key || '').startsWith('certificados/empresa-')
+            ? 'gerado'
+            : 'upload',
         },
         categoria,
       });
@@ -540,7 +541,9 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
           dataUpload: doc.dataUpload || '',
           status: 'Válido',
           origem: 'pasta_virtual',
-          proveniencia: String(doc.r2_key || '').startsWith('certificados/empresa-') ? 'gerado' : 'upload',
+          proveniencia: String(doc.r2_key || '').startsWith('certificados/empresa-')
+            ? 'gerado'
+            : 'upload',
         },
         categoria,
       });
@@ -970,6 +973,11 @@ app.post('/upload', auth(), async (c) => {
     const subTipo = (formData.get('sub_tipo') as string) || null;
     const descricao = (formData.get('descricao') as string) || null;
     const dataRealizacaoStr = (formData.get('data_realizacao') as string) || null;
+    const uploadOriginalSize = String(formData.get('upload_original_size') || '').trim();
+    const uploadFinalSize = String(formData.get('upload_final_size') || '').trim();
+    const uploadOptimized = String(formData.get('upload_optimized') || '') === '1';
+    const uploadPreservedSignature =
+      String(formData.get('upload_preserved_signature') || '') === '1';
 
     if (!file) {
       return c.json({ success: false, error: 'Campo "file" é obrigatório' }, 400);
@@ -1081,6 +1089,10 @@ app.post('/upload', auth(), async (c) => {
         categoria_funcional: normalizarTipoDocumento(tipoDocumento),
         uploaded_at: new Date().toISOString(),
         file_size: fileSize.toString(),
+        original_file_size: uploadOriginalSize || fileSize.toString(),
+        optimized_file_size: uploadFinalSize || fileSize.toString(),
+        pdf_optimized: uploadOptimized ? '1' : '0',
+        preserved_digital_signature: uploadPreservedSignature ? '1' : '0',
         sha256_hash: hashHex,
       },
     });
