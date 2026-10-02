@@ -13,6 +13,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { ApiError } from '../middleware/error-handler';
+import { getSchemaColumns } from '../utils/db-schema';
 import {
   requireOperationalAccess,
   resolveOperationalAccess,
@@ -30,8 +31,7 @@ function getContextValue(c: Context<{ Bindings: Env }>, key: string): unknown {
 
 async function hasColumn(db: D1Database, table: string, column: string): Promise<boolean> {
   try {
-    const info = await db.prepare(`PRAGMA table_info(${table})`).bind().all<{ name: string }>();
-    return (info.results || []).some((row) => row?.name === column);
+    return (await getSchemaColumns(db, table)).has(column);
   } catch {
     return false;
   }

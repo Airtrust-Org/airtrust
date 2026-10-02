@@ -54,6 +54,19 @@ type QueryHandler = {
 // legacy-tenant test, so the flag query resolves to 0 (disabled) by
 // default, same as any tenant that hasn't opted into the new RBAC.
 const DEFAULT_HANDLERS: Array<[string, QueryHandler]> = [
+  [
+    "PRAGMA table_info('lms_cursos')",
+    {
+      all: () => ({
+        results: [
+          { name: 'id' },
+          { name: 'empresa_id' },
+          { name: 'formato_id' },
+          { name: 'dominio_codigo' },
+        ],
+      }),
+    },
+  ],
   ['operational_domain_rbac_enabled', { first: () => ({ operational_domain_rbac_enabled: 0 }) }],
 ];
 
