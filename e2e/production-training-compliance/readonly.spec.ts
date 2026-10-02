@@ -99,11 +99,17 @@ async function login(page: Page) {
       let loginJson: LoginPayload | null = null;
 
       for (let attempt = 1; attempt <= 5; attempt += 1) {
-        loginResponse = await fetch(`${apiBase}/api/auth/login`, {
-          method: 'POST',
-          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, senha: password }),
-        });
+        try {
+          loginResponse = await fetch(`${apiBase}/api/auth/login`, {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, senha: password }),
+          });
+        } catch (error) {
+          if (attempt === 5) throw error;
+          await wait(Math.min(1000 * 2 ** (attempt - 1), 8000));
+          continue;
+        }
         loginJson = (await loginResponse.json().catch(() => null)) as LoginPayload | null;
         if (loginResponse.status !== 429) break;
         const retryAfterSeconds = Number(loginResponse.headers.get('retry-after') || 0);
