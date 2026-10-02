@@ -19,6 +19,7 @@ export interface DocumentoPV {
   substituidoPorId?: number | null;
   origem?: 'documentos' | 'pasta_virtual' | 'ficha_sessao';
   ficha_id?: number | null;
+  proveniencia?: 'gerado' | 'upload';
 }
 
 export interface CategoriaPV {
@@ -107,6 +108,7 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
         substituidoPorId?: number | null;
         origem?: 'documentos' | 'pasta_virtual' | 'ficha_sessao';
         fichaId?: number | null;
+        proveniencia?: 'gerado' | 'upload';
       }
 
       const mapToDocumentoPV = (docs: DocumentoApi[], tipo: TipoDocumento): DocumentoPV[] =>
@@ -123,6 +125,7 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
           substituidoPorId: d.substituidoPorId ?? null,
           origem: d.origem,
           ficha_id: d.fichaId ?? null,
+          proveniencia: d.proveniencia,
         }));
 
       const categorizedDocs: Record<string, DocumentoApi[]> = categoryData.data || {};

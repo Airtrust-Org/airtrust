@@ -86,12 +86,18 @@ function formatDateYMD(date: Date): string {
 }
 
 function sanitizarNome(nome: string): string {
+  const conectores = new Set(['da', 'das', 'de', 'do', 'dos', 'e']);
   return nome
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9\s]/g, '')
-    .replace(/\s+/g, '_')
-    .toUpperCase()
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .map((parte, index) =>
+      index > 0 && conectores.has(parte) ? parte : parte.charAt(0).toUpperCase() + parte.slice(1),
+    )
+    .join('_')
     .substring(0, 30);
 }
 
@@ -116,34 +122,34 @@ export function gerarNomeArquivoPadronizado(params: NomeArquivoParams): string {
 
   switch (tipo) {
     case 'CERTIFICADO_QUALIFICACAO':
-      return `CERT-${identificador}-${sanitizarSubtipo(codigo || subTipo, 'SEM_CODIGO')}-${dataStr}-${uuidShort}.pdf`;
+      return `Cert-${identificador}-${sanitizarSubtipo(codigo || subTipo, 'SEM_CODIGO')}-${dataStr}-${uuidShort}.pdf`;
     case 'AVALIACAO_CQ':
-      return `AVAL-${subtipo}-${identificador}-${dataStr}-${uuidShort}.pdf`;
+      return `Aval-${subtipo}-${identificador}-${dataStr}-${uuidShort}.pdf`;
     case 'FTV':
-      return `FTV-${subtipo}-${identificador}-${dataStr}-${uuidShort}.pdf`;
+      return `Ftv-${subtipo}-${identificador}-${dataStr}-${uuidShort}.pdf`;
     case 'EXAME_MEDICO':
-      return `EXAME-${sanitizarSubtipo(subTipo, 'ASO')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
+      return `Exame-${sanitizarSubtipo(subTipo, 'ASO')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
     case 'DOCUMENTO_PESSOAL':
-      return `DOC-${subtipo}-${identificador}-${dataStr}-${uuidShort}.pdf`;
+      return `Doc-${subtipo}-${identificador}-${dataStr}-${uuidShort}.pdf`;
     case 'LICENCA':
-      return `LIC-${sanitizarSubtipo(subTipo, 'LIC')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
+      return `Lic-${sanitizarSubtipo(subTipo, 'LIC')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
     case 'SIMULADOR':
-      return `SIM-${sanitizarSubtipo(subTipo, 'FICHA_SESSAO')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
+      return `Sim-${sanitizarSubtipo(subTipo, 'FICHA_SESSAO')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
     case 'DESIGNACAO_OPERACIONAL':
-      return `DESIG-${sanitizarSubtipo(subTipo, 'FUNCAO')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
+      return `Desig-${sanitizarSubtipo(subTipo, 'FUNCAO')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
     case 'EXPERIENCIA_HORAS':
-      return `EXP-${sanitizarSubtipo(subTipo, 'EXPERIENCIA')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
+      return `Exp-${sanitizarSubtipo(subTipo, 'EXPERIENCIA')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
     case 'INSTRUTOR_EXAMINADOR':
-      return `INST-${sanitizarSubtipo(subTipo, 'CREDENCIAMENTO')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
+      return `Inst-${sanitizarSubtipo(subTipo, 'CREDENCIAMENTO')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
     case 'VINCULO_FUNCIONAL':
-      return `VINC-${sanitizarSubtipo(subTipo, 'REGISTRO')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
+      return `Vinc-${sanitizarSubtipo(subTipo, 'REGISTRO')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
     case 'CURRICULO_PROFISSIONAL':
-      return `CURR-${sanitizarSubtipo(subTipo, 'CURRICULO')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
+      return `Curr-${sanitizarSubtipo(subTipo, 'CURRICULO')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
     case 'TREINAMENTO':
-      return `TREIN-${sanitizarSubtipo(subTipo, 'TREIN')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
+      return `Trein-${sanitizarSubtipo(subTipo, 'TREIN')}-${identificador}-${dataStr}-${uuidShort}.pdf`;
     case 'OUTRO':
     default:
-      return `DOC-OUTROS-${identificador}-${dataStr}-${uuidShort}.pdf`;
+      return `Doc-Outros-${identificador}-${dataStr}-${uuidShort}.pdf`;
   }
 }
 
