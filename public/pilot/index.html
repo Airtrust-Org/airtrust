@@ -874,6 +874,13 @@
         </section>
 
         <section id="rdv-editor-card" class="card hidden">
+          <div id="flight-update-alert" class="lease-box hidden" aria-live="assertive">
+            <strong>Atualização da Coordenação disponível</strong>
+            <p id="flight-update-message" class="muted">Este voo foi alterado depois da preparação offline. Atualize antes de concluir o lançamento.</p>
+            <div class="actions">
+              <button id="refresh-flight-update" class="primary" type="button">Atualizar voo agora</button>
+            </div>
+          </div>
           <div class="draft-banner">
             <strong>Salvamento automático</strong>
             <div id="rdv-editor-save-status" class="statusline attention" aria-live="polite">

@@ -36,6 +36,7 @@ import {
 
 const DRAFT_ID = 'phase1-synthetic-rdv-draft';
 const SAVE_DELAY_MS = 180;
+const ACTIVE_FLIGHT_REVISION_CHECK_MS = 60_000;
 const ACTIVE_FLIGHT_SESSION_ID = 'active-flight';
 const PILOT_OFFLINE_FLIGHT_LOCK_KEY = 'airtrust_pilot_offline_flight_locked_v1';
 const TARGET_FLIGHT_ID = new URLSearchParams(window.location.search).get('flight');
@@ -96,6 +97,9 @@ const prepareEditOfflineButton = document.querySelector('#prepare-edit-offline')
 const openLocalDraftButton = document.querySelector('#open-local-draft');
 const leaseStatus = document.querySelector('#lease-status');
 const rdvEditorCard = document.querySelector('#rdv-editor-card');
+const flightUpdateAlert = document.querySelector('#flight-update-alert');
+const flightUpdateMessage = document.querySelector('#flight-update-message');
+const refreshFlightUpdateButton = document.querySelector('#refresh-flight-update');
 const rdvEditorTitle = document.querySelector('#rdv-editor-title');
 const rdvEditorSubtitle = document.querySelector('#rdv-editor-subtitle');
 const rdvEditorSaveStatus = document.querySelector('#rdv-editor-save-status');
@@ -158,6 +162,9 @@ let activeStageTabIndex = 0;
 let targetFlightAutoOpened = false;
 let offlineFlightLocked = false;
 let pilotRefreshPromise = null;
+let activeFlightRevisionTimer = null;
+let activeFlightRevisionCheckInFlight = false;
+let activeFlightUpdateAvailable = null;
 let flightDateManuallySelected = false;
 const notifiedFlightVersions = new Set();
 
@@ -172,6 +179,86 @@ function writeOfflineFlightLockMarker(locked) {
   } catch {}
 }
 
+function cachedPackageNeedsRevision(record, revision) {
+  const packageData = record?.value?.package;
+  if (!packageData || !revision) return false;
+  return (
+    Number(revision.flight_version || 0) > Number(packageData.voo?.versao || 0) ||
+    Number(revision.rdv_version || 0) > Number(packageData.rdv?.versao || 0) ||
+    (revision.package_id && String(revision.package_id) !== String(packageData.contract?.package_id || ''))
+  );
+}
+
+function clearActiveFlightUpdateAlert() {
+  activeFlightUpdateAvailable = null;
+  flightUpdateAlert?.classList.add('hidden');
+  if (refreshFlightUpdateButton) refreshFlightUpdateButton.disabled = true;
+  updateSyncButtonState();
+}
+
+function showActiveFlightUpdateAlert(revision) {
+  activeFlightUpdateAvailable = revision || {};
+  if (flightUpdateMessage) {
+    flightUpdateMessage.textContent =
+      'A Coordenação alterou este voo depois da preparação offline. Atualize para receber novas etapas, tripulação ou outros dados antes de concluir o lançamento.';
+  }
+  flightUpdateAlert?.classList.remove('hidden');
+  if (refreshFlightUpdateButton) refreshFlightUpdateButton.disabled = !navigator.onLine;
+  setSessionMessage(
+    'Atenção: existe uma atualização da Coordenação para este voo. Use “Atualizar voo agora”.',
+    'attention',
+  );
+  updateSyncButtonState();
+  void refreshCoordinationControls();
+}
+
+function stopActiveFlightRevisionWatch() {
+  if (activeFlightRevisionTimer !== null) {
+    window.clearInterval(activeFlightRevisionTimer);
+    activeFlightRevisionTimer = null;
+  }
+}
+
+function startActiveFlightRevisionWatch() {
+  stopActiveFlightRevisionWatch();
+  activeFlightRevisionTimer = window.setInterval(() => {
+    if (document.visibilityState !== 'hidden') void checkActiveFlightRevision();
+  }, ACTIVE_FLIGHT_REVISION_CHECK_MS);
+}
+
+async function checkActiveFlightRevision() {
+  if (
+    !offlineFlightLocked ||
+    !navigator.onLine ||
+    !activePackageRecord ||
+    activeFlightRevisionCheckInFlight
+  ) {
+    return false;
+  }
+
+  const flightId = Number(activePackageData()?.voo?.id || 0);
+  if (!flightId) return false;
+  activeFlightRevisionCheckInFlight = true;
+  try {
+    const body = await authenticatedGet(
+      '/controle-voos/voos/' + encodeURIComponent(String(flightId)) + '/offline-revision',
+      { allowDuringFlight: true },
+    );
+    const revision = body?.data || null;
+    if (cachedPackageNeedsRevision(activePackageRecord, revision)) {
+      showActiveFlightUpdateAlert(revision);
+      return true;
+    }
+    if (activeFlightUpdateAvailable) clearActiveFlightUpdateAlert();
+    return false;
+  } catch {
+    // O voo continua operacional offline. Falha de rede nunca bloqueia o preenchimento local.
+    return false;
+  } finally {
+    activeFlightRevisionCheckInFlight = false;
+  }
+}
+
 async function enterOfflineFlightMode(packageData) {
   const identity = assertPackageIdentity(packageData);
   await vault.putJson('active_sessions', ACTIVE_FLIGHT_SESSION_ID, {
@@ -184,9 +271,13 @@ async function enterOfflineFlightMode(packageData) {
   offlineFlightLocked = true;
   writeOfflineFlightLockMarker(true);
   setConnectivity();
+  startActiveFlightRevisionWatch();
+  void checkActiveFlightRevision();
 }
 
 async function exitOfflineFlightMode() {
+  stopActiveFlightRevisionWatch();
+  clearActiveFlightUpdateAlert();
   offlineFlightLocked = false;
   writeOfflineFlightLockMarker(false);
   if (vault?.isUnlocked()) {
@@ -358,7 +449,7 @@ function setConnectivity() {
   dot.className = 'dot';
   const text = document.createElement('span');
   text.textContent = offlineFlightLocked
-    ? (online ? 'MODO VOO OFFLINE — sinal ignorado' : 'MODO VOO OFFLINE — sem sinal')
+    ? (online ? 'MODO VOO OFFLINE — conectado para atualizações' : 'MODO VOO OFFLINE — sem sinal')
     : (online ? 'ONLINE' : 'OFFLINE — operação local ativa');
   connectivity.append(dot, text);
   refreshOnlineButton.disabled = offlineFlightLocked || !online;
@@ -1104,7 +1195,10 @@ function cachedPackageForFlight(flightId) {
 function flightPackageNeedsUpdate(voo) {
   const cached = cachedPackageForFlight(voo?.id);
   if (!cached) return false;
-  return Number(voo?.versao || 0) > Number(cached.value?.package?.voo?.versao || 0);
+  return (
+    Number(voo?.versao || 0) > Number(cached.value?.package?.voo?.versao || 0) ||
+    Number(voo?.rdv_versao || 0) > Number(cached.value?.package?.rdv?.versao || 0)
+  );
 }
 
 function updateFlightNotificationControl() {
@@ -1153,8 +1247,9 @@ async function requestFlightNotificationPermission() {
 
 async function notifyFlightUpdate(voo) {
   const version = Number(voo?.versao || 0);
-  const key = String(voo?.id) + ':' + String(version);
-  if (!version || notifiedFlightVersions.has(key)) return;
+  const rdvVersion = Number(voo?.rdv_versao || 0);
+  const key = String(voo?.id) + ':' + String(version) + ':rdv:' + String(rdvVersion);
+  if ((!version && !rdvVersion) || notifiedFlightVersions.has(key)) return;
   notifiedFlightVersions.add(key);
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   try {
@@ -1260,13 +1355,15 @@ async function restoreActiveOfflineFlight() {
   offlineFlightLocked = true;
   writeOfflineFlightLockMarker(true);
   setConnectivity();
+  startActiveFlightRevisionWatch();
   activePackageRecord = record;
   const opened = await openExistingOperationalDraft();
   if (!opened) {
     await exitOfflineFlightMode();
     return false;
   }
-  setSessionMessage('Voo offline restaurado neste tablet. A conexão automática continua bloqueada.', 'ok');
+  setSessionMessage('Voo offline restaurado neste tablet.', 'ok');
+  void checkActiveFlightRevision();
   return true;
 }
 
@@ -1759,6 +1856,7 @@ async function refreshCoordinationControls() {
     !activePackageRecord ||
     !activeRdvDraft ||
     activePackageData()?.contract?.sync_supported !== true ||
+    Boolean(activeFlightUpdateAvailable) ||
     coordinationInFlight ||
     completeSendInFlight;
   setCoordinationReceipt('');
@@ -1770,6 +1868,13 @@ async function refreshCoordinationControls() {
 
   const state = await getCoordinationState();
   const rdv = state.rdv;
+  if (activeFlightUpdateAvailable) {
+    setCoordinationMessage(
+      'A Coordenação alterou este voo. Atualize o voo antes de sincronizar, finalizar ou enviar.',
+      'error',
+    );
+    return;
+  }
   if (!rdv) {
     setCoordinationMessage(
       'O servidor ainda não recebeu o lançamento deste voo. Transmita os dados e atualize o status.',
@@ -1852,6 +1957,7 @@ function updateSyncButtonState() {
     !activeRdvDraft ||
     !activeVerifiedLease ||
     activePackageData()?.contract?.sync_supported !== true ||
+    Boolean(activeFlightUpdateAvailable) ||
     operationalSyncInFlight;
 }
 
@@ -2883,6 +2989,174 @@ async function drainPilotOutbox(options = {}) {
     operationalSyncInFlight = false;
     updateSyncButtonState();
     await refreshOutboxStatusForActiveFlight();
+  }
+}
+
+async function rebaseOperationalDraftAfterCoordinationUpdate(previousPackage, freshPackage) {
+  const previousIdentity = assertPackageIdentity(previousPackage);
+  const freshIdentity = assertPackageIdentity(freshPackage);
+  if (
+    previousIdentity.tenantId !== freshIdentity.tenantId ||
+    previousIdentity.userId !== freshIdentity.userId ||
+    previousIdentity.flightId !== freshIdentity.flightId
+  ) {
+    throw new Error('A atualização recebida não corresponde ao voo aberto neste tablet.');
+  }
+
+  const rdvId = rdvDraftRecordId(freshIdentity.flightId);
+  const existingRdv = await vault.getJson('rdv_drafts', rdvId);
+  if (!existingRdv) {
+    await openOrSeedOperationalDraft(freshPackage, activeVerifiedLease);
+    return;
+  }
+  if (existingRdv.value?.sync_state === 'accepted_requires_refresh') {
+    await openOrSeedOperationalDraft(freshPackage, activeVerifiedLease);
+    return;
+  }
+  if (String(existingRdv.value?.source_package_id || '') !== previousIdentity.packageId) {
+    throw new Error('O rascunho local já está baseado em outra versão do voo.');
+  }
+
+  const stageRecords = (await vault.listJson('stage_drafts')).filter(
+    (record) => Number(record.value?.flight_id) === freshIdentity.flightId,
+  );
+  const previousSequence = Math.max(
+    Number(existingRdv.localRevision || existingRdv.value?.local_sequence || 0),
+    ...stageRecords.map((record) => Number(record.localRevision || record.value?.local_sequence || 0)),
+  );
+  const freshSnapshot = buildDraftSnapshot(freshPackage, previousSequence);
+  const freshBySourceId = new Map(
+    freshSnapshot.stages
+      .filter((stage) => stage.source_stage_id != null)
+      .map((stage) => [Number(stage.source_stage_id), stage]),
+  );
+  const retainedSourceIds = new Set();
+  const rebasedStages = [];
+
+  for (const record of stageRecords) {
+    const stage = record.value;
+    if (String(stage?.source_package_id || '') !== previousIdentity.packageId) continue;
+    if (stage.source_stage_id == null) {
+      rebasedStages.push({
+        ...stage,
+        source_package_id: freshIdentity.packageId,
+        local_sequence: previousSequence,
+      });
+      continue;
+    }
+
+    const sourceId = Number(stage.source_stage_id);
+    const freshStage = freshBySourceId.get(sourceId);
+    if (!freshStage) {
+      throw new Error(
+        'A Coordenação removeu uma etapa que já existia no tablet. O preenchimento local foi preservado para revisão.',
+      );
+    }
+    const previousUpdatedAt = String(stage.source_stage_updated_at || '');
+    const freshUpdatedAt = String(freshStage.source_stage_updated_at || '');
+    if (previousUpdatedAt && freshUpdatedAt && previousUpdatedAt !== freshUpdatedAt) {
+      throw new Error(
+        'A Coordenação alterou uma etapa que já estava sendo preenchida. O preenchimento local foi preservado para revisão.',
+      );
+    }
+    retainedSourceIds.add(sourceId);
+    rebasedStages.push({
+      ...stage,
+      source_package_id: freshIdentity.packageId,
+      source_stage_updated_at: freshStage.source_stage_updated_at,
+      local_sequence: previousSequence,
+    });
+  }
+
+  for (const freshStage of freshSnapshot.stages) {
+    const sourceId = freshStage.source_stage_id == null ? null : Number(freshStage.source_stage_id);
+    if (sourceId != null && retainedSourceIds.has(sourceId)) continue;
+    rebasedStages.push({
+      ...freshStage,
+      local_sequence: previousSequence,
+    });
+  }
+
+  if (rebasedStages.length === 0) {
+    throw new Error('A atualização não contém etapas válidas para este voo.');
+  }
+
+  const canonicalCommon = buildCommonFlightFields(freshPackage);
+  const rebasedRdv = {
+    ...existingRdv.value,
+    source_package_id: freshIdentity.packageId,
+    source_rdv_id: freshSnapshot.rdv.source_rdv_id,
+    source_rdv_version: freshSnapshot.rdv.source_rdv_version,
+    source_flight_version: freshSnapshot.rdv.source_flight_version,
+    local_sequence: previousSequence,
+    updated_at_claimed: new Date().toISOString(),
+    common: {
+      ...(existingRdv.value?.common || {}),
+      ...(canonicalCommon.numero_voo ? { numero_voo: canonicalCommon.numero_voo } : {}),
+      peso_vazio: canonicalCommon.peso_vazio || existingRdv.value?.common?.peso_vazio || '',
+      unidade_peso: 'LB',
+    },
+  };
+
+  await vault.putJsonBatch([
+    {
+      storeName: 'rdv_drafts',
+      id: rdvId,
+      value: rebasedRdv,
+      localRevision: previousSequence,
+    },
+    ...rebasedStages.map((stage) => ({
+      storeName: 'stage_drafts',
+      id: stage.entity_local_id,
+      value: stage,
+      localRevision: previousSequence,
+    })),
+  ]);
+
+  await openOrSeedOperationalDraft(freshPackage, activeVerifiedLease);
+}
+
+async function refreshActiveFlightFromCoordination() {
+  const previousRecord = activePackageRecord;
+  const previousPackage = previousRecord?.value?.package;
+  const flightId = Number(previousPackage?.voo?.id || 0);
+  if (!flightId || !navigator.onLine || !activeFlightUpdateAvailable) return false;
+
+  if (refreshFlightUpdateButton) refreshFlightUpdateButton.disabled = true;
+  setSessionMessage('Baixando a atualização da Coordenação…', 'attention');
+  await flushOperationalSave();
+
+  const refreshed = await prepareFlightPackage(flightId, { allowDuringFlight: true });
+  if (!refreshed) {
+    if (refreshFlightUpdateButton) refreshFlightUpdateButton.disabled = !navigator.onLine;
+    showActiveFlightUpdateAlert(activeFlightUpdateAvailable);
+    return false;
+  }
+
+  try {
+    await rebaseOperationalDraftAfterCoordinationUpdate(previousPackage, refreshed.value.package);
+    clearActiveFlightUpdateAlert();
+    setSessionMessage(
+      'Atualização da Coordenação aplicada. Revise as etapas e os dados do voo antes de continuar.',
+      'ok',
+    );
+    await refreshCoordinationControls();
+    return true;
+  } catch (error) {
+    const restoreRevision = Number(refreshed.localRevision || 0) + 1;
+    await vault.putJson('flight_packages', 'flight:' + String(flightId), previousRecord.value, restoreRevision);
+    activePackageRecord = await vault.getJson('flight_packages', 'flight:' + String(flightId));
+    showActiveFlightUpdateAlert(activeFlightUpdateAvailable);
+    setSessionMessage(
+      error instanceof Error ? error.message : 'Não foi possível conciliar a atualização da Coordenação.',
+      'error',
+    );
+    renderOperationalEditor({ preserveScroll: true });
+    return false;
+  } finally {
+    if (refreshFlightUpdateButton) {
+      refreshFlightUpdateButton.disabled = !navigator.onLine || !activeFlightUpdateAvailable;
+    }
   }
 }
 
@@ -4848,7 +5122,9 @@ window.addEventListener('online', () => {
   setConnectivity();
   if (offlineFlightLocked) {
     updateSyncButtonState();
-    setSessionMessage('Modo voo offline mantido. O sinal voltou, mas nenhuma conexão automática será feita.', 'ok');
+    if (refreshFlightUpdateButton) refreshFlightUpdateButton.disabled = !activeFlightUpdateAvailable;
+    setSessionMessage('Conexão disponível. O Pilot App verificará se a Coordenação atualizou este voo.', 'ok');
+    void checkActiveFlightRevision();
     return;
   }
   if (vault?.isUnlocked()) {
@@ -4864,7 +5140,8 @@ window.addEventListener('offline', () => {
   setConnectivity();
   if (offlineFlightLocked) {
     updateSyncButtonState();
-    setSessionMessage('Modo voo offline mantido. Continue preenchendo normalmente.', 'ok');
+    if (refreshFlightUpdateButton) refreshFlightUpdateButton.disabled = true;
+    setSessionMessage('Sem conexão — o voo continua disponível e o preenchimento permanece salvo no tablet.', 'ok');
     return;
   }
   if (vault?.isUnlocked()) {
@@ -4911,6 +5188,7 @@ toggleLogbookCopyModeButton?.addEventListener('click', toggleLogbookCopyMode);
 refreshCanonicalPackageButton.addEventListener('click', () =>
   void refreshCanonicalPackageForActiveFlight(),
 );
+refreshFlightUpdateButton?.addEventListener('click', () => void refreshActiveFlightFromCoordination());
 finalizeRdvServerButton.addEventListener('click', () => void finalizeCanonicalRdv());
 sendRdvCoordinationButton.addEventListener('click', () =>
   void sendCanonicalRdvToCoordination(),
@@ -4939,6 +5217,8 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && vault?.isUnlocked()) {
     void flushDiagnosticSave();
     void flushOperationalSave();
+  } else if (document.visibilityState === 'visible' && offlineFlightLocked && navigator.onLine) {
+    void checkActiveFlightRevision();
   }
 });
 window.addEventListener('beforeunload', (event) => {
