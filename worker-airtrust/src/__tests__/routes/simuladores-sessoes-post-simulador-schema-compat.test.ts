@@ -68,7 +68,7 @@ function createDbWithoutSimuladoresEmpresaId() {
       };
 
       const all = async () => {
-        if (query === 'PRAGMA table_info(simuladores)') {
+        if (query === "PRAGMA table_info('simuladores')") {
           return {
             results: [
               { name: 'id' },

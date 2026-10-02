@@ -70,7 +70,7 @@ function createDb(schemaHasEmpresaId: boolean) {
     prepare(rawSql: string) {
       const sql = normalizeSql(rawSql);
 
-      if (sql === 'PRAGMA table_info(simuladores)') {
+      if (sql === "PRAGMA table_info('simuladores')") {
         return {
           async all() {
             return {

@@ -146,7 +146,7 @@ function createDbForLegacyCharacterization() {
             };
           }
 
-          if (query === 'PRAGMA table_info(simuladores)') {
+          if (query === "PRAGMA table_info('simuladores')") {
             // Production schema: `simuladores` has no empresa_id column.
             return {
               results: [

@@ -26,7 +26,7 @@ describe('Simuladores Schema Drift Regressions', () => {
     // Simulate D1 DB behavior where simuladores does NOT have empresa_id
     const mockDb = {
       prepare: (sql: string) => {
-        if (sql.includes('PRAGMA table_info(simuladores)')) {
+        if (sql.includes('PRAGMA table_info') && sql.includes('simuladores')) {
           return {
             all: () => Promise.resolve({
               results: [{ name: 'id' }, { name: 'nome' }] // no empresa_id

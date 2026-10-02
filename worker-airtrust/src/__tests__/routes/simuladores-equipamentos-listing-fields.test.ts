@@ -40,7 +40,7 @@ function createDbWithLinkedSimulators() {
   return {
     prepare(query: string) {
       const sql = normalizeSql(query);
-      if (sql === 'PRAGMA table_info(simuladores)') {
+      if (sql === "PRAGMA table_info('simuladores')") {
         return {
           async all() {
             return { results: [{ name: 'empresa_id' }] };
@@ -105,7 +105,7 @@ function createDbWithSoftDeletedLink() {
   return {
     prepare(query: string) {
       const sql = normalizeSql(query);
-      if (sql === 'PRAGMA table_info(simuladores)') {
+      if (sql === "PRAGMA table_info('simuladores')") {
         return {
           async all() {
             return { results: [{ name: 'empresa_id' }] };

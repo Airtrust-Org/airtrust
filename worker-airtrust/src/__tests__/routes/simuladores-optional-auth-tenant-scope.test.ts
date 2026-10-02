@@ -69,7 +69,7 @@ function createRelatoriosDb() {
     prepare(query: string) {
       const sql = normalizeSql(query);
       const allResult = async () => {
-        if (sql.includes('PRAGMA table_info(simuladores)')) {
+        if (sql.includes("PRAGMA table_info('simuladores')")) {
           return {
             results: [{ name: 'id' }, { name: 'empresa_id' }]
           };
@@ -81,7 +81,7 @@ function createRelatoriosDb() {
         bind(...args: unknown[]) {
           return {
             async all() {
-              if (sql.includes('PRAGMA table_info(simuladores)')) {
+              if (sql.includes("PRAGMA table_info('simuladores')")) {
                 return {
                   results: [{ name: 'id' }, { name: 'empresa_id' }]
                 };
@@ -134,7 +134,7 @@ function createEquipamentosDb() {
   return {
     prepare(query: string) {
       const sql = normalizeSql(query);
-      if (sql === 'PRAGMA table_info(simuladores)') {
+      if (sql === "PRAGMA table_info('simuladores')") {
         return {
           async all() {
             return { results: [{ name: 'empresa_id' }] };
