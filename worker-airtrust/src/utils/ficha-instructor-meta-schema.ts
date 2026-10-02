@@ -1,5 +1,7 @@
 /** Compatibility contract for metadata introduced by migration 0429. */
 
+import { getSchemaColumns, hasSchemaTable } from './db-schema';
+
 const META_TABLE = 'fichas_sessao_instrutor_meta';
 const METADATA_COLUMNS = [
   'equipamento_utilizado',
@@ -14,27 +16,25 @@ export type FichaInstructorMetaSchema = {
   legacyColumns: ReadonlySet<FichaInstructorMetaColumn>;
 };
 
-let cachedSchema: FichaInstructorMetaSchema | null = null;
+let cachedSchemaByDb = new WeakMap<D1Database, FichaInstructorMetaSchema>();
 
 /** Schema is immutable for a Worker instance, so one lookup is enough. */
 export async function getFichaInstructorMetaSchema(
   db: D1Database,
 ): Promise<FichaInstructorMetaSchema> {
+  const cachedSchema = cachedSchemaByDb.get(db);
   if (cachedSchema) return cachedSchema;
 
-  const [table, columns] = await Promise.all([
-    db
-      .prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
-      .bind(META_TABLE)
-      .first<{ found: number }>(),
-    db.prepare("PRAGMA table_info('fichas_sessao')").all<{ name: string }>(),
+  const [hasMetaTable, columnNames] = await Promise.all([
+    hasSchemaTable(db, META_TABLE),
+    getSchemaColumns(db, 'fichas_sessao'),
   ]);
-  const columnNames = new Set((columns.results || []).map((column) => column.name));
-  cachedSchema = {
-    hasMetaTable: Boolean(table?.found),
+  const schema: FichaInstructorMetaSchema = {
+    hasMetaTable,
     legacyColumns: new Set(METADATA_COLUMNS.filter((column) => columnNames.has(column))),
   };
-  return cachedSchema;
+  cachedSchemaByDb.set(db, schema);
+  return schema;
 }
 
 export function fichaInstructorMetaSelect(
@@ -58,5 +58,5 @@ export function fichaInstructorMetaJoin(schema: FichaInstructorMetaSchema): stri
 }
 
 export function resetFichaInstructorMetaSchemaCache(): void {
-  cachedSchema = null;
+  cachedSchemaByDb = new WeakMap<D1Database, FichaInstructorMetaSchema>();
 }
