@@ -43,6 +43,17 @@ describe('ficha instructor metadata schema compatibility', () => {
     expect(fichaInstructorMetaSelect(schema)).not.toContain('fichas_sessao_instrutor_meta');
   });
 
+  it('isolates cached schema metadata between distinct D1 bindings', async () => {
+    const dbWithMeta = createDb({ hasMetaTable: true });
+    const dbWithoutMeta = createDb({ hasMetaTable: false });
+
+    const withMeta = await getFichaInstructorMetaSchema(dbWithMeta);
+    const withoutMeta = await getFichaInstructorMetaSchema(dbWithoutMeta);
+
+    expect(withMeta.hasMetaTable).toBe(true);
+    expect(withoutMeta.hasMetaTable).toBe(false);
+  });
+
   it('uses legacy ficha columns only when introspection proves they exist', async () => {
     const schema = await getFichaInstructorMetaSchema(
       createDb({ hasMetaTable: false, legacyColumns: ['equipamento_utilizado'] }),
