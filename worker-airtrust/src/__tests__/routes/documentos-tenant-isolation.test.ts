@@ -274,7 +274,11 @@ function createMockEnv() {
         }
 
         if (query.includes('FROM documentos d') && query.includes('WHERE d.id = ?')) {
-          return findScopedDocument(Number(args[0]), Number(args[1]));
+          const doc = findScopedDocument(Number(args[0]), Number(args[1]));
+          if (!doc) return null;
+          return query.includes('f.nome AS funcionario_nome')
+            ? { ...doc, uuid: `documento-${doc.id}`, funcionario_nome: 'Tripulante Teste' }
+            : doc;
         }
 
         if (query.includes('FROM pasta_virtual pv')) {
@@ -424,6 +428,22 @@ function createMockEnv() {
       const executeRun = async (args: unknown[]) => {
         calls.push({ query, args, method: 'run' });
         runs.push({ query, args });
+        if (query.includes('SET nome_arquivo = ?') && query.includes('WHERE id = ?')) {
+          const nomeArquivo = String(args[0]);
+          const id = Number(args[1]);
+          const empresaId = Number(args[2]);
+          const currentName = String(args[3]);
+          const doc = docs.find(
+            (row) =>
+              row.id === id &&
+              row.empresa_id === empresaId &&
+              !row.deleted_at &&
+              row.nome_arquivo === currentName,
+          );
+          if (!doc) return { meta: { changes: 0, last_row_id: 0 } };
+          doc.nome_arquivo = nomeArquivo;
+          return { meta: { changes: 1, last_row_id: id } };
+        }
         return { meta: { changes: 1, last_row_id: 999 } };
       };
 
@@ -482,6 +502,57 @@ describe('documentos tenant isolation', () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('pdf-body');
     expect(bucket.get).toHaveBeenCalledWith('certificados/a.pdf');
+  });
+
+  it('renomeia documento do tenant sem mover objeto no R2', async () => {
+    const { env, bucket, runs } = createMockEnv();
+
+    const response = await request('/api/pasta-virtual/101/rename-canonical', env, 1, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tipo_documento: 'CERTIFICADO_QUALIFICACAO',
+        codigo: 'D3-CRM',
+        data_documento: '2026-03-14',
+        expected_current_name: 'CERT-TENANT-A.pdf',
+      }),
+    });
+    const body = await response.json<{ data: { nome_arquivo: string; r2_key: string } }>();
+
+    expect(response.status).toBe(200);
+    expect(body.data.nome_arquivo).toMatch(/^Cert-Tripulante_Teste-D3_CRM-20260314-/);
+    expect(body.data.r2_key).toBe('certificados/a.pdf');
+    expect(runs.some((run) => run.query.includes('SET nome_arquivo = ?'))).toBe(true);
+    expect(bucket.get).not.toHaveBeenCalled();
+    expect(bucket.put).not.toHaveBeenCalled();
+    expect(bucket.delete).not.toHaveBeenCalled();
+  });
+
+  it('bloqueia renomeacao cross-tenant e nome stale sem tocar R2', async () => {
+    const crossTenant = createMockEnv();
+    const denied = await request('/api/pasta-virtual/202/rename-canonical', crossTenant.env, 1, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo_documento: 'OUTRO', data_documento: '2026-01-01' }),
+    });
+    expect(denied.status).toBe(404);
+    expect(crossTenant.runs).toHaveLength(0);
+
+    const stale = createMockEnv();
+    const conflict = await request('/api/pasta-virtual/101/rename-canonical', stale.env, 1, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tipo_documento: 'OUTRO',
+        data_documento: '2026-01-01',
+        expected_current_name: 'nome-antigo-incorreto.pdf',
+      }),
+    });
+    expect(conflict.status).toBe(409);
+    expect(stale.runs).toHaveLength(0);
+    expect(stale.bucket.get).not.toHaveBeenCalled();
+    expect(stale.bucket.put).not.toHaveBeenCalled();
+    expect(stale.bucket.delete).not.toHaveBeenCalled();
   });
 
   it('bloqueia download cross-tenant antes de ler R2', async () => {
