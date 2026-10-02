@@ -118,15 +118,27 @@ async function login(page: Page) {
 
 test('production intelligent training compliance UI and APIs are coherent and read-only', async ({ page }) => {
   const guard = installProductionReadOnlyGuard(page);
-  const capabilitiesP = waitApi(page, '/api/compliance-treinamentos/capabilities');
-  const catalogsP = waitApi(page, '/api/compliance-treinamentos/catalogos');
-  const summaryP = waitApi(page, '/api/compliance-treinamentos/resumo');
-  const pendingsP = waitApi(page, '/api/compliance-treinamentos/pendencias');
   await login(page);
   await assertProductionFrontendShaFromPage(
     page,
     EXPECTED_SHA.slice(0, 7),
     'production-compliance',
+  );
+
+  // Start the API observers only after authentication/profile selection and force a
+  // fresh authenticated mount. This avoids masking navigation/profile-selection
+  // issues as API timeouts while still proving the real Compliance UI issues the
+  // canonical read-only requests.
+  const capabilitiesP = waitApi(page, '/api/compliance-treinamentos/capabilities');
+  const catalogsP = waitApi(page, '/api/compliance-treinamentos/catalogos');
+  const summaryP = waitApi(page, '/api/compliance-treinamentos/resumo');
+  const pendingsP = waitApi(page, '/api/compliance-treinamentos/pendencias');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForURL((url) => url.pathname === '/treinamentos/compliance', { timeout: 45_000 });
+  await assertProductionFrontendShaFromPage(
+    page,
+    EXPECTED_SHA.slice(0, 7),
+    'production-compliance-reload',
   );
 
   const [capabilities, catalogs, summary, pendings] = await Promise.all([
