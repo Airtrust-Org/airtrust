@@ -14,6 +14,7 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
+import { getSchemaColumns } from '../utils/db-schema';
 import {
   assertFuncionarioInScope,
   getEmployeeSectorAccess,
@@ -25,7 +26,6 @@ const app = new Hono<{ Bindings: Env }>();
 // Auth específico por rota (rotas montadas em /api não podem ter use('*') global)
 app.use('/funcionarios/:id/ficha-360', auth());
 
-const tableColumnsCache = new Map<string, Set<string>>();
 const NOTA_MINIMA_TREINAMENTO_VOO = 8;
 
 interface TreinamentoVooPontoAtencaoItem {
@@ -72,13 +72,11 @@ function createEmptyTreinamentoVooPontosAtencao(): TreinamentoVooPontosAtencaoPa
   };
 }
 
-export async function getTableColumns(db: D1Database, tableName: string): Promise<Set<string>> {
-  const cached = tableColumnsCache.get(tableName);
-  if (cached) return cached;
-  const pragma = await db.prepare(`PRAGMA table_info('${tableName}')`).all<{ name: string }>();
-  const cols = new Set((pragma.results || []).map((r) => r.name));
-  tableColumnsCache.set(tableName, cols);
-  return cols;
+export async function getTableColumns(
+  db: D1Database,
+  tableName: string,
+): Promise<ReadonlySet<string>> {
+  return getSchemaColumns(db, tableName);
 }
 
 function normalizeFuncionarioRecord(funcionario: Record<string, unknown>) {
