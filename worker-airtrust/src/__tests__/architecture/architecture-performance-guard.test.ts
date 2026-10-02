@@ -39,7 +39,7 @@ const LARGE_FILE_LINE_CAPS = {
   // through planned-training create/update/list, so Initial/Periodic/Semiannual
   // workload and qualification-history provenance are explicit instead of inferred.
   // Program selection and curriculum resolution remain extracted in services/training-programs.ts.
-  'routes/treinamentos-planejados.ts': 3945,
+  'routes/treinamentos-planejados.ts': 3746,
   // Cap raised 2026-07-30: counted 3507 (hotfix/lms-compliance-final — all four
   // completion call sites (scorm/commit, xapi/statements, POST /:id/finalizar,
   // PATCH /:id/status) now delegate the entire completion write (Histórico,
