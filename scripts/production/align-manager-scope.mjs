@@ -8,6 +8,8 @@ import {
   login,
   selectEmpresa,
 } from '../smoke-auth-common.mjs';
+import { createHash } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
 
 const DEFAULT_BASE_URL = 'https://api.airtrust.online';
 const baseUrl = assertAllowedProductionBaseUrl(process.env.PROD_API_BASE_URL || DEFAULT_BASE_URL);
@@ -16,11 +18,15 @@ const email = String(process.env.PROD_EMAIL || '')
   .toLowerCase();
 const password = String(process.env.PROD_PASSWORD || '');
 const referenceQuery = String(process.env.REFERENCE_NAME || 'Yngrid').trim();
-const targetQueries = String(process.env.TARGET_NAMES || 'Giancarlo,Emyle,Layla,Mirela dos Santos Silva')
+const targetQueries = String(process.env.TARGET_NAMES || '')
   .split(',')
   .map((value) => value.trim())
   .filter(Boolean);
 const apply = String(process.env.APPLY || '').toLowerCase() === 'true';
+const expectedCandidateHash = String(
+  process.env.ALIGN_MANAGER_EXPECTED_CANDIDATE_HASH || '',
+).trim();
+const resultFile = String(process.env.ALIGN_MANAGER_RESULT_FILE || '').trim();
 
 function normalize(value) {
   return String(value || '')
@@ -169,7 +175,10 @@ async function resolveCommonTenant(loginToken, loginClaims) {
     );
     console.log(
       `TENANT_SCAN=${tenantId} users=${scopedUsers.length} reference=${activeNameMatches(scopedUsers, referenceQuery).length}/${referenceMatches.length} targets=${targetQueries
-        .map((query, index) => `${query}:${activeNameMatches(scopedUsers, query).length}/${targetMatches[index].length}`)
+        .map(
+          (query, index) =>
+            `${query}:${activeNameMatches(scopedUsers, query).length}/${targetMatches[index].length}`,
+        )
         .join(',')}`,
     );
 
@@ -194,11 +203,36 @@ async function resolveCommonTenant(loginToken, loginClaims) {
 }
 
 function isManagerRole(value) {
-  return ['GESTOR', 'MANAGER'].includes(String(value || '').trim().toUpperCase());
+  return ['GESTOR', 'MANAGER'].includes(
+    String(value || '')
+      .trim()
+      .toUpperCase(),
+  );
 }
 
 function isAdminRole(value) {
-  return ['ADMIN', 'ADMINISTRADOR'].includes(String(value || '').trim().toUpperCase());
+  return ['ADMIN', 'ADMINISTRADOR'].includes(
+    String(value || '')
+      .trim()
+      .toUpperCase(),
+  );
+}
+
+function candidateHash({ tenantId, referenceId, targetIds, sectorIds }) {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        tenant_id: tenantId,
+        reference_user_id: referenceId,
+        target_user_ids: [...targetIds].sort((a, b) => a - b),
+        sector_ids: [...sectorIds].sort((a, b) => a - b),
+      }),
+    )
+    .digest('hex');
+}
+
+function publishResult(result) {
+  if (resultFile) writeFileSync(resultFile, `${JSON.stringify(result, null, 2)}\n`);
 }
 
 async function getTenantAccess(token, usuarioId, tenantId) {
@@ -215,7 +249,9 @@ async function getTenantAccess(token, usuarioId, tenantId) {
 async function promoteToManagerIfNeeded({ token, usuarioId, tenantId, apply }) {
   const { acessos, tenantAccess } = await getTenantAccess(token, usuarioId, tenantId);
   const explicitProfiles = Array.isArray(tenantAccess?.perfis) ? tenantAccess.perfis : [];
-  const currentRole = String(tenantAccess?.role || '').trim().toUpperCase();
+  const currentRole = String(tenantAccess?.role || '')
+    .trim()
+    .toUpperCase();
   const alreadyManager = isManagerRole(currentRole) || explicitProfiles.some(isManagerRole);
 
   if (alreadyManager) return false;
@@ -252,7 +288,8 @@ async function promoteToManagerIfNeeded({ token, usuarioId, tenantId, apply }) {
   const refreshed = await getTenantAccess(token, usuarioId, tenantId);
   assert(
     isManagerRole(refreshed.tenantAccess?.role) ||
-      (Array.isArray(refreshed.tenantAccess?.perfis) && refreshed.tenantAccess.perfis.some(isManagerRole)),
+      (Array.isArray(refreshed.tenantAccess?.perfis) &&
+        refreshed.tenantAccess.perfis.some(isManagerRole)),
     `Usuário ${usuarioId} não ficou com perfil GESTOR`,
   );
   return true;
@@ -260,7 +297,7 @@ async function promoteToManagerIfNeeded({ token, usuarioId, tenantId, apply }) {
 
 async function main() {
   assert(email && password, 'Credenciais de produção ausentes');
-  assert(targetQueries.length === 4, 'TARGET_NAMES deve conter exatamente 4 usuários');
+  assert(targetQueries.length > 0, 'TARGET_NAMES deve conter ao menos um usuário');
 
   const loginPayload = await login(baseUrl, email, password);
   const loginToken = extractAccessToken(loginPayload);
@@ -280,24 +317,30 @@ async function main() {
   const reference = resolveUnique(scopedUsers, referenceQuery, 'referência');
   const targets = targetQueries.map((query) => resolveUnique(scopedUsers, query, 'alvo'));
 
-  assert(
-    ['GESTOR', 'MANAGER', 'ADMIN', 'ADMINISTRADOR'].includes(
-      String(reference.perfil || '').toUpperCase(),
-    ),
-    'Ingrid não possui perfil compatível com a referência de escopo',
-  );
+  assert(isManagerRole(reference.perfil), 'A referência não possui perfil GESTOR compatível');
   assert(Array.isArray(links), 'Lista de vínculos setor-gestor inválida');
   const byUser = (userId, source = links) =>
     source.filter((link) => Number(link.usuario_id) === Number(userId) && link.ativo !== false);
   const referenceLinks = byUser(reference.id);
   assert(referenceLinks.length > 0, 'Ingrid não possui setores ativos para espelhar');
   const desired = new Set(referenceLinks.map((link) => Number(link.setor_id)));
+  const reviewedHash = candidateHash({
+    tenantId,
+    referenceId: reference.id,
+    targetIds: targets.map((target) => target.id),
+    sectorIds: desired,
+  });
+  assert(
+    !expectedCandidateHash || expectedCandidateHash === reviewedHash,
+    'O conjunto de candidatos não corresponde ao dry-run revisado',
+  );
 
   console.log(`MODE=${apply ? 'APPLY' : 'DRY_RUN'}`);
   console.log(`TENANT_ID=${tenantId}`);
   console.log(
-    `REFERENCE=${reference.nome} setores=${[...desired].sort((a, b) => a - b).join(',')}`,
+    `REFERENCE_USER_ID=${reference.id} sectors=${[...desired].sort((a, b) => a - b).join(',')}`,
   );
+  console.log(`CANDIDATE_HASH=${reviewedHash}`);
 
   for (const target of targets) {
     await promoteToManagerIfNeeded({
@@ -312,7 +355,7 @@ async function main() {
     const missing = [...desired].filter((id) => !current.has(id));
     const extra = [...current].filter((id) => !desired.has(id));
     console.log(
-      `TARGET=${target.nome} missing=${missing.join(',') || '-'} extra=${extra.join(',') || '-'}`,
+      `TARGET_USER_ID=${target.id} missing=${missing.join(',') || '-'} extra=${extra.join(',') || '-'}`,
     );
 
     if (!apply) continue;
@@ -355,10 +398,23 @@ async function main() {
         `${target.nome} não ficou com o mesmo escopo setorial da Ingrid`,
       );
       console.log(
-        `VERIFIED=${target.nome} setores=${[...finalSet].sort((a, b) => a - b).join(',')}`,
+        `VERIFIED_USER_ID=${target.id} setores=${[...finalSet].sort((a, b) => a - b).join(',')}`,
       );
     }
   }
+
+  publishResult({
+    mode: apply ? 'apply' : 'dry-run',
+    source_sha: process.env.GITHUB_SHA || null,
+    empresa_id: tenantId,
+    candidate_count: targets.length,
+    candidate_hash: reviewedHash,
+    reference_profile_verified: true,
+    reference_sector_count: desired.size,
+    mutation_executed: apply,
+    postconditions_verified: apply,
+    pii_emitted: false,
+  });
 }
 
 main().catch((error) => {
