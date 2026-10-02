@@ -1,4 +1,5 @@
 import { ApiError } from '../middleware/error-handler';
+import { getSchemaColumns } from '../utils/db-schema';
 
 export type QualificationCategoryContract = {
   id: number;
@@ -17,10 +18,7 @@ type CategoryColumnSupport = {
 };
 
 async function categoryColumnSupport(db: D1Database): Promise<CategoryColumnSupport> {
-  const result = await db
-    .prepare("PRAGMA table_info('qualificacoes_categorias')")
-    .all<{ name?: string }>();
-  const names = new Set((result.results || []).map((row) => String(row.name || '')));
+  const names = await getSchemaColumns(db, 'qualificacoes_categorias');
   return {
     dominioCodigo: names.has('dominio_codigo'),
     lmsIntegrada: names.has('lms_integrada'),
