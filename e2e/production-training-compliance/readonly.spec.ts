@@ -177,34 +177,26 @@ async function login(page: Page) {
     `production auth bootstrap failed at ${authResult.stage} (HTTP ${authResult.status}${authResult.code ? `, ${authResult.code}` : ''})`,
   ).toBe(true);
 
-  await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
-  await page.waitForURL((url) => url.pathname === '/treinamentos/compliance', { timeout: 45_000 });
-  await expect(page).toHaveURL(/\/treinamentos\/compliance$/);
 }
 
 test('production intelligent training compliance UI and APIs are coherent and read-only', async ({ page }) => {
   const guard = installProductionReadOnlyGuard(page);
   await login(page);
-  await assertProductionFrontendShaFromPage(
-    page,
-    EXPECTED_SHA.slice(0, 7),
-    'production-compliance',
-  );
 
-  // Start the API observers only after the authenticated bootstrap and force a
-  // fresh authenticated mount. This avoids masking session/bootstrap problems
-  // as API timeouts while still proving the real Compliance UI issues the
-  // canonical read-only requests.
+  // Observe the first authenticated Compliance mount. A second reload can race
+  // with the app's auth/session navigation and abort the document before these
+  // canonical read-only requests settle.
   const capabilitiesP = waitApi(page, '/api/compliance-treinamentos/capabilities');
   const catalogsP = waitApi(page, '/api/compliance-treinamentos/catalogos');
   const summaryP = waitApi(page, '/api/compliance-treinamentos/resumo');
   const pendingsP = waitApi(page, '/api/compliance-treinamentos/pendencias');
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
   await page.waitForURL((url) => url.pathname === '/treinamentos/compliance', { timeout: 45_000 });
+  await expect(page).toHaveURL(/\/treinamentos\/compliance$/);
   await assertProductionFrontendShaFromPage(
     page,
     EXPECTED_SHA.slice(0, 7),
-    'production-compliance-reload',
+    'production-compliance',
   );
 
   const [capabilities, catalogs, summary, pendings] = await Promise.all([
