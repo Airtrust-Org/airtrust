@@ -144,7 +144,7 @@ function createMockDb(options: {
         },
         all: async () => {
           calls.push({ query, args, method: 'all' });
-          if (query.includes('PRAGMA table_info(qualificacoes_historico)')) {
+          if (query.includes("PRAGMA table_info('qualificacoes_historico')")) {
             return { results: hasRenovacaoDe ? [{ name: 'renovacao_de' }] : [] };
           }
           if (query.includes('LIMIT ? OFFSET ?')) {
@@ -452,7 +452,7 @@ describe('qualificacoes historico renovadas contract', () => {
     expect(second.status).toBe(200);
 
     const pragmaCalls = calls.filter((call) =>
-      call.query.includes('PRAGMA table_info(qualificacoes_historico)'),
+      call.query.includes("PRAGMA table_info('qualificacoes_historico')"),
     );
     expect(pragmaCalls.length).toBeLessThanOrEqual(1);
   });
