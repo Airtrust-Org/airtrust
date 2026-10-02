@@ -57,6 +57,11 @@ function certificateUploadKind(value: unknown): 'qualificacao' | 'profissional' 
 }
 
 
+function originalUploadFilename(file: File, fallback: string): string {
+  const raw = String(file.name || '').trim();
+  return raw.split(/[\\/]/).pop()?.trim() || fallback;
+}
+
 interface Documento {
   id: number;
   uuid: string;
@@ -1069,7 +1074,7 @@ app.post('/upload', auth(), async (c) => {
       },
       customMetadata: {
         funcionario_id: funcionarioIdStr,
-        original_name: nomeArquivoPersistido,
+        original_name: originalUploadFilename(file, nomeArquivoPersistido),
         nome_padronizado: nomeArquivoPersistido,
         tipo_documento: tipoDocumento,
         sub_tipo: subTipo || '',

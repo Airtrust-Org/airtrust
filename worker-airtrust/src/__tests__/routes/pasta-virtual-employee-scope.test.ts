@@ -207,7 +207,7 @@ describe('pasta virtual employee scope', () => {
     expect(lookup?.bindings).toEqual([999, 6, 10]);
   });
 
-  it('preserva o nome original no upload de certificado e mantém a chave R2 interna única', async () => {
+  it('persiste o nome canônico legível no upload de certificado e mantém a chave R2 interna única', async () => {
     const { db, calls } = createDb();
     const pdfContent = new Uint8Array([
       ...[0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34], // %PDF-1.4
@@ -237,7 +237,10 @@ describe('pasta virtual employee scope', () => {
     const insert = calls.find(
       (call) => call.method === 'run' && call.query.includes('INSERT INTO documentos'),
     );
-    expect(insert?.bindings[2]).toBe(originalName);
+    expect(String(insert?.bindings[2] || '')).toMatch(
+      /^Cert-Instrutor_Qa-SEM_CODIGO-\d{8}-[0-9a-f]{8}\.pdf$/i,
+    );
+    expect(insert?.bindings[2]).not.toBe(originalName);
     expect(String(insert?.bindings[5] || '')).toContain(
       '/certificados-upload/qualificacao/',
     );
