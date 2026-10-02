@@ -1,4 +1,5 @@
 import { ApiError } from '../../middleware/error-handler';
+import { getSchemaColumns } from '../../utils/db-schema';
 
 export type EligibleFlightCrewMember = {
   id: number;
@@ -63,10 +64,8 @@ export async function listEligibleFlightCrew(
     );
   }
 
-  const funcionarioColumns = await db
-    .prepare('PRAGMA table_info(funcionarios)')
-    .all<{ name: string }>();
-  const hasNomeGuerra = (funcionarioColumns.results || []).some((column) => column.name === 'guerra');
+  const funcionarioColumns = await getSchemaColumns(db, 'funcionarios');
+  const hasNomeGuerra = funcionarioColumns.has('guerra');
   const nomeGuerraSql = hasNomeGuerra
     ? `COALESCE(NULLIF(TRIM(f.guerra), ''), f.nome)`
     : 'f.nome';
