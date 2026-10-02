@@ -38,7 +38,7 @@ Apply the 2026-10-02 reviewed Costa do Sol Training Compliance decisions without
 - Current designation assignments are not created or inferred.
 - Existing evidence remains valid and auditable.
 - Unrelated Maintenance/Other models are not reclassified as Petrobras/IOGP.
-- Target active rules are stable on re-run; inserts are guarded by the active unique keys and INSERT OR IGNORE.
+- The effective active rule set is stable on re-run; inserts are guarded by the active unique keys and INSERT OR IGNORE.
 
 ## Rollback / compensation
 Forward-only. If a reviewed decision must be changed, create a new Schema V2 compensating change. Do not restore an old database snapshot over newer unrelated data.

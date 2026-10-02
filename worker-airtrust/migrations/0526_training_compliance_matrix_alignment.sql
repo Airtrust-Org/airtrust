@@ -90,15 +90,15 @@ UPDATE qualificacoes_tipos
      OR (
        UPPER(COALESCE(categoria,'')) IN ('MANUTENCAO','MANUTENÇÃO','OUTROS')
        AND UPPER(TRIM(nome)) IN (
-         'PROCEDIMENTO INTEGRACAO','PROCEDIMENTO INTEGRAÇÃO',
-         'INTEGRACAO / DOUTRINACAO DE MANUTENCAO','INTEGRAÇÃO / DOUTRINAÇÃO DE MANUTENÇÃO',
-         'MOM','MCQ','MGM','IRM','INSPECAO & IIO & APRS','INSPEÇÃO & IIO & APRS',
-         'AS350 B2','S76 A/C','AW139','ARRIEL 2','ARRIEL 2 MODULACAO/DESMODULACAO',
-         'ARRIEL 2 MODULAÇÃO/DESMODULAÇÃO','ARRIEL 1','PW PT6C-67C','PT6C-67C',
-         'HUMS','HUMS-VXP','FATORES HUMANOS','SGSO','SGSO PARA MANUTENCAO',
-         'SGSO PARA MANUTENÇÃO','CRM','ARTIGOS PERIGOSOS','MEL',
-         'PROFICIENCIA LINGUA INGLESA','PROFICIÊNCIA LÍNGUA INGLESA',
-         'PROFICIENCIA EM LINGUA INGLESA','PROFICIÊNCIA EM LÍNGUA INGLESA'
+         UPPER('PROCEDIMENTO INTEGRACAO'),UPPER('PROCEDIMENTO INTEGRAÇÃO'),
+         UPPER('INTEGRACAO / DOUTRINACAO DE MANUTENCAO'),UPPER('INTEGRAÇÃO / DOUTRINAÇÃO DE MANUTENÇÃO'),
+         UPPER('MOM'),UPPER('MCQ'),UPPER('MGM'),UPPER('IRM'),UPPER('INSPECAO & IIO & APRS'),UPPER('INSPEÇÃO & IIO & APRS'),
+         UPPER('AS350 B2'),UPPER('S76 A/C'),UPPER('AW139'),UPPER('ARRIEL 2'),UPPER('ARRIEL 2 MODULACAO/DESMODULACAO'),
+         UPPER('ARRIEL 2 MODULAÇÃO/DESMODULAÇÃO'),UPPER('ARRIEL 1'),UPPER('PW PT6C-67C'),UPPER('PT6C-67C'),
+         UPPER('HUMS'),UPPER('HUMS-VXP'),UPPER('FATORES HUMANOS'),UPPER('SGSO'),UPPER('SGSO PARA MANUTENCAO'),
+         UPPER('SGSO PARA MANUTENÇÃO'),UPPER('CRM'),UPPER('ARTIGOS PERIGOSOS'),UPPER('MEL'),
+         UPPER('PROFICIENCIA LINGUA INGLESA'),UPPER('PROFICIÊNCIA LÍNGUA INGLESA'),
+         UPPER('PROFICIENCIA EM LINGUA INGLESA'),UPPER('PROFICIÊNCIA EM LÍNGUA INGLESA')
        )
      )
    );
@@ -120,15 +120,15 @@ UPDATE treinamento_requisitos
           OR (
             UPPER(COALESCE(categoria,'')) IN ('MANUTENCAO','MANUTENÇÃO','OUTROS')
             AND UPPER(TRIM(nome)) IN (
-              'PROCEDIMENTO INTEGRACAO','PROCEDIMENTO INTEGRAÇÃO',
-              'INTEGRACAO / DOUTRINACAO DE MANUTENCAO','INTEGRAÇÃO / DOUTRINAÇÃO DE MANUTENÇÃO',
-              'MOM','MCQ','MGM','IRM','INSPECAO & IIO & APRS','INSPEÇÃO & IIO & APRS',
-              'AS350 B2','S76 A/C','AW139','ARRIEL 2','ARRIEL 2 MODULACAO/DESMODULACAO',
-              'ARRIEL 2 MODULAÇÃO/DESMODULAÇÃO','ARRIEL 1','PW PT6C-67C','PT6C-67C',
-              'HUMS','HUMS-VXP','FATORES HUMANOS','SGSO','SGSO PARA MANUTENCAO',
-              'SGSO PARA MANUTENÇÃO','CRM','ARTIGOS PERIGOSOS','MEL',
-              'PROFICIENCIA LINGUA INGLESA','PROFICIÊNCIA LÍNGUA INGLESA',
-              'PROFICIENCIA EM LINGUA INGLESA','PROFICIÊNCIA EM LÍNGUA INGLESA'
+              UPPER('PROCEDIMENTO INTEGRACAO'),UPPER('PROCEDIMENTO INTEGRAÇÃO'),
+              UPPER('INTEGRACAO / DOUTRINACAO DE MANUTENCAO'),UPPER('INTEGRAÇÃO / DOUTRINAÇÃO DE MANUTENÇÃO'),
+              UPPER('MOM'),UPPER('MCQ'),UPPER('MGM'),UPPER('IRM'),UPPER('INSPECAO & IIO & APRS'),UPPER('INSPEÇÃO & IIO & APRS'),
+              UPPER('AS350 B2'),UPPER('S76 A/C'),UPPER('AW139'),UPPER('ARRIEL 2'),UPPER('ARRIEL 2 MODULACAO/DESMODULACAO'),
+              UPPER('ARRIEL 2 MODULAÇÃO/DESMODULAÇÃO'),UPPER('ARRIEL 1'),UPPER('PW PT6C-67C'),UPPER('PT6C-67C'),
+              UPPER('HUMS'),UPPER('HUMS-VXP'),UPPER('FATORES HUMANOS'),UPPER('SGSO'),UPPER('SGSO PARA MANUTENCAO'),
+              UPPER('SGSO PARA MANUTENÇÃO'),UPPER('CRM'),UPPER('ARTIGOS PERIGOSOS'),UPPER('MEL'),
+              UPPER('PROFICIENCIA LINGUA INGLESA'),UPPER('PROFICIÊNCIA LÍNGUA INGLESA'),
+              UPPER('PROFICIENCIA EM LINGUA INGLESA'),UPPER('PROFICIÊNCIA EM LÍNGUA INGLESA')
             )
           )
         )
@@ -158,13 +158,13 @@ UPDATE treinamento_requisitos
    AND NOT (
      escopo='FUNCAO' AND (
        (qualificacao_tipo_id=(SELECT id FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)='NR-11' AND deleted_at IS NULL LIMIT 1)
-         AND funcao_id IN (SELECT id FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND UPPER(TRIM(nome)) IN ('MECÂNICO','MECANICO','AUX MANUTENÇÃO','AUX MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO')))
+         AND funcao_id IN (SELECT id FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome) IN ('Mecânico','Mecanico','MECÂNICO','MECANICO','Aux Manutenção','Aux Manutencao','AUX MANUTENÇÃO','AUX MANUTENCAO','Auxiliar de Manutenção','Auxiliar de Manutencao','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO')))
        OR
        (qualificacao_tipo_id=(SELECT id FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)='NR-20' AND deleted_at IS NULL LIMIT 1)
-         AND funcao_id IN (SELECT id FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND UPPER(TRIM(nome)) IN ('MECÂNICO','MECANICO','AUX MANUTENÇÃO','AUX MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO','AUX SUPRIMENTOS','AUXILIAR DE SUPRIMENTOS','SUPERVISOR SUPRIMENTOS','SUPERVISOR DE SUPRIMENTOS')))
+         AND funcao_id IN (SELECT id FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome) IN ('Mecânico','Mecanico','MECÂNICO','MECANICO','Aux Manutenção','Aux Manutencao','AUX MANUTENÇÃO','AUX MANUTENCAO','Auxiliar de Manutenção','Auxiliar de Manutencao','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO','Aux Suprimentos','Auxiliar de Suprimentos','Supervisor Suprimentos','Supervisor de Suprimentos')))
        OR
        (qualificacao_tipo_id=(SELECT id FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)='NR-35' AND deleted_at IS NULL LIMIT 1)
-         AND funcao_id IN (SELECT id FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND UPPER(TRIM(nome)) IN ('MECÂNICO','MECANICO','AUX MANUTENÇÃO','AUX MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO')))
+         AND funcao_id IN (SELECT id FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome) IN ('Mecânico','Mecanico','MECÂNICO','MECANICO','Aux Manutenção','Aux Manutencao','AUX MANUTENÇÃO','AUX MANUTENCAO','Auxiliar de Manutenção','Auxiliar de Manutencao','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO')))
      )
    );
 
@@ -180,7 +180,7 @@ SELECT 6,qt.id,'FUNCAO',f.id,'OBRIGATORIA',1,'REGULATORIO',
        'REGULATORIO_DIRETO','NR-11; FORM-SGI-037 Rev.03','MODELO',0,1,datetime('now'),datetime('now')
   FROM qualificacoes_tipos qt
   JOIN funcoes f ON f.empresa_id=6 AND f.ativo=1 AND f.deleted_at IS NULL
-   AND UPPER(TRIM(f.nome)) IN ('MECÂNICO','MECANICO','AUX MANUTENÇÃO','AUX MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO')
+   AND TRIM(f.nome) IN ('Mecânico','Mecanico','MECÂNICO','MECANICO','Aux Manutenção','Aux Manutencao','AUX MANUTENÇÃO','AUX MANUTENCAO','Auxiliar de Manutenção','Auxiliar de Manutencao','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO')
  WHERE qt.empresa_id=6 AND UPPER(qt.codigo)='NR-11' AND qt.ativo=1 AND qt.deleted_at IS NULL;
 
 -- NR-20: conservative Intermediate trail for maintenance/inspection in the helicopter hangar.
@@ -198,9 +198,11 @@ SELECT 6,qt.id,'FUNCAO',f.id,'OBRIGATORIA',1,'REGULATORIO',
        datetime('now'),datetime('now')
   FROM qualificacoes_tipos qt
   JOIN funcoes f ON f.empresa_id=6 AND f.ativo=1 AND f.deleted_at IS NULL
-   AND UPPER(TRIM(f.nome)) IN (
-     'MECÂNICO','MECANICO','AUX MANUTENÇÃO','AUX MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO',
-     'AUX SUPRIMENTOS','AUXILIAR DE SUPRIMENTOS','SUPERVISOR SUPRIMENTOS','SUPERVISOR DE SUPRIMENTOS'
+   AND TRIM(f.nome) IN (
+     'Mecânico','Mecanico','MECÂNICO','MECANICO',
+     'Aux Manutenção','Aux Manutencao','AUX MANUTENÇÃO','AUX MANUTENCAO',
+     'Auxiliar de Manutenção','Auxiliar de Manutencao','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO',
+     'Aux Suprimentos','Auxiliar de Suprimentos','Supervisor Suprimentos','Supervisor de Suprimentos'
    )
  WHERE qt.empresa_id=6 AND UPPER(qt.codigo)='NR-20' AND qt.ativo=1 AND qt.deleted_at IS NULL;
 
@@ -218,21 +220,21 @@ SELECT 6,qt.id,'FUNCAO',f.id,'OBRIGATORIA',0,'EMPRESA',
        'MODELO',0,1,datetime('now'),datetime('now')
   FROM qualificacoes_tipos qt
   JOIN funcoes f ON f.empresa_id=6 AND f.ativo=1 AND f.deleted_at IS NULL
-   AND UPPER(TRIM(f.nome)) IN (
-     'AGENTE ATENDIMENTO','AGENTE DE ATENDIMENTO','AGENTE RAMPA','AGENTE DE RAMPA',
-     'ANALISTA CTM','ANALISTA DE CTM','ASSISTENTE OPERAÇÕES','ASSISTENTE DE OPERAÇÕES',
-     'ASSISTENTE SEGURANÇA OPERACIONAL','ASSISTENTE DE SEGURANÇA OPERACIONAL',
-     'AUX CTM','AUXILIAR DE CTM','AUX COORDENAÇÃO VOO','AUXILIAR DE COORDENAÇÃO DE VOO',
-     'AUX MANUTENÇÃO','AUX MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO',
-     'AUX QSMS','AUXILIAR DE QSMS','AUX SUPRIMENTOS','AUXILIAR DE SUPRIMENTOS',
-     'COMANDANTE','COPILOTO','COORDENADOR BASE','COORDENADOR DE BASE','COORDENADOR ENGENHARIA','COORDENADOR DE ENGENHARIA',
-     'COORDENADOR VOO','COORDENADOR DE VOO','GERENTE BASES','GERENTE DE BASES',
-     'GERENTE MANUTENÇÃO','GERENTE MANUTENCAO','GERENTE DE MANUTENÇÃO','GERENTE DE MANUTENCAO',
-     'GERENTE OPERAÇÕES','GERENTE OPERACOES','GERENTE DE OPERAÇÕES','GERENTE DE OPERACOES',
-     'GERENTE QSMS','GERENTE DE QSMS','GERENTE SEGURANÇA OPERACIONAL','GERENTE SEGURANCA OPERACIONAL',
-     'GERENTE DE SEGURANÇA OPERACIONAL','GERENTE DE SEGURANCA OPERACIONAL',
-     'MECÂNICO','MECANICO','MOTORISTA','SUPERVISOR ENGENHARIA','SUPERVISOR DE ENGENHARIA',
-     'SUPERVISOR SUPRIMENTOS','SUPERVISOR DE SUPRIMENTOS','TST','TÉCNICO DE SEGURANÇA DO TRABALHO','TECNICO DE SEGURANCA DO TRABALHO'
+   AND TRIM(f.nome) IN (
+     'Agente Atendimento','Agente de Atendimento','Agente Rampa','Agente de Rampa',
+     'Analista CTM','Analista de CTM','Assistente Operações','Assistente de Operações',
+     'Assistente Segurança Operacional','Assistente de Segurança Operacional',
+     'Aux CTM','Auxiliar de CTM','Aux Coordenação Voo','Auxiliar de Coordenação de Voo',
+     'Aux Manutenção','Aux Manutencao','Auxiliar de Manutenção','Auxiliar de Manutencao',
+     'Aux QSMS','Auxiliar de QSMS','Aux Suprimentos','Auxiliar de Suprimentos',
+     'Comandante','Copiloto','Coordenador Base','Coordenador de Base','Coordenador Engenharia','Coordenador de Engenharia',
+     'Coordenador Voo','Coordenador de Voo','Gerente Bases','Gerente de Bases',
+     'Gerente Manutenção','Gerente Manutencao','Gerente de Manutenção','Gerente de Manutencao',
+     'Gerente Operações','Gerente Operacoes','Gerente de Operações','Gerente de Operacoes',
+     'Gerente QSMS','Gerente de QSMS','Gerente Segurança Operacional','Gerente Seguranca Operacional',
+     'Gerente de Segurança Operacional','Gerente de Seguranca Operacional',
+     'Mecânico','Mecanico','Motorista','Supervisor Engenharia','Supervisor de Engenharia',
+     'Supervisor Suprimentos','Supervisor de Suprimentos','TST','Técnico de Segurança do Trabalho','Tecnico de Seguranca do Trabalho'
    )
  WHERE qt.empresa_id=6 AND UPPER(qt.codigo)='NR-26' AND qt.ativo=1 AND qt.deleted_at IS NULL;
 
@@ -249,7 +251,7 @@ SELECT 6,qt.id,'FUNCAO',f.id,'OBRIGATORIA',1,'REGULATORIO',
        'MODELO',0,1,datetime('now'),datetime('now')
   FROM qualificacoes_tipos qt
   JOIN funcoes f ON f.empresa_id=6 AND f.ativo=1 AND f.deleted_at IS NULL
-   AND UPPER(TRIM(f.nome)) IN ('MECÂNICO','MECANICO','AUX MANUTENÇÃO','AUX MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO')
+   AND TRIM(f.nome) IN ('Mecânico','Mecanico','MECÂNICO','MECANICO','Aux Manutenção','Aux Manutencao','AUX MANUTENÇÃO','AUX MANUTENCAO','Auxiliar de Manutenção','Auxiliar de Manutencao','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO')
  WHERE qt.empresa_id=6 AND UPPER(qt.codigo)='NR-35' AND qt.ativo=1 AND qt.deleted_at IS NULL;
 
 -- AVSEC awareness remains company-wide because every employee must be able to access the airport base.

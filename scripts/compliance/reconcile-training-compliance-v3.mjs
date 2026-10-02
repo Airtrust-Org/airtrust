@@ -150,7 +150,7 @@ addCompanyRule({
 });
 
 deactivate('NR-11');
-for (const name of ['Mecânico', 'Auxiliar de Manutenção'])
+for (const name of ['Mecânico', 'Aux Manutenção', 'Auxiliar de Manutenção'])
   addFunctionRule({
     code: 'NR-11',
     functionName: name,
@@ -161,11 +161,17 @@ for (const name of ['Mecânico', 'Auxiliar de Manutenção'])
       'Todos os ocupantes deste cargo operam os equipamentos motorizados abrangidos na rotina atual.',
   });
 
+statements.push(
+  `UPDATE qualificacoes_tipos SET validade=24,carga_horaria_inicial=16,carga_horaria_recorrente=4,updated_at=datetime('now') WHERE empresa_id=6 AND UPPER(codigo)=UPPER('NR-20') AND deleted_at IS NULL`,
+);
 deactivate('NR-20');
 for (const name of [
   'Mecânico',
+  'Aux Manutenção',
   'Auxiliar de Manutenção',
+  'Aux Suprimentos',
   'Auxiliar de Suprimentos',
+  'Supervisor Suprimentos',
   'Supervisor de Suprimentos',
 ])
   addFunctionRule({
@@ -173,32 +179,41 @@ for (const name of [
     functionName: name,
     origin: 'REGULATORIO',
     foundation: 'REGULATORIO_DIRETO',
-    document: 'NR-20; Matriz auditada Costa do Sol',
+    document: 'NR-20; FORM-SGI-037 Rev.03; LO INEA IN001890',
     reason:
-      'População auditada com exposição a inflamáveis/combustíveis. Pacote EAD atual permanece provisoriamente como Iniciação; será substituído por NR-20 Intermediário adequado ao contato direto.',
+      'Trilha NR-20 Intermediário adotada para a população da matriz exposta a inflamáveis, combustíveis e óleos no hangar; inicial 16 h e atualização 4 h/24 meses com evidência da parte prática aplicável.',
+    modality: 'HIBRIDO',
   });
 
 deactivate('NR-26');
 for (const name of [
-  'Mecânico',
-  'Auxiliar de Manutenção',
-  'Auxiliar de Suprimentos',
-  'Supervisor de Suprimentos',
+  'Agente Atendimento','Agente de Atendimento','Agente Rampa','Agente de Rampa',
+  'Analista CTM','Analista de CTM','Assistente Operações','Assistente de Operações',
+  'Assistente Segurança Operacional','Assistente de Segurança Operacional',
+  'Aux CTM','Auxiliar de CTM','Aux Coordenação Voo','Auxiliar de Coordenação de Voo',
+  'Aux Manutenção','Auxiliar de Manutenção','Aux QSMS','Auxiliar de QSMS',
+  'Aux Suprimentos','Auxiliar de Suprimentos','Comandante','Copiloto',
+  'Coordenador Base','Coordenador de Base','Coordenador Engenharia','Coordenador de Engenharia',
+  'Coordenador Voo','Coordenador de Voo','Gerente Bases','Gerente de Bases',
+  'Gerente Manutenção','Gerente de Manutenção','Gerente Operações','Gerente de Operações',
+  'Gerente QSMS','Gerente de QSMS','Gerente Segurança Operacional','Gerente de Segurança Operacional',
+  'Mecânico','Motorista','Supervisor Engenharia','Supervisor de Engenharia',
+  'Supervisor Suprimentos','Supervisor de Suprimentos','TST','Técnico de Segurança do Trabalho',
 ])
   addFunctionRule({
     code: 'NR-26',
     functionName: name,
-    origin: 'REGULATORIO',
-    foundation: 'REGULATORIO_DIRETO',
-    document: 'NR-26; Matriz auditada Costa do Sol',
-    reason: 'População auditada que utiliza/manuseia produtos químicos na atividade.',
+    origin: 'EMPRESA',
+    foundation: 'POLITICA_INTERNA',
+    document: 'NR-26; FORM-SGI-037 Rev.03; decisão gerencial 2026-10-02',
+    reason: 'A Costa do Sol mantém produtos químicos/FDS para o pessoal operacional como critério corporativo mais abrangente.',
   });
 
 deactivate('NR-35');
 statements.push(
-  `UPDATE qualificacoes_tipos SET categoria='Presencial',updated_at=datetime('now') WHERE empresa_id=6 AND UPPER(codigo)=UPPER('NR-35') AND deleted_at IS NULL`,
+  `UPDATE qualificacoes_tipos SET validade=24,carga_horaria_inicial=8,categoria='Presencial',updated_at=datetime('now') WHERE empresa_id=6 AND UPPER(codigo)=UPPER('NR-35') AND deleted_at IS NULL`,
 );
-for (const name of ['Mecânico', 'Auxiliar de Manutenção'])
+for (const name of ['Mecânico', 'Aux Manutenção', 'Auxiliar de Manutenção'])
   addFunctionRule({
     code: 'NR-35',
     functionName: name,
@@ -348,22 +363,22 @@ addConditionalRule({
   reason: 'Aplicável somente à função especial de supervisão prevista no PPSP.',
 });
 
-// 5) AVSEC: conscientização para credencial aeroportuária é requisito próprio; certificações por atividade permanecem adicionais.
+// 5) AVSEC: conscientização corporativa para acesso à base aeroportuária; certificações por atividade permanecem adicionais.
 ensureQualificationModel({
   code: 'AVSEC_CONSC',
-  name: 'Conscientização com AVSEC — Credencial Aeroportuária',
+  name: 'AVSEC — Conscientização Corporativa',
   description:
-    'Atividade de conscientização AVSEC para pessoa que receberá credencial permanente com permissão de acesso às áreas operacionais do aeródromo.',
+    'Conscientização AVSEC corporativa para funcionários que precisam acessar a base da Costa do Sol em ambiente aeroportuário.',
   areaCode: 'OPERACOES',
 });
 deactivate('AVSEC_CONSC');
 addCompanyRule({
   code: 'AVSEC_CONSC',
-  origin: 'REGULATORIO',
-  foundation: 'REGULATORIO_DIRETO',
-  document: 'RBAC 107.97; PAVSEC/PSA do aeródromo aplicável; critério operacional Costa do Sol',
+  origin: 'EMPRESA',
+  foundation: 'POLITICA_INTERNA',
+  document: 'Requisito operacional de acesso à base aeroportuária Costa do Sol; decisão gerencial 2026-10-02',
   reason:
-    'Requisito corporativo porque os empregados, inclusive os lotados no escritório do Rio, precisam de credencial aeroportuária para acessar a unidade de Macaé. Para credencial permanente com acesso às áreas operacionais, a validade da conscientização acompanha a credencial e a atividade deve ser refeita na renovação.',
+    'Todos os funcionários precisam poder acessar a base localizada dentro do ambiente aeroportuário; certificações AVSEC específicas permanecem adicionais.',
 });
 
 // Certificações AVSEC: uma qualificação D1, com perfil por atividade; não substituem a regra de conscientização/credencial.
@@ -467,11 +482,21 @@ for (const [code, aircraft] of [
     });
 }
 
-// 9) LOFT e English Assessment deixam de gerar obrigação corrente. Histórico é preservado.
-for (const code of ['LOFT', 'EN-ASSES']) {
-  deactivate(code);
-  setModelActive(code, false);
-}
+// 9) LOFT permanece como controle separado da tripulação; English Assessment continua retirado.
+deactivate('LOFT');
+setModelActive('LOFT', true);
+for (const name of ['Comandante', 'Copiloto'])
+  addFunctionRule({
+    code: 'LOFT',
+    functionName: name,
+    origin: 'PTO',
+    foundation: 'PROGRAMA_APROVADO',
+    document: 'PTO vigente Costa do Sol; decisão da Gerência de Treinamento 2026-10-02',
+    reason: 'LOFT permanece como controle separado aplicável à tripulação técnica.',
+    critical: 1,
+  });
+deactivate('EN-ASSES');
+setModelActive('EN-ASSES', false);
 
 // 10) Metadados de fundamento: nunca deixar um requisito vigente sem explicar por que existe.
 statements.push(
