@@ -298,15 +298,23 @@ export default function PastaVirtualCompleta({
                                   >
                                     {atual ? 'Versão atual' : 'Histórico'}
                                   </span>
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                  <span
+                                    className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-300"
+                                    title={
+                                      doc.proveniencia === 'gerado'
+                                        ? 'Gerado pelo AirTrust'
+                                        : 'Documento enviado por upload'
+                                    }
+                                    aria-label={
+                                      doc.proveniencia === 'gerado'
+                                        ? 'Gerado pelo AirTrust'
+                                        : 'Documento enviado por upload'
+                                    }
+                                  >
                                     {doc.proveniencia === 'gerado' ? (
-                                      <>
-                                        <Sparkles className="h-3 w-3" /> Gerado pelo AirTrust
-                                      </>
+                                      <Sparkles className="h-3.5 w-3.5" />
                                     ) : (
-                                      <>
-                                        <Upload className="h-3 w-3" /> Upload
-                                      </>
+                                      <Upload className="h-3.5 w-3.5" />
                                     )}
                                   </span>
                                 </div>

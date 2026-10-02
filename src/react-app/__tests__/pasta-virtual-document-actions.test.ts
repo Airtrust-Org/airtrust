@@ -13,8 +13,10 @@ describe('Pasta Virtual document actions', () => {
     expect(source).toContain('title="Visualizar documento"');
     expect(source).toContain('handleDownload(doc)');
     expect(source).toContain('title="Baixar documento"');
-    expect(source).toContain('Gerado pelo AirTrust');
-    expect(source).toContain('Upload');
+    expect(source).toContain("? 'Gerado pelo AirTrust'");
+    expect(source).toContain(": 'Documento enviado por upload'");
+    expect(source).toContain('<Sparkles className="h-3.5 w-3.5" />');
+    expect(source).toContain('<Upload className="h-3.5 w-3.5" />');
   });
 
   it('separates preview and direct download in the hook contract', () => {
