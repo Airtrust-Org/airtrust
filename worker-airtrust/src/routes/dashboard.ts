@@ -10,6 +10,7 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
+import { getSchemaColumns } from '../utils/db-schema';
 import {
   buildFuncionarioScopeWhere,
   getEmployeeSectorAccess,
@@ -95,10 +96,7 @@ function buildDashboardRenewalSqlPredicates() {
 
 async function hasDashboardRenovacaoDeColumn(db: D1Database): Promise<boolean> {
   try {
-    const { results } = await db
-      .prepare('PRAGMA table_info(qualificacoes_historico)')
-      .all<{ name?: string }>();
-    return (results || []).some((column) => column?.name === 'renovacao_de');
+    return (await getSchemaColumns(db, 'qualificacoes_historico')).has('renovacao_de');
   } catch {
     return false;
   }
