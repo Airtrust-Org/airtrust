@@ -6,6 +6,7 @@ export const AUTH_POST_ALLOWLIST = Object.freeze([
   '/api/auth/logout',
   '/api/auth/empresas/select',
   '/api/auth/select-empresa',
+  '/api/me/operational-access/session-profile',
 ]);
 
 export const SAFE_METHODS = Object.freeze(['GET', 'HEAD', 'OPTIONS']);

@@ -27,6 +27,13 @@ test('production guard permits production GET and authentication POST only', () 
   assert.equal(
     classifyProductionReadOnlyRequest({
       method: 'POST',
+      url: 'https://api.airtrust.online/api/me/operational-access/session-profile',
+    }).decision,
+    'allow',
+  );
+  assert.equal(
+    classifyProductionReadOnlyRequest({
+      method: 'POST',
       url: 'https://api.airtrust.online/api/compliance-treinamentos/regras',
     }).decision,
     'block',

@@ -83,7 +83,32 @@ async function login(page: Page) {
   await page.locator('input[type="email"]').fill(EMAIL);
   await page.locator('input[type="password"]').fill(PASSWORD);
   await page.getByRole('button', { name: /entrar|sign in/i }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 45_000 });
+
+  const profileChooser = page.getByRole('heading', { name: 'Como você quer entrar?' });
+  await expect
+    .poll(
+      async () => {
+        if (!new URL(page.url()).pathname.startsWith('/login')) return 'authenticated';
+        if (await profileChooser.isVisible().catch(() => false)) return 'choose-profile';
+        return 'waiting';
+      },
+      { timeout: 45_000 },
+    )
+    .not.toBe('waiting');
+
+  if (new URL(page.url()).pathname.startsWith('/login')) {
+    const adminProfile = page.getByRole('button', { name: /^Entrar como Administrador$/i });
+    const managerProfile = page.getByRole('button', { name: /^Entrar como Gestor$/i });
+    if ((await adminProfile.count()) > 0) {
+      await adminProfile.click();
+    } else if ((await managerProfile.count()) > 0) {
+      await managerProfile.click();
+    } else {
+      throw new Error('PRODUCTION_COMPLIANCE_PROFILE_NOT_AVAILABLE');
+    }
+    await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 45_000 });
+  }
+
   if (new URL(page.url()).pathname !== '/treinamentos/compliance') {
     await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
   }
