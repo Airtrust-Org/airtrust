@@ -264,7 +264,7 @@ test('production intelligent training compliance UI and APIs are coherent and re
       '/api/compliance-treinamentos/treinamentos',
       (url) => url.searchParams.get('setor_id') === String(sector.id),
     );
-    await page.getByRole('combobox').first().selectOption(String(sector.id));
+    await page.getByRole('combobox', { name: 'Filtrar por setor' }).selectOption(String(sector.id));
     const [filteredSummary, filteredTrainings] = await Promise.all([
       filteredSummaryP.then(payload),
       filteredTrainingsP.then(payload),
@@ -272,7 +272,7 @@ test('production intelligent training compliance UI and APIs are coherent and re
     assertSummary(filteredSummary.data);
     expect(filteredSummary.data.pessoas).toBeLessThanOrEqual(summary.data.pessoas);
     expect(Array.isArray(filteredTrainings.data)).toBe(true);
-    await page.getByRole('combobox').first().selectOption('');
+    await page.getByRole('combobox', { name: 'Filtrar por setor' }).selectOption('');
   }
 
   const statusCandidates = [
