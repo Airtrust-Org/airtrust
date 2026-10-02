@@ -87,101 +87,101 @@ async function login(page: Page) {
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
   await assertProductionFrontendShaFromPage(page, EXPECTED_SHA.slice(0, 7), 'production-login');
 
-  const authResult = await page.evaluate(
-    async ({ apiBase, email, password }) => {
-      const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-      type LoginPayload = {
-        success?: boolean;
-        code?: unknown;
-        data?: { accessToken?: unknown; refreshToken?: unknown; user?: unknown };
-      };
-      let loginResponse: Response | null = null;
-      let loginJson: LoginPayload | null = null;
+  // Run the auth bootstrap from the runner, not from the SPA execution context.
+  // The login page may navigate while its app initializes, which destroys page.evaluate.
+  // Only the canonical auth POST and the read-only session-profiles GET are issued here.
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  type LoginPayload = {
+    success?: boolean;
+    code?: unknown;
+    data?: {
+      accessToken?: unknown;
+      refreshToken?: unknown;
+      user?: Record<string, unknown>;
+    };
+  };
+  let loginResponse: Response | null = null;
+  let loginJson: LoginPayload | null = null;
 
-      for (let attempt = 1; attempt <= 5; attempt += 1) {
-        try {
-          loginResponse = await fetch(`${apiBase}/api/auth/login`, {
-            method: 'POST',
-            headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, senha: password }),
-          });
-        } catch (error) {
-          if (attempt === 5) throw error;
-          await wait(Math.min(1000 * 2 ** (attempt - 1), 8000));
-          continue;
-        }
-        loginJson = (await loginResponse.json().catch(() => null)) as LoginPayload | null;
-        if (loginResponse.status !== 429) break;
-        const retryAfterSeconds = Number(loginResponse.headers.get('retry-after') || 0);
-        const delayMs = retryAfterSeconds > 0
-          ? retryAfterSeconds * 1000
-          : Math.min(1000 * 2 ** (attempt - 1), 8000);
-        await wait(delayMs);
-      }
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      loginResponse = await fetch(`${PROD_API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: EMAIL, senha: PASSWORD }),
+      });
+''    } catch (error) {
+      if (attempt === 5) throw error;
+      await wait(Math.min(1000 * 2 ** (attempt - 1), 8000));
+      continue;
+    }
+    loginJson = (await loginResponse.json().catch(() => null)) as LoginPayload | null;
+    if (loginResponse.status !== 429) break;
+    const retryAfterSeconds = Number(loginResponse.headers.get('retry-after') || 0);
+    await wait(
+      retryAfterSeconds > 0
+        ? retryAfterSeconds * 1000
+        : Math.min(1000 * 2 ** (attempt - 1), 8000),
+    );
+  }
 
-      const accessToken = String(loginJson?.data?.accessToken || '');
-      const refreshToken = String(loginJson?.data?.refreshToken || '');
-      const user = loginJson?.data?.user;
-      if (
-        !loginResponse ||
-        loginResponse.status !== 200 ||
-        loginJson?.success !== true ||
-        accessToken.length < 20 ||
-        !user ||
-        typeof user !== 'object'
-      ) {
-        return {
-          ok: false,
-          stage: 'login',
-          status: loginResponse?.status ?? 0,
-          code: String(loginJson?.code || ''),
-        };
-      }
+  const accessToken = String(loginJson?.data?.accessToken || '');
+  const refreshToken = String(loginJson?.data?.refreshToken || '');
+  const user = loginJson?.data?.user || null;
+  let authResult = {
+    ok: Boolean(
+      loginResponse?.status === 200 &&
+      loginJson?.success === true &&
+      accessToken.length >= 20 &&
+      user,
+    ),
+    stage: 'login',
+    status: loginResponse?.status ?? 0,
+    code: String(loginJson?.code || ''),
+  };
 
-      const profilesResponse = await fetch(
-        `${apiBase}/api/me/operational-access/session-profiles`,
-        {
-          method: 'GET',
-          headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` },
+  if (authResult.ok) {
+    const profilesResponse = await fetch(
+      `${PROD_API_BASE_URL}/api/me/operational-access/session-profiles`,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
-      );
-      const profilesJson = await profilesResponse.json().catch(() => null);
-      if (profilesResponse.status !== 200 || profilesJson?.success !== true) {
-        return {
-          ok: false,
-          stage: 'session-profiles',
-          status: profilesResponse.status,
-          code: String(profilesJson?.code || ''),
-        };
-      }
+      },
+    );
+    const profilesJson = await profilesResponse.json().catch(() => null);
+    authResult = {
+      ok: profilesResponse.status === 200 && profilesJson?.success === true,
+      stage: 'session-profiles',
+      status: profilesResponse.status,
+      code: String(profilesJson?.code || ''),
+    };
+  }
 
-      localStorage.setItem('airtrust_persist_login_policy', '2');
-      localStorage.setItem('airtrust_persist_login', '1');
-      localStorage.setItem('airtrust_token', accessToken);
-      localStorage.setItem('airtrust_user', JSON.stringify(user));
-      if (refreshToken) {
-        localStorage.setItem('airtrust_refresh_token', refreshToken);
-      }
-      sessionStorage.removeItem('airtrust_token');
-      sessionStorage.removeItem('airtrust_user');
-      sessionStorage.removeItem('airtrust_refresh_token');
-      document.cookie = 'airtrust_session_role=; Max-Age=0; Path=/; SameSite=Lax';
-      document.cookie = 'airtrust_session_role=; Max-Age=0; Path=/; Domain=.airtrust.online; SameSite=Lax';
-
-      return {
-        ok: true,
-        stage: 'ready',
-        status: profilesResponse.status,
-        profileCount: Array.isArray(profilesJson?.data?.roles) ? profilesJson.data.roles.length : -1,
-      };
-    },
-    { apiBase: PROD_API_BASE_URL, email: EMAIL, password: PASSWORD },
-  );
 
   expect(
     authResult.ok,
     `production auth bootstrap failed at ${authResult.stage} (HTTP ${authResult.status}${authResult.code ? `, ${authResult.code}` : ''})`,
   ).toBe(true);
+  if (!authResult.ok || !user) throw new Error('PRODUCTION_AUTH_BOOTSTRAP_FAILED_CLOSED');
+
+  await page.addInitScript(
+    ({ accessToken, refreshToken, user }) => {
+      localStorage.setItem('airtrust_persist_login_policy', '2');
+      localStorage.setItem('airtrust_persist_login', '1');
+      localStorage.setItem('airtrust_token', accessToken);
+      localStorage.setItem('airtrust_user', JSON.stringify(user));
+      if (refreshToken) localStorage.setItem('airtrust_refresh_token', refreshToken);
+      sessionStorage.removeItem('airtrust_token');
+      sessionStorage.removeItem('airtrust_user');
+      sessionStorage.removeItem('airtrust_refresh_token');
+      document.cookie = 'airtrust_session_role=; Max-Age=0; Path=/; SameSite=Lax';
+      document.cookie = 'airtrust_session_role=; Max-Age=0; Path=/; Domain=.airtrust.online; SameSite=Lax';
+    },
+    { accessToken, refreshToken, user },
+  );
 
 }
 
@@ -316,7 +316,7 @@ test('production intelligent training compliance UI and APIs are coherent and re
   const people = await peopleP.then(payload);
   expect(Array.isArray(people.data)).toBe(true);
   await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
-  await expect(page.getByRole('columnheader', { name: 'Setor / cargo' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Setor / função' })).toBeVisible();
 
   const sectorsP = waitApi(page, '/api/compliance-treinamentos/setores');
   await page.getByRole('button', { name: 'Setores', exact: true }).click();
