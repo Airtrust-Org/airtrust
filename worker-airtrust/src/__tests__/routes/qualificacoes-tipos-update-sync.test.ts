@@ -176,9 +176,9 @@ describe('qualificacoes tipos update sync', () => {
         },
       ],
       [
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='auditoria_avancada_v2' LIMIT 1",
+        'SELECT 1 as found FROM sqlite_master',
         {
-          first: () => ({ name: 'auditoria_avancada_v2' }),
+          first: (args) => (args[0] === 'auditoria_avancada_v2' ? { found: 1 } : null),
         },
       ],
       [
@@ -365,9 +365,9 @@ describe('qualificacoes tipos update sync', () => {
         },
       ],
       [
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='auditoria_avancada_v2' LIMIT 1",
+        'SELECT 1 as found FROM sqlite_master',
         {
-          first: () => ({ name: 'auditoria_avancada_v2' }),
+          first: (args) => (args[0] === 'auditoria_avancada_v2' ? { found: 1 } : null),
         },
       ],
       [

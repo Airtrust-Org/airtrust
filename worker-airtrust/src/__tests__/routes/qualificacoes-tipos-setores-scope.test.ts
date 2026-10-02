@@ -126,6 +126,14 @@ function createMockEnv() {
             return { operational_domain_rbac_enabled: 0 };
           }
 
+          if (query.includes('SELECT 1 as found FROM sqlite_master')) {
+            const tableName = String(args[0] || '');
+            if (tableName === 'qualificacoes_tipos_setores' || tableName === 'auditoria_avancada_v2') {
+              return { found: 1 };
+            }
+            return null;
+          }
+
           if (query.includes("sqlite_master WHERE type = 'table' AND name = 'qualificacoes_tipos_setores'")) {
             return { name: 'qualificacoes_tipos_setores' };
           }
