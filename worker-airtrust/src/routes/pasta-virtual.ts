@@ -16,7 +16,10 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { registrarAuditoria } from '../utils/auditoria';
-import { normalizarTipoDocumento } from '../utils/nomenclatura-padronizada';
+import {
+  gerarNomeArquivoPadronizado,
+  normalizarTipoDocumento,
+} from '../utils/nomenclatura-padronizada';
 import { getSchemaColumns, hasSchemaTable } from '../utils/db-schema';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
@@ -1403,6 +1406,102 @@ app.get('/stream/:id', auth(), async (c) => {
     console.error('Erro no streaming:', error);
     return c.json({ success: false, error: 'Erro ao baixar arquivo' }, 500);
   }
+});
+
+/**
+ * POST /api/pasta-virtual/:id/rename-canonical
+ * Normaliza somente o nome visível/baixado do documento histórico.
+ * O r2_key permanece estável para preservar vínculos, hashes e objetos físicos.
+ */
+app.post('/:id/rename-canonical', auth(), requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+  const empresaId = getEmpresaId(c);
+  if (!Number.isInteger(id) || id <= 0) badRequest('ID inválido');
+
+  const body = await c.req.json<{
+    tipo_documento?: string;
+    data_documento?: string;
+    codigo?: string;
+    sub_tipo?: string;
+    expected_current_name?: string;
+  }>();
+  const dataDocumento = new Date(String(body.data_documento || ''));
+  if (Number.isNaN(dataDocumento.getTime())) badRequest('Data do documento inválida');
+
+  const documento = await db
+    .prepare(
+      `SELECT d.id, d.uuid, d.funcionario_id, d.nome_arquivo, d.tipo, d.tamanho, d.r2_key,
+              f.nome AS funcionario_nome
+         FROM documentos d
+         INNER JOIN funcionarios f ON f.id = d.funcionario_id
+        WHERE d.id = ? AND d.empresa_id = ? AND f.empresa_id = ?
+          AND d.deleted_at IS NULL AND f.deleted_at IS NULL
+        LIMIT 1`,
+    )
+    .bind(id, empresaId, empresaId)
+    .first<Documento & { funcionario_nome: string }>();
+  if (!documento) notFound('Documento não encontrado');
+
+  const expectedCurrentName = String(body.expected_current_name || '').trim();
+  if (expectedCurrentName && expectedCurrentName !== documento.nome_arquivo) {
+    return c.json(
+      { success: false, error: 'Documento mudou durante o preflight; operação cancelada' },
+      409,
+    );
+  }
+
+  const tipo = normalizarTipoDocumento(body.tipo_documento || documento.tipo);
+  const nomeArquivo = gerarNomeArquivoPadronizado({
+    tipo,
+    nomeFuncionario: documento.funcionario_nome,
+    codigo: String(body.codigo || '').trim() || undefined,
+    subTipo: String(body.sub_tipo || '').trim() || undefined,
+    data: dataDocumento,
+    uuid: documento.uuid,
+  });
+  if (nomeArquivo === documento.nome_arquivo) {
+    return c.json({
+      success: true,
+      data: { id, nome_arquivo: nomeArquivo, r2_key: documento.r2_key, renamed: false },
+    });
+  }
+
+  const update = await db
+    .prepare(
+      `UPDATE documentos
+          SET nome_arquivo = ?, updated_at = datetime('now')
+        WHERE id = ? AND empresa_id = ? AND nome_arquivo = ? AND deleted_at IS NULL`,
+    )
+    .bind(nomeArquivo, id, empresaId, documento.nome_arquivo)
+    .run();
+  if (Number(update.meta?.changes || 0) !== 1) {
+    return c.json(
+      { success: false, error: 'Documento mudou durante a renomeação; operação cancelada' },
+      409,
+    );
+  }
+
+  await registrarAuditoria({
+    db,
+    tabela: 'documentos',
+    acao: 'UPDATE',
+    registro_id: id,
+    usuario_id: String(c.get('userId') || '0'),
+    dados_anteriores: { nome_arquivo: documento.nome_arquivo, r2_key: documento.r2_key },
+    dados_novos: {
+      nome_arquivo: nomeArquivo,
+      r2_key: documento.r2_key,
+      motivo: 'RENOMEACAO_CANONICA',
+    },
+    ip_address: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
+    user_agent: c.req.header('user-agent'),
+  });
+
+  return c.json({
+    success: true,
+    data: { id, nome_arquivo: nomeArquivo, r2_key: documento.r2_key, renamed: true },
+  });
 });
 
 /**
