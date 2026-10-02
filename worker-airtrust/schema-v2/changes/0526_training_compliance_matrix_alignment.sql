@@ -48,7 +48,14 @@ UPDATE treinamento_requisitos
       WHERE empresa_id=6 AND UPPER(codigo)='LOFT' AND ativo=1 AND deleted_at IS NULL LIMIT 1
    )
    AND condicao_id IS NULL
-   AND escopo IN ('EMPRESA','SETOR','FUNCAO','SETOR_FUNCAO');
+   AND escopo IN ('EMPRESA','SETOR','FUNCAO','SETOR_FUNCAO')
+   AND NOT (
+     escopo='FUNCAO' AND funcao_id IN (
+       SELECT id FROM funcoes
+        WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL
+          AND UPPER(TRIM(nome)) IN ('COMANDANTE','COPILOTO')
+     )
+   );
 
 INSERT OR IGNORE INTO treinamento_requisitos (
   empresa_id,qualificacao_tipo_id,escopo,funcao_id,obrigatoriedade,critico_operacional,
@@ -67,7 +74,7 @@ SELECT 6,qt.id,'FUNCAO',f.id,'OBRIGATORIA',1,
  WHERE qt.empresa_id=6 AND UPPER(qt.codigo)='LOFT' AND qt.ativo=1 AND qt.deleted_at IS NULL;
 
 -- Maintenance controlled training: 24 months is treated as a Petrobras/IOGP client criterion,
--- not as an internal-policy interval. Scope is intentionally limited to Maintenance/Other models.
+-- not as an internal-policy interval. The predicate is intentionally bounded to the reviewed list.
 UPDATE qualificacoes_tipos
    SET validade=24,
        observacoes=CASE
@@ -99,7 +106,7 @@ UPDATE qualificacoes_tipos
 UPDATE treinamento_requisitos
    SET origem='CLIENTE',
        referencia_normativa='Critério contratual Petrobras/IOGP informado pela Gerência de Treinamento em 2026-10-02',
-       justificativa='Treinamento controlado de Manutenção com validade corporativa de 24 meses por critério contratual Petrobras/IOGP.',
+       justificativa='Treinamento controlado de Manutenção com validade de 24 meses por critério contratual Petrobras/IOGP.',
        fundamento_tipo='CONTRATUAL_CLIENTE',
        fundamento_documento='Critério contratual Petrobras/IOGP — decisão gerencial registrada em 2026-10-02',
        validade_fonte='MODELO',
@@ -108,10 +115,22 @@ UPDATE treinamento_requisitos
    AND qualificacao_tipo_id IN (
      SELECT id FROM qualificacoes_tipos
       WHERE empresa_id=6 AND deleted_at IS NULL
-        AND validade=24
         AND (
           UPPER(codigo) IN ('MNT_AW139','MNT_S76AC')
-          OR UPPER(COALESCE(categoria,'')) IN ('MANUTENCAO','MANUTENÇÃO','OUTROS')
+          OR (
+            UPPER(COALESCE(categoria,'')) IN ('MANUTENCAO','MANUTENÇÃO','OUTROS')
+            AND UPPER(TRIM(nome)) IN (
+              'PROCEDIMENTO INTEGRACAO','PROCEDIMENTO INTEGRAÇÃO',
+              'INTEGRACAO / DOUTRINACAO DE MANUTENCAO','INTEGRAÇÃO / DOUTRINAÇÃO DE MANUTENÇÃO',
+              'MOM','MCQ','MGM','IRM','INSPECAO & IIO & APRS','INSPEÇÃO & IIO & APRS',
+              'AS350 B2','S76 A/C','AW139','ARRIEL 2','ARRIEL 2 MODULACAO/DESMODULACAO',
+              'ARRIEL 2 MODULAÇÃO/DESMODULAÇÃO','ARRIEL 1','PW PT6C-67C','PT6C-67C',
+              'HUMS','HUMS-VXP','FATORES HUMANOS','SGSO','SGSO PARA MANUTENCAO',
+              'SGSO PARA MANUTENÇÃO','CRM','ARTIGOS PERIGOSOS','MEL',
+              'PROFICIENCIA LINGUA INGLESA','PROFICIÊNCIA LÍNGUA INGLESA',
+              'PROFICIENCIA EM LINGUA INGLESA','PROFICIÊNCIA EM LÍNGUA INGLESA'
+            )
+          )
         )
    )
    AND obrigatoriedade<>'NAO_APLICA';
@@ -122,14 +141,11 @@ UPDATE qualificacoes_tipos
  WHERE empresa_id=6 AND UPPER(codigo)='NR-20' AND deleted_at IS NULL;
 
 UPDATE qualificacoes_tipos
-   SET validade=24, updated_at=datetime('now')
- WHERE empresa_id=6 AND UPPER(codigo)='NR-26' AND deleted_at IS NULL;
-
-UPDATE qualificacoes_tipos
    SET validade=24, carga_horaria_inicial=8, categoria='Presencial', updated_at=datetime('now')
  WHERE empresa_id=6 AND UPPER(codigo)='NR-35' AND deleted_at IS NULL;
 
 -- Replace only unconditioned organizational rules for the four reviewed NRs.
+-- Target function rules are preserved on a re-run so the active rule set is stable.
 UPDATE treinamento_requisitos
    SET ativo=0,deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
  WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL
@@ -138,7 +154,19 @@ UPDATE treinamento_requisitos
       WHERE empresa_id=6 AND UPPER(codigo) IN ('NR-11','NR-20','NR-26','NR-35') AND deleted_at IS NULL
    )
    AND condicao_id IS NULL
-   AND escopo IN ('EMPRESA','SETOR','FUNCAO','SETOR_FUNCAO');
+   AND escopo IN ('EMPRESA','SETOR','FUNCAO','SETOR_FUNCAO')
+   AND NOT (
+     escopo='FUNCAO' AND (
+       (qualificacao_tipo_id=(SELECT id FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)='NR-11' AND deleted_at IS NULL LIMIT 1)
+         AND funcao_id IN (SELECT id FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND UPPER(TRIM(nome)) IN ('MECÂNICO','MECANICO','AUX MANUTENÇÃO','AUX MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO')))
+       OR
+       (qualificacao_tipo_id=(SELECT id FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)='NR-20' AND deleted_at IS NULL LIMIT 1)
+         AND funcao_id IN (SELECT id FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND UPPER(TRIM(nome)) IN ('MECÂNICO','MECANICO','AUX MANUTENÇÃO','AUX MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO','AUX SUPRIMENTOS','AUXILIAR DE SUPRIMENTOS','SUPERVISOR SUPRIMENTOS','SUPERVISOR DE SUPRIMENTOS')))
+       OR
+       (qualificacao_tipo_id=(SELECT id FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)='NR-35' AND deleted_at IS NULL LIMIT 1)
+         AND funcao_id IN (SELECT id FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND UPPER(TRIM(nome)) IN ('MECÂNICO','MECANICO','AUX MANUTENÇÃO','AUX MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO')))
+     )
+   );
 
 -- NR-11: every Mechanic and Maintenance Assistant may operate the covered equipment.
 INSERT OR IGNORE INTO treinamento_requisitos (
@@ -152,10 +180,10 @@ SELECT 6,qt.id,'FUNCAO',f.id,'OBRIGATORIA',1,'REGULATORIO',
        'REGULATORIO_DIRETO','NR-11; FORM-SGI-037 Rev.03','MODELO',0,1,datetime('now'),datetime('now')
   FROM qualificacoes_tipos qt
   JOIN funcoes f ON f.empresa_id=6 AND f.ativo=1 AND f.deleted_at IS NULL
-   AND UPPER(TRIM(f.nome)) IN ('MECÂNICO','MECANICO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO','AUX MANUTENÇÃO','AUX MANUTENCAO')
+   AND UPPER(TRIM(f.nome)) IN ('MECÂNICO','MECANICO','AUX MANUTENÇÃO','AUX MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO')
  WHERE qt.empresa_id=6 AND UPPER(qt.codigo)='NR-11' AND qt.ativo=1 AND qt.deleted_at IS NULL;
 
--- NR-20: corporate conservative trail for maintenance/inspection in a helicopter hangar.
+-- NR-20: conservative Intermediate trail for maintenance/inspection in the helicopter hangar.
 INSERT OR IGNORE INTO treinamento_requisitos (
   empresa_id,qualificacao_tipo_id,escopo,funcao_id,obrigatoriedade,critico_operacional,
   origem,referencia_normativa,justificativa,modalidade_requerida,fundamento_tipo,fundamento_documento,
@@ -171,12 +199,13 @@ SELECT 6,qt.id,'FUNCAO',f.id,'OBRIGATORIA',1,'REGULATORIO',
   FROM qualificacoes_tipos qt
   JOIN funcoes f ON f.empresa_id=6 AND f.ativo=1 AND f.deleted_at IS NULL
    AND UPPER(TRIM(f.nome)) IN (
-     'MECÂNICO','MECANICO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO','AUX MANUTENÇÃO','AUX MANUTENCAO',
-     'AUXILIAR DE SUPRIMENTOS','AUX SUPRIMENTOS','SUPERVISOR DE SUPRIMENTOS','SUPERVISOR SUPRIMENTOS'
+     'MECÂNICO','MECANICO','AUX MANUTENÇÃO','AUX MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO',
+     'AUX SUPRIMENTOS','AUXILIAR DE SUPRIMENTOS','SUPERVISOR SUPRIMENTOS','SUPERVISOR DE SUPRIMENTOS'
    )
  WHERE qt.empresa_id=6 AND UPPER(qt.codigo)='NR-20' AND qt.ativo=1 AND qt.deleted_at IS NULL;
 
 -- NR-26/FDS: the company deliberately keeps an audience broader than the regulatory minimum.
+-- Do not impose a fabricated fixed expiry here; the current qualification model keeps its reviewed validity metadata.
 INSERT OR IGNORE INTO treinamento_requisitos (
   empresa_id,qualificacao_tipo_id,escopo,funcao_id,obrigatoriedade,critico_operacional,
   origem,referencia_normativa,justificativa,fundamento_tipo,fundamento_documento,
@@ -190,19 +219,20 @@ SELECT 6,qt.id,'FUNCAO',f.id,'OBRIGATORIA',0,'EMPRESA',
   FROM qualificacoes_tipos qt
   JOIN funcoes f ON f.empresa_id=6 AND f.ativo=1 AND f.deleted_at IS NULL
    AND UPPER(TRIM(f.nome)) IN (
-     'AGENTE DE ATENDIMENTO','AGENTE ATENDIMENTO','AGENTE DE RAMPA','AGENTE RAMPA',
-     'ANALISTA DE CTM','ANALISTA CTM','ASSISTENTE DE OPERAÇÕES','ASSISTENTE OPERAÇÕES',
-     'ASSISTENTE DE SEGURANÇA OPERACIONAL','ASSISTENTE SEGURANÇA OPERACIONAL',
-     'AUXILIAR DE CTM','AUX CTM','AUXILIAR DE COORDENAÇÃO DE VOO','AUX COORDENAÇÃO VOO',
-     'AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO','AUX MANUTENÇÃO','AUX MANUTENCAO',
-     'AUXILIAR DE QSMS','AUX QSMS','AUXILIAR DE SUPRIMENTOS','AUX SUPRIMENTOS',
-     'COMANDANTE','COORDENADOR DE BASE','COORDENADOR BASE','COORDENADOR DE ENGENHARIA','COORDENADOR ENGENHARIA',
-     'COORDENADOR DE VOO','COORDENADOR VOO','COPILOTO','GERENTE DE BASES','GERENTE BASES',
-     'GERENTE DE MANUTENÇÃO','GERENTE MANUTENÇÃO','GERENTE DE OPERAÇÕES','GERENTE OPERAÇÕES',
-     'GERENTE DE QSMS','GERENTE QSMS','GERENTE DE SEGURANÇA OPERACIONAL','GERENTE SEGURANÇA OPERACIONAL',
-     'MECÂNICO','MECANICO','MOTORISTA','SUPERVISOR DE ENGENHARIA','SUPERVISOR ENGENHARIA',
-     'SUPERVISOR DE SUPRIMENTOS','SUPERVISOR SUPRIMENTOS','TÉCNICO DE SEGURANÇA DO TRABALHO',
-     'TECNICO DE SEGURANCA DO TRABALHO','TST'
+     'AGENTE ATENDIMENTO','AGENTE DE ATENDIMENTO','AGENTE RAMPA','AGENTE DE RAMPA',
+     'ANALISTA CTM','ANALISTA DE CTM','ASSISTENTE OPERAÇÕES','ASSISTENTE DE OPERAÇÕES',
+     'ASSISTENTE SEGURANÇA OPERACIONAL','ASSISTENTE DE SEGURANÇA OPERACIONAL',
+     'AUX CTM','AUXILIAR DE CTM','AUX COORDENAÇÃO VOO','AUXILIAR DE COORDENAÇÃO DE VOO',
+     'AUX MANUTENÇÃO','AUX MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO',
+     'AUX QSMS','AUXILIAR DE QSMS','AUX SUPRIMENTOS','AUXILIAR DE SUPRIMENTOS',
+     'COMANDANTE','COPILOTO','COORDENADOR BASE','COORDENADOR DE BASE','COORDENADOR ENGENHARIA','COORDENADOR DE ENGENHARIA',
+     'COORDENADOR VOO','COORDENADOR DE VOO','GERENTE BASES','GERENTE DE BASES',
+     'GERENTE MANUTENÇÃO','GERENTE MANUTENCAO','GERENTE DE MANUTENÇÃO','GERENTE DE MANUTENCAO',
+     'GERENTE OPERAÇÕES','GERENTE OPERACOES','GERENTE DE OPERAÇÕES','GERENTE DE OPERACOES',
+     'GERENTE QSMS','GERENTE DE QSMS','GERENTE SEGURANÇA OPERACIONAL','GERENTE SEGURANCA OPERACIONAL',
+     'GERENTE DE SEGURANÇA OPERACIONAL','GERENTE DE SEGURANCA OPERACIONAL',
+     'MECÂNICO','MECANICO','MOTORISTA','SUPERVISOR ENGENHARIA','SUPERVISOR DE ENGENHARIA',
+     'SUPERVISOR SUPRIMENTOS','SUPERVISOR DE SUPRIMENTOS','TST','TÉCNICO DE SEGURANÇA DO TRABALHO','TECNICO DE SEGURANCA DO TRABALHO'
    )
  WHERE qt.empresa_id=6 AND UPPER(qt.codigo)='NR-26' AND qt.ativo=1 AND qt.deleted_at IS NULL;
 
@@ -219,7 +249,7 @@ SELECT 6,qt.id,'FUNCAO',f.id,'OBRIGATORIA',1,'REGULATORIO',
        'MODELO',0,1,datetime('now'),datetime('now')
   FROM qualificacoes_tipos qt
   JOIN funcoes f ON f.empresa_id=6 AND f.ativo=1 AND f.deleted_at IS NULL
-   AND UPPER(TRIM(f.nome)) IN ('MECÂNICO','MECANICO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO','AUX MANUTENÇÃO','AUX MANUTENCAO')
+   AND UPPER(TRIM(f.nome)) IN ('MECÂNICO','MECANICO','AUX MANUTENÇÃO','AUX MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENCAO')
  WHERE qt.empresa_id=6 AND UPPER(qt.codigo)='NR-35' AND qt.ativo=1 AND qt.deleted_at IS NULL;
 
 -- AVSEC awareness remains company-wide because every employee must be able to access the airport base.
