@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-01",
-    "last_reconciled_against": "0525 organizational structure PJ normalization prepared; remote apply pending",
-    "schema_v2_digest": "d86436443d2d5ba51f737cf281c8841cffe6e26dde8dc67f529220512b7200ca",
+    "last_reconciled_at": "2026-10-02",
+    "last_reconciled_against": "0526 training compliance matrix alignment prepared; remote apply pending; 0525 organizational normalization also remains pending",
+    "schema_v2_digest": "3c9b4c2cad32205f051cd0d352352bcbfe94a1664b54b2e36c6e60ed45fc95c5",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1245,6 +1245,18 @@
       "reviewed_manifest": "organizational-structure-pj-normalization-0525.json",
       "evidence": "worker-airtrust/schema-v2/plans/organizational-structure-pj-normalization-0525.md",
       "note": "0525 is a reviewed data-only organizational normalization. It creates only missing tenant-6 sectors/functions and sector-function mappings required by the reviewed 2026-09-28 source, normalizes 13 bounded active employee records by internal ID, clears only provisional TEMP-TRN matricula placeholders, versions no employee names, and changes no training history, RBAC or tenant membership. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0526_training_compliance_matrix_alignment.sql",
+      "change_id": "training-compliance-matrix-alignment-0526",
+      "sha256": "1473d8815f4dff920672c50db70f171f3c915e73c95f1d4852a531366f785f77",
+      "targets": [],
+      "domain": "training compliance / reviewed corporate matrix and qualification metadata alignment",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-matrix-alignment-0526.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-matrix-alignment-0526.md",
+      "note": "0526 is a reviewed data-only Training Compliance alignment for tenant 6. It preserves broader controlled-matrix audiences, keeps LOFT separate, sets SGSO/PRE/NR-20/NR-35 reviewed cycles, keeps AVSEC awareness company-wide, records the bounded 24-month Petrobras/IOGP client criterion for controlled Maintenance training, seeds only specific designation catalog entries, infers no employee designation, and writes no LMS enrollment, qualification history, certificate or completion evidence. Remote apply requires staging validation, the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     }
   ]
 }
