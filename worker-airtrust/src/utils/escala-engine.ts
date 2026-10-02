@@ -7,18 +7,10 @@
  *   - Geração de alertas CMA para uma escala
  */
 
-let historicoTipoColumnCache: string | null = null;
-let historicoVencimentoColumnCache: string | null = null;
+import { getSchemaColumns } from './db-schema';
 
 async function resolveHistoricoTipoColumn(db: D1Database): Promise<string> {
-  if (historicoTipoColumnCache) return historicoTipoColumnCache;
-
-  const cols = await db
-    .prepare(`PRAGMA table_info(qualificacoes_historico)`)
-    .all<{ name?: string }>();
-
-  const names = new Set((cols.results || []).map((c) => String(c.name || '').toLowerCase()));
-
+  const names = await getSchemaColumns(db, 'qualificacoes_historico');
   const candidate = ['qualificacao_tipo_id', 'qualificacao_id', 'tipo_id'].find((col) =>
     names.has(col),
   );
@@ -29,26 +21,17 @@ async function resolveHistoricoTipoColumn(db: D1Database): Promise<string> {
     );
   }
 
-  historicoTipoColumnCache = candidate;
   return candidate;
 }
 
 async function resolveHistoricoVencimentoColumn(db: D1Database): Promise<string> {
-  if (historicoVencimentoColumnCache) return historicoVencimentoColumnCache;
-
-  const cols = await db
-    .prepare(`PRAGMA table_info(qualificacoes_historico)`)
-    .all<{ name?: string }>();
-
-  const names = new Set((cols.results || []).map((c) => String(c.name || '').toLowerCase()));
-
+  const names = await getSchemaColumns(db, 'qualificacoes_historico');
   const candidate = ['data_vencimento', 'validade'].find((col) => names.has(col));
 
   if (!candidate) {
     throw new Error('Schema incompatível: qualificacoes_historico sem coluna de vencimento');
   }
 
-  historicoVencimentoColumnCache = candidate;
   return candidate;
 }
 
