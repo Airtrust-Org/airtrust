@@ -1,4 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import { getSchemaColumns } from '../utils/db-schema';
 
 /**
  * Simulador físico: catálogo GLOBAL, intencionalmente sem empresa_id (mesma
@@ -74,8 +75,7 @@ export async function validateInstructorAssignment(
     return { eligible: false, reason: 'instructor_id inválido' };
   }
 
-  const columns = await db.prepare("PRAGMA table_info('funcionarios')").all<{ name: string }>();
-  const columnNames = new Set((columns.results || []).map((row) => row.name));
+  const columnNames = await getSchemaColumns(db, 'funcionarios');
   const hasIsInstrutor = columnNames.has('is_instrutor');
 
   const row = await db
