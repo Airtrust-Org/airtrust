@@ -6,6 +6,7 @@ import { Upload, File, Trash2, Download, FolderOpen, Search } from 'lucide-react
 import { LoadingSpinner } from '@/react-app/components/common/LoadingSpinner';
 import ConfirmDeleteModal from '@/react-app/components/modals/ConfirmDeleteModal';
 import { showAlertDialog } from '@/react-app/utils/confirmDialog';
+import { preparePdfUploadFile } from '@/react-app/utils/certificateUploadOptimization';
 
 interface Arquivo {
   id: number;
@@ -61,8 +62,16 @@ export default function PastaVirtualGeral() {
 
     try {
       for (const file of Array.from(files)) {
+        const preparedUpload = await preparePdfUploadFile(file);
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', preparedUpload.file);
+        formData.append('upload_original_size', String(preparedUpload.originalSize));
+        formData.append('upload_final_size', String(preparedUpload.finalSize));
+        formData.append('upload_optimized', preparedUpload.optimized ? '1' : '0');
+        formData.append(
+          'upload_preserved_signature',
+          preparedUpload.preservedDigitalSignature ? '1' : '0',
+        );
 
         const response = await fetch(`${API_BASE_URL}/pasta-virtual/upload`, {
           method: 'POST',
