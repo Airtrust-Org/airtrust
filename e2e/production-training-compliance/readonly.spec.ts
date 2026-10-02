@@ -148,8 +148,8 @@ test('production intelligent training compliance UI and APIs are coherent and re
     pendingsP.then(payload),
   ]);
   await expect(page.getByRole('heading', { name: 'Compliance de Treinamentos' })).toBeVisible();
-  await expect(page.getByRole('combobox').first()).toContainText('Todos os setores');
-  await expect(page.getByRole('combobox').nth(1)).toContainText('Todos os cargos');
+  await expect(page.getByRole('combobox', { name: 'Filtrar por setor' })).toContainText('Todos os setores');
+  await expect(page.getByRole('combobox', { name: 'Filtrar por função' })).toContainText('Todas as funções');
   await expect(page.getByRole('heading', { name: 'Central de pendências' })).toBeVisible();
   expect(capabilities.data.schema_ready).toBe(true);
   expect(capabilities.data.reconciliation_ready).toBe(true);
