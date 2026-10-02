@@ -63,9 +63,7 @@
       <file href="imscp_rootv1p1p2.xsd"/>
       <file href="imsmd_rootv1p2p1.xsd"/>
       <file href="app.07c4586bb0edca1b.js"/>
-      <file href="app.07c4586bb0edca1b.js.map"/>
       <file href="app.cc0d588970e1f88e.css"/>
-      <file href="app.cc0d588970e1f88e.css.map"/>
       <file href="assets/NotoSans-Italic.f322611529c721d3.woff"/>
       <file href="assets/NotoSans-Regular.d443fda2a79a3b67.woff"/>
       <file href="assets/NotoSans-SemiBold.53a4b677893d7a69.woff"/>
@@ -110,15 +108,11 @@
       <file href="img/video/empty.png"/>
       <file href="index.html"/>
       <file href="modules.473fbbfd66fb5923.js"/>
-      <file href="modules.473fbbfd66fb5923.js.map"/>
       <file href="modules.a5b0990ec50f29b5.css"/>
-      <file href="modules.a5b0990ec50f29b5.css.map"/>
       <file href="player.html"/>
       <file href="runtime.670f4cabae4eeec9.js"/>
       <file href="scorm.2aa5f200ece6542d.js"/>
-      <file href="scorm.2aa5f200ece6542d.js.map"/>
       <file href="vendors.9d8f217301be500e.js"/>
-      <file href="vendors.9d8f217301be500e.js.map"/>
       <file href="video/example.mp4"/>
       <file href="config.json"/>
     </resource>
