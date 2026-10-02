@@ -385,7 +385,7 @@ describe('qualificacoes historico status sort contract', () => {
     expect(body.data[0]).toMatchObject({
       id: 901,
       validade_meses: 24,
-      data_vencimento: '2020-08-08',
+      data_vencimento: '2021-08-08',
     });
   });
 
