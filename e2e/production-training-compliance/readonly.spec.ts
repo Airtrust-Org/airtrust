@@ -86,6 +86,7 @@ async function login(page: Page) {
   // only the authentication POST plus read-only requests.
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
   await assertProductionFrontendShaFromPage(page, EXPECTED_SHA.slice(0, 7), 'production-login');
+  await page.setContent('<!doctype html><html><body></body></html>');
 
   const authResult = await page.evaluate(
     async ({ apiBase, email, password }) => {
