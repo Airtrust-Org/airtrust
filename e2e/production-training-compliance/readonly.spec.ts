@@ -316,7 +316,7 @@ test('production intelligent training compliance UI and APIs are coherent and re
   const people = await peopleP.then(payload);
   expect(Array.isArray(people.data)).toBe(true);
   await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
-  await expect(page.getByRole('columnheader', { name: 'Setor / cargo' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Setor / função' })).toBeVisible();
 
   const sectorsP = waitApi(page, '/api/compliance-treinamentos/setores');
   await page.getByRole('button', { name: 'Setores', exact: true }).click();
