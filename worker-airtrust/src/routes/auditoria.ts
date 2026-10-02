@@ -10,6 +10,7 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
+import { getSchemaColumns } from '../utils/db-schema';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -23,10 +24,7 @@ app.get('/', async (c) => {
   try {
     const db = c.env.DB;
     const { empresaId } = getTenantContext(c);
-    const schemaInfo = await db.prepare("PRAGMA table_info('qualificacoes_historico')").all();
-    const schemaColumns = new Set(
-      (schemaInfo.results || []).map((row) => String((row as { name?: string }).name || '')),
-    );
+    const schemaColumns = await getSchemaColumns(db, 'qualificacoes_historico');
     const hasRenovacaoDe = schemaColumns.has('renovacao_de');
     const hasRenovada = schemaColumns.has('renovada');
     const vinculoExpr = hasRenovacaoDe
