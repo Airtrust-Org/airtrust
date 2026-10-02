@@ -263,13 +263,13 @@ describe('LMS cursos domínio-agnósticos', () => {
     const dbThrowingOnOperationalAccess = {
       prepare: (sql: string) => {
         // PRAGMA table_info — responde com a coluna dominio_codigo presente
-        if (sql.includes('pragma_table_info')) {
+        if (sql.includes('pragma_table_info') || sql.includes("PRAGMA table_info('lms_cursos')")) {
+          const result = {
+            results: [{ name: 'dominio_codigo' }, { name: 'id' }, { name: 'empresa_id' }],
+          };
           return {
-            bind: () => ({
-              all: async () => ({
-                results: [{ name: 'dominio_codigo' }, { name: 'id' }, { name: 'empresa_id' }],
-              }),
-            }),
+            all: async () => result,
+            bind: () => ({ all: async () => result }),
           };
         }
         // SELECT dominio_codigo FROM lms_cursos — responde com NULL
