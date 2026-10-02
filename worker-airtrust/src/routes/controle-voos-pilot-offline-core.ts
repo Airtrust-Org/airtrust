@@ -357,6 +357,38 @@ pilotOffline.post(
 );
 
 pilotOffline.get(
+  '/voos/:id/offline-revision',
+  auth(),
+  requireAnyRdvAccess(),
+  async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    const voo = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
+    await assertRdvSelfScope(
+      c,
+      c.env.DB,
+      empresaId,
+      voo.id,
+      RDV_CAPABILITIES.visualizarProprio,
+    );
+    const rdv = await getActiveRdvByFlight(c.env.DB, voo.id, empresaId);
+    const flightVersion = Number(voo.versao || 0);
+    const rdvVersion = Number(rdv?.versao || 0);
+
+    c.header('Cache-Control', 'no-store, max-age=0');
+    c.header('Pragma', 'no-cache');
+    return c.json({
+      success: true,
+      data: {
+        flight_id: voo.id,
+        flight_version: flightVersion,
+        rdv_version: rdvVersion,
+        package_id: `pilot-offline:v1:voo:${voo.id}:v${flightVersion}:rdv:${rdvVersion}`,
+      },
+    });
+  },
+);
+
+pilotOffline.get(
   '/voos/:id/offline-package',
   auth(),
   requireAnyRdvAccess(),
