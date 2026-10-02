@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-02",
-    "last_reconciled_against": "0526 training compliance matrix alignment prepared; remote apply pending; 0525 organizational normalization also remains pending",
-    "schema_v2_digest": "3c9b4c2cad32205f051cd0d352352bcbfe94a1664b54b2e36c6e60ed45fc95c5",
+    "last_reconciled_against": "0527 LOFT prerequisite bootstrap prepared after fail-closed staging 0526 preflight; 0526 and 0525 remain remotely pending",
+    "schema_v2_digest": "2d19a562f19a2542a05afe8b0c9ddf24c39c02d607e4a910617496e8fe454654",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1257,6 +1257,18 @@
       "reviewed_manifest": "training-compliance-matrix-alignment-0526.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-matrix-alignment-0526.md",
       "note": "0526 is a reviewed data-only Training Compliance alignment for tenant 6. It preserves broader controlled-matrix audiences, keeps LOFT separate, sets SGSO/PRE/NR-20/NR-35 reviewed cycles, keeps AVSEC awareness company-wide, records the bounded 24-month Petrobras/IOGP client criterion for controlled Maintenance training, seeds only specific designation catalog entries, infers no employee designation, and writes no LMS enrollment, qualification history, certificate or completion evidence. Remote apply requires staging validation, the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0527_training_compliance_loft_bootstrap.sql",
+      "change_id": "training-compliance-loft-bootstrap-0527",
+      "sha256": "efb65cc607d6f4c75c3f8ecd44916e4e82663e4efab14311c4bc0f44af261c10",
+      "targets": [],
+      "domain": "training compliance / LOFT prerequisite bootstrap for reviewed matrix alignment",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-loft-bootstrap-0527.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-loft-bootstrap-0527.md",
+      "note": "0527 is a reviewed data-only prerequisite discovered by the fail-closed 0526 staging preflight. It preserves an existing tenant-6 LOFT identity when available or creates the minimal model only when none exists, writes no histories/enrollments/requirements, and must be applied before 0526 only in environments missing LOFT."
     }
   ]
 }
