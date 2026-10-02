@@ -378,9 +378,11 @@ describe('Tenant SQL Guardrail — Schema Drift Prevention', () => {
       for (const block of blocks) {
         // Very basic conservative regex to catch direct usage
         // Fails if "table_name ... empresa_id" appear in the same block without PRAGMA check
-        // We will allow it if PRAGMA table_info is used in the same file to conditionally add it
-        const hasPragmaInfo = source.includes('PRAGMA table_info');
-        if (hasPragmaInfo) continue;
+        // Allow schema-aware feature detection when the route uses either the
+        // direct PRAGMA probe or the canonical per-D1 schema helper.
+        const hasSchemaFeatureDetection =
+          source.includes('PRAGMA table_info') || source.includes('getSchemaColumns(');
+        if (hasSchemaFeatureDetection) continue;
 
         for (const table of tablesWithoutEmpresaId) {
           // If the block contains the table name AND 'empresa_id', it's a potential drift violation.
