@@ -7,9 +7,9 @@ import { execSql, querySql } from '../helpers/sqlite-batch-runner';
 
 const ROOT = join(__dirname, '../../../..');
 const read = (path: string) => readFileSync(join(ROOT, path), 'utf8');
-const changePath = 'worker-airtrust/schema-v2/changes/0526_setor_compliance_responsibles.sql';
-const planPath = 'worker-airtrust/schema-v2/plans/setor-compliance-responsibles-0526.md';
-const manifestPath = 'worker-airtrust/schema-v2/setor-compliance-responsibles-0526.json';
+const changePath = 'worker-airtrust/schema-v2/changes/0527_setor_compliance_responsibles.sql';
+const planPath = 'worker-airtrust/schema-v2/plans/setor-compliance-responsibles-0527.md';
+const manifestPath = 'worker-airtrust/schema-v2/setor-compliance-responsibles-0527.json';
 const change = read(changePath);
 const tempDirs: string[] = [];
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 function createDatabase() {
-  const dir = mkdtempSync(join(tmpdir(), 'airtrust-0526-'));
+  const dir = mkdtempSync(join(tmpdir(), 'airtrust-0527-'));
   tempDirs.push(dir);
   const db = join(dir, 'test.sqlite');
   const setup = execSql(
@@ -38,11 +38,11 @@ function createDatabase() {
   return db;
 }
 
-describe('0526 sector Compliance responsibles', () => {
+describe('0527 sector Compliance responsibles', () => {
   it('pins reviewed Schema V2 hashes', () => {
     const manifest = JSON.parse(read(manifestPath)) as Record<string, string>;
     expect(manifest).toMatchObject({
-      changeId: 'setor-compliance-responsibles-0526',
+      changeId: 'setor-compliance-responsibles-0527',
       baselineId: 'production-d1-baseline-v2-20260714',
       filePath: changePath,
       planPath,

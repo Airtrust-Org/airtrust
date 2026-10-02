@@ -1,0 +1,8 @@
+{
+  "changeId": "setor-compliance-responsibles-0527",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0527_setor_compliance_responsibles.sql",
+  "fileHash": "313ca39eb976b41c5b8fae7addc3be021163fd3964d4c036b7b9163b34715686",
+  "planPath": "worker-airtrust/schema-v2/plans/setor-compliance-responsibles-0527.md",
+  "planHash": "01928fed9a8e4a2b9461a0f0ae950600ce33e8bc86a9f8d049ff6fbd774e705c"
+}

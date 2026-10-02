@@ -364,7 +364,7 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-02",
-    "last_reconciled_against": "0526 sector Compliance responsibles prepared; remote apply pending",
+    "last_reconciled_against": "0527 sector Compliance responsibles prepared; remote apply pending",
     "schema_v2_digest": "22f788e867f377708b2012109274f46e378b48c46f3fd0eae0bf4abdd1585d39",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
@@ -899,7 +899,7 @@
     {
       "change_file": "0501_controle_voos_leg_operational_weights.sql",
       "change_id": "controle-voos-leg-operational-weights-0501",
-      "sha256": "b1d9be8e4674c9810b2bb21877684598491fe7da405268a0e650854b85638d5b",
+      "sha256": "b1d9be8e4674c9810b2bb21877684598491fe7da405278a0e650854b85638d5b",
       "targets": [
         "aeronaves",
         "cv_voo_etapas"
@@ -1247,18 +1247,18 @@
       "note": "0525 is a reviewed data-only organizational normalization. It creates only missing tenant-6 sectors/functions and sector-function mappings required by the reviewed 2026-09-28 source, normalizes 13 bounded active employee records by internal ID, clears only provisional TEMP-TRN matricula placeholders, versions no employee names, and changes no training history, RBAC or tenant membership. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
     },
     {
-      "change_file": "0526_setor_compliance_responsibles.sql",
-      "change_id": "setor-compliance-responsibles-0526",
-      "sha256": "b2dd99b6f8c09c60e80d43e317a60e4bd372001c529acfbb3ab5bdb63a245f81",
+      "change_file": "0527_setor_compliance_responsibles.sql",
+      "change_id": "setor-compliance-responsibles-0527",
+      "sha256": "313ca39eb976b41c5b8fae7addc3be021163fd3964d4c036b7b9163b34715686",
       "targets": [
         "setores_responsaveis_compliance"
       ],
       "domain": "training compliance / sector alert responsibility separated from operational access",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
-      "reviewed_manifest": "setor-compliance-responsibles-0526.json",
-      "evidence": "worker-airtrust/schema-v2/plans/setor-compliance-responsibles-0526.md",
-      "note": "0526 is an additive tenant-scoped responsibility registry. It separates Training Compliance alert recipients from operational setor access, enforces cross-tenant guards, rewrites no existing RBAC/user/training data, and preserves legacy recipients only as a runtime fallback until each sector is explicitly configured. Remote apply requires staging validation, a recovery point, ledger verification and exact-SHA production authorization."
+      "reviewed_manifest": "setor-compliance-responsibles-0527.json",
+      "evidence": "worker-airtrust/schema-v2/plans/setor-compliance-responsibles-0527.md",
+      "note": "0527 is an additive tenant-scoped responsibility registry. It separates Training Compliance alert recipients from operational setor access, enforces cross-tenant guards, rewrites no existing RBAC/user/training data, and preserves legacy recipients only as a runtime fallback until each sector is explicitly configured. Remote apply requires staging validation, a recovery point, ledger verification and exact-SHA production authorization."
     }
   ]
 }
