@@ -10,6 +10,7 @@ import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
+import { getSchemaColumns } from '../utils/db-schema';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -35,12 +36,8 @@ app.get('/uso', async (c) => {
     const diSql = di || '2000-01-01';
     const dfSql = df || '2099-12-31';
 
-    const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all<{
-      name: string;
-    }>();
-    const hasEmpresaId = (tableInfo.results || []).some(
-      (row) => String(row.name || '') === 'empresa_id',
-    );
+    const simuladoresColumns = await getSchemaColumns(c.env.DB, 'simuladores');
+    const hasEmpresaId = simuladoresColumns.has('empresa_id');
     const sEmpresaClause = hasEmpresaId ? ' AND s.empresa_id = ?' : '';
 
     // 1. Uso por simulador
