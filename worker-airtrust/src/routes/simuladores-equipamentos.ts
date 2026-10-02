@@ -20,6 +20,7 @@ import { requirePermission } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
 import { requireAdminForDelete, audit, simuladoresHasEmpresaId } from './simuladores-shared';
 import { createLogger, toError } from '../utils/logger';
+import { getSchemaColumns } from '../utils/db-schema';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -438,12 +439,8 @@ app.put('/:id', requirePermission('simuladores', 'editar', 'admin', 'manager'), 
     const { empresaId } = getTenantContext(c);
     const id = c.req.param('id');
     const b = await c.req.json();
-    // PUT also needs the full column set for modelo_aeronave compatibility, so
-    // this remains the single direct schema probe in this module for now.
-    const tableInfo = await c.env.DB.prepare('PRAGMA table_info(simuladores)').all();
-    const colunas = new Set(
-      (tableInfo.results || []).map((row: Record<string, unknown>) => String(row.name || '')),
-    );
+    // PUT needs the full column set for modelo_aeronave compatibility.
+    const colunas = await getSchemaColumns(c.env.DB, 'simuladores');
     const hasEmpresaId = colunas.has('empresa_id');
     const a = await c.env.DB.prepare(
       hasEmpresaId
