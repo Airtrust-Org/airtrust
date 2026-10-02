@@ -34,6 +34,7 @@ interface PastaVirtualCompletaProps {
 }
 
 function formatFileSize(bytes: number): string {
+  if (bytes < 0) return 'Gerado pelo AirTrust';
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
@@ -304,14 +305,18 @@ export default function PastaVirtualCompleta({
                               >
                                 <Download className="h-5 w-5" />
                               </button>
-                              <button
-                                onClick={() => setShowConfirmDelete({ id: doc.id, nome: doc.nome })}
-                                disabled={deletandoId === doc.id}
-                                className="rounded p-2 text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-950/30"
-                                title="Excluir"
-                              >
-                                <Trash2 className="h-5 w-5" />
-                              </button>
+                              {doc.origem !== 'ficha_sessao' && (
+                                <button
+                                  onClick={() =>
+                                    setShowConfirmDelete({ id: doc.id, nome: doc.nome })
+                                  }
+                                  disabled={deletandoId === doc.id}
+                                  className="rounded p-2 text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-950/30"
+                                  title="Excluir"
+                                >
+                                  <Trash2 className="h-5 w-5" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>

@@ -17,6 +17,7 @@ import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { registrarAuditoria } from '../utils/auditoria';
 import { normalizarTipoDocumento } from '../utils/nomenclatura-padronizada';
+import { hasSchemaTable } from '../utils/db-schema';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { employeeSectorSql, getEmployeeSectorAccess } from '../services/employee-sector-access';
@@ -85,6 +86,8 @@ interface CategorizedDocument {
   status: string;
   versaoAtual?: boolean;
   substituidoPorId?: number | null;
+  origem?: 'documentos' | 'pasta_virtual' | 'ficha_sessao';
+  fichaId?: number | null;
 }
 
 const PASTA_VIRTUAL_CATEGORIA = {
@@ -171,7 +174,53 @@ export function inferirCategoriaDocumento(
   return PASTA_VIRTUAL_CATEGORIA.OUTROS;
 }
 
+type FichaSessaoPastaVirtualRow = {
+  id: number;
+  uuid: string;
+  tipo_sessao: string | null;
+  tipo_aeronave: string | null;
+  data_sessao: string | null;
+  status: string | null;
+  aprovado: number | null;
+  caminho_arquivo?: string | null;
+};
+
+function sanitizeFtvToken(value: string | null | undefined, fallback: string): string {
+  return (
+    String(value || fallback)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Z0-9]+/gi, '_')
+      .replace(/^_+|_+$/g, '')
+      .toUpperCase() || fallback
+  );
+}
+
+export function buildFichaSessaoPastaVirtualDocument(
+  ficha: FichaSessaoPastaVirtualRow,
+): CategorizedDocument {
+  const dataSessao = String(ficha.data_sessao || '').slice(0, 10);
+  const dataToken = dataSessao.replace(/-/g, '') || 'SEM_DATA';
+  const aeronave = sanitizeFtvToken(ficha.tipo_aeronave, 'AERONAVE');
+  const sessao = sanitizeFtvToken(ficha.tipo_sessao, 'SESSAO');
+
+  return {
+    id: ficha.id,
+    uuid: ficha.uuid || `ftv-${ficha.id}`,
+    nome: `FTV-${aeronave}-${sessao}-${dataToken}-${ficha.id}.pdf`,
+    tipo: 'FTV',
+    tamanho: -1,
+    url: `/simuladores/fichas/${ficha.id}/pdf`,
+    dataUpload: dataSessao,
+    status: 'Válido',
+    origem: 'ficha_sessao',
+    fichaId: ficha.id,
+  };
+}
+
 function documentVersionKey(document: CategorizedDocument): string {
+  if (document.origem === 'ficha_sessao') return `UNVERSIONED:FTV:${document.id}`;
+
   const cleanName = String(document.nome || '')
     .replace(/\.pdf$/i, '')
     .toUpperCase();
@@ -196,6 +245,7 @@ function documentVersionKey(document: CategorizedDocument): string {
     if (subtype === 'OUTROS' || subtype === 'OUTRO') return `UNVERSIONED:${document.id}`;
     return `${prefix}:${subtype}`;
   }
+  if (prefix === 'FTV') return `UNVERSIONED:FTV:${document.id}`;
   if (prefix === 'SIM') return cleanName.replace(/-\d{8}(?:-[A-Z0-9]{1,12})?$/, '');
   return `${String(document.tipo || prefix).toUpperCase()}:${prefix}`;
 }
@@ -337,7 +387,32 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
       ORDER BY pv.created_at DESC
     `;
 
-    const [docsResult, pvResult] = await Promise.all([
+    const fichasSessaoTable = await hasSchemaTable(db, 'fichas_sessao');
+
+    const queryFichasTreinamentoVoo = `
+      SELECT
+        fs.id,
+        fs.uuid,
+        fs.tipo_sessao,
+        fs.tipo_aeronave,
+        COALESCE(fs.data_sessao, fs.data_conclusao, substr(fs.created_at, 1, 10)) AS data_sessao,
+        fs.status,
+        fs.aprovado,
+        fs.caminho_arquivo
+      FROM fichas_sessao fs
+      INNER JOIN funcionarios f ON f.id = fs.colaborador_id_aluno AND f.deleted_at IS NULL
+      WHERE fs.colaborador_id_aluno = ?
+        AND fs.empresa_id = ?
+        AND f.empresa_id = ?
+        AND fs.deleted_at IS NULL
+        AND (
+          COALESCE(fs.aprovado, 0) = 1
+          OR UPPER(COALESCE(fs.status, '')) IN ('APROVADO', 'CONCLUIDA', 'CONCLUIDO', 'ARQUIVADA', 'ARQUIVADO')
+        )
+      ORDER BY date(COALESCE(fs.data_sessao, fs.data_conclusao, fs.created_at)) DESC, fs.id DESC
+    `;
+
+    const [docsResult, pvResult, fichasResult] = await Promise.all([
       db.prepare(queryDocumentos).bind(funcionarioId, empresaId).all<{
         id: number;
         uuid: string;
@@ -364,6 +439,12 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
         qualificacao_is_check?: number;
         origem: string;
       }>(),
+      fichasSessaoTable
+        ? db
+            .prepare(queryFichasTreinamentoVoo)
+            .bind(funcionarioId, empresaId, empresaId)
+            .all<FichaSessaoPastaVirtualRow>()
+        : Promise.resolve({ results: [] as FichaSessaoPastaVirtualRow[] }),
     ]);
 
     // Agrupar por categoria baseado no nome do arquivo
@@ -391,10 +472,20 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
     // certificado.pdf must not hide unrelated legacy documents.
     const filesMap = new Map<string, { doc: CategorizedDocument; categoria: string }>();
     const canonicalDocumentoIds = new Set((docsResult.results || []).map((doc) => Number(doc.id)));
+    const canonicalFichaR2Keys = new Set(
+      (fichasResult.results || [])
+        .map((ficha) => String(ficha.caminho_arquivo || '').trim())
+        .filter(Boolean),
+    );
+    const canonicalR2Keys = new Set(
+      (docsResult.results || []).map((doc) => String(doc.r2_key || '').trim()).filter(Boolean),
+    );
 
     // Processar documentos da tabela documentos primeiro. A classificação é
     // derivada de prefixos canônicos e mantém compatibilidade com nomes antigos.
     (docsResult.results || []).forEach((doc) => {
+      if (doc.r2_key && canonicalFichaR2Keys.has(String(doc.r2_key).trim())) return;
+
       const categoria = inferirCategoriaDocumento(
         doc.nome_arquivo,
         null,
@@ -413,6 +504,7 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
           url: doc.r2_key,
           dataUpload: doc.dataUpload,
           status: 'Válido',
+          origem: 'documentos',
         },
         categoria,
       });
@@ -420,8 +512,11 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
 
     // Processar documentos da tabela pasta_virtual (apenas se não existirem em documentos).
     (pvResult.results || []).forEach((doc) => {
-      // Skip only an explicit compatibility mirror of the canonical documentos row.
+      // Skip compatibility mirrors of the canonical documentos row. Newer schemas use
+      // documento_id; older production schemas are reconciled by exact R2 identity only.
       if (doc.documento_id && canonicalDocumentoIds.has(Number(doc.documento_id))) return;
+      if (doc.r2_key && canonicalR2Keys.has(String(doc.r2_key).trim())) return;
+      if (doc.r2_key && canonicalFichaR2Keys.has(String(doc.r2_key).trim())) return;
 
       const categoria = inferirCategoriaDocumento(
         doc.nome_arquivo,
@@ -441,8 +536,18 @@ app.get('/by-category/:funcionario_id', auth(), async (c) => {
           url: doc.r2_key || '',
           dataUpload: doc.dataUpload || '',
           status: 'Válido',
+          origem: 'pasta_virtual',
         },
         categoria,
+      });
+    });
+
+    // Fichas finalizadas no módulo de Treinamento de Voo são uma fonte canônica própria.
+    // Elas aparecem na Pasta Virtual sem criar uma segunda cópia em documentos/R2.
+    (fichasResult.results || []).forEach((ficha) => {
+      filesMap.set(`ficha_sessao:${ficha.id}`, {
+        doc: buildFichaSessaoPastaVirtualDocument(ficha),
+        categoria: PASTA_VIRTUAL_CATEGORIA.FTV,
       });
     });
 

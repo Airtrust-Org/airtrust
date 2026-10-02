@@ -27,4 +27,15 @@ describe('Pasta Virtual canonical document presentation', () => {
     expect(view).toContain('Versão atual');
     expect(view).toContain('Substituído');
   });
+
+  it('trata FTV estruturada como fonte canônica sem reupload ou exclusão documental', () => {
+    const hook = source('src/react-app/hooks/usePastaVirtual.ts');
+    const view = source('src/react-app/components/funcionarios/PastaVirtualCompleta.tsx');
+
+    expect(hook).toContain("doc.origem === 'ficha_sessao'");
+    expect(hook).toContain('/simuladores/fichas/${fichaId}/pdf');
+    expect(hook).toContain("method: 'POST'");
+    expect(view).toContain("doc.origem !== 'ficha_sessao'");
+    expect(view).toContain('Gerado pelo AirTrust');
+  });
 });

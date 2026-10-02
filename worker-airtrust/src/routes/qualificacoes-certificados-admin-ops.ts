@@ -17,6 +17,7 @@ import {
 } from '../lib/audit/context';
 import { recordLegacyAndCanonicalAudit } from '../lib/audit/record-legacy-and-canonical-audit';
 import { ensureCertificateForQualification } from '../services/ensure-certificate';
+import { getSchemaColumns } from '../utils/db-schema';
 
 const opsRouter = new Hono<{ Bindings: Env }>();
 const BACKFILL_DEFAULT_LIMIT = 10;
@@ -374,6 +375,246 @@ opsRouter.post(
         500,
       );
     }
+  },
+);
+
+// 🔁 Realocar uma evidência já existente entre históricos da MESMA qualificação.
+// Evita reupload/R2 duplicado quando o documento correto foi ligado ao ciclo errado.
+opsRouter.post(
+  '/realocar-evidencia',
+  auth(),
+  requireControlledAdminOrSupportAccess({
+    action: 'CERTIFICADOS_REALOCAR_EVIDENCIA',
+    access: 'mutation',
+    entityType: 'certificados_admin_ops',
+    module: 'qualificacoes_certificados',
+  }),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaId(c);
+    const body = await c.req.json().catch(() => ({}));
+    const documentoId = Number((body as Record<string, unknown>).documento_id || 0);
+    const historicoOrigemId = Number((body as Record<string, unknown>).historico_origem_id || 0);
+    const historicoDestinoId = Number((body as Record<string, unknown>).historico_destino_id || 0);
+
+    if (
+      !Number.isInteger(documentoId) ||
+      documentoId <= 0 ||
+      !Number.isInteger(historicoOrigemId) ||
+      historicoOrigemId <= 0 ||
+      !Number.isInteger(historicoDestinoId) ||
+      historicoDestinoId <= 0 ||
+      historicoOrigemId === historicoDestinoId
+    ) {
+      return c.json({ success: false, error: 'IDs inválidos para realocação de evidência' }, 400);
+    }
+
+    type ReassignRow = {
+      documento_id: number;
+      funcionario_id: number;
+      r2_key: string;
+      origem_documento_id: number | null;
+      destino_documento_id: number | null;
+      origem_codigo: string | null;
+      destino_codigo: string | null;
+    };
+
+    const row = await db
+      .prepare(
+        `SELECT
+           d.id AS documento_id,
+           d.funcionario_id,
+           d.r2_key,
+           origem.certificado_arquivo_id AS origem_documento_id,
+           destino.certificado_arquivo_id AS destino_documento_id,
+           COALESCE(origem.qualificacao_codigo, origem.codigo, origem.tipo_codigo) AS origem_codigo,
+           COALESCE(destino.qualificacao_codigo, destino.codigo, destino.tipo_codigo) AS destino_codigo
+         FROM documentos d
+         INNER JOIN funcionarios f
+           ON f.id=d.funcionario_id
+          AND f.empresa_id=?
+          AND f.deleted_at IS NULL
+         INNER JOIN qualificacoes_historico origem
+           ON origem.id=?
+          AND origem.funcionario_id=d.funcionario_id
+          AND origem.empresa_id=f.empresa_id
+          AND origem.deleted_at IS NULL
+         INNER JOIN qualificacoes_historico destino
+           ON destino.id=?
+          AND destino.funcionario_id=d.funcionario_id
+          AND destino.empresa_id=f.empresa_id
+          AND destino.deleted_at IS NULL
+         WHERE d.id=?
+           AND d.empresa_id=f.empresa_id
+           AND d.deleted_at IS NULL
+         LIMIT 1`,
+      )
+      .bind(empresaId, historicoOrigemId, historicoDestinoId, documentoId)
+      .first<ReassignRow>();
+
+    if (!row) {
+      return c.json({ success: false, error: 'Evidência ou histórico não encontrado' }, 404);
+    }
+
+    const origemCodigo = String(row.origem_codigo || '')
+      .trim()
+      .toUpperCase();
+    const destinoCodigo = String(row.destino_codigo || '')
+      .trim()
+      .toUpperCase();
+    if (!origemCodigo || origemCodigo !== destinoCodigo) {
+      return c.json(
+        { success: false, error: 'A evidência só pode ser realocada dentro da mesma qualificação' },
+        409,
+      );
+    }
+    if (Number(row.origem_documento_id || 0) !== documentoId) {
+      return c.json(
+        { success: false, error: 'O histórico de origem não referencia esta evidência' },
+        409,
+      );
+    }
+    if (row.destino_documento_id && Number(row.destino_documento_id) !== documentoId) {
+      return c.json(
+        { success: false, error: 'O histórico de destino já possui outra evidência' },
+        409,
+      );
+    }
+
+    // Um único UPDATE cobre origem e destino. As subqueries de precondição são
+    // compartilhadas pelas duas linhas, evitando estado intermediário em caso de corrida.
+    const reassignResult = await db
+      .prepare(
+        `UPDATE qualificacoes_historico
+            SET certificado_arquivo_id = CASE
+                  WHEN id=? THEN NULL
+                  WHEN id=? THEN ?
+                  ELSE certificado_arquivo_id
+                END,
+                updated_at=datetime('now')
+          WHERE empresa_id=?
+            AND funcionario_id=?
+            AND deleted_at IS NULL
+            AND id IN (?, ?)
+            AND (SELECT certificado_arquivo_id
+                   FROM qualificacoes_historico
+                  WHERE id=? AND empresa_id=? AND funcionario_id=? AND deleted_at IS NULL) = ?
+            AND COALESCE(
+                  (SELECT certificado_arquivo_id
+                     FROM qualificacoes_historico
+                    WHERE id=? AND empresa_id=? AND funcionario_id=? AND deleted_at IS NULL),
+                  ?
+                ) = ?`,
+      )
+      .bind(
+        historicoOrigemId,
+        historicoDestinoId,
+        documentoId,
+        empresaId,
+        row.funcionario_id,
+        historicoOrigemId,
+        historicoDestinoId,
+        historicoOrigemId,
+        empresaId,
+        row.funcionario_id,
+        documentoId,
+        historicoDestinoId,
+        empresaId,
+        row.funcionario_id,
+        documentoId,
+        documentoId,
+      )
+      .run();
+
+    if (Number(reassignResult.meta?.changes || 0) !== 2) {
+      return c.json(
+        {
+          success: false,
+          error: 'As precondições mudaram; a evidência não foi realocada',
+        },
+        409,
+      );
+    }
+
+    // Compatibilidade com pasta_virtual antiga: o espelho pode não ter documento_id,
+    // mas compartilha exatamente a mesma chave R2. Atualizamos apenas esse vínculo.
+    const pvColumnNames = await getSchemaColumns(db, 'pasta_virtual');
+    if (
+      pvColumnNames.has('certificacao_id') &&
+      pvColumnNames.has('caminho_arquivo') &&
+      pvColumnNames.has('empresa_id')
+    ) {
+      if (pvColumnNames.has('updated_at')) {
+        await db
+          .prepare(
+            `UPDATE pasta_virtual
+                SET certificacao_id=?, updated_at=datetime('now')
+              WHERE caminho_arquivo=? AND funcionario_id=? AND empresa_id=? AND deleted_at IS NULL`,
+          )
+          .bind(historicoDestinoId, row.r2_key, row.funcionario_id, empresaId)
+          .run();
+      } else {
+        await db
+          .prepare(
+            `UPDATE pasta_virtual
+                SET certificacao_id=?
+              WHERE caminho_arquivo=? AND funcionario_id=? AND empresa_id=? AND deleted_at IS NULL`,
+          )
+          .bind(historicoDestinoId, row.r2_key, row.funcionario_id, empresaId)
+          .run();
+      }
+    }
+
+    const post = await db
+      .prepare(
+        `SELECT
+           (SELECT certificado_arquivo_id FROM qualificacoes_historico
+             WHERE id=? AND funcionario_id=? AND empresa_id=? AND deleted_at IS NULL) AS origem_documento_id,
+           (SELECT certificado_arquivo_id FROM qualificacoes_historico
+             WHERE id=? AND funcionario_id=? AND empresa_id=? AND deleted_at IS NULL) AS destino_documento_id`,
+      )
+      .bind(
+        historicoOrigemId,
+        row.funcionario_id,
+        empresaId,
+        historicoDestinoId,
+        row.funcionario_id,
+        empresaId,
+      )
+      .first<{ origem_documento_id: number | null; destino_documento_id: number | null }>();
+
+    if (
+      post?.origem_documento_id != null ||
+      Number(post?.destino_documento_id || 0) !== documentoId
+    ) {
+      return c.json(
+        { success: false, error: 'Pós-condição da realocação não foi confirmada' },
+        500,
+      );
+    }
+
+    await recordCertificadosAdminOperationAudit(c, {
+      action: 'CERTIFICADOS_REALOCAR_EVIDENCIA',
+      entityId: documentoId,
+      metadata: { count: 1, approximate_count: 1 },
+      legacyPayload: {
+        documento_id: documentoId,
+        historico_origem_id: historicoOrigemId,
+        historico_destino_id: historicoDestinoId,
+        qualificacao_codigo: destinoCodigo,
+      },
+    });
+
+    return c.json({
+      success: true,
+      message: 'Evidência realocada sem duplicar o arquivo',
+      data: {
+        documento_id: documentoId,
+        historico_origem_id: historicoOrigemId,
+        historico_destino_id: historicoDestinoId,
+        qualificacao_codigo: destinoCodigo,
+      },
+    });
   },
 );
 
