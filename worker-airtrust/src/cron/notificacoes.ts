@@ -17,7 +17,7 @@ import {
 } from '../utils/whatsapp-templates';
 import { createStructuredConsole } from '../utils/logger';
 import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
-import { getSetorGestoresBySetor } from '../services/setores-gestores';
+import { resolveSetorComplianceAlertEmails } from '../services/setores-responsaveis-compliance';
 import { trainingComplianceEffectiveRequirementPredicateSql } from '../services/training-compliance-rule-engine';
 import {
   inferTrainingAlertStageCode,
@@ -549,15 +549,14 @@ async function resolveQualificationEmailRecipients(
 
   if (policy.gestores && qualificacao.funcionario_setor_id) {
     try {
-      const gestores = await getSetorGestoresBySetor(
+      const responsaveis = await resolveSetorComplianceAlertEmails(
         env.DB,
         empresaId,
         qualificacao.funcionario_setor_id,
-        true,
       );
-      recipients.push(...gestores.map((gestor) => gestor.gestor_email).filter(Boolean));
+      recipients.push(...responsaveis);
     } catch (gestorError) {
-      log.warn('[NOTIFICACOES] Falha ao resolver gestores do setor', {
+      log.warn('[NOTIFICACOES] Falha ao resolver responsáveis de Compliance do setor', {
         qualificacaoHistoricoId: qualificacao.id,
         setorId: qualificacao.funcionario_setor_id,
         erro: gestorError instanceof Error ? gestorError.message : String(gestorError),

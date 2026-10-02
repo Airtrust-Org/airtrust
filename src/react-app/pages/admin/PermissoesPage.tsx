@@ -46,7 +46,7 @@ const MODULOS = [
 const ACOES = ['visualizar', 'editar'] as const;
 
 const PERFIS: { value: Perfil; label: string; color: string }[] = [
-  { value: 'GESTOR', label: 'Gestor', color: 'bg-blue-100 text-blue-800' },
+  { value: 'GESTOR', label: 'Administrador da Empresa', color: 'bg-blue-100 text-blue-800' },
   { value: 'INSTRUTOR', label: 'Instrutor', color: 'bg-green-100 text-green-800' },
   { value: 'ALUNO', label: 'Aluno / Usuário', color: 'bg-gray-100 text-gray-700' },
 ];

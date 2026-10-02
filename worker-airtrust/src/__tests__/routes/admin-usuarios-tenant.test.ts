@@ -767,3 +767,83 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
     });
   });
 });
+
+describe('Administrador da Empresa privilege boundary', () => {
+  it('GESTOR não pode criar outro Administrador da Empresa', async () => {
+    const response = await adminRequest('POST', '', {
+      callerId: 10,
+      callerRole: 'GESTOR',
+      callerEmpresaId: 1,
+      body: {
+        email: 'novo.admin.empresa@test.com',
+        nome: 'Novo Admin Empresa',
+        perfil: 'GESTOR',
+        setor_ids: [1],
+      },
+      db: createDb({ targetExists: false, callerEmpresaId: 1 }),
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('GESTOR não pode editar outro Administrador da Empresa', async () => {
+    const response = await adminRequest('PUT', '/200', {
+      callerId: 10,
+      callerRole: 'GESTOR',
+      callerEmpresaId: 1,
+      body: { nome: 'Tentativa de alteração' },
+      db: createDb({
+        targetExists: true,
+        targetPerfil: 'GESTOR',
+        targetEmpresaId: 1,
+        targetHasVinculo: true,
+      }),
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('GESTOR não pode alterar permissões de outro Administrador da Empresa', async () => {
+    const response = await adminRequest('PUT', '/200/permissoes', {
+      callerId: 10,
+      callerRole: 'GESTOR',
+      callerEmpresaId: 1,
+      body: { permissoes: [{ permissao: 'frms.view', tipo: 'DENY' as const }] },
+      db: createDb({
+        targetExists: true,
+        targetPerfil: 'GESTOR',
+        targetEmpresaId: 1,
+        targetHasVinculo: true,
+      }),
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('GESTOR não pode remover acesso de outro Administrador da Empresa', async () => {
+    const response = await adminRequest('DELETE', '/200', {
+      callerId: 10,
+      callerRole: 'GESTOR',
+      callerEmpresaId: 1,
+      db: createDb({
+        targetExists: true,
+        targetPerfil: 'GESTOR',
+        targetEmpresaId: 1,
+        targetHasVinculo: true,
+      }),
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('GESTOR não pode regenerar convite de outro Administrador da Empresa', async () => {
+    const response = await adminRequest('POST', '/200/invite', {
+      callerId: 10,
+      callerRole: 'GESTOR',
+      callerEmpresaId: 1,
+      db: createDb({
+        targetExists: true,
+        targetPerfil: 'GESTOR',
+        targetEmpresaId: 1,
+        targetHasVinculo: true,
+      }),
+    });
+    expect(response.status).toBe(403);
+  });
+});

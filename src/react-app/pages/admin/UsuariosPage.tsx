@@ -122,10 +122,10 @@ const resetSenhaSchema = z
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const PERFIS = [
-  { value: 'ADMINISTRADOR', label: 'Admin', color: 'bg-red-100 text-red-800' },
-  { value: 'ADMIN', label: 'Admin', color: 'bg-red-100 text-red-800' }, // alias legado
-  { value: 'GESTOR', label: 'Gestor', color: 'bg-blue-100 text-blue-700' },
-  { value: 'MANAGER', label: 'Gestor', color: 'bg-blue-100 text-blue-700' },
+  { value: 'ADMINISTRADOR', label: 'Administrador Geral', color: 'bg-red-100 text-red-800' },
+  { value: 'ADMIN', label: 'Administrador Geral', color: 'bg-red-100 text-red-800' }, // alias legado
+  { value: 'GESTOR', label: 'Administrador da Empresa', color: 'bg-blue-100 text-blue-700' },
+  { value: 'MANAGER', label: 'Administrador da Empresa', color: 'bg-blue-100 text-blue-700' },
   { value: 'INSTRUTOR', label: 'Instrutor', color: 'bg-green-100 text-green-800' },
   { value: 'ALUNO', label: 'Aluno', color: 'bg-gray-100 text-gray-600' },
   { value: 'USUARIO', label: 'Aluno', color: 'bg-gray-100 text-gray-600' },
@@ -388,7 +388,7 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
   // Funcionários sem usuário (para vincular ao criar)
   const [funcionarios, setFuncionarios] = useState<FuncionarioOpcao[]>([]);
 
-  // Gestores com ao menos um setor ativo vinculado (para indicador "sem setor")
+  // Administradores da Empresa com ao menos um setor ativo vinculado (para indicador "sem setor")
   const [gestoresComSetor, setGestoresComSetor] = useState<Set<number>>(new Set());
 
   // ─── Carregar dados ──────────────────────────────────────────────────────────
@@ -813,7 +813,7 @@ export default function UsuariosPage() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Campo: Setores gerenciados (obrigatório quando perfil = GESTOR)
+// Campo: Setores com acesso (obrigatório quando perfil técnico = GESTOR)
 // ─────────────────────────────────────────────────────────────────────────────
 
 type SetorOpcao = { id: number; nome: string; ativo: number | boolean };
@@ -927,7 +927,9 @@ function ModalCriarUsuario({
   const [tentouEnviar, setTentouEnviar] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const perfisSelecionaveis = isAdmin ? PERFIS : PERFIS.filter((p) => p.value !== 'ADMINISTRADOR');
+  const perfisSelecionaveis = isAdmin
+    ? PERFIS
+    : PERFIS.filter((p) => !['ADMINISTRADOR', 'ADMIN', 'GESTOR', 'MANAGER'].includes(p.value));
 
   // Auto-preencher email e nome do funcionário selecionado
   const handleFuncionarioChange = (id: string) => {
@@ -1145,7 +1147,9 @@ function ModalEditarUsuario({
         ]
       : funcionarios;
 
-  const perfisSelecionaveis = isAdmin ? PERFIS : PERFIS.filter((p) => p.value !== 'ADMINISTRADOR');
+  const perfisSelecionaveis = isAdmin
+    ? PERFIS
+    : PERFIS.filter((p) => !['ADMINISTRADOR', 'ADMIN', 'GESTOR', 'MANAGER'].includes(p.value));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1609,7 +1613,7 @@ function buildDefaultPerfisEditaveis(): PerfilEditavel[] {
     },
     {
       value: 'GESTOR',
-      label: 'Gestor',
+      label: 'Administrador da Empresa',
       ...BUILTIN_COLORS.GESTOR,
       permissoes: ROLE_DEFAULTS.GESTOR!,
       is_builtin: true,

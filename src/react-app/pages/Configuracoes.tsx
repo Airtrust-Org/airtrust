@@ -36,6 +36,13 @@ const GestaoEmpresas = lazyWithRetry(
     import('./Configuracoes/GestaoEmpresas').then((module) => ({ default: module.GestaoEmpresas })),
   'ConfiguracoesGestaoEmpresasTab',
 );
+const ResponsaveisSetor = lazyWithRetry(
+  () =>
+    import('./Configuracoes/ResponsaveisSetor').then((module) => ({
+      default: module.ResponsaveisSetor,
+    })),
+  'ConfiguracoesResponsaveisSetorTab',
+);
 const SetoresGestores = lazyWithRetry(
   () =>
     import('./Configuracoes/SetoresGestores').then((module) => ({
@@ -76,6 +83,7 @@ type ConfigTab =
   | 'sistema'
   | 'usuarios'
   | 'setores-gestores'
+  | 'responsaveis-setor'
   | 'matriz-treinamento'
   | 'alertas';
 
@@ -92,8 +100,9 @@ export default function Configuracoes() {
   const { isAdmin, isGestor } = usePermissions();
   const canAccessCompanyManagement = isAdmin;
   const canManageMatriz = isAdmin || isGestor;
-  const canManageUsers = isAdmin;
+  const canManageUsers = isAdmin || isGestor;
   const canManageBackup = isAdmin;
+  const canManageSystem = isAdmin;
   const canManageOperationalSettings = isAdmin || isGestor;
   const [searchParams] = useSearchParams();
 
@@ -126,8 +135,14 @@ export default function Configuracoes() {
       setActiveTab(requested);
       return;
     }
+    if (requested === 'sistema' && canManageSystem) {
+      setActiveTab(requested);
+      return;
+    }
     if (
-      ['importacao', 'integracoes', 'sistema', 'setores-gestores', 'alertas'].includes(requested) &&
+      ['importacao', 'integracoes', 'setores-gestores', 'responsaveis-setor', 'alertas'].includes(
+        requested,
+      ) &&
       canManageOperationalSettings
     ) {
       setActiveTab(requested);
@@ -138,6 +153,7 @@ export default function Configuracoes() {
     canManageBackup,
     canManageMatriz,
     canManageOperationalSettings,
+    canManageSystem,
     canManageUsers,
   ]);
 
@@ -154,8 +170,14 @@ export default function Configuracoes() {
       setActiveTab('cadastros');
       return;
     }
+    if (activeTab === 'sistema' && !canManageSystem) {
+      setActiveTab('cadastros');
+      return;
+    }
     if (
-      ['importacao', 'integracoes', 'sistema', 'setores-gestores', 'alertas'].includes(activeTab) &&
+      ['importacao', 'integracoes', 'setores-gestores', 'responsaveis-setor', 'alertas'].includes(
+        activeTab,
+      ) &&
       !canManageOperationalSettings
     ) {
       setActiveTab('cadastros');
@@ -165,6 +187,7 @@ export default function Configuracoes() {
     canAccessCompanyManagement,
     canManageBackup,
     canManageOperationalSettings,
+    canManageSystem,
     canManageUsers,
   ]);
 
@@ -209,7 +232,20 @@ export default function Configuracoes() {
                 role="tab"
               >
                 <Network className="h-4 w-4" />
-                Gestores por Setor
+                Acesso por Setor
+              </button>
+            )}
+
+            {canManageOperationalSettings && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('responsaveis-setor')}
+                className={tabClass(activeTab === 'responsaveis-setor')}
+                aria-selected={activeTab === 'responsaveis-setor'}
+                role="tab"
+              >
+                <Users className="h-4 w-4" />
+                Responsáveis por Setor
               </button>
             )}
 
@@ -316,7 +352,7 @@ export default function Configuracoes() {
                 </button>
               )}
 
-              {canManageOperationalSettings && (
+              {canManageSystem && (
                 <button
                   type="button"
                   onClick={() => setActiveTab('sistema')}
@@ -357,6 +393,12 @@ export default function Configuracoes() {
         </Suspense>
       )}
 
+      {canManageOperationalSettings && activeTab === 'responsaveis-setor' && (
+        <Suspense fallback={tabFallback}>
+          <ResponsaveisSetor />
+        </Suspense>
+      )}
+
       {canManageMatriz && activeTab === 'matriz-treinamento' && (
         <Suspense fallback={tabFallback}>
           <MatrizTreinamento />
@@ -381,7 +423,7 @@ export default function Configuracoes() {
         </Suspense>
       )}
 
-      {canManageOperationalSettings && activeTab === 'sistema' && (
+      {canManageSystem && activeTab === 'sistema' && (
         <Suspense fallback={tabFallback}>
           <SistemaConfiguracoes />
         </Suspense>

@@ -183,12 +183,12 @@ async function resolveTargetAccess(
 }
 
 function assertManagerMayManageTarget(callerRole: string, targetRole: string): void {
-  if (
-    ['ADMINISTRADOR', 'ADMIN'].includes(targetRole.toUpperCase()) &&
-    !['ADMINISTRADOR', 'ADMIN'].includes(callerRole)
-  ) {
+  const privilegedTarget = ['ADMINISTRADOR', 'ADMIN', 'GESTOR', 'MANAGER'].includes(
+    targetRole.toUpperCase(),
+  );
+  if (privilegedTarget && !['ADMINISTRADOR', 'ADMIN'].includes(callerRole)) {
     throw forbidden(
-      'Apenas ADMINISTRADOR pode gerenciar outros administradores',
+      'Apenas ADMINISTRADOR pode gerenciar Administradores da Empresa ou Administradores Gerais',
       'INSUFFICIENT_ROLE',
     );
   }
