@@ -3,7 +3,7 @@ const JPEG_QUALITY = 0.82;
 const MIN_SAVINGS_RATIO = 0.05;
 const MAX_IMAGE_DIMENSION = 1800;
 
-export interface CertificateUploadPreparation {
+export interface PdfUploadPreparation {
   file: File;
   optimized: boolean;
   convertedToPdf: boolean;
@@ -50,7 +50,16 @@ async function imageFileToPdf(file: File): Promise<File> {
   const heightPt = (fitted.height * 72) / TARGET_DPI;
   const orientation = widthPt > heightPt ? 'landscape' : 'portrait';
   const pdf = new jsPDF({ unit: 'pt', format: [widthPt, heightPt], orientation, compress: true });
-  pdf.addImage(await canvasToJpegDataUrl(canvas), 'JPEG', 0, 0, widthPt, heightPt, undefined, 'FAST');
+  pdf.addImage(
+    await canvasToJpegDataUrl(canvas),
+    'JPEG',
+    0,
+    0,
+    widthPt,
+    heightPt,
+    undefined,
+    'FAST',
+  );
   const blob = pdf.output('blob');
   return new File([blob], certificatePdfFileName(file.name), {
     type: 'application/pdf',
@@ -59,12 +68,17 @@ async function imageFileToPdf(file: File): Promise<File> {
 }
 
 async function rasterizeScannedPdf(file: File, bytes: Uint8Array): Promise<File | null> {
-  const pdfjs = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as typeof import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdfjs =
+    (await import('pdfjs-dist/legacy/build/pdf.mjs')) as typeof import('pdfjs-dist/legacy/build/pdf.mjs');
   pdfjs.GlobalWorkerOptions.workerSrc = new URL(
     'pdfjs-dist/legacy/build/pdf.worker.min.mjs',
     import.meta.url,
   ).toString();
-  const loadingTask = pdfjs.getDocument({ data: bytes, isEvalSupported: false, useWorkerFetch: false });
+  const loadingTask = pdfjs.getDocument({
+    data: bytes,
+    isEvalSupported: false,
+    useWorkerFetch: false,
+  });
   const source = await loadingTask.promise;
 
   // Preserve digital/searchable PDFs. Rasterization is reserved for scans
@@ -101,11 +115,25 @@ async function rasterizeScannedPdf(file: File, bytes: Uint8Array): Promise<File 
 
     const orientation = pointViewport.width > pointViewport.height ? 'landscape' : 'portrait';
     if (!output) {
-      output = new jsPDF({ unit: 'pt', format: [pointViewport.width, pointViewport.height], orientation, compress: true });
+      output = new jsPDF({
+        unit: 'pt',
+        format: [pointViewport.width, pointViewport.height],
+        orientation,
+        compress: true,
+      });
     } else {
       output.addPage([pointViewport.width, pointViewport.height], orientation);
     }
-    output.addImage(await canvasToJpegDataUrl(canvas), 'JPEG', 0, 0, pointViewport.width, pointViewport.height, undefined, 'FAST');
+    output.addImage(
+      await canvasToJpegDataUrl(canvas),
+      'JPEG',
+      0,
+      0,
+      pointViewport.width,
+      pointViewport.height,
+      undefined,
+      'FAST',
+    );
     page.cleanup();
   }
 
@@ -114,7 +142,7 @@ async function rasterizeScannedPdf(file: File, bytes: Uint8Array): Promise<File 
   const blob = output.output('blob');
   return new File([blob], file.name, { type: 'application/pdf', lastModified: file.lastModified });
 }
-export async function prepareCertificateUploadFile(file: File): Promise<CertificateUploadPreparation> {
+export async function preparePdfUploadFile(file: File): Promise<PdfUploadPreparation> {
   const originalSize = file.size;
   const isImage = /image\/(jpeg|jpg|png)/i.test(file.type) || /\.(jpe?g|png)$/i.test(file.name);
   if (isImage) {
@@ -142,7 +170,8 @@ export async function prepareCertificateUploadFile(file: File): Promise<Certific
   }
 
   const candidate = await rasterizeScannedPdf(file, bytes);
-  const useCandidate = candidate !== null && candidate.size <= originalSize * (1 - MIN_SAVINGS_RATIO);
+  const useCandidate =
+    candidate !== null && candidate.size <= originalSize * (1 - MIN_SAVINGS_RATIO);
   return {
     file: useCandidate && candidate ? candidate : file,
     optimized: useCandidate,
@@ -152,3 +181,6 @@ export async function prepareCertificateUploadFile(file: File): Promise<Certific
     finalSize: useCandidate && candidate ? candidate.size : originalSize,
   };
 }
+
+export const prepareCertificateUploadFile = preparePdfUploadFile;
+export type CertificateUploadPreparation = PdfUploadPreparation;

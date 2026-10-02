@@ -80,6 +80,24 @@ describe('Pasta Virtual taxonomy', () => {
     expect(source).toContain("if (tipoDocumento === 'CERTIFICADO_QUALIFICACAO') return file.name;");
   });
 
+  it('optimizes generic Pasta Virtual PDFs before upload and records optimization metadata', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/react-app/components/funcionarios/UploadDocumentoModal.tsx'),
+      'utf8',
+    );
+    const backend = readFileSync(
+      resolve(process.cwd(), 'worker-airtrust/src/routes/pasta-virtual.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('preparePdfUploadFile(file)');
+    expect(source).toContain("formData.append('upload_original_size'");
+    expect(source).toContain("formData.append('upload_optimized'");
+    expect(backend).toContain('original_file_size');
+    expect(backend).toContain('pdf_optimized');
+    expect(backend).toContain('preserved_digital_signature');
+  });
+
   it('keeps the canonical category structure visible for every employee', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/react-app/components/funcionarios/PastaVirtualCompleta.tsx'),
