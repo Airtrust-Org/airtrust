@@ -13,6 +13,7 @@ import type { Env } from '../../types';
 import { auth } from '../../middleware/auth';
 import { getTenantContext } from '../../middleware/tenant';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../../utils/auditoria';
+import { getSchemaColumns } from '../../utils/db-schema';
 import {
   filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
@@ -58,7 +59,6 @@ const cancelledQualificationPredicate = sqlStatusEqualsAny(
   QUALIFICATION_STATUS_EXPR,
   CANCELLED_STATUS_VALUES,
 );
-let historicoRenovacaoDeColumnPromise: Promise<boolean> | null = null;
 
 export function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
   const qualificationIdentityExpr = (qhAlias: string, qtAlias: string) =>
@@ -120,18 +120,11 @@ export function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
 }
 
 export async function hasHistoricoRenovacaoDeColumn(db: D1Database): Promise<boolean> {
-  if (!historicoRenovacaoDeColumnPromise) {
-    historicoRenovacaoDeColumnPromise = db
-      .prepare('PRAGMA table_info(qualificacoes_historico)')
-      .all()
-      .then(({ results }) =>
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (results || []).some((column: any) => column?.name === 'renovacao_de'),
-      )
-      .catch(() => false);
+  try {
+    return (await getSchemaColumns(db, 'qualificacoes_historico')).has('renovacao_de');
+  } catch {
+    return false;
   }
-
-  return historicoRenovacaoDeColumnPromise;
 }
 
 function parseRequestedSetorIds(rawSetorId?: string, rawSetorIds?: string): number[] {
@@ -235,39 +228,20 @@ function buildStatsExtendedCacheScope(params: {
   };
 }
 
-const historicoColumnSupportCache = new WeakMap<
-  D1Database,
-  Map<string, Promise<boolean>>
->();
-
 async function hasTableColumn(
   db: D1Database,
   tableName: string,
   columnName: string,
 ): Promise<boolean> {
-  const cacheKey = `${tableName}:${columnName}`;
-  let dbCache = historicoColumnSupportCache.get(db);
-  if (!dbCache) {
-    dbCache = new Map<string, Promise<boolean>>();
-    historicoColumnSupportCache.set(db, dbCache);
-  }
-  const cached = dbCache.get(cacheKey);
-  if (cached) return cached;
-
-  const lookup = (async () => {
-    try {
-      const columns = await db.prepare(`PRAGMA table_info('${tableName}')`).all<{ name: string }>();
-      if (!columns.results || columns.results.length === 0) {
-        return true;
-      }
-      return (columns.results || []).some((column) => column.name === columnName);
-    } catch {
+  try {
+    const columns = await getSchemaColumns(db, tableName);
+    if (columns.size === 0) {
       return true;
     }
-  })();
-
-  dbCache.set(cacheKey, lookup);
-  return lookup;
+    return columns.has(columnName);
+  } catch {
+    return true;
+  }
 }
 
 async function buildHistoricoEmployeeScopeCompat(
