@@ -58,7 +58,7 @@ const LARGE_FILE_LINE_CAPS = {
   // corrupted cross-tenant curso_id/funcionario_id/qualificacao_id can no
   // longer leak another tenant's data or feed a completion write).
   // Cap raised 2026-09-30: 0519 stamps competency-profile lineage on enrollment paths.
-  'routes/lms-matriculas.ts': 3206,
+  'routes/lms-matriculas.ts': 3056,
   // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
   // Cap raised 2026-08-22: counted 2048 (fix/frms-parameter-governance-recalc
   // — governed operational context wired into the check-in contexto-piloto
