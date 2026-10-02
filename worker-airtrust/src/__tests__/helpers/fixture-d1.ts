@@ -183,7 +183,7 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
     if (sql.includes('PRAGMA table_info(qualificacoes_tipos_setores)')) {
       return { all: [{ name: 'tipo_id' }, { name: 'setor_id' }, { name: 'empresa_id' }] };
     }
-    if (sql.includes('PRAGMA table_info(lms_cursos)')) {
+    if (sql.includes('PRAGMA table_info(lms_cursos)') || sql.includes("PRAGMA table_info('lms_cursos')")) {
       return { all: [{ name: 'id' }, { name: 'empresa_id' }, { name: 'dominio_codigo' }] };
     }
 

@@ -19,6 +19,7 @@ import {
   type EmployeeSectorAccess,
 } from '../services/employee-sector-access';
 import { logAudit } from '../utils/db';
+import { getSchemaColumns } from '../utils/db-schema';
 import { getAuditContextSnapshot } from '../lib/audit/context';
 import { recordAuditEventV2 } from '../lib/audit/audit-events-v2';
 import {
@@ -153,28 +154,19 @@ async function tableExists(db: D1Database, tableName: string): Promise<boolean> 
   }
 }
 
-async function hasColumn(db: D1Database, table: string, column: string): Promise<boolean> {
-  try {
-    const { results } = await db.prepare(`PRAGMA table_info(${table})`).all();
-    return (results || []).some((col: any) => col?.name === column);
-  } catch {
-    return false;
-  }
-}
-
 async function getCourseSetorSchema(db: D1Database): Promise<{
   hasCursoSetores: boolean;
   hasQualificacaoTipoSetores: boolean;
   hasLmsCursosFormato: boolean;
   hasLmsCursosDominioCodigo: boolean;
 }> {
-  const [hasCursoSetores, hasQualificacaoTipoSetores, hasLmsCursosFormato, hasLmsCursosDominioCodigo] =
-    await Promise.all([
-      tableExists(db, 'lms_cursos_setores'),
-      tableExists(db, 'qualificacoes_tipos_setores'),
-      hasColumn(db, 'lms_cursos', 'formato_id'),
-      hasColumn(db, 'lms_cursos', 'dominio_codigo'), // migration 0452, same schema-drift defense as formato_id
-    ]);
+  const [hasCursoSetores, hasQualificacaoTipoSetores, lmsCursosColumns] = await Promise.all([
+    tableExists(db, 'lms_cursos_setores'),
+    tableExists(db, 'qualificacoes_tipos_setores'),
+    getSchemaColumns(db, 'lms_cursos'),
+  ]);
+  const hasLmsCursosFormato = lmsCursosColumns.has('formato_id');
+  const hasLmsCursosDominioCodigo = lmsCursosColumns.has('dominio_codigo');
 
   return { hasCursoSetores, hasQualificacaoTipoSetores, hasLmsCursosFormato, hasLmsCursosDominioCodigo };
 }
