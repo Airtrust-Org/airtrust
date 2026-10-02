@@ -34,42 +34,12 @@ import {
   type InstrutorRow,
   type ParticipanteRow,
 } from '../services/treinamentos-planejados-expansions';
+import {
+  detectTreinamentoSchemaCapabilities,
+  type TreinamentoSchemaCapabilities,
+} from '../services/treinamentos-planejados-schema';
+import { hasSchemaColumn } from '../utils/db-schema';
 
-interface TreinamentoSchemaCapabilities {
-  hasModalidade: boolean;
-  hasCodigoTurma: boolean;
-  hasDataInicio: boolean;
-  hasDataFim: boolean;
-  hasBase: boolean;
-  hasSala: boolean;
-  hasEquipamentoDescricao: boolean;
-  hasLimiteParticipantes: boolean;
-  hasInstrutoresTable: boolean;
-  hasDiasTable: boolean;
-  hasQualificacoesTiposFormato: boolean;
-  hasQualificacoesTiposCategoria: boolean;
-}
-
-async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
-  try {
-    const row = await db
-      .prepare('SELECT COUNT(*) as cnt FROM sqlite_master WHERE type = ? AND name = ?')
-      .bind('table', tableName)
-      .first<{ cnt: number }>();
-    return (row?.cnt ?? 0) > 0;
-  } catch {
-    return false;
-  }
-}
-
-async function hasColumn(db: D1Database, table: string, column: string): Promise<boolean> {
-  try {
-    const { results } = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
-    return (results || []).some((col) => col?.name === column);
-  } catch {
-    return false;
-  }
-}
 
 function parseRequestedSetorIds(rawSetorId?: string | null, rawSetorIds?: string | null): number[] {
   const values: string[] = [];
@@ -114,57 +84,6 @@ function resolveScopedSetorIds(
   return access.setorIds;
 }
 
-// Module-level cache for schema capabilities — avoids 10+ PRAGMA calls per request.
-// Worker isolates restart regularly so this never holds stale data for long.
-let _capabilitiesCache: TreinamentoSchemaCapabilities | null = null;
-
-async function detectTreinamentoSchemaCapabilities(
-  db: D1Database,
-): Promise<TreinamentoSchemaCapabilities> {
-  if (_capabilitiesCache) return _capabilitiesCache;
-  const [
-    hasModalidade,
-    hasCodigoTurma,
-    hasDataInicio,
-    hasDataFim,
-    hasBase,
-    hasSala,
-    hasEquipamentoDescricao,
-    hasLimiteParticipantes,
-    hasQualificacoesTiposFormato,
-    hasQualificacoesTiposCategoria,
-  ] = await Promise.all([
-    hasColumn(db, 'treinamentos_planejados', 'modalidade'),
-    hasColumn(db, 'treinamentos_planejados', 'codigo_turma'),
-    hasColumn(db, 'treinamentos_planejados', 'data_inicio'),
-    hasColumn(db, 'treinamentos_planejados', 'data_fim'),
-    hasColumn(db, 'treinamentos_planejados', 'base'),
-    hasColumn(db, 'treinamentos_planejados', 'sala'),
-    hasColumn(db, 'treinamentos_planejados', 'equipamento_descricao'),
-    hasColumn(db, 'treinamentos_planejados', 'limite_participantes'),
-    hasColumn(db, 'qualificacoes_tipos', 'formato_id'),
-    hasColumn(db, 'qualificacoes_tipos', 'categoria_id'),
-  ]);
-  const [hasInstrutoresTable, hasDiasTable] = await Promise.all([
-    tableExists(db, 'treinamentos_instrutores'),
-    tableExists(db, 'treinamentos_dias'),
-  ]);
-  _capabilitiesCache = {
-    hasModalidade,
-    hasCodigoTurma,
-    hasDataInicio,
-    hasDataFim,
-    hasBase,
-    hasSala,
-    hasEquipamentoDescricao,
-    hasLimiteParticipantes,
-    hasInstrutoresTable,
-    hasDiasTable,
-    hasQualificacoesTiposFormato,
-    hasQualificacoesTiposCategoria,
-  };
-  return _capabilitiesCache;
-}
 
 const treinamentosPlanejadosRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -1507,7 +1426,7 @@ async function loadSimulatorSessionItems(
     busca?: string | null;
   },
 ): Promise<ConsolidatedTrainingItem[]> {
-  const equipamentoExpr = (await hasColumn(db, 'aeronaves', 'matricula'))
+  const equipamentoExpr = (await hasSchemaColumn(db, 'aeronaves', 'matricula').catch(() => false))
     ? 'COALESCE(sim.nome, aer.prefixo, aer.modelo, aer.matricula, sim.modelo)'
     : 'COALESCE(sim.nome, aer.prefixo, aer.modelo, sim.modelo)';
 

@@ -65,7 +65,7 @@ function createReadOnlyEmptyDb() {
       };
       const executeFirst = async (args: unknown[]) => {
         calls.push({ query, args, method: 'first' as const });
-        if (query.includes('sqlite_master')) return { cnt: 0 };
+        if (query.includes('sqlite_master')) return { found: 0 };
         return null;
       };
       const executeRun = async (args: unknown[]) => {
