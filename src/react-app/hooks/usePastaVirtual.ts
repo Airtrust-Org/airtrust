@@ -250,9 +250,7 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
         headers,
       });
     } else {
-      const response = await fetch(`${API_BASE_URL}/pasta-virtual/stream/${doc.id}`, { headers });
-      if (!response.ok) throw new Error(`Erro ao baixar arquivo (${response.status})`);
-      blob = await response.blob();
+      blob = await api.getBlob(`/pasta-virtual/stream/${doc.id}`, { headers });
     }
 
     triggerDocumentDownload(blob, doc.nome);
