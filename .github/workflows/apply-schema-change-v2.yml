@@ -472,13 +472,13 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0526-production-preflight.sh --target=airtrust-db
 
-      - name: Preflight sector Compliance responsibles 0527
-        if: ${{ inputs.change_id == 'setor-compliance-responsibles-0527' }}
+      - name: Preflight sector Compliance responsibles 0528
+        if: ${{ inputs.change_id == 'setor-compliance-responsibles-0528' }}
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bash scripts/schema-v2/validate-0527-production-preflight.sh --target=airtrust-db
+        run: bash scripts/schema-v2/validate-0528-production-preflight.sh --target=airtrust-db
 
       - name: Backup governance ledger
         shell: bash
@@ -878,13 +878,13 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0526-production-postconditions.sh --target=airtrust-db
 
-      - name: Post-validate sector Compliance responsibles 0527
-        if: ${{ inputs.change_id == 'setor-compliance-responsibles-0527' }}
+      - name: Post-validate sector Compliance responsibles 0528
+        if: ${{ inputs.change_id == 'setor-compliance-responsibles-0528' }}
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bash scripts/schema-v2/validate-0527-production-postconditions.sh --target=airtrust-db
+        run: bash scripts/schema-v2/validate-0528-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate EAD reconciliation ledger 0453
         if: ${{ inputs.change_id == 'ead-category-reconciliation-executor-0453' }}

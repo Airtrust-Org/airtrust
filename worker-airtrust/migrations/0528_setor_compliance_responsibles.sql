@@ -1,8 +1,8 @@
--- 0527_setor_compliance_responsibles.sql
+-- 0528_setor_compliance_responsibles.sql
 -- Separates company operational access from sector responsibility for Training Compliance alerts.
 -- source_reference: user-approved AirTrust RBAC/Compliance separation on 2026-10-02.
 -- dry_run_required: true
--- rollback_plan_required: worker-airtrust/schema-v2/plans/setor-compliance-responsibles-0527.md
+-- rollback_plan_required: worker-airtrust/schema-v2/plans/setor-compliance-responsibles-0528.md
 
 CREATE TABLE IF NOT EXISTS setores_responsaveis_compliance (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
