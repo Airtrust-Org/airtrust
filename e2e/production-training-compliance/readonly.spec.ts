@@ -283,21 +283,34 @@ test('production intelligent training compliance UI and APIs are coherent and re
   ] as const;
   const drill = statusCandidates.find(([, , count]) => count > 0);
   if (drill) {
-    const peopleP = waitApi(
+    // Summary status cards now open the requirement drilldown instead of the people tab.
+    // Validate the current UI contract and its read-only API rather than a stale /pessoas request.
+    const requirementsP = waitApi(
       page,
-      '/api/compliance-treinamentos/pessoas',
+      '/api/compliance-treinamentos/requisitos-aplicaveis',
       (url) => url.searchParams.get('status') === drill[1],
     );
     await page.getByRole('button', { name: new RegExp(`${drill[0]}$`, 'i') }).click();
-    const people = await peopleP.then(payload);
-    expect(Array.isArray(people.data)).toBe(true);
-    expect(people.data.length).toBeGreaterThan(0);
-    await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: 'Setor / cargo' })).toBeVisible();
-  } else {
-    await page.getByRole('button', { name: 'Pessoas', exact: true }).click();
-    await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
+    const requirements = await requirementsP.then(payload);
+    expect(Array.isArray(requirements.data)).toBe(true);
+    expect(requirements.data.length).toBeGreaterThan(0);
+    expectCount(requirements.meta?.pessoas ?? -1, 'requirements.meta.pessoas');
+    expectCount(requirements.meta?.requisitos_distintos ?? -1, 'requirements.meta.requisitos_distintos');
+    expectCount(requirements.meta?.obrigacoes_individuais ?? -1, 'requirements.meta.obrigacoes_individuais');
+    const dialog = page.getByRole('dialog', { name: new RegExp(`${drill[0]}.*visão geral`, 'i') });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText('Detalhamento do número', { exact: true })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Fechar', exact: true }).click();
+    await expect(dialog).toBeHidden();
   }
+
+  // Exercise the Pessoas tab independently from the status-card requirement drilldown.
+  const peopleP = waitApi(page, '/api/compliance-treinamentos/pessoas');
+  await page.getByRole('button', { name: 'Pessoas', exact: true }).click();
+  const people = await peopleP.then(payload);
+  expect(Array.isArray(people.data)).toBe(true);
+  await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Setor / cargo' })).toBeVisible();
 
   const sectorsP = waitApi(page, '/api/compliance-treinamentos/setores');
   await page.getByRole('button', { name: 'Setores', exact: true }).click();
