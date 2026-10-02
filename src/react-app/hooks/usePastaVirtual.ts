@@ -35,6 +35,7 @@ interface UsePastaVirtualResult {
   error: string | null;
   refetch: () => Promise<void>;
   deleteDocumento: (id: number) => Promise<void>;
+  previewDocumento: (doc: DocumentoPV) => Promise<void>;
   downloadDocumento: (doc: DocumentoPV) => Promise<void>;
 }
 
@@ -52,6 +53,17 @@ export function isPastaVirtualDocumentAvailable(
 ) {
   if (doc.origem === 'ficha_sessao') return true;
   return Number(doc.tamanho) > 0 && Boolean(String(doc.arquivo_url || '').trim());
+}
+
+function triggerDocumentDownload(blob: Blob, fileName: string): void {
+  const objectUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = fileName || 'documento.pdf';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(objectUrl);
 }
 
 export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirtualResult {
@@ -169,7 +181,7 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
     [refetch],
   );
 
-  const downloadDocumento = useCallback(async (doc: DocumentoPV) => {
+  const previewDocumento = useCallback(async (doc: DocumentoPV) => {
     if (!isPastaVirtualDocumentAvailable(doc)) {
       throw new Error('Arquivo indisponível para visualização');
     }
@@ -218,12 +230,41 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
     });
   }, []);
 
+  const downloadDocumento = useCallback(async (doc: DocumentoPV) => {
+    if (!isPastaVirtualDocumentAvailable(doc)) {
+      throw new Error('Arquivo indisponível para download');
+    }
+
+    const token = getAccessToken();
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    let blob: Blob;
+    if (doc.origem === 'ficha_sessao') {
+      const fichaId = Number(doc.ficha_id || doc.id);
+      if (!Number.isFinite(fichaId) || fichaId <= 0) {
+        throw new Error('Ficha de treinamento inválida');
+      }
+      blob = await api.getBlob(`/simuladores/fichas/${fichaId}/pdf`, {
+        method: 'POST',
+        headers,
+      });
+    } else {
+      const response = await fetch(`${API_BASE_URL}/pasta-virtual/stream/${doc.id}`, { headers });
+      if (!response.ok) throw new Error(`Erro ao baixar arquivo (${response.status})`);
+      blob = await response.blob();
+    }
+
+    triggerDocumentDownload(blob, doc.nome);
+  }, []);
+
   return {
     categorias,
     loading,
     error,
     refetch,
     deleteDocumento,
+    previewDocumento,
     downloadDocumento,
   };
 }

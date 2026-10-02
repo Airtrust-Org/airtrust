@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  Eye,
   FileText,
   History,
   Plus,
@@ -68,7 +69,7 @@ export default function PastaVirtualCompleta({
   funcao,
   cargo,
 }: PastaVirtualCompletaProps) {
-  const { categorias, loading, error, deleteDocumento, downloadDocumento, refetch } =
+  const { categorias, loading, error, deleteDocumento, previewDocumento, downloadDocumento, refetch } =
     usePastaVirtual(funcionarioId);
   const [categoriasExpandidas, setCategoriasExpandidas] = useState<Set<TipoDocumento>>(
     new Set(['CERTIFICADO_QUALIFICACAO']),
@@ -96,6 +97,14 @@ export default function PastaVirtualCompleta({
   const abrirUpload = (tipo: TipoDocumento = 'CERTIFICADO_QUALIFICACAO') => {
     setTipoUploadSelecionado(tipo);
     setModalUploadAberto(true);
+  };
+
+  const handlePreview = async (doc: DocumentoPV) => {
+    try {
+      await previewDocumento(doc);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Arquivo indisponível');
+    }
   };
 
   const handleDownload = async (doc: DocumentoPV) => {
@@ -299,9 +308,18 @@ export default function PastaVirtualCompleta({
                             </div>
                             <div className="flex items-center gap-2 self-end sm:self-auto">
                               <button
+                                onClick={() => handlePreview(doc)}
+                                className="rounded p-2 text-primary transition hover:bg-primary/10"
+                                title="Visualizar documento"
+                                aria-label={`Visualizar ${doc.nome}`}
+                              >
+                                <Eye className="h-5 w-5" />
+                              </button>
+                              <button
                                 onClick={() => handleDownload(doc)}
                                 className="rounded p-2 text-green-600 transition hover:bg-green-50 dark:hover:bg-green-950/30"
-                                title="Visualizar documento"
+                                title="Baixar documento"
+                                aria-label={`Baixar ${doc.nome}`}
                               >
                                 <Download className="h-5 w-5" />
                               </button>
