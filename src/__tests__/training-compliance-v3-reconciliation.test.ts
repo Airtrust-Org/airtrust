@@ -33,9 +33,9 @@ describe('training compliance V3 reconciliation', () => {
 
   it('treats AVSEC awareness as a corporate requirement and keeps activity certifications separate', () => {
     expect(source).toContain("code: 'AVSEC_CONSC'");
-    expect(source).toContain('inclusive os lotados no escritório do Rio');
-    expect(source).toContain('RBAC 107.97');
-    expect(source).toContain('a validade da conscientização acompanha a credencial');
+    expect(source).toContain('AVSEC — Conscientização Corporativa');
+    expect(source).toContain("origin: 'EMPRESA'");
+    expect(source).toContain('Todos os funcionários precisam poder acessar a base');
     expect(output).toContain('AVSEC_CONSC');
     expect(output).toContain("'EMPRESA','OBRIGATORIA'");
     expect(output).not.toContain('AVSEC_CREDENCIAL_PERMANENTE');
@@ -70,14 +70,25 @@ describe('training compliance V3 reconciliation', () => {
     expect(source).toContain("foundation: 'APRIMORAMENTO_INTERNO'");
   });
 
-  it('retires standalone LOFT and English Assessment without deleting history', () => {
-    expect(source).toContain("for (const code of ['LOFT', 'EN-ASSES'])");
-    expect(source).toContain('setModelActive(code, false)');
-    expect(output).toContain('SET ativo=0');
+  it('keeps LOFT separate and retires only English Assessment without deleting history', () => {
+    expect(source).toContain("deactivate('LOFT')");
+    expect(source).toContain("setModelActive('LOFT', true)");
+    expect(source).toContain("code: 'LOFT'");
+    expect(source).toContain("deactivate('EN-ASSES')");
+    expect(source).toContain("setModelActive('EN-ASSES', false)");
     expect(output).not.toContain('DELETE FROM qualificacoes_historico');
   });
 
-  it('keeps the audited FDM awareness population and a designation fallback for exceptions', () => {
+  it('keeps the reviewed broad NR populations and the FDM transition population', () => {
+    expect(source).toContain("code: 'NR-20'");
+    expect(source).toContain("modality: 'HIBRIDO'");
+    expect(source).toContain('inicial 16 h e atualização 4 h/24 meses');
+    expect(source).toContain("code: 'NR-26'");
+    expect(source).toContain('pessoal operacional como critério corporativo mais abrangente');
+    expect(source).toContain("'Aux Manutenção'");
+
+    // FDM remains broad until formal designations are returned.
+
     expect(source).toContain("deactivate('FDM-EAD')");
     expect(source).toContain('const fdmAwarenessFunctions = [');
     for (const functionName of [

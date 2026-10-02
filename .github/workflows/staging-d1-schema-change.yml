@@ -32,6 +32,7 @@ on:
           - 0522_auth_profile_orphan_cleanup.sql
           - 0523_training_compliance_governed_designation_rules.sql
           - 0524_training_compliance_requirement_sanitization.sql
+          - 0526_training_compliance_matrix_alignment.sql
           - 0527_setor_compliance_responsibles.sql
       release_reason:
         description: 'Reason for this staging schema change'
@@ -84,7 +85,7 @@ jobs:
           [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "pr_number must be positive." >&2; exit 1; }
           [[ -n "$RELEASE_REASON" ]] || { echo "release_reason is required." >&2; exit 1; }
           case "$APPROVED_MIGRATION" in
-            0453_ead_category_reconciliation_executor.sql|0454_qualificacoes_tipos_dominio_override.sql|0475_usuarios_empresas_perfis_reconciliation.sql|0476_frms_pvtb_v2_operational_load.sql|0489_a02_natural_keys_tenant_scoped.sql|0518_crm_qualification_consolidation.sql|0519_training_compliance_evidence_profiles.sql|0520_training_compliance_evidence_multi_profiles.sql|0521_training_compliance_designation_overrides.sql|0522_auth_profile_orphan_cleanup.sql|0523_training_compliance_governed_designation_rules.sql|0524_training_compliance_requirement_sanitization.sql|0527_setor_compliance_responsibles.sql) ;;
+            0453_ead_category_reconciliation_executor.sql|0454_qualificacoes_tipos_dominio_override.sql|0475_usuarios_empresas_perfis_reconciliation.sql|0476_frms_pvtb_v2_operational_load.sql|0489_a02_natural_keys_tenant_scoped.sql|0518_crm_qualification_consolidation.sql|0519_training_compliance_evidence_profiles.sql|0520_training_compliance_evidence_multi_profiles.sql|0521_training_compliance_designation_overrides.sql|0522_auth_profile_orphan_cleanup.sql|0523_training_compliance_governed_designation_rules.sql|0524_training_compliance_requirement_sanitization.sql|0526_training_compliance_matrix_alignment.sql|0527_setor_compliance_responsibles.sql) ;;
             *) echo "Migration outside the incident allowlist." >&2; exit 1 ;;
           esac
 

@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-matrix-alignment-0526",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0526_training_compliance_matrix_alignment.sql",
+  "fileHash": "1473d8815f4dff920672c50db70f171f3c915e73c95f1d4852a531366f785f77",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-matrix-alignment-0526.md",
+  "planHash": "fa6c9f67561d08f248dd25c093df08dc0ab09bb79b5a75651bfbd6de2010a7f0"
+}
