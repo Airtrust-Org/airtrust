@@ -472,6 +472,14 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0526-production-preflight.sh --target=airtrust-db
 
+      - name: Preflight training compliance LOFT bootstrap 0527
+        if: ${{ inputs.change_id == 'training-compliance-loft-bootstrap-0527' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0527-production-preflight.sh --target=airtrust-db
+
       - name: Preflight sector Compliance responsibles 0528
         if: ${{ inputs.change_id == 'setor-compliance-responsibles-0528' }}
         shell: bash
@@ -877,6 +885,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0526-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate training compliance LOFT bootstrap 0527
+        if: ${{ inputs.change_id == 'training-compliance-loft-bootstrap-0527' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0527-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate sector Compliance responsibles 0528
         if: ${{ inputs.change_id == 'setor-compliance-responsibles-0528' }}

@@ -129,6 +129,7 @@ describe('migration governance', () => {
     // 0522 removes profile-authority rows without tenant membership and prevents recurrence on membership delete.
     // 0523 restores governed designation rules; 0524 sanitizes redundant/orphaned Compliance requirement rows.
     // 0525 normalizes the governed tenant-6 organizational structure; 0526 aligns the reviewed training matrix.
+    // 0527 bootstraps a missing tenant-6 LOFT model without rewriting the reviewed 0526 change.
     // 0528 separates sector Compliance alert responsibility from operational sector access.
     const expectedLatest = 528;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);

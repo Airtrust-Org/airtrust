@@ -58,6 +58,7 @@ APPROVED_MIGRATIONS=(
   "0523_training_compliance_governed_designation_rules.sql"
   "0524_training_compliance_requirement_sanitization.sql"
   "0526_training_compliance_matrix_alignment.sql"
+  "0527_training_compliance_loft_bootstrap.sql"
   "0528_setor_compliance_responsibles.sql"
 )
 
@@ -267,6 +268,9 @@ validate_postconditions() {
     0526_training_compliance_matrix_alignment.sql)
       bash scripts/staging/validate-0526-postconditions.sh --target="$db_name"
       ;;
+    0527_training_compliance_loft_bootstrap.sql)
+      bash scripts/staging/validate-0527-postconditions.sh --target="$db_name"
+      ;;
     0528_setor_compliance_responsibles.sql)
       bash scripts/staging/validate-0528-postconditions.sh --target="$db_name"
       ;;
@@ -385,6 +389,11 @@ fi
 if [[ "$migration_basename" == "0526_training_compliance_matrix_alignment.sql" && "$ledger_count" == "0" ]]; then
   bash scripts/staging/validate-0526-preflight.sh --target="$db_name"
   echo "SPECIALIZED_PREFLIGHT_0526_OK=true"
+fi
+
+if [[ "$migration_basename" == "0527_training_compliance_loft_bootstrap.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0527-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0527_OK=true"
 fi
 
 if [[ "$migration_basename" == "0528_setor_compliance_responsibles.sql" && "$ledger_count" == "0" ]]; then
