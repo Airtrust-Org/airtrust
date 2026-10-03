@@ -89,11 +89,11 @@ A lista acima define **tipos de designação**, não ocupantes. Ocupantes devem 
 
 ## 6. Estado técnico relacionado
 
-- `training-compliance-matrix-alignment-0526`: integrado à `main`; aplicação remota de staging ainda depende do workflow oficial e deve usar o SHA atual da `main` que contenha byte-identical a SQL revisada.
+- `training-compliance-matrix-alignment-0526`: **aplicado e validado em staging** pelo workflow oficial `Staging D1 Schema Change (Safe Recovery Point)`, run `37152837890`, usando release SHA `422d4bb96b7ba92d7e722fdf563ce1262e7b7447`. SQL SHA-256 `1473d8815f4dff920672c50db70f171f3c915e73c95f1d4852a531366f785f77`; recovery point D1 `2026-10-03T20:49:45Z`; ledger confirmado; preflight e pós-condições da matriz V4 concluídos com PASS.
 - `training-compliance-loft-bootstrap-0527`: bootstrap de LOFT corrigido e validado em staging antes da 0526.
 - `setor-compliance-responsibles-0528`: integrado; é aditivo e independente das designações técnicas de Compliance. Remote apply permanece governado separadamente.
 
-A SQL canônica da 0526 não deve ser reescrita para acompanhar avanço de `main`; se o conteúdo permanecer idêntico, a execução usa o SHA atual revisado que contenha o mesmo artefato.
+A SQL canônica da 0526 permanece imutável. Avanço posterior de `main` não altera a evidência da aplicação executada no SHA acima nem autoriza produção.
 
 ## 7. Cursos EAD — princípio de implementação
 
@@ -111,9 +111,8 @@ Para cursos EAD criados ou refeitos por esta frente:
 
 ## 8. Próximos passos operacionais
 
-1. Aplicar e validar 0526 em staging pelo workflow oficial.
-2. Reexecutar o caso real do Compliance contra a matriz V4.
-3. Receber dos gestores apenas as listas de designações específicas do checklist V4.
-4. Inserir essas designações pelo fluxo auditável do AirTrust; não inferir ocupantes.
-5. Completar/QA dos EADs ausentes ou ainda não publicados.
-6. Somente após staging + validação real, formar candidato de produção e solicitar autorização específica.
+1. Executar o caso real/QA do Compliance em staging contra a matriz V4 já aplicada.
+2. Receber dos gestores apenas as listas de designações específicas do checklist V4.
+3. Inserir essas designações pelo fluxo auditável do AirTrust; não inferir ocupantes.
+4. Completar e fazer QA dos EADs ausentes ou ainda não publicados, verificando antes o catálogo/R2 live para evitar duplicidade.
+5. Somente após staging + validação real, formar candidato de produção e solicitar autorização específica.
