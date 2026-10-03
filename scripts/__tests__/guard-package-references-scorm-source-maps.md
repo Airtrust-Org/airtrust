@@ -1,0 +1,1 @@
+SCORM source-map guard behavior is exercised by `guard-package-references-scorm-source-maps.test.mjs`: a disposable Git fixture must pass without source maps and fail when a tracked `.map` is present or referenced by `imsmanifest.xml`.
