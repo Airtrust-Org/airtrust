@@ -132,6 +132,7 @@ import {
   sortPlanejadosByDate,
   computePlanejadosStats,
   getAvailablePlannedTrainings,
+  getPlannedFallbackParticipantIds,
   getStatusColor,
   getStatusDotColor,
   getStatusLabel,
@@ -1331,51 +1332,14 @@ export default function Qualificacoes() {
       return;
     }
 
-    const normalize = (value?: string | null) =>
-      String(value || '')
-        .trim()
-        .toUpperCase();
     const dataRef = String(dataPlanejada).slice(0, 10);
-    const codigoRef = normalize(
-      planejadaConvocacaoSelecionada.qualificacao_codigo || planejadaConvocacaoSelecionada.codigo,
-    );
-    const nomeRef = normalize(
-      planejadaConvocacaoSelecionada.qualificacao_nome || planejadaConvocacaoSelecionada.tipo_nome,
-    );
-
-    const turmaFuncionarioIds = Array.from(
-      new Set(
-        planejadosHistorico
-          .filter((item) => {
-            const itemData = String(
-              (
-                item as HistoricoItem & {
-                  data_realizacao?: string;
-                }
-              ).data_realizacao ||
-                item.data_conclusao ||
-                '',
-            ).slice(0, 10);
-            if (itemData !== dataRef) return false;
-
-            const itemCodigo = normalize(item.qualificacao_codigo || item.codigo);
-            const itemNome = normalize(item.qualificacao_nome || item.tipo_nome);
-
-            const codigoMatch = Boolean(codigoRef && itemCodigo && codigoRef === itemCodigo);
-            const nomeMatch = Boolean(nomeRef && itemNome && nomeRef === itemNome);
-
-            if (codigoRef || nomeRef) return codigoMatch || nomeMatch;
-            return true;
-          })
-          .map((item) => Number(item.funcionario_id || 0))
-          .filter((id) => id > 0),
-      ),
-    );
-
+    const turmaFuncionarioIds = getPlannedFallbackParticipantIds(planejadosHistorico, {
+      ...planejadaConvocacaoSelecionada,
+      data_realizacao: (
+        planejadaConvocacaoSelecionada as HistoricoItem & { data_realizacao?: string }
+      ).data_realizacao,
+    });
     const funcionarioSelecionadoId = Number(planejadaConvocacaoSelecionada.funcionario_id || 0);
-    if (turmaFuncionarioIds.length === 0 && funcionarioSelecionadoId > 0) {
-      turmaFuncionarioIds.push(funcionarioSelecionadoId);
-    }
 
     if (turmaFuncionarioIds.length === 0) {
       showToast.error('Não foi possível identificar os participantes da turma planejada.');
