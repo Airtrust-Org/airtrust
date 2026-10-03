@@ -121,6 +121,10 @@ import {
   normalizeCategoriaKey,
   getCategoriaCorDisplay,
   parseDateLocal,
+  normalizeTipoCodigo,
+  getTipoTreinamentoDisplay,
+  formatDateInputValue,
+  formatDateLabel,
   getStatusColor,
   getStatusDotColor,
   getStatusLabel,
@@ -457,34 +461,6 @@ export default function Qualificacoes() {
   const [novaAreaNome, setNovaAreaNome] = useState('');
   const [novaAreaDesc, setNovaAreaDesc] = useState('');
 
-  const getTipoTreinamentoDisplay = (value?: string | null, validadeMeses?: number | null) => {
-    const tipo = String(value || '')
-      .trim()
-      .toUpperCase();
-
-    if (tipo === 'SEMESTRAL' || Number(validadeMeses || 0) === 6) {
-      return {
-        value: 'SEMESTRAL',
-        label: 'Semestral',
-        className: 'bg-emerald-100 text-emerald-800',
-      };
-    }
-
-    if (tipo === 'INICIAL') {
-      return {
-        value: 'INICIAL',
-        label: 'Inicial',
-        className: 'bg-amber-100 text-amber-800',
-      };
-    }
-
-    return {
-      value: 'RECORRENTE',
-      label: 'Periódico',
-      className: 'bg-sky-100 text-sky-800',
-    };
-  };
-
   const [showCertModal, setShowCertModal] = useState(false);
   const [historicoSelecionado, setHistoricoSelecionado] = useState<HistoricoItem | null>(null);
   const [certificadoOverrides, setCertificadoOverrides] = useState<Record<number, boolean>>({});
@@ -807,9 +783,6 @@ export default function Qualificacoes() {
         .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
     [areas],
   );
-
-  const normalizeTipoCodigo = (value?: string | null) =>
-    (value ?? '').toString().trim().toUpperCase();
 
   const categoriasMap = useMemo(() => {
     const map = new Map<string, Categoria>();
@@ -1211,20 +1184,6 @@ export default function Qualificacoes() {
   };
 
   // Definir colunas da tabela de histórico (limpas e corrigidas)
-  const formatDateInputValue = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const formatDateLabel = (value?: string | null): string => {
-    if (!value) return 'Data a definir';
-    const parsed = parseDateLocal(value);
-    if (!parsed) return value;
-    return parsed.toLocaleDateString('pt-BR');
-  };
-
   const getDataMinimaPlanejada = (): string => {
     const amanha = new Date();
     amanha.setHours(0, 0, 0, 0);
