@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse, hashlib, json, re, subprocess, tempfile, unicodedata, uuid
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -245,9 +246,14 @@ def main() -> int:
     summary={"mode":"dry-run","source_sha":head,"empresa_id":EMPRESA_ID,"plan_sha256":plan_sha,"valid_rows":len(rows),"excluded":dict(excluded),"already_present":dup,"candidate_count":len(pending),"candidate_hash":c_hash,"candidate_by_employee":dict(Counter(EXPECTED_EMPLOYEES[r['funcionario_id']] for r in pending)),"candidate_by_category":dict(Counter(r['category'] for r in pending)),"upload_bytes":sum(Path(r['file_path']).stat().st_size for r in pending),"document_hash_column":has_hash,"mutation_executed":False,"pii_emitted":False}
     if args.mode=="dry-run": print(json.dumps(summary,ensure_ascii=False,indent=2)); return 0
     exact=ensure_apply_guards(args,plan_sha,len(pending),c_hash); recovery=capture_recovery_point()
-    for i,row in enumerate(pending,1):
-        upload_r2(row)
-        if i % 25 == 0: print(f"R2_PROGRESS {i}/{len(pending)}", file=__import__('sys').stderr)
+    completed = 0
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(upload_r2, row): row for row in pending}
+        for future in as_completed(futures):
+            future.result()
+            completed += 1
+            if completed % 25 == 0 or completed == len(pending):
+                print(f"R2_PROGRESS {completed}/{len(pending)}", file=__import__('sys').stderr, flush=True)
     apply_d1(pending, has_hash)
     employees2,m2,u2,has_hash2=load_live(rows); remaining=[r for r in rows if (r['funcionario_id'],r['original_sha']) not in m2 and (r['funcionario_id'],r['upload_sha']) not in u2]
     imported=sum(1 for r in rows if (r['funcionario_id'],r['original_sha']) in m2 or (r['funcionario_id'],r['upload_sha']) in u2)
