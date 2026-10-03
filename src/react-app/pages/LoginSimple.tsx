@@ -43,13 +43,13 @@ const QUICK_LOGIN_ALUNO_PASSWORD =
 // Perfis de acesso rápido (demo/testes)
 const DEV_PROFILES = [
   {
-    label: 'Admin',
+    label: 'Administrador Geral',
     email: DEFAULT_LOGIN_EMAIL,
     password: DEFAULT_LOGIN_PASSWORD,
     color: 'bg-purple-100 text-purple-700 hover:bg-purple-200',
   },
   {
-    label: 'Gestor',
+    label: 'Administrador da Empresa',
     email: QUICK_LOGIN_GESTOR_EMAIL,
     password: QUICK_LOGIN_GESTOR_PASSWORD,
     color: 'bg-blue-100 text-blue-700 hover:bg-blue-200',
@@ -90,8 +90,8 @@ type SelectProfileResponse = {
 };
 
 const PROFILE_LABELS: Record<SessionRole, string> = {
-  ADMINISTRADOR: 'Administrador',
-  GESTOR: 'Gestor',
+  ADMINISTRADOR: 'Administrador Geral',
+  GESTOR: 'Administrador da Empresa',
   INSTRUTOR: 'Instrutor',
   ALUNO: 'Aluno',
   USUARIO: 'Usuário',
@@ -99,7 +99,7 @@ const PROFILE_LABELS: Record<SessionRole, string> = {
 
 const PROFILE_DESCRIPTIONS: Record<SessionRole, string> = {
   ADMINISTRADOR: 'Administração completa da empresa e do sistema.',
-  GESTOR: 'Gestão da área, equipe, treinamentos e controles autorizados.',
+  GESTOR: 'Administração operacional da empresa nos módulos e setores autorizados.',
   INSTRUTOR: 'Atuação como instrutor, com acesso às ferramentas de instrução.',
   ALUNO: 'Acesso aos treinamentos e atividades atribuídas a você.',
   USUARIO: 'Acesso operacional padrão do seu usuário.',

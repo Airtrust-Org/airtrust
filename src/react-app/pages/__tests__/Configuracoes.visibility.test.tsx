@@ -58,7 +58,7 @@ describe('Configuracoes visibility', () => {
     });
   });
 
-  it('oculta abas administrativas restritas para gestor', () => {
+  it('separa Administrador da Empresa das configurações profundas do Administrador Geral', () => {
     permissionsMock.mockReturnValue({
       isAdmin: false,
       isGestor: true,
@@ -67,15 +67,16 @@ describe('Configuracoes visibility', () => {
     renderPage();
 
     expect(screen.queryByRole('tab', { name: 'Empresas' })).toBeNull();
-    expect(screen.queryByRole('tab', { name: 'Usuários' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Usuários' })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Backup' })).toBeNull();
 
     expect(screen.getByRole('tab', { name: 'Cadastros' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Gestores por Setor' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Acesso por Setor' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Responsáveis por Setor' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Matriz de Treinamentos' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Importações e Exportações' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Integrações' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Sistema' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Sistema' })).toBeNull();
   });
 
   it('mantem abas administrativas para admin geral', () => {
