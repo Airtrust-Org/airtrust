@@ -13,5 +13,6 @@ assert_count unapplied-change 0 "SELECT COUNT(*) count FROM airtrust_schema_chan
 assert_count dependency-0524 1 "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id='training-compliance-requirement-sanitization-0524';"
 assert_count alignment-0526-unapplied 0 "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id='training-compliance-matrix-alignment-0526';"
 assert_count tenant-6 1 "SELECT COUNT(*) count FROM empresas WHERE id=6;"
+assert_count operational-training-category 1 "SELECT COUNT(*) count FROM qualificacoes_categorias WHERE empresa_id=6 AND UPPER(TRIM(codigo))='TREINAMENTO_OPERACIONAL' AND ativo=1 AND deleted_at IS NULL;"
 assert_zero_or_one active-loft-before "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)='LOFT' AND ativo=1 AND deleted_at IS NULL;"
 echo TRAINING_COMPLIANCE_LOFT_BOOTSTRAP_0527_PRODUCTION_PREFLIGHT=PASS

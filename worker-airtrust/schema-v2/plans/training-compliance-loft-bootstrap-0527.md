@@ -6,6 +6,8 @@ Provide the minimal governed prerequisite required by `0526_training_compliance_
 ## Incident evidence
 The official staging workflow for merge SHA `4f6abc1422b3dfbd545b567647728ced7b98d918` stopped fail-closed on 2026-10-02 during the 0526 read-only preflight with `loft-model-record expected=1 found=0`. The failure happened before the recovery point and before any D1 mutation.
 
+The first governed 0527 staging apply on merge SHA `c88d1df901472ec6fbff43f246fdf8db3972733f` captured a D1 Time Travel recovery point and then failed atomically with `QUALIFICATION_CATEGORY_INVALID`. Migration 0457 requires every current `qualificacoes_tipos` row to reference an active same-tenant `qualificacoes_categorias` row through `categoria_id`; the initial 0527 draft only supplied the legacy display text. No 0527 ledger row was written.
+
 ## Authority and scope
 - Tenant: Costa do Sol (`empresa_id=6`) only.
 - Business decision: LOFT remains a separate qualification/control for flight crew.
@@ -15,14 +17,16 @@ The official staging workflow for merge SHA `4f6abc1422b3dfbd545b567647728ced7b9
 ## Forward change
 1. If tenant 6 already has a current LOFT row, keep its identity and normalize only active/current metadata needed by 0526.
 2. If LOFT exists only as a soft-deleted/historical row, reactivate one existing identity instead of creating a replacement ID.
-3. If tenant 6 has no LOFT row at all, create one minimal active LOFT model with a 12-month default validity.
-4. Do not create training requirements, LMS enrollments or employee assignments. Those remain outside this bootstrap.
+3. Resolve the qualification category by the stable tenant-6 code `TREINAMENTO_OPERACIONAL`; never infer a category ID or rely on presentation text.
+4. If tenant 6 has no LOFT row at all, create one minimal active LOFT model with a 12-month default validity and that canonical category FK.
+5. Do not create training requirements, LMS enrollments or employee assignments. Those remain outside this bootstrap.
 
 ## Safety
 - No writes outside `empresa_id=6`.
 - No writes/deletes to qualification history, certificates, completion evidence, LMS enrollments or training requirements.
 - Existing LOFT identity is preferred to preserve historical foreign-key lineage.
 - Existing non-null validity is preserved; 12 months is only the fallback/default when missing or newly created.
+- Preflight requires exactly one active tenant-6 `TREINAMENTO_OPERACIONAL` category, and postconditions prove LOFT references it.
 - Idempotent: a rerun leaves exactly one current tenant-6 LOFT model.
 - 0526 itself is not modified.
 

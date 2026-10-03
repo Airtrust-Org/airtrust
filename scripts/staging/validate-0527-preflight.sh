@@ -12,6 +12,7 @@ assert_count dependency-0524 1 "SELECT COUNT(*) count FROM d1_migrations WHERE n
 assert_count alignment-0526-unapplied 0 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0526_training_compliance_matrix_alignment.sql';"
 assert_count migration-ledger-0527-absent 0 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0527_training_compliance_loft_bootstrap.sql';"
 assert_count tenant-6 1 "SELECT COUNT(*) count FROM empresas WHERE id=6;"
+assert_count operational-training-category 1 "SELECT COUNT(*) count FROM qualificacoes_categorias WHERE empresa_id=6 AND UPPER(TRIM(codigo))='TREINAMENTO_OPERACIONAL' AND ativo=1 AND deleted_at IS NULL;"
 assert_count qualification-table 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name='qualificacoes_tipos';"
 assert_zero_or_one active-loft-before "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)='LOFT' AND ativo=1 AND deleted_at IS NULL;"
 echo TRAINING_COMPLIANCE_LOFT_BOOTSTRAP_0527_STAGING_PREFLIGHT=PASS
