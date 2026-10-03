@@ -11,6 +11,7 @@ import {
   sortPlanejadosByDate,
   computePlanejadosStats,
   getAvailablePlannedTrainings,
+  getPlannedFallbackParticipantIds,
 } from '@/react-app/pages/qualificacoes/qualificacoes.helpers';
 
 describe('qualificacoes pure presentation helpers', () => {
@@ -249,5 +250,56 @@ describe('qualificacoes pure presentation helpers', () => {
       8,
     ]);
     expect(trainings.map((training) => training.id)).toEqual([8, 9, 10]);
+  });
+
+  it('derives fallback class participants by same date and exact normalized code or name', () => {
+    const selected = {
+      funcionario_id: 7,
+      data_realizacao: '2026-10-10T08:00:00',
+      qualificacao_codigo: ' g1 ',
+      qualificacao_nome: 'Segurança de Voo',
+    };
+    const items = [
+      { funcionario_id: 8, data_realizacao: '2026-10-10', qualificacao_codigo: 'G1' },
+      { funcionario_id: 9, data_conclusao: '2026-10-10', qualificacao_nome: ' segurança de voo ' },
+      { funcionario_id: 8, data_realizacao: '2026-10-10', qualificacao_codigo: 'G1' },
+      { funcionario_id: 10, data_realizacao: '2026-10-11', qualificacao_codigo: 'G1' },
+      { funcionario_id: 11, data_realizacao: '2026-10-10', qualificacao_codigo: 'OUTRO' },
+      { funcionario_id: 0, data_realizacao: '2026-10-10', qualificacao_codigo: 'G1' },
+    ];
+
+    expect(getPlannedFallbackParticipantIds(items, selected)).toEqual([8, 9]);
+  });
+
+  it('keeps same-date fallback broad when qualification code and name are absent', () => {
+    const selected = { funcionario_id: 7, data_conclusao: '2026-10-10' };
+    const items = [
+      { funcionario_id: 8, data_realizacao: '2026-10-10', qualificacao_codigo: 'G1' },
+      { funcionario_id: 9, data_conclusao: '2026-10-10', qualificacao_codigo: 'G2' },
+      { funcionario_id: 10, data_realizacao: '2026-10-11', qualificacao_codigo: 'G3' },
+    ];
+
+    expect(getPlannedFallbackParticipantIds(items, selected)).toEqual([8, 9]);
+  });
+
+  it('falls back to the selected employee only when no planned class match exists', () => {
+    const items = [
+      { funcionario_id: 8, data_realizacao: '2026-10-11', qualificacao_codigo: 'G1' },
+    ];
+
+    expect(
+      getPlannedFallbackParticipantIds(items, {
+        funcionario_id: '7',
+        data_realizacao: '2026-10-10',
+        qualificacao_codigo: 'G1',
+      }),
+    ).toEqual([7]);
+    expect(
+      getPlannedFallbackParticipantIds(items, {
+        funcionario_id: 0,
+        data_realizacao: '2026-10-10',
+        qualificacao_codigo: 'G1',
+      }),
+    ).toEqual([]);
   });
 });
