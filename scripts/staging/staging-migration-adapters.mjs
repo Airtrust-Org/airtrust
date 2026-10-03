@@ -1,9 +1,10 @@
-// source_reference: staging D1 0518 failures + staging 0524 preflight failure on 2026-09-30; production tenant 6 CRM/maintenance reference catalog read-only comparisons
+// source_reference: staging D1 0518 failures + staging 0524 preflight failure on 2026-09-30 + staging 0526 read-only preflight failure run 37087544679; production tenant 6 reference catalog comparisons
 // operational_decision: preserve immutable production Schema V2 changes 0518/0524 and bootstrap only their non-PII reference prerequisites missing from reduced staging
 // dry_run_required: true
 // rollback_plan_required: staging D1 Time Travel recovery point captured by apply-approved-migration-with-recovery-point.sh
 const CRM_0518_MIGRATION = '0518_crm_qualification_consolidation.sql';
 const COMPLIANCE_0524_MIGRATION = '0524_training_compliance_requirement_sanitization.sql';
+const COMPLIANCE_0526_MIGRATION = '0526_training_compliance_matrix_alignment.sql';
 
 export function adaptStagingMigrationSql({ migrationName, migrationSql }) {
   if (typeof migrationSql !== 'string' || !migrationSql.trim()) {
@@ -193,6 +194,45 @@ WHERE NOT EXISTS (
 );`;
 
     return `${bootstrap}\n\n${migrationSql}`;
+  }
+
+  if (migrationName === COMPLIANCE_0526_MIGRATION) {
+    // Staging intentionally carries a reduced organizational reference catalog.
+    // 0526 targets function IDs by reviewed names, so seed only the seven non-PII
+    // function references needed to exercise its LOFT/NR rules. No employee,
+    // history, enrollment, certificate or designation row is created.
+    const bootstrap = `-- staging-only function reference prerequisites for immutable production change 0526
+INSERT INTO funcoes (codigo,nome,descricao,categoria,ativo,empresa_id,created_at,updated_at)
+SELECT 'CMD','Comandante',NULL,'OPERACOES',1,6,datetime('now'),datetime('now')
+WHERE NOT EXISTS (SELECT 1 FROM funcoes WHERE empresa_id=6 AND deleted_at IS NULL AND (UPPER(TRIM(codigo))='CMD' OR TRIM(nome)='Comandante'));
+
+INSERT INTO funcoes (codigo,nome,descricao,categoria,ativo,empresa_id,created_at,updated_at)
+SELECT 'COP','Copiloto',NULL,'OPERACOES',1,6,datetime('now'),datetime('now')
+WHERE NOT EXISTS (SELECT 1 FROM funcoes WHERE empresa_id=6 AND deleted_at IS NULL AND (UPPER(TRIM(codigo))='COP' OR TRIM(nome)='Copiloto'));
+
+INSERT INTO funcoes (codigo,nome,descricao,categoria,ativo,empresa_id,created_at,updated_at)
+SELECT 'MEC','Mecânico',NULL,'MANUTENCAO',1,6,datetime('now'),datetime('now')
+WHERE NOT EXISTS (SELECT 1 FROM funcoes WHERE empresa_id=6 AND deleted_at IS NULL AND (UPPER(TRIM(codigo))='MEC' OR TRIM(nome) IN ('Mecânico','Mecanico','MECÂNICO','MECANICO')));
+
+INSERT INTO funcoes (codigo,nome,descricao,categoria,ativo,empresa_id,created_at,updated_at)
+SELECT 'AUXM','Aux Manutenção',NULL,'MANUTENCAO',1,6,datetime('now'),datetime('now')
+WHERE NOT EXISTS (SELECT 1 FROM funcoes WHERE empresa_id=6 AND deleted_at IS NULL AND (UPPER(TRIM(codigo))='AUXM' OR TRIM(nome) IN ('Aux Manutenção','Aux Manutencao','Auxiliar de Manutenção','Auxiliar de Manutencao')));
+
+INSERT INTO funcoes (codigo,nome,descricao,categoria,ativo,empresa_id,created_at,updated_at)
+SELECT 'AUXS','Aux Suprimentos',NULL,'SUPRIMENTOS',1,6,datetime('now'),datetime('now')
+WHERE NOT EXISTS (SELECT 1 FROM funcoes WHERE empresa_id=6 AND deleted_at IS NULL AND (UPPER(TRIM(codigo))='AUXS' OR TRIM(nome) IN ('Aux Suprimentos','Auxiliar de Suprimentos')));
+
+INSERT INTO funcoes (codigo,nome,descricao,categoria,ativo,empresa_id,created_at,updated_at)
+SELECT 'SUPS','Supervisor Suprimentos',NULL,'SUPRIMENTOS',1,6,datetime('now'),datetime('now')
+WHERE NOT EXISTS (SELECT 1 FROM funcoes WHERE empresa_id=6 AND deleted_at IS NULL AND (UPPER(TRIM(codigo))='SUPS' OR TRIM(nome) IN ('Supervisor Suprimentos','Supervisor de Suprimentos')));
+
+INSERT INTO funcoes (codigo,nome,descricao,categoria,ativo,empresa_id,created_at,updated_at)
+SELECT 'RMP','Agente Rampa',NULL,'OPERACOES',1,6,datetime('now'),datetime('now')
+WHERE NOT EXISTS (SELECT 1 FROM funcoes WHERE empresa_id=6 AND deleted_at IS NULL AND (UPPER(TRIM(codigo))='RMP' OR TRIM(nome) IN ('Agente Rampa','Agente de Rampa')));`;
+
+    return `${bootstrap}
+
+${migrationSql}`;
   }
 
   return migrationSql;
