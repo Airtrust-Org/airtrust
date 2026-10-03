@@ -62,6 +62,8 @@ jobs:
           node --test scripts/__tests__/deploy-release-gates-wiring.test.mjs
           node --test scripts/ci/check-github-workflow-contexts.test.mjs
           node --test scripts/ci/check-frontend-entry-chunks.test.mjs
+      - name: validate SCORM source-map package guard
+        run: node --test scripts/__tests__/guard-package-references-scorm-source-maps.test.mjs
       - name: tenant mutations guard
         run: node scripts/guard-tenant-mutations.mjs
       - name: validate 0438 on disposable real-base SQLite
