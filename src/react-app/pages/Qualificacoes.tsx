@@ -128,6 +128,9 @@ import {
   isPlanejadaVencida,
   getDataMinimaPlanejada,
   sugerirNovaDataPlanejada,
+  prioritizeHistoricoItems,
+  sortPlanejadosByDate,
+  computePlanejadosStats,
   getStatusColor,
   getStatusDotColor,
   getStatusLabel,
@@ -951,95 +954,20 @@ export default function Qualificacoes() {
     [getHistoricoStatus, historico, isDefaultStatusFilter, statusFiltro],
   );
 
-  const prioritizedHistorico = useMemo(() => {
-    const parseDateForPriority = (value?: string | null): Date | null => {
-      if (!value) return null;
-      const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(value);
-      if (m) {
-        const year = Number(m[1]);
-        const month = Number(m[2]);
-        const day = Number(m[3]);
-        return new Date(year, month - 1, day);
-      }
-      const d = new Date(value);
-      return isNaN(d.getTime()) ? null : d;
-    };
-
-    const shouldPrioritize = (item: HistoricoItem): boolean => {
-      const status = String(
-        (item as HistoricoItem & { qualificacao_status?: string }).qualificacao_status || '',
-      ).toUpperCase();
-      if (status !== 'PLANEJADA') return false;
-
-      const dataRef =
-        (item as HistoricoItem & { data_realizacao?: string; data_conclusao?: string })
-          .data_realizacao || item.data_conclusao;
-      const data = parseDateForPriority(dataRef);
-      if (!data) return false;
-
-      const hoje = new Date();
-      hoje.setHours(0, 0, 0, 0);
-      return data <= hoje;
-    };
-
-    return [...filteredHistorico].sort((a, b) => {
-      const destaqueA = highlightedHistoricoId && a.id === highlightedHistoricoId ? 1 : 0;
-      const destaqueB = highlightedHistoricoId && b.id === highlightedHistoricoId ? 1 : 0;
-      if (destaqueA !== destaqueB) {
-        return destaqueB - destaqueA;
-      }
-
-      const prioridadeA = shouldPrioritize(a) ? 1 : 0;
-      const prioridadeB = shouldPrioritize(b) ? 1 : 0;
-      return prioridadeB - prioridadeA;
-    });
-  }, [filteredHistorico, highlightedHistoricoId]);
+  const prioritizedHistorico = useMemo(
+    () => prioritizeHistoricoItems(filteredHistorico, highlightedHistoricoId),
+    [filteredHistorico, highlightedHistoricoId],
+  );
 
   const planejadosHistorico = useMemo(() => {
-    const items = prioritizedHistorico.filter((item) => {
-      return getHistoricoStatus(item) === 'PLANEJADA';
-    });
-
-    return items.sort((a, b) => {
-      const dataA = parseDateLocal(
-        (a as HistoricoItem & { data_realizacao?: string }).data_realizacao || a.data_conclusao,
-      );
-      const dataB = parseDateLocal(
-        (b as HistoricoItem & { data_realizacao?: string }).data_realizacao || b.data_conclusao,
-      );
-
-      if (!dataA && !dataB) return 0;
-      if (!dataA) return 1;
-      if (!dataB) return -1;
-      return dataA.getTime() - dataB.getTime();
-    });
+    const items = prioritizedHistorico.filter((item) => getHistoricoStatus(item) === 'PLANEJADA');
+    return sortPlanejadosByDate(items);
   }, [getHistoricoStatus, prioritizedHistorico]);
 
-  const planejadosStats = useMemo(() => {
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-
-    return planejadosHistorico.reduce(
-      (acc, item) => {
-        acc.total += 1;
-        const data = parseDateLocal(
-          (item as HistoricoItem & { data_realizacao?: string }).data_realizacao ||
-            item.data_conclusao,
-        );
-        if (!data) {
-          acc.semData += 1;
-          return acc;
-        }
-        if (data < hoje) {
-          acc.atrasados += 1;
-        } else {
-          acc.futuros += 1;
-        }
-        return acc;
-      },
-      { total: 0, futuros: 0, atrasados: 0, semData: 0 },
-    );
-  }, [planejadosHistorico]);
+  const planejadosStats = useMemo(
+    () => computePlanejadosStats(planejadosHistorico),
+    [planejadosHistorico],
+  );
 
   const shouldUseLocalHistoricoHeaderStats = Boolean(
     debouncedSearch.trim() ||
