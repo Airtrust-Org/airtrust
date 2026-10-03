@@ -131,6 +131,7 @@ import {
   prioritizeHistoricoItems,
   sortPlanejadosByDate,
   computePlanejadosStats,
+  getAvailablePlannedTrainings,
   getStatusColor,
   getStatusDotColor,
   getStatusLabel,
@@ -1166,73 +1167,14 @@ export default function Qualificacoes() {
   };
 
   const getTurmasPlanejadasDisponiveis = useCallback(
-    (item: HistoricoItem): TreinamentoPlanejado[] => {
-      const normalizeText = (value?: string | null) =>
-        (value ?? '')
-          .toString()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .trim()
-          .toUpperCase();
-      const normalizeCode = (value?: string | null) =>
-        (value ?? '').toString().trim().toUpperCase();
-      const isSameDate = (left?: string | null, right?: string | null) =>
-        String(left || '').slice(0, 10) === String(right || '').slice(0, 10);
-
-      const qualificacaoId = Number(item.qualificacao_id || 0);
-      const qualificacaoCodigo = normalizeCode(item.qualificacao_codigo || item.codigo || '');
-      const qualificacaoNome = normalizeText(item.qualificacao_nome || '');
-      const funcionarioId = Number(item.funcionario_id || 0);
-      const dataPlanejadaItem =
-        (item as HistoricoItem & { data_realizacao?: string }).data_realizacao ||
-        item.data_conclusao ||
-        null;
-
-      return (treinamentosPlanejadosConvocacaoQuery.data?.items || [])
-        .filter((treinamento) => {
-          const statusTreinamento = normalizeText(treinamento.status);
-          if (statusTreinamento !== 'PLANEJADO') return false;
-          if (
-            !treinamento.participantes.some(
-              (participante) => Number(participante.funcionario_id) === funcionarioId,
-            )
-          ) {
-            return false;
-          }
-
-          if (qualificacaoId > 0 && Number(treinamento.qualificacao_tipo_id) === qualificacaoId) {
-            return true;
-          }
-
-          const treinamentoCodigo = normalizeCode(treinamento.qualificacao_codigo || '');
-          if (qualificacaoCodigo && treinamentoCodigo === qualificacaoCodigo) {
-            return true;
-          }
-
-          const treinamentoNome = normalizeText(
-            treinamento.qualificacao_nome || treinamento.titulo || '',
-          );
-          if (
-            qualificacaoNome &&
-            treinamentoNome &&
-            (treinamentoNome.includes(qualificacaoNome) ||
-              qualificacaoNome.includes(treinamentoNome))
-          ) {
-            return true;
-          }
-
-          if (isSameDate(treinamento.data_prevista, dataPlanejadaItem)) {
-            return true;
-          }
-
-          return false;
-        })
-        .sort((left, right) => {
-          const leftKey = `${left.data_prevista} ${left.hora_inicio || '99:99'}`;
-          const rightKey = `${right.data_prevista} ${right.hora_inicio || '99:99'}`;
-          return leftKey.localeCompare(rightKey);
-        });
-    },
+    (item: HistoricoItem): TreinamentoPlanejado[] =>
+      getAvailablePlannedTrainings(
+        treinamentosPlanejadosConvocacaoQuery.data?.items || [],
+        {
+          ...item,
+          data_realizacao: (item as HistoricoItem & { data_realizacao?: string }).data_realizacao,
+        },
+      ),
     [treinamentosPlanejadosConvocacaoQuery.data?.items],
   );
 
