@@ -69,6 +69,51 @@ export function formatDateLabel(value?: string | null): string {
   return parsed.toLocaleDateString('pt-BR');
 }
 
+export type PlanejadaDateSource = {
+  qualificacao_status?: string | null;
+  data_realizacao?: string | null;
+  data_conclusao?: string | null;
+};
+
+export function isPlanejadaVencida(
+  item: PlanejadaDateSource,
+  today: Date = new Date(),
+): boolean {
+  const status = String(item.qualificacao_status || '').toUpperCase();
+  if (status !== 'PLANEJADA') return false;
+
+  const data = parseDateLocal(item.data_realizacao || item.data_conclusao);
+  if (!data) return false;
+
+  const hoje = new Date(today);
+  hoje.setHours(0, 0, 0, 0);
+  return data < hoje;
+}
+
+export function getDataMinimaPlanejada(today: Date = new Date()): string {
+  const amanha = new Date(today);
+  amanha.setHours(0, 0, 0, 0);
+  amanha.setDate(amanha.getDate() + 1);
+  return formatDateInputValue(amanha);
+}
+
+export function sugerirNovaDataPlanejada(
+  item?: PlanejadaDateSource | null,
+  today: Date = new Date(),
+): string {
+  const dataBase = parseDateLocal(item?.data_realizacao || item?.data_conclusao);
+  const sugerida = dataBase ? new Date(dataBase) : new Date(today);
+  sugerida.setHours(0, 0, 0, 0);
+  sugerida.setDate(sugerida.getDate() + 1);
+
+  const minima = parseDateLocal(getDataMinimaPlanejada(today));
+  if (minima && sugerida < minima) {
+    return formatDateInputValue(minima);
+  }
+
+  return formatDateInputValue(sugerida);
+}
+
 export function getStatusColor(status: string) {
   if (status === 'CONCLUIDA' || status === 'CONCLUIDO') return 'bg-emerald-600/10 text-emerald-700';
   if (status === 'RENOVADA') return 'bg-blue-600/10 text-blue-600';

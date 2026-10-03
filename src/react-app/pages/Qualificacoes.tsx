@@ -125,6 +125,9 @@ import {
   getTipoTreinamentoDisplay,
   formatDateInputValue,
   formatDateLabel,
+  isPlanejadaVencida,
+  getDataMinimaPlanejada,
+  sugerirNovaDataPlanejada,
   getStatusColor,
   getStatusDotColor,
   getStatusLabel,
@@ -1139,22 +1142,6 @@ export default function Qualificacoes() {
     setShowRenovarModal(true);
   };
 
-  // Destacar qualificações planejadas com data já ultrapassada
-  const isPlanejadaVencida = (item: HistoricoItem): boolean => {
-    const status = String(
-      (item as HistoricoItem & { qualificacao_status?: string }).qualificacao_status || '',
-    ).toUpperCase();
-    if (status !== 'PLANEJADA') return false;
-    const dataRef =
-      (item as HistoricoItem & { data_realizacao?: string; data_conclusao?: string })
-        .data_realizacao || item.data_conclusao;
-    const data = parseDateLocal(dataRef);
-    if (!data) return false;
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-    return data < hoje;
-  };
-
   // Ícone inline replace do modal — operador vê a linha colorida + ícone na tabela, não modal interruptivo
 
   // ModalRenovarQualificacao cuidará do POST e do loading; aqui apenas controlamos abertura/fechamento
@@ -1184,30 +1171,6 @@ export default function Qualificacoes() {
   };
 
   // Definir colunas da tabela de histórico (limpas e corrigidas)
-  const getDataMinimaPlanejada = (): string => {
-    const amanha = new Date();
-    amanha.setHours(0, 0, 0, 0);
-    amanha.setDate(amanha.getDate() + 1);
-    return formatDateInputValue(amanha);
-  };
-
-  const sugerirNovaDataPlanejada = (item?: HistoricoItem | null): string => {
-    const dataBase = parseDateLocal(
-      (item as HistoricoItem & { data_realizacao?: string })?.data_realizacao ||
-        item?.data_conclusao,
-    );
-    const sugerida = dataBase ?? new Date();
-    sugerida.setHours(0, 0, 0, 0);
-    sugerida.setDate(sugerida.getDate() + 1);
-
-    const minima = parseDateLocal(getDataMinimaPlanejada());
-    if (minima && sugerida < minima) {
-      return formatDateInputValue(minima);
-    }
-
-    return formatDateInputValue(sugerida);
-  };
-
   const recarregarHistoricoEStats = useCallback(async () => {
     await carregarHistorico();
   }, [carregarHistorico]);
