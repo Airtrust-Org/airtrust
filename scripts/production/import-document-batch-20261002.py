@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse, hashlib, json, re, subprocess, tempfile, unicodedata, uuid
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -209,7 +210,8 @@ def apply_d1(rows: list[dict], has_hash: bool) -> None:
         vals = f"{sql_text(row['uuid'])},{row['funcionario_id']},{sql_text(row['nome_arquivo'])},'application/pdf',{int(Path(row['file_path']).stat().st_size)},{sql_text(row['r2_key'])},{sql_text(row['descricao'])}"
         if has_hash: vals += f",{sql_text(row['upload_sha'])}"
         vals += f",{EMPRESA_ID},datetime('now'),datetime('now')"
-        duplicate = f"descricao LIKE {sql_text(BATCH + ':source_sha256=' + row['original_sha'] + ';%')} OR r2_key={sql_text(row['r2_key'])}"
+        prefix = BATCH + ':source_sha256=' + row['original_sha'] + ';'
+        duplicate = f"instr(descricao,{sql_text(prefix)})=1 OR r2_key={sql_text(row['r2_key'])}"
         if has_hash: duplicate += f" OR sha256_hash={sql_text(row['upload_sha'])}"
         lines.append(
             f"INSERT INTO documentos ({cols}) SELECT {vals} "
@@ -218,7 +220,7 @@ def apply_d1(rows: list[dict], has_hash: bool) -> None:
     lines.append(
         "INSERT INTO audit_logs (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at) "
         "SELECT NULL,'DOCUMENT_BATCH_IMPORT_20261002','documentos',d.id,NULL,'{\"batch\":\"document-batch-20261002\"}',d.empresa_id,datetime('now') "
-        f"FROM documentos d WHERE d.empresa_id={EMPRESA_ID} AND d.deleted_at IS NULL AND d.descricao LIKE {sql_text(BATCH + ':%')} "
+        f"FROM documentos d WHERE d.empresa_id={EMPRESA_ID} AND d.deleted_at IS NULL AND instr(d.descricao,{sql_text(BATCH + ':')})=1 "
         "AND NOT EXISTS (SELECT 1 FROM audit_logs a WHERE a.empresa_id=d.empresa_id AND a.action='DOCUMENT_BATCH_IMPORT_20261002' AND a.entity_type='documentos' AND a.entity_id=d.id);"
     )
     with tempfile.NamedTemporaryFile("w", suffix=".sql", delete=False, encoding="utf-8") as f:
@@ -245,9 +247,14 @@ def main() -> int:
     summary={"mode":"dry-run","source_sha":head,"empresa_id":EMPRESA_ID,"plan_sha256":plan_sha,"valid_rows":len(rows),"excluded":dict(excluded),"already_present":dup,"candidate_count":len(pending),"candidate_hash":c_hash,"candidate_by_employee":dict(Counter(EXPECTED_EMPLOYEES[r['funcionario_id']] for r in pending)),"candidate_by_category":dict(Counter(r['category'] for r in pending)),"upload_bytes":sum(Path(r['file_path']).stat().st_size for r in pending),"document_hash_column":has_hash,"mutation_executed":False,"pii_emitted":False}
     if args.mode=="dry-run": print(json.dumps(summary,ensure_ascii=False,indent=2)); return 0
     exact=ensure_apply_guards(args,plan_sha,len(pending),c_hash); recovery=capture_recovery_point()
-    for i,row in enumerate(pending,1):
-        upload_r2(row)
-        if i % 25 == 0: print(f"R2_PROGRESS {i}/{len(pending)}", file=__import__('sys').stderr)
+    completed = 0
+    with ThreadPoolExecutor(max_workers=32) as pool:
+        futures = {pool.submit(upload_r2, row): row for row in pending}
+        for future in as_completed(futures):
+            future.result()
+            completed += 1
+            if completed % 25 == 0 or completed == len(pending):
+                print(f"R2_PROGRESS {completed}/{len(pending)}", file=__import__('sys').stderr, flush=True)
     apply_d1(pending, has_hash)
     employees2,m2,u2,has_hash2=load_live(rows); remaining=[r for r in rows if (r['funcionario_id'],r['original_sha']) not in m2 and (r['funcionario_id'],r['upload_sha']) not in u2]
     imported=sum(1 for r in rows if (r['funcionario_id'],r['original_sha']) in m2 or (r['funcionario_id'],r['upload_sha']) in u2)

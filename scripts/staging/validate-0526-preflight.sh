@@ -14,12 +14,23 @@ for code in D2 PRE NR-11 NR-20 NR-26 NR-35 AVSEC_CONSC; do
   assert_count "model-$code" 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)=UPPER('$code') AND deleted_at IS NULL;"
 done
 assert_count loft-model-record 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)='LOFT';"
-assert_count comandante-function 1 "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome)='Comandante';"
-assert_count copiloto-function 1 "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome)='Copiloto';"
-assert_count mechanic-function 1 "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome) IN ('Mecânico','Mecanico','MECÂNICO','MECANICO');"
-assert_count maintenance-assistant-function 1 "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome) IN ('Aux Manutenção','Aux Manutencao','Auxiliar de Manutenção','Auxiliar de Manutencao');"
-assert_count supplies-assistant-function 1 "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome) IN ('Aux Suprimentos','Auxiliar de Suprimentos');"
-assert_count supplies-supervisor-function 1 "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome) IN ('Supervisor Suprimentos','Supervisor de Suprimentos');"
+# Staging is intentionally reduced. The staging-only 0526 adapter atomically seeds
+# these non-PII references if absent. Preflight still rejects duplicates and code/name
+# collisions before any recovery point or write.
+assert_zero_or_one comandante-function "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome)='Comandante';"
+assert_zero_or_one copiloto-function "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome)='Copiloto';"
+assert_zero_or_one mechanic-function "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome) IN ('Mecânico','Mecanico','MECÂNICO','MECANICO');"
+assert_zero_or_one maintenance-assistant-function "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome) IN ('Aux Manutenção','Aux Manutencao','Auxiliar de Manutenção','Auxiliar de Manutencao');"
+assert_zero_or_one supplies-assistant-function "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome) IN ('Aux Suprimentos','Auxiliar de Suprimentos');"
+assert_zero_or_one supplies-supervisor-function "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome) IN ('Supervisor Suprimentos','Supervisor de Suprimentos');"
+assert_zero_or_one ramp-agent-function "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND TRIM(nome) IN ('Agente Rampa','Agente de Rampa');"
+assert_count comandante-code-collision 0 "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND UPPER(TRIM(codigo))='CMD' AND TRIM(nome)<>'Comandante';"
+assert_count copiloto-code-collision 0 "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND UPPER(TRIM(codigo))='COP' AND TRIM(nome)<>'Copiloto';"
+assert_count mechanic-code-collision 0 "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND UPPER(TRIM(codigo))='MEC' AND TRIM(nome) NOT IN ('Mecânico','Mecanico','MECÂNICO','MECANICO');"
+assert_count maintenance-assistant-code-collision 0 "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND UPPER(TRIM(codigo))='AUXM' AND TRIM(nome) NOT IN ('Aux Manutenção','Aux Manutencao','Auxiliar de Manutenção','Auxiliar de Manutencao');"
+assert_count supplies-assistant-code-collision 0 "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND UPPER(TRIM(codigo))='AUXS' AND TRIM(nome) NOT IN ('Aux Suprimentos','Auxiliar de Suprimentos');"
+assert_count supplies-supervisor-code-collision 0 "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND UPPER(TRIM(codigo))='SUPS' AND TRIM(nome) NOT IN ('Supervisor Suprimentos','Supervisor de Suprimentos');"
+assert_count ramp-agent-code-collision 0 "SELECT COUNT(*) count FROM funcoes WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND UPPER(TRIM(codigo))='RMP' AND TRIM(nome) NOT IN ('Agente Rampa','Agente de Rampa');"
 for code in FDM_ADMIN FDM_COMITE LOSA_ANALISTA EDB_LOGBOOK_USUARIO GESTAO_MUDANCAS_PARTICIPANTE; do
   assert_zero_or_one "condition-$code" "SELECT COUNT(*) count FROM compliance_condicoes WHERE empresa_id=6 AND codigo='$code' AND ativo=1 AND deleted_at IS NULL;"
 done
