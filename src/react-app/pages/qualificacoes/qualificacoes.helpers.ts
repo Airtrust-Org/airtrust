@@ -190,6 +190,155 @@ export function computePlanejadosStats(
   );
 }
 
+export type PlannedTrainingParticipantSource = {
+  funcionario_id?: number | string | null;
+};
+
+export type PlannedTrainingAvailabilitySource = {
+  status?: string | null;
+  participantes: readonly PlannedTrainingParticipantSource[];
+  qualificacao_tipo_id?: number | string | null;
+  qualificacao_codigo?: string | null;
+  qualificacao_nome?: string | null;
+  titulo?: string | null;
+  data_prevista?: string | null;
+  hora_inicio?: string | null;
+};
+
+export type PlannedQualificationAvailabilitySource = {
+  qualificacao_id?: number | string | null;
+  qualificacao_codigo?: string | null;
+  codigo?: string | null;
+  qualificacao_nome?: string | null;
+  funcionario_id?: number | string | null;
+  data_realizacao?: string | null;
+  data_conclusao?: string | null;
+};
+
+function normalizePlannedAvailabilityText(value?: string | null): string {
+  return (value ?? '')
+    .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+function normalizePlannedAvailabilityCode(value?: string | null): string {
+  return (value ?? '').toString().trim().toUpperCase();
+}
+
+function isSamePlannedDate(left?: string | null, right?: string | null): boolean {
+  return String(left || '').slice(0, 10) === String(right || '').slice(0, 10);
+}
+
+export function getAvailablePlannedTrainings<T extends PlannedTrainingAvailabilitySource>(
+  trainings: readonly T[],
+  item: PlannedQualificationAvailabilitySource,
+): T[] {
+  const qualificacaoId = Number(item.qualificacao_id || 0);
+  const qualificacaoCodigo = normalizePlannedAvailabilityCode(
+    item.qualificacao_codigo || item.codigo || '',
+  );
+  const qualificacaoNome = normalizePlannedAvailabilityText(item.qualificacao_nome || '');
+  const funcionarioId = Number(item.funcionario_id || 0);
+  const dataPlanejadaItem = item.data_realizacao || item.data_conclusao || null;
+
+  return trainings
+    .filter((treinamento) => {
+      const statusTreinamento = normalizePlannedAvailabilityText(treinamento.status);
+      if (statusTreinamento !== 'PLANEJADO') return false;
+      if (
+        !treinamento.participantes.some(
+          (participante) => Number(participante.funcionario_id) === funcionarioId,
+        )
+      ) {
+        return false;
+      }
+
+      if (qualificacaoId > 0 && Number(treinamento.qualificacao_tipo_id) === qualificacaoId) {
+        return true;
+      }
+
+      const treinamentoCodigo = normalizePlannedAvailabilityCode(
+        treinamento.qualificacao_codigo || '',
+      );
+      if (qualificacaoCodigo && treinamentoCodigo === qualificacaoCodigo) {
+        return true;
+      }
+
+      const treinamentoNome = normalizePlannedAvailabilityText(
+        treinamento.qualificacao_nome || treinamento.titulo || '',
+      );
+      if (
+        qualificacaoNome &&
+        treinamentoNome &&
+        (treinamentoNome.includes(qualificacaoNome) || qualificacaoNome.includes(treinamentoNome))
+      ) {
+        return true;
+      }
+
+      return isSamePlannedDate(treinamento.data_prevista, dataPlanejadaItem);
+    })
+    .sort((left, right) => {
+      const leftKey = `${left.data_prevista} ${left.hora_inicio || '99:99'}`;
+      const rightKey = `${right.data_prevista} ${right.hora_inicio || '99:99'}`;
+      return leftKey.localeCompare(rightKey);
+    });
+}
+
+export type PlannedFallbackParticipantSource = {
+  funcionario_id?: number | string | null;
+  qualificacao_codigo?: string | null;
+  codigo?: string | null;
+  qualificacao_nome?: string | null;
+  tipo_nome?: string | null;
+  data_realizacao?: string | null;
+  data_conclusao?: string | null;
+};
+
+function normalizePlannedFallbackValue(value?: string | null): string {
+  return String(value || '').trim().toUpperCase();
+}
+
+export function getPlannedFallbackParticipantIds(
+  items: readonly PlannedFallbackParticipantSource[],
+  selected: PlannedFallbackParticipantSource,
+): number[] {
+  const dataPlanejada = selected.data_realizacao || selected.data_conclusao || '';
+  const dataRef = String(dataPlanejada).slice(0, 10);
+  const codigoRef = normalizePlannedFallbackValue(
+    selected.qualificacao_codigo || selected.codigo,
+  );
+  const nomeRef = normalizePlannedFallbackValue(
+    selected.qualificacao_nome || selected.tipo_nome,
+  );
+
+  const ids = Array.from(
+    new Set(
+      items
+        .filter((item) => {
+          const itemData = String(item.data_realizacao || item.data_conclusao || '').slice(0, 10);
+          if (itemData !== dataRef) return false;
+
+          const itemCodigo = normalizePlannedFallbackValue(item.qualificacao_codigo || item.codigo);
+          const itemNome = normalizePlannedFallbackValue(item.qualificacao_nome || item.tipo_nome);
+          const codigoMatch = Boolean(codigoRef && itemCodigo && codigoRef === itemCodigo);
+          const nomeMatch = Boolean(nomeRef && itemNome && nomeRef === itemNome);
+
+          if (codigoRef || nomeRef) return codigoMatch || nomeMatch;
+          return true;
+        })
+        .map((item) => Number(item.funcionario_id || 0))
+        .filter((id) => id > 0),
+    ),
+  );
+
+  const selectedId = Number(selected.funcionario_id || 0);
+  if (ids.length === 0 && selectedId > 0) ids.push(selectedId);
+  return ids;
+}
+
 export function getStatusColor(status: string) {
   if (status === 'CONCLUIDA' || status === 'CONCLUIDO') return 'bg-emerald-600/10 text-emerald-700';
   if (status === 'RENOVADA') return 'bg-blue-600/10 text-blue-600';

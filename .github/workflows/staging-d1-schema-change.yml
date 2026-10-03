@@ -1,6 +1,9 @@
 name: Staging D1 Schema Change (Safe Recovery Point)
 
 on:
+  issue_comment:
+    types:
+      - created
   workflow_dispatch:
     inputs:
       confirmation:
@@ -59,25 +62,50 @@ env:
 jobs:
   guard:
     name: Reviewed Release Guard
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, 'AIRTRUST_STAGING_SCHEMA_CHANGE '))
     runs-on: ubuntu-latest
     outputs:
-      release_sha: ${{ steps.release.outputs.release_sha }}
+      release_sha: ${{ steps.request.outputs.release_sha }}
+      approved_migration: ${{ steps.request.outputs.approved_migration }}
+      release_reason: ${{ steps.request.outputs.release_reason }}
     steps:
       - name: Checkout trusted workflow source
         uses: actions/checkout@v7
 
-      - name: Validate dispatch and reviewed SHA
+      - name: Resolve governed request
+        id: request
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_ACTOR: ${{ github.event.comment.user.login }}
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+          INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+          INPUT_RELEASE_SHA: ${{ inputs.release_sha }}
+          INPUT_APPROVED_MIGRATION: ${{ inputs.approved_migration }}
+          INPUT_RELEASE_REASON: ${{ inputs.release_reason }}
+        run: |
+          set -euo pipefail
+          node scripts/staging/resolve-schema-change-request.mjs >> "$GITHUB_OUTPUT"
+
+      - name: Validate request and reviewed SHA
         shell: bash
         env:
           GIT_REF: ${{ github.ref }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_ACTOR: ${{ github.actor }}
-          CONFIRMATION: ${{ inputs.confirmation }}
-          PR_NUMBER: ${{ inputs.pr_number }}
-          RELEASE_SHA: ${{ inputs.release_sha }}
-          RELEASE_REASON: ${{ inputs.release_reason }}
-          APPROVED_MIGRATION: ${{ inputs.approved_migration }}
+          CONFIRMATION: ${{ steps.request.outputs.confirmation }}
+          PR_NUMBER: ${{ steps.request.outputs.pr_number }}
+          RELEASE_SHA: ${{ steps.request.outputs.release_sha }}
+          RELEASE_REASON: ${{ steps.request.outputs.release_reason }}
+          APPROVED_MIGRATION: ${{ steps.request.outputs.approved_migration }}
         run: |
           set -euo pipefail
           [[ "$GIT_REF" == "refs/heads/main" ]] || { echo "Workflow must run from main." >&2; exit 1; }
@@ -128,7 +156,6 @@ jobs:
             if (!['write', 'push', 'maintain', 'admin'].includes(permission.permission)) {
               throw new Error('ACTOR_PERMISSION_INSUFFICIENT');
             }
-
           })().catch((error) => {
             console.error(`Schema release guard failed: ${error.message}`);
             process.exit(1);
@@ -142,17 +169,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_SHA: ${{ steps.request.outputs.release_sha }}
         run: |
           set -euo pipefail
           export RELEASE_SHA="${RELEASE_SHA,,}"
           node scripts/ci/verify-release-gates.mjs
-
-      - name: Publish trusted release SHA
-        id: release
-        env:
-          RELEASE_SHA: ${{ inputs.release_sha }}
-        run: echo "release_sha=${RELEASE_SHA,,}" >> "$GITHUB_OUTPUT"
 
   schema-change:
     name: Apply One Staging Schema Change
@@ -199,7 +220,7 @@ jobs:
           STAGING_D1_NAME: ${{ env.ALLOWED_STAGING_DB_NAME }}
           STAGING_D1_ID: ${{ env.ALLOWED_STAGING_DB_ID }}
           CONFIRM_STAGING_SCHEMA_CHANGE: AIRTRUST_STAGING_SCHEMA_CHANGE
-          APPROVED_MIGRATION: ${{ inputs.approved_migration }}
+          APPROVED_MIGRATION: ${{ needs.guard.outputs.approved_migration }}
         run: |
           set -euo pipefail
           output="$RUNNER_TEMP/staging-schema-change.log"
@@ -219,8 +240,8 @@ jobs:
       - name: Write outcome
         env:
           RELEASE_SHA: ${{ needs.guard.outputs.release_sha }}
-          MIGRATION: ${{ inputs.approved_migration }}
-          REASON: ${{ inputs.release_reason }}
+          MIGRATION: ${{ needs.guard.outputs.approved_migration }}
+          REASON: ${{ needs.guard.outputs.release_reason }}
           RESULT: ${{ needs.schema-change.result }}
           RECOVERY_TIMESTAMP: ${{ needs.schema-change.outputs.recovery_timestamp }}
         run: |
