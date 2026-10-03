@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-02",
     "last_reconciled_against": "0527 LOFT prerequisite bootstrap reconciled with 0528 sector Compliance responsibles; 0526/0527/0528 remote apply pending",
-    "schema_v2_digest": "1e67c19ce0c154a438072bc2f1c7cffecc29bf35c45885207188c9a7db8521cf",
+    "schema_v2_digest": "8012067e1c33f9a2deb08a68081cbebc8607c984d4e273edc383599f46ca3bfd",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1261,14 +1261,14 @@
     {
       "change_file": "0527_training_compliance_loft_bootstrap.sql",
       "change_id": "training-compliance-loft-bootstrap-0527",
-      "sha256": "efb65cc607d6f4c75c3f8ecd44916e4e82663e4efab14311c4bc0f44af261c10",
+      "sha256": "287b141826e634ef26b9a1f7c292d671838a3dd1b3aec7c518e07ea31c399594",
       "targets": [],
       "domain": "training compliance / LOFT prerequisite bootstrap for reviewed matrix alignment",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "training-compliance-loft-bootstrap-0527.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-loft-bootstrap-0527.md",
-      "note": "0527 is a reviewed data-only prerequisite discovered by the fail-closed 0526 staging preflight. It preserves an existing tenant-6 LOFT identity when available or creates the minimal model only when none exists, writes no histories/enrollments/requirements, and must be applied before 0526 only in environments missing LOFT."
+      "note": "0527 is a reviewed data-only prerequisite discovered by the fail-closed 0526 staging preflight. It preserves an existing tenant-6 LOFT identity when available or creates the minimal model only when none exists, binds LOFT to the canonical same-tenant TREINAMENTO_OPERACIONAL category required by the 0457 FK contract, writes no histories/enrollments/requirements, and must be applied before 0526 only in environments missing LOFT."
     },
     {
       "change_file": "0528_setor_compliance_responsibles.sql",

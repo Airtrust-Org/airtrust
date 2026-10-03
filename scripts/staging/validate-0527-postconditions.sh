@@ -9,6 +9,7 @@ query_count(){ local sql="$1"; (cd worker-airtrust && npx wrangler d1 execute "$
 assert_count(){ local label="$1" expected="$2" sql="$3" count; count="$(query_count "$sql")"; [[ "$count" == "$expected" ]] || { echo "ERROR: $label expected=$expected found=$count" >&2; exit 1; }; echo "POSTCONDITION_OK=$label"; }
 assert_count migration-ledger-0527 1 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0527_training_compliance_loft_bootstrap.sql';"
 assert_count loft-active 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)='LOFT' AND ativo=1 AND deleted_at IS NULL;"
+assert_count loft-operational-category 1 "SELECT COUNT(*) count FROM qualificacoes_tipos qt JOIN qualificacoes_categorias qc ON qc.id=qt.categoria_id AND qc.empresa_id=qt.empresa_id WHERE qt.empresa_id=6 AND UPPER(qt.codigo)='LOFT' AND qt.ativo=1 AND qt.deleted_at IS NULL AND UPPER(TRIM(qc.codigo))='TREINAMENTO_OPERACIONAL' AND qc.ativo=1 AND qc.deleted_at IS NULL;"
 assert_count loft-current-validity-present 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(codigo)='LOFT' AND ativo=1 AND deleted_at IS NULL AND validade IS NOT NULL AND validade>0;"
 assert_count alignment-0526-still-unapplied 0 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0526_training_compliance_matrix_alignment.sql';"
 echo TRAINING_COMPLIANCE_LOFT_BOOTSTRAP_0527_STAGING_POSTCONDITIONS=PASS

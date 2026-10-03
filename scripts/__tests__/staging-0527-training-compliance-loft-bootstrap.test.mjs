@@ -29,6 +29,7 @@ test('0527 validators enforce prerequisite-only ordering and exact environments'
   assert.match(prodPre, /--env production/);
   assert.match(prodPre, /training-compliance-loft-bootstrap-0527/);
   assert.match(prodPost, /schema-v2-change/);
+  for (const validator of [pre, post, prodPre, prodPost]) assert.match(validator, /TREINAMENTO_OPERACIONAL/);
 });
 
 test('0527 shell validators and routed apply scripts are syntactically valid', () => {
