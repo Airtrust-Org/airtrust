@@ -210,7 +210,8 @@ def apply_d1(rows: list[dict], has_hash: bool) -> None:
         vals = f"{sql_text(row['uuid'])},{row['funcionario_id']},{sql_text(row['nome_arquivo'])},'application/pdf',{int(Path(row['file_path']).stat().st_size)},{sql_text(row['r2_key'])},{sql_text(row['descricao'])}"
         if has_hash: vals += f",{sql_text(row['upload_sha'])}"
         vals += f",{EMPRESA_ID},datetime('now'),datetime('now')"
-        duplicate = f"descricao LIKE {sql_text(BATCH + ':source_sha256=' + row['original_sha'] + ';%')} OR r2_key={sql_text(row['r2_key'])}"
+        prefix = BATCH + ':source_sha256=' + row['original_sha'] + ';'
+        duplicate = f"instr(descricao,{sql_text(prefix)})=1 OR r2_key={sql_text(row['r2_key'])}"
         if has_hash: duplicate += f" OR sha256_hash={sql_text(row['upload_sha'])}"
         lines.append(
             f"INSERT INTO documentos ({cols}) SELECT {vals} "
@@ -219,7 +220,7 @@ def apply_d1(rows: list[dict], has_hash: bool) -> None:
     lines.append(
         "INSERT INTO audit_logs (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at) "
         "SELECT NULL,'DOCUMENT_BATCH_IMPORT_20261002','documentos',d.id,NULL,'{\"batch\":\"document-batch-20261002\"}',d.empresa_id,datetime('now') "
-        f"FROM documentos d WHERE d.empresa_id={EMPRESA_ID} AND d.deleted_at IS NULL AND d.descricao LIKE {sql_text(BATCH + ':%')} "
+        f"FROM documentos d WHERE d.empresa_id={EMPRESA_ID} AND d.deleted_at IS NULL AND instr(d.descricao,{sql_text(BATCH + ':')})=1 "
         "AND NOT EXISTS (SELECT 1 FROM audit_logs a WHERE a.empresa_id=d.empresa_id AND a.action='DOCUMENT_BATCH_IMPORT_20261002' AND a.entity_type='documentos' AND a.entity_id=d.id);"
     )
     with tempfile.NamedTemporaryFile("w", suffix=".sql", delete=False, encoding="utf-8") as f:
