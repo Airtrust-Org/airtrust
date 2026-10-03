@@ -133,6 +133,9 @@ import {
   computePlanejadosStats,
   getAvailablePlannedTrainings,
   getPlannedFallbackParticipantIds,
+  sortPlannedParticipantDirectory,
+  buildPlannedParticipantNameMap,
+  filterPlannedParticipantDirectory,
   getStatusColor,
   getStatusDotColor,
   getStatusLabel,
@@ -542,30 +545,19 @@ export default function Qualificacoes() {
   }, [setoresTipos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const funcionariosAtivos = useMemo(
-    () =>
-      [...funcionariosAtivosData].sort((a, b) =>
-        String(a?.nome || '').localeCompare(String(b?.nome || ''), 'pt-BR'),
-      ),
+    () => sortPlannedParticipantDirectory(funcionariosAtivosData),
     [funcionariosAtivosData],
   );
 
   const funcionariosAtivosMap = useMemo(
-    () =>
-      new Map(
-        funcionariosAtivos.map((funcionario) => [Number(funcionario.id || 0), funcionario.nome]),
-      ),
+    () => buildPlannedParticipantNameMap(funcionariosAtivos),
     [funcionariosAtivos],
   );
 
-  const participantesTurmaPlanejadaFiltrados = useMemo(() => {
-    const termo = buscaParticipanteTurmaPlanejada.trim().toLowerCase();
-    if (!termo) return funcionariosAtivos;
-    return funcionariosAtivos.filter((funcionario) => {
-      const nome = String(funcionario.nome || '').toLowerCase();
-      const matricula = String(funcionario.matricula || '').toLowerCase();
-      return nome.includes(termo) || matricula.includes(termo);
-    });
-  }, [buscaParticipanteTurmaPlanejada, funcionariosAtivos]);
+  const participantesTurmaPlanejadaFiltrados = useMemo(
+    () => filterPlannedParticipantDirectory(funcionariosAtivos, buscaParticipanteTurmaPlanejada),
+    [buscaParticipanteTurmaPlanejada, funcionariosAtivos],
+  );
 
   const totalParticipantesTurmaPlanejadaFiltrados = participantesTurmaPlanejadaFiltrados.length;
   const totalParticipantesTurmaPlanejadaSelecionados =
