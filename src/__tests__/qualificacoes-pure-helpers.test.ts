@@ -3,7 +3,10 @@ import {
   formatDateInputValue,
   formatDateLabel,
   getTipoTreinamentoDisplay,
+  getDataMinimaPlanejada,
+  isPlanejadaVencida,
   normalizeTipoCodigo,
+  sugerirNovaDataPlanejada,
 } from '@/react-app/pages/qualificacoes/qualificacoes.helpers';
 
 describe('qualificacoes pure presentation helpers', () => {
@@ -46,5 +49,21 @@ describe('qualificacoes pure presentation helpers', () => {
     expect(formatDateLabel(null)).toBe('Data a definir');
     expect(formatDateLabel('2026-10-02')).toBe('02/10/2026');
     expect(formatDateLabel('valor-invalido')).toBe('valor-invalido');
+  });
+
+  it('detects overdue planned qualifications against a deterministic local day', () => {
+    const today = new Date(2026, 9, 2, 15, 30);
+    expect(isPlanejadaVencida({ qualificacao_status: 'PLANEJADA', data_realizacao: '2026-10-01' }, today)).toBe(true);
+    expect(isPlanejadaVencida({ qualificacao_status: 'PLANEJADA', data_conclusao: '2026-10-02' }, today)).toBe(false);
+    expect(isPlanejadaVencida({ qualificacao_status: 'VENCIDA', data_realizacao: '2026-10-01' }, today)).toBe(false);
+    expect(isPlanejadaVencida({ qualificacao_status: 'PLANEJADA', data_realizacao: 'invalida' }, today)).toBe(false);
+  });
+
+  it('keeps planned rescheduling dates bounded to tomorrow', () => {
+    const today = new Date(2026, 9, 2, 15, 30);
+    expect(getDataMinimaPlanejada(today)).toBe('2026-10-03');
+    expect(sugerirNovaDataPlanejada({ data_realizacao: '2026-10-10' }, today)).toBe('2026-10-11');
+    expect(sugerirNovaDataPlanejada({ data_conclusao: '2026-10-01' }, today)).toBe('2026-10-03');
+    expect(sugerirNovaDataPlanejada(null, today)).toBe('2026-10-03');
   });
 });
