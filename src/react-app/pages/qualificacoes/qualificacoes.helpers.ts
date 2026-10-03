@@ -114,6 +114,82 @@ export function sugerirNovaDataPlanejada(
   return formatDateInputValue(sugerida);
 }
 
+export type PlanejadaListItem = PlanejadaDateSource & {
+  id?: number | null;
+};
+
+function getPlanejadaReferenceDate(item: PlanejadaDateSource): Date | null {
+  return parseDateLocal(item.data_realizacao || item.data_conclusao);
+}
+
+export function prioritizeHistoricoItems<T extends PlanejadaListItem>(
+  items: readonly T[],
+  highlightedHistoricoId?: number | null,
+  today: Date = new Date(),
+): T[] {
+  const hoje = new Date(today);
+  hoje.setHours(0, 0, 0, 0);
+
+  const shouldPrioritize = (item: T): boolean => {
+    const status = String(item.qualificacao_status || '').toUpperCase();
+    if (status !== 'PLANEJADA') return false;
+    const data = getPlanejadaReferenceDate(item);
+    return Boolean(data && data <= hoje);
+  };
+
+  return [...items].sort((a, b) => {
+    const destaqueA = highlightedHistoricoId && a.id === highlightedHistoricoId ? 1 : 0;
+    const destaqueB = highlightedHistoricoId && b.id === highlightedHistoricoId ? 1 : 0;
+    if (destaqueA !== destaqueB) return destaqueB - destaqueA;
+
+    const prioridadeA = shouldPrioritize(a) ? 1 : 0;
+    const prioridadeB = shouldPrioritize(b) ? 1 : 0;
+    return prioridadeB - prioridadeA;
+  });
+}
+
+export function sortPlanejadosByDate<T extends PlanejadaDateSource>(items: readonly T[]): T[] {
+  return [...items].sort((a, b) => {
+    const dataA = getPlanejadaReferenceDate(a);
+    const dataB = getPlanejadaReferenceDate(b);
+    if (!dataA && !dataB) return 0;
+    if (!dataA) return 1;
+    if (!dataB) return -1;
+    return dataA.getTime() - dataB.getTime();
+  });
+}
+
+export type PlanejadosStats = {
+  total: number;
+  futuros: number;
+  atrasados: number;
+  semData: number;
+};
+
+export function computePlanejadosStats(
+  items: readonly PlanejadaDateSource[],
+  today: Date = new Date(),
+): PlanejadosStats {
+  const hoje = new Date(today);
+  hoje.setHours(0, 0, 0, 0);
+
+  return items.reduce<PlanejadosStats>(
+    (acc, item) => {
+      acc.total += 1;
+      const data = getPlanejadaReferenceDate(item);
+      if (!data) {
+        acc.semData += 1;
+      } else if (data < hoje) {
+        acc.atrasados += 1;
+      } else {
+        acc.futuros += 1;
+      }
+      return acc;
+    },
+    { total: 0, futuros: 0, atrasados: 0, semData: 0 },
+  );
+}
+
 export function getStatusColor(status: string) {
   if (status === 'CONCLUIDA' || status === 'CONCLUIDO') return 'bg-emerald-600/10 text-emerald-700';
   if (status === 'RENOVADA') return 'bg-blue-600/10 text-blue-600';

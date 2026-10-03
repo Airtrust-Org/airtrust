@@ -7,6 +7,9 @@ import {
   isPlanejadaVencida,
   normalizeTipoCodigo,
   sugerirNovaDataPlanejada,
+  prioritizeHistoricoItems,
+  sortPlanejadosByDate,
+  computePlanejadosStats,
 } from '@/react-app/pages/qualificacoes/qualificacoes.helpers';
 
 describe('qualificacoes pure presentation helpers', () => {
@@ -65,5 +68,40 @@ describe('qualificacoes pure presentation helpers', () => {
     expect(sugerirNovaDataPlanejada({ data_realizacao: '2026-10-10' }, today)).toBe('2026-10-11');
     expect(sugerirNovaDataPlanejada({ data_conclusao: '2026-10-01' }, today)).toBe('2026-10-03');
     expect(sugerirNovaDataPlanejada(null, today)).toBe('2026-10-03');
+  });
+
+  it('prioritizes highlighted and due planned history without mutating input order', () => {
+    const today = new Date(2026, 9, 2, 12);
+    const items = [
+      { id: 1, qualificacao_status: 'VALIDA', data_conclusao: '2026-10-01' },
+      { id: 2, qualificacao_status: 'PLANEJADA', data_realizacao: '2026-10-02' },
+      { id: 3, qualificacao_status: 'PLANEJADA', data_realizacao: '2026-10-05' },
+    ];
+    expect(prioritizeHistoricoItems(items, 3, today).map((item) => item.id)).toEqual([3, 2, 1]);
+    expect(items.map((item) => item.id)).toEqual([1, 2, 3]);
+  });
+
+  it('sorts planned history by local reference date and keeps missing dates last', () => {
+    const items = [
+      { id: 1 },
+      { id: 2, data_conclusao: '2026-10-05' },
+      { id: 3, data_realizacao: '2026-10-03' },
+    ];
+    expect(sortPlanejadosByDate(items).map((item) => item.id)).toEqual([3, 2, 1]);
+  });
+
+  it('computes planned totals with same-day items treated as future/current', () => {
+    const today = new Date(2026, 9, 2, 20);
+    expect(
+      computePlanejadosStats(
+        [
+          { data_realizacao: '2026-10-01' },
+          { data_realizacao: '2026-10-02' },
+          { data_conclusao: '2026-10-05' },
+          {},
+        ],
+        today,
+      ),
+    ).toEqual({ total: 4, futuros: 2, atrasados: 1, semData: 1 });
   });
 });
