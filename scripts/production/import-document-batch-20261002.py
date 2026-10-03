@@ -247,7 +247,7 @@ def main() -> int:
     if args.mode=="dry-run": print(json.dumps(summary,ensure_ascii=False,indent=2)); return 0
     exact=ensure_apply_guards(args,plan_sha,len(pending),c_hash); recovery=capture_recovery_point()
     completed = 0
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=32) as pool:
         futures = {pool.submit(upload_r2, row): row for row in pending}
         for future in as_completed(futures):
             future.result()
