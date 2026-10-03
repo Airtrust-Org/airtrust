@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-02",
-    "last_reconciled_against": "0527 LOFT prerequisite bootstrap prepared after fail-closed staging 0526 preflight; 0526 and 0525 remain remotely pending",
-    "schema_v2_digest": "2d19a562f19a2542a05afe8b0c9ddf24c39c02d607e4a910617496e8fe454654",
+    "last_reconciled_against": "0527 LOFT prerequisite bootstrap reconciled with 0528 sector Compliance responsibles; 0526/0527/0528 remote apply pending",
+    "schema_v2_digest": "1e67c19ce0c154a438072bc2f1c7cffecc29bf35c45885207188c9a7db8521cf",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1269,6 +1269,20 @@
       "reviewed_manifest": "training-compliance-loft-bootstrap-0527.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-loft-bootstrap-0527.md",
       "note": "0527 is a reviewed data-only prerequisite discovered by the fail-closed 0526 staging preflight. It preserves an existing tenant-6 LOFT identity when available or creates the minimal model only when none exists, writes no histories/enrollments/requirements, and must be applied before 0526 only in environments missing LOFT."
+    },
+    {
+      "change_file": "0528_setor_compliance_responsibles.sql",
+      "change_id": "setor-compliance-responsibles-0528",
+      "sha256": "0a5458d43405e6ce3561a4e63b70de41a64275456f94d459bf084c2f3c9cc557",
+      "targets": [
+        "setores_responsaveis_compliance"
+      ],
+      "domain": "training compliance / sector alert responsibility separated from operational access",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "setor-compliance-responsibles-0528.json",
+      "evidence": "worker-airtrust/schema-v2/plans/setor-compliance-responsibles-0528.md",
+      "note": "0528 is an additive tenant-scoped responsibility registry. It separates Training Compliance alert recipients from operational setor access, enforces cross-tenant guards, rewrites no existing RBAC/user/training data, and preserves legacy recipients only as a runtime fallback until each sector is explicitly configured. Remote apply requires staging validation, a recovery point, ledger verification and exact-SHA production authorization."
     }
   ]
 }

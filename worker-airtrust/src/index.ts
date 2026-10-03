@@ -68,6 +68,7 @@ import { lookup } from './routes/lookup';
 import funcoes from './routes/funcoes';
 import setores from './routes/setores';
 import setoresGestores from './routes/setores-gestores';
+import setoresResponsaveisCompliance from './routes/setores-responsaveis-compliance';
 import adminOperationalDomainRbac from './routes/admin-operational-domain-rbac';
 import meOperationalAccess from './routes/me-operational-access';
 import matrizTreinamento from './routes/matriz-treinamento';
@@ -505,6 +506,7 @@ app.route('/api/setores', setores);
  * DELETE /api/setores-gestores/:id
  */
 app.route('/api/setores-gestores', setoresGestores);
+app.route('/api/setores-responsaveis-compliance', setoresResponsaveisCompliance);
 app.route('/api/admin/operational-domain-rbac', adminOperationalDomainRbac);
 app.route('/api/me/operational-access', meOperationalAccess);
 

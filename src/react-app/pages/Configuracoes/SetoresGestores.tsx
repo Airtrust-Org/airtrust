@@ -63,7 +63,9 @@ export function SetoresGestores() {
         const data = (await usuariosRes.json().catch(() => ({}))) as { data?: unknown };
         const usuarios = (Array.isArray(data.data) ? data.data : []) as UsuarioGestorElegivel[];
         setUsuariosGestores(
-          usuarios.sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR')),
+          usuarios.sort((a, b) =>
+            String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'),
+          ),
         );
       }
 
@@ -102,7 +104,7 @@ export function SetoresGestores() {
         throw new Error('Erro ao salvar');
       }
 
-      showToast.success('Vínculos gestor-setor salvos com sucesso');
+      showToast.success('Acessos por setor salvos com sucesso');
       await loadData();
       setSelectedSetorId(null);
       setSelectedUsuariosIds([]);
@@ -115,7 +117,7 @@ export function SetoresGestores() {
   }
 
   async function handleDeleteAssignment(setorGestorId: number) {
-    if (!confirm('Deseja remover este vínculo gestor-setor?')) return;
+    if (!confirm('Deseja remover este acesso ao setor?')) return;
 
     try {
       const response = await fetchWithAuth(`/api/setores-gestores/${setorGestorId}`, {
@@ -149,10 +151,10 @@ export function SetoresGestores() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-slate-900">Gestores por Setor</h3>
+        <h3 className="text-lg font-semibold text-slate-900">Acesso por Setor</h3>
         <p className="mt-1 text-sm text-slate-600">
-          Vincule apenas usuários com perfil de gestor aos setores autorizados. Esses vínculos
-          alimentam o controle de acesso real no backend.
+          Defina quais Administradores da Empresa podem acessar cada setor. Este escopo controla a
+          visualização e as operações no backend; ele não define quem recebe alertas de Compliance.
         </p>
       </div>
 
@@ -182,7 +184,9 @@ export function SetoresGestores() {
                         {count}
                       </span>
                     </div>
-                    {setor.codigo ? <div className="mt-1 text-xs text-slate-500">{setor.codigo}</div> : null}
+                    {setor.codigo ? (
+                      <div className="mt-1 text-xs text-slate-500">{setor.codigo}</div>
+                    ) : null}
                   </button>
                 );
               })
@@ -195,24 +199,26 @@ export function SetoresGestores() {
             <div className="flex h-64 items-center justify-center">
               <div className="text-center">
                 <AlertCircle className="mx-auto mb-2 h-8 w-8 text-slate-400" />
-                <p className="text-slate-500">Selecione um setor para editar os gestores vinculados</p>
+                <p className="text-slate-500">
+                  Selecione um setor para editar os administradores com acesso
+                </p>
               </div>
             </div>
           ) : (
             <>
               <div className="mb-4">
                 <h4 className="font-semibold text-slate-900">
-                  Gestores: {setores.find((s) => s.id === selectedSetorId)?.nome}
+                  Acesso: {setores.find((s) => s.id === selectedSetorId)?.nome}
                 </h4>
                 <p className="mt-1 text-sm text-slate-600">
-                  Escolha quais usuários gestores podem acessar este setor.
+                  Escolha quais Administradores da Empresa podem acessar este setor.
                 </p>
               </div>
 
               <div className="mb-4 max-h-[350px] space-y-2 overflow-y-auto">
                 {usuariosGestores.length === 0 ? (
                   <p className="text-sm text-slate-500">
-                    Nenhum usuário com perfil de gestor encontrado para esta empresa.
+                    Nenhum Administrador da Empresa encontrado para esta empresa.
                   </p>
                 ) : (
                   usuariosGestores.map((usuario) => {
@@ -231,7 +237,9 @@ export function SetoresGestores() {
                               setSelectedUsuariosIds((prev) => [...prev, usuario.id]);
                               return;
                             }
-                            setSelectedUsuariosIds((prev) => prev.filter((id) => id !== usuario.id));
+                            setSelectedUsuariosIds((prev) =>
+                              prev.filter((id) => id !== usuario.id),
+                            );
                           }}
                           className="mt-1 h-4 w-4 rounded border-slate-300"
                         />
@@ -305,7 +313,9 @@ export function SetoresGestores() {
             <thead>
               <tr className="border-b border-slate-200">
                 <th className="px-4 py-2 text-left font-medium text-slate-600">Setor</th>
-                <th className="px-4 py-2 text-left font-medium text-slate-600">Gestor</th>
+                <th className="px-4 py-2 text-left font-medium text-slate-600">
+                  Administrador da Empresa
+                </th>
                 <th className="px-4 py-2 text-left font-medium text-slate-600">Perfil</th>
                 <th className="px-4 py-2 text-left font-medium text-slate-600">Status</th>
                 <th className="px-4 py-2 text-center font-medium text-slate-600">Ação</th>
@@ -326,7 +336,11 @@ export function SetoresGestores() {
                       <div className="text-slate-700">{sg.gestor_nome}</div>
                       <div className="text-xs text-slate-500">{sg.gestor_email}</div>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{sg.gestor_perfil || 'GESTOR'}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {sg.gestor_perfil === 'GESTOR' || sg.gestor_perfil === 'MANAGER'
+                        ? 'Administrador da Empresa'
+                        : sg.gestor_perfil || 'Administrador da Empresa'}
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${

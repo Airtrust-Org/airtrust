@@ -448,9 +448,11 @@ adminUsuariosRoutes.post('/', async (c) => {
     throw forbidden('Sem permissão para convidar usuários para outra empresa', 'WRONG_TENANT');
   }
 
-  // Gestor não pode criar ADMINISTRADOR
-  if (perfil === 'ADMINISTRADOR' || perfil === 'ADMIN') {
-    requireAdmin(callerRole, 'criar usuário ADMINISTRADOR');
+  // Somente o Administrador Geral pode conceder um perfil administrativo.
+  // Administradores da Empresa podem criar/gerenciar usuários operacionais,
+  // mas não criar pares nem elevar alguém ao próprio nível.
+  if (perfil === 'ADMINISTRADOR' || perfil === 'ADMIN' || isManager) {
+    requireAdmin(callerRole, 'criar perfil administrativo');
   }
 
   // Gestor exige ao menos um setor válido da mesma empresa (fail-closed por design)
@@ -634,17 +636,18 @@ adminUsuariosRoutes.put('/:id', async (c) => {
   // Verificar vínculo com a empresa (platform admin pode cross-tenant)
   await requireTenantAccess(db, getCallerId(c), id, empresaId);
 
-  // Gestor não pode editar ADMINISTRADOR
+  // Somente o Administrador Geral pode editar um perfil administrativo ou
+  // promover um usuário a Administrador da Empresa.
   const targetPerfil = body?.perfil?.toUpperCase() || existente.perfil.toUpperCase();
-  if (
-    (existente.perfil.toUpperCase() === 'ADMINISTRADOR' ||
-      existente.perfil.toUpperCase() === 'ADMIN' ||
-      targetPerfil === 'ADMINISTRADOR' ||
-      targetPerfil === 'ADMIN') &&
-    callerRole !== 'ADMINISTRADOR' &&
-    callerRole !== 'ADMIN'
-  ) {
-    throw forbidden('Apenas ADMINISTRADOR pode editar outros administradores', 'INSUFFICIENT_ROLE');
+  const targetPrivilegiado =
+    existente.perfil.toUpperCase() === 'ADMINISTRADOR' ||
+    existente.perfil.toUpperCase() === 'ADMIN' ||
+    isManagerPerfil(existente.perfil) ||
+    targetPerfil === 'ADMINISTRADOR' ||
+    targetPerfil === 'ADMIN' ||
+    isManagerPerfil(targetPerfil);
+  if (targetPrivilegiado && callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
+    throw forbidden('Apenas ADMINISTRADOR pode editar perfis administrativos', 'INSUFFICIENT_ROLE');
   }
 
   // Promoção para gestor ou ativação de gestor exige ao menos um setor (fail-closed)
@@ -823,6 +826,21 @@ adminUsuariosRoutes.post('/:id/invite', async (c) => {
     .first<{ id: number; email: string; nome: string; perfil: string }>();
 
   if (!user) throw notFound('Usuário não encontrado');
+
+  // Um Administrador da Empresa não pode regenerar o convite de outro perfil
+  // administrativo, pois o link permite ativar/assumir a credencial alvo.
+  if (
+    (user.perfil.toUpperCase() === 'ADMINISTRADOR' ||
+      user.perfil.toUpperCase() === 'ADMIN' ||
+      isManagerPerfil(user.perfil)) &&
+    getCallerRole(c) !== 'ADMINISTRADOR' &&
+    getCallerRole(c) !== 'ADMIN'
+  ) {
+    throw forbidden(
+      'Apenas ADMINISTRADOR pode reenviar convite de perfil administrativo',
+      'INSUFFICIENT_ROLE',
+    );
+  }
 
   // Verificar vínculo com a empresa (platform admin pode cross-tenant)
   await requireTenantAccess(db, getCallerId(c), id, empresaId);
