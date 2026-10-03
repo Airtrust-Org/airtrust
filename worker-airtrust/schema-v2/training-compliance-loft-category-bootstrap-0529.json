@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-loft-category-bootstrap-0529",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0529_training_compliance_loft_category_bootstrap.sql",
+  "fileHash": "0b485e61701f575f3a80fa7ba9b2333fea8ac1aa90492b5aefecdfbec86e7a69",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-loft-category-bootstrap-0529.md",
+  "planHash": "cfc1e8fb5611ebbfbf399d21979f0b0394705dfb3c2fcb2b925a277f08c80f10"
+}
