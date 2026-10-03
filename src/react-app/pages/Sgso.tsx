@@ -44,6 +44,7 @@ const directTools = [
   { title: 'RELPREV', href: '/sgso/relprev', icon: ShieldCheck },
   { title: 'Bowtie', href: '/sgso/bowtie', icon: GitBranch },
   { title: 'FRAT', href: '/sgso/frat', icon: Calculator },
+  { title: 'HFA', href: '/sgso/hfa', icon: ShieldAlert },
 ];
 
 function SgsoOperationalEntry() {

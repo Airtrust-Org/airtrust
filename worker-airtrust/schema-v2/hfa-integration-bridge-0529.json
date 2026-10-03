@@ -1,0 +1,8 @@
+{
+  "changeId": "hfa-integration-bridge-0529",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0529_hfa_integration_bridge.sql",
+  "fileHash": "09d17ed2551b6d63ccd01677eb47cd7bb758c295784df4f1afaead06e1dc62f4",
+  "planPath": "worker-airtrust/schema-v2/plans/hfa-integration-bridge-0529.md",
+  "planHash": "2d71bcd602959a320fc3dc223ba127c07f53b3394608f235b4cdf2e0fd9222dd"
+}

@@ -273,6 +273,10 @@ const ConhecimentoAtivoAdmin = lazyWithRetry(
 // SGSO — Sistema de Gerenciamento de Segurança Operacional
 const Sgso = lazyWithRetry(() => import('./pages/Sgso'), 'Sgso');
 const SgsoRelato = lazyWithRetry(() => import('./pages/SgsoRelato'), 'SgsoRelato');
+const SgsoHfaIntegrationPage = lazyWithRetry(
+  () => import('./pages/sgso/SgsoHfaIntegrationPage'),
+  'SgsoHfaIntegrationPage',
+);
 const SgsoRelprevPage = lazyWithRetry(
   () => import('./pages/sgso/SgsoRelprevPage'),
   'SgsoRelprevPage',
@@ -972,6 +976,14 @@ export default function App() {
                       element={
                         <ProtectedRoute>
                           <SgsoRelato />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/sgso/hfa"
+                      element={
+                        <ProtectedRoute>
+                          <SgsoHfaIntegrationPage />
                         </ProtectedRoute>
                       }
                     />
