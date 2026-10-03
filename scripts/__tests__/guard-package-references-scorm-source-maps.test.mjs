@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
 import {
   copyFileSync,
   mkdirSync,
@@ -39,18 +40,16 @@ function runGuardFixture({ withSourceMap }) {
   }
 }
 
-describe('SCORM source-map package guard', () => {
-  it('accepts a tracked SCORM package without source maps', () => {
-    const result = runGuardFixture({ withSourceMap: false });
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain('1 manifest(s) SCORM sem source maps');
-  });
+test('SCORM guard accepts a tracked package without source maps', () => {
+  const result = runGuardFixture({ withSourceMap: false });
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /1 manifest\(s\) SCORM sem source maps/);
+});
 
-  it('rejects tracked source maps and manifest references to them', () => {
-    const result = runGuardFixture({ withSourceMap: true });
-    const output = `${result.stdout}\n${result.stderr}`;
-    expect(result.status).toBe(1);
-    expect(output).toContain('SCORM_SOURCE_MAP: course/app.js.map');
-    expect(output).toContain('SCORM_SOURCE_MAP_REF: app.js.map');
-  });
+test('SCORM guard rejects tracked source maps and manifest references', () => {
+  const result = runGuardFixture({ withSourceMap: true });
+  const output = `${result.stdout}\n${result.stderr}`;
+  assert.equal(result.status, 1);
+  assert.match(output, /SCORM_SOURCE_MAP: course\/app\.js\.map/);
+  assert.match(output, /SCORM_SOURCE_MAP_REF: app\.js\.map/);
 });
