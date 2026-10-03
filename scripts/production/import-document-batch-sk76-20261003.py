@@ -66,7 +66,7 @@ def normalize_token(value: str, fallback: str = "DOC", limit: int = 48) -> str:
     text = re.sub(r"\([^)]*(?:19|20)\d{2}[^)]*\)", " ", text)
     text = re.sub(r"\b[vV][._ -]?(?:19|20)\d{2}(?:[._ -]\d{1,2}){0,2}\b", " ", text)
     text = re.sub(r"\b(?:19|20)\d{2}(?:[._ -]\d{1,2}){0,2}\b", " ", text)
-    text = re.sub(r"^(?:DAU|DAUMAS|ROM|ROMULO|IRE|IRENE|ADR|ADRIANA|NRS|NARESSI)[_ -]+", "", text, flags=re.I)
+    text = re.sub(r"^(?:DIE|DIET|DIETER|DGO|DIEGO|ROC|MAR|MARINHO|MAX|MAGIOLI|MON|MONTEIRO|NGR|NEGREIROS|RMS|RAMOS|GAB|GABRIEL|VAR|VARGAS|SANT|SANTANNA|KARL|PAL|PALOMA|VIT|VITOR|JAIR)[_ -]+", "", text, flags=re.I)
     text = re.sub(r"[^A-Za-z0-9]+", "_", text).strip("_").upper()
     return (text or fallback)[:limit]
 
