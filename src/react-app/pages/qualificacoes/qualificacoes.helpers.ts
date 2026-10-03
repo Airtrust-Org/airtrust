@@ -287,6 +287,38 @@ export function getAvailablePlannedTrainings<T extends PlannedTrainingAvailabili
     });
 }
 
+export type PlannedParticipantDirectorySource = {
+  id: number | string;
+  nome: string;
+  matricula?: string | null;
+};
+
+export function sortPlannedParticipantDirectory<
+  T extends PlannedParticipantDirectorySource,
+>(items: readonly T[]): T[] {
+  return [...items].sort((left, right) =>
+    String(left.nome || '').localeCompare(String(right.nome || ''), 'pt-BR'),
+  );
+}
+
+export function buildPlannedParticipantNameMap(
+  items: readonly PlannedParticipantDirectorySource[],
+): Map<number, string> {
+  return new Map(items.map((item) => [Number(item.id || 0), item.nome]));
+}
+
+export function filterPlannedParticipantDirectory<
+  T extends PlannedParticipantDirectorySource,
+>(items: T[], search: string): T[] {
+  const term = search.trim().toLowerCase();
+  if (!term) return items;
+  return items.filter((item) => {
+    const name = String(item.nome || '').toLowerCase();
+    const registration = String(item.matricula || '').toLowerCase();
+    return name.includes(term) || registration.includes(term);
+  });
+}
+
 export type PlannedFallbackParticipantSource = {
   funcionario_id?: number | string | null;
   qualificacao_codigo?: string | null;
