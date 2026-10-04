@@ -174,7 +174,7 @@ describe('DashboardPrincipal setorial', () => {
     expect(window.localStorage.getItem('airtrust.dashboard.sectors.v2:1:1')).toBe('[2]');
   });
 
-  it('mostra ao gestor um escopo fixo e mantém acesso à Home', () => {
+  it('redireciona gestor para Funcionários e bloqueia o Painel Principal', () => {
     useAuthMock.mockReturnValue(buildAuthContext('GESTOR'));
     usePermissionsMock.mockReturnValue({
       can: () => true,
@@ -187,10 +187,10 @@ describe('DashboardPrincipal setorial', () => {
 
     renderDashboard();
 
-    expect(screen.getAllByText('Operações').length).toBeGreaterThan(0);
+    expect(screen.getByText('funcionarios-page')).toBeInTheDocument();
+    expect(screen.queryByText('Operações')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Aplicar filtro' })).toBeNull();
-    expect(screen.queryByText('funcionarios-page')).toBeNull();
-    expect(useOperationalSummaryMock).toHaveBeenCalledWith([], true);
+    expect(useOperationalSummaryMock).toHaveBeenCalledWith([], false);
   });
 
   it('informa falha parcial sem tratar a fonte ausente como normal', () => {

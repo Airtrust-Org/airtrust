@@ -1,0 +1,596 @@
+// source_reference: PR #1154 plus the operator-reviewed external provisioning plan for Costa do Sol empresa_id=6; PII stays outside Git.
+// operational_decision: reconcile only explicit employee e-mail fills, missing users, reviewed relinks, and GESTOR sector links; an explicit relink may transfer the employee e-mail from its reviewed inactive source record while preserving the existing user profile/password and tenant scope.
+// dry_run_required: true; production apply is allowed only after the read-only candidate set, plan SHA-256, candidate count, and candidate hash are reviewed and supplied exactly.
+// rollback_plan_required: capture a D1 Time Travel recovery point before the first write; on failed postconditions stop and use the governed recovery path rather than ad hoc compensating SQL.
+
+// Governed Costa do Sol user provisioning/reconciliation from an external plan.
+// The plan is intentionally kept outside Git because it contains employee identifiers/email PII.
+// Dry-run is read-only. Apply is locked to exact plan SHA, candidate count/hash and exact clean main SHA.
+import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, realpathSync } from 'node:fs';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const WORKER_DIR = resolve(REPO_ROOT, 'worker-airtrust');
+const requireFromWorker = createRequire(new URL('../../worker-airtrust/package.json', import.meta.url));
+let bcryptForApply = null;
+const DB_NAME = 'airtrust-db';
+const EMPRESA_ID = 6;
+const CORPORATE_DOMAIN = 'voecostadosol.com.br';
+const DRY_CONFIRM = 'AIRTRUST_PRODUCTION_DRYRUN_USER_PROVISIONING_20261003';
+const APPLY_CONFIRM = 'AIRTRUST_PRODUCTION_APPLY_USER_PROVISIONING_20261003';
+const mode = String(process.argv[2] || 'dry-run').trim();
+const planArg = String(process.argv[3] || process.env.USER_PROVISION_PLAN || '').trim();
+
+function fail(code) {
+  console.error(`USER_PROVISION_RECONCILIATION_ERROR:${code}`);
+  process.exit(1);
+}
+
+if (!['dry-run', 'apply'].includes(mode)) fail('INVALID_MODE');
+if (!planArg) fail('PLAN_REQUIRED');
+if ((process.env.USER_PROVISION_DB_NAME || DB_NAME) !== DB_NAME) fail('PRODUCTION_DB_TARGET_REJECTED');
+
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function hashStrings(values) {
+  return sha256([...values].sort().join('\n'));
+}
+
+function sqlText(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function firstName(value) {
+  return String(value || '').trim().split(/\s+/)[0];
+}
+
+function normalizeCreateProfile(value) {
+  const profile = String(value || 'ALUNO').trim().toUpperCase();
+  if (!['ALUNO', 'GESTOR'].includes(profile)) fail('PLAN_CREATE_PROFILE_INVALID');
+  return profile;
+}
+
+function tenantRoleForProfile(profile) {
+  return profile === 'GESTOR' ? 'manager' : 'student';
+}
+
+function assertExternalPlan(path) {
+  const absolute = realpathSync(resolve(path));
+  const rel = relative(REPO_ROOT, absolute);
+  if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) fail('PLAN_MUST_BE_OUTSIDE_REPO');
+  return absolute;
+}
+
+const planPath = assertExternalPlan(planArg);
+const planRaw = readFileSync(planPath);
+const planSha = sha256(planRaw);
+let plan;
+try {
+  plan = JSON.parse(planRaw.toString('utf8'));
+} catch {
+  fail('PLAN_JSON_INVALID');
+}
+if (!Array.isArray(plan) || plan.length === 0) fail('PLAN_EMPTY');
+
+const seenEmployees = new Set();
+const seenEmails = new Set();
+for (const item of plan) {
+  const employeeId = Number(item?.funcionario_id);
+  const email = normalizeEmail(item?.email);
+  if (!Number.isSafeInteger(employeeId) || employeeId <= 0) fail('PLAN_EMPLOYEE_ID_INVALID');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail(`PLAN_EMAIL_INVALID_${employeeId}`);
+  if (!email.endsWith(`@${CORPORATE_DOMAIN}`)) fail(`PLAN_EMAIL_DOMAIN_INVALID_${employeeId}`);
+  if (seenEmployees.has(employeeId)) fail(`PLAN_EMPLOYEE_DUPLICATE_${employeeId}`);
+  if (seenEmails.has(email)) fail('PLAN_EMAIL_DUPLICATE');
+  seenEmployees.add(employeeId);
+  seenEmails.add(email);
+
+  const createProfile = normalizeCreateProfile(item?.create_profile);
+  const allActiveSectors = item?.all_active_sectors === true;
+  if (createProfile === 'GESTOR' && !allActiveSectors) fail(`PLAN_GESTOR_ALL_SECTORS_REQUIRED_${employeeId}`);
+  if (createProfile !== 'GESTOR' && allActiveSectors) fail(`PLAN_ALL_SECTORS_REQUIRES_GESTOR_${employeeId}`);
+
+  const relinkUserId = item?.relink_user_id == null ? null : Number(item.relink_user_id);
+  const relinkFromEmployeeId =
+    item?.relink_from_funcionario_id == null ? null : Number(item.relink_from_funcionario_id);
+  if ((relinkUserId == null) !== (relinkFromEmployeeId == null)) fail(`PLAN_RELINK_PAIR_REQUIRED_${employeeId}`);
+  if (relinkUserId != null) {
+    if (!Number.isSafeInteger(relinkUserId) || relinkUserId <= 0) fail(`PLAN_RELINK_USER_INVALID_${employeeId}`);
+    if (!Number.isSafeInteger(relinkFromEmployeeId) || relinkFromEmployeeId <= 0) {
+      fail(`PLAN_RELINK_EMPLOYEE_INVALID_${employeeId}`);
+    }
+    if (relinkFromEmployeeId === employeeId) fail(`PLAN_RELINK_SAME_EMPLOYEE_${employeeId}`);
+  }
+}
+
+const confirmation = String(process.env.USER_PROVISION_CONFIRMATION || '');
+if (mode === 'dry-run' && confirmation !== DRY_CONFIRM) fail('DRYRUN_CONFIRMATION_REQUIRED');
+if (mode === 'apply' && confirmation !== APPLY_CONFIRM) fail('APPLY_CONFIRMATION_REQUIRED');
+
+function run(command, args, { cwd = REPO_ROOT, label = command } = {}) {
+  const result = spawnSync(command, args, {
+    cwd,
+    encoding: 'utf8',
+    env: process.env,
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  if (result.status !== 0) {
+    console.error(`COMMAND_FAILED:${label}:exit=${result.status ?? 'null'}`);
+    if (result.stderr) process.stderr.write(result.stderr);
+    fail('COMMAND_FAILED');
+  }
+  return result.stdout || '';
+}
+
+function runWrangler(sql, label) {
+  const stdout = run(
+    'npx',
+    ['--no-install', 'wrangler', 'd1', 'execute', DB_NAME, '--env', 'production', '--remote', '--json', '--command', sql],
+    { cwd: WORKER_DIR, label },
+  );
+  let payload;
+  try {
+    payload = JSON.parse(stdout || '[]');
+  } catch {
+    fail(`D1_JSON_INVALID_${label}`);
+  }
+  const envelopes = Array.isArray(payload) ? payload : [payload];
+  if (!envelopes.length || envelopes.some((entry) => !entry || !Array.isArray(entry.results))) {
+    fail(`D1_RESULTS_MISSING_${label}`);
+  }
+  return envelopes;
+}
+
+function select(sql, label) {
+  const normalized = String(sql).trim().replace(/;+\s*$/, '');
+  if (!/^(SELECT|WITH)\b/i.test(normalized)) fail(`NON_SELECT_${label}`);
+  if (/\b(?:INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|REPLACE|VACUUM|ATTACH|DETACH|REINDEX)\b/i.test(normalized)) {
+    fail(`MUTATING_PREFLIGHT_${label}`);
+  }
+  return runWrangler(normalized, label)[0].results;
+}
+
+function one(rows, code) {
+  if (rows.length !== 1) fail(`${code}_COUNT_${rows.length}`);
+  return rows[0];
+}
+
+function activeMembership(userId) {
+  const rows = select(
+    `SELECT id, role, is_primary
+       FROM usuarios_empresas
+      WHERE usuario_id=${userId}
+        AND empresa_id=${EMPRESA_ID}`,
+    `membership_${userId}`,
+  );
+  if (rows.length > 1) fail(`MEMBERSHIP_DUPLICATE_${userId}`);
+  return rows[0] || null;
+}
+
+function inspectPlan() {
+  const actions = [];
+  const resolved = [];
+  const activeSectors = select(
+    `SELECT id FROM setores WHERE empresa_id=${EMPRESA_ID} AND ativo=1 AND deleted_at IS NULL ORDER BY id`,
+    'active_sectors',
+  ).map((row) => Number(row.id));
+  if (!activeSectors.length || activeSectors.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+    fail('ACTIVE_SECTOR_SCOPE_INVALID');
+  }
+
+  for (const item of plan) {
+    const employeeId = Number(item.funcionario_id);
+    const email = normalizeEmail(item.email);
+    const createProfile = normalizeCreateProfile(item.create_profile);
+    const createRole = tenantRoleForProfile(createProfile);
+    const allActiveSectors = item.all_active_sectors === true;
+    const employee = one(
+      select(
+        `SELECT id, nome, email, ativo, deleted_at
+           FROM funcionarios
+          WHERE id=${employeeId}
+            AND empresa_id=${EMPRESA_ID}`,
+        `employee_${employeeId}`,
+      ),
+      `EMPLOYEE_${employeeId}`,
+    );
+    if (Number(employee.ativo) !== 1 || employee.deleted_at != null) fail(`EMPLOYEE_NOT_ACTIVE_${employeeId}`);
+
+    const currentEmployeeEmail = normalizeEmail(employee.email);
+    const needsEmployeeEmail = !currentEmployeeEmail;
+    if (currentEmployeeEmail && currentEmployeeEmail !== email) {
+      fail(`EMPLOYEE_EMAIL_CONFLICT_${employeeId}`);
+    }
+
+    const employeeUsers = select(
+      `SELECT id, email, perfil, active, deleted_at
+         FROM usuarios
+        WHERE funcionario_id=${employeeId}
+        ORDER BY id`,
+      `employee_users_${employeeId}`,
+    );
+    const activeEmployeeUsers = employeeUsers.filter((row) => row.deleted_at == null);
+    if (activeEmployeeUsers.length > 1) fail(`EMPLOYEE_USER_DUPLICATE_${employeeId}`);
+
+    let user = activeEmployeeUsers[0] || null;
+    let relink = null;
+    if (user) {
+      if (normalizeEmail(user.email) !== email) fail(`EXISTING_USER_EMAIL_CONFLICT_${employeeId}`);
+    } else {
+      const emailUsers = select(
+        `SELECT id, funcionario_id, email, perfil, active, deleted_at
+           FROM usuarios
+          WHERE LOWER(TRIM(email))=${sqlText(email)}
+          ORDER BY id`,
+        `email_users_${employeeId}`,
+      );
+      const activeEmailUsers = emailUsers.filter((row) => row.deleted_at == null);
+      if (activeEmailUsers.length > 1) fail(`EMAIL_USER_DUPLICATE_${employeeId}`);
+      if (activeEmailUsers.length === 1) {
+        user = activeEmailUsers[0];
+        const expectedUserId = item.relink_user_id == null ? null : Number(item.relink_user_id);
+        const expectedOldEmployeeId =
+          item.relink_from_funcionario_id == null ? null : Number(item.relink_from_funcionario_id);
+        if (Number(user.funcionario_id) !== employeeId) {
+          if (expectedUserId !== Number(user.id) || expectedOldEmployeeId !== Number(user.funcionario_id)) {
+            fail(`RELINK_NOT_EXPLICIT_${employeeId}`);
+          }
+          const oldEmployee = one(
+            select(
+              `SELECT id, empresa_id, ativo, deleted_at
+                 FROM funcionarios
+                WHERE id=${expectedOldEmployeeId}`,
+              `relink_old_employee_${employeeId}`,
+            ),
+            `RELINK_OLD_EMPLOYEE_${employeeId}`,
+          );
+          if (Number(oldEmployee.empresa_id) !== EMPRESA_ID) fail(`RELINK_CROSS_TENANT_${employeeId}`);
+          if (Number(oldEmployee.ativo) === 1 && oldEmployee.deleted_at == null) fail(`RELINK_OLD_EMPLOYEE_ACTIVE_${employeeId}`);
+          relink = { userId: Number(user.id), fromEmployeeId: expectedOldEmployeeId };
+        }
+      } else {
+        const deletedEmailUsers = emailUsers.filter((row) => row.deleted_at != null);
+        if (deletedEmailUsers.length) fail(`DELETED_USER_EMAIL_CONFLICT_${employeeId}`);
+        actions.push({
+          type: 'create-user',
+          employeeId,
+          email,
+          profile: createProfile,
+          role: createRole,
+        });
+      }
+    }
+
+    let membership = null;
+    if (user && !relink) {
+      membership = activeMembership(Number(user.id));
+      if (!membership) fail(`EXISTING_USER_MEMBERSHIP_MISSING_${employeeId}`);
+    } else if (relink) {
+      membership = activeMembership(relink.userId);
+      if (!membership) fail(`RELINK_USER_MEMBERSHIP_MISSING_${employeeId}`);
+    }
+
+    let relinkBundledWithEmailTransfer = false;
+    if (needsEmployeeEmail) {
+      const conflictingEmployees = select(
+        `SELECT id, ativo, deleted_at
+           FROM funcionarios
+          WHERE empresa_id=${EMPRESA_ID}
+            AND id<>${employeeId}
+            AND deleted_at IS NULL
+            AND LOWER(TRIM(email))=${sqlText(email)}
+          ORDER BY id`,
+        `employee_email_conflicts_${employeeId}`,
+      );
+      if (conflictingEmployees.length === 0) {
+        actions.push({ type: 'employee-email', employeeId, email });
+      } else if (
+        relink &&
+        conflictingEmployees.length === 1 &&
+        Number(conflictingEmployees[0].id) === relink.fromEmployeeId &&
+        Number(conflictingEmployees[0].ativo) !== 1
+      ) {
+        actions.push({
+          type: 'employee-email-transfer',
+          employeeId,
+          email,
+          userId: relink.userId,
+          fromEmployeeId: relink.fromEmployeeId,
+        });
+        relinkBundledWithEmailTransfer = true;
+      } else {
+        fail(`EMPLOYEE_EMAIL_OCCUPIED_${employeeId}`);
+      }
+    }
+
+    if (relink && !relinkBundledWithEmailTransfer) {
+      actions.push({
+        type: 'relink-user',
+        employeeId,
+        userId: relink.userId,
+        fromEmployeeId: relink.fromEmployeeId,
+      });
+    }
+
+    if (allActiveSectors) {
+      if (user && String(membership?.role || '').trim().toLowerCase() !== 'manager') {
+        fail(`GESTOR_MEMBERSHIP_ROLE_MISMATCH_${employeeId}`);
+      }
+      const assigned = user
+        ? new Set(
+            select(
+              `SELECT setor_id FROM setores_gestores
+                WHERE usuario_id=${Number(user.id)}
+                  AND empresa_id=${EMPRESA_ID}
+                  AND ativo=1
+                  AND deleted_at IS NULL`,
+              `manager_sectors_${employeeId}`,
+            ).map((row) => Number(row.setor_id)),
+          )
+        : new Set();
+      for (const sectorId of activeSectors) {
+        if (!assigned.has(sectorId)) actions.push({ type: 'manager-sector', employeeId, sectorId });
+      }
+    }
+
+    resolved.push({
+      employeeId,
+      email,
+      name: String(employee.nome || ''),
+      createProfile,
+      createRole,
+      allActiveSectors,
+      existingUserId: user ? Number(user.id) : null,
+      relink,
+    });
+  }
+
+  const signatures = actions.map((action) => {
+    if (action.type === 'employee-email') return `employee-email:${action.employeeId}:${action.email}`;
+    if (action.type === 'employee-email-transfer') {
+      return `employee-email-transfer:${action.userId}:${action.fromEmployeeId}->${action.employeeId}:${action.email}`;
+    }
+    if (action.type === 'create-user') {
+      return `create-user:${action.employeeId}:${action.email}:${action.profile}:${action.role}`;
+    }
+    if (action.type === 'manager-sector') return `manager-sector:${action.employeeId}:${action.sectorId}`;
+    return `relink-user:${action.userId}:${action.fromEmployeeId}->${action.employeeId}`;
+  });
+
+  return {
+    actions,
+    resolved,
+    candidateCount: signatures.length,
+    candidateHash: hashStrings(signatures),
+  };
+}
+
+function assertApplyGitState() {
+  const branch = run('git', ['branch', '--show-current'], { label: 'git_branch' }).trim();
+  if (branch !== 'main') fail(`APPLY_REQUIRES_MAIN_${branch || 'detached'}`);
+  const porcelain = run('git', ['status', '--porcelain'], { label: 'git_status' }).trim();
+  if (porcelain) fail('APPLY_REQUIRES_CLEAN_WORKTREE');
+  run('git', ['fetch', '--prune', 'origin', 'main'], { label: 'git_fetch_main' });
+  const head = run('git', ['rev-parse', 'HEAD'], { label: 'git_head' }).trim();
+  const originMain = run('git', ['rev-parse', 'origin/main'], { label: 'git_origin_main' }).trim();
+  const expected = String(process.env.USER_PROVISION_EXPECTED_SHA || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(expected)) fail('EXPECTED_SHA_REQUIRED');
+  if (head !== originMain || head !== expected) fail('APPLY_SHA_MISMATCH');
+  return head;
+}
+
+function captureRecoveryPoint() {
+  const stamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  run(
+    'npx',
+    ['--no-install', 'wrangler', 'd1', 'time-travel', 'info', DB_NAME, '--env', 'production', `--timestamp=${stamp}`, '--json'],
+    { cwd: WORKER_DIR, label: 'd1_time_travel_recovery_point' },
+  );
+  return stamp;
+}
+
+function auditSql(employeeId, action) {
+  return `INSERT INTO audit_logs (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at)
+          VALUES (NULL,${sqlText(action)},'funcionarios',${employeeId},NULL,'{"governed":true}',${EMPRESA_ID},datetime('now'));`;
+}
+
+function applyAction(action, state) {
+  const item = state.resolved.find((row) => row.employeeId === action.employeeId);
+  if (!item) fail(`RESOLVED_ITEM_MISSING_${action.employeeId}`);
+
+  if (action.type === 'employee-email-transfer') {
+    runWrangler(
+      `UPDATE funcionarios
+          SET email=NULL, updated_at=datetime('now')
+        WHERE id=${action.fromEmployeeId}
+          AND empresa_id=${EMPRESA_ID}
+          AND deleted_at IS NULL
+          AND ativo<>1
+          AND LOWER(TRIM(email))=${sqlText(action.email)}
+          AND EXISTS (
+            SELECT 1 FROM usuarios u
+             WHERE u.id=${action.userId}
+               AND u.funcionario_id=${action.fromEmployeeId}
+               AND u.deleted_at IS NULL
+               AND LOWER(TRIM(u.email))=${sqlText(action.email)}
+          );
+       ${auditSql(action.fromEmployeeId, 'USER_PROVISION_EMPLOYEE_EMAIL_RELEASE_20261003')}
+       UPDATE funcionarios
+          SET email=${sqlText(action.email)}, updated_at=datetime('now')
+        WHERE id=${action.employeeId}
+          AND empresa_id=${EMPRESA_ID}
+          AND deleted_at IS NULL
+          AND ativo=1
+          AND (email IS NULL OR TRIM(email)='');
+       ${auditSql(action.employeeId, 'USER_PROVISION_EMPLOYEE_EMAIL_20261003')}
+       UPDATE usuarios
+          SET funcionario_id=${action.employeeId}, updated_at=datetime('now')
+        WHERE id=${action.userId}
+          AND funcionario_id=${action.fromEmployeeId}
+          AND deleted_at IS NULL
+          AND LOWER(TRIM(email))=${sqlText(action.email)};
+       ${auditSql(action.employeeId, 'USER_PROVISION_RELINK_20261003')}`,
+      `apply_email_transfer_relink_${action.employeeId}`,
+    );
+    return;
+  }
+
+  if (action.type === 'employee-email') {
+    runWrangler(
+      `UPDATE funcionarios
+          SET email=${sqlText(action.email)}, updated_at=datetime('now')
+        WHERE id=${action.employeeId}
+          AND empresa_id=${EMPRESA_ID}
+          AND deleted_at IS NULL
+          AND ativo=1
+          AND (email IS NULL OR TRIM(email)='');
+       ${auditSql(action.employeeId, 'USER_PROVISION_EMPLOYEE_EMAIL_20261003')}`,
+      `apply_employee_email_${action.employeeId}`,
+    );
+    return;
+  }
+
+  if (action.type === 'relink-user') {
+    runWrangler(
+      `UPDATE usuarios
+          SET funcionario_id=${action.employeeId}, updated_at=datetime('now')
+        WHERE id=${action.userId}
+          AND funcionario_id=${action.fromEmployeeId}
+          AND deleted_at IS NULL;
+       ${auditSql(action.employeeId, 'USER_PROVISION_RELINK_20261003')}`,
+      `apply_relink_${action.employeeId}`,
+    );
+    return;
+  }
+
+  if (action.type === 'manager-sector') {
+    runWrangler(
+      `INSERT INTO setores_gestores
+          (setor_id,gestor_id,usuario_id,empresa_id,role,ativo,created_at,updated_at,deleted_at)
+       SELECT s.id,NULL,u.id,${EMPRESA_ID},'manager',1,datetime('now'),datetime('now'),NULL
+         FROM setores s
+         JOIN usuarios u ON u.funcionario_id=${action.employeeId} AND u.deleted_at IS NULL
+         JOIN usuarios_empresas ue ON ue.usuario_id=u.id AND ue.empresa_id=${EMPRESA_ID} AND LOWER(TRIM(ue.role))='manager'
+        WHERE s.id=${action.sectorId}
+          AND s.empresa_id=${EMPRESA_ID}
+          AND s.ativo=1
+          AND s.deleted_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM setores_gestores sg
+             WHERE sg.setor_id=s.id
+               AND sg.usuario_id=u.id
+               AND sg.empresa_id=${EMPRESA_ID}
+               AND sg.ativo=1
+               AND sg.deleted_at IS NULL
+          );
+       ${auditSql(action.employeeId, 'USER_PROVISION_MANAGER_SECTOR_20261003')}`,
+      `apply_manager_sector_${action.employeeId}_${action.sectorId}`,
+    );
+    return;
+  }
+
+  if (action.type === 'create-user') {
+    const initialPassword = `${firstName(item.name)}123`;
+    if (!firstName(item.name)) fail(`EMPLOYEE_NAME_INVALID_${action.employeeId}`);
+    if (!bcryptForApply) fail('PASSWORD_HASHER_NOT_PREFLIGHTED');
+    const passwordHash = bcryptForApply.hashSync(initialPassword, 10);
+    runWrangler(
+      `INSERT INTO usuarios (email,password_hash,nome,perfil,funcionario_id,active,created_at,updated_at)
+       SELECT ${sqlText(action.email)},${sqlText(passwordHash)},f.nome,${sqlText(action.profile)},f.id,1,datetime('now'),datetime('now')
+         FROM funcionarios f
+        WHERE f.id=${action.employeeId}
+          AND f.empresa_id=${EMPRESA_ID}
+          AND f.ativo=1
+          AND f.deleted_at IS NULL
+          AND NOT EXISTS (SELECT 1 FROM usuarios u WHERE u.funcionario_id=f.id OR LOWER(TRIM(u.email))=${sqlText(action.email)});
+       INSERT INTO usuarios_empresas (usuario_id,empresa_id,is_primary,role,created_at)
+       SELECT u.id,${EMPRESA_ID},1,${sqlText(action.role)},datetime('now')
+         FROM usuarios u
+        WHERE u.funcionario_id=${action.employeeId}
+          AND LOWER(TRIM(u.email))=${sqlText(action.email)}
+          AND u.deleted_at IS NULL
+          AND NOT EXISTS (SELECT 1 FROM usuarios_empresas ue WHERE ue.usuario_id=u.id AND ue.empresa_id=${EMPRESA_ID});
+       INSERT OR IGNORE INTO usuarios_empresas_perfis (usuario_id,empresa_id,perfil,ativo,created_at,updated_at)
+       SELECT u.id,${EMPRESA_ID},${sqlText(action.profile)},1,datetime('now'),datetime('now')
+         FROM usuarios u
+        WHERE u.funcionario_id=${action.employeeId}
+          AND LOWER(TRIM(u.email))=${sqlText(action.email)}
+          AND u.deleted_at IS NULL;
+       ${auditSql(action.employeeId, `USER_PROVISION_CREATE_${action.profile}_20261003`)}`,
+      `apply_create_user_${action.employeeId}`,
+    );
+  }
+}
+
+const before = inspectPlan();
+const actionCounts = Object.fromEntries(
+  ['employee-email', 'employee-email-transfer', 'create-user', 'relink-user', 'manager-sector'].map((type) => [
+    type,
+    before.actions.filter((action) => action.type === type).length,
+  ]),
+);
+const sourceSha = run('git', ['rev-parse', 'HEAD'], { label: 'git_head_readonly' }).trim();
+const summary = {
+  mode,
+  source_sha: sourceSha,
+  empresa_id: EMPRESA_ID,
+  plan_rows: plan.length,
+  plan_sha256: planSha,
+  candidate_count: before.candidateCount,
+  candidate_hash: before.candidateHash,
+  action_counts: actionCounts,
+  mutation_executed: false,
+  postconditions_verified: false,
+  pii_emitted: false,
+};
+
+if (mode === 'dry-run') {
+  process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
+  process.exit(0);
+}
+
+const expectedPlanSha = String(process.env.USER_PROVISION_EXPECTED_PLAN_SHA || '').trim().toLowerCase();
+const expectedCount = Number(process.env.USER_PROVISION_EXPECTED_COUNT || -1);
+const expectedHash = String(process.env.USER_PROVISION_EXPECTED_HASH || '').trim().toLowerCase();
+if (!/^[0-9a-f]{64}$/.test(expectedPlanSha) || expectedPlanSha !== planSha) fail('PLAN_SHA_MISMATCH');
+if (!Number.isInteger(expectedCount) || expectedCount < 0 || expectedCount !== before.candidateCount) fail('CANDIDATE_COUNT_MISMATCH');
+if (!/^[0-9a-f]{64}$/.test(expectedHash) || expectedHash !== before.candidateHash) fail('CANDIDATE_HASH_MISMATCH');
+const applySha = assertApplyGitState();
+if (before.actions.some((entry) => entry.type === 'create-user')) {
+  try {
+    bcryptForApply = requireFromWorker('bcryptjs');
+  } catch {
+    fail('PASSWORD_HASHER_UNAVAILABLE');
+  }
+  if (typeof bcryptForApply?.hashSync !== 'function') fail('PASSWORD_HASHER_INVALID');
+}
+const recoveryPoint = captureRecoveryPoint();
+
+for (const action of before.actions.filter((entry) => entry.type === 'employee-email-transfer')) applyAction(action, before);
+for (const action of before.actions.filter((entry) => entry.type === 'employee-email')) applyAction(action, before);
+for (const action of before.actions.filter((entry) => entry.type === 'relink-user')) applyAction(action, before);
+for (const action of before.actions.filter((entry) => entry.type === 'create-user')) applyAction(action, before);
+for (const action of before.actions.filter((entry) => entry.type === 'manager-sector')) applyAction(action, before);
+
+const after = inspectPlan();
+if (after.candidateCount !== 0) fail(`POSTCONDITIONS_PENDING_${after.candidateCount}`);
+
+Object.assign(summary, {
+  source_sha: applySha,
+  recovery_point_utc: recoveryPoint,
+  mutation_executed: before.candidateCount > 0,
+  postconditions_verified: true,
+  post_candidate_count: after.candidateCount,
+  post_candidate_hash: after.candidateHash,
+});
+process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
