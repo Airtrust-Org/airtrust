@@ -61,7 +61,11 @@ describe('useQualificacoesFiltros', () => {
       'VENCENDO_30',
     ]);
     expect(result.current.isDefaultStatusFilter).toBe(true);
-    expect(result.current.effectiveHistoricoStatusFiltro).toEqual([]);
+    expect(result.current.effectiveHistoricoStatusFiltro).toEqual([
+      'VALIDA',
+      'VENCIDA',
+      'VENCENDO_30',
+    ]);
   });
 
   it('marca seleção explícita por URL como filtro ativo', async () => {
