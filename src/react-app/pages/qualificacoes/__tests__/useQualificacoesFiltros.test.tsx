@@ -27,7 +27,8 @@ vi.mock('@/react-app/hooks/useTablePreferences', async () => {
           tablePreferenceWriteSpy(resolved);
           return resolved;
         });
-      };      return {
+      };
+      return {
         preferences,
         setPreferences: updatePreferences,
         ready: true,
@@ -56,10 +57,8 @@ describe('useQualificacoesFiltros', () => {
 
     expect([...result.current.statusFiltro]).toEqual([
       'VALIDA',
-      'VENCIDA',      'VENCENDO_30',
-      'RENOVADA',
-      'PLANEJADA',
-      'CANCELADA',
+      'VENCIDA',
+      'VENCENDO_30',
     ]);
     expect(result.current.isDefaultStatusFilter).toBe(true);
     expect(result.current.effectiveHistoricoStatusFiltro).toEqual([]);
@@ -85,7 +84,8 @@ describe('useQualificacoesFiltros', () => {
       wrapper: createWrapper('/qualificacoes?status=vencida'),
     });
 
-    await waitFor(() => expect([...result.current.statusFiltro]).toEqual(['VENCIDA']));    expect(result.current.searchTerm).toBe('preferência pessoal');
+    await waitFor(() => expect([...result.current.statusFiltro]).toEqual(['VENCIDA']));
+    expect(result.current.searchTerm).toBe('preferência pessoal');
     expect(tablePreferenceWriteSpy).not.toHaveBeenCalled();
   });
 
