@@ -72,6 +72,17 @@ test('GESTOR provisioning requires and reconciles all active operational sectors
   assert.match(body, /USER_PROVISION_MANAGER_SECTOR_20261003/);
 });
 
+test('explicit relink can govern transfer of a conflicting inactive source employee email', () => {
+  assert.match(body, /employee-email-transfer:/);
+  assert.match(body, /EMPLOYEE_EMAIL_OCCUPIED_/);
+  assert.match(body, /employee_email_conflicts_/);
+  assert.match(body, /type: 'employee-email-transfer'/);
+  assert.match(body, /AND ativo<>1/);
+  assert.match(body, /AND u\.funcionario_id=\$\{action\.fromEmployeeId\}/);
+  assert.match(body, /USER_PROVISION_EMPLOYEE_EMAIL_RELEASE_20261003/);
+  assert.match(body, /apply_email_transfer_relink_/);
+});
+
 test('employee email write is additive-only and administrative writes are audited', () => {
   assert.match(body, /UPDATE funcionarios[\s\S]*AND \(email IS NULL OR TRIM\(email\)=''\)/);
   assert.match(body, /USER_PROVISION_EMPLOYEE_EMAIL_20261003/);
