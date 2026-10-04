@@ -12,6 +12,9 @@ import {
   computePlanejadosStats,
   getAvailablePlannedTrainings,
   getPlannedFallbackParticipantIds,
+  sortPlannedParticipantDirectory,
+  buildPlannedParticipantNameMap,
+  filterPlannedParticipantDirectory,
 } from '@/react-app/pages/qualificacoes/qualificacoes.helpers';
 
 describe('qualificacoes pure presentation helpers', () => {
@@ -250,6 +253,40 @@ describe('qualificacoes pure presentation helpers', () => {
       8,
     ]);
     expect(trainings.map((training) => training.id)).toEqual([8, 9, 10]);
+  });
+
+  it('sorts planned participant directory by name without mutating the source', () => {
+    const source = [
+      { id: 2, nome: 'Bruno', matricula: '002' },
+      { id: 1, nome: 'Ana', matricula: '001' },
+    ];
+    const sorted = sortPlannedParticipantDirectory(source);
+    expect(sorted.map((item) => item.id)).toEqual([1, 2]);
+    expect(source.map((item) => item.id)).toEqual([2, 1]);
+  });
+
+  it('builds planned participant names by numeric employee id', () => {
+    expect(
+      Array.from(
+        buildPlannedParticipantNameMap([
+          { id: '7', nome: 'Ana' },
+          { id: 8, nome: 'Bruno' },
+        ]).entries(),
+      ),
+    ).toEqual([
+      [7, 'Ana'],
+      [8, 'Bruno'],
+    ]);
+  });
+
+  it('filters planned participant directory by trimmed case-insensitive name or registration', () => {
+    const items = [
+      { id: 1, nome: 'Ana Souza', matricula: 'AB-123' },
+      { id: 2, nome: 'Bruno Lima', matricula: 'CD-456' },
+    ];
+    expect(filterPlannedParticipantDirectory(items, '  ana ')).toEqual([items[0]]);
+    expect(filterPlannedParticipantDirectory(items, 'cd-4')).toEqual([items[1]]);
+    expect(filterPlannedParticipantDirectory(items, '   ')).toBe(items);
   });
 
   it('derives fallback class participants by same date and exact normalized code or name', () => {
