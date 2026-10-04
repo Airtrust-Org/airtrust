@@ -132,7 +132,8 @@ describe('migration governance', () => {
     // 0527 bootstraps a missing tenant-6 LOFT model without rewriting the reviewed 0526 change.
     // 0528 separates sector Compliance alert responsibility from operational sector access.
     // 0530 adds the governed placeholder qualification models for planned EAD packages.
-    const expectedLatest = 530;
+    // 0531 repairs the reviewed tenant-6 NR-20 HIBRIDO requirement modality after 0526.
+    const expectedLatest = 531;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
