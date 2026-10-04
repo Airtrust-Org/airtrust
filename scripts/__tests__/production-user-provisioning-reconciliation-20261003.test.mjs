@@ -25,26 +25,40 @@ test('dry-run is read-only and apply is exact-plan/exact-candidate/exact-main gu
   assert.match(body, /D1.*time-travel[\s\S]*info/i);
 });
 
-test('reconciliation preserves existing authority and only creates missing ALUNO users', () => {
+test('reconciliation preserves existing authority and creates missing users from reviewed profile intent', () => {
   assert.match(body, /EXISTING_USER_EMAIL_CONFLICT_/);
   assert.match(body, /EXISTING_USER_MEMBERSHIP_MISSING_/);
   assert.match(body, /RELINK_NOT_EXPLICIT_/);
   assert.match(body, /RELINK_OLD_EMPLOYEE_ACTIVE_/);
   assert.match(body, /SET funcionario_id=\$\{action\.employeeId\}/);
   assert.match(body, /AND funcionario_id=\$\{action\.fromEmployeeId\}/);
+  assert.match(body, /normalizeCreateProfile/);
+  assert.match(body, /\['ALUNO', 'GESTOR'\]/);
+  assert.match(body, /profile === 'GESTOR' \? 'manager' : 'student'/);
   assert.match(body, /INSERT INTO usuarios \(email,password_hash,nome,perfil,funcionario_id,active,created_at,updated_at\)/);
-  assert.match(body, /'ALUNO'/);
+  assert.match(body, /sqlText\(action\.profile\)/);
+  assert.match(body, /sqlText\(action\.role\)/);
   assert.match(body, /INSERT INTO usuarios_empresas/);
-  assert.match(body, /SELECT u\.id,\$\{EMPRESA_ID\},1,'student',datetime\('now'\)/);
   assert.match(body, /INSERT OR IGNORE INTO usuarios_empresas_perfis/);
   assert.match(body, /NOT EXISTS \(SELECT 1 FROM usuarios u WHERE u\.funcionario_id=f\.id OR LOWER\(TRIM\(u\.email\)\)=/);
+});
+
+test('GESTOR provisioning requires and reconciles all active operational sectors', () => {
+  assert.match(body, /PLAN_GESTOR_ALL_SECTORS_REQUIRED_/);
+  assert.match(body, /PLAN_ALL_SECTORS_REQUIRES_GESTOR_/);
+  assert.match(body, /GESTOR_MEMBERSHIP_ROLE_MISMATCH_/);
+  assert.match(body, /SELECT id FROM setores WHERE empresa_id=\$\{EMPRESA_ID\} AND ativo=1 AND deleted_at IS NULL/);
+  assert.match(body, /manager-sector:/);
+  assert.match(body, /INSERT INTO setores_gestores/);
+  assert.match(body, /JOIN usuarios_empresas ue[\s\S]*LOWER\(TRIM\(ue\.role\)\)='manager'/);
+  assert.match(body, /USER_PROVISION_MANAGER_SECTOR_20261003/);
 });
 
 test('employee email write is additive-only and administrative writes are audited', () => {
   assert.match(body, /UPDATE funcionarios[\s\S]*AND \(email IS NULL OR TRIM\(email\)=''\)/);
   assert.match(body, /USER_PROVISION_EMPLOYEE_EMAIL_20261003/);
   assert.match(body, /USER_PROVISION_RELINK_20261003/);
-  assert.match(body, /USER_PROVISION_CREATE_ALUNO_20261003/);
+  assert.match(body, /USER_PROVISION_CREATE_\$\{action\.profile\}_20261003/);
   assert.match(body, /INSERT INTO audit_logs/);
 });
 

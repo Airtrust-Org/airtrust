@@ -49,6 +49,16 @@ function firstName(value) {
   return String(value || '').trim().split(/\s+/)[0];
 }
 
+function normalizeCreateProfile(value) {
+  const profile = String(value || 'ALUNO').trim().toUpperCase();
+  if (!['ALUNO', 'GESTOR'].includes(profile)) fail('PLAN_CREATE_PROFILE_INVALID');
+  return profile;
+}
+
+function tenantRoleForProfile(profile) {
+  return profile === 'GESTOR' ? 'manager' : 'student';
+}
+
 function assertExternalPlan(path) {
   const absolute = realpathSync(resolve(path));
   const rel = relative(REPO_ROOT, absolute);
@@ -79,6 +89,11 @@ for (const item of plan) {
   if (seenEmails.has(email)) fail('PLAN_EMAIL_DUPLICATE');
   seenEmployees.add(employeeId);
   seenEmails.add(email);
+
+  const createProfile = normalizeCreateProfile(item?.create_profile);
+  const allActiveSectors = item?.all_active_sectors === true;
+  if (createProfile === 'GESTOR' && !allActiveSectors) fail(`PLAN_GESTOR_ALL_SECTORS_REQUIRED_${employeeId}`);
+  if (createProfile !== 'GESTOR' && allActiveSectors) fail(`PLAN_ALL_SECTORS_REQUIRES_GESTOR_${employeeId}`);
 
   const relinkUserId = item?.relink_user_id == null ? null : Number(item.relink_user_id);
   const relinkFromEmployeeId =
@@ -160,10 +175,20 @@ function activeMembership(userId) {
 function inspectPlan() {
   const actions = [];
   const resolved = [];
+  const activeSectors = select(
+    `SELECT id FROM setores WHERE empresa_id=${EMPRESA_ID} AND ativo=1 AND deleted_at IS NULL ORDER BY id`,
+    'active_sectors',
+  ).map((row) => Number(row.id));
+  if (!activeSectors.length || activeSectors.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+    fail('ACTIVE_SECTOR_SCOPE_INVALID');
+  }
 
   for (const item of plan) {
     const employeeId = Number(item.funcionario_id);
     const email = normalizeEmail(item.email);
+    const createProfile = normalizeCreateProfile(item.create_profile);
+    const createRole = tenantRoleForProfile(createProfile);
+    const allActiveSectors = item.all_active_sectors === true;
     const employee = one(
       select(
         `SELECT id, nome, email, ativo, deleted_at
@@ -233,22 +258,53 @@ function inspectPlan() {
       } else {
         const deletedEmailUsers = emailUsers.filter((row) => row.deleted_at != null);
         if (deletedEmailUsers.length) fail(`DELETED_USER_EMAIL_CONFLICT_${employeeId}`);
-        actions.push({ type: 'create-user', employeeId, email });
+        actions.push({
+          type: 'create-user',
+          employeeId,
+          email,
+          profile: createProfile,
+          role: createRole,
+        });
       }
     }
 
+    let membership = null;
     if (user && !relink) {
-      const membership = activeMembership(Number(user.id));
+      membership = activeMembership(Number(user.id));
       if (!membership) fail(`EXISTING_USER_MEMBERSHIP_MISSING_${employeeId}`);
     } else if (relink) {
-      const membership = activeMembership(relink.userId);
+      membership = activeMembership(relink.userId);
       if (!membership) fail(`RELINK_USER_MEMBERSHIP_MISSING_${employeeId}`);
+    }
+
+    if (allActiveSectors) {
+      if (user && String(membership?.role || '').trim().toLowerCase() !== 'manager') {
+        fail(`GESTOR_MEMBERSHIP_ROLE_MISMATCH_${employeeId}`);
+      }
+      const assigned = user
+        ? new Set(
+            select(
+              `SELECT setor_id FROM setores_gestores
+                WHERE usuario_id=${Number(user.id)}
+                  AND empresa_id=${EMPRESA_ID}
+                  AND ativo=1
+                  AND deleted_at IS NULL`,
+              `manager_sectors_${employeeId}`,
+            ).map((row) => Number(row.setor_id)),
+          )
+        : new Set();
+      for (const sectorId of activeSectors) {
+        if (!assigned.has(sectorId)) actions.push({ type: 'manager-sector', employeeId, sectorId });
+      }
     }
 
     resolved.push({
       employeeId,
       email,
       name: String(employee.nome || ''),
+      createProfile,
+      createRole,
+      allActiveSectors,
       existingUserId: user ? Number(user.id) : null,
       relink,
     });
@@ -256,7 +312,36 @@ function inspectPlan() {
 
   const signatures = actions.map((action) => {
     if (action.type === 'employee-email') return `employee-email:${action.employeeId}:${action.email}`;
-    if (action.type === 'create-user') return `create-user:${action.employeeId}:${action.email}`;
+    if (action.type === 'manager-sector') {
+    runWrangler(
+      `INSERT INTO setores_gestores
+          (setor_id,gestor_id,usuario_id,empresa_id,role,ativo,created_at,updated_at,deleted_at)
+       SELECT s.id,NULL,u.id,${EMPRESA_ID},'manager',1,datetime('now'),datetime('now'),NULL
+         FROM setores s
+         JOIN usuarios u ON u.funcionario_id=${action.employeeId} AND u.deleted_at IS NULL
+         JOIN usuarios_empresas ue ON ue.usuario_id=u.id AND ue.empresa_id=${EMPRESA_ID} AND LOWER(TRIM(ue.role))='manager'
+        WHERE s.id=${action.sectorId}
+          AND s.empresa_id=${EMPRESA_ID}
+          AND s.ativo=1
+          AND s.deleted_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM setores_gestores sg
+             WHERE sg.setor_id=s.id
+               AND sg.usuario_id=u.id
+               AND sg.empresa_id=${EMPRESA_ID}
+               AND sg.ativo=1
+               AND sg.deleted_at IS NULL
+          );
+       ${auditSql(action.employeeId, 'USER_PROVISION_MANAGER_SECTOR_20261003')}`,
+      `apply_manager_sector_${action.employeeId}_${action.sectorId}`,
+    );
+    return;
+  }
+
+  if (action.type === 'create-user') {
+      return `create-user:${action.employeeId}:${action.email}:${action.profile}:${action.role}`;
+    }
+    if (action.type === 'manager-sector') return `manager-sector:${action.employeeId}:${action.sectorId}`;
     return `relink-user:${action.userId}:${action.fromEmployeeId}->${action.employeeId}`;
   });
 
@@ -336,7 +421,7 @@ function applyAction(action, state) {
     const passwordHash = bcryptForApply.hashSync(initialPassword, 10);
     runWrangler(
       `INSERT INTO usuarios (email,password_hash,nome,perfil,funcionario_id,active,created_at,updated_at)
-       SELECT ${sqlText(action.email)},${sqlText(passwordHash)},f.nome,'ALUNO',f.id,1,datetime('now'),datetime('now')
+       SELECT ${sqlText(action.email)},${sqlText(passwordHash)},f.nome,${sqlText(action.profile)},f.id,1,datetime('now'),datetime('now')
          FROM funcionarios f
         WHERE f.id=${action.employeeId}
           AND f.empresa_id=${EMPRESA_ID}
@@ -344,19 +429,19 @@ function applyAction(action, state) {
           AND f.deleted_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM usuarios u WHERE u.funcionario_id=f.id OR LOWER(TRIM(u.email))=${sqlText(action.email)});
        INSERT INTO usuarios_empresas (usuario_id,empresa_id,is_primary,role,created_at)
-       SELECT u.id,${EMPRESA_ID},1,'student',datetime('now')
+       SELECT u.id,${EMPRESA_ID},1,${sqlText(action.role)},datetime('now')
          FROM usuarios u
         WHERE u.funcionario_id=${action.employeeId}
           AND LOWER(TRIM(u.email))=${sqlText(action.email)}
           AND u.deleted_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM usuarios_empresas ue WHERE ue.usuario_id=u.id AND ue.empresa_id=${EMPRESA_ID});
        INSERT OR IGNORE INTO usuarios_empresas_perfis (usuario_id,empresa_id,perfil,ativo,created_at,updated_at)
-       SELECT u.id,${EMPRESA_ID},'ALUNO',1,datetime('now'),datetime('now')
+       SELECT u.id,${EMPRESA_ID},${sqlText(action.profile)},1,datetime('now'),datetime('now')
          FROM usuarios u
         WHERE u.funcionario_id=${action.employeeId}
           AND LOWER(TRIM(u.email))=${sqlText(action.email)}
           AND u.deleted_at IS NULL;
-       ${auditSql(action.employeeId, 'USER_PROVISION_CREATE_ALUNO_20261003')}`,
+       ${auditSql(action.employeeId, `USER_PROVISION_CREATE_${action.profile}_20261003`)}`,
       `apply_create_user_${action.employeeId}`,
     );
   }
@@ -364,7 +449,7 @@ function applyAction(action, state) {
 
 const before = inspectPlan();
 const actionCounts = Object.fromEntries(
-  ['employee-email', 'create-user', 'relink-user'].map((type) => [
+  ['employee-email', 'create-user', 'relink-user', 'manager-sector'].map((type) => [
     type,
     before.actions.filter((action) => action.type === type).length,
   ]),
@@ -409,6 +494,7 @@ const recoveryPoint = captureRecoveryPoint();
 for (const action of before.actions.filter((entry) => entry.type === 'employee-email')) applyAction(action, before);
 for (const action of before.actions.filter((entry) => entry.type === 'relink-user')) applyAction(action, before);
 for (const action of before.actions.filter((entry) => entry.type === 'create-user')) applyAction(action, before);
+for (const action of before.actions.filter((entry) => entry.type === 'manager-sector')) applyAction(action, before);
 
 const after = inspectPlan();
 if (after.candidateCount !== 0) fail(`POSTCONDITIONS_PENDING_${after.candidateCount}`);
