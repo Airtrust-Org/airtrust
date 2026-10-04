@@ -1,0 +1,229 @@
+name: Production Qualification Evidence Reconciliation 20261004
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA reviewed for this reconciliation
+        required: true
+        type: string
+      expected_plan_sha:
+        description: Exact reviewed external plan SHA-256
+        required: true
+        type: string
+      expected_candidate_count:
+        description: Exact reviewed candidate count
+        required: true
+        type: string
+      expected_candidate_hash:
+        description: Exact reviewed candidate hash
+        required: true
+        type: string
+      mode:
+        description: dry-run is read-only; apply changes only the reviewed D1 evidence links
+        required: true
+        type: choice
+        options: [dry-run, apply]
+        default: dry-run
+      confirmation:
+        description: Exact confirmation required by the selected mode
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        description: Required for apply; successful dry-run run on this same SHA and reviewed plan
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-qualification-evidence-reconciliation-20261004
+  cancel-in-progress: false
+
+jobs:
+  d1_reconcile:
+    name: Governed Production D1 Qualification Evidence Reconciliation
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          EXPECTED_PLAN_SHA: ${{ inputs.expected_plan_sha }}
+          EXPECTED_COUNT: ${{ inputs.expected_candidate_count }}
+          EXPECTED_HASH: ${{ inputs.expected_candidate_hash }}
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_REF_REQUIRED >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_SHA_INVALID >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo EXPECTED_SHA_MISMATCH >&2; exit 1; }
+          [[ "$EXPECTED_PLAN_SHA" == 'bb4aaadfce1c5ae9ed9fa4ae8723f3126103f5edbd048dff46d0ef8dffa900cc' ]] || { echo REVIEWED_PLAN_SHA_MISMATCH >&2; exit 1; }
+          [[ "$EXPECTED_COUNT" == '13' ]] || { echo REVIEWED_COUNT_MISMATCH >&2; exit 1; }
+          [[ "$EXPECTED_HASH" == '3797b28d538ba6cd810ee9334755012b9df54b4134e94c0cfc29b9ab3cfab6d0' ]] || { echo REVIEWED_CANDIDATE_HASH_MISMATCH >&2; exit 1; }
+          if [[ "$MODE" == dry-run ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_DRYRUN_QUALIFICATION_EVIDENCE_20261004 ]] || { echo DRYRUN_CONFIRMATION_REQUIRED >&2; exit 1; }
+          elif [[ "$MODE" == apply ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_RECONCILE_QUALIFICATION_EVIDENCE_20261004 ]] || { echo APPLY_CONFIRMATION_REQUIRED >&2; exit 1; }
+          else
+            echo INVALID_MODE >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+
+      - name: Install Worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Verify official release gates on exact SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Require production D1 credential
+        shell: bash
+        env:
+          D1_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$D1_TOKEN" ]] || { echo PRODUCTION_D1_TOKEN_MISSING >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo CLOUDFLARE_ACCOUNT_ID_MISSING >&2; exit 1; }
+
+      - name: Verify reviewed dry-run predecessor
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_RUN: ${{ inputs.reviewed_dry_run_run_id }}
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_PLAN_SHA: ${{ inputs.expected_plan_sha }}
+          EXPECTED_COUNT: ${{ inputs.expected_candidate_count }}
+          EXPECTED_HASH: ${{ inputs.expected_candidate_hash }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_RUN" =~ ^[1-9][0-9]*$ ]] || { echo REVIEWED_DRY_RUN_RUN_ID_REQUIRED >&2; exit 1; }
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN")"
+          [[ "$(jq -r .name <<<"$run_json")" == 'Production Qualification Evidence Reconciliation 20261004' ]] || { echo REVIEWED_WORKFLOW_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .conclusion <<<"$run_json")" == success ]] || { echo REVIEWED_DRY_RUN_NOT_SUCCESSFUL >&2; exit 1; }
+          [[ "$(jq -r .head_sha <<<"$run_json")" == "$EXPECTED_SHA" ]] || { echo REVIEWED_DRY_RUN_SHA_MISMATCH >&2; exit 1; }
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "production-qualification-evidence-dry-run-$EXPECTED_SHA" \
+            --dir "$RUNNER_TEMP/reviewed"
+          evidence="$RUNNER_TEMP/reviewed/result.json"
+          test -s "$evidence"
+          [[ "$(jq -r .mode "$evidence")" == dry-run ]] || { echo REVIEWED_MODE_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .source_sha "$evidence")" == "$EXPECTED_SHA" ]] || { echo REVIEWED_RESULT_SHA_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .plan_sha256 "$evidence")" == "$EXPECTED_PLAN_SHA" ]] || { echo REVIEWED_RESULT_PLAN_SHA_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .candidate_count "$evidence")" == "$EXPECTED_COUNT" ]] || { echo REVIEWED_RESULT_COUNT_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .candidate_hash "$evidence")" == "$EXPECTED_HASH" ]] || { echo REVIEWED_RESULT_HASH_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .mutation_executed "$evidence")" == false ]] || { echo REVIEWED_RESULT_NOT_READONLY >&2; exit 1; }
+
+      - name: Materialize reviewed plan from live read-only state
+        shell: bash
+        working-directory: .
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_PLAN_SHA: ${{ inputs.expected_plan_sha }}
+        run: |
+          set -euo pipefail
+          plan="$RUNNER_TEMP/qualification-evidence-plan.json"
+          python3 scripts/production/materialize-qualification-evidence-plan-20261004.py --output "$plan"
+          actual="$(sha256sum "$plan" | awk '{print $1}')"
+          [[ "$actual" == "$EXPECTED_PLAN_SHA" ]] || { echo MATERIALIZED_PLAN_SHA_MISMATCH >&2; rm -f "$plan"; exit 1; }
+          echo "QUALIFICATION_EVIDENCE_PLAN=$plan" >> "$GITHUB_ENV"
+
+      - name: Capture D1 Time Travel recovery point
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ts="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$ts" > "$RUNNER_TEMP/recovery.txt"
+          test -s "$RUNNER_TEMP/recovery.txt"
+          echo "QUALIFICATION_EVIDENCE_RECOVERY_TIMESTAMP_UTC=$ts" >> "$GITHUB_STEP_SUMMARY"
+          rm -f "$RUNNER_TEMP/recovery.txt"
+
+      - name: Execute reviewed qualification-evidence reconciliation
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          MODE: ${{ inputs.mode }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          EXPECTED_PLAN_SHA: ${{ inputs.expected_plan_sha }}
+          EXPECTED_COUNT: ${{ inputs.expected_candidate_count }}
+          EXPECTED_HASH: ${{ inputs.expected_candidate_hash }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/result.json"
+          if [[ "$MODE" == dry-run ]]; then
+            python3 scripts/production/reconcile-qualification-evidence-20261004.py dry-run \
+              --plan "$QUALIFICATION_EVIDENCE_PLAN" > "$out"
+          else
+            python3 scripts/production/reconcile-qualification-evidence-20261004.py apply \
+              --plan "$QUALIFICATION_EVIDENCE_PLAN" \
+              --expected-sha "$EXPECTED_SHA" \
+              --expected-plan-sha "$EXPECTED_PLAN_SHA" \
+              --expected-candidate-count "$EXPECTED_COUNT" \
+              --expected-candidate-hash "$EXPECTED_HASH" \
+              --confirmation "$CONFIRMATION" > "$out"
+          fi
+          test -s "$out"
+          [[ "$(jq -r .source_sha "$out")" == "$EXPECTED_SHA" ]] || { echo RESULT_SHA_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .plan_sha256 "$out")" == "$EXPECTED_PLAN_SHA" ]] || { echo RESULT_PLAN_SHA_MISMATCH >&2; exit 1; }
+          if [[ "$MODE" == dry-run ]]; then
+            [[ "$(jq -r .candidate_count "$out")" == "$EXPECTED_COUNT" ]] || { echo RESULT_COUNT_MISMATCH >&2; exit 1; }
+            [[ "$(jq -r .candidate_hash "$out")" == "$EXPECTED_HASH" ]] || { echo RESULT_HASH_MISMATCH >&2; exit 1; }
+            [[ "$(jq -r .mutation_executed "$out")" == false ]] || { echo RESULT_DRYRUN_MUTATED >&2; exit 1; }
+          else
+            [[ "$(jq -r .mutation_executed "$out")" == true ]] || { echo RESULT_APPLY_NOT_EXECUTED >&2; exit 1; }
+            [[ "$(jq -r .postconditions_verified "$out")" == true ]] || { echo RESULT_POSTCONDITIONS_NOT_VERIFIED >&2; exit 1; }
+            [[ "$(jq -r .post_remaining "$out")" == 0 ]] || { echo RESULT_REMAINING_CANDIDATES >&2; exit 1; }
+            [[ "$(jq -r .audit_rows "$out")" == "$EXPECTED_COUNT" ]] || { echo RESULT_AUDIT_COUNT_MISMATCH >&2; exit 1; }
+          fi
+
+      - name: Remove materialized plan containing document metadata
+        if: ${{ always() }}
+        shell: bash
+        run: rm -f "${QUALIFICATION_EVIDENCE_PLAN:-$RUNNER_TEMP/qualification-evidence-plan.json}"
+
+      - name: Publish sanitized summary
+        if: ${{ success() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq '{mode,source_sha,empresa_id,plan_sha256,reviewed_rows,candidate_count,already_applied,candidate_hash,candidate_by_action,r2_mutations,mutation_executed,applied_count,post_remaining,post_all_reconciled,audit_rows,postconditions_verified,recovery_timestamp_utc,pii_emitted}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized evidence
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-qualification-evidence-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: error
+          retention-days: 30
