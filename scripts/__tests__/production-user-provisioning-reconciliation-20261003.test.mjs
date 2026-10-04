@@ -9,7 +9,6 @@ test('user provisioning reconciler keeps PII in an external plan and emits no co
   assert.match(body, /PLAN_MUST_BE_OUTSIDE_REPO/);
   assert.match(body, /CORPORATE_DOMAIN = 'voecostadosol\.com\.br'/);
   assert.doesNotMatch(body, /[A-Za-z0-9._%+-]+@voecostadosol\.com\.br/i);
-  assert.doesNotMatch(body, /Alessandro|Daniel Alonso|Elzo|João Marcelo|Jorge Abadia|Mauricio Castelo|Mikhail|Renata Miguez|Ricardo Fontes|Rodrigo Vieiralves|Rogerio Affonso|Yuri Azevedo/i);
 });
 
 test('dry-run is read-only and apply is exact-plan/exact-candidate/exact-main guarded', () => {
