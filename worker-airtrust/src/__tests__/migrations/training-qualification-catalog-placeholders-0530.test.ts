@@ -11,6 +11,9 @@ const migrationPath = 'worker-airtrust/migrations/0530_training_qualification_ca
 const changePath = 'worker-airtrust/schema-v2/changes/0530_training_qualification_catalog_placeholders.sql';
 const planPath = 'worker-airtrust/schema-v2/plans/training-qualification-catalog-placeholders-0530.md';
 const manifestPath = 'worker-airtrust/schema-v2/training-qualification-catalog-placeholders-0530.json';
+const productionWorkflowPath = '.github/workflows/apply-schema-change-v2.yml';
+const productionPreflightPath = 'scripts/schema-v2/validate-0530-production-preflight.sh';
+const productionPostconditionsPath = 'scripts/schema-v2/validate-0530-production-postconditions.sh';
 const migration = read(migrationPath);
 const tempDirs: string[] = [];
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -102,6 +105,23 @@ describe('0530 training qualification catalog placeholders', () => {
     });
     expect(manifest.fileHash).toBe(sha256(change));
     expect(manifest.planHash).toBe(sha256(plan));
+  });
+
+  it('wires fail-closed production preflight and postconditions into Schema V2', () => {
+    const workflow = read(productionWorkflowPath);
+    const preflight = read(productionPreflightPath);
+    const postconditions = read(productionPostconditionsPath);
+    expect(workflow).toContain("inputs.change_id == 'training-qualification-catalog-placeholders-0530'");
+    expect(workflow).toContain('bash scripts/schema-v2/validate-0530-production-preflight.sh --target=airtrust-db');
+    expect(workflow).toContain('bash scripts/schema-v2/validate-0530-production-postconditions.sh --target=airtrust-db');
+    expect(preflight).toContain('ALLOWED_DB_NAME="airtrust-db"');
+    expect(preflight).toContain('existing-target-compliance-requirements 0');
+    expect(preflight).toContain('existing-target-lms-courses 0');
+    expect(postconditions).toContain('schema-v2-change 1');
+    expect(postconditions).toContain('qualification-models 5');
+    expect(postconditions).toContain('canonical-ead-binding 5');
+    expect(postconditions).toContain('no-compliance-requirements 0');
+    expect(postconditions).toContain('no-lms-courses 0');
   });
 
   it('creates exactly the five tenant-6 qualification models and is idempotent', () => {

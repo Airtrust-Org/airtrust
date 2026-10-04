@@ -66,3 +66,5 @@ Post-apply checks must confirm:
 3. no active `treinamento_requisitos` were created for those model IDs by this change;
 4. no LMS course/enrollment/history counts changed as a consequence of the migration;
 5. re-running the SQL is idempotent.
+
+Production execution is additionally guarded by `scripts/schema-v2/validate-0530-production-preflight.sh` and `scripts/schema-v2/validate-0530-production-postconditions.sh`, wired into the canonical `apply-schema-change-v2.yml` workflow. The preflight refuses pre-existing target LMS courses or active Compliance requirements so this model-only change cannot silently absorb a different production state.
