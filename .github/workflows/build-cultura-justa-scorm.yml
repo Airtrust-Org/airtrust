@@ -1,0 +1,63 @@
+name: Build Cultura Justa SCORM
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'training-content/cultura-justa-m8/**'
+      - 'scripts/lms/build-cultura-justa-scorm.mjs'
+      - 'worker-airtrust/src/__tests__/lms-cultura-justa-m8-source.test.ts'
+      - '.github/workflows/build-cultura-justa-scorm.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-cultura-justa-scorm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Cultura Justa SCORM Build QA
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix worker-airtrust ci
+      - name: Validate controlled source against AirTrust M8 contract
+        run: npm --prefix worker-airtrust test -- --run src/__tests__/lms-cultura-justa-m8-source.test.ts
+      - name: Build reproducible SCORM 1.2 ZIP
+        run: node scripts/lms/build-cultura-justa-scorm.mjs --output=dist/scorm/cultura-justa-m8-2026.10-rc1.zip | tee dist/scorm/cultura-justa-build-summary.json
+      - name: Verify offline package surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP=dist/scorm/cultura-justa-m8-2026.10-rc1.zip
+          test -s "$ZIP"
+          unzip -l "$ZIP" | tee /tmp/cultura-justa-files.txt
+          grep -q 'imsmanifest.xml' /tmp/cultura-justa-files.txt
+          grep -q 'airtrust-completion-manifest.json' /tmp/cultura-justa-files.txt
+          grep -q 'course-model.js' /tmp/cultura-justa-files.txt
+          ! grep -E '\.svg($| )|\.map($| )' /tmp/cultura-justa-files.txt
+          for file in index.html app.js styles.css course-model.js; do
+            if unzip -p "$ZIP" "$file" | grep -E 'https?://|//[^ ]+\.com' >/dev/null; then
+              echo "External runtime dependency found in $file" >&2
+              exit 1
+            fi
+          done
+      - name: Upload review artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cultura-justa-m8-2026.10-rc1-${{ github.sha }}
+          path: |
+            dist/scorm/cultura-justa-m8-2026.10-rc1.zip
+            dist/scorm/cultura-justa-build-summary.json
+          if-no-files-found: error
+          retention-days: 30
