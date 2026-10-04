@@ -44,10 +44,18 @@ describe('development module administrator access', () => {
     expect(isPrimaryAdmin({ email: 'admin@example.test', role: 'ADMINISTRADOR' })).toBe(false);
   });
 
-  it('keeps operational dashboard access aligned with manager roles', () => {
+  it('keeps operational dashboard roles while restricting the administrative dashboard to the primary admin', () => {
     expect(canSeeOperationalDashboard(null)).toBe(false);
     expect(canSeeOperationalDashboard({ role: 'GESTOR' })).toBe(true);
     expect(canSeeOperationalDashboard({ role: 'ALUNO' })).toBe(false);
-    expect(canSeeAdministrativeDashboard({ role: 'MANAGER' })).toBe(true);
+
+    expect(canSeeAdministrativeDashboard({ email: 'manager@example.test', role: 'MANAGER' })).toBe(false);
+    expect(canSeeAdministrativeDashboard({ email: 'admin@example.test', role: 'ADMINISTRADOR' })).toBe(false);
+    expect(
+      canSeeAdministrativeDashboard({
+        email: 'filipe.daumas@icloud.com',
+        role: 'ADMINISTRADOR',
+      }),
+    ).toBe(true);
   });
 });

@@ -65,7 +65,7 @@ export function canSeeOperationalDashboard(
 export function canSeeAdministrativeDashboard(
   user: DevelopmentModuleVisibilityUser | null | undefined,
 ): boolean {
-  return canSeeOperationalDashboard(user);
+  return isPrimaryAdmin(user);
 }
 
 export function shouldShowRestrictedDevelopmentNavItems(
