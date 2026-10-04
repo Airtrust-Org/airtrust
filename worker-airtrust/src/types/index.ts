@@ -138,6 +138,8 @@ export interface Env {
   // Feature flag for guarded Controle de Voos SIGVOOS shadow compare in staging.
   CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED?: string;
   SIGVOOS_CONFIG_ENCRYPTION_KEY?: string;
+  // HFA integration token encryption. Dedicated key preferred; JWT_SECRET is fallback.
+  HFA_INTEGRATION_ENCRYPTION_KEY?: string;
   SIGVOOS_REAL_API_BASE_URL?: string;
   SIGVOOS_REAL_API_USERNAME?: string;
   SIGVOOS_REAL_API_PASSWORD?: string;
