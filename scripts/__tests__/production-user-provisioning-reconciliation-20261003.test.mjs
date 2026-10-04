@@ -11,7 +11,14 @@ test('user provisioning reconciler keeps PII in an external plan and emits no co
   assert.doesNotMatch(body, /[A-Za-z0-9._%+-]+@voecostadosol\.com\.br/i);
 });
 
-test('dry-run is read-only and apply is exact-plan/exact-candidate/exact-main guarded', () => {
+test('dry-run is structurally read-only and apply is exact-plan/exact-candidate/exact-main guarded', () => {
+  const inspectStart = body.indexOf('function inspectPlan()');
+  const applyGuardStart = body.indexOf('function assertApplyGitState()');
+  assert.ok(inspectStart >= 0 && applyGuardStart > inspectStart);
+  const inspectBody = body.slice(inspectStart, applyGuardStart);
+  assert.doesNotMatch(inspectBody, /runWrangler\s*\(/);
+  assert.doesNotMatch(inspectBody, /auditSql\s*\(/);
+  assert.doesNotMatch(inspectBody, /\b(?:INSERT|UPDATE|DELETE)\s+(?:INTO|FROM|[A-Za-z_])/i);
   assert.match(body, /AIRTRUST_PRODUCTION_DRYRUN_USER_PROVISIONING_20261003/);
   assert.match(body, /AIRTRUST_PRODUCTION_APPLY_USER_PROVISIONING_20261003/);
   assert.match(body, /EXPECTED_SHA_REQUIRED/);
@@ -43,7 +50,13 @@ test('reconciliation preserves existing authority and creates missing users from
   assert.match(body, /NOT EXISTS \(SELECT 1 FROM usuarios u WHERE u\.funcionario_id=f\.id OR LOWER\(TRIM\(u\.email\)\)=/);
 });
 
-test('GESTOR provisioning requires and reconciles all active operational sectors', () => {
+test('GESTOR provisioning requires and reconciles all active operational sectors only in applyAction', () => {
+  const applyStart = body.indexOf('function applyAction(action, state)');
+  const executionStart = body.indexOf('const before = inspectPlan();');
+  assert.ok(applyStart >= 0 && executionStart > applyStart);
+  const applyBody = body.slice(applyStart, executionStart);
+  assert.match(applyBody, /if \(action\.type === 'manager-sector'\)/);
+  assert.match(applyBody, /INSERT INTO setores_gestores/);
   assert.match(body, /PLAN_GESTOR_ALL_SECTORS_REQUIRED_/);
   assert.match(body, /PLAN_ALL_SECTORS_REQUIRES_GESTOR_/);
   assert.match(body, /GESTOR_MEMBERSHIP_ROLE_MISMATCH_/);

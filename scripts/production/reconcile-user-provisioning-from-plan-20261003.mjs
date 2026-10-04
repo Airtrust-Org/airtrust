@@ -312,33 +312,7 @@ function inspectPlan() {
 
   const signatures = actions.map((action) => {
     if (action.type === 'employee-email') return `employee-email:${action.employeeId}:${action.email}`;
-    if (action.type === 'manager-sector') {
-    runWrangler(
-      `INSERT INTO setores_gestores
-          (setor_id,gestor_id,usuario_id,empresa_id,role,ativo,created_at,updated_at,deleted_at)
-       SELECT s.id,NULL,u.id,${EMPRESA_ID},'manager',1,datetime('now'),datetime('now'),NULL
-         FROM setores s
-         JOIN usuarios u ON u.funcionario_id=${action.employeeId} AND u.deleted_at IS NULL
-         JOIN usuarios_empresas ue ON ue.usuario_id=u.id AND ue.empresa_id=${EMPRESA_ID} AND LOWER(TRIM(ue.role))='manager'
-        WHERE s.id=${action.sectorId}
-          AND s.empresa_id=${EMPRESA_ID}
-          AND s.ativo=1
-          AND s.deleted_at IS NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM setores_gestores sg
-             WHERE sg.setor_id=s.id
-               AND sg.usuario_id=u.id
-               AND sg.empresa_id=${EMPRESA_ID}
-               AND sg.ativo=1
-               AND sg.deleted_at IS NULL
-          );
-       ${auditSql(action.employeeId, 'USER_PROVISION_MANAGER_SECTOR_20261003')}`,
-      `apply_manager_sector_${action.employeeId}_${action.sectorId}`,
-    );
-    return;
-  }
-
-  if (action.type === 'create-user') {
+    if (action.type === 'create-user') {
       return `create-user:${action.employeeId}:${action.email}:${action.profile}:${action.role}`;
     }
     if (action.type === 'manager-sector') return `manager-sector:${action.employeeId}:${action.sectorId}`;
@@ -410,6 +384,32 @@ function applyAction(action, state) {
           AND deleted_at IS NULL;
        ${auditSql(action.employeeId, 'USER_PROVISION_RELINK_20261003')}`,
       `apply_relink_${action.employeeId}`,
+    );
+    return;
+  }
+
+  if (action.type === 'manager-sector') {
+    runWrangler(
+      `INSERT INTO setores_gestores
+          (setor_id,gestor_id,usuario_id,empresa_id,role,ativo,created_at,updated_at,deleted_at)
+       SELECT s.id,NULL,u.id,${EMPRESA_ID},'manager',1,datetime('now'),datetime('now'),NULL
+         FROM setores s
+         JOIN usuarios u ON u.funcionario_id=${action.employeeId} AND u.deleted_at IS NULL
+         JOIN usuarios_empresas ue ON ue.usuario_id=u.id AND ue.empresa_id=${EMPRESA_ID} AND LOWER(TRIM(ue.role))='manager'
+        WHERE s.id=${action.sectorId}
+          AND s.empresa_id=${EMPRESA_ID}
+          AND s.ativo=1
+          AND s.deleted_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM setores_gestores sg
+             WHERE sg.setor_id=s.id
+               AND sg.usuario_id=u.id
+               AND sg.empresa_id=${EMPRESA_ID}
+               AND sg.ativo=1
+               AND sg.deleted_at IS NULL
+          );
+       ${auditSql(action.employeeId, 'USER_PROVISION_MANAGER_SECTOR_20261003')}`,
+      `apply_manager_sector_${action.employeeId}_${action.sectorId}`,
     );
     return;
   }
