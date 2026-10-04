@@ -36,6 +36,7 @@ test('reconciliation preserves existing authority and only creates missing ALUNO
   assert.match(body, /INSERT INTO usuarios \(email,password_hash,nome,perfil,funcionario_id,active,created_at,updated_at\)/);
   assert.match(body, /'ALUNO'/);
   assert.match(body, /INSERT INTO usuarios_empresas/);
+  assert.match(body, /SELECT u\.id,\$\{EMPRESA_ID\},1,'student',datetime\('now'\)/);
   assert.match(body, /INSERT OR IGNORE INTO usuarios_empresas_perfis/);
   assert.match(body, /NOT EXISTS \(SELECT 1 FROM usuarios u WHERE u\.funcionario_id=f\.id OR LOWER\(TRIM\(u\.email\)\)=/);
 });

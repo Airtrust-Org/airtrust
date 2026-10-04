@@ -343,7 +343,7 @@ function applyAction(action, state) {
           AND f.deleted_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM usuarios u WHERE u.funcionario_id=f.id OR LOWER(TRIM(u.email))=${sqlText(action.email)});
        INSERT INTO usuarios_empresas (usuario_id,empresa_id,is_primary,role,created_at)
-       SELECT u.id,${EMPRESA_ID},1,'ALUNO',datetime('now')
+       SELECT u.id,${EMPRESA_ID},1,'student',datetime('now')
          FROM usuarios u
         WHERE u.funcionario_id=${action.employeeId}
           AND LOWER(TRIM(u.email))=${sqlText(action.email)}
