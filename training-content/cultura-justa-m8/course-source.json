@@ -1,0 +1,298 @@
+{
+  "schema": "AIRTRUST_TRAINING_MODEL_M8",
+  "courseId": "JUST_CULTURE",
+  "packageVersion": "2026.10-rc1",
+  "title": "Cultura Justa",
+  "subtitle": "Reporte, aprendizado, erros e violações",
+  "language": "pt-BR",
+  "source": {
+    "document": "PRC-SSO-008 - Cultura Justa - Rev05",
+    "code": "PRC-SSO-008",
+    "revision": "05",
+    "date": "2026-02-25",
+    "scope": "Costa do Sol Táxi Aéreo",
+    "note": "Conteúdo pedagógico derivado exclusivamente do procedimento controlado; nenhuma afirmação normativa externa foi acrescentada."
+  },
+  "navigationGate": "module-assessment",
+  "masteryScore": 70,
+  "auditClosure": {
+    "version": "M8-FINAL-100-AUDIT",
+    "typographyMinPx": 20,
+    "semanticVisualCoverage": "real-aviation-safety-media-per-topic",
+    "moduleGate": true,
+    "certifyingScoreChanged": false,
+    "storageScope": "course+enrollment+active-cycle"
+  },
+  "mediaAssets": [
+    {
+      "id": "maintenance",
+      "path": "assets/helicopter-maintenance.jpg",
+      "commonsTitle": "Helicopter Maintenance (8325359).jpg",
+      "alt": "Profissional de manutenção trabalhando em helicóptero em hangar",
+      "license": "Public domain — U.S. Navy official duty"
+    },
+    {
+      "id": "safety-brief",
+      "path": "assets/safety-brief.jpg",
+      "commonsTitle": "US Navy 110706-N-QL471-084 Senior Chief Aviation Boatswain's Mate (Handling) Martin Jimenez gives Sailors a safety briefing before flight deck safe.jpg",
+      "alt": "Equipe reunida para briefing de segurança antes da atividade operacional",
+      "license": "Public domain — U.S. Navy official duty"
+    },
+    {
+      "id": "maintenance-team",
+      "path": "assets/maintenance-team.jpg",
+      "commonsTitle": "HSC-26 aviation maintenance 150806-N-TB410-146.jpg",
+      "alt": "Equipe de manutenção aeronáutica trabalhando em conjunto",
+      "license": "Public domain — U.S. Navy official duty"
+    },
+    {
+      "id": "flight-operations",
+      "path": "assets/helicopter-operations.jpg",
+      "commonsTitle": "Frank E Petersen Jr Conducts Helicopter Operations (9884687).jpg",
+      "alt": "Equipe conduzindo operação com helicóptero em ambiente operacional",
+      "license": "Public domain — U.S. Navy official duty"
+    },
+    {
+      "id": "maintenance-deck",
+      "path": "assets/helicopter-maintenance-deck.jpg",
+      "commonsTitle": "USS Princeton Conducts Helicopter Maintenance (9844082).jpg",
+      "alt": "Equipe executando manutenção de helicóptero em área operacional",
+      "license": "Public domain — U.S. Navy official duty"
+    }
+  ],
+  "slides": [
+    {
+      "id": "s001",
+      "kind": "concept_map",
+      "title": "Cultura Justa na Costa do Sol",
+      "eyebrow": "Objetivo e aplicação",
+      "body": [
+        "A Cultura Justa busca diferenciar erros e violações para orientar responsabilidades e intervenções adequadas.",
+        "O procedimento é aplicável a todas as pessoas da empresa, em todas as bases."
+      ],
+      "media": [{ "src": "assets/safety-brief.jpg", "alt": "Equipe reunida em briefing de segurança" }]
+    },
+    {
+      "id": "s002",
+      "kind": "concept_map",
+      "title": "Aprender com o erro sem normalizar a violação",
+      "body": [
+        "Pessoas podem errar independentemente de capacidade e experiência; por isso a organização deve reduzir oportunidades de erro e aprender com os eventos.",
+        "Erros e omissões não intencionais devem ser encorajados ao reporte e não tratados como punição automática.",
+        "Negligências, violações intencionais e atos destrutivos não são tolerados."
+      ],
+      "media": [{ "src": "assets/helicopter-maintenance.jpg", "alt": "Profissional realizando manutenção em helicóptero" }]
+    },
+    {
+      "id": "s003",
+      "kind": "concept_map",
+      "title": "Princípios da Cultura Justa",
+      "body": [
+        "Liberdade para expressão de incidentes, acidentes e preocupações de segurança.",
+        "Reconhecimento voluntário de erros e falhas para permitir prevenção eficaz.",
+        "Reporte imediato de acontecimentos que coloquem em risco a segurança dos voos.",
+        "Confidencialidade na análise e proteção da fonte.",
+        "Sanção quando houver rompimento deliberado ou repetido das regras de segurança ou omissão de incidente manifestamente significativo.",
+        "Treinamento adicional deve ser entendido como instrumento de melhoria, não como punição."
+      ],
+      "media": [{ "src": "assets/safety-brief.jpg", "alt": "Briefing operacional com foco em segurança" }]
+    },
+    {
+      "id": "s004",
+      "kind": "concept_map",
+      "title": "Sistema de reportes",
+      "body": [
+        "O procedimento apresenta o RELPREV e o Programa Confidencial de Reporte Voluntário como meios de reporte de segurança.",
+        "O reporte é voluntário e orientado à prevenção; pode comunicar perigos, erros e violações.",
+        "O nome do relator não deve ser divulgado no reporte e as informações devem servir à segurança operacional."
+      ],
+      "media": [{ "src": "assets/helicopter-operations.jpg", "alt": "Operação de helicóptero em ambiente operacional" }]
+    },
+    {
+      "id": "s005",
+      "kind": "concept_map",
+      "title": "Erro: comportamento não intencional",
+      "body": [
+        "O erro humano é não intencional e normalmente ligado ao processo cognitivo.",
+        "Pode ocorrer como deslize, lapso de memória ou engano.",
+        "A resposta organizacional é fortalecer as defesas: treinamento, recursos tecnológicos e procedimentos."
+      ],
+      "media": [{ "src": "assets/helicopter-maintenance-deck.jpg", "alt": "Manutenção de helicóptero sendo executada em equipe" }]
+    },
+    {
+      "id": "s006",
+      "kind": "concept_map",
+      "title": "Violação: desvio consciente",
+      "body": [
+        "A violação envolve decisão consciente de desconsiderar uma regra ou aumentar injustificadamente o risco.",
+        "A identificação de uma violação pressupõe a existência de um padrão conhecido, escrito ou costumeiro, intencionalmente desconsiderado.",
+        "Violações exigem gerenciamento e avaliação do risco assumido."
+      ],
+      "media": [{ "src": "assets/maintenance-team.jpg", "alt": "Equipe de manutenção aeronáutica em atividade" }]
+    },
+    {
+      "id": "s007",
+      "kind": "concept_map",
+      "title": "Tipos de violação previstos no procedimento",
+      "body": [
+        "O procedimento classifica violações como excepcionais, situacionais, imprudência, negligência, imperícia e sabotagem.",
+        "A classificação ajuda a entender contexto, intenção, capacidade técnica e risco, evitando tratar situações diferentes como se fossem iguais."
+      ],
+      "media": [{ "src": "assets/helicopter-operations.jpg", "alt": "Equipe em operação com helicóptero" }]
+    },
+    {
+      "id": "s008",
+      "kind": "concept_map",
+      "title": "Quando pode haver responsabilização",
+      "body": [
+        "O sistema de reportes se baseia na não punibilidade, mas há comportamentos que ultrapassam níveis aceitáveis de prudência e razoabilidade.",
+        "O procedimento prevê responsabilização para violações intencionais e para condutas caracterizadas como imperícia, imprudência, negligência ou sabotagem."
+      ],
+      "media": [{ "src": "assets/safety-brief.jpg", "alt": "Equipe discutindo segurança antes da operação" }]
+    },
+    {
+      "id": "s009",
+      "kind": "scenario",
+      "title": "Cenário: erro reconhecido e reportado",
+      "requiredDecision": true,
+      "body": [
+        "Durante uma tarefa, um profissional percebe que executou inadvertidamente uma etapa diferente do procedimento. Ele interrompe a atividade, informa o ocorrido e relata o risco."
+      ],
+      "question": "Qual resposta é mais coerente com a Cultura Justa descrita no procedimento?",
+      "choices": [
+        "Tratar o reporte voluntário como oportunidade de aprendizado e reforçar as defesas necessárias.",
+        "Ocultar o evento porque não houve consequência.",
+        "Aplicar punição automática, independentemente de intenção ou contexto."
+      ],
+      "correctIndex": 0,
+      "feedback": {
+        "correct": "Correto. O erro não intencional reportado deve alimentar aprendizado e prevenção.",
+        "incorrect": "Reveja a diferença entre erro não intencional, reporte voluntário e violação deliberada."
+      },
+      "media": [{ "src": "assets/helicopter-maintenance.jpg", "alt": "Profissional realizando manutenção de helicóptero" }]
+    },
+    {
+      "id": "s010",
+      "kind": "scenario",
+      "title": "Cenário: atalho deliberado e repetido",
+      "requiredDecision": true,
+      "body": [
+        "Uma regra de segurança é conhecida pela equipe. Mesmo assim, uma pessoa decide ignorá-la repetidamente para ganhar tempo, aumentando o risco sem justificativa."
+      ],
+      "question": "Como o procedimento orienta classificar essa situação?",
+      "choices": [
+        "Como uma violação deliberada que exige gerenciamento e pode gerar responsabilização.",
+        "Como simples erro de memória sem necessidade de avaliação.",
+        "Como comportamento protegido automaticamente pela não punibilidade."
+      ],
+      "correctIndex": 0,
+      "feedback": {
+        "correct": "Correto. Desvio consciente e repetido de regra de segurança caracteriza violação no contexto apresentado.",
+        "incorrect": "A não punibilidade de erros não elimina a responsabilização por violações deliberadas."
+      },
+      "media": [{ "src": "assets/maintenance-team.jpg", "alt": "Equipe de manutenção aeronáutica trabalhando em conjunto" }]
+    },
+    {
+      "id": "s011",
+      "kind": "concept_map",
+      "title": "Responsabilidades que sustentam a cultura",
+      "body": [
+        "A liderança deve incentivar reportes, divulgar a Política de Reporte Voluntário e apoiar as decisões de segurança.",
+        "Gestores orientam as equipes e difundem a política.",
+        "A Gestão de Segurança Operacional deve promover treinamento periódico e apresentar o procedimento aos novos funcionários."
+      ],
+      "media": [{ "src": "assets/safety-brief.jpg", "alt": "Liderança conduzindo briefing de segurança" }]
+    },
+    {
+      "id": "s012",
+      "kind": "concept_map",
+      "title": "Cultura de segurança precisa ser acompanhada",
+      "body": [
+        "O procedimento prevê pesquisa anual de Segurança Operacional para avaliar Cultura de Segurança e clima organizacional.",
+        "Entre os temas observados estão reportes de prevenção, uso de EPI, STOP WORK, comunicações da GSO e participação das lideranças.",
+        "Após o treinamento, a avaliação exige nota mínima 7,0; abaixo disso, o treinamento e a prova devem ser refeitos."
+      ],
+      "media": [{ "src": "assets/helicopter-operations.jpg", "alt": "Operação de helicóptero com equipe em área operacional" }]
+    },
+    {
+      "id": "q001",
+      "kind": "assessment",
+      "title": "Avaliação 1 de 6",
+      "question": "Qual alternativa descreve melhor um erro segundo o procedimento de Cultura Justa?",
+      "choices": [
+        "Comportamento não intencional que pode ocorrer como deslize, lapso ou engano.",
+        "Descumprimento consciente de uma regra para aceitar maior risco.",
+        "Ação de sabotagem executada de forma deliberada."
+      ],
+      "correctIndex": 0,
+      "feedback": { "correct": "Correto.", "incorrect": "Erro é não intencional; reveja a distinção entre erro e violação." },
+      "media": [{ "src": "assets/helicopter-maintenance-deck.jpg", "alt": "Manutenção aeronáutica em ambiente operacional" }]
+    },
+    {
+      "id": "q002",
+      "kind": "assessment",
+      "title": "Avaliação 2 de 6",
+      "question": "O que caracteriza uma violação no procedimento?",
+      "choices": [
+        "Desvio consciente de uma regra ou aumento injustificado do risco.",
+        "Qualquer falha humana, mesmo involuntária.",
+        "Somente eventos que resultam em acidente."
+      ],
+      "correctIndex": 0,
+      "feedback": { "correct": "Correto.", "incorrect": "A violação envolve consciência do desvio; nem todo erro é violação." },
+      "media": [{ "src": "assets/maintenance-team.jpg", "alt": "Equipe de manutenção trabalhando em conjunto" }]
+    },
+    {
+      "id": "q003",
+      "kind": "assessment",
+      "title": "Avaliação 3 de 6",
+      "question": "Qual é a finalidade principal de um sistema de reporte voluntário no contexto do procedimento?",
+      "choices": [
+        "Contribuir para prevenção e aprendizado com informações de segurança.",
+        "Substituir todos os processos formais de investigação.",
+        "Produzir automaticamente uma sanção disciplinar."
+      ],
+      "correctIndex": 0,
+      "feedback": { "correct": "Correto.", "incorrect": "O reporte voluntário é orientado à prevenção e à segurança operacional." },
+      "media": [{ "src": "assets/helicopter-operations.jpg", "alt": "Operação de helicóptero em ambiente operacional" }]
+    },
+    {
+      "id": "q004",
+      "kind": "assessment",
+      "title": "Avaliação 4 de 6",
+      "question": "Como deve ser entendido um treinamento adicional após a identificação de erro ou lacuna?",
+      "choices": [
+        "Como prática normal de melhoria, e não como punição em si.",
+        "Como penalidade obrigatória em qualquer situação.",
+        "Como medida sem relação com prevenção."
+      ],
+      "correctIndex": 0,
+      "feedback": { "correct": "Correto.", "incorrect": "O procedimento trata treinamento adicional como instrumento normal de melhoria." },
+      "media": [{ "src": "assets/safety-brief.jpg", "alt": "Equipe reunida em briefing de segurança" }]
+    },
+    {
+      "id": "q005",
+      "kind": "assessment",
+      "title": "Avaliação 5 de 6",
+      "question": "Qual situação pode ser passível de responsabilização segundo o procedimento?",
+      "choices": [
+        "Violação intencional, imprudência, negligência, imperícia ou sabotagem.",
+        "Todo erro não intencional reportado imediatamente.",
+        "Qualquer dúvida apresentada à liderança."
+      ],
+      "correctIndex": 0,
+      "feedback": { "correct": "Correto.", "incorrect": "Reveja os casos que ultrapassam níveis aceitáveis de prudência e razoabilidade." },
+      "media": [{ "src": "assets/helicopter-maintenance.jpg", "alt": "Profissional em manutenção de helicóptero" }]
+    },
+    {
+      "id": "q006",
+      "kind": "assessment",
+      "title": "Avaliação 6 de 6",
+      "question": "Qual nota mínima é prevista pelo PRC-SSO-008 Rev.05 na avaliação do treinamento?",
+      "choices": ["7,0", "5,0", "10,0 sem possibilidade de nova tentativa"],
+      "correctIndex": 0,
+      "feedback": { "correct": "Correto. A nota mínima é 7,0.", "incorrect": "A fonte controlada estabelece nota mínima 7,0 e refazimento quando abaixo disso." },
+      "media": [{ "src": "assets/helicopter-maintenance-deck.jpg", "alt": "Equipe executando manutenção de helicóptero" }]
+    }
+  ]
+}
