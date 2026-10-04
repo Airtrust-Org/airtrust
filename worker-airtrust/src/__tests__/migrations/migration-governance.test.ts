@@ -131,7 +131,8 @@ describe('migration governance', () => {
     // 0525 normalizes the governed tenant-6 organizational structure; 0526 aligns the reviewed training matrix.
     // 0527 bootstraps a missing tenant-6 LOFT model without rewriting the reviewed 0526 change.
     // 0528 separates sector Compliance alert responsibility from operational sector access.
-    const expectedLatest = 528;
+    // 0530 adds the governed placeholder qualification models for planned EAD packages.
+    const expectedLatest = 530;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
