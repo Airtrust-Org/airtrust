@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-04",
-    "last_reconciled_against": "0530 planned EAD qualification catalog classified; 0526/0527/0528/0530 governed states preserved; 0529 remains on its independent HFA PR",
-    "schema_v2_digest": "02258de66fa44208609ea93775bb3137aca6df5c4710337bed81d9d2adf3275d",
+    "last_reconciled_against": "0531 NR-20 modality forward repair classified; 0526/0527/0528/0530 governed states preserved; 0529 remains on its independent HFA PR",
+    "schema_v2_digest": "89fb11ad8e033775ade787ed5d2e040bb25939a9cbb76d1a950b16173719c417",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1295,6 +1295,18 @@
       "reviewed_manifest": "training-qualification-catalog-placeholders-0530.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-qualification-catalog-placeholders-0530.md",
       "note": "0530 is a tenant-6 data-only catalog change that creates five canonical qualification models for future EAD packages. It creates no LMS course, enrollment, compliance requirement or qualification history, invents no validity/duration, and is idempotent. Remote apply requires the governed Schema V2 workflow, staging validation, recovery point and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0531_training_compliance_nr20_modality_repair.sql",
+      "change_id": "training-compliance-nr20-modality-repair-0531",
+      "sha256": "385fd0a8a532966813030cd946410d3c0837da25eabf7dfcf8d430f8c2fc4529",
+      "targets": [],
+      "domain": "training compliance / forward repair of reviewed NR-20 HIBRIDO modality",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-nr20-modality-repair-0531.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-nr20-modality-repair-0531.md",
+      "note": "0531 is a tenant-6 data-only forward repair for the reviewed 0526 NR-20 HIBRIDO requirement modality after production post-validation run 37231357958 exposed four preserved active requirements with null modality. It preserves those requirement ids, changes no audience, DDL, LMS data, qualification history or designation, and reruns the full 0526 postcondition suite after repair. Production apply requires the governed Schema V2 workflow, recovery point, staging validation and new exact-SHA production authorization."
     }
   ]
 }
