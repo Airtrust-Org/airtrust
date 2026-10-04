@@ -7,8 +7,14 @@ export const COMPLETE_QUALIFICATION_HISTORY_STATUSES = [
   'CANCELADA',
 ] as const;
 
+export const DEFAULT_QUALIFICATION_HISTORY_STATUSES = [
+  'VALIDA',
+  'VENCIDA',
+  'VENCENDO_30',
+] as const;
+
 export function createDefaultQualificationHistoryStatusSet(): Set<string> {
-  return new Set(COMPLETE_QUALIFICATION_HISTORY_STATUSES);
+  return new Set(DEFAULT_QUALIFICATION_HISTORY_STATUSES);
 }
 
 export function normalizeQualificationHistoryStatuses(values?: readonly string[]): string[] {
