@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-02",
-    "last_reconciled_against": "0527 LOFT prerequisite bootstrap reconciled with 0528 sector Compliance responsibles; 0526/0527/0528 remote apply pending",
-    "schema_v2_digest": "8012067e1c33f9a2deb08a68081cbebc8607c984d4e273edc383599f46ca3bfd",
+    "last_reconciled_at": "2026-10-04",
+    "last_reconciled_against": "0530 planned EAD qualification catalog classified; 0526/0527/0528/0530 governed states preserved; 0529 remains on its independent HFA PR",
+    "schema_v2_digest": "142b4aad055367330c5a979f61074d602927ff0ed02c586a12032b5111fd0329",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1283,6 +1283,18 @@
       "reviewed_manifest": "setor-compliance-responsibles-0528.json",
       "evidence": "worker-airtrust/schema-v2/plans/setor-compliance-responsibles-0528.md",
       "note": "0528 is an additive tenant-scoped responsibility registry. It separates Training Compliance alert recipients from operational setor access, enforces cross-tenant guards, rewrites no existing RBAC/user/training data, and preserves legacy recipients only as a runtime fallback until each sector is explicitly configured. Remote apply requires staging validation, a recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0530_training_qualification_catalog_placeholders.sql",
+      "change_id": "training-qualification-catalog-placeholders-0530",
+      "sha256": "39be87dc37afb9200192a88035d3378f7c7ccf16c55082be8c97042dd049a7e2",
+      "targets": [],
+      "domain": "training compliance / planned EAD qualification catalog models",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-qualification-catalog-placeholders-0530.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-qualification-catalog-placeholders-0530.md",
+      "note": "0530 is a tenant-6 data-only catalog change that creates five canonical qualification models for future EAD packages. It creates no LMS course, enrollment, compliance requirement or qualification history, invents no validity/duration, and is idempotent. Remote apply requires the governed Schema V2 workflow, staging validation, recovery point and exact-SHA production authorization."
     }
   ]
 }
