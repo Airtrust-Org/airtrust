@@ -1,5 +1,5 @@
 // source_reference: PR #1154 plus the operator-reviewed external provisioning plan for Costa do Sol empresa_id=6; PII stays outside Git.
-// operational_decision: reconcile only explicit employee e-mail fills, missing users, reviewed relinks, and GESTOR sector links; preserve existing profiles/passwords and tenant scope.
+// operational_decision: reconcile only explicit employee e-mail fills, missing users, reviewed relinks, and GESTOR sector links; an explicit relink may transfer the employee e-mail from its reviewed inactive source record while preserving the existing user profile/password and tenant scope.
 // dry_run_required: true; production apply is allowed only after the read-only candidate set, plan SHA-256, candidate count, and candidate hash are reviewed and supplied exactly.
 // rollback_plan_required: capture a D1 Time Travel recovery point before the first write; on failed postconditions stop and use the governed recovery path rather than ad hoc compensating SQL.
 
@@ -207,9 +207,8 @@ function inspectPlan() {
     if (Number(employee.ativo) !== 1 || employee.deleted_at != null) fail(`EMPLOYEE_NOT_ACTIVE_${employeeId}`);
 
     const currentEmployeeEmail = normalizeEmail(employee.email);
-    if (!currentEmployeeEmail) {
-      actions.push({ type: 'employee-email', employeeId, email });
-    } else if (currentEmployeeEmail !== email) {
+    const needsEmployeeEmail = !currentEmployeeEmail;
+    if (currentEmployeeEmail && currentEmployeeEmail !== email) {
       fail(`EMPLOYEE_EMAIL_CONFLICT_${employeeId}`);
     }
 
@@ -258,7 +257,6 @@ function inspectPlan() {
           if (Number(oldEmployee.empresa_id) !== EMPRESA_ID) fail(`RELINK_CROSS_TENANT_${employeeId}`);
           if (Number(oldEmployee.ativo) === 1 && oldEmployee.deleted_at == null) fail(`RELINK_OLD_EMPLOYEE_ACTIVE_${employeeId}`);
           relink = { userId: Number(user.id), fromEmployeeId: expectedOldEmployeeId };
-          actions.push({ type: 'relink-user', employeeId, userId: relink.userId, fromEmployeeId: relink.fromEmployeeId });
         }
       } else {
         const deletedEmailUsers = emailUsers.filter((row) => row.deleted_at != null);
@@ -280,6 +278,48 @@ function inspectPlan() {
     } else if (relink) {
       membership = activeMembership(relink.userId);
       if (!membership) fail(`RELINK_USER_MEMBERSHIP_MISSING_${employeeId}`);
+    }
+
+    let relinkBundledWithEmailTransfer = false;
+    if (needsEmployeeEmail) {
+      const conflictingEmployees = select(
+        `SELECT id, ativo, deleted_at
+           FROM funcionarios
+          WHERE empresa_id=${EMPRESA_ID}
+            AND id<>${employeeId}
+            AND deleted_at IS NULL
+            AND LOWER(TRIM(email))=${sqlText(email)}
+          ORDER BY id`,
+        `employee_email_conflicts_${employeeId}`,
+      );
+      if (conflictingEmployees.length === 0) {
+        actions.push({ type: 'employee-email', employeeId, email });
+      } else if (
+        relink &&
+        conflictingEmployees.length === 1 &&
+        Number(conflictingEmployees[0].id) === relink.fromEmployeeId &&
+        Number(conflictingEmployees[0].ativo) !== 1
+      ) {
+        actions.push({
+          type: 'employee-email-transfer',
+          employeeId,
+          email,
+          userId: relink.userId,
+          fromEmployeeId: relink.fromEmployeeId,
+        });
+        relinkBundledWithEmailTransfer = true;
+      } else {
+        fail(`EMPLOYEE_EMAIL_OCCUPIED_${employeeId}`);
+      }
+    }
+
+    if (relink && !relinkBundledWithEmailTransfer) {
+      actions.push({
+        type: 'relink-user',
+        employeeId,
+        userId: relink.userId,
+        fromEmployeeId: relink.fromEmployeeId,
+      });
     }
 
     if (allActiveSectors) {
@@ -317,6 +357,9 @@ function inspectPlan() {
 
   const signatures = actions.map((action) => {
     if (action.type === 'employee-email') return `employee-email:${action.employeeId}:${action.email}`;
+    if (action.type === 'employee-email-transfer') {
+      return `employee-email-transfer:${action.userId}:${action.fromEmployeeId}->${action.employeeId}:${action.email}`;
+    }
     if (action.type === 'create-user') {
       return `create-user:${action.employeeId}:${action.email}:${action.profile}:${action.role}`;
     }
@@ -364,6 +407,43 @@ function auditSql(employeeId, action) {
 function applyAction(action, state) {
   const item = state.resolved.find((row) => row.employeeId === action.employeeId);
   if (!item) fail(`RESOLVED_ITEM_MISSING_${action.employeeId}`);
+
+  if (action.type === 'employee-email-transfer') {
+    runWrangler(
+      `UPDATE funcionarios
+          SET email=NULL, updated_at=datetime('now')
+        WHERE id=${action.fromEmployeeId}
+          AND empresa_id=${EMPRESA_ID}
+          AND deleted_at IS NULL
+          AND ativo<>1
+          AND LOWER(TRIM(email))=${sqlText(action.email)}
+          AND EXISTS (
+            SELECT 1 FROM usuarios u
+             WHERE u.id=${action.userId}
+               AND u.funcionario_id=${action.fromEmployeeId}
+               AND u.deleted_at IS NULL
+               AND LOWER(TRIM(u.email))=${sqlText(action.email)}
+          );
+       ${auditSql(action.fromEmployeeId, 'USER_PROVISION_EMPLOYEE_EMAIL_RELEASE_20261003')}
+       UPDATE funcionarios
+          SET email=${sqlText(action.email)}, updated_at=datetime('now')
+        WHERE id=${action.employeeId}
+          AND empresa_id=${EMPRESA_ID}
+          AND deleted_at IS NULL
+          AND ativo=1
+          AND (email IS NULL OR TRIM(email)='');
+       ${auditSql(action.employeeId, 'USER_PROVISION_EMPLOYEE_EMAIL_20261003')}
+       UPDATE usuarios
+          SET funcionario_id=${action.employeeId}, updated_at=datetime('now')
+        WHERE id=${action.userId}
+          AND funcionario_id=${action.fromEmployeeId}
+          AND deleted_at IS NULL
+          AND LOWER(TRIM(email))=${sqlText(action.email)};
+       ${auditSql(action.employeeId, 'USER_PROVISION_RELINK_20261003')}`,
+      `apply_email_transfer_relink_${action.employeeId}`,
+    );
+    return;
+  }
 
   if (action.type === 'employee-email') {
     runWrangler(
@@ -454,7 +534,7 @@ function applyAction(action, state) {
 
 const before = inspectPlan();
 const actionCounts = Object.fromEntries(
-  ['employee-email', 'create-user', 'relink-user', 'manager-sector'].map((type) => [
+  ['employee-email', 'employee-email-transfer', 'create-user', 'relink-user', 'manager-sector'].map((type) => [
     type,
     before.actions.filter((action) => action.type === type).length,
   ]),
@@ -496,6 +576,7 @@ if (before.actions.some((entry) => entry.type === 'create-user')) {
 }
 const recoveryPoint = captureRecoveryPoint();
 
+for (const action of before.actions.filter((entry) => entry.type === 'employee-email-transfer')) applyAction(action, before);
 for (const action of before.actions.filter((entry) => entry.type === 'employee-email')) applyAction(action, before);
 for (const action of before.actions.filter((entry) => entry.type === 'relink-user')) applyAction(action, before);
 for (const action of before.actions.filter((entry) => entry.type === 'create-user')) applyAction(action, before);
