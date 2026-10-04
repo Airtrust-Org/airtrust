@@ -1,3 +1,8 @@
+// source_reference: PR #1154 plus the operator-reviewed external provisioning plan for Costa do Sol empresa_id=6; PII stays outside Git.
+// operational_decision: reconcile only explicit employee e-mail fills, missing users, reviewed relinks, and GESTOR sector links; preserve existing profiles/passwords and tenant scope.
+// dry_run_required: true; production apply is allowed only after the read-only candidate set, plan SHA-256, candidate count, and candidate hash are reviewed and supplied exactly.
+// rollback_plan_required: capture a D1 Time Travel recovery point before the first write; on failed postconditions stop and use the governed recovery path rather than ad hoc compensating SQL.
+
 // Governed Costa do Sol user provisioning/reconciliation from an external plan.
 // The plan is intentionally kept outside Git because it contains employee identifiers/email PII.
 // Dry-run is read-only. Apply is locked to exact plan SHA, candidate count/hash and exact clean main SHA.

@@ -1,3 +1,8 @@
+// source_reference: PR #1154 and scripts/production/reconcile-user-provisioning-from-plan-20261003.mjs.
+// operational_decision: test the governed provisioning contract without embedding the external identity plan or production PII.
+// dry_run_required: true; tests enforce that inspectPlan() remains structurally read-only.
+// rollback_plan_required: production writes are permitted only after the executor captures the governed D1 Time Travel recovery point.
+
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
