@@ -5,11 +5,13 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import bcrypt from 'bcryptjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WORKER_DIR = resolve(REPO_ROOT, 'worker-airtrust');
+const requireFromWorker = createRequire(new URL('../../worker-airtrust/package.json', import.meta.url));
+const bcrypt = requireFromWorker('bcryptjs');
 const DB_NAME = 'airtrust-db';
 const EMPRESA_ID = 6;
 const CORPORATE_DOMAIN = 'voecostadosol.com.br';
