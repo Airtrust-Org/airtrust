@@ -2,7 +2,7 @@
   "changeId": "training-qualification-catalog-placeholders-0530",
   "baselineId": "production-d1-baseline-v2-20260714",
   "filePath": "worker-airtrust/schema-v2/changes/0530_training_qualification_catalog_placeholders.sql",
-  "fileHash": "39be87dc37afb9200192a88035d3378f7c7ccf16c55082be8c97042dd049a7e2",
+  "fileHash": "20c203e9e7976ca4b1376ee44c3a6a81328a11fe6a6c585ecca1f0ba61679d9b",
   "planPath": "worker-airtrust/schema-v2/plans/training-qualification-catalog-placeholders-0530.md",
   "planHash": "c5674828b068c5d9de855e2d1ed0b9ccb6b722231810f66b1dbe598a6e014cdd"
 }

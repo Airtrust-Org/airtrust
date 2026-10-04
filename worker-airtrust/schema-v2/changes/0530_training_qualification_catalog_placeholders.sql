@@ -7,25 +7,22 @@
 -- rollback_plan_required: worker-airtrust/schema-v2/plans/training-qualification-catalog-placeholders-0530.md
 
 -- Guard: tenant and canonical EAD category must already exist.
-CREATE TEMP TABLE qualification_catalog_0530_guard (
-  ok INTEGER NOT NULL CHECK (ok = 1)
+-- The SELECT emits zero rows when the precondition is valid. If it is invalid, the
+-- intentional NULL for the NOT NULL `codigo` column aborts the statement and the
+-- migration fails closed without introducing a temporary-table exception.
+INSERT INTO qualificacoes_tipos (empresa_id,codigo,nome,ativo,is_check,created_at,updated_at)
+SELECT 6,NULL,'0530 precondition guard',1,0,datetime('now'),datetime('now')
+WHERE NOT (
+  EXISTS (SELECT 1 FROM empresas WHERE id = 6)
+  AND (
+    SELECT COUNT(*)
+      FROM qualificacoes_categorias
+     WHERE empresa_id = 6
+       AND ativo = 1
+       AND deleted_at IS NULL
+       AND UPPER(TRIM(codigo)) = 'EAD'
+  ) = 1
 );
-
-INSERT INTO qualification_catalog_0530_guard(ok)
-SELECT CASE
-  WHEN EXISTS (SELECT 1 FROM empresas WHERE id = 6)
-   AND (
-     SELECT COUNT(*)
-       FROM qualificacoes_categorias
-      WHERE empresa_id = 6
-        AND ativo = 1
-        AND deleted_at IS NULL
-        AND UPPER(TRIM(codigo)) = 'EAD'
-   ) = 1
-  THEN 1 ELSE 0
-END;
-
-DROP TABLE qualification_catalog_0530_guard;
 
 -- Five future-EAD qualification models. No validity is invented at this stage.
 -- No treinamento_requisitos, lms_cursos, lms_matriculas or historico rows are created.
