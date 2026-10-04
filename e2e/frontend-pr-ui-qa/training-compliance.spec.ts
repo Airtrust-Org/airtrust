@@ -48,7 +48,9 @@ test('training compliance intelligent staging flow is live and read-only', async
   await expect(page.getByRole('combobox', { name: 'Filtrar por função' })).toContainText(
     'Todas as funções',
   );
-  await expect(page.getByRole('heading', { name: 'Situação dos requisitos' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Situação das obrigações individuais' }),
+  ).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Central de pendências' })).toBeVisible();
 
   const [capabilities, catalogs, summary, pendings] = await Promise.all([
