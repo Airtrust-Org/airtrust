@@ -87,7 +87,7 @@ test('workflow is production read-only, SHA-pinned and online-triggerable', () =
   assert.match(workflow, /environment: production/);
   assert.match(workflow, /verify-release-gates\.mjs/);
   assert.match(workflow, /https:\/\/api\.airtrust\.online\/api\/version/);
-  assert.match(workflow, /production-lms-catalog-readonly-inventory\.mjs/);
+  assert.match(workflow, /scripts\/production\/lms-catalog-readonly-inventory\.mjs/);
   assert.match(script, /assertAllowedProductionBaseUrl/);
   assert.match(script, /TARGET_COMPANY_ID \|\| 6/);
   assert.match(script, /LMS_WRITE_BLOCKED/);
