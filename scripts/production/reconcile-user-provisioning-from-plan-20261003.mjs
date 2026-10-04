@@ -11,7 +11,6 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WORKER_DIR = resolve(REPO_ROOT, 'worker-airtrust');
 const requireFromWorker = createRequire(new URL('../../worker-airtrust/package.json', import.meta.url));
-const bcrypt = requireFromWorker('bcryptjs');
 const DB_NAME = 'airtrust-db';
 const EMPRESA_ID = 6;
 const CORPORATE_DOMAIN = 'voecostadosol.com.br';
@@ -332,6 +331,7 @@ function applyAction(action, state) {
   if (action.type === 'create-user') {
     const initialPassword = `${firstName(item.name)}123`;
     if (!firstName(item.name)) fail(`EMPLOYEE_NAME_INVALID_${action.employeeId}`);
+    const bcrypt = requireFromWorker('bcryptjs');
     const passwordHash = bcrypt.hashSync(initialPassword, 10);
     runWrangler(
       `INSERT INTO usuarios (email,password_hash,nome,perfil,funcionario_id,active,created_at,updated_at)
