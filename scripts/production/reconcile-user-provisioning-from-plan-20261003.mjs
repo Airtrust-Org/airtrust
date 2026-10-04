@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WORKER_DIR = resolve(REPO_ROOT, 'worker-airtrust');
 const requireFromWorker = createRequire(new URL('../../worker-airtrust/package.json', import.meta.url));
+let bcryptForApply = null;
 const DB_NAME = 'airtrust-db';
 const EMPRESA_ID = 6;
 const CORPORATE_DOMAIN = 'voecostadosol.com.br';
@@ -331,8 +332,8 @@ function applyAction(action, state) {
   if (action.type === 'create-user') {
     const initialPassword = `${firstName(item.name)}123`;
     if (!firstName(item.name)) fail(`EMPLOYEE_NAME_INVALID_${action.employeeId}`);
-    const bcrypt = requireFromWorker('bcryptjs');
-    const passwordHash = bcrypt.hashSync(initialPassword, 10);
+    if (!bcryptForApply) fail('PASSWORD_HASHER_NOT_PREFLIGHTED');
+    const passwordHash = bcryptForApply.hashSync(initialPassword, 10);
     runWrangler(
       `INSERT INTO usuarios (email,password_hash,nome,perfil,funcionario_id,active,created_at,updated_at)
        SELECT ${sqlText(action.email)},${sqlText(passwordHash)},f.nome,'ALUNO',f.id,1,datetime('now'),datetime('now')
@@ -395,6 +396,14 @@ if (!/^[0-9a-f]{64}$/.test(expectedPlanSha) || expectedPlanSha !== planSha) fail
 if (!Number.isInteger(expectedCount) || expectedCount < 0 || expectedCount !== before.candidateCount) fail('CANDIDATE_COUNT_MISMATCH');
 if (!/^[0-9a-f]{64}$/.test(expectedHash) || expectedHash !== before.candidateHash) fail('CANDIDATE_HASH_MISMATCH');
 const applySha = assertApplyGitState();
+if (before.actions.some((entry) => entry.type === 'create-user')) {
+  try {
+    bcryptForApply = requireFromWorker('bcryptjs');
+  } catch {
+    fail('PASSWORD_HASHER_UNAVAILABLE');
+  }
+  if (typeof bcryptForApply?.hashSync !== 'function') fail('PASSWORD_HASHER_INVALID');
+}
 const recoveryPoint = captureRecoveryPoint();
 
 for (const action of before.actions.filter((entry) => entry.type === 'employee-email')) applyAction(action, before);

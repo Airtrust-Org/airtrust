@@ -51,7 +51,9 @@ test('employee email write is additive-only and administrative writes are audite
 
 test('initial password convention is applied in memory and never emitted in summary', () => {
   assert.match(body, /const initialPassword = `\$\{firstName\(item\.name\)\}123`/);
-  assert.match(body, /bcrypt\.hashSync\(initialPassword, 10\)/);
+  assert.match(body, /PASSWORD_HASHER_UNAVAILABLE/);
+  assert.match(body, /PASSWORD_HASHER_NOT_PREFLIGHTED/);
+  assert.match(body, /bcryptForApply\.hashSync\(initialPassword, 10\)/);
   assert.match(body, /pii_emitted: false/);
   assert.doesNotMatch(body, /initialPassword[\s\S]{0,100}process\.stdout/);
 });
