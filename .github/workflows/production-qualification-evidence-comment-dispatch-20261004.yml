@@ -1,0 +1,81 @@
+name: Production Qualification Evidence Comment Dispatch 20261004
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  actions: write
+  pull-requests: read
+
+concurrency:
+  group: production-qualification-evidence-comment-dispatch-20261004
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Validate and dispatch reviewed qualification evidence run
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.event.issue.number == 1162 &&
+      github.actor == 'isaeldaumas' &&
+      startsWith(github.event.comment.body, '/qualification-evidence ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      COMMENT_BODY: ${{ github.event.comment.body }}
+    steps:
+      - name: Resolve current canonical main
+        id: main
+        shell: bash
+        run: |
+          set -euo pipefail
+          main_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]] || { echo MAIN_SHA_INVALID >&2; exit 1; }
+          echo "sha=$main_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Validate exact command and dispatch online workflow
+        shell: bash
+        env:
+          MAIN_SHA: ${{ steps.main.outputs.sha }}
+        run: |
+          set -euo pipefail
+          PLAN='bb4aaadfce1c5ae9ed9fa4ae8723f3126103f5edbd048dff46d0ef8dffa900cc'
+          HASH='3797b28d538ba6cd810ee9334755012b9df54b4134e94c0cfc29b9ab3cfab6d0'
+          DRY_CONFIRM='AIRTRUST_PRODUCTION_DRYRUN_QUALIFICATION_EVIDENCE_20261004'
+          APPLY_CONFIRM='AIRTRUST_PRODUCTION_RECONCILE_QUALIFICATION_EVIDENCE_20261004'
+          WORKFLOW='production-qualification-evidence-reconciliation-20261004.yml'
+
+          dry="/qualification-evidence dry-run sha=$MAIN_SHA plan=$PLAN count=13 hash=$HASH confirm=$DRY_CONFIRM"
+          if [[ "$COMMENT_BODY" == "$dry" ]]; then
+            gh workflow run "$WORKFLOW" --repo "$GITHUB_REPOSITORY" --ref main \
+              -f expected_sha="$MAIN_SHA" \
+              -f expected_plan_sha="$PLAN" \
+              -f expected_candidate_count=13 \
+              -f expected_candidate_hash="$HASH" \
+              -f mode=dry-run \
+              -f confirmation="$DRY_CONFIRM"
+            echo "DISPATCHED_DRY_RUN sha=$MAIN_SHA"
+            exit 0
+          fi
+
+          prefix="/qualification-evidence apply sha=$MAIN_SHA plan=$PLAN count=13 hash=$HASH reviewed_run="
+          suffix=" confirm=$APPLY_CONFIRM"
+          if [[ "$COMMENT_BODY" =~ ^${prefix}([1-9][0-9]*)${suffix}$ ]]; then
+            reviewed_run="${BASH_REMATCH[1]}"
+            gh workflow run "$WORKFLOW" --repo "$GITHUB_REPOSITORY" --ref main \
+              -f expected_sha="$MAIN_SHA" \
+              -f expected_plan_sha="$PLAN" \
+              -f expected_candidate_count=13 \
+              -f expected_candidate_hash="$HASH" \
+              -f mode=apply \
+              -f confirmation="$APPLY_CONFIRM" \
+              -f reviewed_dry_run_run_id="$reviewed_run"
+            echo "DISPATCHED_APPLY sha=$MAIN_SHA reviewed_run=$reviewed_run"
+            exit 0
+          fi
+
+          echo COMMENT_COMMAND_REJECTED >&2
+          exit 1
