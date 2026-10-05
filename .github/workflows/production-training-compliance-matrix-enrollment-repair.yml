@@ -59,7 +59,7 @@ jobs:
           if [[ "$MODE" == dry-run ]]; then
             [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_DRYRUN_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR ]] || { echo DRYRUN_CONFIRMATION_REQUIRED >&2; exit 1; }
           elif [[ "$MODE" == apply ]]; then
-            [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_NO_EMAIL ]] || { echo APPLY_CONFIRMATION_REQUIRED >&2; exit 1; }
+            [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_NO_EMAIL ]] || { echo APPLY_CONFIRMATION_REQUIRED >&2; exit 1; }
           else
             echo INVALID_MODE >&2; exit 1
           fi
@@ -119,7 +119,9 @@ jobs:
             echo "TRAINING_COMPLIANCE_EXPECTED_${upper}_COUNT=$count" >> "$GITHUB_ENV"
             echo "TRAINING_COMPLIANCE_EXPECTED_${upper}_HASH=$hash" >> "$GITHUB_ENV"
           done
-          [[ "$(jq -r .unsafe_wrong_count "$evidence")" == 0 ]] || { echo REVIEWED_UNSAFE_WRONG_NOT_ZERO >&2; exit 1; }
+          evidenced_wrong_count="$(jq -r .unsafe_wrong_count "$evidence")"
+          [[ "$evidenced_wrong_count" =~ ^[0-9]+$ ]] || { echo REVIEWED_EVIDENCED_WRONG_COUNT_INVALID >&2; exit 1; }
+          echo "REVIEWED_WRONG_WITH_EVIDENCE_COUNT=$evidenced_wrong_count" >> "$GITHUB_STEP_SUMMARY"
           [[ "$(jq -r .ambiguous_course_count "$evidence")" == 0 ]] || { echo REVIEWED_AMBIGUOUS_COURSES_NOT_ZERO >&2; exit 1; }
           echo "REVIEWED_DRY_RUN_VERIFIED=$REVIEWED_RUN" >> "$GITHUB_STEP_SUMMARY"
 
@@ -154,7 +156,7 @@ jobs:
         run: |
           set -euo pipefail
           test -s "$RUNNER_TEMP/result.json" || exit 0
-          jq '{mode,source_sha,empresa_id,expected_pairs,missing_count,missing_hash,wrong_count,wrong_hash,unsafe_wrong_count,no_course_count,no_course_hash,no_course_codes,ambiguous_course_count,email_disabled,invitation_endpoint_called,mutation_executed,created_courses,created_enrollments,ignored_existing,cancelled_wrong_enrollments,post_expected_pairs,post_missing_count,post_wrong_count,post_no_course_count,postconditions_verified,pii_emitted}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+          jq '{mode,source_sha,empresa_id,expected_pairs,missing_count,missing_hash,wrong_count,wrong_hash,unsafe_wrong_count,wrong_with_evidence_count,historical_evidence_preserved,no_course_count,no_course_hash,no_course_codes,ambiguous_course_count,email_disabled,invitation_endpoint_called,mutation_executed,created_courses,created_enrollments,ignored_existing,cancelled_wrong_enrollments,cancelled_wrong_with_evidence_enrollments,post_expected_pairs,post_missing_count,post_wrong_count,post_no_course_count,postconditions_verified,pii_emitted}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload sanitized evidence
         uses: actions/upload-artifact@v7
