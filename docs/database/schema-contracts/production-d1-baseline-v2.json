@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-04",
-    "last_reconciled_against": "0531 NR-20 modality forward repair classified; 0526/0527/0528/0530 governed states preserved; 0529 remains on its independent HFA PR",
-    "schema_v2_digest": "89fb11ad8e033775ade787ed5d2e040bb25939a9cbb76d1a950b16173719c417",
+    "last_reconciled_at": "2026-10-05",
+    "last_reconciled_against": "0532 FDM designation-only data correction classified; 0531 and prior governed states preserved; enrollment cleanup remains separate",
+    "schema_v2_digest": "0bf9c513c82512e0aa27e8418c4de5324477d85acbc56b69bc8380aa04bbea63",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1307,6 +1307,18 @@
       "reviewed_manifest": "training-compliance-nr20-modality-repair-0531.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-nr20-modality-repair-0531.md",
       "note": "0531 is a tenant-6 data-only forward repair for the reviewed 0526 NR-20 HIBRIDO requirement modality after production post-validation run 37231357958 exposed four preserved active requirements with null modality. It preserves those requirement ids, changes no audience, DDL, LMS data, qualification history or designation, and reruns the full 0526 postcondition suite after repair. Production apply requires the governed Schema V2 workflow, recovery point, staging validation and new exact-SHA production authorization."
+    },
+    {
+      "change_file": "0532_training_compliance_fdm_designation_only.sql",
+      "change_id": "training-compliance-fdm-designation-only-0532",
+      "sha256": "b4040b89a581fcce362e0c87611c6d79d88a132e82eb29d174d64f2358516c50",
+      "targets": [],
+      "domain": "training compliance / FDM designation-only applicability correction",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-fdm-designation-only-0532.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-fdm-designation-only-0532.md",
+      "note": "0532 is a tenant-6 data-only forward correction that removes broad organizational FDM-EAD obligations and preserves only the governed FDM_EQUIPE designation requirement. It changes no DDL, LMS enrollment, completion evidence or qualification history. Remote apply requires staging validation, a D1 recovery point and new exact-SHA production authorization; enrollment cleanup remains a separate governed operation."
     }
   ]
 }

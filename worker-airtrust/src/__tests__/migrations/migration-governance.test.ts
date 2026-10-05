@@ -133,7 +133,8 @@ describe('migration governance', () => {
     // 0528 separates sector Compliance alert responsibility from operational sector access.
     // 0530 adds the governed placeholder qualification models for planned EAD packages.
     // 0531 repairs the reviewed tenant-6 NR-20 HIBRIDO requirement modality after 0526.
-    const expectedLatest = 531;
+    // 0532 narrows FDM-EAD to the governed FDM_EQUIPE designation only.
+    const expectedLatest = 532;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

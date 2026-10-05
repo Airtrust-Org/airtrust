@@ -504,6 +504,14 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0531-production-preflight.sh --target=airtrust-db
 
+      - name: Preflight training compliance FDM designation-only 0532
+        if: ${{ inputs.change_id == 'training-compliance-fdm-designation-only-0532' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0532-production-preflight.sh --target=airtrust-db
+
       - name: Backup governance ledger
         shell: bash
         working-directory: worker-airtrust
@@ -933,6 +941,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0531-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate training compliance FDM designation-only 0532
+        if: ${{ inputs.change_id == 'training-compliance-fdm-designation-only-0532' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0532-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate EAD reconciliation ledger 0453
         if: ${{ inputs.change_id == 'ead-category-reconciliation-executor-0453' }}

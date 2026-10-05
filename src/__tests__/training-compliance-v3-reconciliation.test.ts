@@ -79,7 +79,7 @@ describe('training compliance V3 reconciliation', () => {
     expect(output).not.toContain('DELETE FROM qualificacoes_historico');
   });
 
-  it('keeps the reviewed broad NR populations and the FDM transition population', () => {
+  it('keeps the reviewed broad NR populations but makes FDM designation-only', () => {
     expect(source).toContain("code: 'NR-20'");
     expect(source).toContain("modality: 'HIBRIDO'");
     expect(source).toContain('inicial 16 h e atualização 4 h/24 meses');
@@ -87,28 +87,9 @@ describe('training compliance V3 reconciliation', () => {
     expect(source).toContain('pessoal operacional como critério corporativo mais abrangente');
     expect(source).toContain("'Aux Manutenção'");
 
-    // FDM remains broad until formal designations are returned.
-
     expect(source).toContain("deactivate('FDM-EAD')");
-    expect(source).toContain('const fdmAwarenessFunctions = [');
-    for (const functionName of [
-      'Comandante',
-      'Copiloto',
-      'Mecânico',
-      'Auxiliar de Manutenção',
-      'Coordenador de Engenharia',
-      'Analista de CTM',
-      'Analista de CTM I',
-      'Auxiliar de CTM',
-      'Auxiliar de CTM I',
-      'Gerente de Operações',
-      'Assistente de Segurança Operacional',
-      'Auxiliar de QSMS',
-      'Técnico de Segurança do Trabalho',
-    ]) {
-      expect(source).toContain(`'${functionName}'`);
-    }
+    expect(source).not.toContain('const fdmAwarenessFunctions = [');
     expect(source).toContain("condition: 'FDM_EQUIPE'");
-    expect(source).toContain('familiarização/conhecimento geral do programa FDM/HFDM');
+    expect(source).toContain('Aplicável somente a integrante formalmente designado para a equipe FDM/HFDM.');
   });
 });

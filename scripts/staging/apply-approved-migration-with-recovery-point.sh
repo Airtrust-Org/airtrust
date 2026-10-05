@@ -62,6 +62,7 @@ APPROVED_MIGRATIONS=(
   "0528_setor_compliance_responsibles.sql"
   "0530_training_qualification_catalog_placeholders.sql"
   "0531_training_compliance_nr20_modality_repair.sql"
+  "0532_training_compliance_fdm_designation_only.sql"
 )
 
 apply=false
@@ -282,6 +283,9 @@ validate_postconditions() {
     0531_training_compliance_nr20_modality_repair.sql)
       bash scripts/staging/validate-0531-postconditions.sh --target="$db_name"
       ;;
+    0532_training_compliance_fdm_designation_only.sql)
+      bash scripts/staging/validate-0532-postconditions.sh --target="$db_name"
+      ;;
   esac
 }
 
@@ -417,6 +421,11 @@ fi
 if [[ "$migration_basename" == "0531_training_compliance_nr20_modality_repair.sql" && "$ledger_count" == "0" ]]; then
   bash scripts/staging/validate-0531-preflight.sh --target="$db_name"
   echo "SPECIALIZED_PREFLIGHT_0531_OK=true"
+fi
+
+if [[ "$migration_basename" == "0532_training_compliance_fdm_designation_only.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0532-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0532_OK=true"
 fi
 
 if [[ "$migration_basename" == 0461_* || "$migration_basename" == 0462_* ]]; then
