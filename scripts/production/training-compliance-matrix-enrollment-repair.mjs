@@ -297,22 +297,40 @@ async function login(email, password) {
   throw lastError || new Error('AUTH_FAILED');
 }
 
-async function apiJson(token, path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(options.headers || {}),
-    },
-    signal: AbortSignal.timeout(30000),
-  });
-  const json = await response.json().catch(() => null);
-  if (!response.ok || json?.success === false) {
-    throw new Error(`${path}_HTTP_${response.status}:${String(json?.code || json?.error || 'API_ERROR').slice(0, 160)}`);
+async function apiJson(token, path, options = {}, retry = {}) {
+  const retryTimeouts = retry.retryTimeouts === true;
+  const maxAttempts = retryTimeouts ? Math.max(1, Number(retry.maxAttempts || 5)) : 1;
+  const timeoutMs = Math.max(1000, Number(retry.timeoutMs || 30000));
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+          ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+          ...(options.headers || {}),
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      const json = await response.json().catch(() => null);
+      if (!response.ok || json?.success === false) {
+        throw new Error(`${path}_HTTP_${response.status}:${String(json?.code || json?.error || 'API_ERROR').slice(0, 160)}`);
+      }
+      return json;
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      const name = error instanceof Error ? error.name : '';
+      const timeoutLike = name === 'TimeoutError' || name === 'AbortError' || /timeout|aborted/i.test(message);
+      if (!retryTimeouts || !timeoutLike || attempt === maxAttempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(1000 * attempt, 5000)));
+    }
   }
-  return json;
+
+  throw lastError || new Error(`${path}_RETRY_EXHAUSTED`);
 }
 
 async function ensureRequiredEadCourses(token, state) {
@@ -366,7 +384,7 @@ async function enrollMissingPairs(token) {
           observacoes: REPAIR_MARKER,
           enviar_convite_email: false,
         }),
-      });
+      }, { retryTimeouts: true, maxAttempts: 5, timeoutMs: 30000 });
       const data = json?.data || {};
       created += Number(data.criadas || 0);
       ignored += Number(data.ignoradas || 0);
