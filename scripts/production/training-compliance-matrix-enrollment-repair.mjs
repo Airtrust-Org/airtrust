@@ -196,6 +196,12 @@ function requirementSuppressesEnrollment(requirement) {
     !requirementNeedsEnrollment(requirement);
 }
 
+function requirementNeedsManualModalityCompletion(requirement) {
+  return String(requirement?.status_compliance || '').trim().toUpperCase() === 'NAO_REALIZADO' &&
+    requirement?.evidencia_modalidade_incompativel === true &&
+    isCompletedEnrollmentStatus(requirement?.lms_status);
+}
+
 function isProvablyUnstartedEnrollment(row) {
   return String(row.status || '').trim().toUpperCase() === 'NAO_INICIADO' &&
     Number(row.progresso_pct || 0) === 0 &&
@@ -325,6 +331,7 @@ async function readState(token) {
 
   const missingRows = [];
   let suppressedByValidEvidenceCount = 0;
+  let modalityManualReviewCount = 0;
   let renewalWindowCount = 0;
   for (const row of topology.targetRows) {
     const key = pairKey(row.funcionario_id, row.qualificacao_tipo_id);
@@ -332,6 +339,10 @@ async function readState(token) {
     const needsEnrollment = requirementNeedsEnrollment(requirement);
     if (!needsEnrollment) {
       if (requirementSuppressesEnrollment(requirement)) suppressedByValidEvidenceCount += 1;
+      continue;
+    }
+    if (requirementNeedsManualModalityCompletion(requirement)) {
+      modalityManualReviewCount += 1;
       continue;
     }
     if (
@@ -384,6 +395,7 @@ async function readState(token) {
     redundant_count: redundantRows.length,
     redundant_hash: sha(redundantIds.map(String)),
     redundant_manual_review_count: redundantManualReviewRows.length,
+    modality_manual_review_count: modalityManualReviewCount,
     no_course_types: noCourseTypes,
     no_course_count: noCourseTypes.length,
     no_course_hash: sha(noCourseTypes.map((row) => String(row.id))),
@@ -637,6 +649,7 @@ function sanitizedSummary(state) {
     redundant_count: state.redundant_count,
     redundant_hash: state.redundant_hash,
     redundant_manual_review_count: state.redundant_manual_review_count,
+    modality_manual_review_count: state.modality_manual_review_count,
     historical_evidence_preserved: true,
     no_course_count: state.no_course_count,
     no_course_hash: state.no_course_hash,
