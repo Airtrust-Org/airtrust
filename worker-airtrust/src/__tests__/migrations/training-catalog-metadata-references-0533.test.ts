@@ -90,6 +90,23 @@ describe('training catalog metadata references 0533', () => {
     ).toHaveLength(1);
   });
 
+  it('allows the sparse staging baseline to omit PT6C while keeping production strict', () => {
+    const stagingPostconditions = read('scripts/staging/validate-0533-postconditions.sh');
+    const productionPostconditions = read(
+      'scripts/schema-v2/validate-0533-production-postconditions.sh',
+    );
+
+    expect(stagingPostconditions).toContain(
+      'POSTCONDITION_NOT_APPLICABLE=pt6c-hours:model-absent-in-staging',
+    );
+    expect(stagingPostconditions).toContain('pt6c-model-count expected=1');
+    expect(stagingPostconditions).toContain("UPPER(TRIM(codigo))='PT6C-67C'");
+    expect(productionPostconditions).toContain('assert_count pt6c-hours 1');
+    expect(productionPostconditions).not.toContain(
+      'POSTCONDITION_NOT_APPLICABLE=pt6c-hours:model-absent-in-staging',
+    );
+  });
+
   it('ships governed preflight and postcondition validators', () => {
     const files = [
       'scripts/schema-v2/validate-0533-production-preflight.sh',
