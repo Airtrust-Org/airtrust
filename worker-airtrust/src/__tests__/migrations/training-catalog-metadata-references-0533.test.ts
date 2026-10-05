@@ -68,6 +68,17 @@ describe('training catalog metadata references 0533', () => {
     expect(sql).toContain('Portaria MTE nº 1.259/2026');
   });
 
+  it('routes 0533 through the governed staging recovery-point workflow', () => {
+    const workflow = read('.github/workflows/staging-d1-schema-change.yml');
+    const runner = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
+    const migration = '0533_training_catalog_metadata_references.sql';
+    expect(workflow).toContain(`- ${migration}`);
+    expect(workflow).toContain(`0532_training_compliance_fdm_designation_only.sql|${migration}) ;;`);
+    expect(runner).toContain(`"${migration}"`);
+    expect(runner).toContain('bash scripts/staging/validate-0533-preflight.sh --target="$db_name"');
+    expect(runner).toContain('bash scripts/staging/validate-0533-postconditions.sh --target="$db_name"');
+  });
+
   it('ships governed preflight and postcondition validators', () => {
     const files = [
       'scripts/schema-v2/validate-0533-production-preflight.sh',
