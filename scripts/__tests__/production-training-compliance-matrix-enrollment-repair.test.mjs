@@ -12,6 +12,19 @@ test('repair derives only mandatory EAD requirements from the current matrix', (
   assert.match(script, /prioridade DESC,regra_id DESC/);
 });
 
+
+test('missing enrollment target is organizational-role only and defers designation-specific training', () => {
+  assert.match(script, /enrollment_target AS/);
+  assert.match(script, /condicao_id IS NULL/);
+  assert.match(script, /escopo IN \('EMPRESA','SETOR','FUNCAO','SETOR_FUNCAO'\)/);
+  assert.ok(script.includes("UPPER(TRIM(COALESCE(fundamento_tipo,'')))<>'DESIGNACAO'"));
+  for (const code of ['I', 'L', 'FDM-EAD', 'GATEKEEPER', 'LOSA', 'PPSP_SUP', 'E8', 'NR-05', 'BRIGADA_INCENDIO', 'PRIMEIROS_SOCORROS', 'NR-12']) {
+    assert.match(script, new RegExp(`'${code.replaceAll('-', '\-')}'`));
+  }
+  assert.match(script, /FROM enrollment_target e/);
+  assert.match(script, /LEFT JOIN expected e ON e\.funcionario_id=a\.funcionario_id/);
+});
+
 test('repair never sends enrollment e-mail or calls invitation endpoint', () => {
   assert.match(script, /enviar_convite_email: false/);
   assert.doesNotMatch(script, /\/api\/lms\/matriculas\/convites/);
