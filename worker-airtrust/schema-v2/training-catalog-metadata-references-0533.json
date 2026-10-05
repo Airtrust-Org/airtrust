@@ -1,0 +1,8 @@
+{
+  "changeId": "training-catalog-metadata-references-0533",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0533_training_catalog_metadata_references.sql",
+  "fileHash": "fe444f5419a77a5fd80ac720222455359b4ada0200e6ad293a3a319f2043a878",
+  "planPath": "worker-airtrust/schema-v2/plans/training-catalog-metadata-references-0533.md",
+  "planHash": "4cda9d1fb33e94ce5530503995d4e77ce1f5112b87db597d2779bde2f17c4084"
+}

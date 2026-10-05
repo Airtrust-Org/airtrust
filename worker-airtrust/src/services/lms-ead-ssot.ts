@@ -31,6 +31,7 @@ type QualificacaoTipoEadRow = {
   formato_codigo: string | null;
   conteudo_programatico: string | null;
   observacoes: string | null;
+  referencias: string | null;
   carga_horaria: number | null;
   carga_horaria_inicial: number | null;
   carga_horaria_recorrente: number | null;
@@ -50,6 +51,7 @@ type LmsCursoMirrorRow = {
   carga_horaria_minutos: number | null;
   conteudo_programatico: string | null;
   observacoes: string | null;
+  referencias: string | null;
   carga_horaria_inicial_horas: number | null;
   carga_horaria_recorrente_horas: number | null;
   tipo_conteudo: string | null;
@@ -218,6 +220,7 @@ async function fetchQualificacaoTipo(
               qf.codigo AS formato_codigo,
               qualificacoes_tipos.conteudo_programatico,
               qualificacoes_tipos.observacoes,
+              qualificacoes_tipos.referencias,
               qualificacoes_tipos.carga_horaria,
               qualificacoes_tipos.carga_horaria_inicial,
               qualificacoes_tipos.carga_horaria_recorrente,
@@ -255,6 +258,7 @@ async function fetchCursoByQualificacaoTipo(
               lms_cursos.carga_horaria_minutos,
               lms_cursos.conteudo_programatico,
               lms_cursos.observacoes,
+              lms_cursos.referencias,
               lms_cursos.carga_horaria_inicial_horas,
               lms_cursos.carga_horaria_recorrente_horas,
               lms_cursos.tipo_conteudo,
@@ -357,6 +361,7 @@ async function fetchCursoMirror(db: D1Database, empresaId: number, cursoId: numb
               lms_cursos.carga_horaria_minutos,
               lms_cursos.conteudo_programatico,
               lms_cursos.observacoes,
+              lms_cursos.referencias,
               lms_cursos.carga_horaria_inicial_horas,
               lms_cursos.carga_horaria_recorrente_horas,
               lms_cursos.tipo_conteudo,
@@ -513,6 +518,7 @@ export async function syncLmsCourseFromQualificacaoTipo(
   const categoria = CANONICAL_TRAINING_CATEGORY;
   const conteudoProgramatico = normalizeNullableText(tipo.conteudo_programatico);
   const observacoes = normalizeNullableText(tipo.observacoes);
+  const referencias = normalizeNullableText(tipo.referencias);
   const cargaInicial = normalizeNullableNumber(tipo.carga_horaria_inicial);
   const cargaRecorrente = normalizeNullableNumber(tipo.carga_horaria_recorrente);
   const cargaMinutos = resolveCourseMinutesFromTipo(tipo);
@@ -538,6 +544,7 @@ export async function syncLmsCourseFromQualificacaoTipo(
                 carga_horaria_minutos = ?,
                 conteudo_programatico = ?,
                 observacoes = ?,
+                referencias = ?,
                 carga_horaria_inicial_horas = ?,
                 carga_horaria_recorrente_horas = ?,
                 gerar_qualificacao_ao_concluir = 1,
@@ -555,6 +562,7 @@ export async function syncLmsCourseFromQualificacaoTipo(
         cargaMinutos,
         conteudoProgramatico,
         observacoes,
+        referencias,
         cargaInicial,
         cargaRecorrente,
         ...(shouldSetDominio ? [dominioCodigo] : []),
@@ -585,13 +593,14 @@ export async function syncLmsCourseFromQualificacaoTipo(
          ativo,
          conteudo_programatico,
          observacoes,
+         referencias,
          carga_horaria_inicial_horas,
          carga_horaria_recorrente_horas,
          ${hasDominioCodigoColumn ? 'dominio_codigo,' : ''}
          created_at,
          updated_at,
          deleted_at
-       ) VALUES (?, ?, ?, ?, ?, ?, 'pt-BR', 'scorm', '1.2', 70, ?, 1, 0, 1, ?, ?, ?, ?, ${
+       ) VALUES (?, ?, ?, ?, ?, ?, 'pt-BR', 'scorm', '1.2', 70, ?, 1, 0, 1, ?, ?, ?, ?, ?, ${
          hasDominioCodigoColumn ? '?,' : ''
        } datetime('now'), datetime('now'), NULL)`,
     )
@@ -605,6 +614,7 @@ export async function syncLmsCourseFromQualificacaoTipo(
       tipo.id,
       conteudoProgramatico,
       observacoes,
+      referencias,
       cargaInicial,
       cargaRecorrente,
       ...(hasDominioCodigoColumn ? [dominioCodigo] : []),
@@ -664,11 +674,12 @@ export async function ensureQualificacaoTipoForCurso(
            validade,
            vencimento_fim_mes,
            observacoes,
+           referencias,
            ativo,
            created_at,
            updated_at,
            deleted_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, 1, datetime('now'), datetime('now'), NULL)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, 1, datetime('now'), datetime('now'), NULL)`,
       )
       .bind(
         params.empresaId,
@@ -686,6 +697,7 @@ export async function ensureQualificacaoTipoForCurso(
         cargaRecorrente,
         normalizeNullableText(curso.conteudo_programatico),
         normalizeNullableText(curso.observacoes),
+        normalizeNullableText(curso.referencias),
       )
       .run();
 
@@ -724,6 +736,7 @@ export async function syncAllEadCoursesFromQualificacoes(db: D1Database, empresa
               qt.descricao,
               qt.conteudo_programatico,
               qt.observacoes,
+              qt.referencias,
               qt.carga_horaria,
               qt.carga_horaria_inicial,
               qt.carga_horaria_recorrente
@@ -789,6 +802,7 @@ export async function syncQualificacaoTipoFromCurso(
               c.carga_horaria_minutos,
               c.conteudo_programatico,
               c.observacoes,
+              c.referencias,
               c.carga_horaria_inicial_horas,
               c.carga_horaria_recorrente_horas,
               qt.categoria AS qualificacao_categoria,
@@ -853,6 +867,7 @@ export async function syncQualificacaoTipoFromCurso(
               formato_id = NULL,
               conteudo_programatico = ?,
               observacoes = ?,
+              referencias = ?,
               carga_horaria = ?,
               carga_horaria_inicial = ?,
               carga_horaria_recorrente = ?,
@@ -869,6 +884,7 @@ export async function syncQualificacaoTipoFromCurso(
       ...(shouldUpdateArea ? [params.qualificacaoAreaId] : []),
       normalizeNullableText(curso.conteudo_programatico),
       normalizeNullableText(curso.observacoes),
+      normalizeNullableText(curso.referencias),
       cargaPadrao,
       cargaInicial,
       cargaRecorrente,

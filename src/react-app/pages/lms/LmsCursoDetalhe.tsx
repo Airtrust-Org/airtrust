@@ -401,6 +401,12 @@ export default function LmsCursoDetalhe() {
                 <p className="mt-2 whitespace-pre-line">{curso.observacoes}</p>
               </div>
             ) : null}
+            {curso.referencias ? (
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                <p className="font-semibold text-slate-900">Referências</p>
+                <p className="mt-2 whitespace-pre-line">{curso.referencias}</p>
+              </div>
+            ) : null}
           </LmsSurface>
         ) : null}
       </LmsPageShell>

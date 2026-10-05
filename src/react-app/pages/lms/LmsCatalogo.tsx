@@ -222,6 +222,7 @@ function applyQualTemplate(
   if (overwrite || !toNullableText(n.conteudo_programatico))
     n.conteudo_programatico = tipo.conteudo_programatico ?? '';
   if (overwrite || !toNullableText(n.observacoes)) n.observacoes = tipo.observacoes ?? '';
+  if (overwrite || !toNullableText(n.referencias)) n.referencias = tipo.referencias ?? '';
   if (overwrite || n.carga_horaria_inicial_horas == null)
     n.carga_horaria_inicial_horas = tipo.carga_horaria_inicial ?? null;
   if (overwrite || n.carga_horaria_recorrente_horas == null)
@@ -286,6 +287,7 @@ function buildInitialForm(initial?: Partial<LmsCurso>): CreateCursoDTO {
     carga_horaria_minutos: initial?.carga_horaria_minutos ?? null,
     conteudo_programatico: initial?.conteudo_programatico ?? '',
     observacoes: initial?.observacoes ?? '',
+    referencias: initial?.referencias ?? '',
     carga_horaria_inicial_horas: initial?.carga_horaria_inicial_horas ?? null,
     carga_horaria_recorrente_horas: initial?.carga_horaria_recorrente_horas ?? null,
     qualificacao_tipo_id: initial?.qualificacao_tipo_id ?? null,
@@ -1091,6 +1093,16 @@ function CourseDrawer({
                           rows={3}
                           value={form.observacoes ?? ''}
                           onChange={(e) => setForm((c) => ({ ...c, observacoes: e.target.value }))}
+                          className={textareaCls}
+                        />
+                      </div>
+                      <div className="space-y-2 lg:col-span-2">
+                        <FieldLabel label="Referências" />
+                        <textarea
+                          rows={4}
+                          value={form.referencias ?? ''}
+                          onChange={(e) => setForm((c) => ({ ...c, referencias: e.target.value }))}
+                          placeholder="Normas, regulamentos, manuais, programas e procedimentos aplicáveis — uma referência por linha."
                           className={textareaCls}
                         />
                       </div>

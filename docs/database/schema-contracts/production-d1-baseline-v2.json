@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-05",
-    "last_reconciled_against": "0532 FDM designation-only data correction classified; 0531 and prior governed states preserved; enrollment cleanup remains separate",
-    "schema_v2_digest": "0bf9c513c82512e0aa27e8418c4de5324477d85acbc56b69bc8380aa04bbea63",
+    "last_reconciled_against": "0533 training catalog references/metadata + stricter 24-month Maintenance recurrence classified; 0532 and prior governed states preserved",
+    "schema_v2_digest": "41ee4deae0c67f80cc49c450ae88f7a4c446044ccd46908bb6824a3ae219e5f6",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1319,6 +1319,21 @@
       "reviewed_manifest": "training-compliance-fdm-designation-only-0532.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-fdm-designation-only-0532.md",
       "note": "0532 is a tenant-6 data-only forward correction that removes broad organizational FDM-EAD obligations and preserves only the governed FDM_EQUIPE designation requirement. It changes no DDL, LMS enrollment, completion evidence or qualification history. Remote apply requires staging validation, a D1 recovery point and new exact-SHA production authorization; enrollment cleanup remains a separate governed operation."
+    },
+    {
+      "change_file": "0533_training_catalog_metadata_references.sql",
+      "change_id": "training-catalog-metadata-references-0533",
+      "sha256": "fe444f5419a77a5fd80ac720222455359b4ada0200e6ad293a3a319f2043a878",
+      "targets": [
+        "lms_cursos",
+        "qualificacoes_tipos"
+      ],
+      "domain": "training catalog / explicit references and reviewed course metadata",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-catalog-metadata-references-0533.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-catalog-metadata-references-0533.md",
+      "note": "0533 adds explicit training references metadata to qualification/LMS tables and performs tenant-6 reviewed catalog corrections. It also applies the Training Manager decision to reduce active Maintenance models reviewed at 36 months to a stricter 24-month AirTrust cycle with coherent history snapshots, corrects PT6C/Doutrination loads, makes NR-35 presencial and NR-20 hybrid for compliance, disables EAD-only auto-qualification for those two regulated courses, and moves LGPD to QSMS taxonomy. Production apply requires staging validation, D1 recovery point, ledger verification and exact-SHA authorization."
     }
   ]
 }

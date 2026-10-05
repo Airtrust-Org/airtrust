@@ -26,6 +26,7 @@ export interface LmsCurso {
   carga_horaria_minutos: number | null;
   conteudo_programatico: string | null;
   observacoes: string | null;
+  referencias: string | null;
   carga_horaria_inicial_horas: number | null;
   carga_horaria_recorrente_horas: number | null;
   thumbnail_r2_key: string | null;
@@ -190,6 +191,7 @@ export interface CreateCursoDTO {
   carga_horaria_minutos?: number | null;
   conteudo_programatico?: string | null;
   observacoes?: string | null;
+  referencias?: string | null;
   carga_horaria_inicial_horas?: number | null;
   carga_horaria_recorrente_horas?: number | null;
   qualificacao_tipo_id?: number | null;
@@ -275,6 +277,7 @@ function sanitizeCreateCursoPayload(dto: CreateCursoDTO): CreateCursoDTO {
     categoria: dto.categoria === '' ? null : dto.categoria,
     conteudo_programatico: dto.conteudo_programatico === '' ? null : dto.conteudo_programatico,
     observacoes: dto.observacoes === '' ? null : dto.observacoes,
+    referencias: dto.referencias === '' ? null : dto.referencias,
     carga_horaria_minutos: dto.carga_horaria_minutos ?? 0,
     carga_horaria_inicial_horas: dto.carga_horaria_inicial_horas ?? null,
     carga_horaria_recorrente_horas: dto.carga_horaria_recorrente_horas ?? null,
@@ -298,6 +301,9 @@ function sanitizeUpdateCursoPayload(dto: UpdateCursoDTO): UpdateCursoDTO {
   }
   if ('observacoes' in dto) {
     payload.observacoes = dto.observacoes === '' ? null : dto.observacoes;
+  }
+  if ('referencias' in dto) {
+    payload.referencias = dto.referencias === '' ? null : dto.referencias;
   }
   if ('carga_horaria_minutos' in dto) payload.carga_horaria_minutos = dto.carga_horaria_minutos;
   if ('carga_horaria_inicial_horas' in dto) {

@@ -136,6 +136,7 @@ type TipoQualificacaoRow = {
   carga_horaria_inicial?: number | null;
   carga_horaria_recorrente?: number | null;
   conteudo_programatico?: string | null;
+  referencias?: string | null;
   validade?: number | null;
   vencimento_fim_mes?: number | null;
   observacoes?: string | null;
@@ -153,6 +154,7 @@ const router = new Hono<{ Bindings: Env }>();
 type TiposColumnsSupport = {
   hasIsCheck: boolean;
   hasConteudoProgramatico: boolean;
+  hasReferencias: boolean;
   hasCargaInicial: boolean;
   hasCargaRecorrente: boolean;
   // Deprecated schema compatibility: no new request writes this field.
@@ -207,6 +209,7 @@ async function loadQualificacoesTiposColumnsSupport(db: D1Database): Promise<Tip
         hasCargaInicial: hasColumn('carga_horaria_inicial'),
         hasCargaRecorrente: hasColumn('carga_horaria_recorrente'),
         hasConteudoProgramatico: hasColumn('conteudo_programatico'),
+        hasReferencias: hasColumn('referencias'),
         hasIsCheck: hasColumn('is_check'),
         hasFormatoId: hasColumn('formato_id'),
         hasClasseRequisito: hasColumn('classe_requisito'),
@@ -239,6 +242,7 @@ const createTipoSchema = z
     area_id: z.number().int().positive('Área da qualificação inválida').optional().nullable(),
     descricao: z.string().optional(),
     conteudo_programatico: z.string().nullable().optional(),
+    referencias: z.string().nullable().optional(),
     carga_horaria_inicial: z.number().nullable().optional(),
     carga_horaria_recorrente: z.number().nullable().optional(),
     validade: z.number().positive('Validade deve ser maior que zero').nullable().optional(),
@@ -263,6 +267,7 @@ const updateTipoSchema = z.object({
   area_id: z.number().int().positive('Área da qualificação inválida').optional().nullable(),
   descricao: z.string().optional().nullable(),
   conteudo_programatico: z.string().optional().nullable(),
+  referencias: z.string().optional().nullable(),
   carga_horaria_inicial: z.number().nullable().optional(),
   carga_horaria_recorrente: z.number().nullable().optional(),
   validade: z.number().positive('Validade deve ser maior que zero').nullable().optional(),
@@ -803,7 +808,7 @@ router.get(
           columnsSupport.hasConteudoProgramatico
             ? 'conteudo_programatico'
             : 'NULL as conteudo_programatico'
-        }, qt.validade, qt.vencimento_fim_mes, qt.observacoes, qt.ativo, ${
+        }, ${columnsSupport.hasReferencias ? 'qt.referencias' : 'NULL as referencias'}, qt.validade, qt.vencimento_fim_mes, qt.observacoes, qt.ativo, ${
           hasIsCheck ? 'is_check' : '0 as is_check'
         }, qt.created_at, qt.updated_at,
         COALESCE(qhc.total_no_historico, 0) AS total_no_historico,
@@ -859,7 +864,7 @@ router.get(
           columnsSupport.hasConteudoProgramatico
             ? 'conteudo_programatico'
             : 'NULL as conteudo_programatico'
-        }, qt.validade, qt.vencimento_fim_mes, qt.observacoes, qt.ativo, ${
+        }, ${columnsSupport.hasReferencias ? 'qt.referencias' : 'NULL as referencias'}, qt.validade, qt.vencimento_fim_mes, qt.observacoes, qt.ativo, ${
           hasIsCheck ? 'is_check' : '0 as is_check'
         }, qt.created_at, qt.updated_at,
         ${buildSetoresAggregationSelect(hasQualificacoesTiposSetores)}
@@ -1041,6 +1046,7 @@ router.post(
     const cargaHorariaRecorrente =
       data.carga_horaria_recorrente == null ? null : Number(data.carga_horaria_recorrente);
     const conteudoProgramatico = data.conteudo_programatico?.trim() || null;
+    const referencias = data.referencias?.trim() || null;
     const vencimentoFimMes = data.vencimento_fim_mes ? 1 : 0;
     const ativo = data.ativo === false ? 0 : 1;
     const isCheck = data.is_check ? 1 : 0;
@@ -1076,6 +1082,10 @@ router.post(
       data.observacoes || null,
       ativo,
     ];
+    if (columnsSupport.hasReferencias) {
+      insertCols.push('referencias');
+      insertBinds.push(referencias);
+    }
     if (hasIsCheck) {
       insertCols.push('is_check');
       insertBinds.push(isCheck);
@@ -1321,6 +1331,7 @@ router.put(
                 qt.carga_horaria_inicial,
                 qt.carga_horaria_recorrente,
                 ${columnsSupport.hasConteudoProgramatico ? 'qt.conteudo_programatico' : 'NULL as conteudo_programatico'},
+                ${columnsSupport.hasReferencias ? 'qt.referencias' : 'NULL as referencias'},
                 ${hasIsCheck ? 'qt.is_check' : '0 as is_check'},
                 ${columnsSupport.hasClasseRequisito ? 'qt.classe_requisito' : 'NULL as classe_requisito'},
                 ${columnsSupport.hasFormatoId ? 'qt.formato_id, qf.codigo AS formato_codigo' : 'NULL AS formato_id, NULL AS formato_codigo'}
@@ -1341,6 +1352,7 @@ router.put(
           carga_horaria_inicial: number | null;
           carga_horaria_recorrente: number | null;
           conteudo_programatico: string | null;
+          referencias: string | null;
           is_check: number | null;
           classe_requisito: string | null;
         })
@@ -1472,6 +1484,17 @@ router.put(
       if (draftVal !== atualVal) {
         updateParts.push('conteudo_programatico = ?');
         binds.push(data.conteudo_programatico || null);
+      }
+    }
+    if (data.referencias !== undefined) {
+      if (!columnsSupport.hasReferencias) {
+        return c.json({ success: false, error: 'Campo de referências ainda não disponível' }, 503);
+      }
+      const draftVal = normalizeStr(data.referencias);
+      const atualVal = normalizeStr(rowAtual.referencias);
+      if (draftVal !== atualVal) {
+        updateParts.push('referencias = ?');
+        binds.push(data.referencias || null);
       }
     }
     if (data.carga_horaria_inicial !== undefined) {

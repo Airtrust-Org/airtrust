@@ -63,6 +63,7 @@ const LMS_CURSOS_SELECT_COLUMNS = `
   tipo_conteudo,
   conteudo_programatico,
   observacoes,
+  referencias,
   carga_horaria_inicial_horas,
   carga_horaria_recorrente_horas,
   pdf_r2_key,
@@ -484,6 +485,7 @@ type EadQualificacaoTipoRow = {
   descricao: string | null;
   conteudo_programatico: string | null;
   observacoes: string | null;
+  referencias: string | null;
   carga_horaria: number | null;
   carga_horaria_inicial: number | null;
   carga_horaria_recorrente: number | null;
@@ -499,6 +501,7 @@ type SyncableCursoRow = {
   gerar_qualificacao_ao_concluir: number;
   conteudo_programatico: string | null;
   observacoes: string | null;
+  referencias: string | null;
   carga_horaria_inicial_horas: number | null;
   carga_horaria_recorrente_horas: number | null;
 };
@@ -536,6 +539,7 @@ function buildEadCursoSeed(tipo: EadQualificacaoTipoRow) {
     carga_horaria_minutos: resolveCursoCargaHorariaMinutos(tipo),
     conteudo_programatico: normalizeNullableText(tipo.conteudo_programatico),
     observacoes: normalizeNullableText(tipo.observacoes),
+    referencias: normalizeNullableText(tipo.referencias),
     carga_horaria_inicial_horas: normalizeNullableNumber(tipo.carga_horaria_inicial),
     carga_horaria_recorrente_horas: normalizeNullableNumber(tipo.carga_horaria_recorrente),
   };
@@ -553,6 +557,7 @@ async function listEmpresaEadQualificacaoTipos(db: D1Database, empresaId: number
               qt.descricao,
               qt.conteudo_programatico,
               qt.observacoes,
+              qt.referencias,
               qt.carga_horaria,
               qt.carga_horaria_inicial,
               qt.carga_horaria_recorrente
@@ -649,6 +654,7 @@ const CursoCreateSchema = z.object({
   carga_horaria_minutos: intWithDefault(0, 0),
   conteudo_programatico: trimNullableText,
   observacoes: trimNullableText,
+  referencias: trimNullableText,
   carga_horaria_inicial_horas: optionalNullableNonNegativeNumber,
   carga_horaria_recorrente_horas: optionalNullableNonNegativeNumber,
   idioma: z.preprocess(
@@ -680,6 +686,7 @@ const CursoUpdateSchema = z.object({
   ),
   conteudo_programatico: trimNullableText,
   observacoes: trimNullableText,
+  referencias: trimNullableText,
   carga_horaria_inicial_horas: optionalNullableNonNegativeNumber,
   carga_horaria_recorrente_horas: optionalNullableNonNegativeNumber,
   idioma: z.preprocess((value) => (value === '' ? 'pt-BR' : value), z.string().optional()),
@@ -2044,6 +2051,7 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
     'idioma',
     'conteudo_programatico',
     'observacoes',
+    'referencias',
     'carga_horaria_inicial_horas',
     'carga_horaria_recorrente_horas',
     'tipo_conteudo',
@@ -2062,6 +2070,7 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
     d.idioma,
     d.conteudo_programatico ?? null,
     d.observacoes ?? null,
+    d.referencias ?? null,
     d.carga_horaria_inicial_horas ?? null,
     d.carga_horaria_recorrente_horas ?? null,
     d.tipo_conteudo,
@@ -2290,6 +2299,7 @@ app.put('/:id', requirePermission('lms', 'editar', 'admin', 'manager'), requireO
     'carga_horaria_minutos',
     'conteudo_programatico',
     'observacoes',
+    'referencias',
     'carga_horaria_inicial_horas',
     'carga_horaria_recorrente_horas',
     'idioma',
