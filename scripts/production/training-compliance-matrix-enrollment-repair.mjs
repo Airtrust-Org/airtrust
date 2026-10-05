@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { appendFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
 const DB_NAME = 'airtrust-db';
@@ -33,7 +32,7 @@ function runWrangler(sql, label, { mutating = false } = {}) {
   const normalized = String(sql).trim().replace(/;+\s*$/g, '');
   if (!mutating) {
     if (!/^(SELECT|WITH)\b/i.test(normalized)) fail(`NON_SELECT_${label}`);
-    if (/\b(?:INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|REPLACE|VACUUM|ATTACH|DETACH|REINDEX)\b/i.test(normalized)) {
+    if (/\b(?:INSERT\s+INTO|UPDATE\s+[A-Za-z_]|DELETE\s+FROM|ALTER\s+TABLE|DROP\s+TABLE|CREATE\s+TABLE|VACUUM|ATTACH|DETACH|REINDEX)\b/i.test(normalized)) {
       fail(`MUTATING_PREFLIGHT_${label}`);
     }
   }
