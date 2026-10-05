@@ -18,8 +18,10 @@ test('repair never sends enrollment e-mail or calls invitation endpoint', () => 
   assert.doesNotMatch(script, /enviar_convite_email:\s*true/);
 });
 
-test('wrong enrollments are restricted to prior batch and only evidence-free rows may be cancelled', () => {
-  assert.match(script, /PREVIOUS_BATCH_MARKER/);
+test('global wrong enrollment audit covers all active employees and preserves explicit standalone decisions', () => {
+  assert.match(script, /treinamento_matricula_reconciliacoes/);
+  assert.match(script, /MANTER_AVULSA/);
+  assert.doesNotMatch(script, /m\.observacoes=\$\{JSON\.stringify\(PREVIOUS_BATCH_MARKER\)\}/);
   assert.match(script, /WRONG_ENROLLMENTS_WITH_EVIDENCE_REQUIRE_MANUAL_REVIEW/);
   assert.match(script, /lms_progresso_scorm/);
   assert.match(script, /lms_xapi_statements/);
