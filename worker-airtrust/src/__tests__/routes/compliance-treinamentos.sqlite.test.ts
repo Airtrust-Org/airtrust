@@ -59,7 +59,7 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
                        codigo = CASE id WHEN 10 THEN 'MAN' WHEN 11 THEN 'OPS' ELSE 'OUT' END;
 
     ALTER TABLE qualificacoes_tipos ADD COLUMN nome TEXT;
-    UPDATE qualificacoes_tipos SET nome = codigo, categoria = 'EAD';
+    UPDATE qualificacoes_tipos SET nome = codigo;
 
     ALTER TABLE funcionarios ADD COLUMN funcao_id INTEGER;
     ALTER TABLE funcionarios ADD COLUMN status TEXT DEFAULT 'ATIVO';
@@ -203,20 +203,14 @@ describe('training compliance engine', () => {
     const sectorsBody = (await sectorsResponse.json()) as any;
     expect(sectorsResponse.status).toBe(200);
     expect(sectorsBody.data).toHaveLength(1);
-    expect(sectorsBody.data[0]).toMatchObject({
-      setor_id: 11,
-      setor_nome: 'Operações',
-      pessoas: 1,
-    });
+    expect(sectorsBody.data[0]).toMatchObject({ setor_id: 11, setor_nome: 'Operações', pessoas: 1 });
 
     const requirementsResponse = await app.request('/requisitos-aplicaveis?q=operacoes');
     const requirementsBody = (await requirementsResponse.json()) as any;
     expect(requirementsResponse.status).toBe(200);
     expect(requirementsBody.meta.pessoas).toBe(1);
 
-    const pendingResponse = await app.request(
-      '/pendencias?funcionario_q=operacoes&status=NAO_REALIZADO',
-    );
+    const pendingResponse = await app.request('/pendencias?funcionario_q=operacoes&status=NAO_REALIZADO');
     const pendingBody = (await pendingResponse.json()) as any;
     expect(pendingResponse.status).toBe(200);
     expect(pendingBody.data.map((item: any) => item.funcionario_id)).toEqual([1002]);
@@ -674,19 +668,13 @@ describe('training compliance engine', () => {
     const remove = await app.request('/regras/95', { method: 'DELETE' });
     expect(update.status).toBe(409);
     expect(remove.status).toBe(409);
-    expect(await update.json()).toMatchObject({
-      error: expect.stringContaining('Regra governada'),
-    });
-    expect(await remove.json()).toMatchObject({
-      error: expect.stringContaining('Regra governada'),
-    });
+    expect(await update.json()).toMatchObject({ error: expect.stringContaining('Regra governada') });
+    expect(await remove.json()).toMatchObject({ error: expect.stringContaining('Regra governada') });
 
     const ordinaryRemove = await app.request('/regras/96', { method: 'DELETE' });
     expect(ordinaryRemove.status).toBe(200);
     const rows = sqlite.database
-      .prepare(
-        'SELECT id,ativo,deleted_at FROM treinamento_requisitos WHERE id IN (95,96) ORDER BY id',
-      )
+      .prepare('SELECT id,ativo,deleted_at FROM treinamento_requisitos WHERE id IN (95,96) ORDER BY id')
       .all() as Array<{ id: number; ativo: number; deleted_at: string | null }>;
     expect(rows[0]).toMatchObject({ id: 95, ativo: 1, deleted_at: null });
     expect(rows[1].id).toBe(96);
@@ -709,11 +697,7 @@ describe('training compliance engine', () => {
     expect(response.status).toBe(400);
     expect(body.error).toContain('Exclusão global sem condição é redundante');
     expect(
-      sqlite.database
-        .prepare(
-          "SELECT COUNT(*) total FROM treinamento_requisitos WHERE empresa_id=1 AND qualificacao_tipo_id=100 AND escopo='EMPRESA' AND obrigatoriedade='NAO_APLICA' AND ativo=1 AND deleted_at IS NULL",
-        )
-        .get(),
+      sqlite.database.prepare("SELECT COUNT(*) total FROM treinamento_requisitos WHERE empresa_id=1 AND qualificacao_tipo_id=100 AND escopo='EMPRESA' AND obrigatoriedade='NAO_APLICA' AND ativo=1 AND deleted_at IS NULL").get(),
     ).toMatchObject({ total: 0 });
   });
 
@@ -831,7 +815,7 @@ describe('training compliance engine', () => {
     expect(mntGap.cursos_ead).toEqual([{ id: 501, titulo: 'MNT EAD' }]);
   });
 
-  it('ignora requisito recomendado na reconciliação de matrículas EAD', async () => {
+  it('inclui requisito recomendado e permite renovação quando só existe matrícula concluída', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
         (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
@@ -848,30 +832,20 @@ describe('training compliance engine', () => {
     const body = (await response.json()) as any;
 
     expect(response.status).toBe(200);
-    expect(
-      body.data.gaps_matricula.find((item: any) => item.qualificacao_tipo_id === 101),
-    ).toBeUndefined();
-    expect(body.data.resumo.requisitos_sem_matricula).toBe(0);
-  });
+    const renewalGap = body.data.gaps_matricula.find(
+      (item: any) => item.qualificacao_tipo_id === 101,
+    );
+    expect(renewalGap).toMatchObject({ pessoas: 1, vencidos: 1, nunca_realizados: 0 });
+    expect(renewalGap.cursos_ead).toEqual([{ id: 500, titulo: 'SOP S76 EAD' }]);
 
-  it('ignora requisito de categoria não EAD mesmo quando existe curso LMS vinculado', async () => {
     sqlite.database.exec(`
-      UPDATE qualificacoes_tipos SET categoria = 'Presencial' WHERE id = 100 AND empresa_id = 1;
-      INSERT INTO treinamento_requisitos
-        (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
-      VALUES (1, 100, 'SETOR_FUNCAO', 10, 1, 'OBRIGATORIA', 'EMPRESA');
-      INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id)
-      VALUES (501, 1, 'NR-35 Presencial', 100);
+      INSERT INTO lms_matriculas
+        (id, empresa_id, curso_id, funcionario_id, status, data_conclusao, created_at, updated_at)
+      VALUES (701, 1, 500, 1002, 'NAO_INICIADO', NULL, '2026-09-16', '2026-09-16');
     `);
-
-    const response = await createApp(sqlite.asD1()).request('/reconciliacao');
-    const body = (await response.json()) as any;
-
-    expect(response.status).toBe(200);
-    expect(body.data.resumo.requisitos_sem_matricula).toBe(0);
-    expect(body.data.resumo.gaps_matricula_acionaveis).toBe(0);
+    const withOpenEnrollment = (await (await app.request('/reconciliacao')).json()) as any;
     expect(
-      body.data.gaps_matricula.find((item: any) => item.qualificacao_tipo_id === 100),
+      withOpenEnrollment.data.gaps_matricula.find((item: any) => item.qualificacao_tipo_id === 101),
     ).toBeUndefined();
   });
 

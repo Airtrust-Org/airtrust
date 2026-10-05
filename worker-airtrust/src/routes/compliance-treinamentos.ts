@@ -5,10 +5,7 @@ import { ApiError } from '../middleware/error-handler';
 import { getEmpresaId } from '../middleware/tenant';
 import type { Env } from '../types';
 import { createTrainingComplianceIntelligenceRoutes } from './compliance-treinamentos-intelligence';
-import {
-  aggregateDistinctMandatoryRequirements,
-  createTrainingComplianceRequirementRoutes,
-} from './compliance-treinamentos-requirements';
+import { aggregateDistinctMandatoryRequirements, createTrainingComplianceRequirementRoutes } from './compliance-treinamentos-requirements';
 import conditionsRouter from './compliance-treinamentos-conditions';
 import {
   CANCELLED_STATUS_VALUES,
@@ -25,11 +22,7 @@ import {
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
 } from '../services/employee-sector-access';
-import {
-  insertTrainingComplianceRequirement,
-  isGovernedTrainingComplianceRequirement,
-  updateTrainingComplianceRequirement,
-} from '../services/training-compliance-rule-write';
+import { insertTrainingComplianceRequirement, isGovernedTrainingComplianceRequirement, updateTrainingComplianceRequirement } from '../services/training-compliance-rule-write';
 import {
   normalizeAircraftModel,
   parseLegacyAircraftModels,
@@ -817,31 +810,7 @@ async function loadReconciliationDecisions(
   return map;
 }
 
-async function loadEadQualificationTypeIds(
-  db: D1Database,
-  empresaId: number,
-): Promise<Set<number>> {
-  if (!(await tableExists(db, 'qualificacoes_tipos'))) return new Set<number>();
-  const cols = await columnSet(db, 'qualificacoes_tipos');
-  if (!cols.has('categoria')) return new Set<number>();
-  const deletedExpr = cols.has('deleted_at') ? 'AND deleted_at IS NULL' : '';
-  const { results } = await db
-    .prepare(
-      `SELECT id FROM qualificacoes_tipos
-        WHERE empresa_id=?
-          AND UPPER(TRIM(COALESCE(categoria,''))) IN ('EAD','TREINAMENTO EAD')
-          ${deletedExpr}`,
-    )
-    .bind(empresaId)
-    .all<{ id: number }>();
-  return new Set((results || []).map((row) => Number(row.id)).filter((id) => id > 0));
-}
-
-async function loadActiveLmsCourses(
-  db: D1Database,
-  empresaId: number,
-  eadQualificationTypeIds: Set<number>,
-) {
+async function loadActiveLmsCourses(db: D1Database, empresaId: number) {
   if (!(await tableExists(db, 'lms_cursos')))
     return [] as Array<{ id: number; titulo: string; qualificacao_tipo_id: number }>;
   const cols = await columnSet(db, 'lms_cursos');
@@ -855,9 +824,7 @@ async function loadActiveLmsCourses(
     )
     .bind(empresaId)
     .all<{ id: number; titulo: string; qualificacao_tipo_id: number }>();
-  return (results || []).filter((row) =>
-    eadQualificationTypeIds.has(Number(row.qualificacao_tipo_id)),
-  );
+  return results || [];
 }
 
 function orgRuleApplies(
@@ -1274,11 +1241,7 @@ app.put('/regras/:id', requireRole('admin', 'manager'), async (c) => {
     .bind(id, empresaId)
     .first<Record<string, unknown>>();
   if (!existing) throw new ApiError('Regra não encontrada', 404);
-  if (isGovernedTrainingComplianceRequirement(existing))
-    throw new ApiError(
-      'Regra governada por designação regulatória; altere os ocupantes na área de designações.',
-      409,
-    );
+  if (isGovernedTrainingComplianceRequirement(existing)) throw new ApiError('Regra governada por designação regulatória; altere os ocupantes na área de designações.', 409);
   const patch = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const access = await getEmployeeSectorAccess(c, empresaId);
   const existingData = await validateRuleReferences(db, empresaId, existing);
@@ -1316,11 +1279,7 @@ app.delete('/regras/:id', requireRole('admin', 'manager'), async (c) => {
     .bind(id, empresaId)
     .first<Record<string, unknown>>();
   if (!existing) throw new ApiError('Regra não encontrada', 404);
-  if (isGovernedTrainingComplianceRequirement(existing))
-    throw new ApiError(
-      'Regra governada por designação regulatória; altere os ocupantes na área de designações.',
-      409,
-    );
+  if (isGovernedTrainingComplianceRequirement(existing)) throw new ApiError('Regra governada por designação regulatória; altere os ocupantes na área de designações.', 409);
   const access = await getEmployeeSectorAccess(c, empresaId);
   const existingData = await validateRuleReferences(db, empresaId, existing);
   await assertIndividualRuleWithinAccess(db, empresaId, access, existingData);
@@ -1364,12 +1323,9 @@ app.get('/pessoas', requireRole('admin', 'manager'), async (c) => {
   const funcaoId = asPositiveInt(c.req.query('funcao_id'));
   const aeronaveModelo = normalizeAircraftModel(c.req.query('aeronave_modelo'));
   const qualificacaoTipoId = asPositiveInt(c.req.query('qualificacao_tipo_id'));
-  const rawConfigurado = String(c.req.query('configurado') || '')
-    .trim()
-    .toLowerCase();
+  const rawConfigurado = String(c.req.query('configurado') || '').trim().toLowerCase();
   const configurado = rawConfigurado === 'true' ? true : rawConfigurado === 'false' ? false : null;
-  if (rawConfigurado && configurado === null)
-    throw new ApiError('Filtro configurado inválido', 400);
+  if (rawConfigurado && configurado === null) throw new ApiError('Filtro configurado inválido', 400);
   const statusCompliance = String(c.req.query('status') || '')
     .trim()
     .toUpperCase();
@@ -1488,9 +1444,7 @@ app.get('/setores', requireRole('admin', 'manager'), async (c) => {
   const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
   const requestedSetorId = asPositiveInt(c.req.query('setor_id'));
   const people = snapshot.people.filter(
-    (person) =>
-      (!requestedSetorId || person.setor_id === requestedSetorId) &&
-      matchesSearchText(person.nome, c.req.query('q')),
+    (person) => (!requestedSetorId || person.setor_id === requestedSetorId) && matchesSearchText(person.nome, c.req.query('q')),
   );
   const sectors = new Map<
     number | null,
@@ -1711,11 +1665,10 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
   );
   const peopleById = new Map(people.map((person) => [person.id, person]));
   const allowedIds = new Set(people.map((person) => person.id));
-  const eadQualificationTypeIds = await loadEadQualificationTypeIds(db, empresaId);
   const [allEnrollments, decisions, courses] = await Promise.all([
     loadLmsEnrollments(db, empresaId),
     loadReconciliationDecisions(db, empresaId),
-    loadActiveLmsCourses(db, empresaId, eadQualificationTypeIds),
+    loadActiveLmsCourses(db, empresaId),
   ]);
   const enrollments = allEnrollments.filter((row) => allowedIds.has(Number(row.funcionario_id)));
   // A matrícula concluída é evidência histórica e não pode bloquear uma nova
@@ -1752,8 +1705,6 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
   let requisitosSemMatricula = 0;
   for (const person of people) {
     for (const req of person.requisitos) {
-      if (req.obrigatoriedade !== 'OBRIGATORIA') continue;
-      if (!eadQualificationTypeIds.has(Number(req.qualificacao_tipo_id))) continue;
       const key = `${person.id}:${req.qualificacao_tipo_id}`;
       if (blockingEnrollmentKeys.has(key)) continue;
       requisitosSemMatricula += 1;
