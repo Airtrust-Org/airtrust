@@ -13,7 +13,8 @@ const EMPRESA_ID = 6;
 const API_BASE = process.env.PROD_API_BASE_URL || 'https://api.airtrust.online';
 const REPAIR_MARKER = 'Matrícula criada pela reconciliação exata da matriz obrigatória EAD — lote autorizado pela Gerência de Treinamento.';
 const DRY_CONFIRM = 'AIRTRUST_PRODUCTION_DRYRUN_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR';
-const APPLY_CONFIRM = 'AIRTRUST_PRODUCTION_APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_NO_EMAIL';
+const APPLY_CONFIRM = 'AIRTRUST_PRODUCTION_APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_AND_REDUNDANT_VALID_EVIDENCE_NO_EMAIL';
+const RENEWAL_WINDOW_DAYS = 60;
 
 const mode = process.argv[2] || process.env.TRAINING_COMPLIANCE_MATRIX_REPAIR_MODE || 'dry-run';
 
@@ -165,26 +166,112 @@ function baseCte() {
   )`;
 }
 
-function readState() {
-  const expectedSummary = runWrangler(
-    `${baseCte()}
-     SELECT COUNT(*) expected_pairs,
-            SUM(CASE WHEN ae.funcionario_id IS NULL THEN 1 ELSE 0 END) missing_pairs
-       FROM enrollment_target e
-       LEFT JOIN active_enroll ae ON ae.funcionario_id=e.funcionario_id AND ae.qualificacao_tipo_id=e.qualificacao_tipo_id`,
-    'expected_summary',
-  )[0] || {};
+function pairKey(funcionarioId, qualificacaoTipoId) {
+  return `${Number(funcionarioId)}:${Number(qualificacaoTipoId)}`;
+}
 
-  const missingRows = runWrangler(
+function isCompletedEnrollmentStatus(status) {
+  return ['CONCLUIDO', 'CONCLUIDA'].includes(String(status || '').trim().toUpperCase());
+}
+
+function requirementNeedsEnrollment(requirement) {
+  const realizedOn = String(requirement?.ultima_data || '').slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+  if (realizedOn && realizedOn > today) fail('CANONICAL_FUTURE_EVIDENCE_REQUIRES_WORKER_FIX');
+  const status = String(requirement?.status_compliance || '').trim().toUpperCase();
+  if (['NAO_REALIZADO', 'VENCIDO', 'VENCENDO'].includes(status)) return true;
+  if (status === 'EM_ANDAMENTO') return false;
+  if (status === 'CONFORME') {
+    const days = requirement?.dias_para_vencer;
+    if (days == null || days === '') return false;
+    const parsed = Number(days);
+    if (!Number.isFinite(parsed)) fail('CANONICAL_DAYS_TO_EXPIRY_INVALID');
+    return parsed <= RENEWAL_WINDOW_DAYS;
+  }
+  fail(`CANONICAL_COMPLIANCE_STATUS_UNSUPPORTED_${status || 'EMPTY'}`);
+}
+
+function requirementSuppressesEnrollment(requirement) {
+  return String(requirement?.status_compliance || '').trim().toUpperCase() === 'CONFORME' &&
+    !requirementNeedsEnrollment(requirement);
+}
+
+function isProvablyUnstartedEnrollment(row) {
+  return String(row.status || '').trim().toUpperCase() === 'NAO_INICIADO' &&
+    Number(row.progresso_pct || 0) === 0 &&
+    row.data_inicio == null &&
+    row.data_conclusao == null &&
+    row.qualificacao_historico_id == null &&
+    Number(row.has_scorm || 0) === 0 &&
+    Number(row.has_xapi || 0) === 0 &&
+    Number(row.has_diag || 0) === 0 &&
+    Number(row.has_history || 0) === 0;
+}
+
+async function loadCanonicalRequirementMap(token, targetRows) {
+  const targetKeys = new Set(targetRows.map((row) => pairKey(row.funcionario_id, row.qualificacao_tipo_id)));
+  const employeeIds = [...new Set(targetRows.map((row) => Number(row.funcionario_id)))].sort((a, b) => a - b);
+  const map = new Map();
+
+  for (const employeeChunk of chunk(employeeIds, 5)) {
+    const people = await Promise.all(employeeChunk.map(async (funcionarioId) => {
+      const json = await apiJson(token, `/api/compliance-treinamentos/funcionarios/${funcionarioId}`, {}, {
+        retryTimeouts: true,
+        maxAttempts: 4,
+        timeoutMs: 30000,
+      });
+      if (json?.success !== true || !json?.data || Number(json.data.id) !== funcionarioId) {
+        fail('CANONICAL_COMPLIANCE_PERSON_INVALID');
+      }
+      return json.data;
+    }));
+
+    for (const person of people) {
+      for (const requirement of Array.isArray(person.requisitos) ? person.requisitos : []) {
+        const key = pairKey(person.id, requirement.qualificacao_tipo_id);
+        if (!targetKeys.has(key)) continue;
+        if (map.has(key)) fail('CANONICAL_REQUIREMENT_AMBIGUOUS');
+        map.set(key, requirement);
+      }
+    }
+  }
+
+  for (const key of targetKeys) {
+    if (!map.has(key)) fail('CANONICAL_REQUIREMENT_MISSING');
+  }
+  return map;
+}
+
+function readD1Topology() {
+  const targetRows = runWrangler(
     `${baseCte()}
      SELECT e.funcionario_id,e.qualificacao_tipo_id,e.codigo,e.nome,
             COALESCE(ac.n_courses,0) n_courses,ac.course_id
        FROM enrollment_target e
-       LEFT JOIN active_enroll ae ON ae.funcionario_id=e.funcionario_id AND ae.qualificacao_tipo_id=e.qualificacao_tipo_id
        LEFT JOIN active_courses ac ON ac.qualificacao_tipo_id=e.qualificacao_tipo_id
-      WHERE ae.funcionario_id IS NULL
       ORDER BY e.funcionario_id,e.qualificacao_tipo_id`,
-    'missing_pairs',
+    'enrollment_targets',
+  );
+
+  const activeTargetRows = runWrangler(
+    `${baseCte()}
+     SELECT m.id,m.funcionario_id,c.qualificacao_tipo_id,m.status,m.progresso_pct,
+            m.data_inicio,m.data_conclusao,m.qualificacao_historico_id,
+            EXISTS(SELECT 1 FROM lms_progresso_scorm ps WHERE ps.matricula_id=m.id AND ps.empresa_id=m.empresa_id) has_scorm,
+            EXISTS(SELECT 1 FROM lms_xapi_statements xs WHERE xs.matricula_id=m.id AND xs.empresa_id=m.empresa_id) has_xapi,
+            EXISTS(SELECT 1 FROM lms_completion_diagnostics_snapshots ds WHERE ds.matricula_id=m.id AND ds.empresa_id=m.empresa_id) has_diag,
+            EXISTS(SELECT 1 FROM qualificacoes_historico qh WHERE qh.lms_matricula_id=m.id AND qh.empresa_id=m.empresa_id AND qh.deleted_at IS NULL) has_history
+       FROM lms_matriculas m
+       JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id
+       JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id AND c.deleted_at IS NULL
+       JOIN enrollment_target e ON e.funcionario_id=m.funcionario_id AND e.qualificacao_tipo_id=c.qualificacao_tipo_id
+      WHERE m.empresa_id=${EMPRESA_ID}
+        AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
+        AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'
+        AND m.deleted_at IS NULL
+        AND UPPER(COALESCE(m.status,''))!='CANCELADO'
+      ORDER BY m.id`,
+    'active_target_enrollments',
   );
 
   const wrongRows = runWrangler(
@@ -224,20 +311,48 @@ function readState() {
     'wrong_global_pairs',
   );
 
-  const unsafeWrong = wrongRows.filter((row) => {
-    return !(
-      String(row.status || '').toUpperCase() === 'NAO_INICIADO' &&
-      Number(row.progresso_pct || 0) === 0 &&
-      row.data_inicio == null &&
-      row.data_conclusao == null &&
-      row.qualificacao_historico_id == null &&
-      Number(row.has_scorm || 0) === 0 &&
-      Number(row.has_xapi || 0) === 0 &&
-      Number(row.has_diag || 0) === 0 &&
-      Number(row.has_history || 0) === 0
-    );
-  });
+  return { targetRows, activeTargetRows, wrongRows };
+}
 
+async function readState(token) {
+  const topology = readD1Topology();
+  const canonical = await loadCanonicalRequirementMap(token, topology.targetRows);
+  const blockingPairs = new Set(
+    topology.activeTargetRows
+      .filter((row) => !isCompletedEnrollmentStatus(row.status))
+      .map((row) => pairKey(row.funcionario_id, row.qualificacao_tipo_id)),
+  );
+
+  const missingRows = [];
+  let suppressedByValidEvidenceCount = 0;
+  let renewalWindowCount = 0;
+  for (const row of topology.targetRows) {
+    const key = pairKey(row.funcionario_id, row.qualificacao_tipo_id);
+    const requirement = canonical.get(key);
+    const needsEnrollment = requirementNeedsEnrollment(requirement);
+    if (!needsEnrollment) {
+      if (requirementSuppressesEnrollment(requirement)) suppressedByValidEvidenceCount += 1;
+      continue;
+    }
+    if (
+      String(requirement?.status_compliance || '').toUpperCase() === 'CONFORME' &&
+      requirement?.dias_para_vencer != null &&
+      Number(requirement.dias_para_vencer) <= RENEWAL_WINDOW_DAYS
+    ) renewalWindowCount += 1;
+    if (!blockingPairs.has(key)) missingRows.push(row);
+  }
+
+  const redundantRows = [];
+  const redundantManualReviewRows = [];
+  for (const row of topology.activeTargetRows) {
+    const requirement = canonical.get(pairKey(row.funcionario_id, row.qualificacao_tipo_id));
+    if (!requirementSuppressesEnrollment(requirement)) continue;
+    if (isCompletedEnrollmentStatus(row.status)) continue;
+    if (isProvablyUnstartedEnrollment(row)) redundantRows.push(row);
+    else redundantManualReviewRows.push(row);
+  }
+
+  const unsafeWrong = topology.wrongRows.filter((row) => !isProvablyUnstartedEnrollment(row));
   const noCourseTypesMap = new Map();
   const ambiguousCourseTypesMap = new Map();
   for (const row of missingRows) {
@@ -247,20 +362,28 @@ function readState() {
     if (nCourses > 1) ambiguousCourseTypesMap.set(typeId, { id: typeId, codigo: row.codigo, nome: row.nome, n_courses: nCourses });
   }
 
-  const missingKeys = missingRows.map((row) => `${Number(row.funcionario_id)}:${Number(row.qualificacao_tipo_id)}`).sort();
-  const wrongIds = wrongRows.map((row) => Number(row.id)).sort((a, b) => a - b);
+  const missingKeys = missingRows.map((row) => pairKey(row.funcionario_id, row.qualificacao_tipo_id)).sort();
+  const wrongIds = topology.wrongRows.map((row) => Number(row.id)).sort((a, b) => a - b);
+  const redundantIds = redundantRows.map((row) => Number(row.id)).sort((a, b) => a - b);
   const noCourseTypes = [...noCourseTypesMap.values()].sort((a, b) => a.id - b.id);
   const ambiguousCourseTypes = [...ambiguousCourseTypesMap.values()].sort((a, b) => a.id - b.id);
 
   return {
-    expected_pairs: Number(expectedSummary.expected_pairs || 0),
+    expected_pairs: topology.targetRows.length,
+    suppressed_by_valid_evidence_count: suppressedByValidEvidenceCount,
+    renewal_window_days: RENEWAL_WINDOW_DAYS,
+    renewal_window_count: renewalWindowCount,
     missing_rows: missingRows,
     missing_count: missingRows.length,
     missing_hash: sha(missingKeys),
-    wrong_rows: wrongRows,
-    wrong_count: wrongRows.length,
+    wrong_rows: topology.wrongRows,
+    wrong_count: topology.wrongRows.length,
     wrong_hash: sha(wrongIds.map(String)),
     unsafe_wrong_count: unsafeWrong.length,
+    redundant_rows: redundantRows,
+    redundant_count: redundantRows.length,
+    redundant_hash: sha(redundantIds.map(String)),
+    redundant_manual_review_count: redundantManualReviewRows.length,
     no_course_types: noCourseTypes,
     no_course_count: noCourseTypes.length,
     no_course_hash: sha(noCourseTypes.map((row) => String(row.id))),
@@ -358,7 +481,7 @@ function chunk(items, size = 200) {
 }
 
 async function enrollMissingPairs(token) {
-  const state = readState();
+  const state = await readState(token);
   if (state.ambiguous_course_types.length > 0) fail('AMBIGUOUS_ACTIVE_COURSE_MAPPING');
   if (state.no_course_count > 0) fail('REQUIRED_EAD_COURSE_STILL_MISSING_AFTER_CREATE');
 
@@ -436,6 +559,49 @@ function cancelReviewedWrongEnrollments(ids) {
   return ids.length;
 }
 
+function cancelReviewedRedundantEnrollments(ids) {
+  if (ids.length === 0) return 0;
+  const idList = ids.join(',');
+  runWrangler(
+    `INSERT INTO audit_logs (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at)
+     SELECT NULL,'LMS_MATRICULA_REDUNDANT_VALID_EVIDENCE','lms_matriculas',m.id,
+            json_object('status',m.status,'progresso_pct',COALESCE(m.progresso_pct,0)),
+            '{"status":"CANCELADO","reason":"requirement_satisfied_by_valid_evidence"}',${EMPRESA_ID},datetime('now')
+       FROM lms_matriculas m
+      WHERE m.empresa_id=${EMPRESA_ID} AND m.id IN (${idList}) AND m.deleted_at IS NULL`,
+    'audit_redundant_enrollments',
+    { mutating: true },
+  );
+  runWrangler(
+    `UPDATE notificacoes_inapp
+        SET deleted_at=COALESCE(deleted_at,datetime('now'))
+      WHERE empresa_id=${EMPRESA_ID} AND deleted_at IS NULL
+        AND referencia_tipo='lms_matricula'
+        AND CAST(referencia_id AS INTEGER) IN (${idList})`,
+    'hide_redundant_notifications',
+    { mutating: true },
+  );
+  runWrangler(
+    `UPDATE lms_matricula_ciclos
+        SET status='CANCELADO',updated_at=datetime('now')
+      WHERE empresa_id=${EMPRESA_ID} AND ciclo_atual=1 AND deleted_at IS NULL
+        AND matricula_id IN (${idList})`,
+    'cancel_redundant_cycles',
+    { mutating: true },
+  );
+  runWrangler(
+    `UPDATE lms_matriculas
+        SET status='CANCELADO',updated_at=datetime('now')
+      WHERE empresa_id=${EMPRESA_ID} AND id IN (${idList}) AND deleted_at IS NULL
+        AND UPPER(COALESCE(status,''))='NAO_INICIADO'
+        AND COALESCE(progresso_pct,0)=0
+        AND data_inicio IS NULL AND data_conclusao IS NULL AND qualificacao_historico_id IS NULL`,
+    'cancel_redundant_enrollments',
+    { mutating: true },
+  );
+  return ids.length;
+}
+
 function verifyReviewedState(state) {
   const expectedMissingCount = Number(process.env.TRAINING_COMPLIANCE_EXPECTED_MISSING_COUNT || -1);
   const expectedMissingHash = String(process.env.TRAINING_COMPLIANCE_EXPECTED_MISSING_HASH || '').toLowerCase();
@@ -443,10 +609,13 @@ function verifyReviewedState(state) {
   const expectedWrongHash = String(process.env.TRAINING_COMPLIANCE_EXPECTED_WRONG_HASH || '').toLowerCase();
   const expectedNoCourseCount = Number(process.env.TRAINING_COMPLIANCE_EXPECTED_NO_COURSE_COUNT || -1);
   const expectedNoCourseHash = String(process.env.TRAINING_COMPLIANCE_EXPECTED_NO_COURSE_HASH || '').toLowerCase();
+  const expectedRedundantCount = Number(process.env.TRAINING_COMPLIANCE_EXPECTED_REDUNDANT_COUNT || -1);
+  const expectedRedundantHash = String(process.env.TRAINING_COMPLIANCE_EXPECTED_REDUNDANT_HASH || '').toLowerCase();
 
   if (state.missing_count !== expectedMissingCount || state.missing_hash !== expectedMissingHash) fail('MISSING_CANDIDATE_SET_CHANGED');
   if (state.wrong_count !== expectedWrongCount || state.wrong_hash !== expectedWrongHash) fail('WRONG_CANDIDATE_SET_CHANGED');
   if (state.no_course_count !== expectedNoCourseCount || state.no_course_hash !== expectedNoCourseHash) fail('NO_COURSE_SET_CHANGED');
+  if (state.redundant_count !== expectedRedundantCount || state.redundant_hash !== expectedRedundantHash) fail('REDUNDANT_CANDIDATE_SET_CHANGED');
 }
 
 function sanitizedSummary(state) {
@@ -456,12 +625,18 @@ function sanitizedSummary(state) {
     empresa_id: EMPRESA_ID,
     enrollment_scope: 'organizational-role-matrix-only',
     expected_pairs: state.expected_pairs,
+    renewal_window_days: state.renewal_window_days,
+    renewal_window_count: state.renewal_window_count,
+    suppressed_by_valid_evidence_count: state.suppressed_by_valid_evidence_count,
     missing_count: state.missing_count,
     missing_hash: state.missing_hash,
     wrong_count: state.wrong_count,
     wrong_hash: state.wrong_hash,
     unsafe_wrong_count: state.unsafe_wrong_count,
     wrong_with_evidence_count: state.unsafe_wrong_count,
+    redundant_count: state.redundant_count,
+    redundant_hash: state.redundant_hash,
+    redundant_manual_review_count: state.redundant_manual_review_count,
     historical_evidence_preserved: true,
     no_course_count: state.no_course_count,
     no_course_hash: state.no_course_hash,
@@ -474,7 +649,12 @@ function sanitizedSummary(state) {
 }
 
 async function main() {
-  const before = readState();
+  const email = process.env.E2E_EMAIL || '';
+  const password = process.env.E2E_PASSWORD || '';
+  if (!email || !password) fail('PRODUCTION_ADMIN_CREDENTIALS_MISSING');
+  const token = await login(email, password);
+
+  const before = await readState(token);
   if (before.ambiguous_course_types.length > 0) fail('AMBIGUOUS_ACTIVE_COURSE_MAPPING');
 
   const summary = sanitizedSummary(before);
@@ -484,6 +664,7 @@ async function main() {
   summary.ignored_existing = 0;
   summary.cancelled_wrong_enrollments = 0;
   summary.cancelled_wrong_with_evidence_enrollments = 0;
+  summary.cancelled_redundant_valid_evidence_enrollments = 0;
 
   if (mode === 'dry-run') {
     process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
@@ -491,11 +672,6 @@ async function main() {
   }
 
   verifyReviewedState(before);
-  const email = process.env.E2E_EMAIL || '';
-  const password = process.env.E2E_PASSWORD || '';
-  if (!email || !password) fail('PRODUCTION_ADMIN_CREDENTIALS_MISSING');
-
-  const token = await login(email, password);
   await ensureRequiredEadCourses(token, before);
   summary.created_courses = before.no_course_count;
 
@@ -507,10 +683,14 @@ async function main() {
     before.wrong_rows.map((row) => Number(row.id)).sort((a, b) => a - b),
   );
   summary.cancelled_wrong_with_evidence_enrollments = before.unsafe_wrong_count;
+  summary.cancelled_redundant_valid_evidence_enrollments = cancelReviewedRedundantEnrollments(
+    before.redundant_rows.map((row) => Number(row.id)).sort((a, b) => a - b),
+  );
 
-  const after = readState();
+  const after = await readState(token);
   if (after.missing_count !== 0) fail(`POST_MISSING_EXPECTED_PAIRS_${after.missing_count}`);
   if (after.wrong_count !== 0) fail(`POST_WRONG_GLOBAL_PAIRS_${after.wrong_count}`);
+  if (after.redundant_count !== 0) fail(`POST_REDUNDANT_VALID_EVIDENCE_ENROLLMENTS_${after.redundant_count}`);
   if (after.no_course_count !== 0) fail(`POST_REQUIRED_EAD_COURSE_MISSING_${after.no_course_count}`);
   if (after.unsafe_wrong_count !== 0) fail('POST_UNSAFE_WRONG_ENROLLMENTS');
 
@@ -519,6 +699,7 @@ async function main() {
     post_expected_pairs: after.expected_pairs,
     post_missing_count: after.missing_count,
     post_wrong_count: after.wrong_count,
+    post_redundant_count: after.redundant_count,
     post_no_course_count: after.no_course_count,
     postconditions_verified: true,
   });
