@@ -27,7 +27,7 @@ Ausência de designação específica também não pode apagar uma obrigação a
 | SGSO / D2 | Validade corporativa: **36 meses**. Carga de referência: **8 h inicial / 4 h recorrente**. |
 | PRE | Ciclo anual: **12 meses**. |
 | D3 | Manter **12 meses**. |
-| FDM EAD | Preservar o público amplo previsto na matriz. Designações podem ser usadas apenas para papéis específicos do programa, sem retirar a familiarização geral já prevista. |
+| FDM EAD | **Somente por designação formal da equipe FDM/HFDM (`FDM_EQUIPE`)**. Não atribuir automaticamente por cargo ou setor. Decisão da Gerência de Treinamento confirmada em 2026-10-05. |
 | LOFT | Manter como controle/qualificação separado. Não desativar nem absorver em outro treinamento. |
 | Manutenção controlada | Cursos controlados de Manutenção definidos na matriz permanecem em **24 meses**. Proveniência: **critério contratual Petrobras/IOGP informado pela Gerência de Treinamento**; não registrar como política interna. |
 | Históricos e certificados | Nunca apagar, reescrever ou invalidar histórico concluído para fazer a matriz nova “caber”. A matriz define obrigação futura/atual; o histórico permanece evidência. |
@@ -53,14 +53,13 @@ Ao registrar proveniência no AirTrust:
 - NR-20 para o público amplo já definido na matriz;
 - NR-26 / Produtos Químicos / FDS para o pessoal operacional;
 - NR-35 para o público de Manutenção já definido na matriz;
-- FDM EAD de familiarização, quando previsto amplamente na matriz.
 
 ### Permanecem adequados para designação específica
 
 - ARSO;
 - Supervisor ARSO;
 - Gatekeeper;
-- papéis específicos do FDM (`FDM_ADMIN`, `FDM_COMITE` e equivalentes aprovados);
+- FDM / HFDM (`FDM_EQUIPE`, `FDM_ADMIN`, `FDM_COMITE` e equivalentes aprovados);
 - LOSA Observador;
 - LOSA Analista;
 - Auditor Comportamental;

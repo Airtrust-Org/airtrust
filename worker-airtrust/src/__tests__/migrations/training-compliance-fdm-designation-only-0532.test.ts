@@ -4,8 +4,10 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = join(process.cwd(), '..');
-const migrationPath = 'worker-airtrust/migrations/0532_training_compliance_fdm_designation_only.sql';
-const changePath = 'worker-airtrust/schema-v2/changes/0532_training_compliance_fdm_designation_only.sql';
+const migrationPath =
+  'worker-airtrust/migrations/0532_training_compliance_fdm_designation_only.sql';
+const changePath =
+  'worker-airtrust/schema-v2/changes/0532_training_compliance_fdm_designation_only.sql';
 const planPath = 'worker-airtrust/schema-v2/plans/training-compliance-fdm-designation-only-0532.md';
 const manifestPath = 'worker-airtrust/schema-v2/training-compliance-fdm-designation-only-0532.json';
 const read = (path: string) => readFileSync(join(ROOT, path), 'utf8');
@@ -33,15 +35,19 @@ describe('training compliance FDM designation-only 0532', () => {
     const sql = read(changePath);
     expect(sql).toContain("UPPER(codigo)='FDM-EAD'");
     expect(sql).toContain("UPPER(codigo)='FDM_EQUIPE'");
-    expect(sql).toContain("condicao_id IS NULL");
+    expect(sql).toContain('condicao_id IS NULL');
     expect(sql).toContain("'DESIGNACAO','MNL-SSO-002'");
-    expect(sql).toContain("'Aplicável somente a integrante formalmente designado para a equipe FDM/HFDM.'");
+    expect(sql).toContain(
+      "'Aplicável somente a integrante formalmente designado para a equipe FDM/HFDM.'",
+    );
   });
 
   it('does not mutate LMS enrollments or completion evidence', () => {
     const sql = read(changePath);
     expect(sql).not.toMatch(/(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?lms_matriculas/i);
-    expect(sql).not.toMatch(/(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?qualificacoes_historico/i);
+    expect(sql).not.toMatch(
+      /(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?qualificacoes_historico/i,
+    );
     expect(sql).not.toContain('auto_matricular_ead,1');
   });
 
