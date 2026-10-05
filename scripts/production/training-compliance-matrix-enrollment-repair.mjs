@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+// source_reference: tenant-6 production read-only D1 inventory 2026-10-05; 1,942 mandatory EAD employee-training pairs, 950 missing, 26 prior-batch wrong and evidence-free.
+// operational_decision: repair only effective mandatory EAD matrix enrollments; create only missing mandatory EAD course placeholders; cancel only exact prior-batch wrong evidence-free enrollments.
+// dry_run_required: production apply requires a successful reviewed dry-run on the exact same SHA with identical candidate counts and hashes.
+// rollback_plan_required: workflow captures a D1 Time Travel recovery point immediately before apply; no enrollment with progress, runtime evidence, completion evidence or qualification history may be cancelled.
+
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
