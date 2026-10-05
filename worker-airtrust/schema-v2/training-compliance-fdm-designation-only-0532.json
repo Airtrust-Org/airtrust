@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-fdm-designation-only-0532",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0532_training_compliance_fdm_designation_only.sql",
+  "fileHash": "b4040b89a581fcce362e0c87611c6d79d88a132e82eb29d174d64f2358516c50",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-fdm-designation-only-0532.md",
+  "planHash": "66a2af3d75f5709a7b2baffc59765d867d5ca1cc0eb5bfe55d17d94d7b187af6"
+}
