@@ -357,7 +357,7 @@ async function enrollMissingPairs(token) {
   let ignored = 0;
   let errors = 0;
   for (const [courseId, employeeIds] of byCourse.entries()) {
-    for (const employeeChunk of chunk([...new Set(employeeIds)].sort((a, b) => a - b), 200)) {
+    for (const employeeChunk of chunk([...new Set(employeeIds)].sort((a, b) => a - b), 10)) {
       const json = await apiJson(token, '/api/lms/matriculas/lote', {
         method: 'POST',
         body: JSON.stringify({
