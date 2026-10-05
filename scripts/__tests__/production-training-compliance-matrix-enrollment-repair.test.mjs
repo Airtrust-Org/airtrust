@@ -29,6 +29,13 @@ test('production enrollment repair uses small API batches to stay within Worker 
   assert.match(script, /employeeChunk of chunk\(\[\.\.\.new Set\(employeeIds\)\]\.sort\(\(a, b\) => a - b\), 10\)/);
 });
 
+test('production enrollment repair retries only timeout-like failures for idempotent no-email batch enrollment', () => {
+  assert.match(script, /retryTimeouts = retry\.retryTimeouts === true/);
+  assert.match(script, /name === 'TimeoutError' \|\| name === 'AbortError'/);
+  assert.match(script, /retryTimeouts: true, maxAttempts: 5, timeoutMs: 30000/);
+  assert.match(script, /enviar_convite_email: false/);
+});
+
 test('repair never sends enrollment e-mail or calls invitation endpoint', () => {
   assert.match(script, /enviar_convite_email: false/);
   assert.doesNotMatch(script, /\/api\/lms\/matriculas\/convites/);
