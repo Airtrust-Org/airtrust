@@ -1,4 +1,6 @@
 import { appendFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const DEFAULT_API_BASE_URL = 'https://api.airtrust.online';
 const CONFIRMATION = 'AIRTRUST_PRODUCTION_TRAINING_COMPLIANCE_ENROLL_NO_EMAIL';
@@ -84,7 +86,7 @@ async function login(fetchImpl, apiBaseUrl, email, password) {
       });
       const json = await response.json().catch(() => null);
       if (response.status === 429 && attempt < 5) {
-        await new Promise((resolve) => setTimeout(resolve, Math.min(1000 * 2 ** (attempt - 1), 8000)));
+        await new Promise((resolveWait) => setTimeout(resolveWait, Math.min(1000 * 2 ** (attempt - 1), 8000)));
         continue;
       }
       const token = String(json?.data?.accessToken || '');
@@ -95,7 +97,7 @@ async function login(fetchImpl, apiBaseUrl, email, password) {
     } catch (error) {
       lastError = error;
       if (attempt === 5) break;
-      await new Promise((resolve) => setTimeout(resolve, Math.min(1000 * 2 ** (attempt - 1), 8000)));
+      await new Promise((resolveWait) => setTimeout(resolveWait, Math.min(1000 * 2 ** (attempt - 1), 8000)));
     }
   }
   throw lastError || new Error('PRODUCTION_AUTH_FAILED');
@@ -128,8 +130,9 @@ export async function executeSilentEnrollment({
   password,
 } = {}) {
   if (!email || !password) throw new Error('PRODUCTION_SMOKE_CREDENTIALS_MISSING');
-  const token = await login(fetchImpl, apiBaseUrl.replace(/\/+$/, ''), email, password);
-  const beforeJson = await authenticatedJson(fetchImpl, apiBaseUrl, token, '/api/compliance-treinamentos/reconciliacao');
+  const normalizedApiBaseUrl = String(apiBaseUrl || DEFAULT_API_BASE_URL).replace(/\/+$/, '');
+  const token = await login(fetchImpl, normalizedApiBaseUrl, email, password);
+  const beforeJson = await authenticatedJson(fetchImpl, normalizedApiBaseUrl, token, '/api/compliance-treinamentos/reconciliacao');
   const before = buildEnrollmentPlan(beforeJson?.data);
 
   if (before.ambiguous.length > 0) {
@@ -154,7 +157,7 @@ export async function executeSilentEnrollment({
 
   for (const item of before.plan) {
     for (const funcionarioIds of chunkIds(item.funcionario_ids, 200)) {
-      const result = await authenticatedJson(fetchImpl, apiBaseUrl, token, '/api/lms/matriculas/lote', {
+      const result = await authenticatedJson(fetchImpl, normalizedApiBaseUrl, token, '/api/lms/matriculas/lote', {
         method: 'POST',
         body: JSON.stringify({
           funcionario_ids: funcionarioIds,
@@ -172,7 +175,7 @@ export async function executeSilentEnrollment({
 
   if (summary.errors > 0) throw new Error(`SILENT_ENROLLMENT_API_ERRORS:${summary.errors}`);
 
-  const afterJson = await authenticatedJson(fetchImpl, apiBaseUrl, token, '/api/compliance-treinamentos/reconciliacao');
+  const afterJson = await authenticatedJson(fetchImpl, normalizedApiBaseUrl, token, '/api/compliance-treinamentos/reconciliacao');
   const after = buildEnrollmentPlan(afterJson?.data);
   if (after.ambiguous.length > 0) throw new Error('POSTCONDITION_AMBIGUOUS_MAPPING');
   if (after.plan.length > 0) {
@@ -199,7 +202,11 @@ async function main() {
   appendOutput(summary);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const isDirectExecution = Boolean(
+  process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href,
+);
+
+if (isDirectExecution) {
   main().catch((error) => {
     console.error(`Production silent enrollment failed: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
