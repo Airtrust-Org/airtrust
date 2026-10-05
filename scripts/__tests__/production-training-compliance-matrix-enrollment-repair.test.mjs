@@ -36,6 +36,13 @@ test('repair uses canonical compliance evidence and a 60-day renewal window befo
   assert.match(script, /CANONICAL_FUTURE_EVIDENCE_REQUIRES_WORKER_FIX/);
 });
 
+test('completed LMS with incompatible required modality is manual review, not duplicate enrollment', () => {
+  assert.match(script, /requirementNeedsManualModalityCompletion/);
+  assert.match(script, /evidencia_modalidade_incompativel === true/);
+  assert.match(script, /isCompletedEnrollmentStatus\(requirement\?\.lms_status\)/);
+  assert.match(script, /modality_manual_review_count/);
+});
+
 test('repair cancels only provably unstarted redundant enrollments satisfied by valid evidence', () => {
   assert.match(script, /requirementSuppressesEnrollment/);
   assert.match(script, /isProvablyUnstartedEnrollment/);
