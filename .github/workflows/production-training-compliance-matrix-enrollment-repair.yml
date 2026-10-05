@@ -36,8 +36,8 @@ env:
   PROD_API_BASE_URL: https://api.airtrust.online
 
 jobs:
-  repair:
-    name: Governed Production Compliance Matrix Enrollment Repair
+  d1_repair:
+    name: Governed Production D1 Compliance Matrix Enrollment Repair
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
