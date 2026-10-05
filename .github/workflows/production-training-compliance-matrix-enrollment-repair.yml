@@ -59,7 +59,7 @@ jobs:
           if [[ "$MODE" == dry-run ]]; then
             [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_DRYRUN_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR ]] || { echo DRYRUN_CONFIRMATION_REQUIRED >&2; exit 1; }
           elif [[ "$MODE" == apply ]]; then
-            [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_NO_EMAIL ]] || { echo APPLY_CONFIRMATION_REQUIRED >&2; exit 1; }
+            [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_AND_REDUNDANT_VALID_EVIDENCE_NO_EMAIL ]] || { echo APPLY_CONFIRMATION_REQUIRED >&2; exit 1; }
           else
             echo INVALID_MODE >&2; exit 1
           fi
@@ -110,7 +110,7 @@ jobs:
           gh run download "$REVIEWED_RUN" --repo "$GITHUB_REPOSITORY" --name "production-training-compliance-matrix-enrollment-repair-dry-run-$EXPECTED_SHA" --dir "$RUNNER_TEMP/reviewed"
           evidence="$RUNNER_TEMP/reviewed/result.json"
           test -s "$evidence"
-          for key in missing wrong no_course; do
+          for key in missing wrong no_course redundant; do
             count="$(jq -r ".${key}_count" "$evidence")"
             hash="$(jq -r ".${key}_hash" "$evidence")"
             [[ "$count" =~ ^[0-9]+$ ]] || { echo "REVIEWED_${key}_COUNT_INVALID" >&2; exit 1; }
@@ -120,8 +120,11 @@ jobs:
             echo "TRAINING_COMPLIANCE_EXPECTED_${upper}_HASH=$hash" >> "$GITHUB_ENV"
           done
           evidenced_wrong_count="$(jq -r .unsafe_wrong_count "$evidence")"
+          redundant_review_count="$(jq -r .redundant_manual_review_count "$evidence")"
           [[ "$evidenced_wrong_count" =~ ^[0-9]+$ ]] || { echo REVIEWED_EVIDENCED_WRONG_COUNT_INVALID >&2; exit 1; }
+          [[ "$redundant_review_count" =~ ^[0-9]+$ ]] || { echo REVIEWED_REDUNDANT_REVIEW_COUNT_INVALID >&2; exit 1; }
           echo "REVIEWED_WRONG_WITH_EVIDENCE_COUNT=$evidenced_wrong_count" >> "$GITHUB_STEP_SUMMARY"
+          echo "REVIEWED_REDUNDANT_MANUAL_REVIEW_COUNT=$redundant_review_count" >> "$GITHUB_STEP_SUMMARY"
           [[ "$(jq -r .ambiguous_course_count "$evidence")" == 0 ]] || { echo REVIEWED_AMBIGUOUS_COURSES_NOT_ZERO >&2; exit 1; }
           echo "REVIEWED_DRY_RUN_VERIFIED=$REVIEWED_RUN" >> "$GITHUB_STEP_SUMMARY"
 
@@ -156,7 +159,7 @@ jobs:
         run: |
           set -euo pipefail
           test -s "$RUNNER_TEMP/result.json" || exit 0
-          jq '{mode,source_sha,empresa_id,expected_pairs,missing_count,missing_hash,wrong_count,wrong_hash,unsafe_wrong_count,wrong_with_evidence_count,historical_evidence_preserved,no_course_count,no_course_hash,no_course_codes,ambiguous_course_count,email_disabled,invitation_endpoint_called,mutation_executed,created_courses,created_enrollments,ignored_existing,cancelled_wrong_enrollments,cancelled_wrong_with_evidence_enrollments,post_expected_pairs,post_missing_count,post_wrong_count,post_no_course_count,postconditions_verified,pii_emitted}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+          jq '{mode,source_sha,empresa_id,expected_pairs,renewal_window_days,renewal_window_count,suppressed_by_valid_evidence_count,missing_count,missing_hash,wrong_count,wrong_hash,unsafe_wrong_count,wrong_with_evidence_count,redundant_count,redundant_hash,redundant_manual_review_count,historical_evidence_preserved,no_course_count,no_course_hash,no_course_codes,ambiguous_course_count,email_disabled,invitation_endpoint_called,mutation_executed,created_courses,created_enrollments,ignored_existing,cancelled_wrong_enrollments,cancelled_wrong_with_evidence_enrollments,cancelled_redundant_valid_evidence_enrollments,post_expected_pairs,post_missing_count,post_wrong_count,post_redundant_count,post_no_course_count,postconditions_verified,pii_emitted}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload sanitized evidence
         uses: actions/upload-artifact@v7

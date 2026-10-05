@@ -849,6 +849,57 @@ describe('training compliance engine', () => {
     ).toBeUndefined();
   });
 
+  it('não aceita evidência com data de realização futura como compliance válido', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 100, 'SETOR_FUNCAO', 10, 1, 'OBRIGATORIA', 'EMPRESA');
+      INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id)
+      VALUES (501, 1, 'MNT EAD', 100);
+      INSERT INTO qualificacoes_historico
+        (id, empresa_id, funcionario_id, qualificacao_id, data_conclusao, data_vencimento, status, deleted_at)
+      VALUES (9900, 1, 1000, 100, date('now','+10 days'), date('now','+400 days'), 'VALIDA', NULL);
+    `);
+
+    const app = createApp(sqlite.asD1());
+    const person = (await (await app.request('/funcionarios/1000')).json()) as any;
+    const requirement = person.data.requisitos.find((item: any) => item.qualificacao_tipo_id === 100);
+    expect(requirement.status_compliance).toBe('NAO_REALIZADO');
+    expect(requirement.ultima_data).toBeNull();
+
+    const reconciliation = (await (await app.request('/reconciliacao')).json()) as any;
+    const gap = reconciliation.data.gaps_matricula.find((item: any) => item.qualificacao_tipo_id === 100);
+    expect(gap).toMatchObject({ pessoas: 2, nunca_realizados: 2 });
+  });
+
+  it('abre renovação antecipada em 60 dias sem alterar o status global de compliance', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 100, 'SETOR_FUNCAO', 10, 1, 'OBRIGATORIA', 'EMPRESA');
+      INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id)
+      VALUES (501, 1, 'MNT EAD', 100);
+      INSERT INTO qualificacoes_historico
+        (id, empresa_id, funcionario_id, qualificacao_id, data_conclusao, data_vencimento, status, deleted_at)
+      VALUES (9901, 1, 1000, 100, date('now','-300 days'), date('now','+45 days'), 'VALIDA', NULL);
+    `);
+
+    const app = createApp(sqlite.asD1());
+    const person = (await (await app.request('/funcionarios/1000')).json()) as any;
+    const requirement = person.data.requisitos.find((item: any) => item.qualificacao_tipo_id === 100);
+    expect(requirement.status_compliance).toBe('CONFORME');
+    expect(requirement.dias_para_vencer).toBeGreaterThan(30);
+    expect(requirement.dias_para_vencer).toBeLessThanOrEqual(60);
+
+    const reconciliation = (await (await app.request('/reconciliacao')).json()) as any;
+    const gap = reconciliation.data.gaps_matricula.find((item: any) => item.qualificacao_tipo_id === 100);
+    expect(gap).toMatchObject({
+      pessoas: 2,
+      renovacao_antecipada: 1,
+      janela_renovacao_dias: 60,
+    });
+  });
+
   it('persiste decisão de manter matrícula avulsa e permite reabrir a reconciliação', async () => {
     sqlite.database.exec(`
       INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id)

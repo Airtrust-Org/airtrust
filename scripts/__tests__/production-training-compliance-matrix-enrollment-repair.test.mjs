@@ -25,6 +25,28 @@ test('missing enrollment target is organizational-role only and defers designati
   assert.match(script, /LEFT JOIN expected e ON e\.funcionario_id=a\.funcionario_id/);
 });
 
+
+test('repair uses canonical compliance evidence and a 60-day renewal window before enrolling', () => {
+  assert.match(script, /RENEWAL_WINDOW_DAYS = 60/);
+  assert.match(script, /\/api\/compliance-treinamentos\/funcionarios\/\$\{funcionarioId\}/);
+  assert.match(script, /status === 'CONFORME'/);
+  assert.match(script, /parsed <= RENEWAL_WINDOW_DAYS/);
+  assert.match(script, /CANONICAL_REQUIREMENT_AMBIGUOUS/);
+  assert.match(script, /CANONICAL_REQUIREMENT_MISSING/);
+  assert.match(script, /CANONICAL_FUTURE_EVIDENCE_REQUIRES_WORKER_FIX/);
+});
+
+test('repair cancels only provably unstarted redundant enrollments satisfied by valid evidence', () => {
+  assert.match(script, /requirementSuppressesEnrollment/);
+  assert.match(script, /isProvablyUnstartedEnrollment/);
+  assert.match(script, /LMS_MATRICULA_REDUNDANT_VALID_EVIDENCE/);
+  assert.match(script, /requirement_satisfied_by_valid_evidence/);
+  assert.match(script, /redundant_manual_review_count/);
+  assert.match(script, /REDUNDANT_CANDIDATE_SET_CHANGED/);
+  assert.match(script, /cancelled_redundant_valid_evidence_enrollments/);
+  assert.match(script, /POST_REDUNDANT_VALID_EVIDENCE_ENROLLMENTS/);
+});
+
 test('production enrollment repair uses small API batches to stay within Worker request timeouts', () => {
   assert.match(script, /employeeChunk of chunk\(\[\.\.\.new Set\(employeeIds\)\]\.sort\(\(a, b\) => a - b\), 10\)/);
 });
@@ -70,6 +92,7 @@ test('workflow is exact-SHA, dry-run-first and recovery guarded', () => {
   assert.match(workflow, /CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
   assert.match(workflow, /PROD_SMOKE_EMAIL \|\| secrets\.QA_EXAMINER_ADMIN_EMAIL/);
   assert.match(workflow, /production-training-compliance-matrix-enrollment-repair-dry-run-/);
-  assert.match(workflow, /APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_NO_EMAIL/);
+  assert.match(workflow, /for key in missing wrong no_course redundant/);
+  assert.match(workflow, /APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_AND_REDUNDANT_VALID_EVIDENCE_NO_EMAIL/);
   assert.doesNotMatch(workflow, /REVIEWED_UNSAFE_WRONG_NOT_ZERO/);
 });
