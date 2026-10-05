@@ -40,6 +40,7 @@ import {
   type TrainingComplianceScope,
 } from '../services/training-compliance-rule-engine';
 import { buildQualificationEvidenceProfileSql } from '../services/training-compliance-evidence-profile';
+import { TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS, trainingComplianceEvidenceIsRealizedBy, trainingComplianceNeedsEnrollment } from '../services/training-compliance-enrollment-policy';
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 
@@ -60,7 +61,6 @@ type Scope = TrainingComplianceScope;
 type Obrigatoriedade = (typeof OBRIGATORIEDADES)[number];
 type Origem = (typeof ORIGENS)[number];
 type ComplianceStatus = 'CONFORME' | 'VENCENDO' | 'VENCIDO' | 'NAO_REALIZADO' | 'EM_ANDAMENTO';
-const ENROLLMENT_RENEWAL_WINDOW_DAYS = 60;
 
 type Employee = {
   id: number;
@@ -561,19 +561,13 @@ function computeRequirement(
   const allHistory = historyItems || [];
   const allLms = lmsItems || [];
   const historyForProfile = allHistory.filter(
-    (item) =>
-      evidenceMatchesCompetencyProfile(rule.perfil_competencia, item) &&
-      Boolean(item.data_realizacao) &&
-      String(item.data_realizacao).slice(0, 10) <= today,
+    (item) => evidenceMatchesCompetencyProfile(rule.perfil_competencia, item) && trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, today),
   );
   const lmsForProfile = allLms.filter((item) =>
     evidenceMatchesCompetencyProfile(rule.perfil_competencia, item),
   );
   const completedLmsForProfile = lmsForProfile.filter(
-    (item) =>
-      String(item.lms_status || '').toUpperCase() === 'CONCLUIDO' &&
-      Boolean(item.data_realizacao) &&
-      String(item.data_realizacao).slice(0, 10) <= today,
+    (item) => String(item.lms_status || '').toUpperCase() === 'CONCLUIDO' && trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, today),
   );
   const compatibleHistory = historyForProfile.filter((item) =>
     trainingComplianceEvidenceMeetsRequiredModality(rule.modalidade_requerida, item.modalidade),
@@ -1715,11 +1709,7 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
       const key = `${person.id}:${req.qualificacao_tipo_id}`;
       if (blockingEnrollmentKeys.has(key)) continue;
       requisitosSemMatricula += 1;
-      const renovacaoAntecipada =
-        req.status_compliance === 'CONFORME' &&
-        req.dias_para_vencer !== null &&
-        req.dias_para_vencer <= ENROLLMENT_RENEWAL_WINDOW_DAYS;
-      if (!renovacaoAntecipada && !['NAO_REALIZADO', 'VENCIDO', 'VENCENDO'].includes(req.status_compliance)) continue;
+      if (!trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer)) continue;
       const current = gaps.get(req.qualificacao_tipo_id) || {
         qualificacao_tipo_id: req.qualificacao_tipo_id,
         qualificacao_tipo_nome: req.qualificacao_tipo_nome,
@@ -1796,10 +1786,8 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
       vencidos: gap.funcionarios.filter((p) => p.status_compliance === 'VENCIDO').length,
       nunca_realizados: gap.funcionarios.filter((p) => p.status_compliance === 'NAO_REALIZADO')
         .length,
-      renovacao_antecipada: gap.funcionarios.filter(
-        (p) => p.status_compliance === 'CONFORME',
-      ).length,
-      janela_renovacao_dias: ENROLLMENT_RENEWAL_WINDOW_DAYS,
+      renovacao_antecipada: gap.funcionarios.filter((p) => p.status_compliance === 'CONFORME').length,
+      janela_renovacao_dias: TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS,
       cursos_ead: courseByType.get(gap.qualificacao_tipo_id) || [],
     }))
     .sort((a, b) =>
