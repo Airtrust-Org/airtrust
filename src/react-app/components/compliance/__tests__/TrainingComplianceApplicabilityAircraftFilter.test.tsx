@@ -128,6 +128,10 @@ describe('TrainingComplianceApplicabilityEditor aircraft scope', () => {
       .find((element) => element.tagName === 'SPAN') as HTMLElement;
     const normalRow = normalRuleText.closest('div.flex.flex-col') as HTMLElement;
     expect(within(normalRow).getByRole('button', { name: 'Remover requisito' })).not.toBeDisabled();
+    expect(normalRow).not.toHaveClass('md:flex-row');
+    const statusSelect = within(normalRow).getByRole('combobox');
+    expect(statusSelect).toHaveClass('flex-1', 'min-w-0');
+    expect(statusSelect.parentElement).toHaveClass('border-t', 'pt-3');
   });
 
   it('explains that não se aplica is only an explicit exception', async () => {
