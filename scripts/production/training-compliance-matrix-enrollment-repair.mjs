@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-// source_reference: tenant-6 production read-only D1 inventory 2026-10-05; 1,942 mandatory EAD employee-training pairs, 950 missing, 26 prior-batch wrong and evidence-free.
-// operational_decision: repair only effective mandatory EAD matrix enrollments; create only missing mandatory EAD course placeholders; cancel only exact prior-batch wrong evidence-free enrollments.
+// source_reference: tenant-6 production read-only D1 inventory 2026-10-05; global active-employee LMS enrollment reconciliation against the effective mandatory EAD matrix.
+// operational_decision: repair effective mandatory EAD matrix enrollments for every active employee; create only missing mandatory EAD course placeholders; cancel only globally mismatched evidence-free enrollments that were not explicitly reconciled as standalone.
 // dry_run_required: production apply requires a successful reviewed dry-run on the exact same SHA with identical candidate counts and hashes.
 // rollback_plan_required: workflow captures a D1 Time Travel recovery point immediately before apply; no enrollment with progress, runtime evidence, completion evidence or qualification history may be cancelled.
 
@@ -11,7 +11,6 @@ import { spawnSync } from 'node:child_process';
 const DB_NAME = 'airtrust-db';
 const EMPRESA_ID = 6;
 const API_BASE = process.env.PROD_API_BASE_URL || 'https://api.airtrust.online';
-const PREVIOUS_BATCH_MARKER = 'Matrícula criada pela reconciliação do Compliance de Treinamentos — lote autorizado pela Gerência de Treinamento.';
 const REPAIR_MARKER = 'Matrícula criada pela reconciliação exata da matriz obrigatória EAD — lote autorizado pela Gerência de Treinamento.';
 const DRY_CONFIRM = 'AIRTRUST_PRODUCTION_DRYRUN_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR';
 const APPLY_CONFIRM = 'AIRTRUST_PRODUCTION_APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_NO_EMAIL';
@@ -138,8 +137,11 @@ function baseCte() {
   ), active_enroll AS (
     SELECT DISTINCT m.funcionario_id,c.qualificacao_tipo_id
       FROM lms_matriculas m
+      JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id
       JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id AND c.deleted_at IS NULL
      WHERE m.empresa_id=${EMPRESA_ID}
+       AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
+       AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'
        AND m.deleted_at IS NULL
        AND UPPER(COALESCE(m.status,''))!='CANCELADO'
   ), active_courses AS (
@@ -175,26 +177,40 @@ function readState() {
   );
 
   const wrongRows = runWrangler(
-    `${baseCte()}, batch AS (
+    `${baseCte()}, active_global AS (
        SELECT m.id,m.funcionario_id,c.qualificacao_tipo_id,qt.categoria,m.status,m.progresso_pct,m.data_inicio,m.data_conclusao,m.qualificacao_historico_id,
               EXISTS(SELECT 1 FROM lms_progresso_scorm ps WHERE ps.matricula_id=m.id AND ps.empresa_id=m.empresa_id) has_scorm,
               EXISTS(SELECT 1 FROM lms_xapi_statements xs WHERE xs.matricula_id=m.id AND xs.empresa_id=m.empresa_id) has_xapi,
               EXISTS(SELECT 1 FROM lms_completion_diagnostics_snapshots ds WHERE ds.matricula_id=m.id AND ds.empresa_id=m.empresa_id) has_diag,
-              EXISTS(SELECT 1 FROM qualificacoes_historico qh WHERE qh.lms_matricula_id=m.id AND qh.empresa_id=m.empresa_id AND qh.deleted_at IS NULL) has_history
+              EXISTS(SELECT 1 FROM qualificacoes_historico qh WHERE qh.lms_matricula_id=m.id AND qh.empresa_id=m.empresa_id AND qh.deleted_at IS NULL) has_history,
+              CASE WHEN EXISTS(
+                SELECT 1 FROM treinamento_matricula_reconciliacoes tmr
+                 WHERE tmr.empresa_id=m.empresa_id
+                   AND tmr.matricula_id=m.id
+                   AND tmr.ativo=1 AND tmr.deleted_at IS NULL
+                   AND UPPER(TRIM(COALESCE(tmr.decisao,'')))='MANTER_AVULSA'
+              ) THEN 1 ELSE 0 END keep_standalone
          FROM lms_matriculas m
-         JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
-         LEFT JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id
+         JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id
+         JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id AND c.deleted_at IS NULL
+         LEFT JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id AND qt.deleted_at IS NULL
         WHERE m.empresa_id=${EMPRESA_ID}
+          AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
+          AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'
           AND m.deleted_at IS NULL
-          AND m.observacoes=${JSON.stringify(PREVIOUS_BATCH_MARKER)}
+          AND UPPER(COALESCE(m.status,''))!='CANCELADO'
      )
-     SELECT b.id,b.funcionario_id,b.qualificacao_tipo_id,b.categoria,b.status,b.progresso_pct,b.data_inicio,b.data_conclusao,b.qualificacao_historico_id,b.has_scorm,b.has_xapi,b.has_diag,b.has_history
-       FROM batch b
-       LEFT JOIN expected e ON e.funcionario_id=b.funcionario_id AND e.qualificacao_tipo_id=b.qualificacao_tipo_id
-      WHERE UPPER(TRIM(COALESCE(b.categoria,''))) NOT IN ('EAD','TREINAMENTO EAD')
-         OR e.funcionario_id IS NULL
-      ORDER BY b.id`,
-    'wrong_batch_pairs',
+     SELECT a.id,a.funcionario_id,a.qualificacao_tipo_id,a.categoria,a.status,a.progresso_pct,a.data_inicio,a.data_conclusao,a.qualificacao_historico_id,a.has_scorm,a.has_xapi,a.has_diag,a.has_history
+       FROM active_global a
+       LEFT JOIN expected e ON e.funcionario_id=a.funcionario_id AND e.qualificacao_tipo_id=a.qualificacao_tipo_id
+      WHERE a.keep_standalone=0
+        AND (
+          a.qualificacao_tipo_id IS NULL
+          OR UPPER(TRIM(COALESCE(a.categoria,''))) NOT IN ('EAD','TREINAMENTO EAD')
+          OR e.funcionario_id IS NULL
+        )
+      ORDER BY a.id`,
+    'wrong_global_pairs',
   );
 
   const unsafeWrong = wrongRows.filter((row) => {
@@ -356,7 +372,7 @@ function cancelReviewedWrongEnrollments(ids) {
   runWrangler(
     `INSERT INTO audit_logs (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at)
      SELECT NULL,'LMS_MATRICULA_COMPLIANCE_MATRIX_REPAIR','lms_matriculas',m.id,
-            '{"status":"NAO_INICIADO","progresso_pct":0}',
+            json_object('status',m.status,'progresso_pct',COALESCE(m.progresso_pct,0)),
             '{"status":"CANCELADO","reason":"not_mandatory_ead_in_current_matrix"}',${EMPRESA_ID},datetime('now')
        FROM lms_matriculas m
       WHERE m.empresa_id=${EMPRESA_ID} AND m.id IN (${idList}) AND m.deleted_at IS NULL`,
@@ -460,7 +476,7 @@ async function main() {
 
   const after = readState();
   if (after.missing_count !== 0) fail(`POST_MISSING_EXPECTED_PAIRS_${after.missing_count}`);
-  if (after.wrong_count !== 0) fail(`POST_WRONG_BATCH_PAIRS_${after.wrong_count}`);
+  if (after.wrong_count !== 0) fail(`POST_WRONG_GLOBAL_PAIRS_${after.wrong_count}`);
   if (after.no_course_count !== 0) fail(`POST_REQUIRED_EAD_COURSE_MISSING_${after.no_course_count}`);
   if (after.unsafe_wrong_count !== 0) fail('POST_UNSAFE_WRONG_ENROLLMENTS');
 
