@@ -29,6 +29,14 @@ test('global wrong enrollment audit covers all active employees and preserves ex
   assert.match(script, /qualificacoes_historico/);
 });
 
+test('dry-run reports unsafe wrong enrollments while apply remains fail-closed', () => {
+  const dryRunBranch = script.indexOf("if (mode === 'dry-run')");
+  const unsafeApplyGuard = script.indexOf("if (before.unsafe_wrong_count > 0) fail('WRONG_ENROLLMENTS_WITH_EVIDENCE_REQUIRE_MANUAL_REVIEW')");
+  assert.ok(dryRunBranch >= 0);
+  assert.ok(unsafeApplyGuard > dryRunBranch);
+  assert.match(script, /unsafe_wrong_count: state\.unsafe_wrong_count/);
+});
+
 test('workflow is exact-SHA, dry-run-first and recovery guarded', () => {
   assert.match(workflow, /options: \[dry-run, apply\]/);
   assert.match(workflow, /reviewed_dry_run_run_id/);
