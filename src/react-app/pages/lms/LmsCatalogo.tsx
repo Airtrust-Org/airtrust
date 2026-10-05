@@ -9,8 +9,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
   BadgeCheck,
-  BookOpen,
-  CheckCircle2,
   Clock,
   Eye,
   EyeOff,
@@ -67,7 +65,6 @@ import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAr
 import {
   formatMinutes,
   getTypeMeta,
-  getLmsCourseThumbnailUrl,
   useLmsCourseThumbnailUrl,
   getMatriculaStatusMeta,
   getLmsGridCardBorderClasses,
@@ -76,7 +73,6 @@ import {
   getLmsProgressBarFillClasses,
   getLmsProgressLabel,
   LmsCourseArtwork,
-  LmsCourseMiniMeta,
   LmsEmptyState,
   LmsModuleTabs,
   LmsPageShell,
@@ -103,6 +99,7 @@ const DEFAULT_CATEGORIES = [
 ];
 const EAD_QUALIFICACAO_CATEGORIAS = new Set(['EAD', 'TREINAMENTO EAD']);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function resolveLmsCatalogRoleView(params: {
   canManage: boolean;
   restrictToEnrolledCourses: boolean;
@@ -135,6 +132,7 @@ type LmsCourseMutationAccess = {
  * authoritative; this prevents the catalog from offering an action that will
  * be rejected after a destructive confirmation.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function canMutateLmsCourse({
   canManage,
   operationalAccessReady,
@@ -719,7 +717,7 @@ function CourseDrawer({
         ? current
         : { ...current, qualificacao_area_id: nextAreaId },
     );
-  }, [curTipo?.id, curTipo?.area_id]);
+  }, [curTipo]);
   const hasLegacy =
     form.gerar_qualificacao_ao_concluir === 1 && Boolean(curTipo) && !isEadTipo(curTipo!);
   const storedContentLabel = getStoredContentLabel(courseSnapshot);

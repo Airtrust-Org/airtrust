@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = join(process.cwd(), '..');
 const migrationPath = 'worker-airtrust/migrations/0533_training_catalog_metadata_references.sql';
-const changePath = 'worker-airtrust/schema-v2/changes/0533_training_catalog_metadata_references.sql';
+const changePath =
+  'worker-airtrust/schema-v2/changes/0533_training_catalog_metadata_references.sql';
 const planPath = 'worker-airtrust/schema-v2/plans/training-catalog-metadata-references-0533.md';
 const manifestPath = 'worker-airtrust/schema-v2/training-catalog-metadata-references-0533.json';
 const read = (path: string) => readFileSync(join(ROOT, path), 'utf8');
@@ -34,7 +35,7 @@ describe('training catalog metadata references 0533', () => {
     expect(sql).toContain('ALTER TABLE qualificacoes_tipos ADD COLUMN referencias TEXT;');
     expect(sql).toContain('ALTER TABLE lms_cursos ADD COLUMN referencias TEXT;');
     expect(sql).toContain('referencias=(SELECT qt.referencias');
-    expect(sql).toContain("empresa_id=6");
+    expect(sql).toContain('empresa_id=6');
   });
 
   it('applies the reviewed maintenance 24-month rule and corrected loads', () => {
@@ -72,11 +73,21 @@ describe('training catalog metadata references 0533', () => {
     const workflow = read('.github/workflows/staging-d1-schema-change.yml');
     const runner = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
     const migration = '0533_training_catalog_metadata_references.sql';
-    expect(workflow.match(new RegExp(`^\\s*- ${migration.replace('.', '\\.')}$`, 'gm'))).toHaveLength(1);
-    expect(workflow).toContain(`0532_training_compliance_fdm_designation_only.sql|${migration}) ;;`);
-    expect(runner.match(new RegExp(`^\\s*\"${migration.replace('.', '\\.')}\"$`, 'gm'))).toHaveLength(1);
-    expect(runner.match(/bash scripts\/staging\/validate-0533-preflight\.sh --target="\$db_name"/g)).toHaveLength(1);
-    expect(runner.match(/bash scripts\/staging\/validate-0533-postconditions\.sh --target="\$db_name"/g)).toHaveLength(1);
+    expect(
+      workflow.match(new RegExp(`^\\s*- ${migration.replace('.', '\\.')}$`, 'gm')),
+    ).toHaveLength(1);
+    expect(workflow).toContain(
+      `0532_training_compliance_fdm_designation_only.sql|${migration}) ;;`,
+    );
+    expect(runner.match(new RegExp(`^\\s*"${migration.replace('.', '\\.')}"$`, 'gm'))).toHaveLength(
+      1,
+    );
+    expect(
+      runner.match(/bash scripts\/staging\/validate-0533-preflight\.sh --target="\$db_name"/g),
+    ).toHaveLength(1);
+    expect(
+      runner.match(/bash scripts\/staging\/validate-0533-postconditions\.sh --target="\$db_name"/g),
+    ).toHaveLength(1);
   });
 
   it('ships governed preflight and postcondition validators', () => {

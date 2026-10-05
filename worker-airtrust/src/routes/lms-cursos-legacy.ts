@@ -10,7 +10,12 @@ import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { resolveScormLaunchFileHref, resolveScormVersion } from '../lib/lms/scorm-manifest-parser';
-import { requireOperacoesCurso, applyLmsCursosDomainReadFilter, assertLmsCursoDetailDomainAccess, resolveAndValidateCursoDominioCodigo } from './lms-cursos-rbac';
+import {
+  requireOperacoesCurso,
+  applyLmsCursosDomainReadFilter,
+  assertLmsCursoDetailDomainAccess,
+  resolveAndValidateCursoDominioCodigo,
+} from './lms-cursos-rbac';
 import { getEmpresaIdSafe } from './escalas-shared';
 import {
   employeeSectorSql,
@@ -169,7 +174,12 @@ async function getCourseSetorSchema(db: D1Database): Promise<{
   const hasLmsCursosFormato = lmsCursosColumns.has('formato_id');
   const hasLmsCursosDominioCodigo = lmsCursosColumns.has('dominio_codigo');
 
-  return { hasCursoSetores, hasQualificacaoTipoSetores, hasLmsCursosFormato, hasLmsCursosDominioCodigo };
+  return {
+    hasCursoSetores,
+    hasQualificacaoTipoSetores,
+    hasLmsCursosFormato,
+    hasLmsCursosDominioCodigo,
+  };
 }
 
 function assertSetorIdsWithinWriteScope(access: EmployeeSectorAccess, setorIds: number[]): void {
@@ -1597,7 +1607,12 @@ app.get('/', async (c) => {
     }
   }
 
-  const domainFilter = await applyLmsCursosDomainReadFilter({ db, empresaId, c, hasLmsCursosDominioCodigo: courseSetorSchema.hasLmsCursosDominioCodigo });
+  const domainFilter = await applyLmsCursosDomainReadFilter({
+    db,
+    empresaId,
+    c,
+    hasLmsCursosDominioCodigo: courseSetorSchema.hasLmsCursosDominioCodigo,
+  });
   where += domainFilter.clause;
   binds.push(...(domainFilter.bindings as (string | number)[]));
 
@@ -1925,7 +1940,11 @@ async function handleLmsStats(c: Context) {
 // ── KPIs / Stats ─────────────────────────────────────────────────────────────
 
 app.get('/stats', requirePermission('lms', 'visualizar', 'admin', 'manager'), handleLmsStats);
-app.get('/cursos/stats', requirePermission('lms', 'visualizar', 'admin', 'manager'), handleLmsStats);
+app.get(
+  '/cursos/stats',
+  requirePermission('lms', 'visualizar', 'admin', 'manager'),
+  handleLmsStats,
+);
 
 // ── Detalhes de curso ────────────────────────────────────────────────────────
 
@@ -2034,7 +2053,13 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
     qualificacaoTipoId: resolvedQualificacaoTipoId,
   });
 
-  const cursoDominioCodigo = await resolveAndValidateCursoDominioCodigo({ db, empresaId, c, explicitDominioCodigo: d.dominio_codigo, resolvedQualificacaoTipoId });
+  const cursoDominioCodigo = await resolveAndValidateCursoDominioCodigo({
+    db,
+    empresaId,
+    c,
+    explicitDominioCodigo: d.dominio_codigo,
+    resolvedQualificacaoTipoId,
+  });
 
   if (setorIds.length > 0) {
     await validateSetorIds(db, empresaId, setorIds);
@@ -2196,75 +2221,87 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
 
 // ── Editar curso ─────────────────────────────────────────────────────────────
 
-app.put('/:id', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
-  const db = c.env.DB;
-  const empresaId = getEmpresaIdSafe(c);
-  const cursoId = Number(c.req.param('id'));
-  const access = await getEmployeeSectorAccess(c, empresaId);
-  const courseSetorSchema = await getCourseSetorSchema(db);
+app.put(
+  '/:id',
+  requirePermission('lms', 'editar', 'admin', 'manager'),
+  requireOperacoesCurso('update'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaIdSafe(c);
+    const cursoId = Number(c.req.param('id'));
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const courseSetorSchema = await getCourseSetorSchema(db);
 
-  const existing = await db
-    .prepare(
-      'SELECT id, titulo, categoria, tipo_conteudo, publicado, ativo, qualificacao_tipo_id, gerar_qualificacao_ao_concluir FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
-    )
-    .bind(cursoId, empresaId)
-    .first<{
-      id: number;
-      titulo: string;
-      categoria: string | null;
-      tipo_conteudo: string;
-      publicado: number;
-      ativo: number;
-      qualificacao_tipo_id: number | null;
-      gerar_qualificacao_ao_concluir: number;
-    }>();
-  if (!existing) throw new ApiError('Curso não encontrado', 404);
+    const existing = await db
+      .prepare(
+        'SELECT id, titulo, categoria, tipo_conteudo, publicado, ativo, qualificacao_tipo_id, gerar_qualificacao_ao_concluir FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      )
+      .bind(cursoId, empresaId)
+      .first<{
+        id: number;
+        titulo: string;
+        categoria: string | null;
+        tipo_conteudo: string;
+        publicado: number;
+        ativo: number;
+        qualificacao_tipo_id: number | null;
+        gerar_qualificacao_ao_concluir: number;
+      }>();
+    if (!existing) throw new ApiError('Curso não encontrado', 404);
 
-  const currentCursoSetorIds = await getCursoSetorIds(db, empresaId, cursoId, courseSetorSchema);
-  await assertCursoWriteScope({
-    db,
-    empresaId,
-    access,
-    schema: courseSetorSchema,
-    setorIds: currentCursoSetorIds,
-    qualificacaoTipoId: existing.qualificacao_tipo_id,
-  });
-
-  const body = await c.req.json<unknown>();
-  const parsed = CursoUpdateSchema.safeParse(body);
-  if (!parsed.success)
-    throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
-
-  const d = parsed.data;
-  if (!(await isValidQualificationAreaId(db, empresaId, d.qualificacao_area_id)))
-    throw new ApiError('Área da qualificação inválida ou inativa para esta empresa', 400);
-  const nextGerarQualificacao =
-    d.gerar_qualificacao_ao_concluir ?? existing.gerar_qualificacao_ao_concluir;
-  const nextQualificacaoTipoId =
-    d.qualificacao_tipo_id !== undefined ? d.qualificacao_tipo_id : existing.qualificacao_tipo_id;
-  const nextCategoria = d.categoria !== undefined ? d.categoria : existing.categoria;
-  const nextFormatoId = d.formato_id !== undefined ? d.formato_id : undefined;
-  const isEadCourse = await isEadCourseRequest(db, empresaId, {
-    qualificacaoTipoId: nextQualificacaoTipoId ?? null,
-    formatoId: nextFormatoId ?? null,
-    categoria: nextCategoria,
-  });
-  const qualificacaoBindingChanged =
-    nextGerarQualificacao !== existing.gerar_qualificacao_ao_concluir ||
-    nextQualificacaoTipoId !== existing.qualificacao_tipo_id;
-
-  ensureQualificacaoBinding(nextGerarQualificacao, nextQualificacaoTipoId ?? null, isEadCourse);
-
-  let resolvedQualificacaoTipoId = nextQualificacaoTipoId ?? null;
-
-  if (!qualificacaoBindingChanged) {
-    const hasLegacyBinding = await isLegacyNonEadQualificacaoBinding(
+    const currentCursoSetorIds = await getCursoSetorIds(db, empresaId, cursoId, courseSetorSchema);
+    await assertCursoWriteScope({
       db,
       empresaId,
-      nextQualificacaoTipoId ?? null,
-    );
+      access,
+      schema: courseSetorSchema,
+      setorIds: currentCursoSetorIds,
+      qualificacaoTipoId: existing.qualificacao_tipo_id,
+    });
 
-    if (!hasLegacyBinding) {
+    const body = await c.req.json<unknown>();
+    const parsed = CursoUpdateSchema.safeParse(body);
+    if (!parsed.success)
+      throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
+
+    const d = parsed.data;
+    if (!(await isValidQualificationAreaId(db, empresaId, d.qualificacao_area_id)))
+      throw new ApiError('Área da qualificação inválida ou inativa para esta empresa', 400);
+    const nextGerarQualificacao =
+      d.gerar_qualificacao_ao_concluir ?? existing.gerar_qualificacao_ao_concluir;
+    const nextQualificacaoTipoId =
+      d.qualificacao_tipo_id !== undefined ? d.qualificacao_tipo_id : existing.qualificacao_tipo_id;
+    const nextCategoria = d.categoria !== undefined ? d.categoria : existing.categoria;
+    const nextFormatoId = d.formato_id !== undefined ? d.formato_id : undefined;
+    const isEadCourse = await isEadCourseRequest(db, empresaId, {
+      qualificacaoTipoId: nextQualificacaoTipoId ?? null,
+      formatoId: nextFormatoId ?? null,
+      categoria: nextCategoria,
+    });
+    const qualificacaoBindingChanged =
+      nextGerarQualificacao !== existing.gerar_qualificacao_ao_concluir ||
+      nextQualificacaoTipoId !== existing.qualificacao_tipo_id;
+
+    ensureQualificacaoBinding(nextGerarQualificacao, nextQualificacaoTipoId ?? null, isEadCourse);
+
+    let resolvedQualificacaoTipoId = nextQualificacaoTipoId ?? null;
+
+    if (!qualificacaoBindingChanged) {
+      const hasLegacyBinding = await isLegacyNonEadQualificacaoBinding(
+        db,
+        empresaId,
+        nextQualificacaoTipoId ?? null,
+      );
+
+      if (!hasLegacyBinding) {
+        resolvedQualificacaoTipoId = await resolveEadQualificacaoBinding(
+          db,
+          empresaId,
+          nextQualificacaoTipoId ?? null,
+          { allowMissingForEad: isEadCourse },
+        );
+      }
+    } else {
       resolvedQualificacaoTipoId = await resolveEadQualificacaoBinding(
         db,
         empresaId,
@@ -2272,160 +2309,154 @@ app.put('/:id', requirePermission('lms', 'editar', 'admin', 'manager'), requireO
         { allowMissingForEad: isEadCourse },
       );
     }
-  } else {
-    resolvedQualificacaoTipoId = await resolveEadQualificacaoBinding(
+
+    const nextResolvedGerarQualificacao =
+      resolvedQualificacaoTipoId != null ? 1 : nextGerarQualificacao;
+
+    const sets: string[] = [];
+    const vals: (string | number | null)[] = [];
+
+    const map: Record<string, unknown> = {
+      ...d,
+      qualificacao_tipo_id: resolvedQualificacaoTipoId,
+      gerar_qualificacao_ao_concluir: nextResolvedGerarQualificacao,
+    };
+    const updateKeys = [
+      'titulo',
+      'descricao',
+      'categoria',
+      'carga_horaria_minutos',
+      'conteudo_programatico',
+      'observacoes',
+      'referencias',
+      'carga_horaria_inicial_horas',
+      'carga_horaria_recorrente_horas',
+      'idioma',
+      'tipo_conteudo',
+      'scorm_versao',
+      'scorm_mastery_score',
+      'qualificacao_tipo_id',
+      'gerar_qualificacao_ao_concluir',
+      'publicado',
+      'ativo',
+      'version_tag',
+    ];
+    if (courseSetorSchema.hasLmsCursosFormato && isEadCourse) {
+      map.formato_id = null;
+      updateKeys.push('formato_id');
+    }
+    for (const key of updateKeys) {
+      if (key in map && map[key] !== undefined) {
+        sets.push(`${key} = ?`);
+        vals.push(map[key] as string | number | null);
+      }
+    }
+
+    const updateSetorIds =
+      Array.isArray(d.setor_ids) && d.setor_ids.length > 0 ? d.setor_ids : null;
+    const nextCursoSetorIds = updateSetorIds ?? currentCursoSetorIds;
+    await assertCursoWriteScope({
       db,
       empresaId,
-      nextQualificacaoTipoId ?? null,
-      { allowMissingForEad: isEadCourse },
-    );
-  }
-
-  const nextResolvedGerarQualificacao =
-    resolvedQualificacaoTipoId != null ? 1 : nextGerarQualificacao;
-
-  const sets: string[] = [];
-  const vals: (string | number | null)[] = [];
-
-  const map: Record<string, unknown> = {
-    ...d,
-    qualificacao_tipo_id: resolvedQualificacaoTipoId,
-    gerar_qualificacao_ao_concluir: nextResolvedGerarQualificacao,
-  };
-  const updateKeys = [
-    'titulo',
-    'descricao',
-    'categoria',
-    'carga_horaria_minutos',
-    'conteudo_programatico',
-    'observacoes',
-    'referencias',
-    'carga_horaria_inicial_horas',
-    'carga_horaria_recorrente_horas',
-    'idioma',
-    'tipo_conteudo',
-    'scorm_versao',
-    'scorm_mastery_score',
-    'qualificacao_tipo_id',
-    'gerar_qualificacao_ao_concluir',
-    'publicado',
-    'ativo',
-    'version_tag',
-  ];
-  if (courseSetorSchema.hasLmsCursosFormato && isEadCourse) {
-    map.formato_id = null;
-    updateKeys.push('formato_id');
-  }
-  for (const key of updateKeys) {
-    if (key in map && map[key] !== undefined) {
-      sets.push(`${key} = ?`);
-      vals.push(map[key] as string | number | null);
+      access,
+      schema: courseSetorSchema,
+      setorIds: nextCursoSetorIds,
+      qualificacaoTipoId: resolvedQualificacaoTipoId,
+    });
+    if (updateSetorIds !== null) {
+      await validateSetorIds(db, empresaId, updateSetorIds);
     }
-  }
 
-  const updateSetorIds = Array.isArray(d.setor_ids) && d.setor_ids.length > 0 ? d.setor_ids : null;
-  const nextCursoSetorIds = updateSetorIds ?? currentCursoSetorIds;
-  await assertCursoWriteScope({
-    db,
-    empresaId,
-    access,
-    schema: courseSetorSchema,
-    setorIds: nextCursoSetorIds,
-    qualificacaoTipoId: resolvedQualificacaoTipoId,
-  });
-  if (updateSetorIds !== null) {
-    await validateSetorIds(db, empresaId, updateSetorIds);
-  }
+    if (sets.length === 0 && updateSetorIds === null)
+      throw new ApiError('Nenhum campo para atualizar', 400);
 
-  if (sets.length === 0 && updateSetorIds === null)
-    throw new ApiError('Nenhum campo para atualizar', 400);
+    if (sets.length > 0) {
+      sets.push("updated_at = datetime('now')");
+      await db
+        .prepare(`UPDATE lms_cursos SET ${sets.join(', ')} WHERE id = ? AND empresa_id = ?`)
+        .bind(...vals, cursoId, empresaId)
+        .run();
+    }
 
-  if (sets.length > 0) {
-    sets.push("updated_at = datetime('now')");
-    await db
-      .prepare(`UPDATE lms_cursos SET ${sets.join(', ')} WHERE id = ? AND empresa_id = ?`)
-      .bind(...vals, cursoId, empresaId)
-      .run();
-  }
+    if (updateSetorIds !== null && courseSetorSchema.hasCursoSetores) {
+      await replaceCursoSetores(db, empresaId, cursoId, updateSetorIds);
+    }
 
-  if (updateSetorIds !== null && courseSetorSchema.hasCursoSetores) {
-    await replaceCursoSetores(db, empresaId, cursoId, updateSetorIds);
-  }
+    if (!resolvedQualificacaoTipoId && isEadCourse) {
+      resolvedQualificacaoTipoId = await ensureQualificacaoTipoForCurso(db, { empresaId, cursoId });
+    }
 
-  if (!resolvedQualificacaoTipoId && isEadCourse) {
-    resolvedQualificacaoTipoId = await ensureQualificacaoTipoForCurso(db, { empresaId, cursoId });
-  }
-
-  if (resolvedQualificacaoTipoId) {
-    await syncQualificacaoTipoFromCurso(db, {
-      empresaId,
-      cursoId,
-      qualificacaoAreaId: d.qualificacao_area_id ?? null,
-    });
-    await syncLmsCourseFromQualificacaoTipo(db, {
-      empresaId,
-      qualificacaoTipoId: Number(resolvedQualificacaoTipoId),
-    });
-
-    const reconcileTask = reconcileImportedEdappHistory(db, {
-      empresaId,
-      qualificacaoTipoId: Number(resolvedQualificacaoTipoId),
-      cursoId,
-    }).catch((error) => {
-      console.error('[LMS] Failed to reconcile imported EDAPP history after course update', {
+    if (resolvedQualificacaoTipoId) {
+      await syncQualificacaoTipoFromCurso(db, {
         empresaId,
         cursoId,
-        qualificacaoTipoId: Number(resolvedQualificacaoTipoId),
-        error,
+        qualificacaoAreaId: d.qualificacao_area_id ?? null,
       });
-    });
+      await syncLmsCourseFromQualificacaoTipo(db, {
+        empresaId,
+        qualificacaoTipoId: Number(resolvedQualificacaoTipoId),
+      });
 
-    if (c.executionCtx) {
-      c.executionCtx.waitUntil(reconcileTask);
-    } else {
-      await reconcileTask;
+      const reconcileTask = reconcileImportedEdappHistory(db, {
+        empresaId,
+        qualificacaoTipoId: Number(resolvedQualificacaoTipoId),
+        cursoId,
+      }).catch((error) => {
+        console.error('[LMS] Failed to reconcile imported EDAPP history after course update', {
+          empresaId,
+          cursoId,
+          qualificacaoTipoId: Number(resolvedQualificacaoTipoId),
+          error,
+        });
+      });
+
+      if (c.executionCtx) {
+        c.executionCtx.waitUntil(reconcileTask);
+      } else {
+        await reconcileTask;
+      }
     }
-  }
 
-  const cursoSetores = courseSetorSchema.hasCursoSetores
-    ? await getCursoSetores(db, empresaId, cursoId)
-    : [];
-  const curso = {
-    ...(await db
-      .prepare(
-        `SELECT c.*,
+    const cursoSetores = courseSetorSchema.hasCursoSetores
+      ? await getCursoSetores(db, empresaId, cursoId)
+      : [];
+    const curso = {
+      ...(await db
+        .prepare(
+          `SELECT c.*,
            qt.nome AS qualificacao_tipo_nome,
            qt.codigo AS qualificacao_tipo_codigo
          FROM lms_cursos c
          LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id
          WHERE c.id = ?`,
-      )
-      .bind(cursoId)
-      .first()),
-    setores: cursoSetores,
-  };
-  await logLmsCourseAudit(db, c, {
-    action: 'LMS_CURSO_EDITADO',
-    cursoId,
-    oldValues: {
-      titulo: existing.titulo,
-      tipo_conteudo: existing.tipo_conteudo,
-      publicado: existing.publicado,
-      ativo: existing.ativo,
-      qualificacao_tipo_id: existing.qualificacao_tipo_id,
-      gerar_qualificacao_ao_concluir: existing.gerar_qualificacao_ao_concluir,
-    },
-    newValues: {
-      ...d,
-      qualificacao_tipo_id: resolvedQualificacaoTipoId ?? null,
-      qualificacao_area_id: d.qualificacao_area_id ?? undefined,
-      gerar_qualificacao_ao_concluir:
-        resolvedQualificacaoTipoId != null ? 1 : nextGerarQualificacao,
-      setor_ids: updateSetorIds ?? undefined,
-    },
-  });
-  return c.json({ success: true, data: curso });
-});
+        )
+        .bind(cursoId)
+        .first()),
+      setores: cursoSetores,
+    };
+    await logLmsCourseAudit(db, c, {
+      action: 'LMS_CURSO_EDITADO',
+      cursoId,
+      oldValues: {
+        titulo: existing.titulo,
+        tipo_conteudo: existing.tipo_conteudo,
+        publicado: existing.publicado,
+        ativo: existing.ativo,
+        qualificacao_tipo_id: existing.qualificacao_tipo_id,
+        gerar_qualificacao_ao_concluir: existing.gerar_qualificacao_ao_concluir,
+      },
+      newValues: {
+        ...d,
+        qualificacao_tipo_id: resolvedQualificacaoTipoId ?? null,
+        qualificacao_area_id: d.qualificacao_area_id ?? undefined,
+        gerar_qualificacao_ao_concluir:
+          resolvedQualificacaoTipoId != null ? 1 : nextGerarQualificacao,
+        setor_ids: updateSetorIds ?? undefined,
+      },
+    });
+    return c.json({ success: true, data: curso });
+  },
+);
 
 app.post('/sync-ead', requirePermission('lms', 'editar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
@@ -2448,192 +2479,216 @@ app.post('/sync-ead', requirePermission('lms', 'editar', 'admin', 'manager'), as
 
 // ── Upload endpoints (specific paths before generic /:id) ─────────────────────
 
-app.post('/:id/thumbnail-upload', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
-  const db = c.env.DB;
-  const empresaId = getEmpresaIdSafe(c);
-  const cursoId = Number(c.req.param('id'));
+app.post(
+  '/:id/thumbnail-upload',
+  requirePermission('lms', 'editar', 'admin', 'manager'),
+  requireOperacoesCurso('update'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaIdSafe(c);
+    const cursoId = Number(c.req.param('id'));
 
-  if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
 
-  const formData = await c.req.formData();
-  const thumbnailFile = pickThumbnailFile(formData);
-  if (!thumbnailFile) throw new ApiError('Arquivo de capa não encontrado', 400);
+    const formData = await c.req.formData();
+    const thumbnailFile = pickThumbnailFile(formData);
+    if (!thumbnailFile) throw new ApiError('Arquivo de capa não encontrado', 400);
 
-  const result = await uploadCursoThumbnail({
-    db,
-    bucket: c.env.BUCKET,
-    empresaId,
-    cursoId,
-    file: thumbnailFile,
-  });
+    const result = await uploadCursoThumbnail({
+      db,
+      bucket: c.env.BUCKET,
+      empresaId,
+      cursoId,
+      file: thumbnailFile,
+    });
 
-  await logLmsCourseAudit(db, c, {
-    action: 'LMS_CURSO_CAPA_ATUALIZADA',
-    cursoId,
-    newValues: {
-      thumbnail_r2_key: result.thumbnail_r2_key,
-      version_tag: result.version_tag,
-    },
-  });
+    await logLmsCourseAudit(db, c, {
+      action: 'LMS_CURSO_CAPA_ATUALIZADA',
+      cursoId,
+      newValues: {
+        thumbnail_r2_key: result.thumbnail_r2_key,
+        version_tag: result.version_tag,
+      },
+    });
 
-  return c.json({ success: true, data: result });
-});
+    return c.json({ success: true, data: result });
+  },
+);
 
 // ── Upload pacote SCORM (ZIP) ────────────────────────────────────────────────
 // POST /api/lms/cursos/:id/scorm-upload
 // Content-Type: application/octet-stream (body = zip raw bytes)
 // ou multipart/form-data com campo "file"
 
-app.post('/:id/content-upload/init', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
-  const db = c.env.DB;
-  const empresaId = getEmpresaIdSafe(c);
-  const cursoId = Number(c.req.param('id'));
+app.post(
+  '/:id/content-upload/init',
+  requirePermission('lms', 'editar', 'admin', 'manager'),
+  requireOperacoesCurso('update'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaIdSafe(c);
+    const cursoId = Number(c.req.param('id'));
 
-  if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
 
-  const body = await c.req.json<unknown>();
-  const parsed = StructuredContentInitSchema.safeParse(body);
-  if (!parsed.success) {
-    throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
-  }
+    const body = await c.req.json<unknown>();
+    const parsed = StructuredContentInitSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
+    }
 
-  await getCursoUploadContext(db, empresaId, cursoId);
+    await getCursoUploadContext(db, empresaId, cursoId);
 
-  const prefix = getStructuredUploadPrefix(parsed.data.tipo_conteudo, empresaId, cursoId);
-  if (!parsed.data.skip_purge) {
-    await purgeStructuredUploadPrefix(c.env.BUCKET, prefix);
-  }
+    const prefix = getStructuredUploadPrefix(parsed.data.tipo_conteudo, empresaId, cursoId);
+    if (!parsed.data.skip_purge) {
+      await purgeStructuredUploadPrefix(c.env.BUCKET, prefix);
+    }
 
-  return c.json({
-    success: true,
-    data: {
+    return c.json({
+      success: true,
+      data: {
+        prefix,
+        tipo_conteudo: parsed.data.tipo_conteudo,
+      },
+    });
+  },
+);
+
+app.post(
+  '/:id/content-upload/file',
+  requirePermission('lms', 'editar', 'admin', 'manager'),
+  requireOperacoesCurso('update'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaIdSafe(c);
+    const cursoId = Number(c.req.param('id'));
+    const tipoConteudo = c.req.query('tipo_conteudo');
+    const path = c.req.query('path');
+
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    if (tipoConteudo !== 'scorm' && tipoConteudo !== 'h5p') {
+      throw new ApiError('Tipo de conteúdo inválido', 400);
+    }
+
+    await getCursoUploadContext(db, empresaId, cursoId);
+
+    const normalizedPath = sanitizeArchivePath(path ?? '');
+    if (!normalizedPath) throw new ApiError('Caminho de arquivo inválido', 400);
+
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    validatePackageBytes(bytes);
+
+    const prefix = getStructuredUploadPrefix(tipoConteudo, empresaId, cursoId);
+    await c.env.BUCKET.put(prefix + normalizedPath, bytes, {
+      httpMetadata: {
+        contentType: guessMime(normalizedPath),
+        cacheControl: 'public, max-age=86400',
+      },
+    });
+
+    return c.json({
+      success: true,
+      data: {
+        path: normalizedPath,
+        bytes: bytes.length,
+      },
+    });
+  },
+);
+
+app.post(
+  '/:id/content-upload/complete',
+  requirePermission('lms', 'editar', 'admin', 'manager'),
+  requireOperacoesCurso('update'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaIdSafe(c);
+    const cursoId = Number(c.req.param('id'));
+
+    const body = await c.req.json<unknown>();
+    const parsed = StructuredContentCompleteSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
+    }
+
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+
+    // Verify expected file count is present in R2 before committing DB changes
+    const prefix = getStructuredUploadPrefix(parsed.data.tipo_conteudo, empresaId, cursoId);
+    await verifyStructuredUploadPresence({
+      bucket: c.env.BUCKET,
       prefix,
-      tipo_conteudo: parsed.data.tipo_conteudo,
-    },
-  });
-});
+      expectedCount: parsed.data.files_uploaded,
+      uploadedPaths: parsed.data.uploaded_paths,
+    });
 
-app.post('/:id/content-upload/file', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
-  const db = c.env.DB;
-  const empresaId = getEmpresaIdSafe(c);
-  const cursoId = Number(c.req.param('id'));
-  const tipoConteudo = c.req.query('tipo_conteudo');
-  const path = c.req.query('path');
+    const curso = await getCursoUploadContext(db, empresaId, cursoId);
+    const result = await finalizeStructuredContentUpload(
+      c.env.BUCKET,
+      db,
+      empresaId,
+      cursoId,
+      curso.titulo,
+      parsed.data.tipo_conteudo,
+      {
+        launchFile: parsed.data.launch_file ?? null,
+        scormVersao: parsed.data.scorm_versao,
+        tipoH5p: parsed.data.tipo_h5p ?? null,
+        arquivoNome: parsed.data.arquivo_nome ?? null,
+      },
+    );
 
-  if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
-  if (tipoConteudo !== 'scorm' && tipoConteudo !== 'h5p') {
-    throw new ApiError('Tipo de conteúdo inválido', 400);
-  }
+    return c.json({
+      success: true,
+      data: {
+        ...result,
+        files_uploaded: parsed.data.files_uploaded ?? null,
+      },
+    });
+  },
+);
 
-  await getCursoUploadContext(db, empresaId, cursoId);
+app.post(
+  '/:id/scorm-upload',
+  requirePermission('lms', 'editar', 'admin', 'manager'),
+  requireOperacoesCurso('update'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaIdSafe(c);
+    const cursoId = Number(c.req.param('id'));
 
-  const normalizedPath = sanitizeArchivePath(path ?? '');
-  if (!normalizedPath) throw new ApiError('Caminho de arquivo inválido', 400);
+    const curso = await db
+      .prepare(
+        'SELECT id, empresa_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      )
+      .bind(cursoId, empresaId)
+      .first<{ id: number; empresa_id: number }>();
+    if (!curso) throw new ApiError('Curso não encontrado', 404);
 
-  const bytes = new Uint8Array(await c.req.arrayBuffer());
-  validatePackageBytes(bytes);
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
 
-  const prefix = getStructuredUploadPrefix(tipoConteudo, empresaId, cursoId);
-  await c.env.BUCKET.put(prefix + normalizedPath, bytes, {
-    httpMetadata: {
-      contentType: guessMime(normalizedPath),
-      cacheControl: 'public, max-age=86400',
-    },
-  });
+    let zipBytes: Uint8Array;
+    let uploadedFileName: string | null = null;
+    const ct = c.req.header('content-type') ?? '';
+    if (ct.includes('multipart/form-data')) {
+      const formData = await c.req.formData();
+      const file = pickUploadFile(formData);
+      if (!file) throw new ApiError('Campo de arquivo não encontrado', 400);
+      validatePackageFile(file, 'scorm');
+      uploadedFileName = normalizeUploadFileName(file);
+      zipBytes = new Uint8Array(await file.arrayBuffer());
+    } else {
+      zipBytes = new Uint8Array(await c.req.arrayBuffer());
+    }
 
-  return c.json({
-    success: true,
-    data: {
-      path: normalizedPath,
-      bytes: bytes.length,
-    },
-  });
-});
+    validatePackageBytes(zipBytes);
 
-app.post('/:id/content-upload/complete', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
-  const db = c.env.DB;
-  const empresaId = getEmpresaIdSafe(c);
-  const cursoId = Number(c.req.param('id'));
+    const skipPurge = c.req.query('skip_purge') === 'true';
+    const upload = await processScormUpload(c.env.BUCKET, empresaId, cursoId, zipBytes, skipPurge);
 
-  const body = await c.req.json<unknown>();
-  const parsed = StructuredContentCompleteSchema.safeParse(body);
-  if (!parsed.success) {
-    throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
-  }
-
-  if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
-
-  // Verify expected file count is present in R2 before committing DB changes
-  const prefix = getStructuredUploadPrefix(parsed.data.tipo_conteudo, empresaId, cursoId);
-  await verifyStructuredUploadPresence({
-    bucket: c.env.BUCKET,
-    prefix,
-    expectedCount: parsed.data.files_uploaded,
-    uploadedPaths: parsed.data.uploaded_paths,
-  });
-
-  const curso = await getCursoUploadContext(db, empresaId, cursoId);
-  const result = await finalizeStructuredContentUpload(
-    c.env.BUCKET,
-    db,
-    empresaId,
-    cursoId,
-    curso.titulo,
-    parsed.data.tipo_conteudo,
-    {
-      launchFile: parsed.data.launch_file ?? null,
-      scormVersao: parsed.data.scorm_versao,
-      tipoH5p: parsed.data.tipo_h5p ?? null,
-      arquivoNome: parsed.data.arquivo_nome ?? null,
-    },
-  );
-
-  return c.json({
-    success: true,
-    data: {
-      ...result,
-      files_uploaded: parsed.data.files_uploaded ?? null,
-    },
-  });
-});
-
-app.post('/:id/scorm-upload', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
-  const db = c.env.DB;
-  const empresaId = getEmpresaIdSafe(c);
-  const cursoId = Number(c.req.param('id'));
-
-  const curso = await db
-    .prepare(
-      'SELECT id, empresa_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
-    )
-    .bind(cursoId, empresaId)
-    .first<{ id: number; empresa_id: number }>();
-  if (!curso) throw new ApiError('Curso não encontrado', 404);
-
-  if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
-
-  let zipBytes: Uint8Array;
-  let uploadedFileName: string | null = null;
-  const ct = c.req.header('content-type') ?? '';
-  if (ct.includes('multipart/form-data')) {
-    const formData = await c.req.formData();
-    const file = pickUploadFile(formData);
-    if (!file) throw new ApiError('Campo de arquivo não encontrado', 400);
-    validatePackageFile(file, 'scorm');
-    uploadedFileName = normalizeUploadFileName(file);
-    zipBytes = new Uint8Array(await file.arrayBuffer());
-  } else {
-    zipBytes = new Uint8Array(await c.req.arrayBuffer());
-  }
-
-  validatePackageBytes(zipBytes);
-
-  const skipPurge = c.req.query('skip_purge') === 'true';
-  const upload = await processScormUpload(c.env.BUCKET, empresaId, cursoId, zipBytes, skipPurge);
-
-  await db
-    .prepare(
-      `
+    await db
+      .prepare(
+        `
       UPDATE lms_cursos
       SET scorm_package_r2_prefix = ?,
           scorm_launch_file = ?,
@@ -2643,131 +2698,142 @@ app.post('/:id/scorm-upload', requirePermission('lms', 'editar', 'admin', 'manag
           updated_at = datetime('now')
       WHERE id = ? AND empresa_id = ?
     `,
-    )
-    .bind(
-      upload.prefix,
-      upload.launchFileFull,
-      upload.scormVersao,
-      uploadedFileName,
-      new Date().toISOString(),
-      cursoId,
-      empresaId,
-    )
-    .run();
+      )
+      .bind(
+        upload.prefix,
+        upload.launchFileFull,
+        upload.scormVersao,
+        uploadedFileName,
+        new Date().toISOString(),
+        cursoId,
+        empresaId,
+      )
+      .run();
 
-  await purgeStructuredCourseAssets(c.env.BUCKET, empresaId, cursoId, { keepTipo: 'scorm' });
+    await purgeStructuredCourseAssets(c.env.BUCKET, empresaId, cursoId, { keepTipo: 'scorm' });
 
-  return c.json({
-    success: true,
-    data: {
-      prefix: upload.prefix,
-      launch_file: upload.launchFileFull,
-      scorm_versao: upload.scormVersao,
-      conteudo_arquivo_nome: uploadedFileName,
-      files_uploaded: upload.filesUploaded,
-    },
-  });
-});
+    return c.json({
+      success: true,
+      data: {
+        prefix: upload.prefix,
+        launch_file: upload.launchFileFull,
+        scorm_versao: upload.scormVersao,
+        conteudo_arquivo_nome: uploadedFileName,
+        files_uploaded: upload.filesUploaded,
+      },
+    });
+  },
+);
 
 // ── Upload H5P ───────────────────────────────────────────────────────────────
 // POST /api/lms/cursos/:id/upload/h5p
 // O .h5p é um ZIP renomeado — extraímos e guardamos no R2 sob lms/h5p/{empresa_id}/{curso_id}/
 
-app.post('/:id/upload/h5p', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
-  const db = c.env.DB;
-  const empresaId = getEmpresaIdSafe(c);
-  const cursoId = Number(c.req.param('id'));
+app.post(
+  '/:id/upload/h5p',
+  requirePermission('lms', 'editar', 'admin', 'manager'),
+  requireOperacoesCurso('update'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaIdSafe(c);
+    const cursoId = Number(c.req.param('id'));
 
-  const curso = await db
-    .prepare(
-      'SELECT id, empresa_id, titulo FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
-    )
-    .bind(cursoId, empresaId)
-    .first<{ id: number; empresa_id: number; titulo: string }>();
-  if (!curso) throw new ApiError('Curso não encontrado', 404);
+    const curso = await db
+      .prepare(
+        'SELECT id, empresa_id, titulo FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      )
+      .bind(cursoId, empresaId)
+      .first<{ id: number; empresa_id: number; titulo: string }>();
+    if (!curso) throw new ApiError('Curso não encontrado', 404);
 
-  if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
 
-  let zipBytes: Uint8Array;
-  let uploadedFileName: string | null = null;
-  const ct = c.req.header('content-type') ?? '';
-  if (ct.includes('multipart/form-data')) {
-    const formData = await c.req.formData();
-    const file = pickUploadFile(formData);
-    if (!file) throw new ApiError('Campo "file" ou "h5p" não encontrado', 400);
-    validatePackageFile(file, 'h5p');
-    uploadedFileName = normalizeUploadFileName(file);
-    zipBytes = new Uint8Array(await file.arrayBuffer());
-  } else {
-    zipBytes = new Uint8Array(await c.req.arrayBuffer());
-  }
+    let zipBytes: Uint8Array;
+    let uploadedFileName: string | null = null;
+    const ct = c.req.header('content-type') ?? '';
+    if (ct.includes('multipart/form-data')) {
+      const formData = await c.req.formData();
+      const file = pickUploadFile(formData);
+      if (!file) throw new ApiError('Campo "file" ou "h5p" não encontrado', 400);
+      validatePackageFile(file, 'h5p');
+      uploadedFileName = normalizeUploadFileName(file);
+      zipBytes = new Uint8Array(await file.arrayBuffer());
+    } else {
+      zipBytes = new Uint8Array(await c.req.arrayBuffer());
+    }
 
-  validatePackageBytes(zipBytes);
+    validatePackageBytes(zipBytes);
 
-  const upload = await processH5pUpload(c.env.BUCKET, empresaId, cursoId, zipBytes);
-  const existing = await db
-    .prepare(
-      `
+    const upload = await processH5pUpload(c.env.BUCKET, empresaId, cursoId, zipBytes);
+    const existing = await db
+      .prepare(
+        `
       SELECT id
       FROM lms_h5p_conteudos
       WHERE empresa_id = ? AND titulo = ? AND deleted_at IS NULL
       ORDER BY id DESC
       LIMIT 1
     `,
-    )
-    .bind(empresaId, curso.titulo)
-    .first<{ id: number }>();
+      )
+      .bind(empresaId, curso.titulo)
+      .first<{ id: number }>();
 
-  let h5pId: number;
-  if (existing) {
+    let h5pId: number;
+    if (existing) {
+      await db
+        .prepare(
+          "UPDATE lms_h5p_conteudos SET r2_key = ?, tipo_h5p = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?",
+        )
+        .bind(upload.prefix, upload.tipoH5p, existing.id, empresaId)
+        .run();
+      h5pId = existing.id;
+    } else {
+      const r = await db
+        .prepare(
+          'INSERT INTO lms_h5p_conteudos (empresa_id, titulo, tipo_h5p, r2_key) VALUES (?,?,?,?)',
+        )
+        .bind(empresaId, curso.titulo, upload.tipoH5p, upload.prefix)
+        .run();
+      h5pId = r.meta.last_row_id;
+    }
+
     await db
       .prepare(
-        "UPDATE lms_h5p_conteudos SET r2_key = ?, tipo_h5p = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?",
+        "UPDATE lms_cursos SET tipo_conteudo = 'h5p', scorm_package_r2_prefix = ?, scorm_launch_file = NULL, conteudo_arquivo_nome = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?",
       )
-      .bind(upload.prefix, upload.tipoH5p, existing.id, empresaId)
+      .bind(upload.prefix, uploadedFileName, cursoId, empresaId)
       .run();
-    h5pId = existing.id;
-  } else {
-    const r = await db
-      .prepare(
-        'INSERT INTO lms_h5p_conteudos (empresa_id, titulo, tipo_h5p, r2_key) VALUES (?,?,?,?)',
-      )
-      .bind(empresaId, curso.titulo, upload.tipoH5p, upload.prefix)
-      .run();
-    h5pId = r.meta.last_row_id;
-  }
 
-  await db
-    .prepare(
-      "UPDATE lms_cursos SET tipo_conteudo = 'h5p', scorm_package_r2_prefix = ?, scorm_launch_file = NULL, conteudo_arquivo_nome = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?",
-    )
-    .bind(upload.prefix, uploadedFileName, cursoId, empresaId)
-    .run();
+    await purgeStructuredCourseAssets(c.env.BUCKET, empresaId, cursoId, { keepTipo: 'h5p' });
 
-  await purgeStructuredCourseAssets(c.env.BUCKET, empresaId, cursoId, { keepTipo: 'h5p' });
-
-  return c.json({
-    success: true,
-    data: {
-      h5p_id: h5pId,
-      prefix: upload.prefix,
-      tipo_h5p: upload.tipoH5p,
-      conteudo_arquivo_nome: uploadedFileName,
-      files_uploaded: upload.filesUploaded,
-    },
-  });
-});
+    return c.json({
+      success: true,
+      data: {
+        h5p_id: h5pId,
+        prefix: upload.prefix,
+        tipo_h5p: upload.tipoH5p,
+        conteudo_arquivo_nome: uploadedFileName,
+        files_uploaded: upload.filesUploaded,
+      },
+    });
+  },
+);
 
 // Alias para compatibilidade com prompt 2.4: /upload/scorm
-app.post('/:id/upload/scorm', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
-  // Forward to /:id/scorm-upload handler logic inline (avoid duplication by delegating)
-  c.req.param = Object.assign(c.req.param.bind(c.req), { bind: c.req.param.bind(c.req) });
-  // Re-dispatch via internal redirect is not Hono-native; instead we call the existing handler
-  // by just duplicating the param name mapping — the scorm-upload route already handles this.
-  // Simpler: redirect via 307 to keep DRY
-  const id = c.req.param('id');
-  return c.redirect(`/api/lms/cursos/${id}/scorm-upload`, 307);
-});
+app.post(
+  '/:id/upload/scorm',
+  requirePermission('lms', 'editar', 'admin', 'manager'),
+  requireOperacoesCurso('update'),
+  async (c) => {
+    // Forward to /:id/scorm-upload handler logic inline (avoid duplication by delegating)
+    c.req.param = Object.assign(c.req.param.bind(c.req), { bind: c.req.param.bind(c.req) });
+    // Re-dispatch via internal redirect is not Hono-native; instead we call the existing handler
+    // by just duplicating the param name mapping — the scorm-upload route already handles this.
+    // Simpler: redirect via 307 to keep DRY
+    const id = c.req.param('id');
+    return c.redirect(`/api/lms/cursos/${id}/scorm-upload`, 307);
+  },
+);
 
 // ── MIME guess helper ────────────────────────────────────────────────────────
 
@@ -2808,190 +2874,206 @@ function guessMime(filename: string): string {
 
 const LMS_PDF_MAX_BYTES = 200 * 1024 * 1024; // 200 MB
 
-app.post('/:id/upload/pdf', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
-  const db = c.env.DB;
-  const empresaId = getEmpresaIdSafe(c);
-  const cursoId = Number(c.req.param('id'));
+app.post(
+  '/:id/upload/pdf',
+  requirePermission('lms', 'editar', 'admin', 'manager'),
+  requireOperacoesCurso('update'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaIdSafe(c);
+    const cursoId = Number(c.req.param('id'));
 
-  const curso = await db
-    .prepare(
-      'SELECT id, empresa_id, titulo, pdf_r2_key FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
-    )
-    .bind(cursoId, empresaId)
-    .first<{ id: number; empresa_id: number; titulo: string; pdf_r2_key: string | null }>();
-  if (!curso) throw new ApiError('Curso não encontrado', 404);
+    const curso = await db
+      .prepare(
+        'SELECT id, empresa_id, titulo, pdf_r2_key FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      )
+      .bind(cursoId, empresaId)
+      .first<{ id: number; empresa_id: number; titulo: string; pdf_r2_key: string | null }>();
+    if (!curso) throw new ApiError('Curso não encontrado', 404);
 
-  const formData = await c.req.formData();
-  const file = (formData.get('arquivo') ?? formData.get('file')) as File | string | null;
-  if (!(file instanceof File)) throw new ApiError('Arquivo PDF obrigatório', 400);
+    const formData = await c.req.formData();
+    const file = (formData.get('arquivo') ?? formData.get('file')) as File | string | null;
+    if (!(file instanceof File)) throw new ApiError('Arquivo PDF obrigatório', 400);
 
-  const normalizedName = file.name.trim().toLowerCase();
-  if (normalizedName && !normalizedName.endsWith('.pdf')) {
-    throw new ApiError('Envie um arquivo .pdf válido', 400);
-  }
-
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  if (bytes.length === 0) throw new ApiError('Arquivo vazio', 400);
-  if (bytes.length > LMS_PDF_MAX_BYTES) throw new ApiError('PDF excede o limite de 200 MB', 400);
-
-  const key = `lms/pdf/${empresaId}/${cursoId}/document.pdf`;
-
-  await c.env.BUCKET.put(key, bytes, {
-    httpMetadata: { contentType: 'application/pdf', cacheControl: 'no-store' },
-  });
-
-  if (curso.pdf_r2_key && curso.pdf_r2_key !== key) {
-    try {
-      await c.env.BUCKET.delete(curso.pdf_r2_key);
-    } catch {
-      /* ignore */
+    const normalizedName = file.name.trim().toLowerCase();
+    if (normalizedName && !normalizedName.endsWith('.pdf')) {
+      throw new ApiError('Envie um arquivo .pdf válido', 400);
     }
-  }
 
-  await db
-    .prepare(
-      `UPDATE lms_cursos SET tipo_conteudo = 'pdf', pdf_r2_key = ?, conteudo_arquivo_nome = ?, version_tag = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?`,
-    )
-    .bind(key, normalizeUploadFileName(file), new Date().toISOString(), cursoId, empresaId)
-    .run();
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.length === 0) throw new ApiError('Arquivo vazio', 400);
+    if (bytes.length > LMS_PDF_MAX_BYTES) throw new ApiError('PDF excede o limite de 200 MB', 400);
 
-  return c.json({
-    success: true,
-    data: { pdf_r2_key: key, conteudo_arquivo_nome: normalizeUploadFileName(file) },
-  });
-});
+    const key = `lms/pdf/${empresaId}/${cursoId}/document.pdf`;
+
+    await c.env.BUCKET.put(key, bytes, {
+      httpMetadata: { contentType: 'application/pdf', cacheControl: 'no-store' },
+    });
+
+    if (curso.pdf_r2_key && curso.pdf_r2_key !== key) {
+      try {
+        await c.env.BUCKET.delete(curso.pdf_r2_key);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    await db
+      .prepare(
+        `UPDATE lms_cursos SET tipo_conteudo = 'pdf', pdf_r2_key = ?, conteudo_arquivo_nome = ?, version_tag = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?`,
+      )
+      .bind(key, normalizeUploadFileName(file), new Date().toISOString(), cursoId, empresaId)
+      .run();
+
+    return c.json({
+      success: true,
+      data: { pdf_r2_key: key, conteudo_arquivo_nome: normalizeUploadFileName(file) },
+    });
+  },
+);
 
 // ── Upload PPTX ──────────────────────────────────────────────────────────────
 
 const LMS_PPTX_MAX_BYTES = 200 * 1024 * 1024; // 200 MB
 
-app.post('/:id/upload/pptx', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
-  const db = c.env.DB;
-  const empresaId = getEmpresaIdSafe(c);
-  const cursoId = Number(c.req.param('id'));
+app.post(
+  '/:id/upload/pptx',
+  requirePermission('lms', 'editar', 'admin', 'manager'),
+  requireOperacoesCurso('update'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaIdSafe(c);
+    const cursoId = Number(c.req.param('id'));
 
-  const curso = await db
-    .prepare(
-      'SELECT id, empresa_id, titulo, pptx_r2_key FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
-    )
-    .bind(cursoId, empresaId)
-    .first<{ id: number; empresa_id: number; titulo: string; pptx_r2_key: string | null }>();
-  if (!curso) throw new ApiError('Curso não encontrado', 404);
+    const curso = await db
+      .prepare(
+        'SELECT id, empresa_id, titulo, pptx_r2_key FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      )
+      .bind(cursoId, empresaId)
+      .first<{ id: number; empresa_id: number; titulo: string; pptx_r2_key: string | null }>();
+    if (!curso) throw new ApiError('Curso não encontrado', 404);
 
-  const formData = await c.req.formData();
-  const file = (formData.get('arquivo') ?? formData.get('file')) as File | string | null;
-  if (!(file instanceof File)) throw new ApiError('Arquivo PPTX obrigatório', 400);
+    const formData = await c.req.formData();
+    const file = (formData.get('arquivo') ?? formData.get('file')) as File | string | null;
+    if (!(file instanceof File)) throw new ApiError('Arquivo PPTX obrigatório', 400);
 
-  const normalizedName = file.name.trim().toLowerCase();
-  if (normalizedName && !normalizedName.endsWith('.pptx') && !normalizedName.endsWith('.ppt')) {
-    throw new ApiError('Envie um arquivo .pptx válido', 400);
-  }
-
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  if (bytes.length === 0) throw new ApiError('Arquivo vazio', 400);
-  if (bytes.length > LMS_PPTX_MAX_BYTES) throw new ApiError('PPTX excede o limite de 200 MB', 400);
-
-  // Extrair contagem de slides (PPTX é um ZIP com ppt/slides/slideN.xml)
-  let slideCount = 0;
-  try {
-    const { unzipSync: uz } = await import('fflate');
-    const files = uz(bytes);
-    slideCount = Object.keys(files).filter((p) => /^ppt\/slides\/slide\d+\.xml$/i.test(p)).length;
-  } catch {
-    // Se falhar a extração da contagem, continua com 0
-  }
-
-  const key = `lms/pptx/${empresaId}/${cursoId}/presentation.pptx`;
-
-  await c.env.BUCKET.put(key, bytes, {
-    httpMetadata: {
-      contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      cacheControl: 'no-store',
-    },
-  });
-
-  if (curso.pptx_r2_key && curso.pptx_r2_key !== key) {
-    try {
-      await c.env.BUCKET.delete(curso.pptx_r2_key);
-    } catch {
-      /* ignore */
+    const normalizedName = file.name.trim().toLowerCase();
+    if (normalizedName && !normalizedName.endsWith('.pptx') && !normalizedName.endsWith('.ppt')) {
+      throw new ApiError('Envie um arquivo .pptx válido', 400);
     }
-  }
 
-  await db
-    .prepare(
-      `UPDATE lms_cursos SET tipo_conteudo = 'pptx', pptx_r2_key = ?, pptx_slide_count = ?, conteudo_arquivo_nome = ?, version_tag = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?`,
-    )
-    .bind(
-      key,
-      slideCount,
-      normalizeUploadFileName(file),
-      new Date().toISOString(),
-      cursoId,
-      empresaId,
-    )
-    .run();
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.length === 0) throw new ApiError('Arquivo vazio', 400);
+    if (bytes.length > LMS_PPTX_MAX_BYTES)
+      throw new ApiError('PPTX excede o limite de 200 MB', 400);
 
-  return c.json({
-    success: true,
-    data: {
-      pptx_r2_key: key,
-      slide_count: slideCount,
-      conteudo_arquivo_nome: normalizeUploadFileName(file),
-    },
-  });
-});
+    // Extrair contagem de slides (PPTX é um ZIP com ppt/slides/slideN.xml)
+    let slideCount = 0;
+    try {
+      const { unzipSync: uz } = await import('fflate');
+      const files = uz(bytes);
+      slideCount = Object.keys(files).filter((p) => /^ppt\/slides\/slide\d+\.xml$/i.test(p)).length;
+    } catch {
+      // Se falhar a extração da contagem, continua com 0
+    }
+
+    const key = `lms/pptx/${empresaId}/${cursoId}/presentation.pptx`;
+
+    await c.env.BUCKET.put(key, bytes, {
+      httpMetadata: {
+        contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        cacheControl: 'no-store',
+      },
+    });
+
+    if (curso.pptx_r2_key && curso.pptx_r2_key !== key) {
+      try {
+        await c.env.BUCKET.delete(curso.pptx_r2_key);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    await db
+      .prepare(
+        `UPDATE lms_cursos SET tipo_conteudo = 'pptx', pptx_r2_key = ?, pptx_slide_count = ?, conteudo_arquivo_nome = ?, version_tag = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?`,
+      )
+      .bind(
+        key,
+        slideCount,
+        normalizeUploadFileName(file),
+        new Date().toISOString(),
+        cursoId,
+        empresaId,
+      )
+      .run();
+
+    return c.json({
+      success: true,
+      data: {
+        pptx_r2_key: key,
+        slide_count: slideCount,
+        conteudo_arquivo_nome: normalizeUploadFileName(file),
+      },
+    });
+  },
+);
 
 // ── Desativar (soft delete) ──────────────────────────────────────────────────
 // MUST BE LAST: generic /:id route needs to come after all specific /:id/path routes
 
-app.delete('/:id', requirePermission('lms', 'deletar', 'admin', 'manager'), requireOperacoesCurso('delete'), async (c) => {
-  const db = c.env.DB;
-  const empresaId = getEmpresaIdSafe(c);
-  const cursoId = Number(c.req.param('id'));
+app.delete(
+  '/:id',
+  requirePermission('lms', 'deletar', 'admin', 'manager'),
+  requireOperacoesCurso('delete'),
+  async (c) => {
+    const db = c.env.DB;
+    const empresaId = getEmpresaIdSafe(c);
+    const cursoId = Number(c.req.param('id'));
 
-  const existing = await db
-    .prepare(
-      'SELECT id, titulo, tipo_conteudo, publicado, ativo FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
-    )
-    .bind(cursoId, empresaId)
-    .first<{
-      id: number;
-      titulo: string;
-      tipo_conteudo: string;
-      publicado: number;
-      ativo: number;
-    }>();
-  if (!existing) throw new ApiError('Curso não encontrado', 404);
+    const existing = await db
+      .prepare(
+        'SELECT id, titulo, tipo_conteudo, publicado, ativo FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      )
+      .bind(cursoId, empresaId)
+      .first<{
+        id: number;
+        titulo: string;
+        tipo_conteudo: string;
+        publicado: number;
+        ativo: number;
+      }>();
+    if (!existing) throw new ApiError('Curso não encontrado', 404);
 
-  await db
-    .prepare(
-      "UPDATE lms_cursos SET deleted_at = datetime('now'), ativo = 0 WHERE id = ? AND empresa_id = ?",
-    )
-    .bind(cursoId, empresaId)
-    .run();
+    await db
+      .prepare(
+        "UPDATE lms_cursos SET deleted_at = datetime('now'), ativo = 0 WHERE id = ? AND empresa_id = ?",
+      )
+      .bind(cursoId, empresaId)
+      .run();
 
-  if (c.env.BUCKET) {
-    try {
-      await purgeStructuredCourseAssets(c.env.BUCKET, empresaId, cursoId);
-    } catch (error) {
-      console.warn('[LMS] Falha ao limpar assets do curso removido:', error);
+    if (c.env.BUCKET) {
+      try {
+        await purgeStructuredCourseAssets(c.env.BUCKET, empresaId, cursoId);
+      } catch (error) {
+        console.warn('[LMS] Falha ao limpar assets do curso removido:', error);
+      }
     }
-  }
 
-  await logLmsCourseAudit(db, c, {
-    action: 'LMS_CURSO_REMOVIDO',
-    cursoId,
-    oldValues: {
-      titulo: existing.titulo,
-      tipo_conteudo: existing.tipo_conteudo,
-      publicado: existing.publicado,
-      ativo: existing.ativo,
-    },
-    newValues: { deleted: true, ativo: 0 },
-  });
+    await logLmsCourseAudit(db, c, {
+      action: 'LMS_CURSO_REMOVIDO',
+      cursoId,
+      oldValues: {
+        titulo: existing.titulo,
+        tipo_conteudo: existing.tipo_conteudo,
+        publicado: existing.publicado,
+        ativo: existing.ativo,
+      },
+      newValues: { deleted: true, ativo: 0 },
+    });
 
-  return c.json({ success: true, data: { id: cursoId, deleted: true } });
-});
+    return c.json({ success: true, data: { id: cursoId, deleted: true } });
+  },
+);
 
 export default app;

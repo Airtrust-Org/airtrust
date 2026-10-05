@@ -98,10 +98,7 @@
           "type": "TEXT"
         }
       },
-      "relevant_indexes": [
-        "idx_participantes_sessao_id",
-        "idx_participantes_funcionario_id"
-      ]
+      "relevant_indexes": ["idx_participantes_sessao_id", "idx_participantes_funcionario_id"]
     },
     "simulador_atribuicoes_curriculares": {
       "required_columns": {
@@ -293,9 +290,7 @@
           "type": "TEXT"
         }
       },
-      "relevant_indexes": [
-        "idx_fichas_sessao_manobras_ficha_ordem"
-      ]
+      "relevant_indexes": ["idx_fichas_sessao_manobras_ficha_ordem"]
     },
     "fichas_sessao_instrutor_meta": {
       "required_columns": {
@@ -318,9 +313,7 @@
           "type": "TEXT"
         }
       },
-      "relevant_indexes": [
-        "idx_fichas_sessao_instrutor_meta_empresa"
-      ]
+      "relevant_indexes": ["idx_fichas_sessao_instrutor_meta_empresa"]
     },
     "d1_migrations": {
       "required_columns": {
@@ -343,10 +336,7 @@
     "modelos_sessao.tipo_sessao_codigo existe",
     "migration presente no repositorio significa migration aplicada"
   ],
-  "out_of_contract_tables": [
-    "airtrust_schema_baselines_v2",
-    "airtrust_schema_changes_v2"
-  ],
+  "out_of_contract_tables": ["airtrust_schema_baselines_v2", "airtrust_schema_changes_v2"],
   "provenance": {
     "baseline_state": "PRODUCTION_CONFIRMED",
     "confirmed_via": "docs/database/production-schema-snapshot-20260714/structural-snapshot.json",
@@ -413,11 +403,7 @@
       "change_file": "0451_cron_job_resilience_state_v2.sql",
       "change_id": "cron-resilience-state-0451",
       "sha256": "3746540210b488cdc1f21ce9f85a17ac27da17c4f231147e0901e8ac57d7a3ca",
-      "targets": [
-        "cron_job_items",
-        "cron_job_runs",
-        "cron_job_state"
-      ],
+      "targets": ["cron_job_items", "cron_job_runs", "cron_job_state"],
       "domain": "cron job resilience / scheduler state",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -443,9 +429,7 @@
       "change_file": "0454_qualificacoes_tipos_dominio_override.sql",
       "change_id": null,
       "sha256": "6aef100bbff18241eae3c067b5c9aadc647a17145fcd136f300cb57244b2b2f6",
-      "targets": [
-        "qualificacoes_tipos"
-      ],
+      "targets": ["qualificacoes_tipos"],
       "domain": "qualificacoes_tipos operational-domain override (base statement)",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REPO_EXPECTED",
@@ -455,9 +439,7 @@
       "change_file": "0454_qualificacoes_tipos_dominio_override_reconcile_existing.sql",
       "change_id": "qualificacoes-tipos-dominio-override-0454",
       "sha256": "ca185d203fc0cc11b26be9fb829057c618c6d5f471adadfdba3c67f9526521a3",
-      "targets": [
-        "qualificacoes_tipos"
-      ],
+      "targets": ["qualificacoes_tipos"],
       "domain": "qualificacoes_tipos operational-domain override (reconcile existing rows)",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -467,9 +449,7 @@
       "change_file": "0456_lms_h5p_course_binding.sql",
       "change_id": null,
       "sha256": "0236d14eb531eb590b5f7f09dd952c2c1f35f090543eaa580d75ce378f72e1ec",
-      "targets": [
-        "lms_cursos"
-      ],
+      "targets": ["lms_cursos"],
       "domain": "LMS H5P course binding",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REPO_EXPECTED",
@@ -494,9 +474,7 @@
       "change_file": "0459_sk76_periodic_code_denominator.sql",
       "change_id": null,
       "sha256": "4417c6e8a0416711117056254e995b4ad8c86ccf69294f5ac377fe25fa13e21c",
-      "targets": [
-        "modelos_sessao_versionamento"
-      ],
+      "targets": ["modelos_sessao_versionamento"],
       "domain": "SK76 periodic-code denominator reconciliation (modelos_sessao_versionamento trigger + DML)",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REPO_EXPECTED",
@@ -506,10 +484,7 @@
       "change_file": "0460_simulator_future_planning.sql",
       "change_id": null,
       "sha256": "d5214bd5bac6a0ea01df3778fb2d09d6b1899bbd52d4b278549910cb693512ab",
-      "targets": [
-        "simulador_planejamento_auditoria",
-        "treinamentos_planejados"
-      ],
+      "targets": ["simulador_planejamento_auditoria", "treinamentos_planejados"],
       "domain": "simulator future planning (treinamentos_planejados + audit) - adjacent to the simulator domain but does not touch scoped session/ficha tables",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REPO_EXPECTED",
@@ -534,9 +509,7 @@
       "change_file": "0468_sigvoos_shadow_leg_crew_v1.sql",
       "change_id": "sigvoos-shadow-leg-crew-0468",
       "sha256": "0dfa5264de1c155a1aa8bbc4217e145b16ba93ccd97bc249102314828ed264e2",
-      "targets": [
-        "sigvoos_shadow_leg_crews"
-      ],
+      "targets": ["sigvoos_shadow_leg_crews"],
       "domain": "SIGVOOS shadow leg crew",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -546,9 +519,7 @@
       "change_file": "0469_lms_completion_pendencias_snapshots.sql",
       "change_id": "lms-completion-diagnostics-0469",
       "sha256": "37e9bdd45048ca5e84f3e955324996d8e49a81a7a0893d10e05f8be792a35ebf",
-      "targets": [
-        "lms_completion_diagnostics_snapshots"
-      ],
+      "targets": ["lms_completion_diagnostics_snapshots"],
       "domain": "LMS completion pendencias diagnostics snapshots",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -558,9 +529,7 @@
       "change_file": "0470_certificado_validacao_hash_index.sql",
       "change_id": "certificate-validation-hash-0470",
       "sha256": "efc80eadb66bf30a241cf595529ccc9452f894d6f6d60cab25288cc514efbf02",
-      "targets": [
-        "qualificacoes_historico"
-      ],
+      "targets": ["qualificacoes_historico"],
       "domain": "certificate validation-hash index on qualificacoes_historico",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -570,10 +539,7 @@
       "change_file": "0472_frms_operational_readiness.sql",
       "change_id": "frms-operational-readiness-0472",
       "sha256": "8db1a914f013ae48d3e860c8148a1dd9c0d6c9c2ab591a02870dde09fd05a738",
-      "targets": [
-        "frms_readiness_assessment",
-        "frms_readiness_vigilance_trial"
-      ],
+      "targets": ["frms_readiness_assessment", "frms_readiness_vigilance_trial"],
       "domain": "FRMS operational readiness persistence",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "PRODUCTION_CONFIRMED",
@@ -598,9 +564,7 @@
       "change_file": "0475_usuarios_empresas_perfis_reconciliation.sql",
       "change_id": "usuarios-empresas-perfis-reconciliation-0475",
       "sha256": "a1b979f8e09e326effe62e4374572df5ea5f7154503d87bcc0b980525cfb9230",
-      "targets": [
-        "usuarios_empresas_perfis"
-      ],
+      "targets": ["usuarios_empresas_perfis"],
       "domain": "multi-profile authorization authority (usuarios_empresas_perfis)",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "PRODUCTION_CONFIRMED",
@@ -612,10 +576,7 @@
       "change_file": "0476_frms_pvtb_v2_operational_load.sql",
       "change_id": "frms-pvtb-v2-operational-load-0476",
       "sha256": "6c708bdf3309bbac9382ce549909e2d6488dcafb4067e33e67485f100c24fcd8",
-      "targets": [
-        "frms_fatorizacao_jornada",
-        "frms_readiness_assessment"
-      ],
+      "targets": ["frms_fatorizacao_jornada", "frms_readiness_assessment"],
       "domain": "FRMS PVT-B V2 + operational load (frms_fatorizacao_jornada)",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -639,9 +600,7 @@
       "change_file": "0482_training_dependency_complete_curriculum.sql",
       "change_id": "training-dependency-complete-curriculum-0482",
       "sha256": "6d2902d8e6a41ee501ae564d8740e2f3a6c3d2ff605d11668949cdf30d9a2437",
-      "targets": [
-        "treinamentos_planejados"
-      ],
+      "targets": ["treinamentos_planejados"],
       "domain": "training dependency complete-curriculum trigger",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -651,11 +610,7 @@
       "change_file": "0483_edb_diary_persistence_foundation.sql",
       "change_id": "edb-diary-persistence-0483",
       "sha256": "e9dfb1409099be76d1da58c7f500d92182fe9182149f9dffd6163a8b1a3377b8",
-      "targets": [
-        "edb_diarios",
-        "edb_incidentes_integridade",
-        "edb_volumes"
-      ],
+      "targets": ["edb_diarios", "edb_incidentes_integridade", "edb_volumes"],
       "domain": "eDB diary persistence foundation",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -665,9 +620,7 @@
       "change_file": "0484_edb_audit_persistence.sql",
       "change_id": "edb-audit-persistence-0484",
       "sha256": "9eec92df3dc98642659de5483d35955cb2cd6ce7753cc13877f76de1cba4c6f6",
-      "targets": [
-        "edb_audit_events"
-      ],
+      "targets": ["edb_audit_events"],
       "domain": "eDB audit chain persistence",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -677,10 +630,7 @@
       "change_file": "0485_edb_technical_awareness_persistence.sql",
       "change_id": "edb-technical-awareness-persistence-0485",
       "sha256": "efd9d6d74f3d0eca5f751374cfd227e1b71107aaeaeb9056d6bbe7e8cbad4c54",
-      "targets": [
-        "edb_ciencias_tecnicas_pic",
-        "edb_situacoes_tecnicas"
-      ],
+      "targets": ["edb_ciencias_tecnicas_pic", "edb_situacoes_tecnicas"],
       "domain": "eDB technical awareness persistence",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -690,11 +640,7 @@
       "change_file": "0486_edb_final_revision_persistence.sql",
       "change_id": "edb-final-revision-persistence-0486",
       "sha256": "ad4b3e9b367c3c0ea4a8dd8fc3b54a29183da51a8c06a80a61a58d4a28ab9502",
-      "targets": [
-        "edb_assinaturas",
-        "edb_registro_estado",
-        "edb_registro_revisoes"
-      ],
+      "targets": ["edb_assinaturas", "edb_registro_estado", "edb_registro_revisoes"],
       "domain": "eDB final revision / signatures persistence",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -704,9 +650,7 @@
       "change_file": "0487_qualificacoes_renovacoes.sql",
       "change_id": "qualificacoes-renovacoes-0487",
       "sha256": "2e76ab6e7a0ae9dc6e37b16d2856bb6369dbb13595c4305456648b6381b441f9",
-      "targets": [
-        "qualificacoes_renovacoes"
-      ],
+      "targets": ["qualificacoes_renovacoes"],
       "domain": "qualification renewal requests backing table (HEALTH P1-26)",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "PRODUCTION_CONFIRMED",
@@ -718,9 +662,7 @@
       "change_file": "0488_controle_voos_pilot_offline_sync_receipts.sql",
       "change_id": "controle-voos-pilot-offline-sync-receipts-0488",
       "sha256": "8ea1601690c07b3260d660b0cbad57b91d5590f73e94b64d5192a6622659a449",
-      "targets": [
-        "cv_offline_sync_receipts"
-      ],
+      "targets": ["cv_offline_sync_receipts"],
       "domain": "Controle de Voos / Pilot offline synchronization idempotency receipts",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -731,9 +673,7 @@
       "change_file": "0489_a02_natural_keys_tenant_scoped.sql",
       "change_id": "a02-natural-keys-tenant-scoped-0489",
       "sha256": "046d9ee05c31c7f637bee2521aebd293227ceba64c3ae88c5e29414dce5264e4",
-      "targets": [
-        "funcionarios"
-      ],
+      "targets": ["funcionarios"],
       "domain": "tenant-scoped employee natural-key uniqueness (audit A-02)",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -744,9 +684,7 @@
       "change_file": "0490_simulator_planning_curriculum_metadata.sql",
       "change_id": "simulator-planning-curriculum-metadata-0490",
       "sha256": "a9b0582b6bfa7345dfde2621c5b2a36d63b595a7a27b99df62951117cf77525f",
-      "targets": [
-        "treinamentos_planejados"
-      ],
+      "targets": ["treinamentos_planejados"],
       "domain": "simulator planning curriculum metadata and dependency snapshot semantics",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -757,9 +695,7 @@
       "change_file": "0491_training_compliance_requirements.sql",
       "change_id": "training-compliance-requirements-0491",
       "sha256": "a4ce45a5d8da1896f6d52cb800fb19d29ea8c4ed35201b7aed66f1d25a5480fc",
-      "targets": [
-        "treinamento_requisitos"
-      ],
+      "targets": ["treinamento_requisitos"],
       "domain": "canonical training compliance applicability requirements and legacy matrix backfill",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "PRODUCTION_CONFIRMED",
@@ -771,12 +707,7 @@
       "change_file": "0492_organizational_structure_normalization.sql",
       "change_id": "organizational-structure-normalization-0492",
       "sha256": "f796a05c8e654940bf043a9fe995eaea678493a34638a3ed6e72dec796290cb0",
-      "targets": [
-        "funcionarios",
-        "funcoes_aliases",
-        "setores_aliases",
-        "setores_funcoes"
-      ],
+      "targets": ["funcionarios", "funcoes_aliases", "setores_aliases", "setores_funcoes"],
       "domain": "canonical employee organizational sector/function identity and approved tenant-6 normalization",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "PRODUCTION_CONFIRMED",
@@ -788,10 +719,7 @@
       "change_file": "0493_simulator_annual_curriculum_cycles.sql",
       "change_id": "simulator-annual-curriculum-cycles-0493",
       "sha256": "933f4e471564b9f4516ca818e155e488fdbb59d2f502a9fe7784adbf7d2cebf8",
-      "targets": [
-        "simuladores_curriculos_voo_config",
-        "simuladores_curriculos_voo_itens"
-      ],
+      "targets": ["simuladores_curriculos_voo_config", "simuladores_curriculos_voo_itens"],
       "domain": "simulator annual recurrent curriculum cycle rotation and canonical session membership",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "PRODUCTION_CONFIRMED",
@@ -803,9 +731,7 @@
       "change_file": "0494_training_enrollment_reconciliation.sql",
       "change_id": "training-enrollment-reconciliation-0494",
       "sha256": "ddabeaa1b96554bd4a8547598edd39ec3879424f888ecf8e314991152d6368f5",
-      "targets": [
-        "treinamento_matricula_reconciliacoes"
-      ],
+      "targets": ["treinamento_matricula_reconciliacoes"],
       "domain": "explicit tenant-scoped reconciliation of LMS enrollments against the canonical training requirement matrix",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "PRODUCTION_CONFIRMED",
@@ -845,9 +771,7 @@
       "change_file": "0497_training_compliance_aircraft_scope.sql",
       "change_id": "training-compliance-aircraft-scope-0497",
       "sha256": "0695fc28c56a07bb3dfaac856c8a40b3b0fd871828a02dd0fc5a9ecc9e08079c",
-      "targets": [
-        "treinamento_requisitos"
-      ],
+      "targets": ["treinamento_requisitos"],
       "domain": "optional aircraft-model qualifier for training compliance applicability using existing crew-aircraft assignments",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -886,10 +810,7 @@
       "change_file": "0500_controle_voos_navigation_points.sql",
       "change_id": "controle-voos-navigation-points-0500",
       "sha256": "4224bd34f053b09b52554a1c98c0f04ed828f05bad15276bf63d4ef2c3fd14cb",
-      "targets": [
-        "cv_aeroportos",
-        "cv_pontos_navegacao"
-      ],
+      "targets": ["cv_aeroportos", "cv_pontos_navegacao"],
       "domain": "canonical tenant-scoped Controle de Voos aerodrome/navigation-point catalog with separate ICAO lookup and reviewed Flight Preview import",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -900,10 +821,7 @@
       "change_file": "0501_controle_voos_leg_operational_weights.sql",
       "change_id": "controle-voos-leg-operational-weights-0501",
       "sha256": "b1d9be8e4674c9810b2bb21877684598491fe7da405268a0e650854b85638d5b",
-      "targets": [
-        "aeronaves",
-        "cv_voo_etapas"
-      ],
+      "targets": ["aeronaves", "cv_voo_etapas"],
       "domain": "tenant-scoped Controle de Voos aircraft empty weight, per-leg operational weight breakdown, observations, and Petrobras flight-nature catalog",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -914,9 +832,7 @@
       "change_file": "0502_controle_voos_fueling_companies.sql",
       "change_id": "controle-voos-fueling-companies-0502",
       "sha256": "d0f19c51942836e451fb1b836a33ea380bc56aa80a749e7c308f79e6bc9e320f",
-      "targets": [
-        "cv_empresas_abastecimento"
-      ],
+      "targets": ["cv_empresas_abastecimento"],
       "domain": "tenant-scoped Controle de Voos fueling-company catalog used by Pilot App refueling records",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -969,9 +885,7 @@
       "change_file": "0505_conhecimento_ativo_desafios_livres.sql",
       "change_id": "conhecimento-ativo-desafios-livres-0505",
       "sha256": "30b84d25764eff8acd9b70abb92e688d0715add56ac0827f3165a78144f8915d",
-      "targets": [
-        "conhecimento_ativo_desafios"
-      ],
+      "targets": ["conhecimento_ativo_desafios"],
       "domain": "tenant-scoped Conhecimento Ativo challenge selection by aircraft/topic, 10-question challenges, two-per-fortnight recommendation, and voluntary additional challenges",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -982,10 +896,7 @@
       "change_file": "0506_controle_voos_flight_justifications.sql",
       "change_id": "controle-voos-flight-justifications-0506",
       "sha256": "a52b14f5d07731bdcc81362f5c9fb02fcbc51bd53b59d8d38d8aceebec63d798",
-      "targets": [
-        "cv_justificativas_voo",
-        "cv_voo_justificativas"
-      ],
+      "targets": ["cv_justificativas_voo", "cv_voo_justificativas"],
       "domain": "tenant-scoped Controle de Voos planning-versus-realized flight-time justification catalog and minute allocation",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -996,9 +907,7 @@
       "change_file": "0507_controle_voos_delay_justification_catalog.sql",
       "change_id": "controle-voos-delay-justification-catalog-0507",
       "sha256": "b88d560d149ecfbacf322b97ecfb40bea797d95a0fef102c862825c30244792c",
-      "targets": [
-        "cv_justificativas_voo"
-      ],
+      "targets": ["cv_justificativas_voo"],
       "domain": "tenant-scoped Controle de Voos Petrobras AA41-AA94 delay justification catalog with source categories",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -1009,9 +918,7 @@
       "change_file": "0508_training_compliance_daily_snapshots.sql",
       "change_id": "training-compliance-daily-snapshots-0508",
       "sha256": "03db09a365602bd52436e326a7e4bd98b40e905816546ce88f03cc8671f678ab",
-      "targets": [
-        "training_compliance_daily_snapshots"
-      ],
+      "targets": ["training_compliance_daily_snapshots"],
       "domain": "tenant-scoped daily training-compliance aggregate snapshots for company, sector, role and sector+role trend reporting",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -1022,10 +929,7 @@
       "change_file": "0509_controle_voos_flight_plan.sql",
       "change_id": "controle-voos-flight-plan-0509",
       "sha256": "e5909c563a3eea04df18d24f6d4dd36cb74417e2c4c3708f9c844e75142681bb",
-      "targets": [
-        "cv_planos_voo",
-        "cv_plano_voo_eventos"
-      ],
+      "targets": ["cv_planos_voo", "cv_plano_voo_eventos"],
       "domain": "tenant-scoped Controle de Voos structured flight-plan aggregate and append-only DECEA/SIGMA provider event ledger",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -1036,9 +940,7 @@
       "change_file": "0510_controle_voos_petrobras_rve_export.sql",
       "change_id": "controle-voos-petrobras-rve-export-0510",
       "sha256": "74fbcc66819b5f0ea564f7efb87509b1109643b4d065e2bf7e52bcf46dea2cb5",
-      "targets": [
-        "cv_voos"
-      ],
+      "targets": ["cv_voos"],
       "domain": "tenant-scoped Controle de Voos Petrobras daily RVE XML export identifiers on operational flights",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -1049,9 +951,7 @@
       "change_file": "0511_frms_duty_boundary_config.sql",
       "change_id": "frms-duty-boundary-config-0511",
       "sha256": "58a9f5a5839791e64fdd88c3d86183feb992d4fe63b67ed98fe8645ffcc8afef",
-      "targets": [
-        "frms_fadiga_config_empresa"
-      ],
+      "targets": ["frms_fadiga_config_empresa"],
       "domain": "tenant-scoped FRMS duty-boundary configuration for post-flight cutoff offset and no-flight workday end",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -1073,10 +973,7 @@
       "change_file": "0513_qualification_areas.sql",
       "change_id": "qualification-areas-0513",
       "sha256": "7334b72075970d480ff6faeb6171e4a75a53ab33be5c598a0061811519c83431",
-      "targets": [
-        "qualificacoes_areas",
-        "qualificacoes_tipos"
-      ],
+      "targets": ["qualificacoes_areas", "qualificacoes_tipos"],
       "domain": "tenant-scoped qualification-area catalog separating model classification from employee organizational sectors and Training Compliance applicability",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -1087,9 +984,7 @@
       "change_file": "0514_auth_profile_authority_sync.sql",
       "change_id": "auth-profile-authority-sync-0514",
       "sha256": "c3675d09aabb8f2e5fff8051d1d0f56cd7a67a725e4608786ccfce5d984bb4ea",
-      "targets": [
-        "usuarios_empresas"
-      ],
+      "targets": ["usuarios_empresas"],
       "domain": "tenant membership compatibility role to explicit multi-profile authority synchronization",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -1111,9 +1006,7 @@
       "change_file": "0516_qualification_expired_daily_alerts.sql",
       "change_id": "qualification-expired-daily-alerts-0516",
       "sha256": "9090059d1be859668791d5028cee359611159fa58b85f79a04ea547445fd4fc8",
-      "targets": [
-        "notificacoes_config"
-      ],
+      "targets": ["notificacoes_config"],
       "domain": "tenant-configurable qualification notification stages with editable subjects/templates/frequency plus recurring expired-qualification alerts",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -1139,9 +1032,7 @@
       "change_file": "ead-category-reconciliation-executor-0453.sql",
       "change_id": null,
       "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
-      "targets": [
-        "ead_category_reconciliation_runs"
-      ],
+      "targets": ["ead_category_reconciliation_runs"],
       "domain": "EAD category reconciliation executor ledger",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REPO_EXPECTED",
@@ -1162,10 +1053,7 @@
       "change_file": "0519_training_compliance_evidence_profiles.sql",
       "change_id": "training-compliance-evidence-profiles-0519",
       "sha256": "69b3b6f68792d9c75c0591c16d3bb4ffb9178793547c1c9fbda5ed2b5e3f87f2",
-      "targets": [
-        "lms_matriculas",
-        "qualificacoes_historico"
-      ],
+      "targets": ["lms_matriculas", "qualificacoes_historico"],
       "domain": "compliance / training evidence profiles",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -1176,9 +1064,7 @@
       "change_file": "0520_training_compliance_evidence_multi_profiles.sql",
       "change_id": "training-compliance-evidence-multi-profiles-0520",
       "sha256": "7eea5dea60019a79e872d2e46ec7f3886241232f9388996766a3cce64705a184",
-      "targets": [
-        "qualificacoes_historico_perfis_competencia"
-      ],
+      "targets": ["qualificacoes_historico_perfis_competencia"],
       "domain": "compliance / training evidence multi profiles",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -1200,9 +1086,7 @@
       "change_file": "0522_auth_profile_orphan_cleanup.sql",
       "change_id": "auth-profile-orphan-cleanup-0522",
       "sha256": "086e7a0b098e74bfbfb656c4c972918c00cf3b4c7b3f3b986d81cea8d518dbc0",
-      "targets": [
-        "usuarios_empresas"
-      ],
+      "targets": ["usuarios_empresas"],
       "domain": "tenant membership / explicit multi-profile authority orphan cleanup and delete synchronization",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -1274,9 +1158,7 @@
       "change_file": "0528_setor_compliance_responsibles.sql",
       "change_id": "setor-compliance-responsibles-0528",
       "sha256": "0a5458d43405e6ce3561a4e63b70de41a64275456f94d459bf084c2f3c9cc557",
-      "targets": [
-        "setores_responsaveis_compliance"
-      ],
+      "targets": ["setores_responsaveis_compliance"],
       "domain": "training compliance / sector alert responsibility separated from operational access",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
@@ -1324,10 +1206,7 @@
       "change_file": "0533_training_catalog_metadata_references.sql",
       "change_id": "training-catalog-metadata-references-0533",
       "sha256": "fe444f5419a77a5fd80ac720222455359b4ada0200e6ad293a3a319f2043a878",
-      "targets": [
-        "lms_cursos",
-        "qualificacoes_tipos"
-      ],
+      "targets": ["lms_cursos", "qualificacoes_tipos"],
       "domain": "training catalog / explicit references and reviewed course metadata",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",

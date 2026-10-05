@@ -697,7 +697,16 @@ async function syncTipoSetores(
 router.get(
   '/',
   auth(),
-  requirePermission('qualificacoes', 'visualizar', 'admin', 'manager', 'instructor', 'student', 'viewer', 'editor'),
+  requirePermission(
+    'qualificacoes',
+    'visualizar',
+    'admin',
+    'manager',
+    'instructor',
+    'student',
+    'viewer',
+    'editor',
+  ),
   safe(async (c) => {
     const db: D1Database = c.env.DB;
     const { empresaId } = getTenantContext(c);
@@ -774,7 +783,10 @@ router.get(
 
     if (areaId > 0) {
       if (!columnsSupport.hasAreaId) {
-        return c.json({ success: false, error: 'Classificação por área ainda não disponível' }, 503);
+        return c.json(
+          { success: false, error: 'Classificação por área ainda não disponível' },
+          503,
+        );
       }
       conditions.push('qt.area_id = ?');
       bindings.push(areaId);
@@ -783,7 +795,9 @@ router.get(
     if (search) {
       const like = `%${search}%`;
       if (columnsSupport.hasAreaId) {
-        conditions.push('(qt.nome LIKE ? OR qt.codigo LIKE ? OR qt.categoria LIKE ? OR qa.nome LIKE ?)');
+        conditions.push(
+          '(qt.nome LIKE ? OR qt.codigo LIKE ? OR qt.categoria LIKE ? OR qa.nome LIKE ?)',
+        );
         bindings.push(like, like, like, like);
       } else {
         conditions.push('(qt.nome LIKE ? OR qt.codigo LIKE ? OR qt.categoria LIKE ?)');
@@ -1459,11 +1473,17 @@ router.put(
     }
     if (data.area_id !== undefined) {
       if (!columnsSupport.hasAreaId) {
-        return c.json({ success: false, error: 'Classificação por área ainda não disponível' }, 503);
+        return c.json(
+          { success: false, error: 'Classificação por área ainda não disponível' },
+          503,
+        );
       }
       const areaCanonica = await resolveAreaQualificacao(db, empresaId, data.area_id);
       if (!areaCanonica) {
-        return c.json({ success: false, error: 'Área da qualificação não encontrada ou inativa' }, 404);
+        return c.json(
+          { success: false, error: 'Área da qualificação não encontrada ou inativa' },
+          404,
+        );
       }
       if (Number(rowAtual.area_id || 0) !== areaCanonica.id) {
         updateParts.push('area_id = ?');

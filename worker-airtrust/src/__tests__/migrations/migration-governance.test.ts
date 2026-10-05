@@ -14,10 +14,6 @@ const experimentalMigrationPath = join(
   'migrations_experimental',
   '0410_experimental_regulated_records_core.sql',
 );
-const wranglerConfigPaths = [
-  join(workerRoot, 'wrangler.toml'),
-  join(workerRoot, 'wrangler.dev.toml'),
-] as const;
 const historicalFilenameExceptions = [
   '0098-indices-performance.sql',
   '132_add_funcionario_ativo.sql',

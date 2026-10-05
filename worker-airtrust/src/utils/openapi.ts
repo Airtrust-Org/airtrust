@@ -522,7 +522,11 @@ export const openApiSpec = {
         security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
-          content: { 'application/json': { schema: { $ref: '#/components/schemas/LmsMatriculaConviteLoteInput' } } },
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/LmsMatriculaConviteLoteInput' },
+            },
+          },
         },
         responses: {
           '200': { description: 'Convites processados' },
@@ -998,7 +1002,12 @@ export const openApiSpec = {
         type: 'object',
         required: ['matricula_ids'],
         properties: {
-          matricula_ids: { type: 'array', minItems: 1, maxItems: 200, items: { type: 'integer', minimum: 1 } },
+          matricula_ids: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 200,
+            items: { type: 'integer', minimum: 1 },
+          },
         },
       },
       LmsScormCommitInput: {

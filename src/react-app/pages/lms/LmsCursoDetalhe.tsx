@@ -6,7 +6,6 @@ import {
   ArrowRight,
   Award,
   CheckCircle2,
-  Eye,
   Play,
   Sparkles,
   Target,
