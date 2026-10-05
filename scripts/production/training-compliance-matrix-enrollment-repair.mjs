@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 // source_reference: tenant-6 production read-only D1 inventory 2026-10-05; global active-employee LMS enrollment reconciliation against the effective mandatory EAD matrix.
-// operational_decision: repair effective mandatory EAD matrix enrollments for every active employee; create only missing mandatory EAD course placeholders; cancel only globally mismatched evidence-free enrollments that were not explicitly reconciled as standalone.
+// operational_decision: repair effective mandatory EAD matrix enrollments for every active employee; create only missing mandatory EAD course placeholders; cancel every globally mismatched active enrollment that was not explicitly reconciled as standalone, preserving all historical/progress evidence.
 // dry_run_required: production apply requires a successful reviewed dry-run on the exact same SHA with identical candidate counts and hashes.
-// rollback_plan_required: workflow captures a D1 Time Travel recovery point immediately before apply; no enrollment with progress, runtime evidence, completion evidence or qualification history may be cancelled.
+// rollback_plan_required: workflow captures a D1 Time Travel recovery point immediately before apply; cancellation changes active enrollment status only and preserves progress, runtime evidence, completion evidence and qualification history.
 
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -13,7 +13,7 @@ const EMPRESA_ID = 6;
 const API_BASE = process.env.PROD_API_BASE_URL || 'https://api.airtrust.online';
 const REPAIR_MARKER = 'Matrícula criada pela reconciliação exata da matriz obrigatória EAD — lote autorizado pela Gerência de Treinamento.';
 const DRY_CONFIRM = 'AIRTRUST_PRODUCTION_DRYRUN_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR';
-const APPLY_CONFIRM = 'AIRTRUST_PRODUCTION_APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_NO_EMAIL';
+const APPLY_CONFIRM = 'AIRTRUST_PRODUCTION_APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_NO_EMAIL';
 
 const mode = process.argv[2] || process.env.TRAINING_COMPLIANCE_MATRIX_REPAIR_MODE || 'dry-run';
 
@@ -398,8 +398,9 @@ function cancelReviewedWrongEnrollments(ids) {
   );
   runWrangler(
     `UPDATE lms_matriculas
-        SET status='CANCELADO',deleted_at=datetime('now'),updated_at=datetime('now')
-      WHERE empresa_id=${EMPRESA_ID} AND id IN (${idList}) AND deleted_at IS NULL`,
+        SET status='CANCELADO',updated_at=datetime('now')
+      WHERE empresa_id=${EMPRESA_ID} AND id IN (${idList}) AND deleted_at IS NULL
+        AND UPPER(COALESCE(status,''))!='CANCELADO'`,
     'cancel_wrong_enrollments',
     { mutating: true },
   );
@@ -430,6 +431,8 @@ function sanitizedSummary(state) {
     wrong_count: state.wrong_count,
     wrong_hash: state.wrong_hash,
     unsafe_wrong_count: state.unsafe_wrong_count,
+    wrong_with_evidence_count: state.unsafe_wrong_count,
+    historical_evidence_preserved: true,
     no_course_count: state.no_course_count,
     no_course_hash: state.no_course_hash,
     no_course_codes: state.no_course_types.map((row) => String(row.codigo || row.id)),
@@ -450,13 +453,13 @@ async function main() {
   summary.created_enrollments = 0;
   summary.ignored_existing = 0;
   summary.cancelled_wrong_enrollments = 0;
+  summary.cancelled_wrong_with_evidence_enrollments = 0;
 
   if (mode === 'dry-run') {
     process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
     return;
   }
 
-  if (before.unsafe_wrong_count > 0) fail('WRONG_ENROLLMENTS_WITH_EVIDENCE_REQUIRE_MANUAL_REVIEW');
   verifyReviewedState(before);
   const email = process.env.E2E_EMAIL || '';
   const password = process.env.E2E_PASSWORD || '';
@@ -473,6 +476,7 @@ async function main() {
   summary.cancelled_wrong_enrollments = cancelReviewedWrongEnrollments(
     before.wrong_rows.map((row) => Number(row.id)).sort((a, b) => a - b),
   );
+  summary.cancelled_wrong_with_evidence_enrollments = before.unsafe_wrong_count;
 
   const after = readState();
   if (after.missing_count !== 0) fail(`POST_MISSING_EXPECTED_PAIRS_${after.missing_count}`);

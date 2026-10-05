@@ -22,19 +22,20 @@ test('global wrong enrollment audit covers all active employees and preserves ex
   assert.match(script, /treinamento_matricula_reconciliacoes/);
   assert.match(script, /MANTER_AVULSA/);
   assert.doesNotMatch(script, /m\.observacoes=\$\{JSON\.stringify\(PREVIOUS_BATCH_MARKER\)\}/);
-  assert.match(script, /WRONG_ENROLLMENTS_WITH_EVIDENCE_REQUIRE_MANUAL_REVIEW/);
+  assert.doesNotMatch(script, /WRONG_ENROLLMENTS_WITH_EVIDENCE_REQUIRE_MANUAL_REVIEW/);
   assert.match(script, /lms_progresso_scorm/);
   assert.match(script, /lms_xapi_statements/);
   assert.match(script, /lms_completion_diagnostics_snapshots/);
   assert.match(script, /qualificacoes_historico/);
 });
 
-test('dry-run reports unsafe wrong enrollments while apply remains fail-closed', () => {
-  const dryRunBranch = script.indexOf("if (mode === 'dry-run')");
-  const unsafeApplyGuard = script.indexOf("if (before.unsafe_wrong_count > 0) fail('WRONG_ENROLLMENTS_WITH_EVIDENCE_REQUIRE_MANUAL_REVIEW')");
-  assert.ok(dryRunBranch >= 0);
-  assert.ok(unsafeApplyGuard > dryRunBranch);
+test('dry-run reports evidenced wrong enrollments and apply preserves evidence while cancelling active state', () => {
   assert.match(script, /unsafe_wrong_count: state\.unsafe_wrong_count/);
+  assert.match(script, /wrong_with_evidence_count: state\.unsafe_wrong_count/);
+  assert.match(script, /historical_evidence_preserved: true/);
+  assert.doesNotMatch(script, /SET status='CANCELADO',deleted_at=datetime\('now'\)/);
+  assert.match(script, /SET status='CANCELADO',updated_at=datetime\('now'\)/);
+  assert.match(script, /cancelled_wrong_with_evidence_enrollments = before\.unsafe_wrong_count/);
 });
 
 test('workflow is exact-SHA, dry-run-first and recovery guarded', () => {
@@ -45,4 +46,6 @@ test('workflow is exact-SHA, dry-run-first and recovery guarded', () => {
   assert.match(workflow, /CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
   assert.match(workflow, /PROD_SMOKE_EMAIL \|\| secrets\.QA_EXAMINER_ADMIN_EMAIL/);
   assert.match(workflow, /production-training-compliance-matrix-enrollment-repair-dry-run-/);
+  assert.match(workflow, /APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_NO_EMAIL/);
+  assert.doesNotMatch(workflow, /REVIEWED_UNSAFE_WRONG_NOT_ZERO/);
 });
