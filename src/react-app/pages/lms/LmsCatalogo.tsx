@@ -1664,7 +1664,7 @@ export default function LmsCatalogo() {
   const [search, setSearch] = useState('');
   const [areaFilter, setAreaFilter] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<TipoConteudo[]>([]);
-  const [statusFilter, setStatusFilter] = useState<MatriculaStatus[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const { tipos: qualificacaoTipos } = useQualificacaoTipos(showAdministrativeFilters, 500);
   const { data: areasData } = useApi<Array<{ id: number; nome: string; codigo?: string | null }>>(
     '/qualificacoes/areas',
@@ -1783,11 +1783,15 @@ export default function LmsCatalogo() {
     const matchType = typeFilter.length === 0 || typeFilter.includes(curso.tipo_conteudo);
     const matchStatus =
       statusFilter.length === 0 ||
-      statusFilter.some((status) =>
-        status === 'NAO_INICIADO'
-          ? !mat || mat.status === 'NAO_INICIADO'
-          : mat?.status === status,
-      );
+      (canManage
+        ? statusFilter.some((status) =>
+            status === 'PUBLICADO' ? curso.publicado === 1 : status === 'RASCUNHO' && curso.publicado === 0,
+          )
+        : statusFilter.some((status) =>
+            status === 'NAO_INICIADO'
+              ? !mat || mat.status === 'NAO_INICIADO'
+              : mat?.status === status,
+          ));
     return matchTab && matchSearch && matchArea && matchType && matchStatus;
   });
 
@@ -2125,14 +2129,21 @@ export default function LmsCatalogo() {
                   className="w-full [&>button]:h-10 [&>button]:w-full [&>button]:justify-between [&>button]:rounded-lg"
                 />
                 <MultiSelect
-                  options={[
-                    ...(!canManage ? [{ value: 'NAO_INICIADO', label: 'Não iniciado' }] : []),
-                    { value: 'EM_ANDAMENTO', label: 'Em andamento' },
-                    { value: 'CONCLUIDO', label: 'Concluído' },
-                    { value: 'REPROVADO', label: 'Reprovado' },
-                  ]}
+                  options={
+                    canManage
+                      ? [
+                          { value: 'PUBLICADO', label: 'Publicado' },
+                          { value: 'RASCUNHO', label: 'Rascunho' },
+                        ]
+                      : [
+                          { value: 'NAO_INICIADO', label: 'Não iniciado' },
+                          { value: 'EM_ANDAMENTO', label: 'Em andamento' },
+                          { value: 'CONCLUIDO', label: 'Concluído' },
+                          { value: 'REPROVADO', label: 'Reprovado' },
+                        ]
+                  }
                   selected={statusFilter}
-                  onChange={(selected) => setStatusFilter(selected as MatriculaStatus[])}
+                  onChange={setStatusFilter}
                   placeholder="Todos os status"
                   allLabel="Todos os status"
                   className="w-full [&>button]:h-10 [&>button]:w-full [&>button]:justify-between [&>button]:rounded-lg"
