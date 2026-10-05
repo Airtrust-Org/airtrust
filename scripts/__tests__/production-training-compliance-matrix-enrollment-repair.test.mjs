@@ -25,6 +25,10 @@ test('missing enrollment target is organizational-role only and defers designati
   assert.match(script, /LEFT JOIN expected e ON e\.funcionario_id=a\.funcionario_id/);
 });
 
+test('production enrollment repair uses small API batches to stay within Worker request timeouts', () => {
+  assert.match(script, /employeeChunk of chunk\(\[\.\.\.new Set\(employeeIds\)\]\.sort\(\(a, b\) => a - b\), 10\)/);
+});
+
 test('repair never sends enrollment e-mail or calls invitation endpoint', () => {
   assert.match(script, /enviar_convite_email: false/);
   assert.doesNotMatch(script, /\/api\/lms\/matriculas\/convites/);
