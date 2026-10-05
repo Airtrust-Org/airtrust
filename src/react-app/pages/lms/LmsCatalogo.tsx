@@ -9,8 +9,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
   BadgeCheck,
-  BookOpen,
-  CheckCircle2,
   Clock,
   Eye,
   EyeOff,
@@ -68,7 +66,6 @@ import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAr
 import {
   formatMinutes,
   getTypeMeta,
-  getLmsCourseThumbnailUrl,
   useLmsCourseThumbnailUrl,
   getMatriculaStatusMeta,
   getLmsGridCardBorderClasses,
@@ -77,7 +74,6 @@ import {
   getLmsProgressBarFillClasses,
   getLmsProgressLabel,
   LmsCourseArtwork,
-  LmsCourseMiniMeta,
   LmsEmptyState,
   LmsModuleTabs,
   LmsPageShell,
@@ -104,6 +100,7 @@ const DEFAULT_CATEGORIES = [
 ];
 const EAD_QUALIFICACAO_CATEGORIAS = new Set(['EAD', 'TREINAMENTO EAD']);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function resolveLmsCatalogRoleView(params: {
   canManage: boolean;
   restrictToEnrolledCourses: boolean;
@@ -136,6 +133,7 @@ type LmsCourseMutationAccess = {
  * authoritative; this prevents the catalog from offering an action that will
  * be rejected after a destructive confirmation.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function canMutateLmsCourse({
   canManage,
   operationalAccessReady,
@@ -223,6 +221,7 @@ function applyQualTemplate(
   if (overwrite || !toNullableText(n.conteudo_programatico))
     n.conteudo_programatico = tipo.conteudo_programatico ?? '';
   if (overwrite || !toNullableText(n.observacoes)) n.observacoes = tipo.observacoes ?? '';
+  if (overwrite || !toNullableText(n.referencias)) n.referencias = tipo.referencias ?? '';
   if (overwrite || n.carga_horaria_inicial_horas == null)
     n.carga_horaria_inicial_horas = tipo.carga_horaria_inicial ?? null;
   if (overwrite || n.carga_horaria_recorrente_horas == null)
@@ -287,6 +286,7 @@ function buildInitialForm(initial?: Partial<LmsCurso>): CreateCursoDTO {
     carga_horaria_minutos: initial?.carga_horaria_minutos ?? null,
     conteudo_programatico: initial?.conteudo_programatico ?? '',
     observacoes: initial?.observacoes ?? '',
+    referencias: initial?.referencias ?? '',
     carga_horaria_inicial_horas: initial?.carga_horaria_inicial_horas ?? null,
     carga_horaria_recorrente_horas: initial?.carga_horaria_recorrente_horas ?? null,
     qualificacao_tipo_id: initial?.qualificacao_tipo_id ?? null,
@@ -718,7 +718,7 @@ function CourseDrawer({
         ? current
         : { ...current, qualificacao_area_id: nextAreaId },
     );
-  }, [curTipo?.id, curTipo?.area_id]);
+  }, [curTipo]);
   const hasLegacy =
     form.gerar_qualificacao_ao_concluir === 1 && Boolean(curTipo) && !isEadTipo(curTipo!);
   const storedContentLabel = getStoredContentLabel(courseSnapshot);
@@ -1092,6 +1092,16 @@ function CourseDrawer({
                           rows={3}
                           value={form.observacoes ?? ''}
                           onChange={(e) => setForm((c) => ({ ...c, observacoes: e.target.value }))}
+                          className={textareaCls}
+                        />
+                      </div>
+                      <div className="space-y-2 lg:col-span-2">
+                        <FieldLabel label="Referências" />
+                        <textarea
+                          rows={4}
+                          value={form.referencias ?? ''}
+                          onChange={(e) => setForm((c) => ({ ...c, referencias: e.target.value }))}
+                          placeholder="Normas, regulamentos, manuais, programas e procedimentos aplicáveis — uma referência por linha."
                           className={textareaCls}
                         />
                       </div>

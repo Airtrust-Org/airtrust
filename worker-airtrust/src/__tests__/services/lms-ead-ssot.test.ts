@@ -17,7 +17,8 @@ function makeTipoRow() {
     formato_id: null,
     formato_codigo: 'EAD',
     conteudo_programatico: 'Conteúdo',
-    observacoes: null,
+    observacoes: 'Observação operacional',
+    referencias: 'RBAC 135\nPTO Rev.10',
     carga_horaria: 8,
     carga_horaria_inicial: 8,
     carga_horaria_recorrente: 8,
@@ -37,7 +38,8 @@ function makeCourseRow(overrides: Record<string, unknown> = {}) {
     formato_codigo: 'EAD',
     carga_horaria_minutos: 480,
     conteudo_programatico: 'Conteúdo',
-    observacoes: null,
+    observacoes: 'Observação operacional',
+    referencias: 'RBAC 135\nPTO Rev.10',
     carga_horaria_inicial_horas: 8,
     carga_horaria_recorrente_horas: 8,
     tipo_conteudo: 'scorm',
@@ -128,6 +130,8 @@ describe('lms-ead-ssot', () => {
       (call) => call.query.includes('UPDATE lms_cursos') && call.method === 'run',
     );
     expect(update?.query).toContain('formato_id = NULL');
+    expect(update?.query).toContain('referencias = ?');
+    expect(update?.args).toContain('RBAC 135\nPTO Rev.10');
   });
 
   it('prefere o curso original com assets e matrículas ao shell vazio mais novo', async () => {
@@ -209,7 +213,8 @@ describe('syncQualificacaoTipoFromCurso', () => {
       formato_codigo: null,
       carga_horaria_minutos: 480,
       conteudo_programatico: null,
-      observacoes: null,
+      observacoes: 'Aplicabilidade conforme currículo',
+      referencias: 'RBAC 135\nPTO Rev.10',
       carga_horaria_inicial_horas: null,
       carga_horaria_recorrente_horas: null,
       qualificacao_categoria: 'EAD',
@@ -265,6 +270,7 @@ describe('syncQualificacaoTipoFromCurso', () => {
     expect(result).toBe(139);
     expect(updateCalls).toHaveLength(1);
     expect(updateCalls[0]).toContain(13);
+    expect(updateCalls[0]).toContain('RBAC 135\nPTO Rev.10');
   });
 
   it('sincroniza a área da qualificação quando o curso envia uma área válida', async () => {

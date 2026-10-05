@@ -522,7 +522,11 @@ export const openApiSpec = {
         security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
-          content: { 'application/json': { schema: { $ref: '#/components/schemas/LmsMatriculaConviteLoteInput' } } },
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/LmsMatriculaConviteLoteInput' },
+            },
+          },
         },
         responses: {
           '200': { description: 'Convites processados' },
@@ -862,6 +866,7 @@ export const openApiSpec = {
           carga_horaria_recorrente_horas: { type: 'number', nullable: true },
           conteudo_programatico: { type: 'string', nullable: true },
           observacoes: { type: 'string', nullable: true },
+          referencias: { type: 'string', nullable: true },
           thumbnail_r2_key: { type: 'string', nullable: true },
           total_matriculas: { type: 'integer', nullable: true },
           total_concluidos: { type: 'integer', nullable: true },
@@ -879,6 +884,7 @@ export const openApiSpec = {
           carga_horaria_minutos: { type: 'integer', minimum: 0, default: 0 },
           conteudo_programatico: { type: 'string', nullable: true },
           observacoes: { type: 'string', nullable: true },
+          referencias: { type: 'string', nullable: true },
           carga_horaria_inicial_horas: { type: 'number', nullable: true, minimum: 0 },
           carga_horaria_recorrente_horas: { type: 'number', nullable: true, minimum: 0 },
           idioma: { type: 'string', default: 'pt-BR' },
@@ -899,6 +905,7 @@ export const openApiSpec = {
           carga_horaria_minutos: { type: 'integer', minimum: 0 },
           conteudo_programatico: { type: 'string', nullable: true },
           observacoes: { type: 'string', nullable: true },
+          referencias: { type: 'string', nullable: true },
           carga_horaria_inicial_horas: { type: 'number', nullable: true, minimum: 0 },
           carga_horaria_recorrente_horas: { type: 'number', nullable: true, minimum: 0 },
           idioma: { type: 'string' },
@@ -995,7 +1002,12 @@ export const openApiSpec = {
         type: 'object',
         required: ['matricula_ids'],
         properties: {
-          matricula_ids: { type: 'array', minItems: 1, maxItems: 200, items: { type: 'integer', minimum: 1 } },
+          matricula_ids: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 200,
+            items: { type: 'integer', minimum: 1 },
+          },
         },
       },
       LmsScormCommitInput: {

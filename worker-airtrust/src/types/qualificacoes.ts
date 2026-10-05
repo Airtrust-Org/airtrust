@@ -36,6 +36,7 @@ export interface TipoQualificacao {
   validade: number; // Validade em meses (12, 24, etc)
   vencimento_fim_mes: VencimentoMode; // 0=dia exato, 1=fim do mês
   observacoes?: string | null; // Observações adicionais
+  referencias?: string | null; // Normas, manuais e documentos aplicáveis
   ativo: number | boolean; // 1/true = ativo, 0/false = inativo
   created_at: string; // ISO timestamp
   updated_at?: string | null; // ISO timestamp
@@ -116,6 +117,7 @@ export interface CreateUpdateTipoQualificacaoRequest {
   validade: number;
   vencimento_fim_mes?: VencimentoMode; // Default 0
   observacoes?: string | null;
+  referencias?: string | null;
   ativo?: number | boolean; // Default 1
 }
 
