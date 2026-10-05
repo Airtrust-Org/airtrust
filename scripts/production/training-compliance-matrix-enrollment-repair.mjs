@@ -443,7 +443,6 @@ function sanitizedSummary(state) {
 async function main() {
   const before = readState();
   if (before.ambiguous_course_types.length > 0) fail('AMBIGUOUS_ACTIVE_COURSE_MAPPING');
-  if (before.unsafe_wrong_count > 0) fail('WRONG_ENROLLMENTS_WITH_EVIDENCE_REQUIRE_MANUAL_REVIEW');
 
   const summary = sanitizedSummary(before);
   summary.mutation_executed = false;
@@ -457,6 +456,7 @@ async function main() {
     return;
   }
 
+  if (before.unsafe_wrong_count > 0) fail('WRONG_ENROLLMENTS_WITH_EVIDENCE_REQUIRE_MANUAL_REVIEW');
   verifyReviewedState(before);
   const email = process.env.E2E_EMAIL || '';
   const password = process.env.E2E_PASSWORD || '';
