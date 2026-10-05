@@ -313,6 +313,11 @@ done
 
 ensure_sqlite_column "lms_cursos" "formato_id" "INTEGER REFERENCES qualificacoes_formatos(id)"
 ensure_sqlite_column "lms_cursos" "dominio_codigo" "TEXT"
+# Schema V2 0533 adds explicit controlled-document references to the two
+# training metadata SSOT surfaces. Keep the isolated CI bootstrap structurally
+# aligned without replaying the tenant-scoped production data correction.
+ensure_sqlite_column "qualificacoes_tipos" "referencias" "TEXT"
+ensure_sqlite_column "lms_cursos" "referencias" "TEXT"
 require_sqlite_column "lms_cursos" "conteudo_arquivo_nome"
 require_sqlite_column "lms_cursos" "h5p_conteudo_id"
 require_sqlite_column "lms_matriculas" "ultimo_slide"
