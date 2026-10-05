@@ -290,9 +290,6 @@ validate_postconditions() {
     0533_training_catalog_metadata_references.sql)
       bash scripts/staging/validate-0533-postconditions.sh --target="$db_name"
       ;;
-    0533_training_catalog_metadata_references.sql)
-      bash scripts/staging/validate-0533-postconditions.sh --target="$db_name"
-      ;;
   esac
 }
 
@@ -433,11 +430,6 @@ fi
 if [[ "$migration_basename" == "0532_training_compliance_fdm_designation_only.sql" && "$ledger_count" == "0" ]]; then
   bash scripts/staging/validate-0532-preflight.sh --target="$db_name"
   echo "SPECIALIZED_PREFLIGHT_0532_OK=true"
-fi
-
-if [[ "$migration_basename" == "0533_training_catalog_metadata_references.sql" && "$ledger_count" == "0" ]]; then
-  bash scripts/staging/validate-0533-preflight.sh --target="$db_name"
-  echo "SPECIALIZED_PREFLIGHT_0533_OK=true"
 fi
 
 if [[ "$migration_basename" == "0533_training_catalog_metadata_references.sql" && "$ledger_count" == "0" ]]; then

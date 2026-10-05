@@ -72,11 +72,11 @@ describe('training catalog metadata references 0533', () => {
     const workflow = read('.github/workflows/staging-d1-schema-change.yml');
     const runner = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
     const migration = '0533_training_catalog_metadata_references.sql';
-    expect(workflow).toContain(`- ${migration}`);
+    expect(workflow.match(new RegExp(`^\\s*- ${migration.replace('.', '\\.')}$`, 'gm'))).toHaveLength(1);
     expect(workflow).toContain(`0532_training_compliance_fdm_designation_only.sql|${migration}) ;;`);
-    expect(runner).toContain(`"${migration}"`);
-    expect(runner).toContain('bash scripts/staging/validate-0533-preflight.sh --target="$db_name"');
-    expect(runner).toContain('bash scripts/staging/validate-0533-postconditions.sh --target="$db_name"');
+    expect(runner.match(new RegExp(`^\\s*\"${migration.replace('.', '\\.')}\"$`, 'gm'))).toHaveLength(1);
+    expect(runner.match(/bash scripts\/staging\/validate-0533-preflight\.sh --target="\$db_name"/g)).toHaveLength(1);
+    expect(runner.match(/bash scripts\/staging\/validate-0533-postconditions\.sh --target="\$db_name"/g)).toHaveLength(1);
   });
 
   it('ships governed preflight and postcondition validators', () => {
