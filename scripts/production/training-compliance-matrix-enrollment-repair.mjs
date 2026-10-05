@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // source_reference: tenant-6 production read-only D1 inventory 2026-10-05; global active-employee LMS enrollment reconciliation against the effective mandatory EAD matrix.
-// operational_decision: repair effective mandatory EAD matrix enrollments for every active employee; create only missing mandatory EAD course placeholders; cancel every globally mismatched active enrollment that was not explicitly reconciled as standalone, preserving all historical/progress evidence.
+// operational_decision: first align active enrollments to the reviewed organizational company/sector/function matrix; defer designation/individual-only missing enrollments, while still cancelling globally mismatched active enrollments and preserving all historical/progress evidence.
 // dry_run_required: production apply requires a successful reviewed dry-run on the exact same SHA with identical candidate counts and hashes.
 // rollback_plan_required: workflow captures a D1 Time Travel recovery point immediately before apply; cancellation changes active enrollment status only and preserves progress, runtime evidence, completion evidence and qualification history.
 
@@ -67,7 +67,7 @@ function runWrangler(sql, label, { mutating = false } = {}) {
 
 function baseCte() {
   return `WITH eligible AS (
-    SELECT f.id funcionario_id, tr.id regra_id, tr.qualificacao_tipo_id, tr.obrigatoriedade,
+    SELECT f.id funcionario_id, tr.id regra_id, tr.qualificacao_tipo_id, tr.obrigatoriedade, tr.condicao_id, tr.escopo, tr.fundamento_tipo,
            (CASE tr.escopo WHEN 'FUNCIONARIO' THEN 5000 WHEN 'SETOR_FUNCAO' THEN 40 WHEN 'FUNCAO' THEN 30 WHEN 'SETOR' THEN 20 WHEN 'EMPRESA' THEN 10 ELSE 0 END
             + CASE WHEN tr.condicao_id IS NOT NULL THEN 1000 ELSE 0 END
             + CASE WHEN NULLIF(TRIM(tr.aeronave_modelo),'') IS NOT NULL THEN 100 ELSE 0 END) prioridade
@@ -127,13 +127,24 @@ function baseCte() {
     ) rn
       FROM eligible
   ), expected AS (
-    SELECT r.funcionario_id,r.qualificacao_tipo_id,qt.codigo,qt.nome
+    SELECT r.funcionario_id,r.qualificacao_tipo_id,qt.codigo,qt.nome,r.condicao_id,r.escopo,r.fundamento_tipo
       FROM ranked r
       JOIN qualificacoes_tipos qt ON qt.id=r.qualificacao_tipo_id AND qt.empresa_id=${EMPRESA_ID}
      WHERE r.rn=1
        AND r.obrigatoriedade='OBRIGATORIA'
        AND qt.deleted_at IS NULL AND COALESCE(qt.ativo,1)=1
        AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
+  ), enrollment_target AS (
+    SELECT *
+      FROM expected
+     WHERE condicao_id IS NULL
+       AND escopo IN ('EMPRESA','SETOR','FUNCAO','SETOR_FUNCAO')
+       AND UPPER(TRIM(COALESCE(fundamento_tipo,'')))<>'DESIGNACAO'
+       AND UPPER(TRIM(COALESCE(codigo,''))) NOT IN (
+         'I','L','FDM-EAD','GATEKEEPER','LOSA','PPSP_SUP','E8',
+         'NR-05','BRIGADA_INCENDIO','PRIMEIROS_SOCORROS','NR-12',
+         'AUDITOR_INTERNO','AUDITOR_COMPORTAMENTAL'
+       )
   ), active_enroll AS (
     SELECT DISTINCT m.funcionario_id,c.qualificacao_tipo_id
       FROM lms_matriculas m
@@ -159,7 +170,7 @@ function readState() {
     `${baseCte()}
      SELECT COUNT(*) expected_pairs,
             SUM(CASE WHEN ae.funcionario_id IS NULL THEN 1 ELSE 0 END) missing_pairs
-       FROM expected e
+       FROM enrollment_target e
        LEFT JOIN active_enroll ae ON ae.funcionario_id=e.funcionario_id AND ae.qualificacao_tipo_id=e.qualificacao_tipo_id`,
     'expected_summary',
   )[0] || {};
@@ -168,7 +179,7 @@ function readState() {
     `${baseCte()}
      SELECT e.funcionario_id,e.qualificacao_tipo_id,e.codigo,e.nome,
             COALESCE(ac.n_courses,0) n_courses,ac.course_id
-       FROM expected e
+       FROM enrollment_target e
        LEFT JOIN active_enroll ae ON ae.funcionario_id=e.funcionario_id AND ae.qualificacao_tipo_id=e.qualificacao_tipo_id
        LEFT JOIN active_courses ac ON ac.qualificacao_tipo_id=e.qualificacao_tipo_id
       WHERE ae.funcionario_id IS NULL
@@ -425,6 +436,7 @@ function sanitizedSummary(state) {
     mode,
     source_sha: process.env.GITHUB_SHA || null,
     empresa_id: EMPRESA_ID,
+    enrollment_scope: 'organizational-role-matrix-only',
     expected_pairs: state.expected_pairs,
     missing_count: state.missing_count,
     missing_hash: state.missing_hash,
