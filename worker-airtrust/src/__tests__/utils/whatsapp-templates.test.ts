@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildTrainingStatusVencimento,
   buildTrainingTemplateVariables,
+  buildTrainingTemplateVariablesForDelivery,
   getAlertWhatsAppTemplateDefinition,
   renderTemplateBody,
   resolveQualificacaoAlertTemplateKey,
@@ -88,5 +89,48 @@ describe('whatsapp-templates', () => {
     expect(variables['4']).not.toContain('\n');
     expect(variables['5']).toBe('https://airtrust.online/lms/player/999');
   });
+
+  it('mantem compatibilidade com template EAD antigo enquanto a nova versao nao foi sincronizada', () => {
+    const oldBody =
+      '*GERÊNCIA DE TREINAMENTO | COSTA DO SOL*\n\nOlá, {{1}}!\n\n*Treinamento:* {{2}}\n*Vencimento:* {{3}}\n*Status:* {{4}}';
+    const variables = buildTrainingTemplateVariablesForDelivery({
+      templateKey: 'ead_expiring',
+      templateBodyText: oldBody,
+      funcionarioNome: 'Filipe Daumas',
+      qualificacaoNome: 'CRM',
+      dataVencimento: '28/09/2026',
+      statusVencimento: 'Vence em 7 dias',
+      trainingUrl: 'https://airtrust.online/lms/player/123',
+    });
+
+    expect(variables).toEqual({
+      '1': 'Filipe Daumas',
+      '2': 'CRM',
+      '3': '28/09/2026',
+      '4':
+        'Vence em 7 dias\n\n*Acesse diretamente o treinamento:*\nhttps://airtrust.online/lms/player/123',
+    });
+    expect(renderTemplateBody(oldBody, variables)).toContain('*Status:* Vence em 7 dias');
+  });
+
+  it('mantem compatibilidade com o template antigo de obrigatorio nunca realizado', () => {
+    const oldBody =
+      '*GERÊNCIA DE TREINAMENTO | COSTA DO SOL*\n\nOlá, {{1}}!\n\n*Treinamento:* {{2}}\n*Status:* {{3}}';
+    const variables = buildTrainingTemplateVariablesForDelivery({
+      templateKey: 'ead_required',
+      templateBodyText: oldBody,
+      funcionarioNome: 'Viviane',
+      qualificacaoNome: 'CRM',
+      dataVencimento: 'Não realizado',
+      statusVencimento: 'Treinamento obrigatório ainda não realizado',
+      trainingUrl: 'https://airtrust.online/lms/player/999',
+    });
+
+    expect(variables['3']).toContain('Treinamento obrigatório ainda não realizado');
+    expect(variables['3']).toContain('https://airtrust.online/lms/player/999');
+    expect(variables['4']).toBeUndefined();
+    expect(variables['5']).toBeUndefined();
+  });
+
 
 });
