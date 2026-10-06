@@ -29,17 +29,13 @@ const ALERT_WHATSAPP_TEMPLATE_DEFINITIONS: AlertWhatsAppTemplateDefinition[] = [
     category: 'UTILITY',
     language: 'pt_BR',
     bodyText:
-      '*GERÊNCIA DE TREINAMENTO | COSTA DO SOL*\n\nOlá, {{1}}!\n\nVocê possui um treinamento que requer sua atenção:\n\n*Treinamento:* {{2}}\n*Vencimento:* {{3}}\n*Status:* {{4}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação, sendo acompanhado pela *Gerência de Treinamento* e sujeito à verificação em auditorias.\n\nPor favor, acesse o treinamento e realize-o o quanto antes para manter sua situação de treinamento regularizada.\n\nCaso seja solicitado, faça login no *AirTrust*. Após o login, você será direcionado diretamente ao treinamento.\n\n*Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.*',
+      '*GERÊNCIA DE TREINAMENTO | COSTA DO SOL*\n\nOlá, {{1}}!\n\nVocê possui um treinamento obrigatório que requer sua atenção:\n\n*Treinamento:* {{2}}\n*Vencimento:* {{3}}\n*Status:* {{4}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação, sendo acompanhado pela *Gerência de Treinamento* e sujeito à verificação em auditorias.\n\nPor favor, realize-o o quanto antes para manter sua situação regularizada.\n\n*Acesse diretamente o treinamento:*\n{{5}}\n\nCaso seja solicitado, faça login no *AirTrust*. Após o login, você será direcionado diretamente ao treinamento.\n\n*Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.*',
     variables: [
       { id: '1', name: 'funcionario_nome', sample: 'Filipe Daumas' },
       { id: '2', name: 'qualificacao_nome', sample: 'Treinamento EAD' },
       { id: '3', name: 'data_vencimento', sample: '15/04/2026' },
-      {
-        id: '4',
-        name: 'status_vencimento',
-        sample:
-          'Vence em 7 dias\n\n*Acesse diretamente o treinamento:*\nhttps://app.airtrust.online/treinamentos/123',
-      },
+      { id: '4', name: 'status_vencimento', sample: 'Vence em 7 dias' },
+      { id: '5', name: 'training_url', sample: 'https://airtrust.online/lms/player/123' },
     ],
   },
   {
@@ -49,16 +45,17 @@ const ALERT_WHATSAPP_TEMPLATE_DEFINITIONS: AlertWhatsAppTemplateDefinition[] = [
     category: 'UTILITY',
     language: 'pt_BR',
     bodyText:
-      '*GERÊNCIA DE TREINAMENTO | COSTA DO SOL*\n\nOlá, {{1}}!\n\nExiste um treinamento obrigatório vinculado ao seu cargo/setor que ainda não consta como realizado:\n\n*Treinamento:* {{2}}\n*Status:* {{3}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação, sendo acompanhado pela *Gerência de Treinamento* e sujeito à verificação em auditorias.\n\nPor favor, acesse o treinamento e realize-o o quanto antes para regularizar sua situação.\n\n*Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.*',
+      '*GERÊNCIA DE TREINAMENTO | COSTA DO SOL*\n\nOlá, {{1}}!\n\nVocê possui um treinamento obrigatório que requer sua atenção:\n\n*Treinamento:* {{2}}\n*Vencimento:* {{3}}\n*Status:* {{4}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação, sendo acompanhado pela *Gerência de Treinamento* e sujeito à verificação em auditorias.\n\nPor favor, realize-o o quanto antes para manter sua situação regularizada.\n\n*Acesse diretamente o treinamento:*\n{{5}}\n\n*Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.*',
     variables: [
       { id: '1', name: 'funcionario_nome', sample: 'Filipe Daumas' },
       { id: '2', name: 'qualificacao_nome', sample: 'Treinamento EAD' },
+      { id: '3', name: 'data_vencimento', sample: 'Não realizado' },
       {
-        id: '3',
-        name: 'status_acesso',
-        sample:
-          'Obrigatório ainda não realizado\n\n*Acesse diretamente o treinamento:*\nhttps://app.airtrust.online/treinamentos/123',
+        id: '4',
+        name: 'status_vencimento',
+        sample: 'Treinamento obrigatório ainda não realizado',
       },
+      { id: '5', name: 'training_url', sample: 'https://airtrust.online/lms/player/890' },
     ],
   },
   {
@@ -68,17 +65,13 @@ const ALERT_WHATSAPP_TEMPLATE_DEFINITIONS: AlertWhatsAppTemplateDefinition[] = [
     category: 'UTILITY',
     language: 'pt_BR',
     bodyText:
-      '*GERÊNCIA DE TREINAMENTO | COSTA DO SOL*\n\nOlá, {{1}}!\n\nVocê possui um treinamento que requer sua atenção:\n\n*Treinamento:* {{2}}\n*Vencimento:* {{3}}\n*Status:* {{4}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação, sendo acompanhado pela *Gerência de Treinamento* e sujeito à verificação em auditorias.\n\nPor favor, acesse o treinamento e realize-o o quanto antes para manter sua situação de treinamento regularizada.\n\nCaso seja solicitado, faça login no *AirTrust*. Após o login, você será direcionado diretamente ao treinamento.\n\n*Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.*',
+      '*GERÊNCIA DE TREINAMENTO | COSTA DO SOL*\n\nOlá, {{1}}!\n\nVocê possui um treinamento obrigatório que requer sua atenção:\n\n*Treinamento:* {{2}}\n*Vencimento:* {{3}}\n*Status:* {{4}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação, sendo acompanhado pela *Gerência de Treinamento* e sujeito à verificação em auditorias.\n\nPor favor, realize-o o quanto antes para manter sua situação regularizada.\n\n*Acesse diretamente o treinamento:*\n{{5}}\n\nCaso seja solicitado, faça login no *AirTrust*. Após o login, você será direcionado diretamente ao treinamento.\n\n*Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.*',
     variables: [
       { id: '1', name: 'funcionario_nome', sample: 'Filipe Daumas' },
       { id: '2', name: 'qualificacao_nome', sample: 'Treinamento EAD' },
       { id: '3', name: 'data_vencimento', sample: '15/04/2026' },
-      {
-        id: '4',
-        name: 'status_vencimento',
-        sample:
-          'Vencido há 3 dias\n\n*Acesse diretamente o treinamento:*\nhttps://app.airtrust.online/treinamentos/123',
-      },
+      { id: '4', name: 'status_vencimento', sample: 'Vencido há 3 dias' },
+      { id: '5', name: 'training_url', sample: 'https://airtrust.online/lms/player/456' },
     ],
   },
   {
@@ -179,6 +172,22 @@ export function buildQualificacaoTemplateVariables(params: {
     '2': params.qualificacaoNome,
     '3': params.dataVencimento,
     '4': params.statusVencimento,
+  };
+}
+
+export function buildTrainingTemplateVariables(params: {
+  funcionarioNome: string;
+  qualificacaoNome: string;
+  dataVencimento: string;
+  statusVencimento: string;
+  trainingUrl?: string | null;
+}): Record<string, string> {
+  return {
+    '1': params.funcionarioNome,
+    '2': params.qualificacaoNome,
+    '3': params.dataVencimento,
+    '4': params.statusVencimento,
+    '5': String(params.trainingUrl || '').trim() || 'https://airtrust.online/login',
   };
 }
 
