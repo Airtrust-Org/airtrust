@@ -229,6 +229,28 @@ describe('generateCertificateForHistorico — qualification status eligibility (
     }
   });
 
+  it.each(['VALIDA', 'VÁLIDA', 'PROXIMA_VENCIMENTO', 'VENCENDO', 'VENCENDO_30'])(
+    '%s: eligible for certificate because the qualification realization happened',
+    async (status) => {
+      const db = new SqliteD1Database();
+      patchSchema(db);
+      try {
+        const historicoId = insertHistory(db.database, {
+          funcionarioId: 1000,
+          qualificationId: 100,
+          empresaId: 1,
+          status,
+        });
+
+        await expect(
+          generateCertificateForHistorico(makeEnv(db), historicoId, 1),
+        ).rejects.not.toMatchObject({ code: 'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE' });
+      } finally {
+        db.close();
+      }
+    },
+  );
+
   it('RENOVADA: still eligible for reemission of the historical document (real past realization)', async () => {
     const db = new SqliteD1Database();
     patchSchema(db);

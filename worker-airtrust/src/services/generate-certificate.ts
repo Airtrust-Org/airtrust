@@ -28,6 +28,7 @@ import {
   resolveFuncionarioInstrutorNaEmpresa,
 } from '../routes/qualificacoes-certificados-helpers';
 import { generateCertificateValidationHash } from '../utils/certificate-validation-hash';
+import { isCertificateEligibleQualificationStatus } from '../lib/status/status-codes';
 
 // ── Erros tipados ──────────────────────────────────────────────────────────────
 
@@ -50,21 +51,6 @@ export const CERTIFICATE_ERROR_CODES = [
   'CERTIFICATE_PERSISTENCE_FAILED',
   'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE',
 ] as const;
-
-/**
- * A certificate can only ever represent a real realization. PLANEJADA has
- * no data_conclusao yet (nothing happened); CANCELADA explicitly did not
- * happen. CONCLUIDA/VENCIDA/RENOVADA are historical realizations that did
- * happen and remain eligible for (re)emission of the same historical
- * document even if the qualification's current operational status has
- * since expired or been superseded — document authenticity is independent
- * of current operational validity. Anything else fails closed.
- */
-const CERTIFICATE_ELIGIBLE_STATUSES = new Set([
-  'CONCLUIDA',
-  'VENCIDA',
-  'RENOVADA',
-]);
 
 export type CertificateErrorCode = (typeof CERTIFICATE_ERROR_CODES)[number];
 
@@ -293,7 +279,7 @@ export async function generateCertificateForHistorico(
   const qualificacaoStatus = String(qualificacao.status || '')
     .trim()
     .toUpperCase();
-  if (!CERTIFICATE_ELIGIBLE_STATUSES.has(qualificacaoStatus)) {
+  if (!isCertificateEligibleQualificationStatus(qualificacaoStatus)) {
     throw new CertificateGenerationError(
       'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE',
       qualificacaoStatus === 'PLANEJADA' || qualificacaoStatus === 'PLANEJADO'
