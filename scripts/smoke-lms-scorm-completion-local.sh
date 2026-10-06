@@ -43,40 +43,57 @@ echo "[smoke:lms:scorm] Authenticating"
 LOGIN_RESPONSE="$(curl -fsS -X POST "$API_BASE/auth/login"   -H 'Content-Type: application/json'   -d "{\"email\":\"$LOGIN_EMAIL\",\"senha\":\"$LOGIN_PASSWORD\"}")"
 TOKEN="$(printf '%s' "$LOGIN_RESPONSE" | json_get data.accessToken)"
 
-echo "[smoke:lms:scorm] Creating synthetic SCORM course"
-COURSE_PAYLOAD="$(node -e '
-  const qualificationId = Number(process.argv[1]);
-  process.stdout.write(JSON.stringify({
-    titulo: "LMS Smoke SCORM Completion",
-    descricao: "Synthetic local-only SCORM completion fixture.",
-    categoria: "EAD",
-    carga_horaria_minutos: 10,
-    conteudo_programatico: "Synthetic SCORM progress, resume and terminal completion.",
-    observacoes: "Disposable CI smoke fixture.",
-    qualificacao_tipo_id: qualificationId,
-    gerar_qualificacao_ao_concluir: 1,
-    scorm_versao: "1.2",
-    scorm_mastery_score: 70,
-    tipo_conteudo: "scorm",
-    publicado: 1
-  }));
-' "$QUALIFICACAO_ID")"
-COURSE_RESPONSE="$(curl -fsS -X POST "$API_BASE/lms/cursos"   -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json'   -d "$COURSE_PAYLOAD")"
-CURSO_ID="$(printf '%s' "$COURSE_RESPONSE" | json_get data.id)"
+echo "[smoke:lms:scorm] Reusing the disposable qualifying PDF fixture as SCORM"
+CURSO_ID="$(sql "SELECT id
+  FROM lms_cursos
+  WHERE empresa_id=$EMPRESA_ID
+    AND qualificacao_tipo_id=$QUALIFICACAO_ID
+    AND tipo_conteudo='pdf'
+    AND deleted_at IS NULL
+  ORDER BY id
+  LIMIT 1;")"
+[[ "$CURSO_ID" =~ ^[1-9][0-9]*$ ]] || { echo "Disposable qualifying PDF course fixture not found." >&2; exit 1; }
 
-# Completion integrity requires a package binding. This is a disposable local
-# fixture: no R2 object is fetched or written by this smoke.
+MATRICULA_ID="$(sql "SELECT id
+  FROM lms_matriculas
+  WHERE empresa_id=$EMPRESA_ID
+    AND curso_id=$CURSO_ID
+    AND funcionario_id=$FUNCIONARIO_ID
+    AND deleted_at IS NULL
+  ORDER BY id DESC
+  LIMIT 1;")"
+[[ "$MATRICULA_ID" =~ ^[1-9][0-9]*$ ]] || { echo "Disposable LMS enrollment fixture not found." >&2; exit 1; }
+
+# The parent smoke has already proved that this qualifying PDF fails closed.
+# From this point onward the same disposable rows are repurposed to isolate the
+# SCORM commit/completion path without exercising unrelated course creation.
 sql "UPDATE lms_cursos
-        SET scorm_package_r2_prefix = 'local-smoke/scorm/$CURSO_ID',
-            scorm_launch_file = 'index.html',
-            ativo = 1,
-            publicado = 1,
-            updated_at = datetime('now')
-      WHERE id = $CURSO_ID AND empresa_id = $EMPRESA_ID;"
+        SET titulo='LMS Smoke SCORM Completion',
+            tipo_conteudo='scorm',
+            scorm_versao='1.2',
+            scorm_mastery_score=70,
+            scorm_package_r2_prefix='local-smoke/scorm/$CURSO_ID',
+            scorm_launch_file='index.html',
+            gerar_qualificacao_ao_concluir=1,
+            ativo=1,
+            publicado=1,
+            updated_at=datetime('now')
+      WHERE id=$CURSO_ID AND empresa_id=$EMPRESA_ID;"
 
-echo "[smoke:lms:scorm] Creating synthetic enrollment"
-MATRICULA_RESPONSE="$(curl -fsS -X POST "$API_BASE/lms/matriculas"   -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json'   -d "{\"curso_id\":$CURSO_ID,\"funcionario_id\":$FUNCIONARIO_ID,\"observacoes\":\"SCORM completion smoke\"}")"
-MATRICULA_ID="$(printf '%s' "$MATRICULA_RESPONSE" | json_get data.id)"
+sql "UPDATE lms_matriculas
+        SET status='NAO_INICIADO',
+            progresso_pct=0,
+            ultimo_slide=0,
+            ultima_pagina=0,
+            data_inicio=NULL,
+            data_conclusao=NULL,
+            tentativas=0,
+            score_final=NULL,
+            qualificacao_historico_id=NULL,
+            updated_at=datetime('now')
+      WHERE id=$MATRICULA_ID AND empresa_id=$EMPRESA_ID;"
+sql "DELETE FROM lms_progresso_scorm
+      WHERE matricula_id=$MATRICULA_ID AND empresa_id=$EMPRESA_ID;"
 
 echo "[smoke:lms:scorm] Persisting non-terminal progress first"
 PARTIAL_CMI='{"cmi.core.lesson_location":"1/3","cmi.core.lesson_status":"incomplete"}'
