@@ -34,6 +34,10 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /content-choice-retry/);
   assert.match(source, /submitAlreadyTried/);
   assert.match(source, /semanticAction/);
+  assert.match(source, /clickedByLocation/);
+  assert.match(source, /captureDriverState/);
+  assert.match(source, /driver_state/);
+  assert.match(source, /location: currentLocation/);
   assert.match(source, /submit-after-choice/);
   assert.match(source, /airtrustCertClicked/);
   assert.match(source, /interactionsValid/);
