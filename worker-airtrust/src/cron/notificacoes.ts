@@ -11,7 +11,7 @@ import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import {
   buildQualificacaoTemplateVariables,
   buildTrainingStatusVencimento,
-  buildTrainingTemplateVariables,
+  buildTrainingTemplateVariablesForDelivery,
   getAlertWhatsAppTemplateDefinition,
   renderTemplateBody,
   resolveQualificacaoAlertTemplateKey,
@@ -691,6 +691,7 @@ async function enviarNotificacao(
         throw new Error('WHATSAPP_TEMPLATE_NOT_APPROVED');
       }
 
+      const deliveryBodyText = localTemplate.body_text || templateDefinition.bodyText;
       const templateVariables = isCmaQualificacao(qualificacao)
         ? buildQualificacaoTemplateVariables({
             funcionarioNome: qualificacao.funcionario_nome,
@@ -700,7 +701,9 @@ async function enviarNotificacao(
             ).toLocaleDateString('pt-BR'),
             statusVencimento: buildStatusVencimento(diasAteVencimento),
           })
-        : buildTrainingTemplateVariables({
+        : buildTrainingTemplateVariablesForDelivery({
+            templateKey: templateKey as 'ead_expiring' | 'ead_expired',
+            templateBodyText: deliveryBodyText,
             funcionarioNome: qualificacao.funcionario_nome,
             qualificacaoNome: qualificacao.qualificacao_nome,
             dataVencimento: new Date(
@@ -709,7 +712,7 @@ async function enviarNotificacao(
             statusVencimento: buildTrainingStatusVencimento(diasAteVencimento),
             trainingUrl,
           });
-      const mensagemTemplate = renderTemplateBody(templateDefinition.bodyText, templateVariables);
+      const mensagemTemplate = renderTemplateBody(deliveryBodyText, templateVariables);
       const normalizedDestinations: string[] = [];
 
       for (const destinatario of destinatarios) {
