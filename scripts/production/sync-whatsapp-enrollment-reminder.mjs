@@ -56,8 +56,9 @@ export async function syncEnrollmentReminder({
     headers: { Authorization: `Bearer ${token}` },
   });
   assert(me.status === 200 && me.json?.success === true, `AUTH_ME_HTTP_${me.status}`);
-  const role = String(me.json?.data?.role || '').trim().toLowerCase();
-  assert(role === 'admin', `PRODUCTION_ADMIN_ROLE_REQUIRED_${role || 'missing'}`);
+  const rawRole = String(me.json?.data?.role || '').trim().toLowerCase();
+  const role = rawRole === 'administrador' ? 'admin' : rawRole;
+  assert(role === 'admin', `PRODUCTION_ADMIN_ROLE_REQUIRED_${rawRole || 'missing'}`);
 
   const sync = await fetchJsonImpl(`${baseUrl}/api/alertas/whatsapp/templates/sync`, {
     method: 'POST',
