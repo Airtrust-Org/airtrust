@@ -30,6 +30,7 @@ import {
   TrainingComplianceIntelligence,
   TrainingComplianceNotificationSettings,
 } from '@/react-app/components/compliance/TrainingComplianceIntelligence';
+import { TrainingComplianceNoticeAction } from '@/react-app/components/compliance/TrainingComplianceNoticeAction';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { useQualificacaoTipos } from '@/react-app/hooks/useQualificacoesExt';
 
@@ -548,6 +549,10 @@ export default function ComplianceTreinamentosPage() {
   };
 
   const summaryRealized = realizedCount(summary.data?.conformes ?? 0, summary.data?.vencendo ?? 0);
+  const summaryActionable =
+    (summary.data?.nao_realizados ?? 0) +
+    (summary.data?.vencendo ?? 0) +
+    (summary.data?.vencidos ?? 0);
 
   const handleSetor = (value: string) => {
     const next = value ? Number(value) : null;
@@ -626,6 +631,19 @@ export default function ComplianceTreinamentosPage() {
                   </select>
                 ) : null}
               </div>
+              {(['treinamentos', 'pessoas', 'setores'] as ComplianceTab[]).includes(tab) ? (
+                <div className="flex justify-end">
+                  <TrainingComplianceNoticeAction
+                    scopeLabel="filtro atual do Compliance"
+                    pendingCount={summaryActionable}
+                    setorId={setorId}
+                    funcaoId={funcaoId}
+                    search={searchQuery}
+                    label="Enviar alertas do filtro"
+                    className="px-3 py-2 text-sm"
+                  />
+                </div>
+              ) : null}
               {setorId || funcaoId || searchText ? (
                 <button
                   type="button"
@@ -934,6 +952,7 @@ export default function ComplianceTreinamentosPage() {
                           }
                           className="px-3 py-3 text-right"
                         />
+                        <th className="px-3 py-3 text-right font-medium">Alertas</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -1019,11 +1038,21 @@ export default function ComplianceTreinamentosPage() {
                               {item.nao_realizados}
                             </button>
                           </td>
+                          <td className="px-3 py-3 text-right">
+                            <TrainingComplianceNoticeAction
+                              scopeLabel={`treinamento ${item.qualificacao_tipo_nome}`}
+                              pendingCount={item.nao_realizados + item.vencendo + item.vencidos}
+                              setorId={setorId}
+                              funcaoId={funcaoId}
+                              qualificacaoTipoId={item.qualificacao_tipo_id}
+                              search={searchQuery}
+                            />
+                          </td>
                         </tr>
                       ))}
                       {!trainings.isLoading && (trainings.data?.length || 0) === 0 ? (
                         <tr>
-                          <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                          <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                             Nenhum requisito obrigatório configurado para o filtro atual.
                           </td>
                         </tr>
@@ -1114,6 +1143,7 @@ export default function ComplianceTreinamentosPage() {
                             }
                             className="px-4 py-3 text-right"
                           />
+                          <th className="px-3 py-3 text-right font-medium">Alertas</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -1211,6 +1241,13 @@ export default function ComplianceTreinamentosPage() {
                                 }}
                               />
                             </td>
+                            <td className="px-3 py-3 text-right">
+                              <TrainingComplianceNoticeAction
+                                scopeLabel={item.nome}
+                                pendingCount={item.nao_realizados + item.vencendo + item.vencidos}
+                                funcionarioId={item.id}
+                              />
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1283,6 +1320,7 @@ export default function ComplianceTreinamentosPage() {
                           }
                           className="px-4 py-3 text-right"
                         />
+                        <th className="px-3 py-3 text-right font-medium">Alertas</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -1381,6 +1419,16 @@ export default function ComplianceTreinamentosPage() {
                                 }}
                               />
                             </td>
+                            <td className="px-3 py-3 text-right">
+                              <TrainingComplianceNoticeAction
+                                scopeLabel={`setor ${sector.setor_nome}`}
+                                pendingCount={
+                                  sector.nao_realizados + sector.vencendo + sector.vencidos
+                                }
+                                setorId={sector.setor_id}
+                                search={searchQuery}
+                              />
+                            </td>
                           </tr>,
                         ];
                         if (expanded) {
@@ -1471,6 +1519,17 @@ export default function ComplianceTreinamentosPage() {
                                         },
                                       );
                                     }}
+                                  />
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  <TrainingComplianceNoticeAction
+                                    scopeLabel={`${sector.setor_nome} · ${cargo.funcao_nome}`}
+                                    pendingCount={
+                                      cargo.nao_realizados + cargo.vencendo + cargo.vencidos
+                                    }
+                                    setorId={sector.setor_id}
+                                    funcaoId={cargo.funcao_id}
+                                    search={searchQuery}
                                   />
                                 </td>
                               </tr>
