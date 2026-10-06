@@ -141,6 +141,10 @@ export async function sendMatriculaEmail(
     const closing = isAlert
       ? 'Por favor, acesse o treinamento e dê continuidade o quanto antes.'
       : 'Para acessar o curso, clique no botão abaixo:';
+    const buttonLabel = isAlert ? 'Acessar treinamento' : 'Acessar curso';
+    const footerText = isAlert
+      ? 'Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.'
+      : 'Este e-mail foi enviado automaticamente pela plataforma AirTrust.';
     const htmlContent = `
       <div style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
         <h2 style="color:#1e40af;margin-bottom:16px">${actionLabel}</h2>
@@ -152,8 +156,8 @@ export async function sendMatriculaEmail(
         ${statusLinha}
         ${validadeLinha}
         <p>${closing}</p>
-        <p style="margin:24px 0"><a href="${cursoUrl}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block">Acessar treinamento</a></p>
-        <p style="color:#6b7280;font-size:12px;margin-top:24px">Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.</p>
+        <p style="margin:24px 0"><a href="${cursoUrl}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block">${buttonLabel}</a></p>
+        <p style="color:#6b7280;font-size:12px;margin-top:24px">${footerText}</p>
       </div>`;
     const textContent = [
       `${actionLabel}: ${params.cursoTitulo}`,
@@ -169,7 +173,9 @@ export async function sendMatriculaEmail(
       isAlert ? 'Por favor, acesse o treinamento e dê continuidade o quanto antes.' : '',
       `Acesse diretamente o treinamento: ${cursoUrl}`,
       '',
-      'Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.',
+      isAlert
+        ? 'Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.'
+        : 'Este e-mail foi enviado automaticamente pela plataforma AirTrust.',
     ]
       .filter(Boolean)
       .join('\n');
