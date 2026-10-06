@@ -325,6 +325,10 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
       const isProductChrome = (el, text) => {
         const id = String(el.id || '').toLowerCase();
+        const semanticAction =
+          good.test(text) ||
+          /^(next|continue|start|finish|submit|pr[oó]ximo|avan[cç]ar|continuar|prosseguir|finalizar|concluir)$/i.test(id);
+        if (semanticAction) return false;
         if (/^(menubtn|refbtn|closemenubtn|prev|previous|back)$/.test(id)) return true;
         if (bad.test(text)) return true;
         return Boolean(el.closest(
@@ -339,7 +343,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           const key = clean(`${id} ${text}`);
           const multiToggle = Boolean(
             el.matches('[aria-pressed],[aria-checked],[role=checkbox]') ||
-            el.closest('[class*="checklist" i],[id*="checklist" i],[class*="practice" i],[id*="practice" i]'),
+            el.closest('[class*="checklist" i],[id*="checklist" i]'),
           );
           return { el, text, id, key, index, multiToggle, chrome: isProductChrome(el, key) };
         })
@@ -369,9 +373,21 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         !/(^|\s)(finish|finalizar|concluir|resultado|start|iniciar|come[cç]ar)(\s|$)/i.test(item.key)
       );
       const priorChoice = genericChoices.some(alreadyClicked);
+      const submitAlreadyTried = Boolean(submit && alreadyClicked(submit));
 
       // For single-choice decision cards: choose one option, then confirm.
-      if (submit && priorChoice) return markAndClick(submit, 'submit-after-choice');
+      if (submit && priorChoice && !submitAlreadyTried) {
+        return markAndClick(submit, 'submit-after-choice');
+      }
+
+      // If submit did not unlock navigation, try the next not-yet-tested answer.
+      if (submit && priorChoice && submitAlreadyTried) {
+        const retryChoice = genericChoices.find((item) => !alreadyClicked(item));
+        if (retryChoice) {
+          delete submit.el.dataset.airtrustCertClicked;
+          return markAndClick(retryChoice, 'content-choice-retry');
+        }
+      }
 
       const choice = genericChoices.find((item) => !alreadyClicked(item));
       if (choice) return markAndClick(choice, 'content-choice');
