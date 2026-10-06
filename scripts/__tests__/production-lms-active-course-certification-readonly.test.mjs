@@ -21,6 +21,9 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /\/api\/lms\/scorm\/preview\/\$\{course\.id\}/);
   assert.match(source, /COMPLETION_NOT_REACHED/);
   assert.match(source, /reopen-completed/);
+  assert.match(source, /locator\('#scorm-frame'\)/);
+  assert.match(source, /contentFrame\(\)/);
+  assert.match(source, /waitForURL/);
   assert.match(source, /calls_after_finish/);
   assert.match(source, /completion_reached/);
   assert.match(source, /chromium/);
