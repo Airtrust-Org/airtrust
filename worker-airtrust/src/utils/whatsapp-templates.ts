@@ -191,6 +191,40 @@ export function buildTrainingTemplateVariables(params: {
   };
 }
 
+export function buildTrainingTemplateVariablesForDelivery(params: {
+  templateKey: 'ead_expiring' | 'ead_expired' | 'ead_required';
+  templateBodyText?: string | null;
+  funcionarioNome: string;
+  qualificacaoNome: string;
+  dataVencimento: string;
+  statusVencimento: string;
+  trainingUrl?: string | null;
+}): Record<string, string> {
+  const bodyText = String(params.templateBodyText || '');
+  if (!bodyText || bodyText.includes('{{5}}')) {
+    return buildTrainingTemplateVariables(params);
+  }
+
+  const statusAccess = params.trainingUrl
+    ? `${params.statusVencimento}\n\n*Acesse diretamente o treinamento:*\n${params.trainingUrl}`
+    : params.statusVencimento;
+
+  if (params.templateKey === 'ead_required') {
+    return {
+      '1': params.funcionarioNome,
+      '2': params.qualificacaoNome,
+      '3': statusAccess,
+    };
+  }
+
+  return buildQualificacaoTemplateVariables({
+    funcionarioNome: params.funcionarioNome,
+    qualificacaoNome: params.qualificacaoNome,
+    dataVencimento: params.dataVencimento,
+    statusVencimento: statusAccess,
+  });
+}
+
 export function buildLicencaTemplateVariables(params: {
   funcionarioNome: string;
   licencaNome: string;
