@@ -10,7 +10,8 @@ import { normalizeWhatsAppPhone } from '../utils/whatsapp';
 import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import {
   buildQualificacaoTemplateVariables,
-  buildTrainingTemplateStatusVariable,
+  buildTrainingStatusVencimento,
+  buildTrainingTemplateVariables,
   getAlertWhatsAppTemplateDefinition,
   renderTemplateBody,
   resolveQualificacaoAlertTemplateKey,
@@ -690,16 +691,24 @@ async function enviarNotificacao(
         throw new Error('WHATSAPP_TEMPLATE_NOT_APPROVED');
       }
 
-      const templateVariables = buildQualificacaoTemplateVariables({
-        funcionarioNome: qualificacao.funcionario_nome,
-        qualificacaoNome: qualificacao.qualificacao_nome,
-        dataVencimento: new Date(`${qualificacao.data_vencimento}T00:00:00`).toLocaleDateString(
-          'pt-BR',
-        ),
-        statusVencimento: isCmaQualificacao(qualificacao)
-          ? buildStatusVencimento(diasAteVencimento)
-          : buildTrainingTemplateStatusVariable(diasAteVencimento, trainingUrl),
-      });
+      const templateVariables = isCmaQualificacao(qualificacao)
+        ? buildQualificacaoTemplateVariables({
+            funcionarioNome: qualificacao.funcionario_nome,
+            qualificacaoNome: qualificacao.qualificacao_nome,
+            dataVencimento: new Date(
+              `${qualificacao.data_vencimento}T00:00:00`,
+            ).toLocaleDateString('pt-BR'),
+            statusVencimento: buildStatusVencimento(diasAteVencimento),
+          })
+        : buildTrainingTemplateVariables({
+            funcionarioNome: qualificacao.funcionario_nome,
+            qualificacaoNome: qualificacao.qualificacao_nome,
+            dataVencimento: new Date(
+              `${qualificacao.data_vencimento}T00:00:00`,
+            ).toLocaleDateString('pt-BR'),
+            statusVencimento: buildTrainingStatusVencimento(diasAteVencimento),
+            trainingUrl,
+          });
       const mensagemTemplate = renderTemplateBody(templateDefinition.bodyText, templateVariables);
       const normalizedDestinations: string[] = [];
 
