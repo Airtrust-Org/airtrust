@@ -2,6 +2,7 @@ export type AlertWhatsAppTemplateKey =
   | 'ead_expiring'
   | 'ead_expired'
   | 'ead_required'
+  | 'ead_enrollment_reminder'
   | 'cma_expiring'
   | 'cma_expired'
   | 'licenca_expiring'
@@ -56,6 +57,22 @@ const ALERT_WHATSAPP_TEMPLATE_DEFINITIONS: AlertWhatsAppTemplateDefinition[] = [
         sample: 'Treinamento obrigatório ainda não realizado',
       },
       { id: '5', name: 'training_url', sample: 'https://airtrust.online/lms/player/890' },
+    ],
+  },
+  {
+    key: 'ead_enrollment_reminder',
+    friendlyName: 'AirTrust lembrete de treinamento matriculado',
+    templateName: 'airtrust_lembrete_treinamento_matriculado',
+    category: 'UTILITY',
+    language: 'pt_BR',
+    bodyText:
+      '*GERÊNCIA DE TREINAMENTO | COSTA DO SOL*\n\nOlá, {{1}}!\n\nVocê possui um treinamento matriculado no AirTrust que requer sua atenção:\n\n*Treinamento:* {{2}}\n*Prazo:* {{3}}\n*Status:* {{4}}\n\nPor favor, acesse o treinamento e dê continuidade o quanto antes.\n\n*Acesse diretamente o treinamento:*\n{{5}}\n\n*Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.*',
+    variables: [
+      { id: '1', name: 'funcionario_nome', sample: 'Filipe Daumas' },
+      { id: '2', name: 'curso_nome', sample: 'Integração Corporativa' },
+      { id: '3', name: 'prazo_conclusao', sample: '15/10/2026' },
+      { id: '4', name: 'status_matricula', sample: 'Treinamento em andamento' },
+      { id: '5', name: 'training_url', sample: 'https://airtrust.online/lms/player/321' },
     ],
   },
   {
@@ -192,7 +209,11 @@ export function buildTrainingTemplateVariables(params: {
 }
 
 export function buildTrainingTemplateVariablesForDelivery(params: {
-  templateKey: 'ead_expiring' | 'ead_expired' | 'ead_required';
+  templateKey:
+    | 'ead_expiring'
+    | 'ead_expired'
+    | 'ead_required'
+    | 'ead_enrollment_reminder';
   templateBodyText?: string | null;
   funcionarioNome: string;
   qualificacaoNome: string;
