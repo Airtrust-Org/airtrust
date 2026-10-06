@@ -75,6 +75,18 @@ export type ComplianceNotificationResult = {
   whatsapp: { attempted: boolean; ok: boolean; error?: string | null };
 };
 
+export function normalizeNotificationMessageTemplate(
+  value: unknown,
+  fallback: string,
+  maxLength = 5000,
+): string {
+  const candidate = String(value || '').trim().slice(0, maxLength);
+  if (!candidate) return fallback;
+
+  const compact = (text: string) => text.replace(/\s+/g, ' ').trim();
+  return compact(candidate) === compact(fallback) ? fallback : candidate;
+}
+
 function normalizePolicy(value: unknown): ComplianceNotificationPolicy {
   const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   const normalizeThresholds = (raw: unknown, fallback: number[]) => {
@@ -109,18 +121,18 @@ function normalizePolicy(value: unknown): ComplianceNotificationPolicy {
       String(input.email_subject_template || '')
         .trim()
         .slice(0, 300) || DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_subject_template,
-    email_message_template:
-      String(input.email_message_template || '')
-        .trim()
-        .slice(0, 5000) || DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template,
+    email_message_template: normalizeNotificationMessageTemplate(
+      input.email_message_template,
+      DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template,
+    ),
     manager_subject_template:
       String(input.manager_subject_template || '')
         .trim()
         .slice(0, 300) || DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.manager_subject_template,
-    manager_message_template:
-      String(input.manager_message_template || '')
-        .trim()
-        .slice(0, 5000) || DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.manager_message_template,
+    manager_message_template: normalizeNotificationMessageTemplate(
+      input.manager_message_template,
+      DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.manager_message_template,
+    ),
   };
 }
 
@@ -256,6 +268,7 @@ function plainMessage(target: ComplianceNotificationTarget, trainingUrl: string 
     `Olá, ${target.funcionario_nome}!`,
     '',
     'Você possui um treinamento obrigatório que requer sua atenção:',
+    '',
     `Treinamento: ${target.qualificacao_nome}`,
     `Vencimento: ${formatDateBr(target.data_validade)}`,
     `Status: ${statusText(target)}`,
@@ -265,7 +278,7 @@ function plainMessage(target: ComplianceNotificationTarget, trainingUrl: string 
     'Por favor, realize-o o quanto antes para manter sua situação regularizada.',
   ];
   if (trainingUrl) lines.push('', `Acesse diretamente o treinamento: ${trainingUrl}`);
-  lines.push('', 'Mensagem automática da Gerência de Treinamento da Costa do Sol.');
+  lines.push('', 'Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.');
   return lines.join('\n');
 }
 
