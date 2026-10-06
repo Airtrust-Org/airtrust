@@ -1,0 +1,148 @@
+name: Production LMS Active Course Certification Readonly
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_production_sha:
+        description: 'Exact Worker SHA currently deployed to production'
+        required: true
+        type: string
+      confirmation:
+        description: 'Type AIRTRUST_PRODUCTION_LMS_ACTIVE_CERTIFICATION_READONLY'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+  pull-requests: read
+
+concurrency:
+  group: production-lms-active-course-certification-readonly
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  PROD_API_BASE_URL: https://api.airtrust.online
+  TARGET_COMPANY_ID: '6'
+
+jobs:
+  guard:
+    name: Guard production LMS active certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      expected_sha: ${{ steps.guard.outputs.expected_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Require pinned production SHA and canonical gates
+        id: guard
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_SHA: ${{ inputs.expected_production_sha }}
+          RELEASE_SHA: ${{ inputs.expected_production_sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_ONLY >&2; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_PRODUCTION_LMS_ACTIVE_CERTIFICATION_READONLY' ]] || { echo CONFIRMATION_REJECTED >&2; exit 1; }
+          expected="${EXPECTED_SHA,,}"
+          [[ "$expected" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_SHA_INVALID >&2; exit 1; }
+          git cat-file -e "$expected^{commit}"
+          git merge-base --is-ancestor "$expected" HEAD
+          EXPECTED_SHA="$expected" RELEASE_SHA="$expected" node scripts/ci/verify-release-gates.mjs
+          live="$(curl -fsS https://api.airtrust.online/api/version | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);const b=j.data&&typeof j.data==='object'?j.data:j;process.stdout.write(String(b.sourceSha||b.source_sha||'').toLowerCase())})")"
+          [[ "$live" == "$expected" ]] || { echo "PRODUCTION_SHA_MISMATCH:$live" >&2; exit 1; }
+          echo "expected_sha=$expected" >> "$GITHUB_OUTPUT"
+
+  certify:
+    name: Certify active courses (${{ matrix.browser }})
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    env:
+      EXPECTED_PRODUCTION_SHA: ${{ needs.guard.outputs.expected_sha }}
+      PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+      CERT_BROWSER: ${{ matrix.browser }}
+      CERT_REPORT_PATH: qa-state/lms-active-certification-${{ matrix.browser }}.json
+      CERT_COURSE_TIMEOUT_MS: '25000'
+      CERT_MAX_STEPS: '240'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright system dependencies
+        timeout-minutes: 8
+        run: npx playwright install-deps ${{ matrix.browser }}
+      - name: Install Playwright browser
+        timeout-minutes: 8
+        env:
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT: 120000
+        run: npx playwright install ${{ matrix.browser }}
+      - name: Run exact-package read-only certification
+        id: certify
+        shell: bash
+        run: |
+          set +e
+          node scripts/validation/production-lms-active-course-certification-readonly.mjs
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          test -s "$CERT_REPORT_PATH"
+      - name: Publish certification summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ ! -s "$CERT_REPORT_PATH" ]]; then
+            echo "## LMS active certification — $CERT_BROWSER" >> "$GITHUB_STEP_SUMMARY"
+            echo "Report missing." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('node:fs');
+          const r = JSON.parse(fs.readFileSync(process.env.CERT_REPORT_PATH, 'utf8'));
+          console.log(`## LMS active certification — ${r.browser}`);
+          console.log('');
+          console.log(`- production SHA: \`${r.production_sha}\``);
+          console.log(`- courses: \`${r.course_count}\``);
+          console.log(`- PASS: \`${r.pass_count}\``);
+          console.log(`- FAIL: \`${r.fail_count}\``);
+          console.log(`- writes: \`${r.writes}\``);
+          console.log('');
+          for (const item of r.results) {
+            console.log(`- ${item.status} — #${item.course_id} ${item.titulo}${item.reason ? ` — ${item.reason}` : ''}`);
+          }
+          NODE
+      - name: Upload sanitized certification evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-lms-active-certification-${{ matrix.browser }}-${{ needs.guard.outputs.expected_sha }}
+          path: ${{ env.CERT_REPORT_PATH }}
+          if-no-files-found: error
+          retention-days: 30
+      - name: Enforce zero certification failures
+        if: always()
+        shell: bash
+        env:
+          CERT_RC: ${{ steps.certify.outputs.rc }}
+        run: |
+          set -euo pipefail
+          [[ "${CERT_RC:-1}" == '0' ]]
