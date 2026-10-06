@@ -101,6 +101,31 @@ describe('ensureCertificateForQualification', () => {
     expect(result.documentoId).toBe(999);
   });
 
+  it.each(['VALIDA', 'VÁLIDA', 'VENCIDA', 'RENOVADA', 'PROXIMA_VENCIMENTO', 'VENCENDO', 'VENCENDO_30'])(
+    'permite certificado para qualificação realizada em estado operacional %s',
+    async (status) => {
+      const db = createDb({
+        id: 1,
+        certificado_arquivo_id: null,
+        data_conclusao: '2026-09-09',
+        status,
+        empresa_id: 10,
+      });
+
+      generateCertificateForHistoricoMock.mockResolvedValueOnce({ documentoId: 999 });
+
+      const result = await ensureCertificateForQualification(
+        { ...mockEnv, DB: db } as unknown as Env,
+        1,
+        10,
+      );
+
+      expect(result.state).toBe('CREATED');
+      expect(result.documentoId).toBe(999);
+      expect(generateCertificateForHistoricoMock).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('bloqueia certificado para estado não concluído (PLANEJADA)', async () => {
     const db = createDb({
       id: 1,
@@ -117,7 +142,7 @@ describe('ensureCertificateForQualification', () => {
     );
 
     expect(result.state).toBe('SKIPPED');
-    expect(result.reason).toContain('não possui um status de conclusão válido');
+    expect(result.reason).toContain('não possui um status elegível para certificado');
     expect(generateCertificateForHistoricoMock).not.toHaveBeenCalled();
   });
 
@@ -137,7 +162,7 @@ describe('ensureCertificateForQualification', () => {
     );
 
     expect(result.state).toBe('SKIPPED');
-    expect(result.reason).toContain('não possui um status de conclusão válido');
+    expect(result.reason).toContain('não possui um status elegível para certificado');
   });
 
   it('bloqueia certificado para estado desconhecido (fail closed)', async () => {
@@ -156,7 +181,7 @@ describe('ensureCertificateForQualification', () => {
     );
 
     expect(result.state).toBe('SKIPPED');
-    expect(result.reason).toContain('não possui um status de conclusão válido');
+    expect(result.reason).toContain('não possui um status elegível para certificado');
   });
 
   it('bloqueia certificado para ausência de status (null) (fail closed)', async () => {
@@ -175,7 +200,7 @@ describe('ensureCertificateForQualification', () => {
     );
 
     expect(result.state).toBe('SKIPPED');
-    expect(result.reason).toContain('não possui um status de conclusão válido');
+    expect(result.reason).toContain('não possui um status elegível para certificado');
   });
 
   it('comportamento idempotente: retorna EXISTS se já tem certificado e não é forceRegenerate', async () => {
