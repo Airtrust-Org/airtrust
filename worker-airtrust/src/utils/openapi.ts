@@ -518,7 +518,7 @@ export const openApiSpec = {
     '/api/lms/matriculas/convites/lote': {
       post: {
         tags: ['LMS'],
-        summary: 'Enviar ou reenviar convite por e-mail para matrículas existentes',
+        summary: 'Enviar convite ou alerta de matrícula por e-mail e/ou WhatsApp',
         security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
@@ -1007,6 +1007,18 @@ export const openApiSpec = {
             minItems: 1,
             maxItems: 200,
             items: { type: 'integer', minimum: 1 },
+          },
+          modo: {
+            type: 'string',
+            enum: ['convite', 'alerta'],
+            default: 'convite',
+          },
+          canais: {
+            type: 'object',
+            properties: {
+              email: { type: 'boolean' },
+              whatsapp: { type: 'boolean' },
+            },
           },
         },
       },
