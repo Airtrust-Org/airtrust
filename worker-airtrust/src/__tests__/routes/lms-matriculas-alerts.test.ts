@@ -12,8 +12,8 @@ const {
   sendWhatsAppMessageMock: vi.fn(async () => ({ sid: 'SM123' })),
   logAuditMock: vi.fn(async () => undefined),
   getLocalWhatsAppTemplateRecordMock: vi.fn(async () => ({
-    template_key: 'ead_required',
-    template_name: 'airtrust_treinamento_ead_obrigatorio_pendente',
+    template_key: 'ead_enrollment_reminder',
+    template_name: 'airtrust_lembrete_treinamento_matriculado',
     body_text:
       'Olá {{1}}! Treinamento: {{2}}. Prazo: {{3}}. Status: {{4}}. Acesse: {{5}}',
     approval_status: 'approved',
