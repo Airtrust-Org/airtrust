@@ -2,7 +2,7 @@ import type { Env } from '../types';
 import { sendEmailDetailed, type EmailSendResult } from '../lib/email';
 import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import {
-  buildQualificacaoTemplateVariables,
+  buildTrainingTemplateVariablesForDelivery,
   getAlertWhatsAppTemplateDefinition,
   renderTemplateBody,
   type AlertWhatsAppTemplateKey,
@@ -29,6 +29,9 @@ export type ComplianceNotificationPolicy = {
   manager_message_template: string;
 };
 
+const LEGACY_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE =
+  'GERÊNCIA DE TREINAMENTO | COSTA DO SOL\n\nOlá, {{funcionario}}!\n\nVocê possui um treinamento obrigatório que requer sua atenção:\nTreinamento: {{treinamento}}\nVencimento: {{data_vencimento}}\nStatus: {{status}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação e é acompanhado pela Gerência de Treinamento, inclusive para fins de auditoria.\n\nPor favor, realize-o o quanto antes para manter sua situação regularizada.{{link_bloco}}\n\nMensagem automática da Gerência de Treinamento da Costa do Sol.';
+
 export const DEFAULT_COMPLIANCE_NOTIFICATION_POLICY: ComplianceNotificationPolicy = {
   enabled: false,
   email: true,
@@ -39,7 +42,7 @@ export const DEFAULT_COMPLIANCE_NOTIFICATION_POLICY: ComplianceNotificationPolic
   manager_overdue_thresholds: [0, -7, -15, -30],
   email_subject_template: 'Treinamento obrigatório: {{treinamento}} — {{status}}',
   email_message_template:
-    'GERÊNCIA DE TREINAMENTO | COSTA DO SOL\n\nOlá, {{funcionario}}!\n\nVocê possui um treinamento obrigatório que requer sua atenção:\nTreinamento: {{treinamento}}\nVencimento: {{data_vencimento}}\nStatus: {{status}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação e é acompanhado pela Gerência de Treinamento, inclusive para fins de auditoria.\n\nPor favor, realize-o o quanto antes para manter sua situação regularizada.{{link_bloco}}\n\nMensagem automática da Gerência de Treinamento da Costa do Sol.',
+    'GERÊNCIA DE TREINAMENTO | COSTA DO SOL\n\nOlá, {{funcionario}}!\n\nVocê possui um treinamento obrigatório que requer sua atenção:\n\nTreinamento: {{treinamento}}\nVencimento: {{data_vencimento}}\nStatus: {{status}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação e é acompanhado pela Gerência de Treinamento, inclusive para fins de auditoria.\n\nPor favor, realize-o o quanto antes para manter sua situação regularizada.{{link_bloco}}\n\nEsta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.',
   manager_subject_template: 'Pendência de treinamento — {{funcionario}} — {{treinamento}}',
   manager_message_template:
     'Gerência de Treinamento | Costa do Sol\n\nFuncionário: {{funcionario}}\nSetor: {{setor}}\nTreinamento: {{treinamento}}\nSituação: {{status}}\n\nSolicitamos apoio do gestor para regularização desta pendência obrigatória.',
@@ -75,6 +78,26 @@ export type ComplianceNotificationResult = {
   whatsapp: { attempted: boolean; ok: boolean; error?: string | null };
 };
 
+export function normalizeNotificationMessageTemplate(
+  value: unknown,
+  fallback: string,
+  maxLength = 5000,
+  legacyDefaults: string[] = [],
+): string {
+  const candidate = String(value || '').trim().slice(0, maxLength);
+  if (!candidate) return fallback;
+
+  const compact = (text: string) => text.replace(/\s+/g, ' ').trim();
+  const normalizedCandidate = compact(candidate);
+  if (
+    normalizedCandidate === compact(fallback) ||
+    legacyDefaults.some((legacy) => normalizedCandidate === compact(legacy))
+  ) {
+    return fallback;
+  }
+  return candidate;
+}
+
 function normalizePolicy(value: unknown): ComplianceNotificationPolicy {
   const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   const normalizeThresholds = (raw: unknown, fallback: number[]) => {
@@ -109,18 +132,20 @@ function normalizePolicy(value: unknown): ComplianceNotificationPolicy {
       String(input.email_subject_template || '')
         .trim()
         .slice(0, 300) || DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_subject_template,
-    email_message_template:
-      String(input.email_message_template || '')
-        .trim()
-        .slice(0, 5000) || DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template,
+    email_message_template: normalizeNotificationMessageTemplate(
+      input.email_message_template,
+      DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template,
+      5000,
+      [LEGACY_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE],
+    ),
     manager_subject_template:
       String(input.manager_subject_template || '')
         .trim()
         .slice(0, 300) || DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.manager_subject_template,
-    manager_message_template:
-      String(input.manager_message_template || '')
-        .trim()
-        .slice(0, 5000) || DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.manager_message_template,
+    manager_message_template: normalizeNotificationMessageTemplate(
+      input.manager_message_template,
+      DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.manager_message_template,
+    ),
   };
 }
 
@@ -256,6 +281,7 @@ function plainMessage(target: ComplianceNotificationTarget, trainingUrl: string 
     `Olá, ${target.funcionario_nome}!`,
     '',
     'Você possui um treinamento obrigatório que requer sua atenção:',
+    '',
     `Treinamento: ${target.qualificacao_nome}`,
     `Vencimento: ${formatDateBr(target.data_validade)}`,
     `Status: ${statusText(target)}`,
@@ -265,28 +291,55 @@ function plainMessage(target: ComplianceNotificationTarget, trainingUrl: string 
     'Por favor, realize-o o quanto antes para manter sua situação regularizada.',
   ];
   if (trainingUrl) lines.push('', `Acesse diretamente o treinamento: ${trainingUrl}`);
-  lines.push('', 'Mensagem automática da Gerência de Treinamento da Costa do Sol.');
+  lines.push('', 'Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.');
   return lines.join('\n');
 }
 
-function htmlMessage(target: ComplianceNotificationTarget, trainingUrl: string | null): string {
-  const button = trainingUrl
-    ? `<p style="margin:22px 0"><a href="${trainingUrl}" style="background:#1d4ed8;color:#fff;padding:11px 18px;border-radius:6px;text-decoration:none;font-weight:600">Acessar treinamento</a></p>`
-    : '';
-  return `<div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.55;max-width:640px;margin:auto">
-    <h2 style="margin-bottom:6px">Gerência de Treinamento | Costa do Sol</h2>
-    <p>Olá, <strong>${target.funcionario_nome}</strong>.</p>
-    <p>Você possui um treinamento obrigatório que requer sua atenção.</p>
-    <div style="background:#f8fafc;border-left:4px solid #d97706;padding:12px 16px;margin:16px 0">
-      <div><strong>Treinamento:</strong> ${target.qualificacao_nome}</div>
-      <div><strong>Vencimento:</strong> ${formatDateBr(target.data_validade)}</div>
-      <div><strong>Status:</strong> ${statusText(target)}</div>
-    </div>
-    <p>Este treinamento integra os requisitos obrigatórios de treinamento e conformidade da operação e é acompanhado pela Gerência de Treinamento, inclusive para fins de auditoria.</p>
-    <p>Realize-o o quanto antes para manter sua situação regularizada.</p>
-    ${button}
-    <p style="font-size:12px;color:#64748b;margin-top:24px">Mensagem automática da Gerência de Treinamento da Costa do Sol.</p>
-  </div>`;
+export function renderComplianceEmailHtml(message: string): string {
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+
+  const linkify = (value: string) =>
+    escapeHtml(value).replace(
+      /(https?:\/\/[^\s<]+)/g,
+      '<a href="$1" style="color:#1d4ed8;text-decoration:underline;word-break:break-word">$1</a>',
+    );
+
+  const lines = message.replace(/\r\n?/g, '\n').split('\n');
+  const body = lines
+    .map((line, index) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        return '<div style="height:12px;line-height:12px">&nbsp;</div>';
+      }
+
+      if (index === 0) {
+        return `<div style="font-size:18px;font-weight:700;color:#0f172a;margin:0 0 4px">${linkify(line)}</div>`;
+      }
+
+      const field = line.match(/^(Treinamento|Vencimento|Status):\s*(.*)$/);
+      if (field) {
+        return `<div style="margin:3px 0"><strong>${escapeHtml(field[1])}:</strong> ${linkify(field[2])}</div>`;
+      }
+
+      const access = line.match(/^Acesse diretamente o treinamento:\s*(.*)$/);
+      if (access) {
+        const url = access[1].trim();
+        return url
+          ? `<div style="margin:4px 0"><strong>Acesse diretamente o treinamento:</strong><br>${linkify(url)}</div>`
+          : '<div style="margin:4px 0"><strong>Acesse diretamente o treinamento:</strong></div>';
+      }
+
+      return `<div style="margin:2px 0">${linkify(line)}</div>`;
+    })
+    .join('');
+
+  return `<div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.55;max-width:640px;margin:auto">${body}</div>`;
 }
 
 async function insertLog(
@@ -353,7 +406,7 @@ async function sendEmailChannel(
       to: [{ email: target.email, name: target.funcionario_nome }],
       subject,
       textContent: message,
-      htmlContent: `<div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.55;max-width:640px;margin:auto;white-space:pre-wrap">${message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`,
+      htmlContent: renderComplianceEmailHtml(message),
     });
   } catch (error) {
     result = {
@@ -391,29 +444,28 @@ async function sendWhatsappChannel(
         ? 'ead_expired'
         : 'ead_expiring';
   const template = getAlertWhatsAppTemplateDefinition(templateKey);
-  const statusVariable = trainingUrl
-    ? `${statusText(target)}\n\n*Acesse diretamente o treinamento:*\n${trainingUrl}`
-    : statusText(target);
-  const variables =
-    target.status_compliance === 'NAO_REALIZADO'
-      ? { '1': target.funcionario_nome, '2': target.qualificacao_nome, '3': statusVariable }
-      : buildQualificacaoTemplateVariables({
-          funcionarioNome: target.funcionario_nome,
-          qualificacaoNome: target.qualificacao_nome,
-          dataVencimento: formatDateBr(target.data_validade),
-          statusVencimento: statusVariable,
-        });
-  const rendered = template
-    ? renderTemplateBody(template.bodyText, variables)
+  let localTemplate = null;
+  try {
+    localTemplate = await getLocalWhatsAppTemplateRecord(db, templateKey);
+  } catch {
+    localTemplate = null;
+  }
+  const approved = localTemplate && isWhatsAppTemplateApproved(localTemplate.approval_status);
+  const deliveryBodyText =
+    approved && localTemplate?.twilio_content_sid ? localTemplate.body_text : template?.bodyText;
+  const variables = buildTrainingTemplateVariablesForDelivery({
+    templateKey,
+    templateBodyText: deliveryBodyText,
+    funcionarioNome: target.funcionario_nome,
+    qualificacaoNome: target.qualificacao_nome,
+    dataVencimento: formatDateBr(target.data_validade),
+    statusVencimento: statusText(target),
+    trainingUrl,
+  });
+  const rendered = deliveryBodyText
+    ? renderTemplateBody(deliveryBodyText, variables)
     : plainMessage(target, trainingUrl);
   try {
-    let localTemplate = null;
-    try {
-      localTemplate = await getLocalWhatsAppTemplateRecord(db, templateKey);
-    } catch {
-      localTemplate = null;
-    }
-    const approved = localTemplate && isWhatsAppTemplateApproved(localTemplate.approval_status);
     await sendWhatsAppMessage(
       env,
       target.telefone,
