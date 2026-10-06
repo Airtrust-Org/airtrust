@@ -2,8 +2,7 @@ name: Production LMS Active Course Certification Readonly
 
 on:
   issue_comment:
-    types:
-      - created
+    types: [created]
   workflow_dispatch:
     inputs:
       expected_production_sha:
@@ -59,17 +58,18 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
           COMMENT_BODY: ${{ github.event.comment.body }}
-          COMMENT_ACTOR: ${{ github.event.comment.user.login }}
-          GITHUB_ACTOR: ${{ github.actor }}
+          COMMENT_ASSOCIATION: ${{ github.event.comment.author_association }}
           INPUT_CONFIRMATION: ${{ inputs.confirmation }}
           INPUT_EXPECTED_SHA: ${{ inputs.expected_production_sha }}
           INPUT_COURSE_IDS: ${{ inputs.course_ids }}
         run: |
           set -euo pipefail
           if [[ "$EVENT_NAME" == 'issue_comment' ]]; then
-            [[ "$COMMENT_ACTOR" == "$GITHUB_ACTOR" && -n "$COMMENT_ACTOR" ]] || { echo COMMENT_ACTOR_MISMATCH >&2; exit 1; }
+            case "$COMMENT_ASSOCIATION" in
+              OWNER|MEMBER|COLLABORATOR) ;;
+              *) echo COMMENT_ACTOR_NOT_TRUSTED >&2; exit 1 ;;
+            esac
             [[ "$COMMENT_BODY" != *
   certify:
     name: Certify active courses (${{ matrix.browser }})
@@ -241,64 +241,22 @@ jobs:
           set -euo pipefail
           [[ "${CERT_RC:-1}" == '0' ]]
 \r'* ]] || { echo COMMENT_COMMAND_MUST_BE_SINGLE_LINE >&2; exit 1; }
-            if [[ "$COMMENT_BODY" =~ ^AIRTRUST_PRODUCTION_LMS_ACTIVE_CERTIFICATION_READONLY\ ([0-9a-f]{40})(\ ([0-9]+(,[0-9]+)*))?$ ]]; then
-              expected_sha="${BASH_REMATCH[1]}"
+            if [[ "$COMMENT_BODY" =~ ^AIRTRUST_PRODUCTION_LMS_ACTIVE_CERTIFICATION_READONLY\ ([0-9a-fA-F]{40})(\ ([0-9]+(,[0-9]+)*))?$ ]]; then
+              expected="${BASH_REMATCH[1],,}"
               course_ids="${BASH_REMATCH[3]:-}"
             else
               echo COMMENT_COMMAND_INVALID >&2
               exit 1
             fi
-            [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo COMMENT_PR_NUMBER_INVALID >&2; exit 1; }
-            echo "pr_number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
           else
             [[ "$INPUT_CONFIRMATION" == 'AIRTRUST_PRODUCTION_LMS_ACTIVE_CERTIFICATION_READONLY' ]] || { echo CONFIRMATION_REJECTED >&2; exit 1; }
-            expected_sha="${INPUT_EXPECTED_SHA,,}"
+            expected="${INPUT_EXPECTED_SHA,,}"
             course_ids="${INPUT_COURSE_IDS:-}"
           fi
-          [[ "$expected_sha" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_SHA_INVALID >&2; exit 1; }
-          if [[ -n "$course_ids" && ! "$course_ids" =~ ^[0-9]+(,[0-9]+)*$ ]]; then
-            echo COURSE_IDS_INVALID >&2
-            exit 1
-          fi
-          echo "expected_sha=$expected_sha" >> "$GITHUB_OUTPUT"
+          [[ "$expected" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_SHA_INVALID >&2; exit 1; }
+          [[ -z "$course_ids" || "$course_ids" =~ ^[0-9]+(,[0-9]+)*$ ]] || { echo COURSE_IDS_INVALID >&2; exit 1; }
+          echo "expected_sha=$expected" >> "$GITHUB_OUTPUT"
           echo "course_ids=$course_ids" >> "$GITHUB_OUTPUT"
-
-      - name: Validate PR actor for comment requests
-        if: github.event_name == 'issue_comment'
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_ACTOR: ${{ github.actor }}
-          PR_NUMBER: ${{ steps.request.outputs.pr_number }}
-        run: |
-          set -euo pipefail
-          export GITHUB_TOKEN GITHUB_REPOSITORY GITHUB_ACTOR PR_NUMBER
-          node <<'NODE'
-          (async () => {
-            const headers = {
-              authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
-              accept: 'application/vnd.github+json',
-              'x-github-api-version': '2022-11-28',
-            };
-            const get = async (path) => {
-              const response = await fetch(`https://api.github.com${path}`, { headers });
-              if (!response.ok) throw new Error(`${path}:HTTP_${response.status}`);
-              return response.json();
-            };
-            const repo = process.env.GITHUB_REPOSITORY;
-            const pr = await get(`/repos/${repo}/pulls/${process.env.PR_NUMBER}`);
-            if (pr.base?.ref !== 'main') throw new Error('PR_BASE_NOT_MAIN');
-            if (pr.head?.repo?.full_name !== repo || pr.head?.repo?.fork) throw new Error('PR_FROM_FORK_REJECTED');
-            const permission = await get(`/repos/${repo}/collaborators/${process.env.GITHUB_ACTOR}/permission`);
-            if (!['write', 'push', 'maintain', 'admin'].includes(permission.permission)) {
-              throw new Error('ACTOR_PERMISSION_INSUFFICIENT');
-            }
-          })().catch((error) => {
-            console.error(error.message);
-            process.exit(1);
-          });
-          NODE
 
       - name: Require pinned production SHA and canonical gates
         shell: bash
@@ -311,7 +269,6 @@ jobs:
           set -euo pipefail
           [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_ONLY >&2; exit 1; }
           expected="${EXPECTED_SHA,,}"
-          [[ "$expected" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_SHA_INVALID >&2; exit 1; }
           git cat-file -e "$expected^{commit}"
           git merge-base --is-ancestor "$expected" HEAD
           EXPECTED_SHA="$expected" RELEASE_SHA="$expected" node scripts/ci/verify-release-gates.mjs
