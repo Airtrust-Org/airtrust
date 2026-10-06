@@ -364,8 +364,15 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
 
   const response = await page.goto(`${API}/api/lms/scorm/preview/${course.id}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });
   invariant(response?.status() === 200, `SCORM_PREVIEW_HTTP_${course.id}_${response?.status()}`);
-  const frame = page.frames().find((candidate) => candidate !== page.mainFrame() && candidate.url().includes(`/api/lms/scorm/assets/${TARGET_COMPANY_ID}/${course.id}/`));
+  const iframe = page.locator('#scorm-frame');
+  await iframe.waitFor({ state: 'attached', timeout: 15_000 });
+  const iframeHandle = await iframe.elementHandle();
+  const frame = await iframeHandle?.contentFrame();
   invariant(frame, `SCORM_PACKAGE_FRAME_MISSING:${course.id}`);
+  await frame.waitForURL(
+    (url) => url.pathname.includes(`/api/lms/scorm/assets/${TARGET_COMPANY_ID}/${course.id}/`),
+    { timeout: 15_000 },
+  );
   await frame.waitForLoadState('domcontentloaded', { timeout: 15_000 }).catch(() => undefined);
   await page.waitForTimeout(350);
 
