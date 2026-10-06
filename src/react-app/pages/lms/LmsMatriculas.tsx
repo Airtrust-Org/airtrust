@@ -18,6 +18,7 @@ import {
   XCircle,
   Loader2,
   ChevronDown,
+  BellRing,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppLayout from '@/react-app/components/AppLayout';
@@ -38,6 +39,10 @@ import type { LmsMatricula, MatriculaStatus } from '@/react-app/hooks/useLms';
 import type { Funcionario } from '@/react-app/hooks/useFuncionarios';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import { LmsMetricCard, LmsModuleTabs, LmsSurface, LmsCourseMiniMeta, LmsPageShell } from './lmsUi';
+import {
+  isLmsEnrollmentAlertable,
+  LmsEnrollmentAlertModal,
+} from './LmsEnrollmentAlertModal';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -497,6 +502,8 @@ export default function LmsMatriculas() {
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
   const [optimisticMatriculas, setOptimisticMatriculas] = useState<LmsMatricula[]>([]);
+  const [selectedAlertIds, setSelectedAlertIds] = useState<Set<number>>(new Set());
+  const [alertTargetIds, setAlertTargetIds] = useState<number[]>([]);
 
   const { data: cursosRes, isLoading: loadingCursosIndex } = useLmsCursos(
     { limit: 300 },
@@ -515,7 +522,13 @@ export default function LmsMatriculas() {
 
   useEffect(() => {
     setOptimisticMatriculas([]);
+    setSelectedAlertIds(new Set());
+    setAlertTargetIds([]);
   }, [cursoId]);
+
+  useEffect(() => {
+    setSelectedAlertIds(new Set());
+  }, [search, statusFilter]);
 
   const todasMatriculas: LmsMatricula[] = (() => {
     const merged = new Map<number, LmsMatricula>();
@@ -546,6 +559,45 @@ export default function LmsMatriculas() {
         (m.funcionario_nome ?? '').toLowerCase().includes(search.toLowerCase()),
       )
     : todasMatriculas;
+
+  const alertableMatriculas = matriculas.filter(isLmsEnrollmentAlertable);
+  const selectedAlertTargets = todasMatriculas.filter(
+    (matricula) => alertTargetIds.includes(matricula.id) && isLmsEnrollmentAlertable(matricula),
+  );
+  const selectedAlertCount = [...selectedAlertIds].filter((id) =>
+    todasMatriculas.some((matricula) => matricula.id === id && isLmsEnrollmentAlertable(matricula)),
+  ).length;
+  const allVisibleAlertableSelected =
+    alertableMatriculas.length > 0 &&
+    alertableMatriculas.every((matricula) => selectedAlertIds.has(matricula.id));
+
+  function toggleAlertSelection(matriculaId: number) {
+    setSelectedAlertIds((current) => {
+      const next = new Set(current);
+      if (next.has(matriculaId)) next.delete(matriculaId);
+      else next.add(matriculaId);
+      return next;
+    });
+  }
+
+  function toggleAllVisibleAlerts() {
+    setSelectedAlertIds((current) => {
+      const next = new Set(current);
+      if (allVisibleAlertableSelected) {
+        alertableMatriculas.forEach((matricula) => next.delete(matricula.id));
+      } else {
+        alertableMatriculas.forEach((matricula) => next.add(matricula.id));
+      }
+      return next;
+    });
+  }
+
+  function openSelectedAlerts() {
+    const ids = [...selectedAlertIds].filter((id) =>
+      todasMatriculas.some((matricula) => matricula.id === id && isLmsEnrollmentAlertable(matricula)),
+    );
+    setAlertTargetIds(ids);
+  }
 
   async function handleCancelarConfirmado() {
     if (!cancelTarget) return;
@@ -770,6 +822,14 @@ export default function LmsMatriculas() {
               </select>
               <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             </div>
+            <Button
+              variant="secondary"
+              onClick={openSelectedAlerts}
+              disabled={selectedAlertCount === 0}
+            >
+              <BellRing className="h-4 w-4" />
+              Enviar alertas{selectedAlertCount > 0 ? ` (${selectedAlertCount})` : ''}
+            </Button>
           </div>
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
@@ -797,6 +857,16 @@ export default function LmsMatriculas() {
                 <table className="w-full text-sm">
                   <thead className="border-b border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-800">
                     <tr>
+                      <th className="w-10 px-3 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          aria-label="Selecionar matrículas pendentes visíveis"
+                          checked={allVisibleAlertableSelected}
+                          disabled={alertableMatriculas.length === 0}
+                          onChange={toggleAllVisibleAlerts}
+                          className="rounded"
+                        />
+                      </th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">
                         Funcionário
                       </th>
@@ -829,6 +899,16 @@ export default function LmsMatriculas() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {matriculas.map((m) => (
                       <tr key={m.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <td className="w-10 px-3 py-3 text-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`Selecionar matrícula de ${m.funcionario_nome ?? `ID ${m.funcionario_id}`}`}
+                            checked={selectedAlertIds.has(m.id)}
+                            disabled={!isLmsEnrollmentAlertable(m)}
+                            onChange={() => toggleAlertSelection(m.id)}
+                            className="rounded"
+                          />
+                        </td>
                         <td className="px-4 py-3">
                           <FuncionarioLink
                             funcionarioId={m.funcionario_id}
@@ -889,6 +969,15 @@ export default function LmsMatriculas() {
                             <RowActionsMenu
                               label={`Mais ações para a matrícula de ${m.funcionario_nome ?? 'funcionário'}`}
                               actions={[
+                                ...(isLmsEnrollmentAlertable(m)
+                                  ? [
+                                      {
+                                        label: 'Enviar alerta',
+                                        icon: BellRing,
+                                        onSelect: () => setAlertTargetIds([m.id]),
+                                      },
+                                    ]
+                                  : []),
                                 {
                                   label: 'Cancelar matrícula',
                                   destructive: true,
@@ -908,6 +997,14 @@ export default function LmsMatriculas() {
             )}
           </div>
         </LmsSurface>
+
+        <LmsEnrollmentAlertModal
+          isOpen={alertTargetIds.length > 0}
+          onClose={() => setAlertTargetIds([])}
+          targets={selectedAlertTargets}
+          cursoTitulo={curso?.titulo ?? 'Treinamento'}
+          onSent={() => setSelectedAlertIds(new Set())}
+        />
 
         {showModal && (
           <ModalMatricular
