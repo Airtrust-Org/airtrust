@@ -323,14 +323,67 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         if (!input.checked) input.click();
       }
 
-      const candidates = Array.from(document.querySelectorAll('button,[role=button],input[type=button],input[type=submit],a'))
+      const isProductChrome = (el, text) => {
+        const id = String(el.id || '').toLowerCase();
+        if (/^(menubtn|refbtn|closemenubtn|prev|previous|back)$/.test(id)) return true;
+        if (bad.test(text)) return true;
+        return Boolean(el.closest(
+          'nav,aside,[role=navigation],[class*="sidebar" i],[class*="drawer" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+        ));
+      };
+      const items = Array.from(document.querySelectorAll('button,[role=button],input[type=button],input[type=submit],a'))
         .filter(visible)
-        .map((el) => ({ el, text: clean(el.innerText || el.value || el.getAttribute('aria-label') || el.title) }))
-        .filter((item) => item.text && !bad.test(item.text));
-      const preferred = candidates.find((item) => good.test(item.text));
-      if (preferred) { preferred.el.click(); return { type: 'click', text: preferred.text.slice(0, 80) }; }
-      const safe = candidates.find((item) => /next|continue|start|finish|submit/i.test(item.text));
-      if (safe) { safe.el.click(); return { type: 'click', text: safe.text.slice(0, 80) }; }
+        .map((el, index) => {
+          const text = clean(el.innerText || el.value || el.getAttribute('aria-label') || el.title);
+          const id = clean(el.id);
+          const key = clean(`${id} ${text}`);
+          const multiToggle = Boolean(
+            el.matches('[aria-pressed],[aria-checked],[role=checkbox]') ||
+            el.closest('[class*="checklist" i],[id*="checklist" i],[class*="practice" i],[id*="practice" i]'),
+          );
+          return { el, text, id, key, index, multiToggle, chrome: isProductChrome(el, key) };
+        })
+        .filter((item) => !item.chrome);
+
+      const alreadyClicked = (item) => item.el.dataset.airtrustCertClicked === '1';
+      const markAndClick = (item, type) => {
+        item.el.dataset.airtrustCertClicked = '1';
+        item.el.click();
+        return { type, text: (item.text || item.id || String(item.index)).slice(0, 80) };
+      };
+
+      // Multi-select practices/checklists must be satisfied before submit/navigation.
+      const toggle = items.find((item) => item.multiToggle && !alreadyClicked(item));
+      if (toggle) return markAndClick(toggle, 'content-toggle');
+
+      // Once a decision enabled "next", advance immediately instead of cycling
+      // through the remaining single-choice alternatives.
+      const next = items.find((item) => /(^|\s)(next|pr[oó]ximo|avan[cç]ar|continuar|prosseguir)(\s|$)/i.test(item.key));
+      if (next) return markAndClick(next, 'next');
+
+      const submit = items.find((item) => /confirmar|responder|enviar|verificar|corrigir|submit/i.test(item.key));
+      const genericChoices = items.filter((item) =>
+        item.el.tagName.toLowerCase() !== 'a' &&
+        !item.multiToggle &&
+        !good.test(item.key) &&
+        !/(^|\s)(finish|finalizar|concluir|resultado|start|iniciar|come[cç]ar)(\s|$)/i.test(item.key)
+      );
+      const priorChoice = genericChoices.some(alreadyClicked);
+
+      // For single-choice decision cards: choose one option, then confirm.
+      if (submit && priorChoice) return markAndClick(submit, 'submit-after-choice');
+
+      const choice = genericChoices.find((item) => !alreadyClicked(item));
+      if (choice) return markAndClick(choice, 'content-choice');
+
+      if (submit) return markAndClick(submit, 'submit');
+
+      const preferred = items.find((item) => good.test(item.key));
+      if (preferred) return markAndClick(preferred, 'preferred');
+
+      const safe = items.find((item) => /next|continue|start|finish|submit/i.test(item.key));
+      if (safe) return markAndClick(safe, 'safe');
+
       return { type: 'none' };
     }, { plan: answerPlan }).catch(() => ({ type: 'frame-error' }));
 
