@@ -24,6 +24,10 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /locator\('#scorm-frame'\)/);
   assert.match(source, /contentFrame\(\)/);
   assert.match(source, /waitForURL/);
+  assert.match(source, /CERT_COURSE_IDS/);
+  assert.match(source, /summarizeStalledSlide/);
+  assert.match(source, /captureVisibleControls/);
+  assert.match(source, /visible_controls/);
   assert.match(source, /interactionsValid/);
   assert.doesNotMatch(source, /interactions\.length\s*>\s*0/);
   assert.match(source, /calls_after_finish/);
@@ -39,6 +43,8 @@ test('production active-course certifier is preview/read-only and exact-package 
 test('production certification workflow is manual, SHA-pinned, secret-scoped and evidence-preserving', () => {
   const workflow = read(WORKFLOW);
   assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /course_ids:/);
+  assert.match(workflow, /CERT_COURSE_IDS/);
   assert.doesNotMatch(workflow, /\bpush:/);
   assert.doesNotMatch(workflow, /\bpull_request:/);
   assert.match(workflow, /AIRTRUST_PRODUCTION_LMS_ACTIVE_CERTIFICATION_READONLY/);
