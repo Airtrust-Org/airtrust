@@ -56,6 +56,26 @@ export function targetTagsForCourse(course) {
   return TARGET_PATTERNS.filter(([, pattern]) => pattern.test(haystack)).map(([tag]) => tag);
 }
 
+export function sanitizeActiveScormPackage(versions) {
+  const rows = Array.isArray(versions) ? versions : [];
+  const active = rows.filter((row) => String(row?.status || '').toUpperCase() === 'ACTIVE');
+  invariant(active.length <= 1, 'LMS_MULTIPLE_ACTIVE_SCORM_PACKAGES');
+  if (!active.length) return null;
+  const row = active[0];
+  const sha256 = String(row?.packageSha256 || '').trim().toLowerCase();
+  invariant(/^[0-9a-f]{64}$/.test(sha256), 'LMS_ACTIVE_PACKAGE_SHA256_INVALID');
+  const runtime = row?.runtime && typeof row.runtime === 'object' ? row.runtime : null;
+  return {
+    package_sha256: sha256,
+    launch_file: row?.launchFile ? String(row.launchFile) : null,
+    validator_version: row?.validatorVersion ? String(row.validatorVersion) : null,
+    publishable: row?.publishable === true,
+    runtime_status: runtime?.status ? String(runtime.status) : null,
+    completion_reached: runtime?.completionReached === true,
+    lesson_status: runtime?.lessonStatus ? String(runtime.lessonStatus) : null,
+  };
+}
+
 export function sanitizeCourse(course) {
   const sanitized = {
     course_id: Number(course?.id || 0),
@@ -163,6 +183,24 @@ async function enrichCourseDetails(api, token, courses) {
   return enriched;
 }
 
+async function enrichActiveScormPackages(api, token, courses) {
+  const byCourse = new Map();
+  for (const course of courses) {
+    const id = Number(course.id);
+    if (
+      String(course?.tipo_conteudo || '').toLowerCase() !== 'scorm' ||
+      Number(course?.ativo || 0) !== 1 ||
+      Number(course?.publicado || 0) !== 1
+    ) {
+      continue;
+    }
+    const response = await authJson(api, token, `/api/lms/cursos/${id}/scorm-package-versions`);
+    invariant(response.status === 200, `LMS_PACKAGE_VERSIONS_HTTP_${id}_${response.status}`);
+    byCourse.set(id, sanitizeActiveScormPackage(response.json?.data));
+  }
+  return byCourse;
+}
+
 export async function buildInventory() {
   const api = assertAllowedProductionBaseUrl(process.env.PROD_API_BASE_URL || DEFAULT_API);
   const expectedSha = String(process.env.EXPECTED_PRODUCTION_SHA || '').trim().toLowerCase();
@@ -180,7 +218,13 @@ export async function buildInventory() {
 
   const listed = await listAllCourses(api, token);
   const detailed = await enrichCourseDetails(api, token, listed);
-  const courses = detailed.map(sanitizeCourse).sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
+  const activePackages = await enrichActiveScormPackages(api, token, detailed);
+  const courses = detailed
+    .map((course) => ({
+      ...sanitizeCourse(course),
+      active_scorm_package: activePackages.get(Number(course.id)) ?? null,
+    }))
+    .sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
   const targetMatches = courses.filter((course) => course.target_tags.length > 0);
 
   return {
@@ -191,6 +235,10 @@ export async function buildInventory() {
     active_count: courses.filter((course) => course.ativo).length,
     published_count: courses.filter((course) => course.publicado).length,
     scorm_package_count: courses.filter((course) => course.has_scorm_package).length,
+    active_scorm_package_count: courses.filter((course) => course.active_scorm_package).length,
+    scorm_missing_active_package_record_count: courses.filter(
+      (course) => course.tipo_conteudo === 'scorm' && course.ativo && course.publicado && !course.active_scorm_package,
+    ).length,
     target_match_count: targetMatches.length,
     target_matches: targetMatches,
     courses,

@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import {
   assertReadOnlyApiRequest,
+  sanitizeActiveScormPackage,
   sanitizeCourse,
   targetTagsForCourse,
 } from '../production/lms-catalog-readonly-inventory.mjs';
@@ -68,6 +69,52 @@ test('course sanitizer emits only non-PII metadata and reduces storage data to b
   }
   assert.equal(JSON.stringify(sanitized).includes('secret-ish-prefix'), false);
   assert.equal(JSON.stringify(sanitized).includes('person@example.com'), false);
+});
+
+test('active SCORM package sanitizer keeps exact SHA but strips R2/package identifiers', () => {
+  const sanitized = sanitizeActiveScormPackage([
+    {
+      packageId: 'internal-package-id',
+      packageSha256: 'a'.repeat(64),
+      status: 'ACTIVE',
+      r2Prefix: 'lms/scorm/6/42/_candidates/private/',
+      launchFile: 'index.html',
+      validatorVersion: 'AIRTRUST_SCORM_PACKAGE_QUALITY_GATE_V1',
+      publishable: true,
+      runtime: {
+        status: 'PASS',
+        completionReached: false,
+        lessonStatus: 'incomplete',
+      },
+    },
+  ]);
+  assert.deepEqual(sanitized, {
+    package_sha256: 'a'.repeat(64),
+    launch_file: 'index.html',
+    validator_version: 'AIRTRUST_SCORM_PACKAGE_QUALITY_GATE_V1',
+    publishable: true,
+    runtime_status: 'PASS',
+    completion_reached: false,
+    lesson_status: 'incomplete',
+  });
+  const json = JSON.stringify(sanitized);
+  assert.equal(json.includes('internal-package-id'), false);
+  assert.equal(json.includes('_candidates/private'), false);
+});
+
+test('active SCORM package sanitizer is fail-closed for duplicate ACTIVE or invalid SHA', () => {
+  assert.equal(sanitizeActiveScormPackage([]), null);
+  assert.throws(
+    () => sanitizeActiveScormPackage([
+      { status: 'ACTIVE', packageSha256: 'a'.repeat(64) },
+      { status: 'ACTIVE', packageSha256: 'b'.repeat(64) },
+    ]),
+    /LMS_MULTIPLE_ACTIVE_SCORM_PACKAGES/,
+  );
+  assert.throws(
+    () => sanitizeActiveScormPackage([{ status: 'ACTIVE', packageSha256: 'not-a-sha' }]),
+    /LMS_ACTIVE_PACKAGE_SHA256_INVALID/,
+  );
 });
 
 test('V4 target matcher recognizes planned corporate EAD themes', () => {
