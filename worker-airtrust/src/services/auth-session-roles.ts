@@ -84,7 +84,10 @@ async function hasLmsStudentLink(
  * A role administrativa do tenant continua vindo de usuarios_empresas.role.
  * Perfis operacionais adicionais são derivados de vínculos reais do funcionário:
  * - INSTRUTOR: cadastro ativo em instrutores_simulador;
- * - ALUNO: matrícula LMS ativa/não removida no tenant.
+ * - ALUNO: matrícula LMS ativa/não removida no tenant no fallback legado.
+ *
+ * Invariante de negócio: todo GESTOR também pode atuar como ALUNO, mesmo sem
+ * matrícula LMS e mesmo quando a estrutura explícita de perfis já existe.
  *
  * Nenhum perfil é criado por simples pedido do cliente; o backend sempre valida
  * a evidência no D1 antes de permitir a troca de role no JWT.
@@ -181,6 +184,13 @@ export async function resolveAvailableSessionRoles(
         roles.add('ALUNO');
       }
     }
+  }
+
+  // Regra de negócio: todo GESTOR também precisa poder atuar como ALUNO.
+  // A derivação em tempo de autorização cobre gestores já existentes sem
+  // migration/backfill e mantém ADMINISTRADOR como perfil independente.
+  if (roles.has('GESTOR')) {
+    roles.add('ALUNO');
   }
 
   return ROLE_ORDER.filter((role) => roles.has(role));
