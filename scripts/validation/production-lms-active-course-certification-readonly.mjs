@@ -287,10 +287,28 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
     const state = await getTrace(page).catch(() => null);
     if (state?.values && terminalState(state.values)) break;
 
-    const action = await frame.evaluate(({ plan }) => {
+    const currentLocation =
+      state?.values?.['cmi.core.lesson_location'] ??
+      state?.values?.['cmi.location'] ??
+      '';
+    const action = await frame.evaluate(({ plan, location }) => {
       const w = window;
-      w.__AIRTRUST_CERT_DRIVER ??= { questionOrder: [], attempts: {}, planCursor: 0 };
+      w.__AIRTRUST_CERT_DRIVER ??= {
+        questionOrder: [],
+        attempts: {},
+        planCursor: 0,
+        clickedByLocation: {},
+        actionLog: [],
+      };
       const st = w.__AIRTRUST_CERT_DRIVER;
+      st.clickedByLocation ??= {};
+      st.actionLog ??= [];
+      const locationKey = String(location || 'unknown');
+      const clicked = new Set(
+        Array.isArray(st.clickedByLocation[locationKey])
+          ? st.clickedByLocation[locationKey]
+          : [],
+      );
       const visible = (el) => {
         const r = el.getBoundingClientRect();
         const s = getComputedStyle(el);
@@ -345,13 +363,39 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
             el.matches('[aria-pressed],[aria-checked],[role=checkbox]') ||
             el.closest('[class*="checklist" i],[id*="checklist" i]'),
           );
-          return { el, text, id, key, index, multiToggle, chrome: isProductChrome(el, key) };
+          const role = clean(el.getAttribute('role'));
+          const name = clean(el.getAttribute('name'));
+          const signature = [index, id, role, name, el.tagName.toLowerCase()].join(':');
+          return {
+            el,
+            text,
+            id,
+            key,
+            index,
+            role,
+            name,
+            signature,
+            multiToggle,
+            chrome: isProductChrome(el, key),
+          };
         })
         .filter((item) => !item.chrome);
 
-      const alreadyClicked = (item) => item.el.dataset.airtrustCertClicked === '1';
+      const alreadyClicked = (item) => clicked.has(item.signature);
+      const persistClicked = () => {
+        st.clickedByLocation[locationKey] = Array.from(clicked).slice(-120);
+      };
       const markAndClick = (item, type) => {
-        item.el.dataset.airtrustCertClicked = '1';
+        clicked.add(item.signature);
+        persistClicked();
+        st.actionLog.push({
+          location: locationKey,
+          type,
+          index: item.index,
+          id: item.id || null,
+          role: item.role || null,
+        });
+        if (st.actionLog.length > 120) st.actionLog.splice(0, st.actionLog.length - 120);
         item.el.click();
         return { type, text: (item.text || item.id || String(item.index)).slice(0, 80) };
       };
@@ -384,7 +428,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       if (submit && priorChoice && submitAlreadyTried) {
         const retryChoice = genericChoices.find((item) => !alreadyClicked(item));
         if (retryChoice) {
-          delete submit.el.dataset.airtrustCertClicked;
+          clicked.delete(submit.signature);
+          persistClicked();
           return markAndClick(retryChoice, 'content-choice-retry');
         }
       }
@@ -401,7 +446,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       if (safe) return markAndClick(safe, 'safe');
 
       return { type: 'none' };
-    }, { plan: answerPlan }).catch(() => ({ type: 'frame-error' }));
+    }, { plan: answerPlan, location: currentLocation }).catch(() => ({ type: 'frame-error' }));
 
     await page.evaluate(() => {
       const f = document.getElementById('scorm-frame');
@@ -503,6 +548,25 @@ async function captureVisibleControls(frame) {
   }).catch(() => null);
 }
 
+async function captureDriverState(frame) {
+  return frame.evaluate(() => {
+    const st = window.__AIRTRUST_CERT_DRIVER;
+    if (!st || typeof st !== 'object') return null;
+    const clickedByLocation = st.clickedByLocation && typeof st.clickedByLocation === 'object'
+      ? Object.fromEntries(
+          Object.entries(st.clickedByLocation).map(([location, values]) => [
+            location,
+            Array.isArray(values) ? values.length : 0,
+          ]),
+        )
+      : {};
+    return {
+      clicked_by_location: clickedByLocation,
+      recent_actions: Array.isArray(st.actionLog) ? st.actionLog.slice(-30) : [],
+    };
+  }).catch(() => null);
+}
+
 async function runPhase({ browser, token, course, manifest, phase, initialValues, maxDriveMs }) {
   const context = await browser.newContext({ ignoreHTTPSErrors: false });
   const page = await context.newPage();
@@ -566,6 +630,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     null;
   const visibleControls = await captureVisibleControls(frame);
   const stalledSlide = summarizeStalledSlide(model, preUnloadLocation);
+  const driverState = await captureDriverState(frame);
 
   await unloadFrame(frame);
   await page.waitForTimeout(120);
@@ -592,6 +657,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     model: modelMeta,
     stalled_slide: stalledSlide,
     visible_controls: visibleControls,
+    driver_state: driverState,
     asset_failures: assetFailures.slice(0, 20),
     page_errors: pageErrors.slice(0, 10),
     console_errors: consoleErrors.slice(0, 10),
