@@ -45,9 +45,17 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.doesNotMatch(source, /wrangler\s+(?:deploy|d1|r2)/i);
 });
 
-test('production certification workflow is manual, SHA-pinned, secret-scoped and evidence-preserving', () => {
+test('production certification workflow is governed, online-triggerable, SHA-pinned, secret-scoped and evidence-preserving', () => {
   const workflow = read(WORKFLOW);
+  const resolver = read('scripts/validation/resolve-production-lms-active-certification-request.mjs');
+  assert.match(workflow, /issue_comment:/);
   assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /resolve-production-lms-active-certification-request\.mjs/);
+  assert.match(workflow, /collaborators\/\$\{actor\}\/permission/);
+  assert.match(workflow, /ACTOR_PERMISSION_INSUFFICIENT/);
+  assert.match(workflow, /PR_BASE_NOT_MAIN/);
+  assert.match(workflow, /PR_FROM_FORK_REJECTED/);
+  assert.match(workflow, /needs\.guard\.outputs\.course_ids/);
   assert.match(workflow, /course_ids:/);
   assert.match(workflow, /CERT_COURSE_IDS/);
   assert.doesNotMatch(workflow, /\bpush:/);
@@ -64,6 +72,13 @@ test('production certification workflow is manual, SHA-pinned, secret-scoped and
   assert.match(workflow, /if:\s*always\(\)/);
   assert.match(workflow, /actions\/upload-artifact@v7/);
   assert.match(workflow, /Enforce zero certification failures/);
+
+  assert.match(resolver, /COMMENT_ACTOR_MISMATCH/);
+  assert.match(resolver, /COMMENT_COMMAND_MUST_BE_SINGLE_LINE/);
+  assert.match(resolver, /COMMENT_COMMAND_INVALID/);
+  assert.match(resolver, /COURSE_IDS_INVALID/);
+  assert.match(resolver, /OUTPUT_NEWLINE_FORBIDDEN/);
+  assert.match(resolver, /AIRTRUST_PRODUCTION_LMS_ACTIVE_CERTIFICATION_READONLY/);
 
   assert.doesNotMatch(workflow, /CLOUDFLARE_(?:WORKER|PAGES|D1|API)_/);
   assert.doesNotMatch(workflow, /wrangler\s+(?:deploy|d1|r2)/i);
