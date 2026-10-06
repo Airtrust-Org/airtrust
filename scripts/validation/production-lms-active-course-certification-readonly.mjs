@@ -316,7 +316,16 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       };
       const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
       const bad = /voltar|anterior|menu|sum[aá]rio|fechar|sair|cancelar/i;
-      const good = /confirmar|responder|enviar|verificar|corrigir|continuar|pr[oó]ximo|avan[cç]ar|iniciar|come[cç]ar|prosseguir|finalizar|concluir|resultado|tentar novamente|refazer/i;
+      const good = /confirmar|responder|enviar|verificar|corrigir|continuar|pr[oó]xim[oa]|avan[cç]ar|iniciar|come[cç]ar|prosseguir|finalizar|concluir|resultado/i;
+      const retry = /tentar novamente|refazer|retry/i;
+      const forwardId = /^(?:next|nextbtn|btnnext|qnext|quiznext|continue|continuebtn|submitnext)$/i;
+      const backwardId = /^(?:prev|prevbtn|previous|back|qprev|quizprev)$/i;
+
+      const closeMenu = Array.from(document.querySelectorAll('#closeMenuBtn,[data-action="close-menu"]')).find(visible);
+      if (closeMenu) {
+        closeMenu.click();
+        return { type: 'close-menu', text: 'close-menu' };
+      }
 
       const groups = new Map();
       for (const input of Array.from(document.querySelectorAll('input[type=radio]')).filter(visible)) {
@@ -345,9 +354,10 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         const id = String(el.id || '').toLowerCase();
         const semanticAction =
           good.test(text) ||
-          /^(next|continue|start|finish|submit|pr[oó]ximo|avan[cç]ar|continuar|prosseguir|finalizar|concluir)$/i.test(id);
+          forwardId.test(id) ||
+          /^(start|finish|submit|iniciar|come[cç]ar|finalizar|concluir)$/i.test(id);
         if (semanticAction) return false;
-        if (/^(menubtn|refbtn|closemenubtn|prev|previous|back)$/.test(id)) return true;
+        if (/^(menubtn|refbtn|closemenubtn|resetbtn)$/.test(id) || backwardId.test(id)) return true;
         if (bad.test(text)) return true;
         return Boolean(el.closest(
           'nav,aside,[role=navigation],[class*="sidebar" i],[class*="drawer" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
@@ -365,6 +375,9 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           );
           const role = clean(el.getAttribute('role'));
           const name = clean(el.getAttribute('name'));
+          const className = clean(el.className);
+          const ariaPressed = clean(el.getAttribute('aria-pressed'));
+          const ariaChecked = clean(el.getAttribute('aria-checked'));
           const signature = [index, id, role, name, el.tagName.toLowerCase()].join(':');
           return {
             el,
@@ -374,6 +387,9 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
             index,
             role,
             name,
+            className,
+            ariaPressed,
+            ariaChecked,
             signature,
             multiToggle,
             chrome: isProductChrome(el, key),
@@ -406,7 +422,10 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
       // Once a decision enabled "next", advance immediately instead of cycling
       // through the remaining single-choice alternatives.
-      const next = items.find((item) => /(^|\s)(next|pr[oó]ximo|avan[cç]ar|continuar|prosseguir)(\s|$)/i.test(item.key));
+      const next = items.find((item) =>
+        forwardId.test(item.id) ||
+        /(^|\s)(next|pr[oó]xim[oa]|avan[cç]ar|continuar|prosseguir)(\s|$)/i.test(item.key)
+      );
       if (next) return markAndClick(next, 'next');
 
       const submit = items.find((item) => /confirmar|responder|enviar|verificar|corrigir|submit/i.test(item.key));
@@ -414,6 +433,10 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         item.el.tagName.toLowerCase() !== 'a' &&
         !item.multiToggle &&
         !good.test(item.key) &&
+        !retry.test(item.key) &&
+        !forwardId.test(item.id) &&
+        !backwardId.test(item.id) &&
+        !/^resetbtn$/i.test(item.id) &&
         !/(^|\s)(finish|finalizar|concluir|resultado|start|iniciar|come[cç]ar)(\s|$)/i.test(item.key)
       );
       const priorChoice = genericChoices.some(alreadyClicked);
@@ -442,8 +465,14 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       const preferred = items.find((item) => good.test(item.key));
       if (preferred) return markAndClick(preferred, 'preferred');
 
-      const safe = items.find((item) => /next|continue|start|finish|submit/i.test(item.key));
+      const safe = items.find((item) =>
+        forwardId.test(item.id) ||
+        /next|continue|start|finish|submit/i.test(item.key)
+      );
       if (safe) return markAndClick(safe, 'safe');
+
+      const retryAction = items.find((item) => retry.test(item.key) && !/^resetbtn$/i.test(item.id));
+      if (retryAction) return markAndClick(retryAction, 'retry');
 
       return { type: 'none' };
     }, { plan: answerPlan, location: currentLocation }).catch(() => ({ type: 'frame-error' }));
@@ -529,6 +558,9 @@ async function captureVisibleControls(frame) {
           tag: el.tagName.toLowerCase(),
           id: el.id || null,
           role: el.getAttribute('role'),
+          class_name: String(el.className || '').slice(0, 160) || null,
+          aria_pressed: el.getAttribute('aria-pressed'),
+          aria_checked: el.getAttribute('aria-checked'),
           category: classify(text),
           disabled: Boolean(el.disabled) || el.getAttribute('aria-disabled') === 'true',
         };
