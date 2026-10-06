@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  buildQualificacaoTemplateVariables,
-  buildTrainingTemplateStatusVariable,
+  buildTrainingStatusVencimento,
+  buildTrainingTemplateVariables,
   getAlertWhatsAppTemplateDefinition,
   renderTemplateBody,
   resolveQualificacaoAlertTemplateKey,
@@ -15,14 +15,12 @@ describe('whatsapp-templates', () => {
 
   it('renderiza aviso EAD a vencer como Gerência de Treinamento da Costa do Sol sem emojis', () => {
     const template = getAlertWhatsAppTemplateDefinition('ead_expiring');
-    const variables = buildQualificacaoTemplateVariables({
+    const variables = buildTrainingTemplateVariables({
       funcionarioNome: 'Filipe Daumas',
       qualificacaoNome: 'CRM',
       dataVencimento: '28/09/2026',
-      statusVencimento: buildTrainingTemplateStatusVariable(
-        7,
-        'https://app.airtrust.online/treinamentos/123',
-      ),
+      statusVencimento: buildTrainingStatusVencimento(7),
+      trainingUrl: 'https://airtrust.online/lms/player/123',
     });
 
     expect(template).toBeDefined();
@@ -33,8 +31,10 @@ describe('whatsapp-templates', () => {
     expect(message).toContain('*Treinamento:* CRM');
     expect(message).toContain('*Vencimento:* 28/09/2026');
     expect(message).toContain('*Status:* Vence em 7 dias');
+    expect(variables['4']).toBe('Vence em 7 dias');
+    expect(variables['5']).toBe('https://airtrust.online/lms/player/123');
     expect(message).toContain(
-      '*Acesse diretamente o treinamento:*' + '\n' + 'https://app.airtrust.online/treinamentos/123',
+      '*Acesse diretamente o treinamento:*' + '\n' + 'https://airtrust.online/lms/player/123',
     );
     expect(message).toContain('requisitos obrigatórios de treinamento e conformidade da operação');
     expect(message).toContain('sujeito à verificação em auditorias');
@@ -44,21 +44,19 @@ describe('whatsapp-templates', () => {
 
   it('renderiza aviso EAD vencido com status vermelho e concordancia de treinamento', () => {
     const template = getAlertWhatsAppTemplateDefinition('ead_expired');
-    const variables = buildQualificacaoTemplateVariables({
+    const variables = buildTrainingTemplateVariables({
       funcionarioNome: 'Ingrid',
       qualificacaoNome: 'SOP AW139',
       dataVencimento: '18/09/2026',
-      statusVencimento: buildTrainingTemplateStatusVariable(
-        -3,
-        'https://app.airtrust.online/treinamentos/456',
-      ),
+      statusVencimento: buildTrainingStatusVencimento(-3),
+      trainingUrl: 'https://airtrust.online/lms/player/456',
     });
 
     expect(template).toBeDefined();
     const message = renderTemplateBody(template!.bodyText, variables);
 
     expect(message).toContain('*Status:* Vencido há 3 dias');
-    expect(message).toContain('https://app.airtrust.online/treinamentos/456');
+    expect(message).toContain('https://airtrust.online/lms/player/456');
   });
 
   it('mantem os templates de CMA fora da identidade da Gerência de Treinamento', () => {
@@ -73,15 +71,22 @@ describe('whatsapp-templates', () => {
   it('usa template próprio para treinamento obrigatório nunca realizado', () => {
     const template = getAlertWhatsAppTemplateDefinition('ead_required');
     expect(template).toBeDefined();
-    const message = renderTemplateBody(template!.bodyText, {
-      '1': 'Viviane',
-      '2': 'CRM',
-      '3': 'Obrigatório ainda não realizado\n\n*Acesse diretamente o treinamento:*\nhttps://app.airtrust.online/treinamentos/999',
+    const variables = buildTrainingTemplateVariables({
+      funcionarioNome: 'Viviane',
+      qualificacaoNome: 'CRM',
+      dataVencimento: 'Não realizado',
+      statusVencimento: 'Treinamento obrigatório ainda não realizado',
+      trainingUrl: 'https://airtrust.online/lms/player/999',
     });
-    expect(message).toContain('ainda não consta como realizado');
+    const message = renderTemplateBody(template!.bodyText, variables);
+    expect(message).toContain('Você possui um treinamento obrigatório que requer sua atenção');
     expect(message).toContain('*Treinamento:* CRM');
+    expect(message).toContain('*Vencimento:* Não realizado');
+    expect(message).toContain('*Status:* Treinamento obrigatório ainda não realizado');
+    expect(message).toContain('*Acesse diretamente o treinamento:*\nhttps://airtrust.online/lms/player/999');
     expect(message).toContain('sujeito à verificação em auditorias');
-    expect(message).toContain('https://app.airtrust.online/treinamentos/999');
+    expect(variables['4']).not.toContain('\n');
+    expect(variables['5']).toBe('https://airtrust.online/lms/player/999');
   });
 
 });
