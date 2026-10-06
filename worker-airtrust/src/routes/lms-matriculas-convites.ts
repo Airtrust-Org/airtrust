@@ -246,7 +246,7 @@ export async function sendMatriculaWhatsApp(
       })) ||
       `${String(env.FRONTEND_URL || 'https://airtrust.online').replace(/\/$/, '')}/lms/cursos/${params.cursoId}`;
 
-    const templateKey = 'ead_required' as const;
+    const templateKey = 'ead_enrollment_reminder' as const;
     const template = getAlertWhatsAppTemplateDefinition(templateKey);
     let localTemplate = null;
     try {
