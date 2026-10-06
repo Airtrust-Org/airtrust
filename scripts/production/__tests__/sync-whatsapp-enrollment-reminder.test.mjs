@@ -60,7 +60,7 @@ test('syncEnrollmentReminder pins the live Worker SHA and syncs only the enrollm
     if (url.endsWith('/api/auth/me')) {
       return {
         status: 200,
-        json: { success: true, data: { role: 'admin' } },
+        json: { success: true, data: { role: 'administrador' } },
       };
     }
     if (url.endsWith('/api/alertas/whatsapp/templates/sync')) {
