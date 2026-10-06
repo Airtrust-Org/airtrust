@@ -15,7 +15,7 @@ import {
   CertificateGenerationError,
   generateCertificateForHistorico,
 } from './generate-certificate';
-import { isCompletedStatus } from '../lib/status/status-codes';
+import { isCertificateEligibleQualificationStatus } from '../lib/status/status-codes';
 
 // ── Tipos públicos ─────────────────────────────────────────────────────────────
 
@@ -85,10 +85,10 @@ export async function ensureCertificateForQualification(
       };
     }
 
-    if (!isCompletedStatus(historico.status)) {
+    if (!isCertificateEligibleQualificationStatus(historico.status)) {
       return {
         state: 'SKIPPED',
-        reason: `Qualificação ${historicoId} não possui um status de conclusão válido (status atual: ${historico.status}).`,
+        reason: `Qualificação ${historicoId} não possui um status elegível para certificado (status atual: ${historico.status}).`,
       };
     }
 

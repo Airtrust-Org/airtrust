@@ -97,6 +97,26 @@ export const PLANNED_QUALIFICATION_STATUS_VALUES = [
   QUALIFICACAO_STATUS.PLANEJADO_LEGACY,
 ] as const;
 
+/**
+ * Statuses that represent a qualification realization that actually happened
+ * and therefore may have its historical certificate emitted/re-emitted.
+ *
+ * This is intentionally broader than COMPLETED_STATUS_VALUES: qualification
+ * history stores operational lifecycle states (valid, expiring, expired,
+ * renewed) after completion. Planned/cancelled/unknown states remain fail-closed.
+ */
+export const CERTIFICATE_ELIGIBLE_QUALIFICATION_STATUS_VALUES = [
+  QUALIFICACAO_STATUS.CONCLUIDA,
+  QUALIFICACAO_STATUS.CONCLUIDO_LEGACY,
+  QUALIFICACAO_STATUS.VALIDA,
+  'VÁLIDA',
+  QUALIFICACAO_STATUS.VENCIDA,
+  QUALIFICACAO_STATUS.RENOVADA,
+  'PROXIMA_VENCIMENTO',
+  'VENCENDO',
+  'VENCENDO_30',
+] as const;
+
 const completedStatusSet = new Set<string>(COMPLETED_STATUS_VALUES);
 const cancelledStatusSet = new Set<string>(CANCELLED_STATUS_VALUES);
 const activeOrCompletedSessionStatusSet = new Set<string>(ACTIVE_OR_COMPLETED_SESSION_STATUS_VALUES);
@@ -104,6 +124,9 @@ const plannedTrainingStatusSet = new Set<string>(TRAINING_PLANNED_STATUS_VALUES)
 const confirmedTrainingStatusSet = new Set<string>(TRAINING_CONFIRMED_STATUS_VALUES);
 const inProgressTrainingStatusSet = new Set<string>(TRAINING_IN_PROGRESS_STATUS_VALUES);
 const plannedQualificationStatusSet = new Set<string>(PLANNED_QUALIFICATION_STATUS_VALUES);
+const certificateEligibleQualificationStatusSet = new Set<string>(
+  CERTIFICATE_ELIGIBLE_QUALIFICATION_STATUS_VALUES,
+);
 const scheduledSessionStatusSet = new Set<string>(SCHEDULED_SESSION_STATUS_VALUES);
 
 export const COMPLETED_STATUS_SQL = toSqlList(COMPLETED_STATUS_VALUES);
@@ -142,6 +165,10 @@ export function isActiveOrCompletedSessionStatus(status: StatusLike): boolean {
 
 export function isPlannedQualificationStatus(status: StatusLike): boolean {
   return plannedQualificationStatusSet.has(normalizeStatus(status));
+}
+
+export function isCertificateEligibleQualificationStatus(status: StatusLike): boolean {
+  return certificateEligibleQualificationStatusSet.has(normalizeStatus(status));
 }
 
 export function isScheduledSessionStatus(status: StatusLike): boolean {
