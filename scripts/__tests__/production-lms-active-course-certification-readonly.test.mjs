@@ -31,6 +31,9 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /isProductChrome/);
   assert.match(source, /content-toggle/);
   assert.match(source, /content-choice/);
+  assert.match(source, /content-choice-retry/);
+  assert.match(source, /submitAlreadyTried/);
+  assert.match(source, /semanticAction/);
   assert.match(source, /submit-after-choice/);
   assert.match(source, /airtrustCertClicked/);
   assert.match(source, /interactionsValid/);
