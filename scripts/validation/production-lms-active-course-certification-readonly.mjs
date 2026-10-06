@@ -21,6 +21,7 @@ const BROWSER_NAME = String(process.env.CERT_BROWSER || 'chromium').trim().toLow
 const REPORT_PATH = process.env.CERT_REPORT_PATH || `qa-state/lms-active-certification-${BROWSER_NAME}.json`;
 const COURSE_TIMEOUT_MS = Number(process.env.CERT_COURSE_TIMEOUT_MS || 25_000);
 const MAX_STEPS = Number(process.env.CERT_MAX_STEPS || 240);
+const COURSE_IDS = parseCourseIdFilter(process.env.CERT_COURSE_IDS);
 
 const ALLOWED_AUTH_POSTS = new Set(['/api/auth/login', '/api/auth/select-empresa', '/api/lms/assets/session']);
 const TERMINAL_SCORM12 = new Set(['passed', 'completed']);
@@ -29,6 +30,17 @@ const TERMINAL_SCORM2004_SUCCESS = new Set(['passed']);
 
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function parseCourseIdFilter(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return new Set();
+  const parts = raw.split(',').map((item) => item.trim()).filter(Boolean);
+  invariant(
+    parts.length > 0 && parts.every((item) => /^\d+$/.test(item) && Number(item) > 0),
+    'CERT_COURSE_IDS_INVALID',
+  );
+  return new Set(parts.map(Number));
 }
 
 function safe(value) {
@@ -106,7 +118,10 @@ async function listCourses(token) {
     const total = Number(r.json?.pagination?.total || out.length);
     if (!rows.length || out.length >= total) break;
   }
-  return out.filter((row) => Number(row?.ativo || 0) === 1 && Number(row?.publicado || 0) === 1);
+  const active = out.filter((row) => Number(row?.ativo || 0) === 1 && Number(row?.publicado || 0) === 1);
+  return COURSE_IDS.size > 0
+    ? active.filter((row) => COURSE_IDS.has(Number(row?.id || 0)))
+    : active;
 }
 
 async function courseDetail(token, id) {
@@ -340,6 +355,85 @@ async function unloadFrame(frame) {
   }).catch(() => undefined);
 }
 
+function summarizeStalledSlide(model, lessonLocation) {
+  const location = String(lessonLocation || '');
+  if (!model || typeof model !== 'object' || !Array.isArray(model.slides)) {
+    return { location: location || null, resolved: false };
+  }
+  let slide = null;
+  let index = -1;
+  const numeric = location.match(/^(\d+)(?:\/\d+)?$/);
+  if (numeric) {
+    index = Number(numeric[1]) - 1;
+    slide = model.slides[index] ?? null;
+  }
+  if (!slide && location) {
+    index = model.slides.findIndex((item) => String(item?.id || '') === location);
+    slide = index >= 0 ? model.slides[index] : null;
+  }
+  if (!slide || typeof slide !== 'object') {
+    return { location: location || null, resolved: false };
+  }
+  const options = Array.isArray(slide.options)
+    ? slide.options
+    : Array.isArray(slide.alternatives)
+      ? slide.alternatives
+      : [];
+  return {
+    location: location || null,
+    resolved: true,
+    index: index + 1,
+    id: slide.id ? String(slide.id) : null,
+    kind: slide.kind ? String(slide.kind) : null,
+    required_decision: slide.requiredDecision === true,
+    option_count: options.length,
+    keys: Object.keys(slide).sort().slice(0, 40),
+  };
+}
+
+async function captureVisibleControls(frame) {
+  return frame.evaluate(() => {
+    const visible = (el) => {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+    const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const classify = (text) => {
+      if (/pr[oó]ximo|avan[cç]ar|continuar|prosseguir|next/.test(text)) return 'next';
+      if (/confirmar|responder|enviar|verificar|submit/.test(text)) return 'submit';
+      if (/finalizar|concluir|finish|resultado/.test(text)) return 'finish';
+      if (/voltar|anterior|previous|back/.test(text)) return 'back';
+      if (/tentar novamente|refazer|retry/.test(text)) return 'retry';
+      return 'choice_or_other';
+    };
+    const buttons = Array.from(document.querySelectorAll('button,[role=button],input[type=button],input[type=submit],a'))
+      .filter(visible)
+      .map((el) => {
+        const text = clean(el.innerText || el.value || el.getAttribute('aria-label') || el.title);
+        return {
+          tag: el.tagName.toLowerCase(),
+          id: el.id || null,
+          role: el.getAttribute('role'),
+          category: classify(text),
+          disabled: Boolean(el.disabled) || el.getAttribute('aria-disabled') === 'true',
+        };
+      });
+    return {
+      button_count: buttons.length,
+      enabled_button_count: buttons.filter((item) => !item.disabled).length,
+      buttons: buttons.slice(0, 20),
+      radio_count: Array.from(document.querySelectorAll('input[type=radio]')).filter(visible).length,
+      checkbox_count: Array.from(document.querySelectorAll('input[type=checkbox]')).filter(visible).length,
+      role_radio_count: Array.from(document.querySelectorAll('[role=radio]')).filter(visible).length,
+      role_option_count: Array.from(document.querySelectorAll('[role=option]')).filter(visible).length,
+      select_count: Array.from(document.querySelectorAll('select')).filter(visible).length,
+      details_count: Array.from(document.querySelectorAll('details')).filter(visible).length,
+      summary_count: Array.from(document.querySelectorAll('summary')).filter(visible).length,
+    };
+  }).catch(() => null);
+}
+
 async function runPhase({ browser, token, course, manifest, phase, initialValues, maxDriveMs }) {
   const context = await browser.newContext({ ignoreHTTPSErrors: false });
   const page = await context.newPage();
@@ -396,6 +490,14 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
   } else {
     await page.waitForTimeout(1200);
   }
+  const preUnloadTrace = await getTrace(page).catch(() => null);
+  const preUnloadLocation =
+    preUnloadTrace?.values?.['cmi.core.lesson_location'] ??
+    preUnloadTrace?.values?.['cmi.location'] ??
+    null;
+  const visibleControls = await captureVisibleControls(frame);
+  const stalledSlide = summarizeStalledSlide(model, preUnloadLocation);
+
   await unloadFrame(frame);
   await page.waitForTimeout(120);
   const trace = await getTrace(page);
@@ -419,6 +521,8 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     last_error: trace.lastError,
     steps,
     model: modelMeta,
+    stalled_slide: stalledSlide,
+    visible_controls: visibleControls,
     asset_failures: assetFailures.slice(0, 20),
     page_errors: pageErrors.slice(0, 10),
     console_errors: consoleErrors.slice(0, 10),
@@ -540,6 +644,10 @@ async function main() {
   await assertPinnedProduction();
   const token = await productionToken();
   const listed = await listCourses(token);
+  invariant(
+    COURSE_IDS.size === 0 || listed.length === COURSE_IDS.size,
+    `CERT_COURSE_IDS_NOT_FOUND:expected=${COURSE_IDS.size}:found=${listed.length}`,
+  );
   const browserType = BROWSER_NAME === 'webkit' ? webkit : chromium;
   invariant(BROWSER_NAME === 'chromium' || BROWSER_NAME === 'webkit', 'CERT_BROWSER_INVALID');
   const browser = await browserType.launch({ headless: true });
@@ -566,6 +674,7 @@ async function main() {
     production_sha: EXPECTED_SHA,
     empresa_id: TARGET_COMPANY_ID,
     browser: BROWSER_NAME,
+    course_filter: COURSE_IDS.size > 0 ? [...COURSE_IDS].sort((a, b) => a - b) : null,
     course_count: results.length,
     pass_count: results.filter((r) => r.status === 'PASS').length,
     fail_count: results.filter((r) => r.status === 'FAIL').length,
