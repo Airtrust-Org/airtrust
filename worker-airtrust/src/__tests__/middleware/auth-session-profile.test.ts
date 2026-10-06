@@ -143,7 +143,7 @@ beforeEach(() => {
 
 describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () => {
 
-  it('perfil removido explicitamente NÃO reaparece por inferência (ALUNO mantido inativo)', async () => {
+  it('GESTOR sempre recebe ALUNO mesmo quando ALUNO explícito está inativo', async () => {
     const db = createDb({
       userId: 10,
       empresaId: 500,
@@ -159,7 +159,7 @@ describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () =>
       ]
     });
     const roles = await resolveAvailableSessionRoles(db, 10, 500);
-    expect(roles).toEqual(['GESTOR']); // ALUNO should not appear
+    expect(roles).toEqual(['GESTOR', 'ALUNO']);
   });
 
   it('perfil adicionado explicitamente aparece mesmo sem legacy link', async () => {
@@ -177,7 +177,7 @@ describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () =>
       ]
     });
     const roles = await resolveAvailableSessionRoles(db, 10, 500);
-    expect(roles).toEqual(['GESTOR', 'INSTRUTOR']);
+    expect(roles).toEqual(['GESTOR', 'INSTRUTOR', 'ALUNO']);
   });
 
   const base = {
@@ -187,9 +187,9 @@ describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () =>
     funcionarioEmpresaId: 500,
   };
 
-  it('GESTOR único: retorna apenas o perfil canônico', async () => {
+  it('GESTOR único: inclui ALUNO por invariante', async () => {
     const db = createDb({ ...base, perfil: 'gestor', membershipRole: 'manager' });
-    expect(await resolveAvailableSessionRoles(db, 10, 500)).toEqual(['GESTOR']);
+    expect(await resolveAvailableSessionRoles(db, 10, 500)).toEqual(['GESTOR', 'ALUNO']);
   });
 
   it('INSTRUTOR + perfil base: INSTRUTOR aparece como opção selecionável', async () => {
@@ -211,7 +211,7 @@ describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () =>
       membershipRole: 'manager',
       instrutor: true,
     });
-    expect(await resolveAvailableSessionRoles(db, 10, 500)).toEqual(['GESTOR', 'INSTRUTOR']);
+    expect(await resolveAvailableSessionRoles(db, 10, 500)).toEqual(['GESTOR', 'INSTRUTOR', 'ALUNO']);
   });
 
   it('GESTOR + ALUNO: retorna as duas opções', async () => {
@@ -250,7 +250,7 @@ describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () =>
       instrutor: true,
       aluno: true,
     });
-    expect(await resolveAvailableSessionRoles(db, 10, 500)).toEqual(['GESTOR']);
+    expect(await resolveAvailableSessionRoles(db, 10, 500)).toEqual(['GESTOR', 'ALUNO']);
   });
 });
 
@@ -429,9 +429,9 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
     funcionarioEmpresaId: 6,
   };
 
-  it('sem múltiplos perfis: um único perfil explícito → nenhuma seleção', async () => {
+  it('GESTOR explícito único → inclui ALUNO e exige seleção de perfil', async () => {
     const db = createDb({ ...b, explicitProfiles: [{ perfil: 'GESTOR', ativo: 1 }] });
-    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR']);
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR', 'ALUNO']);
   });
 
   it('INSTRUTOR + ALUNO explícitos (sem GESTOR) → exatamente essas duas opções', async () => {
@@ -463,17 +463,17 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
     ]);
   });
 
-  it('remoção por EXCLUSÃO da linha: existindo outras linhas explícitas, o perfil removido não volta por inferência', async () => {
+  it('remoção explícita de ALUNO não viola o invariante de GESTOR', async () => {
     const db = createDb({
       ...b,
       instrutor: true, // vínculo legado ainda existe
       aluno: true, // matrícula LMS ainda existe
       explicitProfiles: [{ perfil: 'GESTOR', ativo: 1 }], // admin deixou só GESTOR
     });
-    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR']);
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR', 'ALUNO']);
   });
 
-  it('tabela explícita presente vence 100% da inferência legada (instrutor/aluno ignorados)', async () => {
+  it('tabela explícita vence inferência legada, exceto pelo invariante GESTOR → ALUNO', async () => {
     const db = createDb({
       ...b,
       instrutor: true,
@@ -484,7 +484,7 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
         { perfil: 'ALUNO', ativo: 0 },
       ],
     });
-    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR']);
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR', 'ALUNO']);
   });
 
   it('isolamento por empresa_id: perfis explícitos da empresa B não vazam para a empresa A', async () => {
@@ -497,7 +497,7 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
         99: [{ perfil: 'ADMINISTRADOR', ativo: 1 }, { perfil: 'INSTRUTOR', ativo: 1 }],
       },
     });
-    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR']);
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR', 'ALUNO']);
     expect(await resolveAvailableSessionRoles(db, 43, 99)).toEqual([
       'ADMINISTRADOR',
       'INSTRUTOR',
