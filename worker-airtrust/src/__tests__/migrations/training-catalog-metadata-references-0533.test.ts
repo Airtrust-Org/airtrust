@@ -77,7 +77,7 @@ describe('training catalog metadata references 0533', () => {
       workflow.match(new RegExp(`^\\s*- ${migration.replace('.', '\\.')}$`, 'gm')),
     ).toHaveLength(1);
     expect(workflow).toContain(
-      `0532_training_compliance_fdm_designation_only.sql|${migration}) ;;`,
+      `0532_training_compliance_fdm_designation_only.sql|${migration}`,
     );
     expect(runner.match(new RegExp(`^\\s*"${migration.replace('.', '\\.')}"$`, 'gm'))).toHaveLength(
       1,
