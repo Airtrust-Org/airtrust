@@ -2,7 +2,7 @@ import type { Env } from '../types';
 import { sendEmailDetailed, type EmailSendResult } from '../lib/email';
 import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import {
-  buildTrainingTemplateVariables,
+  buildTrainingTemplateVariablesForDelivery,
   getAlertWhatsAppTemplateDefinition,
   renderTemplateBody,
   type AlertWhatsAppTemplateKey,
@@ -431,24 +431,28 @@ async function sendWhatsappChannel(
         ? 'ead_expired'
         : 'ead_expiring';
   const template = getAlertWhatsAppTemplateDefinition(templateKey);
-  const variables = buildTrainingTemplateVariables({
+  let localTemplate = null;
+  try {
+    localTemplate = await getLocalWhatsAppTemplateRecord(db, templateKey);
+  } catch {
+    localTemplate = null;
+  }
+  const approved = localTemplate && isWhatsAppTemplateApproved(localTemplate.approval_status);
+  const deliveryBodyText =
+    approved && localTemplate?.twilio_content_sid ? localTemplate.body_text : template?.bodyText;
+  const variables = buildTrainingTemplateVariablesForDelivery({
+    templateKey,
+    templateBodyText: deliveryBodyText,
     funcionarioNome: target.funcionario_nome,
     qualificacaoNome: target.qualificacao_nome,
     dataVencimento: formatDateBr(target.data_validade),
     statusVencimento: statusText(target),
     trainingUrl,
   });
-  const rendered = template
-    ? renderTemplateBody(template.bodyText, variables)
+  const rendered = deliveryBodyText
+    ? renderTemplateBody(deliveryBodyText, variables)
     : plainMessage(target, trainingUrl);
   try {
-    let localTemplate = null;
-    try {
-      localTemplate = await getLocalWhatsAppTemplateRecord(db, templateKey);
-    } catch {
-      localTemplate = null;
-    }
-    const approved = localTemplate && isWhatsAppTemplateApproved(localTemplate.approval_status);
     await sendWhatsAppMessage(
       env,
       target.telefone,
