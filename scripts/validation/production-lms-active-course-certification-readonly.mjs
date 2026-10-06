@@ -141,11 +141,15 @@ async function activePackage(token, id) {
 function parseCompletionManifest(text) {
   try {
     const parsed = JSON.parse(text);
-    const slides = Array.isArray(parsed?.content?.requiredSlides) ? parsed.content.requiredSlides.map(String) : [];
-    const interactions = Array.isArray(parsed?.assessment?.requiredInteractions) ? parsed.assessment.requiredInteractions.map(String) : [];
+    const rawSlides = parsed?.content?.requiredSlides;
+    const rawInteractions = parsed?.assessment?.requiredInteractions;
+    const slides = Array.isArray(rawSlides) ? rawSlides.map(String) : [];
+    const interactions = Array.isArray(rawInteractions) ? rawInteractions.map(String) : [];
+    const slidesValid = Array.isArray(rawSlides) && rawSlides.length > 0 && rawSlides.every((item) => typeof item === 'string' && item.trim());
+    const interactionsValid = Array.isArray(rawInteractions) && rawInteractions.every((item) => typeof item === 'string' && item.trim());
     const mastery = Number(parsed?.assessment?.masteryScore);
     return {
-      ok: parsed?.schemaVersion === 1 && String(parsed?.scormVersion || '') === '1.2' && slides.length > 0 && interactions.length > 0,
+      ok: parsed?.schemaVersion === 1 && String(parsed?.scormVersion || '') === '1.2' && slidesValid && interactionsValid,
       requiredSlides: slides.length,
       requiredInteractions: interactions.length,
       masteryScore: Number.isFinite(mastery) ? mastery : null,
