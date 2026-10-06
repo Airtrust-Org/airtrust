@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_COMPLIANCE_NOTIFICATION_POLICY,
+  normalizeNotificationMessageTemplate,
   renderComplianceEmailHtml,
 } from '../../services/training-compliance-notifications';
 
@@ -13,6 +14,19 @@ describe('training compliance notification formatting', () => {
     expect(DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template).toContain(
       'Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.',
     );
+  });
+
+  it('restores the canonical layout when a stored default template was flattened', () => {
+    const flattened = DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    expect(
+      normalizeNotificationMessageTemplate(
+        flattened,
+        DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template,
+      ),
+    ).toBe(DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template);
   });
 
   it('renders explicit email blocks instead of relying on white-space CSS', () => {
