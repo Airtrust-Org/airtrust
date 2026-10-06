@@ -141,11 +141,15 @@ async function activePackage(token, id) {
 function parseCompletionManifest(text) {
   try {
     const parsed = JSON.parse(text);
-    const slides = Array.isArray(parsed?.content?.requiredSlides) ? parsed.content.requiredSlides.map(String) : [];
-    const interactions = Array.isArray(parsed?.assessment?.requiredInteractions) ? parsed.assessment.requiredInteractions.map(String) : [];
+    const rawSlides = parsed?.content?.requiredSlides;
+    const rawInteractions = parsed?.assessment?.requiredInteractions;
+    const slides = Array.isArray(rawSlides) ? rawSlides.map(String) : [];
+    const interactions = Array.isArray(rawInteractions) ? rawInteractions.map(String) : [];
+    const slidesValid = Array.isArray(rawSlides) && rawSlides.length > 0 && rawSlides.every((item) => typeof item === 'string' && item.trim());
+    const interactionsValid = Array.isArray(rawInteractions) && rawInteractions.every((item) => typeof item === 'string' && item.trim());
     const mastery = Number(parsed?.assessment?.masteryScore);
     return {
-      ok: parsed?.schemaVersion === 1 && String(parsed?.scormVersion || '') === '1.2' && slides.length > 0 && interactions.length > 0,
+      ok: parsed?.schemaVersion === 1 && String(parsed?.scormVersion || '') === '1.2' && slidesValid && interactionsValid,
       requiredSlides: slides.length,
       requiredInteractions: interactions.length,
       masteryScore: Number.isFinite(mastery) ? mastery : null,
@@ -364,8 +368,15 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
 
   const response = await page.goto(`${API}/api/lms/scorm/preview/${course.id}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });
   invariant(response?.status() === 200, `SCORM_PREVIEW_HTTP_${course.id}_${response?.status()}`);
-  const frame = page.frames().find((candidate) => candidate !== page.mainFrame() && candidate.url().includes(`/api/lms/scorm/assets/${TARGET_COMPANY_ID}/${course.id}/`));
+  const iframe = page.locator('#scorm-frame');
+  await iframe.waitFor({ state: 'attached', timeout: 15_000 });
+  const iframeHandle = await iframe.elementHandle();
+  const frame = await iframeHandle?.contentFrame();
   invariant(frame, `SCORM_PACKAGE_FRAME_MISSING:${course.id}`);
+  await frame.waitForURL(
+    (url) => url.pathname.includes(`/api/lms/scorm/assets/${TARGET_COMPANY_ID}/${course.id}/`),
+    { timeout: 15_000 },
+  );
   await frame.waitForLoadState('domcontentloaded', { timeout: 15_000 }).catch(() => undefined);
   await page.waitForTimeout(350);
 
