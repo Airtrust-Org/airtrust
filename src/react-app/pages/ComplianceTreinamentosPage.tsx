@@ -31,6 +31,7 @@ import {
   TrainingComplianceNotificationSettings,
 } from '@/react-app/components/compliance/TrainingComplianceIntelligence';
 import { TrainingComplianceNoticeAction } from '@/react-app/components/compliance/TrainingComplianceNoticeAction';
+import { TrainingComplianceBulkNoticeComposer } from '@/react-app/components/compliance/TrainingComplianceBulkNoticeComposer';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { useQualificacaoTipos } from '@/react-app/hooks/useQualificacoesExt';
 
@@ -631,8 +632,13 @@ export default function ComplianceTreinamentosPage() {
                   </select>
                 ) : null}
               </div>
-              {(['treinamentos', 'pessoas', 'setores'] as ComplianceTab[]).includes(tab) ? (
-                <div className="flex justify-end">
+              <div className="flex flex-wrap justify-end gap-2">
+                <TrainingComplianceBulkNoticeComposer
+                  catalogs={catalogs.data}
+                  trainingTypes={tipos}
+                  currentFilter={{ setorId, funcaoId, search: searchQuery }}
+                />
+                {(['treinamentos', 'pessoas', 'setores'] as ComplianceTab[]).includes(tab) ? (
                   <TrainingComplianceNoticeAction
                     scopeLabel="filtro atual do Compliance"
                     pendingCount={summaryActionable}
@@ -642,8 +648,8 @@ export default function ComplianceTreinamentosPage() {
                     label="Enviar alertas do filtro"
                     className="px-3 py-2 text-sm"
                   />
-                </div>
-              ) : null}
+                ) : null}
+              </div>
               {setorId || funcaoId || searchText ? (
                 <button
                   type="button"
