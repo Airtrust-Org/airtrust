@@ -45,10 +45,18 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.doesNotMatch(source, /wrangler\s+(?:deploy|d1|r2)/i);
 });
 
-test('production certification workflow is manual, SHA-pinned, secret-scoped and evidence-preserving', () => {
+test('production certification workflow is governed, online-triggerable, SHA-pinned, secret-scoped and evidence-preserving', () => {
   const workflow = read(WORKFLOW);
+  assert.match(workflow, /issue_comment:\s*\n\s*types:\s*\n\s*- created/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /course_ids:/);
+  assert.match(workflow, /COMMENT_ACTOR_MISMATCH/);
+  assert.match(workflow, /PR_FROM_FORK_REJECTED/);
+  assert.match(workflow, /ACTOR_PERMISSION_INSUFFICIENT/);
+  assert.match(workflow, /COMMENT_COMMAND_MUST_BE_SINGLE_LINE/);
+  assert.match(workflow, /COMMENT_COMMAND_INVALID/);
+  assert.match(workflow, /COURSE_IDS_INVALID/);
+  assert.match(workflow, /startsWith\(github\.event\.comment\.body, 'AIRTRUST_PRODUCTION_LMS_ACTIVE_CERTIFICATION_READONLY '\)/);
   assert.match(workflow, /CERT_COURSE_IDS/);
   assert.doesNotMatch(workflow, /\bpush:/);
   assert.doesNotMatch(workflow, /\bpull_request:/);
